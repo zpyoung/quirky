@@ -995,6 +995,8 @@ and deletion actions target it, including inside expanded folders.
 Search in Files uses singular or plural result and file counts independently, and
 shows “No results” when a completed search has no matches. While a search is running,
 only “Searching files…” appears; the result summary waits until it completes.
+Press Enter in the search query, **Files to include**, or **Files to exclude** to run
+the current query with the current search options and filters.
 
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and

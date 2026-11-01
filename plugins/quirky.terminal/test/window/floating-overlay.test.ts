@@ -78,6 +78,7 @@ async function mountOverlay(options: Options = {}) {
       'quirky.terminal/activateTab': (params) => ({ workspace: forWorkspace(params.workspace).current }),
       'quirky.terminal/quickCommands': () => ({ commands: [] }),
       'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
+      'quirky.worktree/wake': () => ({}),
       'quirky.terminal/floating': () => (options.read ? options.read() : state),
       'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }),
       'quirky.terminal/setFloating': (params) => {
@@ -475,8 +476,9 @@ describe('SC-58: keys inside the panel', () => {
   test('the app keys act on the floating workspace while it holds focus, and on the main view otherwise', async () => {
     const view = await mountOverlay({ state: { open: true }, withMain: true })
     await view.run('new-shell', 'quirky.session')
-    await view.run('select-tab-1', 'quirky.session')
     expect(view.calls('newTab')).toEqual([{ workspace: 'floating' }])
+    expect(view.fake.callsTo('quirky.worktree/wake').map((call) => call.params)).toEqual([])
+    await view.run('select-tab-1', 'quirky.session')
     expect(view.calls('activateTab')).toEqual([])
 
     const outside = document.createElement('input')
@@ -484,6 +486,7 @@ describe('SC-58: keys inside the panel', () => {
     await act(async () => void outside.focus())
     await view.run('new-shell', 'quirky.session')
     expect(view.calls('newTab')[1]).toEqual({ workspace: 'wt-main' })
+    expect(view.fake.callsTo('quirky.worktree/wake').map((call) => call.params)).toEqual([{ worktree: 'wt-main' }])
   })
 
   test('close with no tabs left minimizes the panel', async () => {

@@ -23,6 +23,7 @@ function start(installed?: string[], configure?: (agents: FakeAgents) => void, w
   agents = new FakeAgents(installed)
   configure?.(agents)
   fake = fakeAgentsContext(agents, {
+    'quirky.worktree/wake': () => ({ worktrees: [] }),
     'quirky.session/create': (params) => {
       created.push(params)
       return { id: `s-${created.length}`, agent: params.agent } as Session
@@ -61,13 +62,27 @@ describe('SC-9: "New agent tab" never opens a plain shell', () => {
 
   test('a failed create is shown and opens nothing', async () => {
     start(['codex'])
+    const call = fake.context.call
     fake.context.call = async (method, params = {}) => {
       if (method === 'quirky.session/create') throw new RpcError(RpcErrorCode.InvalidParams, 'agent codex is disabled')
-      return agents.handlers()[method]!(params)
+      return call(method, params)
     }
     await fake.command('new-agent-tab')
     expect(fake.opened).toEqual([])
     expect(fake.toasts.map((toast) => toast.body)).toEqual(['agent codex is disabled'])
+  })
+
+  test('a failed wake is shown and starts no agent session', async () => {
+    start(['codex'])
+    const call = fake.context.call
+    fake.context.call = async (method, params = {}) => {
+      if (method === 'quirky.worktree/wake') throw new Error('could not wake worktree')
+      return call(method, params)
+    }
+    await fake.command('new-agent-tab')
+    expect(created).toEqual([])
+    expect(fake.opened).toEqual([])
+    expect(fake.toasts.map((toast) => toast.body)).toEqual(['could not wake worktree'])
   })
 })
 

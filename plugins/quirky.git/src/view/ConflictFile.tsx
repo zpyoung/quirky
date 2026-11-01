@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
-import type { GitConflictKind, GitOperation } from '@quirky/protocol'
+import type { GitConflictKind, GitOperation, GitStatus } from '@quirky/protocol'
+import { RpcErrorCode } from '@quirky/protocol'
 import { Badge, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
 import { editorTheme } from '@quirky/ui/editor-theme'
 
@@ -21,6 +22,15 @@ type ConflictFileResult = {
   operation: GitOperation
 }
 
+type ConflictDraft = {
+  text: string
+  base: { text: string; hash: string | null }
+  result: ConflictFileResult
+  stale: boolean
+}
+
+const drafts = new Map<string, ConflictDraft>()
+
 const KIND_LABEL: Record<GitConflictKind, string> = {
   both_modified: 'Both modified',
   both_added: 'Both added',
@@ -39,30 +49,45 @@ const KIND_LABEL: Record<GitConflictKind, string> = {
 export function ConflictFile({ context, input, settings, report, bind, close }: ModeProps) {
   const path = input.path ?? ''
   const worktree = input.worktree
-  const [file, setFile] = useState<{ result: ConflictFileResult; revision: number } | null>(null)
+  const draftKey = input.tabId ? JSON.stringify([worktree, input.tabId, path]) : null
+  const restored = useRef(draftKey ? drafts.get(draftKey) : undefined).current
+  const [file, setFile] = useState<{ result: ConflictFileResult; revision: number } | null>(
+    restored ? { result: restored.result, revision: 1 } : null
+  )
   const [error, setError] = useState<string | null>(null)
   const [blocks, setBlocks] = useState<ConflictBlock[]>([])
   const [current, setCurrent] = useState<number | null>(null)
-  const [dirty, setDirty] = useState(false)
-  const [stale, setStale] = useState(false)
+  const [dirty, setDirty] = useState(restored !== undefined)
+  const [stale, setStale] = useState(restored?.stale ?? false)
+  const [operationEnded, setOperationEnded] = useState(false)
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
-  const fileRef = useRef<typeof file>(null)
-  const base = useRef<{ text: string; hash: string | null }>({ text: '', hash: null })
-  const carried = useRef<string | null>(null)
-  const dirtyRef = useRef(false)
+  const fileRef = useRef<typeof file>(file)
+  const base = useRef<{ text: string; hash: string | null }>(restored?.base ?? { text: '', hash: null })
+  const carried = useRef<string | null>(restored?.text ?? null)
+  const dirtyRef = useRef(restored !== undefined)
+  const staleRef = useRef(stale)
+  staleRef.current = stale
   const currentRef = useRef<number | null>(null)
   const blocksRef = useRef<ConflictBlock[]>([])
   const inFlight = useRef(false)
+  const operationEndedRef = useRef(false)
+  const active = useRef(true)
+  useEffect(() => {
+    active.current = true
+    return () => { active.current = false }
+  }, [])
 
   const load = async (): Promise<ConflictFileResult> =>
     (await context.call('quirky.git/conflictFile', { worktree, path })) as ConflictFileResult
 
   const replace = (result: ConflictFileResult) => {
+    if (!active.current) return
     base.current = { text: result.content ?? '', hash: result.hash }
     dirtyRef.current = false
     setDirty(false)
     setStale(false)
+    if (draftKey) drafts.delete(draftKey)
     const next = { result, revision: (fileRef.current?.revision ?? 0) + 1 }
     fileRef.current = next
     setFile(next)
@@ -73,10 +98,13 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     inFlight.current = true
     try {
       const fresh = await load()
+      if (!active.current) return
+      operationEndedRef.current = false
+      setOperationEnded(false)
+      setError(null)
       const previous = fileRef.current
       if (!previous) {
         replace(fresh)
-        setError(null)
       } else if (fresh.hash !== base.current.hash) {
         if (dirtyRef.current) setStale(true)
         else replace(fresh)
@@ -86,7 +114,40 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
         setFile(next)
       }
     } catch (e) {
-      if (!fileRef.current) setError(messageOf(e))
+      if (!active.current) return
+      const isNotFound = (e as { code?: number } | null)?.code === RpcErrorCode.NotFound
+      const previous = fileRef.current
+      let status: GitStatus | null = null
+      if (previous || isNotFound) {
+        try {
+          status = (await context.call('quirky.git/status', { worktree })) as GitStatus
+          if (!active.current) return
+        } catch {
+          if (!active.current) return
+          // Keep the original read failure if current Git state is unavailable.
+        }
+      }
+      const entry = status?.entries.find((candidate) => candidate.area === 'conflicts' && candidate.path === path)
+      if (isNotFound && status?.operation === 'none' && !entry) {
+        operationEndedRef.current = true
+        setOperationEnded(true)
+        setError(null)
+      } else {
+        setError(messageOf(e))
+        if (status && (status.operation !== 'none' || entry)) {
+          operationEndedRef.current = false
+          setOperationEnded(false)
+        }
+        if (previous && entry?.conflict?.state === 'resolved_locally') {
+          const next = {
+            ...previous,
+            result: { ...previous.result, kind: entry.conflict.kind, state: 'resolved_locally' as const }
+          }
+          fileRef.current = next
+          setFile(next)
+          if (isNotFound) setError(null)
+        }
+      }
     } finally {
       inFlight.current = false
     }
@@ -123,6 +184,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
   }
 
   const step = (direction: 1 | -1) => {
+    if (operationEndedRef.current || fileRef.current?.result.state !== 'unresolved') return
     const count = blocksRef.current.length
     if (count === 0) return
     const from = currentRef.current ?? (direction > 0 ? 0 : 1)
@@ -140,11 +202,14 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
         content,
         ...(!force && base.current.hash !== null ? { expected: base.current.hash } : {})
       })) as { hash: string }
+      if (!active.current) return
       base.current = { text: content, hash: result.hash }
       dirtyRef.current = view.state.sliceDoc() !== content
       setDirty(dirtyRef.current)
       setStale(false)
+      if (draftKey && !dirtyRef.current) drafts.delete(draftKey)
     } catch (e) {
+      if (!active.current) return
       if (reasonOf(e) === 'changed-on-disk') setStale(true)
       else context.toast('Save failed', messageOf(e))
     }
@@ -154,8 +219,11 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
 
   const reload = async () => {
     try {
-      replace(await load())
+      const fresh = await load()
+      if (!active.current) return
+      replace(fresh)
     } catch (e) {
+      if (!active.current) return
       context.toast('Reload failed', messageOf(e))
     }
   }
@@ -204,6 +272,13 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     }
     return () => {
       carried.current = dirtyRef.current ? view.state.sliceDoc() : null
+      if (draftKey) {
+        if (dirtyRef.current && fileRef.current) {
+          drafts.set(draftKey, { text: view.state.sliceDoc(), base: base.current, result: fileRef.current.result, stale: staleRef.current })
+        } else {
+          drafts.delete(draftKey)
+        }
+      }
       viewRef.current = null
       view.destroy()
     }
@@ -218,7 +293,12 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     overwrite: () => save(true)
   })
 
-  const stateKey = JSON.stringify([blocks.length, current, dirty, stale])
+  const result = file?.result
+  const resolved = operationEnded || result?.state === 'resolved_locally'
+  const kindHint = result && (result.kind === 'deleted_by_us' || result.kind === 'deleted_by_them')
+  const conflictCount = resolved ? 0 : blocks.length
+  const currentConflict = conflictCount === 0 ? null : current
+  const stateKey = JSON.stringify([conflictCount, currentConflict, dirty, stale])
   useEffect(() => {
     report({
       mode: 'conflict-file',
@@ -231,20 +311,17 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
       dirty,
       stale,
       tooLarge: false,
-      conflicts: blocks.length,
-      currentConflict: current
+      conflicts: conflictCount,
+      currentConflict
     })
   }, [stateKey, path, report])
-
-  const result = file?.result
-  const kindHint = result && (result.kind === 'deleted_by_us' || result.kind === 'deleted_by_them')
   return (
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <SectionHeader
-        title={`${path} (conflict)`}
+        title={resolved ? path : `${path} (conflict)`}
         actions={
           <div className="ui-cluster">
-            {editable && (
+            {editable && !resolved && (
               <>
                 <Badge label={blocks.length === 0 ? '0 conflicts' : `Conflict ${current ?? 1} of ${blocks.length}`}>{blocks.length === 0 ? '0 / 0' : `${current ?? 1} / ${blocks.length}`}</Badge>
                 <IconButton label="Previous conflict" title="Previous conflict" disabled={blocks.length === 0} onClick={() => step(-1)}>
@@ -259,25 +336,31 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
           </div>
         }
       />
-      {result && (
+      {(result || operationEnded) && (
         <div className="ui-stack" role="status" style={{ padding: 'var(--ui-space-8)' }}>
-          <Badge tone={result.state === 'unresolved' ? 'needs-you' : 'accent'}>
-            {result.state === 'unresolved' ? 'Unresolved conflict' : 'Resolved locally conflict'} · {KIND_LABEL[result.kind]}
-          </Badge>
-          {result.state === 'resolved_locally' && (
-            <span className="ui-text-muted">Session-local continuity state. Git is no longer reporting this file as unmerged.</span>
-          )}
-          {kindHint && <span>Decide whether to keep the file or accept deletion</span>}
+          {operationEnded ? (
+            <Badge tone="accent">Git operation ended</Badge>
+          ) : result?.state === 'resolved_locally' ? (
+            <Badge tone="accent">Resolved</Badge>
+          ) : result ? (
+            <>
+              <Badge tone="needs-you">Unresolved conflict · {KIND_LABEL[result.kind]}</Badge>
+              {kindHint && <span>Decide whether to keep the file or accept deletion</span>}
+            </>
+          ) : null}
         </div>
       )}
       {stale && <StaleBar variant="file" onReload={() => void reload()} onOverwrite={() => void save(true)} />}
+      {error !== null && file && <ErrorNotice message={error} subject="conflict file" />}
       <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
-        {error !== null && !file ? (
+        {operationEnded && !file ? (
+          <EmptyState message="No working-tree file is available." />
+        ) : error !== null && !file ? (
           <ErrorNotice message={error} subject="conflict file" />
         ) : !file ? (
           <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>Loading diff...</p>
         ) : result?.content === null ? (
-          <EmptyState message="No working-tree file is available to edit for this conflict." />
+          <EmptyState message={resolved ? 'The file is not present in the working tree.' : 'No working-tree file is available to edit for this conflict.'} />
         ) : (
           <div data-diff-editor ref={hostRef} style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }} />
         )}

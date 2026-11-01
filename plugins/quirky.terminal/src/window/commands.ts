@@ -312,11 +312,13 @@ export function sessionCommands(context: UiPluginContext): Record<string, Comman
     'new-shell': async () => {
       const controller = focusedController()
       if (controller) {
+        if (!controller.floating) await context.call('quirky.worktree/wake', { worktree: controller.workspaceId })
         await controller.newTab()
         return OK
       }
       const worktree = selectedWorktree(context)
       if (worktree === null) return NO_WORKSPACE
+      await context.call('quirky.worktree/wake', { worktree })
       await context.call('quirky.terminal/newTab', { workspace: worktree })
       return OK
     },

@@ -425,6 +425,10 @@ Pinning, Explorer, Source Control, tab closing and font zoom are available in Fi
 the header fits two rows in the default window with Worktrees and Files open. Markdown formatting
 scrolls horizontally instead of adding rows; search and review-note controls still wrap.
 
+CSV table edits and the table toolbar's Save share the document's draft acknowledgments.
+Saving your own table changes leaves a clean, closable tab; newer competing drafts still
+require comparison before saving.
+
 New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
 Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
 `bufferId`, `path` and `expectedRevision`, refuses existing destinations and preserves the

@@ -284,8 +284,8 @@ async function mutateSmallCsv(
   bufferId: string,
   locks: Map<string, Promise<void>>,
   mutate: (table: CsvTable) => void
-): Promise<void> {
-  await withLock(locks, bufferId, async () => {
+): Promise<EditorBuffer> {
+  return await withLock(locks, bufferId, async () => {
     const buffer = host.get(bufferId)
     if (buffer.kind !== 'csv' || buffer.size >= CSV_PAGED_BYTES || buffer.readOnly) error(host, 'conflict', 'Large CSV previews are read-only.')
     const revision = buffer.contentRevision
@@ -294,7 +294,7 @@ async function mutateSmallCsv(
     const serialized = serializeCsv(table)
     const bytes = new TextEncoder().encode(serialized).byteLength
     if (bytes >= CSV_PAGED_BYTES) error(host, 'conflict', 'Table edits must stay below 1 MiB. Use Source for larger changes.')
-    await host.draft(bufferId, serialized, revision)
+    return await host.draft(bufferId, serialized, revision)
   })
 }
 
@@ -575,7 +575,7 @@ export function createViewerMethods(host: EditorServices): FeatureMethods {
     if (action === 'edit' || action === 'insertRow' || action === 'deleteRow' || action === 'insertColumn' || action === 'deleteColumn' || action === 'delimiter' || action === 'paste') {
       const buffer = host.get(bufferId)
       if (buffer.kind !== 'csv') error(host, 'invalid-params', `${action} requires a CSV or TSV file`)
-      await mutateSmallCsv(host, bufferId, mutationLocks, (table) => {
+      const updated = await mutateSmallCsv(host, bufferId, mutationLocks, (table) => {
         if (action === 'edit') {
           const row = integerParam(host, params.row, 'row')
           const column = integerParam(host, params.column, 'column')
@@ -625,7 +625,8 @@ export function createViewerMethods(host: EditorServices): FeatureMethods {
           }
         }
       })
-      return getMetadata(host, host.get(bufferId))
+      const metadata = await getMetadata(host, host.get(bufferId))
+      return { ...metadata, buffer: updated }
     }
     if (action === 'sort' || action === 'filter') {
       const buffer = host.get(bufferId)

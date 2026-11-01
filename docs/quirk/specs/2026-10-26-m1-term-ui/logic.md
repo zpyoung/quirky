@@ -241,6 +241,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
     - **Given** the view with tabs "Terminal 1" and "Build" and agents Claude and Codex installed
     - **When** the person clicks `+` and types "bu"
     - **Then** the menu shows the search box "Search open tabs and agents…", New Terminal ⌘T, the agent rows Quirky lists today and Agent settings…; typing "bu" leaves the open tab "Build" and no rows; Enter on it activates "Build"
+    - Search text stays literal: autocorrection, autocapitalization and spellchecking are disabled. The first Return activates the highlighted result instead of accepting a system word completion.
 
 ### Panes and splits
 

@@ -32,6 +32,8 @@ Click a Source Control row to preview its diff in the selected terminal workspac
 
 Replacing a clean preview keeps the tab on the newly selected file. Delayed dirty-state reports from the previous diff cannot change the replacement's input, title, or unsaved state.
 
+Conflict-file tabs keep the editor draft while status changes. A staged resolution shows “Resolved” without deletion choices or conflict navigation; when the Git operation ends, the tab shows a neutral ended status and removes conflict controls.
+
 Opening a file row in Changes or Committed on Branch moves the opened-diff highlight to that row. Rows in different sections remain distinct even when they name the same file; bulk selection stays separate from the opened diff.
 
 File diff tabs include `(Diff)` after the path so they remain distinguishable from editor tabs for the same file. Branch file diffs use `(Branch Diff)` and commit file diffs use `(Commit Diff)`; staged, unstaged, and unspecified file diffs keep the generic `(Diff)` label.
@@ -49,11 +51,15 @@ Tree-view folder counts use singular wording for one file and plural wording for
 
 The Commits dock gives the subject its own full-width line and wraps refs beneath it. Long ref labels are ellipsized visually; the full value remains available in the tooltip and screen-reader label.
 
+The Changes header ellipsizes long branch names, keeping the comparison arrow and base-ref button beside the name on one row.
+
 Right-click a file row for its Source Control actions. Blank Changes areas follow the [shell's context-menu behavior](../../README.md#shared-desktop-ui-components), including native editing and selected-text menus.
 
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
 
 Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.
+
+Conflict review's **Open** opens the file in a normal worktree tab. Switching between review and file tabs keeps the original review snapshot and any unsaved resolution. After the merge, rebase, or cherry-pick finishes, the file tab shows “Git operation ended” instead of a load error. File-read failures remain visible alongside a retained draft until a successful refresh.
 
 Combined diffs open at the first file and keep their scroll position as sections load. Single-file diffs still jump to the first change; change-navigation commands remain available in both views.
 

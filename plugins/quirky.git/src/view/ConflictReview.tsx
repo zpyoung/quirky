@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
 import type { GitConflictKind, GitStatus } from '@quirky/protocol'
-import { DIFF_VIEW_ID, PANEL_ID, type ReviewSnapshot } from '../shared/view-input'
+import { DIFF_VIEW_ID, PANEL_ID, diffViewKey, type ReviewSnapshot } from '../shared/view-input'
 import { messageOf } from './data'
+import { openHostedDiff } from './hosted-tabs'
 import { ErrorNotice } from './Fallbacks'
 import type { ModeProps } from './types'
 
@@ -82,6 +83,32 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
     }
   }
 
+  const openConflictFile = async (path: string) => {
+    const review: ReviewSnapshot = { entries: snapshot.current ?? [], capturedAt: capturedAt?.getTime() ?? Date.now() }
+    try {
+      if (input.groupId && input.tabId) {
+        const { workspace } = (await context.call('quirky.terminal/workspace', {
+          workspace: `id:${worktree}`
+        })) as { workspace: { revision: number } }
+        await context.call('quirky.terminal/rekeyViewTabs', {
+          workspace: `id:${worktree}`,
+          viewId: DIFF_VIEW_ID,
+          changes: [{
+            tab: input.tabId,
+            key: diffViewKey(input),
+            input: { ...input, review } as unknown as Record<string, unknown>
+          }],
+          revision: workspace.revision
+        })
+      }
+      await openHostedDiff(context, {
+        worktree, mode: 'conflict-file', path, groupId: input.groupId, preview: false, review
+      })
+    } catch (error) {
+      context.toast('Could not open diff', messageOf(error))
+    }
+  }
+
   useEffect(() => {
     void refresh()
   }, [])
@@ -132,14 +159,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
                     <Badge tone={row.state === 'unresolved' ? 'needs-you' : row.state === 'resolved' ? 'accent' : 'neutral'}>{BADGE[row.state]}</Badge>
                     {row.state === 'unresolved' && (
                       <Button
-                        onClick={() =>
-                          context.openView(DIFF_VIEW_ID, {
-                            worktree,
-                            mode: 'conflict-file',
-                            path: row.path,
-                            review: { entries: snapshot.current ?? [], capturedAt: capturedAt?.getTime() ?? Date.now() }
-                          })
-                        }
+                        onClick={() => void openConflictFile(row.path)}
                       >
                         Open
                       </Button>

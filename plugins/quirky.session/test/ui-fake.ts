@@ -150,7 +150,19 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     emit: (event: QuirkyEvent) => act(async () => void eventListeners.forEach((listener) => listener(event))),
     setConnection: (status: 'connected' | 'reconnecting') =>
       act(async () => void connectionListeners.forEach((listener) => listener(status))),
-    command: (id: string, args?: unknown) => act(async () => void (await provided.get(`command:quirky.session/${id}`)!(args)))
+    command: async (id: string, args?: unknown) => {
+      let failed = false
+      let failure: unknown
+      await act(async () => {
+        try {
+          await provided.get(`command:quirky.session/${id}`)!(args)
+        } catch (error) {
+          failed = true
+          failure = error
+        }
+      })
+      if (failed) throw failure
+    }
   }
 }
 
@@ -203,6 +215,7 @@ export function attachResult(over: Record<string, unknown> = {}): Record<string,
 export function sessionHandlers(sessions: Session[], extra: Record<string, Handler> = {}): Record<string, Handler> {
   return {
     'quirky.worktree/resolve': () => WORKTREE,
+    'quirky.worktree/wake': () => ({ worktrees: [] }),
     'quirky.session/list': () => sessions,
     'quirky.agents/list': () => DEFAULT_AGENTS,
     'quirky.terminal/attach': () => attachResult(),

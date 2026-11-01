@@ -77,6 +77,7 @@ export async function openAgentTab(context: UiPluginContext, agent: string | nul
       if (!info.enabled) return fail(`${info.label} is disabled`)
       chosen = info.id
     }
+    await context.call('quirky.worktree/wake', { worktree })
     const session = (await context.call('quirky.session/create', { worktree, agent: chosen })) as Session
     context.openView(SESSION_VIEW_ID, { worktree, session: session.id })
   } catch (error) {

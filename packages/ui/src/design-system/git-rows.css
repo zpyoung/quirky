@@ -2,6 +2,24 @@
   padding-inline: var(--ui-space-12);
 }
 
+[data-git-panel] [data-branch-refs] {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  min-width: 0;
+}
+
+[data-git-panel] [data-branch-refs] > * {
+  flex-shrink: 0;
+}
+
+[data-git-panel] [data-branch-refs] > [data-branch-name] {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .git-rows .git-row .ui-list-row {
   border: 0;
   flex-wrap: nowrap;

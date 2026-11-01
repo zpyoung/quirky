@@ -70,6 +70,30 @@ test(
 )
 
 test(
+  'new-shell wakes a sleeping worktree and selects exactly one new terminal tab',
+  async () => {
+    const ui = await startUi()
+    const { h } = ui
+    const first = await ui.firstTab()
+    const worktree = (await h.call<Array<{ id: string; path: string; sleeping: boolean }>>('quirky.worktree/list'))
+      .find((row) => row.path === h.repo)
+    if (!worktree) throw new Error(`worktree ${h.repo} is missing`)
+    await h.call('quirky.worktree/sleep', { worktree: worktree.id })
+    expect((await h.call<Array<{ id: string; sleeping: boolean }>>('quirky.worktree/list')).find((row) => row.id === worktree.id)?.sleeping).toBe(true)
+
+    expect(await ui.run('quirky.session/new-shell')).toEqual({ ok: true })
+    expect((await h.call<Array<{ id: string; sleeping: boolean }>>('quirky.worktree/list')).find((row) => row.id === worktree.id)?.sleeping).toBe(false)
+    const workspace = await ui.waitLayout('one new terminal tab', (candidate) => tabsOf(candidate).length === 2)
+    const tabs = tabsOf(workspace)
+    expect(tabs[0]!.id).toBe(first.tab.id)
+    expect(tabs[1]!.defaultTitle).toBe('Terminal 2')
+    expect(workspace.root.kind === 'group' && workspace.root.activeTab).toBe(tabs[1]!.id)
+    await waitFor('Terminal 2 selected', () => ui.q('.qt-selected .qt-tab-title')?.textContent === 'Terminal 2' ? true : undefined)
+  },
+  SCENARIO_MS
+)
+
+test(
   'SC-9: renaming a tab (a: double-click, type, Enter, or the CLI)',
   async () => {
     const ui = await startUi()

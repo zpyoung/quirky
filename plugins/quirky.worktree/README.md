@@ -71,6 +71,8 @@ Sleep keeps the window layout unchanged, including the active view, exact input,
 
 Sleep does not close sessions, stop terminals or agents, delete history, or start replacement processes; live work continues in the background. Wake reveals the existing contribution without replaying its input or starting a process. CLI `sleep-preview` and `sleep` accept `--window <connId>`.
 
+Open terminal and New agent wake the target worktree before creating and selecting the requested tab, so the new session is visible immediately. If waking fails, the action reports the error without starting a session. Creating sessions through the daemon API does not wake a worktree.
+
 Sleeping rows lead with “Sleeping” instead of live session activity, even when activity is hidden. Their activity indicator stays idle and shows no progress; pending questions still keep their attention indicator. Wake restores the live session activity.
 
 ```sh

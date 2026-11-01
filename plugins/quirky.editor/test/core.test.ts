@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, st
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import type { QuirkyClient } from '@quirky/protocol'
+import type { MethodHandler, PluginCaller, QuirkyClient } from '@quirky/protocol'
 import { connectDaemon } from '@quirky/protocol/node'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness, waitForAsync } from '../../../packages/daemon/test/helpers'
 import type { EditorBufferInfo, EditorOpenResult, EditorSearchState } from '../src/types'
@@ -271,6 +271,81 @@ describe('editor core through the daemon API', () => {
     expect(saved.draft).toBeNull()
     expect(saved.dirty).toBe(false)
   })
+
+  for (const scenario of [
+    { name: 'unequal draft lengths', ownText: 'first own draft with additional bytes\n', competingText: 'peer\n', inline: true },
+    { name: 'oversized own draft and small competitor', ownText: 'x'.repeat(320 * 1024), competingText: 'peer\n', inline: false }
+  ] as const) {
+    test(`preview promotion projects ${scenario.name} from the committed draft snapshot`, async () => {
+      const t = await boot()
+      await write(t, 'preview-race.txt', 'original\n')
+      const opened = await open(t, 'preview-race.txt', { preview: true })
+      expect(opened.preview).toBe(true)
+
+      const pluginHost = t.h.daemon.plugins
+      const resolveImplementation = pluginHost.resolveImplementation.bind(pluginHost)
+      const promotionEntered = Promise.withResolvers<void>()
+      const releasePromotion = Promise.withResolvers<void>()
+      let gateNextPromotion = true
+      pluginHost.resolveImplementation = async (id) => {
+        const implementation = await resolveImplementation(id)
+        if (id !== 'method:quirky.terminal/rekeyViewTabs' || !gateNextPromotion) return implementation
+        gateNextPromotion = false
+        const rekeyViewTabs = implementation as MethodHandler
+        return async (params: Record<string, unknown>, caller: PluginCaller) => {
+          promotionEntered.resolve()
+          await releasePromotion.promise
+          return await rekeyViewTabs(params, caller)
+        }
+      }
+
+      const ownText = scenario.ownText
+      const competingText = scenario.competingText
+      const ownAcknowledgment = t.call<EditorBuffer>('quirky.editor/draft', {
+        bufferId: opened.id,
+        content: ownText,
+        expectedRevision: opened.contentRevision
+      }).then(
+        (buffer) => ({ buffer }),
+        (error: unknown) => ({ error })
+      )
+      let competingAcknowledgment: EditorBuffer | undefined
+      try {
+        await Promise.race([
+          promotionEntered.promise,
+          ownAcknowledgment.then((result) => {
+            if ('error' in result) throw result.error
+            throw new Error('Draft completed without entering preview promotion.')
+          })
+        ])
+        competingAcknowledgment = await t.call<EditorBuffer>('quirky.editor/draft', {
+          bufferId: opened.id,
+          content: competingText,
+          expectedRevision: opened.contentRevision + 1
+        })
+        const current = (await state(t, { bufferId: opened.id })).buffers.find((buffer) => buffer.id === opened.id)
+        if (!current || current.draftLength === null) throw new Error('The competing draft was not committed.')
+        expect(await readText(t, opened.id, 'draft', current.contentRevision, current.draftLength)).toBe(competingText)
+      } finally {
+        releasePromotion.resolve()
+        pluginHost.resolveImplementation = resolveImplementation
+      }
+
+      const ownResult = await ownAcknowledgment
+      if ('error' in ownResult) throw ownResult.error
+      expect(competingAcknowledgment?.draft).toBe(competingText)
+      expect(ownResult.buffer.draft).toBe(scenario.inline ? ownText : undefined)
+      expect(ownResult.buffer.draftLength).toBe(ownText.length)
+      expect(ownResult.buffer.draftBytes).toBe(new TextEncoder().encode(ownText).byteLength)
+      const encoder = new TextEncoder()
+      const inlineTextBytes = encoder.encode(ownResult.buffer.content ?? '').byteLength +
+        encoder.encode(ownResult.buffer.draft ?? '').byteLength
+      expect(inlineTextBytes).toBeLessThanOrEqual(256 * 1024)
+      const latest = (await state(t, { bufferId: opened.id })).buffers.find((buffer) => buffer.id === opened.id)
+      if (!latest || latest.draftLength === null) throw new Error('The competing draft was not committed.')
+      expect(await readText(t, opened.id, 'draft', latest.contentRevision, latest.draftLength)).toBe(competingText)
+    }, 20_000)
+  }
 
   test('requires an explicit offset for text reads', async () => {
     const t = await boot()

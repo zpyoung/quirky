@@ -131,10 +131,12 @@ export function activate(context: UiPluginContext): void {
 
   context.provide(WORKTREE_VIEW_ID, mountView)
   context.provide(STRUCTURED_VIEW_ID, mountStructured)
-  context.provide(`command:${PLUGIN_ID}/new-shell`, () => {
-    if (current) return current.create('shell', '', false)
-    const worktree = layoutWorktree(context)
+  context.provide(`command:${PLUGIN_ID}/new-shell`, async () => {
+    const store = current
+    const worktree = store?.report().worktree ?? layoutWorktree(context)
     if (worktree === null) return undefined
+    await context.call('quirky.worktree/wake', { worktree })
+    if (store) return store.create('shell', '', false)
     return new WorktreeSessions(context, worktree).create('shell', '', false)
   })
   context.provide(`command:${PLUGIN_ID}/close-session`, () => {

@@ -5,15 +5,28 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { DocumentSurface as DocumentSurfaceComponent } from '../src/window/DocumentSurface'
 import { CloseOverlay } from '../src/window/CloseOverlay'
-import type { EditorBufferInfo } from '../src/types'
+import type { EditorBuffer, EditorBufferInfo, EditorServices } from '../src/types'
+import { createViewerMethods } from '../src/viewers/service'
 import { activeDocument } from '../src/window/activeDocument'
 import type { EditorView as EditorViewType } from '@codemirror/view'
+import { undo as undoMarkdown } from '@tiptap/pm/history'
+import type { EditorView as ProseMirrorView } from '@tiptap/pm/view'
 
 type SettingWrite = { id: string; value: unknown }
 type SettingChange = { type: 'setting.changed'; id: string; value: unknown }
 type ContextEvent = SettingChange | { type: 'quirky.editor/changed' }
 type PanelToggle = { panel: string; open: boolean }
 type DraftRequest = { content: string; expectedRevision: number; release(): void }
+type RichDraftUpdate = { changed: boolean; buffer: EditorBufferInfo }
+type RichAcknowledgementOrder = 'subscription-first' | 'response-first'
+type RichApplyRequest = {
+  text: string
+  expectedRevision: number
+  stage(): void
+  respond(): void
+  release(order?: RichAcknowledgementOrder): void
+  publishSubscription(): void
+}
 type Mounted = {
   element: HTMLElement
   settingWrites: SettingWrite[]
@@ -23,8 +36,12 @@ type Mounted = {
   buffer: EditorBufferInfo
   completeSave(): void
   draftRequests: DraftRequest[]
+  richApplyRequests: RichApplyRequest[]
+  currentBuffer(): EditorBufferInfo
   savedContents: string[]
+  viewerMutationResponses: EditorBufferInfo[]
   publishCompetitorDraft(content: string): void
+  publishPendingCsvChange(): void
   unmount(): Promise<void>
 }
 
@@ -32,6 +49,14 @@ const BUFFER_ID = 'buffer-file-actions'
 const TAB_ID = 'tab-file-actions'
 const WORKTREE_ID = 'wt-editor-file-actions'
 const CONTENT = 'File actions regression fixture\n'
+const RICH_FRONTMATTER = '---\ntitle: File actions regression fixture\n---\n\n'
+const RICH_BODY = '# File actions regression fixture\n'
+const RICH_CONTENT = `${RICH_FRONTMATTER}${RICH_BODY}`
+const CSV_CONTENT = 'name,value\nalpha,1\n'
+const CSV_SAVED_CONTENT = 'name,value\nalpha,2\n'
+const LARGE_CSV_VALUE = 'x'.repeat(200 * 1024 - 'name,value\nalpha,\n'.length)
+const LARGE_CSV_CONTENT = `name,value\nalpha,${LARGE_CSV_VALUE}\n`
+const RICH_RELOADED_CONTENT = `${RICH_FRONTMATTER}# Reloaded from disk\n`
 const SETTINGS = new Map<string, unknown>([
   ['editorAutoSave', false],
   ['editorAutoSaveDelayMs', 1000],
@@ -55,8 +80,9 @@ let findEditorView: (node: HTMLElement) => EditorViewType | null
 beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  // DocumentSurface initializes editor browser APIs, so load it after Happy DOM is registered.
+  // DocumentSurface and ViewerSurface initialize browser APIs, so load them after Happy DOM is registered.
   ;({ createRoot } = await import('react-dom/client'))
+  await import('../src/viewers/ViewerSurface')
   ;({ DocumentSurface } = await import('../src/window/DocumentSurface'))
   const { EditorView } = await import('@codemirror/view')
   findEditorView = (node) => EditorView.findFromDOM(node)
@@ -74,20 +100,24 @@ afterEach(async () => {
 function makeBufferInfo(options: {
   dirty?: boolean
   mode?: 'source' | 'rich'
+  kind?: EditorBufferInfo['kind']
+  content?: string
   external?: EditorBufferInfo['external']
   draft?: string
   diskWritable?: boolean
 } = {}): EditorBufferInfo {
-  const content = options.mode === 'rich' ? '# File actions regression fixture\n' : CONTENT
+  const content = options.content ?? (options.mode === 'rich' ? RICH_CONTENT : CONTENT)
   const draft = options.draft ?? null
+  const kind = options.kind ?? (options.mode === 'rich' ? 'markdown' : 'text')
+  const filename = kind === 'csv' ? 'table.csv' : 'README.txt'
   return {
     id: BUFFER_ID,
     worktreeId: WORKTREE_ID,
     root: '/tmp/file-actions-worktree',
-    path: '/tmp/file-actions-worktree/README.txt',
-    relativePath: 'README.txt',
-    name: 'README.txt',
-    kind: options.mode === 'rich' ? 'markdown' : 'text',
+    path: `/tmp/file-actions-worktree/${filename}`,
+    relativePath: filename,
+    name: filename,
+    kind,
     content,
     draft,
     baseline: null,
@@ -115,12 +145,54 @@ function makeBufferInfo(options: {
   }
 }
 
+/** Mirrors the daemon's 256 KiB cumulative inline-text budget for a viewer result. */
+function projectViewerResponse(value: unknown): { result: unknown; buffer?: EditorBufferInfo } {
+  if (typeof value !== 'object' || value === null) return { result: value }
+  const response = value as { buffer?: EditorBufferInfo }
+  const buffer = response.buffer
+  if (!buffer) return { result: value }
+
+  const projected: EditorBufferInfo = { ...buffer }
+  delete projected.content
+  delete projected.draft
+  delete projected.diskContent
+  let remaining = 256 * 1024
+  if (typeof buffer.content === 'string' && buffer.contentBytes <= remaining) {
+    projected.content = buffer.content
+    remaining -= buffer.contentBytes
+  }
+  if (buffer.draft === null) {
+    projected.draft = null
+  } else if (
+    typeof buffer.draft === 'string' &&
+    buffer.draftBytes !== null &&
+    buffer.draftBytes <= remaining
+  ) {
+    projected.draft = buffer.draft
+    remaining -= buffer.draftBytes
+  }
+  if (buffer.diskContent === null) {
+    projected.diskContent = null
+  } else if (
+    typeof buffer.diskContent === 'string' &&
+    buffer.diskContentBytes !== null &&
+    buffer.diskContentBytes <= remaining
+  ) {
+    projected.diskContent = buffer.diskContent
+  }
+  return { result: { ...response, buffer: projected }, buffer: projected }
+}
+
 async function renderDocument(options: {
   dirty?: boolean
   withCloseOverlay?: boolean
   mode?: 'source' | 'rich'
+  kind?: EditorBufferInfo['kind']
+  content?: string
+  csvResponseFirst?: boolean
   deferSave?: boolean
   delayDraftWrites?: boolean
+  delayRichApply?: boolean
   diskWritable?: boolean
   external?: EditorBufferInfo['external']
   draft?: string
@@ -140,12 +212,22 @@ async function renderDocument(options: {
   const saveCalls: Record<string, unknown>[] = []
   const { promise: saveStarted, resolve: announceSaveStarted } = Promise.withResolvers<void>()
   let releaseSave: (() => void) | undefined
+  const richApplyRequests: RichApplyRequest[] = []
   const draftRequests: DraftRequest[] = []
   const savedContents: string[] = []
+  const viewerMutationResponses: EditorBufferInfo[] = []
+  let pendingCsvChange = false
   const settings = new Map(SETTINGS)
   const savedInfo = (): EditorBufferInfo => {
+    const content = options.kind === 'csv' ? info.draft ?? info.content ?? '' : undefined
     const saved = {
       ...info,
+      ...(content === undefined ? {} : {
+        content,
+        size: content.length,
+        contentLength: content.length,
+        contentBytes: new TextEncoder().encode(content).byteLength
+      }),
       dirty: false,
       external: null,
       draft: null,
@@ -155,6 +237,9 @@ async function renderDocument(options: {
       draftBytes: null
     }
     state.buffers[0] = saved
+    info = saved
+    if (content !== undefined) savedContents.push(content)
+    if (options.kind === 'csv') publishDraftChange()
     return saved
   }
   const publishCompetitorDraft = (content: string) => {
@@ -167,16 +252,108 @@ async function renderDocument(options: {
       revision: info.revision + 1,
       contentRevision: info.contentRevision + 1
     }
+    state.buffers[0] = info
     publishDraftChange()
   }
   const publishDraftChange = () => {
     for (const listener of settingListeners) listener({ type: 'quirky.editor/changed' })
   }
+  const publishPendingCsvChange = () => {
+    if (!pendingCsvChange) throw new Error('No delayed CSV draft subscription is pending.')
+    pendingCsvChange = false
+    publishDraftChange()
+  }
+  const viewerHost: Partial<EditorServices> = {
+    context: { error: (_kind: string, message: string) => new Error(message) } as EditorServices['context'],
+    store: {} as EditorServices['store'],
+    get(bufferId) {
+      if (bufferId !== BUFFER_ID) throw new Error(`Unknown buffer ${bufferId}`)
+      return info as unknown as EditorBuffer
+    },
+    async path() {
+      return info.path
+    },
+    async draft(bufferId, content, expectedRevision) {
+      if (bufferId !== BUFFER_ID) throw new Error(`Unknown buffer ${bufferId}`)
+      if (expectedRevision !== info.contentRevision) throw new Error('stale editor content revision')
+      const changed = (info.draft ?? info.content) !== content
+      const draft = content === info.content ? null : content
+      info = {
+        ...info,
+        draft,
+        draftLength: draft?.length ?? null,
+        draftBytes: draft === null ? null : new TextEncoder().encode(draft).byteLength,
+        dirty: draft !== null,
+        revision: info.revision + 1,
+        contentRevision: info.contentRevision + (changed ? 1 : 0)
+      }
+      state.buffers[0] = info
+      if (options.csvResponseFirst) pendingCsvChange = true
+      else publishDraftChange()
+      return info as unknown as EditorBuffer
+    },
+    async save() {
+      return savedInfo() as unknown as EditorBuffer
+    },
+    async updateView(_bufferId, patch) {
+      info = { ...info, view: { ...info.view, ...patch }, revision: info.revision + 1 }
+      state.buffers[0] = info
+      return info as unknown as EditorBuffer
+    },
+    emit: publishDraftChange,
+    onClose: () => () => {}
+  }
+  const viewerFeature = options.kind === 'csv'
+    ? createViewerMethods(viewerHost as EditorServices)
+    : null
+  const writeRichDraft = (text: string): RichDraftUpdate => {
+    const source = info.content
+    if (typeof source !== 'string') throw new Error('The rich fixture requires hydrated source text.')
+    const prefix = /^---\r?\n[\s\S]*?\r?\n---\r?\n(?:\r?\n)?/.exec(source)?.[0] ?? ''
+    const originalBody = source.slice(prefix.length)
+    const content = text.trimEnd() === originalBody.trimEnd() ? source : `${prefix}${text}`
+    const previous = info.draft ?? source
+    const draft = content === source ? null : content
+    const changed = previous !== content
+    info = {
+      ...info,
+      draft,
+      draftLength: draft?.length ?? null,
+      draftBytes: draft === null ? null : new TextEncoder().encode(draft).byteLength,
+      dirty: draft !== null,
+      revision: info.revision + 1,
+      contentRevision: info.contentRevision + (changed ? 1 : 0)
+    }
+    state.buffers[0] = info
+    return { changed, buffer: { ...info } }
+  }
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'quirky.editor/viewer' && viewerFeature) {
+        const projected = projectViewerResponse(await viewerFeature.methods.viewer(params, {} as never))
+        if (projected.buffer) viewerMutationResponses.push(projected.buffer)
+        return projected.result
+      }
+      if (method === 'quirky.editor/read' && params.action === 'text') {
+        const revision = typeof params.contentRevision === 'number' ? params.contentRevision : -1
+        if (revision !== info.contentRevision) throw new Error(`stale editor content revision: expected ${revision}, current ${info.contentRevision}`)
+        const source = params.kind === 'draft' ? info.draft ?? '' : info.content ?? ''
+        const offset = typeof params.offset === 'number' ? params.offset : 0
+        const length = typeof params.length === 'number' ? params.length : source.length - offset
+        const nextOffset = Math.min(source.length, offset + length)
+        return {
+          text: source.slice(offset, nextOffset),
+          offset,
+          nextOffset,
+          eof: nextOffset >= source.length,
+          contentRevision: info.contentRevision
+        }
+      }
       if (method === 'quirky.editor/state') {
-        return options.delayDraftWrites ? { ...state, buffers: [{ ...info }] } : state
+        return options.kind === 'csv' || options.delayDraftWrites || options.delayRichApply
+          ? { ...state, buffers: [{ ...info }] }
+          : state
       }
       if (method === 'quirky.editor/draft' && options.delayDraftWrites) {
         const content = typeof params.content === 'string' ? params.content : ''
@@ -242,8 +419,82 @@ async function renderDocument(options: {
         const event: SettingChange = { type: 'setting.changed', id, value: params.value }
         settingListeners.forEach((listener) => listener(event))
       }
-      if (method === 'quirky.editor/view') return params.action === 'pin' ? { ...info, pinned: true } : info
+      if (method === 'quirky.editor/view') {
+        if (params.action === 'pin') return { ...info, pinned: true }
+        if (params.action === 'reload') {
+          const content = options.mode === 'rich' ? RICH_RELOADED_CONTENT : CONTENT
+          info = {
+            ...info,
+            content,
+            draft: null,
+            dirty: false,
+            external: null,
+            revision: info.revision + 1,
+            contentRevision: info.contentRevision + 1,
+            size: content.length,
+            contentLength: content.length,
+            draftLength: null,
+            contentBytes: new TextEncoder().encode(content).byteLength,
+            draftBytes: null
+          }
+          state.buffers[0] = info
+          publishDraftChange()
+        }
+        return { ...info }
+      }
       if (method === 'quirky.editor/markdown') {
+        if (params.action === 'apply' && options.delayRichApply) {
+          const text = typeof params.text === 'string' ? params.text : ''
+          const expectedRevision = typeof params.expectedRevision === 'number' ? params.expectedRevision : info.contentRevision
+          const pending = Promise.withResolvers<{ buffer: EditorBufferInfo; changed: boolean; sourcePreserved: true }>()
+          let staged = false
+          let responded = false
+          let subscriptionPublished = false
+          let stageError: Error | null = null
+          let stagedResult: RichDraftUpdate | null = null
+          const stage = () => {
+            if (staged) throw new Error('This rich Markdown apply is already staged.')
+            staged = true
+            if (expectedRevision !== info.contentRevision) {
+              stageError = new Error(`stale editor content revision: expected ${expectedRevision}, current ${info.contentRevision}`)
+              return
+            }
+            stagedResult = writeRichDraft(text)
+          }
+          const respond = () => {
+            if (!staged) throw new Error('The rich Markdown apply must be staged before responding.')
+            if (responded) throw new Error('This rich Markdown apply is already answered.')
+            responded = true
+            if (stageError) {
+              pending.reject(stageError)
+              return
+            }
+            if (!stagedResult) {
+              pending.reject(new Error('The rich Markdown apply produced no buffer.'))
+              return
+            }
+            pending.resolve({ ...stagedResult, sourcePreserved: true })
+          }
+          const publishSubscription = () => {
+            if (!staged) throw new Error('The rich Markdown apply must be staged before publishing its subscription.')
+            if (subscriptionPublished) return
+            subscriptionPublished = true
+            publishDraftChange()
+          }
+          richApplyRequests.push({
+            text,
+            expectedRevision,
+            stage,
+            respond,
+            release(order = 'subscription-first') {
+              stage()
+              if (order === 'subscription-first') publishSubscription()
+              respond()
+            },
+            publishSubscription
+          })
+          return await pending.promise
+        }
         if (params.action === 'capabilities') return { richEligible: true, openAnywayAvailable: false }
         if (params.action === 'toc') return { headings: [] }
       }
@@ -285,12 +536,17 @@ async function renderDocument(options: {
       releaseSave = undefined
     },
     draftRequests,
+    richApplyRequests,
+    currentBuffer: () => info,
     publishCompetitorDraft,
+    publishPendingCsvChange,
     savedContents,
+    viewerMutationResponses,
     async unmount() {
       if (unmounted) return
       unmounted = true
       await act(async () => root.unmount())
+      await viewerFeature?.dispose()
     }
   }
   mounted.push(surface)
@@ -331,6 +587,31 @@ function buttonByText(element: HTMLElement, text: string): HTMLButtonElement {
   if (!button) throw new Error(`Missing button: ${text}`)
   return button
 }
+async function csvCellInput(surface: Mounted): Promise<HTMLInputElement> {
+  const deadline = Date.now() + 3000
+  while (Date.now() < deadline) {
+    const input = surface.element.querySelector<HTMLInputElement>('input[aria-label="Row 2, column 2"]')
+    if (input) return input
+    await flushReact()
+  }
+  throw new Error('The CSV cell input did not mount.')
+}
+
+async function changeCsvCell(input: HTMLInputElement, value: string): Promise<void> {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  if (!setter) throw new Error('The input value setter is unavailable.')
+  await act(async () => {
+    setter.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+function csvSaveButton(element: HTMLElement): HTMLButtonElement {
+  const viewer = element.querySelector<HTMLElement>('.viewer-csv')
+  if (!viewer) throw new Error('The CSV table viewer did not render.')
+  return buttonByText(viewer, 'Save')
+}
+
 function outsideSourceControl(): HTMLButtonElement {
   const button = document.createElement('button')
   button.textContent = 'Source Control'
@@ -475,6 +756,46 @@ function sourceEditorView(element: HTMLElement): EditorViewType {
   const view = findEditorView(editor)
   if (!view) throw new Error('The source editor has no CodeMirror view.')
   return view
+}
+
+function richEditorView(element: HTMLElement): ProseMirrorView {
+  const editor = element.querySelector<HTMLElement>('.ProseMirror')
+  if (!editor) throw new Error('DocumentSurface did not render the rich Markdown editor.')
+  const dom = editor as HTMLElement & {
+    editor?: { view?: ProseMirrorView }
+    pmViewDesc?: { view?: ProseMirrorView }
+  }
+  const view = dom.editor?.view ?? dom.pmViewDesc?.view
+  if (!view) throw new Error('The rich Markdown editor has no ProseMirror view.')
+  return view
+}
+
+async function flushRichApply(
+  surface: Mounted,
+  order: RichAcknowledgementOrder
+): Promise<{ request: RichApplyRequest; error: unknown }> {
+  const active = activeDocument()
+  if (!active) throw new Error('The active document was not registered.')
+  const requestIndex = surface.richApplyRequests.length
+  let flush: Promise<void> = Promise.resolve()
+  await act(async () => { flush = active.flush() })
+  await flushReact()
+  const request = surface.richApplyRequests[requestIndex]
+  if (!request) throw new Error('The rich Markdown flush did not issue an apply action.')
+  let error: unknown
+  await act(async () => {
+    request.release(order)
+    try {
+      await flush
+    } catch (reason) {
+      error = reason
+    }
+  })
+  if (order === 'response-first') {
+    await act(async () => request.publishSubscription())
+  }
+  await flushReact()
+  return { request, error }
 }
 
 test('Escape from the File actions trigger closes it and keeps focus on the trigger', async () => {
@@ -676,6 +997,234 @@ test('cancelling a keyboard-activated dirty Close tab returns focus to the visib
   expect(surface.buffer.dirty).toBe(true)
 })
 
+for (const [editOrder, undoOrder] of [
+  ['subscription-first', 'response-first'],
+  ['response-first', 'subscription-first']
+] as const) {
+  test(`Rich Markdown undo to baseline is acknowledged in ${editOrder}/${undoOrder} order and closes cleanly`, async () => {
+    const surface = await renderDocument({ mode: 'rich', delayRichApply: true })
+    const editor = await editorTarget(surface, 'rich')
+    const view = richEditorView(surface.element)
+    await act(async () => editor.focus())
+    const baseline = view.state.doc
+
+    await act(async () => {
+      const position = view.state.doc.content.size - 1
+      view.dispatch(view.state.tr.insertText(' rich edit', position))
+    })
+    expect(view.state.doc.eq(baseline)).toBe(false)
+    await flushReact()
+
+    const edit = await flushRichApply(surface, editOrder)
+    expect(edit.error).toBeUndefined()
+    expect(edit.request.expectedRevision).toBe(1)
+    expect(edit.request.text).not.toContain('title: File actions regression fixture')
+    expect(surface.currentBuffer()).toMatchObject({ dirty: true, contentRevision: 2 })
+    expect(surface.currentBuffer().draft).toContain(RICH_FRONTMATTER)
+
+    await act(async () => {
+      expect(undoMarkdown(view.state, transaction => view.dispatch(transaction))).toBe(true)
+    })
+    expect(view.state.doc.eq(baseline)).toBe(true)
+    await flushReact()
+
+    const undo = await flushRichApply(surface, undoOrder)
+    expect(undo.error).toBeUndefined()
+    expect(undo.request.expectedRevision).toBe(2)
+    expect(surface.currentBuffer()).toMatchObject({ draft: null, dirty: false, contentRevision: 3 })
+    expect(surface.element.textContent).not.toContain('A newer shared draft arrived.')
+
+    const current = activeDocument()
+    if (!current) throw new Error('The active document was not registered.')
+    let closed = false
+    await act(async () => { closed = await current.close() })
+    expect(closed).toBe(true)
+  })
+}
+
+test('Rich Markdown preserves a local source draft and Compare for a newer competing draft', async () => {
+  const surface = await renderDocument({ mode: 'rich', delayRichApply: true })
+  const editor = await editorTarget(surface, 'rich')
+  const view = richEditorView(surface.element)
+  await act(async () => editor.focus())
+
+  await act(async () => {
+    const position = view.state.doc.content.size - 1
+    view.dispatch(view.state.tr.insertText(' rich edit', position))
+  })
+  await flushReact()
+  const ownWrite = await flushRichApply(surface, 'response-first')
+  expect(ownWrite.error).toBeUndefined()
+  const localText = surface.currentBuffer().draft
+  if (typeof localText !== 'string') throw new Error('The rich edit did not produce a source draft.')
+
+  const sharedText = `${RICH_FRONTMATTER}# Competing shared version\n`
+  await act(async () => surface.publishCompetitorDraft(sharedText))
+  await flushReact()
+
+  expect(surface.element.textContent).toContain('A newer shared draft arrived.')
+  await act(async () => buttonByText(surface.element, 'Compare local text').click())
+  await flushReact()
+
+  const comparedVersions = [...surface.element.querySelectorAll<HTMLTextAreaElement>('.qe-compare-textarea')]
+  expect(comparedVersions.map((textarea) => textarea.value)).toEqual([sharedText, localText])
+})
+
+test('Rich Markdown detects a competitor published while its apply response is pending', async () => {
+  const surface = await renderDocument({ mode: 'rich', delayRichApply: true })
+  const editor = await editorTarget(surface, 'rich')
+  const view = richEditorView(surface.element)
+  await act(async () => editor.focus())
+
+  await act(async () => {
+    const position = view.state.doc.content.size - 1
+    view.dispatch(view.state.tr.insertText(' rich edit', position))
+  })
+  await flushReact()
+
+  const active = activeDocument()
+  if (!active) throw new Error('The active document was not registered.')
+  const requestIndex = surface.richApplyRequests.length
+  let flush: Promise<void> = Promise.resolve()
+  await act(async () => { flush = active.flush() })
+  await flushReact()
+  const request = surface.richApplyRequests[requestIndex]
+  if (!request) throw new Error('The rich Markdown flush did not issue an apply action.')
+
+  await act(async () => request.stage())
+  const localText = surface.currentBuffer().draft
+  if (typeof localText !== 'string') throw new Error('The rich edit did not produce a source draft.')
+  const sharedText = `${RICH_FRONTMATTER}# Competing shared version\n`
+  await act(async () => surface.publishCompetitorDraft(sharedText))
+  await flushReact()
+
+  let flushError: unknown
+  await act(async () => {
+    request.respond()
+    try {
+      await flush
+    } catch (reason) {
+      flushError = reason
+    }
+  })
+  await flushReact()
+
+  expect(flushError).toBeDefined()
+  expect(surface.element.textContent).toContain('A newer shared draft arrived.')
+  await act(async () => buttonByText(surface.element, 'Compare local text').click())
+  await flushReact()
+
+  const comparedVersions = [...surface.element.querySelectorAll<HTMLTextAreaElement>('.qe-compare-textarea')]
+  expect(comparedVersions.map((textarea) => textarea.value)).toEqual([sharedText, localText])
+})
+
+test('Rich undo keeps the baseline for Compare when a competitor arrives before its response', async () => {
+  const surface = await renderDocument({ mode: 'rich', delayRichApply: true })
+  const editor = await editorTarget(surface, 'rich')
+  const view = richEditorView(surface.element)
+  await act(async () => editor.focus())
+
+  await act(async () => {
+    const position = view.state.doc.content.size - 1
+    view.dispatch(view.state.tr.insertText(' rich edit', position))
+  })
+  await flushReact()
+  const edit = await flushRichApply(surface, 'response-first')
+  expect(edit.error).toBeUndefined()
+  await act(async () => {
+    expect(undoMarkdown(view.state, transaction => view.dispatch(transaction))).toBe(true)
+  })
+  await flushReact()
+
+  const active = activeDocument()
+  if (!active) throw new Error('The active document was not registered.')
+  const requestIndex = surface.richApplyRequests.length
+  let flush: Promise<void> = Promise.resolve()
+  await act(async () => { flush = active.flush() })
+  await flushReact()
+  const undo = surface.richApplyRequests[requestIndex]
+  if (!undo) throw new Error('The undo flush did not issue an apply action.')
+  await act(async () => undo.stage())
+  expect(surface.currentBuffer()).toMatchObject({ draft: null, dirty: false, contentRevision: 3 })
+
+  const sharedText = `${RICH_FRONTMATTER}# Competing shared version\n`
+  await act(async () => surface.publishCompetitorDraft(sharedText))
+  await flushReact()
+
+  let flushError: unknown
+  await act(async () => {
+    undo.respond()
+    try {
+      await flush
+    } catch (reason) {
+      flushError = reason
+    }
+  })
+  await flushReact()
+
+  expect(flushError).toBeDefined()
+  expect(surface.element.textContent).toContain('A newer shared draft arrived.')
+  await act(async () => buttonByText(surface.element, 'Compare local text').click())
+  await flushReact()
+
+  const comparedVersions = [...surface.element.querySelectorAll<HTMLTextAreaElement>('.qe-compare-textarea')]
+  expect(comparedVersions.map((textarea) => textarea.value)).toEqual([sharedText, RICH_CONTENT])
+})
+
+test('Reload from Disk discards a Rich edit whose apply response arrives later', async () => {
+  const surface = await renderDocument({ mode: 'rich', external: 'changed', delayRichApply: true })
+  const editor = await editorTarget(surface, 'rich')
+  const view = richEditorView(surface.element)
+  await act(async () => editor.focus())
+
+  await act(async () => {
+    const position = view.state.doc.content.size - 1
+    view.dispatch(view.state.tr.insertText(' discarded rich edit', position))
+  })
+  await flushReact()
+
+  const active = activeDocument()
+  if (!active) throw new Error('The active document was not registered.')
+  const requestIndex = surface.richApplyRequests.length
+  let flush: Promise<void> = Promise.resolve()
+  await act(async () => { flush = active.flush() })
+  await flushReact()
+  const request = surface.richApplyRequests[requestIndex]
+  if (!request) throw new Error('The rich Markdown flush did not issue an apply action.')
+  await act(async () => request.stage())
+
+  await act(async () => buttonByText(surface.element, 'Reload from Disk').click())
+  await flushReact()
+  expect(surface.currentBuffer()).toMatchObject({
+    content: RICH_RELOADED_CONTENT,
+    draft: null,
+    dirty: false,
+    contentRevision: 3
+  })
+  await editorTarget(surface, 'rich')
+  await flushReact()
+  expect(richEditorView(surface.element).state.doc.textContent).toContain('Reloaded from disk')
+
+  let flushError: unknown
+  await act(async () => {
+    request.respond()
+    try {
+      await flush
+    } catch (reason) {
+      flushError = reason
+    }
+  })
+  await flushReact()
+
+  expect(flushError).toBeUndefined()
+  expect(surface.currentBuffer()).toMatchObject({ content: RICH_RELOADED_CONTENT, draft: null, dirty: false })
+  const sharedText = `${RICH_FRONTMATTER}# Newer shared version\n`
+  await act(async () => surface.publishCompetitorDraft(sharedText))
+  await flushReact()
+
+  expect(surface.element.textContent).not.toContain('A newer shared draft arrived.')
+  expect(richEditorView(surface.element).state.doc.textContent).toContain('Newer shared version')
+})
 test('Source keeps the latest local text when an earlier draft acknowledgment arrives, then saves it without a conflict alert', async () => {
   const surface = await renderDocument({ delayDraftWrites: true })
   const editor = sourceEditorView(surface.element)
@@ -740,6 +1289,123 @@ test('Source preserves local edits and opens Compare for a newer competing draft
 
   const comparedVersions = [...surface.element.querySelectorAll<HTMLTextAreaElement>('.qe-compare-textarea')]
   expect(comparedVersions.map((textarea) => textarea.value)).toEqual([sharedText, localText])
+})
+
+for (const responseFirst of [false, true]) {
+  test(`CSV table Save acknowledges its own edit when the ${responseFirst ? 'response' : 'subscription'} arrives first`, async () => {
+    const surface = await renderDocument({
+      mode: 'rich',
+      kind: 'csv',
+      content: CSV_CONTENT,
+      csvResponseFirst: responseFirst
+    })
+    const cell = await csvCellInput(surface)
+    await changeCsvCell(cell, '2')
+    await act(async () => {
+      cell.focus()
+      cell.blur()
+    })
+    await flushReact()
+    expect(surface.currentBuffer().draft).toBe(CSV_SAVED_CONTENT)
+    if (responseFirst) {
+      await act(async () => surface.publishPendingCsvChange())
+      await flushReact()
+    }
+
+    await act(async () => csvSaveButton(surface.element).click())
+    await flushReact()
+
+    expect(surface.savedContents).toEqual([CSV_SAVED_CONTENT])
+    expect(surface.currentBuffer()).toMatchObject({
+      content: CSV_SAVED_CONTENT,
+      draft: null,
+      dirty: false
+    })
+    expect(surface.element.textContent).not.toContain('A newer shared draft arrived.')
+
+    const active = activeDocument()
+    if (!active) throw new Error('The active document was not registered.')
+    let closed = false
+    await act(async () => { closed = await active.close() })
+    expect(closed).toBe(true)
+  })
+}
+test('CSV table edits keep 200 KiB projected draft acknowledgments through a later save and close', async () => {
+  const initialValue = `${LARGE_CSV_VALUE.slice(0, -1)}p`
+  const firstValue = `${LARGE_CSV_VALUE.slice(0, -1)}a`
+  const secondValue = `${LARGE_CSV_VALUE.slice(0, -1)}b`
+  const initialDraft = `name,value\nalpha,${initialValue}\n`
+  const firstDraft = `name,value\nalpha,${firstValue}\n`
+  const secondDraft = `name,value\nalpha,${secondValue}\n`
+  expect(new TextEncoder().encode(LARGE_CSV_CONTENT).byteLength).toBe(200 * 1024)
+  const surface = await renderDocument({
+    mode: 'rich',
+    kind: 'csv',
+    content: LARGE_CSV_CONTENT,
+    draft: initialDraft,
+    dirty: true
+  })
+
+  const firstCell = await csvCellInput(surface)
+  await changeCsvCell(firstCell, firstValue)
+  await act(async () => {
+    firstCell.focus()
+    firstCell.blur()
+  })
+  await flushReact()
+  expect(surface.viewerMutationResponses).toHaveLength(1)
+  expect(surface.viewerMutationResponses[0]?.content).toBe(LARGE_CSV_CONTENT)
+  expect(surface.viewerMutationResponses[0]?.draft).toBeUndefined()
+  expect(surface.viewerMutationResponses[0]?.draftLength).toBe(firstDraft.length)
+
+  const secondCell = await csvCellInput(surface)
+  await changeCsvCell(secondCell, secondValue)
+  await act(async () => {
+    secondCell.focus()
+    secondCell.blur()
+  })
+  await flushReact()
+  expect(surface.viewerMutationResponses).toHaveLength(2)
+  expect(surface.viewerMutationResponses[1]?.draft).toBeUndefined()
+  expect(surface.viewerMutationResponses[1]?.draftLength).toBe(secondDraft.length)
+  expect(surface.currentBuffer().draft).toBe(secondDraft)
+  const conflictedAfterSecondEdit = surface.element.textContent?.includes('A newer shared draft arrived.') ?? false
+
+  await act(async () => csvSaveButton(surface.element).click())
+  await flushReact()
+  const active = activeDocument()
+  if (!active) throw new Error('The active document was not registered.')
+  let closed = false
+  await act(async () => { closed = await active.close() })
+
+  expect(conflictedAfterSecondEdit).toBe(false)
+  expect(surface.savedContents).toEqual([secondDraft])
+  expect(surface.currentBuffer()).toMatchObject({ content: secondDraft, draft: null, dirty: false })
+  expect(surface.element.querySelector('.viewer-error')).toBeNull()
+  expect(closed).toBe(true)
+}, 20_000)
+
+
+test('CSV table Save still rejects a newer competing draft', async () => {
+  const surface = await renderDocument({ mode: 'rich', kind: 'csv', content: CSV_CONTENT })
+  const cell = await csvCellInput(surface)
+  await changeCsvCell(cell, '2')
+  await act(async () => {
+    cell.focus()
+    cell.blur()
+  })
+  await flushReact()
+  expect(surface.currentBuffer().draft).toBe(CSV_SAVED_CONTENT)
+
+  await act(async () => surface.publishCompetitorDraft('name,value\nbeta,3\n'))
+  await flushReact()
+  expect(surface.element.textContent).toContain('A newer shared draft arrived.')
+
+  await act(async () => csvSaveButton(surface.element).click())
+  await flushReact()
+
+  expect(surface.savedContents).toEqual([])
+  expect(surface.element.querySelector('.viewer-error')?.textContent).toContain('A newer shared draft arrived.')
 })
 
 test('deleted-file banner keeps the editable draft and explicit recovery actions', async () => {
