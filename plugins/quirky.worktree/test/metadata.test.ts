@@ -170,6 +170,74 @@ describe('set stores the worktree base ref', () => {
   })
 })
 
+describe('set persists references and metadata atomically', () => {
+  test('omission preserves references, replacement deduplicates and keeps identities, and invalid input changes nothing', async () => {
+    const { client, repo, t } = await start()
+    let activeClient = client
+    const worktree = await createWt(activeClient, { repo: repo.id, name: 'reference-save' })
+    type Reference = { id: string; url: string; label: string; createdAt: number }
+    const references = () => call(activeClient, 'quirky.worktree/references', { worktree: worktree.id }) as Promise<Reference[]>
+    const set = (params: Record<string, unknown>) => call(activeClient, 'quirky.worktree/set', { worktree: worktree.id, ...params })
+    const retained = await call(activeClient, 'quirky.worktree/linkReference', {
+      worktree: worktree.id,
+      url: 'https://tracker.example/issues/42',
+      label: 'Initial label'
+    }) as Reference
+    const removed = await call(activeClient, 'quirky.worktree/linkReference', {
+      worktree: worktree.id,
+      url: 'https://tracker.example/issues/43',
+      label: 'Remove this'
+    }) as Reference
+
+    const initial = await references()
+    expect(initial).toEqual([retained, removed])
+    expect(await set({ displayName: 'Login fix', comment: 'Initial notes' })).toMatchObject({
+      displayName: 'Login fix',
+      comment: 'Initial notes'
+    })
+    expect(await references()).toEqual(initial)
+
+    const saved = await set({
+      displayName: 'Saved login fix',
+      comment: 'Saved notes',
+      references: [
+        { url: retained.url, label: 'First label' },
+        { url: 'https://example.com/new-reference', label: '   ' },
+        { url: retained.url, label: ' Last label ' }
+      ]
+    }) as Worktree
+    expect(saved).toMatchObject({ displayName: 'Saved login fix', comment: 'Saved notes' })
+    const savedReferences = await references()
+    expect(savedReferences).toHaveLength(2)
+    const byUrl = new Map(savedReferences.map((reference) => [reference.url, reference]))
+    expect(byUrl.get(retained.url)).toEqual({ ...retained, label: 'Last label' })
+    expect(byUrl.get('https://example.com/new-reference')).toMatchObject({
+      url: 'https://example.com/new-reference',
+      label: 'https://example.com/new-reference'
+    })
+    expect(byUrl.get('https://example.com/new-reference')?.id).toMatch(/^ref_/)
+    expect(typeof byUrl.get('https://example.com/new-reference')?.createdAt).toBe('number')
+
+    activeClient = (await t.restart()).client
+    expect(await references()).toEqual(savedReferences)
+
+    const rejected = await failure(set({
+      displayName: 'Must not save',
+      comment: 'Must not save',
+      references: [{ url: 'javascript:alert(1)', label: 'Unsafe' }]
+    }))
+    expect(rejected.code).toBe(RpcErrorCode.InvalidParams)
+    expect(await call(activeClient, 'quirky.worktree/resolve', { selector: worktree.id })).toMatchObject({
+      displayName: 'Saved login fix',
+      comment: 'Saved notes'
+    })
+    expect(await references()).toEqual(savedReferences)
+
+    await set({ references: [] })
+    expect(await references()).toEqual([])
+  })
+})
+
 describe('SC-41: parents are set and cleared, and cycles are refused', () => {
   test('a, b under a, c under b: cycles are refused, no-parent clears, show lists the children (CLI)', async () => {
     const { client, repoDir } = await start()

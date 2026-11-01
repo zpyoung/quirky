@@ -303,6 +303,7 @@ export async function setWorktree(
     noParent?: boolean
     displayName?: string
     comment?: string
+    references?: Array<{ url: string; label: string }>
     parent?: string
   }
 ): Promise<boolean> {

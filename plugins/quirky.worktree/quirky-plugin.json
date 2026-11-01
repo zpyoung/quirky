@@ -797,7 +797,7 @@
       },
       {
         "id": "set",
-        "description": "Changes a worktree's display name, note, status, pin, unread flag or parent.",
+        "description": "Changes a worktree's display name, note, status, pin, unread flag or parent. If supplied, the references array replaces the linked-reference list.",
         "params": {
           "type": "object",
           "properties": {
@@ -811,6 +811,18 @@
             },
             "comment": {
               "type": "string"
+            },
+            "references": {
+              "type": "array",
+              "description": "Replacement list of manual worktree references; an empty list clears it.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "url": { "type": "string", "description": "Absolute HTTP or HTTPS URL." },
+                  "label": { "type": "string", "description": "Optional display label; blank or omitted defaults to the URL." }
+                },
+                "required": ["url"]
+              }
             },
             "status": { "type": "string", "description": "Built-in or project-defined status ID." },
             "pinned": {

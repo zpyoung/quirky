@@ -4,6 +4,7 @@ import { joinMetadata } from './list'
 import { filesystemIdentitySource, instanceIdFor, stillNamesHeldDirectory, type DirectoryHandle, type DirectoryIdentitySource } from './identity'
 import { insertRow, rowOf } from './store'
 import { readStatusDefinitions } from './statuses'
+import { replacementReferences } from './records'
 
 /** What `set` and `show` need from the plugin: the store, error building and selector resolution. */
 export type SetEnv = {
@@ -32,6 +33,7 @@ export type SetParams = {
   projectGroupId?: string | null
   expectedInstanceId?: string
   expectedProjectGroupId?: string | null
+  references?: Array<{ url: string; label: string }>
 }
 
 export type CreateGroupParams = {
@@ -73,6 +75,7 @@ function assertExpected(env: SetEnv, worktree: Worktree, params: SetParams): voi
  * `parent` names the workspace to nest under and `noParent` clears the link. A parent that is the
  * workspace itself or one of its descendants is refused as `parent-cycle`. `baseRef` sets the
  * workspace's own compare and rebase target; null or a blank string clears it.
+ * `references` replaces the manual links atomically with the other metadata; omitting it keeps them.
  */
 export async function setWorktree(
   env: SetEnv,
@@ -189,6 +192,15 @@ export async function setWorktree(
         lastActivityAt: worktree.lastActivityAt,
         instanceId: worktree.instanceId
       })
+    }
+    if (params.references !== undefined) {
+      const references = replacementReferences(
+        env.store,
+        worktree.id,
+        params.references,
+        (message) => env.fail('invalid-params', message)
+      )
+      assign('references_json', JSON.stringify(references))
     }
     if (assignments.length > 0) env.store.run(`UPDATE worktrees SET ${assignments.join(', ')} WHERE id = ?`, ...values, worktree.id)
     return rowOf(env.store, worktree.id)!
