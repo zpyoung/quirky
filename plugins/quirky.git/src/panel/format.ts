@@ -8,11 +8,8 @@ export function splitPath(path: string): { name: string; dir: string } {
   return at === -1 ? { name: path, dir: '' } : { name: path.slice(at + 1), dir: path.slice(0, at) }
 }
 
-/** The seven-character commit id shown in the history and in diff titles. */
+/** The seven-character commit id shown in the history. */
 export const shortOid = (oid: string): string => oid.slice(0, 7)
-
-/** The title of a commit's combined diff: "Commit 1a2b3c4: Merge main". */
-export const commitTitle = (oid: string, subject: string): string => `Commit ${shortOid(oid)}: ${subject}`
 
 const STATUS_LETTERS: Readonly<Record<GitChangeStatus, string>> = {
   modified: 'M',

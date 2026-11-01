@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  commitTitle,
   conflictLabel,
   dataOf,
   hasMoreDetail,
@@ -20,9 +19,8 @@ describe('the panel\'s text helpers', () => {
     expect(splitPath('README.md')).toEqual({ name: 'README.md', dir: '' })
   })
 
-  test('commit titles use the seven-character id', () => {
+  test('commit ids use seven characters', () => {
     expect(shortOid('1a2b3c4d5e6f')).toBe('1a2b3c4')
-    expect(commitTitle('1a2b3c4d5e6f', 'Merge main')).toBe('Commit 1a2b3c4: Merge main')
   })
 
   test('letters and conflict labels', () => {
