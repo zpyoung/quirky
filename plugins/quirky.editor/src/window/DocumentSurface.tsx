@@ -287,6 +287,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const acknowledgedBuffer = useRef<AcknowledgedDocumentDraft | null>(null)
   const pendingDrafts = useRef(new Map<number, DraftAcknowledgement>())
   const ownDraftAcknowledgements = useRef(new Map<number, string | null>())
+  const pendingRichApplies = useRef(0)
   const pendingSaveAcknowledgement = useRef<DraftAcknowledgement | null>(null)
   const draftWriteId = useRef(0)
   const blockedDraft = useRef(false)
@@ -324,25 +325,25 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     return () => { cancelled = true }
   }, [context, info, state])
 
-  useEffect(() => {
-    if (!buffer) return
+  const reconcileDraftObservation = useCallback((observedBuffer: EditorSurfaceBuffer) => {
+    if (observedBuffer.contentRevision < ackRevision.current) return
     if (localTextRef.current === null) {
-      acknowledgedBuffer.current = { content: buffer.content, draft: buffer.draft }
-      ackRevision.current = Math.max(ackRevision.current, buffer.contentRevision)
-      if (buffer.draft !== null) {
-        localTextRef.current = buffer.draft
-        setLocalText(buffer.draft)
+      acknowledgedBuffer.current = { content: observedBuffer.content, draft: observedBuffer.draft }
+      ackRevision.current = Math.max(ackRevision.current, observedBuffer.contentRevision)
+      if (observedBuffer.draft !== null) {
+        localTextRef.current = observedBuffer.draft
+        setLocalText(observedBuffer.draft)
       }
       return
     }
-    const observation = { contentRevision: buffer.contentRevision, draft: buffer.draft }
+    const observation = { contentRevision: observedBuffer.contentRevision, draft: observedBuffer.draft }
     const pending = [...pendingDrafts.current.values()]
     if (pendingSaveAcknowledgement.current !== null) pending.push(pendingSaveAcknowledgement.current)
     const origin = classifyDraftUpdate(observation, ownDraftAcknowledgements.current, pending)
     if (origin === 'pending') return
     if (origin === 'acknowledged') {
-      ackRevision.current = Math.max(ackRevision.current, buffer.contentRevision)
-      if (buffer.draft === null && buffer.content === localTextRef.current) {
+      ackRevision.current = Math.max(ackRevision.current, observedBuffer.contentRevision)
+      if (observedBuffer.draft === null && observedBuffer.content === localTextRef.current) {
         localTextRef.current = null
         setLocalText(null)
         pendingDrafts.current.clear()
@@ -351,16 +352,21 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
         setDraftConflict(null)
         return
       }
-      if (buffer.draft === localTextRef.current) {
+      if (observedBuffer.draft === localTextRef.current) {
         blockedDraft.current = false
         setDraftConflict(null)
       }
       return
     }
-    if (buffer.contentRevision <= ackRevision.current) return
+    if (observedBuffer.contentRevision <= ackRevision.current) return
     blockedDraft.current = true
     setDraftConflict('A newer shared draft arrived. Your local text is preserved for comparison.')
-  }, [buffer?.content, buffer?.contentRevision, buffer?.draft])
+  }, [])
+
+  useEffect(() => {
+    if (!buffer || pendingRichApplies.current > 0) return
+    reconcileDraftObservation(buffer)
+  }, [buffer?.content, buffer?.contentRevision, buffer?.draft, reconcileDraftObservation])
 
   useEffect(() => () => {
     if (input.tabId !== null) cancelEditorFocus(input.tabId)
@@ -632,12 +638,45 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const onAction = useCallback((method: string, params: Record<string, unknown>) => {
     const needsBuffer = BUFFER_METHODS[method] === true && params.bufferId === undefined
     const needsTab = TAB_METHODS[method] === true && params.tabId === undefined && actualTabId !== null
-    if (!needsBuffer && !needsTab) return context.call(method, params)
-    const request = { ...params }
+    const request = needsBuffer || needsTab ? { ...params } : params
     if (needsBuffer) request.bufferId = input.bufferId
     if (needsTab) request.tabId = actualTabId
-    return context.call(method, request)
-  }, [context, input.bufferId, actualTabId])
+    if (method !== 'quirky.editor/markdown' || request.action !== 'apply') return context.call(method, request)
+
+    pendingRichApplies.current += 1
+    return (async () => {
+      try {
+        const result = await context.call(method, request)
+        const updated = (result as { buffer?: EditorBufferInfo } | null | undefined)?.buffer
+        if (!updated || updated.contentRevision < ackRevision.current) return result
+        const acceptedDraft = updated.draft === undefined
+          ? updated.draftLength === null ? null : undefined
+          : updated.draft
+        if (acceptedDraft !== null && typeof acceptedDraft !== 'string') return result
+        const previousAcknowledgement = acknowledgedBuffer.current ?? {
+          content: bufferRef.current?.content ?? '',
+          draft: bufferRef.current?.draft ?? null
+        }
+        const acceptedContent = typeof updated.content === 'string' ? updated.content : previousAcknowledgement.content
+        rememberDraftAcknowledgement(ownDraftAcknowledgements.current, {
+          contentRevision: updated.contentRevision,
+          draft: acceptedDraft
+        })
+        ackRevision.current = Math.max(ackRevision.current, updated.contentRevision)
+        acknowledgedBuffer.current = { content: acceptedContent, draft: acceptedDraft }
+        localTextRef.current = acceptedDraft ?? acceptedContent
+        setLocalText(acceptedDraft ?? acceptedContent)
+        refresh()
+        return result
+      } finally {
+        pendingRichApplies.current -= 1
+        if (pendingRichApplies.current === 0) {
+          const latest = bufferRef.current
+          if (latest) reconcileDraftObservation(latest)
+        }
+      }
+    })()
+  }, [actualTabId, context, input.bufferId, reconcileDraftObservation, refresh])
 
   const featureProps = useMemo<SurfaceProps | null>(() => {
     if (!buffer) return null
