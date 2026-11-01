@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { chromium, type Locator } from 'playwright'
+import { chromium, webkit, type Locator } from 'playwright'
 
 const executable = chromium.executablePath()
 
@@ -64,3 +64,32 @@ test.skipIf(!existsSync(executable))('PopupMenu keeps natural keyboard focus aft
     await browser.close()
   }
 }, 60_000)
+
+for (const browserType of [chromium, webkit]) {
+  test.skipIf(!existsSync(browserType.executablePath()))(`searchable PopupMenu accepts typing immediately after opening in ${browserType.name()}`, async () => {
+    const bundle = await buildFixture()
+    const browser = await browserType.launch({ headless: true, args: process.platform === 'linux' && browserType === chromium ? ['--no-sandbox'] : [] })
+    try {
+      const page = await browser.newPage()
+      await page.setContent('<!doctype html><html><body><div id="root"></div></body></html>')
+      await page.addScriptTag({ content: bundle })
+
+      const trigger = page.getByRole('button', { name: 'Search menu' })
+      const dialog = page.getByRole('dialog', { name: 'Search items' })
+      const input = page.getByRole('textbox', { name: 'Search items' })
+      for (let opening = 0; opening < 2; opening++) {
+        await trigger.click()
+        await dialog.waitFor({ state: 'visible' })
+        expect(await input.evaluate((node) => document.activeElement === node)).toBe(true)
+        await page.keyboard.type('Second')
+        expect(await input.inputValue()).toBe('Second')
+        expect(await page.getByRole('menuitem').allTextContents()).toEqual(['Second item'])
+        await page.keyboard.press('Escape')
+        await dialog.waitFor({ state: 'detached' })
+        expect(await trigger.evaluate((node) => document.activeElement === node)).toBe(true)
+      }
+    } finally {
+      await browser.close()
+    }
+  }, 60_000)
+}

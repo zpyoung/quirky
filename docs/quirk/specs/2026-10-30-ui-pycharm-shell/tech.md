@@ -145,7 +145,7 @@ PopupItem = ContextMenuItem + { lead?: ReactNode; subtitle?: string; selected?: 
 ```
 
 - It wraps `ContextMenuList`, reusing its keyboard handling and `heading`, `key` and `header` slots. It adds anchor positioning, a pill on `selected`, an optional title and optional search.
-- A non-searchable popup takes keyboard focus only after positioning makes it visible, so arrow navigation and Escape work immediately after opening it.
+- A popup takes keyboard focus only after positioning makes it visible: the search field in a searchable popup, or the menu otherwise. Typing filters immediately, and arrow navigation and Escape work immediately after opening it.
 - Only one is open at a time, enforced by a module-level current-popup handle, so opening one closes the last. Escape closes it and returns focus to its anchor.
 - It renders with `role="menu"`, or `role="dialog"` when it has a search field, so `NATIVE_BROWSER_DEFAULT_MASKS` in `packages/ui/src/native-browser.ts` masks it over native browser panes.
 - `anchor` is an element, not `Popover`'s ref, because the window bar and status bar own their buttons. If `anchor` leaves the DOM, it closes.

@@ -60,6 +60,7 @@ function themeScope(anchor: HTMLElement): string | undefined {
 export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: PopupMenuProps) {
   const searchable = searchPlaceholder !== undefined
   const root = useRef<HTMLDivElement>(null)
+  const searchInput = useRef<HTMLInputElement>(null)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
   const closed = useRef(false)
@@ -150,6 +151,10 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
     }
   }, [anchor, dismissed, menuItems])
 
+  useLayoutEffect(() => {
+    if (searchable && !dismissed && position.visibility !== 'hidden') searchInput.current?.focus()
+  }, [searchable, dismissed, position.visibility])
+
   if (dismissed) return null
   const label = title ?? searchPlaceholder ?? 'Menu'
   const header = searchable ? (
@@ -157,7 +162,7 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
       <ControlIcon name="magnifying-glass" />
       <input
         className="ui-text-field__input qt-menu-search"
-        autoFocus
+        ref={searchInput}
         aria-label={searchPlaceholder}
         placeholder={searchPlaceholder}
         value={query}
