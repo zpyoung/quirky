@@ -75,6 +75,7 @@ type Fallback = { worktreeId: string; message: string }
 
 function orderedWorktrees(
   worktrees: WorktreeControl[],
+  groupBy: StockWorktreeOptions['groupBy'],
   sortBy: StockWorktreeOptions['sortBy'],
   sessions: Session[] | null,
   repos: Repo[]
@@ -82,7 +83,7 @@ function orderedWorktrees(
   const waitingIds = new Set(sessions?.filter((session) => session.status === 'waiting').map((session) => session.worktreeId) ?? [])
   const repoNames = new Map(repos.map((repo) => [repo.id, repo.displayName ?? repo.name]))
   return [...worktrees].sort((left, right) => {
-    if (left.isMain !== right.isMain) return left.isMain ? -1 : 1
+    if (!(groupBy === 'none' && sortBy === 'name') && left.isMain !== right.isMain) return left.isMain ? -1 : 1
     if (sortBy === 'name') return left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
     if (sortBy === 'project') {
       const project = (repoNames.get(left.repoId) ?? left.repoId).localeCompare(repoNames.get(right.repoId) ?? right.repoId)
@@ -274,7 +275,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const alwaysShowPrimary = activityProjection?.preferences.alwaysShowDefaultBranchWorkspace ?? true
   const canShowSleeping = (worktree: Worktree) =>
     stockOptions.showSleeping || revealSleeping || (worktree.isMain && alwaysShowPrimary)
-  const ordered = useMemo(() => orderedWorktrees(worktrees, stockOptions.sortBy, sessions, repos), [worktrees, stockOptions.sortBy, sessions, repos])
+  const ordered = useMemo(() => orderedWorktrees(worktrees, stockOptions.groupBy, stockOptions.sortBy, sessions, repos), [worktrees, stockOptions.groupBy, stockOptions.sortBy, sessions, repos])
   const hiddenFilteredWorktrees = useMemo(
     () => revealFiltered ? [] : ordered.filter((worktree) =>
       !passesStockFilters(worktree, stockOptions, hasAuthenticatedDesktopClient, otherClientByWorktree)
