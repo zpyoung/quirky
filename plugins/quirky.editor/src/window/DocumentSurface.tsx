@@ -656,7 +656,8 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const viewerAction = method === 'quirky.editor/viewer' && typeof request.action === 'string'
       ? request.action
       : null
-    if (viewerAction === 'save') return save('user')
+    const notebookSave = method === 'quirky.editor/notebook' && request.action === 'save'
+    if (viewerAction === 'save' || notebookSave) return save('user')
     const viewerMutation = viewerAction !== null && VIEWER_DRAFT_ACTIONS[viewerAction] === true
     if (!markdownApply && !viewerMutation) return context.call(method, request)
 
