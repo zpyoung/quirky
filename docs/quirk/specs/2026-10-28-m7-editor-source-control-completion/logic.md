@@ -35,6 +35,8 @@ Before: README.md and docs/Guide.md exist, with two ambiguous same-basename file
 ### C3: Permission-aware drafts, save and notes
 Before: a readable Markdown file is not writable under effective OS permissions/ACLs. State/read responses report disk write capability independently of format readOnly; UI explains the disk restriction. Editing preserves a draft, annotations persist in the owning note store, but denied save reports a concrete error and cannot clear dirty state, draft or baseline. If permissions are granted later, retry refreshes capability and saves through the existing content precondition. Never treat a chmod bit test as an ACL authority or promise a TOCTOU-free prediction.
 
+A file deleted on disk shows the deletion/recreation notice, not an OS-permissions warning. Explicit Save can recreate it; if recreation is denied, the save error preserves the draft.
+
 ### C4: Changes mode shares the actual buffer
 Before: tracked code/Markdown has staged changes plus a newer shared draft. Changes on its edit tab shows HEAD versus current draft without opening another editor tab; staged content must not be mistaken for HEAD. Editing the modified pane updates the canonical draft/revision and uses the normal guarded save. Commit/HEAD change refreshes the original side without discarding the modified draft. Untitled, binary, notebook and unavailable/error surfaces do not advertise unsupported Changes. No uncommitted changes is explicit. Markdown preview shows only the modified side with an explanatory notice; switching back retains draft and tab identity.
 

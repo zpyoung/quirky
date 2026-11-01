@@ -1097,7 +1097,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           {!buffer.readOnly && <Button variant="primary" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</Button>}
         </div>
       </header>
-      {!buffer.readOnly && buffer.diskWritable === false && (
+      {!buffer.readOnly && buffer.diskWritable === false && buffer.external !== 'deleted' && (
         <section className="qe-permission-banner" role="status">
           This file is not writable with the current OS permissions. Editing and review notes remain available; Save keeps the draft until write access is restored.
         </section>
