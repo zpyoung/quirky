@@ -35,6 +35,8 @@ Single-file diff headers preserve the path's casing for unstaged, staged, branch
 In the command palette, **Save Source Control File** saves edits in the focused Source Control diff. **Save File** saves the focused editor draft.
 
 Screen readers announce file rows with their Git state (such as modified or untracked) and history rows as commits. Row colors do not change those names to agent activity states.
+Tree-view folder counts use singular wording for one file and plural wording for multiple files. Folder discard confirmations describe the same count in their heading and warning.
+
 The Commits dock gives the subject its own full-width line and wraps refs beneath it. Long ref labels are ellipsized visually; the full value remains available in the tooltip and screen-reader label.
 
 Right-click a file row for its Source Control actions. Blank Changes areas follow the [shell's context-menu behavior](../../README.md#shared-desktop-ui-components), including native editing and selected-text menus.

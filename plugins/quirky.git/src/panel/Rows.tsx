@@ -273,7 +273,7 @@ function TreeRows({ scope, nodes, collapsedDirs, onToggleDir, selected, handlers
               <Button title={node.path} aria-expanded={!collapsed} onClick={() => onToggleDir(key)}>
                 <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
                 <span>{node.name}</span>
-                <Badge label={`${node.fileCount} files`}>{node.fileCount}</Badge>
+                <Badge label={`${node.fileCount} file${node.fileCount === 1 ? '' : 's'}`}>{node.fileCount}</Badge>
               </Button>
               <span className="git-row__reveal"><Buttons buttons={handlers.folderButtons(node.items)} subject={node.path} /></span>
             </div>

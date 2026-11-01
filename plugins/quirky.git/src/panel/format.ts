@@ -125,7 +125,7 @@ export function manyDiscardText(entries: readonly GitStatusEntry[]): DiscardText
   const n = entries.length
   return {
     title: `Discard changes to ${n} file${n === 1 ? '' : 's'}?`,
-    body: 'This will revert the unstaged changes to these files. This cannot be undone.',
+    body: `This will revert the unstaged changes to ${n === 1 ? 'this file' : 'these files'}. This cannot be undone.`,
     confirm: `Discard ${n}`
   }
 }
