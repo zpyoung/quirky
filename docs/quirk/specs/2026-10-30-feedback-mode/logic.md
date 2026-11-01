@@ -46,6 +46,7 @@ Copy turns every stored comment into one Markdown block. File issue builds a dra
    - **Then** the click doesn't reach the app, and the tray count goes up by one and the element gets a numbered dot
    - While composing, the card names the target by its safe accessible name or visible text, falling back to its tag or pane name. The selected target stays outlined, and the card opens near it without extending beyond the viewport.
    - Long target names wrap within the comment card, including names without spaces.
+   - The focused Comment textarea shows a complete focus ring inside the card's scrolling body, including after the first Esc warns about discarding a draft.
    - **Data before:** **Tray**: 2 comments
    - **Walkthrough:**
      1. The person clicks the Commit button; Quirky highlights it and opens the comment card

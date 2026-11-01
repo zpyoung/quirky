@@ -61,6 +61,7 @@ export function Card({ card, number, actions }: { card: CardState; number: numbe
       <TextArea
         label="Comment"
         autoFocus
+        style={{ outlineOffset: 'calc(-1 * var(--ui-focus-width))' }}
         value={card.text}
         onChange={(event) => actions.setText(event.target.value)}
         error={tooLong ? `Comments can be up to ${MAX_COMMENT_LENGTH} characters.` : undefined}
