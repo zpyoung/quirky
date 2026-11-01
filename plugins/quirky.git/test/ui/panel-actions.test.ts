@@ -432,7 +432,7 @@ describe('SC-25: the commit box', () => {
     unmount()
   })
 
-  test('a failed commit toasts "Commit failed" and keeps the message', async () => {
+  test('a classified commit failure keeps its summary and draft without redundant Details', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
       f.on('quirky.git/commit', () => {
@@ -441,7 +441,12 @@ describe('SC-25: the commit box', () => {
     })
     await type(message(element), 'msg')
     await click(primary(element))
-    expect(fake.toasts).toEqual([['Commit failed', 'fatal: nope']])
+    const card = q(element, '[role="alert"] .ui-inline-agent-card')
+    expect(card).not.toBeNull()
+    expect(card?.textContent).toContain('fatal: nope')
+    expect(q(card!, '[aria-label="Failed"]')?.textContent).toBe('Failed')
+    expect(buttonText(card!, 'Details')).toBeUndefined()
+    expect(fake.toasts).toEqual([])
     expect(message(element).value).toBe('msg')
     unmount()
   })
@@ -470,22 +475,52 @@ describe('SC-27: a failing hook blocks the commit', () => {
     unmount()
   })
 
-  test('a successful commit clears an earlier hook blocker', async () => {
-    let fail = true
-    const { element, unmount } = await open((f) => {
+  test('a failed commit keeps all output reachable without a toast', async () => {
+    const summary = 'Type check found problems'
+    const output = [summary, ...Array.from({ length: 30 }, (_, i) => `detail ${i + 1} src/fmt.ts`)].join('\n')
+    const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
       f.on('quirky.git/commit', () => {
-        if (fail) throw failure('Pre-commit hook failed.', { reason: 'hook', summary: 'Pre-commit hook failed.', output: 'hook output' })
-        return { sha: 'd'.repeat(40) }
+        throw failure(summary, { reason: 'failed', summary, output })
       })
     })
-    await type(message(element), 'Add math')
-    await click(primary(element))
-    expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(true)
-    fail = false
-    await click(primary(element))
-    expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(false)
-    unmount()
+    try {
+      await type(message(element), 'Add math')
+      await click(primary(element))
+      const card = q(element, '[role="alert"] .ui-inline-agent-card')
+      expect(card).not.toBeNull()
+      expect(card!.textContent).toContain(summary)
+      expect(fake.toasts).toEqual([])
+      expect(message(element).value).toBe('Add math')
+      await click(buttonText(card!, 'Details'))
+      expect(q(dialog()!, 'pre')?.textContent).toBe(output)
+      await click(buttonText(dialog()!, 'Close'))
+      await click(buttonText(card!, 'Details'))
+      expect(q(dialog()!, 'pre')?.textContent).toBe(output)
+    } finally {
+      unmount()
+    }
+  })
+
+  test('a successful commit clears earlier hook and failed blockers', async () => {
+    for (const reason of ['hook', 'failed'] as const) {
+      let fail = true
+      const summary = reason === 'hook' ? 'Pre-commit hook failed.' : 'Type check found problems'
+      const { element, unmount } = await open((f) => {
+        f.status = statusOf([entry('math.ts', 'staged')])
+        f.on('quirky.git/commit', () => {
+          if (fail) throw failure(summary, { reason, summary, output: `${reason} output` })
+          return { sha: 'd'.repeat(40) }
+        })
+      })
+      await type(message(element), 'Add math')
+      await click(primary(element))
+      expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(true)
+      fail = false
+      await click(primary(element))
+      expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(false)
+      unmount()
+    }
   })
 
   test('a hook failure has a Hook pill, and no Details when the output is just the summary', async () => {

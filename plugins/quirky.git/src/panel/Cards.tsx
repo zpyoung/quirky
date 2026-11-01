@@ -99,7 +99,7 @@ export function HugeBanner({ onStageAll, onRetry }: { onStageAll(): void; onRetr
 
 type BlockedProps = {
   title: 'Commit blocked' | 'Push blocked'
-  pill: 'Lint' | 'Hook'
+  pill: 'Lint' | 'Hook' | 'Failed'
   summary: string
   /** Null when the summary says everything the output does. */
   onDetails: (() => void) | null
@@ -107,7 +107,7 @@ type BlockedProps = {
   fix?: FixButtonProps
 }
 
-/** The card for a commit or push a hook refused, with the hook's summary and a Details button. */
+/** The card for a commit or push a hook refused, or a commit failure, with its summary and Details when available. */
 export function BlockedCard({ title, pill, summary, onDetails, fix }: BlockedProps) {
   return (
     <div role="alert">
