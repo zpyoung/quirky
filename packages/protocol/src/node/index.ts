@@ -11,6 +11,7 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -19,7 +20,7 @@ import {
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { QuirkyClient } from '../client'
 import { RPC_PATH, type ClientRole } from '../rpc'
@@ -149,9 +150,42 @@ export async function isDaemonAlive(info: RuntimeInfo | null, timeoutMs = 1500):
   }
 }
 
-/** Identifies a daemon build by the content of its entry file; the package version is not bumped per release. */
+const SOURCE_ENTRY = join('packages', 'daemon', 'src', 'main.ts')
+
+/** What a daemon running from a checkout holds in memory. It reads the UI from disk per request, and the CLI and PTY host are separate programs. */
+const DAEMON_SOURCES = [join('packages', 'daemon'), join('packages', 'protocol'), join('packages', 'git'), 'plugins']
+const NOT_DAEMON_SOURCE = new Set(['node_modules', 'dist', 'test', 'assets'])
+
+function sourceFilesIn(dir: string): string[] {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
+    if (item.name.startsWith('.') || NOT_DAEMON_SOURCE.has(item.name)) return []
+    const path = join(dir, item.name)
+    if (item.isDirectory()) return sourceFilesIn(path)
+    return item.isFile() ? [path] : []
+  })
+}
+
+/**
+ * Identifies a daemon build, since the package version is not bumped per release. A bundled entry
+ * holds all the daemon's code, so its content is enough. An entry in a source checkout imports the
+ * rest, so that identity covers the checkout's location, its daemon sources and its lockfile.
+ */
 export function daemonEntryHash(entry: string): string {
-  return createHash('sha256').update(readFileSync(entry)).digest('hex').slice(0, 16)
+  const hash = createHash('sha256')
+  const realEntry = realpathSync(entry)
+  if (!realEntry.endsWith(sep + SOURCE_ENTRY)) return hash.update(readFileSync(entry)).digest('hex').slice(0, 16)
+
+  const root = realEntry.slice(0, -SOURCE_ENTRY.length)
+  const files = DAEMON_SOURCES.flatMap((dir) => sourceFilesIn(join(root, dir)))
+  const lockfile = join(root, 'bun.lock')
+  if (existsSync(lockfile)) files.push(lockfile)
+  hash.update(root)
+  for (const file of files.sort()) {
+    hash.update(`\0${file}\0`)
+    hash.update(readFileSync(file))
+  }
+  return hash.digest('hex').slice(0, 16)
 }
 
 /** Stops a running daemon the way `quirky daemon restart` does and waits for its health check to go quiet. */
