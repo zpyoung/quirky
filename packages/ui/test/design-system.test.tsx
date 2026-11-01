@@ -438,9 +438,11 @@ describe('shared graphite components', () => {
     await click(dialog.querySelector('button')!)
     expect(calls).toEqual(['copy'])
     const outside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Outside')!
+    outside.focus()
     await act(async () => { outside.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
     expect(calls).toEqual(['copy', 'close'])
     expect(document.querySelector('[role="dialog"][aria-label="AI notes"]')).toBeNull()
+    expect(document.activeElement).toBe(outside)
   })
 
   test('toasts dismiss on expiration and expiration never invokes the action', async () => {

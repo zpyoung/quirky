@@ -43,7 +43,13 @@ export function Popover({ open, label, anchor, boundary, onClose, children }: Po
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Node && !anchor.current?.contains(event.target) && !root.current?.contains(event.target)) close.current()
     }
-    const keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); close.current() } }
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        anchor.current?.focus()
+        close.current()
+      }
+    }
     document.addEventListener('pointerdown', outside, true)
     document.addEventListener('keydown', keydown, true)
     return () => { document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', keydown, true) }

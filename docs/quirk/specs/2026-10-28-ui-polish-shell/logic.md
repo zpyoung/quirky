@@ -24,6 +24,8 @@ Given the synthetic project has main, ui-review-notes and ui-review-ready, openi
 
 Click the header options icon: all named controls become reachable in a shared popover. Opening existing settings/disclosures and changing filters retains current canonical callbacks, persistence and selected-workspace exceptions. Example: choose an activity filter, dismiss, reopen; the selected filter remains selected. Clear filters restores All and clears filter checkboxes. Escape and outside click dismiss the popover without discarding applied filter changes. Add project continues to open its existing dialog; cancelling it creates no project. Empty/loading/error list behavior is retained; an empty list still has its recovery action.
 
+Escape returns keyboard focus to the header options button, including when focus is inside the popover. Outside-click dismissal does not restore focus to the header button.
+
 ### S3: Quiet stripes without losing movement
 
 Every assigned tool on left, right and bottom stripes has one visible icon button and no underneath dropdown chevron. Clicking continues to open/close its slot. The existing tool context menu still exposes move-to-slot actions, including keyboard access, and drag movement continues unchanged.

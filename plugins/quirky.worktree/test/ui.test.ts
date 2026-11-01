@@ -622,11 +622,14 @@ test('Worktrees controls are supplied by the header popover, not the closed pane
   expect(summaries).toContain('More workspace tools')
   expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('true')
 
-  await act(async () => {
-    popover!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
-  })
+  const workspaceOptions = [...popover!.querySelectorAll<HTMLElement>('details > summary')]
+    .find((summary) => summary.textContent?.trim() === 'Workspace options')!
+  workspaceOptions.focus()
+  expect(document.activeElement).toBe(workspaceOptions)
+  await press('Escape')
   expect(optionsPopover()).toBeNull()
   expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('false')
+  expect(document.activeElement).toBe(trigger!)
   await unmount()
 })
 
