@@ -4,6 +4,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { act, useState } from 'react'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { IssueDraft, TasksState } from '../src/contracts'
+import { IssueSurface } from '../src/issue/IssueSurface'
 import { NewIssueDialog } from '../src/issue/NewIssueDialog'
 
 type Mounted = { container: HTMLDivElement; root: Root }
@@ -129,4 +130,44 @@ test('Cancel closes New Issue without creating it and keeps the saved draft for 
   }, 'reopened New Issue title field')
   expect(titleField(container)?.value).toBe('Edited draft')
   expect(creates).toBe(0)
+})
+
+test('an issue shows no placeholder state or author until its detail has arrived', async () => {
+  const target = { worktree: 'worktree-1', kind: 'issue', number: 256, url: 'https://github.com/test-owner/test-repo/issues/256', host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+  const detail = {
+    item: { kind: 'issue', number: 256, title: 'Loaded issue', body: '', state: 'open', url: target.url, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z', author: 'octocat', labels: [], assignees: [] },
+    viewerCanUpdate: true, comments: [], participants: [], timeline: [], partialFailures: [], truncated: false, source: 'repository'
+  }
+  const read = Promise.withResolvers<unknown>()
+  const context = {
+    async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'quirky.tasks/issue') return read.promise
+      if (method === 'quirky.tasks/issueChoices') return params.kind === 'source' ? { source: 'origin', sources: [] } : { available: false, labels: [], assignees: [] }
+      return {}
+    },
+    async executeCommand() { return undefined },
+    toast() {}
+  } as unknown as UiPluginContext
+  const state = { navigation: { detail: target, project: null }, links: {} } as unknown as TasksState
+  const container = document.createElement('div')
+  const mounted = { container, root: createRoot(container) }
+  mounts.push(mounted)
+  document.body.append(container)
+  await act(async () => mounted.root.render(<IssueSurface context={context} state={state} refresh={async () => {}} />))
+
+  expect(container.textContent).toContain('Issue #256')
+  expect(container.textContent).toContain('Loading issue details…')
+  expect(container.textContent).not.toContain('Unknown state')
+  expect(container.textContent).not.toContain('unknown author')
+  expect(container.textContent).not.toContain('updated unknown time')
+  const labels = [...container.querySelectorAll('button')].map((button) => button.textContent?.trim())
+  expect(labels).toEqual(expect.arrayContaining(['Close', 'Copy link', 'Open on GitHub']))
+  expect(labels.some((label) => label?.startsWith('Refresh') || label === 'Refreshing…')).toBe(true)
+
+  await act(async () => read.resolve(detail))
+  await waitFor(() => container.textContent?.includes('Loaded issue') === true, 'loaded issue detail')
+  expect(container.textContent).toContain('octocat opened this issue')
+  expect(container.textContent).toContain('Open')
+  expect(container.textContent).not.toContain('Unknown state')
+  expect(container.textContent).not.toContain('Loading issue details…')
 })

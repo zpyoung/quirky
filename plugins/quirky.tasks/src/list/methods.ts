@@ -175,6 +175,89 @@ function sortItems(items: TaskListResult['items']): void {
   })
 }
 
+type ResolvedEntry = { repo: TaskRepo; source: ResolvedRepoSource }
+type RepoSourceResult = ResolvedEntry | { repo: TaskRepo; error: unknown }
+
+/** The repositories a read covers, each with its resolved source or the reason it has none. */
+async function resolveSelection(env: TasksEnv, selectedValue: unknown, explicit: boolean): Promise<{ repos: TaskRepo[]; repoSources: RepoSourceResult[]; resolved: ResolvedEntry[] }> {
+  const repos = eligibleRepositories(await env.repositories())
+  const selectedIds = selectedValue === null || selectedValue === undefined ? null : new Set(selectedValue as string[])
+  if (explicit && selectedIds !== null) {
+    const known = new Set(repos.map((repo) => repo.id))
+    const unknown = [...selectedIds].filter((id) => !known.has(id))
+    if (unknown.length > 0) invalid(env, `Unknown Git repository selection: ${unknown.join(', ')}.`)
+  }
+  const requestedRepos = selectedIds === null ? repos : repos.filter((repo) => selectedIds.has(repo.id))
+  const repoSources = await Promise.all(requestedRepos.map(async (repo): Promise<RepoSourceResult> => {
+    try {
+      const source = await resolveRepoSource(env, repo)
+      return { repo, source }
+    } catch (error) {
+      return { repo, error }
+    }
+  }))
+  const resolved = repoSources.filter((entry): entry is ResolvedEntry => 'source' in entry)
+  return { repos, repoSources, resolved }
+}
+
+/** The resolved repositories a search covers: all of them, or those its `repo:` qualifiers name. */
+function qualifyRepositories(env: TasksEnv, resolved: ResolvedEntry[], search: ReturnType<typeof planSearch>): ResolvedEntry[] {
+  if (search.repositories.length > 0 && !resolved.some((entry) => searchRepoMatches(entry.source, search.repositories))) {
+    invalid(env, 'Search repository must match a selected configured GitHub source.')
+  }
+  return search.repositories.length === 0 ? resolved : resolved.filter((entry) => searchRepoMatches(entry.source, search.repositories))
+}
+
+const DEFAULT_QUERY: Record<ListMode, string> = { issues: 'is:issue is:open', prs: 'is:pr is:open' }
+
+/** One repository's total for a search, or null when the read failed or returned no usable total. */
+async function repositoryTotal(env: TasksEnv, entry: ResolvedEntry, kind: ItemKind, query: string): Promise<number | null> {
+  if (entry.source.availability.status !== 'available') return null
+  try {
+    const response = object(await env.context.call('quirky.hosting/workItemPage', { worktree: entry.repo.worktree, kind, query, page: 1, limit: 1 }))
+    const total = response?.totalCount
+    const errors = object(response?.errors)
+    if (errors && Object.keys(errors).length > 0) return null
+    return typeof total === 'number' && Number.isSafeInteger(total) && total >= 0 ? total : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Counts issues and pull requests separately across the repositories `list` would cover. The
+ * given `mode` uses the given `query` and the other mode its default open query. A count is null
+ * when any covered repository could not be read, so a caller never shows a partial total.
+ */
+async function countWork(env: TasksEnv, params: Record<string, unknown>): Promise<{ issues: number | null; prs: number | null }> {
+  const mode = params.mode === undefined ? undefined : listMode(env, params.mode, 'issues')
+  if (params.query !== undefined && typeof params.query !== 'string') invalid(env, 'query must be a string.')
+  if (params.query !== undefined && mode === undefined) invalid(env, 'query requires a mode of issues or prs.')
+  const selectedValue = params.repoIds === undefined ? env.read().navigation.repoIds : params.repoIds
+  if (selectedValue !== null && selectedValue !== undefined && (!Array.isArray(selectedValue) || selectedValue.some((id) => typeof id !== 'string'))) {
+    invalid(env, 'repoIds must be an array of repository IDs or null.')
+  }
+  const plans = {} as Record<ListMode, ReturnType<typeof planSearch>>
+  for (const listed of ['issues', 'prs'] as const) {
+    const query = listed === mode && typeof params.query === 'string' ? params.query : DEFAULT_QUERY[listed]
+    try {
+      plans[listed] = planSearch(query, listed === 'issues' ? 'issue' : 'pullRequest')
+    } catch (error) {
+      invalid(env, messageOf(error))
+    }
+  }
+  const { repoSources, resolved } = await resolveSelection(env, selectedValue, params.repoIds !== undefined)
+  if (repoSources.some((entry) => 'error' in entry)) return { issues: null, prs: null }
+  const totals = {} as Record<ListMode, number | null>
+  await Promise.all((['issues', 'prs'] as const).map(async (listed) => {
+    const kind: ItemKind = listed === 'issues' ? 'issue' : 'pullRequest'
+    const qualified = qualifyRepositories(env, resolved, plans[listed])
+    const each = await Promise.all(qualified.map((entry) => repositoryTotal(env, entry, kind, plans[listed].query)))
+    totals[listed] = each.some((total) => total === null) ? null : each.reduce<number>((sum, total) => sum + total!, 0)
+  }))
+  return { issues: totals.issues, prs: totals.prs }
+}
+
 async function listWork(env: TasksEnv, params: Record<string, unknown>): Promise<TaskListResult> {
   const state = env.read()
   const navigation = state.navigation
@@ -197,27 +280,8 @@ async function listWork(env: TasksEnv, params: Record<string, unknown>): Promise
   if (selectedValue !== null && selectedValue !== undefined && (!Array.isArray(selectedValue) || selectedValue.some((id) => typeof id !== 'string'))) {
     invalid(env, 'repoIds must be an array of repository IDs or null.')
   }
-  const repos = eligibleRepositories(await env.repositories())
-  const selectedIds = selectedValue === null || selectedValue === undefined ? null : new Set(selectedValue as string[])
-  if ((params as ListArgs).repoIds !== undefined && selectedIds !== null) {
-    const known = new Set(repos.map((repo) => repo.id))
-    const unknown = [...selectedIds].filter((id) => !known.has(id))
-    if (unknown.length > 0) invalid(env, `Unknown Git repository selection: ${unknown.join(', ')}.`)
-  }
-  const requestedRepos = selectedIds === null ? repos : repos.filter((repo) => selectedIds.has(repo.id))
-  const repoSources = await Promise.all(requestedRepos.map(async (repo) => {
-    try {
-      const source = await resolveRepoSource(env, repo)
-      return { repo, source }
-    } catch (error) {
-      return { repo, error }
-    }
-  }))
-  const resolved = repoSources.filter((entry): entry is { repo: TaskRepo; source: ResolvedRepoSource } => 'source' in entry)
-  if (search.repositories.length > 0 && !resolved.some((entry) => searchRepoMatches(entry.source, search.repositories))) {
-    invalid(env, 'Search repository must match a selected configured GitHub source.')
-  }
-  const qualified = search.repositories.length === 0 ? resolved : resolved.filter((entry) => searchRepoMatches(entry.source, search.repositories))
+  const { repos, repoSources, resolved } = await resolveSelection(env, selectedValue, (params as ListArgs).repoIds !== undefined)
+  const qualified = qualifyRepositories(env, resolved, search)
   const perRepo = qualified.length === 0 ? 0 : Math.max(1, Math.min(MAX_PER_REPO, Math.floor(100 / qualified.length)))
   const pageLimit = perRepo > 0 ? Math.ceil(MAX_SEARCH_RESULTS / perRepo) : 1
   if (page > pageLimit) invalid(env, `page exceeds the ${MAX_SEARCH_RESULTS}-result GitHub search limit.`)
@@ -638,6 +702,7 @@ async function rowConfirmation(env: TasksEnv, params: Record<string, unknown>): 
 export function listMethods(env: TasksEnv): TaskMethodTable {
   return {
     list: (params) => listWork(env, params),
+    counts: (params) => countWork(env, params),
     row: (params) => mutateRow(env, params),
     rowConfirmation: (params) => rowConfirmation(env, params),
     checks: (params) => checks(env, params),

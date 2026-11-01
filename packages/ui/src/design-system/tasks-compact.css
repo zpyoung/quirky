@@ -1,0 +1,85 @@
+.plugin-slot-body:has(> .tasks-compact) { display: flex; }
+.tasks-compact { min-width: 0; max-width: 100%; }
+.tasks-compact .ui-tool-panel-frame__body { min-width: 0; }
+
+.tasks-compact__filters {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-4);
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: var(--ui-space-4) var(--ui-space-8);
+  font-size: var(--ui-font-label);
+}
+.tasks-compact__filter-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-text); }
+.tasks-compact__filter-count { flex: 0 0 auto; white-space: nowrap; color: var(--ui-muted); }
+.tasks-compact__filters .ui-icon-button { margin-inline-start: auto; flex: 0 0 auto; background: var(--ui-transparent); border-color: var(--ui-transparent); color: var(--ui-muted); }
+
+.tasks-compact__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--ui-space-4) var(--ui-space-8);
+}
+
+.tasks-compact__row { position: relative; flex: 0 0 auto; min-width: 0; max-width: 100%; }
+.tasks-compact__row .ui-list-row { border-color: var(--ui-transparent); background: var(--ui-transparent); min-width: 0; max-width: 100%; }
+.tasks-compact__row .ui-list-row--selected, .tasks-compact__row .ui-list-row--interactive:hover { background: var(--ui-selected); }
+.tasks-compact__row .ui-list-row__main { min-width: 0; }
+.tasks-compact__row .ui-list-row__title,
+.tasks-compact__row .ui-list-row__description {
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the actions sit in the row's flow at zero width while hidden, so shown they take width from the text, and they stay focusable */
+.tasks-compact__row .ui-list-row { flex-wrap: nowrap; gap: 0; }
+.tasks-compact__row .ui-list-row__trailing {
+  width: 0;
+  overflow: clip;
+  opacity: 0;
+  pointer-events: none;
+}
+.tasks-compact__row:hover .ui-list-row__trailing,
+.tasks-compact__row:focus-within .ui-list-row__trailing {
+  width: auto;
+  overflow: visible;
+  margin-inline-start: var(--ui-space-8);
+  opacity: 1;
+  pointer-events: auto;
+  background: var(--ui-selected);
+  border-radius: var(--ui-radius-control);
+}
+[data-panel-focused] .tasks-compact__row .ui-list-row--selected,
+[data-panel-focused] .tasks-compact__row .ui-list-row--selected:hover:not([aria-disabled="true"]) {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+.tasks-compact__row .ui-icon-button, .tasks-compact__row .ui-menu__trigger {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  color: var(--ui-text);
+  padding: var(--ui-space-2) var(--ui-space-4);
+}
+.tasks-compact__row .ui-menu__list { left: auto; right: 0; max-width: 100%; }
+
+.tasks-compact__loading { display: flex; flex-direction: column; gap: var(--ui-space-8); min-width: 0; padding: var(--ui-space-4) 0; }
+.tasks-compact__skeleton { height: var(--ui-row-double); border-radius: var(--ui-radius-control); background: var(--ui-selected); }
+
+.tasks-compact__notice {
+  margin: 0;
+  padding: var(--ui-space-4) var(--ui-space-8);
+  color: var(--ui-muted);
+  font-size: var(--ui-font-label);
+}
+.tasks-compact__problem { min-width: 0; border-inline-start: var(--ui-focus-width) solid var(--ui-failing); }
+.tasks-compact__problem .ui-empty-state__message, .tasks-compact__empty .ui-empty-state__message { color: var(--ui-muted); }
+.tasks-compact .ui-empty-state { min-width: 0; padding: var(--ui-space-12) var(--ui-space-8); }
+.tasks-compact .ui-empty-state__action { max-width: 100%; white-space: normal; }

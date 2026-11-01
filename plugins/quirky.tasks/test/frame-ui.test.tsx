@@ -27,7 +27,7 @@ afterAll(async () => {
 
 const state: TasksState = {
   revision: 1,
-  navigation: { source: 'github', mode: 'prs', repoIds: null, query: '', page: 1, scrollTop: 0, detail: null, newIssue: false, project: null },
+  navigation: { source: 'github', mode: 'prs', repoIds: null, query: '', page: 1, scrollTop: 0, detail: null, newIssue: false, project: null, lastList: { mode: 'prs', query: '', page: 1 } },
   preferences: { showTasksButton: true, visibleTaskProviders: ['github'], defaultTaskSource: 'github', defaultTaskViewPreset: 'open', defaultRepoSelection: null },
   issueDraft: { title: '', body: '', labels: [], assignees: [], repoId: null },
   projects: { pinned: [], recent: [], lastViewByProject: {}, queryByView: {}, hiddenColumns: {}, columnWidths: {}, roadmapZoom: 'month' },
@@ -43,6 +43,7 @@ async function mountTasks() {
       calls.push({ method, params })
       if (method === 'quirky.tasks/state') return state
       if (method === 'quirky.tasks/navigate') return state
+      if (method === 'ui.tool.open') return {}
       throw new Error('offline')
     },
     subscribe: () => () => {},
@@ -68,4 +69,14 @@ test('Tasks puts its mode tabs in the frame header next to one title and keeps t
   const issues = [...tabs!.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
   await act(async () => issues.click())
   expect(calls.find((call) => call.method === 'quirky.tasks/navigate')?.params).toMatchObject({ mode: 'issues' })
+})
+
+test('Tasks puts Collapse in the frame actions, opens the tool on press and has no Minimize', async () => {
+  const { element, calls } = await mountTasks()
+  const actions = element.querySelector('.ui-tool-panel-frame__actions')!
+  const collapse = [...actions.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.getAttribute('aria-label') === 'Collapse Tasks')!
+  expect(collapse).toBeDefined()
+  expect([...element.querySelectorAll('button')].some((button) => button.getAttribute('aria-label') === 'Minimize Tasks')).toBe(false)
+  await act(async () => collapse.click())
+  expect(calls.find((call) => call.method === 'ui.tool.open')?.params).toEqual({ id: 'sidebar-section:quirky.tasks/tasks' })
 })
