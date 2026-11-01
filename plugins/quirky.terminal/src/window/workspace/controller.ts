@@ -634,7 +634,21 @@ export class WorkspaceController {
   async activateTab(tabId: string): Promise<void> {
     const loc = this.ws ? locateTab(this.ws, tabId) : null
     if (!loc) return
-    if (loc.group.activeTab === tabId && this.ws!.activeGroup === loc.group.id) return
+    if (loc.group.activeTab === tabId && this.ws!.activeGroup === loc.group.id) {
+      const { menu, dialog, rename } = this.state
+      if (menu || dialog || rename) return
+      const pane = this.activePaneId()
+      const dock = pane ? this.state.dockStates[pane] : undefined
+      const host = pane ? this.state.dockHosts[pane] : undefined
+      if (pane && dock?.enabled && dock.supported && dock.docked && dock.mounted && host?.mounted && !dock.passthrough) {
+        try {
+          await this.context.executeCommand('command:quirky.terminal-dock/focus', { pane })
+        } catch (error) {
+          this.context.toast('Could not focus agent composer', messageOf(error))
+        }
+      } else if (pane) this.handleOf(pane)?.focus()
+      return
+    }
     await this.run('activateTab', { tab: tabId }, 'switch tabs')
   }
 

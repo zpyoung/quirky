@@ -151,6 +151,24 @@ describe('SC-11: clicking a tab activates it', () => {
     await click(view.q('[data-tab="tab-2"]'))
     expect(callsTo(view.fake, 'activateTab')).toEqual([])
   })
+  test('clicking the active tab restores split-pane terminal focus without activating it again', async () => {
+    const workspace = conceptualWorkspace()
+    const root = workspace.root
+    if (root.kind !== 'split' || root.first.kind !== 'group') throw new Error('Expected the conceptual workspace to have a first group.')
+    const activeTab = root.first.tabs.find((entry) => entry.id === 'tab-2')
+    if (!activeTab || activeTab.kind === 'view') throw new Error('Expected tab-2 to be a terminal tab.')
+    activeTab.activePane = 'pane-4'
+    const view = await mount(fakeDaemon(workspace))
+    const terminal = view.q<HTMLTextAreaElement>('[data-pane="pane-4"] textarea.xterm-helper-textarea')!
+    const external = document.createElement('button')
+    document.body.appendChild(external)
+    external.focus()
+    expect(document.activeElement).toBe(external)
+    await click(view.q('[data-tab="tab-2"]'))
+    expect(document.activeElement).toBe(terminal)
+    expect(callsTo(view.fake, 'activateTab')).toEqual([])
+  })
+
 
   test('the daemon answer replaces what is drawn, and only its panes are mounted', async () => {
     const daemon = fakeDaemon(conceptualWorkspace(), {
