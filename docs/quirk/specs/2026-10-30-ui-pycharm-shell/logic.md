@@ -161,6 +161,8 @@ Center tabs show a tool or file icon and an accent underline on the active tab, 
 
 ⌘K gains scope tabs for All, Worktrees, Commands and Files, and shows recent items before anything is typed.
 
+Search focuses its query field when it opens. Dismissing it with Escape or its close button returns focus to the control or terminal that had focus before it opened. Selecting a result instead lets that destination take focus.
+
 ## The golden screens
 
 These replace the 10-28 golden screens and are what every screenshot review scores against. The user approved them on 2026-10-30. Their content is made up.

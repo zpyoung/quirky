@@ -145,6 +145,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const fileSearchKey = `${selectedWorktree}\n${fileQuery}`
   const fileSearchActive = searchesFiles(scope) && fileQuery !== '' && selectedWorktree !== null
   useEffect(() => {
+    fieldRef.current?.focus()
+  }, [])
+  useEffect(() => {
     let mounted = true
     let requestVersion = 0
     const refreshAgents = async () => {
@@ -308,7 +311,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         label="Search"
         aria-label="Search commands, tools, views, worktrees, and files"
         placeholder="Type to search"
-        autoFocus
         value={filter}
         onChange={(event) => {
           setFilter(event.target.value)
