@@ -103,7 +103,7 @@ Each side's stripe runs top to bottom in this order:
 
 The row of bottom-tool icons is removed, which gives the work about 40 more height. The six slots and their rules are unchanged: left foot opens bottom left and right foot opens bottom right. The open tool's icon gets a full-width `selected` block rather than a small rounded square.
 
-Overflow lists tools that aren't on a stripe, either because the user took them off or because the window is too short to fit them, and shows their shortcuts where they have one.
+Overflow lists tools that aren't on a stripe, either because the user took them off or because the window is too short to fit them, and shows their shortcuts where they have one. Escape closes More tools and returns focus to its button, with a complete rounded focus ring inside the stripe.
 
 ### Icons
 
