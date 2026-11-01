@@ -531,13 +531,33 @@ describe('quirky.git editable file diff', () => {
     expect(s.modifiedEditor(element).state.sliceDoc()).toBe('mine\n')
   })
 
-  test('SC-61: Revert Block puts the block back to the original text, unsaved, and the command does the same', async () => {
+  test('Revert Block restores the original block and visibly marks the draft unsaved without saving', async () => {
     const { element, report } = await open(editableDiff())
     expect(element.querySelectorAll('button[name=reject]').length).toBeGreaterThan(0)
-    await act(async () => void (await fake.run('revert-change')))
+    await act(async () => {
+      element.querySelector('button[name=reject]')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    })
     await settle()
     expect(s.modifiedEditor(element).state.sliceDoc()).toBe(far.modified.replace('line three\n', 'line 3\n'))
     expect(report()).toMatchObject({ dirty: true, changes: 1 })
+    expect(fake.callsTo('quirky.git/save')).toEqual([])
+    expect(element.querySelector('h2')?.textContent).toContain('Unsaved')
+  })
+
+  test('closing an unsaved diff can cancel without losing its draft or discard without saving', async () => {
+    const { element, report } = await open(editableDiff())
+    edit(element, 'unsaved draft\n')
+    await settle()
+    await click(byLabel(element, 'Close'))
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('math.ts')
+    await click(byText(document.body, 'Cancel'))
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(s.modifiedEditor(element).state.sliceDoc()).toBe('unsaved draft\n')
+    expect(report().dirty).toBe(true)
+    expect(fake.opened).toEqual([])
+    await click(byLabel(element, 'Close'))
+    await click(byText(document.body, "Don't Save"))
+    expectOpened(fake, s.SESSIONS_VIEW, { worktree: 'w1' })
     expect(fake.callsTo('quirky.git/save')).toEqual([])
   })
 

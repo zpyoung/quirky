@@ -25,6 +25,7 @@ export type PaneHandle = {
   changeCount(): number
   revertChange(): boolean
   save(): Promise<void>
+  isDirty(): boolean
   reload(): Promise<void>
   overwrite(): Promise<void>
   /** The current modified-side draft, whether or not it has been saved. */
@@ -253,6 +254,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       currentChange: () => mergeRef.current?.currentChange() ?? null,
       changeCount: () => mergeRef.current?.changeCount() ?? 0,
       revertChange: () => (editable ? (mergeRef.current?.revertChange() ?? false) : false),
+      isDirty: () => dirtyRef.current,
       save: () => actions.current.save(),
       reload: () => reload(),
       overwrite: () => actions.current.overwrite(),
