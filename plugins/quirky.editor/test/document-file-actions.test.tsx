@@ -12,6 +12,7 @@ import type { EditorView as EditorViewType } from '@codemirror/view'
 import { undo as undoMarkdown } from '@tiptap/pm/history'
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view'
 
+import { parseNotebookRoot, serializeNotebook } from '../src/notebook/document'
 type SettingWrite = { id: string; value: unknown }
 type SettingChange = { type: 'setting.changed'; id: string; value: unknown }
 type ContextEvent = SettingChange | { type: 'quirky.editor/changed' }
@@ -52,6 +53,30 @@ const CONTENT = 'File actions regression fixture\n'
 const RICH_FRONTMATTER = '---\ntitle: File actions regression fixture\n---\n\n'
 const RICH_BODY = '# File actions regression fixture\n'
 const RICH_CONTENT = `${RICH_FRONTMATTER}${RICH_BODY}`
+const NOTEBOOK_CONTENT = serializeNotebook({
+  cells: [{
+    cell_type: 'code',
+    metadata: {},
+    source: ['print("before")\n'],
+    outputs: [],
+    execution_count: null
+  }],
+  metadata: { kernelspec: { language: 'python' } },
+  nbformat: 4,
+  nbformat_minor: 5
+})
+const NOTEBOOK_SAVED_CONTENT = serializeNotebook({
+  cells: [{
+    cell_type: 'code',
+    metadata: {},
+    source: ['print("latest")\n'],
+    outputs: [],
+    execution_count: null
+  }],
+  metadata: { kernelspec: { language: 'python' } },
+  nbformat: 4,
+  nbformat_minor: 5
+})
 const CSV_CONTENT = 'name,value\nalpha,1\n'
 const CSV_SAVED_CONTENT = 'name,value\nalpha,2\n'
 const LARGE_CSV_VALUE = 'x'.repeat(200 * 1024 - 'name,value\nalpha,\n'.length)
@@ -106,10 +131,11 @@ function makeBufferInfo(options: {
   draft?: string
   diskWritable?: boolean
 } = {}): EditorBufferInfo {
-  const content = options.content ?? (options.mode === 'rich' ? RICH_CONTENT : CONTENT)
-  const draft = options.draft ?? null
   const kind = options.kind ?? (options.mode === 'rich' ? 'markdown' : 'text')
-  const filename = kind === 'csv' ? 'table.csv' : 'README.txt'
+  const mode = options.mode ?? (kind === 'notebook' ? 'rich' : 'source')
+  const content = options.content ?? (kind === 'notebook' ? NOTEBOOK_CONTENT : mode === 'rich' ? RICH_CONTENT : CONTENT)
+  const draft = options.draft ?? null
+  const filename = kind === 'csv' ? 'table.csv' : kind === 'notebook' ? 'notebook.ipynb' : 'README.txt'
   return {
     id: BUFFER_ID,
     worktreeId: WORKTREE_ID,
@@ -126,7 +152,7 @@ function makeBufferInfo(options: {
     diskWritable: options.diskWritable ?? true,
     dirty: options.dirty ?? false,
     external: options.external ?? null,
-    mode: options.mode ?? 'source',
+    mode,
     tabId: TAB_ID,
     preview: false,
     pinned: false,
@@ -190,6 +216,7 @@ async function renderDocument(options: {
   kind?: EditorBufferInfo['kind']
   content?: string
   csvResponseFirst?: boolean
+  saveResponseFirst?: boolean
   deferSave?: boolean
   delayDraftWrites?: boolean
   delayRichApply?: boolean
@@ -219,7 +246,7 @@ async function renderDocument(options: {
   let pendingCsvChange = false
   const settings = new Map(SETTINGS)
   const savedInfo = (): EditorBufferInfo => {
-    const content = options.kind === 'csv' ? info.draft ?? info.content ?? '' : undefined
+    const content = options.kind === 'csv' || options.kind === 'notebook' ? info.draft ?? info.content ?? '' : undefined
     const saved = {
       ...info,
       ...(content === undefined ? {} : {
@@ -239,7 +266,7 @@ async function renderDocument(options: {
     state.buffers[0] = saved
     info = saved
     if (content !== undefined) savedContents.push(content)
-    if (options.kind === 'csv') publishDraftChange()
+    if (options.kind === 'csv' || options.kind === 'notebook') publishSaveChange()
     return saved
   }
   const publishCompetitorDraft = (content: string) => {
@@ -257,6 +284,10 @@ async function renderDocument(options: {
   }
   const publishDraftChange = () => {
     for (const listener of settingListeners) listener({ type: 'quirky.editor/changed' })
+  }
+  const publishSaveChange = () => {
+    if (options.saveResponseFirst) setTimeout(publishDraftChange, 0)
+    else publishDraftChange()
   }
   const publishPendingCsvChange = () => {
     if (!pendingCsvChange) throw new Error('No delayed CSV draft subscription is pending.')
@@ -363,6 +394,10 @@ async function renderDocument(options: {
           content,
           expectedRevision,
           release() {
+            if (info.contentRevision !== expectedRevision) {
+              pending.reject(new Error('stale editor content revision'))
+              return
+            }
             info = {
               ...info,
               draft: content,
@@ -379,6 +414,7 @@ async function renderDocument(options: {
         return await pending.promise
       }
       if (method === 'quirky.editor/save' && options.delayDraftWrites) {
+        saveCalls.push(params)
         const content = info.draft ?? info.content ?? ''
         savedContents.push(content)
         info = {
@@ -393,7 +429,9 @@ async function renderDocument(options: {
           contentBytes: new TextEncoder().encode(content).byteLength,
           draftBytes: null
         }
-        publishDraftChange()
+        state.buffers[0] = info
+        publishSaveChange()
+        announceSaveStarted()
         return { ...info }
       }
       if (method === 'quirky.editor/close') {
@@ -441,6 +479,11 @@ async function renderDocument(options: {
           publishDraftChange()
         }
         return { ...info }
+      }
+      if (method === 'quirky.editor/notebook' && params.action === 'state') return { trusted: false, busy: false, kernel: { status: 'stopped' } }
+      if (method === 'quirky.editor/notebook' && params.action === 'save') {
+        announceSaveStarted()
+        return savedInfo()
       }
       if (method === 'quirky.editor/markdown') {
         if (params.action === 'apply' && options.delayRichApply) {
@@ -610,6 +653,16 @@ function csvSaveButton(element: HTMLElement): HTMLButtonElement {
   const viewer = element.querySelector<HTMLElement>('.viewer-csv')
   if (!viewer) throw new Error('The CSV table viewer did not render.')
   return buttonByText(viewer, 'Save')
+}
+async function notebookButton(surface: Mounted, text: string): Promise<HTMLButtonElement> {
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const button = Array.from(surface.element.querySelectorAll<HTMLButtonElement>('button'))
+      .find((candidate) => candidate.textContent?.trim() === text)
+    if (button) return button
+    await flushReact()
+  }
+  throw new Error(`The notebook ${text} button did not mount.`)
 }
 
 function outsideSourceControl(): HTMLButtonElement {
@@ -1291,6 +1344,92 @@ test('Source preserves local edits and opens Compare for a newer competing draft
   expect(comparedVersions.map((textarea) => textarea.value)).toEqual([sharedText, localText])
 })
 
+for (const responseFirst of [false, true]) {
+  test(`Notebook Save persists a pending cell edit without a false draft conflict and closes cleanly when the ${responseFirst ? 'response' : 'subscription'} arrives first`, async () => {
+    const surface = await renderDocument({
+      kind: 'notebook',
+      content: NOTEBOOK_CONTENT,
+      delayDraftWrites: true,
+      saveResponseFirst: responseFirst
+    })
+    const editCell = await notebookButton(surface, 'Edit cell')
+    await act(async () => editCell.click())
+    await flushReact()
+    const editor = surface.element.querySelector<HTMLTextAreaElement>('.notebook-cell-editor')
+    if (!editor) throw new Error('The notebook cell editor did not open.')
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+    if (!setter) throw new Error('The textarea value setter is unavailable.')
+    await act(async () => {
+      setter.call(editor, 'print("latest")\n')
+      editor.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => buttonByText(surface.element, 'Save notebook').click())
+
+    const draftDeadline = Date.now() + 3000
+    while (Date.now() < draftDeadline && surface.draftRequests.length === 0) await flushReact()
+    expect(surface.draftRequests).toHaveLength(1)
+    await act(async () => surface.draftRequests[0]!.release())
+    await surface.saveStarted
+    await flushReact()
+
+    expect(surface.savedContents).toEqual([NOTEBOOK_SAVED_CONTENT])
+    expect(parseNotebookRoot(surface.savedContents[0]!).cells[0]?.source.join('')).toBe('print("latest")\n')
+    expect(surface.currentBuffer()).toMatchObject({ content: NOTEBOOK_SAVED_CONTENT, draft: null, dirty: false })
+    expect(surface.element.textContent).not.toContain('A newer shared draft arrived.')
+
+    const active = activeDocument()
+    if (!active) throw new Error('The active document was not registered.')
+    let closed = false
+    await act(async () => { closed = await active.close() })
+    expect(closed).toBe(true)
+  })
+}
+
+test('Notebook Save still rejects a newer competing draft', async () => {
+  const surface = await renderDocument({
+    kind: 'notebook',
+    content: NOTEBOOK_CONTENT,
+    delayDraftWrites: true
+  })
+  const editCell = await notebookButton(surface, 'Edit cell')
+  await act(async () => editCell.click())
+  await flushReact()
+  const editor = surface.element.querySelector<HTMLTextAreaElement>('.notebook-cell-editor')
+  if (!editor) throw new Error('The notebook cell editor did not open.')
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('The textarea value setter is unavailable.')
+  await act(async () => {
+    setter.call(editor, 'print("local")\n')
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => buttonByText(surface.element, 'Save notebook').click())
+
+  const draftDeadline = Date.now() + 3000
+  while (Date.now() < draftDeadline && surface.draftRequests.length === 0) await flushReact()
+  expect(surface.draftRequests).toHaveLength(1)
+  const competitor = serializeNotebook({
+    cells: [{
+      cell_type: 'code',
+      metadata: {},
+      source: ['print("shared")\n'],
+      outputs: [],
+      execution_count: null
+    }],
+    metadata: { kernelspec: { language: 'python' } },
+    nbformat: 4,
+    nbformat_minor: 5
+  })
+  await act(async () => surface.publishCompetitorDraft(competitor))
+  await flushReact()
+  expect(surface.element.textContent).toContain('A newer shared draft arrived.')
+
+  await act(async () => surface.draftRequests[0]!.release())
+  await flushReact()
+
+  expect(surface.savedContents).toEqual([])
+  expect(surface.currentBuffer().draft).toBe(competitor)
+  expect(surface.element.textContent).toContain('conflicts with a newer shared version')
+})
 for (const responseFirst of [false, true]) {
   test(`CSV table Save acknowledges its own edit when the ${responseFirst ? 'response' : 'subscription'} arrives first`, async () => {
     const surface = await renderDocument({

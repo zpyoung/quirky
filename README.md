@@ -428,9 +428,9 @@ Pinning, Explorer, Source Control, tab closing and font zoom are available in Fi
 the header fits two rows in the default window with Worktrees and Files open. Markdown formatting
 scrolls horizontally instead of adding rows; search and review-note controls still wrap.
 
-CSV table edits and the table toolbar's Save share the document's draft acknowledgments.
-Saving your own table changes leaves a clean, closable tab; newer competing drafts still
-require comparison before saving.
+CSV table edits, the table toolbar's Save, and Save notebook share the document's draft
+acknowledgments. Notebook saves flush pending cell edits before writing. Saving your own
+changes leaves a clean, closable tab; newer competing drafts still require comparison before saving.
 Paste cells and rectangular-range copy controls are under **Paste and copy range**, collapsed
 by default so table rows stay visible. Filtering and the common table actions remain in the toolbar.
 
