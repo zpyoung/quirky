@@ -174,6 +174,7 @@ function uiContext(host: TasksTest) {
       return result
     },
     executeCommand: (command: string, params: Record<string, unknown> = {}) => host.client.callAny(command.replace(/^command:/u, ''), { worktree: host.worktree, ...params }),
+    subscribe: () => () => undefined,
     confirm: async () => true,
     toast: () => undefined
   } as unknown as UiPluginContext
@@ -253,13 +254,27 @@ function listItemState(value: unknown, number: number): string | null {
   return typeof item?.state === 'string' ? item.state : null
 }
 
-function closedStatusMenuOpen(container: HTMLElement): boolean {
-  const menu = container.querySelector('[role="menu"]')
-  if (!menu) return false
-  const items = [...menu.querySelectorAll('[role="menuitem"]')]
-  const open = items.find((item) => item.textContent?.trim() === 'Open')
-  const close = items.find((item) => item.textContent?.trim() === 'Close as completed')
-  return open instanceof HTMLButtonElement && close instanceof HTMLButtonElement && !open.disabled && close.disabled
+function mergeTrigger(container: HTMLElement, number: number): HTMLButtonElement | null {
+  return container.querySelector<HTMLButtonElement>(`button[aria-label="Merge actions for PR #${number}"]`)
+}
+
+function mergedShown(container: HTMLElement, number: number): boolean {
+  const trigger = mergeTrigger(container, number)
+  return trigger !== null && trigger.textContent?.trim().startsWith('Merged') === true
+}
+
+function issueStatusSelect(container: HTMLElement): HTMLSelectElement {
+  const select = container.querySelector('select[aria-label="Issue status"]')
+  if (!(select instanceof HTMLSelectElement)) throw new Error('issue status control was not rendered')
+  return select
+}
+
+async function chooseIssueStatus(container: HTMLElement, value: string): Promise<void> {
+  const select = issueStatusSelect(container)
+  await React.act(async () => {
+    select.value = value
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
 }
 
 function setTextareaValue(element: HTMLTextAreaElement, value: string): void {
@@ -269,21 +284,15 @@ function setTextareaValue(element: HTMLTextAreaElement, value: string): void {
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-function menuItem(container: HTMLElement, name: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll('[role="menuitem"]')].find((candidate) => candidate.textContent?.trim() === name)
+function checkedMenuItem(container: HTMLElement, name: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('[role="menuitemcheckbox"]')].find((candidate) => candidate.textContent?.replace('✓', '').trim() === name)
   if (!(found instanceof HTMLButtonElement)) throw new Error(`menu item not found: ${name}`)
   return found
 }
 
-async function expectClosedIssueStatus(container: HTMLElement): Promise<void> {
-  const trigger = container.querySelector('tbody button[aria-haspopup="menu"]')
-  if (!(trigger instanceof HTMLButtonElement)) throw new Error('issue status menu button was not rendered')
-  await click(trigger)
-  expect(menuItem(container, 'Open').disabled).toBe(false)
-  expect(menuItem(container, 'Close as completed').disabled).toBe(true)
-  await click(trigger)
+function alertShows(container: HTMLElement, message: string): boolean {
+  return [...container.querySelectorAll('[role="alert"]')].some((alert) => alert.textContent?.includes(message))
 }
-
 
 test('sticky all includes repositories added later and API, CLI, and visible navigation retain their exact projection', async () => {
   const host = await bootTasks(listFixtureSource)
@@ -481,7 +490,8 @@ test('an origin switch prevents a lagging upstream refresh from repainting the c
   const oldRefresh = driver.hold('quirky.tasks/list', (params) => params.noCache === true)
   await React.act(async () => { button(mounted.container, 'Refresh').click() })
   await waitForUi(() => oldRefresh.wasReached(), 'delayed upstream refresh')
-  await React.act(async () => { button(mounted.container, 'Origin').click() })
+  await click(mounted.container.querySelector('button[aria-label="Tasks options"]'))
+  await React.act(async () => { checkedMenuItem(mounted.container, 'Origin').click() })
   await waitForUi(() => mounted.container.textContent?.includes('Origin issue 7') === true, 'confirmed origin issue row')
 
   oldRefresh.release()
@@ -526,111 +536,100 @@ test('a delayed issue list cannot repaint the PR view after a mode switch', asyn
   expect(mounted.container.textContent).not.toContain('Issue 7')
 }, 30_000)
 
-test('a failed assignee edit preserves an earlier successful status change in the rendered row', async () => {
+test('a failed assignee edit preserves an earlier successful status change in the open issue pane', async () => {
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
   const issue = fixtureIssue('test-owner', 'test-repo', 7, '2026-10-01T00:00:00Z')
   issue.assignees = ['alex']
   host.writeState(seedListFixture({ 'test-owner/test-repo': [issue] }))
-  await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue' })
+  await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue', detail: { worktree: host.worktree, kind: 'issue', number: 7, url: issue.url } })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
     () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues')
-      && mounted.container.querySelector('tbody tr') !== null,
-    'initial issue row'
+      && completedCall(driver.receipts, 'quirky.tasks/issue')
+      && mounted.container.querySelector('.tasks-list__row') !== null
+      && !issueStatusSelect(mounted.container).disabled,
+    'initial issue row and pane'
   )
 
-  await click(mounted.container.querySelector('tbody button[aria-haspopup="menu"]'))
-  await React.act(async () => { menuItem(mounted.container, 'Close as completed').click() })
+  await chooseIssueStatus(mounted.container, 'closed-completed')
   await waitForUi(
     () => fixtureItem(host, 7).state === 'closed'
-      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'issueStatus')
-      && mounted.container.querySelector('[role="menu"]') === null,
+      && completedCall(driver.receipts, 'quirky.tasks/issueEdit')
+      && !issueStatusSelect(mounted.container).disabled,
     'confirmed issue status update'
   )
-  await expectClosedIssueStatus(mounted.container)
+  expect(issueStatusSelect(mounted.container).value).toBe('closed')
 
   host.writeState({ ...fixtureState(host), failIssueUpdate: true })
-  const assigneeButton = mounted.container.querySelector('tbody button[aria-haspopup="dialog"]')
-  await React.act(async () => {
-    if (!(assigneeButton instanceof HTMLElement)) throw new Error('assignee button was not rendered')
-    assigneeButton.click()
-  })
+  await waitForUi(
+    () => [...mounted.container.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === '+ fixture-user'),
+    'assignable user choice'
+  )
+  await React.act(async () => { button(mounted.container, '+ fixture-user').click() })
   await waitForUi(() => {
-    const dialog = mounted.container.querySelector('[role="dialog"]')
-    return dialog !== null && [...dialog.querySelectorAll('label')].some((label) => label.textContent?.includes('fixture-user'))
-  }, 'assignable user choice')
-  const selectable = [...mounted.container.querySelectorAll('label')].find((label) => label.textContent?.includes('fixture-user'))
-  const checkbox = selectable?.querySelector('input[type="checkbox"]')
-  if (!(checkbox instanceof HTMLInputElement)) throw new Error('assignable user checkbox was not rendered')
-  await click(checkbox)
-  await React.act(async () => { button(mounted.container, 'Save assignees').click() })
-  await waitForUi(() => {
-    const alert = mounted.container.querySelector('[role="alert"]')
-    return completedCall(driver.receipts, 'quirky.tasks/row', (receipt) =>
-      receipt.params.action === 'assignees' && receipt.error instanceof Error &&
-      alert?.textContent?.includes(receipt.error.message) === true)
+    const failed = driver.receipts.find((receipt) =>
+      receipt.method === 'quirky.tasks/issueEdit' && receipt.completed && receipt.error instanceof Error && receipt.params.assignees !== undefined)
+    return failed !== undefined && failed.error instanceof Error && alertShows(mounted.container, failed.error.message)
   }, 'failed assignee update')
 
   expect(fixtureItem(host, 7).state).toBe('closed')
-  await expectClosedIssueStatus(mounted.container)
+  expect(issueStatusSelect(mounted.container).value).toBe('closed')
 }, 30_000)
 
-test('quiet adoption retains a confirmed status while search indexing lags, then adopts the indexed row', async () => {
+test('quiet adoption retains a confirmed merge while search indexing lags, then adopts the indexed row', async () => {
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
-  const issue = fixtureIssue('test-owner', 'test-repo', 7, '2026-10-01T00:00:00Z')
-  host.writeState(seedListFixture({ 'test-owner/test-repo': [issue] }))
-  await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue' })
+  const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }, { mergeQueueRequired: false, autoMergeAllowed: true }))
+  await host.call('navigate', { mode: 'prs', repoIds: [host.repoId], query: 'is:pr', detail: { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url } })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
-    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues')
-      && mounted.container.querySelector('tbody tr') !== null,
-    'initial issue row'
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
+      && mergeTrigger(mounted.container, 12)?.textContent?.trim().startsWith('Merge ') === true,
+    'initial pull-request row with merge metadata'
   )
   host.writeState({
     ...fixtureState(host),
-    lagSearch: { repository: 'test-owner/test-repo', remaining: 1, items: [issue] }
+    lagSearch: { repository: 'test-owner/test-repo', remaining: 1, items: [pull] }
   })
 
-  await click(mounted.container.querySelector('tbody button[aria-haspopup="menu"]'))
-  await React.act(async () => { menuItem(mounted.container, 'Close as completed').click() })
+  await click(mergeTrigger(mounted.container, 12))
+  await React.act(async () => { button(mounted.container, 'Squash and merge').click() })
   await waitForUi(
-    () => fixtureItem(host, 7).state === 'closed'
-      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'issueStatus')
+    () => fixtureItem(host, 12).state === 'merged'
+      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'merge')
       && mounted.container.querySelector('[role="menu"]') === null,
-    'confirmed issue status update'
+    'confirmed merge'
   )
-  const statusTrigger = mounted.container.querySelector('tbody button[aria-haspopup="menu"]')
-  await click(statusTrigger)
 
   const staleIndexReturned = () => completedCall(
     driver.receipts,
     'quirky.tasks/list',
-    (receipt) => receipt.params.noCache === true && listItemState(receipt.value, 7) === 'open'
+    (receipt) => receipt.params.noCache === true && listItemState(receipt.value, 12) === 'open'
   )
   const indexedRowReturned = () => completedCall(
     driver.receipts,
     'quirky.tasks/list',
-    (receipt) => receipt.params.noCache === true && listItemState(receipt.value, 7) === 'closed'
+    (receipt) => receipt.params.noCache === true && listItemState(receipt.value, 12) === 'merged'
   )
   await waitForUi(
-    () => staleIndexReturned() && closedStatusMenuOpen(mounted.container),
-    'confirmed status through the stale indexed result'
+    () => staleIndexReturned() && mergedShown(mounted.container, 12),
+    'confirmed merge through the stale indexed result'
   )
   expect(record(fixtureState(host).lagSearch).remaining).toBe(0)
-  expect(fixtureItem(host, 7).state).toBe('closed')
+  expect(fixtureItem(host, 12).state).toBe('merged')
   await waitForUi(
-    () => indexedRowReturned() && closedStatusMenuOpen(mounted.container),
-    'adoption of the indexed closed row'
+    () => indexedRowReturned() && mergedShown(mounted.container, 12),
+    'adoption of the indexed merged row'
   )
 
   expect(record(fixtureState(host).lagSearch).remaining).toBe(0)
-  expect(fixtureItem(host, 7).state).toBe('closed')
+  expect(fixtureItem(host, 12).state).toBe('merged')
 }, 30_000)
 
 test('a failed later reviewer request retains an earlier confirmed reviewer update', async () => {
@@ -639,11 +638,11 @@ test('a failed later reviewer request retains an earlier confirmed reviewer upda
   const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
   pull.requestedReviewers = ['existing-reviewer']
   host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }))
-  await host.call('navigate', { mode: 'prs', repoIds: [host.repoId], query: 'is:pr is:open' })
+  await host.call('navigate', { mode: 'prs', repoIds: [host.repoId], query: 'is:pr is:open', detail: { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url } })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
-  const reviewerButton = () => mounted.container.querySelector('tbody button[aria-haspopup="dialog"]')
+  const reviewerButton = () => mounted.container.querySelector('.tasks-pr button[aria-haspopup="dialog"]')
   await waitForUi(
     () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
       && reviewerButton()?.textContent?.includes('existing-reviewer') === true,

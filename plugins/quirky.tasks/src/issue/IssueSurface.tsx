@@ -505,7 +505,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
 
   return <main className="quirky-tasks-issue">
     <header className="quirky-tasks-issue__toolbar">
-      <Button type="button" onClick={() => void navigateBack()}>{projectOrigin ? 'Back to Project' : 'Back to GitHub list'}</Button>
+      <Button type="button" className="quirky-tasks-issue__back" onClick={() => void navigateBack()}>{projectOrigin ? 'Back to Project' : 'Close'}</Button>
       <span className="quirky-tasks-issue__context">{issueContext(target)} · #{target.number}</span>
       <Button type="button" onClick={refreshDetails} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
       <Button type="button" onClick={() => void runLinkCommand('copy-link')} disabled={!initialUrl}>Copy link</Button>
