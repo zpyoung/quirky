@@ -664,6 +664,42 @@ describe('editor core through the daemon API', () => {
     }
   })
 
+  test.each([
+    { trigger: 'user', dirty: false },
+    { trigger: 'user', dirty: true },
+    { trigger: 'overwrite', dirty: true }
+  ])('saving a deleted file uses umask-derived permissions ($trigger, dirty=$dirty)', async ({ trigger, dirty }) => {
+    const t = await boot()
+    const originalUmask = process.umask()
+    try {
+      for (const { mask, expected } of [
+        { mask: 0o022, expected: 0o644 },
+        { mask: 0o077, expected: 0o600 }
+      ]) {
+        process.umask(mask)
+        const relativePath = `deleted-${mask.toString(8)}.txt`
+        const path = join(t.root, relativePath)
+        writeFileSync(path, 'original\n')
+        const opened = await open(t, relativePath, { focus: false })
+        const content = dirty ? 'unsaved draft\n' : 'original\n'
+        if (dirty) {
+          await t.call('quirky.editor/draft', {
+            bufferId: opened.id,
+            content,
+            expectedRevision: opened.contentRevision
+          })
+        }
+        rmSync(path)
+        const saved = await t.call<EditorBuffer>('quirky.editor/save', { bufferId: opened.id, trigger })
+        expect(saved).toMatchObject({ dirty: false, external: null })
+        expect(readFileSync(path, 'utf8')).toBe(content)
+        expect(statSync(path).mode & 0o777).toBe(expected)
+      }
+    } finally {
+      process.umask(originalUmask)
+    }
+  })
+
   test('file creation and imports use umask-derived permissions across create, duplicate, and redo', async () => {
     const t = await boot()
     const originalUmask = process.umask()
