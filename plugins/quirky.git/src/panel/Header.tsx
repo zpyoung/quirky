@@ -100,17 +100,19 @@ export function BranchRow({ status, compare, onChangeBase }: BranchProps) {
   const ready = compare?.status === 'ready'
   return (
     <div className="ui-cluster" data-branch-row>
-      <span data-branch-name>{status.branch ?? (status.detached ? 'detached HEAD' : 'no branch')}</span>
-      {base !== null && (
-        <>
-          <span className="ui-text-muted" aria-hidden="true">
-            {'→'}
-          </span>
-          <Button data-base-ref title="Change base ref" onClick={onChangeBase}>
-            {base}
-          </Button>
-        </>
-      )}
+      <div className="ui-cluster" data-branch-refs>
+        <span data-branch-name>{status.branch ?? (status.detached ? 'detached HEAD' : 'no branch')}</span>
+        {base !== null && (
+          <>
+            <span className="ui-text-muted" aria-hidden="true">
+              {'→'}
+            </span>
+            <Button data-base-ref title="Change base ref" onClick={onChangeBase}>
+              {base}
+            </Button>
+          </>
+        )}
+      </div>
       {status.ahead > 0 && <Badge tone="working" label={`${status.ahead} commit(s) to push`}>{`↑${status.ahead}`}</Badge>}
       {status.behind > 0 && <Badge tone="needs-you" label={`${status.behind} commit(s) to pull`}>{`↓${status.behind}`}</Badge>}
       {ready && compare && (compare.added > 0 || compare.removed > 0) && (
