@@ -33,7 +33,7 @@ Menu lists size to their labels and remain at least as wide as their trigger. Ic
 
 Tabs keep a complete focus-visible ring inside their horizontal scrollport, including the first and last tabs. The ring is inset so it remains visible without changing control sizing or disabling horizontal scrolling.
 
-Tool-panel header tab groups wrap whole tabs within their available width instead of leaving a partial label at the panel edge. Narrow tool-panel titles retain ellipsis truncation; tabs remain keyboard-accessible across wrapped rows.
+At the default 280 px panel width, the Tasks title, Issues, PRs and Projects tabs, and header actions fit on one row without title truncation. At narrower widths, tool-panel header tab groups wrap whole tabs within their available width instead of leaving a partial label at the panel edge. Narrow tool-panel titles retain ellipsis truncation; tabs remain keyboard-accessible across wrapped rows.
 
 At the 160 px panel minimum, hosted headers without tabs keep a single row. Hidden actions reserve no extra row; hover, panel focus, and keyboard focus reveal usable controls over the title without moving the panel content. Expanding header actions stay icon-only at narrow widths so every control remains inside the panel.
 
@@ -87,3 +87,5 @@ Enforced plugin: an explicit plugin ID whose UI source must obey all three rules
 2026-10-28: Clarified canonical shared CSS import admission; private plugin CSS stays prohibited. Lane4's landed public terminal-theme export composes with the shared root/CSS exports; no new preference or terminal owner introduced.
 
 2026-10-31: Clarified SC2's oversized-token boundary for narrow empty states and Vault consent.
+
+2026-10-31: Clarified SC2's single-row Tasks header at the default panel width while preserving whole-tab wrapping at narrower widths.
