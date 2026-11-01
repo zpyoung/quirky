@@ -246,7 +246,8 @@ async function countWork(env: TasksEnv, params: Record<string, unknown>): Promis
       invalid(env, messageOf(error))
     }
   }
-  const { resolved } = await resolveSelection(env, selectedValue, params.repoIds !== undefined)
+  const { repoSources, resolved } = await resolveSelection(env, selectedValue, params.repoIds !== undefined)
+  if (repoSources.some((entry) => 'error' in entry)) return { issues: null, prs: null }
   const totals = {} as Record<ListMode, number | null>
   await Promise.all((['issues', 'prs'] as const).map(async (listed) => {
     const kind: ItemKind = listed === 'issues' ? 'issue' : 'pullRequest'

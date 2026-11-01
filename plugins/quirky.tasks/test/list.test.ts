@@ -475,6 +475,15 @@ for (const [label, failure] of [['a response without a total', { unknownCount: t
   }, 30_000)
 }
 
+test('counts is null for both kinds when a selected repository has no resolvable source', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const brokenRepoId = await addRepo(host, join(host.root, 'repo-d'), 'https://example.invalid/not-github.git')
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }))
+  expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: 1, prs: 0 })
+  expect(await host.call('counts', { repoIds: [host.repoId, brokenRepoId] })).toEqual({ issues: null, prs: null })
+}, 30_000)
+
 test('counts refuses a query without a mode, a bad mode and an over-limit query before any GitHub read', async () => {
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)

@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from 'bun:test'
 import { bootTasks, type TasksTest } from './helpers'
-import type { UiLayout, UiToolSlot } from '@quirky/protocol'
+import { RpcErrorCode, type PluginContext, type UiLayout, type UiToolSlot } from '@quirky/protocol'
 import { TASKS_SETTINGS_VIEW, TASKS_VIEW, type TasksState } from '../src/contracts'
+import { createTasksEnv } from '../src/env'
 
 const runs: TasksTest[] = []
 afterEach(async () => { for (const run of runs.splice(0).reverse()) await run.cleanup() })
@@ -308,3 +309,56 @@ test('reactivation retains preferences but not transient navigation, and reopeni
   expect(reopened.navigation.query).toBe('is:pr label:ready')
   expect(reopened.navigation.page).toBe(4)
 }, 20_000)
+
+
+type ViewOpen = { id: string; input: { revision: number } }
+
+/** A context whose layout shows the Tasks tab; `open` handles each ui.view.open and `stateDelays` slows successive ui.state reads. */
+function stubbedContext(open: (params: ViewOpen) => Promise<unknown>, stateDelays: number[] = []): PluginContext {
+  let stateReads = 0
+  return {
+    openStore: () => ({ get: () => undefined, run: () => undefined }),
+    getSetting: () => undefined,
+    emit: () => true,
+    error: (_kind: string, message: string) => new Error(message),
+    async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.state') {
+        const delay = stateDelays[stateReads++] ?? 0
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        return { layout: { view: { id: TASKS_VIEW } } }
+      }
+      if (method === 'ui.contributions') return {}
+      if (method === 'ui.view.open') return open(params as unknown as ViewOpen)
+      throw new Error(`unexpected call ${method}`)
+    }
+  } as unknown as PluginContext
+}
+
+test('overlapping navigates leave the view input at the daemon revision', async () => {
+  const published: number[] = []
+  const env = createTasksEnv(stubbedContext(async ({ input }) => { published.push(input.revision) }, [40, 0]))
+  await Promise.all([env.navigate({ page: 2 }), env.navigate({ page: 3 })])
+  expect(published.at(-1)).toBe(env.read().revision)
+  expect(env.read().revision).toBe(2)
+})
+
+test('overlapping navigates against the daemon leave the open tab at the current revision', async () => {
+  const run = await boot()
+  await run.call('open', { detail: target(run) })
+  await Promise.all([run.call('navigate', { page: 2 }), run.call('navigate', { page: 3 }), run.call('navigate', { page: 4 })])
+  const state = await run.call('state') as TasksState
+  expect((await layoutOf(run)).view?.input).toMatchObject({ revision: state.revision })
+}, 20_000)
+
+test('navigate keeps its state change when several windows are open', async () => {
+  const conflict = Object.assign(new Error('multiple Quirky windows are open; specify connId'), { code: RpcErrorCode.Conflict })
+  const env = createTasksEnv(stubbedContext(async () => { throw conflict }))
+  const result = await env.navigate({ page: 2 })
+  expect(result.navigation.page).toBe(2)
+  expect(env.read().navigation.page).toBe(2)
+})
+
+test('navigate still rejects when the view republish fails for another reason', async () => {
+  const env = createTasksEnv(stubbedContext(async () => { throw Object.assign(new Error('boom'), { code: RpcErrorCode.Internal }) }))
+  await expect(env.navigate({ page: 2 })).rejects.toThrow('boom')
+})
