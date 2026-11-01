@@ -749,9 +749,16 @@ export function Tree({
     const { repo, rows: projectRows, pending: pendingCreates } = node
     const identity = projectIdentities[repo.id]
     const showTile = options.groupBy === 'project' && options.filterRepoIds.length === 0
-    const projectTitle = showTile
-      ? <><ProjectTile name={repoLabel(repo)} color={identity?.color} /> {repoLabel(repo)}</>
-      : `${identity?.icon ? `${identity.icon} ` : ''}${repoLabel(repo)}`
+    const projectTitle = (
+      <>
+        {showTile && <ProjectTile name={repoLabel(repo)} color={identity?.color} />}
+        <span className="project-name ui-text-ellipsis">
+          {!showTile && identity?.icon ? `${identity.icon} ` : ''}
+          {repoLabel(repo)}
+        </span>
+        <span className="project-count" title={`${projectRows.length} ${projectRows.length === 1 ? 'worktree' : 'worktrees'}`}>{projectRows.length}</span>
+      </>
+    )
     const sectionKey = `repo:${repo.id}`
     const separator = topLevel && eligibleBoundaries.includes(sectionKey)
     const previewing = dropPreview?.kind === 'repo' && dropPreview.id === repo.id
@@ -797,7 +804,6 @@ export function Tree({
                   ⋯
                 </IconButton>
               </span>
-              <span className="project-count" title={`${projectRows.length} ${projectRows.length === 1 ? 'worktree' : 'worktrees'}`}>{projectRows.length}</span>
             </span>
           }
         />

@@ -4,16 +4,24 @@
 }
 
 .repo-header.project-header > .ui-section-header__title {
+  align-items: center;
   color: var(--ui-text);
+  display: flex;
   flex: 1 1 auto;
   font-size: var(--ui-font-body);
   font-weight: 600;
+  gap: var(--ui-space-4);
   letter-spacing: normal;
   text-transform: none;
 }
 
+.repo-header.project-header .project-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .repo-header.project-header .ui-project-tile {
-  vertical-align: middle;
+  flex: 0 0 auto;
 }
 
 .repo-header.project-header > .ui-section-header__actions {
@@ -23,20 +31,38 @@
 
 .repo-header.project-header .project-count {
   color: var(--ui-muted);
+  flex: 0 0 auto;
   font-size: var(--ui-font-label);
   font-variant-numeric: tabular-nums;
+  font-weight: 400;
 }
 
 @container ui-tool-panel (max-width: 220px) {
-  .repo-header.project-header {
-    align-items: stretch;
-    flex-direction: column;
+  .repo-header.project-header:not([hidden]) {
+    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .repo-header.project-header > .ui-section-header__title {
+    grid-area: 1 / 1;
   }
 
   .repo-header.project-header > .ui-section-header__actions {
-    align-self: stretch;
+    grid-area: 1 / 1;
+    justify-self: end;
     justify-content: flex-end;
     margin-inline-start: 0;
+  }
+
+  .repo-header.project-header:has(.repo-actions > .ui-badge) > .ui-section-header__actions {
+    grid-area: 2 / 1;
+    justify-self: stretch;
+  }
+
+  .repo-header.project-header:hover .project-reveal,
+  .repo-header.project-header:focus-within .project-reveal {
+    background: var(--ui-surface);
   }
 }
 
