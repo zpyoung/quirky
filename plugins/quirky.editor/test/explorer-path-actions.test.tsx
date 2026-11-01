@@ -1605,6 +1605,37 @@ for (const entryPoint of ['Contents', 'Search in Files']) {
   })
 }
 
+for (const { label, extraFiles, results, files } of [
+  { label: 'no matches', extraFiles: {}, results: 0, files: 0 },
+  { label: 'one match', extraFiles: { 'search.txt': 'qa-summary-needle\n' }, results: 1, files: 1 },
+  { label: 'multiple matches in one file', extraFiles: { 'search.txt': 'qa-summary-needle\nqa-summary-needle\n' }, results: 2, files: 1 },
+  { label: 'multiple matching files', extraFiles: { 'search.txt': 'qa-summary-needle\n', 'other.txt': 'qa-summary-needle\n' }, results: 2, files: 2 }
+]) {
+  test(`Explorer Contents summary uses natural counts for ${label}`, async () => {
+    const fixture = await makeFixture({ extraFiles })
+    const panel = await renderExplorer(fixture)
+    await act(async () => footerButton(panel.element, 'Search in Files').click())
+    const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Search"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(query, 'qa-summary-needle')
+      query.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => panel.element.querySelector<HTMLButtonElement>('.qe-explorer-query button')!.click())
+    const summary = await waitForUi(() => {
+      const text = panel.element.querySelector('.qe-explorer-content-results > p')?.textContent ?? ''
+      return /result/i.test(text) ? text : false
+    }, 15_000)
+    if (results === 0) {
+      expect(summary).toMatch(/\bno results\b/i)
+      expect(summary).not.toMatch(/\b0\b/)
+    } else {
+      expect(summary).toMatch(new RegExp(`\\b${results} ${results === 1 ? 'result' : 'results'}\\b(?!\\(s\\))`))
+      expect(summary).toMatch(new RegExp(`\\b${files} ${files === 1 ? 'file' : 'files'}\\b(?!\\(s\\))`))
+    }
+    expect(panel.element.querySelectorAll('.qe-search-file').length).toBe(files)
+  }, 30_000)
+}
+
 test('Explorer explains an unmatched Contents query in Names and clears it to reveal a newly created file', async () => {
   const fixture = await makeFixture()
   const panel = await renderExplorer(fixture)
