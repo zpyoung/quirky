@@ -174,7 +174,7 @@ describe('SC-50: Change Base Ref', () => {
     }
   })
 
-  test('ArrowDown in search focuses the first matching branch without changing the base', async () => {
+  test('arrow keys navigate matching branches without changing the base', async () => {
     const { fake, element, unmount } = await open(setup)
     try {
       await click(q(element, '[data-base-ref]'))
@@ -183,6 +183,14 @@ describe('SC-50: Change Base Ref', () => {
       search.focus()
       await press(search, 'ArrowDown')
       expect(document.activeElement === q(dialog()!, '[aria-label="Branches"] button')).toBe(true)
+      expect(document.activeElement?.textContent).toBe('releaselocal')
+      await press(document.activeElement!, 'ArrowDown')
+      expect(document.activeElement?.textContent).toBe('origin/releaseremote')
+      await press(document.activeElement!, 'ArrowDown')
+      expect(document.activeElement?.textContent).toBe('releaselocal')
+      await press(document.activeElement!, 'ArrowUp')
+      expect(document.activeElement?.textContent).toBe('origin/releaseremote')
+      await press(document.activeElement!, 'ArrowUp')
       expect(document.activeElement?.textContent).toBe('releaselocal')
       expect(fake.called('quirky.git/setBase')).toHaveLength(0)
     } finally {
