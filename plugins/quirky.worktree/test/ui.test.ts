@@ -2159,9 +2159,39 @@ test('workspace board exposes status controls for a worktree with a project-defi
   await openDisclosure('More workspace tools')
   await click(buttonNamed(optionsContent(), 'Workspace board')!)
   const board = host.querySelector('section[aria-label="Workspace board"]')!
-  const statusControl = board.querySelector<HTMLSelectElement>('select[aria-label="Move fix-login to status"]')
+  const statusControl = board.querySelector<HTMLSelectElement>('select[aria-label="Move fix-login in api to status"]')
   expect(statusControl).not.toBeNull()
   expect(statusControl?.value).toBe('blocked')
+  await unmount()
+})
+
+test('workspace board identifies duplicate worktree names by project and keeps project-qualified actions', async () => {
+  const h = setup()
+  h.world.repos = h.world.repos.map((repo) => repo.id === 'r1' ? { ...repo, displayName: 'Payments API' } : repo)
+  h.world.worktrees[1] = wt('w2', 'r1', 'duplicate')
+  h.world.worktrees.push(wt('w4', 'r2', 'duplicate'))
+  const unmount = await h.mountInto(host)
+  await openDisclosure('More workspace tools')
+  await click(buttonNamed(optionsContent(), 'Workspace board')!)
+
+  const board = host.querySelector<HTMLElement>('section[aria-label="Workspace board"]')!
+  const apiCard = board.querySelector<HTMLSelectElement>('#worktree-status-w2')!.closest<HTMLElement>('.worktree-board-card')!
+  const webCard = board.querySelector<HTMLSelectElement>('#worktree-status-w4')!.closest<HTMLElement>('.worktree-board-card')!
+  expect(apiCard.querySelector('.ui-list-row__description')?.textContent?.trim()).toBe('Payments API')
+  expect(webCard.querySelector('.ui-list-row__description')?.textContent?.trim()).toBe('web')
+  const apiOpen = apiCard.querySelector<HTMLButtonElement>('button[aria-label]')!
+  const webOpen = webCard.querySelector<HTMLButtonElement>('button[aria-label]')!
+  const apiStatus = apiCard.querySelector<HTMLSelectElement>('select')!
+  const webStatus = webCard.querySelector<HTMLSelectElement>('select')!
+  expect(apiOpen.getAttribute('aria-label')).toBe('Open duplicate in Payments API')
+  expect(webOpen.getAttribute('aria-label')).toBe('Open duplicate in web')
+  expect(apiStatus.getAttribute('aria-label')).toBe('Move duplicate in Payments API to status')
+  expect(webStatus.getAttribute('aria-label')).toBe('Move duplicate in web to status')
+
+  await click(apiOpen)
+  await selectInto(webStatus, 'done')
+  expect(h.callsTo('quirky.worktree/navigate')).toEqual([{ worktree: 'w2', window: 1 }])
+  expect(h.callsTo('quirky.worktree/set')).toEqual([{ worktree: 'w4', status: 'done' }])
   await unmount()
 })
 

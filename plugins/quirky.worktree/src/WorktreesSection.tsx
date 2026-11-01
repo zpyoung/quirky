@@ -549,7 +549,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   }
 
   return (
-    <div ref={sectionRoot} className="ui-stack ui-panel-content">
+    <div ref={sectionRoot} className="ui-stack ui-panel-content worktree-section">
       <ToolPanelActions>
         <>
           {!(loaded && repos.length === 0) && (
@@ -603,18 +603,21 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
         </>
       </ToolPanelActions>
       {boardOpen && (
-        <WorktreeBoard
-          worktrees={ordered.filter((worktree) => treeVisibleIds.has(worktree.id))}
-          statuses={statusDefinitions}
-          open={(worktree) => {
-            void currentWindowId(context).then((window) =>
-              context.call('quirky.worktree/navigate', { worktree: worktree.id, window })
-            ).catch((error: unknown) =>
-              context.toast('Could not open workspace', error instanceof Error ? error.message : String(error))
-            )
-          }}
-          setStatus={(worktree, status) => void setWorktree(context, worktree.id, { status })}
-        />
+        <div className="worktree-board-scroll ui-scroll">
+          <WorktreeBoard
+            worktrees={ordered.filter((worktree) => treeVisibleIds.has(worktree.id))}
+            statuses={statusDefinitions}
+            repos={repos}
+            open={(worktree) => {
+              void currentWindowId(context).then((window) =>
+                context.call('quirky.worktree/navigate', { worktree: worktree.id, window })
+              ).catch((error: unknown) =>
+                context.toast('Could not open workspace', error instanceof Error ? error.message : String(error))
+              )
+            }}
+            setStatus={(worktree, status) => void setWorktree(context, worktree.id, { status })}
+          />
+        </div>
       )}
       {!loaded && <p className="ui-text-muted" role="status">Loading projects and worktrees…</p>}
       {loaded && repos.length === 0 && (

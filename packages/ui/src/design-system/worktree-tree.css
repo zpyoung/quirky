@@ -124,3 +124,24 @@
     display: none;
   }
 }
+
+.worktree-section {
+  height: 100%;
+  min-height: 0;
+}
+
+.worktree-board-scroll {
+  flex: 0 1 auto;
+  max-height: 50%;
+}
+
+.worktree-board {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  min-width: max-content;
+}
+
+.worktree-board-column {
+  flex: 0 0 calc(var(--ui-form-column-width) - var(--ui-space-16));
+  min-width: calc(var(--ui-form-column-width) - var(--ui-space-16));
+}

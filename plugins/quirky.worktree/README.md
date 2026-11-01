@@ -57,6 +57,8 @@ Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identit
 
 `statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. Status labels, color metadata and safe text icons persist. The board and status-group lanes use shared semantic colors rather than arbitrary stored paint. More workspace tools opens the Workspace statuses editor; `quirky worktree status-set --statuses '<json>'` uses the same API.
 
+The board sits above the worktree tree in its own scroll area, capped at half the available sidebar height. Its fixed-width lanes stay in one top-aligned row; scroll horizontally to reach lanes outside the viewport. Each card shows its project below the worktree name, and the Open and Move to status controls include the project in their accessible names so same-named worktrees remain distinguishable.
+
 ## Navigation and Open in
 
 Opening a card records durable history for that exact kernel UI connection. `navigate({worktree,target?,window?})`, `navigationBack({window?})`, `navigationForward({window?})`, `navigationMove({direction,window?})`, `navigationIndex({index,window?})`, and `openIn({worktree,target,window?})` share one API across the UI and CLI. `window` is a live numeric `connId`, never a native auxiliary ID. Omitted window preserves singleton behavior and refuses when multiple windows are connected. CLI commands `back`, `forward`, `previous`, `next`, `index`, and `open-in` accept `--window <connId>`.
