@@ -11,6 +11,9 @@ function PlusSearch({ controller, query }: { controller: WorkspaceController; qu
     <input
       className="ui-text-field__input qt-menu-search"
       autoFocus
+      autoCapitalize="off"
+      autoCorrect="off"
+      spellCheck={false}
       aria-label="Search open tabs and agents…"
       placeholder="Search open tabs and agents…"
       value={query}
