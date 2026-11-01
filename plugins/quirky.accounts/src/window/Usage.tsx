@@ -565,6 +565,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
   const hidden = preferences?.hidden ?? false
   const visibleChips = visibleCount === null ? chips : chips.slice(0, visibleCount)
   const collapsed = visibleCount === null ? [] : chips.slice(visibleCount)
+  const firstCollapsed = collapsed[0]
   const tooltip = collapsed.length ? `Also: ${collapsed.map((item) => {
     const best = compactWindow(item)
     return `${PROVIDER_LABELS[item.provider]}${best ? ` ${displayPercent(best.window.usedPercent, preferences?.direction ?? 'used')}%` : ''}`
@@ -596,7 +597,10 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
       <Button ref={triggerRef} type="button" className="usage-trigger" aria-label="Open Usage" aria-expanded={snapshot.ui.open} onClick={() => void store.setUiState({ open: !snapshot.ui.open })}>Usage <small>{preferences?.direction === 'remaining' ? 'Remaining' : 'Used'}</small></Button>
       {!showEmptyCta && <div ref={chipsRef} className="usage-chips" aria-label="Provider usage status bar">
             {visibleChips.map((provider) => <StatusChip key={provider.provider} store={store} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
-            {collapsed.length > 0 && <Button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => void store.setUiState({ open: true })}>+{collapsed.length}</Button>}
+            {firstCollapsed && <Button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => {
+              const provider = firstCollapsed.provider
+              void store.setUiState({ open: true, provider, ...(provider === 'claude' || provider === 'codex' ? { expanded: null } : {}) })
+            }}>+{collapsed.length}</Button>}
           </div>}
       <IconButton ref={refreshRef} className="usage-refresh" label="Refresh rate limits" title="Refresh usage data" disabled={snapshot.refreshing || scopeLoading} onClick={() => void store.refresh()}>↻</IconButton>
     </>}
