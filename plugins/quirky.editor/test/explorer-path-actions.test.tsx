@@ -1605,6 +1605,46 @@ for (const entryPoint of ['Contents', 'Search in Files']) {
   })
 }
 
+test('Explorer Contents summary waits until the search completes', async () => {
+  const fixture = await makeFixture()
+  const context = makeContext(fixture)
+  const originalCall = context.call
+  const search = Promise.withResolvers<{
+    files: []
+    totalMatches: number
+    truncated: boolean
+    error: null
+    loading: boolean
+  }>()
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/search' && params.action === 'run') return await search.promise
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  try {
+    await act(async () => footerButton(panel.element, 'Search in Files').click())
+    const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Search"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(query, 'qa-summary-needle')
+      query.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => panel.element.querySelector<HTMLButtonElement>('.qe-explorer-query button')!.click())
+
+    const status = panel.element.querySelector('.qe-explorer-content-results [role="status"]')
+    expect(status?.textContent).toMatch(/searching files/i)
+    expect(panel.element.querySelector('.qe-explorer-content-results > p:not([role="status"])')).toBeNull()
+
+    await act(async () => {
+      search.resolve({ files: [], totalMatches: 0, truncated: false, error: null, loading: false })
+    })
+    expect(panel.element.querySelector('.qe-explorer-content-results [role="status"]')).toBeNull()
+    expect(panel.element.querySelector('.qe-explorer-content-results > p')?.textContent).toMatch(/\bno results\b/i)
+  } finally {
+    search.resolve({ files: [], totalMatches: 0, truncated: false, error: null, loading: false })
+    await panel.unmount()
+  }
+}, 30_000)
+
 for (const { label, extraFiles, results, files } of [
   { label: 'no matches', extraFiles: {}, results: 0, files: 0 },
   { label: 'one match', extraFiles: { 'search.txt': 'qa-summary-needle\n' }, results: 1, files: 1 },

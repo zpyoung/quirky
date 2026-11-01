@@ -993,7 +993,8 @@ to Names restores access to the retained selection.
 Creating or duplicating a file selects the new path in Explorer, so footer path-copy
 and deletion actions target it, including inside expanded folders.
 Search in Files uses singular or plural result and file counts independently, and
-shows “No results” when a completed search has no matches.
+shows “No results” when a completed search has no matches. While a search is running,
+only “Searching files…” appears; the result summary waits until it completes.
 
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
