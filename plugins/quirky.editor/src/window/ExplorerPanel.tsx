@@ -889,7 +889,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     }
   }
 
-  const deleteSelected = async (paths = visibleSelectedPaths) => {
+  const deleteSelected = async (paths = visibleSelectedPaths, opener?: HTMLElement) => {
     const requestedWorktree = worktree
     if (!requestedWorktree || paths.length === 0) return
     const requestedPaths = [...paths]
@@ -907,7 +907,18 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       title: requestedPaths.length === 1 ? `Delete ${basename(requestedPaths[0]!)}?` : `Delete ${requestedPaths.length} items?`,
       body: 'Dirty files are saved before deletion. Undo is available for supported file operations.'
     })
-    if (!confirmed) return
+    if (!confirmed) {
+      if (opener?.isConnected) {
+        const ownerDocument = opener.ownerDocument
+        const focusedElement = ownerDocument.activeElement
+        requestAnimationFrame(() => {
+          if (!opener.isConnected || ownerDocument.querySelector('[role="dialog"]') !== null) return
+          const currentFocus = ownerDocument.activeElement
+          if (currentFocus === focusedElement || currentFocus === ownerDocument.body) opener.focus()
+        })
+      }
+      return
+    }
     const intent = userIntentRef.current
     setItemBusy(true)
     try {
@@ -1116,7 +1127,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     <>
       <Button disabled={searchMode !== 'names' || visibleSelectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
       <Button disabled={searchMode !== 'names' || visibleSelectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
-      <Button variant="destructive" disabled={searchMode !== 'names' || visibleSelectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
+      <Button variant="destructive" disabled={searchMode !== 'names' || visibleSelectedPaths.length === 0 || !worktree} onClick={(event) => void deleteSelected(undefined, event.currentTarget)}>Delete</Button>
       <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern(''); searchInputRef.current?.focus() }}>Search in Files</Button>
     </>
   )
