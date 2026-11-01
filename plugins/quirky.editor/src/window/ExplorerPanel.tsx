@@ -1401,8 +1401,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           <label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.currentTarget.checked)} />Match Case</label>
           <label><input type="checkbox" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} />Match Whole Word</label>
           <label><input type="checkbox" checked={useRegex} onChange={(event) => setUseRegex(event.currentTarget.checked)} />Use Regular Expression</label>
-          <TextField label="Files to include" placeholder="files to include (e.g. *.ts, src/**)" value={includePattern} onChange={(event) => setIncludePattern(event.currentTarget.value)} />
-          <TextField label="Files to exclude" placeholder="files to exclude (e.g. *.min.js, dist/**)" value={excludePattern} onChange={(event) => setExcludePattern(event.currentTarget.value)} />
+          <TextField label="Files to include" placeholder="files to include (e.g. *.ts, src/**)" value={includePattern} onChange={(event) => setIncludePattern(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runContentsSearch(query) }} />
+          <TextField label="Files to exclude" placeholder="files to exclude (e.g. *.min.js, dist/**)" value={excludePattern} onChange={(event) => setExcludePattern(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runContentsSearch(query) }} />
         </div>
       )}
       {error && <p className="qe-editor-error" role="alert">{error}</p>}
