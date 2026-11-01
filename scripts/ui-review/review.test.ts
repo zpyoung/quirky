@@ -122,7 +122,8 @@ function options(overrides: Partial<ReviewOptions> = {}): ReviewOptions {
     reviewerAlias: 'gemini',
     authorFamily: 'openai',
     threshold: 85,
-    timeoutMs: 1_000,
+    // the fake reviewer cold-starts node, which can take over a second on a busy runner
+    timeoutMs: 30_000,
     reviewerExecutable,
     ...overrides
   }
