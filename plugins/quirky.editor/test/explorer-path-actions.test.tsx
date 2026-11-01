@@ -1275,6 +1275,140 @@ test('Explorer footer path actions are disabled until something is selected', as
   for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) expect(footerButton(panel.element, label).disabled).toBe(false)
 })
 
+test('Explorer selection actions use visible Names results and restore hidden selections after clearing the filter', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  const path = join(fixture.root, FILE_A)
+  const unmatchedQuery = 'no-visible-explorer-results'
+  try {
+    await selectRow(panel.element, path)
+    const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')
+    if (!query) throw new Error('Missing Explorer Names query')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(query, unmatchedQuery)
+      query.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await waitForUi(() => panel.element.querySelector('.qe-explorer-filter-empty') || false)
+
+    const contents = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-search-mode button'))
+      .find((button) => button.textContent === 'Contents')
+    if (!contents) throw new Error('Missing Explorer Contents mode')
+    await act(async () => contents.click())
+    expect(panel.element.querySelector<HTMLInputElement>('input[placeholder="Search"]')?.value).toBe(unmatchedQuery)
+
+    const names = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-search-mode button'))
+      .find((button) => button.textContent === 'Names')
+    if (!names) throw new Error('Missing Explorer Names mode')
+    await act(async () => names.click())
+    await waitForUi(() => panel.element.querySelector('.qe-explorer-filter-empty') || false)
+    expect(panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')?.value).toBe(unmatchedQuery)
+
+    for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) {
+      expect(footerButton(panel.element, label).disabled).toBe(true)
+    }
+
+    const moreActions = panel.element.querySelector<HTMLDetailsElement>('.qe-explorer-more-actions')
+    const summary = moreActions?.querySelector<HTMLElement>('summary[aria-label="More Explorer Actions"]')
+    if (!moreActions || !summary) throw new Error('Missing Explorer overflow actions')
+    await act(async () => summary.click())
+    const overflowButtons = Array.from(moreActions.querySelectorAll<HTMLButtonElement>('button'))
+    for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) {
+      const button = overflowButtons.find((entry) => entry.textContent?.trim() === label)
+      expect(button?.disabled).toBe(true)
+    }
+
+    const clear = panel.element.querySelector<HTMLButtonElement>('.qe-explorer-filter-empty button')
+    if (!clear) throw new Error('Missing Explorer filter clear action')
+    await act(async () => clear.click())
+    await waitForUi(() => findRow(panel.element, path)?.getAttribute('aria-selected') === 'true' || false)
+    for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) {
+      expect(footerButton(panel.element, label).disabled).toBe(false)
+    }
+    await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
+    expect(await navigator.clipboard.readText()).toBe(FILE_A)
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
+
+test('Explorer keyboard deletion cannot confirm or delete a selection hidden by the Names filter', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  const confirmations: string[] = []
+  context.confirm = async ({ title }) => {
+    confirmations.push(title)
+    return true
+  }
+  const panel = await renderExplorer(fixture, context)
+  const path = join(fixture.root, FILE_A)
+  try {
+    await selectRow(panel.element, path)
+    const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')
+    if (!query) throw new Error('Missing Explorer Names query')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(query, 'no-visible-explorer-results')
+      query.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await waitForUi(() => panel.element.querySelector('.qe-explorer-filter-empty') || false)
+
+    const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+    if (!tree) throw new Error('Missing Explorer tree')
+    await act(async () => {
+      tree.focus()
+      tree.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+    })
+    await flushReact()
+
+    expect(confirmations).toEqual([])
+    expect(existsSync(path)).toBe(true)
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
+
+test('Explorer footer copies and deletes only visible files from a partial Names result', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  const confirmations: string[] = []
+  context.confirm = async ({ title }) => {
+    confirmations.push(title)
+    return true
+  }
+  const panel = await renderExplorer(fixture, context)
+  const visiblePath = join(fixture.root, FILE_A)
+  const hiddenPath = join(fixture.root, FILE_B)
+  try {
+    await selectRow(panel.element, visiblePath)
+    await selectRow(panel.element, hiddenPath)
+    const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')
+    if (!query) throw new Error('Missing Explorer Names query')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(query, "O'Brien café")
+      query.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await waitForUi(() =>
+      findRow(panel.element, visiblePath)?.getAttribute('aria-selected') === 'true' &&
+      findRow(panel.element, hiddenPath) === null || false
+    )
+
+    await act(async () => footerButton(panel.element, 'Copy Path').click())
+    expect(await navigator.clipboard.readText()).toBe(visiblePath)
+    await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
+    expect(await navigator.clipboard.readText()).toBe(FILE_A)
+
+    await act(async () => footerButton(panel.element, 'Delete').click())
+    await waitForUi(() => !existsSync(visiblePath) || false, 15_000)
+    expect(confirmations).toHaveLength(1)
+    expect(confirmations[0]).toContain(basename(visiblePath))
+    expect(confirmations[0]).not.toContain(basename(hiddenPath))
+    expect(existsSync(hiddenPath)).toBe(true)
+    await waitForTreeFocus(panel.element, null)
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
+
+
 for (const entryPoint of ['Contents', 'Search in Files']) {
   test(`Explorer footer cannot act on a hidden tree selection after ${entryPoint}`, async () => {
     const fixture = await makeFixture({ displayRoot: 'nested' })
