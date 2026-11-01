@@ -3,6 +3,18 @@ import { createPortal } from 'react-dom'
 import type { CSSProperties } from 'react'
 import type { PopoverProps } from './contracts'
 
+const focusableSelector = [
+  'a[href]',
+  'area[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'summary',
+  '[contenteditable="true"]',
+  '[tabindex]:not([disabled])',
+].join(',')
+
 /** Nonmodal anchored dialog that receives focus on open, without a focus trap or backdrop. */
 export function Popover({ open, label, anchor, boundary, onClose, children }: PopoverProps) {
   const root = useRef<HTMLDivElement>(null)
@@ -60,7 +72,16 @@ export function Popover({ open, label, anchor, boundary, onClose, children }: Po
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation()
-        if (node?.contains(document.activeElement)) opener.current?.focus()
+        if (node?.contains(document.activeElement)) {
+          const target = anchor.current
+          const captured = opener.current
+          const trigger = captured && target?.contains(captured)
+            ? captured
+            : target?.matches(focusableSelector)
+              ? target
+              : target?.querySelector<HTMLElement>(focusableSelector)
+          trigger?.focus()
+        }
         close.current()
       }
     }

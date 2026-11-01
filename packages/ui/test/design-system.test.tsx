@@ -438,9 +438,11 @@ describe('shared graphite components', () => {
     await click(dialog.querySelector('button')!)
     expect(calls).toEqual(['copy'])
     const outside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Outside')!
+    outside.focus()
     await act(async () => { outside.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
     expect(calls).toEqual(['copy', 'close'])
     expect(document.querySelector('[role="dialog"][aria-label="AI notes"]')).toBeNull()
+    expect(document.activeElement).toBe(outside)
   })
 
   test('opening a popover moves keyboard focus into it and Escape returns to the opener', async () => {
@@ -463,6 +465,54 @@ describe('shared graphite components', () => {
     await key(summary, 'Escape')
     expect(document.querySelector('[role="dialog"][aria-label="Worktrees options"]')).toBeNull()
     expect(document.activeElement).toBe(anchor.current)
+  })
+
+  for (const anchorTag of ['button', 'span'] as const) {
+    for (const initialFocus of ['body', 'outside'] as const) {
+      test(`Escape restores a mouse-opened popover to its ${anchorTag} trigger from ${initialFocus} focus`, async () => {
+        const anchor = createRef<HTMLElement>()
+        function Example() {
+          const [open, setOpen] = useState(false)
+          const trigger = <button onClick={() => setOpen(true)}>Notes</button>
+          return <><button>Outside</button>
+            {anchorTag === 'button'
+              ? h('button', { ref: anchor, onClick: () => setOpen(true) }, 'Notes')
+              : h('span', { ref: anchor }, trigger)}
+            <Popover open={open} label="AI notes" anchor={anchor} onClose={() => setOpen(false)}>
+              <Button>Copy</Button>
+            </Popover></>
+        }
+        await render(<Example />)
+        const outside = container.querySelector('button')!
+        if (initialFocus === 'outside') outside.focus()
+        expect(document.activeElement).toBe(initialFocus === 'outside' ? outside : document.body)
+        const trigger = anchorTag === 'button' ? anchor.current! : anchor.current!.querySelector('button')!
+        await click(trigger)
+        const copy = document.querySelector<HTMLElement>('[role="dialog"] button')!
+        copy.focus()
+        await key(copy, 'Escape')
+        expect(document.querySelector('[role="dialog"]')).toBeNull()
+        expect(document.activeElement).toBe(trigger)
+      })
+    }
+  }
+
+  test('Escape restores the captured trigger inside an anchor rather than its first button', async () => {
+    const anchor = createRef<HTMLSpanElement>()
+    function Example() {
+      const [open, setOpen] = useState(false)
+      return <><span ref={anchor}><button>Other action</button><button onClick={() => setOpen(true)}>Notes</button></span>
+        <Popover open={open} label="AI notes" anchor={anchor} onClose={() => setOpen(false)}>
+          <Button>Copy</Button>
+        </Popover></>
+    }
+    await render(<Example />)
+    const trigger = anchor.current!.querySelectorAll('button')[1]!
+    trigger.focus()
+    await click(trigger)
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+    await key(dialog, 'Escape')
+    expect(document.activeElement).toBe(trigger)
   })
 
   test('a popover preserves child autofocus and restores its opener under StrictMode', async () => {
