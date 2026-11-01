@@ -27,7 +27,7 @@ afterAll(async () => {
 
 const state: TasksState = {
   revision: 1,
-  navigation: { source: 'github', mode: 'prs', repoIds: null, query: '', page: 1, scrollTop: 0, detail: null, newIssue: false, project: null },
+  navigation: { source: 'github', mode: 'prs', repoIds: null, query: '', page: 1, scrollTop: 0, detail: null, newIssue: false, project: null, lastList: { mode: 'prs', query: '', page: 1 } },
   preferences: { showTasksButton: true, visibleTaskProviders: ['github'], defaultTaskSource: 'github', defaultTaskViewPreset: 'open', defaultRepoSelection: null },
   issueDraft: { title: '', body: '', labels: [], assignees: [], repoId: null },
   projects: { pinned: [], recent: [], lastViewByProject: {}, queryByView: {}, hiddenColumns: {}, columnWidths: {}, roadmapZoom: 'month' },

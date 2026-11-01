@@ -18,6 +18,11 @@ export type UiToolEntry = {
   contributionId: string | null
   /** Original contribution IDs which target this tool after projection. */
   aliases: string[]
+  /**
+   * A view that shows this tool full size. The tool's slot and this view are never both open for
+   * the focused window, so opening one closes the other.
+   */
+  expandedView?: string
 }
 
 /** Saved once per user profile, never per worktree or project. */

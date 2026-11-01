@@ -424,3 +424,64 @@ test('generated Tasks CLI command reaches the same bounded list method', async (
   expect(result).toMatchObject({ code: 0, stderr: '' })
   expect(JSON.parse(result.stdout)).toMatchObject({ page: 1, totalPages: 1, perRepo: 36 })
 })
+
+test('counts reads one item per repository and sums each kind separately, with the given mode using the given query', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const secondRepoId = await addRepo(host, join(host.root, 'repo-c'), 'https://github.com/other-owner/other-repo.git')
+  const closed = { ...fixtureIssue('test-owner', 'test-repo', 3, '2026-10-01T00:00:00Z'), state: 'closed' as const }
+  host.writeState(seedListFixture({
+    'test-owner/test-repo': [
+      fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z'),
+      fixtureIssue('test-owner', 'test-repo', 2, '2026-10-01T00:00:00Z'),
+      closed,
+      fixturePullRequest('test-owner', 'test-repo', 11, '2026-10-01T00:00:00Z')
+    ],
+    'other-owner/other-repo': [
+      fixtureIssue('other-owner', 'other-repo', 101, '2026-10-01T00:00:00Z'),
+      fixturePullRequest('other-owner', 'other-repo', 111, '2026-10-01T00:00:00Z'),
+      fixturePullRequest('other-owner', 'other-repo', 112, '2026-10-01T00:00:00Z')
+    ]
+  }))
+  const repoIds = [host.repoId, secondRepoId]
+
+  expect(await host.call('counts', { repoIds })).toEqual({ issues: 3, prs: 3 })
+  expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: 2, prs: 1 })
+  expect(await host.call('counts', { repoIds, mode: 'issues', query: 'is:issue is:closed' })).toEqual({ issues: 1, prs: 3 })
+  expect(await host.call('counts', { repoIds, mode: 'prs', query: 'repo:other-owner/other-repo is:pr' })).toEqual({ issues: 3, prs: 2 })
+  expect(await host.call('counts', { repoIds: [] })).toEqual({ issues: 0, prs: 0 })
+
+  const before = host.invocations().length
+  await host.call('counts', { repoIds: [host.repoId] })
+  expect(host.invocations().length).toBeGreaterThan(before)
+}, 60_000)
+
+test('counts falls back to the current Tasks selection when no repositories are given', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }))
+  await host.call('navigate', { repoIds: [host.repoId] })
+  expect(await host.call('counts')).toEqual({ issues: 1, prs: 0 })
+  await host.call('navigate', { repoIds: [] })
+  expect(await host.call('counts')).toEqual({ issues: 0, prs: 0 })
+}, 30_000)
+
+for (const [label, failure] of [['a response without a total', { unknownCount: true }], ['a failed list read', { failList: 'test-owner/test-repo' }]] as const) {
+  test(`counts is null for both kinds after ${label}`, async () => {
+    const host = await bootTasks(listFixtureSource)
+    hosts.push(host)
+    host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }, failure))
+    expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: null, prs: null })
+  }, 30_000)
+}
+
+test('counts refuses a query without a mode, a bad mode and an over-limit query before any GitHub read', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [] }))
+  const before = host.invocations().length
+  await expect(host.call('counts', { query: 'is:open' })).rejects.toThrow(/mode/)
+  await expect(host.call('counts', { mode: 'projects' })).rejects.toThrow(/mode/)
+  await expect(host.call('counts', { mode: 'issues', query: 'x'.repeat(8193) })).rejects.toThrow(/8192/)
+  expect(host.invocations()).toHaveLength(before)
+}, 20_000)

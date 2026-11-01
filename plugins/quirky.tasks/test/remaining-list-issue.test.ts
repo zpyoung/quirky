@@ -294,7 +294,9 @@ test('sticky all includes repositories added later and API, CLI, and visible nav
     'beta-owner/beta-repo': [fixtureIssue('beta-owner', 'beta-repo', 8, '2026-10-02T00:00:00Z')]
   }))
   await host.call('preferences', { defaultRepoSelection: null })
+  await host.call('open', { mode: 'projects' })
   await host.call('open', { mode: 'issues', repoIds: null, query: 'is:issue is:open' })
+  await host.call('navigate', {})
 
   const initial = await host.call('list', { mode: 'issues', query: 'is:issue is:open' })
   expect(new Set(repoIds(initial))).toEqual(new Set([host.repoId, betaId]))
@@ -324,7 +326,9 @@ test('an explicit saved repository survives a temporary Beta deep link in API, C
     'beta-owner/beta-repo': [fixtureIssue('beta-owner', 'beta-repo', 8, '2026-10-02T00:00:00Z')]
   }))
   await host.call('preferences', { defaultRepoSelection: [host.repoId] })
+  await host.call('open', { mode: 'projects' })
   await host.call('open', { mode: 'issues', repoIds: [betaId], query: 'is:issue is:open' })
+  await host.call('navigate', {})
 
   const state = taskState(await host.call('state'))
   expect(state.preferences.defaultRepoSelection).toEqual([host.repoId])
@@ -342,6 +346,7 @@ test('changing Tasks mode clears an old issue target before publishing the new v
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
   const target = { worktree: host.worktree, kind: 'issue', number: 7, url: 'https://github.com/test-owner/test-repo/issues/7' }
+  await host.call('open', { mode: 'projects' })
   await host.call('navigate', { mode: 'issues', detail: target, query: 'is:issue is:open' })
   await host.call('navigate', { mode: 'prs' })
   const state = taskState(await host.call('state'))

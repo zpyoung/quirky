@@ -9,84 +9,253 @@ const gh = `if(process.argv.includes('auth')) { console.log('Logged in to github
 
 async function boot(extraBuiltins: string[] = []) { const run = await bootTasks(gh, { extraBuiltins }); runs.push(run); return run }
 
-test('Tasks open and navigation publish the exact daemon-owned view and close restores its predecessor', async () => {
-  const run = await boot()
-  const before = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  await run.call('open', { mode: 'prs', repoIds: [run.repoId], query: 'is:pr is:open', page: 3 })
-  const state = await run.call('state') as TasksState
-  expect(state.navigation.mode).toBe('prs')
-  expect(state.navigation.repoIds).toEqual([run.repoId])
-  expect(state.navigation.page).toBe(3)
-  const visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(visible.layout.view?.id).toBe(TASKS_VIEW)
-  expect(visible.layout.view?.input).toMatchObject({ navigation: { page: 3 } })
-  await run.call('close')
-  const after = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(after.layout.view).toEqual(before.layout.view)
+const TOOL = 'sidebar-section:quirky.tasks/tasks'
+const REVIEW_VIEW = 'view:quirky.reviews/review'
+const CENTER = { id: REVIEW_VIEW, input: { keep: true } }
+
+async function bootWithCenter() { return boot(['quirky.reviews', 'quirky.git']) }
+
+async function layoutOf(run: TasksTest): Promise<UiLayout> {
+  return ((await run.client.callAny('ui.state', {})) as { layout: UiLayout }).layout
+}
+
+function toolOpen(layout: UiLayout): boolean {
+  return Object.values(layout.tools!.open).includes(TOOL)
+}
+
+function target(run: TasksTest, number = 281) {
+  return { worktree: run.worktree, kind: 'issue' as const, number }
+}
+
+test('a plain open shows the panel and leaves the center alone', async () => {
+  const run = await bootWithCenter()
+  const center = CENTER
+  await run.client.callAny('ui.view.open', center)
+  await run.call('open')
+  const layout = await layoutOf(run)
+  expect(toolOpen(layout)).toBe(true)
+  expect(layout.view).toEqual(center)
+  expect(layout.viewTabs).toEqual([center])
+  await run.call('open')
+  expect(toolOpen(await layoutOf(run))).toBe(true)
 }, 20_000)
+
+test('opening with a row, a project, a new issue or the Projects mode expands and closes the panel', async () => {
+  const run = await boot()
+  const project = { id: 'p1', owner: 'o', ownerType: 'organization', number: 1, url: 'https://github.com/orgs/o/projects/1' }
+  const cases: Record<string, unknown>[] = [{ detail: target(run) }, { project }, { newIssue: true }, { mode: 'projects' }]
+  for (const params of cases) {
+    await run.client.callAny('ui.tool.open', { id: TOOL })
+    expect(toolOpen(await layoutOf(run))).toBe(true)
+    await run.call('open', params)
+    const layout = await layoutOf(run)
+    expect(toolOpen(layout)).toBe(false)
+    expect(layout.view?.id).toBe(TASKS_VIEW)
+    const state = await run.call('state') as TasksState
+    expect(layout.view?.input).toMatchObject({ navigation: { mode: state.navigation.mode }, revision: state.revision })
+    await run.call('close')
+    expect(toolOpen(await layoutOf(run))).toBe(false)
+    await run.call('navigate', { detail: null, project: null, newIssue: false, mode: 'issues' })
+  }
+}, 30_000)
+
+test('a plain open keeps the open row and the tab that is showing', async () => {
+  const run = await boot()
+  await run.call('open', { detail: target(run) })
+  await run.call('open')
+  const state = await run.call('state') as TasksState
+  expect(state.navigation.detail).toEqual(target(run))
+  const layout = await layoutOf(run)
+  expect(layout.view?.id).toBe(TASKS_VIEW)
+  expect(toolOpen(layout)).toBe(false)
+}, 20_000)
+
+test('a plain open brings a background Tasks tab forward instead of opening the panel', async () => {
+  const run = await bootWithCenter()
+  await run.call('open', { detail: target(run) })
+  await run.client.callAny('ui.view.open', { id: REVIEW_VIEW })
+  await run.call('open')
+  const layout = await layoutOf(run)
+  expect(layout.view?.id).toBe(TASKS_VIEW)
+  expect(layout.viewTabs?.map(({ id }) => id)).toEqual([TASKS_VIEW, REVIEW_VIEW])
+  expect(toolOpen(layout)).toBe(false)
+}, 20_000)
+
+test('navigate never opens or closes anything, and republishes only while the tab is active', async () => {
+  const run = await bootWithCenter()
+  const before = await layoutOf(run)
+  await run.call('navigate', { mode: 'prs', query: 'is:pr is:open', page: 2 })
+  expect(await layoutOf(run)).toEqual(before)
+
+  await run.client.callAny('ui.tool.open', { id: TOOL })
+  const withPanel = await layoutOf(run)
+  await run.call('navigate', { page: 3 })
+  expect(await layoutOf(run)).toEqual(withPanel)
+
+  await run.call('open', { detail: target(run) })
+  const revision = ((await run.call('state')) as TasksState).revision
+  await run.call('navigate', { page: 4 })
+  let layout = await layoutOf(run)
+  expect(layout.view?.input).toMatchObject({ navigation: { page: 4 }, revision: revision + 1 })
+
+  await run.client.callAny('ui.view.open', { id: REVIEW_VIEW })
+  const behind = await layoutOf(run)
+  await run.call('navigate', { page: 5 })
+  layout = await layoutOf(run)
+  expect(layout.view).toEqual(behind.view)
+  expect(layout.viewTabs).toEqual(behind.viewTabs)
+  expect(layout.viewTabs?.find(({ id }) => id === TASKS_VIEW)?.input).toMatchObject({ navigation: { page: 4 } })
+}, 30_000)
+
+test('lastList follows every issues or PRs state and ignores Projects', async () => {
+  const run = await boot()
+  const initial = await run.call('state') as TasksState
+  expect(initial.navigation.lastList).toEqual({ mode: 'issues', query: 'is:issue is:open', page: 1 })
+  await run.call('navigate', { mode: 'prs', query: 'is:pr label:ready', page: 3 })
+  expect(((await run.call('state')) as TasksState).navigation.lastList).toEqual({ mode: 'prs', query: 'is:pr label:ready', page: 3 })
+  await run.call('navigate', { page: 4 })
+  expect(((await run.call('state')) as TasksState).navigation.lastList).toEqual({ mode: 'prs', query: 'is:pr label:ready', page: 4 })
+  await run.call('navigate', { mode: 'projects' })
+  const projects = await run.call('state') as TasksState
+  expect(projects.navigation.mode).toBe('projects')
+  expect(projects.navigation.lastList).toEqual({ mode: 'prs', query: 'is:pr label:ready', page: 4 })
+  await run.call('navigate', { mode: 'issues' })
+  expect(((await run.call('state')) as TasksState).navigation.lastList).toEqual({ mode: 'issues', query: 'is:issue is:open', page: 1 })
+}, 20_000)
+
+test('the first open sets lastList from the default preset, including when it opens on Projects', async () => {
+  const run = await boot()
+  await run.call('preferences', { defaultTaskViewPreset: 'needs-review' })
+  await run.call('open', { mode: 'projects' })
+  const state = await run.call('state') as TasksState
+  expect(state.navigation.mode).toBe('projects')
+  expect(state.navigation.lastList).toEqual({ mode: 'prs', query: 'review-requested:@me is:pr is:open', page: 1 })
+}, 20_000)
+
+test('prepare applies the first-open defaults once and changes no layout', async () => {
+  const run = await boot()
+  await run.call('preferences', { defaultTaskViewPreset: 'needs-review', defaultRepoSelection: [run.repoId] })
+  const before = await layoutOf(run)
+  const prepared = await run.call('prepare') as TasksState
+  expect(prepared.navigation).toMatchObject({
+    mode: 'prs',
+    query: 'review-requested:@me is:pr is:open',
+    repoIds: [run.repoId],
+    lastList: { mode: 'prs', query: 'review-requested:@me is:pr is:open', page: 1 }
+  })
+  expect(await layoutOf(run)).toEqual(before)
+
+  await run.call('navigate', { query: 'is:pr label:ready', page: 2 })
+  const again = await run.call('prepare') as TasksState
+  expect(again.navigation).toMatchObject({ query: 'is:pr label:ready', page: 2 })
+  await run.call('open')
+  expect(((await run.call('state')) as TasksState).navigation).toMatchObject({ query: 'is:pr label:ready', page: 2 })
+  expect(toolOpen(await layoutOf(run))).toBe(true)
+}, 20_000)
+
+test('a detail open after prepare keeps the prepared defaults and expands', async () => {
+  const run = await boot()
+  await run.call('preferences', { defaultTaskViewPreset: 'mine' })
+  await run.call('prepare')
+  await run.call('open', { detail: target(run) })
+  const state = await run.call('state') as TasksState
+  expect(state.navigation).toMatchObject({ mode: 'prs', query: 'author:@me is:pr is:open', detail: target(run) })
+  expect((await layoutOf(run)).view?.id).toBe(TASKS_VIEW)
+}, 20_000)
+
+test('close shuts the slot, the active tab or a background tab, and does nothing when Tasks is closed', async () => {
+  const run = await bootWithCenter()
+  const center = CENTER
+  await run.client.callAny('ui.view.open', center)
+
+  expect(await run.call('close')).toEqual({ closed: true })
+  expect(await layoutOf(run)).toMatchObject({ view: center, viewTabs: [center] })
+
+  await run.client.callAny('ui.tool.open', { id: TOOL })
+  expect(await run.call('close')).toEqual({ closed: true })
+  const afterSlot = await layoutOf(run)
+  expect(toolOpen(afterSlot)).toBe(false)
+  expect(afterSlot.view).toEqual(center)
+
+  await run.call('open', { detail: target(run) })
+  expect(await run.call('close')).toEqual({ closed: true })
+  const afterTab = await layoutOf(run)
+  expect(afterTab.view).toEqual(center)
+  expect(afterTab.viewTabs).toEqual([center])
+  expect(toolOpen(afterTab)).toBe(false)
+
+  await run.call('open', { detail: target(run) })
+  await run.client.callAny('ui.view.open', { id: TASKS_SETTINGS_VIEW })
+  expect(await run.call('close')).toEqual({ closed: true })
+  const afterBackground = await layoutOf(run)
+  expect(afterBackground.viewTabs?.map(({ id }) => id)).toEqual([REVIEW_VIEW, TASKS_SETTINGS_VIEW])
+  expect(toolOpen(afterBackground)).toBe(false)
+}, 30_000)
 
 test('Tasks navigation and close stay in the open tool without changing the center view', async () => {
   const run = await boot()
-  const toolId = 'sidebar-section:quirky.tasks/tasks'
   const center = { id: TASKS_SETTINGS_VIEW, input: { source: 'keep' } }
   await run.client.callAny('ui.view.open', center)
-  await run.client.callAny('ui.tool.open', { id: toolId })
+  await run.client.callAny('ui.tool.open', { id: TOOL })
 
-  const before = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  const slot = before.layout.tools!.placements[toolId] as UiToolSlot
-  expect(before.layout.tools!.open[slot]).toBe(toolId)
+  const before = await layoutOf(run)
+  const slot = before.tools!.placements[TOOL] as UiToolSlot
+  expect(before.tools!.open[slot]).toBe(TOOL)
 
   await run.call('navigate', { mode: 'prs', query: 'is:pr is:open' })
-  const navigated = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(navigated.layout.view).toEqual(center)
-  expect(navigated.layout.viewTabs).toEqual([center])
-  expect(navigated.layout.tools!.open[slot]).toBe(toolId)
+  const navigated = await layoutOf(run)
+  expect(navigated.view).toEqual(center)
+  expect(navigated.viewTabs).toEqual([center])
+  expect(navigated.tools!.open[slot]).toBe(TOOL)
 
   await run.call('close')
-  const closed = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(closed.layout.tools!.open[slot]).toBeNull()
-  expect(closed.layout.view).toEqual(center)
-  expect(closed.layout.viewTabs).toEqual([center])
+  const closed = await layoutOf(run)
+  expect(closed.tools!.open[slot]).toBeNull()
+  expect(closed.view).toEqual(center)
+  expect(closed.viewTabs).toEqual([center])
 }, 20_000)
 
-test('rail Task Sources carries the current workspace worktree through returning to Tasks', async () => {
+test('returning from Task Sources closes the settings tab, then follows the open rules and keeps the workspace', async () => {
   const run = await boot(['quirky.agents', 'quirky.session'])
-  const toolId = 'sidebar-section:quirky.tasks/tasks'
   const workspaceView = { id: 'view:quirky.session/worktree', input: { worktree: run.worktree } }
   await run.client.callAny('ui.view.open', workspaceView)
-  await run.client.callAny('ui.tool.open', { id: toolId })
+  await run.client.callAny('ui.tool.open', { id: TOOL })
 
   await run.client.callAny('quirky.tasks/settings', {})
-  let visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(visible.layout.view).toEqual({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
-  expect(visible.layout.viewTabs).toContainEqual(workspaceView)
+  let visible = await layoutOf(run)
+  expect(visible.view).toEqual({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
+  expect(visible.viewTabs).toContainEqual(workspaceView)
 
   await run.client.callAny('quirky.tasks/open', {})
-  visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(visible.layout.view?.id).toBe(TASKS_VIEW)
-  expect(visible.layout.view?.input).toMatchObject({ worktree: run.worktree })
-  expect(visible.layout.viewTabs).toContainEqual(workspaceView)
+  visible = await layoutOf(run)
+  expect(visible.view).toEqual(workspaceView)
+  expect(visible.viewTabs?.map(({ id }) => id)).toEqual([workspaceView.id])
+  expect(toolOpen(visible)).toBe(true)
 
   await run.client.callAny('quirky.tasks/settings', {})
-  visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(visible.layout.view).toMatchObject({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
-}, 20_000)
+  await run.client.callAny('quirky.tasks/open', { detail: target(run) })
+  visible = await layoutOf(run)
+  expect(visible.view?.id).toBe(TASKS_VIEW)
+  expect(visible.view?.input).toMatchObject({ worktree: run.worktree })
+  expect(visible.viewTabs?.map(({ id }) => id)).toEqual([workspaceView.id, TASKS_VIEW])
+  expect(toolOpen(visible)).toBe(false)
+}, 30_000)
 
 test('Task Sources falls back to the predecessor workspace only when Tasks is the center view', async () => {
   const run = await boot(['quirky.agents', 'quirky.session'])
   const workspaceView = { id: 'view:quirky.session/worktree', input: { worktree: run.worktree } }
   await run.client.callAny('ui.view.open', workspaceView)
-  await run.client.callAny('quirky.tasks/open', {})
-  await run.client.callAny('ui.tool.open', { id: 'sidebar-section:quirky.tasks/tasks' })
+  await run.client.callAny('quirky.tasks/open', { detail: target(run) })
+  expect((await layoutOf(run)).view?.id).toBe(TASKS_VIEW)
 
   await run.client.callAny('quirky.tasks/settings', {})
-  let visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(visible.layout.view).toMatchObject({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
+  let visible = await layoutOf(run)
+  expect(visible.view).toMatchObject({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
 
   await run.client.callAny('ui.view.open', { id: TASKS_SETTINGS_VIEW, input: { source: 'unrelated' } })
   await run.client.callAny('quirky.tasks/settings', {})
-  visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(visible.layout.view).toEqual({ id: TASKS_SETTINGS_VIEW })
+  visible = await layoutOf(run)
+  expect(visible.view).toEqual({ id: TASKS_SETTINGS_VIEW })
 }, 20_000)
 
 test('task preferences preserve sticky all and reject hiding the final provider without corrupting prior state', async () => {

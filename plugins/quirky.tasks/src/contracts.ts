@@ -1,5 +1,6 @@
 import type { MethodHandler, PluginContext, UiPluginContext, UiLayout, WorktreeCreateResult, PromptDeliveryState } from '@quirky/protocol'
 
+export const TASKS_TOOL = 'sidebar-section:quirky.tasks/tasks'
 export const TASKS_VIEW = 'view:quirky.tasks/tasks'
 export const TASKS_SETTINGS_VIEW = 'view:quirky.tasks/settings'
 export const TASKS_API = 'quirky.tasks/'
@@ -90,6 +91,8 @@ export type TaskWorkspaceCreated = WorktreeCreateResult & {
   target: ItemTarget
   promptDelivery?: PromptDeliveryState | null
 }
+/** The Issues or PRs list most recently shown, which the compact panel falls back to while Projects is selected. */
+export type TaskListView = { mode: 'issues' | 'prs'; query: string; page: number }
 export type TaskNavigation = {
   source: string
   mode: 'issues' | 'prs' | 'projects'
@@ -100,6 +103,8 @@ export type TaskNavigation = {
   detail: ItemTarget | null
   newIssue: boolean
   project: ProjectTarget | null
+  /** Follows every state whose mode isn't `projects`; session state, never persisted. */
+  lastList: TaskListView
 }
 export type TasksState = {
   revision: number
@@ -115,6 +120,9 @@ export type TasksEnv = {
   context: PluginContext
   read(): TasksState
   update(change: (state: TasksState) => void): TasksState
+  /** Validates and applies a navigation patch without touching layout. */
+  apply(patch: Partial<TaskNavigation>): TasksState
+  /** Applies a patch, then republishes the view input only while the Tasks tab is the active view. */
   navigate(patch: Partial<TaskNavigation>): Promise<TasksState>
   repositories(): Promise<TaskRepo[]>
   previousView: UiLayout['view']
