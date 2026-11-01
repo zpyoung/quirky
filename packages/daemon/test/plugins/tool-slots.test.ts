@@ -23,6 +23,11 @@ const EDITOR_SIDEBAR = 'sidebar-section:quirky.editor/explorer'
 const SIDEBAR_ACTIVITY = 'activity-item:quirky.sidebar-extras/source-control'
 const TASKS = 'sidebar-section:quirky.tasks/tasks'
 const TASKS_VIEW = 'view:quirky.tasks/tasks'
+const HEIMDALL = 'sidebar-section:quirky.heimdall/navigation'
+const HEIMDALL_VIEW = 'view:quirky.heimdall/fleet'
+const AUTOMATIONS = 'sidebar-section:quirky.automations/automations'
+const MOBILE = 'sidebar-section:quirky.mobile/mobile'
+const REVIEW_VIEW = 'view:quirky.reviews/review'
 const LEDGER = 'panel:quirky.ledger/ledger'
 const LEDGER_SIDEBAR = 'sidebar-section:quirky.ledger/ledger'
 const OUTLINE = 'panel:acme.tools/outline'
@@ -146,7 +151,8 @@ describe('effective tool projection', () => {
     expect(tool(model, FILES)).toMatchObject({ contributionId: FILES, defaultSlot: 'right-top', aliases: expect.arrayContaining([EDITOR_SIDEBAR]) })
     expect(tool(model, CHANGES)).toMatchObject({ contributionId: CHANGES, defaultSlot: 'right-top', aliases: expect.arrayContaining([SIDEBAR_ACTIVITY]) })
     expect(tool(model, LEDGER)).toMatchObject({ aliases: expect.arrayContaining([LEDGER_SIDEBAR]), defaultSlot: 'bottom-left' })
-    expect(tool(model, TASKS)).toMatchObject({ contributionId: TASKS_VIEW, aliases: expect.arrayContaining([TASKS_VIEW]), defaultSlot: 'left-bottom' })
+    expect(tool(model, TASKS)).toMatchObject({ contributionId: TASKS, aliases: [TASKS], expandedView: TASKS_VIEW, defaultSlot: 'left-bottom' })
+    for (const id of [HEIMDALL, AUTOMATIONS, MOBILE]) expect(tool(model, id)).not.toHaveProperty('expandedView')
     expect(tool(model, 'sidebar-section:quirky.heimdall/navigation')).toMatchObject({
       contributionId: 'view:quirky.heimdall/fleet',
       defaultSlot: 'left-bottom'
@@ -436,18 +442,31 @@ describe('tool layout mutations', () => {
 
   test('state reports the active view-backed tool body and its window report', async () => {
     const { harness, caller } = await start()
-    expect((await caller.call('ui.state', {})).slots.find(({ id }) => id === TASKS_VIEW)?.shown).toBe(false)
+    expect((await caller.call('ui.state', {})).slots.find(({ id }) => id === HEIMDALL_VIEW)?.shown).toBe(false)
     const window = await harness.connectWithEvents('ui')
-    await caller.call('ui.tool.open', { id: TASKS })
-    await window.client.call('ui.report', { slot: TASKS_VIEW, state: { mounted: true } })
+    await caller.call('ui.tool.open', { id: HEIMDALL })
+    await window.client.call('ui.report', { slot: HEIMDALL_VIEW, state: { mounted: true } })
 
     const state = await caller.call('ui.state', {})
-    expect(state.slots.find(({ id }) => id === TASKS_VIEW)).toMatchObject({
+    expect(state.slots.find(({ id }) => id === HEIMDALL_VIEW)).toMatchObject({
       kind: 'view',
       shown: true,
       report: { mounted: true }
     })
-    expect(state.slots.find(({ id }) => id === TASKS)).toMatchObject({ kind: 'sidebar-section', shown: false })
+    expect(state.slots.find(({ id }) => id === HEIMDALL)).toMatchObject({ kind: 'sidebar-section', shown: false })
+  })
+
+  test('state reports the Tasks slot body and its expanded view separately', async () => {
+    const { caller } = await start()
+    await caller.call('ui.tool.open', { id: TASKS })
+    let state = await caller.call('ui.state', {})
+    expect(state.slots.find(({ id }) => id === TASKS)?.shown).toBe(true)
+    expect(state.slots.find(({ id }) => id === TASKS_VIEW)?.shown).toBe(false)
+
+    await caller.call('ui.view.open', { id: TASKS_VIEW })
+    state = await caller.call('ui.state', {})
+    expect(state.slots.find(({ id }) => id === TASKS)?.shown).toBe(false)
+    expect(state.slots.find(({ id }) => id === TASKS_VIEW)?.shown).toBe(true)
   })
   test('legacy panel width configuration remains a profile layout preference', async () => {
     const { caller } = await start()
@@ -456,3 +475,181 @@ describe('tool layout mutations', () => {
   })
 })
 
+
+describe('a tool with an expanded view', () => {
+  const SLOT = 'left-bottom'
+
+  function seedWithBothOpen() {
+    return {
+      view: { id: TASKS_VIEW },
+      viewTabs: [{ id: TASKS_VIEW }],
+      panel: null,
+      sidebar: true,
+      focus: null,
+      tools: {
+        placements: { [WORKTREES]: 'left-top', [TASKS]: SLOT },
+        order: [WORKTREES, TASKS],
+        open: { 'left-top': WORKTREES, [SLOT]: TASKS, 'right-top': null, 'right-bottom': null, 'bottom-left': null, 'bottom-right': null },
+        sizes: { left: 280, right: 280, bottom: 176, leftSplit: 0.75, rightSplit: 0.5, bottomSplit: 0.5 }
+      }
+    }
+  }
+
+  async function connectWindow(harness: Harness, focused = false) {
+    const window = await harness.connectWithEvents('ui')
+    const { connId } = await window.client.call('ui.window.self', {})
+    if (focused) await window.client.call('ui.window.focused', { focused: true })
+    return { ...window, connId }
+  }
+
+  test('projects expandedView only while that view is effective, and only for the Tasks rule', async () => {
+    const entry = (kind: UiSlotEntry['kind'], id: string): UiSlotEntry => ({ id, kind, plugin: 'quirky.tasks', title: id, order: 0, module: '/ui.js' })
+    const sidebar = [entry('sidebar-section', TASKS), entry('sidebar-section', HEIMDALL)]
+    const withView = projectTools({ panels: [], sidebarSections: sidebar, activityItems: [], views: [entry('view', TASKS_VIEW), entry('view', HEIMDALL_VIEW)] })
+    expect(withView.find(({ id }) => id === TASKS)).toMatchObject({ contributionId: TASKS, expandedView: TASKS_VIEW })
+    expect(withView.find(({ id }) => id === HEIMDALL)).toMatchObject({ contributionId: HEIMDALL_VIEW })
+    expect(withView.find(({ id }) => id === HEIMDALL)).not.toHaveProperty('expandedView')
+
+    const withoutView = projectTools({ panels: [], sidebarSections: sidebar, activityItems: [], views: [] })
+    expect(withoutView.find(({ id }) => id === TASKS)).toMatchObject({ contributionId: TASKS })
+    expect(withoutView.find(({ id }) => id === TASKS)).not.toHaveProperty('expandedView')
+  })
+
+  test('opening the tool while its view is active closes the view and opens the slot', async () => {
+    const { caller } = await start()
+    await caller.call('ui.view.open', { id: TASKS_VIEW, input: { n: 1 } })
+    const opened = await caller.call('ui.tool.open', { id: TASKS })
+    expect(opened.view).toBeNull()
+    expect(opened.viewTabs).toEqual([])
+    expect(opened.tools?.open[SLOT]).toBe(TASKS)
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({ view: null, tools: { open: { [SLOT]: TASKS } } })
+  })
+
+  test('closing the active view hands the center to the previous tab', async () => {
+    const { caller } = await start()
+    await caller.call('ui.view.open', { id: REVIEW_VIEW, input: { n: 7 } })
+    await caller.call('ui.view.open', { id: TASKS_VIEW })
+    const opened = await caller.call('ui.tool.open', { id: TASKS })
+    expect(opened.view).toEqual({ id: REVIEW_VIEW, input: { n: 7 } })
+    expect(opened.viewTabs).toEqual([{ id: REVIEW_VIEW, input: { n: 7 } }])
+    expect(opened.tools?.open[SLOT]).toBe(TASKS)
+  })
+
+  test('opening the tool while its view is a background tab activates the view with its input and leaves slots alone', async () => {
+    const { caller } = await start()
+    await caller.call('ui.view.open', { id: TASKS_VIEW, input: { navigation: { page: 3 } } })
+    await caller.call('ui.view.open', { id: REVIEW_VIEW })
+    const before = (await caller.call('ui.state', {})).layout.tools!.open
+    const opened = await caller.call('ui.tool.open', { id: TASKS })
+    expect(opened.view).toEqual({ id: TASKS_VIEW, input: { navigation: { page: 3 } } })
+    expect(opened.viewTabs?.map(({ id }) => id)).toEqual([TASKS_VIEW, REVIEW_VIEW])
+    expect(opened.tools?.open).toEqual(before)
+    expect(opened.tools?.open[SLOT]).toBeNull()
+  })
+
+  test('opening the tool while its view is not open opens the slot as before', async () => {
+    const { caller } = await start()
+    await caller.call('ui.view.open', { id: REVIEW_VIEW })
+    const opened = await caller.call('ui.tool.open', { id: TASKS })
+    expect(opened.view).toEqual({ id: REVIEW_VIEW })
+    expect(opened.tools?.open[SLOT]).toBe(TASKS)
+    expect((await caller.call('ui.tool.open', { id: TASKS })).tools?.open[SLOT]).toBe(TASKS)
+  })
+
+  test('opening the view clears the tool slot and keeps the rest of the layout', async () => {
+    const { caller } = await start()
+    await caller.call('ui.tool.open', { id: TASKS })
+    await caller.call('ui.tool.open', { id: LEDGER })
+    const opened = await caller.call('ui.view.open', { id: TASKS_VIEW, input: { detail: 1 } })
+    expect(opened.view).toEqual({ id: TASKS_VIEW, input: { detail: 1 } })
+    expect(opened.tools?.open[SLOT]).toBeNull()
+    expect(opened.tools?.open['left-top']).toBe(WORKTREES)
+    expect(opened.tools?.open['bottom-left']).toBe(LEDGER)
+    expect(opened.tools?.placements[TASKS]).toBe(SLOT)
+  })
+
+  test('closing the view leaves every slot alone, and closing a slot works as before', async () => {
+    const { caller } = await start()
+    await caller.call('ui.view.open', { id: TASKS_VIEW })
+    await caller.call('ui.tool.open', { id: LEDGER })
+    const closedView = await caller.call('ui.view.close', {})
+    expect(closedView.view).toBeNull()
+    expect(closedView.tools?.open[SLOT]).toBeNull()
+    expect(closedView.tools?.open['bottom-left']).toBe(LEDGER)
+    expect((await caller.call('ui.tool.close', { slot: 'bottom-left' })).tools?.open['bottom-left']).toBeNull()
+  })
+
+  test('a tool without an expanded view keeps both its slot and its body view', async () => {
+    const { caller } = await start()
+    await caller.call('ui.tool.open', { id: HEIMDALL })
+    const viewOpened = await caller.call('ui.view.open', { id: HEIMDALL_VIEW })
+    expect(viewOpened.view?.id).toBe(HEIMDALL_VIEW)
+    expect(viewOpened.tools?.open[SLOT]).toBe(HEIMDALL)
+    const toolOpened = await caller.call('ui.tool.open', { id: HEIMDALL })
+    expect(toolOpened.view?.id).toBe(HEIMDALL_VIEW)
+    expect(toolOpened.tools?.open[SLOT]).toBe(HEIMDALL)
+  })
+
+  test('a window opening the view or the tool follows the same rules', async () => {
+    const { harness, caller } = await start()
+    const window = await connectWindow(harness, true)
+    await caller.call('ui.tool.open', { id: TASKS })
+
+    const expanded = await caller.call('ui.window.view.open', { connId: window.connId, id: TASKS_VIEW, input: { a: 1 } })
+    expect(expanded.view?.id).toBe(TASKS_VIEW)
+    expect(expanded.tools?.open[SLOT]).toBeNull()
+
+    const collapsed = await caller.call('ui.tool.open', { id: TASKS })
+    expect(collapsed.view).toBeNull()
+    expect(collapsed.tools?.open[SLOT]).toBe(TASKS)
+    expect((await caller.call('ui.window.state', { connId: window.connId })).layout.viewTabs).toEqual([])
+  })
+
+  test('with two windows the focused window decides, and no call hits the single-window conflict', async () => {
+    const { harness, caller } = await start()
+    const first = await connectWindow(harness)
+    const second = await connectWindow(harness, true)
+    await caller.call('ui.window.view.open', { connId: second.connId, id: TASKS_VIEW })
+    await caller.call('ui.window.view.open', { connId: first.connId, id: TASKS_VIEW })
+
+    const opened = await caller.call('ui.tool.open', { id: TASKS })
+    expect(opened.tools?.open[SLOT]).toBe(TASKS)
+    expect((await caller.call('ui.window.state', { connId: second.connId })).layout.view).toBeNull()
+    expect((await caller.call('ui.window.state', { connId: first.connId })).layout.view?.id).toBe(TASKS_VIEW)
+
+    const reopened = await caller.call('ui.window.view.open', { connId: second.connId, id: TASKS_VIEW })
+    expect(reopened.tools?.open[SLOT]).toBeNull()
+    expect(reopened.view?.id).toBe(TASKS_VIEW)
+  })
+
+  test('a window that closed its own copy does not make the next panel open collapse', async () => {
+    const { harness, caller } = await start()
+    const first = await connectWindow(harness, true)
+    await caller.call('ui.window.view.open', { connId: first.connId, id: TASKS_VIEW })
+    const second = await connectWindow(harness)
+    await caller.call('ui.window.view.close', { connId: first.connId })
+
+    await caller.call('ui.tool.open', { id: TASKS })
+    expect((await caller.call('ui.window.state', { connId: first.connId })).layout.tools?.open[SLOT]).toBe(TASKS)
+    expect((await caller.call('ui.window.state', { connId: second.connId })).layout.tools?.open[SLOT]).toBe(TASKS)
+    expect((await caller.call('ui.state', {})).layout.tools?.open[SLOT]).toBe(TASKS)
+  })
+
+  test('a stored layout with both open settles to the tab at load', async () => {
+    const { caller } = await start(seedWithBothOpen())
+    const layout = (await caller.call('ui.state', {})).layout
+    expect(layout.view).toEqual({ id: TASKS_VIEW })
+    expect(layout.viewTabs).toEqual([{ id: TASKS_VIEW }])
+    expect(layout.tools?.open[SLOT]).toBeNull()
+    expect(layout.tools?.open['left-top']).toBe(WORKTREES)
+  })
+
+  test('a stored layout is left alone at load when two windows are already connected', async () => {
+    const env = makeEnv(seedWithBothOpen())
+    const harness = await env.start()
+    const caller = await harness.connect('cli')
+    await harness.connectWithEvents('ui')
+    await harness.connectWithEvents('ui')
+    expect((await caller.call('ui.state', {})).layout.tools?.open[SLOT]).toBe(TASKS)
+  })
+})

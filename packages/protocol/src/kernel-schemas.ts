@@ -188,7 +188,8 @@ const uiTool = object(
     hue: toolHue,
     defaultSlot: toolSlot,
     contributionId: { description: 'A contribution ID, or null for the host-owned Inbox.' },
-    aliases: strings
+    aliases: strings,
+    expandedView: string('An effective view that shows this tool full size; the tool and this view are never both open.')
   },
   ['id', 'title', 'icon', 'hue', 'defaultSlot', 'contributionId', 'aliases']
 )
@@ -543,7 +544,7 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiWindowState
   },
   'ui.window.view.open': {
-    description: 'Opens view `id` with `input` only in the exact live target UI connection.',
+    description: 'Opens view `id` with `input` only in the exact live target UI connection. In a main window, the expanded view of a tool also closes that tool\'s slot; an auxiliary window leaves the slots alone.',
     params: object(
       {
         connId: integer(1, 'A live kernel UI connection ID.'),
@@ -594,7 +595,7 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiLayout
   },
   'ui.tool.open': {
-    description: 'Opens tool `id` in its assigned slot, toggling that slot closed when the tool is already shown.',
+    description: 'Opens tool `id` in its assigned slot; a tool that is already shown stays shown. For a tool with an expanded view: when that view is active it is closed and the slot opens; when that view is open behind another one it becomes the active view and no slot opens.',
     params: object({ id: string() }, ['id']),
     result: uiLayout
   },
@@ -614,7 +615,7 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiLayout
   },
   'ui.view.open': {
-    description: 'Opens view `id` with `input` (JSON up to 64 KiB); `id` must be an effective view.',
+    description: 'Opens view `id` with `input` (JSON up to 64 KiB); `id` must be an effective view. When `id` is the expanded view of a tool, that tool\'s slot is closed.',
     params: object({ id: string(), input: { description: 'Passed to the view as its input.' } }, ['id']),
     result: uiLayout
   },

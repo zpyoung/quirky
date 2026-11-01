@@ -54,6 +54,7 @@ type ToolSource = UiSlotEntry & { hue?: UiToolHue }
 const RULES: {
   id: string
   body?: string
+  expandedView?: string
   aliases?: string[]
   title: string
   icon: string
@@ -71,7 +72,7 @@ const RULES: {
   { id: REVIEWS, title: 'Reviews', icon: 'git-pull-request', hue: 'rose', defaultSlot: 'right-top' },
   { id: 'panel:quirky.session-info/info', title: 'Session info', icon: 'info', hue: 'slate', defaultSlot: 'right-bottom' },
   { id: 'panel:quirky.vault/history', title: 'Vault', icon: 'vault', hue: 'sand', defaultSlot: 'right-bottom' },
-  { id: TASKS, body: TASKS_VIEW, title: 'Tasks', icon: 'list-checks', hue: 'teal', defaultSlot: 'left-bottom' },
+  { id: TASKS, expandedView: TASKS_VIEW, title: 'Tasks', icon: 'list-checks', hue: 'teal', defaultSlot: 'left-bottom' },
   { id: HEIMDALL, body: HEIMDALL_VIEW, title: 'Heimdall', icon: 'robot', hue: 'coral', defaultSlot: 'left-bottom' },
   { id: AUTOMATIONS, body: AUTOMATIONS_VIEW, title: 'Automations', icon: 'flow-arrow', hue: 'magenta', defaultSlot: 'left-bottom' },
   { id: MOBILE, body: MOBILE_VIEW, title: 'Mobile', icon: 'device-mobile', hue: 'slate', defaultSlot: 'left-bottom' },
@@ -145,6 +146,7 @@ export function projectTools(model: Pick<UiModel, 'panels' | 'sidebarSections' |
       entries.has(id) && all.indexOf(id) === index
     )
     for (const id of aliases) consumed.add(id)
+    const expanded = rule.expandedView === undefined ? undefined : entries.get(rule.expandedView)
     tools.push({
       id: rule.id,
       title: rule.title,
@@ -152,7 +154,8 @@ export function projectTools(model: Pick<UiModel, 'panels' | 'sidebarSections' |
       hue: source.hue ?? body.hue ?? rule.hue,
       defaultSlot: source.defaultSlot ?? body.defaultSlot ?? rule.defaultSlot,
       contributionId: body.id,
-      aliases
+      aliases,
+      ...(rule.expandedView !== undefined && expanded && expanded.module !== null ? { expandedView: rule.expandedView } : {})
     })
   }
 
