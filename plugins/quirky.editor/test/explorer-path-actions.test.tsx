@@ -720,8 +720,6 @@ test.each([
     await panel.unmount()
   }
 }, 60_000)
-
-
 test.each([
   { kind: 'file', path: 'created.md', expandedParent: false },
   { kind: 'folder', path: 'created-folder', expandedParent: false },
