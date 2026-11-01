@@ -1086,6 +1086,66 @@ test('SC-47: Delete asks in the window and passes force and yes with no ask card
   expect(h.callsTo('quirky.ask/answer')).toEqual([])
 })
 
+test('Delete warns that a running agent session will end and still allows deletion', async () => {
+  const h = setup()
+  h.world.sessions = [{ ...session('s1', 'w2', 'working'), agent: 'opencode' }]
+  await h.mountInto(host)
+  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
+  await click(itemNamed('Delete'))
+  const dialog = document.querySelector('[role="dialog"]')!
+  expect(dialog.textContent).toMatch(/1 agent is running/i)
+  expect(dialog.textContent).toMatch(/deleting.*will end.*session/i)
+  expect(dialogButton('Delete Workspace').disabled).toBe(false)
+  await click(dialogButton('Delete Workspace'))
+  expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, yes: true }])
+})
+
+test('the running-agent warning follows live sessions without counting other workspaces, shells or exited agents', async () => {
+  const h = setup()
+  h.world.sessions = [
+    { ...session('s1', 'w2', 'done'), agent: 'opencode' },
+    { ...session('s2', 'w2', 'waiting'), agent: 'claude' },
+    { ...session('elsewhere', 'w1', 'working'), agent: 'opencode' },
+    session('shell', 'w2', 'running'),
+    { ...session('exited', 'w2', 'exited'), agent: 'claude' }
+  ]
+  await h.mountInto(host)
+  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
+  await click(itemNamed('Delete'))
+  const dialog = document.querySelector('[role="dialog"]')!
+  expect(dialog.textContent).toMatch(/2 agents are running/i)
+  expect(dialog.textContent).toMatch(/deleting.*will end.*sessions/i)
+  await h.emit({ type: 'quirky.session/changed', data: { session: { ...session('s2', 'w2', 'exited'), agent: 'claude' } } })
+  expect(dialog.textContent).toMatch(/1 agent is running/i)
+  await h.emit({ type: 'quirky.session/removed', data: { sessionId: 's1' } })
+  expect(dialog.textContent).not.toMatch(/agents? (?:is|are) running/i)
+})
+
+test('Delete with Descendants warns about agents running in child workspaces', async () => {
+  const h = setup()
+  h.world.worktrees.push(wt('w5', 'r1', 'child', { parentId: 'w2' }), wt('w6', 'r1', 'grandchild', { parentId: 'w5' }))
+  h.world.sessions = [
+    { ...session('child-agent', 'w5', 'running'), agent: 'opencode' },
+    { ...session('grandchild-agent', 'w6', 'working'), agent: 'claude' }
+  ]
+  await h.mountInto(host)
+  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
+  await click(itemNamed('Delete with Descendants (2)…'))
+  const dialog = document.querySelector('[role="dialog"]')!
+  expect(dialog.textContent).toMatch(/2 agents are running/i)
+  expect(dialog.textContent).toMatch(/deleting.*will end.*sessions/i)
+})
+
+test('Delete works without a running-agent warning when the session plugin is off', async () => {
+  const h = setup()
+  h.world.sessions = null
+  await h.mountInto(host)
+  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
+  await click(itemNamed('Delete'))
+  expect(document.querySelector('[role="dialog"]')!.textContent).not.toMatch(/agents? (?:is|are) running/i)
+  expect(dialogButton('Delete Workspace').disabled).toBe(false)
+})
+
 test('the delete dialog leaves out the change count for no changes or a failed status', async () => {
   const h = setup()
   await h.mountInto(host)

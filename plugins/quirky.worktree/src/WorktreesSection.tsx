@@ -669,6 +669,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
         <DeleteDialog
           context={context}
           worktree={target}
+          sessions={sessions}
           descendants={descendants}
           onClose={closeDialog}
           onConfirm={(options) => {

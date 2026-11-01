@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { UiPluginContext, Worktree } from '@quirky/protocol'
+import type { Session, UiPluginContext, Worktree } from '@quirky/protocol'
 import { Badge, Button, Dialog } from '@quirky/ui'
 
 type Props = {
   context: UiPluginContext
   worktree: Worktree
+  sessions: Session[] | null
   /** Present when the delete takes the workspaces nested below it too. */
   descendants?: Worktree[]
   onConfirm(options: { dontAskAgain: boolean }): void
@@ -25,9 +26,13 @@ async function changedFiles(context: UiPluginContext, worktree: Worktree): Promi
 }
 
 /** Warns what deleting a workspace discards, with the option to stop asking. */
-export function DeleteDialog({ context, worktree, descendants, onConfirm, onClose }: Props) {
+export function DeleteDialog({ context, worktree, sessions, descendants, onConfirm, onClose }: Props) {
   const [changes, setChanges] = useState<number | null>(null)
   const [dontAskAgain, setDontAskAgain] = useState(false)
+  const workspaceIds = new Set([worktree.id, ...(descendants ?? []).map((child) => child.id)])
+  const runningAgents = (sessions ?? []).filter((session) =>
+    workspaceIds.has(session.worktreeId) && session.agent !== 'shell' && session.status !== 'exited'
+  ).length
 
   useEffect(() => {
     let live = true
@@ -43,6 +48,13 @@ export function DeleteDialog({ context, worktree, descendants, onConfirm, onClos
       <p className="ui-text-muted">
         {`Remove ${worktree.name} from git and delete its workspace folder. Any uncommitted or untracked changes in Git workspaces will be permanently deleted.`}
       </p>
+      {runningAgents > 0 && (
+        <p className="ui-error-text">
+          {runningAgents === 1
+            ? '1 agent is running in the workspace being deleted. Deleting it will end the session.'
+            : `${runningAgents} agents are running in the workspaces being deleted. Deleting them will end the sessions.`}
+        </p>
+      )}
       <p className="ui-text-mono">{worktree.path}</p>
       {changes !== null && changes > 0 && <Badge tone="failing">{changeLabel(changes)}</Badge>}
       {descendants && descendants.length > 0 && (
