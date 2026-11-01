@@ -39,6 +39,7 @@ export function reuseGitDiff(prev: GitDiff | null, next: GitDiff): GitDiff {
   if (
     prev &&
     prev.path === next.path &&
+    prev.oldPath === next.oldPath &&
     prev.source === next.source &&
     prev.kind === next.kind &&
     prev.mime === next.mime &&
