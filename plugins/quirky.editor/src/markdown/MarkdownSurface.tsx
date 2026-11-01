@@ -12,6 +12,7 @@ import type { MarkdownFormat } from './operations'
 import { isSafeMarkdownLink } from './operations'
 import { extractHeadings, splitFrontMatter, slugHeading, utf8Bytes } from './source'
 import { createMarkdownExtensions } from './tiptap'
+import { findRichMatches, revealRichSearchMatch, RichSearchHighlight, type RichSearchRange } from './search'
 import { filterSlashCatalog, SLASH_CATALOG, type SlashItem } from './slashCatalog'
 import { MermaidDiagram } from './MermaidDiagram'
 import { destinationDirectory } from './files'
@@ -92,14 +93,6 @@ function imageFileFromTransfer(transfer: DataTransfer): File | null {
 function markdownSource(buffer: SurfaceProps['buffer']): { prefix: string; body: string } {
   const split = splitFrontMatter(sourceValue(buffer))
   return { prefix: split.prefix, body: split.body }
-}
-
-function findTextPosition(editor: Editor, query: string, from = 0): { from: number; to: number } | null {
-  if (query === '') return null
-  const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n')
-  const index = text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase(), from)
-  if (index < 0) return null
-  return { from: Math.min(index + 1, editor.state.doc.content.size), to: Math.min(index + query.length + 1, editor.state.doc.content.size) }
 }
 
 function lineOfSelection(editor: Editor, position: number): number {
@@ -513,7 +506,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const { buffer, onAction, onView, context } = props
   const split = markdownSource(buffer)
   const source = sourceValue(buffer)
-  const extensions = useMemo(() => createMarkdownExtensions(), [])
+  const extensions = useMemo(() => [...createMarkdownExtensions(), RichSearchHighlight], [])
   const [readOnly, setReadOnly] = useState(buffer.readOnly)
   const [flushError, setFlushError] = useState<string | null>(null)
   const [slash, setSlash] = useState<{ query: string; index: number } | null>(null)
@@ -534,7 +527,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [matchCase, setMatchCase] = useState(false)
   const [wholeWord, setWholeWord] = useState(false)
   const [replaceText, setReplaceText] = useState('')
-  const [searchResult, setSearchResult] = useState<{ matches: { from: number; to: number; line: number; text: string }[]; total: number } | null>(null)
+  const [searchResult, setSearchResult] = useState<{ matches: RichSearchRange[]; total: number; query: string; matchCase: boolean; wholeWord: boolean; doc: Editor['state']['doc'] } | null>(null)
   const [searchIndex, setSearchIndex] = useState(0)
   const [tocOpen, setTocOpen] = useState(buffer.view.markdownTocVisible === true)
   const [tocLevels, setTocLevels] = useState<Set<number>>(new Set([1, 2, 3, 4, 5]))
@@ -1101,21 +1094,22 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     catch (cause) { setFeedback(errorText(cause)) }
   }, [call, frontMatterVisible])
 
-  const updateSearch = useCallback(async () => {
-    try {
-      const result = await call(MARKDOWN_METHOD, { action: 'search', query: searchQuery, matchCase, wholeWord }) as { matches: { from: number; to: number; line: number; text: string }[]; total: number }
-      setSearchResult(result)
-      setSearchIndex(0)
-      const position = result.matches[0] ? findTextPosition(editor!, searchQuery) : null
-      if (position) editor?.chain().focus().setTextSelection(position).scrollIntoView().run()
-    } catch (cause) { setFeedback(errorText(cause)) }
-  }, [call, editor, matchCase, wholeWord, searchQuery])
+  const updateSearch = useCallback(() => {
+    if (!editor) return
+    const result = findRichMatches(editor, searchQuery, { matchCase, wholeWord })
+    setSearchResult({ ...result, query: searchQuery, matchCase, wholeWord, doc: editor.state.doc })
+    setSearchIndex(0)
+    revealRichSearchMatch(editor, result.matches[0] ?? null)
+    searchInput.current?.focus()
+  }, [editor, matchCase, wholeWord, searchQuery])
   const closeSearch = useCallback(() => {
     setSearchOpen(false)
+    if (editor) revealRichSearchMatch(editor, null)
+    setSearchResult(null)
     const opener = searchOpener.current
     searchOpener.current = null
     opener?.focus()
-  }, [])
+  }, [editor])
   const openSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>, opener: Element | null = document.activeElement) => {
     if (!editor) throw new Error('The rich Markdown editor is not ready.')
     const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
@@ -1127,22 +1121,25 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     if (requestedQuery !== undefined) setSearchQuery(requestedQuery)
     window.requestAnimationFrame(() => searchInput.current?.focus())
     if (requestedQuery === undefined || requestedQuery === '') return { opened: true, replace }
-    const result = await call(MARKDOWN_METHOD, { action: 'search', query: requestedQuery, matchCase, wholeWord }) as { matches: { from: number; to: number; line: number; text: string }[]; total: number }
-    setSearchResult(result)
+    const result = findRichMatches(editor, requestedQuery, { matchCase, wholeWord })
+    setSearchResult({ ...result, query: requestedQuery, matchCase, wholeWord, doc: editor.state.doc })
     setSearchIndex(0)
-    const position = result.matches[0] ? findTextPosition(editor, requestedQuery) : null
-    if (position) editor.chain().focus().setTextSelection(position).scrollIntoView().run()
+    revealRichSearchMatch(editor, result.matches[0] ?? null)
     return { opened: true, replace, query: requestedQuery, total: result.total }
-  }, [call, editor, matchCase, searchOpen, wholeWord])
+  }, [editor, matchCase, searchOpen, wholeWord])
 
   const moveSearch = useCallback((direction: number) => {
-    if (!editor || !searchResult || searchResult.matches.length === 0) return
+    if (!editor || !searchResult) return
+    if (searchResult.doc !== editor.state.doc || searchResult.query !== searchQuery || searchResult.matchCase !== matchCase || searchResult.wholeWord !== wholeWord) {
+      updateSearch()
+      return
+    }
+    if (searchResult.matches.length === 0) return
     const next = (searchIndex + direction + searchResult.matches.length) % searchResult.matches.length
     setSearchIndex(next)
-    const match = searchResult.matches[next]!
-    const position = findTextPosition(editor, searchQuery, Math.max(0, match.from - 1)) ?? findTextPosition(editor, searchQuery)
-    if (position) editor.chain().focus().setTextSelection(position).scrollIntoView().run()
-  }, [editor, searchIndex, searchQuery, searchResult])
+    revealRichSearchMatch(editor, searchResult.matches[next]!)
+    searchInput.current?.focus()
+  }, [editor, matchCase, searchIndex, searchQuery, searchResult, updateSearch, wholeWord])
 
   const replaceMatches = useCallback(async (all: boolean) => {
     try {
@@ -1441,7 +1438,12 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <summary>Front Matter (edit in source mode)</summary><pre className="markdown-frontmatter__source">{frontmatter}</pre>
       </details>}
       {searchOpen && <div className="markdown-toolbar markdown-toolbar--search">
-        <input ref={searchInput} className="markdown-input" aria-label="Find in rich editor" placeholder="Find in rich editor" value={searchQuery} onChange={(event) => setSearchQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void updateSearch() }} />
+        <input ref={searchInput} className="markdown-input" aria-label="Find in rich editor" placeholder="Find in rich editor" value={searchQuery} onChange={(event) => setSearchQuery(event.currentTarget.value)} onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+          event.preventDefault()
+          if (searchResult) moveSearch(event.shiftKey ? -1 : 1)
+          else updateSearch()
+        }} />
         <label className="markdown-check"><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
         <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
         <Button type="button" onClick={() => void updateSearch()}>Find</Button>

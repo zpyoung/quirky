@@ -24,23 +24,26 @@ export function Card({ card, number, actions }: { card: CardState; number: numbe
   const cardElement = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     const capture = card.capture
-    if (editing || capture === null) return
     const element = cardElement.current
     if (element === null) return
     const win = element.ownerDocument.defaultView
     if (win === null) return
     const place = () => {
+      const margin = 12
+      const bannerBottom = element.ownerDocument.querySelector<HTMLElement>('[data-feedback-banner]')?.getBoundingClientRect().bottom ?? 0
+      const minTop = Math.max(margin, bannerBottom + margin)
+      element.style.maxHeight = `${Math.max(0, win.innerHeight - minTop - margin)}px`
+      if (editing || capture === null) return
       const { width, height } = element.getBoundingClientRect()
       const rect = capture.rect
-      const margin = 12
       const maxLeft = Math.max(margin, win.innerWidth - width - margin)
-      const maxTop = Math.max(margin, win.innerHeight - height - margin)
+      const maxTop = Math.max(minTop, win.innerHeight - height - margin)
       const left = Math.min(Math.max(rect.x, margin), maxLeft)
       const below = rect.y + rect.height + margin
       const above = rect.y - height - margin
-      let top = Math.min(Math.max(rect.y, margin), maxTop)
-      if (below >= margin && below <= maxTop) top = below
-      else if (above >= margin) top = Math.min(above, maxTop)
+      let top = Math.min(Math.max(rect.y, minTop), maxTop)
+      if (below >= minTop && below <= maxTop) top = below
+      else if (above >= minTop) top = Math.min(above, maxTop)
       Object.assign(element.style, { left: `${left}px`, top: `${top}px`, right: 'auto', bottom: 'auto' })
     }
     place()

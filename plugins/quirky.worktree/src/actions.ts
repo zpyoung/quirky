@@ -180,7 +180,8 @@ export const SETUP_CHOICE_NEEDED = 'setup-choice-needed'
  * one the person submitted from, else a toast names it. An untrusted shared setup script or issue
  * command is put to the person and the create retried with their answer. Returns the result,
  * `SETUP_CHOICE_NEEDED` when the daemon wants a run-or-skip answer the form can still collect, or
- * null after a toast says why nothing was created (or the person backed out of the trust question).
+ * null when trust is cancelled or a trust-specific check has already shown its own message.
+ * Ordinary create failures propagate so the dialog can display them inline.
  */
 export async function createWorkspace(
   context: UiPluginContext,
@@ -232,10 +233,7 @@ export async function createWorkspace(
       return result
     } catch (error) {
       if (reasonOf(error) === 'setup-decision-required') return SETUP_CHOICE_NEEDED
-      if (reasonOf(error) !== 'hooks-untrusted') {
-        context.toast('Could not create worktree', messageOf(error))
-        return null
-      }
+      if (reasonOf(error) !== 'hooks-untrusted') throw error
       const rawData = error !== null && typeof error === 'object' && 'data' in error ? error.data : undefined
       const data: Record<string, unknown> = rawData !== null && typeof rawData === 'object' && !Array.isArray(rawData)
         ? rawData as Record<string, unknown> // RPC error data is a record; guard its object shape before indexing.

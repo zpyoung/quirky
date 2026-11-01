@@ -5,6 +5,7 @@ import { type Ask, type Repo, type Session, type Worktree } from '@quirky/protoc
 import { chromium } from 'playwright'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Banner } from '../../../plugins/quirky.feedback/src/mode/Banner'
+import { Button, Tabs } from '../src/design-system'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { launchableAgents, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
 import { attentionStoreFor } from '../src/shell/attention'
@@ -157,31 +158,56 @@ describe('window bar', () => {
       await browser.close()
     }
   }, 60_000)
-  test.skipIf(!existsSync(chromium.executablePath()))('feedback banner clears toolbar controls and leaves Exit reachable', async () => {
+  test.skipIf(!existsSync(chromium.executablePath()))('reserved banner slot keeps toolbar and workspace controls clear and Exit reachable', async () => {
     const { env, unselectedMarkup } = await bootBar(true)
     const toolbarMarkups = [unselectedMarkup!, bar(env).outerHTML]
     const bannerMarkup = renderToStaticMarkup(<Banner onExit={() => {}} />)
+    const workspaceMarkup = renderToStaticMarkup(<div className="shell-workspace"><div className="shell-main-region"><div className="main-header shell-main-header">
+      <Tabs label="Open views" items={[{ id: 'session', label: 'Session' }, { id: 'terminal', label: 'Terminal' }]} value="session" onChange={() => {}} />
+      <div className="workspace-command-row"><Button>Add quick command</Button><Button>Pane actions</Button></div>
+    </div></div></div>)
     const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
     try {
-      const page = await browser.newPage({ viewport: { width: 1054, height: 100 } })
+      const page = await browser.newPage({ viewport: { width: 1054, height: 300 } })
       const styles = await Promise.all([
         '../src/design-system/tokens.css',
         '../src/design-system/components.css',
         '../src/shell/chrome.css'
       ].map((path) => Bun.file(new URL(path, import.meta.url)).text()))
-      const css = `${styles.join('\n')}\nbody { margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }`
+      const css = `${styles.join('\n')}\nbody { margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.app { height: 100vh; display: flex; flex-direction: column; }
+.shell-workspace { position: relative; flex: 1 1 auto; min-height: 0; }
+.shell-main-region { position: relative; height: 100%; }
+.main-header { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-12); min-height: var(--ui-row-double); }`
+      const pageMarkup = (toolbarMarkup: string, banner = '') =>
+        `<!doctype html><html><head><style>${css}</style></head><body><div class="app" data-theme="dark">${toolbarMarkup}<div class="feedback-banner-slot" data-feedback-banner-slot>${banner}</div>${workspaceMarkup}</div></body></html>`
 
       for (const toolbarMarkup of toolbarMarkups) {
         for (const width of [646, 768, 1054, 1568]) {
-          await page.setViewportSize({ width, height: 100 })
-          await page.setContent(`<!doctype html><html><head><style>${css}</style></head><body><div class="app" data-theme="dark">${toolbarMarkup}${bannerMarkup}</div></body></html>`)
+          await page.setViewportSize({ width, height: 300 })
+          await page.setContent(pageMarkup(toolbarMarkup))
+          const emptySlot = await page.evaluate(() => {
+            const toolbar = document.querySelector<HTMLElement>('[aria-label="Window bar"]')!
+            const workspace = document.querySelector<HTMLElement>('.shell-workspace')!
+            return {
+              toolbarBottom: toolbar.getBoundingClientRect().bottom,
+              workspaceTop: workspace.getBoundingClientRect().top
+            }
+          })
+          expect(emptySlot.workspaceTop).toBe(emptySlot.toolbarBottom)
 
+          await page.setContent(pageMarkup(toolbarMarkup, bannerMarkup))
           const layout = await page.evaluate(() => {
             const toolbar = document.querySelector<HTMLElement>('[aria-label="Window bar"]')!
+            const workspace = document.querySelector<HTMLElement>('.shell-workspace')!
             const banner = document.querySelector<HTMLElement>('[data-feedback-banner]')!
             const toolbarRect = toolbar.getBoundingClientRect()
             const bannerRect = banner.getBoundingClientRect()
-            const buttons = [...toolbar.querySelectorAll<HTMLButtonElement>('button')].map((button) => {
+            const workspaceRect = workspace.getBoundingClientRect()
+            const controls = [
+              ...toolbar.querySelectorAll<HTMLButtonElement>('button'),
+              ...workspace.querySelectorAll<HTMLButtonElement>('[role="tab"], .workspace-command-row button')
+            ].map((button) => {
               const rect = button.getBoundingClientRect()
               const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
               return {
@@ -193,14 +219,16 @@ describe('window bar', () => {
             })
             return {
               bannerGap: bannerRect.top - toolbarRect.bottom,
-              overlappingButtons: buttons.filter((button) => button.intersectsBanner).map((button) => button.name),
-              blockedButtons: buttons.filter((button) => !button.centerReceivesPointer).map((button) => button.name)
+              workspaceGap: workspaceRect.top - bannerRect.bottom,
+              overlappingControls: controls.filter((control) => control.intersectsBanner).map((control) => control.name),
+              blockedControls: controls.filter((control) => !control.centerReceivesPointer).map((control) => control.name)
             }
           })
 
-          expect(layout.overlappingButtons).toEqual([])
           expect(layout.bannerGap).toBeGreaterThanOrEqual(12)
-          expect(layout.blockedButtons).toEqual([])
+          expect(layout.workspaceGap).toBeGreaterThanOrEqual(0)
+          expect(layout.overlappingControls).toEqual([])
+          expect(layout.blockedControls).toEqual([])
 
           const exit = page.getByRole('button', { name: 'Exit', exact: true })
           await exit.evaluate((button) => button.addEventListener('click', () => button.setAttribute('data-exit-clicked', ''), { once: true }))

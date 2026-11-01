@@ -1159,6 +1159,10 @@
                       "local",
                       "remote"
                     ]
+                  },
+                  "checkedOutIn": {
+                    "type": "string",
+                    "description": "Absolute worktree path holding the branch; omitted when it is not checked out."
                   }
                 },
                 "required": [

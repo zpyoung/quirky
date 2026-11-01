@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import type { EffectiveHooks, GitHubWorktreeSource, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { EffectiveHooks, GitHubWorktreeSource, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { Badge, Button, Dialog, FormRow, Tabs, TextField } from '@quirky/ui'
 import { createWorkspace, messageOf, SETUP_CHOICE_NEEDED, type CreateHooks } from './actions'
 import { isGitHubWorktreeReference, parseWorkItemsPage, parseWorktreeSource, type GitHubWorkItem } from './github'
@@ -120,7 +120,7 @@ type SearchState = {
   error?: string
 }
 type SelectedSource = { repoId: string; primaryId: string; source: GitHubWorktreeSource }
-type BranchRef = { name: string; kind: 'local' | 'remote' }
+type BranchRef = { name: string; kind: 'local' | 'remote'; checkedOutIn?: string }
 type BranchSearchState = {
   repoId: string
   primaryId: string
@@ -134,7 +134,8 @@ type ActiveInput = { repoId: string; primaryId: string | undefined; mode: Mode; 
 function isBranchRef(value: unknown): value is BranchRef {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const ref = value as Record<string, unknown>
-  return typeof ref.name === 'string' && (ref.kind === 'local' || ref.kind === 'remote')
+  return typeof ref.name === 'string' && (ref.kind === 'local' || ref.kind === 'remote') &&
+    (ref.checkedOutIn === undefined || typeof ref.checkedOutIn === 'string')
 }
 
 function parseBranchRefs(value: unknown): BranchRef[] {
@@ -201,6 +202,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [choiceDemanded, setChoiceDemanded] = useState(false)
   const [createMore, setCreateMore] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [placeholder, setPlaceholder] = useState('')
   const [suggestion, setSuggestion] = useState(0)
   const [project, setProject] = useState<Project | null>(null)
@@ -240,6 +242,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     setSelectedDefaultTabs([])
     setSelectedHost('')
     setProject(null)
+    setCreateError(null)
     setSetupChoice(null)
     setModel('')
     setLaunchPicks({})
@@ -477,12 +480,14 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const currentSearch = search && mode === 'github' && search.repoId === repoId && search.primaryId === (primary?.id ?? '') && search.query === query.trim() ? search : null
   const currentBranchSearch = branchSearch && mode === 'branch' && branchSearch.repoId === repoId && branchSearch.primaryId === (primary?.id ?? '') && branchSearch.query === branch.trim() ? branchSearch : null
   const issuePromptIsDerived = source?.item.kind === 'issue' && prompt.trim() === ''
+  const occupiedBranch = currentBranchSearch?.refs.find((ref) => ref.name === branch.trim() && ref.checkedOutIn)
+  const branchUnavailable = fromBranch && (currentBranchSearch?.status !== 'ready' || occupiedBranch !== undefined)
   const plainSmartInputNeedsChoice = mode === 'smart' && smartInput.trim() !== '' && !explicitSmartReference
   const workspaceName = (plainSmartInputNeedsChoice ? smartInput : name).trim()
   const showBase = !folder && (source ? source.item.kind === 'issue' : mode !== 'github' && !fromBranch && !explicitSmartReference)
   const showBranchName = !folder && !isPullRequest && !fromBranch && (source ? source.item.kind === 'issue' : mode !== 'github' && !explicitSmartReference)
   const blocked = !repo || busy || (asksForSetup && setupChoice === null) || sourceBusy || unsupportedFolderReference ||
-    (mode === 'github' && source === null) || (explicitSmartReference && source === null) || selectedHostUnavailable ||
+    (mode === 'github' && source === null) || (explicitSmartReference && source === null) || selectedHostUnavailable || branchUnavailable ||
     (launchSelectionRequested && (!agentOptionsCatalog?.supported || agentOptionsState?.status !== 'ready'))
 
   const fields = (): Record<string, unknown> => {
@@ -514,11 +519,19 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const submit = async () => {
     if (blocked) return
     setBusy(true)
+    setCreateError(null)
     const label = workspaceName || source?.item.title || (fromBranch ? branch.trim() : placeholder) || 'new workspace'
     const clearPending = onPending(repoId, label)
-    const result = await createWorkspace(context, fields(), hooks)
-    clearPending()
-    setBusy(false)
+    let result: WorktreeCreateResult | typeof SETUP_CHOICE_NEEDED | null
+    try {
+      result = await createWorkspace(context, fields(), hooks)
+    } catch (error) {
+      setCreateError(messageOf(error))
+      return
+    } finally {
+      clearPending()
+      setBusy(false)
+    }
     if (result === SETUP_CHOICE_NEEDED) {
       setChoiceDemanded(true)
       setAdvanced(true)
@@ -679,13 +692,18 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             <TextField label="Existing branch" id="create-branch" value={branch} onChange={(event) => setBranch(event.target.value)} placeholder="Search or enter an existing branch" />
             {currentBranchSearch?.status === 'loading' && <p className="ui-text-muted" role="status">Loading branches…</p>}
             {currentBranchSearch?.status === 'error' && <p className="ui-error-text" role="alert">Could not search branches: {currentBranchSearch.error}</p>}
+            {occupiedBranch && (
+              <p className="ui-error-text" role="alert">
+                Branch “{occupiedBranch.name}” is already in use in workspace “{occupiedBranch.checkedOutIn?.split('/').at(-1)}”. Open that workspace or choose another branch.
+              </p>
+            )}
             {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <p className="ui-text-muted" role="status">No matching branches.</p>}
             {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length > 0 && (
               <ul className="ui-tree">
                 {currentBranchSearch.refs.map((ref) => (
                   <li key={`${ref.kind}:${ref.name}`} className="ui-tree-item">
-                    <Button type="button" aria-pressed={branch.trim() === ref.name} onClick={() => setBranch(ref.name)}>
-                      {ref.name} <span className="ui-text-muted">{ref.kind}</span>
+                    <Button type="button" aria-pressed={branch.trim() === ref.name} disabled={!!ref.checkedOutIn} onClick={() => setBranch(ref.name)}>
+                      {ref.name} <span className="ui-text-muted">{ref.kind}{ref.checkedOutIn ? ` · In use in ${ref.checkedOutIn.split('/').at(-1)}` : ''}</span>
                     </Button>
                   </li>
                 ))}
@@ -940,6 +958,11 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               </section>
             )}
           </div>
+        )}
+        {createError !== null && (
+          <p className="ui-error-text" role="alert" tabIndex={0} style={{ maxHeight: '6rem', overflowY: 'auto' }}>
+            Could not create worktree: {createError}
+          </p>
         )}
         <div className="ui-actions">
           <label className="ui-checkbox-label">

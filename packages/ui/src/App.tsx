@@ -139,12 +139,15 @@ export function App() {
     <div className="app">
       <ConnectionBanner />
       {auxiliary ? (
-        <div className="shell-workspace shell-workspace--auxiliary">
-          <MainArea />
-        </div>
+        <>
+          <div className="shell-workspace shell-workspace--auxiliary">
+            <MainArea />
+          </div>
+        </>
       ) : (
         <>
           <WindowBar onSettings={() => setSettingsOpen(true)} />
+          <div className="feedback-banner-slot" data-feedback-banner-slot />
           <div ref={workspace} className="shell-workspace" style={shellStyle}>
             <ToolShell
               geometry={geometry}

@@ -89,25 +89,60 @@ export async function commitFiles(
 
 /**
  * Local and remote branch names for the base picker, filtered by a case-insensitive substring
- * `query`: locals first, each group by name, at most 200. `current` is the checked-out branch, or
- * null when HEAD is detached.
+ * `query`: locals first, each group by name, at most 200; an exact-name match is retained if it
+ * falls beyond the cap. `current` is the checked-out branch, or null when HEAD is detached.
  */
 export async function listBranches(
   cwd: string,
   query?: string
-): Promise<{ refs: { name: string; kind: 'local' | 'remote' }[]; current: string | null }> {
-  const out = await git(cwd, ['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes'], { readOnly: true })
-  const needle = query?.toLowerCase() ?? ''
-  const refs: { name: string; kind: 'local' | 'remote' }[] = []
-  for (const full of out.split('\n')) {
-    if (full.startsWith('refs/heads/')) refs.push({ name: full.slice('refs/heads/'.length), kind: 'local' })
-    else if (full.startsWith('refs/remotes/')) refs.push({ name: full.slice('refs/remotes/'.length), kind: 'remote' })
+): Promise<{ refs: { name: string; kind: 'local' | 'remote'; checkedOutIn?: string }[]; current: string | null }> {
+  const out = await git(
+    cwd,
+    ['for-each-ref', '--format=%(refname)%00%(worktreepath)%00', 'refs/heads', 'refs/remotes'],
+    { readOnly: true }
+  )
+  const fields = out.split('\0')
+  const refs: { name: string; kind: 'local' | 'remote'; checkedOutIn?: string }[] = []
+  const localBranches = new Map<string, string | null>()
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const full = fields[i]!.replace(/^\n/, '')
+    const worktreePath = fields[i + 1]!
+    if (full.startsWith('refs/heads/')) {
+      const name = full.slice('refs/heads/'.length)
+      localBranches.set(name, worktreePath || null)
+      refs.push({ name, kind: 'local', ...(worktreePath ? { checkedOutIn: worktreePath } : {}) })
+    } else if (full.startsWith('refs/remotes/')) {
+      refs.push({ name: full.slice('refs/remotes/'.length), kind: 'remote' })
+    }
   }
+
+  const remoteRefs = refs.filter((ref) => ref.kind === 'remote')
+  if (remoteRefs.length > 0) {
+    const remoteNames = new Set((await git(cwd, ['remote'], { readOnly: true })).trim().split('\n').filter(Boolean))
+    for (const ref of remoteRefs) {
+      let checkedOutIn = localBranches.get(ref.name)
+      if (checkedOutIn === undefined) {
+        const slash = ref.name.indexOf('/')
+        if (slash > 0 && remoteNames.has(ref.name.slice(0, slash))) {
+          checkedOutIn = localBranches.get(ref.name.slice(slash + 1))
+        }
+      }
+      if (checkedOutIn) ref.checkedOutIn = checkedOutIn
+    }
+  }
+
+  const needle = query?.toLowerCase() ?? ''
   const filtered = refs
     .filter((ref) => !ref.name.endsWith('/HEAD') && ref.name.toLowerCase().includes(needle))
     .sort((a, b) => (a.kind === b.kind ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : a.kind === 'local' ? -1 : 1))
-    .slice(0, BRANCH_LIST_LIMIT)
+  const exactMatchIndex = query
+    ? filtered.findIndex((ref) => ref.name === query)
+    : -1
+  const limited = filtered.slice(0, BRANCH_LIST_LIMIT)
+  if (exactMatchIndex >= BRANCH_LIST_LIMIT) {
+    limited[BRANCH_LIST_LIMIT - 1] = filtered[exactMatchIndex]!
+  }
   const head = await runGit(cwd, ['symbolic-ref', '--quiet', '--short', 'HEAD'], { readOnly: true })
   const current = head.exitCode === 0 ? decoder.decode(head.stdout).trim() || null : null
-  return { refs: filtered, current }
+  return { refs: limited, current }
 }

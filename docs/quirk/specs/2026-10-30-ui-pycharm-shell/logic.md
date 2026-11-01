@@ -105,6 +105,8 @@ The row of bottom-tool icons is removed, which gives the work about 40 more heig
 
 Overflow lists tools that aren't on a stripe, either because the user took them off or because the window is too short to fit them, and shows their shortcuts where they have one. Escape closes More tools and returns focus to its button, with a complete rounded focus ring inside the stripe.
 
+Activity-provider buttons such as Source Control also keep a complete rounded focus ring inside the stripe, including when reopening Changes at a 647px window width.
+
 ### Icons
 
 Tools use Phosphor Duotone, each in one fixed hue. Files use Catppuccin, Mocha in dark and Latte in light. Controls such as carets and search use Phosphor Regular in the text color. All of these are MIT licensed.
