@@ -128,6 +128,11 @@ Builds the UI, then runs the shell from the repo sources (`packages/*/src`), so 
 checked-out code. The dev app is `apps/desktop/build/dev-macos-arm64/Quirky-dev.app`; console
 output of the shell appears in the terminal.
 
+Each launch replaces a running daemon if it came from another checkout or its sources have changed
+since it started. Daemon changes made while the app is open apply on the next launch or
+`quirky daemon restart`. To run two checkouts side by side, give each its own `QUIRKY_HOME`, because
+the later launch takes over a shared one.
+
 ## Logs
 
 - Daemon: `$QUIRKY_HOME/logs/daemon.log` (default `~/.quirky/logs/daemon.log`).

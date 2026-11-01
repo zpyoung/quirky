@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { daemonEntryHash, ensureDaemon, ensureHome, openPrivateLog, readRuntime } from '../src/node'
 
 const dirs: string[] = []
@@ -146,6 +147,115 @@ setInterval(() => {}, 1000)
     writeFileSync(join(dir, 'c.js'), 'two')
     expect(daemonEntryHash(join(dir, 'a.js'))).toBe(daemonEntryHash(join(dir, 'b.js')))
     expect(daemonEntryHash(join(dir, 'a.js'))).not.toBe(daemonEntryHash(join(dir, 'c.js')))
+  })
+
+  describe('an entry in a source checkout', () => {
+    const ENTRY = join('packages', 'daemon', 'src', 'main.ts')
+    const put = (root: string, path: string, content: string) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true })
+      writeFileSync(join(root, path), content)
+    }
+    function sourceCheckout(): string {
+      const root = realpathSync(tempDir())
+      put(root, ENTRY, 'entry')
+      put(root, 'bun.lock', 'lock')
+      put(root, 'packages/daemon/src/core.ts', 'core')
+      put(root, 'packages/protocol/src/rpc.ts', 'rpc')
+      put(root, 'packages/git/src/status.ts', 'status')
+      put(root, 'plugins/quirky.git/main.ts', 'plugin')
+      return root
+    }
+
+    for (const path of [
+      'packages/daemon/src/core.ts',
+      'packages/protocol/src/rpc.ts',
+      'packages/git/src/status.ts',
+      'plugins/quirky.git/main.ts',
+      'bun.lock'
+    ]) {
+      test(`the hash changes when ${path} changes`, () => {
+        const root = sourceCheckout()
+        const before = daemonEntryHash(join(root, ENTRY))
+        put(root, path, 'edited')
+        expect(daemonEntryHash(join(root, ENTRY))).not.toBe(before)
+      })
+    }
+
+    test('the hash changes when a source file is added', () => {
+      const root = sourceCheckout()
+      const before = daemonEntryHash(join(root, ENTRY))
+      put(root, 'packages/daemon/src/added.ts', 'added')
+      expect(daemonEntryHash(join(root, ENTRY))).not.toBe(before)
+    })
+
+    for (const path of [
+      'packages/daemon/test/core.test.ts',
+      'packages/ui/src/app.tsx',
+      'packages/cli/src/main.ts',
+      'packages/pty-host/src/main.ts',
+      'plugins/quirky.git/dist/ui.js',
+      'plugins/quirky.git/test/main.test.ts',
+      'plugins/quirky.git/node_modules/dep/index.js',
+      'plugins/quirky.mobile/assets/mobile/index.html'
+    ]) {
+      test(`the hash ignores ${path}`, () => {
+        const root = sourceCheckout()
+        const before = daemonEntryHash(join(root, ENTRY))
+        put(root, path, 'edited')
+        expect(daemonEntryHash(join(root, ENTRY))).toBe(before)
+      })
+    }
+
+    // a daemon serves the UI and plugins of the checkout it started from
+    test('two checkouts with the same sources hash differently', () => {
+      expect(daemonEntryHash(join(sourceCheckout(), ENTRY))).not.toBe(daemonEntryHash(join(sourceCheckout(), ENTRY)))
+    })
+
+    test('a symlinked path hashes the same as the real one', () => {
+      const root = sourceCheckout()
+      const link = join(tempDir(), 'link')
+      symlinkSync(root, link)
+      expect(daemonEntryHash(join(link, ENTRY))).toBe(daemonEntryHash(join(root, ENTRY)))
+    })
+
+    /** A stand-in daemon that reports the real hash of its own entry, as `packages/daemon/src/main.ts` does. */
+    function fakeSourceDaemon(root: string, home: string): string {
+      const node = fileURLToPath(new URL('../src/node', import.meta.url))
+      put(
+        root,
+        ENTRY,
+        `import { daemonEntryHash } from ${JSON.stringify(node)}
+const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => Response.json({ pid: process.pid }) })
+await Bun.write(${JSON.stringify(join(home, 'runtime.json'))}, JSON.stringify({ pid: process.pid, port: server.port, token: 't', hookToken: 'h', daemonVersion: '0', protocolVersion: 1, startedAt: Date.now(), entryHash: daemonEntryHash(process.argv[1]) }))
+process.on('SIGTERM', () => process.exit(0))
+setInterval(() => {}, 1000)
+`
+      )
+      return join(root, ENTRY)
+    }
+
+    test('a daemon is replaced after a source other than its entry changes', async () => {
+      const root = sourceCheckout()
+      const home = tempDir()
+      const entry = fakeSourceDaemon(root, home)
+      const old = await ensureDaemon({ home, daemonEntry: entry })
+      started.push(old.pid)
+      put(root, 'packages/daemon/src/core.ts', 'edited')
+      const next = await ensureDaemon({ home, daemonEntry: entry, replaceStale: true })
+      started.push(next.pid)
+      expect(next.pid).not.toBe(old.pid)
+      expect(alive(old.pid)).toBe(false)
+    })
+
+    test('a daemon is reused while its sources are unchanged', async () => {
+      const root = sourceCheckout()
+      const home = tempDir()
+      const entry = fakeSourceDaemon(root, home)
+      const first = await ensureDaemon({ home, daemonEntry: entry })
+      started.push(first.pid)
+      const again = await ensureDaemon({ home, daemonEntry: entry, replaceStale: true })
+      expect(again.pid).toBe(first.pid)
+    })
   })
 
   for (const reports of ['other-build', 'no-hash'] as const) {
