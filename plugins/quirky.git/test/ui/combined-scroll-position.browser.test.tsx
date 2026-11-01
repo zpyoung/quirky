@@ -45,7 +45,8 @@ function browserEntry(): string {
     import { CombinedDiff } from ${JSON.stringify(combinedDiff)}
     import { DiffPane } from ${JSON.stringify(diffPane)}
 
-    const paths = Array.from({ length: 6 }, (_, index) => 'file-' + (index + 1) + '.ts')
+    const defaultPaths = Array.from({ length: 6 }, (_, index) => 'file-' + (index + 1) + '.ts')
+    let paths = defaultPaths
     const settings = { sideBySide: false, wrap: false, showWhitespace: false, collapseUnchanged: false, fileTree: false }
     const originalFor = (path) => Array.from({ length: 100 }, (_, index) => path + ' line ' + (index + 1)).join('\\n') + '\\n'
     const diffFor = (path) => {
@@ -79,15 +80,19 @@ function browserEntry(): string {
       root = createRoot(host)
       root.render(element)
     }
-    window.openCombined = () => mount(createElement(CombinedDiff, {
-      context,
-      input,
-      settings,
-      setSetting() {},
-      report() {},
-      bind() {},
-      close() {}
-    }))
+    window.openCombined = (options = {}) => {
+      paths = options.paths ?? defaultPaths
+      settings.fileTree = options.fileTree ?? false
+      mount(createElement(CombinedDiff, {
+        context,
+        input,
+        settings,
+        setSetting() {},
+        report() {},
+        bind() {},
+        close() {}
+      }))
+    }
     window.showSingleFile = () => mount(createElement(DiffPane, {
       context,
       worktree: input.worktree,
@@ -132,13 +137,20 @@ function browserBuildScript(entrypoint: string, outputPath: string): string {
 }
 
 type BrowserTestWindow = typeof window & {
-  openCombined(): void
+  openCombined(options?: { fileTree?: boolean; paths?: string[] }): void
   showSingleFile(): void
   singleFileCurrentChange(): number | null
 }
-
-async function openPage() {
-  const context = await browser!.newContext({ viewport: { width: 900, height: 540 } })
+async function openPage({
+  viewport = { width: 900, height: 540 },
+  paneWidth = 860,
+  paneHeight = 500
+}: {
+  viewport?: { width: number; height: number }
+  paneWidth?: number
+  paneHeight?: number
+} = {}) {
+  const context = await browser!.newContext({ viewport })
   const page = await context.newPage()
   await page.setContent(`<!doctype html>
     <html data-theme="dark">
@@ -148,7 +160,7 @@ async function openPage() {
           * { box-sizing: border-box; }
           html, body { height: 100%; margin: 0; overflow: hidden; }
           body { font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-          #diff-pane { height: 500px; width: 860px; display: flex; flex-direction: column; overflow: hidden; }
+          #diff-pane { height: ${paneHeight}px; width: ${paneWidth}px; display: flex; flex-direction: column; overflow: hidden; }
           #diff-root { display: flex; flex: 1; min-height: 0; }
         </style>
       </head>
@@ -161,8 +173,8 @@ async function openPage() {
   return { context, page }
 }
 
-async function waitForSections(page: Page): Promise<void> {
-  await page.waitForFunction(() => document.querySelectorAll('#diff-root [data-diff-editor] .cm-editor').length === 6, null, { timeout: 15_000 })
+async function waitForSections(page: Page, count = 6): Promise<void> {
+  await page.waitForFunction((expectedCount) => document.querySelectorAll('#diff-root [data-diff-editor] .cm-editor').length === expectedCount, count, { timeout: 15_000 })
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
 }
 
@@ -231,6 +243,63 @@ test.skipIf(!existsSync(executable))('combined commit diff stays at its first fi
   }
 }, 60_000)
 
+test.skipIf(!existsSync(executable))('combined file tree keeps long paths on one line at a constrained width', async () => {
+  const paths = ['data/metrics.csv', 'notebooks/summary.ipynb']
+  const { context, page } = await openPage({
+    viewport: { width: 1280, height: 720 },
+    paneWidth: 628,
+    paneHeight: 720
+  })
+  try {
+    await page.evaluate((fixturePaths) => (window as BrowserTestWindow).openCombined({ fileTree: true, paths: fixturePaths }), paths)
+    await waitForSections(page, paths.length)
+
+    const layout = await page.evaluate((fixturePaths) => {
+      const nav = document.querySelector<HTMLElement>('#diff-root nav[aria-label="Files"]')
+      if (!nav) throw new Error('The combined diff file tree did not render.')
+      const rows = fixturePaths.map((path) => {
+        const wrapper = nav.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`)
+        const row = wrapper?.querySelector<HTMLElement>('.ui-list-row')
+        const pathSpan = wrapper?.querySelector<HTMLElement>('.ui-list-row__title > span')
+        if (!row || !pathSpan) throw new Error(`The file tree row for ${path} did not render.`)
+        const range = document.createRange()
+        range.selectNodeContents(pathSpan)
+        const lineTops = new Set(Array.from(range.getClientRects(), (rect) => Math.round(rect.top * 2) / 2))
+        return {
+          path,
+          title: pathSpan.title,
+          lineCount: lineTops.size,
+          rowOverflowsHorizontally: row.scrollWidth > row.clientWidth + 1
+        }
+      })
+      return {
+        paneWidth: document.querySelector<HTMLElement>('#diff-pane')!.getBoundingClientRect().width,
+        navOverflowsHorizontally: nav.scrollWidth > nav.clientWidth + 1,
+        rows
+      }
+    }, paths)
+
+    expect(layout.paneWidth).toBeCloseTo(628, 0)
+    expect(layout.navOverflowsHorizontally).toBe(false)
+    for (const row of layout.rows) {
+      expect(row.lineCount).toBe(1)
+      expect(row.title).toBe(row.path)
+      expect(row.rowOverflowsHorizontally).toBe(false)
+      expect(await page.getByRole('button', { name: row.path, exact: true }).count()).toBe(1)
+    }
+    await page.getByRole('button', { name: paths[1], exact: true }).click()
+    const targetScrollTop = await page.evaluate((path) => {
+      const scroll = [...document.querySelectorAll<HTMLElement>('#diff-root .ui-stack')].find(
+        (element) => element.style.overflow === 'auto' && element.querySelector(`:scope > section[data-path="${CSS.escape(path)}"]`)
+      )
+      return scroll?.scrollTop ?? 0
+    }, paths[1])
+    expect(targetScrollTop).toBeGreaterThan(0)
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
 test.skipIf(!existsSync(executable))('single-file diff still selects its first change on mount', async () => {
   const { context, page } = await openPage()
   try {
@@ -241,4 +310,3 @@ test.skipIf(!existsSync(executable))('single-file diff still selects its first c
     await context.close()
   }
 }, 60_000)
-
