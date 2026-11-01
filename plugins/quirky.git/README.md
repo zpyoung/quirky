@@ -8,7 +8,9 @@ With staged changes and an empty commit message, the sparkle button's tooltip an
 
 ## Keyboard focus
 
-Committing, deleting an untracked file, and closing the base-ref picker keep keyboard focus in Source Control. If the active control is disabled or removed, focus returns to the base-ref button or, when no base is available, More commit and remote actions. A valid control focused during a pending operation keeps focus.
+Committing and deleting an untracked file keep keyboard focus in Source Control. If the active control is disabled or removed, focus returns to the base-ref button or, when no base is available, More commit and remote actions. A valid control focused during a pending operation keeps focus.
+
+Closing the base-ref picker returns focus to the current base-ref button, including when the picker opened from More source control actions. If no base is available after closing, focus returns to More commit and remote actions.
 
 ## Name candidates
 

@@ -306,6 +306,37 @@ describe('SC-50: Change Base Ref', () => {
     }
   })
 
+  for (const dismissal of ['Close', 'Escape'] as const) {
+    test(`${dismissal} from the menu-opened base picker returns focus to the base chip`, async () => {
+      const { element, unmount } = await open(setup)
+      try {
+        await click(byLabel(element, 'More source control actions'))
+        await click(buttonText(document.body, 'Change Base Ref…'))
+        if (dismissal === 'Close') await click(buttonText(dialog()!, 'Close'))
+        else await press(byLabel(dialog()!, 'Search branches')!, 'Escape')
+        expect(dialog()).toBeNull()
+        expect(document.activeElement === q(element, '[data-base-ref]')).toBe(true)
+      } finally {
+        unmount()
+      }
+    })
+  }
+
+  test('Use Primary from the menu returns focus to commit actions when the base chip disappears', async () => {
+    const { fake, element, unmount } = await open(setup)
+    try {
+      await click(byLabel(element, 'More source control actions'))
+      await click(buttonText(document.body, 'Change Base Ref…'))
+      fake.compare = compareOf({ base: null })
+      await click(buttonText(dialog()!, 'Use Primary'))
+      expect(dialog()).toBeNull()
+      expect(q(element, '[data-base-ref]')).toBeNull()
+      expect(document.activeElement === byLabel(element, 'More commit and remote actions')).toBe(true)
+    } finally {
+      unmount()
+    }
+  })
+
   test('closing the base picker preserves focus on its connected opener', async () => {
     const { element, unmount } = await open(setup)
     const opener = q(element, '[data-base-ref]')!
