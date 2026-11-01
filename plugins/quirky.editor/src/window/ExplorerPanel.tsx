@@ -1369,7 +1369,12 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           {query.trim() && !searchResult && <p className="muted">Press Enter to search</p>}
           {searchResult?.loading && <p className="muted" role="status">Searching files…</p>}
           {searchResult?.error && <p className="qe-editor-error" role="alert">{searchResult.error}</p>}
-          {searchResult && !searchResult.error && <p>{searchResult.totalMatches} result(s) in {searchResult.files.length} file(s){searchResult.truncated ? ' (results truncated)' : ''}</p>}
+          {searchResult && !searchResult.loading && !searchResult.error && <p>
+            {searchResult.totalMatches === 0
+              ? 'No results'
+              : `${searchResult.totalMatches} result${searchResult.totalMatches === 1 ? '' : 's'} in ${searchResult.files.length} file${searchResult.files.length === 1 ? '' : 's'}`}
+            {searchResult.truncated ? ' (results truncated)' : ''}
+          </p>}
           {searchResult?.files.map((file) => (
             <section className="qe-search-file" key={file.path}>
               <h4>{file.relativePath}</h4>
