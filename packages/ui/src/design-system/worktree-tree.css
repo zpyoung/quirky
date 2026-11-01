@@ -4,16 +4,24 @@
 }
 
 .repo-header.project-header > .ui-section-header__title {
+  align-items: center;
   color: var(--ui-text);
+  display: flex;
   flex: 1 1 auto;
   font-size: var(--ui-font-body);
   font-weight: 600;
+  gap: var(--ui-space-4);
   letter-spacing: normal;
   text-transform: none;
 }
 
+.repo-header.project-header .project-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .repo-header.project-header .ui-project-tile {
-  vertical-align: middle;
+  flex: 0 0 auto;
 }
 
 .repo-header.project-header > .ui-section-header__actions {
@@ -23,8 +31,10 @@
 
 .repo-header.project-header .project-count {
   color: var(--ui-muted);
+  flex: 0 0 auto;
   font-size: var(--ui-font-label);
   font-variant-numeric: tabular-nums;
+  font-weight: 400;
 }
 
 @container ui-tool-panel (max-width: 220px) {

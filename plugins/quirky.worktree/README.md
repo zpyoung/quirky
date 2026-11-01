@@ -22,10 +22,11 @@ Pin, Unpin, Sleep and Wake restore focus to a visible worktree Actions button af
 Unpin from Pinned returns focus to the remaining project row. If the action hides the row,
 focus returns to the previous focus owner.
 
-In narrow panels, the panel heading and project names sit above their controls so they remain readable.
+In narrow panels, the panel heading overlays its controls on reveal without reserving an empty row.
 Add project stays icon-only on hover or keyboard focus when its label and neighboring controls do not fit together; when they do, its label expands without moving the filter or minimize controls.
-Project names truncate with an ellipsis; project avatars stay whole, and hover or keyboard focus reveals
-the project controls without moving the name or count.
+Project names truncate with an ellipsis; avatars stay whole, and the worktree count stays beside the name.
+Project controls overlay the title on hover or keyboard focus without moving the name, count or first
+worktree. A visible tracker project or drop-target badge keeps a separate row so it stays readable.
 
 Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 

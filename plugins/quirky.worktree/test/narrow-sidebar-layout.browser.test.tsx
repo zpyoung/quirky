@@ -12,13 +12,14 @@ const BROWSER_IMPORTS: Record<string, string> = {
   'react/jsx-dev-runtime': join(MODULES, 'react/jsx-dev-runtime.js'),
   'react-dom': join(MODULES, 'react-dom/index.js'),
   'react-dom/client': join(MODULES, 'react-dom/client.js'),
+  '@quirky/protocol': join(ROOT, 'packages/protocol/src/rpc.ts'),
   '@quirky/ui': join(ROOT, 'packages/ui/src/design-system/index.ts')
 }
 const browserDependencyResolver: Bun.BunPlugin = {
   name: 'worktree-narrow-sidebar-browser-dependencies',
   setup(builder) {
     builder.onResolve(
-      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui)$/ },
+      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/protocol|@quirky\/ui)$/ },
       ({ path }) => ({ path: BROWSER_IMPORTS[path] })
     )
   }
@@ -40,23 +41,58 @@ let panelHeaderRegressionBundle = ''
 
 function browserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
+  const treeModule = join(ROOT, 'plugins/quirky.worktree/src/Tree.tsx')
+  const controlTypesModule = join(ROOT, 'plugins/quirky.worktree/src/control-types.ts')
   return `
-    import { createElement as h, Fragment } from 'react'
+    import { createElement as h } from 'react'
     import { createRoot } from 'react-dom/client'
-    import { Badge, ExpandingIconButton, IconButton, ListRow, ProjectTile, SectionHeader, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+    import { Tree } from ${JSON.stringify(treeModule)}
+    import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
+    import { Badge, ExpandingIconButton, IconButton, ListRow, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
     const projectName = 'QuirkyWorktreeProject'
-    const projectActions = h('span', { className: 'ui-cluster repo-actions' },
-      h('span', { className: 'ui-cluster project-reveal' },
-        h(IconButton, { label: 'New worktree in ' + projectName, title: 'New worktree' }, '+'),
-        h(IconButton, { label: 'Actions for ' + projectName, title: 'Project actions' }, '⋯')
-      ),
-      h('span', { className: 'project-count', title: '2 worktrees' }, '2')
-    )
-    const projectHeader = h(SectionHeader, {
-      className: 'repo-header project-header',
-      title: h(Fragment, null, h(ProjectTile, { name: projectName }), ' ' + projectName),
-      actions: projectActions
+    const treeContext = {
+      call: async () => [],
+      toast: () => {},
+      log: () => {},
+      subscribe: () => () => {},
+      onConnection: () => () => {}
+    }
+    const tree = h(Tree, {
+      context: treeContext,
+      model: {
+        pinned: [],
+        groups: [],
+        projects: [{
+          repo: {
+            id: 'r1',
+            name: projectName,
+            path: '/repo/' + projectName,
+            addedAt: 1,
+            kind: 'git',
+            displayName: null,
+            groupId: null
+          },
+          rows: [],
+          pending: []
+        }]
+      },
+      groups: [],
+      sessions: [],
+      selectedId: null,
+      automationExpandedId: null,
+      automationAvailability: null,
+      onToggleAutomationDetails() {},
+      now: 1,
+      separatorEnabled: false,
+      options: DEFAULT_STOCK_OPTIONS,
+      canShowSleeping: (worktree) => DEFAULT_STOCK_OPTIONS.showSleeping || worktree.isMain,
+      statusDefinitions: [],
+      projectIdentities: {},
+      openDialog() {},
+      requestDelete() {},
+      onDropPreviewChange() {},
+      onSeparatorStateChange() {}
     })
     const worktreeDescription = 'Primary worktree located in the local project folder with a deliberately long description that must truncate instead of wrapping onto another line.'
     const makeWorktreeRow = (worktree) => h('li', {
@@ -109,10 +145,8 @@ function browserEntry(): string {
     }, h('div', { className: 'ui-stack ui-panel-content' },
       h('div', { className: 'ui-scroll ui-grow' },
         h('div', { className: 'worktree-tree ui-stack' },
-          h('section', { className: 'repo ui-stack' },
-            projectHeader,
-            worktreeList
-          )
+          tree,
+          worktreeList
         )
       )
     ))
@@ -293,14 +327,13 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       const changesWord = changesWordRange.getBoundingClientRect()
       const projectTitle = projectHeader.querySelector('.ui-section-header__title')!
       const projectTile = projectTitle.querySelector('.ui-project-tile')!
+      const projectName = projectTitle.querySelector<HTMLElement>('.project-name')!
       const projectActions = projectHeader.querySelector('.ui-section-header__actions')!
       const projectReveal = projectActions.querySelector('.project-reveal')!
-      const projectCount = projectActions.querySelector('.project-count')!
-      const projectNameNode = [...projectTitle.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())!
-      const projectNameOffset = projectNameNode.textContent!.search(/\S/)
+      const projectCount = projectTitle.querySelector('.project-count')!
       const projectNameRange = document.createRange()
-      projectNameRange.setStart(projectNameNode, projectNameOffset)
-      projectNameRange.setEnd(projectNameNode, projectNameOffset + 1)
+      projectNameRange.selectNodeContents(projectName)
+      projectNameRange.setEnd(projectName.firstChild!, 1)
       const toolLeadingRange = document.createRange()
       toolLeadingRange.selectNodeContents(toolTitle)
       toolLeadingRange.setEnd(toolTitle.firstChild!, 1)
@@ -325,11 +358,13 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         projectTitle: box(projectTitle),
         projectTile: box(projectTile),
         projectLeading: { left: projectLeading.left, right: projectLeading.right, width: projectLeading.width },
+        projectName: box(projectName),
+        projectNameOverflow: projectName.scrollWidth > projectName.clientWidth,
+        projectNameTextOverflow: getComputedStyle(projectName).textOverflow,
+        projectRevealOpacity: getComputedStyle(projectReveal).opacity,
         projectActions: box(projectActions),
         projectButtons: [...projectActions.querySelectorAll('button')].map(box),
         projectCount: box(projectCount),
-        projectRevealOpacity: getComputedStyle(projectReveal).opacity,
-        projectTitleOverflow: getComputedStyle(projectTitle).textOverflow,
         expandingLabelDisplay: getComputedStyle(frame.querySelector('.ui-expanding-icon-button__label')!).display,
       }
     })
@@ -344,8 +379,16 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
       expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
     }
+    const expectSameBounds = (
+      actual: { left: number; top: number; right: number; bottom: number },
+      expected: { left: number; top: number; right: number; bottom: number }
+    ) => {
+      for (const coordinate of ['left', 'top', 'right', 'bottom'] as const) {
+        expect(actual[coordinate]).toBeCloseTo(expected[coordinate], 0)
+      }
+    }
 
-    for (const sidebarWidth of [116, 200, 240]) {
+    for (const sidebarWidth of [116, 160, 200, 240]) {
       const viewportWidth = GUTTER * 2 + CENTER_WIDTH + sidebarWidth * 2
       await page.setViewportSize({ width: viewportWidth, height: HEIGHT })
       await page.locator('#layout').evaluate((element, width) => {
@@ -377,14 +420,21 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       expect(overlaps(layout.toolTitle, layout.toolActions)).toBe(false)
       expectContained(layout.projectHeader, layout.frame)
       expectContained(layout.projectTitle, layout.projectHeader)
+      expectContained(layout.projectName, layout.projectTitle)
       expectContained(layout.projectTile, layout.projectTitle)
       expect(layout.projectTitle.right - layout.projectTile.right).toBeGreaterThan(1)
       expect(layout.projectLeading.width).toBeGreaterThan(0)
       expect(layout.projectLeading.left).toBeGreaterThanOrEqual(layout.projectTile.right - 0.5)
       expect(layout.projectLeading.right).toBeLessThanOrEqual(layout.projectTitle.right + 0.5)
-      expect(layout.projectTitleOverflow).toBe('ellipsis')
+      expect(layout.projectNameTextOverflow).toBe('ellipsis')
       expectContained(layout.projectActions, layout.projectHeader)
-      expectContained(layout.projectCount, layout.projectActions)
+      expectContained(layout.projectCount, layout.projectHeader)
+      expectContained(layout.projectCount, layout.projectTitle)
+      expect(Math.abs(
+        layout.projectCount.top + layout.projectCount.height / 2 -
+        (layout.projectName.top + layout.projectName.height / 2)
+      )).toBeLessThanOrEqual(3)
+      if (sidebarWidth <= 160) expect(layout.projectNameOverflow).toBe(true)
       for (const button of layout.projectButtons) expectContained(button, layout.projectHeader)
       if (sidebarWidth <= 140) expect(layout.expandingLabelDisplay).toBe('none')
       else expect(layout.expandingLabelDisplay).not.toBe('none')
@@ -407,6 +457,10 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         const projectHeader = page.locator('.project-header')
         await projectHeader.hover()
         await page.waitForFunction(() => getComputedStyle(document.querySelector('.project-header .project-reveal')!).opacity === '1')
+        const hoveredLayout = await metrics()
+        expectSameBounds(hoveredLayout.projectTitle, layout.projectTitle)
+        expectSameBounds(hoveredLayout.projectName, layout.projectName)
+        expectSameBounds(hoveredLayout.projectCount, layout.projectCount)
         const revealedActions = await projectHeader.locator('.ui-section-header__actions').boundingBox()
         expect(revealedActions).not.toBeNull()
         expect(revealedActions!.x).toBeCloseTo(layout.projectActions.left, 0)
@@ -416,6 +470,10 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         await projectAction.focus()
         expect(await projectAction.evaluate((element) => document.activeElement === element)).toBe(true)
         await page.waitForFunction(() => getComputedStyle(document.querySelector('.project-header:focus-within .project-reveal')!).opacity === '1')
+        const focusedLayout = await metrics()
+        expectSameBounds(focusedLayout.projectTitle, layout.projectTitle)
+        expectSameBounds(focusedLayout.projectName, layout.projectName)
+        expectSameBounds(focusedLayout.projectCount, layout.projectCount)
       }
 
       if (sidebarWidth === 200) {

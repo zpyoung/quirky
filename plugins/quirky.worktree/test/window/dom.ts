@@ -40,7 +40,7 @@ export function accessibleName(element: HTMLElement): string {
 export const sectionHeading = (section: ParentNode): string | undefined => {
   const header = [...section.children].find((child) => child.classList.contains('ui-section-header'))
   const heading = header?.querySelector<HTMLElement>('.ui-section-header__title')
-  return heading ? accessibleName(heading) : undefined
+  return heading ? accessibleName(heading.querySelector<HTMLElement>('.project-name') ?? heading) : undefined
 }
 export function sectionHeadingMatches(section: ParentNode, name: string): boolean {
   const heading = sectionHeading(section)
