@@ -2144,6 +2144,66 @@ test('Group by None and Sort by Name show a flat global list across projects', a
   expect(projectSection('api').closest('[data-top-level-section="group:g1"]')).not.toBeNull()
   expect(projectSection('web')).toBeDefined()
 })
+test('status grouping labels project-scoped lanes and keeps descendants with their parent lane', async () => {
+  const h = setup()
+  h.world.repos = [
+    { ...repos[0]!, displayName: 'API project' },
+    { ...repos[1]!, displayName: 'Web project' }
+  ]
+  h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'status', filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
+  h.world.worktrees.push(wt('w-child', 'r1', 'fix-login-child', { parentId: 'w2', status: 'in-review' }))
+  await h.mountInto(host)
+
+  const lanes = [...host.querySelectorAll<HTMLLIElement>('li.worktree-status-lane')]
+  const laneFor = (id: string) => lanes.find((lane) => lane.querySelector(`[data-worktree-id="${id}"]`))!
+  const apiLane = laneFor('w2')
+  const webLane = laneFor('w3')
+  expect(apiLane).not.toBe(webLane)
+  expect(apiLane.querySelector(':scope > header')?.textContent).toContain('API project')
+  expect(apiLane.querySelector(':scope > header')?.textContent).toContain('In progress')
+  expect(webLane.querySelector(':scope > header')?.textContent).toContain('Web project')
+  expect(webLane.querySelector(':scope > header')?.textContent).toContain('In progress')
+  expect(laneFor('w-child')).toBe(apiLane)
+  expect(apiLane.querySelector(':scope > header')?.textContent).not.toContain('In review')
+})
+
+test('PR grouping labels project-scoped missing and linked pull request lanes', async () => {
+  const h = setup()
+  h.world.repos = [
+    { ...repos[0]!, displayName: 'API project' },
+    { ...repos[1]!, displayName: 'Web project' }
+  ]
+  h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'pr', filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
+  h.world.worktrees[1] = {
+    ...h.world.worktrees[1]!,
+    linkedPR: {
+      provider: 'github',
+      kind: 'pullRequest',
+      number: 42,
+      title: 'Add route',
+      url: 'https://github.com/acme/app/pull/42',
+      repository: { host: 'github.com', owner: 'acme', repo: 'app' }
+    }
+  }
+  h.world.worktrees.push(wt('w-child', 'r1', 'fix-login-child', { parentId: 'w2' }))
+  await h.mountInto(host)
+
+  const lanes = [...host.querySelectorAll<HTMLLIElement>('li.worktree-status-lane')]
+  const laneFor = (id: string) => lanes.find((lane) => lane.querySelector(`[data-worktree-id="${id}"]`))!
+  const apiMissingLane = laneFor('w1')
+  const webMissingLane = laneFor('w3')
+  const apiLinkedLane = laneFor('w2')
+  expect(apiMissingLane).not.toBe(webMissingLane)
+  expect(apiMissingLane.querySelector(':scope > header')?.textContent).toContain('API project')
+  expect(apiMissingLane.querySelector(':scope > header')?.textContent).toContain('No pull request')
+  expect(webMissingLane.querySelector(':scope > header')?.textContent).toContain('Web project')
+  expect(webMissingLane.querySelector(':scope > header')?.textContent).toContain('No pull request')
+  expect(apiLinkedLane.querySelector(':scope > header')?.textContent).toContain('API project')
+  expect(apiLinkedLane.querySelector(':scope > header')?.textContent).toContain('PR #42')
+  expect(apiLinkedLane.querySelector(':scope > header')?.textContent).toContain('Add route')
+  expect(laneFor('w-child')).toBe(apiLinkedLane)
+})
+
 test('PR grouping, CLI-origin filtering and filtered-row reveal change the workspace list', async () => {
   const h = setup()
   h.world.worktrees[1] = {

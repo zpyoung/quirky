@@ -31,7 +31,7 @@ worktree. A visible tracker project or drop-target badge keeps a separate row so
 
 Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 
-- `groupBy`: `project`, `status`, `pr`, or `none`. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together in grouped views; `none` renders one flat unpinned list across projects, with pinned worktrees separate.
+- `groupBy`: `project`, `status`, `pr`, or `none`. Status and PR lanes stay within each project and include its display name in the heading. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together in grouped views; `none` renders one flat unpinned list across projects, with pinned worktrees separate.
 - `sortBy`: `recent`, `agent-activity`, `name`, `project`, or `manual`. In `none` mode, name sorting orders the global unpinned list without forcing primary worktrees first. Agent activity prioritizes sessions in `waiting` status, then uses persisted activity timestamps. Project sorting uses project name then activity.
 - `projectOrderBy`: `manual` or `recent`; manual project order is persisted by `quirky.worktree/reorderProjects({projects:[...]})`.
 - `compact`, `showProperties`, and `showSleeping` control card layout, available branch/note/PR/issue/automation/activity properties, and sleeping visibility. Hiding rows leaves a count and a temporary reveal control.
