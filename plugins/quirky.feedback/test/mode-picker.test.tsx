@@ -71,7 +71,8 @@ async function start(seed: Comment[] = []) {
   return { ...fake, previous }
 }
 
-const container = () => document.querySelector<HTMLElement>('[data-quirky-feedback]')
+const container = () => document.querySelector<HTMLElement>('[data-quirky-feedback]:not([data-feedback-banner])')
+const bannerSlot = () => document.querySelector<HTMLElement>('[data-feedback-banner-slot]')!
 const host = () => container()!.firstElementChild as HTMLElement
 const reactRoot = () => container()!.lastElementChild as HTMLElement
 
@@ -157,16 +158,20 @@ beforeEach(() => {
     shadowRoot = original.call(this, { ...init, mode: 'open' })
     return shadowRoot
   }
-  document.body.innerHTML = `<div id="app">
-    <h2 id="worktrees">Worktrees</h2>
-    <button id="menu" class="menu-trigger" aria-label="Open Worktrees">Menu<span id="gear">icon</span></button>
-    <div role="menu" id="popup"><div id="item" role="menuitem"><span id="itemtext">Item one</span></div></div>
-    <div id="plain"><span id="plainspan">plain</span></div>
-    <button id="secret" aria-label="client_secret=never-share-this"></button>
+  document.body.innerHTML = `<div id="app" class="app">
+    <header class="window-bar" aria-label="Window bar"></header>
+    <div data-feedback-banner-slot></div>
+    <div class="shell-workspace">
+      <h2 id="worktrees">Worktrees</h2>
+      <button id="menu" class="menu-trigger" aria-label="Open Worktrees">Menu<span id="gear">icon</span></button>
+      <div role="menu" id="popup"><div id="item" role="menuitem"><span id="itemtext">Item one</span></div></div>
+      <div id="plain"><span id="plainspan">plain</span></div>
+      <button id="secret" aria-label="client_secret=never-share-this"></button>
 
-    <section data-terminal-pane="t1" id="term"><div class="terminal-pane-screen"><button id="termbutton"><span id="termtext">SECRET OUTPUT secret-token</span></button></div></section>
-    <div class="qbp" data-browser-pane="p1" id="watch"><span class="qbp-mode" data-mode="watch"></span><div id="watched">page text</div></div>
-    <div class="qbp" data-browser-pane="native-pane" id="native"><div class="qbp-native-host" id="native-host"></div></div>
+      <section data-terminal-pane="t1" id="term"><div class="terminal-pane-screen"><button id="termbutton"><span id="termtext">SECRET OUTPUT secret-token</span></button></div></section>
+      <div class="qbp" data-browser-pane="p1" id="watch"><span class="qbp-mode" data-mode="watch"></span><div id="watched">page text</div></div>
+      <div class="qbp" data-browser-pane="native-pane" id="native"><div class="qbp-native-host" id="native-host"></div></div>
+    </div>
   </div>`
   app = document.getElementById('app')!
   app.querySelectorAll('*').forEach((element) => rect(element, { x: 10, y: 10, width: 100, height: 20 }))
@@ -187,25 +192,45 @@ afterEach(async () => {
 describe('container structure', () => {
   test('one fixed container holds the selection host then the react root', async () => {
     await start()
-    expect(document.querySelectorAll('[data-quirky-feedback]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-quirky-feedback]:not([data-feedback-banner])')).toHaveLength(1)
     const box = container()!
     expect(box.parentElement).toBe(document.body)
     expect(box.style.position).toBe('fixed')
-    expect(box.style.zIndex).toBe('2147483647')
+    expect(box.style.zIndex).toBe('2147483646')
+    expect(Number(bannerSlot().style.zIndex)).toBeGreaterThan(Number(box.style.zIndex))
     expect(box.style.pointerEvents).toBe('none')
     expect(box.children).toHaveLength(2)
     expect(host().style.getPropertyValue('pointer-events')).toBe('auto')
     expect(reactRoot().style.pointerEvents).toBe('none')
-    expect(reactRoot().style.zIndex).toBe('2147483647')
     expect(host().hasAttribute('data-quirky-native-mask')).toBe(false)
   })
 
   test('mode text and native masks', async () => {
     await start()
-    const banner = reactRoot().querySelector('[data-feedback-banner]')!
-    expect(banner.querySelector('span')!.textContent).toBe('Feedback mode on · Option uses the app · Esc exits')
-    expect(banner.hasAttribute('data-quirky-native-mask')).toBe(true)
+    const banner = bannerSlot().querySelector('[data-feedback-banner]')
+    expect(banner).not.toBeNull()
+    expect(banner!.querySelector('span')!.textContent).toBe('Feedback mode on · Option uses the app · Esc exits')
+    expect(banner!.hasAttribute('data-quirky-feedback')).toBe(true)
+    expect(banner!.hasAttribute('data-quirky-native-mask')).toBe(true)
     expect(reactRoot().querySelector('[data-feedback-tray]')!.hasAttribute('data-quirky-native-mask')).toBe(true)
+  })
+
+  test('mounts the banner in the reserved slot and restores workspace on teardown', async () => {
+    await start()
+    const slot = bannerSlot()
+    const workspace = slot.nextElementSibling
+    const banner = slot.querySelector('[data-feedback-banner]')
+    expect(banner).not.toBeNull()
+    expect(workspace?.classList.contains('shell-workspace')).toBe(true)
+    expect(banner?.parentElement).toBe(slot)
+    expect(container()!.contains(banner)).toBe(false)
+
+    await act(async () => { teardown!() })
+    teardown = null
+
+    expect(slot.childElementCount).toBe(0)
+    expect(slot.nextElementSibling).toBe(workspace)
+    expect(slot.style.zIndex).toBe('')
   })
 
   test('teardown removes everything and is safe to repeat', async () => {
@@ -586,6 +611,50 @@ describe('new card placement', () => {
     expect(left + 240).toBeGreaterThan(targetBox.x - 240)
     expect(top + 180).toBeGreaterThan(targetBox.y - 180)
   })
+
+  test('keeps a new card below the banner with its actions in the viewport', async () => {
+    const viewport = mockViewport(800, 500)
+    restoreViewport = viewport.restore
+    restoreCardMeasurement = measureCardBy((card) => {
+      const maxHeight = Number.parseFloat(card.style.maxHeight)
+      return { width: 240, height: Math.min(430, Number.isFinite(maxHeight) ? maxHeight : 430) }
+    })
+    await start()
+    const banner = bannerSlot().querySelector<HTMLElement>('[data-feedback-banner]')!
+    rect(banner, { x: 216, y: 52, width: 368, height: 38 })
+    const target = document.getElementById('menu')!
+    rect(target, { x: 500, y: 43, width: 90, height: 26 })
+    stack(target)
+    await act(async () => { mouse(host(), 'click') })
+
+    const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+    const top = parseFloat(card.style.top)
+    expect(top).toBeGreaterThanOrEqual(banner.getBoundingClientRect().bottom + 12)
+    expect(top + card.getBoundingClientRect().height).toBeLessThanOrEqual(window.innerHeight)
+  })
+
+  test('keeps an edited card below the banner with actions in the viewport', async () => {
+    const viewport = mockViewport(800, 500)
+    restoreViewport = viewport.restore
+    restoreCardMeasurement = measureCardBy((card) => {
+      const maxHeight = Number.parseFloat(card.style.maxHeight)
+      return { width: 240, height: Math.min(430, Number.isFinite(maxHeight) ? maxHeight : 430) }
+    })
+    await start([sample('saved')])
+    const banner = bannerSlot().querySelector<HTMLElement>('[data-feedback-banner]')!
+    rect(banner, { x: 216, y: 52, width: 368, height: 38 })
+    const edit = reactRoot().querySelector<HTMLButtonElement>('[aria-label="Edit comment 1"]')!
+    await act(async () => { edit.click() })
+    await flush()
+
+    const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+    const bannerBottom = banner.getBoundingClientRect().bottom
+    const height = card.getBoundingClientRect().height
+    const top = window.innerHeight - 12 - height
+    expect(top).toBeGreaterThanOrEqual(bannerBottom + 12)
+    expect(top + height).toBeLessThanOrEqual(window.innerHeight - 12)
+    expect(card.querySelector('[data-feedback-submit]')).not.toBeNull()
+  })
   test('repositions a new card when the viewport shrinks', async () => {
     const viewport = mockViewport(800, 500)
     restoreViewport = viewport.restore
@@ -678,6 +747,21 @@ describe('option key', () => {
     key('keyup', 'Alt', { altKey: false })
     expect(restored()).toBe(true)
     expect(surfaceRestored()).toBe(true)
+  })
+  test('Option yields the picker while keeping the reserved banner mounted', async () => {
+    await start()
+    const banner = bannerSlot().querySelector('[data-feedback-banner]')!
+    expect(banner).not.toBeNull()
+
+    key('keydown', 'Alt', { altKey: true })
+    expect(passThrough()).toBe(true)
+    expect(surfacePassThrough()).toBe(true)
+    expect(banner.isConnected).toBe(true)
+
+    key('keyup', 'Alt', { altKey: false })
+    expect(restored()).toBe(true)
+    expect(surfaceRestored()).toBe(true)
+    expect(banner.isConnected).toBe(true)
   })
 
   test('a window blur releases Option', async () => {
@@ -794,6 +878,19 @@ describe('focus', () => {
     expect(document.activeElement).toBe(area)
     expect(seen).toHaveLength(0)
   })
+
+  test('focusin from the banner does not reach document handlers', async () => {
+    await start()
+    const seen: Event[] = []
+    document.addEventListener('focusin', (event) => { seen.push(event) })
+    const exit = bannerSlot().querySelector<HTMLButtonElement>('button')
+    expect(exit).not.toBeNull()
+
+    await act(async () => { exit!.focus() })
+
+    expect(document.activeElement).toBe(exit)
+    expect(seen).toHaveLength(0)
+  })
 })
 
 describe('escape', () => {
@@ -873,15 +970,19 @@ describe('escape', () => {
 
   test('suspends the picker while a confirm is pending', async () => {
     const fake = await start([sample('c1')])
+    const activeZIndex = container()!.style.zIndex
+    const activeBannerZIndex = bannerSlot().style.zIndex
     await act(async () => { reactRoot().querySelector<HTMLButtonElement>('[data-feedback-clear]')!.click() })
     expect(host().style.getPropertyValue('display')).toBe('none')
     expect(container()!.style.zIndex).toBe('0')
+    expect(bannerSlot().style.zIndex).toBe('0')
     const click = mouse(host(), 'click')
     expect(click.defaultPrevented).toBe(false)
     await act(async () => { fake.confirm.pending!(false) })
     await flush()
     expect(host().style.getPropertyValue('display')).not.toBe('none')
-    expect(container()!.style.zIndex).toBe('2147483647')
+    expect(container()!.style.zIndex).toBe(activeZIndex)
+    expect(bannerSlot().style.zIndex).toBe(activeBannerZIndex)
   })
 })
 
