@@ -231,7 +231,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const notes = useNotes(context, worktree)
   const counts = useMemo(() => noteCounts(notes), [notes])
 
-  const [openedPath, setOpenedPath] = useState<string | null>(null)
+  const [openedRow, setOpenedRow] = useState<{ path: string; area: GitStatusEntry['area'] | 'branch' } | null>(null)
   const [filter, setFilter] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [selection, setSelectionState] = useState<SelectionState>(EMPTY_SELECTION)
@@ -454,6 +454,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     if (item.entry?.submodule) return toggleSubmodule(item)
     const placement = options.split ? { split: true, preview: false } : { preview: options.permanent !== true }
     const area = item.entry?.area
+    setOpenedRow({ path: item.path, area: area ?? 'branch' })
     const oldPath = item.oldPath === undefined ? {} : { oldPath: item.oldPath }
     if (area === 'conflicts') return open({ mode: 'conflict-file', path: item.path, ...placement })
     const source = area === undefined ? 'branch' : area === 'staged' ? 'staged' : 'unstaged'
@@ -595,7 +596,6 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       const type = kind === 'mod' ? 'mod-click' : kind === 'shift' ? 'shift-click' : 'click'
       const action: SelectionAction = type === 'shift-click' ? { type, path: item.path, order } : { type, path: item.path }
       if (dispatchSelection(action) !== null) {
-        setOpenedPath(item.path)
         openRow(item, { permanent })
       }
     },
@@ -1246,7 +1246,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 viewMode={viewMode}
                 collapsedDirs={collapsed}
                 onToggleDir={sectionToggle}
-                selected={selected.length === 0 && openedPath !== null ? [openedPath] : selected}
+                selected={selected.length === 0 && openedRow?.area === section.id ? [openedRow.path] : selected}
                 handlers={handlers}
               />
             </SectionFrame>
@@ -1272,7 +1272,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             onToggle={() => sectionToggle('branch')}
             buttons={filtering ? [] : [{ label: 'View all', glyph: '↗', run: () => open({ mode: 'combined', area: 'branch' }) }]}
           >
-            <Rows scope="branch" items={branchItems} viewMode={viewMode} collapsedDirs={collapsed} onToggleDir={sectionToggle} selected={[]} handlers={branchHandlers} />
+            <Rows scope="branch" items={branchItems} viewMode={viewMode} collapsedDirs={collapsed} onToggleDir={sectionToggle} selected={openedRow?.area === 'branch' ? [openedRow.path] : []} handlers={branchHandlers} />
           </SectionFrame>
         )}
         {status && !filtering && (

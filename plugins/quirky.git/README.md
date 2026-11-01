@@ -28,6 +28,8 @@ Names are drafts only. Generating a candidate does not create or rename a Git br
 
 Click a Source Control row to preview its diff in the selected terminal workspace. Double-click to keep the tab; Option-click to open it in a split group. Dirty diff tabs refuse close and are not replaced by another preview.
 
+Opening a file row in Changes or Committed on Branch moves the opened-diff highlight to that row. Rows in different sections remain distinct even when they name the same file; bulk selection stays separate from the opened diff.
+
 File diff tabs include `(Diff)` after the path so they remain distinguishable from editor tabs for the same file. Branch file diffs use `(Branch Diff)` and commit file diffs use `(Commit Diff)`; staged, unstaged, and unspecified file diffs keep the generic `(Diff)` label.
 
 Single-file diff headers preserve the path's casing for unstaged, staged, branch, and commit diffs. The full path remains available in the header tooltip.
