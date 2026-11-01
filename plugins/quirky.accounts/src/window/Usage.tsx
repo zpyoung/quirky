@@ -549,7 +549,10 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
       void store.setUiState({ open: false })
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented) void store.setUiState({ open: false })
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        triggerRef.current?.focus()
+        void store.setUiState({ open: false })
+      }
     }
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)

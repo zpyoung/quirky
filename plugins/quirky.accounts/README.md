@@ -22,7 +22,7 @@ Account selection, inactive-account usage, and usage refresh operate on the sele
 
 ## Usage and sign-in controls
 
-The Usage status bar measures the rendered chip container, gaps and overflow-button widths. Its preferred width comes from all configured, visible provider chips, so it uses free status-bar space and restores collapsed chips when space returns. It keeps an exact visible prefix and a `+N` button for the omitted providers; the button's tooltip names that suffix. Compact, Detailed, Remaining and badge-only changes remeasure, and hidden measurement elements do not enlarge the status bar.
+The Usage status bar measures the rendered chip container, gaps and overflow-button widths. Its preferred width comes from all configured, visible provider chips, so it uses free status-bar space and restores collapsed chips when space returns. It keeps an exact visible prefix and a `+N` button for the omitted providers; the button's tooltip names that suffix. Compact, Detailed, Remaining and badge-only changes remeasure, and hidden measurement elements do not enlarge the status bar. Escape closes the Usage popover and returns focus to the status-bar trigger; outside-pointer dismissal only closes it.
 
 Refreshing usage does not add chips for unconfigured providers. Providers with account, credential or cached-usage evidence remain visible while fetching.
 

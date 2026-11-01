@@ -417,6 +417,27 @@ test('Escape dismisses Usage from its focused status-bar trigger and dialog unle
 
   await act(async () => { trigger.click() })
   await settle()
+  const layoutDialog = getUsageDialog()
+  if (!layoutDialog) throw new Error('Missing Usage dialog after reopening')
+  const compact = buttonByText('Compact', layoutDialog)
+  compact.focus()
+  await act(async () => { compact.click() })
+  await settle()
+  const detailed = buttonByText('Detailed', layoutDialog)
+  detailed.focus()
+  await act(async () => { detailed.click() })
+  await settle()
+  expect(document.activeElement).toBe(detailed)
+  await act(async () => {
+    detailed.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+  await settle()
+  expect(getUsageDialog()).toBeNull()
+  expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  expect(document.activeElement).toBe(trigger)
+
+  await act(async () => { trigger.click() })
+  await settle()
   const dialog = getUsageDialog()
   if (!dialog) throw new Error('Missing Usage dialog after reopening')
   await act(async () => {
