@@ -101,6 +101,7 @@ function browserEntry(): string {
     const treeContext = {
       call: async () => [],
       log: () => {},
+      toast: () => {},
       subscribe: () => () => {},
       onConnection: () => () => {}
     }
@@ -224,7 +225,6 @@ function browserEntry(): string {
     )
   `
 }
-
 
 function panelHeaderRegressionBrowserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
