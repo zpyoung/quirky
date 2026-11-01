@@ -8,13 +8,11 @@ import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
 
 type Mode = 'preview' | 'rich'
 type CommandHandlers = Parameters<SurfaceProps['registerCommandHandlers']>[0]
-type SearchResult = { total: number; matches: { from: number; to: number; line: number; text: string }[] }
 type MountedSurface = {
   element: HTMLElement
   commands(): CommandHandlers | undefined
   unmount(): Promise<void>
 }
-type Options = { search?(query: string): Promise<SearchResult> }
 
 const MODES: Mode[] = ['preview', 'rich']
 let createRoot: (container: HTMLElement) => Root
@@ -69,7 +67,7 @@ function makeBuffer(mode: Mode, content: string): EditorSurfaceBuffer {
   }
 }
 
-async function renderSurface(mode: Mode, content: string, options: Options = {}): Promise<MountedSurface> {
+async function renderSurface(mode: Mode, content: string): Promise<MountedSurface> {
   let commands: CommandHandlers | undefined
   const onAction: SurfaceProps['onAction'] = async (method, params) => {
     if (method === 'quirky.editor/markdown') {
@@ -79,7 +77,7 @@ async function renderSurface(mode: Mode, content: string, options: Options = {})
           : { richEligible: true }
       }
       if (params.action === 'toc') return { headings: [] }
-      if (params.action === 'search') return options.search?.(String(params.query ?? '')) ?? { total: 0, matches: [] }
+      if (params.action === 'search') return { total: 0, matches: [] }
     }
     if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
     return {}
@@ -286,15 +284,8 @@ test('Preview command-driven Find focuses its input and restores the original fo
   expect(document.activeElement).toBe(originalFocus)
 })
 
-test('Rich command-driven Find keeps focus through an asynchronous query and restores the original focused element', async () => {
-  const pendingSearch = Promise.withResolvers<SearchResult>()
-  let searchStarted = false
-  const surface = await renderSurface('rich', 'needle in the editor', {
-    search(query) {
-      searchStarted = query === 'needle'
-      return pendingSearch.promise
-    }
-  })
+test('Rich command-driven Find highlights a match without taking input focus and restores the opener', async () => {
+  const surface = await renderSurface('rich', 'needle in the editor')
   const originalFocus = document.createElement('button')
   originalFocus.type = 'button'
   originalFocus.textContent = 'Original focus target'
@@ -303,25 +294,72 @@ test('Rich command-driven Find keeps focus through an asynchronous query and res
   const find = surface.commands()?.find
   if (!find) throw new Error('The Rich Find command was not registered.')
 
-  let commandResult: Promise<unknown> | undefined
-  await act(async () => { commandResult = Promise.resolve(find({ query: 'needle' })) })
-  await waitFor(() => searchStarted || false, 'asynchronous Rich search request')
+  await act(async () => { await find({ query: 'needle' }) })
   const input = await waitFor(() => {
     const candidate = searchInput(surface, 'rich')
     return candidate && document.activeElement === candidate ? candidate : false
   }, 'command-opened Rich search input focus')
   expect(input.value).toBe('needle')
 
-  await act(async () => {
-    pendingSearch.resolve({ total: 0, matches: [] })
-    await commandResult
-  })
+  expect(surface.element.querySelector('.markdown-search-match')?.textContent).toBe('needle')
   expect(document.activeElement).toBe(input)
 
   const close = buttonByText(searchToolbar(surface)!, 'Close')
   if (!close) throw new Error('Could not find the command-opened Rich search Close button.')
   await act(async () => close.click())
   await waitForClosed(surface)
+  expect(surface.element.querySelector('.markdown-search-match')).toBeNull()
   await waitForFocus(originalFocus, 'original focus restoration after queried Rich search')
   expect(document.activeElement).toBe(originalFocus)
+})
+
+test('Rich Find highlights a nested match and keeps repeated Enter in the search field', async () => {
+  const content = '# Heading\n\nAn earlier paragraph.\n\n- [x] First item\n- [ ] Two isolated worktrees\n'
+  const surface = await renderSurface('rich', content)
+  await act(async () => { await surface.commands()!.find!({ query: 'isolated' }) })
+  const input = await waitFor(() => {
+    const candidate = searchInput(surface, 'rich')
+    return candidate && document.activeElement === candidate ? candidate : false
+  }, 'queried Rich search input focus')
+  const editor = surface.element.querySelector<HTMLElement>('.ProseMirror')!
+  const originalDocument = editor.innerHTML
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await act(async () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      const { promise, resolve } = Promise.withResolvers<void>()
+      requestAnimationFrame(() => resolve())
+      await promise
+    })
+    expect(document.activeElement).toBe(input)
+    expect([...editor.querySelectorAll('.markdown-search-match')].map((node) => node.textContent).join('')).toBe('isolated')
+    expect(editor.innerHTML).toBe(originalDocument)
+  }
+})
+
+test('Rich Find Enter advances through repeated matches and wraps without editing', async () => {
+  const content = '# needle\n\nA **nee**dle paragraph.\n\n- [ ] Last needle\n'
+  const surface = await renderSurface('rich', content)
+  await act(async () => { await surface.commands()!.find!({ query: 'needle' }) })
+  const input = await waitFor(() => {
+    const candidate = searchInput(surface, 'rich')
+    return candidate && document.activeElement === candidate ? candidate : false
+  }, 'repeated-match search input focus')
+  const editor = surface.element.querySelector<HTMLElement>('.ProseMirror')!
+  const originalText = editor.textContent
+  const originalCheckboxes = editor.querySelectorAll('input[type="checkbox"]').length
+
+  for (const expected of ['2 of 3', '3 of 3', '1 of 3']) {
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      const { promise, resolve } = Promise.withResolvers<void>()
+      requestAnimationFrame(() => resolve())
+      await promise
+    })
+    expect(searchToolbar(surface)!.textContent).toContain(expected)
+    expect(document.activeElement).toBe(input)
+    expect([...editor.querySelectorAll('.markdown-search-match')].map((node) => node.textContent).join('')).toBe('needle')
+    expect(editor.textContent).toBe(originalText)
+    expect(editor.querySelectorAll('input[type="checkbox"]').length).toBe(originalCheckboxes)
+  }
 })

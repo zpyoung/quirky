@@ -41,6 +41,8 @@ that preserves PTY history and supported agents' resume identities. Unknown work
 remain visible under automation/other-client filters. Markdown tabs use the actual editor
 document and tab identity, with revision-guarded edits and saves. Markdown tabs remain available
 when the optional Browser plugin is absent or disabled.
+Rich Markdown Find searches visible editor text and keeps keyboard focus in its search field.
+Enter advances to the next match; Shift+Enter returns to the previous match without editing the document.
 
 Workspace cards count the Terminal layout's current tabs, including Browser and Markdown;
 split panes, background sessions and closed history do not add tabs. Unavailable counts are
