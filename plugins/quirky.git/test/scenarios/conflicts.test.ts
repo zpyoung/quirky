@@ -195,6 +195,24 @@ describe('opening a conflict', () => {
     })
   }
 
+  test('SC-44: Accept deletion resolves a missing deleted-by-them file', async () => {
+    s = await startScenario(scratch)
+    diverge(s, { 'a.ts': null }, { 'a.ts': 'ours\n' })
+    expect(s.gitTry(null, 'merge', 'other').code).toBe(1)
+    rmSync(join(s.feat.path, 'a.ts'))
+
+    const opened = await s.api('conflictFile', { path: 'a.ts' })
+    expect(opened).toMatchObject({ kind: 'deleted_by_them', content: null, hash: null })
+    await s.api('acceptConflictDeletion', { path: 'a.ts', expected: opened.hash })
+    expect(s.gitIn('ls-files', '-u')).toBe('')
+    expect(s.gitIn('ls-files', '--', 'a.ts')).toBe('')
+    expect(conflictRows(await status(s))).toEqual([['a.ts', 'deleted_by_them', 'resolved_locally']])
+
+    expect(await s.api('continue')).toEqual({ finished: true, operation: 'none' })
+    expect(existsSync(join(s.feat.path, 'a.ts'))).toBe(false)
+    expect(await status(s)).toMatchObject({ operation: 'none', entries: [] })
+  })
+
   test('SC-44: acceptConflictDeletion refuses unrelated conflicts, paths outside the worktree and stale hashes', async () => {
     s = await startScenario(scratch)
     diverge(s, { 'a.ts': 'theirs a\n', 'b.ts': 'theirs b\n' }, { 'a.ts': null, 'b.ts': 'ours b\n' })
