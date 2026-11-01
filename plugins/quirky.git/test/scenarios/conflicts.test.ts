@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type GitStatus } from '@quirky/protocol'
+import { actionPaths, entryActions } from '../../src/panel/sections'
 import { waitFor, waitForAsync } from '../../../../packages/daemon/test/helpers'
 import { diverge, installHook, isolateScenarioGit, jsonError, startScenario, type Scenario } from './fixture'
 
@@ -222,6 +223,36 @@ describe('opening a conflict', () => {
     expect(await s.fails(s.api('conflictFile', { path: '../x' }))).toMatchObject({ code: RpcErrorCode.InvalidParams, data: { reason: 'outside-worktree' } })
     writeFileSync(join(s.feat.path, 'a.ts'), Buffer.from([0, 1, 2, 3]))
     expect(await s.fails(s.api('conflictFile', { path: 'a.ts' }))).toMatchObject({ code: RpcErrorCode.InvalidParams, data: { reason: 'not-allowed' } })
+  })
+
+  test('a binary deleted-by-them conflict can be staged and continued', async () => {
+    s = await startScenario(scratch)
+    const path = 'math.ts'
+    const binaryContent = '\u0000ours binary\u0000content\n'
+    const expectedBytes = Buffer.from(binaryContent)
+    diverge(s, { [path]: null }, { [path]: binaryContent })
+    expect(s.gitTry(null, 'merge', 'other').code).toBe(1)
+
+    const merged = await status(s)
+    expect(conflictRows(merged)).toEqual([[path, 'deleted_by_them', 'unresolved']])
+    const refusal = await s.fails(s.api('conflictFile', { path, peek: true }))
+    expect(refusal.data.reason).toBe('not-allowed')
+
+    const conflict = merged.entries.find((entry) => entry.area === 'conflicts' && entry.path === path)!
+    const context = { markersGone: new Set([path]), unreadableConflicts: new Set([path]) }
+    expect(entryActions(conflict, context).stage).toBe(true)
+    const paths = actionPaths([conflict], 'stage', context)
+    expect(paths).toEqual([path])
+    await s.api('stage', { paths })
+
+    expect(s.gitIn('ls-files', '-u')).toBe('')
+    const staged = await status(s)
+    expect(staged.entries.some((entry) => entry.path === path && entry.conflict?.state === 'unresolved')).toBe(false)
+
+    expect(await s.api('continue')).toEqual({ finished: true, operation: 'none' })
+    expect(readFileSync(join(s.feat.path, path))).toEqual(expectedBytes)
+    expect(s.gitIn('rev-parse', 'HEAD^2')).toBe(s.gitIn('rev-parse', 'other'))
+    expect(await status(s)).toMatchObject({ operation: 'none', entries: [] })
   })
 })
 

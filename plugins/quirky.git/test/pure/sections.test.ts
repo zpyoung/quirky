@@ -146,6 +146,41 @@ describe('entryActions', () => {
     expect(actionPaths([ordinaryConflict], 'stage', context)).toEqual(['ordinary.ts'])
   })
 
+  test('unreadable modify/delete conflicts can be staged after markers are gone', () => {
+    for (const kind of ['deleted_by_us', 'deleted_by_them'] as const) {
+      const path = kind === 'deleted_by_us' ? 'binary-deleted-by-us' : 'binary-deleted-by-them'
+      const conflict = entry(path, 'conflicts', 'deleted', { conflict: { kind, state: 'unresolved' } })
+      const readableContext = { markersGone: new Set([path]) }
+      const unreadableContext = { markersGone: new Set([path]), unreadableConflicts: new Set([path]) }
+      const section = groupSections([conflict], 'changes-first')[0]
+
+      expect(entryActions(conflict, readableContext).stage).toBe(false)
+      expect(sectionButtons(section, readableContext).stageAll).toBe(false)
+      expect(actionPaths([conflict], 'stage', readableContext)).toEqual([])
+
+      expect(entryActions(conflict, unreadableContext).stage).toBe(true)
+      expect(sectionButtons(section, unreadableContext).stageAll).toBe(true)
+      expect(actionPaths([conflict], 'stage', unreadableContext)).toEqual([path])
+    }
+
+    const protectedContext = {
+      markersGone: new Set(['resolved.ts', 'vendor/lib']),
+      unreadableConflicts: new Set(['resolved.ts', 'vendor/lib'])
+    }
+    const resolvedConflict = entry('resolved.ts', 'conflicts', 'deleted', {
+      conflict: { kind: 'deleted_by_them', state: 'resolved_locally' }
+    })
+    const submoduleConflict = entry('vendor/lib', 'conflicts', 'deleted', {
+      conflict: { kind: 'deleted_by_them', state: 'unresolved' },
+      submodule: { commitChanged: false, trackedChanges: true, untrackedChanges: false }
+    })
+    for (const conflict of [resolvedConflict, submoduleConflict]) {
+      expect(entryActions(conflict, protectedContext).stage).toBe(false)
+      expect(sectionButtons(groupSections([conflict], 'changes-first')[0], protectedContext).stageAll).toBe(false)
+      expect(actionPaths([conflict], 'stage', protectedContext)).toEqual([])
+    }
+  })
+
   test('a conflict resolved locally is already staged in git, so it has no row actions', () => {
     expect(entryActions(resolved('d.ts'), { markersGone: new Set(['d.ts']) })).toEqual({
       stage: false,

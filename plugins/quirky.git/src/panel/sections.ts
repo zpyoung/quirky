@@ -76,6 +76,8 @@ export type ActionContext = {
    * longer exists). Only these can be staged, because staging clears git's unmerged record.
    */
   markersGone?: ReadonlySet<string>
+  /** Paths the text conflict editor cannot open, which must remain stageable without its named actions. */
+  unreadableConflicts?: ReadonlySet<string>
 }
 
 /** The hover buttons a row shows; `discard` names which one, or null for none. */
@@ -86,15 +88,15 @@ const NONE: EntryActions = { stage: false, unstage: false, discard: null }
 /**
  * Orca's per-row eligibility with logic SC-13 applied. Submodule rows are read-only. Staged rows
  * can only be unstaged (discarding staged work is the section's "Discard all"). A conflict
- * resolved locally is already staged, so it offers nothing. Modify/delete conflicts require
- * their named Keep file or Accept deletion actions.
+ * resolved locally is already staged, so it offers nothing. Readable modify/delete conflicts
+ * require their named Keep file or Accept deletion actions.
  */
 export function entryActions(entry: GitStatusEntry, context: ActionContext = {}): EntryActions {
   if (entry.submodule) return NONE
   switch (entry.area) {
     case 'conflicts':
-      return entry.conflict?.kind !== 'deleted_by_us' &&
-        entry.conflict?.kind !== 'deleted_by_them' &&
+      return (context.unreadableConflicts?.has(entry.path) ||
+        (entry.conflict?.kind !== 'deleted_by_us' && entry.conflict?.kind !== 'deleted_by_them')) &&
         entry.conflict?.state === 'unresolved' &&
         context.markersGone?.has(entry.path)
         ? { stage: true, unstage: false, discard: null }

@@ -254,6 +254,8 @@ detached HEAD (`detached`, "Check out a branch first.").
 - `conflictFile {path}` → `{path, kind, state, content: string | null, hash: string | null,
   operation}`; content is the working file (null when missing; binary → refused
   `not-allowed`). Records the path in `opened.ts` for the current operation.
+  The panel tracks `not-allowed` reads separately from readable marker-free files and allows
+  row and bulk Stage for those unreadable modify/delete conflicts.
 - `acceptConflictDeletion {path, expected: string | null}` → `{ok: true}`: only a live unresolved
   modify/delete conflict is eligible. Within the same absolute-path queue as `save`, recheck
   containment, refuse submodules/directories, compare the working-file hash with `expected`,

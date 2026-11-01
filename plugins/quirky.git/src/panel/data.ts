@@ -79,9 +79,10 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 
 const MARKER_READS_AT_ONCE = 8
 
-/** Paths of unresolved conflicts whose working copy holds no conflict markers (or no file at all). */
-async function findMarkersGone(context: UiPluginContext, worktree: string, status: GitStatus): Promise<Set<string>> {
-  const gone = new Set<string>()
+/** Finds marker-free conflicts and files that the text conflict editor cannot open. */
+async function findConflictReadiness(context: UiPluginContext, worktree: string, status: GitStatus) {
+  const markersGone = new Set<string>()
+  const unreadableConflicts = new Set<string>()
   const unresolved = status.entries.filter((e) => e.conflict?.state === 'unresolved' && !e.submodule)
   let next = 0
   const worker = async () => {
@@ -89,15 +90,17 @@ async function findMarkersGone(context: UiPluginContext, worktree: string, statu
       const entry = unresolved[next++]!
       try {
         const file = (await context.call('quirky.git/conflictFile', { worktree, path: entry.path, peek: true })) as { content: string | null }
-        if (file.content === null || conflictBlocks(file.content).length === 0) gone.add(entry.path)
+        if (file.content === null || conflictBlocks(file.content).length === 0) markersGone.add(entry.path)
       } catch (error) {
-        // binary or linked files have no text markers to wait for
-        if (dataOf(error).reason === 'not-allowed') gone.add(entry.path)
+        if (dataOf(error).reason === 'not-allowed') {
+          markersGone.add(entry.path)
+          unreadableConflicts.add(entry.path)
+        }
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(MARKER_READS_AT_ONCE, unresolved.length) }, worker))
-  return gone
+  return { markersGone, unreadableConflicts }
 }
 
 export type StatusData = {
@@ -107,6 +110,7 @@ export type StatusData = {
   /** The sentence for a workspace opened as a folder, which has no git features. */
   unavailable: string | null
   markersGone: ReadonlySet<string>
+  unreadableConflicts: ReadonlySet<string>
   /** Reads the status now; resolves to it, or null when the read failed. */
   refresh(): Promise<GitStatus | null>
 }
@@ -122,6 +126,7 @@ export function useStatus(context: UiPluginContext, worktree: string): StatusDat
   const [error, setError] = useState<string | null>(null)
   const [unavailable, setUnavailable] = useState<string | null>(null)
   const [markersGone, setMarkersGone] = useState<ReadonlySet<string>>(NO_PATHS)
+  const [unreadableConflicts, setUnreadableConflicts] = useState<ReadonlySet<string>>(NO_PATHS)
   const newest = useRef(0)
   const alive = useRef(true)
 
@@ -129,10 +134,11 @@ export function useStatus(context: UiPluginContext, worktree: string): StatusDat
     const ticket = ++newest.current
     try {
       const next = (await context.call('quirky.git/status', { worktree })) as GitStatus
-      const gone = await findMarkersGone(context, worktree, next)
+      const readiness = await findConflictReadiness(context, worktree, next)
       if (!alive.current || ticket !== newest.current) return next
       setStatus((prev) => (same(prev, next) ? prev : next))
-      setMarkersGone((prev) => (same([...prev].sort(), [...gone].sort()) ? prev : gone))
+      setMarkersGone((prev) => (same([...prev].sort(), [...readiness.markersGone].sort()) ? prev : readiness.markersGone))
+      setUnreadableConflicts((prev) => (same([...prev].sort(), [...readiness.unreadableConflicts].sort()) ? prev : readiness.unreadableConflicts))
       setError(null)
       setUnavailable(null)
       return next
@@ -160,7 +166,7 @@ export function useStatus(context: UiPluginContext, worktree: string): StatusDat
     }
   }, [context, worktree, refresh])
 
-  return { status, error, unavailable, markersGone, refresh }
+  return { status, error, unavailable, markersGone, unreadableConflicts, refresh }
 }
 
 export type CompareData = {
