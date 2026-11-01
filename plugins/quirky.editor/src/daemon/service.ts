@@ -538,7 +538,7 @@ export class EditorDaemon {
       return { buffer: state.buffer, promote: state.buffer.preview }
     })
     if (result.promote) await this.promoteBuffer(bufferId)
-    return this.get(bufferId)
+    return result.buffer
   }
 
   async save(bufferId: string, trigger: SaveParams['trigger'] = 'user', expectedRevision?: number): Promise<EditorBuffer> {
@@ -799,13 +799,14 @@ export class EditorDaemon {
     if (this.isBufferValue(value)) {
       const buffer = value as EditorBuffer
       const state = this.buffers.get(buffer.id)
-      const contentBytes = state?.contentBytes ?? Buffer.byteLength(buffer.content, 'utf8')
-      const contentLength = state?.contentLength ?? buffer.content.length
-      const draftBytes = buffer.draft === null ? null : (state?.draftBytes ?? Buffer.byteLength(buffer.draft, 'utf8'))
-      const draftLength = buffer.draft === null ? null : (state?.draftLength ?? buffer.draft.length)
-      const diskContentBytes = buffer.diskContent === null ? null : (state?.diskContentBytes ?? Buffer.byteLength(buffer.diskContent, 'utf8'))
-      const diskContentLength = buffer.diskContent === null ? null : (state?.diskContentLength ?? buffer.diskContent.length)
-      const info: Record<string, unknown> = { ...buffer, contentLength, draftLength, diskContentLength, contentBytes, draftBytes, diskContentBytes, diskSignature: state?.diskSignature ?? null }
+      const metrics = state?.buffer === buffer ? state : undefined
+      const contentBytes = metrics?.contentBytes ?? Buffer.byteLength(buffer.content, 'utf8')
+      const contentLength = metrics?.contentLength ?? buffer.content.length
+      const draftBytes = buffer.draft === null ? null : (metrics?.draftBytes ?? Buffer.byteLength(buffer.draft, 'utf8'))
+      const draftLength = buffer.draft === null ? null : (metrics?.draftLength ?? buffer.draft.length)
+      const diskContentBytes = buffer.diskContent === null ? null : (metrics?.diskContentBytes ?? Buffer.byteLength(buffer.diskContent, 'utf8'))
+      const diskContentLength = buffer.diskContent === null ? null : (metrics?.diskContentLength ?? buffer.diskContent.length)
+      const info: Record<string, unknown> = { ...buffer, contentLength, draftLength, diskContentLength, contentBytes, draftBytes, diskContentBytes, diskSignature: metrics?.diskSignature ?? null }
       delete info.content
       delete info.draft
       delete info.diskContent
