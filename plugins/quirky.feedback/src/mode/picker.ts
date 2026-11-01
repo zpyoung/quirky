@@ -43,7 +43,8 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
     label.textContent = target.label
     Object.assign(label.style, { left: '0px', top: '0px' })
     highlight.hidden = false
-    label.hidden = false
+    label.hidden = selected !== null
+    if (label.hidden) return
     const size = label.getBoundingClientRect()
     const above = box.top - size.height
     const top = Math.min(Math.max(above >= 0 ? above : box.top, 0), Math.max(win.innerHeight - size.height, 0))
