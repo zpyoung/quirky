@@ -111,6 +111,14 @@ async function write(t: CoreTestHarness, path: string, text: string): Promise<vo
   mkdirSync(join(absolute, '..'), { recursive: true })
   writeFileSync(absolute, text)
 }
+async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+  throw new Error('Expected operation to reject')
+}
 
 function controlledRg(queries: string[], ignoreTermQueries: string[] = []) {
   const realRg = spawnSync('which', ['rg'], { encoding: 'utf8' })
@@ -627,6 +635,89 @@ describe('editor core through the daemon API', () => {
     await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'redo' })
     expect(existsSync(join(t.root, 'renamed.txt'))).toBe(false)
   })
+
+  test('qa-files-50: createFile reports a duplicate relative destination and preserves its contents', async () => {
+    const t = await boot()
+    await write(t, 'README.md', '# Existing\n')
+
+    const message = await rejectionMessage(t.call('quirky.editor/mutate', {
+      worktree: t.worktreeId,
+      action: 'createFile',
+      path: 'README.md',
+      content: '# Replacement\n'
+    }))
+    expect(message.toLowerCase()).toContain('destination already exists')
+    expect(message).toContain('README.md')
+    expect(message).not.toContain(t.root)
+    expect(message).not.toContain('EEXIST')
+    expect(readFileSync(join(t.root, 'README.md'), 'utf8')).toBe('# Existing\n')
+  }, 20_000)
+
+  test('qa-files-50: rename into an open existing file reports a destination conflict and preserves both buffers', async () => {
+    const t = await boot()
+    await write(t, 'source.txt', 'source content\n')
+    await write(t, 'README.md', 'destination content\n')
+    const source = await open(t, 'source.txt')
+    const destination = await open(t, 'README.md')
+
+    const message = await rejectionMessage(t.call('quirky.editor/mutate', {
+      worktree: t.worktreeId,
+      action: 'rename',
+      path: 'source.txt',
+      newPath: 'README.md'
+    }))
+    expect(message.toLowerCase()).toContain('destination already exists')
+    expect(message).toContain('README.md')
+    expect(message).not.toMatch(/buffer/i)
+    expect(readFileSync(join(t.root, 'source.txt'), 'utf8')).toBe('source content\n')
+    expect(readFileSync(join(t.root, 'README.md'), 'utf8')).toBe('destination content\n')
+    const buffers = (await state(t)).buffers
+    expect(buffers.find((buffer) => buffer.id === source.id)).toMatchObject({ relativePath: 'source.txt' })
+    expect(buffers.find((buffer) => buffer.id === destination.id)).toMatchObject({ relativePath: 'README.md' })
+  }, 20_000)
+
+  test('qa-files-50: rename into a deleted but open destination keeps its buffer reservation', async () => {
+    const t = await boot()
+    await write(t, 'source.txt', 'source content\n')
+    await write(t, 'README.md', 'destination content\n')
+    const source = await open(t, 'source.txt')
+    const destination = await open(t, 'README.md')
+    rmSync(join(t.root, 'README.md'))
+
+    const message = await rejectionMessage(t.call('quirky.editor/mutate', {
+      worktree: t.worktreeId,
+      action: 'rename',
+      path: 'source.txt',
+      newPath: 'README.md'
+    }))
+    expect(message.toLowerCase()).toContain('destination already exists')
+    expect(message).toContain('README.md')
+    expect(message).not.toMatch(/buffer/i)
+    expect(readFileSync(join(t.root, 'source.txt'), 'utf8')).toBe('source content\n')
+    expect(existsSync(join(t.root, 'README.md'))).toBe(false)
+    const buffers = (await state(t)).buffers
+    expect(buffers.find((buffer) => buffer.id === source.id)).toMatchObject({ relativePath: 'source.txt' })
+    expect(buffers.find((buffer) => buffer.id === destination.id)).toMatchObject({ relativePath: 'README.md' })
+  }, 20_000)
+
+  test('qa-files-50: createFile rejects an outside-worktree path without exposing internals or creating it', async () => {
+    const t = await boot()
+    const outsidePath = join(t.root, '..', 'zqaescape.txt')
+    expect(existsSync(outsidePath)).toBe(false)
+
+    const message = await rejectionMessage(t.call('quirky.editor/mutate', {
+      worktree: t.worktreeId,
+      action: 'createFile',
+      path: '../zqaescape.txt',
+      content: 'not authorized'
+    }))
+    expect(message.toLowerCase()).toMatch(/worktree/)
+    expect(message.toLowerCase()).toMatch(/within|inside|remain|stay/)
+    expect(message).not.toContain(t.worktreeId)
+    expect(message).not.toContain(t.root)
+    expect(message).not.toMatch(/EEXIST|ENOENT|errno|syscall|lstat|realpath/i)
+    expect(existsSync(outsidePath)).toBe(false)
+  }, 20_000)
 
   test('SC-9: path and browser uploads import collision-safely into the authorized worktree', async () => {
     const t = await boot()

@@ -2010,7 +2010,14 @@ export class EditorDaemon {
     const keys = await this.fileKeys(target.path)
     await this.fileQueue.run(keys, async () => {
       await mkdir(dirname(target.path), { recursive: true })
-      await writeFile(target.path, content, { flag: 'wx' })
+      try {
+        await writeFile(target.path, content, { flag: 'wx' })
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code === 'EEXIST') {
+          throw this.context.error('conflict', `Destination already exists: ${target.relativePath}`)
+        }
+        throw error
+      }
     })
     if (contentBytes <= 5 * 1024 * 1024) {
       await this.pushHistory(worktree.id, {
@@ -2049,7 +2056,7 @@ export class EditorDaemon {
     if (directory && this.paths.isWithin(source.path, target.path)) throw this.context.error('invalid-params', 'A directory cannot be moved into itself or one of its descendants.')
     const occupiedBuffer = this.pathIndex.get(this.pathKey(worktree.id, target.path))
     if (occupiedBuffer !== undefined && occupiedBuffer !== this.pathIndex.get(this.pathKey(worktree.id, source.path))) {
-      throw this.context.error('conflict', `A buffer already owns the destination path: ${target.relativePath}`)
+      throw this.context.error('conflict', `Destination already exists: ${target.relativePath}`)
     }
     if (await this.exists(target.path)) throw this.context.error('conflict', `Destination already exists: ${target.relativePath}`)
     const keys = [...await this.fileKeys(source.path), ...await this.fileKeys(target.path)]

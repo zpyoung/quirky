@@ -48,7 +48,7 @@ export class WorktreePaths {
       ? resolvePath(requestedPath)
       : resolvePath(worktree.path, requestedPath)
     if (!this.isWithin(worktree.path, candidate)) {
-      throw this.context.error('invalid-params', `path is outside worktree ${worktree.id}`)
+      throw this.context.error('invalid-params', 'Path must remain within the worktree.')
     }
 
     let cursor = worktree.path
@@ -108,7 +108,7 @@ export class WorktreePaths {
       ? resolvePath(requestedPath)
       : resolvePath(worktree.path, requestedPath)
     if (!this.isWithin(worktree.path, candidate)) {
-      throw this.context.error('invalid-params', `path is outside worktree ${worktree.id}`)
+      throw this.context.error('invalid-params', 'Path must remain within the worktree.')
     }
     const leaf = basename(candidate)
     if (leaf === '' || leaf === '.' || leaf === '..' || candidate === worktree.path) {
