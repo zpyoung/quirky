@@ -913,7 +913,7 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
         }
       >
         <div className="ui-stack" style={{ padding: 'var(--ui-space-8)' }}>
-          {snapshot && <div><Badge tone={snapshot.attentionCount > 0 ? 'needs-you' : 'neutral'}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</Badge></div>}
+          {snapshot && <div><Badge tone={snapshot.attentionCount > 0 ? 'needs-you' : 'neutral'}><span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</span></Badge></div>}
           {refreshError && (
             <div role="alert" className="ui-error-text">
               Fleet refresh failed; {snapshot ? 'showing the last confirmed snapshot' : 'no confirmed snapshot is available'}: {refreshError}

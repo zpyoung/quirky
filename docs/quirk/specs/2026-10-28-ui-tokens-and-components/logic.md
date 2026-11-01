@@ -33,6 +33,8 @@ Menu lists size to their labels and remain at least as wide as their trigger. Ic
 
 Tabs keep a complete focus-visible ring inside their horizontal scrollport, including the first and last tabs. The ring is inset so it remains visible without changing control sizing or disabling horizontal scrolling.
 
+Tool-panel header tab groups wrap whole tabs within their available width instead of leaving a partial label at the panel edge. Narrow tool-panel titles retain ellipsis truncation; tabs remain keyboard-accessible across wrapped rows.
+
 Scrollable dialog bodies leave inline clearance for outward focus rings, including Settings checkboxes at the content edge. Content stays aligned with the dialog header and actions, and the body keeps vertical scrolling.
 
 At narrow panel widths, EmptyState and Vault search-consent prose keep words intact when they fit the section or card. Tokens wider than that boundary wrap within it; neither the message box nor its text may overflow the panel.
