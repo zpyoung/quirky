@@ -757,7 +757,8 @@
       {"id":"open-markdown","description":"Open a Markdown document in an exact workspace tab group.","params":{"type":"object","properties":{"worktree":{"type":"string"},"group":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,dialog:'open-markdown'}."}},"required":["result"],"additionalProperties":false}}
     ],
     "event": [
-      { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false } }
+      { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false } },
+      { "id": "explorerChanged", "description": "Filesystem tree changed for a worktree; clients should reload its root, expanded directories and active filename filter.", "data": { "type": "object", "properties": { "worktreeId": { "type": "string" } }, "required": ["worktreeId"], "additionalProperties": false } }
     ],
     "view": [
       { "id": "document", "title": "Editor Document", "description": "A worktree file rendered by the matching editor surface." }

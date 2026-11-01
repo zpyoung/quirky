@@ -17,6 +17,7 @@ type ExplorerResult = {
   interaction?: Interaction
 }
 type EditorState = {
+  buffers: unknown[]
   explorer: { worktreeId: string; expanded: string[]; selectedPaths?: string[]; focusedPath?: string | null; selectionAnchor?: string | null }
 }
 type Fixture = { harness: Harness; client: QuirkyClient; home: string; root: string; repoId: string; worktree: Worktree; roots: Set<string>; events: QuirkyEvent[] }
@@ -502,4 +503,41 @@ test('Explorer interaction and expansion state are isolated by worktree', async 
   const secondState = (await stateOf(world, second.id)).explorer
   expect(firstState).toMatchObject({ worktreeId: world.worktree.id, expanded: ['A'], selectedPaths: [join(world.root, 'shared.txt')], focusedPath: join(world.root, 'shared.txt') })
   expect(secondState).toMatchObject({ worktreeId: second.id, expanded: [], selectedPaths: [join(otherRoot, 'A')], focusedPath: join(otherRoot, 'A') })
+})
+
+test('Explorer watching survives the last clean buffer closing and refreshes external changes', async () => {
+  const world = await fixture({ 'buffer.txt': 'buffer\n' })
+  const worktree = world.worktree.id
+
+  const initial = await explorer(world, worktree, { action: 'list', path: '.' })
+  expect(initial.entries.map((entry) => entry.name)).toContain('buffer.txt')
+  expect((await stateOf(world, worktree)).buffers).toEqual([])
+  const opened = await call<{ id: string }>(world.client, 'quirky.editor/open', { worktree, path: 'buffer.txt' })
+  expect((await stateOf(world, worktree)).buffers).toHaveLength(1)
+  expect(await call<{ closed: boolean }>(world.client, 'quirky.editor/close', { bufferId: opened.id })).toMatchObject({ closed: true })
+  expect((await stateOf(world, worktree)).buffers).toEqual([])
+
+  const createdPaths = ['externally-created-one.ts', 'externally-created-two.ts'].map((name) => join(world.root, name))
+  const changes = () => world.events.filter((event) => event.type === 'quirky.editor/explorerChanged')
+  world.events.length = 0
+  for (const path of createdPaths) writeFileSync(path, 'external\n')
+
+  const createdChange = await waitFor(() => changes()[0])
+  expect('data' in createdChange ? createdChange.data : undefined).toEqual({ worktreeId: worktree })
+
+  const createdListing = await explorer(world, worktree, { action: 'list', path: '.' })
+  expect(createdListing.entries.map((entry) => entry.path)).toEqual(expect.arrayContaining(createdPaths))
+  const createdFilter = await explorer(world, worktree, { action: 'filter', query: 'externally-created' })
+  expect(createdFilter.entries.map((entry) => entry.path).sort()).toEqual(createdPaths.sort())
+
+  world.events.length = 0
+  unlinkSync(createdPaths[0]!)
+  const deletedChange = await waitFor(() => changes()[0])
+  expect('data' in deletedChange ? deletedChange.data : undefined).toEqual({ worktreeId: worktree })
+
+  const deletedListing = await explorer(world, worktree, { action: 'list', path: '.' })
+  expect(deletedListing.entries.map((entry) => entry.path)).not.toContain(createdPaths[0])
+  expect(deletedListing.entries.map((entry) => entry.path)).toContain(createdPaths[1])
+  const deletedFilter = await explorer(world, worktree, { action: 'filter', query: 'externally-created' })
+  expect(deletedFilter.entries.map((entry) => entry.path)).toEqual([createdPaths[1]])
 })
