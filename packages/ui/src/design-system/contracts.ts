@@ -52,6 +52,7 @@ export type InlineAgentCardProps = { title: string; description?: ReactNode; sta
 export type UiLayoutProps = HTMLAttributes<HTMLDivElement>
 /** Icon props: `size` is the square edge in CSS pixels (default 16); an icon is decorative unless given a `label`. */
 export type ToolIconProps = { name: string; hue: UiToolHue; size?: number; label?: string }
+export type AgentIconProps = { id: string; size?: number }
 export type ControlIconProps = { name: string; size?: number; label?: string }
 export type FileIconProps = { path: string; size?: number; label?: string }
 export type ProjectTileProps = { name: string; color?: string | null; size?: number; label?: string }

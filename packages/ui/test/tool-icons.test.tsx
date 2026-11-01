@@ -6,7 +6,7 @@ import { act, createElement as h } from 'react'
 import type { Root } from 'react-dom/client'
 import { UI_TOOL_HUES } from '@quirky/protocol'
 import { DEFAULT_THEME, LIGHT_THEME } from '@quirky/protocol'
-import { ControlIcon, FileIcon, ProjectTile, ToolIcon, uiTokens } from '../src/design-system'
+import { AgentIcon, ControlIcon, FileIcon, ProjectTile, ToolIcon, uiTokens } from '../src/design-system'
 import { fileIconName } from '../src/design-system/icons/file-icon-map'
 import { FILE_ICON_NAMES } from '../src/design-system/icons/generated-files'
 
@@ -295,6 +295,46 @@ describe('ProjectTile', () => {
   })
 })
 
+describe('AgentIcon', () => {
+  const MARKS: readonly [id: string, mark: string][] = [
+    ['claude', 'claude'], ['claude-agent-teams', 'claude'], ['codex', 'codex'], ['opencode', 'opencode'], ['opencode2', 'opencode'],
+    ['opencode-go', 'opencode'], ['pi', 'pi'], ['gemini', 'gemini'], ['aider', 'aider'], ['cursor', 'cursor'], ['rovo', 'atlassian'],
+    ['antigravity', 'antigravity'], ['kimi', 'kimi'], ['grok', 'grok'], ['zcode', 'zai'], ['copilot', 'copilot'], ['qoder-cn', 'qoder']
+  ]
+
+  for (const [id, mark] of MARKS) {
+    test(`${id} draws the ${mark} mark`, async () => {
+      await render(h(AgentIcon, { id }))
+      const svg = container.querySelector('svg')!
+      expect(svg.getAttribute('data-icon')).toBe(mark)
+      expect(svg.getAttribute('aria-hidden')).toBe('true')
+      expect(svg.getAttribute('fill')).toBe('currentColor')
+      expect(svg.getAttribute('width')).toBe('16')
+      expect(svg.querySelector('path')).not.toBeNull()
+    })
+  }
+
+  const MONOGRAMS: readonly [id: string, letter: string][] = [
+    ['omp', 'O'], ['minimax', 'M'], ['hermes', 'H'], ['some-plugin-agent', 'S'], ['constructor', 'C'], ['__proto__', '_'], ['', '?']
+  ]
+
+  for (const [id, letter] of MONOGRAMS) {
+    test(`"${id}" has no mark and falls back to the monogram ${letter}`, async () => {
+      await render(h(AgentIcon, { id }))
+      expect(container.querySelector('svg')).toBeNull()
+      const monogram = container.querySelector('.ui-agent-monogram')!
+      expect(monogram.textContent).toBe(letter)
+      expect(monogram.getAttribute('aria-hidden')).toBe('true')
+    })
+  }
+
+  test('a size reaches both the mark and the monogram box', async () => {
+    await render(h('div', null, h(AgentIcon, { id: 'claude', size: 20 }), h(AgentIcon, { id: 'omp', size: 20 })))
+    expect(container.querySelector('svg')!.getAttribute('width')).toBe('20')
+    expect(container.querySelector<HTMLElement>('.ui-agent-monogram')!.style.getPropertyValue('--ui-icon-box')).toBe('20px')
+  })
+})
+
 describe('gallery', () => {
   test('shows each new component in both themes, with file icons and popups following their section', async () => {
     const { Gallery } = await import('../src/gallery')
@@ -307,6 +347,8 @@ describe('gallery', () => {
       expect(category('ToolIcon').querySelector('.ui-icon-fallback')).not.toBeNull()
       expect(category('ControlIcon').querySelectorAll('svg').length).toBeGreaterThan(5)
       expect(category('ProjectTile').querySelectorAll('.ui-project-tile').length).toBeGreaterThan(5)
+      expect(category('AgentIcon').querySelectorAll('svg').length).toBeGreaterThan(5)
+      expect(category('AgentIcon').querySelector('.ui-agent-monogram')).not.toBeNull()
       const flavors = new Set([...category('FileIcon').querySelectorAll('svg')].map((svg) => svg.getAttribute('data-flavor')))
       expect([...flavors]).toEqual([section.dataset.theme === 'dark' ? 'mocha' : 'latte'])
     }

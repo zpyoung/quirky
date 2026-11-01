@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
-import type { ControlIconProps, FileIconProps, ProjectTileProps, ToolIconProps } from './contracts'
+import type { AgentIconProps, ControlIconProps, FileIconProps, ProjectTileProps, ToolIconProps } from './contracts'
+import { agentIconName } from './icons/agent-icon-map'
+import { AGENT_ICON_MARKUP } from './icons/generated-agents'
 import { CONTROL_ICON_MARKUP } from './icons/generated-controls'
 import { FILE_ICON_MARKUP } from './icons/generated-files'
 import { TOOL_ICON_MARKUP } from './icons/generated-tools'
@@ -80,6 +82,20 @@ export function ControlIcon({ name, size, label }: ControlIconProps) {
       label={label}
     />
   )
+}
+
+/**
+ * An agent's or usage provider's logo, drawn in the surrounding text color so it reads in both themes.
+ * An id with no vendored mark draws a neutral monogram in the same box. Always decorative: the caller
+ * keeps the agent's name in its own text or label.
+ */
+export function AgentIcon({ id, size }: AgentIconProps) {
+  const name = agentIconName(id)
+  if (name === null) {
+    return <span className="ui-agent-monogram" style={sizeVariable(size)} aria-hidden="true">{Array.from(id.trim())[0]?.toUpperCase() ?? '?'}</span>
+  }
+  const { markup, viewBox } = AGENT_ICON_MARKUP[name]
+  return <Glyph className="ui-agent-icon" data-icon={name} markup={markup} viewBox={viewBox} size={size ?? DEFAULT_SIZE} />
 }
 
 type Flavor = 'mocha' | 'latte'

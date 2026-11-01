@@ -1,3 +1,4 @@
+.ui-agent-icon,
 .ui-tool-icon,
 .ui-control-icon,
 .ui-file-icon { flex: none; vertical-align: middle; }
@@ -13,6 +14,20 @@
   font-weight: 600;
   line-height: 1;
   text-transform: uppercase;
+}
+.ui-agent-monogram {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-icon-box, var(--ui-icon-size));
+  height: var(--ui-icon-box, var(--ui-icon-size));
+  border-radius: var(--ui-radius-mark);
+  background: var(--ui-selected);
+  font-size: var(--ui-font-label);
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
 }
 .ui-project-tile {
   --ui-tile-size: var(--ui-icon-size);
