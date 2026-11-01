@@ -51,7 +51,7 @@ const GLOBAL_HELLO: QuickCommand = { id: 'hello', label: 'Hello', kind: 'termina
 const REPO_TEST: QuickCommand = { id: 'test', label: 'Test', kind: 'terminal', agent: null, command: 'bun test', appendEnter: false, scope: 'repo', repo: 'repo-1' }
 
 /** Activates the plugin on a fake context over a fake daemon and mounts the worktree view it provides. */
-async function wire(options: { mount?: boolean; settings?: Record<string, unknown>; floating?: Partial<FloatingState>; commands?: QuickCommand[] } = {}) {
+async function wire(options: { mount?: boolean; settings?: Record<string, unknown>; floating?: Partial<FloatingState>; commands?: QuickCommand[]; wake?: () => unknown } = {}) {
   const daemon = fakeDaemon(conceptualWorkspace())
   let floating: FloatingState = { enabled: true, open: false, maximized: false, bounds: null, button: null, ...options.floating }
   const fake: FakeContext = fakeContext(
@@ -62,7 +62,7 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
       'quirky.terminal/paneOf': (params) => ({ workspace: 'wt-main', tab: 'tab-1', pane: params.pane }),
       'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }),
       'quirky.terminal/openSession': () => ({ workspace: daemon.current, pane: 'pane-1' }),
-      'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
+      'quirky.worktree/wake': options.wake ?? (() => ({})),
       'quirky.terminal/floating': () => floating,
       'quirky.terminal/setFloating': (params) => {
         floating = { ...floating, ...params }
@@ -426,6 +426,7 @@ describe('the overridden session commands', () => {
   test('SC-58: new-shell opens a tab in the focused workspace', async () => {
     const wired = await track()
     expect(await wired.run('new-shell', undefined, 'quirky.session')).toEqual({ ok: true })
+    expect(wired.fake.callsTo('quirky.worktree/wake').map((call) => call.params)).toEqual([{ worktree: 'wt-main' }])
     expect(wired.calls('newTab')).toEqual([{ workspace: 'wt-main' }])
   })
 
@@ -434,12 +435,28 @@ describe('the overridden session commands', () => {
     wired.fake.layout.worktree = 'wt-other'
     wired.fake.layout.view = { id: VIEW, input: { worktree: 'wt-view' } }
     expect(await wired.run('new-shell', undefined, 'quirky.session')).toEqual({ ok: true })
+    expect(wired.fake.callsTo('quirky.worktree/wake').map((call) => call.params)).toEqual([{ worktree: 'wt-other' }])
     expect(wired.calls('newTab')).toEqual([{ workspace: 'wt-other' }])
+  })
+
+  test('new-shell does not add a tab when waking the focused worktree fails', async () => {
+    const wakeError = new Error('worktree wake failed')
+    const wired = await track({ wake: () => { throw wakeError } })
+    const beforeWorkspace = structuredClone(wired.daemon.current)
+    const beforeTabs = wired.last().tabs
+
+    await expect(wired.run('new-shell', undefined, 'quirky.session')).rejects.toThrow('worktree wake failed')
+
+    expect(wired.fake.callsTo('quirky.worktree/wake').map((call) => call.params)).toEqual([{ worktree: 'wt-main' }])
+    expect(wired.calls('newTab')).toEqual([])
+    expect(wired.daemon.current).toEqual(beforeWorkspace)
+    expect(wired.last().tabs).toEqual(beforeTabs)
   })
 
   test('new-shell with nothing to open in says so', async () => {
     const wired = await track({ mount: false })
     expect(await wired.run('new-shell', undefined, 'quirky.session')).toEqual(NO_WORKSPACE)
+    expect(wired.fake.callsTo('quirky.worktree/wake')).toEqual([])
     expect(wired.calls('newTab')).toEqual([])
   })
 

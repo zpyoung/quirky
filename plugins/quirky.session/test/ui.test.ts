@@ -577,7 +577,6 @@ describe('UI commands', () => {
     expect(fake.opened).toEqual(openedBefore)
   })
 
-
   test('close-session closes the active session', async () => {
     start([session({ id: 's1', status: 'exited', exitCode: 0 }), claude], { 'quirky.session/close': () => ({ ok: true }) })
     await open({ worktree: WORKTREE.id, session: 's1' })

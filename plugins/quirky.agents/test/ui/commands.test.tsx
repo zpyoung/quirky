@@ -142,4 +142,3 @@ describe('SC-43: the agent commands', () => {
     expect(fake.opened).toEqual([{ id: VIEW_ID, input: undefined }])
   })
 })
-
