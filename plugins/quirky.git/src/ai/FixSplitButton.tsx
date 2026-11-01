@@ -37,8 +37,8 @@ export function FixSplitButton({ action, busy, onFix, onCustomize }: FixButtonPr
   const copy = COPY[action]
 
   return (
-    <div className="ui-cluster">
-      <Button type="button" variant="primary" aria-label={copy.primary} title={copy.title} disabled={busy} onClick={onFix}>
+    <div className="ui-cluster" style={{ flexWrap: 'nowrap' }}>
+      <Button type="button" variant="primary" aria-label={copy.primary} title={copy.title} disabled={busy} onClick={onFix} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
         {busy ? <StatusDot status="working" /> : <SparkleIcon />}
         {copy.label}
       </Button>
