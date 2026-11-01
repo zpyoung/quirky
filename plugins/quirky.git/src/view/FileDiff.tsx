@@ -203,7 +203,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   return (
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <SectionHeader
-        title={`${path} (diff)`}
+        title={<span style={{ textTransform: 'none' }}>{`${path} (diff)`}</span>}
         titleTooltip={`${path} (diff)`}
         style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', padding: 'var(--ui-space-8)' }}
         actions={
