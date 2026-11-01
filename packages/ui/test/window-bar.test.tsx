@@ -161,7 +161,7 @@ describe('window bar', () => {
   test.skipIf(!existsSync(chromium.executablePath()))('reserved banner slot keeps toolbar and workspace controls clear and Exit reachable', async () => {
     const { env, unselectedMarkup } = await bootBar(true)
     const toolbarMarkups = [unselectedMarkup!, bar(env).outerHTML]
-    const bannerMarkup = renderToStaticMarkup(<Banner onExit={() => {}} />)
+    const bannerMarkup = renderToStaticMarkup(<Banner count={2} open={false} onToggle={() => {}} onExit={() => {}} />)
     const workspaceMarkup = renderToStaticMarkup(<div className="shell-workspace"><div className="shell-main-region"><div className="main-header shell-main-header">
       <Tabs label="Open views" items={[{ id: 'session', label: 'Session' }, { id: 'terminal', label: 'Terminal' }]} value="session" onChange={() => {}} />
       <div className="workspace-command-row"><Button>Add quick command</Button><Button>Pane actions</Button></div>
@@ -229,6 +229,12 @@ describe('window bar', () => {
           expect(layout.workspaceGap).toBeGreaterThanOrEqual(0)
           expect(layout.overlappingControls).toEqual([])
           expect(layout.blockedControls).toEqual([])
+
+          const toggle = page.getByRole('button', { name: '2 comments', exact: true })
+          expect(await toggle.getAttribute('aria-expanded')).toBe('false')
+          await toggle.evaluate((button) => button.addEventListener('click', () => button.setAttribute('data-toggle-clicked', ''), { once: true }))
+          await toggle.click()
+          expect(await toggle.getAttribute('data-toggle-clicked')).not.toBeNull()
 
           const exit = page.getByRole('button', { name: 'Exit', exact: true })
           await exit.evaluate((button) => button.addEventListener('click', () => button.setAttribute('data-exit-clicked', ''), { once: true }))

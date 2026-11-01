@@ -18,7 +18,7 @@ export function App({ session, layout, bannerSlot, annotate }: Props) {
   const chips = useMemo(findPaneChips, [version])
   const editing = state.card?.id == null ? -1 : state.comments.findIndex((comment) => comment.id === state.card?.id)
   return <>
-    {createPortal(<Banner onExit={() => void session.exit()} />, bannerSlot)}
+    {createPortal(<Banner count={state.comments.length} open={!state.collapsed} onToggle={session.toggleCollapsed} onExit={() => void session.exit()} />, bannerSlot)}
     <Dots comments={state.comments} found={found} />
     <Chips chips={chips} onComment={session.pickElement} onAnnotate={annotate} />
     <Tray state={state} found={found} session={session} />

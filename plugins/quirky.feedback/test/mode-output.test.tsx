@@ -73,6 +73,8 @@ async function start(seed: Comment[] = [], plugins: unknown = []) {
   const fake = fakeContext(seed, plugins)
   await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async (pane) => { annotated.push(pane) } }) })
   await flush()
+  // copy and file issue live in the panel, which starts closed
+  await click(document.querySelector('[data-feedback-toggle]')!)
   return fake
 }
 
