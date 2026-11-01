@@ -1,8 +1,19 @@
 .quirky-tasks .tasks-list {
+  color: var(--ui-text);
+  container-type: inline-size;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--ui-space-12);
+  min-height: var(--compat-px-480);
+  min-width: 0;
+}
+
+.quirky-tasks .tasks-list__controls {
   display: grid;
+  flex: 0 0 auto;
   gap: var(--ui-space-12);
   min-width: 0;
-  color: var(--ui-text);
 }
 
 .quirky-tasks .tasks-list__context,
@@ -128,189 +139,156 @@
   height: var(--ui-row-double);
 }
 
-.quirky-tasks .tasks-list__table-scroll {
+.quirky-tasks .tasks-list__body {
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-window);
-  max-height: min(70vh, calc(var(--compat-px-720) + var(--compat-px-180)));
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: calc(var(--compat-px-360) + var(--compat-px-20)) minmax(0, 1fr);
+  min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
-.quirky-tasks .tasks-list__table {
-  border-collapse: separate;
-  border-spacing: 0;
-  min-width: 100%;
-  width: 100%;
+.quirky-tasks .tasks-list__list {
+  border-inline-end: var(--ui-border-width) solid var(--ui-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
 }
 
-.quirky-tasks .tasks-list[data-kind='issue'] .tasks-list__table {
-  min-width: calc(var(--compat-px-680) + var(--compat-px-180));
+.quirky-tasks .tasks-list__rows {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--ui-space-4) var(--ui-space-8);
 }
 
-.quirky-tasks .tasks-list[data-kind='pullRequest'] .tasks-list__table {
-  min-width: calc(var(--compat-px-720) + var(--compat-px-360) + var(--compat-px-40));
-}
-
-.quirky-tasks .tasks-list__table th,
-.quirky-tasks .tasks-list__table td {
-  border-block-end: var(--ui-border-width) solid var(--ui-border);
-  padding: var(--ui-space-8);
-  text-align: start;
-  vertical-align: top;
-}
-
-.quirky-tasks .tasks-list__header-cell {
-  background: var(--ui-surface);
-  position: sticky;
-  top: 0;
-  white-space: nowrap;
-  z-index: 3;
-}
-
-.quirky-tasks .tasks-list__header-cell--id,
-.quirky-tasks .tasks-list__id-cell {
-  left: 0;
-  position: sticky;
-  white-space: nowrap;
-  width: calc(var(--compat-px-72) + var(--ui-space-2));
-  z-index: 2;
-}
-
-.quirky-tasks .tasks-list__header-cell--id,
-.quirky-tasks .tasks-list__header-cell--title,
-.quirky-tasks .tasks-list__header-cell--actions,
-.quirky-tasks .tasks-list__id-cell,
-.quirky-tasks .tasks-list__title-cell,
-.quirky-tasks .tasks-list__actions-cell {
-  background: var(--ui-surface);
-}
-
-.quirky-tasks .tasks-list__header-cell--title,
-.quirky-tasks .tasks-list__title-cell {
-  left: calc(var(--compat-px-72) + var(--ui-space-2));
-  min-width: calc(var(--compat-px-320) + var(--compat-px-30));
-  position: sticky;
-  z-index: 2;
-}
-
-.quirky-tasks .tasks-list__header-cell--actions,
-.quirky-tasks .tasks-list__actions-cell {
-  position: sticky;
-  right: 0;
-  white-space: nowrap;
-  z-index: 2;
-}
-.quirky-tasks .tasks-list__header-cell--id,
-.quirky-tasks .tasks-list__header-cell--title,
-.quirky-tasks .tasks-list__header-cell--actions {
-  z-index: 4;
+.quirky-tasks .tasks-list__rows > .tasks-list__loading,
+.quirky-tasks .tasks-list__rows > .tasks-list__empty {
+  border: 0;
 }
 
 .quirky-tasks .tasks-list__row {
-  cursor: pointer;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.quirky-tasks .tasks-list__row:focus-visible {
-  outline: var(--ui-focus-width) solid var(--ui-accent);
-  outline-offset: calc(var(--ui-space-2) - var(--ui-space-4));
+.quirky-tasks .tasks-list__row .ui-list-row {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  max-width: 100%;
+  min-width: 0;
 }
 
-.quirky-tasks .tasks-list__row:hover > .tasks-list__id-cell,
-.quirky-tasks .tasks-list__row:hover > .tasks-list__title-cell,
-.quirky-tasks .tasks-list__row:hover > .tasks-list__actions-cell {
+.quirky-tasks .tasks-list__row .ui-list-row--selected,
+.quirky-tasks .tasks-list__row .ui-list-row--interactive:hover {
   background: var(--ui-selected);
 }
 
-.quirky-tasks .tasks-list__metadata {
-  align-items: center;
-  color: var(--ui-muted);
-  display: flex;
-  flex-wrap: wrap;
-  font-size: var(--ui-font-label);
-  gap: var(--ui-space-6);
-  margin-block-start: var(--ui-space-4);
-}
-.quirky-tasks .tasks-list__title-cell > .ui-badge {
-  margin-inline-start: var(--ui-space-6);
+.quirky-tasks .tasks-list__row .ui-list-row__main,
+.quirky-tasks .tasks-list__row .ui-list-row__body {
+  min-width: 0;
 }
 
-.quirky-tasks .tasks-list__row > td:nth-last-child(2) {
+.quirky-tasks .tasks-list__row .ui-list-row__title,
+.quirky-tasks .tasks-list__row .ui-list-row__description {
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.quirky-tasks .tasks-list__action-cell > .ui-button {
-  max-width: var(--compat-px-220);
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.quirky-tasks .tasks-list__action-cell {
-  position: relative;
-}
-
-.quirky-tasks .tasks-list__action-cell > .ui-button,
-.quirky-tasks .tasks-list__action-cell [role='menu'] .ui-button {
-  justify-content: flex-start;
-  text-align: start;
-}
-
-.quirky-tasks .tasks-list__action-cell [role='dialog'],
-.quirky-tasks .tasks-list__action-cell [role='menu'] {
-  background: var(--ui-surface);
-  border: var(--ui-border-width) solid var(--ui-border);
-  border-radius: var(--ui-radius-control);
-  box-shadow: var(--compat-shadow-panel-menu);
-  display: grid;
-  gap: var(--ui-space-6);
-  inset-block-start: 100%;
-  inset-inline-start: 0;
-  max-height: var(--compat-px-320);
-  max-width: calc(100vw - var(--ui-space-16) - var(--ui-space-16));
-  min-width: var(--compat-px-220);
-  overflow: auto;
-  padding: var(--ui-space-8);
-  position: absolute;
-  z-index: 1;
-}
-
-.quirky-tasks .tasks-list__action-cell [role='menu'] .ui-button {
-  width: 100%;
-}
-
-.quirky-tasks .tasks-list__action-cell [role='dialog'] .ui-form-row,
-.quirky-tasks .tasks-list__action-cell [role='dialog'] .ui-form-row__control {
-  min-width: 0;
-}
-
-.quirky-tasks .tasks-list__action-cell .tasks-list__reviewer-input {
-  min-height: calc(var(--ui-row-double) + var(--ui-row-double) + var(--ui-row-double) + var(--ui-space-8));
-  resize: vertical;
-}
-
-.quirky-tasks .tasks-list__suggestions {
-  border: 0;
+.quirky-tasks .tasks-list__row .ui-list-row__trailing {
+  align-items: flex-end;
+  color: var(--ui-muted);
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--ui-space-6);
-  margin: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  font-size: var(--ui-font-label);
+  padding-inline-end: var(--ui-space-4);
+}
+
+.quirky-tasks .tasks-list__checks--danger {
+  color: var(--ui-failing);
+}
+
+.quirky-tasks .tasks-list__checks--warning {
+  color: var(--ui-needs-you);
+}
+
+.quirky-tasks .tasks-list__checks--success {
+  color: var(--ui-working);
+}
+
+.quirky-tasks .tasks-list__detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   min-width: 0;
-  padding: 0;
+  overflow: auto;
 }
 
-.quirky-tasks .tasks-list__suggestions legend {
-  flex-basis: 100%;
+.quirky-tasks .tasks-list__back {
+  align-self: flex-start;
+  display: none;
+  gap: var(--ui-space-4);
+  margin: var(--ui-space-8) var(--ui-space-8) 0;
 }
 
-.quirky-tasks .tasks-list__check-trigger {
-  gap: var(--ui-space-6);
+.quirky-tasks .tasks-list__prompt {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.quirky-tasks .tasks-list__prompt .ui-empty-state__message {
+  color: var(--ui-muted);
+}
+
+@container (max-width: 47.5rem) {
+  .quirky-tasks .tasks-list__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quirky-tasks .tasks-list__body[data-has-detail='true'] .tasks-list__list {
+    display: none;
+  }
+
+  .quirky-tasks .tasks-list__body[data-has-detail='false'] .tasks-list__detail {
+    display: none;
+  }
+
+  .quirky-tasks .tasks-list__back {
+    display: inline-flex;
+  }
+
+  .quirky-tasks .tasks-list__detail .quirky-tasks-issue__back {
+    display: none;
+  }
+
+  .quirky-tasks .tasks-list:has(.tasks-list__body[data-has-detail='true']) :is(.tasks-list__context, .tasks-list__repository-controls, .tasks-list__toolbar, .tasks-list__filter-pills, .tasks-list__filters) {
+    display: none;
+  }
 }
 
 .quirky-tasks .tasks-list__pagination {
   align-items: center;
+  border-block-start: var(--ui-border-width) solid var(--ui-border);
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: var(--ui-space-6);
   justify-content: center;
+  padding: var(--ui-space-8);
 }
 
 .quirky-tasks .tasks-composer {
