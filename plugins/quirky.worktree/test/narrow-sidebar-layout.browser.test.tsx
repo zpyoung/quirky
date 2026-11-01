@@ -141,7 +141,7 @@ function panelHeaderRegressionBrowserEntry(): string {
   return `
     import { createElement as h, useState } from 'react'
     import { createRoot } from 'react-dom/client'
-    import { IconButton, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+    import { ExpandingIconButton, IconButton, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
     function PanelHeaderRegressionFixtures() {
       const [selectedVaultTab, setSelectedVaultTab] = useState('workspace')
@@ -176,6 +176,16 @@ function panelHeaderRegressionBrowserEntry(): string {
             ),
             onMinimize() {}
           }, h('div', null, 'Vault files'))
+        ),
+        h('div', { id: 'add-project-frame-host', className: 'panel-header-regression-frame' },
+          h(ToolPanelFrame, {
+            title: 'Worktrees',
+            actions: h('div', { className: 'ui-cluster' },
+              h(ExpandingIconButton, { label: 'Add project', title: 'Add project' }, '+'),
+              h(IconButton, { label: 'Filter worktrees', title: 'Filter worktrees' }, '⌕')
+            ),
+            onMinimize() {}
+          }, h('div', null, 'Worktree list'))
         )
       )
     }
@@ -756,6 +766,103 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps remote and vault pane
         await page.keyboard.press('Home')
         const workspaceTab = page.getByRole('tab', { name: 'Workspace', exact: true })
         expect(await workspaceTab.evaluate((element) => document.activeElement === element)).toBe(true)
+      }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+test.skipIf(!existsSync(chromium.executablePath()))('keeps Add project controls fixed when its label expands', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addStyleTag({
+      content: `
+        #panel-header-regression-fixtures { display: block; }
+        #remote-frame-host, #vault-frame-host { display: none; }
+        #add-project-frame-host { height: 360px; min-width: 0; width: 160px; }
+      `
+    })
+    await page.addScriptTag({ content: panelHeaderRegressionBundle })
+    await page.getByRole('heading', { name: 'Worktrees', exact: true }).waitFor()
+
+    const addProject = page.getByRole('button', { name: 'Add project', exact: true })
+    await addProject.waitFor()
+    await page.getByRole('button', { name: 'Filter worktrees', exact: true }).waitFor()
+    const minimizeButton = page.getByRole('button', { name: 'Minimize Worktrees', exact: true })
+    await minimizeButton.waitFor()
+
+    type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number }
+    const metrics = async () => page.evaluate(() => {
+      const bounds = (rect: DOMRect): Rect => ({
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height
+      })
+      const box = (element: Element) => bounds(element.getBoundingClientRect())
+      const frame = document.querySelector('#add-project-frame-host .ui-tool-panel-frame')!
+      return {
+        frame: box(frame),
+        addProject: box(frame.querySelector('[aria-label="Add project"]')!),
+        filter: box(frame.querySelector('[aria-label="Filter worktrees"]')!),
+        minimize: box(frame.querySelector('[aria-label="Minimize Worktrees"]')!)
+      }
+    })
+    const expectContained = (inner: Rect, outer: Rect) => {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5)
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5)
+      expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
+    }
+    const expectFixed = (before: Rect, after: Rect) => {
+      for (const coordinate of ['left', 'top', 'right', 'bottom'] as const) {
+        expect(Math.abs(after[coordinate] - before[coordinate])).toBeLessThanOrEqual(0.5)
+      }
+    }
+
+    for (const panelWidth of [160, 174, 175, 320]) {
+      await page.mouse.move(620, HEIGHT - 10)
+      await page.locator('#add-project-frame-host').evaluate((element, width) => {
+        ;(element as HTMLElement).style.width = `${width}px`
+      }, panelWidth)
+      const resting = await metrics()
+      expect(resting.frame.width).toBeCloseTo(panelWidth, 0)
+
+      for (const interaction of ['hover', 'focus'] as const) {
+        if (interaction === 'hover') {
+          await addProject.hover()
+        } else {
+          await minimizeButton.focus()
+          await page.keyboard.press('Shift+Tab')
+          await page.keyboard.press('Shift+Tab')
+          expect(await addProject.evaluate((element) => document.activeElement === element)).toBe(true)
+        }
+        await page.waitForTimeout(150)
+
+        const active = await metrics()
+        expectFixed(resting.filter, active.filter)
+        expectFixed(resting.minimize, active.minimize)
+        for (const button of [active.addProject, active.filter, active.minimize]) {
+          expectContained(button, active.frame)
+        }
+        if (panelWidth > 174) {
+          expect(active.addProject.width).toBeGreaterThan(resting.addProject.width)
+        } else {
+          expect(active.addProject.width).toBe(resting.addProject.width)
+        }
+
+        await page.mouse.move(620, HEIGHT - 10)
+        await page.evaluate(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+        })
+        await page.waitForTimeout(150)
       }
     }
   } finally {
