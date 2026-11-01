@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
 import type { GitConflictKind, GitStatus } from '@quirky/protocol'
 import { DIFF_VIEW_ID, PANEL_ID, diffViewKey, type ReviewSnapshot } from '../shared/view-input'
-import { messageOf } from './data'
+import { messageOf, POLL_MS, useRefreshTriggers } from './data'
 import { openHostedDiff } from './hosted-tabs'
 import { ErrorNotice } from './Fallbacks'
 import type { ModeProps } from './types'
@@ -57,6 +57,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
   const [error, setError] = useState<string | null>(null)
   const [capturedAt, setCapturedAt] = useState<Date | null>(input.review ? new Date(input.review.capturedAt) : null)
   const snapshot = useRef<ReviewSnapshot['entries'] | null>(input.review?.entries ?? null)
+  const inFlight = useRef(false)
 
   const readStatus = async () => (await context.call('quirky.git/status', { worktree })) as GitStatus
 
@@ -70,6 +71,8 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
   }
 
   const refresh = async () => {
+    if (inFlight.current) return
+    inFlight.current = true
     try {
       const status = await readStatus()
       if (snapshot.current === null) {
@@ -80,6 +83,8 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
       setError(null)
     } catch (e) {
       setError(messageOf(e))
+    } finally {
+      inFlight.current = false
     }
   }
 
@@ -112,6 +117,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
   useEffect(() => {
     void refresh()
   }, [])
+  useRefreshTriggers(context, () => void refresh(), POLL_MS)
 
   bind({ isDirty: () => false })
 

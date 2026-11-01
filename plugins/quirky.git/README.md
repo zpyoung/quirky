@@ -61,6 +61,8 @@ Combined-diff navigation and Git open commands use the same hosted-tab route. Op
 
 Conflict review's **Open** opens the file in a normal worktree tab. Switching between review and file tabs keeps the original review snapshot and any unsaved resolution. After the merge, rebase, or cherry-pick finishes, the file tab shows “Git operation ended” instead of a load error. File-read failures remain visible alongside a retained draft until a successful refresh.
 
+While conflict review is open, Git change events and periodic status checks update its original snapshot, including resolutions staged outside the app. Once the last conflict is resolved, it shows “All conflicts resolved” and removes the file-opening actions.
+
 Combined diffs open at the first file and keep their scroll position as sections load. Single-file diffs still jump to the first change; change-navigation commands remain available in both views.
 
 History-opened whole-commit diffs keep the compact toolbar title and show the complete commit subject and body in a scrollable message section above the file diffs.
