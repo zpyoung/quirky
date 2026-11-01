@@ -1122,10 +1122,10 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       {external && (
         <section className="qe-external-change-banner" role="status">
           <span>{external === 'deleted' ? 'This file was deleted on disk. An explicit save can recreate it.' : 'This file changed on disk while you have unsaved edits. Overwrite replaces the newer disk content.'}</span>
-          <Button onClick={() => void runViewAction('compare').catch(handleError)}>Compare</Button>
-          <Button onClick={() => void runViewAction('reload').catch(handleError)}>Reload from Disk</Button>
+          {external === 'changed' && <Button onClick={() => void runViewAction('compare').catch(handleError)}>Compare</Button>}
+          {external === 'changed' && <Button onClick={() => void runViewAction('reload').catch(handleError)}>Reload from Disk</Button>}
           {buffer.dirty && <Button variant="primary" onClick={() => void save('overwrite').catch(handleError)}>Overwrite</Button>}
-          <Button title="Keeps your version. Your next save replaces the version on disk." onClick={() => void runViewAction('keep').catch(handleError)}>Keep My Edits</Button>
+          {external === 'changed' && <Button title="Keeps your version. Your next save replaces the version on disk." onClick={() => void runViewAction('keep').catch(handleError)}>Keep My Edits</Button>}
         </section>
       )}
       {undoReloadUntil > Date.now() && <Button className="qe-undo-reload" onClick={() => void runViewAction('undoReload').catch(handleError)}>Undo reload</Button>}

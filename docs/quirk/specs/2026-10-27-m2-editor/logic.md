@@ -62,6 +62,7 @@ Keep transition: acknowledgement sets an autosave hold that survives later typin
 
 ### SC-6: Delete, rename, overflow and watch gaps
 Before: open clean and dirty files. External deletion preserves content and marks deleted; explicit save recreates even an otherwise clean deleted buffer (regression against the observed Orca no-op); autosave never recreates. Atomic delete/create reloads or conflicts, not a stuck deleted mark. Rename rekeys tabs/drafts and paths. Overflow/reveal rescans buffers, including inactive/ignored paths, and never drops dirty content. Watch subscriptions are bounded and disposed with the owning plugin/worktree.
+Deleted-file conflicts keep the draft editable and expose explicit Save/Overwrite recovery, but not Compare, Reload from Disk or Keep My Edits.
 
 ### SC-7: Explorer tree, settings and keys
 Before: files/folders, dotfiles, ignored files, symlinks. Explorer sorts directories first, naturally; always hides `.git` and `node_modules`; toggles dotfiles/ignored/follow-linked-directories. Expand valid in-root symlinks only, with visible error for escape/broken links. Click/Cmd-click/Shift-click selection, arrows, Home/End/PageUp/PageDown, Space, Enter rename, Delete, path copy and operation undo/redo match the feature doc. Active file reveals ancestors; refresh preserves earlier children on read error. Sidebar open/search shortcuts only show, not toggle closed; resizing respects minimum editor space; activity bar position is adjustable.
