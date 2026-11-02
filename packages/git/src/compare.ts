@@ -1,7 +1,11 @@
 /** Branch compare: the committed changes between a merge base and HEAD, and the file lists they are built from. */
+import { lstat, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { GitChange, GitChangeStatus, GitCompare } from '@quirky/protocol'
+import { MAX_BLOB_BYTES } from './diffs'
 import { GitError } from './index'
 import { git, runGit } from './run'
+import { STATUS_ENTRY_LIMIT } from './status'
 
 const decoder = new TextDecoder()
 
@@ -78,6 +82,76 @@ export async function changeList(cwd: string, from: string | null, to: string): 
       ? ['diff-tree', '--root', '--no-commit-id', '-r', '--raw', '--numstat', '-z', '-M', '-C', to, '--']
       : ['diff', '--raw', '--numstat', '-z', '-M', '-C', from, to, '--']
   return parseChangeList(await git(cwd, args, { readOnly: true }))
+}
+
+const BINARY_SNIFF_BYTES = 8000
+const UNTRACKED_COUNT_CONCURRENCY = 8
+const NEWLINE = 10
+const pathOrder = new Intl.Collator('en', { numeric: true })
+
+/** An untracked file as a change: line count as additions, null counts when binary or over the blob cap. */
+async function untrackedChange(cwd: string, path: string): Promise<GitChange> {
+  const change: GitChange = { path, status: 'untracked', added: null, removed: null, binary: false }
+  try {
+    const full = join(cwd, path)
+    const info = await lstat(full)
+    if (info.isSymbolicLink()) return { ...change, added: 1, removed: 0 }
+    if (!info.isFile() || info.size > MAX_BLOB_BYTES) return change
+    const bytes = await readFile(full)
+    if (bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)) return { ...change, binary: true }
+    let count = 0
+    for (let at = bytes.indexOf(NEWLINE); at !== -1; at = bytes.indexOf(NEWLINE, at + 1)) count++
+    if (bytes.length > 0 && bytes[bytes.length - 1] !== NEWLINE) count++
+    return { ...change, added: count, removed: 0 }
+  } catch {
+    return change
+  }
+}
+
+/**
+ * Every path whose working-tree content differs from commit `from`: committed, staged, unstaged
+ * and untracked changes folded into one list with each path once, counted base to disk. The index
+ * is never the comparison side. Sorted by path in natural order. `options` mean what they do for
+ * `statusV2`: the list is cut at `limit` (default `STATUS_ENTRY_LIMIT`) with `capped` set only
+ * when more were found, and untracked paths in `sharedSymlinks` that are symlinks are left out.
+ * Throws `GitError` when git fails.
+ */
+export async function worktreeChangeList(
+  cwd: string,
+  from: string,
+  options: { limit?: number; sharedSymlinks?: string[] } = {}
+): Promise<{ changes: GitChange[]; capped: boolean }> {
+  const limit = options.limit ?? STATUS_ENTRY_LIMIT
+  const shared = new Set(options.sharedSymlinks ?? [])
+  const [tracked, untrackedOut] = await Promise.all([
+    git(cwd, ['diff', '--raw', '--numstat', '-z', '--find-renames', '--end-of-options', from, '--'], { readOnly: true }),
+    git(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], { readOnly: true })
+  ])
+  const untrackedPaths: string[] = []
+  for (const path of untrackedOut.split('\0')) {
+    if (path === '') continue
+    if (shared.has(path) && (await lstat(join(cwd, path)).then((info) => info.isSymbolicLink(), () => false))) continue
+    untrackedPaths.push(path)
+  }
+
+  const entries: ({ change: GitChange } | { untracked: string })[] = [
+    ...parseChangeList(tracked).map((change) => ({ change })),
+    ...untrackedPaths.map((untracked) => ({ untracked }))
+  ]
+  const pathOf = (entry: (typeof entries)[number]) => ('change' in entry ? entry.change.path : entry.untracked)
+  entries.sort((a, b) => pathOrder.compare(pathOf(a), pathOf(b)))
+  const capped = entries.length > limit
+  if (capped) entries.length = limit
+
+  const changes: GitChange[] = []
+  for (let i = 0; i < entries.length; i += UNTRACKED_COUNT_CONCURRENCY) {
+    changes.push(
+      ...(await Promise.all(
+        entries.slice(i, i + UNTRACKED_COUNT_CONCURRENCY).map((entry) => ('change' in entry ? entry.change : untrackedChange(cwd, entry.untracked)))
+      ))
+    )
+  }
+  return { changes, capped }
 }
 
 async function resolveCommitOid(cwd: string, rev: string): Promise<string | null> {

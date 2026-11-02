@@ -41,8 +41,11 @@ export function contentHash(bytes: Uint8Array): string {
 
 export type DiffRequest = {
   path: string
-  source: GitDiffSource
+  /** `'worktree'` is internal: `from` to the working file, reported as an `unstaged` diff. */
+  source: GitDiffSource | 'worktree'
   oldPath?: string
+  /** For `'worktree'`: the revision of the left side; empty means no left side (unborn HEAD). */
+  from?: string
   mergeBase?: string
   head?: string
   commit?: string
@@ -177,6 +180,9 @@ function decodeSide(side: Side): string {
  */
 export async function diffSource(cwd: string, request: DiffRequest): Promise<GitDiff> {
   const { path, source, oldPath } = request
+  if (source === 'worktree' && request.from === undefined) {
+    throw new GitError('from is required for source worktree.', '', -1)
+  }
   if (request.compareAgainstHead === true && source !== 'unstaged') {
     throw new GitError('compareAgainstHead is only available for source unstaged.', '', -1)
   }
@@ -198,6 +204,15 @@ export async function diffSource(cwd: string, request: DiffRequest): Promise<Git
       working = file
       modified = file.side
     }
+  } else if (source === 'worktree') {
+    const from = request.from!
+    const [base, file] = await Promise.all([
+      from === '' ? EMPTY : readBlob(cwd, `${from}:${fromPath}`),
+      readWorkingFile(cwd, path)
+    ])
+    original = base
+    working = file
+    modified = file.side
   } else if (source === 'branch') {
     const mergeBase = requireOid(request.mergeBase)
     const head = requireOid(request.head)
@@ -217,7 +232,8 @@ export async function diffSource(cwd: string, request: DiffRequest): Promise<Git
     original: '',
     modified: '',
     binary: false,
-    source,
+    // the protocol has no worktree source; the daemon relabels these diffs as review
+    source: source === 'worktree' ? 'unstaged' : source,
     kind: 'text',
     ...(oldPath !== undefined ? { oldPath } : {})
   }

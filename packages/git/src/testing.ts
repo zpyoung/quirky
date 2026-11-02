@@ -85,10 +85,15 @@ export function createFakeGit(): FakeGit {
         busy: null
       }
     },
+    async worktreeChangeList(cwd, from, options) {
+      record('worktreeChangeList', cwd, from, options)
+      return { changes: [{ path: 'a.txt', status: 'modified', added: 1, removed: 1, binary: false }], capped: false }
+    },
     async diffSource(cwd, request): Promise<GitDiff> {
       record('diffSource', cwd, request)
       const staged = request.source === 'staged'
-      return { path: request.path, staged, original: 'old', modified: 'new', binary: false, source: request.source, kind: 'text' }
+      const source = request.source === 'worktree' ? 'unstaged' : request.source
+      return { path: request.path, staged, original: 'old', modified: 'new', binary: false, source, kind: 'text' }
     },
     async diff(cwd, path, staged): Promise<GitDiffPair> {
       record('diff', cwd, path, staged)
