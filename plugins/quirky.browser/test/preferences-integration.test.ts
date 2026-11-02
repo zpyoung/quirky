@@ -135,7 +135,7 @@ test('Browser routing CLI opens an actual worktree hosted pane and exposes truth
     expect(pane).toMatchObject({ worktreeId: worktree, url: 'https://example.test/from-markdown', mode: 'native', profileId: 'default' })
     expect(typeof pane?.tabId).toBe('string')
     const visible = await h.client.call('ui.state', {})
-    expect(visible.layout.view).toMatchObject({ id: 'view:quirky.session/worktree', input: { worktree: `id:${worktree}` } })
+    expect(visible.layout.view).toMatchObject({ id: 'view:quirky.session/worktree', input: { worktree } })
     await expect(call(h, 'openLink', { worktree, url: 'javascript:alert(1)' })).rejects.toThrow()
     const before = await call(h, 'preferencesState') as PreferencesState
     expect(before.localhostLabels).toMatchObject({ available: true, enabled: false, labels: [] })

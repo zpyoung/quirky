@@ -377,7 +377,17 @@ export class PaneService {
       let page: BrowserPage | undefined
       let committed = false
       try {
-        page = await this.createPage(tab.worktreeId, profileId, safeUrl(previous.url))
+        try {
+          page = await this.createPage(tab.worktreeId, profileId, safeUrl(previous.url))
+        } catch {
+          throw fault('browser_error', 'The browser for that profile could not be started. The pane is still on its current profile; try again.')
+        }
+        try {
+          if (tab.viewport !== 'default') await this.runtime.paneControl(page, { action: 'viewport', preset: tab.viewport })
+          if (tab.zoom !== 0) await this.runtime.paneControl(page, { action: 'zoom', level: tab.zoom })
+        } catch {
+          throw fault('browser_error', "The new profile's browser could not apply this pane's size and zoom. The pane is still on its current profile; try again.")
+        }
         assertUnchanged()
         const watch = this.watches.get(paneId)
         if (watch) await this.stopWatch(watch)
@@ -934,7 +944,6 @@ export class PaneService {
     // A new address drops the crossing Forward would have taken, like any forward history.
     tab.convertedTo = undefined
     this.saveTab(tab)
-    this.recordHistory(normalized.historyUrl, tab.title)
     this.emitChanged()
     if (tab.mode === 'native') return this.copyTab(tab)
     const page = this.pageFor(tab)
@@ -1047,6 +1056,7 @@ export class PaneService {
       throw fault('browser_tab_changed', 'pane report must acknowledge the pending command identity')
     }
     const previousUrl = tab.url
+    const completesNavigation = tab.command?.action === 'navigate'
     let untrustedFileReport = false
     if (params.url !== undefined && tab.document) {
       // The isolated guest can't leave its grant; anything else is a stale or forged report.
@@ -1088,7 +1098,7 @@ export class PaneService {
       tab.find = { ...tab.find, current, total }
     }
     tab.command = null
-    if (!untrustedFileReport && !tab.loading && tab.url !== previousUrl) this.recordHistory(tab.preview ? pathToFileURL(tab.preview.path).href : tab.url, tab.title)
+    if (!untrustedFileReport && !tab.loading && (tab.url !== previousUrl || (completesNavigation && !tab.error))) this.recordHistory(tab.preview ? pathToFileURL(tab.preview.path).href : tab.url, tab.title)
     this.saveTab(tab)
     this.emitChanged()
     return this.copyTab(tab)
@@ -1140,6 +1150,12 @@ export class PaneService {
     this.emitChanged()
   }
 
+  private isSearchInput(input: string): boolean {
+    try {
+      return normalizeInput(input, this.searchEngine()).url === searchAddress(input, this.searchEngine())
+    } catch { return false }
+  }
+
   private async paneSuggestions(request: PaneRequests['paneSuggestions'], caller: PluginCaller) {
     if (typeof request.query !== 'string') throw fault('invalid_argument', 'query must be a string')
     if (Buffer.byteLength(request.query, 'utf8') > QUERY_MAX_BYTES) return { suggestions: [] }
@@ -1178,7 +1194,7 @@ export class PaneService {
       seen.add(url)
       suggestions.push({ ...item, url })
     }
-    if (query !== '') {
+    if (query !== '' && this.isSearchInput(request.query)) {
       const url = safeHistoryAddress(searchAddress(request.query, this.searchEngine()))
       const duplicate = suggestions.findIndex((item) => item.url === url)
       const search = { url, title: `Search for ${request.query}`, kind: 'search' as const }
@@ -1230,6 +1246,7 @@ export class PaneService {
       tab.title = page.title
       tab.error = null
       this.saveTab(tab)
+      if (!page.loadError) this.recordHistory(tab.url, tab.title)
       this.emitChanged()
     }
     if (!tab.page) {
@@ -1253,6 +1270,7 @@ export class PaneService {
       lastSentAt: 0
     }
     this.watches.set(tab.id, watch)
+    tab.watchEnded = false
     watch.startupTimeout = setTimeout(() => {
       if (this.watches.get(tab.id) === watch && watch.sequence === 0) void this.stopWatch(watch, 'Watch did not receive a frame before its lease timeout.')
     }, WATCH_NO_FRAME_TIMEOUT_MS)
@@ -1262,7 +1280,7 @@ export class PaneService {
         onPrompt: (prompt) => this.receivePrompt(watch, prompt),
         onDownloadStart: (download) => this.receiveDownloadStart(watch, page, download),
         onDownloadProgress: (progress) => this.receiveDownloadProgress(watch, progress),
-        onLocation: (updated) => this.onPageLocation(watch, updated),
+        onLocation: (updated, navigation) => this.onPageLocation(watch, updated, navigation),
         onPopup: (popup) => this.openPopup(watch, popup),
         onIssue: (reason) => this.watchIssue(watch, reason),
         onStale: (reason) => this.watchEnded(watch, reason)
@@ -1278,6 +1296,7 @@ export class PaneService {
       this.watchReservations.delete(tab.id)
       if (this.active) {
         tab.error = error instanceof Error ? error.message : String(error)
+        tab.watchEnded = true
         this.saveTab(tab)
         this.emitChanged()
       }
@@ -1378,6 +1397,7 @@ export class PaneService {
     const tab = this.tabs.get(watch.paneId)
     if (tab) {
       tab.error = reason
+      tab.watchEnded = true
       tab.loading = false
       this.saveTab(tab)
       this.emitChanged()
@@ -1433,9 +1453,16 @@ export class PaneService {
     }
   }
 
-  private onPageLocation(watch: WatchLease, page: BrowserPage): void {
+  private onPageLocation(watch: WatchLease, page: BrowserPage, navigation?: { canGoBack: boolean; canGoForward: boolean }): void {
     const tab = this.tabs.get(watch.paneId)
-    if (!tab || tab.error !== null || this.watches.get(watch.paneId) !== watch) return
+    if (!tab || this.watches.get(watch.paneId) !== watch) return
+    if (navigation && (tab.canGoBack !== navigation.canGoBack || tab.canGoForward !== navigation.canGoForward)) {
+      tab.canGoBack = navigation.canGoBack
+      tab.canGoForward = navigation.canGoForward
+      this.saveTab(tab)
+      this.emitChanged()
+    }
+    if (tab.error !== null) return
     void this.syncFromPage(tab, page).then(() => {
       if (this.watches.get(watch.paneId) !== watch) return
       if (!tab.preview && /^https?:/i.test(tab.url)) this.recordHistory(tab.url, tab.title)

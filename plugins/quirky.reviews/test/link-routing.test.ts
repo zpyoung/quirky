@@ -113,7 +113,7 @@ test('review links use Browser routing, exact worktree context, and safe error b
     expect(appPane?.tabId).toEqual(expect.any(String))
     const appLayout = await reviews.client.call('ui.state', {})
     expect(appLayout).toMatchObject({
-      layout: { view: { id: 'view:quirky.session/worktree', input: { worktree: `id:${reviews.worktree}` } } }
+      layout: { view: { id: 'view:quirky.session/worktree', input: { worktree: reviews.worktree } } }
     })
 
     const externalUrl = 'https://github.com/acme/quirky/pull/8'
@@ -199,7 +199,7 @@ test('review links use Browser routing, exact worktree context, and safe error b
     expect(explicitChecksPane?.tabId).toEqual(expect.any(String))
     const explicitChecksLayout = await reviews.client.call('ui.state', {})
     expect(explicitChecksLayout).toMatchObject({
-      layout: { view: { id: 'view:quirky.session/worktree', input: { worktree: `id:${checksWorktree}` } } }
+      layout: { view: { id: 'view:quirky.session/worktree', input: { worktree: checksWorktree } } }
     })
 
     const beforeFailureState = await reviews.client.callAny('quirky.browser/paneState', {}) as { tabs: BrowserPane[] }

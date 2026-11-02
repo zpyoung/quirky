@@ -20,6 +20,22 @@ describe('browser window model', () => {
     expect(pointerToFramePoint(9, 270, box, 1600, 900)).toBeNull()
   })
 
+  test('reaches the bottom of a tall emulated viewport fitted into a short pane', () => {
+    const box = { left: 327, top: 233, width: 626, height: 460 }
+    const scale = 460 / 667
+
+    expect(pointerToFramePoint(640, 233 + 666 * scale, box, 375, 667)?.y).toBeCloseTo(666, 0)
+    expect(pointerToFramePoint(640, 233 + 460 + 1, box, 375, 667)).toBeNull()
+    expect(pointerToFramePoint(327 + 626 / 2, 233 + 230, box, 375, 667)).toEqual({ x: 187.5, y: 333.5 })
+  })
+
+  test('maps a full-pane viewport one to one when the frame matches the pane', () => {
+    const box = { left: 100, top: 50, width: 800, height: 450 }
+
+    expect(pointerToFramePoint(100, 50, box, 800, 450)).toEqual({ x: 0, y: 0 })
+    expect(pointerToFramePoint(500, 275, box, 800, 450)).toEqual({ x: 400, y: 225 })
+  })
+
   test('keeps only newer frames from the currently leased pane and watch', () => {
     const current = frame('watch-2', 4)
 

@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 import { fault, BrowserFault } from './errors'
-import { CdpConnection, type CdpEvent } from './cdp'
+import { CdpConnection, CdpTimeoutError, type CdpEvent } from './cdp'
 import { startChrome, type OwnedChrome } from './chrome'
 import { FifoLock, withLocks } from './lock'
 import { nativeData } from './native-response'
@@ -121,6 +121,8 @@ export type PaneControl = {
   findCurrent?: number
 }
 
+export type PaneNavigationState = { canGoBack: boolean; canGoForward: boolean }
+
 export type PaneControlResult = {
   url?: string
   title?: string
@@ -149,7 +151,7 @@ export type PaneWatchCallbacks = {
   onPrompt(prompt: RuntimePanePrompt): void
   onDownloadStart(download: RuntimePaneDownloadStart): void
   onDownloadProgress(progress: RuntimePaneDownloadProgress): void
-  onLocation(page: BrowserPage): void
+  onLocation(page: BrowserPage, navigation?: PaneNavigationState): void
   onPopup?(popup: RuntimePanePopup): boolean | Promise<boolean>
   onIssue(reason: string): void
   onStale(reason: string): void
@@ -430,8 +432,9 @@ export function macOSEditingCommands(key: string, modifiers?: number): readonly 
 
 
 function cdpTransportFailure(error: unknown): boolean {
+  if (error instanceof BrowserFault) return false
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
-  return message.includes('websocket') || message.includes('timed out') || message.includes('malformed json') || message.includes('malformed envelope') || message.includes('50 mib frame')
+  return message.includes('websocket') || message.includes('malformed json') || message.includes('malformed envelope') || message.includes('50 mib frame')
 }
 
 export class BrowserRuntime {
@@ -580,7 +583,7 @@ export class BrowserRuntime {
     } catch (error) {
       if (this.closingPages.has(page.browserPageId)) throw fault('browser_tab_closed', 'the managed page was closed during the operation')
       if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page changed browser profiles during the operation')
-      const transportFailure = this.profileTransportFailure(profile, error)
+      const transportFailure = await this.profileTransportFailure(profile, error)
       if (transportFailure) throw transportFailure
       throw error
     } finally {
@@ -947,11 +950,9 @@ export class BrowserRuntime {
         subscribePage('Page.frameNavigated', (event) => {
           const value = event.params.frame
           if (typeof value !== 'object' || value === null || Array.isArray(value) || (value as Record<string, unknown>).parentId !== undefined) return
-          try { callbacks.onLocation(this.store.getPage(page.browserPageId)) } catch { /* the page was removed during navigation */ }
+          void this.emitPaneLocation(state)
         })
-        subscribePage('Page.navigatedWithinDocument', () => {
-          try { callbacks.onLocation(this.store.getPage(page.browserPageId)) } catch { /* the page was removed during navigation */ }
-        })
+        subscribePage('Page.navigatedWithinDocument', () => void this.emitPaneLocation(state))
         subscribePage('Page.lifecycleEvent', (event) => {
           if (event.params.name === 'load') void this.refreshPaneLocation(state)
         })
@@ -1117,8 +1118,25 @@ export class BrowserRuntime {
         record.title = location.title
         record.loadError = null
       })
-      watch.callbacks.onLocation(this.store.getPage(watch.pageId))
+      await this.emitPaneLocation(watch)
     } catch { /* a navigation or close won the race with the title read */ }
+  }
+
+  /** Reports the stored page location with Back/Forward availability read from Chrome's own history, so in-page navigations count. */
+  private async emitPaneLocation(watch: PaneWatchState): Promise<void> {
+    let navigation: PaneNavigationState | undefined
+    try {
+      const history = safeRecord(await watch.epoch.cdp.send('Page.getNavigationHistory', {}, watch.binding.sessionId, 5_000), {
+        type: 'object',
+        properties: { currentIndex: { type: 'integer' }, entries: { type: 'array' } },
+        required: ['currentIndex', 'entries'],
+        additionalProperties: true
+      }, 'navigation history')
+      const index = history.currentIndex as number
+      navigation = { canGoBack: index > 0, canGoForward: index >= 0 && index < (history.entries as unknown[]).length - 1 }
+    } catch { /* location still reports without history availability */ }
+    if (!this.isCurrentPaneWatch(watch)) return
+    try { watch.callbacks.onLocation(this.store.getPage(watch.pageId), navigation) } catch { /* the page was removed during navigation */ }
   }
 
   private originOf(value: string | undefined): string {
@@ -1255,7 +1273,17 @@ export class BrowserRuntime {
       if (sessionId) await epoch.cdp.send('Target.detachFromTarget', { sessionId }, undefined, 5_000).catch(() => {})
     }
   }
-  private profileTransportFailure(profile: ProfileRuntime, error: unknown): BrowserFault | undefined {
+  private async cdpResponsive(profile: ProfileRuntime): Promise<boolean> {
+    const epoch = profile.epoch
+    if (!epoch || epoch.invalid || epoch.stopping) return false
+    try {
+      await epoch.cdp.send('Browser.getVersion', {}, undefined, 5_000)
+      return true
+    } catch {
+      return false
+    }
+  }
+  private async profileTransportFailure(profile: ProfileRuntime, error: unknown): Promise<BrowserFault | undefined> {
     if (error instanceof NativeTransportError) {
       this.invalidateEpoch(profile, profile.epoch, error.message)
       profile.lossReported = true
@@ -1266,10 +1294,13 @@ export class BrowserRuntime {
       profile.lossReported = true
       return error
     }
-    if (cdpTransportFailure(error)) {
+    if (error instanceof CdpTimeoutError && await this.cdpResponsive(profile)) {
+      return fault('browser_timeout', `${error.method} timed out`)
+    }
+    if (error instanceof CdpTimeoutError || cdpTransportFailure(error)) {
       this.invalidateEpoch(profile, profile.epoch, error instanceof Error ? error.message : String(error))
       profile.lossReported = true
-      return fault('browser_tab_changed', 'owned browser CDP transport was lost')
+      return fault('browser_tab_changed', 'the browser stopped responding; try again')
     }
     return undefined
   }
@@ -1283,7 +1314,7 @@ export class BrowserRuntime {
         return await operation()
       })
     } catch (error) {
-      const transportFailure = this.profileTransportFailure(profile, error)
+      const transportFailure = await this.profileTransportFailure(profile, error)
       if (transportFailure) throw transportFailure
       throw error
     }
@@ -1305,7 +1336,7 @@ export class BrowserRuntime {
       })
     } catch (error) {
       for (const { runtime } of profiles) {
-        const transportFailure = this.profileTransportFailure(runtime, error)
+        const transportFailure = await this.profileTransportFailure(runtime, error)
         if (transportFailure) throw transportFailure
       }
       throw error
@@ -1321,7 +1352,7 @@ export class BrowserRuntime {
         return await operation(await this.cookieTransportLocked(profileId))
       })
     } catch (error) {
-      const transportFailure = this.profileTransportFailure(profile, error)
+      const transportFailure = await this.profileTransportFailure(profile, error)
       if (transportFailure) throw transportFailure
       throw error
     }
@@ -2007,7 +2038,7 @@ export class BrowserRuntime {
     if (profile.epoch?.invalid) {
       if (!profile.lossReported) {
         profile.lossReported = true
-        throw fault('browser_tab_changed', `owned browser helper or CDP epoch was lost${profile.failureReason ? `: ${profile.failureReason}` : ''}`)
+        throw fault('browser_tab_changed', `the browser for this profile stopped unexpectedly; try again${profile.failureReason ? ` (${profile.failureReason})` : ''}`)
       }
       await this.teardownEpoch(profile.epoch)
       profile.epoch = undefined

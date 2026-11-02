@@ -25,6 +25,14 @@ const MESSAGE_SCHEMA: Schema = {
   additionalProperties: true
 }
 
+/** A single CDP command got no reply in time; the connection itself may still be healthy. */
+export class CdpTimeoutError extends Error {
+  constructor(readonly method: string) {
+    super(`CDP command ${method} timed out`)
+    this.name = 'CdpTimeoutError'
+  }
+}
+
 export class CdpConnection {
   private nextId = 1
   private readonly pending = new Map<number, Pending>()
@@ -73,7 +81,7 @@ export class CdpConnection {
     const result = Promise.withResolvers<unknown>()
     const timer = setTimeout(() => {
       this.pending.delete(id)
-      result.reject(new Error(`CDP command ${method} timed out`))
+      result.reject(new CdpTimeoutError(method))
     }, timeoutMs)
     this.pending.set(id, { resolve: result.resolve, reject: result.reject, timer })
     const message = { id, method, params, ...(sessionId ? { sessionId } : {}) }

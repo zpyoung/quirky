@@ -293,8 +293,9 @@ test('failed profile switching clears pending state without changing the checkma
   expect(reviewRadio.checked).toBe(false)
   expect(defaultRadio.disabled).toBe(false)
   expect(reviewRadio.disabled).toBe(false)
+  expect(container.querySelectorAll('[role="alert"]').length).toBe(1)
   expect(container.querySelector('[role="alert"]')?.textContent).toBe('Profile switch failed.')
-  expect(errors).toEqual(['Profile switch failed.'])
+  expect(errors).toEqual([])
 })
 test('creating a profile refreshes the menu with the persisted profile row', async () => {
   const context = makeContext()
