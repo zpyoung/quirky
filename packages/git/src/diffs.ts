@@ -356,6 +356,44 @@ async function capturePatchOnce(cwd: string, args: string[], env?: Record<string
 }
 
 /**
+ * The NUL-separated listing of untracked, non-ignored paths, or null once it passes
+ * `MAX_BLOB_BYTES` (the process is killed). Each listed path appears at least four times in a
+ * patch of it, so a listing that large already means an omitted patch.
+ */
+function untrackedListing(cwd: string): Promise<string | null> {
+  return retryStalled(async () => {
+    const proc = Bun.spawn(['git', 'ls-files', '--others', '--exclude-standard', '-z'], {
+      cwd,
+      env: await gitEnv(cwd, { readOnly: true }),
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe'
+    })
+    const stderr = drainText(proc)
+    const chunks: Uint8Array[] = []
+    let total = 0
+    let tooLarge = false
+    const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
+    for (;;) {
+      const { done, value } = await readChunk(reader, proc.exited)
+      if (done) break
+      total += value.length
+      if (total > MAX_BLOB_BYTES) {
+        tooLarge = true
+        proc.kill()
+        await reader.cancel().catch(() => {})
+        break
+      }
+      chunks.push(value)
+    }
+    const [message, exitCode] = await Promise.all([stderr, proc.exited])
+    if (tooLarge) return null
+    if (exitCode !== 0) throw new GitError(`git ls-files failed (exit ${exitCode}): ${message.trim()}`, message, exitCode)
+    return new TextDecoder().decode(concat(chunks, total))
+  })
+}
+
+/**
  * The whole staged diff as one minimal, colourless patch, for the commit-message prompt. Past
  * `MAX_BLOB_BYTES` of output the process is killed and the result is `{patch: '', omitted: true}`
  * so the prompt can say the diff was too large to read. Throws `GitError` on any other failure.
@@ -369,7 +407,8 @@ export async function stagedPatch(cwd: string): Promise<{ patch: string; omitted
  * unstaged, deleted and untracked files (ignored ones excluded), each file once. An unborn HEAD
  * compares against the empty tree. Untracked files are made visible to the diff through a
  * throwaway copy of the index, so the real index and the working tree are not touched (git
- * writes the empty blob for the intent-to-add entries). Past `MAX_BLOB_BYTES` of output the result is `{patch: '', omitted: true}`. Throws
+ * writes the empty blob for the intent-to-add entries). Past `MAX_BLOB_BYTES` of output, or of untracked
+ * path names alone, the result is `{patch: '', omitted: true}`. Throws
  * `GitError` on any other failure.
  */
 export async function workingPatch(cwd: string): Promise<{ patch: string; omitted: boolean }> {
@@ -380,7 +419,8 @@ export async function workingPatch(cwd: string): Promise<{ patch: string; omitte
   }
   const born = (await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'], { readOnly: true })).exitCode === 0
   const base = born ? 'HEAD' : (await text(['hash-object', '-t', 'tree', '--stdin'], '')).trim()
-  const untracked = await text(['ls-files', '--others', '--exclude-standard', '-z'])
+  const untracked = await untrackedListing(cwd)
+  if (untracked === null) return { patch: '', omitted: true }
   if (untracked === '') return capturePatch(cwd, [base, ...PATCH_ARGS])
 
   // beside the real index so a split index still finds its shared part

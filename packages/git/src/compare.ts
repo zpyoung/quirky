@@ -1,5 +1,5 @@
 /** Branch compare: the committed changes between a merge base and HEAD, and the file lists they are built from. */
-import { lstat, readFile } from 'node:fs/promises'
+import { lstat, readFile, readlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { GitChange, GitChangeStatus, GitCompare } from '@quirky/protocol'
 import { MAX_BLOB_BYTES } from './diffs'
@@ -199,13 +199,24 @@ async function untrackedPrefix(cwd: string, bound: number, isSharedSymlink: (pat
 /**
  * A file that is deleted in the index but still on disk, as one change from the blob at `from` to
  * the disk bytes: null when they are identical, null counts when either side is over the blob cap
- * or the disk entry is not a regular file.
+ * or the disk entry is not a regular file. A symlink is identical when the base is a symlink with
+ * the same target, since git stores the target as the blob.
  */
 async function recreatedChange(cwd: string, from: string, path: string): Promise<GitChange | null> {
   const change: GitChange = { path, status: 'modified', added: null, removed: null, binary: false }
   const ref = `${from}:${path}`
   const full = join(cwd, path)
   const [info, baseSize] = await Promise.all([lstat(full), git(cwd, ['cat-file', '-s', '--end-of-options', ref], { readOnly: true })])
+  if (info.isSymbolicLink()) {
+    const [tree, target] = await Promise.all([
+      git(cwd, ['ls-tree', '-z', '--end-of-options', from, '--', path], { readOnly: true }),
+      readlink(full, 'buffer')
+    ])
+    if (!tree.startsWith('120000 ') || Number(baseSize) > MAX_BLOB_BYTES) return change
+    const baseBlob = await runGit(cwd, ['cat-file', 'blob', '--end-of-options', ref], { readOnly: true })
+    if (baseBlob.exitCode !== 0) throw new GitError(`git cat-file failed (exit ${baseBlob.exitCode}): ${baseBlob.stderr.trim()}`, baseBlob.stderr, baseBlob.exitCode)
+    return Buffer.from(baseBlob.stdout).equals(target) ? null : change
+  }
   if (!info.isFile() || info.size > MAX_BLOB_BYTES || Number(baseSize) > MAX_BLOB_BYTES) return change
   const [baseBlob, disk] = await Promise.all([runGit(cwd, ['cat-file', 'blob', '--end-of-options', ref], { readOnly: true }), readFile(full)])
   if (baseBlob.exitCode !== 0) throw new GitError(`git cat-file failed (exit ${baseBlob.exitCode}): ${baseBlob.stderr.trim()}`, baseBlob.stderr, baseBlob.exitCode)
@@ -272,9 +283,28 @@ export async function worktreeChangeList(
       omitted = tracked.length - resolved.length
     }
 
+    // a rename's old path restored on disk is untracked to git, but it is a base file, not an addition
+    const renamedFrom = new Set(tracked.flatMap((change) => (change.oldPath !== undefined ? [change.oldPath] : [])))
+    const restored = new Map<string, GitChange | null>()
+    const restoredPaths = untrackedPaths.filter((path) => renamedFrom.has(path) && !recreated.has(path))
+    for (let i = 0; i < restoredPaths.length; i += UNTRACKED_COUNT_CONCURRENCY) {
+      await Promise.all(
+        restoredPaths.slice(i, i + UNTRACKED_COUNT_CONCURRENCY).map(async (path) => {
+          restored.set(path, await recreatedChange(cwd, from, path))
+        })
+      )
+    }
+    for (const change of restored.values()) if (change === null) omitted++
+
     entries = [
       ...resolved.map((change) => ({ change })),
-      ...untrackedPaths.filter((path) => !recreated.has(path)).map((untracked) => ({ untracked }))
+      ...untrackedPaths
+        .filter((path) => !recreated.has(path))
+        .flatMap((untracked): Entry[] => {
+          if (!restored.has(untracked)) return [{ untracked }]
+          const change = restored.get(untracked)
+          return change ? [{ change }] : []
+        })
     ]
     const hitBound = tracked.length >= bound || untrackedPaths.length >= bound
     if (entries.length > limit || !hitBound || omitted === 0) {

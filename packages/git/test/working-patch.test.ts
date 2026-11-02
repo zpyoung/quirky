@@ -106,6 +106,18 @@ describe('workingPatch', () => {
     expect(await workingPatch(repo)).toEqual({ patch: '', omitted: true })
   })
 
+  test('reports omitted without adding paths once the untracked listing alone passes the cap', async () => {
+    const repo = makeRepo(scratch(), { 'a.txt': 'one\n' })
+    const stem = 'n'.repeat(240)
+    const count = Math.ceil(MAX_BLOB_BYTES / (stem.length + 8)) + 100
+    for (let i = 0; i < count; i++) writeFileSync(join(repo, `${stem}${String(i).padStart(7, '0')}`), '')
+    const before = git(repo, 'status', '--porcelain', '--untracked-files=no')
+
+    expect(await workingPatch(repo)).toEqual({ patch: '', omitted: true })
+    expect(git(repo, 'status', '--porcelain', '--untracked-files=no')).toBe(before)
+    expect(readdirSync(join(repo, '.git')).filter((name) => name.startsWith('index.'))).toEqual([])
+  }, 120_000)
+
   test('is reachable through gitApi', () => {
     expect(gitApi().workingPatch).toBe(workingPatch)
   })

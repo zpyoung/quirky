@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { QuirkyClient, QuirkyEvent } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
+import { guardedWrite } from '../src/daemon/files'
 import type { EditorBufferInfo } from '../src/types'
 
 type SavedData = { path: string; beforeHash: string | null; afterHash: string }
@@ -101,5 +102,18 @@ describe('quirky.editor/saved', () => {
     await save(t, buffer.id, 'overwrite')
     await waitForAsync(() => t.saved.length > 0)
     expect(t.saved).toEqual([{ path, beforeHash: null, afterHash: sha256('mine\n') }])
+  })
+
+  test('the guarded write itself says whether it created the file or replaced one', async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-guarded-')))
+    try {
+      const path = join(root, 'f.txt')
+      expect(await guardedWrite(path, 'new\n', sha256('stale\n'), true)).toBe('created')
+      expect(await guardedWrite(path, 'next\n', sha256('new\n'), true)).toBe('written')
+      rmSync(path)
+      expect(await guardedWrite(path, 'again\n', sha256('next\n'), false)).toBe('missing')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

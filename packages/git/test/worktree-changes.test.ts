@@ -117,6 +117,41 @@ describe('worktreeChangeList', () => {
     expect((await worktreeChangeList(dir, base)).changes).toEqual([])
   })
 
+  test('a rename whose original path is restored with the base bytes lists only the rename', async () => {
+    const { dir, base } = featRepo({ 'old.txt': lines(30, 'o') })
+    git(dir, 'mv', 'old.txt', 'new.txt')
+    writeFileSync(join(dir, 'old.txt'), lines(30, 'o'))
+
+    const { changes } = await worktreeChangeList(dir, base)
+    expect(changes.map((c) => c.path)).toEqual(['new.txt'])
+    expect(changes[0]).toMatchObject({ status: 'renamed', oldPath: 'old.txt' })
+  })
+
+  test('a rename whose original path is restored with other bytes lists it once as modified', async () => {
+    const { dir, base } = featRepo({ 'old.txt': 'one\ntwo\n' })
+    git(dir, 'mv', 'old.txt', 'new.txt')
+    writeFileSync(join(dir, 'old.txt'), 'one\n2\n')
+
+    const { changes } = await worktreeChangeList(dir, base)
+    expect(changes.map((c) => c.path)).toEqual(['new.txt', 'old.txt'])
+    expect(byPath(changes)['old.txt']).toEqual({ path: 'old.txt', status: 'modified', added: 1, removed: 1, binary: false })
+  })
+
+  test('a symlink dropped from the index keeps its target: unchanged is not listed, retargeted is modified', async () => {
+    const { dir } = featRepo({ 'a.txt': 'x\n' })
+    symlinkSync('a.txt', join(dir, 'same'))
+    symlinkSync('a.txt', join(dir, 'moved'))
+    git(dir, 'add', '.')
+    const linked = commitAll(dir, {}, 'links')
+    git(dir, 'rm', '-q', '--cached', 'same', 'moved')
+    rmSync(join(dir, 'moved'))
+    symlinkSync('elsewhere', join(dir, 'moved'))
+
+    const { changes } = await worktreeChangeList(dir, linked)
+    expect(changes.map((c) => c.path)).toEqual(['moved'])
+    expect(changes[0]).toMatchObject({ status: 'modified' })
+  })
+
   test('omitted recreated files do not make a list that fits the limit look capped', async () => {
     const { dir, base } = featRepo({ 'a.txt': 'one\n' })
     git(dir, 'rm', '-q', '--cached', 'a.txt')
