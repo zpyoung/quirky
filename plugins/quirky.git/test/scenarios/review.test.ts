@@ -183,6 +183,28 @@ describe('the review model size', () => {
     expect(model.capped).toBe(true)
   })
 
+  test('a mark stored while the change list is being read survives the prune of that read', async () => {
+    const { env, worktree } = stubbed([], 0, { paths: [] })
+    let marks: { path: string; baseKey: string; hash: string; markedAt: number }[] = [{ path: 'old.txt', baseKey: 'main', hash: 'h', markedAt: 0 }]
+    env.reviewMarks = {
+      list: () => marks,
+      clear: () => 0,
+      removeAll: (_id: string, paths: readonly string[]) => {
+        const before = marks.length
+        marks = marks.filter((mark) => !paths.includes(mark.path))
+        return before - marks.length
+      }
+    } as unknown as DaemonEnv['reviewMarks']
+    env.changeList = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      marks = [...marks, { path: 'new.txt', baseKey: 'main', hash: 'n', markedAt: Date.now() }]
+      return { changes: [], capped: false }
+    }) as unknown as DaemonEnv['changeList']
+
+    await readReview(env, worktree)
+    expect(marks.map((mark) => mark.path)).toEqual(['new.txt'])
+  })
+
   test('a marked file that cannot be read is changed and does not fail the review', async () => {
     if (process.getuid?.() === 0) return
     const dir = mkdtempSync(join(tmpdir(), 'qd-unreadable-'))

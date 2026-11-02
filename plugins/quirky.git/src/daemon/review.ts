@@ -80,9 +80,11 @@ async function inBatches<T, R>(items: readonly T[], check: (item: T) => Promise<
  * The review of a worktree: every file that differs from the merge base with the base ref, once,
  * with its counts, whether it is uncommitted or staged, and its review mark evaluated against the
  * bytes on disk. When the compare cannot run the files are the uncommitted ones and marks are kept.
- * A file that matches the base again loses its mark, and so do all marks when the base changed.
+ * A file that matches the base again loses its mark, and so do all marks when the base changed;
+ * a mark made after the read began is never pruned by it.
  */
 export async function readReview(env: DaemonEnv, worktree: Worktree): Promise<ReviewModel> {
+  const startedAt = Date.now()
   const [status, current] = await Promise.all([env.readStatus(worktree), readCompare(env, worktree)])
   const ready = current.status === 'ready'
   const facts = factsByPath(status.entries)
@@ -128,7 +130,8 @@ export async function readReview(env: DaemonEnv, worktree: Worktree): Promise<Re
 
   const byPath = new Map(files.map((file) => [file.path, file]))
   if (ready && !capped) {
-    const stale = marks.filter((mark) => !byPath.has(mark.path)).map((mark) => mark.path)
+    // a mark stored after this read began may postdate the change list it is pruned against
+    const stale = marks.filter((mark) => !byPath.has(mark.path) && mark.markedAt < startedAt).map((mark) => mark.path)
     if (stale.length > 0) deletedMarks += env.reviewMarks.removeAll(worktree.id, stale)
   }
   if (deletedMarks > 0) {
