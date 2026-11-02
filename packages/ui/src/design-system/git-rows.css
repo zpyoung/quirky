@@ -143,3 +143,48 @@
   border-color: var(--ui-failing);
   color: var(--ui-surface);
 }
+
+.git-rows .git-row__mark {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  min-width: var(--ui-space-12);
+}
+
+.git-rows .git-row__dirty {
+  background: var(--ui-transparent);
+  border: var(--ui-border-width) solid var(--ui-needs-you);
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex: none;
+  height: var(--ui-space-6);
+  width: var(--ui-space-6);
+}
+
+.git-rows .git-row__dirty--staged {
+  background: var(--ui-needs-you);
+}
+
+.git-rows .git-row__dir {
+  color: var(--ui-muted);
+  direction: rtl;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-rows .git-row__actions {
+  display: none;
+}
+
+.git-rows [aria-selected="true"] .git-row__actions,
+.git-rows [aria-selected="true"].git-row__actions {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  gap: var(--ui-space-4);
+}

@@ -1423,3 +1423,113 @@
   width: calc(var(--ui-space-16) * 20);
   z-index: 90;
 }
+
+.ui-review-mark {
+  color: var(--ui-muted);
+  display: inline-block;
+  font-size: var(--ui-font-label);
+  line-height: 1;
+  text-align: center;
+}
+
+.ui-review-mark--reviewed {
+  color: var(--ui-working);
+}
+
+.ui-review-mark--changed {
+  color: var(--ui-needs-you);
+}
+
+.ui-split-button {
+  display: inline-flex;
+}
+
+.ui-split-button__primary {
+  border-end-end-radius: 0;
+  border-start-end-radius: 0;
+  flex: 1;
+}
+
+.ui-split-button__caret {
+  aspect-ratio: auto;
+  border-end-start-radius: 0;
+  border-inline-start-color: var(--ui-surface);
+  border-start-start-radius: 0;
+}
+
+.ui-split-button__primary:disabled,
+.ui-split-button__caret:disabled {
+  background: var(--ui-selected);
+  border-color: var(--ui-border);
+  color: var(--ui-muted);
+}
+
+.ui-split-button__primary[aria-busy="true"] {
+  cursor: progress;
+}
+
+.ui-inline-error {
+  align-items: center;
+  color: var(--ui-failing);
+  display: flex;
+  font-size: var(--ui-font-label);
+  gap: var(--ui-space-6);
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.ui-inline-error__message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-inline-error__action {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--ui-accent);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.ui-inline-error__action:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: var(--ui-focus-offset);
+}
+
+.ui-inline-error__dismiss,
+.ui-scope-chip__remove {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  color: inherit;
+  flex: none;
+  padding: var(--ui-space-2);
+}
+
+.ui-scope-chip {
+  align-items: center;
+  background: var(--ui-selected);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-mark);
+  color: var(--ui-text);
+  display: inline-flex;
+  font-size: var(--ui-font-label);
+  gap: var(--ui-space-2);
+  line-height: 1.25;
+  max-width: 100%;
+  min-width: 0;
+  padding-inline-start: var(--ui-space-6);
+}
+
+.ui-scope-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
