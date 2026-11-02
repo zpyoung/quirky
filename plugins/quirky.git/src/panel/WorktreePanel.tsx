@@ -263,7 +263,16 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
 
   useEffect(() => {
     setSelected(selectedPath(worktree))
-    return onSelectedPath(worktree, (path) => setSelected(path))
+    return onSelectedPath(worktree, (path, origin) => {
+      setSelected(path)
+      if (origin === 'review' && path !== null) {
+        setCollapsedDirs((prev) => {
+          const hiding = [...prev].filter((dir) => path.startsWith(`${dir}/`))
+          if (hiding.length === 0) return prev
+          return new Set([...prev].filter((dir) => !hiding.includes(dir)))
+        })
+      }
+    })
   }, [worktree])
 
   const viewMode = settings.viewMode
@@ -865,13 +874,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         if (toStage.length > 0) await context.call('quirky.git/stage', { worktree, paths: toStage })
         if (toUnstage.length > 0) await context.call('quirky.git/unstage', { worktree, paths: toUnstage })
       }
-      if (mode === 'all') {
+      if (mode !== 'staged') {
         const staged = await exactStatus(worktree, branch, chain?.head)
-        if (staged.entries.some((entry) => entry.area !== 'staged')) {
+        if (mode === 'all' && staged.entries.some((entry) => entry.area !== 'staged')) {
           throw new Error('New or unresolved changes appeared while staging. Review Source Control and try again.')
         }
         if (chain) {
-          if (staged.entries.length === 0) throw new Error('Stage the intended changes before committing and creating a pull request.')
+          if (mode === 'all' && staged.entries.length === 0) throw new Error('Stage the intended changes before committing and creating a pull request.')
           if (!chain.stillCurrent()) return false
         }
       }
@@ -1171,7 +1180,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         onChangeBase={() => setDialog({ kind: 'base' })}
         onRefresh={() => void refreshAll().then(refreshReview)}
         onSummarize={aiEnabled ? () => setLaunch('branchSummary') : undefined}
-        prActions={aiEnabled && githubReview.kind === 'found' ? PR_AI_ACTIONS.map(({ action, label }) => ({ label, onSelect: () => setLaunch(action) })) : []}
+        prActions={aiEnabled && githubReview.kind === 'found' && githubReview.review.state !== 'closed' && githubReview.review.state !== 'merged' ? PR_AI_ACTIONS.map(({ action, label }) => ({ label, onSelect: () => setLaunch(action) })) : []}
         revertable={revertable.length}
         onRevertAll={() => void revertAll()}
       />

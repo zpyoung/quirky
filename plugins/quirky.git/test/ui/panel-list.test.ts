@@ -630,6 +630,21 @@ describe('the ⋯ menu', () => {
     unmount()
   })
 
+  test('a Review selection inside a collapsed folder expands it so the row is selected and announced', async () => {
+    const { element, unmount } = await open((f) => {
+      four(f)
+      f.settings.viewMode = 'tree'
+    })
+    await click(q(element, '[data-directory-path="src/feature"] button'))
+    expect(rowPaths(element)).toEqual(['src/app.ts', 'README.md'])
+    await act(async () => selectPath('feat', 'src/feature/flags.ts', 'review'))
+    expect(selectedPaths(element)).toEqual(['src/feature/flags.ts'])
+    const active = listbox(element).getAttribute('aria-activedescendant')
+    expect(active).not.toBeNull()
+    expect(document.getElementById(active!)).not.toBeNull()
+    unmount()
+  })
+
   test('collapsing a folder hides its files from the keyboard order', async () => {
     const { element, unmount } = await open((f) => {
       four(f)
@@ -651,6 +666,18 @@ describe('the ⋯ menu', () => {
     await click(buttonText(document.body, 'Change base…'))
     expect(dialogTitle()).toBe('Change Base Ref')
     expect(fake.calls.length).toBeGreaterThan(before - 1)
+    unmount()
+  })
+
+  test.each(['open', 'draft', 'closed', 'merged'])('the pull-request AI actions are in the menu only while the PR is not closed or merged (%s)', async (state) => {
+    const { element, unmount } = await open((f) => {
+      four(f)
+      f.settings['ai-enabled'] = true
+      f.on('quirky.hosting/forBranch', () => ({ kind: 'found', review: { number: 42, url: 'https://github.com/octo/quirky/pull/42', state } }))
+    })
+    await click(byLabel(element, 'More source control actions'))
+    expect(menuLabels().includes('Review pull request with AI')).toBe(state === 'open' || state === 'draft')
+    expect(menuLabels()).toContain('Summarize branch with AI')
     unmount()
   })
 
@@ -814,6 +841,61 @@ describe('Revert file for a committed change', () => {
       ['quirky.git/save', { worktree: 'feat', path: 'lib/before.ts', content: 'old text\n', expected: null }],
       ['quirky.editor/mutate', { worktree: 'feat', action: 'delete', path: 'lib/after.ts', yes: true }]
     ])
+    unmount()
+  })
+
+  test('a rename whose delete failed is retried without restoring the old path again', async () => {
+    let restored = false
+    let failDelete = true
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([])
+      f.compare = compareOf({ entries: [{ path: 'lib/after.ts', oldPath: 'lib/before.ts', status: 'renamed', added: 0, removed: 0, binary: false }] })
+      f.on('quirky.git/diff', (params) => {
+        const onDisk = params.path === 'lib/before.ts' && restored
+        return { original: 'old text\n', modified: onDisk || params.path === 'lib/after.ts' ? 'old text\n' : '', binary: false, kind: 'text', source: 'review', modifiedHash: 'c'.repeat(64), ...(params.path === 'lib/before.ts' && !restored ? { modifiedDeleted: true } : {}) }
+      })
+      f.on('quirky.git/save', () => {
+        if (restored) throw new Error('changed on disk')
+        restored = true
+        return { hash: 'd'.repeat(64) }
+      })
+      f.on('quirky.editor/mutate', () => {
+        if (failDelete) throw new Error('delete failed')
+        return {}
+      })
+    })
+    await click(rowOf(element, 'lib/after.ts'))
+    await click(byLabel(element, 'Revert lib/after.ts'))
+    await click(buttonText(dialog()!, 'Revert'))
+    expect(noticeOf(element)?.textContent).toContain('Failed to revert')
+    failDelete = false
+    await click(buttonText(noticeOf(element)!, 'Retry'))
+    expect(fake.called('quirky.editor/mutate')).toHaveLength(2)
+    expect(noticeOf(element)).toBeNull()
+    unmount()
+  })
+
+  test('a committed file too large to read in full is refused instead of saved empty', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([])
+      f.compare = compareOf({ entries: [{ path: 'src/big.txt', status: 'modified', added: 1, removed: 1, binary: false }] })
+      f.on('quirky.git/diff', () => ({
+        path: 'src/big.txt',
+        staged: false,
+        original: '',
+        modified: '',
+        binary: false,
+        source: 'review',
+        kind: 'text',
+        modifiedHash: 'f'.repeat(64),
+        tooLarge: { originalLines: 25000, modifiedLines: 25000, characters: 100000, reason: 'lines' }
+      }))
+    })
+    await click(rowOf(element, 'src/big.txt'))
+    await click(byLabel(element, 'Revert src/big.txt'))
+    await click(buttonText(dialog()!, 'Revert'))
+    expect(fake.called('quirky.git/save')).toHaveLength(0)
+    expect(noticeOf(element)?.textContent).toContain('too large')
     unmount()
   })
 

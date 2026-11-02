@@ -289,6 +289,23 @@ describe('scenario 25: committing only some files', () => {
     unmount()
   })
 
+  test('a branch switch while the ticked files are staging stops before the commit', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      three(f)
+      f.on('quirky.git/stage', () => {
+        f.status = { ...f.status, branch: 'other-branch', entries: f.status.entries.map((row) => ({ ...row, area: 'staged' as const })) }
+        return { ok: true }
+      })
+    })
+    await choose(element, 'Commit selected files…')
+    await type(message(element)!, 'wrong branch')
+    await click(shipButton(element))
+    expect(fake.called('quirky.git/stage')).toHaveLength(1)
+    expect(fake.called('quirky.git/commit')).toHaveLength(0)
+    expect(errorLine(element)?.textContent).toContain('The branch or HEAD changed')
+    unmount()
+  })
+
   test('Escape leaves the mode without committing', async () => {
     const { fake, element, unmount } = await open(three)
     await choose(element, 'Commit selected files…')

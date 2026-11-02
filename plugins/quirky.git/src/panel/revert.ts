@@ -81,7 +81,7 @@ export function revertPlan(file: ReviewFile, entries: readonly GitStatusEntry[],
   return { kind: 'discard', text, unstage, paths }
 }
 
-type BaseDiff = { original: string; modifiedHash?: string | null; modifiedDeleted?: boolean; kind?: string; binary?: boolean }
+type BaseDiff = { original: string; modifiedHash?: string | null; modifiedDeleted?: boolean; kind?: string; binary?: boolean; tooLarge?: unknown }
 
 function hashOfDiff(diff: BaseDiff, path: string): string | null {
   if (diff.modifiedDeleted === true || diff.modifiedHash === null) return null
@@ -106,6 +106,18 @@ function assertText(diff: BaseDiff, path: string): void {
   if (diff.binary === true || (diff.kind !== undefined && diff.kind !== 'text')) {
     throw new Error(`${splitPath(path).name} is not a text file, so its base version can't be restored here.`)
   }
+  if (diff.tooLarge !== undefined) {
+    throw new Error(`${splitPath(path).name} is too large to restore its base version here, so it was left alone.`)
+  }
+}
+
+async function holdsBase(context: UiPluginContext, worktree: string, path: string, base: string): Promise<boolean> {
+  try {
+    const current = (await context.call('quirky.git/diff', { worktree, path, source: 'review', against: 'base' })) as BaseDiff & { modified?: string }
+    return current.modifiedDeleted !== true && current.kind === 'text' && current.tooLarge === undefined && current.modified === base
+  } catch {
+    return false
+  }
 }
 
 /** Carries out a plan from `revertPlan`; rejects with the daemon's message when a step fails. */
@@ -128,8 +140,12 @@ export async function applyRevert(context: UiPluginContext, worktree: string, pl
       against: 'base'
     })) as BaseDiff
     assertText(diff, plan.oldPath)
-    // restore first: it refuses when the old path exists again, and the new path is still there to retry
-    await context.call('quirky.git/save', { worktree, path: plan.oldPath, content: diff.original, expected: null })
+    // restore first so a failure leaves the new path in place; a retry after a failed delete finds the old path already restored
+    try {
+      await context.call('quirky.git/save', { worktree, path: plan.oldPath, content: diff.original, expected: null })
+    } catch (error) {
+      if (!(await holdsBase(context, worktree, plan.oldPath, diff.original))) throw error
+    }
     await context.call('quirky.editor/mutate', { worktree, action: 'delete', path: plan.path, yes: true })
     return
   }
