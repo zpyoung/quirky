@@ -8,31 +8,48 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 
 /**
  * The worktree's review model. Reads `quirky.git/review` on mount, every 3 seconds, and on this
- * worktree's `changed` and `reviewChanged` events. An unchanged result keeps the previous object,
- * a failure keeps the last good model, and a response that lands after a worktree switch is dropped.
+ * worktree's `changed` and `reviewChanged` events. At most one read is in flight, so a response
+ * slower than the poll interval still lands; a trigger that arrives meanwhile becomes one follow-up
+ * read. An unchanged result keeps the previous object, a failure keeps the last good model, and a
+ * response that lands after a worktree switch or unmount is dropped.
  */
 export function useReview(context: UiPluginContext, worktree: string): { model: ReviewModel | null; error: string | null; refresh(): void } {
   const [model, setModel] = useState<ReviewModel | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const newest = useRef(0)
-  const alive = useRef(true)
+  const generation = useRef(0)
+  const inFlight = useRef(false)
+  const queued = useRef(false)
 
   const refresh = useCallback(() => {
-    const ticket = ++newest.current
-    context.call('quirky.git/review', { worktree }).then(
-      (next) => {
-        if (!alive.current || ticket !== newest.current) return
-        setModel((prev) => (same(prev, next) ? prev : (next as ReviewModel)))
-        setError(null)
-      },
-      (e: unknown) => {
-        if (alive.current && ticket === newest.current) setError(messageOf(e))
+    if (inFlight.current) {
+      queued.current = true
+      return
+    }
+    inFlight.current = true
+    const mine = generation.current
+    const settle = (apply: () => void) => {
+      if (mine !== generation.current) return
+      inFlight.current = false
+      apply()
+      if (queued.current) {
+        queued.current = false
+        refresh()
       }
+    }
+    context.call('quirky.git/review', { worktree }).then(
+      (next) =>
+        settle(() => {
+          setModel((prev) => (same(prev, next) ? prev : (next as ReviewModel)))
+          setError(null)
+        }),
+      (e: unknown) => settle(() => setError(messageOf(e)))
     )
   }, [context, worktree])
 
   useEffect(() => {
-    alive.current = true
+    generation.current++
+    inFlight.current = false
+    queued.current = false
     setModel(null)
     setError(null)
     refresh()
@@ -43,8 +60,7 @@ export function useReview(context: UiPluginContext, worktree: string): { model: 
       if (typeof id !== 'string' || id === worktree) refresh()
     })
     return () => {
-      alive.current = false
-      newest.current++
+      generation.current++
       clearInterval(timer)
       unsubscribe()
     }

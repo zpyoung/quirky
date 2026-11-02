@@ -24,6 +24,12 @@ describe('reviewOrder', () => {
     expect(paths(reviewOrder(files, 'list'))).toEqual(['B.ts', 'lib/c.ts', 'src/app/a.ts', 'src/app/b.ts', 'top.ts'])
   })
 
+  test('list order compares UTF-8 bytes, so a supplementary-plane path sorts after a BMP path above U+E000', () => {
+    const emoji = '\u{1F600}.txt'
+    const bmp = '\uE000.txt'
+    expect(paths(reviewOrder([file(emoji), file(bmp), file('a.txt')], 'list'))).toEqual(['a.txt', bmp, emoji])
+  })
+
   test('tree order lists folders before files, as the panel tree does', () => {
     expect(paths(reviewOrder(files, 'tree'))).toEqual(['lib/c.ts', 'src/app/a.ts', 'src/app/b.ts', 'B.ts', 'top.ts'])
   })

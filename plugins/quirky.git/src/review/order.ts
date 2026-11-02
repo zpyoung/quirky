@@ -1,12 +1,23 @@
 import type { ReviewFile } from '@quirky/protocol'
 import { buildTree, flattenTree } from '../panel/tree'
 
+const utf8 = new TextEncoder()
+
+/** Orders paths by their UTF-8 bytes, as the daemon does; UTF-16 code unit order differs for supplementary characters. */
+function byteOrder(a: string, b: string): number {
+  const x = utf8.encode(a)
+  const y = utf8.encode(b)
+  const shared = Math.min(x.length, y.length)
+  for (let i = 0; i < shared; i++) if (x[i] !== y[i]) return x[i]! - y[i]!
+  return x.length - y.length
+}
+
 /**
  * The files in the order the panel shows them, which is also the order the Review tab stacks its
  * cards and the order mark-and-advance walks. `tree` matches the panel's tree view with nothing collapsed.
  */
 export function reviewOrder(files: readonly ReviewFile[], mode: 'list' | 'tree'): ReviewFile[] {
-  if (mode === 'list') return [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+  if (mode === 'list') return [...files].sort((a, b) => byteOrder(a.path, b.path))
   const rows = flattenTree(buildTree(files))
   return rows.flatMap(({ node }) => (node.kind === 'file' ? [node.item] : []))
 }

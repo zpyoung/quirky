@@ -1,13 +1,16 @@
 import { afterAll, afterEach, describe, expect, test } from 'bun:test'
+import { createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import type { QuirkyEvent, ReviewModel, UiPluginContext } from '@quirky/protocol'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcErrorCode } from '@quirky/protocol'
 import { registerDom } from './register-dom'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-const { fakeContext, layoutFor, failure } = await import('./panel-support')
+const { fakeContext, layoutFor, failure, act } = await import('./panel-support')
 const { openReview, registerReviewView, reviewViewFor } = await import('../../src/review/open')
-const { setReviewMark } = await import('../../src/review/useReview')
+const { setReviewMark, useReview } = await import('../../src/review/useReview')
 const { onSelectedPath, selectPath, selectedPath } = await import('../../src/review/selection')
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -170,5 +173,101 @@ describe('setReviewMark', () => {
       throw Object.assign(failure('nope'), { code: RpcErrorCode.NotFound })
     })
     await expect(setReviewMark(fake.context, { worktree: 'feat', path: 'a.ts', reviewed: false })).rejects.toThrow('nope')
+  })
+})
+
+describe('useReview polling', () => {
+  type Deferred = { worktree: string; resolve(model: unknown): void }
+
+  function harness(worktree = 'feat') {
+    const requests: Deferred[] = []
+    const listeners = new Set<(event: QuirkyEvent) => void>()
+    const context = {
+      call: (_method: string, params: { worktree: string }) => new Promise((resolve) => requests.push({ worktree: params.worktree, resolve })),
+      subscribe: (listener: (event: QuirkyEvent) => void) => {
+        listeners.add(listener)
+        return () => void listeners.delete(listener)
+      }
+    } as unknown as UiPluginContext
+    let tick: () => void = () => {}
+    const realSetInterval = globalThis.setInterval
+    const realClearInterval = globalThis.clearInterval
+    globalThis.setInterval = ((fn: () => void) => {
+      tick = fn
+      return 1
+    }) as unknown as typeof setInterval
+    globalThis.clearInterval = (() => {}) as unknown as typeof clearInterval
+    const seen: { model: ReviewModel | null } = { model: null }
+    function Probe({ worktree: wt }: { worktree: string }) {
+      seen.model = useReview(context, wt).model
+      return null
+    }
+    const root = createRoot(document.createElement('div'))
+    return {
+      requests,
+      seen,
+      poll: () => act(async () => tick()),
+      emit: (event: QuirkyEvent) => act(async () => void listeners.forEach((l) => l(event))),
+      render: (wt: string = worktree) => act(async () => root.render(createElement(Probe, { worktree: wt }))),
+      land: (index: number, model: unknown) => act(async () => requests[index]!.resolve(model)),
+      done: async () => {
+        await act(async () => root.unmount())
+        globalThis.setInterval = realSetInterval
+        globalThis.clearInterval = realClearInterval
+      }
+    }
+  }
+  const model = (version: number) => ({ worktreeId: 'feat', version }) as unknown as ReviewModel
+
+  test('a response slower than the poll interval still lands, and polls meanwhile start no new request', async () => {
+    const h = harness()
+    await h.render()
+    await h.poll()
+    await h.poll()
+    expect(h.requests).toHaveLength(1)
+
+    await h.land(0, model(1))
+    expect(h.seen.model).toEqual(model(1))
+    await h.done()
+  })
+
+  test('the next poll after a response starts a new request', async () => {
+    const h = harness()
+    await h.render()
+    await h.land(0, model(1))
+    await h.poll()
+    expect(h.requests).toHaveLength(2)
+    await h.land(1, model(2))
+    expect(h.seen.model).toEqual(model(2))
+    await h.done()
+  })
+
+  test('an event during an in-flight request becomes exactly one follow-up request', async () => {
+    const h = harness()
+    await h.render()
+    await h.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } })
+    await h.emit({ type: 'quirky.git/reviewChanged', data: { worktreeId: 'feat' } })
+    expect(h.requests).toHaveLength(1)
+
+    await h.land(0, model(1))
+    expect(h.seen.model).toEqual(model(1))
+    expect(h.requests).toHaveLength(2)
+    await h.land(1, model(2))
+    expect(h.seen.model).toEqual(model(2))
+    expect(h.requests).toHaveLength(2)
+    await h.done()
+  })
+
+  test('a response that lands after a worktree switch is dropped', async () => {
+    const h = harness('feat')
+    await h.render('feat')
+    await h.render('other')
+    expect(h.requests.map((r) => r.worktree)).toEqual(['feat', 'other'])
+
+    await h.land(0, model(1))
+    expect(h.seen.model).toBeNull()
+    await h.land(1, { worktreeId: 'other', version: 9 })
+    expect(h.seen.model).toEqual({ worktreeId: 'other', version: 9 } as unknown as ReviewModel)
+    await h.done()
   })
 })
