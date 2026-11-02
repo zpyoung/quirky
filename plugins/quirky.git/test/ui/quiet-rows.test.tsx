@@ -107,14 +107,29 @@ describe('git-rows.css', () => {
     body: body!.replace(/\s+/g, ' ').trim()
   }))
 
-  test('hides with opacity 0 and reveals on hover and on focus within, never by display or visibility', () => {
-    const hidden = rules.filter((rule) => /(^|;|\s)opacity: 0(;|$)/.test(rule.body))
+  const displayOf = (body: string) => /(^|;|\s)display:\s*([\w-]+)/.exec(body)?.[2]
+  const hidesByDisplayOrVisibility = (body: string) => displayOf(body) === 'none' || /visibility:\s*hidden/.test(body)
+
+  test('the legacy reveal hides with opacity 0 and shows on hover and focus within, never by display or visibility', () => {
+    const reveal = rules.filter((rule) => rule.selectors.some((selector) => /\.git-(row|section)__reveal\b/.test(selector)))
+    const hidden = reveal.filter((rule) => /(^|;|\s)opacity: 0(;|$)/.test(rule.body))
     expect(hidden.length).toBeGreaterThan(0)
-    const shown = rules.filter((rule) => /(^|;|\s)opacity: 1(;|$)/.test(rule.body)).flatMap((rule) => rule.selectors)
+    const shown = reveal.filter((rule) => /(^|;|\s)opacity: 1(;|$)/.test(rule.body)).flatMap((rule) => rule.selectors)
     expect(shown.some((selector) => selector.includes(':hover'))).toBe(true)
     expect(shown.some((selector) => selector.includes(':focus-within'))).toBe(true)
-    expect(css).not.toMatch(/display:\s*none/)
-    expect(css).not.toMatch(/visibility:\s*hidden/)
+    for (const rule of reveal) expect(hidesByDisplayOrVisibility(rule.body)).toBe(false)
+  })
+
+  // the selected row is the only one with buttons, so nothing reveals on hover
+  test('the row actions are display none except on a selected row, with no hover reveal and no other hiding rule', () => {
+    const actions = rules.filter((rule) => rule.selectors.some((selector) => selector.includes('.git-row__actions')))
+    const hiding = rules.filter((rule) => hidesByDisplayOrVisibility(rule.body))
+    expect(hiding.map((rule) => rule.selectors)).toEqual([['.git-rows .git-row__actions']])
+    expect(displayOf(hiding[0]!.body)).toBe('none')
+    const shown = actions.filter((rule) => displayOf(rule.body) !== undefined && displayOf(rule.body) !== 'none')
+    expect(shown.length).toBeGreaterThan(0)
+    for (const rule of shown) for (const selector of rule.selectors) expect(selector).toContain('[aria-selected="true"]')
+    for (const rule of actions) for (const selector of rule.selectors) expect(selector).not.toContain(':hover')
   })
 
   test('every selector is scoped under a git panel class', () => {
