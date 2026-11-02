@@ -13,7 +13,7 @@ import { closeHostedDiff, updateHostedDiffDirty } from './hosted-tabs'
 import { useDiffSettings } from './settings'
 import type { Controller, ViewReport } from './types'
 
-const MODES: ReadonlyArray<DiffViewInput['mode']> = ['file', 'combined', 'conflicts', 'conflict-file']
+const MODES: ReadonlyArray<DiffViewInput['mode']> = ['file', 'combined', 'conflicts', 'conflict-file', 'review']
 type CloseChoice = 'save' | 'discard' | 'cancel'
 
 /** The mount input as a `DiffViewInput`, or null when it names no worktree. A missing mode means a file diff. */
@@ -164,6 +164,9 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
   switch (input.mode) {
     case 'combined':
       content = <CombinedDiff {...props} />
+      break
+    case 'review':
+      content = <CombinedDiff {...props} input={{ ...input, mode: 'combined', area: input.commit ? undefined : 'all' }} />
       break
     case 'conflicts':
       content = <ConflictReview {...props} />

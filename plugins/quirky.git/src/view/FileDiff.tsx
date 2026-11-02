@@ -14,7 +14,7 @@ import type { ModeProps } from './types'
 
 const IDLE: PaneState = { changes: 0, current: null, dirty: false, stale: false, tooLarge: false }
 
-const SOURCE_LABELS = { staged: 'Staged', branch: 'Branch', commit: 'Commit', unstaged: null } as const
+const SOURCE_LABELS = { staged: 'Staged', branch: 'Branch', commit: 'Commit', unstaged: null, review: null } as const
 
 type Loaded = { diff: GitDiff; revision: number }
 

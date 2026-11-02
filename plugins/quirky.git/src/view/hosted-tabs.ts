@@ -86,9 +86,11 @@ function titleOf(input: DiffViewInput, dirty = false): string {
     ? input.path ? `${input.path} (${input.source === 'branch' ? 'Branch Diff' : input.source === 'commit' ? 'Commit Diff' : 'Diff'})` : 'Diff'
     : input.mode === 'combined'
       ? input.commit ? `Commit ${input.commit.slice(0, 8)}` : `${input.area ?? 'Changes'} Diff`
-      : input.mode === 'conflicts'
-        ? 'Conflicts'
-        : input.path ?? 'Conflict'
+      : input.mode === 'review'
+        ? 'Review'
+        : input.mode === 'conflicts'
+          ? 'Conflicts'
+          : input.path ?? 'Conflict'
   const title = dirty ? `${base} • Unsaved` : base
   return title.length <= 200 ? title : `…${title.slice(-199)}`
 }
@@ -187,6 +189,20 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     context.openView(SESSIONS_VIEW_ID, { worktree: requested.worktree })
   }
   return finalInput
+}
+
+/**
+ * Brings the already-open hosted diff tab for `input`'s key to the front of its group. Resolves to
+ * false when the workspace holds no such tab, so the caller can open one instead.
+ */
+export async function activateHostedDiff(context: UiPluginContext, input: DiffViewInput): Promise<boolean> {
+  const workspace = await readWorkspace(context, input.worktree)
+  const key = diffViewKey(input)
+  const found = tabLocations(workspace).find(({ tab }) => tab.viewId === DIFF_VIEW_ID && tab.key === key)
+  if (!found) return false
+  await context.call('quirky.terminal/activateTab', { tab: found.tab.id })
+  setActiveHostedView(found.tab.id)
+  return true
 }
 
 export async function closeHostedDiff(context: UiPluginContext, input: DiffViewInput, restoreDirty = false): Promise<void> {

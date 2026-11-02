@@ -57,3 +57,29 @@ export function activeView(): ViewHandle {
   if (current === null) throw new Error('No diff view is open.')
   return current
 }
+
+/** What a mounted Review tab offers `openReview`, so a second open reuses the tab instead of remounting it. */
+export type ReviewViewHandle = {
+  worktree: string
+  /** Scrolls the card for `path` into view, expands it and makes it the active card. */
+  reveal(path: string, noteId?: string): void
+  /** Scrolls the stack to its first card. */
+  scrollToTop(): void
+  /** Shows one commit's files (a commit sha) or returns to the worktree review (null). */
+  setScope(commit: string | null): void
+}
+
+const reviewHandles = new Map<string, ReviewViewHandle>()
+
+/** Makes `handle` the Review tab for its worktree until the returned function runs. */
+export function registerReviewView(handle: ReviewViewHandle): () => void {
+  reviewHandles.set(handle.worktree, handle)
+  return () => {
+    if (reviewHandles.get(handle.worktree) === handle) reviewHandles.delete(handle.worktree)
+  }
+}
+
+/** The mounted Review tab of `worktree`, or null when none is mounted. */
+export function reviewViewFor(worktree: string): ReviewViewHandle | null {
+  return reviewHandles.get(worktree) ?? null
+}
