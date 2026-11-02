@@ -125,7 +125,7 @@ Every contract here traces to the logic spec's [Conceptual model](logic.md#conce
 `CONTRACT:`
 ```
 quirky.git/review { worktree?: string } -> ReviewModel
-packages/git worktreeChangeList(cwd: string, from: string): Promise<GitChange[]>
+packages/git worktreeChangeList(cwd: string, from: string, options?: { limit?: number, sharedSymlinks?: string[] }): Promise<{ changes: GitChange[], capped: boolean }>
 ```
 
 - `worktreeChangeList` lists every path whose working-tree content differs from commit `from`, in two parts:
