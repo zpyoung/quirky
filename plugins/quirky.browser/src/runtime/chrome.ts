@@ -106,6 +106,8 @@ export async function startChrome(
     '--no-default-browser-check',
     '--disable-background-networking',
     '--disable-default-apps',
+    // the private HOME hides the login keychain, so macOS would prompt to create one on every launch
+    ...(process.platform === 'darwin' ? ['--use-mock-keychain'] : []),
     ...(dependencies.chromeArguments ?? []),
     'about:blank'
   ]

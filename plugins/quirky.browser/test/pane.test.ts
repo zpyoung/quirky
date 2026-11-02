@@ -543,7 +543,7 @@ test('profileSet closes only its prepared target page when its pane closes durin
 
 test('Watch JavaScript dialogs resolve pending eval outside the profile lock and downloads use collision-safe owned names', async () => {
   const h = await startBrowserHarness({
-    chromeArguments: ['--use-mock-keychain', '--host-resolver-rules=MAP example.test 127.0.0.1']
+    chromeArguments: ['--host-resolver-rules=MAP example.test 127.0.0.1']
   })
   const fixture = startPageServer()
   let certificate: CertificateServer | undefined
