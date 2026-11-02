@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { GitDiff, GitDiffSource } from '@quirky/protocol'
 import { NotAllowedError } from './conflicts'
 import { GitError } from './index'
-import { gitEnv, runGit } from './run'
+import { drainText, gitEnv, readChunk, retryStalled, runGit } from './run'
 
 export const MAX_BLOB_BYTES = 10 * 1024 * 1024
 export const MAX_RENDER_LINES_PER_SIDE = 120_000
@@ -76,7 +76,11 @@ async function gitCommitExists(cwd: string, oid: string): Promise<boolean> {
  * killed and the side is `tooBig`. A path absent at a real revision is an empty side; any other
  * failure throws.
  */
-async function readBlob(cwd: string, spec: string): Promise<Side> {
+function readBlob(cwd: string, spec: string): Promise<Side> {
+  return retryStalled(() => readBlobOnce(cwd, spec))
+}
+
+async function readBlobOnce(cwd: string, spec: string): Promise<Side> {
   const proc = Bun.spawn(['git', 'show', '--no-textconv', '--end-of-options', spec], {
     cwd,
     env: await gitEnv(cwd, { readOnly: true }),
@@ -84,13 +88,13 @@ async function readBlob(cwd: string, spec: string): Promise<Side> {
     stdout: 'pipe',
     stderr: 'pipe'
   })
-  const stderr = new Response(proc.stderr as ReadableStream).text()
+  const stderr = drainText(proc)
   const chunks: Uint8Array[] = []
   let total = 0
   let tooBig = false
   const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
   for (;;) {
-    const { done, value } = await reader.read()
+    const { done, value } = await readChunk(reader, proc.exited)
     if (done) break
     total += value.length
     if (total > MAX_BLOB_BYTES) {
@@ -313,7 +317,11 @@ export async function saveWorkingFile(
 const PATCH_ARGS = ['--patch', '--minimal', '--no-color', '--no-ext-diff']
 
 /** The output of `git diff` with `args`, or `omitted` once it passes `MAX_BLOB_BYTES` and the process is killed. */
-async function capturePatch(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
+function capturePatch(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
+  return retryStalled(() => capturePatchOnce(cwd, args, env))
+}
+
+async function capturePatchOnce(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
   const proc = Bun.spawn(['git', 'diff', ...args], {
     cwd,
     env: await gitEnv(cwd, { readOnly: true, ...(env ? { env } : {}) }),
@@ -321,13 +329,13 @@ async function capturePatch(cwd: string, args: string[], env?: Record<string, st
     stdout: 'pipe',
     stderr: 'pipe'
   })
-  const stderr = new Response(proc.stderr as ReadableStream).text()
+  const stderr = drainText(proc)
   const chunks: Uint8Array[] = []
   let total = 0
   let omitted = false
   const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
   for (;;) {
-    const { done, value } = await reader.read()
+    const { done, value } = await readChunk(reader, proc.exited)
     if (done) break
     total += value.length
     if (total > MAX_BLOB_BYTES) {

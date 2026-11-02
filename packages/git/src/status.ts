@@ -10,7 +10,7 @@ import type {
   GitStatusEntry
 } from '@quirky/protocol'
 import { GitError } from './index'
-import { gitEnv, runGit } from './run'
+import { drainText, gitEnv, readChunk, retryStalled, runGit } from './run'
 import { effectiveUpstream } from './upstream'
 
 /** The most entries a status returns before it stops reading and reports `capped`. */
@@ -180,7 +180,11 @@ class PorcelainReader {
 }
 
 /** Runs the porcelain v2 status, stopping git as soon as more than `limit` entries have been read. */
-async function readPorcelain(
+function readPorcelain(cwd: string, limit: number, dropUntracked: (path: string) => Promise<boolean>): Promise<Snapshot> {
+  return retryStalled(() => readPorcelainOnce(cwd, limit, dropUntracked))
+}
+
+async function readPorcelainOnce(
   cwd: string,
   limit: number,
   dropUntracked: (path: string) => Promise<boolean>
@@ -198,7 +202,7 @@ async function readPorcelain(
   } catch (err) {
     throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
   }
-  const stderr = new Response(proc.stderr as ReadableStream).text()
+  const stderr = drainText(proc)
   const reader = new PorcelainReader(limit, dropUntracked)
   const decoder = new TextDecoder()
   let carry = ''
@@ -206,7 +210,7 @@ async function readPorcelain(
   try {
     const stdout = (proc.stdout as ReadableStream<Uint8Array>).getReader()
     read: for (;;) {
-      const { done, value } = await stdout.read()
+      const { done, value } = await readChunk(stdout, proc.exited)
       if (done) break
       carry += decoder.decode(value, { stream: true })
       const records = carry.split('\0')
@@ -364,17 +368,28 @@ export async function statusV2(
 
 const gitDirs = new Map<string, Promise<string>>()
 
+/** How long `gitDirOf` waits for git before it fails the lookup. */
+export const GIT_DIR_TIMEOUT_MS = 10_000
+
 /**
  * The absolute git directory of the worktree at `cwd`: a linked worktree's own directory, not the
- * main checkout's. Cached per `cwd`; a failed lookup is not cached.
+ * main checkout's. A successful lookup is cached per `cwd`; one that fails or takes longer than
+ * `timeoutMs` rejects with `GitError` and is not cached, so a later call asks git again.
  */
-export function gitDirOf(cwd: string): Promise<string> {
+export function gitDirOf(cwd: string, timeoutMs: number = GIT_DIR_TIMEOUT_MS): Promise<string> {
   let cached = gitDirs.get(cwd)
   if (!cached) {
-    cached = runGit(cwd, ['rev-parse', '--absolute-git-dir'], { readOnly: true }).then((r) => {
+    const lookup = runGit(cwd, ['rev-parse', '--absolute-git-dir'], { readOnly: true, timeoutMs }).then((r) => {
+      if (r.timedOut) throw new GitError(`git rev-parse timed out after ${timeoutMs}ms`, r.stderr, r.exitCode)
       if (r.exitCode !== 0) throw new GitError(`git rev-parse failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
       return text(r.stdout).trim()
     })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new GitError(`git rev-parse timed out after ${timeoutMs}ms`, '', -1)), timeoutMs)
+    })
+    cached = Promise.race([lookup, deadline]).finally(() => clearTimeout(timer))
+    lookup.catch(() => {})
     gitDirs.set(cwd, cached)
     cached.catch(() => gitDirs.delete(cwd))
   }

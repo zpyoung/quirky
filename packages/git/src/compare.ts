@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { GitChange, GitChangeStatus, GitCompare } from '@quirky/protocol'
 import { MAX_BLOB_BYTES } from './diffs'
 import { GitError } from './index'
-import { git, gitEnv, runGit } from './run'
+import { drainText, git, gitEnv, readChunk, retryStalled, runGit } from './run'
 import { STATUS_ENTRY_LIMIT } from './status'
 
 const decoder = new TextDecoder()
@@ -110,7 +110,8 @@ async function untrackedChange(cwd: string, path: string): Promise<GitChange> {
 
 /**
  * Streams git's NUL-separated stdout one token at a time and kills git once `onToken` returns
- * true, so a huge listing is never held in memory. Throws `GitError` when git fails on its own.
+ * true, so a huge listing is never held in memory. Throws `GitError` when git fails on its own,
+ * and a stalled pipe (see `retryStalled`) when git's output does not end after it exited.
  */
 async function streamTokens(cwd: string, args: string[], onToken: (token: string) => boolean | Promise<boolean>): Promise<void> {
   let proc: ReturnType<typeof Bun.spawn>
@@ -125,14 +126,14 @@ async function streamTokens(cwd: string, args: string[], onToken: (token: string
   } catch (err) {
     throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
   }
-  const stderr = new Response(proc.stderr as ReadableStream).text()
+  const stderr = drainText(proc)
   const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
   const stream = new TextDecoder()
   let carry = ''
   let stopped = false
   try {
     read: for (;;) {
-      const { done, value } = await reader.read()
+      const { done, value } = await readChunk(reader, proc.exited)
       if (done) break
       carry += stream.decode(value, { stream: true })
       const tokens = carry.split('\0')
@@ -157,38 +158,42 @@ async function streamTokens(cwd: string, args: string[], onToken: (token: string
 
 /** The tokens of the first `bound` records of `diff --raw -z` (`numstat` false) or `diff --numstat -z` (true) against `from`. */
 async function trackedTokens(cwd: string, from: string, numstat: boolean, bound: number): Promise<string[]> {
-  const tokens: string[] = []
-  let records = 0
-  let pending = 0
-  await streamTokens(
-    cwd,
-    ['diff', numstat ? '--numstat' : '--raw', '-z', '--find-renames', '--end-of-options', from, '--'],
-    (token) => {
-      tokens.push(token)
-      if (pending > 0) pending--
-      else {
-        records++
-        if (numstat) pending = splitNumstat(token)[2] === '' ? 2 : 0
+  return retryStalled(async () => {
+    const tokens: string[] = []
+    let records = 0
+    let pending = 0
+    await streamTokens(
+      cwd,
+      ['diff', numstat ? '--numstat' : '--raw', '-z', '--find-renames', '--end-of-options', from, '--'],
+      (token) => {
+        tokens.push(token)
+        if (pending > 0) pending--
         else {
-          const letter = token.split(' ').pop()![0]
-          pending = letter === 'R' || letter === 'C' ? 2 : 1
+          records++
+          if (numstat) pending = splitNumstat(token)[2] === '' ? 2 : 0
+          else {
+            const letter = token.split(' ').pop()![0]
+            pending = letter === 'R' || letter === 'C' ? 2 : 1
+          }
         }
+        return pending === 0 && records >= bound
       }
-      return pending === 0 && records >= bound
-    }
-  )
-  return tokens
+    )
+    return tokens
+  })
 }
 
 /** The first `bound` untracked paths git lists, skipping shared symlinks. */
 async function untrackedPrefix(cwd: string, bound: number, isSharedSymlink: (path: string) => Promise<boolean>): Promise<string[]> {
-  const paths: string[] = []
-  await streamTokens(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], async (path) => {
-    if (path === '' || (await isSharedSymlink(path))) return false
-    paths.push(path)
-    return paths.length >= bound
+  return retryStalled(async () => {
+    const paths: string[] = []
+    await streamTokens(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], async (path) => {
+      if (path === '' || (await isSharedSymlink(path))) return false
+      paths.push(path)
+      return paths.length >= bound
+    })
+    return paths
   })
-  return paths
 }
 
 /**
