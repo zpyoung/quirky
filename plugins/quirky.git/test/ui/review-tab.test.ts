@@ -413,6 +413,98 @@ describe('quirky.git review tab', () => {
     expect(fake.callsTo('quirky.git/setReviewMark')[0]!.params).toMatchObject({ path: 'legacy.ts', expected: null })
   })
 
+  test('CA1: marking a card that has not loaded reads its disk hash first and sends it as expected', async () => {
+    model = reviewModel([reviewFile('huge.txt', { added: 12_000, removed: 0 })])
+    const element = await open()
+    expect(diffCalls()).toEqual([])
+    await click(byText(card(element, 'huge.txt'), 'Mark reviewed'))
+    expect(fake.callsTo('quirky.git/diff')[0]!.params).toMatchObject({ path: 'huge.txt', source: 'review', against: 'base' })
+    expect(fake.callsTo('quirky.git/setReviewMark')[0]!.params).toEqual({ worktree: 'w1', path: 'huge.txt', reviewed: true, expected: 'hash:huge.txt' })
+  })
+
+  test('CA1: an unloaded card whose file is deleted sends a null expected hash', async () => {
+    model = reviewModel([reviewFile('gone.txt', { status: 'D', added: 0, removed: 12_000 })])
+    fake.handlers['quirky.git/diff'] = () =>
+      textDiff({ path: 'gone.txt', source: 'review', original: 'a\n', modified: '', modifiedHash: null, modifiedDeleted: true })
+    const element = await open()
+    await click(byText(card(element, 'gone.txt'), 'Mark reviewed'))
+    expect(fake.callsTo('quirky.git/setReviewMark')[0]!.params).toMatchObject({ path: 'gone.txt', expected: null })
+  })
+
+  test('CA1: a failed hash read marks nothing and tells the user', async () => {
+    model = reviewModel([reviewFile('huge.txt', { added: 12_000, removed: 0 })])
+    fake.handlers['quirky.git/diff'] = () => {
+      throw failure('disk unreadable')
+    }
+    const element = await open()
+    await click(byText(card(element, 'huge.txt'), 'Mark reviewed'))
+    expect(fake.callsTo('quirky.git/setReviewMark')).toHaveLength(0)
+    expect(fake.toasts.length).toBe(1)
+  })
+
+  test('the tab offers the hash of the diff a card shows, and nothing for a card that has not loaded', async () => {
+    model = reviewModel([reviewFile(APP), reviewFile('huge.txt', { added: 12_000, removed: 0 })])
+    await open()
+    const handle = reviewViewFor('w1')!
+    expect(handle.loadedHash?.(APP)).toBe(`hash:${APP}`)
+    expect(handle.loadedHash?.('huge.txt')).toBeUndefined()
+    expect(handle.loadedHash?.('not-a-card.ts')).toBeUndefined()
+  })
+
+  test('CA2: Full diff clicked while the since-review load is pending ends on the base diff', async () => {
+    model = reviewModel([reviewFile(FLAGS, { mark: 'changed' })])
+    const replies: Array<{ against: string; reply: () => void }> = []
+    fake.handlers['quirky.git/diff'] = (params) =>
+      new Promise((resolve) => {
+        const against = String(params.against)
+        replies.push({ against, reply: () => resolve(textDiff({ path: FLAGS, source: 'review', original: 'o\n', modified: `${against.toUpperCase()}\n`, modifiedHash: `h:${against}` })) })
+      })
+    const element = await open()
+    await click(byText(card(element, FLAGS), 'Full diff'))
+    await act(async () => replies[0]!.reply())
+    await settle()
+    expect(replies.map((r) => r.against)).toEqual(['reviewed', 'base'])
+    await act(async () => replies[1]!.reply())
+    await settle()
+    expect(modifiedEditor(card(element, FLAGS)).state.doc.toString()).toBe('BASE\n')
+    expect(card(element, FLAGS).textContent).not.toContain('Showing changes since you reviewed')
+  })
+
+  test('XA2: when the Full diff cannot load the card shows the error and Retry, not the since-review diff', async () => {
+    const element = await open()
+    const flagsDiff = fake.handlers['quirky.git/diff']!
+    fake.handlers['quirky.git/diff'] = (params) => {
+      if (params.path === FLAGS && params.against === 'base') throw failure('base unreadable')
+      return flagsDiff(params)
+    }
+    await click(byText(card(element, FLAGS), 'Full diff'))
+    const flags = card(element, FLAGS)
+    expect(flags.textContent).toContain('base unreadable')
+    expect(flags.querySelector('.cm-editor')).toBeNull()
+    fake.handlers['quirky.git/diff'] = flagsDiff
+    await click(byText(flags, 'Retry'))
+    expect(diffCalls().at(-1)).toEqual([FLAGS, 'base'])
+    expect(modifiedEditor(card(element, FLAGS)).state.doc.toString()).toContain('base')
+  })
+
+  test('SA2: a commit scope follows the tree order of the panel', async () => {
+    fake.settings.viewMode = 'tree'
+    fake.handlers['quirky.git/commitFiles'] = (params) => ({
+      commit: String(params.commit),
+      entries: ['src/a.ts', 'src/z/q.ts', 'zed.ts'].map((path) => ({ path, status: 'modified', added: 1, removed: 1, binary: false }))
+    })
+    const element = await open({ worktree: 'w1', mode: 'review', commit: COMMIT })
+    expect(order(element)).toEqual(['src/z/q.ts', 'src/a.ts', 'zed.ts'])
+  })
+
+  test('SA3: a commit card shows the worktree notes on its path', async () => {
+    const note = (path: string, id: string) => ({ id, worktreeId: 'w1', path, startLine: 1, line: 1, body: 'x', createdAt: 1, updatedAt: null })
+    fake.handlers['quirky.git/notes'] = () => ({ notes: [note('a.ts', 'n1'), note('a.ts', 'n2'), note('b.ts', 'n3')] })
+    const element = await open({ worktree: 'w1', mode: 'review', commit: COMMIT })
+    expect(card(element, 'a.ts').textContent).toContain('✎ 2 notes')
+    expect(card(element, 'b.ts').textContent).toContain('✎ 1 note')
+  })
+
   test('a large card waits for Load diff', async () => {
     model = reviewModel([reviewFile('huge.txt', { added: 12_000, removed: 0 })])
     const element = await open()

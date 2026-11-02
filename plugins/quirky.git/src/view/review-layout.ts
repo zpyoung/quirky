@@ -1,4 +1,5 @@
 import type { GitChange, ReviewFile, ReviewMarkState } from '@quirky/protocol'
+import { reviewOrder } from '../review/order'
 import { AUTO_LOAD_MAX_LINES } from './entries'
 
 /** The width, in CSS pixels, from which the Review tab lays diffs out side by side. */
@@ -50,8 +51,27 @@ export function itemFromFile(file: ReviewFile): ReviewItem {
   return { ...item, signature: signatureOf(item, file.status) }
 }
 
-/** The card for a file of `commit`, which has no review state. */
-export function itemFromChange(change: GitChange, commit: string): ReviewItem {
+/** The changes of a commit in the order the panel lists files for `mode`, so a commit scope stacks like the worktree review. */
+export function orderChanges(changes: readonly GitChange[], mode: 'list' | 'tree'): GitChange[] {
+  const byPath = new Map(changes.map((change) => [change.path, change]))
+  const asFiles = changes.map(
+    (change): ReviewFile => ({
+      path: change.path,
+      status: 'M',
+      added: change.added,
+      removed: change.removed,
+      binary: change.binary,
+      uncommitted: false,
+      staged: false,
+      mark: 'none',
+      notes: 0
+    })
+  )
+  return reviewOrder(asFiles, mode).map((file) => byPath.get(file.path)!)
+}
+
+/** The card for a file of `commit`, which has no review state; `notes` is how many the worktree holds on the path. */
+export function itemFromChange(change: GitChange, commit: string, notes = 0): ReviewItem {
   const item = {
     key: `commit:${commit}:${change.path}`,
     path: change.path,
@@ -61,7 +81,7 @@ export function itemFromChange(change: GitChange, commit: string): ReviewItem {
     binary: change.binary,
     submodule: false,
     mark: 'none' as const,
-    notes: 0
+    notes
   }
   return { ...item, signature: signatureOf(item, change.status) }
 }

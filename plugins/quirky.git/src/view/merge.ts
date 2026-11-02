@@ -168,7 +168,7 @@ function ownedRevertControls(onRevert: (apply: () => boolean) => void) {
     if (type === 'accept') return revertOnlyControls(type, action)
     const button = ownedRevertButton()
     button.name = 'reject'
-    button.addEventListener('mousedown', (event) => {
+    const press = (event: MouseEvent) => {
       event.preventDefault()
       onRevert(() => {
         try {
@@ -179,6 +179,11 @@ function ownedRevertControls(onRevert: (apply: () => boolean) => void) {
           return false
         }
       })
+    }
+    button.addEventListener('mousedown', press)
+    // enter and space click with detail 0; a mouse click already ran on mousedown
+    button.addEventListener('click', (event) => {
+      if (event.detail === 0) press(event)
     })
     return button
   }

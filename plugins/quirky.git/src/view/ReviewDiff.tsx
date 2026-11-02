@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, IconButton, Menu, ScopeChip, SectionHeader } from '@quirky/ui'
-import type { GitChange } from '@quirky/protocol'
+import type { GitChange, GitDiff } from '@quirky/protocol'
 
 import { reuseGitDiff } from '../diffRefresh'
 import { useNotes } from '../notes/useNotes'
@@ -24,6 +24,7 @@ import {
   itemFromFile,
   layoutFor,
   loadModeOf,
+  orderChanges,
   reconcileCards,
   type CardUi,
   type DiffLayout,
@@ -35,6 +36,9 @@ const IDLE: PaneState = { changes: 0, current: null, dirty: false, stale: false,
 const NO_ITEMS: readonly ReviewItem[] = []
 
 type CommitFiles = { scope: string; commit: string; entries: GitChange[] }
+
+/** The disk-side hash `setReviewMark` checks: null when the diff shows the file deleted, undefined when the diff carries none. */
+const diskHashOf = (diff: GitDiff): string | null | undefined => (diff.modifiedDeleted === true ? null : diff.modifiedHash)
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -102,16 +106,24 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   }, [context, worktree, scope])
 
   const files = model?.files
+  const noteCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const note of notes) counts.set(note.path, (counts.get(note.path) ?? 0) + 1)
+    return counts
+  }, [notes])
   const items = useMemo<readonly ReviewItem[]>(() => {
     if (scope !== null) {
-      return commitData?.scope === scope ? commitData.entries.map((change) => itemFromChange(change, commitData.commit)) : NO_ITEMS
+      if (commitData?.scope !== scope) return NO_ITEMS
+      return orderChanges(commitData.entries, viewMode).map((change) => itemFromChange(change, commitData.commit, noteCounts.get(change.path) ?? 0))
     }
     return files === undefined ? NO_ITEMS : reviewOrder(files, viewMode).map(itemFromFile)
-  }, [scope, commitData, files, viewMode])
+  }, [scope, commitData, files, viewMode, noteCounts])
   const itemsRef = useRef(items)
   itemsRef.current = items
   const filesRef = useRef(files)
   filesRef.current = files
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
   const viewModeRef = useRef(viewMode)
   viewModeRef.current = viewMode
 
@@ -133,16 +145,24 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       : fetchDiff(context, worktree, { path: item.path, source: 'review', oldPath: item.oldPath, against })
 
   const run = async (key: string): Promise<void> => {
-    const item = itemsRef.current.find((i) => i.key === key)
+    const first = itemsRef.current.find((i) => i.key === key)
     const state = sectionsRef.current[key]
-    if (!item || !state || state.status === 'loaded') return
-    const against = bodyAgainst(viewOfRef(item))
+    if (!first || !state || state.status === 'loaded') return
     patchSection(key, { status: 'loading' })
-    try {
-      const diff = await diffFor(item, against)
-      patchSection(key, { status: 'loaded', diff, error: undefined, revision: (sectionsRef.current[key]?.revision ?? 0) + 1, against, signature: item.signature })
-    } catch (e) {
-      patchSection(key, { status: 'error', error: messageOf(e) })
+    // the card's side can change while a load is in flight, so a reply for the other side is dropped and the load repeats
+    for (;;) {
+      const item = itemsRef.current.find((i) => i.key === key) ?? first
+      const against = bodyAgainst(viewOfRef(item))
+      const stale = () => bodyAgainst(viewOfRef(itemsRef.current.find((i) => i.key === key) ?? item)) !== against
+      try {
+        const diff = await diffFor(item, against)
+        if (stale()) continue
+        patchSection(key, { status: 'loaded', diff, error: undefined, revision: (sectionsRef.current[key]?.revision ?? 0) + 1, against, signature: item.signature })
+      } catch (e) {
+        if (stale()) continue
+        patchSection(key, { status: 'error', error: messageOf(e) })
+      }
+      return
     }
   }
   const runRef = useRef(run)
@@ -173,6 +193,9 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     } finally {
       revalidating.current.delete(key)
     }
+    const latest = itemsRef.current.find((i) => i.key === key)
+    const settled = sectionsRef.current[key]
+    if (latest && settled?.status === 'loaded' && settled.against !== bodyAgainst(viewOfRef(latest))) await revalidate(key)
   }
 
   const onCardSaved = (key: string, content: string, hash: string) => {
@@ -210,7 +233,11 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       const loaded = sectionsRef.current[item.key]
       if (loaded?.status !== 'loaded') continue
       if (loaded.signature !== item.signature || loaded.against !== bodyAgainst(cardFor(ui[item.key], item.mark))) {
-        void revalidate(item.key).catch(() => undefined)
+        void revalidate(item.key).catch((e: unknown) => {
+          // keeping the old side's diff would show it under the wrong label
+          const now = sectionsRef.current[item.key]
+          if (now?.status === 'loaded' && now.against !== bodyAgainst(viewOfRef(item))) patchSection(item.key, { status: 'error', error: messageOf(e) })
+        })
       }
     }
   }, [items, ui, scope])
@@ -307,7 +334,13 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     const setScope = (commit: string | null) => {
       setScopeState((prev) => (prev === commit ? prev : commit))
     }
-    return registerReviewView({ worktree, reveal, scrollToTop, setScope })
+    const loadedHash = (path: string): string | null | undefined => {
+      if (scopeRef.current !== null) return undefined
+      const item = itemsRef.current.find((i) => i.path === path)
+      const shown = item && sectionsRef.current[item.key]
+      return shown && shown.status === 'loaded' && shown.diff ? diskHashOf(shown.diff) : undefined
+    }
+    return registerReviewView({ worktree, reveal, scrollToTop, setScope, loadedHash })
   }, [worktree, reveal])
 
   useEffect(
@@ -332,15 +365,15 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     async (item: ReviewItem) => {
       const path = item.path
       const reviewed = item.mark !== 'reviewed'
-      const hash = sectionsRef.current[item.key]?.diff?.modifiedHash
       setMarking((prev) => new Set(prev).add(path))
       try {
-        const result = await setReviewMark(context, {
-          worktree,
-          path,
-          reviewed,
-          ...(reviewed && hash !== undefined ? { expected: hash } : {})
-        })
+        const shown = sectionsRef.current[item.key]
+        const expected = reviewed
+          ? shown?.status === 'loaded' && shown.diff
+            ? diskHashOf(shown.diff)
+            : diskHashOf(await fetchDiff(context, worktree, { path, source: 'review', oldPath: item.oldPath, against: 'base' }))
+          : undefined
+        const result = await setReviewMark(context, { worktree, path, reviewed, ...(expected !== undefined ? { expected } : {}) })
         refresh()
         if (result === 'ok' && reviewed) {
           const next = nextToReview(reviewOrder(filesRef.current ?? [], viewModeRef.current), path)
