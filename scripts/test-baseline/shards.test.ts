@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { MAX_SHARDS_MAIN, MAX_SHARDS_PR, SHARD_TARGET_MS, splitShards } from './shards'
+import { DURATION_BASELINES, longestFirst, MAX_SHARDS_MAIN, MAX_SHARDS_PR, medianDurations, SHARD_TARGET_MS, splitShards } from './shards'
 
 const opts = { targetMs: 1000, maxShards: 4 }
 const load = (shard: string[], durations: Record<string, number>) => shard.reduce((sum, file) => sum + durations[file]!, 0)
@@ -75,5 +75,32 @@ describe('splitShards', () => {
     const durations = Object.fromEntries(files.map((file, i) => [file, (i * 97) % 800]))
     const shards = splitShards(files, durations, { targetMs: 2000, maxShards: 6 })
     expect(shards.flat().sort()).toEqual([...files].sort())
+  })
+})
+
+describe('medianDurations', () => {
+  test('takes each file\'s median across the runs that recorded it', () => {
+    const runs: Record<string, number>[] = [{ a: 100, b: 10 }, { a: 900, b: 20 }, { a: 120 }, { a: 110, c: 7 }]
+    expect(medianDurations(runs)).toEqual({ a: 115, b: 15, c: 7 })
+  })
+
+  test('is empty for no runs, and one run is taken as it is', () => {
+    expect(medianDurations([])).toEqual({})
+    expect(medianDurations([{ a: 3 }])).toEqual({ a: 3 })
+  })
+
+  test('reads five recent baselines', () => {
+    expect(DURATION_BASELINES).toBe(5)
+  })
+})
+
+describe('longestFirst', () => {
+  test('orders by duration, counting an unknown file as the median and breaking ties by path', () => {
+    expect(longestFirst(['quick', 'new', 'slow', 'b-tie', 'a-tie'], { quick: 1, slow: 50, 'a-tie': 20, 'b-tie': 20, other: 10 })).toEqual(['slow', 'a-tie', 'b-tie', 'new', 'quick'])
+  })
+
+  test('matches the order splitShards gives a single shard', () => {
+    const durations = { a: 5, b: 9, c: 1 }
+    expect(splitShards(['a', 'b', 'c'], durations, { targetMs: 1_000_000, maxShards: 1 })).toEqual([longestFirst(['c', 'a', 'b'], durations)])
   })
 })

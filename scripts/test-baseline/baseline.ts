@@ -69,6 +69,9 @@ async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Li
   return newest
 }
 
+type FindOptions = { cwd: string; head: string; repo: string; gh?: GhRunner; fromParent?: boolean }
+type Found = { commit: string; artifactId: number }
+
 /**
  * Finds the nearest first-parent ancestor of `head` on main that has a stored baseline, looking back at most 500 commits.
  * A baseline counts only when it was published by a run on this repository's main at that commit; artifacts from
@@ -77,24 +80,25 @@ async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Li
  * (a push, so a run never finds itself). Returns null when nothing matches, when there is no merge base, or when
  * `fromParent` is set on a commit with no parent. Throws `BaselineUnavailable` when `gh` fails.
  */
-export async function findBaseline(opts: {
-  cwd: string
-  head: string
-  repo: string
-  gh?: GhRunner
-  fromParent?: boolean
-}): Promise<{ commit: string; artifactId: number } | null> {
+export async function findBaseline(opts: FindOptions): Promise<Found | null> {
+  return (await findBaselines(opts, 1))[0] ?? null
+}
+
+/** Up to `limit` baselines along the same walk as `findBaseline`, nearest first; the first is the one `findBaseline` returns. */
+export async function findBaselines(opts: FindOptions, limit: number): Promise<Found[]> {
   const start = opts.fromParent ? git(opts.cwd, ['rev-parse', '--verify', '--quiet', `${opts.head}^`]) : git(opts.cwd, ['merge-base', opts.head, 'origin/main'])
-  if (!start) return null
+  if (!start) return []
   const listed = await listBaselines(opts.repo, opts.gh ?? defaultGh)
-  if (listed.size === 0) return null
+  if (listed.size === 0) return []
   const walk = git(opts.cwd, ['rev-list', '--first-parent', '-n', String(WALK_LIMIT), start])
-  if (walk === null) return null
+  if (walk === null) return []
+  const found: Found[] = []
   for (const commit of walk.split('\n')) {
-    const found = listed.get(commit)
-    if (found) return { commit, artifactId: found.id }
+    const hit = listed.get(commit)
+    if (hit) found.push({ commit, artifactId: hit.id })
+    if (found.length >= limit) break
   }
-  return null
+  return found
 }
 
 function parseBaseline(text: string): Baseline | null {

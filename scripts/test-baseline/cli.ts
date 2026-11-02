@@ -2,19 +2,18 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { bunTestFile, Host, hostFor, runInHostCopy } from '../suite'
-import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline } from './baseline'
+import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline, findBaselines } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
 import { renderComment, renderLocal } from './report'
 import { findSpawners, selectTests } from './select'
-import { MAX_SHARDS_MAIN, MAX_SHARDS_PR, SHARD_TARGET_MS, splitShards } from './shards'
+import { DURATION_BASELINES, longestFirst, MAX_SHARDS_MAIN, MAX_SHARDS_PR, medianDurations, SHARD_TARGET_MS, splitShards } from './shards'
 import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
 
 const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 
   plan       --event <pull_request|push|workflow_dispatch> [--full <true|false>] --out <dir>
   run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
-  rerun      --plan <dir> --in <dir> --out <file>
   verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
   issues     --plan <dir> --baseline <file> --only <open|close>
   affected   [--json] [--jobs <n>] [--list]
@@ -24,7 +23,6 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
-const RERUN_FILE = 'rerun.json'
 const FILE_RESULTS_PREFIX = 'file-results '
 
 /**
@@ -222,10 +220,10 @@ function jsonFilesIn(dir: string): string[] {
   return found.sort()
 }
 
-type Loaded = { results: FileResult[]; rerun: FileResult[]; problems: string[] }
+type Loaded = { results: FileResult[]; problems: string[] }
 
 function loadResults(dir: string): Loaded {
-  const loaded: Loaded = { results: [], rerun: [], problems: [] }
+  const loaded: Loaded = { results: [], problems: [] }
   let paths: string[]
   try {
     paths = jsonFilesIn(dir)
@@ -236,9 +234,7 @@ function loadResults(dir: string): Loaded {
   }
   for (const path of paths) {
     try {
-      const list = asResults(readJson(path))
-      if (path.split('/').pop() === RERUN_FILE) loaded.rerun.push(...list)
-      else loaded.results.push(...list)
+      loaded.results.push(...asResults(readJson(path)))
     } catch (error) {
       loaded.problems.push(`cannot read ${path}: ${error instanceof Error ? error.message : error}`)
     }
@@ -257,8 +253,13 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   const { macosOnly } = await import('../suite')
   const head = headOf(ctx)
   const repo = repoOf(ctx)
-  const found = await findBaseline({ cwd: ctx.cwd, head, repo, gh: ctx.gh, fromParent: event !== 'pull_request' })
-  const baseline = found ? await fetchBaseline(found, { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download }) : null
+  const fetchOptions = { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download }
+  const [found, ...older] = await findBaselines({ cwd: ctx.cwd, head, repo, gh: ctx.gh, fromParent: event !== 'pull_request' }, DURATION_BASELINES)
+  const baseline = found ? await fetchBaseline(found, fetchOptions) : null
+  const timings = await Promise.all(older.map((entry) => fetchBaseline(entry, fetchOptions).catch((error) => {
+    ctx.err(`skipping the durations from ${entry.commit}: ${error instanceof Error ? error.message : error}\n`)
+    return null
+  })))
 
   let changed: ChangedPath[] = []
   let range: Selected | null = null
@@ -275,9 +276,11 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   const notOnCiList = macosOnly(join(ctx.cwd, NOT_ON_CI_LIST))
   const macosList = macosOnly(join(ctx.cwd, MACOS_LIST))
   const notOnCi = selection.files.filter((file) => notOnCiList.has(file))
-  const macos = selection.files.filter((file) => macosList.has(file) && !notOnCiList.has(file))
+  const durationsOf = (run: Baseline) => Object.fromEntries(Object.entries(run.files).map(([file, info]) => [file, info.durationMs]))
+  const timedRuns = [baseline, ...timings].filter((run): run is Baseline => run !== null)
+  const durations = medianDurations(timedRuns.map(durationsOf))
+  const macos = longestFirst(selection.files.filter((file) => macosList.has(file) && !notOnCiList.has(file)), durations)
   const linux = selection.files.filter((file) => !macosList.has(file) && !notOnCiList.has(file))
-  const durations = Object.fromEntries(Object.entries(baseline?.files ?? {}).map(([file, info]) => [file, info.durationMs]))
   const linuxShards = splitShards(linux, durations, { targetMs: SHARD_TARGET_MS, maxShards: affectedOnly ? MAX_SHARDS_PR : MAX_SHARDS_MAIN })
 
   const plan: Plan = {
@@ -295,6 +298,7 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   if (baseline) writeJson(join(outDir, 'baseline.json'), baseline)
 
   ctx.out(`selection: ${selection.mode}, ${selection.files.length} files, ${linuxShards.length} linux shards, ${macos.length} macos, ${notOnCi.length} not on ci\n`)
+  ctx.out(`durations: median of ${timedRuns.length} main runs\n`)
   for (const reason of selection.reasons) ctx.out(`  ${reason}\n`)
   if (plan.rangeSelection) for (const reason of plan.rangeSelection.reasons) ctx.out(`  range: ${reason}\n`)
   if (range && range.graphMisses > 0) ctx.out(`import graph misses: ${range.graphMisses}\n`)
@@ -314,32 +318,10 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
 
   const { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
   const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }
-  let results = await runTestFiles(options)
-  if (values.macos) {
-    const rerun = await rerunFailed(options, results, RERUN_LIMIT)
-    if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} macos files failed, so none were rerun\n`)
-    results = rerun.results
-  }
-  writeJson(out, results)
-  ctx.out(`ran ${results.length} files\n`)
-  return 0
-}
-
-async function rerunCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' } })
-  const planDir = need(values.plan, 'plan')
-  const inDir = need(values.in, 'in')
-  const out = need(values.out, 'out')
-  readPlan(planDir)
-
-  const loaded = loadResults(inDir)
-  if (loaded.problems.length > 0) throw new Error(loaded.problems.join('\n'))
-  const { FILE_LIMIT_MS, RERUN_LIMIT, rerunFailed } = await import('./runner')
-  const rerun = await rerunFailed({ cwd: ctx.cwd, files: [], platform: 'linux', jobs: 1, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }, loaded.results, RERUN_LIMIT)
-  if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files failed, so none were rerun\n`)
-  const written = rerun.results.filter((result, index) => result.rerun !== undefined && loaded.results[index].rerun === undefined)
-  writeJson(out, written)
-  ctx.out(`reran ${written.length} files\n`)
+  const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
+  if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files in this job failed, so none were rerun\n`)
+  writeJson(out, rerun.results)
+  ctx.out(`ran ${rerun.results.length} files\n`)
   return 0
 }
 
@@ -385,16 +367,7 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
 
   const loaded = loadResults(inDir)
   problems.push(...loaded.problems)
-  const results = new Map<string, FileResult>(loaded.results.map((result) => [result.file, result]))
-  for (const again of loaded.rerun) {
-    const first = results.get(again.file)
-    if (!first || !again.rerun) {
-      problems.push(`${RERUN_FILE} holds ${again.file}, which has no first result`)
-      continue
-    }
-    results.set(again.file, { ...first, rerun: again.rerun })
-  }
-  const merged = [...results.values()]
+  const merged = [...new Map<string, FileResult>(loaded.results.map((result) => [result.file, result])).values()]
 
   const verdict = compareResults({
     baseline,
@@ -556,7 +529,6 @@ async function affectedCommand(args: string[], ctx: Context): Promise<number> {
 const COMMANDS: Record<string, (args: string[], ctx: Context) => Promise<number>> = {
   plan: planCommand,
   'run-shard': runShardCommand,
-  rerun: rerunCommand,
   verdict: verdictCommand,
   issues: issuesCommand,
   affected: affectedCommand,
