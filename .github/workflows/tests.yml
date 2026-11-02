@@ -130,7 +130,9 @@ jobs:
       - name: Run macOS files
         run: |
           mkdir -p results
-          for i in 1 2 3 4; do
+          # two busy loops on the runner's three cores, to slow every test the way a loaded host would
+          for b in 1 2; do (while :; do :; done) & done
+          for i in 1 2 3; do
             echo "::group::pass $i"
             SC_TRACE_FILE="$PWD/results/trace-$i.txt" bun scripts/test-baseline/cli.ts run-shard --plan plan --macos --out "results/macos-$i.json"
             echo "::endgroup::"
