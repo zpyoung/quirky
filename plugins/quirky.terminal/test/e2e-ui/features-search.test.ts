@@ -65,10 +65,11 @@ test(
     expect(await searchOf(f, 'the last match', (search) => search.current === 12)).toMatchObject({ query: '19', current: 12, total: 12, more: false })
 
     const term = termOf(f, session)
-    const active = term.element!.querySelectorAll<HTMLElement>('.xterm-find-active-result-decoration')
+    const found = [...term.element!.querySelectorAll<HTMLElement>('.xterm-find-result-decoration')]
+    // @xterm/addon-search 0.16 never adds its active class, so the active match is the one in the active border
+    const active = found.filter((element) => element.style.outline.includes(term.options.theme!.blue!))
     expect(active).toHaveLength(1)
-    const others = [...term.element!.querySelectorAll<HTMLElement>('.xterm-find-result-decoration:not(.xterm-find-active-result-decoration)')]
-    expect(others.length).toBeGreaterThan(0)
+    expect(found.length - active.length).toBeGreaterThan(0)
     expect(term.options.overviewRuler?.width).toBeGreaterThan(0)
 
     await typeInto(input, '^1.9$')

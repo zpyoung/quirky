@@ -221,12 +221,19 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   }
 
   const applySearch = (next: SearchState | null) => {
+    const previous = searchRef.current
     searchRef.current = next
     setSearchState(next)
     if (!next || !next.query) {
       setResults(EMPTY_RESULTS)
       clearHighlights()
       return
+    }
+    // @xterm/addon-search 0.16 records the new options before comparing against them, so a regex or
+    // case toggle on the same query keeps the old matches until its cached term is cleared
+    if (previous && (previous.regex !== next.regex || previous.caseSensitive !== next.caseSensitive)) {
+      const rt = runtime.current
+      if (rt) guarded(() => rt.search.clearDecorations(), undefined)
     }
     runFind('next', true)
   }
