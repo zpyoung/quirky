@@ -23,7 +23,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
   const w = await boot(scratch, { files: { ...BASE_FILES, 'math.ts': numbered(30) } })
   w.write('math.ts', numbered(30, { 3: 'line three' }))
   await w.win.waitFor(() => rowOf('math.ts'))
-  expect(q('section[aria-label="Notes"]')).toBeNull()
+  expect(q('[aria-label^="Send "][aria-label$=" to agent"]')).toBeNull()
   await w.run('open-diff', { path: 'math.ts' })
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
@@ -46,7 +46,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
 
   expect(await stored(w)).toMatchObject([{ path: 'math.ts', startLine: 12, line: 12, body: 'Handle the empty list' }])
   await w.win.waitFor(() => text(q('[data-note-count]', rowContainerOf('math.ts')!)).includes('1'))
-  expect(text(q('section[aria-label="Notes"] [aria-label="1 note"]'))).toBe('1')
+  await w.win.waitFor(() => byLabel('Send 1 note to agent'))
   await w.win.waitFor(() => text(q('[data-git-view-root] section[data-path="math.ts"] header')).includes('✎ 1 note'), 10_000)
 
   await click(byLabel('Edit note', card))
@@ -58,7 +58,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
 
   await click(byLabel('Delete note', q('[data-note-card="saved"]')!))
   await w.win.waitFor(async () => (await stored(w)).length === 0)
-  await w.win.waitFor(() => q('[data-note-card="saved"]') === null && q('section[aria-label="Notes"]') === null)
+  await w.win.waitFor(() => q('[data-note-card="saved"]') === null && q('[aria-label^="Send "][aria-label$=" to agent"]') === null)
   expect(w.problems()).toEqual([])
 }, SLOW)
 

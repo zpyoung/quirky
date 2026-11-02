@@ -456,7 +456,9 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
 
   const openInReview = (path: string) => {
     selectPath(worktree, path, 'panel')
-    if (fileOf(path)?.conflict !== undefined) return open({ mode: 'conflict-file', path })
+    if (fileOf(path)?.conflict !== undefined || rowEntries(path).some((entry) => entry.conflict !== undefined)) {
+      return open({ mode: 'conflict-file', path })
+    }
     void openReview(context, { worktree, reveal: path }).catch((error: unknown) => context.toast('Could not open diff', messageOf(error)))
   }
 

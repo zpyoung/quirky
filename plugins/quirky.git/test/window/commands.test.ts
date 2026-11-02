@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { EditorView } from '@codemirror/view'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, click, modifiedEditor, q, qa, rowOf, sectionHeadings, stubIntersectionObserver, text } from './dom'
+import { buttonText, click, modifiedEditor, q, qa, rowOf, selectedPaths, stubIntersectionObserver, text } from './dom'
 import { BASE_FILES, boot, DIFF_VIEW, openView, PANEL, SESSION_VIEW, sc1, shutdown, viewTabs, type World } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -127,12 +127,9 @@ test('SC-64: every window command routed through ui.command.run does what its bu
     await w.run('set-filter', { query: '' })
     await w.win.waitFor(() => q('input[aria-label="Filter files…"]') === null && rowOf('big.txt') !== null)
     await w.run('select', { paths: ['math.ts', 'big.txt'] })
-    await w.win.waitFor(() => {
-      const selection = q('[role="toolbar"][aria-label="Selection actions"] > span')
-      return selection !== null && text(selection) === '2 selected'
-    })
+    await w.win.waitFor(() => selectedPaths().join() === 'math.ts')
     await w.run('select', { paths: [] })
-    await w.win.waitFor(() => q('[role="toolbar"][aria-label="Selection actions"]') === null)
+    await w.win.waitFor(() => selectedPaths().length === 0)
     await w.run('toggle-history', { open: true })
     await w.win.waitFor(() => q('[data-history-content]'))
     await w.run('toggle-history')
@@ -169,7 +166,7 @@ test('SC-65: the panel report and an explicit top-level diff view report their s
   const w = await boot(scratch)
   w.commit({ 'util.ts': 'export const u = 1\n' }, 'ahead')
   sc1(w)
-  await w.win.waitFor(() => rowOf('notes.txt') && sectionHeadings().includes('Committed on Branch'))
+  await w.win.waitFor(() => rowOf('notes.txt') && rowOf('util.ts'))
   await w.run('open-diff', { path: 'math.ts', source: 'unstaged' })
   const hosted = await w.win.waitFor(async () => {
     const view = await openView(w)

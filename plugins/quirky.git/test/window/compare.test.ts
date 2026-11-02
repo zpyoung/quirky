@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import type { Repo, Worktree } from '@quirky/protocol'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { buttonText, byLabel, click, dialogNamed, q, qa, rowOf, rowPaths, text, type } from './dom'
-import { boot, DIFF_VIEW, openView, SESSION_VIEW, shutdown, type World } from './world'
+import { boot, DIFF_VIEW, openView, SESSION_VIEW, shutdown, viewTabs, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
@@ -114,7 +114,8 @@ test('SC-54: the Commits dock opens a commit and one of its files in the Review 
   await click(byLabel(`Expand commit ${oid.slice(0, 7)}`))
   const file = await w.win.waitFor(() => q('[data-commit-row] [data-row-path="util.ts"]'))
   await click(file)
-  await w.win.waitFor(async () => (await openView(w))?.input?.reveal === 'util.ts')
-  expect((await openView(w))!.input).toMatchObject({ mode: 'review', commit: oid, reveal: 'util.ts' })
+  await w.win.waitFor(() => q('[data-git-view-root] section[data-path="util.ts"][data-active]'))
+  expect(text(q('[data-git-view-root] .ui-scope-chip'))).toContain(`Commit ${oid.slice(0, 7)}`)
+  expect(await viewTabs(w, DIFF_VIEW)).toHaveLength(1)
   expect(w.problems()).toEqual([])
 }, SLOW)

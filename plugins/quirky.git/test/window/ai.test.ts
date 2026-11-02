@@ -111,8 +111,12 @@ test('NA-25: the sparkle menu opens the Generate dialog for one run', async () =
 
   await click(byLabel('Commit message options'))
   await click(await w.win.waitFor(() => qa('[role="menuitem"]').find((item) => text(item) === 'Choose agent…')))
-  const dialog = await w.win.waitFor(() => dialogNamed('Generate Commit Message'))
-  await click(buttonText('Generate', dialog))
+  const generate = await w.win.waitFor(() => {
+    const dialog = dialogNamed('Generate Commit Message')
+    const button = dialog && buttonText('Generate', dialog)
+    return button && !button.disabled ? button : undefined
+  })
+  await click(generate)
   await w.win.waitFor(() => messageBox().value === 'Rename x to count\n\nClearer name.')
   expect(fakes.read('runs').split('\n').filter(Boolean)).toHaveLength(1)
   expect(w.problems()).toEqual([])

@@ -234,7 +234,8 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
   w.write('math.ts', 'a\nB\nc\nd\ne\n')
   await w.win.waitFor(() => rowOf('math.ts'))
   await w.agent.callAny('ui.command.run', { id: 'command:quirky.git/open-diff', args: { path: 'math.ts', source: 'unstaged' } })
-  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
+  const card = () => q('[data-git-view-root] section[data-path="math.ts"]')
+  await w.win.waitFor(() => card() && q('[contenteditable]', card()!))
   const quickly = (check: () => unknown) => w.win.waitFor(check, 2500)
 
   expect((await w.cli(['git', 'stage', '--paths', 'math.ts']).done).code).toBe(0)
@@ -243,7 +244,7 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
   await quickly(() => rowOf('math.ts') && !rowOf('math.ts', 'staged'))
   expect((await w.cli(['git', 'discard', '--paths', 'math.ts', '--yes']).done).code).toBe(0)
   await quickly(() => !rowOf('math.ts'))
-  await quickly(() => q('[data-git-view-root] h2') && (byLabel('Next change') as HTMLButtonElement).disabled)
+  await quickly(() => card() === null && text(q('[data-review-scroll]')).includes('Nothing changed against'))
   expect(w.problems()).toEqual([])
 }, SLOW)
 
