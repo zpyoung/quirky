@@ -44,20 +44,17 @@ export function shellArgv(home: string, shell: string): string[] {
 
 /**
  * The argv that runs `command` (a shell command string) under the user's login shell. For a POSIX
- * shell, PATH is the bin dir followed by `interactivePath` when given, so CLIs that an interactive
- * rc file such as `~/.zshrc` puts on PATH (nvm, rye and similar) resolve as they do in Terminal;
- * without it, the bin dir goes before whatever PATH the login shell's startup files leave. Other
- * variables come from the login shell alone. PATH is exported inside the command string because
- * the login shell's startup files may have reset it.
+ * shell, PATH is the bin dir, then `interactivePath` when given, then whatever PATH the login
+ * shell's startup files leave. CLIs that an interactive rc file such as `~/.zshrc` puts on PATH
+ * (nvm, rye and similar) so resolve as they do in Terminal, and nothing the login shell finds is
+ * lost when `interactivePath` is stale. Other variables come from the login shell alone. PATH is
+ * exported inside the command string because the login shell's startup files may have reset it.
  */
 export function commandArgv(home: string, shell: string, command: string, interactivePath?: string): string[] {
   if (shellKind(shell) === 'other') return [shell, '-l', '-c', `exec ${command}`]
   const bin = join(home, 'bin')
-  const path =
-    interactivePath === undefined
-      ? doubleQuote(bin, true)
-      : doubleQuote([bin, ...interactivePath.split(':').filter((entry) => entry !== bin)].join(':'))
-  return [shell, '-l', '-c', `export PATH=${path}; exec ${command}`]
+  const first = interactivePath === undefined ? [bin] : [bin, ...interactivePath.split(':').filter((entry) => entry !== bin)]
+  return [shell, '-l', '-c', `export PATH=${doubleQuote(first.join(':'), true)}; exec ${command}`]
 }
 
 /** The daemon environment a child inherits: without the daemon's own QUIRKY_* variables, agent session markers or unset values. */

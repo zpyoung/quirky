@@ -318,7 +318,7 @@ describe('context.launch and context.home', () => {
       return info.commandArgv[3]?.includes('/from-rc') && info.commandArgv[3]
     }, 10000)
     expect(exported.startsWith(`export PATH="${s.home}/bin:/from-rc:`)).toBe(true)
-    expect(exported.endsWith('"; exec claude hi')).toBe(true)
+    expect(exported.endsWith(':$PATH"; exec claude hi')).toBe(true)
   }, 20000)
 
   test('hooks runs the launch-hook pipeline', async () => {

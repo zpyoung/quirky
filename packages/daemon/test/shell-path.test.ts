@@ -158,11 +158,47 @@ describe('command sessions with the interactive shell PATH', () => {
     expect(path).not.toContain('noise')
   })
 
-  test('the bin dir comes first and appears once when the interactive PATH already lists it', async () => {
+  test('the bin dir comes first, then the interactive PATH without it', async () => {
     const bin = join(quirkyHome, 'bin')
     const argv = commandArgv(quirkyHome, '/bin/zsh', 'printenv PATH', `/usr/bin:${bin}:/bin`)
     const result = await run(argv, sessionEnv('/bin/zsh', 'claude'))
-    expect(result.stdout).toBe(`${bin}:/usr/bin:/bin`)
+    expect(result.stdout.startsWith(`${bin}:/usr/bin:/bin:`)).toBe(true)
+  })
+
+  test('a CLI the login shell finds still resolves when the interactive PATH lacks it', async () => {
+    const loginBin = join(root, 'login-bin')
+    write(join(loginBin, 'tool'), '#!/bin/sh\necho from-login\n')
+    chmodSync(join(loginBin, 'tool'), 0o755)
+    write(join(userHome, '.zprofile'), `export PATH=${loginBin}:$PATH`)
+    const result = await run(commandArgv(quirkyHome, '/bin/zsh', 'tool', '/usr/bin:/bin'), sessionEnv('/bin/zsh', 'claude'))
+    expect(result.stdout).toBe('from-login')
+  })
+
+  const gone = (pid: number) => () => {
+    try {
+      process.kill(pid, 0)
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  test('a shell that keeps running after printing its PATH is stopped at the timeout', async () => {
+    const pidFile = join(root, 'logout.pid')
+    write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
+    write(join(userHome, '.zlogout'), `echo $$ > ${pidFile}\nsleep 30`)
+    const path = await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 1000 })
+    expect(path?.split(':')[0]).toBe(rcBin())
+    const pid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
+    await waitFor(gone(pid), 5000)
+  })
+
+  test('a shell that closes stdout before printing its PATH is stopped at the timeout', async () => {
+    const pidFile = join(root, 'rc.pid')
+    write(join(userHome, '.zshrc'), `exec >/dev/null\necho $$ > ${pidFile}\nsleep 30`)
+    expect(await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 1000 })).toBeUndefined()
+    const pid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
+    await waitFor(gone(pid), 5000)
   })
 
   test('gives up on a shell that does not finish in time and stops it', async () => {

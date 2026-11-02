@@ -20,9 +20,9 @@ function probeArgv(home: string, shell: string, script: string): string[] | unde
 /**
  * Reads PATH as the user's interactive shell sets it: zsh as an interactive login shell, bash
  * through Quirky's rcfile as its terminals start. Resolves undefined for other shells, and when
- * the shell fails or does not print its PATH within `timeoutMs`; a shell stopped by the timeout or
- * `signal` is killed with its process group. Output from rc files is ignored, and the shell gets
- * no terminal and an empty stdin.
+ * the shell fails or does not print its PATH within `timeoutMs`. A shell still running at the
+ * timeout or at `signal`, even after it printed its PATH, is killed with its process group. Output
+ * from rc files is ignored, and the shell gets no terminal and an empty stdin.
  */
 export function readInteractivePath(
   home: string,
@@ -37,34 +37,47 @@ export function readInteractivePath(
     // detached starts a new session, so an interactive rc cannot take over the daemon's terminal
     const child = spawn(argv[0]!, argv.slice(1), { env: inheritedEnv(env), stdio: ['ignore', 'pipe', 'ignore'], detached: true })
     let settled = false
-    const finish = (path: string | undefined) => {
-      if (settled) return
-      settled = true
+    let exited = false
+    const release = () => {
+      if (!settled || !exited) return
       clearTimeout(timer)
       options.signal?.removeEventListener('abort', stop)
+    }
+    const settle = (path: string | undefined) => {
+      if (settled) return
+      settled = true
       child.stdout?.destroy()
       resolve(path === '' ? undefined : path)
+      release()
     }
     const stop = () => {
-      if (!settled && child.pid !== undefined) {
+      if (!exited && child.pid !== undefined) {
         try {
           process.kill(-child.pid, 'SIGKILL')
         } catch {}
       }
-      finish(undefined)
+      settle(undefined)
     }
     const timer = setTimeout(stop, options.timeoutMs ?? PROBE_TIMEOUT_MS)
     options.signal?.addEventListener('abort', stop)
-    child.on('error', stop)
+    const onExit = () => {
+      exited = true
+      release()
+    }
+    child.on('exit', onExit)
+    child.on('error', () => {
+      onExit()
+      settle(undefined)
+    })
     let text = ''
     child.stdout?.setEncoding('utf8')
     child.stdout?.on('data', (chunk: string) => {
       text += chunk
       const start = text.indexOf(marker)
       const end = start < 0 ? -1 : text.indexOf(marker, start + marker.length)
-      if (end >= 0) finish(text.slice(start + marker.length, end))
+      if (end >= 0) settle(text.slice(start + marker.length, end))
     })
-    child.stdout?.on('end', () => finish(undefined))
+    child.stdout?.on('end', () => settle(undefined))
   })
 }
 
