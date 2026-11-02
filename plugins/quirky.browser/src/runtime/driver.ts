@@ -15,6 +15,7 @@ import { BrowserStore, type BrowserPage } from '../profiles/store'
 import type { BrowserIdentityMode } from '../preferences/contract'
 import { identityModeFromSetting, userAgentForIdentity } from '../preferences/identity'
 import { findWatchOccurrences } from './find'
+const scTrace = (text: string): void => { (globalThis as { __scTrace?: (text: string) => void }).__scTrace?.(text) }
 
 
 export type RuntimeBinding = {
@@ -527,11 +528,15 @@ export class BrowserRuntime {
     if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
     const expectedGeneration = this.generation(page.browserPageId)
     const controller = new AbortController()
+    const traceId = Math.random().toString(36).slice(2, 7)
+    scTrace(`withPage ${traceId} ${method} enter page=${page.browserPageId.slice(0, 8)} profile=${page.profileId.slice(0, 8)}`)
+    controller.signal.addEventListener('abort', () => scTrace(`withPage ${traceId} ${method} ABORTED ${new Error().stack?.split('\n').slice(2, 6).join(' | ')}`))
     const controllers = profile.controllers.get(page.browserPageId) ?? new Set<AbortController>()
     controllers.add(controller)
     profile.controllers.set(page.browserPageId, controllers)
     try {
       return await profile.lock.run(async () => {
+        scTrace(`withPage ${traceId} ${method} lock acquired`)
         if (this.closingPages.has(page.browserPageId)) throw fault('browser_tab_closed', 'the managed page is closing')
         if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
         let current: BrowserPage
@@ -562,7 +567,9 @@ export class BrowserRuntime {
         let result: T
         try {
           result = await operation(execution)
+          scTrace(`withPage ${traceId} ${method} operation ok aborted=${controller.signal.aborted} closing=${this.closingPages.has(page.browserPageId)} changing=${this.changingPages.has(page.browserPageId)} termination=${binding.runtime.termination !== undefined}`)
         } catch (error) {
+          scTrace(`withPage ${traceId} ${method} operation threw ${error instanceof Error ? error.message : error} aborted=${controller.signal.aborted} termination=${binding.runtime.termination !== undefined}`)
           if (controller.signal.aborted) await binding.runtime.termination
           throw error
         }
@@ -584,6 +591,7 @@ export class BrowserRuntime {
       if (transportFailure) throw transportFailure
       throw error
     } finally {
+      scTrace(`withPage ${traceId} ${method} exit`)
       controllers.delete(controller)
       if (controllers.size === 0) profile.controllers.delete(page.browserPageId)
     }
@@ -1799,6 +1807,7 @@ export class BrowserRuntime {
         binding.generation !== this.generation(pageId)) throw fault('browser_tab_changed', 'pending dialog belongs to a stale page generation')
     if (pending.responding) throw fault('browser_error', 'the pending dialog is already being answered')
     pending.responding = true
+    scTrace(`answerDialog ${pageId.slice(0, 8)} accept=${accept} epoch=${epoch.id} session=${binding.sessionId.slice(0, 8)}`)
     try {
       await epoch.cdp.send('Page.handleJavaScriptDialog', {
         accept,
@@ -2560,6 +2569,7 @@ export class BrowserRuntime {
       try { this.dependencies.onDialog?.({ pageId: binding.pageId, type }) } catch { /* observers cannot intercept browser execution */ }
     })
     epoch.cdp.subscribe('Page.javascriptDialogClosed', (event) => {
+      scTrace(`dialogClosed event session=${String(event.sessionId).slice(0, 8)} binding=${binding.sessionId.slice(0, 8)} page=${binding.pageId.slice(0, 8)} epoch=${epoch.id}`)
       if (event.sessionId === binding.sessionId && !this.paneWatchesByPage.has(binding.pageId)) state.pendingDialog = undefined
     })
   }
@@ -2677,10 +2687,13 @@ export class BrowserRuntime {
       native: async (action, fields = {}, timeoutMs = 90_000) => {
         if (signal?.aborted) return await cancellation()
         try {
+          scTrace(`native ${action} start`)
           const response = await nativeRequest(epoch.helper.socketPath, action, fields, timeoutMs, signal)
+          scTrace(`native ${action} resolved success=${response.success} aborted=${signal?.aborted} termination=${binding.runtime.termination !== undefined}`)
           if (signal?.aborted) return await cancellation()
           return response
         } catch (error) {
+          scTrace(`native ${action} rejected ${error instanceof Error ? error.message : error} aborted=${signal?.aborted}`)
           if (signal?.aborted) return await cancellation()
           throw error
         }

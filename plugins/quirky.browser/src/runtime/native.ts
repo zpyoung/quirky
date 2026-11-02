@@ -7,6 +7,7 @@ import { validateValue, type Schema } from '@quirky/protocol'
 import { fault } from './errors'
 import type { BrowserChild, BrowserDependencies } from './dependencies'
 import { stopOwned } from './process'
+const scTrace = (text: string): void => { (globalThis as { __scTrace?: (text: string) => void }).__scTrace?.(text) }
 
 const MAX_FRAME_BYTES = 50 * 1024 * 1024
 const RESPONSE_SCHEMA: Schema = {
@@ -113,7 +114,10 @@ export async function nativeRequest(
   const cleanupAbort = () => {
     if (signal && onAbort) signal.removeEventListener('abort', onAbort)
   }
+  const trace = (text: string) => scTrace(`nativeRequest ${action} ${id.slice(3, 9)} ${text}`)
+  trace('created')
   const timer = setTimeout(() => {
+    trace('TIMER fired')
     if (settled) return
     settled = true
     cleanupAbort()
@@ -140,6 +144,7 @@ export async function nativeRequest(
   if (signal?.aborted) onAbort()
   socket.setEncoding('utf8')
   socket.once('connect', () => {
+    trace(`connected settled=${settled}`)
     if (!settled) socket.write(`${request}\n`)
   })
   socket.on('data', (chunk: string) => {
@@ -174,10 +179,12 @@ export async function nativeRequest(
     clearTimeout(timer)
     cleanupAbort()
     socket.end()
+    trace(`response success=${parsed.success}`)
     response.resolve(parsed)
   })
-  socket.once('error', (error) => finishFailure(error.message))
+  socket.once('error', (error) => { trace(`socket error ${error.message}`); finishFailure(error.message) })
   socket.once('close', () => {
+    trace(`socket close settled=${settled}`)
     if (!settled) finishFailure('native helper socket closed before its response')
   })
   return await response.promise

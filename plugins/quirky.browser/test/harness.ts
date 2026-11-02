@@ -16,6 +16,8 @@ export function traceStep(text: string): void {
   if (process.env.SC_TRACE_FILE) appendFileSync(process.env.SC_TRACE_FILE, `${line}\n`)
 }
 
+(globalThis as { __scTrace?: (text: string) => void }).__scTrace = traceStep
+
 const ROOT = resolve(import.meta.dir, '../../..')
 const PLUGINS = join(ROOT, 'plugins')
 const BROWSER = join(PLUGINS, 'quirky.browser')
