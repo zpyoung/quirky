@@ -24,6 +24,8 @@ export type PaneTab = {
   find: { text: string; current: number; total: number }; prompts: PanePrompt[]; downloads: PaneDownload[];
   sourcePath?: string; preview?: { path: string; url: string }; tabId?: string;
   document?: PaneDocument;
+  /** True once the Watch lease ended on its own; a page error while the lease is alive is a navigation problem, not an ended Watch. */
+  watchEnded?: boolean;
   /** Set on a page converted from the other kind; Back crosses it once guest history runs out. */
   convertedFrom?: PaneConversion;
   /** Set on a page Back returned to across a conversion; Forward re-crosses it. */

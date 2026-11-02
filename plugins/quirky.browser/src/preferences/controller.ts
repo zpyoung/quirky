@@ -154,7 +154,7 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
         !('worktreeId' in pane) || typeof pane.worktreeId !== 'string' || pane.worktreeId.length === 0) {
         throw fault('browser_error', 'paneOpen did not return a pane and worktree identity')
       }
-      await context.call('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: `id:${pane.worktreeId}` } })
+      await context.call('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: pane.worktreeId } })
       return { route: 'app', pane: pane.id }
     }
   }

@@ -59,9 +59,7 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
       await refresh().catch(() => {})
     } catch (cause) {
       if (request !== profileSelectionRequest.current) return
-      const message = errorMessage(cause)
-      setActionError(message)
-      onError(message)
+      setActionError(errorMessage(cause))
     } finally {
       if (request === profileSelectionRequest.current) {
         profileSwitchingRef.current = false

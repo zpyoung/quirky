@@ -676,6 +676,32 @@ describe('layout changes', () => {
     expect(closed).toMatchObject({ worktree: null, view: null, viewTabs: [] })
   })
 
+  test('an id: worktree selector selects the bare worktree id and keeps the input', async () => {
+    const { caller } = await start()
+    const input = { worktree: 'id:wt_x' }
+    await caller.call('ui.view.open', { id: PAGE, input })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({
+      worktree: 'wt_x',
+      view: { id: PAGE, input }
+    })
+    await caller.call('ui.view.open', { id: OTHER_PAGE, input: { worktree: 'wt_y' } })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({ worktree: 'wt_y' })
+  })
+
+  test('forgetWorktree removes view tabs opened with an id: selector', () => {
+    const win = testWindow(1)
+    const { service } = makeLayoutService([win])
+    service.openWindowView(win.id, PAGE, { worktree: 'id:wt_x' })
+    service.openWindowView(win.id, OTHER_PAGE, { worktree: 'wt_keep' })
+    service.openWindowView(win.id, PAGE, { worktree: 'id:wt_x', tab: 2 })
+
+    service.forgetWorktree('wt_x')
+
+    const layout = service.windowState(win.id).layout
+    expect(layout.worktree).toBe('wt_keep')
+    expect(layout.viewTabs).toEqual([{ id: OTHER_PAGE, input: { worktree: 'wt_keep' } }])
+  })
+
   test('forgetWorktree removes matching tabs from every window and preserves unrelated layouts', () => {
     const first = testWindow(1)
     const second = testWindow(2)

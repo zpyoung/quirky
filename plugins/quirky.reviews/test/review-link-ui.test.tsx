@@ -373,7 +373,7 @@ async function assertRoute(
     const uiState = await host.client.call('ui.state', {}) as { layout: { view: { id: string; input: { worktree: string } } } }
     expect(uiState.layout.view).toMatchObject({
       id: 'view:quirky.session/worktree',
-      input: { worktree: `id:${worktree}` }
+      input: { worktree }
     })
   } else {
     expect(currentExternal.slice(previousExternal.length)).toContainEqual({ target: url, reveal: false })

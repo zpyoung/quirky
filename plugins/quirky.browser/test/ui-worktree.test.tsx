@@ -78,7 +78,7 @@ describe('Browser new tab workspace selection', () => {
     expect(ui.calls.filter((call) => call.method === 'quirky.browser/paneOpen')).toEqual([
       { method: 'quirky.browser/paneOpen', params: { worktree: 'wt-selected', url: 'https://example.test' } }
     ])
-    expect(ui.opened).toEqual([{ id: 'view:quirky.session/worktree', input: { worktree: 'id:wt-resolved' } }])
+    expect(ui.opened).toEqual([{ id: 'view:quirky.session/worktree', input: { worktree: 'wt-resolved' } }])
   })
 
   test('does not fall back to a view-specific input when no worktree is selected', async () => {
@@ -100,6 +100,6 @@ describe('Browser new tab workspace selection', () => {
       { worktree: 'floating' }
     ])
     expect(ui.calls.filter((call) => call.method === 'quirky.terminal/setFloating').map((call) => call.params)).toEqual([{ open: true }])
-    expect(ui.opened).toEqual([{ id: 'view:quirky.session/worktree', input: { worktree: 'id:wt-resolved' } }])
+    expect(ui.opened).toEqual([{ id: 'view:quirky.session/worktree', input: { worktree: 'wt-resolved' } }])
   })
 })

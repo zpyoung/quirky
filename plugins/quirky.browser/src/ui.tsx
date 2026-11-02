@@ -62,7 +62,7 @@ async function openBrowserTab(context: UiPluginContext, raw: unknown): Promise<u
   }
   try {
     const pane = await context.call('quirky.browser/paneOpen', params) as PaneTab
-    const workspace = pane.worktreeId.startsWith('id:') ? pane.worktreeId : `id:${pane.worktreeId}`
+    const workspace = pane.worktreeId.replace(/^id:/, '')
     if (pane.worktreeId === 'floating') await context.call('quirky.terminal/setFloating', { open: true })
     else context.openView(WORKTREE_VIEW, { worktree: workspace })
     return { pane: pane.id, tabId: pane.tabId }
