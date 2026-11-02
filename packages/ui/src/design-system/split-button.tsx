@@ -18,17 +18,19 @@ export function SplitButton({ label, onClick, disabled, busy, title, menuLabel, 
     const rect = caret.current?.getBoundingClientRect()
     if (rect) setAnchor({ x: rect.right, y: rect.bottom })
   }
-  const menuItems: ContextMenuItem[] = items.map((item) =>
-    item.id === undefined || item.submenu
-      ? item
-      : {
-          ...item,
-          onSelect: () => {
-            caret.current?.focus()
-            onChoose(item.id!)
-          },
-        }
-  )
+  const withChoose = (list: ContextMenuItem[]): ContextMenuItem[] =>
+    list.map((item) => {
+      if (item.submenu) return { ...item, submenu: withChoose(item.submenu) }
+      if (item.id === undefined) return item
+      return {
+        ...item,
+        onSelect: () => {
+          caret.current?.focus()
+          onChoose(item.id!)
+        },
+      }
+    })
+  const menuItems = withChoose(items)
 
   return (
     <span className="ui-split-button">

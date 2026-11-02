@@ -109,6 +109,23 @@ describe('SplitButton', () => {
     expect(document.activeElement).toBe(caret)
   })
 
+  test('chooses a nested item and returns focus to the caret', async () => {
+    const nested: ContextMenuItem[] = [
+      { label: 'Other', submenu: [{ id: 'child', label: 'Child' }] },
+    ]
+    const { calls, node } = mount({ items: nested })
+    await render(node)
+    const caret = byLabel('More ship steps')
+    await click(caret)
+    const rowNamed = (text: string) =>
+      [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((r) => r.textContent!.includes(text))!
+    await click(rowNamed('Other'))
+    await click(rowNamed('Child'))
+    expect(calls.chosen).toEqual(['child'])
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    expect(document.activeElement).toBe(caret)
+  })
+
   test('closes on Escape and returns focus to the caret', async () => {
     const { node } = mount()
     await render(node)
