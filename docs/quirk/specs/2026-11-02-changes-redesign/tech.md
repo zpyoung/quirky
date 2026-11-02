@@ -298,7 +298,7 @@ key: `git-diff:${JSON.stringify([worktree, 'review'])}`
 - `src/view/ConflictReview.tsx`, `src/view/ConflictFile.tsx`, `src/view/conflict-markers.ts` and the `conflicts`/`conflict-file` modes. Conflict resolution is out of scope ([Scope and non-goals](logic.md#scope-and-non-goals)). The only conflict change is dropping the "1 conflict(s)" chip in the panel.
 - `src/ai/AiSettingsView.tsx` and the recipe store (`src/daemon/ai-recipes.ts`). The AI defaults form is out of scope.
 - `plugins/quirky.reviews` (the PR form and `createOpen`). Out of scope. The panel only calls it.
-- The git operations in `packages/git` (`stagePaths`, `unstagePaths`, `discardPaths`, `commit`, remote ops, `compare`). Their behavior stays. Only `worktreeChangeList` and the `'worktree'` diff source are added.
+- The git operations in `packages/git` (`stagePaths`, `unstagePaths`, `discardPaths`, `commit`, remote ops, `compare`). Their behavior stays. Only `worktreeChangeList`, the `'worktree'` diff source and `workingPatch` (HEAD to the working tree, untracked included, beside `stagedPatch`, for `generateCommitMessage { scope: 'all' }`) are added.
 - The `notes` table and the note RPCs' shapes. Note placement changes, storage doesn't.
 - Earlier entries in `src/daemon/store.ts` `migrations`. The store is append-only, and editing an applied migration breaks existing databases.
 - The panel's Create PR safety checks (`exactStatus` revalidation, head-change detection, cancel). They protect against racing agent commits. Move them, never weaken them.
