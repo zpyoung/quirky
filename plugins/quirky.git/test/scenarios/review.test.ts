@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { RpcErrorCode, type GitDiff, type ReviewFile, type ReviewModel } from '@quirky/protocol'
+import { STATUS_ENTRY_LIMIT } from '@quirky/git'
+import { createFakeGit, useTestGit } from '@quirky/git/testing'
+import { RpcErrorCode, type GitDiff, type GitStatusEntry, type ReviewFile, type ReviewModel, type Worktree } from '@quirky/protocol'
+import { readReview } from '../../src/daemon/review'
+import type { DaemonEnv } from '../../src/daemon/env'
 import { commitInFeat, isolateScenarioGit, startScenario, type Scenario } from './fixture'
 
 const { scratch } = isolateScenarioGit()
@@ -110,6 +115,101 @@ describe('the review model', () => {
     await mark('README.md')
     expect(row(await review(), 'a.ts').mark).toBe('reviewed')
     expect(await s.api('reviewedContent', { path: 'README.md' })).toMatchObject({ content: 'one\ntwo\n' })
+  })
+})
+
+describe('the review model without a compare', () => {
+  test('lists a partly staged file once even when its bytes on disk match HEAD', async () => {
+    s = await startScenario(scratch)
+    s.write('README.md', 'one\ntwo\nthree\n')
+    s.gitIn('add', 'README.md')
+    s.write('README.md', 'one\ntwo\n')
+    await s.client.callAny('quirky.worktree/set', { worktree: s.feat.id, baseRef: 'no-such-ref' })
+
+    const model = await review()
+    expect(model.compare.status).toBe('invalid-base')
+    expect(model.files).toEqual([
+      { path: 'README.md', status: 'M', added: 1, removed: 1, binary: false, uncommitted: true, staged: true, mark: 'none', notes: 0 }
+    ])
+    expect(model.counts).toMatchObject({ files: 1, uncommitted: 1, staged: 1 })
+  })
+})
+
+describe('the review model size', () => {
+  function stubbed(
+    entries: GitStatusEntry[],
+    listed: number,
+    options: { path?: string; paths?: string[]; marks?: { path: string; hash: string }[] } = {}
+  ): { env: DaemonEnv; worktree: Worktree } {
+    const fake = createFakeGit()
+    fake.compare = async () => ({
+      status: 'ready' as const,
+      baseSource: 'detected' as const,
+      message: null,
+      base: 'main',
+      mergeBase: 'abc',
+      headOid: 'def',
+      baseOid: 'abc',
+      ahead: 1,
+      behind: 0,
+      entries: [],
+      added: 0,
+      removed: 0
+    })
+    useTestGit(fake)
+    const env = {
+      context: { getSetting: () => undefined },
+      readStatus: async () => ({ branch: 'feature', unborn: false, capped: false, entries }),
+      changeList: async () => ({
+        changes: (options.paths ?? Array.from({ length: listed }, (_, i) => `f${String(i).padStart(4, '0')}`)).map((path) => ({ path, status: 'modified' as const, added: 1, removed: 0, binary: false })),
+        capped: false
+      }),
+      reviewMarks: { list: () => (options.marks ?? []).map((mark) => ({ ...mark, baseKey: 'main' })), clear: () => 0, removeAll: () => 0 },
+      notes: { list: () => [] },
+      reviewChanged: () => {},
+      changed: () => {}
+    } as unknown as DaemonEnv
+    return { env, worktree: { id: 'w', path: options.path ?? process.cwd(), baseRef: 'main' } as unknown as Worktree }
+  }
+  afterEach(() => useTestGit(null))
+
+  test('never lists more than the status limit, keeps the conflicts that did not fit and says it was capped', async () => {
+    const conflict: GitStatusEntry = { path: 'zz-conflict', area: 'conflicts', status: 'modified', conflict: { kind: 'both_modified', state: 'unresolved' } }
+    const { env, worktree } = stubbed([conflict], STATUS_ENTRY_LIMIT)
+
+    const model = await readReview(env, worktree)
+    expect(model.files).toHaveLength(STATUS_ENTRY_LIMIT)
+    expect(model.files.some((file) => file.path === 'zz-conflict' && file.conflict !== undefined)).toBe(true)
+    expect(model.capped).toBe(true)
+  })
+
+  test('a marked file that cannot be read is changed and does not fail the review', async () => {
+    if (process.getuid?.() === 0) return
+    const dir = mkdtempSync(join(tmpdir(), 'qd-unreadable-'))
+    const file = join(dir, 'locked.txt')
+    writeFileSync(file, 'text\n')
+    chmodSync(file, 0o000)
+    try {
+      const { env, worktree } = stubbed([{ path: 'locked.txt', area: 'unstaged', status: 'modified' }], 0, {
+        path: dir,
+        paths: ['locked.txt'],
+        marks: [{ path: 'locked.txt', hash: sha256('text\n') }]
+      })
+      const model = await readReview(env, worktree)
+      expect(row(model, 'locked.txt').mark).toBe('changed')
+    } finally {
+      chmodSync(file, 0o644)
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('a list within the limit is not capped', async () => {
+    const conflict: GitStatusEntry = { path: 'zz-conflict', area: 'conflicts', status: 'modified', conflict: { kind: 'both_modified', state: 'unresolved' } }
+    const { env, worktree } = stubbed([conflict], STATUS_ENTRY_LIMIT - 1)
+
+    const model = await readReview(env, worktree)
+    expect(model.files).toHaveLength(STATUS_ENTRY_LIMIT)
+    expect(model.capped).toBe(false)
   })
 })
 
@@ -246,6 +346,56 @@ describe('review marks', () => {
 
     expect(await s.api('reviewedContent', { path: 'blob.bin' })).toEqual({ content: null, hash: sha256(bytes), binary: true, tooLarge: false })
     expect(row(await review(), 'blob.bin')).toMatchObject({ binary: true, added: null, mark: 'reviewed' })
+  })
+
+  test('pruning and clearing marks on a read announce reviewChanged and changed once, and a read with nothing to prune stays quiet', async () => {
+    s = await startScenario(scratch)
+    s.write('b.ts', 'bee\nbuzz\n')
+    s.write('a.ts', 'one\nuno\n')
+    await mark('b.ts')
+    await mark('a.ts')
+    await review()
+    await s.flushEvents()
+    const quiet = { review: countOf('quirky.git/reviewChanged'), changed: countOf('quirky.git/changed') }
+    await review()
+    await s.flushEvents()
+    expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review)
+
+    s.write('b.ts', 'bee\n')
+    await review()
+    await s.flushEvents()
+    expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 1)
+    expect(countOf('quirky.git/changed')).toBeGreaterThan(quiet.changed)
+    await review()
+    await s.flushEvents()
+    expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 1)
+
+    await s.client.callAny('quirky.worktree/set', { worktree: s.feat.id, baseRef: 'main' })
+    await review()
+    await s.flushEvents()
+    expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 2)
+    await review()
+    await s.flushEvents()
+    expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 2)
+  })
+
+  test('a marked file whose folder became a symlink out of the worktree reads as changed and is never followed', async () => {
+    s = await startScenario(scratch)
+    commitInFeat(s, { 'dir/f.txt': 'base\n' })
+    s.write('dir/f.txt', 'mine\n')
+    await mark('dir/f.txt')
+    expect(row(await review(), 'dir/f.txt').mark).toBe('reviewed')
+
+    const outside = mkdtempSync(join(tmpdir(), 'qd-outside-'))
+    try {
+      writeFileSync(join(outside, 'f.txt'), 'mine\n')
+      rmSync(join(s.feat.path, 'dir'), { recursive: true })
+      symlinkSync(outside, join(s.feat.path, 'dir'))
+      const model = await review()
+      expect(model.files.find((file) => file.path === 'dir/f.txt')?.mark ?? 'changed').toBe('changed')
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 
   test('every mutation announces reviewChanged and changed for the worktree', async () => {

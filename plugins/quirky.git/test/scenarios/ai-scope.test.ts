@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
-import { RpcError, RpcErrorCode } from '@quirky/protocol'
+import { createFakeGit, useTestGit } from '@quirky/git/testing'
+import { RpcError, RpcErrorCode, type Worktree } from '@quirky/protocol'
+import { readUncommittedContext } from '../../src/daemon/ai-context'
+import type { DaemonEnv } from '../../src/daemon/env'
 import { buildCommitMessagePrompt } from '../../src/daemon/ai-prompts'
 import { startAiWorld, type AiWorld } from './ai-world'
 
@@ -113,5 +116,27 @@ describe('generateCommitMessage scope', () => {
   test('a scope that is neither staged nor all is refused', async () => {
     w = await startAiWorld()
     expect((await fails(w.api('generateCommitMessage', { scope: 'everything' }))).code).toBe(RpcErrorCode.InvalidParams)
+  })
+})
+
+describe('the uncommitted context on an unborn branch', () => {
+  afterEach(() => useTestGit(null))
+
+  test('lists a partly staged new file once', async () => {
+    useTestGit(createFakeGit())
+    const env = {
+      readStatus: async () => ({
+        unborn: true,
+        branch: 'main',
+        entries: [
+          { path: 'new.txt', area: 'unstaged', status: 'modified' },
+          { path: 'new.txt', area: 'staged', status: 'added' },
+          { path: 'other.txt', area: 'untracked', status: 'untracked' }
+        ]
+      })
+    } as unknown as DaemonEnv
+
+    const context = await readUncommittedContext(env, { path: process.cwd() } as unknown as Worktree)
+    expect(context?.stagedFiles).toBe('A\tnew.txt\nA\tother.txt')
   })
 })

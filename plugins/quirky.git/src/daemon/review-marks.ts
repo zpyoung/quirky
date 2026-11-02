@@ -67,15 +67,14 @@ export class ReviewMarks {
     )
   }
 
-  remove(worktreeId: string, path: string): void {
-    this.store.run('DELETE FROM review_marks WHERE worktree_id = ? AND path = ?', worktreeId, path)
+  /** Deletes the mark of `path` and returns how many rows went (0 or 1). */
+  remove(worktreeId: string, path: string): number {
+    return this.store.run('DELETE FROM review_marks WHERE worktree_id = ? AND path = ?', worktreeId, path).changes
   }
 
-  /** Deletes the marks of `paths` in one transaction. */
-  removeAll(worktreeId: string, paths: readonly string[]): void {
-    this.store.transaction(() => {
-      for (const path of paths) this.remove(worktreeId, path)
-    })
+  /** Deletes the marks of `paths` in one transaction and returns how many rows went. */
+  removeAll(worktreeId: string, paths: readonly string[]): number {
+    return this.store.transaction(() => paths.reduce((deleted, path) => deleted + this.remove(worktreeId, path), 0))
   }
 
   /** Deletes every mark of the worktree and returns how many went. */
@@ -138,4 +137,20 @@ export async function readDisk(full: string): Promise<DiskContent> {
   if (info.size > MAX_BLOB_BYTES) return { hash: await hashFile(full), content: null }
   const bytes = new Uint8Array(await readFile(full))
   return { hash: contentHash(bytes), content: storable(bytes) }
+}
+
+/**
+ * The hash `readDisk` would report for `full`, computed by streaming so no file content is held.
+ * A missing path or a non-file gives null; any other read failure is thrown for the caller to judge.
+ */
+export async function hashDisk(full: string): Promise<string | null> {
+  try {
+    const info = await lstat(full)
+    if (info.isSymbolicLink()) return contentHash(new TextEncoder().encode(await readlink(full)))
+    return info.isFile() ? await hashFile(full) : null
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null
+    throw error
+  }
 }

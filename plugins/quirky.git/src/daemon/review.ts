@@ -1,13 +1,13 @@
 import { realpath } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative } from 'node:path'
-import { ChangedOnDiskError, MAX_RENDER_CHARACTERS, MAX_RENDER_LINES_PER_SIDE, gitApi } from '@quirky/git'
+import { dirname, isAbsolute, relative } from 'node:path'
+import { ChangedOnDiskError, MAX_RENDER_CHARACTERS, MAX_RENDER_LINES_PER_SIDE, STATUS_ENTRY_LIMIT, gitApi } from '@quirky/git'
 import type { GitChange, GitDiff, GitStatusEntry, ReviewFile, ReviewMarkState, ReviewModel, Worktree } from '@quirky/protocol'
 import { compareBase } from './base'
 import { readCompare } from './compare'
 import type { DaemonEnv, Handler } from './env'
 import { serialised } from './files'
 import { containedPath } from './paths'
-import { DELETED_HASH, readDisk, storable } from './review-marks'
+import { DELETED_HASH, hashDisk, readDisk, storable } from './review-marks'
 
 const LETTERS: Record<GitChange['status'], ReviewFile['status']> = {
   modified: 'M',
@@ -25,7 +25,7 @@ const utf8 = new TextEncoder()
 const byteOrder = (a: string, b: string): number => Buffer.compare(utf8.encode(a), utf8.encode(b))
 
 /** What the status says about one path across its areas. */
-type Facts = { staged: boolean; conflict?: GitStatusEntry['conflict']; entry: GitStatusEntry }
+type Facts = { staged: boolean; conflict?: GitStatusEntry['conflict']; entry: GitStatusEntry; entries: GitStatusEntry[] }
 
 function factsByPath(entries: readonly GitStatusEntry[]): Map<string, Facts> {
   const facts = new Map<string, Facts>()
@@ -33,23 +33,39 @@ function factsByPath(entries: readonly GitStatusEntry[]): Map<string, Facts> {
   for (const entry of ranked) {
     const known = facts.get(entry.path)
     if (!known) {
-      facts.set(entry.path, { staged: entry.area === 'staged', ...(entry.conflict ? { conflict: entry.conflict } : {}), entry })
+      facts.set(entry.path, { staged: entry.area === 'staged', ...(entry.conflict ? { conflict: entry.conflict } : {}), entry, entries: [entry] })
       continue
     }
+    known.entries.push(entry)
     if (entry.area === 'staged') known.staged = true
     if (entry.conflict) known.conflict ??= entry.conflict
   }
   return facts
 }
 
-const asChange = (entry: GitStatusEntry): GitChange => ({
-  path: entry.path,
-  ...(entry.oldPath !== undefined ? { oldPath: entry.oldPath } : {}),
-  status: entry.status,
-  added: entry.added ?? null,
-  removed: entry.removed ?? null,
-  binary: entry.binary ?? false
-})
+/** The change the status alone shows for a path: its first area's letter, line counts summed across areas (null when any is unknown). */
+function statusChange({ entry, entries }: Facts): GitChange {
+  const total = (key: 'added' | 'removed'): number | null =>
+    entries.every((each) => each[key] !== undefined) ? entries.reduce((sum, each) => sum + (each[key] ?? 0), 0) : null
+  return {
+    path: entry.path,
+    ...(entry.oldPath !== undefined ? { oldPath: entry.oldPath } : {}),
+    status: entry.status,
+    added: total('added'),
+    removed: total('removed'),
+    binary: entries.some((each) => each.binary === true)
+  }
+}
+
+/** Whether a mark still holds the bytes at its path; a path that left the worktree or cannot be read counts as changed and is never followed. */
+async function markState(worktreePath: string, mark: { path: string; hash: string }): Promise<ReviewMarkState> {
+  try {
+    const { absolute } = await containedPath(worktreePath, mark.path)
+    return ((await hashDisk(absolute)) ?? DELETED_HASH) === mark.hash ? 'reviewed' : 'changed'
+  } catch {
+    return 'changed'
+  }
+}
 
 /** Evaluates `check` over `items` a few at a time so a long list does not open every file at once. */
 async function inBatches<T, R>(items: readonly T[], check: (item: T) => Promise<R>): Promise<R[]> {
@@ -73,23 +89,24 @@ export async function readReview(env: DaemonEnv, worktree: Worktree): Promise<Re
 
   const from = ready ? current.mergeBase! : status.unborn ? null : 'HEAD'
   const listed = from === null ? null : await env.changeList(worktree, from)
-  const changes = (listed?.changes ?? [...facts.values()].map(({ entry }) => asChange(entry))).filter(
-    (change) => ready || facts.has(change.path)
-  )
-  const capped = (listed?.capped ?? false) || status.capped
+  const listedByPath = new Map((listed?.changes ?? []).map((change) => [change.path, change]))
+  const changes = ready ? (listed?.changes ?? []) : [...facts.values()].map((known) => listedByPath.get(known.entry.path) ?? statusChange(known))
   const listedPaths = new Set(changes.map((change) => change.path))
-  const conflictsOnly = [...facts.values()].filter(({ conflict, entry }) => conflict && !listedPaths.has(entry.path))
+  const conflictsOnly = [...facts.values()].filter(({ conflict, entry }) => conflict && !listedPaths.has(entry.path)).map(statusChange)
+  const kept = [...conflictsOnly.slice(0, STATUS_ENTRY_LIMIT), ...changes.slice(0, Math.max(STATUS_ENTRY_LIMIT - conflictsOnly.length, 0))]
+  const capped = (listed?.capped ?? false) || status.capped || changes.length + conflictsOnly.length > kept.length
 
+  let deletedMarks = 0
   let marks = env.reviewMarks.list(worktree.id)
   if (current.base !== null && marks.some((mark) => mark.baseKey !== current.base)) {
-    env.reviewMarks.clear(worktree.id)
+    deletedMarks += env.reviewMarks.clear(worktree.id)
     marks = []
   }
 
   const noteCounts = new Map<string, number>()
   for (const note of env.notes.list(worktree.id)) noteCounts.set(note.path, (noteCounts.get(note.path) ?? 0) + 1)
 
-  const files: ReviewFile[] = [...changes, ...conflictsOnly.map(({ entry }) => asChange(entry))].map((change) => {
+  const files: ReviewFile[] = kept.map((change) => {
     const known = facts.get(change.path)
     const entry = known?.entry
     return {
@@ -112,16 +129,20 @@ export async function readReview(env: DaemonEnv, worktree: Worktree): Promise<Re
   const byPath = new Map(files.map((file) => [file.path, file]))
   if (ready && !capped) {
     const stale = marks.filter((mark) => !byPath.has(mark.path)).map((mark) => mark.path)
-    if (stale.length > 0) env.reviewMarks.removeAll(worktree.id, stale)
+    if (stale.length > 0) deletedMarks += env.reviewMarks.removeAll(worktree.id, stale)
+  }
+  if (deletedMarks > 0) {
+    env.reviewChanged(worktree)
+    env.changed(worktree)
   }
   const states = await inBatches(
     marks.filter((mark) => {
       const file = byPath.get(mark.path)
       return file !== undefined && file.conflict === undefined
     }),
-    async (mark) => ({ mark, disk: await readDisk(join(worktree.path, mark.path)) })
+    async (mark) => ({ mark, state: await markState(worktree.path, mark) })
   )
-  for (const { mark, disk } of states) byPath.get(mark.path)!.mark = (disk.hash ?? DELETED_HASH) === mark.hash ? 'reviewed' : 'changed'
+  for (const { mark, state } of states) byPath.get(mark.path)!.mark = state
 
   return {
     worktreeId: worktree.id,
