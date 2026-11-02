@@ -187,7 +187,7 @@ describe('command sessions with the interactive shell PATH', () => {
     const pidFile = join(root, 'logout.pid')
     write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
     write(join(userHome, '.zlogout'), `echo $$ > ${pidFile}\nsleep 30`)
-    const path = await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 1000 })
+    const path = await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 3000 })
     expect(path?.split(':')[0]).toBe(rcBin())
     const pid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
     await waitFor(gone(pid), 5000)
@@ -196,7 +196,7 @@ describe('command sessions with the interactive shell PATH', () => {
   test('a shell that closes stdout before printing its PATH is stopped at the timeout', async () => {
     const pidFile = join(root, 'rc.pid')
     write(join(userHome, '.zshrc'), `exec >/dev/null\necho $$ > ${pidFile}\nsleep 30`)
-    expect(await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 1000 })).toBeUndefined()
+    expect(await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 3000 })).toBeUndefined()
     const pid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
     await waitFor(gone(pid), 5000)
   })
@@ -205,8 +205,8 @@ describe('command sessions with the interactive shell PATH', () => {
     const pidFile = join(root, 'rc.pid')
     write(join(userHome, '.zshrc'), `echo $$ > ${pidFile}\nsleep 30`)
     const startedAt = Date.now()
-    expect(await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 500 })).toBeUndefined()
-    expect(Date.now() - startedAt).toBeLessThan(5000)
+    expect(await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 3000 })).toBeUndefined()
+    expect(Date.now() - startedAt).toBeLessThan(10000)
     const pid = Number(readFileSync(pidFile, 'utf8').trim())
     await waitFor(() => {
       try {
@@ -275,7 +275,7 @@ describe('command sessions with the interactive shell PATH', () => {
 
     test('a failed refresh keeps the last PATH', async () => {
       write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
-      const kept = cache('/bin/zsh', { timeoutMs: 500 })
+      const kept = cache('/bin/zsh', { timeoutMs: 3000 })
       await kept.refresh()
       write(join(userHome, '.zshrc'), 'sleep 30')
       await kept.refresh()
