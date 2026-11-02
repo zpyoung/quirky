@@ -65,6 +65,14 @@ describe('attach, replay and input', () => {
     expect(fake.callsTo('quirky.terminal/write')).toHaveLength(1)
   })
 
+  test('a program asking about synchronized output hears that the pane supports it', async () => {
+    const { fake, pane } = await mount()
+    await fake.push(101, '\x1b[?2026$p')
+    await pane.flush()
+    // DECRPM status 2 is "recognized, currently reset"; 0 would mean frames draw as they arrive
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params.data)).toEqual(['\x1b[?2026;2$y'])
+  })
+
   test('a pane that is not interactive ignores input', async () => {
     const { fake, pane } = await mount({ interactive: false })
     await act(async () => pane.term().input('ls'))

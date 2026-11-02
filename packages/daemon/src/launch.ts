@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withoutAgentSessionMarkers } from '@quirky/protocol/node'
+import pkg from '../package.json'
 
 export function defaultCliEntry(): string {
   return process.env.QUIRKY_CLI_ENTRY ?? fileURLToPath(new URL('../../cli/src/main.ts', import.meta.url))
@@ -71,7 +72,15 @@ export function buildSessionEnv(options: {
   for (const [key, value] of Object.entries(withoutAgentSessionMarkers(options.base ?? process.env))) {
     if (value !== undefined && !key.startsWith('QUIRKY_')) env[key] = value
   }
-  const baseEnv: Record<string, string> = { ...env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
+  const baseEnv: Record<string, string> = {
+    ...env,
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    TERM_PROGRAM: 'Quirky',
+    TERM_PROGRAM_VERSION: pkg.version,
+    // claude only probes for DEC 2026 after an XTVERSION reply, which xterm.js never sends
+    CLAUDE_CODE_FORCE_SYNC_OUTPUT: '1'
+  }
   for (const [key, value] of Object.entries(options.envPatch ?? {})) {
     if (value === null) delete baseEnv[key]
     else baseEnv[key] = value

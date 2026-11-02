@@ -6,6 +6,7 @@ import type { DesktopShellBridge, UiSlotState, UiState } from '@quirky/protocol'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../../packages/ui/test/fixtures/headless-window'
 import type { ViewReport } from '../../src/window/workspace/controller'
 import type { FloatingState, Workspace } from '../../src/layout/types'
+import { stubXtermFontMetrics } from '../xterm-metrics'
 import { cleanupAll, ensureWorkspace, layoutOf, leavesOf, openTab, startE2e, tabsOf, waitFor, waitReady, type E2eHarness } from '../e2e/support'
 
 export { cleanupAll, ensureWorkspace, layoutOf, openTab, startE2e, waitFor, waitReady }
@@ -275,13 +276,14 @@ function firstSession(workspace: Workspace): string {
   return leavesOf(tabsOf(workspace)[0]!.root)[0]!.session
 }
 
-/** A 2d canvas context for xterm's overview ruler, a fixed size for every measured box, and a recording clipboard. */
+/** A 2d canvas context for xterm's overview ruler, xterm's cell size, a fixed size for every measured box, and a recording clipboard. */
 function installStubs(clipboard: Clipboard): () => void {
   const getContext = HTMLCanvasElement.prototype.getContext
   const context2d = new Proxy({}, { get: () => () => ({ width: 0 }), set: () => true })
   HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string) {
     return type === '2d' ? context2d : null
   } as typeof getContext
+  const restoreMetrics = stubXtermFontMetrics()
 
   const rect = Element.prototype.getBoundingClientRect
   Element.prototype.getBoundingClientRect = function (this: Element) {
@@ -314,6 +316,7 @@ function installStubs(clipboard: Clipboard): () => void {
   return () => {
     HTMLCanvasElement.prototype.getContext = getContext
     Element.prototype.getBoundingClientRect = rect
+    restoreMetrics()
   }
 }
 
