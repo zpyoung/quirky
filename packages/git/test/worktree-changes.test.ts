@@ -98,6 +98,47 @@ describe('worktreeChangeList', () => {
     expect(exact.changes).toHaveLength(4)
   })
 
+  test('a file dropped from the index but kept on disk is one change from the base blob to the disk', async () => {
+    const { dir, base } = featRepo({ 'a.txt': 'one\ntwo\nthree\n', 'bin.dat': 'text\n' })
+    git(dir, 'rm', '-q', '--cached', 'a.txt', 'bin.dat')
+    writeFileSync(join(dir, 'a.txt'), 'one\n2\nthree\nfour\n')
+    writeFileSync(join(dir, 'bin.dat'), Buffer.from([0, 1, 2]))
+
+    const { changes, capped } = await worktreeChangeList(dir, base)
+    expect(capped).toBe(false)
+    expect(changes.map((c) => c.path)).toEqual(['a.txt', 'bin.dat'])
+    expect(changes[0]).toEqual({ path: 'a.txt', status: 'modified', added: 2, removed: 1, binary: false })
+    expect(changes[1]).toMatchObject({ path: 'bin.dat', status: 'modified', added: null, removed: null, binary: true })
+  })
+
+  test('a file dropped from the index whose disk bytes match the base is not listed', async () => {
+    const { dir, base } = featRepo({ 'a.txt': 'one\n', 'b.txt': 'two\n' })
+    git(dir, 'rm', '-q', '--cached', 'a.txt')
+    expect((await worktreeChangeList(dir, base)).changes).toEqual([])
+  })
+
+  test('omitted recreated files do not make a list that fits the limit look capped', async () => {
+    const { dir, base } = featRepo({ 'a.txt': 'one\n' })
+    git(dir, 'rm', '-q', '--cached', 'a.txt')
+    for (const name of ['b.txt', 'c.txt']) writeFileSync(join(dir, name), 'x\n')
+
+    const result = await worktreeChangeList(dir, base, { limit: 2 })
+    expect(result.capped).toBe(false)
+    expect(result.changes.map((c) => c.path)).toEqual(['b.txt', 'c.txt'])
+  })
+
+  test('a capped list is sorted by path and holds exactly the limit', async () => {
+    const { dir, base } = featRepo({ 'a.txt': 'one\n' })
+    for (const name of ['t10.txt', 't2.txt', 't1.txt']) writeFileSync(join(dir, name), 'x\n')
+    writeFileSync(join(dir, 'a.txt'), 'changed\n')
+
+    const result = await worktreeChangeList(dir, base, { limit: 3 })
+    expect(result.capped).toBe(true)
+    const paths = result.changes.map((c) => c.path)
+    expect(paths).toHaveLength(3)
+    expect(paths).toEqual([...paths].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })))
+  })
+
   test('sharedSymlinks that are symlinks are left out, real paths of the same name are kept', async () => {
     const { dir, base } = featRepo({ 'a.txt': 'one\n' })
     mkdirSync(join(dir, 'target'))
