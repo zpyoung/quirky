@@ -413,4 +413,8 @@ The whole-change screenshot review and click-through under Rollout answer the fi
 
 ## Status & amendments
 
-Status: Approved 2026-11-02.
+Status: Approved 2026-11-02. Tech spec: required, because the work crosses `packages/git`, both halves of `quirky.git`, `quirky.editor` and `@quirky/ui`; it is authored as [tech.md](tech.md).
+
+**Amendments:**
+
+- 2026-11-02, while writing the tech spec: two existing features the design didn't place keep a home. The PR AI actions (read pull request details, review pull request, draft conversation reply) move into the panel's ⋯ menu while a PR is open for the branch. Fast-forward and Rebase from base stay in the ship button's caret beside the steps scenario 22 lists, greyed with a reason when they can't run. When nothing is left to do but no step can run, such as everything pushed with no GitHub remote, the ship bar shows a quiet line like "Pushed to origin/ui-review-ready" with the caret beside it instead of a disabled button.
