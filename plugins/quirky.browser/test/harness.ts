@@ -8,6 +8,12 @@ import { startHarness, type Harness } from '../../../packages/daemon/test/helper
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { setBrowserTestOverrides, takeBrowserTestOverrides, type BrowserTestOverrides } from './dependencies'
 
+const traceOrigin = Date.now()
+/** Diagnostic step log for the SC6-SC7 hang investigation; prints elapsed seconds since this module loaded. */
+export function traceStep(text: string): void {
+  console.error(`[sc-trace +${((Date.now() - traceOrigin) / 1000).toFixed(1)}s] ${text}`)
+}
+
 const ROOT = resolve(import.meta.dir, '../../..')
 const PLUGINS = join(ROOT, 'plugins')
 const BROWSER = join(PLUGINS, 'quirky.browser')
@@ -108,7 +114,10 @@ export async function startBrowserHarness(
     runtimeRoot: BROWSER,
     spawn(command, options) {
       launched.push([...command])
-      return scope.spawn(command, options)
+      const child = scope.spawn(command, options)
+      traceStep(`spawn ${child.pid} ${command[0]?.split('/').pop()}`)
+      void child.exited.then((code) => traceStep(`exited ${child.pid} ${command[0]?.split('/').pop()} ${code}`))
+      return child
     },
     chromePath: null,
     downloadDirectory: join(home, 'Downloads'),
@@ -124,8 +133,10 @@ export async function startBrowserHarness(
   useTestGit(fakeGit)
   let daemon: Harness | undefined
   try {
+    traceStep('harness start')
     daemon = await startHarness({ home, builtinPluginsDir })
     const client = await daemon.connect('cli')
+    traceStep('harness ready')
     return {
       home,
       scope,
@@ -149,8 +160,11 @@ export async function startBrowserHarness(
         fixture.stop()
         useTestGit(null)
         let error: unknown
+        traceStep('cleanup daemon')
         try { await daemon!.cleanup() } catch (cleanupError) { error = cleanupError }
+        traceStep('cleanup scope')
         try { await scope.cleanup() } catch (cleanupError) { error ??= cleanupError }
+        traceStep(`cleanup done ${error ? String(error) : ''}`)
         rmSync(work, { recursive: true, force: true })
         if (error) throw error
       }

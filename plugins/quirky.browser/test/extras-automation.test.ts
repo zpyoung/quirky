@@ -1,9 +1,19 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, test } from 'bun:test'
-import { startBrowserHarness, type BrowserTestHarness } from './harness'
-const call = (client: BrowserTestHarness['client'], name: string, params: Record<string, unknown> = {}) =>
-  client.callAny(`quirky.browser/${name}`, params)
+import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test'
+import { startBrowserHarness, traceStep as trace, type BrowserTestHarness } from './harness'
+let testCount = 0
+beforeEach(() => trace(`test ${++testCount} begin`))
+afterEach(() => trace(`test ${testCount} end`))
+afterAll(() => trace('afterAll'))
+process.on('exit', (code) => trace(`process exit ${code}`))
+setInterval(() => trace('heartbeat'), 10_000).unref()
+const call = async (client: BrowserTestHarness['client'], name: string, params: Record<string, unknown> = {}) => {
+  const began = Date.now()
+  trace(`> ${name}`)
+  try { const value = await client.callAny(`quirky.browser/${name}`, params); trace(`< ${name} ${Date.now() - began}ms`); return value }
+  catch (error) { trace(`! ${name} ${Date.now() - began}ms ${error instanceof Error ? error.message : error}`); throw error }
+}
 
 type Page = { browserPageId: string; profileId?: string; url?: string }
 type Cookie = {
@@ -204,7 +214,7 @@ test('SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard a
     )
   })
   let dialogOpened = Promise.withResolvers<void>()
-  const h = await startBrowserHarness({ onDialog: () => dialogOpened.resolve() })
+  const h = await startBrowserHarness({ onDialog: (event) => { trace(`onDialog ${JSON.stringify(event)}`); dialogOpened.resolve() } })
   try {
     const localBase = responseServer.url.href
     const pageUrl = pageServer.url.href
@@ -272,16 +282,21 @@ test('SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard a
     expect(await call(h.client, 'eval', { page: neighbor.browserPageId, expression: `fetch(${JSON.stringify(`${localBase}echo`)}).then(r=>r.json())` })).toEqual({ value: { value: null } })
 
     const pending = call(h.client, 'eval', { page: pageId, expression: 'prompt(\"out-of-band\", \"default\")' })
+    trace('wait dialog 1')
     await dialogOpened.promise
+    trace('dialog 1 opened')
     await call(h.client, 'dialogAccept', { page: pageId, text: 'Unicode answer — λ' })
     await expect(pending).resolves.toEqual({ value: 'Unicode answer — λ' })
     dialogOpened = Promise.withResolvers<void>()
     const confirmation = call(h.client, 'eval', { page: pageId, expression: 'confirm(\"dismiss this dialog?\")' })
+    trace('wait dialog 2')
     await dialogOpened.promise
+    trace('dialog 2 opened')
     await call(h.client, 'dialogDismiss', { page: pageId })
     await expect(confirmation).resolves.toEqual({ value: false })
     expect(await call(h.client, 'eval', { page: neighbor.browserPageId, expression: 'document.title' })).toEqual({ value: 'Events' })
   } finally {
+    trace('SC6 finally')
     await h.cleanup()
     await responseServer.stop(true)
     await pageServer.stop(true)
