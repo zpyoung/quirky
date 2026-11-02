@@ -280,6 +280,7 @@ export type PluginLaunch = {
   shellArgv(): string[]
   /** True when the configured shell gets Quirky's ready-marker wrapper (zsh or bash). */
   shellReady(): boolean
+  /** The argv that runs a shell command string under the user's login shell. PATH starts with Quirky's bin dir, then the PATH of the user's interactive shell once quirkyd has read it, then the login shell's own. */
   commandArgv(command: string): string[]
   /** Runs the launch hooks for a session about to start. */
   hooks(input: {

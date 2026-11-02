@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { join, resolve } from 'node:path'
 import { spawnPty } from '../../pty-host/src/pty-process'
 import { buildSessionEnv, commandArgv, installIntegrationFiles, shellArgv } from '../src/launch'
+import { InteractivePath, readInteractivePath } from '../src/interactive-path'
 import { makeTempHome, waitFor } from './helpers'
 import daemonPackage from '../package.json'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
@@ -122,6 +123,164 @@ describe('command sessions', () => {
     const argv = commandArgv(quirkyHome, '/bin/zsh', 'claude')
     const result = await run(argv, sessionEnv('/bin/zsh', 'claude'))
     expect(result.stdout).toBe(shimPath())
+  })
+})
+
+describe('command sessions with the interactive shell PATH', () => {
+  const userEnv = (shell: string) => ({ HOME: userHome, PATH: '/usr/bin:/bin', SHELL: shell })
+  const rcBin = () => join(root, 'rc-bin')
+
+  function installRcTool() {
+    write(join(rcBin(), 'tool'), '#!/bin/sh\necho from-rc\n')
+    chmodSync(join(rcBin(), 'tool'), 0o755)
+  }
+
+  test('a zsh command session finds a CLI that ~/.zshrc puts on PATH', async () => {
+    installRcTool()
+    write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
+    const path = await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'))
+    const result = await run(commandArgv(quirkyHome, '/bin/zsh', 'tool', path), sessionEnv('/bin/zsh', 'claude'))
+    expect(result.stdout).toBe('from-rc')
+  })
+
+  test('a bash command session finds a CLI that ~/.bashrc puts on PATH', async () => {
+    installRcTool()
+    write(join(userHome, '.bashrc'), `export PATH=${rcBin()}:$PATH`)
+    const path = await readInteractivePath(quirkyHome, bashBinary, userEnv(bashBinary))
+    const result = await run(commandArgv(quirkyHome, bashBinary, 'tool', path), sessionEnv(bashBinary, 'claude'))
+    expect(result.stdout).toBe('from-rc')
+  })
+
+  test('output from rc files does not end up in the PATH', async () => {
+    write(join(userHome, '.zshrc'), `echo noise\nexport PATH=${rcBin()}:$PATH\nprintf 'more noise'`)
+    const path = await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'))
+    expect(path?.split(':')[0]).toBe(rcBin())
+    expect(path).not.toContain('noise')
+  })
+
+  test('the bin dir comes first, then the interactive PATH without it', async () => {
+    const bin = join(quirkyHome, 'bin')
+    const argv = commandArgv(quirkyHome, '/bin/zsh', 'printenv PATH', `/usr/bin:${bin}:/bin`)
+    const result = await run(argv, sessionEnv('/bin/zsh', 'claude'))
+    expect(result.stdout.startsWith(`${bin}:/usr/bin:/bin:`)).toBe(true)
+  })
+
+  test('a CLI the login shell finds still resolves when the interactive PATH lacks it', async () => {
+    const loginBin = join(root, 'login-bin')
+    write(join(loginBin, 'tool'), '#!/bin/sh\necho from-login\n')
+    chmodSync(join(loginBin, 'tool'), 0o755)
+    write(join(userHome, '.zprofile'), `export PATH=${loginBin}:$PATH`)
+    const result = await run(commandArgv(quirkyHome, '/bin/zsh', 'tool', '/usr/bin:/bin'), sessionEnv('/bin/zsh', 'claude'))
+    expect(result.stdout).toBe('from-login')
+  })
+
+  const gone = (pid: number) => () => {
+    try {
+      process.kill(pid, 0)
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  test('a shell that keeps running after printing its PATH is stopped at the timeout', async () => {
+    const pidFile = join(root, 'logout.pid')
+    write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
+    write(join(userHome, '.zlogout'), `echo $$ > ${pidFile}\nsleep 30`)
+    const path = await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 3000 })
+    expect(path?.split(':')[0]).toBe(rcBin())
+    const pid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
+    await waitFor(gone(pid), 5000)
+  })
+
+  test('a shell that closes stdout before printing its PATH is stopped at the timeout', async () => {
+    const pidFile = join(root, 'rc.pid')
+    write(join(userHome, '.zshrc'), `exec >/dev/null\necho $$ > ${pidFile}\nsleep 30`)
+    expect(await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 3000 })).toBeUndefined()
+    const pid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
+    await waitFor(gone(pid), 5000)
+  })
+
+  test('gives up on a shell that does not finish in time and stops it', async () => {
+    const pidFile = join(root, 'rc.pid')
+    write(join(userHome, '.zshrc'), `echo $$ > ${pidFile}\nsleep 30`)
+    const startedAt = Date.now()
+    expect(await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'), { timeoutMs: 3000 })).toBeUndefined()
+    expect(Date.now() - startedAt).toBeLessThan(10000)
+    const pid = Number(readFileSync(pidFile, 'utf8').trim())
+    await waitFor(() => {
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+  })
+
+  test('a shell without startup-file support is not probed', async () => {
+    expect(await readInteractivePath(quirkyHome, '/usr/bin/fish', userEnv('/usr/bin/fish'))).toBeUndefined()
+  })
+
+  describe('cache', () => {
+    const caches: InteractivePath[] = []
+    afterEach(() => {
+      for (const cache of caches.splice(0)) cache.dispose()
+    })
+    const cache = (shell: string, options: { maxAgeMs?: number; timeoutMs?: number } = {}) => {
+      const created = new InteractivePath({ home: quirkyHome, shell, env: userEnv(shell), ...options })
+      caches.push(created)
+      return created
+    }
+
+    test('a PATH read once is kept under the home for the next daemon', async () => {
+      write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
+      const first = cache('/bin/zsh')
+      expect(first.current()).toBeUndefined()
+      await first.refresh()
+      expect(first.current()?.split(':')[0]).toBe(rcBin())
+
+      expect(cache('/bin/zsh').current()?.split(':')[0]).toBe(rcBin())
+      expect(cache(bashBinary).current()).toBeUndefined()
+    })
+
+    test('a stale PATH is refreshed in the background when it is used', async () => {
+      write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
+      const stale = cache('/bin/zsh', { maxAgeMs: 0 })
+      await stale.refresh()
+      const changed = join(root, 'changed-bin')
+      write(join(userHome, '.zshrc'), `export PATH=${changed}:$PATH`)
+      expect(stale.current()?.split(':')[0]).toBe(rcBin())
+      await waitFor(() => stale.current()?.split(':')[0] === changed, 10000)
+    })
+
+    test('dispose stops a running read', async () => {
+      const pidFile = join(root, 'rc.pid')
+      write(join(userHome, '.zshrc'), `echo $$ > ${pidFile}\nsleep 30`)
+      const running = cache('/bin/zsh')
+      const refreshed = running.refresh()
+      const pid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
+      running.dispose()
+      await refreshed
+      expect(running.current()).toBeUndefined()
+      await waitFor(() => {
+        try {
+          process.kill(pid, 0)
+          return false
+        } catch {
+          return true
+        }
+      })
+    })
+
+    test('a failed refresh keeps the last PATH', async () => {
+      write(join(userHome, '.zshrc'), `export PATH=${rcBin()}:$PATH`)
+      const kept = cache('/bin/zsh', { timeoutMs: 3000 })
+      await kept.refresh()
+      write(join(userHome, '.zshrc'), 'sleep 30')
+      await kept.refresh()
+      expect(kept.current()?.split(':')[0]).toBe(rcBin())
+    })
   })
 })
 

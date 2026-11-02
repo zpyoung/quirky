@@ -43,13 +43,27 @@ export function shellArgv(home: string, shell: string): string[] {
 }
 
 /**
- * The argv that runs `command` (a shell command string) under the user's login shell, so CLIs
- * installed through Homebrew, nvm and similar resolve as they do in Terminal. The bin dir is
- * exported inside the command string because the login shell's startup files may have reset PATH.
+ * The argv that runs `command` (a shell command string) under the user's login shell. For a POSIX
+ * shell, PATH is the bin dir, then `interactivePath` when given, then whatever PATH the login
+ * shell's startup files leave. CLIs that an interactive rc file such as `~/.zshrc` puts on PATH
+ * (nvm, rye and similar) so resolve as they do in Terminal, and nothing the login shell finds is
+ * lost when `interactivePath` is stale. Other variables come from the login shell alone. PATH is
+ * exported inside the command string because the login shell's startup files may have reset it.
  */
-export function commandArgv(home: string, shell: string, command: string): string[] {
-  const exportPath = shellKind(shell) === 'other' ? '' : `export PATH=${doubleQuote(join(home, 'bin'), true)}; `
-  return [shell, '-l', '-c', `${exportPath}exec ${command}`]
+export function commandArgv(home: string, shell: string, command: string, interactivePath?: string): string[] {
+  if (shellKind(shell) === 'other') return [shell, '-l', '-c', `exec ${command}`]
+  const bin = join(home, 'bin')
+  const first = interactivePath === undefined ? [bin] : [bin, ...interactivePath.split(':').filter((entry) => entry !== bin)]
+  return [shell, '-l', '-c', `export PATH=${doubleQuote(first.join(':'), true)}; exec ${command}`]
+}
+
+/** The daemon environment a child inherits: without the daemon's own QUIRKY_* variables, agent session markers or unset values. */
+export function inheritedEnv(base: Record<string, string | undefined>): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(withoutAgentSessionMarkers(base))) {
+    if (value !== undefined && !key.startsWith('QUIRKY_')) env[key] = value
+  }
+  return env
 }
 
 /** The environment given to a session's process; the daemon's own QUIRKY_* variables and inherited agent session markers are not passed on. */
@@ -68,10 +82,7 @@ export function buildSessionEnv(options: {
   /** Absolute path of a trusted plugin init file, sourced after user rc files for an interactive shell. */
   shellInit?: string
 }): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(withoutAgentSessionMarkers(options.base ?? process.env))) {
-    if (value !== undefined && !key.startsWith('QUIRKY_')) env[key] = value
-  }
+  const env = inheritedEnv(options.base ?? process.env)
   const baseEnv: Record<string, string> = {
     ...env,
     TERM: 'xterm-256color',

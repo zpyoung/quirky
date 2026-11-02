@@ -44,6 +44,8 @@ export type PluginRuntimeOptions = {
   schedulerRecheckMs?: number
   /** Login shell that agents run under; reported by `context.launch.shell`. */
   shell: string
+  /** PATH of the user's interactive shell for `context.launch.commandArgv`; omitted or undefined keeps the login shell's PATH. */
+  interactivePath?: { current(): string | undefined }
   /** True in safe mode: the stored distro is ignored. */
   safeMode?: boolean
   /** Stops the daemon process; `daemon.stop` calls it after replying. */
@@ -321,7 +323,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           },
           commandArgv(command) {
             guard()
-            return commandArgv(home, options.shell, command)
+            return commandArgv(home, options.shell, command, options.interactivePath?.current())
           },
           hooks(input) {
             guard()

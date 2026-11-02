@@ -22,6 +22,7 @@ const daemon = await startDaemon({
   home,
   entryHash: daemonEntryHash(process.argv[1]!),
   safeMode,
+  interactivePath: true,
   onStopRequested: () => shutdown()
 }).catch((error) => {
   lock.release()
