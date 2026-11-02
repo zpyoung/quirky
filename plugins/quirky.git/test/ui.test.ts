@@ -31,6 +31,14 @@ describe('quirky.git source-control panel', () => {
     expect(manifest.contributes.panel.map((p: { id: string }) => `panel:${manifest.id}/${p.id}`)).toEqual([PANEL])
   })
 
+  test('the manifest no longer declares the settings the flat list and the Review tab left unread', async () => {
+    const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json()
+    const ids = (manifest.contributes.setting as { id: string }[]).map((setting) => setting.id)
+    expect(ids).not.toContain('groupOrder')
+    expect(ids).not.toContain('combinedDiffFileTree')
+    expect(ids).toContain('diffDefaultView')
+  })
+
   test('SC-36: activate provides exactly the panel, view, commands and status bar item the manifest declares', async () => {
     const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json()
     const declared = (['panel', 'view', 'command', 'status-bar'] as const).flatMap((kind) =>

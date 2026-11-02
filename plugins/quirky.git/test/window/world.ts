@@ -1,9 +1,10 @@
-import { chmodSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { chmodSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs'
+import { delimiter, dirname, join } from 'node:path'
 import type { QuirkyClient, Repo, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { spawnCli } from '../../../../packages/cli/test/fixtures/fake-daemon'
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../../packages/daemon/test/plugins/fixtures'
+import { createProcessScope } from '../../../../scripts/test-support/process-scope'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../../packages/ui/test/fixtures/headless-window'
 import { git } from '../../../quirky.repo/test/git-fixtures'
 import { makeOrigin, makeProject } from '../../../quirky.worktree/test/fixtures/repos'
@@ -281,4 +282,149 @@ export async function openView(w: World): Promise<{ id: string; input?: Record<s
   if (tab?.kind !== 'view') return shown
   if (tab.viewId === DIFF_VIEW && tab.input?.tabId !== tab.id) return null
   return { id: tab.viewId, ...(tab.input === undefined ? {} : { input: tab.input }) }
+}
+
+const GITHUB_FIXTURE_ENV = [
+  'HOME', 'QUIRKY_HOME', 'XDG_CONFIG_HOME', 'GH_CONFIG_DIR', 'PATH', 'GH_TOKEN', 'GITHUB_TOKEN',
+  'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GH_HOST', 'GH_REPO', 'GH_PROMPT_DISABLED',
+  'QUIRKY_TEST_GH_STATE', 'QUIRKY_TEST_SCOPE'
+]
+
+const GH_SCRIPT = String.raw`
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+const args = process.argv.slice(2)
+const state = JSON.parse(readFileSync(process.env.QUIRKY_TEST_GH_STATE, 'utf8'))
+const input = process.env.QUIRKY_TEST_GH_INPUT ?? ''
+const emit = (value) => process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value))
+const fail = (message) => { process.stderr.write(message + '\n'); process.exit(1) }
+const endpoint = args.find((value) => value.startsWith('repos/')) ?? ''
+const currentHead = () => execFileSync('git', ['rev-parse', 'HEAD'], { cwd: process.cwd() }).toString().trim()
+const lookupFor = (branch) => state.lookups?.[branch] ?? { kind: 'none' }
+const restPull = (branch, lookup) => {
+  const merged = lookup.state === 'MERGED'
+  const url = 'https://github.com/test-owner/test-repo/pull/' + lookup.number
+  return {
+    number: lookup.number,
+    html_url: url,
+    state: merged || lookup.state === 'CLOSED' ? 'closed' : 'open',
+    merged_at: merged ? '2026-10-28T00:00:00Z' : null,
+    draft: lookup.state === 'DRAFT',
+    head: { ref: branch, sha: currentHead(), repo: { name: 'test-repo', owner: { login: 'test-owner' } } },
+    base: { ref: 'main', sha: 'b'.repeat(40), repo: { name: 'test-repo', owner: { login: 'test-owner' } } }
+  }
+}
+if (args[0] === '--version') emit('gh version 2.70.0\n')
+else if (args[0] === 'auth' && args[1] === 'status') emit('Logged in to github.com account fixture-user (keyring)\nActive account: true\nToken scopes: repo, read:org\n')
+else if (args[0] === 'auth' && args[1] === 'token') emit('fixture-token\n')
+else if (args[0] === 'repo' && args[1] === 'view') emit({ defaultBranchRef: { name: 'main' } })
+else if (args[0] === 'api' && args.includes('rate_limit')) emit({ resources: { core: { limit: 5000, remaining: 4500, reset: 1999999999 }, graphql: { limit: 5000, remaining: 4500, reset: 1999999999 }, search: { limit: 30, remaining: 30, reset: 1999999999 } } })
+else if (args[0] === 'api' && args.includes('user')) emit({ login: 'fixture-user' })
+else if (args[0] === 'api' && args.includes('graphql')) {
+  const request = input.length === 0 ? {} : JSON.parse(input)
+  const variables = request.variables ?? {}
+  emit({ data: { repository: {
+    id: 'REPO_' + (variables.owner ?? 'test-owner') + '_' + (variables.name ?? 'test-repo'),
+    viewerDefaultMergeMethod: 'SQUASH',
+    mergeCommitAllowed: true,
+    rebaseMergeAllowed: true,
+    squashMergeAllowed: true,
+    autoMergeAllowed: true,
+    defaultBranchRef: { name: 'main' },
+    mergeQueue: null,
+    ref: { rules: { nodes: [] } }
+  } } })
+}
+else if (args[0] === 'api' && endpoint.includes('/pulls?')) {
+  const query = new URLSearchParams(endpoint.split('?')[1] ?? '')
+  const branch = (query.get('head') ?? '').split(':').at(-1) ?? ''
+  const lookup = lookupFor(branch)
+  if (lookup.kind === 'unavailable') fail('HTTP 503: fixture lookup unavailable')
+  if (lookup.kind !== 'found') emit([])
+  else emit([restPull(branch, lookup)])
+}
+else if (args[0] === 'api' && /\/pulls\/\d+$/.test(endpoint)) {
+  const number = Number(endpoint.match(/\/pulls\/(\d+)$/)?.[1])
+  const match = Object.entries(state.lookups ?? {}).find(([, lookup]) => lookup.number === number)
+  if (!match) fail('HTTP 404: Not Found')
+  emit(restPull(match[0], match[1]))
+}
+else fail('Unexpected fixture GitHub command: ' + args.join(' '))
+`
+
+export type GitHubLookup = { kind: 'none' } | { kind: 'unavailable' } | { kind: 'found'; number: number; state?: 'OPEN' | 'DRAFT' | 'CLOSED' | 'MERGED' }
+
+/** A fake `gh` on PATH, and a `git` wrapper that sends pushes for the fake GitHub remote to a local bare repo. */
+export type GitHubFixture = {
+  setLookup(branch: string, lookup: GitHubLookup): void
+  /** Points pushes to https://github.com/test-owner/test-repo.git at `bare`. */
+  installTransport(bare: string): void
+  /** Puts the environment back and removes the scope the fixture made. */
+  restore(): Promise<void>
+}
+
+/**
+ * Installs the fake GitHub in this process's environment, so a daemon started afterwards spawns it.
+ * Call `restore` after `shutdown`; the lookup for every branch starts as "no pull request".
+ */
+export function startGitHubFixture(root: string): GitHubFixture {
+  const bin = join(root, 'bin')
+  const statePath = join(root, 'state.json')
+  const scope = createProcessScope()
+  const home = scope.home
+  mkdirSync(bin, { recursive: true })
+  mkdirSync(join(home, '.config'), { recursive: true })
+  const ghPath = join(bin, 'gh')
+  writeFileSync(ghPath, `#!/usr/bin/env bun\n${GH_SCRIPT}\n`, { mode: 0o755 })
+  chmodSync(ghPath, 0o755)
+  writeFileSync(statePath, JSON.stringify({ lookups: {} }))
+
+  const saved = new Map(GITHUB_FIXTURE_ENV.map((key) => [key, process.env[key]]))
+  process.env.HOME = home
+  process.env.QUIRKY_HOME = scope.home
+  process.env.QUIRKY_TEST_SCOPE = scope.env.QUIRKY_TEST_SCOPE
+  process.env.XDG_CONFIG_HOME = join(home, '.config')
+  process.env.GH_CONFIG_DIR = join(home, '.config', 'gh')
+  process.env.PATH = `${bin}${delimiter}${process.env.PATH ?? ''}`
+  process.env.QUIRKY_TEST_GH_STATE = statePath
+  process.env.GH_PROMPT_DISABLED = '1'
+  for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GH_HOST', 'GH_REPO']) delete process.env[key]
+
+  const writeState = (state: unknown) => {
+    const temporary = `${statePath}.${process.pid}.tmp`
+    writeFileSync(temporary, JSON.stringify(state))
+    renameSync(temporary, statePath)
+  }
+  return {
+    setLookup(branch, lookup) {
+      const state = JSON.parse(readFileSync(statePath, 'utf8')) as { lookups: Record<string, GitHubLookup> }
+      state.lookups[branch] = lookup
+      writeState(state)
+    },
+    installTransport(bare) {
+      const realGit = Bun.which('git')
+      if (!realGit) throw new Error('the test Git executable is unavailable')
+      const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
+      const wrapper = [
+        '#!/bin/sh',
+        'if [ "$1" = "push" ]; then',
+        '  shift',
+        '  export GIT_ALLOW_PROTOCOL=file',
+        `  exec ${quote(realGit)} -c ${quote(`url.${bare}.insteadOf=https://github.com/test-owner/test-repo.git`)} push "$@"`,
+        'fi',
+        `exec ${quote(realGit)} "$@"`
+      ].join('\n') + '\n'
+      writeFileSync(join(bin, 'git'), wrapper, { mode: 0o755 })
+    },
+    async restore() {
+      try {
+        await scope.cleanup()
+      } finally {
+        for (const [key, value] of saved) {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        }
+      }
+    }
+  }
 }

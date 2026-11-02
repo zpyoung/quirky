@@ -3468,18 +3468,6 @@
     ],
     "setting": [
       {
-        "id": "groupOrder",
-        "type": "enum",
-        "title": "Source Control Group Order",
-        "description": "Which section comes first after Conflicts.",
-        "default": "changes-first",
-        "values": [
-          "changes-first",
-          "staged-first",
-          "untracked-first"
-        ]
-      },
-      {
         "id": "compareBase",
         "type": "enum",
         "title": "Default Compare Base",
@@ -3532,17 +3520,6 @@
         "title": "Collapse Unchanged Regions",
         "description": "Fold long unchanged stretches in diffs.",
         "default": false
-      },
-      {
-        "id": "combinedDiffFileTree",
-        "type": "enum",
-        "title": "Default Diff File Tree",
-        "description": "Whether a combined diff opens with its file tree.",
-        "default": "hidden",
-        "values": [
-          "hidden",
-          "shown"
-        ]
       },
       {
         "id": "ai-enabled",
