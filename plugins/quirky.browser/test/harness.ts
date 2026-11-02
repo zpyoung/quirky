@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -11,7 +11,9 @@ import { setBrowserTestOverrides, takeBrowserTestOverrides, type BrowserTestOver
 const traceOrigin = Date.now()
 /** Diagnostic step log for the SC6-SC7 hang investigation; prints elapsed seconds since this module loaded. */
 export function traceStep(text: string): void {
-  console.error(`[sc-trace +${((Date.now() - traceOrigin) / 1000).toFixed(1)}s] ${text}`)
+  const line = `[sc-trace ${new Date().toISOString()} +${((Date.now() - traceOrigin) / 1000).toFixed(1)}s pid ${process.pid}] ${text}`
+  console.error(line)
+  if (process.env.SC_TRACE_FILE) appendFileSync(process.env.SC_TRACE_FILE, `${line}\n`)
 }
 
 const ROOT = resolve(import.meta.dir, '../../..')
