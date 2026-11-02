@@ -13,6 +13,7 @@ import {
 } from '@quirky/protocol/node'
 import pkg from '../package.json'
 import { defaultCliEntry, installIntegrationFiles } from './launch'
+import { InteractivePath } from './interactive-path'
 import { osascriptNotifier, type Notifier } from './notify'
 import { PluginHost } from './plugins/host'
 import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
@@ -49,6 +50,12 @@ export type DaemonOptions = {
   cliEntry?: string
   /** Login shell that agents run under; defaults to `$SHELL`. */
   shell?: string
+  /**
+   * Reads PATH from the user's interactive shell, in the background, for commands launched through
+   * `commandArgv`. quirkyd's entry turns it on; it is off by default so a test daemon never runs the
+   * developer's rc files.
+   */
+  interactivePath?: boolean
   ptyConnectTimeoutMs?: number
   log?: (message: string) => void
   /** Run only plugins that ship with Quirky and ignore stored disables and the distro layer. */
@@ -153,6 +160,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     log
   })
   const sessionAuthority = new RuntimeSessionAuthority(store, pty)
+  const interactivePath = options.interactivePath ? new InteractivePath({ home, shell, log }) : undefined
   let port = 0
   // the core and the host are built before the runtime that serves them, so they reach it late-bound
   let lateRuntime: PluginRuntime | undefined
@@ -199,6 +207,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
     schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000,
     shell,
+    ...(interactivePath === undefined ? {} : { interactivePath }),
     safeMode: options.safeMode ?? false,
     stopDaemon: () => (options.onStopRequested ?? (() => void handle?.stop()))()
   })
@@ -208,6 +217,8 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   let handle: DaemonHandle | undefined
 
   installIntegrationFiles(home, cliEntry)
+  // after the integration files, because bash is read through the rcfile they write
+  void interactivePath?.refresh()
 
   try {
     await pty.connect()
@@ -277,6 +288,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     async stop() {
       if (stopped) return
       stopped = true
+      interactivePath?.dispose()
       if (readRuntime(home)?.pid === process.pid) rmSync(runtimeFilePath(home), { force: true })
       await socketServer.stop()
       await server.stop(true)

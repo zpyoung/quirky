@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { base64ToBytes, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { PluginEvents } from '../../src/plugins/events'
@@ -86,11 +86,11 @@ const launchHook: Fixture = {
   behavior: { activate: "context.provide('launch-hook:acme.env/vars', () => ({ env: { FOO: '1' }, args: ['--model', 'opus'] }))" }
 }
 
-async function boot(plugins: Fixture[]) {
+async function boot(plugins: Fixture[], options: Parameters<typeof startHarness>[0] = {}) {
   const home = makeTempHome()
   const marker = join(makeTempDir(), 'marker.log')
   for (const { manifest, behavior } of plugins) writeModulePlugin(join(home, 'plugins'), marker, manifest, behavior)
-  const harness = await startHarness({ home, builtinPluginsDir: null })
+  const harness = await startHarness({ home, builtinPluginsDir: null, ...options })
   h = harness
   const client = await harness.connect()
   const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params)
@@ -306,6 +306,20 @@ describe('context.launch and context.home', () => {
       commandArgv: ['/bin/zsh', '-l', '-c', `export PATH="${s.home}/bin:$PATH"; exec claude hi`]
     })
   })
+
+  test('commandArgv exports the PATH of the interactive shell once the daemon has read it', async () => {
+    // -f skips every rc file, so the PATH this fake shell reports depends only on whether it was started with -i
+    const shell = join(makeTempDir(), 'zsh')
+    writeFileSync(shell, '#!/bin/sh\ncase " $* " in *" -i "*) PATH="/from-rc:$PATH" ;; esac\nexec /bin/zsh -f "$@"\n')
+    chmodSync(shell, 0o755)
+    const s = await boot([contextPlugin('acme.ctx')], { shell, interactivePath: true })
+    const exported = await waitForAsync(async () => {
+      const info = (await s.call('acme.ctx/launchInfo', { command: 'claude hi' })) as { commandArgv: string[] }
+      return info.commandArgv[3]?.includes('/from-rc') && info.commandArgv[3]
+    }, 10000)
+    expect(exported.startsWith(`export PATH="${s.home}/bin:/from-rc:`)).toBe(true)
+    expect(exported.endsWith('"; exec claude hi')).toBe(true)
+  }, 20000)
 
   test('hooks runs the launch-hook pipeline', async () => {
     const s = await boot([contextPlugin('acme.ctx'), launchHook])
