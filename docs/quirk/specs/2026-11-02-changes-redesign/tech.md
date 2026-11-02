@@ -191,7 +191,7 @@ event quirky.editor/saved { path: string /* absolute */, beforeHash: string | nu
 `CONTRACT:`
 ```
 openReview(context: UiPluginContext, input: { worktree: string, reveal?: string, commit?: string | null, noteId?: string }): Promise<void>
-ReviewViewHandle { worktree: string, reveal(path: string, noteId?: string): void, scrollToTop(): void, setScope(commit: string | null): void }
+ReviewViewHandle { worktree: string, reveal(path: string, noteId?: string): void, scrollToTop(): void, setScope(commit: string | null): void, loadedHash?(path: string): string | null | undefined }
 ```
 
 - At most one Review tab per worktree in a window, whatever opened it. That's done by the `'review'` key being per worktree, and by `openReview` preferring a mounted `ReviewViewHandle` for that worktree (activate its tab with `quirky.terminal/activateTab`, then `reveal`/`setScope`) over remounting.
@@ -202,7 +202,7 @@ ReviewViewHandle { worktree: string, reveal(path: string, noteId?: string): void
 - Each card shows `against: 'base'` by default. A `'changed'` card shows `against: 'reviewed'` with a "Full diff" toggle back to `'base'`, which holds until the card's state changes.
 - Collapse: `'reviewed'` cards start collapsed, everything else starts expanded. A user's manual collapse or expand holds until the card's mark changes.
 - Layout: a `ResizeObserver` on the tab body gives inline below 900 CSS px of body width and side-by-side at or above it. The header toggle overrides that for the tab's lifetime (component state, not a setting).
-- Mark reviewed (the card button, or Space in the panel) calls `setReviewMark` with `expected` set to the card's last `modifiedHash`. On `conflict`, refresh and leave the mark unset. On success, the panel selection and the tab move to the next file in panel order whose mark is `'none'` or `'changed'`. When there isn't one, nothing moves (scenario 4).
+- Mark reviewed (the card button, or Space in the panel) calls `setReviewMark` with `expected` set to the card's last `modifiedHash`. The panel gets it from the mounted tab's `loadedHash(path)`. When no diff is loaded for the file (no tab, or a card never expanded), the caller first reads `quirky.git/diff { source: 'review', against: 'base' }` and passes its `modifiedHash` (`null` for a deletion), so a mark is never sent without `expected`. On `conflict`, refresh and leave the mark unset. On success, the panel selection and the tab move to the next file in panel order whose mark is `'none'` or `'changed'`. When there isn't one, nothing moves (scenario 4).
 - Revert one change: confirm through `confirmForPlugin`, apply the chunk revert to the card's buffer, then `quirky.git/save { path, content, expected: modifiedHash }` right away. A save failure restores the buffer and shows a toast. Revert is offered on every card whose disk side exists, committed changes included. Writing base lines to disk is the intended result (scenario 9).
 - Notes: unchanged storage and composer. Note counts appear on the card header (`✎ N notes`) and on the panel row.
 - Commit scope: no review controls, and Revert is hidden, because the modified side isn't the working tree.

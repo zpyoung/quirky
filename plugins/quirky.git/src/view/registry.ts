@@ -67,6 +67,11 @@ export type ReviewViewHandle = {
   scrollToTop(): void
   /** Shows one commit's files (a commit sha) or returns to the worktree review (null). */
   setScope(commit: string | null): void
+  /**
+   * The disk-side hash of the diff the card for `path` currently shows, for `setReviewMark`'s
+   * `expected`: `null` when it shows the file deleted, `undefined` when no diff is loaded for it.
+   */
+  loadedHash?(path: string): string | null | undefined
 }
 
 const reviewHandles = new Map<string, ReviewViewHandle>()
