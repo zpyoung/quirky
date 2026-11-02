@@ -321,7 +321,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       scrollSensitivity: initial['scroll-sensitivity'],
       fastScrollSensitivity: initial['fast-scroll-sensitivity'],
       minimumContrastRatio: initial['minimum-contrast'],
-      overviewRulerWidth: 10,
+      overviewRuler: { width: 10 },
       theme: theme(initial, colors),
       linkHandler: createOscLinkHandler()
     })

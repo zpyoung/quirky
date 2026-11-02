@@ -69,7 +69,7 @@ test(
     expect(active).toHaveLength(1)
     const others = [...term.element!.querySelectorAll<HTMLElement>('.xterm-find-result-decoration:not(.xterm-find-active-result-decoration)')]
     expect(others.length).toBeGreaterThan(0)
-    expect(term.options.overviewRulerWidth).toBeGreaterThan(0)
+    expect(term.options.overviewRuler?.width).toBeGreaterThan(0)
 
     await typeInto(input, '^1.9$')
     await reads('No results')
