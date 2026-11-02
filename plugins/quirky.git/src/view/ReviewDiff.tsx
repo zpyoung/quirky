@@ -37,6 +37,13 @@ const NO_ITEMS: readonly ReviewItem[] = []
 
 type CommitFiles = { scope: string; commit: string; entries: GitChange[] }
 
+/**
+ * What a card owes the disk. `wanted` grows with every event that may have changed the file and
+ * `loaded` is the `wanted` the shown diff was requested at, so a card is current exactly when the
+ * two are equal. `stamp` is the signature and side `wanted` last grew for.
+ */
+type CardVersion = { wanted: number; loaded: number; stamp: string }
+
 /** The disk-side hash `setReviewMark` checks: null when the diff shows the file deleted, undefined when the diff carries none. */
 const diskHashOf = (diff: GitDiff): string | null | undefined => (diff.modifiedDeleted === true ? null : diff.modifiedHash)
 
@@ -78,9 +85,9 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const handles = useRef(new Map<string, PaneHandle>())
   const cardElements = useRef(new Map<string, HTMLElement>())
   const activeRef = useRef<string | null>(null)
-  const revalidating = useRef(new Set<string>())
-  const revalidateAgain = useRef(new Set<string>())
-  const skippedCollapsed = useRef(new Set<string>())
+  const versions = useRef(new Map<string, CardVersion>())
+  const loops = useRef(new Map<string, Promise<void>>())
+  const forced = useRef(new Set<string>())
   const pendingNav = useRef<{ key: string; go: (pane: PaneHandle) => void } | null>(null)
   const pendingReveal = useRef<string | null>(input.reveal ?? null)
   const scrollRef = useRef<HTMLElement | null>(null)
@@ -142,75 +149,100 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     if (current) commitSections({ ...sectionsRef.current, [key]: { ...current, ...patch } })
   }
 
-  const diffFor = (item: ReviewItem, against: 'base' | 'reviewed') =>
-    scope !== null && commitData
-      ? fetchDiff(context, worktree, { path: item.path, source: 'commit', oldPath: item.oldPath, commit: commitData.commit })
-      : fetchDiff(context, worktree, { path: item.path, source: 'review', oldPath: item.oldPath, against })
+  const commitRef = useRef(commitData)
+  commitRef.current = commitData
 
-  const run = async (key: string): Promise<void> => {
-    const first = itemsRef.current.find((i) => i.key === key)
-    const state = sectionsRef.current[key]
-    if (!first || !state || state.status === 'loaded') return
-    patchSection(key, { status: 'loading' })
-    // the card's side can change while a load is in flight, so a reply for the other side is dropped and the load repeats
-    for (;;) {
-      const item = itemsRef.current.find((i) => i.key === key) ?? first
-      const against = bodyAgainst(viewOfRef(item))
-      const stale = () => bodyAgainst(viewOfRef(itemsRef.current.find((i) => i.key === key) ?? item)) !== against
-      try {
-        const diff = await diffFor(item, against)
-        if (stale()) continue
-        patchSection(key, { status: 'loaded', diff, error: undefined, revision: (sectionsRef.current[key]?.revision ?? 0) + 1, against, signature: item.signature })
-      } catch (e) {
-        if (stale()) continue
-        patchSection(key, { status: 'error', error: messageOf(e) })
-      }
-      return
-    }
+  const diffFor = (item: ReviewItem, against: 'base' | 'reviewed') => {
+    const commit = commitRef.current
+    return scopeRef.current !== null && commit
+      ? fetchDiff(context, worktree, { path: item.path, source: 'commit', oldPath: item.oldPath, commit: commit.commit })
+      : fetchDiff(context, worktree, { path: item.path, source: 'review', oldPath: item.oldPath, against })
   }
-  const runRef = useRef(run)
-  runRef.current = run
-  const loader = useRef<SectionLoader | null>(null)
-  if (loader.current === null) loader.current = new SectionLoader((key) => runRef.current(key))
-  useEffect(() => () => loader.current?.clear(), [])
+
+  const versionOf = (item: ReviewItem): CardVersion => {
+    let version = versions.current.get(item.key)
+    if (!version) {
+      version = { wanted: 1, loaded: 0, stamp: `${item.signature}|${bodyAgainst(viewOfRef(item))}` }
+      versions.current.set(item.key, version)
+    }
+    return version
+  }
 
   /**
-   * Refetches a loaded card and keeps what is shown when the content is the same, so a refresh
-   * that changes nothing never rebuilds the editor or loses its scroll position.
+   * The card's single read loop. While the shown diff is older than `wanted` and the card is open
+   * (or the read was asked for by name) it reads, shows the result and records what it was read
+   * at; an invalidation that lands mid-read only raises `wanted`, which the next check sees. A
+   * failed read leaves `loaded` alone so any later expansion, refresh or Retry reads again.
    */
-  const revalidate = async (key: string): Promise<void> => {
-    if (revalidating.current.has(key)) {
-      revalidateAgain.current.add(key)
-      return
-    }
-    revalidating.current.add(key)
+  const readLoop = async (key: string): Promise<void> => {
     try {
-      do {
-        revalidateAgain.current.delete(key)
-        await revalidateOnce(key)
-      } while (revalidateAgain.current.has(key))
+      for (;;) {
+        const item = itemsRef.current.find((i) => i.key === key)
+        const section = sectionsRef.current[key]
+        if (!item || !section) return
+        const version = versionOf(item)
+        if (section.status === 'loaded' && version.loaded >= version.wanted) return
+        if (!forced.current.has(key) && isCollapsed(viewOfRef(item))) return
+        const target = version.wanted
+        const against = bodyAgainst(viewOfRef(item))
+        const before = section.diff
+        if (section.status === 'idle' || (section.status === 'error' && forced.current.has(key))) patchSection(key, { status: 'loading' })
+        // the side or scope can change mid-read, so a reply for another one is dropped and the read repeats
+        const superseded = () => {
+          const latest = itemsRef.current.find((i) => i.key === key)
+          return !latest || bodyAgainst(viewOfRef(latest)) !== against
+        }
+        let diff: GitDiff
+        try {
+          diff = await diffFor(item, against)
+        } catch (e) {
+          if (superseded() || versionOf(item).wanted > target) continue
+          patchSection(key, { status: 'error', error: messageOf(e) })
+          return
+        }
+        const latest = itemsRef.current.find((i) => i.key === key)
+        const now = sectionsRef.current[key]
+        if (!latest || !now || superseded() || now.diff !== before) continue
+        if (now.status === 'loaded' && now.diff) {
+          const reused = reuseGitDiff(now.diff, diff)
+          patchSection(key, { against, signature: latest.signature, ...(reused === now.diff ? {} : { diff: reused, revision: now.revision + 1 }) })
+        } else {
+          patchSection(key, { status: 'loaded', diff, error: undefined, revision: now.revision + 1, against, signature: latest.signature })
+        }
+        const done = versionOf(latest)
+        done.loaded = Math.max(done.loaded, target)
+      }
     } finally {
-      revalidating.current.delete(key)
-      revalidateAgain.current.delete(key)
+      loops.current.delete(key)
+      forced.current.delete(key)
     }
-    const latest = itemsRef.current.find((i) => i.key === key)
-    const settled = sectionsRef.current[key]
-    if (latest && settled?.status === 'loaded' && settled.against !== bodyAgainst(viewOfRef(latest))) await revalidate(key)
   }
 
-  const revalidateOnce = async (key: string): Promise<void> => {
+  /** Resolves once the card's loop has run out of work. `force` reads even if the card is folded. */
+  const readCard = (key: string, force = false): Promise<void> => {
+    if (force) forced.current.add(key)
+    const running = loops.current.get(key)
+    if (running) return running
+    let done!: () => void
+    const promise = new Promise<void>((resolve) => (done = resolve))
+    loops.current.set(key, promise)
+    void readLoop(key).finally(done)
+    return promise
+  }
+  const readCardRef = useRef(readCard)
+  readCardRef.current = readCard
+  const loader = useRef<SectionLoader | null>(null)
+  if (loader.current === null) loader.current = new SectionLoader((key) => readCardRef.current(key, true))
+  useEffect(() => () => loader.current?.clear(), [])
+
+  /** Reads an expanded card that has been requested before and is behind the disk; folded and never-requested cards wait. */
+  const catchUp = (key: string) => {
     const item = itemsRef.current.find((i) => i.key === key)
-    const shown = sectionsRef.current[key]
-    if (!item || shown?.status !== 'loaded' || !shown.diff) return
-    const against = bodyAgainst(viewOfRef(item))
-    const fresh = reuseGitDiff(shown.diff, await diffFor(item, against))
-    const now = sectionsRef.current[key]
-    if (now?.status !== 'loaded' || now.diff !== shown.diff) return
-    patchSection(key, {
-      against,
-      signature: item.signature,
-      ...(fresh === shown.diff ? {} : { diff: fresh, revision: now.revision + 1 })
-    })
+    const section = sectionsRef.current[key]
+    if (!item || !section || section.status === 'idle' || scopeRef.current !== null || isCollapsed(viewOfRef(item))) return
+    const version = versionOf(item)
+    if (section.status === 'loaded' && version.loaded >= version.wanted) return
+    void readCard(key)
   }
 
   const onCardSaved = (key: string, content: string, hash: string) => {
@@ -221,9 +253,13 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const reloadCard = async (key: string): Promise<void> => {
     const item = itemsRef.current.find((i) => i.key === key)
     if (!item) return
+    const target = ++versionOf(item).wanted
     const against = bodyAgainst(viewOfRef(item))
     const diff = await diffFor(item, against)
     patchSection(key, { status: 'loaded', diff, error: undefined, revision: (sectionsRef.current[key]?.revision ?? 0) + 1, against, signature: item.signature })
+    const version = versionOf(item)
+    version.loaded = Math.max(version.loaded, target)
+    catchUp(key)
   }
 
   useEffect(() => {
@@ -233,6 +269,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     }
     const same = Object.keys(kept).length === Object.keys(sectionsRef.current).length && Object.keys(kept).every((k) => sectionsRef.current[k] === kept[k])
     if (!same) commitSections(kept)
+    for (const key of [...versions.current.keys()]) if (!kept[key]) versions.current.delete(key)
     for (const key of [...handles.current.keys()]) if (!kept[key]) handles.current.delete(key)
     setUi((prev) => reconcileCards(prev, items))
   }, [items])
@@ -244,19 +281,15 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       if (loadModeOf(item) === 'auto' && sectionsRef.current[item.key]?.status === 'idle') void loader.current?.request(item.key)
     }
     if (scope !== null) return
-    for (const item of expanded) {
-      const loaded = sectionsRef.current[item.key]
-      if (loaded?.status !== 'loaded') continue
-      const skipped = skippedCollapsed.current.delete(item.key)
-      if (skipped || loaded.signature !== item.signature || loaded.against !== bodyAgainst(cardFor(ui[item.key], item.mark))) {
-        void revalidate(item.key).catch((e: unknown) => {
-          if (skipped) skippedCollapsed.current.add(item.key)
-          // keeping the old side's diff would show it under the wrong label
-          const now = sectionsRef.current[item.key]
-          if (now?.status === 'loaded' && now.against !== bodyAgainst(viewOfRef(item))) patchSection(item.key, { status: 'error', error: messageOf(e) })
-        })
+    for (const item of items) {
+      const version = versionOf(item)
+      const stamp = `${item.signature}|${bodyAgainst(cardFor(ui[item.key], item.mark))}`
+      if (version.stamp !== stamp) {
+        version.stamp = stamp
+        version.wanted++
       }
     }
+    for (const item of expanded) catchUp(item.key)
   }, [items, ui, scope])
 
   useRefreshTriggers(
@@ -264,15 +297,21 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     () => {
       if (scope !== null) return
       for (const item of itemsRef.current) {
-        // a folded card's disk content can change with its counts unchanged, so expanding it refetches
-        if (isCollapsed(viewOfRef(item))) skippedCollapsed.current.add(item.key)
-        else void revalidate(item.key).catch(() => undefined)
+        versionOf(item).wanted++
+        catchUp(item.key)
       }
     },
     null
   )
 
-  const loadNow = useCallback((key: string) => void loader.current!.request(key, true), [])
+  const loadNow = (key: string) => {
+    const item = itemsRef.current.find((i) => i.key === key)
+    if (item && sectionsRef.current[key]?.status === 'error') versionOf(item).wanted++
+    void loader.current!.request(key, true)
+  }
+  const loadNowRef = useRef(loadNow)
+  loadNowRef.current = loadNow
+  const loadCard = useCallback((key: string) => loadNowRef.current(key), [])
   const onVisible = useCallback((key: string) => {
     const item = itemsRef.current.find((i) => i.key === key)
     if (item && loadModeOf(item) === 'auto' && !isCollapsed(cardFor(uiRef.current[key], item.mark))) void loader.current?.request(key)
@@ -342,9 +381,9 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     }
     pendingReveal.current = null
     activate(item.key)
-    if (loadModeOf(item) === 'auto') loadNow(item.key)
+    if (loadModeOf(item) === 'auto') loadCard(item.key)
     element.scrollIntoView?.({ block: 'start' })
-  }, [revealTick, items, ui, writeCard, activate, loadNow])
+  }, [revealTick, items, ui, writeCard, activate, loadCard])
 
   useEffect(() => {
     const scrollToTop = () => {
@@ -583,7 +622,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
               onToggle={toggle}
               onMark={markItem}
               onFullDiff={showFullDiff}
-              onLoad={loadNow}
+              onLoad={loadCard}
               onVisible={onVisible}
               onActivate={activate}
               onPaneState={onPaneState}

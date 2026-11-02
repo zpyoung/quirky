@@ -320,6 +320,111 @@ describe('quirky.git review tab', () => {
     expect(modifiedEditor(card(element, APP)).state.sliceDoc()).toBe('second\n')
   })
 
+  describe('a card never stays behind the disk', () => {
+    type Gate = { started: Promise<void>; release(): void; fail(): void }
+    let disk: string
+    let hold: () => Gate
+    const changed = () => act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } } as never))
+    const shown = (element: ParentNode) => modifiedEditor(card(element, APP)).state.sliceDoc()
+    const reads = () => fake.callsTo('quirky.git/diff').length
+
+    beforeEach(() => {
+      model = reviewModel([reviewFile(APP)])
+      disk = 'first\n'
+      let next: { started(): void; settled: Promise<void> } | null = null
+      hold = () => {
+        let release!: () => void
+        let fail!: () => void
+        let started!: () => void
+        const settled = new Promise<void>((resolve, reject) => {
+          release = resolve
+          fail = () => reject(new Error('read failed'))
+        })
+        const gate: Gate = { started: new Promise<void>((r) => (started = r)), release, fail }
+        next = { started, settled }
+        return gate
+      }
+      fake.handlers['quirky.git/diff'] = async (params) => {
+        const snapshot = disk
+        const held = next
+        next = null
+        if (held) {
+          held.started()
+          await held.settled
+        }
+        return textDiff({ path: params.path as string, source: 'review', original: 'base\n', modified: snapshot, modifiedHash: snapshot })
+      }
+    })
+
+    test('a read that rejects while its card was folded and reopened is retried by the next expansion', async () => {
+      const element = await open()
+      const gate = hold()
+      await changed()
+      await gate.started
+      await click(toggleOf(element, APP))
+      await click(toggleOf(element, APP))
+      await act(async () => gate.fail())
+      await settle()
+      expect(card(element, APP).textContent).toContain('read failed')
+
+      disk = 'second\n'
+      await click(toggleOf(element, APP))
+      const folded = reads()
+      await click(toggleOf(element, APP))
+      await settle()
+      expect(reads()).toBe(folded + 1)
+      expect(shown(element)).toBe('second\n')
+    })
+
+    test('a read that rejects is retried by the next refresh', async () => {
+      const element = await open()
+      const gate = hold()
+      await changed()
+      await gate.started
+      disk = 'second\n'
+      await act(async () => gate.fail())
+      await settle()
+      expect(card(element, APP).textContent).toContain('read failed')
+
+      await changed()
+      await settle()
+      expect(shown(element)).toBe('second\n')
+    })
+
+    test('an invalidation during an in-flight read is read once that read lands', async () => {
+      const element = await open()
+      const gate = hold()
+      await changed()
+      await gate.started
+      const during = reads()
+      disk = 'second\n'
+      await changed()
+      await changed()
+      expect(reads()).toBe(during)
+      await act(async () => gate.release())
+      await settle()
+      expect(reads()).toBe(during + 1)
+      expect(shown(element)).toBe('second\n')
+    })
+
+    test('a folded card that missed several refreshes reads once when it is expanded', async () => {
+      const element = await open()
+      await click(toggleOf(element, APP))
+      const folded = reads()
+      for (const text of ['one\n', 'two\n', 'three\n']) {
+        disk = text
+        await changed()
+      }
+      await settle()
+      expect(reads()).toBe(folded)
+
+      await click(toggleOf(element, APP))
+      await settle()
+      expect(reads()).toBe(folded + 1)
+      expect(shown(element)).toBe('three\n')
+    })
+  })
+
   test('F7 expands a folded card it moves into, so the active change is visible', async () => {
     model = reviewModel([reviewFile('a.ts'), reviewFile('b.ts')])
     diffBody = () => ({ original: numbered(10, 'line'), modified: numbered(10, 'line').replace('line 5', 'five') })
