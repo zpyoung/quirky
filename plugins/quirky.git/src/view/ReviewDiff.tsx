@@ -79,6 +79,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const cardElements = useRef(new Map<string, HTMLElement>())
   const activeRef = useRef<string | null>(null)
   const revalidating = useRef(new Set<string>())
+  const revalidateAgain = useRef(new Set<string>())
   const skippedCollapsed = useRef(new Set<string>())
   const pendingNav = useRef<{ key: string; go: (pane: PaneHandle) => void } | null>(null)
   const pendingReveal = useRef<string | null>(input.reveal ?? null)
@@ -178,26 +179,38 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
    * that changes nothing never rebuilds the editor or loses its scroll position.
    */
   const revalidate = async (key: string): Promise<void> => {
-    const item = itemsRef.current.find((i) => i.key === key)
-    const shown = sectionsRef.current[key]
-    if (!item || shown?.status !== 'loaded' || !shown.diff || revalidating.current.has(key)) return
-    const against = bodyAgainst(viewOfRef(item))
+    if (revalidating.current.has(key)) {
+      revalidateAgain.current.add(key)
+      return
+    }
     revalidating.current.add(key)
     try {
-      const fresh = reuseGitDiff(shown.diff, await diffFor(item, against))
-      const now = sectionsRef.current[key]
-      if (now?.status !== 'loaded' || now.diff !== shown.diff) return
-      patchSection(key, {
-        against,
-        signature: item.signature,
-        ...(fresh === shown.diff ? {} : { diff: fresh, revision: now.revision + 1 })
-      })
+      do {
+        revalidateAgain.current.delete(key)
+        await revalidateOnce(key)
+      } while (revalidateAgain.current.has(key))
     } finally {
       revalidating.current.delete(key)
+      revalidateAgain.current.delete(key)
     }
     const latest = itemsRef.current.find((i) => i.key === key)
     const settled = sectionsRef.current[key]
     if (latest && settled?.status === 'loaded' && settled.against !== bodyAgainst(viewOfRef(latest))) await revalidate(key)
+  }
+
+  const revalidateOnce = async (key: string): Promise<void> => {
+    const item = itemsRef.current.find((i) => i.key === key)
+    const shown = sectionsRef.current[key]
+    if (!item || shown?.status !== 'loaded' || !shown.diff) return
+    const against = bodyAgainst(viewOfRef(item))
+    const fresh = reuseGitDiff(shown.diff, await diffFor(item, against))
+    const now = sectionsRef.current[key]
+    if (now?.status !== 'loaded' || now.diff !== shown.diff) return
+    patchSection(key, {
+      against,
+      signature: item.signature,
+      ...(fresh === shown.diff ? {} : { diff: fresh, revision: now.revision + 1 })
+    })
   }
 
   const onCardSaved = (key: string, content: string, hash: string) => {

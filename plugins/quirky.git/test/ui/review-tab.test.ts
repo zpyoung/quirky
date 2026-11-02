@@ -288,6 +288,38 @@ describe('quirky.git review tab', () => {
     expect(modifiedEditor(card(element, APP)).state.sliceDoc()).toBe('new\n')
   })
 
+  test('expanding a card while an earlier refresh of it is still in flight reads again, so it never shows older content than disk', async () => {
+    model = reviewModel([reviewFile(APP)])
+    let disk = 'first\n'
+    let gate: { started: () => void; release: Promise<void> } | null = null
+    fake.handlers['quirky.git/diff'] = async (params) => {
+      const snapshot = disk
+      const held = gate
+      gate = null
+      if (held) {
+        held.started()
+        await held.release
+      }
+      return textDiff({ path: params.path as string, source: 'review', original: 'base\n', modified: snapshot, modifiedHash: snapshot })
+    }
+    const element = await open()
+    let release!: () => void
+    let started!: () => void
+    const reading = new Promise<void>((r) => (started = r))
+    gate = { started, release: new Promise<void>((r) => (release = r)) }
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } } as never))
+    await reading
+
+    await click(toggleOf(element, APP))
+    disk = 'second\n'
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } } as never))
+    await settle()
+    await click(toggleOf(element, APP))
+    await act(async () => release())
+    await settle()
+    expect(modifiedEditor(card(element, APP)).state.sliceDoc()).toBe('second\n')
+  })
+
   test('F7 expands a folded card it moves into, so the active change is visible', async () => {
     model = reviewModel([reviewFile('a.ts'), reviewFile('b.ts')])
     diffBody = () => ({ original: numbered(10, 'line'), modified: numbered(10, 'line').replace('line 5', 'five') })
