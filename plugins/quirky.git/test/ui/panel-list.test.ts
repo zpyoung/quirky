@@ -8,6 +8,7 @@ registerDom()
 const s = await import('./panel-support')
 const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, listboxOf, mountPanel, noticeOf, press, q, qa, rowOf, rowPaths, selectedPaths, settle, statusOf } = s
 const { onSelectedPath, selectedPath, selectPath } = await import('../../src/review/selection')
+const { registerReviewView } = await import('../../src/view/registry')
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -343,11 +344,50 @@ describe('the keyboard', () => {
     expect(countLine(element)).toBe('2 of 4 reviewed · 4 uncommitted')
     await act(async () => selectPath('feat', 'src/feature/enabled.ts', 'review'))
     await press(listbox(element), ' ')
-    expect(fake.called('quirky.git/setReviewMark').at(-1)?.params).toEqual({ worktree: 'feat', path: 'src/feature/enabled.ts', reviewed: true })
+    expect(fake.called('quirky.git/setReviewMark').at(-1)?.params).toEqual({ worktree: 'feat', path: 'src/feature/enabled.ts', reviewed: true, expected: 'hash:src/feature/enabled.ts' })
     expect(countLine(element)).toBe('3 of 4 reviewed · 4 uncommitted')
     expect(q(rowOf(element, 'src/feature/enabled.ts')!, '.git-row__mark [role="img"]')?.getAttribute('aria-label')).toBe('Reviewed')
     expect(selectedPaths(element)).toEqual(['src/feature/flags.ts'])
     expect(selectedPath('feat')).toBe('src/feature/flags.ts')
+    unmount()
+  })
+
+  test('marking sends the hash the open Review card shows, and null for a card showing a deletion', async () => {
+    const { fake, element, unmount } = await open()
+    const shown: Record<string, string | null | undefined> = { 'README.md': 'a'.repeat(64), 'src/app.ts': null }
+    const stop = registerReviewView({ worktree: 'feat', reveal() {}, scrollToTop() {}, setScope() {}, loadedHash: (path) => shown[path] })
+    await act(async () => selectPath('feat', 'README.md', 'review'))
+    await press(listbox(element), ' ')
+    await act(async () => selectPath('feat', 'src/app.ts', 'review'))
+    await press(listbox(element), ' ')
+    expect(fake.called('quirky.git/diff')).toHaveLength(0)
+    expect(fake.called('quirky.git/setReviewMark').map((call) => call.params.expected)).toEqual(['a'.repeat(64), null])
+    stop()
+    unmount()
+  })
+
+  test('marking a file the Review tab has not loaded reads its base diff for the hash', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      four(f)
+      f.on('quirky.git/diff', () => ({ original: 'x', modified: '', modifiedHash: null, modifiedDeleted: true, kind: 'text', binary: false }))
+    })
+    await act(async () => selectPath('feat', 'README.md', 'review'))
+    await press(listbox(element), ' ')
+    expect(fake.called('quirky.git/diff').at(-1)?.params).toEqual({ worktree: 'feat', path: 'README.md', source: 'review', against: 'base' })
+    expect(fake.called('quirky.git/setReviewMark').at(-1)?.params).toEqual({ worktree: 'feat', path: 'README.md', reviewed: true, expected: null })
+    unmount()
+  })
+
+  test('a mark whose hash cannot be read is not sent', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      four(f)
+      f.on('quirky.git/diff', () => {
+        throw new Error('diff failed')
+      })
+    })
+    await act(async () => selectPath('feat', 'README.md', 'review'))
+    await press(listbox(element), ' ')
+    expect(fake.called('quirky.git/setReviewMark')).toHaveLength(0)
     unmount()
   })
 
@@ -534,7 +574,7 @@ describe('the row menu', () => {
     const { fake, element, unmount } = await open()
     await rightClick(element, 'README.md')
     await click(buttonText(document.body, 'Mark reviewed'))
-    expect(fake.called('quirky.git/setReviewMark').at(-1)?.params).toEqual({ worktree: 'feat', path: 'README.md', reviewed: true })
+    expect(fake.called('quirky.git/setReviewMark').at(-1)?.params).toEqual({ worktree: 'feat', path: 'README.md', reviewed: true, expected: 'hash:README.md' })
     expect(selectedPaths(element)).toEqual(['src/app.ts'])
     unmount()
   })
@@ -718,16 +758,95 @@ describe('Revert file for a committed change', () => {
     unmount()
   })
 
-  test('a new file committed on the branch cannot be reverted here and says why', async () => {
+  test('a committed deletion is restored only when the file is still missing', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([])
+      f.compare = compareOf({ entries: [{ path: 'src/gone.ts', status: 'deleted', added: 0, removed: 2, binary: false }] })
+      f.on('quirky.git/diff', () => ({ path: 'src/gone.ts', staged: false, original: 'base text\n', modified: '', binary: false, source: 'review', kind: 'text', modifiedHash: null, modifiedDeleted: true }))
+    })
+    await click(rowOf(element, 'src/gone.ts'))
+    await click(byLabel(element, 'Revert src/gone.ts'))
+    await click(buttonText(dialog()!, 'Revert'))
+    expect(fake.called('quirky.git/save').at(-1)?.params).toEqual({ worktree: 'feat', path: 'src/gone.ts', content: 'base text\n', expected: null })
+    unmount()
+  })
+
+  test('a save without a readable hash is refused instead of sent unguarded', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      committed(f)
+      f.on('quirky.git/diff', () => ({ original: 'base text\n', binary: false, kind: 'text' }))
+    })
+    await click(rowOf(element, 'src/done.ts'))
+    await click(byLabel(element, 'Revert src/done.ts'))
+    await click(buttonText(dialog()!, 'Revert'))
+    expect(fake.called('quirky.git/save')).toHaveLength(0)
+    expect(noticeOf(element)?.textContent).toContain('Failed to revert “src/done.ts”')
+    unmount()
+  })
+
+  test('a file added on the branch is deleted through the editor after a confirm that says so', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([])
       f.compare = compareOf({ entries: [{ path: 'lib/new.ts', status: 'added', added: 3, removed: 0, binary: false }] })
     })
     await click(rowOf(element, 'lib/new.ts'))
     await click(byLabel(element, 'Revert lib/new.ts'))
-    expect(dialog()).toBeNull()
-    expect(fake.toasts.at(-1)?.[0]).toBe('Can’t revert “new.ts”')
-    expect(fake.toasts.at(-1)?.[1]).toContain('committed on this branch')
+    expect(dialogTitle()).toBe('Delete "new.ts"?')
+    expect(fake.called('quirky.editor/mutate')).toHaveLength(0)
+    await click(buttonText(dialog()!, 'Delete'))
+    expect(fake.called('quirky.editor/mutate').at(-1)?.params).toEqual({ worktree: 'feat', action: 'delete', path: 'lib/new.ts', yes: true })
+    expect(fake.called('quirky.git/discard')).toHaveLength(0)
+    unmount()
+  })
+
+  test('a renamed file restores the old path from the base, then deletes the new one', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([])
+      f.compare = compareOf({ entries: [{ path: 'lib/after.ts', oldPath: 'lib/before.ts', status: 'renamed', added: 0, removed: 0, binary: false }] })
+      f.on('quirky.git/diff', () => ({ original: 'old text\n', modified: 'old text\n', binary: false, kind: 'text', source: 'review', modifiedHash: 'c'.repeat(64) }))
+    })
+    await click(rowOf(element, 'lib/after.ts'))
+    await click(byLabel(element, 'Revert lib/after.ts'))
+    expect(dialogTitle()).toBe('Revert the rename of "after.ts"?')
+    await click(buttonText(dialog()!, 'Revert'))
+    expect(fake.called('quirky.git/diff').at(-1)?.params).toEqual({ worktree: 'feat', path: 'lib/after.ts', oldPath: 'lib/before.ts', source: 'review', against: 'base' })
+    expect(fake.calls.filter((call) => call.method === 'quirky.git/save' || call.method === 'quirky.editor/mutate').map((call) => [call.method, call.params])).toEqual([
+      ['quirky.git/save', { worktree: 'feat', path: 'lib/before.ts', content: 'old text\n', expected: null }],
+      ['quirky.editor/mutate', { worktree: 'feat', action: 'delete', path: 'lib/after.ts', yes: true }]
+    ])
+    unmount()
+  })
+
+  test('a rename whose old path is occupied again keeps the new file', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([])
+      f.compare = compareOf({ entries: [{ path: 'lib/after.ts', oldPath: 'lib/before.ts', status: 'renamed', added: 0, removed: 0, binary: false }] })
+      f.on('quirky.git/diff', () => ({ original: 'old text\n', modified: '', binary: false, kind: 'text', source: 'review', modifiedHash: 'c'.repeat(64) }))
+      f.on('quirky.git/save', () => {
+        throw new Error('changed on disk')
+      })
+    })
+    await click(rowOf(element, 'lib/after.ts'))
+    await click(byLabel(element, 'Revert lib/after.ts'))
+    await click(buttonText(dialog()!, 'Revert'))
+    expect(fake.called('quirky.editor/mutate')).toHaveLength(0)
+    expect(noticeOf(element)?.textContent).toContain('Failed to revert')
+    unmount()
+  })
+
+  test('Revert all names each file it could not revert and why', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([entry('c.ts', 'conflicts', 'modified', { conflict: { kind: 'both_modified', state: 'unresolved' } })])
+      f.compare = compareOf({ entries: [{ path: 'lib/new.ts', status: 'added', added: 3, removed: 0, binary: false }] })
+    })
+    await click(byLabel(element, 'More source control actions'))
+    await click(buttonText(document.body, 'Revert all…'))
+    expect(dialogTitle()).toBe('Revert all 1 file?')
+    await click(buttonText(dialog()!, 'Revert all'))
+    expect(fake.called('quirky.editor/mutate').map((call) => call.params.path)).toEqual(['lib/new.ts'])
+    const left = fake.toasts.at(-1)!
+    expect(left[0]).toBe('Revert all left 1 file unchanged')
+    expect(left[1]).toBe('c.ts: Resolve the conflict before reverting this file')
     unmount()
   })
 

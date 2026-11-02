@@ -585,6 +585,50 @@ describe('scenario 29: a step fails', () => {
   })
 })
 
+describe('the Create PR chain guards its commit', () => {
+  const dirty = (f: Fake) => {
+    f.status = statusOf([entry('a.ts')])
+    f.on('quirky.hosting/forBranch', () => NO_REVIEW)
+  }
+  const startChain = async (element: HTMLElement) => {
+    await type(message(element)!, 'msg')
+    await openCaret(element)
+    await click(menuItem('Commit, push & create PR'))
+  }
+
+  test('a HEAD that moves while staging stops the chain before it commits', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      dirty(f)
+      f.on('quirky.git/stage', () => {
+        f.status = { ...f.status, head: '9'.repeat(40), entries: [entry('a.ts', 'staged')] }
+        return { ok: true }
+      })
+    })
+    await startChain(element)
+    expect(fake.called('quirky.git/commit')).toHaveLength(0)
+    expect(errorLine(element)?.textContent).toContain('The branch or HEAD changed')
+    expect(fake.called('quirky.reviews/createOpen')).toHaveLength(0)
+    unmount()
+  })
+
+  test('cancelling while staging is pending stops the chain before it commits', async () => {
+    const gate = Promise.withResolvers<unknown>()
+    const { fake, element, unmount } = await open((f) => {
+      dirty(f)
+      f.on('quirky.git/stage', () => gate.promise)
+    })
+    await startChain(element)
+    expect(fake.called('quirky.git/stage')).toHaveLength(1)
+    await click(s.buttonText(element, 'Cancel remaining steps'))
+    fake.status = { ...fake.status, entries: [entry('a.ts', 'staged')] }
+    await act(async () => gate.resolve({ ok: true }))
+    await settle()
+    expect(fake.called('quirky.git/commit')).toHaveLength(0)
+    expect(fake.called('quirky.git/push')).toHaveLength(0)
+    unmount()
+  })
+})
+
 describe('scenario 30: nothing to review', () => {
   test('the panel shows one quiet line and no ship bar, message field or buttons', async () => {
     const { element, unmount } = await open()

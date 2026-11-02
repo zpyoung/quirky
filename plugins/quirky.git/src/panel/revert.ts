@@ -1,16 +1,21 @@
 import type { GitStatusEntry, ReviewFile, UiPluginContext } from '@quirky/protocol'
 import { discardText, type DiscardText } from '../shared/discard-text'
+import { reviewViewFor } from '../review/open'
 import { messageOf, splitPath } from './format'
 
 /**
  * How Revert file undoes one file. `discard` throws away its uncommitted changes (unstaging them
  * first when staged) and deletes a file that is new to the worktree. `base` rewrites a file whose
  * changes are all committed with its content at the merge base, which leaves an uncommitted edit.
- * A file with both committed and uncommitted changes only loses the uncommitted ones.
+ * A file with both committed and uncommitted changes only loses the uncommitted ones. `remove`
+ * deletes a file the branch commits added; `rename` deletes the renamed file and restores the old
+ * path from the merge base. Both leave the branch commits alone.
  */
 export type RevertPlan =
   | { kind: 'discard'; text: DiscardText; unstage: string[]; paths: string[] }
   | { kind: 'base'; text: DiscardText; path: string }
+  | { kind: 'remove'; text: DiscardText; path: string }
+  | { kind: 'rename'; text: DiscardText; path: string; oldPath: string }
   | { kind: 'blocked'; reason: string }
 
 export type Revertable = Exclude<RevertPlan, { kind: 'blocked' }>
@@ -26,8 +31,29 @@ export function revertPlan(file: ReviewFile, entries: readonly GitStatusEntry[],
   const { name } = splitPath(file.path)
   if (rows.length === 0) {
     if (file.uncommitted) return { kind: 'blocked', reason: 'Git status is still loading' }
-    if (file.status === 'A' || file.status === 'R') {
-      return { kind: 'blocked', reason: `A ${file.status === 'A' ? 'new' : 'renamed'} file committed on this branch can't be reverted here` }
+    if (file.status === 'A') {
+      return {
+        kind: 'remove',
+        path: file.path,
+        text: {
+          title: `Delete "${name}"?`,
+          body: `This file was added on this branch, so reverting it moves it to the Trash. The branch commits keep it.`,
+          confirm: 'Delete'
+        }
+      }
+    }
+    if (file.status === 'R') {
+      if (file.oldPath === undefined) return { kind: 'blocked', reason: "The original name of this renamed file isn't known" }
+      return {
+        kind: 'rename',
+        path: file.path,
+        oldPath: file.oldPath,
+        text: {
+          title: `Revert the rename of "${name}"?`,
+          body: `This moves "${file.path}" to the Trash and restores "${file.oldPath}" from ${base}. The branch commits keep the rename.`,
+          confirm: 'Revert'
+        }
+      }
     }
     return {
       kind: 'base',
@@ -57,6 +83,31 @@ export function revertPlan(file: ReviewFile, entries: readonly GitStatusEntry[],
 
 type BaseDiff = { original: string; modifiedHash?: string | null; modifiedDeleted?: boolean; kind?: string; binary?: boolean }
 
+function hashOfDiff(diff: BaseDiff, path: string): string | null {
+  if (diff.modifiedDeleted === true || diff.modifiedHash === null) return null
+  if (typeof diff.modifiedHash === 'string') return diff.modifiedHash
+  throw new Error(`${splitPath(path).name} can't be checked against the version you saw, so it was left alone.`)
+}
+
+/**
+ * The disk-side hash of `path` that a guarded write should expect: the one the open Review card
+ * shows when it has loaded one, else the one in a fresh review diff against the base (`null` for a
+ * file that is deleted on disk). Rejects when no hash can be determined, so a write is never sent
+ * unguarded.
+ */
+export async function shownHash(context: UiPluginContext, worktree: string, path: string, diff?: BaseDiff): Promise<string | null> {
+  const loaded = reviewViewFor(worktree)?.loadedHash?.(path)
+  if (loaded !== undefined) return loaded
+  const read = diff ?? ((await context.call('quirky.git/diff', { worktree, path, source: 'review', against: 'base' })) as BaseDiff)
+  return hashOfDiff(read, path)
+}
+
+function assertText(diff: BaseDiff, path: string): void {
+  if (diff.binary === true || (diff.kind !== undefined && diff.kind !== 'text')) {
+    throw new Error(`${splitPath(path).name} is not a text file, so its base version can't be restored here.`)
+  }
+}
+
 /** Carries out a plan from `revertPlan`; rejects with the daemon's message when a step fails. */
 export async function applyRevert(context: UiPluginContext, worktree: string, plan: Revertable): Promise<void> {
   if (plan.kind === 'discard') {
@@ -64,12 +115,28 @@ export async function applyRevert(context: UiPluginContext, worktree: string, pl
     await context.call('quirky.git/discard', { worktree, paths: plan.paths, yes: true })
     return
   }
-  const diff = (await context.call('quirky.git/diff', { worktree, path: plan.path, source: 'review', against: 'base' })) as BaseDiff
-  if (diff.binary === true || (diff.kind !== undefined && diff.kind !== 'text')) {
-    throw new Error(`${splitPath(plan.path).name} is not a text file, so its base version can't be restored here.`)
+  if (plan.kind === 'remove') {
+    await context.call('quirky.editor/mutate', { worktree, action: 'delete', path: plan.path, yes: true })
+    return
   }
-  const expected = diff.modifiedDeleted === true || typeof diff.modifiedHash !== 'string' ? {} : { expected: diff.modifiedHash }
-  await context.call('quirky.git/save', { worktree, path: plan.path, content: diff.original, ...expected })
+  if (plan.kind === 'rename') {
+    const diff = (await context.call('quirky.git/diff', {
+      worktree,
+      path: plan.path,
+      oldPath: plan.oldPath,
+      source: 'review',
+      against: 'base'
+    })) as BaseDiff
+    assertText(diff, plan.oldPath)
+    // restore first: it refuses when the old path exists again, and the new path is still there to retry
+    await context.call('quirky.git/save', { worktree, path: plan.oldPath, content: diff.original, expected: null })
+    await context.call('quirky.editor/mutate', { worktree, action: 'delete', path: plan.path, yes: true })
+    return
+  }
+  const diff = (await context.call('quirky.git/diff', { worktree, path: plan.path, source: 'review', against: 'base' })) as BaseDiff
+  assertText(diff, plan.path)
+  const expected = await shownHash(context, worktree, plan.path, diff)
+  await context.call('quirky.git/save', { worktree, path: plan.path, content: diff.original, expected })
 }
 
 /** What stopped a sequence of reverts: the file and the daemon's message. */

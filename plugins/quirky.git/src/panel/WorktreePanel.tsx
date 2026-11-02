@@ -27,7 +27,7 @@ import { displayOrder, ReviewList } from './list'
 import type { Notice } from './Notices'
 import { registerPanel } from './registry'
 import { errorLineFor, type RemoteAction } from './remote-messages'
-import { applyRevert, revertInOrder, revertPlan, type Revertable } from './revert'
+import { applyRevert, revertInOrder, revertPlan, shownHash, type Revertable } from './revert'
 import type { Expansion, RowButton, RowHandlers, RowItem } from './Rows'
 import { openHostedDiff } from '../view/hosted-tabs'
 import { isRecord } from '../daemon/validation'
@@ -473,7 +473,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     if (!file) return
     const reviewed = file.mark !== 'reviewed'
     try {
-      const result = await setReviewMark(context, { worktree, path, reviewed })
+      const expected = reviewed ? await shownHash(context, worktree, path) : undefined
+      const result = await setReviewMark(context, { worktree, path, reviewed, ...(expected !== undefined && { expected }) })
       refreshReview()
       if (result === 'ok' && reviewed) {
         const next = advanceAfterMark(files, viewMode, path)
@@ -528,14 +529,16 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     await runRevert(path, plan)
   }
 
-  const revertable = useMemo(
-    () =>
-      reviewOrder(visibleFiles, 'list').flatMap((file) => {
-        const plan = revertPlan(file, entries, baseName)
-        return plan.kind === 'blocked' ? [] : [{ file, plan }]
-      }),
-    [visibleFiles, entries, baseName]
-  )
+  const { revertable, unrevertable } = useMemo(() => {
+    const ready: Array<{ file: ReviewFile; plan: Revertable }> = []
+    const blocked: Array<{ path: string; reason: string }> = []
+    for (const file of reviewOrder(visibleFiles, 'list')) {
+      const plan = revertPlan(file, entries, baseName)
+      if (plan.kind === 'blocked') blocked.push({ path: file.path, reason: plan.reason })
+      else ready.push({ file, plan })
+    }
+    return { revertable: ready, unrevertable: blocked }
+  }, [visibleFiles, entries, baseName])
 
   const runRevertBatch = async (batch: typeof revertable, total: number): Promise<void> => {
     const { done, failure } = await revertInOrder(
@@ -558,15 +561,24 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     const batch = revertable
     if (batch.length === 0) return
     const n = batch.length
+    const skipped = unrevertable
+    const skippedNote =
+      skipped.length === 0 ? '' : ` ${skipped.length} ${skipped.length === 1 ? 'file' : 'files'} can’t be reverted here and will be listed afterwards.`
     const ok = await ask({
       title: `Revert all ${n} ${n === 1 ? 'file' : 'files'}?`,
-      body: `Every file in the list goes back to its version on ${baseName}: uncommitted changes are discarded and new files are deleted. It stops at the first file that fails. This cannot be undone.`,
+      body: `Every file in the list goes back to its version on ${baseName}: uncommitted changes are discarded and new files are deleted. It stops at the first file that fails. This cannot be undone.${skippedNote}`,
       confirm: 'Revert all',
       danger: true
     })
     if (!ok) return
     requestFocusRecovery()
     await runRevertBatch(batch, n)
+    if (skipped.length > 0) {
+      context.toast(
+        `Revert all left ${skipped.length} ${skipped.length === 1 ? 'file' : 'files'} unchanged`,
+        skipped.map(({ path, reason }) => `${path}: ${reason}`).join('\n')
+      )
+    }
   }
 
   const absolute = (path: string): string => (worktreePath === null ? path : `${worktreePath.replace(/\/$/, '')}/${path}`)
@@ -827,9 +839,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
    * Commits with the current message. `staged` commits the index as is, `all` stages everything
    * first, `selected` stages exactly the ticked files and unstages any other staged one. Status
    * is re-read and validated before the step and refreshed after it. An empty message sets the
-   * error line and focuses the box instead of committing.
+   * error line and focuses the box instead of committing. Inside the Create PR chain, `chain`
+   * pins the HEAD the chain started from and lets a cancel stop it before the commit starts.
    */
-  const commitWith = async (mode: 'staged' | 'all' | 'selected'): Promise<boolean> => {
+  const commitWith = async (mode: 'staged' | 'all' | 'selected', chain?: { head: string; stillCurrent: () => boolean }): Promise<boolean> => {
     const text = message.trim()
     if (text === '') {
       failWith({ message: EMPTY_MESSAGE })
@@ -841,9 +854,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     requestFocusRecovery()
     try {
       const branch = status?.branch ?? null
-      const fresh = await exactStatus(worktree, branch)
+      const fresh = await exactStatus(worktree, branch, chain?.head)
       if (mode === 'all') {
         await context.call('quirky.git/stage', { worktree, scope: 'all' })
+        if (chain && !chain.stillCurrent()) return false
       } else if (mode === 'selected') {
         const keep = new Set(ticks ?? [])
         const toStage = [...new Set(fresh.entries.filter((entry) => keep.has(entry.path)).map((entry) => entry.path))]
@@ -852,9 +866,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         if (toUnstage.length > 0) await context.call('quirky.git/unstage', { worktree, paths: toUnstage })
       }
       if (mode === 'all') {
-        const staged = await exactStatus(worktree, branch)
+        const staged = await exactStatus(worktree, branch, chain?.head)
         if (staged.entries.some((entry) => entry.area !== 'staged')) {
           throw new Error('New or unresolved changes appeared while staging. Review Source Control and try again.')
+        }
+        if (chain) {
+          if (staged.entries.length === 0) throw new Error('Stage the intended changes before committing and creating a pull request.')
+          if (!chain.stillCurrent()) return false
         }
       }
       await context.call('quirky.git/commit', { worktree, message: text })
@@ -931,7 +949,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       if (fresh.entries.length > 0) {
         if (message.trim() === '') throw new Error(EMPTY_MESSAGE)
         if (!stillCurrent()) return
-        if (!(await commitWith('all'))) return
+        if (!(await commitWith('all', { head: initialHead, stillCurrent }))) return
         if (!stillCurrent()) return
         committed = true
         fresh = await exactStatus(target, branch)

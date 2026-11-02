@@ -381,6 +381,19 @@ export function fakeContext(initial: UiLayout): Fake {
             return {}
           case 'quirky.git/save':
             return { hash: 'e'.repeat(64) }
+          case 'quirky.git/diff':
+            return {
+              path: params.path,
+              staged: false,
+              original: 'base\n',
+              modified: 'now\n',
+              binary: false,
+              source: 'review',
+              kind: 'text',
+              modifiedHash: `hash:${String(params.path)}`
+            }
+          case 'quirky.editor/mutate':
+            return { path: params.path }
           case 'quirky.worktree/resolve':
             return { path: `/repo/${params.selector}` }
           case 'quirky.git/conflictFile':
