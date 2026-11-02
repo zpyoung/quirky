@@ -31,16 +31,28 @@ const upstream = (ahead: number, behind: number, patchEquivalent: boolean | null
   behindPatchEquivalent: patchEquivalent
 })
 
-const primary = (element: HTMLElement) => q(element, '[data-git-primary]') as HTMLButtonElement
+const primary = (element: HTMLElement) => q(element, '.ui-split-button__primary') as HTMLButtonElement
+const errorLine = (element: HTMLElement) => q(element, '.ui-inline-error')
+const shipText = (element: HTMLElement) => primary(element)?.textContent ?? q(element, '[data-git-up-to-date]')?.textContent ?? null
+const SOMETHING_TO_SHIP = compareOf({ entries: [{ path: 'util.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1, ahead: 1 })
+/** Scripts `stage` as the daemon does: every row it names ends up staged. */
+const stagesEverything = (fake: Fake) =>
+  fake.on('quirky.git/stage', () => {
+    fake.status = { ...fake.status, entries: fake.status.entries.map((row) => ({ ...row, area: 'staged' as const })) }
+    return { ok: true }
+  })
+const caretEntries = () => qa(document.body, '[role="menuitem"]') as HTMLButtonElement[]
+const caretLabel = (item: Element) => q(item as HTMLElement, '.qt-menu-label')?.firstChild?.textContent ?? ''
+const caretEntry = (label: string) => caretEntries().find((item) => caretLabel(item) === label)
 const chevron = (element: HTMLElement) => byLabel(element, 'More commit and remote actions') as HTMLButtonElement
 const dialog = () => q(document.body, '[role="dialog"]')
 const dialogTitle = () => {
   const titleId = dialog()?.getAttribute('aria-labelledby')
   return titleId ? document.getElementById(titleId)?.textContent ?? null : null
 }
-const menuLabels = () => qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)
 const message = (element: HTMLElement) => byLabel(element, 'Commit message') as HTMLTextAreaElement
 const recoveryTarget = (element: HTMLElement) => q(element, '[data-base-ref]') ?? chevron(element)
+const listbox = (element: HTMLElement) => q(element, '[role="listbox"]') as HTMLElement
 
 describe('Source Control focus recovery', () => {
   test('does not move focus on initial panel mount', async () => {
@@ -52,27 +64,40 @@ describe('Source Control focus recovery', () => {
 })
 
 
-describe('SC-23: the discard dialogs', () => {
+/** Selects a row and presses its inline Revert button. */
+async function revert(element: HTMLElement, path: string) {
+  await click(rowOf(element, path))
+  await click(byLabel(element, `Revert ${path}`))
+}
+
+/** Right-clicks a row and picks `label` from its menu. */
+async function fromMenu(element: HTMLElement, path: string, label: string) {
+  await act(async () => {
+    rowOf(element, path)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }))
+  })
+  await settle()
+  await click(buttonText(document.body, label))
+}
+
+describe('SC-23: the Revert file dialogs', () => {
   const rows = (fake: Fake) => {
     fake.status = statusOf([
       entry('math.ts', 'unstaged'),
       entry('gone.ts', 'unstaged', 'deleted'),
       entry('notes.txt', 'untracked'),
-      entry('b.txt', 'untracked'),
-      entry('c.txt', 'untracked'),
       entry('README.md', 'staged')
     ])
   }
 
-  const cases: Array<[string, string, string, string, string, string]> = [
-    ['unstaged', 'math.ts', 'Discard changes', 'Discard changes to "math.ts"?', 'This will revert the unstaged changes to this file. This cannot be undone.', 'Discard'],
-    ['unstaged', 'gone.ts', 'Restore file', 'Restore "gone.ts"?', 'This will restore the last staged version and discard the deletion. This cannot be undone.', 'Restore'],
-    ['untracked', 'notes.txt', 'Delete untracked file', 'Delete "notes.txt"?', 'This will permanently delete this file. This cannot be undone.', 'Delete']
+  const cases: Array<[string, string, string, string]> = [
+    ['math.ts', 'Discard changes to "math.ts"?', 'This will revert the unstaged changes to this file. This cannot be undone.', 'Discard'],
+    ['gone.ts', 'Restore "gone.ts"?', 'This will restore the last staged version and discard the deletion. This cannot be undone.', 'Restore'],
+    ['notes.txt', 'Delete "notes.txt"?', 'This will permanently delete this file. This cannot be undone.', 'Delete']
   ]
-  for (const [section, path, button, title, body, confirm] of cases) {
-    test(`${button} on ${path} asks "${title}" with the shared dialog focused, then discards with yes`, async () => {
+  for (const [path, title, body, confirm] of cases) {
+    test(`Revert on ${path} asks "${title}" with the shared dialog focused, then discards with yes`, async () => {
       const { fake, element, unmount } = await open(rows)
-      await click(byLabel(element, `${button} ${path}`))
+      await revert(element, path)
       expect(dialogTitle()).toBe(title)
       expect(dialog()?.textContent).toContain(body)
       const confirmButton = buttonText(dialog()!, confirm)!
@@ -80,26 +105,20 @@ describe('SC-23: the discard dialogs', () => {
       expect(fake.called('quirky.git/discard')).toHaveLength(0)
       await click(confirmButton)
       expect(fake.called('quirky.git/discard').at(-1)?.params).toEqual({ worktree: 'feat', paths: [path], yes: true })
-      expect(section).toBeTruthy()
       unmount()
     })
   }
 
-  for (const count of [1, 2]) {
-    test(`folder discard describes ${count} ${count === 1 ? 'file' : 'files'} consistently`, async () => {
-      const { element, unmount } = await open((fake) => {
-        fake.status = statusOf(Array.from({ length: count }, (_, i) => entry(`src/file-${i}.ts`, 'unstaged')))
-        fake.settings.viewMode = 'tree'
-      })
-      try {
-        await click(byLabel(element, 'Discard folder src'))
-        expect(dialogTitle()).toContain(`${count} ${count === 1 ? 'file?' : 'files?'}`)
-        expect(dialog()?.textContent).toContain(count === 1 ? 'this file.' : 'these files.')
-      } finally {
-        unmount()
-      }
-    })
-  }
+  test('a staged file is unstaged, then discarded, and the confirm says it reverts the staged changes', async () => {
+    const { fake, element, unmount } = await open(rows)
+    await revert(element, 'README.md')
+    expect(dialogTitle()).toBe('Discard changes to "README.md"?')
+    expect(dialog()?.textContent).toContain('This will unstage and revert the changes to this file.')
+    await click(buttonText(dialog()!, 'Discard'))
+    expect(fake.called('quirky.git/unstage').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['README.md'] })
+    expect(fake.called('quirky.git/discard').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['README.md'], yes: true })
+    unmount()
+  })
 
   test('recovers focus before a delete completes and keeps it through a later row-removing status read', async () => {
     const pendingDiscard = Promise.withResolvers<{ ok: boolean }>()
@@ -107,7 +126,8 @@ describe('SC-23: the discard dialogs', () => {
       f.status = statusOf([entry('notes.txt', 'untracked')])
       f.on('quirky.git/discard', () => pendingDiscard.promise)
     })
-    const opener = byLabel(element, 'Delete untracked file notes.txt')!
+    await click(rowOf(element, 'notes.txt'))
+    const opener = byLabel(element, 'Revert notes.txt')!
     const statusReads = fake.called('quirky.git/status').length
     try {
       opener.focus()
@@ -135,30 +155,12 @@ describe('SC-23: the discard dialogs', () => {
     }
   })
 
-  test('Discard all on each section asks with Orca\'s text and sends the area', async () => {
-    const { fake, element, unmount } = await open(rows)
-    const askFor = async (section: string, label: string, title: string, confirm: string) => {
-      await click(byLabel(q(element, `[data-section="${section}"]`)!, label))
-      expect(dialogTitle()).toBe(title)
-      await click(buttonText(dialog()!, confirm))
-    }
-    await askFor('untracked', 'Delete all untracked', 'Delete 3 untracked files?', 'Delete 3')
-    await askFor('staged', 'Discard all', 'Discard all staged changes?', 'Discard all')
-    await askFor('unstaged', 'Discard all', 'Discard all unstaged changes?', 'Discard all')
-    expect(fake.called('quirky.git/discard').map((c) => c.params)).toEqual([
-      { worktree: 'feat', area: 'untracked', yes: true },
-      { worktree: 'feat', area: 'staged', yes: true },
-      { worktree: 'feat', area: 'unstaged', yes: true }
-    ])
-    unmount()
-  })
-
   test('Cancel changes nothing and Escape cancels too', async () => {
     const { fake, element, unmount } = await open(rows)
-    await click(byLabel(element, 'Discard changes math.ts'))
+    await revert(element, 'math.ts')
     await click(buttonText(dialog()!, 'Cancel'))
     expect(dialog()).toBeNull()
-    await click(byLabel(element, 'Discard changes math.ts'))
+    await click(byLabel(element, 'Revert math.ts'))
     await press(dialog()!, 'Escape')
     expect(dialog()).toBeNull()
     expect(fake.called('quirky.git/discard')).toHaveLength(0)
@@ -171,13 +173,13 @@ describe('unstaging a rename', () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('new.ts', 'staged', 'renamed', { oldPath: 'old.ts' })])
     })
-    await click(byLabel(element, 'Unstage new.ts'))
+    await fromMenu(element, 'new.ts', 'Unstage')
     expect(fake.called('quirky.git/unstage').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['new.ts', 'old.ts'] })
     unmount()
   })
 })
 
-describe('SC-24: stage and discard failures show one notice with Retry', () => {
+describe('SC-24: stage and revert failures show one notice with Retry', () => {
   test('a row failure shows the notice with Retry, replaced rather than stacked', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'unstaged')])
@@ -185,13 +187,14 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
         throw new Error('EACCES: permission denied')
       })
     })
+    await click(rowOf(element, 'math.ts'))
     for (let i = 0; i < 2; i++) {
-      await click(byLabel(element, 'Discard changes math.ts'))
+      await click(byLabel(element, 'Revert math.ts'))
       await click(buttonText(dialog()!, 'Discard'))
     }
     const notices = noticesOf(element)
     expect(notices).toHaveLength(1)
-    expect(notices[0]!.textContent).toContain('Failed to discard “math.ts”')
+    expect(notices[0]!.textContent).toContain('Failed to revert “math.ts”')
     expect(notices[0]!.textContent).toContain('EACCES: permission denied')
     expect(buttonText(notices[0]!, 'Retry')).toBeDefined()
     expect(fake.toasts).toEqual([])
@@ -217,7 +220,7 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
           return { ok: true }
         })
       })
-      await click(byLabel(element, 'Stage math.ts'))
+      await fromMenu(element, 'math.ts', 'Stage')
       expect(noticeOf(element)?.textContent).toContain('Failed to stage “math.ts”')
       await act(async () => delays.forEach((run) => run()))
       expect(buttonText(noticeOf(element)!, 'Retry')).toBeUndefined()
@@ -241,7 +244,7 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
         return { ok: true }
       })
     })
-    await click(byLabel(element, 'Stage math.ts'))
+    await fromMenu(element, 'math.ts', 'Stage')
     fail = false
     await click(buttonText(noticeOf(element)!, 'Retry'))
     expect(fake.called('quirky.git/stage')).toHaveLength(2)
@@ -249,23 +252,36 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
     unmount()
   })
 
-  test('a bulk discard where files fail shows the count, the first message and up to three paths', async () => {
+  test('a revert where the file fails shows the first message the daemon gave for it', async () => {
     const { element, unmount } = await open((f) => {
-      f.status = statusOf(['a.ts', 'b.ts', 'c.ts'].map((p) => entry(p, 'unstaged')))
+      f.status = statusOf([entry('a.ts', 'unstaged')])
       f.on('quirky.git/discard', () => {
-        throw failure('Failed to discard 2 file(s)', {
-          failures: [
-            { path: 'a.ts', message: 'read-only' },
-            { path: 'b.ts', message: 'read-only' }
-          ]
-        })
+        throw failure('Failed to discard 1 file(s)', { failures: [{ path: 'a.ts', message: 'read-only' }] })
       })
     })
-    await click(byLabel(q(element, '[data-section="unstaged"]')!, 'Discard all'))
-    await click(buttonText(dialog()!, 'Discard all'))
+    await revert(element, 'a.ts')
+    await click(buttonText(dialog()!, 'Discard'))
     const notice = noticeOf(element)!
-    expect(notice.textContent).toContain('Failed to discard 2 file(s)')
-    expect(notice.textContent).toContain('read-only a.ts, b.ts')
+    expect(notice.textContent).toContain('Failed to revert “a.ts”')
+    expect(notice.textContent).toContain('read-only')
+    unmount()
+  })
+
+  test('a failed mark shows a notice with Retry', async () => {
+    let fail = true
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([entry('math.ts', 'unstaged')])
+      f.on('quirky.git/setReviewMark', (params) => {
+        if (fail) throw new Error('database is locked')
+        f.marks[params.path as string] = 'reviewed'
+        return { mark: 'reviewed' }
+      })
+    })
+    await fromMenu(element, 'math.ts', 'Mark reviewed')
+    expect(noticeOf(element)?.textContent).toContain('Failed to mark “math.ts” reviewed')
+    fail = false
+    await click(buttonText(noticeOf(element)!, 'Retry'))
+    expect(fake.called('quirky.git/setReviewMark')).toHaveLength(2)
     unmount()
   })
 
@@ -277,7 +293,7 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
         throw new Error('index locked')
       })
     })
-    await click(byLabel(element, 'Stage math.ts'))
+    await fromMenu(element, 'math.ts', 'Stage')
     await act(async () => fake.setLayout(layoutFor('other')))
     await settle()
     const notice = noticeOf(element)!
@@ -287,38 +303,53 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
   })
 })
 
-describe('SC-25: the commit box', () => {
-  test('with nothing staged the primary reads Stage All; staged and untyped it is a disabled Commit', async () => {
+describe('SC-25: the message box and the commit step', () => {
+  test('changes with nothing staged read "Commit N files"; an empty message stops the click, a message stages everything and commits', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'unstaged')])
+      stagesEverything(f)
     })
-    expect(primary(element).textContent).toBe('Stage All')
+    expect(primary(element).textContent).toBe('Commit 1 file')
     expect(primary(element).disabled).toBe(false)
     await click(primary(element))
-    expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['math.ts'] })
-    fake.status = statusOf([entry('math.ts', 'staged')])
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
-    expect(primary(element).textContent).toBe('Commit')
-    expect(primary(element).disabled).toBe(true)
-    expect(primary(element).title).toBe('Enter a commit message to commit')
+    expect(errorLine(element)?.textContent).toContain('Write a commit message, or click ✦')
+    expect(fake.called('quirky.git/stage')).toHaveLength(0)
+    await type(message(element), 'msg')
+    await click(primary(element))
+    expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'all' })
+    expect(fake.called('quirky.git/commit').at(-1)?.params).toEqual({ worktree: 'feat', message: 'msg' })
     unmount()
   })
 
-  test('Cmd+Enter commits with the trimmed message, clears the box and refreshes status and compare', async () => {
+  test('hand-staged files read "Commit N staged files" and commit without staging', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([entry('math.ts', 'staged'), entry('util.ts', 'unstaged')])
+    })
+    expect(primary(element).textContent).toBe('Commit 1 staged file')
+    await type(message(element), 'msg')
+    await click(primary(element))
+    expect(fake.called('quirky.git/stage')).toHaveLength(0)
+    expect(fake.called('quirky.git/commit')).toHaveLength(1)
+    unmount()
+  })
+
+  test('Cmd+Enter commits with the trimmed message, clears the box and re-reads status and compare around it', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
     })
     await type(message(element), '  fix the login  ')
-    expect(primary(element).title).toBe('Commit staged changes')
     const before = fake.calls.length
     await press(message(element), 'Enter', { metaKey: true })
-    expect(fake.calls.slice(before).map((c) => c.method)).toEqual(['quirky.git/commit', 'quirky.git/status', 'quirky.git/compare'])
+    expect(fake.calls.slice(before).map((c) => c.method).filter((m) => ['quirky.git/status', 'quirky.git/commit', 'quirky.git/compare'].includes(m))).toEqual([
+      'quirky.git/status',
+      'quirky.git/commit',
+      'quirky.git/status',
+      'quirky.git/compare'
+    ])
     expect(fake.called('quirky.git/commit').at(-1)?.params).toEqual({ worktree: 'feat', message: 'fix the login' })
     expect(message(element).value).toBe('')
     unmount()
   })
-
 
   test('recovers focus while a commit is pending and retains it after completion', async () => {
     const pendingCommit = Promise.withResolvers<{ sha: string }>()
@@ -355,11 +386,12 @@ describe('SC-25: the commit box', () => {
       await type(message(element), 'Add math')
       primary(element).focus()
       await click(primary(element))
-      const chosen = chevron(element)
+      const chosen = listbox(element)
       chosen.focus()
       await act(async () => pendingCommit.reject(new Error('fatal: nope')))
       await settle()
-      expect(fake.toasts).toEqual([['Commit failed', 'fatal: nope']])
+      expect(errorLine(element)?.textContent).toContain('fatal: nope')
+      expect(fake.toasts).toEqual([])
       expect(document.activeElement === chosen).toBe(true)
     } finally {
       await act(async () => pendingCommit.resolve({ sha: 'd'.repeat(40) }))
@@ -392,12 +424,15 @@ describe('SC-25: the commit box', () => {
       unmount()
     }
   })
-  test('Cmd+Enter does nothing when the primary is not an enabled Commit', async () => {
+
+  test('Cmd+Enter does nothing when the ship button is not a commit', async () => {
     const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf([entry('math.ts', 'unstaged')])
+      f.status = statusOf([], { upstreamStatus: upstream(1, 0) })
     })
+    expect(primary(element).textContent).toBe('Push 1 commit')
     await press(element.querySelector('[data-git-panel]')!, 'Enter', { metaKey: true })
     expect(fake.called('quirky.git/commit')).toHaveLength(0)
+    expect(fake.called('quirky.git/push')).toHaveLength(0)
     unmount()
   })
 
@@ -413,7 +448,7 @@ describe('SC-25: the commit box', () => {
     unmount()
   })
 
-  test('the box is locked when nothing is staged and keeps a draft per worktree', async () => {
+  test('the box keeps a draft per worktree and goes away when nothing is left to commit', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
       f.statuses.other = statusOf([entry('x.ts', 'staged')])
@@ -425,10 +460,10 @@ describe('SC-25: the commit box', () => {
     await act(async () => fake.setLayout(layoutFor('feat')))
     await settle()
     expect(message(element).value).toBe('draft one')
-    fake.status = statusOf([entry('math.ts', 'unstaged')])
+    fake.status = statusOf([], { upstreamStatus: upstream(1, 0) })
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
     await settle()
-    expect(message(element).disabled).toBe(true)
+    expect(message(element)).toBeNull()
     unmount()
   })
 
@@ -441,11 +476,10 @@ describe('SC-25: the commit box', () => {
     })
     await type(message(element), 'msg')
     await click(primary(element))
-    const card = q(element, '[role="alert"] .ui-inline-agent-card')
-    expect(card).not.toBeNull()
-    expect(card?.textContent).toContain('fatal: nope')
-    expect(q(card!, '[aria-label="Failed"]')?.textContent).toBe('Failed')
-    expect(buttonText(card!, 'Details')).toBeUndefined()
+    const line = errorLine(element)
+    expect(line).not.toBeNull()
+    expect(line?.textContent).toContain('fatal: nope')
+    expect(buttonText(line as HTMLElement, 'Details')).toBeUndefined()
     expect(fake.toasts).toEqual([])
     expect(message(element).value).toBe('msg')
     unmount()
@@ -453,7 +487,7 @@ describe('SC-25: the commit box', () => {
 })
 
 describe('SC-27: a failing hook blocks the commit', () => {
-  test('shows Commit blocked with a Lint pill, the summary and Details with the raw output', async () => {
+  test('shows the summary in the error line and Details with the raw output', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
       f.on('quirky.git/commit', () => {
@@ -462,12 +496,10 @@ describe('SC-27: a failing hook blocks the commit', () => {
     })
     await type(message(element), 'Add math')
     await click(primary(element))
-    const card = q(element, '[role="alert"] .ui-inline-agent-card')!
-    expect(card.textContent).toContain('Commit blocked')
-    expect(q(card, '[aria-label="Lint"]')?.textContent).toBe('Lint')
-    expect(card.textContent).toContain('Lint failed during commit.')
+    const line = errorLine(element) as HTMLElement
+    expect(line.textContent).toContain('Lint failed during commit.')
     expect(fake.toasts).toEqual([])
-    await click(buttonText(card, 'Details'))
+    await click(buttonText(line, 'Details'))
     expect(dialogTitle()).toBe('Commit Failed')
     expect(q(dialog()!, 'pre')?.textContent).toBe('eslint found 2 problems')
     await click(buttonText(dialog()!, 'Close'))
@@ -487,22 +519,22 @@ describe('SC-27: a failing hook blocks the commit', () => {
     try {
       await type(message(element), 'Add math')
       await click(primary(element))
-      const card = q(element, '[role="alert"] .ui-inline-agent-card')
-      expect(card).not.toBeNull()
-      expect(card!.textContent).toContain(summary)
+      const line = errorLine(element) as HTMLElement
+      expect(line).not.toBeNull()
+      expect(line.textContent).toContain(summary)
       expect(fake.toasts).toEqual([])
       expect(message(element).value).toBe('Add math')
-      await click(buttonText(card!, 'Details'))
+      await click(buttonText(line, 'Details'))
       expect(q(dialog()!, 'pre')?.textContent).toBe(output)
       await click(buttonText(dialog()!, 'Close'))
-      await click(buttonText(card!, 'Details'))
+      await click(buttonText(errorLine(element) as HTMLElement, 'Details'))
       expect(q(dialog()!, 'pre')?.textContent).toBe(output)
     } finally {
       unmount()
     }
   })
 
-  test('a successful commit clears earlier hook and failed blockers', async () => {
+  test('a successful commit clears earlier hook and failed errors', async () => {
     for (const reason of ['hook', 'failed'] as const) {
       let fail = true
       const summary = reason === 'hook' ? 'Pre-commit hook failed.' : 'Type check found problems'
@@ -515,15 +547,15 @@ describe('SC-27: a failing hook blocks the commit', () => {
       })
       await type(message(element), 'Add math')
       await click(primary(element))
-      expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(true)
+      expect(errorLine(element) !== null).toBe(true)
       fail = false
       await click(primary(element))
-      expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(false)
+      expect(errorLine(element) !== null).toBe(false)
       unmount()
     }
   })
 
-  test('a hook failure has a Hook pill, and no Details when the output is just the summary', async () => {
+  test('a hook failure has no Details when the output is just the summary', async () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
       f.on('quirky.git/commit', () => {
@@ -532,45 +564,49 @@ describe('SC-27: a failing hook blocks the commit', () => {
     })
     await type(message(element), 'Add math')
     await click(primary(element))
-    expect(q(element, '[role="alert"] .ui-inline-agent-card [aria-label="Hook"]')?.textContent).toBe('Hook')
-    expect(buttonText(q(element, '[role="alert"] .ui-inline-agent-card')!, 'Details')).toBeUndefined()
+    expect(errorLine(element)?.textContent).toContain('Pre-commit hook failed.')
+    expect(buttonText(errorLine(element) as HTMLElement, 'Details')).toBeUndefined()
     unmount()
   })
 })
 
-describe('SC-28: the primary button follows the ladder and is reported', () => {
-  const rows: Array<[string, Partial<ReturnType<typeof statusOf>>, string, boolean, string | null]> = [
-    ['ahead and behind', { upstreamStatus: upstream(2, 1) }, 'Sync', true, 'Pull 1, push 2'],
-    ['patch-equivalent', { upstreamStatus: upstream(2, 2, true) }, 'Force Push', true, 'Remote only has older copies of local commits. Force push 2 branch commits with lease to update origin/zoe/feat.'],
-    ['behind', { upstreamStatus: upstream(0, 1) }, 'Pull', true, 'Pull 1 commit(s)'],
-    ['ahead', { upstreamStatus: upstream(2, 0) }, 'Push', true, 'Push 2 commit(s)'],
-    ['no upstream', { upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'Publish Branch', true, null],
-    ['up to date', {}, 'Commit', false, 'Nothing to commit. Branch is up to date.'],
-    ['detached', { detached: true, branch: null, upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'Commit', false, 'Check out a branch before publishing commits.']
+describe('SC-28: the ship button names the next step and the panel reports it', () => {
+  const noUpstream = { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null }
+  const rows: Array<[string, Partial<ReturnType<typeof statusOf>>, string, boolean, string]> = [
+    ['ahead and behind', { upstreamStatus: upstream(2, 1) }, 'Sync', true, ''],
+    ['patch-equivalent', { upstreamStatus: upstream(2, 2, true) }, 'Force push 2 commits', true, ''],
+    ['behind', { upstreamStatus: upstream(0, 1) }, 'Pull 1 commit', true, ''],
+    ['ahead', { upstreamStatus: upstream(2, 0) }, 'Push 2 commits', true, ''],
+    ['no upstream', { upstreamStatus: noUpstream }, 'Publish branch', true, ''],
+    ['pushed with no GitHub remote', {}, 'Pushed to origin/zoe/feat', false, 'no GitHub remote'],
+    ['detached', { detached: true, branch: null, upstreamStatus: noUpstream }, 'Publish branch', false, 'check out a branch first']
   ]
-  for (const [name, overrides, label, enabled, title] of rows) {
+  for (const [name, overrides, label, enabled, reason] of rows) {
     test(`${name}: ${label}`, async () => {
       const { fake, element, unmount } = await open((f) => {
         f.status = statusOf([], overrides)
+        f.compare = SOMETHING_TO_SHIP
       })
-      if (name === 'no upstream') await waitForState(element, () => !primary(element).disabled)
-      expect(primary(element).textContent).toBe(label)
-      expect(primary(element).disabled).toBe(!enabled)
-      expect(fake.reports.at(-1).primary).toMatchObject({ label, enabled })
-      if (title !== null) {
-        expect(primary(element).title).toBe(title)
-        expect(fake.reports.at(-1).primary).toEqual({ label, enabled, title })
-      }
+      expect(shipText(element)).toBe(label)
+      expect(primary(element)?.disabled ?? true).toBe(!enabled)
+      expect(fake.reports.at(-1).primary).toEqual({ label, enabled, title: reason })
       unmount()
     })
   }
+
+  test('a worktree that matches its base reports no ship step', async () => {
+    const { fake, element, unmount } = await open()
+    expect(shipText(element)).toBeNull()
+    expect(fake.reports.at(-1).primary).toBeNull()
+    unmount()
+  })
 
   test('the panel reports its state to ui state', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'unstaged'), entry('README.md', 'staged')], { ahead: 1 })
       f.compare = compareOf({ entries: [{ path: 'util.ts', status: 'added', added: 1, removed: 0, binary: false }] })
     })
-    await click(rowOf(element, 'math.ts'), { metaKey: true })
+    await click(rowOf(element, 'math.ts'))
     expect(fake.reports.at(-1)).toEqual({
       worktree: 'feat',
       branch: 'zoe/feat',
@@ -585,7 +621,7 @@ describe('SC-28: the primary button follows the ladder and is reported', () => {
         { id: 'staged', count: 1 },
         { id: 'branch', count: 1 }
       ],
-      primary: { label: 'Commit', enabled: false, title: 'Enter a commit message to commit' },
+      primary: { label: 'Commit 1 staged file', enabled: true, title: '' },
       selection: ['math.ts'],
       filter: '',
       viewMode: 'list',
@@ -595,29 +631,33 @@ describe('SC-28: the primary button follows the ladder and is reported', () => {
   })
 })
 
-describe('SC-29: the chevron menu', () => {
-  test('lists every action in order and dims what does not apply', async () => {
+describe('SC-29: the caret', () => {
+  test('lists every step in order and greys what does not apply, with the reason', async () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')], { upstreamStatus: upstream(2, 1) })
     })
-    await type(message(element), 'msg')
     await click(chevron(element))
-    expect(menuLabels()).toEqual([
-      'Commit',
-      'Commit & Push',
-      'Commit & Sync',
-      'Push (2)',
-      'Force Push (2)',
-      'Pull (1)',
-      'Fast-forward (1)',
-      'Sync (↓1 ↑2)',
+    expect(caretEntries().map(caretLabel)).toEqual([
+      'Commit all 1 file',
+      'Commit selected files…',
+      'Commit & push',
+      'Commit, push & create PR',
+      'Pull 1 commit',
+      'Fast-forward',
+      'Sync',
+      'Push 2 commits',
+      'Publish branch',
+      'Force push',
       'Rebase from origin/main',
       'Fetch',
-      'Publish Branch'
+      'Create PR',
+      'View PR'
     ])
-    const publish = buttonText(document.body, 'Publish Branch')!
+    const publish = caretEntry('Publish branch')!
     expect(publish.disabled).toBe(true)
-    expect(publish.title).toBe('Branch already has an upstream')
+    expect(q(publish, '.ui-help-text')?.textContent).toBe('already published')
+    expect(q(caretEntry('Fast-forward')!, '.ui-help-text')?.textContent).toBe('has local commits')
+    expect(caretEntry('Pull 1 commit')!.disabled).toBe(false)
     unmount()
   })
 
@@ -625,7 +665,7 @@ describe('SC-29: the chevron menu', () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')], { operation: 'merge' })
     })
-    // the commit box is hidden during an operation, so the card's Abort is the entry point
+    // the ship bar is hidden during an operation, so the card's Abort is the entry point
     await click(buttonText(element, 'Abort merge'))
     expect(dialogTitle()).toBe('Abort merge?')
     expect(dialog()?.textContent).toContain('This cancels the merge in progress and can discard conflict resolutions made during this merge.')
@@ -634,18 +674,18 @@ describe('SC-29: the chevron menu', () => {
     unmount()
   })
 
-  test('a compound action commits first and runs its remote part only if the commit succeeded', async () => {
+  test('a compound step commits first and runs its remote part only if the commit succeeded', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')], { upstreamStatus: upstream(1, 0) })
     })
     await type(message(element), 'msg')
     await click(chevron(element))
-    await click(buttonText(document.body, 'Commit & Push'))
+    await click(caretEntry('Commit & push'))
     expect(fake.calls.map((c) => c.method).filter((m) => ['quirky.git/commit', 'quirky.git/push'].includes(m))).toEqual(['quirky.git/commit', 'quirky.git/push'])
     unmount()
   })
 
-  test('a failed commit stops Commit & Sync before the sync', async () => {
+  test('a failed commit stops Commit & push before the push', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')], { upstreamStatus: upstream(1, 0) })
       f.on('quirky.git/commit', () => {
@@ -654,16 +694,23 @@ describe('SC-29: the chevron menu', () => {
     })
     await type(message(element), 'msg')
     await click(chevron(element))
-    await click(buttonText(document.body, 'Commit & Sync'))
-    expect(fake.called('quirky.git/sync')).toHaveLength(0)
+    await click(caretEntry('Commit & push'))
+    expect(fake.called('quirky.git/push')).toHaveLength(0)
+    expect(errorLine(element)?.textContent).toContain('nope')
     unmount()
   })
 
-  test('the chevron stays clickable when the primary is disabled', async () => {
-    const { element, unmount } = await open()
+  test('the caret stays clickable when the ship button is disabled', async () => {
+    const lookup = Promise.withResolvers<unknown>()
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf([], { upstreamStatus: upstream(1, 0) })
+      f.on('quirky.hosting/forBranch', () => lookup.promise)
+    })
     expect(primary(element).disabled).toBe(true)
+    expect(chevron(element).disabled).toBe(false)
     await click(chevron(element))
-    expect(menuLabels().length).toBeGreaterThan(5)
+    expect(caretEntries().length).toBeGreaterThan(5)
+    await act(async () => lookup.resolve({ kind: 'no-review' }))
     unmount()
   })
 })
@@ -696,6 +743,7 @@ describe('C6: linked review push targets', () => {
     expect(q(element, '[data-git-push-target]')?.textContent).toContain('Fork')
     expect(fake.called('quirky.git/pushTarget').at(-1)?.params).toEqual({ worktree: 'feat', purpose: 'review' })
 
+    expect(primary(element).textContent).toBe('Push 2 commits')
     await click(primary(element))
     expect(fake.called('quirky.git/push').at(-1)?.params).toEqual({ worktree: 'feat', purpose: 'review' })
     unmount()
@@ -708,6 +756,7 @@ describe('C6: linked review push targets', () => {
       f.on('quirky.git/pushTarget', () => target)
       f.on('quirky.git/describeForcePush', () => 'Force push zoe/feat to fork?')
     })
+    expect(primary(element).textContent).toBe('Force push 2 commits')
     await click(primary(element))
     expect(dialog()?.textContent).toContain('fork/zoe/feat')
     await click(buttonText(dialog()!, 'Force Push'))
@@ -723,15 +772,14 @@ describe('C6: linked review push targets', () => {
 })
 
 describe('SC-30: a running remote call', () => {
-  test('a running push disables the primary and every menu action', async () => {
+  test('a running push busies the ship button and shuts the caret', async () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([], { busy: 'push', upstreamStatus: upstream(1, 0) })
     })
     expect(primary(element).disabled).toBe(true)
-    await click(chevron(element))
-    const rows = qa(document.body, '[role="menu"] [role="menuitem"]') as HTMLButtonElement[]
-    expect(rows.every((b) => b.disabled)).toBe(true)
+    expect(primary(element).getAttribute('aria-busy')).toBe('true')
+    expect(chevron(element).disabled).toBe(true)
+    expect(caretEntries()).toHaveLength(0)
     unmount()
   })
-
 })

@@ -40,62 +40,65 @@ describe('Changes rows are quiet', () => {
     expect(letter.textContent).toBe('M')
     expect(letter.classList.contains('ui-badge')).toBe(false)
     expect(q(rowItem(element, 'gone.md'), '[aria-label="Git status deleted"]')?.textContent).toBe('D')
-    expect(q(rowItem(element, 'notes.txt'), '[aria-label="Git status untracked"]')?.textContent).toBe('U')
+    expect(q(rowItem(element, 'notes.txt'), '[aria-label="Git status added"]')?.textContent).toBe('A')
     unmount()
   })
 
   test('clicking a row marks it selected, so the opened file shows in the list', async () => {
     const { element, unmount } = await open()
-    const main = q(rowItem(element, 'src/math.ts'), '.ui-list-row__main') as HTMLElement
-    expect(q(rowItem(element, 'src/math.ts'), '.ui-list-row--selected')).toBeNull()
-    await act(async () => { main.click() })
+    const row = rowItem(element, 'src/math.ts')
+    expect(q(row, '.ui-list-row--selected')).toBeNull()
+    expect(row.getAttribute('aria-selected')).toBe('false')
+    await act(async () => { row.click() })
     await settle()
-    expect(q(rowItem(element, 'src/math.ts'), '.ui-list-row--selected')).not.toBeNull()
+    expect(q(row, '.ui-list-row--selected')).not.toBeNull()
+    expect(row.getAttribute('aria-selected')).toBe('true')
     expect(q(rowItem(element, 'notes.txt'), '.ui-list-row--selected')).toBeNull()
     unmount()
   })
 
-  test('a bulk selection replaces the opened row highlight, so what looks selected is what bulk actions change', async () => {
+  test('selecting another row moves the highlight, so one row at a time looks selected', async () => {
     const { element, unmount } = await open()
     const selectedPaths = () => qa(element, '[data-row-path]')
       .filter((row) => q(row, '.ui-list-row--selected') !== null)
       .map((row) => row.getAttribute('data-row-path'))
-    const main = (path: string) => q(rowItem(element, path), '.ui-list-row__main') as HTMLElement
-    await act(async () => { main('src/math.ts').click() })
+    await act(async () => { rowItem(element, 'src/math.ts').click() })
     await settle()
     expect(selectedPaths()).toEqual(['src/math.ts'])
-    await act(async () => { main('notes.txt').dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true })) })
+    await act(async () => { rowItem(element, 'notes.txt').dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true })) })
     await settle()
-    expect(selectedPaths()).not.toContain('src/math.ts')
-    expect(selectedPaths()).toContain('notes.txt')
+    expect(selectedPaths()).toEqual(['notes.txt'])
     unmount()
   })
 
-  test('line counts and actions stay in the DOM with their labels, inside the hover reveal', async () => {
+  test('line counts are always in the row and actions only on the selected row, outside any hover reveal', async () => {
     const { element, unmount } = await open()
     const row = rowItem(element, 'src/math.ts')
-    const reveal = q(row, '.git-row__reveal')!
-    expect(q(reveal, '[aria-label="5 additions"]')?.textContent).toBe('+5')
-    expect(byLabel(reveal, 'Stage src/math.ts')).not.toBeNull()
-    expect(byLabel(reveal, 'Discard changes src/math.ts')).not.toBeNull()
-    expect(q(row, '.git-row__status')?.closest('.git-row__reveal')).toBeNull()
+    expect(q(row, '[aria-label="5 additions"]')?.textContent).toBe('+5')
+    expect(q(row, '.git-row__actions')).toBeNull()
+    await click(row)
+    const actions = q(row, '.git-row__actions')!
+    expect(byLabel(actions, 'Revert src/math.ts')).not.toBeNull()
+    expect(byLabel(actions, 'Open src/math.ts')).not.toBeNull()
+    expect(q(row, '.git-row__reveal')).toBeNull()
+    expect(q(row, '.git-row__status')?.closest('.git-row__actions')).toBeNull()
     unmount()
   })
 
   test('the actions still work', async () => {
     const { fake, element, unmount } = await open()
-    await click(byLabel(element, 'Stage src/math.ts'))
-    expect(fake.called('quirky.git/stage')).toHaveLength(1)
+    await click(rowItem(element, 'src/math.ts'))
+    await click(byLabel(element, 'Open src/math.ts'))
+    expect(fake.called('quirky.editor/open')).toHaveLength(1)
+    await click(byLabel(element, 'Revert src/math.ts'))
+    expect(q(document.body, '[role="dialog"]')).not.toBeNull()
     unmount()
   })
 
-  test('section header actions sit in a reveal and keep their labels', async () => {
+  test('the row actions leave the single tab stop alone', async () => {
     const { element, unmount } = await open()
-    const header = q(element, '[data-section="unstaged"] .ui-section-header')!
-    expect(qa(header, '[data-section-action]').length).toBeGreaterThan(0)
-    expect(byLabel(header, 'Discard all')?.closest('.git-section__reveal')).not.toBeNull()
-    expect(byLabel(header, 'Collapse Changes')?.closest('.git-section__reveal') ?? null).toBeNull()
-    expect(q(header, '[data-section-count]')).not.toBeNull()
+    await click(rowItem(element, 'src/math.ts'))
+    expect(qa(element, '.git-row__actions button').every((button) => button.tabIndex === -1)).toBe(true)
     unmount()
   })
 })
@@ -110,14 +113,9 @@ describe('git-rows.css', () => {
   const displayOf = (body: string) => /(^|;|\s)display:\s*([\w-]+)/.exec(body)?.[2]
   const hidesByDisplayOrVisibility = (body: string) => displayOf(body) === 'none' || /visibility:\s*hidden/.test(body)
 
-  test('the legacy reveal hides with opacity 0 and shows on hover and focus within, never by display or visibility', () => {
-    const reveal = rules.filter((rule) => rule.selectors.some((selector) => /\.git-(row|section)__reveal\b/.test(selector)))
-    const hidden = reveal.filter((rule) => /(^|;|\s)opacity: 0(;|$)/.test(rule.body))
-    expect(hidden.length).toBeGreaterThan(0)
-    const shown = reveal.filter((rule) => /(^|;|\s)opacity: 1(;|$)/.test(rule.body)).flatMap((rule) => rule.selectors)
-    expect(shown.some((selector) => selector.includes(':hover'))).toBe(true)
-    expect(shown.some((selector) => selector.includes(':focus-within'))).toBe(true)
-    for (const rule of reveal) expect(hidesByDisplayOrVisibility(rule.body)).toBe(false)
+  test('nothing reveals on hover: no reveal rule and no hover rule on the row actions', () => {
+    expect(rules.filter((rule) => rule.selectors.some((selector) => /__reveal\b/.test(selector)))).toEqual([])
+    expect(rules.filter((rule) => rule.selectors.some((selector) => selector.includes('.git-row:hover')))).toEqual([])
   })
 
   // the selected row is the only one with buttons, so nothing reveals on hover
@@ -143,12 +141,8 @@ describe('git-rows.css', () => {
     for (const selector of filled) expect(selector).toMatch(/:(hover|focus-visible)/)
   })
 
-  // absolute positioning leaves the reveal no width, so a wrapping cluster stacks over the next row
-  test('the row reveal keeps its controls on one line', () => {
-    const reveal = rules.find((rule) => rule.selectors.includes('.git-rows .git-row__end .git-row__reveal'))
-    expect(reveal?.body).toContain('position: absolute')
-    expect(reveal?.body).toContain('flex-wrap: nowrap')
-    const buttons = rules.find((rule) => rule.selectors.includes('.git-rows .git-row__end .git-row__reveal .git-row__buttons'))
-    expect(buttons?.body).toContain('flex-wrap: nowrap')
+  test('the row end keeps its controls on one line', () => {
+    const end = rules.find((rule) => rule.selectors.includes('.git-rows .git-row__end'))
+    expect(end?.body).toContain('flex-wrap: nowrap')
   })
 })

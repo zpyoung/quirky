@@ -1,205 +1,167 @@
-import { useMemo, useRef, type DragEvent, type MouseEvent } from 'react'
-import { Badge, Button, FileIcon, IconButton, ListRow } from '@quirky/ui'
+import type { DragEvent, ReactNode } from 'react'
+import { Badge, FileIcon, IconButton, ListRow, ReviewMark } from '@quirky/ui'
 import type { UiTone } from '@quirky/ui'
-import type { GitChangeStatus, GitStatusEntry } from '@quirky/protocol'
+import type { GitChangeStatus, GitStatusEntry, ReviewMarkState } from '@quirky/protocol'
 import { conflictLabel, splitPath, statusLetter } from './format'
-import { buildTree, flattenTree, type TreeNode } from './tree'
-import type { ViewMode } from './data'
 
-/** One row of a section: an uncommitted entry or a file of the branch compare. */
+/** The one-letter status a row ends with. */
+export type StatusLetter = 'M' | 'A' | 'D' | 'R' | 'C' | 'U'
+
+/** One file row: a file of the review, or a file of a commit (which has no mark or uncommitted state). */
 export type RowItem = {
   key: string
   path: string
   oldPath?: string
-  status: GitChangeStatus
+  letter: StatusLetter
   added?: number | null
   removed?: number | null
-  /** The status entry behind an uncommitted row; absent for compare rows. */
-  entry?: GitStatusEntry
-  /** How many notes the path carries; absent or 0 shows no icon. */
+  /** The review mark; absent for rows that are not reviewed, such as a commit's files. */
+  mark?: ReviewMarkState
+  /** How many notes the path carries; absent or 0 shows nothing. */
   notes?: number
+  /** The path has staged, unstaged or untracked changes, which the dot before the letter shows. */
+  uncommitted?: boolean
+  staged?: boolean
+  conflict?: GitStatusEntry['conflict']
+  submodule?: GitStatusEntry['submodule']
 }
 
-/** A hover button of a row or folder. */
+/** A button on the selected row. */
 export type RowButton = { label: string; glyph: string; run(): void; destructive?: boolean }
-
-export type ClickKind = 'plain' | 'mod' | 'shift' | 'split'
 
 /** A submodule row's expansion: `entries` is null until the first read finishes, `failed` when it did not. */
 export type Expansion = { open: boolean; entries: readonly GitStatusEntry[] | null; failed: boolean }
 
-/** What a section's rows can do; the section decides, the rows only call. */
+/** What a list's rows can do; the list decides, the rows only call. */
 export type RowHandlers = {
-  click(item: RowItem, kind: ClickKind, permanent?: boolean): void
+  click(item: RowItem): void
   contextMenu(item: RowItem, x: number, y: number): void
+  /** The inline buttons of the selected row. */
   buttons(item: RowItem): RowButton[]
-  folderButtons(items: RowItem[]): RowButton[]
   dragText(item: RowItem): string
   /** The expansion of a dirty submodule row; null for every other row. */
   expansion?(item: RowItem): Expansion | null
   toggleExpansion?(item: RowItem): void
+  /** Whether the row's commit checkbox is ticked; null shows no checkbox for the row. */
+  check?(item: RowItem): boolean | null
+  toggleCheck?(item: RowItem): void
 }
 
-type Props = {
-  /** Distinguishes folders of different sections that share a path. */
-  scope: string
-  items: readonly RowItem[]
-  viewMode: ViewMode
-  collapsedDirs: ReadonlySet<string>
-  onToggleDir(key: string): void
-  selected: readonly string[]
-  handlers: RowHandlers
+const STATUS_NAMES: Readonly<Record<StatusLetter, GitChangeStatus>> = {
+  M: 'modified',
+  A: 'added',
+  D: 'deleted',
+  R: 'renamed',
+  C: 'copied',
+  U: 'untracked'
 }
 
-const clickKind = (event: MouseEvent): ClickKind =>
-  event.metaKey || event.ctrlKey ? 'mod' : event.shiftKey ? 'shift' : event.altKey ? 'split' : 'plain'
+/** The row letter for a commit file's change status. */
+export const letterOf = (status: GitChangeStatus): StatusLetter => statusLetter(status) as StatusLetter
 
-/** The paths of a section's file rows in the order they are shown, which shift-click selects across. */
-export function displayPaths(items: readonly RowItem[], viewMode: ViewMode, scope: string, collapsed: ReadonlySet<string>): string[] {
-  if (viewMode === 'list') return items.map((i) => i.path)
-  const tree = buildTree(items)
-  return flattenTree(tree, scopedCollapsed(scope, collapsed, tree))
-    .filter((r) => r.node.kind === 'file')
-    .map((r) => r.node.path)
-}
-
-/** Collapsed folder keys are `scope:path`; the tree helpers want bare folder paths. */
-function scopedCollapsed(scope: string, collapsed: ReadonlySet<string>, tree: TreeNode<RowItem>[]): Set<string> {
-  const out = new Set<string>()
-  const visit = (nodes: TreeNode<RowItem>[]) => {
-    for (const node of nodes) {
-      if (node.kind !== 'dir') continue
-      if (collapsed.has(`${scope}:${node.path}`)) out.add(node.path)
-      visit(node.children)
-    }
-  }
-  visit(tree)
-  return out
-}
-
-function toneFor(status: GitChangeStatus): UiTone {
-  if (status === 'modified') return 'needs-you'
-  if (status === 'deleted') return 'failing'
-  if (status === 'renamed' || status === 'copied') return 'accent'
-  if (status === 'added' || status === 'untracked') return 'working'
+function toneFor(letter: StatusLetter): UiTone {
+  if (letter === 'M') return 'needs-you'
+  if (letter === 'D') return 'failing'
+  if (letter === 'R' || letter === 'C') return 'accent'
+  if (letter === 'A' || letter === 'U') return 'working'
   return 'neutral'
 }
 
-function Buttons({ buttons, subject }: { buttons: RowButton[]; subject: string }) {
-  if (buttons.length === 0) return null
-  return (
-    <span className="ui-cluster git-row__buttons">
-      {buttons.map((button) => (
-        <IconButton
-          key={button.label}
-          label={`${button.label} ${subject}`}
-          title={button.label}
-          variant={button.destructive ? 'destructive' : 'secondary'}
-          onClick={(event) => {
-            event.stopPropagation()
-            button.run()
-          }}
-        >
-          {button.glyph}
-        </IconButton>
-      ))}
-    </span>
-  )
-}
-
 function Counts({ item }: { item: RowItem }) {
+  const added = item.added ?? 0
+  const removed = item.removed ?? 0
   return (
     <>
-      {(item.added ?? 0) > 0 && <Badge tone="working" label={`${item.added} ${item.added === 1 ? 'addition' : 'additions'}`}>{`+${item.added}`}</Badge>}
-      {(item.removed ?? 0) > 0 && <Badge tone="failing" label={`${item.removed} ${item.removed === 1 ? 'deletion' : 'deletions'}`}>{`−${item.removed}`}</Badge>}
+      {added > 0 && <span className="git-row__added" aria-label={`${added} ${added === 1 ? 'addition' : 'additions'}`}>{`+${added}`}</span>}
+      {removed > 0 && <span className="git-row__removed" aria-label={`${removed} ${removed === 1 ? 'deletion' : 'deletions'}`}>{`−${removed}`}</span>}
     </>
-  )
-}
-
-/** The row's single status letter: coloured text, labelled for assistive tech. */
-function StatusLetter({ status }: { status: GitChangeStatus }) {
-  return (
-    <span className={`git-row__status git-row__status--${toneFor(status)}`} role="img" aria-label={`Git status ${status}`}>
-      {statusLetter(status)}
-    </span>
-  )
-}
-
-/** A file's icon and name; the name truncates, the parent directory trails it. */
-function RowTitle({ path, name, dir }: { path: string; name: string; dir: string | null }) {
-  return (
-    <span className="git-row__title">
-      <FileIcon path={path} />
-      <span className="git-row__text">
-        <span data-row-name>{name}</span>
-        {dir !== null && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}
-      </span>
-    </span>
   )
 }
 
 function NoteCount({ count }: { count: number | undefined }) {
   if (count === undefined || count === 0) return null
   const title = `${count} ${count === 1 ? 'note' : 'notes'}`
-  return <span data-note-count title={title}><Badge tone="neutral" label={title}>✎ {count}</Badge></span>
+  return <span className="git-row__notes" data-note-count title={title} aria-label={title}>{`✎${count}`}</span>
 }
 
-/** What ends a row: counts and actions (revealed on hover or focus) over a resting status letter. */
-function Trailing({ item, buttons }: { item: RowItem; buttons: RowButton[] }) {
-  const conflict = item.entry?.conflict
-  const reveal = (
-    <span className="ui-cluster git-row__reveal">
-      <Counts item={item} />
-      <Buttons buttons={buttons} subject={item.path} />
-    </span>
-  )
-  if (conflict) {
-    const unresolved = conflict.state === 'unresolved'
+/** The row's single status letter, or its conflict badge: coloured text, labelled for assistive tech. */
+function Status({ item }: { item: RowItem }) {
+  if (item.conflict) {
+    const unresolved = item.conflict.state === 'unresolved'
     const text = unresolved ? 'Unresolved' : 'Resolved locally'
     return (
-      <span className="ui-cluster git-row__end">
-        {reveal}
-        <NoteCount count={item.notes} />
-        <Badge
-          tone={unresolved ? 'needs-you' : 'accent'}
-          label={`${text} conflict (${conflictLabel(conflict.kind)})`}
-        >
-          {unresolved ? '⚠' : '✓'} {text}
-        </Badge>
-      </span>
+      <Badge tone={unresolved ? 'needs-you' : 'accent'} label={`${text} conflict (${conflictLabel(item.conflict.kind)})`}>
+        {unresolved ? '⚠' : '✓'} {text}
+      </Badge>
     )
   }
   return (
-    <span className="ui-cluster git-row__end">
-      {reveal}
-      <NoteCount count={item.notes} />
-      <StatusLetter status={item.status} />
+    <span className={`git-row__status git-row__status--${toneFor(item.letter)}`} role="img" aria-label={`Git status ${STATUS_NAMES[item.letter]}`}>
+      {item.letter}
+    </span>
+  )
+}
+
+function Dot({ item }: { item: RowItem }) {
+  if (item.uncommitted !== true) return null
+  const staged = item.staged === true
+  return (
+    <span
+      className={`git-row__dirty${staged ? ' git-row__dirty--staged' : ''}`}
+      role="img"
+      aria-label={staged ? 'Staged, not committed' : 'Uncommitted changes'}
+    />
+  )
+}
+
+/** The commit checkbox, the review mark, file icon, name and the folder dimmed after it. */
+function RowTitle({ item, checkbox }: { item: RowItem; checkbox?: ReactNode }) {
+  const { name, dir } = splitPath(item.path)
+  return (
+    <span className="git-row__title">
+      {checkbox}
+      {item.mark !== undefined && <span className="git-row__mark"><ReviewMark state={item.mark} /></span>}
+      <FileIcon path={item.path} />
+      <span className="git-row__text" data-row-name>{name}</span>
+      {dir !== '' && <span className="git-row__dir" data-row-dir={dir} title={dir}><bdi>{dir}</bdi></span>}
     </span>
   )
 }
 
 const ROW_STYLE = { gap: 'var(--ui-space-2)', listStyle: 'none', margin: 0, padding: 0 } as const
 
-function SubmoduleEntries({ expansion, depth, tree }: { expansion: Expansion; depth: number; tree: boolean }) {
-  const indent = tree ? { paddingInlineStart: `calc(${depth + 1} * var(--ui-space-12))` } : undefined
+function SubmoduleEntries({ expansion, indent }: { expansion: Expansion; indent: string | undefined }) {
+  const style = indent === undefined ? undefined : { paddingInlineStart: indent }
   if (expansion.entries === null || expansion.entries.length === 0) {
     const text = expansion.failed ? 'Could not load the submodule changes' : expansion.entries === null ? 'Loading…' : 'No changes inside'
     return (
-      <li style={indent}>
+      <li role="presentation" style={style}>
         <p className="ui-text-muted" data-submodule-message>{text}</p>
       </li>
     )
   }
   return (
-    <li style={indent}>
-      <ul className="ui-stack" style={ROW_STYLE}>
+    <li role="presentation" style={style}>
+      <ul className="ui-stack" role="group" aria-label="Changes inside the submodule" style={ROW_STYLE}>
         {expansion.entries.map((inside) => {
           const { name, dir } = splitPath(inside.path)
           return (
             <li key={`${inside.area}:${inside.path}`} className="git-row" data-submodule-entry data-row-path={inside.path}>
               <ListRow
-                title={<RowTitle path={inside.path} name={name} dir={dir !== '' ? dir : null} />}
-                trailing={<span className="ui-cluster git-row__end"><StatusLetter status={inside.status} /></span>}
+                title={
+                  <span className="git-row__title">
+                    <FileIcon path={inside.path} />
+                    <span className="git-row__text" data-row-name>{name}</span>
+                    {dir !== '' && <span className="git-row__dir" data-row-dir={dir}><bdi>{dir}</bdi></span>}
+                  </span>
+                }
+                trailing={
+                  <span className="ui-cluster git-row__end">
+                    <span className={`git-row__status git-row__status--${toneFor(letterOf(inside.status))}`} role="img" aria-label={`Git status ${inside.status}`}>
+                      {statusLetter(inside.status)}
+                    </span>
+                  </span>
+                }
               />
             </li>
           )
@@ -209,96 +171,122 @@ function SubmoduleEntries({ expansion, depth, tree }: { expansion: Expansion; de
   )
 }
 
-function FileRow({ item, depth, tree, selected, handlers }: { item: RowItem; depth: number; tree: boolean; selected: boolean; handlers: RowHandlers }) {
-  const { name, dir } = splitPath(item.path)
-  const hint = item.entry?.submodule ? 'Stage inside submodule' : item.entry?.conflict ? conflictLabel(item.entry.conflict.kind) : null
+type FileRowProps = {
+  item: RowItem
+  /** Tree indent level; 0 for a flat list. */
+  depth: number
+  tree: boolean
+  selected: boolean
+  /** The row sits in a listbox, so it is an option that reports whether it is selected. */
+  option: boolean
+  id?: string
+  handlers: RowHandlers
+}
+
+/**
+ * One file row. Only the selected row renders its inline buttons, and nothing is revealed by
+ * hovering. Clicks select and open through the handlers; the buttons stop their own clicks.
+ */
+export function FileRow({ item, depth, tree, selected, option, id, handlers }: FileRowProps) {
+  const hint = item.submodule ? 'Stage inside submodule' : item.conflict ? conflictLabel(item.conflict.kind) : null
   const expansion = handlers.expansion?.(item) ?? null
-  const activation = useRef<{ kind: ClickKind; permanent: boolean }>({ kind: 'plain', permanent: false })
+  const buttons = selected ? handlers.buttons(item) : []
+  const checked = handlers.check?.(item) ?? null
+  const indent = tree ? `calc(${depth} * var(--ui-space-12))` : undefined
   const onDragStart = (event: DragEvent<HTMLLIElement>) => {
     event.dataTransfer?.setData('text/plain', handlers.dragText(item))
   }
   return (
     <>
       <li
+        id={id}
         className="git-row"
+        role={option ? 'option' : undefined}
+        aria-selected={option ? selected : undefined}
         data-row-path={item.path}
-        title={item.path}
-        style={tree ? { paddingInlineStart: `calc(${depth} * var(--ui-space-12))` } : undefined}
+        title={hint === null ? item.path : `${item.path}\n${hint}`}
+        style={indent === undefined ? undefined : { paddingInlineStart: indent }}
         draggable
-        onClickCapture={(event) => { activation.current = { kind: clickKind(event), permanent: event.detail > 1 } }}
+        onClick={() => handlers.click(item)}
         onDragStart={onDragStart}
         onContextMenu={(event) => {
           event.preventDefault()
           handlers.contextMenu(item, event.clientX, event.clientY)
         }}
       >
-        <div className="ui-cluster" style={{ flexWrap: 'nowrap' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <ListRow
-              title={<RowTitle path={item.path} name={name} dir={!tree && dir !== '' ? dir : null} />}
-              description={hint ?? undefined}
-              selected={selected}
-              trailing={<Trailing item={item} buttons={handlers.buttons(item)} />}
-              onClick={() => handlers.click(item, activation.current.kind, activation.current.permanent)}
+        <div className={`ui-list-row ui-list-row--interactive${selected ? ' ui-list-row--selected' : ''}`}>
+          <span className="ui-list-row__main">
+            <RowTitle
+              item={item}
+              checkbox={
+                checked === null ? undefined : (
+                  <input
+                    type="checkbox"
+                    className="git-row__check"
+                    aria-label={`Include ${item.path} in the commit`}
+                    checked={checked}
+                    tabIndex={-1}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={() => handlers.toggleCheck?.(item)}
+                  />
+                )
+              }
             />
-          </div>
-          {expansion && (
-            <IconButton
-              label={`${expansion.open ? 'Collapse' : 'Expand'} ${item.path}`}
-              aria-expanded={expansion.open}
-              onClick={() => handlers.toggleExpansion?.(item)}
-            >
-              {expansion.open ? '▾' : '▸'}
-            </IconButton>
-          )}
+          </span>
+          <span className="ui-list-row__trailing">
+            <span className="ui-cluster git-row__end">
+              {expansion && (
+                <IconButton
+                  label={`${expansion.open ? 'Collapse' : 'Expand'} ${item.path}`}
+                  aria-expanded={expansion.open}
+                  tabIndex={-1}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handlers.toggleExpansion?.(item)
+                  }}
+                >
+                  {expansion.open ? '▾' : '▸'}
+                </IconButton>
+              )}
+              <Counts item={item} />
+              <NoteCount count={item.notes} />
+              <Dot item={item} />
+              <Status item={item} />
+              {buttons.length > 0 && (
+                <span className="git-row__actions">
+                  {buttons.map((button) => (
+                    <IconButton
+                      key={button.label}
+                      label={`${button.label} ${item.path}`}
+                      title={button.label}
+                      tabIndex={-1}
+                      variant={button.destructive ? 'destructive' : 'secondary'}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        button.run()
+                      }}
+                    >
+                      {button.glyph}
+                    </IconButton>
+                  ))}
+                </span>
+              )}
+            </span>
+          </span>
         </div>
       </li>
-      {expansion?.open && <SubmoduleEntries expansion={expansion} depth={depth} tree={tree} />}
+      {expansion?.open && <SubmoduleEntries expansion={expansion} indent={indent} />}
     </>
   )
 }
 
-function TreeRows({ scope, nodes, collapsedDirs, onToggleDir, selected, handlers }: Omit<Props, 'items' | 'viewMode'> & { nodes: TreeNode<RowItem>[] }) {
-  return (
-    <>
-      {nodes.map((node) => {
-        if (node.kind === 'file') {
-          return <FileRow key={node.item.key} item={node.item} depth={node.depth} tree selected={selected.includes(node.path)} handlers={handlers} />
-        }
-        const key = `${scope}:${node.path}`
-        const collapsed = collapsedDirs.has(key)
-        return (
-          <li key={key} data-directory-path={node.path} data-directory-name={node.name} style={{ paddingInlineStart: `calc(${node.depth} * var(--ui-space-12))` }}>
-            <div className="ui-cluster git-folder-head">
-              <Button title={node.path} aria-expanded={!collapsed} onClick={() => onToggleDir(key)}>
-                <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
-                <span>{node.name}</span>
-                <Badge label={`${node.fileCount} file${node.fileCount === 1 ? '' : 's'}`}>{node.fileCount}</Badge>
-              </Button>
-              <span className="git-row__reveal"><Buttons buttons={handlers.folderButtons(node.items)} subject={node.path} /></span>
-            </div>
-            {!collapsed && (
-              <ul className="ui-stack" style={ROW_STYLE}>
-                <TreeRows scope={scope} nodes={node.children} collapsedDirs={collapsedDirs} onToggleDir={onToggleDir} selected={selected} handlers={handlers} />
-              </ul>
-            )}
-          </li>
-        )
-      })}
-    </>
-  )
-}
-
-/** The rows of one section, flat or as a folder tree. */
-export function Rows({ scope, items, viewMode, collapsedDirs, onToggleDir, selected, handlers }: Props) {
-  const tree = useMemo(() => (viewMode === 'tree' ? buildTree(items) : []), [items, viewMode])
+/** A flat, non-interactive-selection list of file rows, such as the files of one commit. */
+export function Rows({ items, selected, handlers }: { items: readonly RowItem[]; selected: readonly string[]; handlers: RowHandlers }) {
   return (
     <ul className="ui-stack git-rows" style={ROW_STYLE}>
-      {viewMode === 'tree' ? (
-        <TreeRows scope={scope} nodes={tree} collapsedDirs={collapsedDirs} onToggleDir={onToggleDir} selected={selected} handlers={handlers} />
-      ) : (
-        items.map((item) => <FileRow key={item.key} item={item} depth={0} tree={false} selected={selected.includes(item.path)} handlers={handlers} />)
-      )}
+      {items.map((item) => (
+        <FileRow key={item.key} item={item} depth={0} tree={false} option={false} selected={selected.includes(item.path)} handlers={handlers} />
+      ))}
     </ul>
   )
 }

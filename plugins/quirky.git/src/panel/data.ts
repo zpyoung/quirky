@@ -2,19 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitCompare, GitStatus, UiPluginContext, Worktree } from '@quirky/protocol'
 import { conflictBlocks } from '../view/conflict-markers'
 import { dataOf, messageOf } from './format'
-import type { GroupOrder } from './sections'
 
 export const STATUS_POLL_MS = 3000
 export const COMPARE_POLL_MS = 30_000
 
 export type ViewMode = 'list' | 'tree'
 
-const GROUP_ORDERS: readonly GroupOrder[] = ['changes-first', 'staged-first', 'untracked-first']
 const VIEW_MODES: readonly ViewMode[] = ['list', 'tree']
 const COMPARE_BASES = ['repository-default', 'branch-upstream'] as const
 
 /** The settings the panel reads; each falls back to its default when the setting is missing or invalid. */
-export type PanelSettings = { groupOrder: GroupOrder; viewMode: ViewMode; compareBase: string; aiEnabled: boolean }
+export type PanelSettings = { viewMode: ViewMode; compareBase: string; aiEnabled: boolean }
 
 function read<T extends string>(context: UiPluginContext, name: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -36,7 +34,6 @@ function readAiEnabled(context: UiPluginContext): boolean {
 
 function readSettings(context: UiPluginContext): PanelSettings {
   return {
-    groupOrder: read(context, 'groupOrder', GROUP_ORDERS, 'changes-first'),
     viewMode: read(context, 'viewMode', VIEW_MODES, 'list'),
     compareBase: read(context, 'compareBase', COMPARE_BASES, 'repository-default'),
     aiEnabled: readAiEnabled(context)

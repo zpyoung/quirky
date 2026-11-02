@@ -13,13 +13,14 @@ type Props = {
 }
 
 /**
- * "Generate Commit Message": the first generation, before any recipe exists, picks the agent and
+ * "Generate Commit Message", opened from the ✦ menu's "Choose agent…": picks the agent and
  * command template for this one run. The choice is never saved.
  */
 export function GenerateDialog({ context, agents, onClose, onGenerate }: Props) {
   const choices = agents === null ? [] : generators(agents)
   const options = [...choices.map((agent) => ({ id: agent.id, label: agent.label })), ...(hasCustomCommand(context) ? [{ id: CUSTOM_AGENT, label: 'Custom command' }] : [])]
-  const [agent, setAgent] = useState(() => (agents === null ? '' : initialAgent(agents, choices)) || (options[0]?.id ?? ''))
+  const [picked, setPicked] = useState<string | null>(null)
+  const agent = picked ?? ((agents === null ? '' : initialAgent(agents, choices)) || (options[0]?.id ?? ''))
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const agentId = useId()
   const templateId = useId()
@@ -46,7 +47,7 @@ export function GenerateDialog({ context, agents, onClose, onGenerate }: Props) 
             className="ui-text-field__input"
             aria-label="Agent"
             value={agent}
-            onChange={(event) => setAgent(event.target.value)}
+            onChange={(event) => setPicked(event.target.value)}
           >
             {options.length === 0 && <option value="">No enabled agents</option>}
             {options.map((option) => (

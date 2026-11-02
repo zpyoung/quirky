@@ -7,11 +7,10 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, rowContainerOf, rowOf, settle, statusOf } = s
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, statusOf } = s
 const { createElement } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { postSendRequest, SendMenu } = await import('../../src/notes/SendMenu')
-const { commandHandlers } = await import('../../src/view/commands')
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -31,9 +30,6 @@ const note = (id: string, path: string, startLine: number, line = startLine, bod
   updatedAt: null
 })
 
-/** NA-10's five notes in the order the daemon lists them. */
-const FIVE = [note('n1', 'README.md', 1), note('n2', 'gone.ts', 3), note('n3', 'math.ts', 5), note('n4', 'math.ts', 30), note('n5', 'util.ts', 2, 4)]
-
 const TARGETS = {
   sessions: [
     { session: 's1', agent: 'claude', label: 'Claude', title: 'fix tests', status: 'working', state: 'working', lastActivityAt: Date.now() - 2 * 60_000 - 500, sendable: true },
@@ -48,25 +44,16 @@ const TARGETS = {
 type Fake = ReturnType<typeof fakeContext>
 
 /** The panel over math.ts (unstaged), notes.txt (untracked), util.ts (staged) and README.md (only on the branch). */
-async function open(notes: TestNote[], configure: (fake: Fake) => void = () => {}) {
+async function open(noteCounts: Record<string, number>, configure: (fake: Fake) => void = () => {}) {
   const fake = fakeContext(layoutFor('feat'))
   fake.status = statusOf([entry('math.ts', 'unstaged'), entry('notes.txt', 'untracked'), entry('util.ts', 'staged')])
   fake.compare = compareOf({ entries: [{ path: 'README.md', status: 'modified', added: 1, removed: 0, binary: false }], added: 1, ahead: 1 })
-  let stored = notes
-  fake.on('quirky.git/notes', () => ({ notes: stored }))
+  fake.noteCounts = { ...noteCounts }
   fake.on('quirky.git/noteTargets', () => TARGETS)
   configure(fake)
   const mounted = mountPanel(fake)
   await settle()
-  return {
-    fake,
-    ...mounted,
-    setNotes: async (next: TestNote[]) => {
-      stored = next
-      await act(async () => fake.emit({ type: 'quirky.git/notesChanged', data: { worktreeId: 'feat' } } as never))
-      await settle()
-    }
-  }
+  return { fake, ...mounted }
 }
 
 const shelf = (root: ParentNode) => q(root, 'section[aria-label="Notes"]')
@@ -77,251 +64,62 @@ const menuText = (menu: Element) => menu.textContent ?? ''
 const hover = (target: Element) => act(async () => void target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
 const key = async (name: string) => press(document.activeElement ?? document.body, name)
 
-describe('NA-13: the shelf and the overflow item exist only with notes', () => {
-  test('no notes: no shelf and no Notes item', async () => {
-    const { element, unmount } = await open([])
+describe('NA-13: the panel has no notes shelf', () => {
+  test('with notes there is no shelf and no Notes menu item; the ship bar is the one reader of the notes', async () => {
+    const { fake, element, unmount } = await open({ 'math.ts': 2, 'util.ts': 1 })
     expect(shelf(element)).toBeNull()
+    expect(q(element, '[data-note-row]')).toBeNull()
     await click(byLabel(element, 'More source control actions'))
-    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['View as tree', 'Change Base Ref…', 'Refresh branch compare'])
+    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => (b.textContent ?? '').replace('✓', ''))).toEqual(['List', 'Tree', 'Change base…', 'Refresh', 'Revert all…'])
+    expect(fake.called('quirky.git/notes')).toHaveLength(1)
     unmount()
   })
 
-  test('two notes: the shelf sits between the branch row and the body, and the item reads Notes 2', async () => {
-    const { element, unmount } = await open([note('n1', 'math.ts', 5), note('n2', 'util.ts', 2)])
-    const box = shelf(element)!
-    expect(box.previousElementSibling?.hasAttribute('data-branch-row')).toBe(true)
-    expect(q(element, '[data-git-content]')!.previousElementSibling).toBe(box)
-    await click(byLabel(element, 'More source control actions'))
-    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toContain('Notes 2')
-    unmount()
-  })
+  test('the ship bar offers "Send N notes to agent" above the message field, and only while notes exist', async () => {
+    const withNotes = await open({ 'math.ts': 2 }, (f) => f.on('quirky.git/notes', () => ({ notes: [note('n1', 'math.ts', 1), note('n2', 'math.ts', 3)] })))
+    const send = byLabel(withNotes.element, 'Send 2 notes to agent')
+    expect(send?.textContent).toBe('Send 2 notes to agent ▾')
+    expect(send!.compareDocumentPosition(byLabel(withNotes.element, 'Commit message')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    withNotes.unmount()
+    document.body.innerHTML = ''
 
-  test('choosing Notes expands a collapsed shelf and scrolls it into view', async () => {
-    const { element, unmount } = await open([note('n1', 'math.ts', 5), note('n2', 'util.ts', 2)])
-    await click(byLabel(element, 'Collapse Notes'))
-    expect(qa(element, '[data-note-row]')).toHaveLength(0)
-    let scrolled = 0
-    shelf(element)!.scrollIntoView = () => void scrolled++
-    await click(byLabel(element, 'More source control actions'))
-    await click(buttonText(document.body, 'Notes 2'))
-    expect(qa(element, '[data-note-row]')).toHaveLength(2)
-    expect(byLabel(element, 'Collapse Notes')?.getAttribute('aria-expanded')).toBe('true')
-    expect(scrolled).toBe(1)
-    unmount()
-  })
-
-  test('the shelf follows notesChanged for its worktree and ignores other worktrees', async () => {
-    const { fake, element, setNotes, unmount } = await open([note('n1', 'math.ts', 5)])
-    expect(qa(element, '[data-note-row]')).toHaveLength(1)
-    const reads = fake.called('quirky.git/notes').length
-    await act(async () => fake.emit({ type: 'quirky.git/notesChanged', data: { worktreeId: 'other' } } as never))
-    await settle()
-    expect(fake.called('quirky.git/notes')).toHaveLength(reads)
-    await setNotes([])
-    expect(shelf(element)).toBeNull()
-    await setNotes([note('n9', 'util.ts', 1)])
-    expect(qa(element, '[data-note-row]')).toHaveLength(1)
-    unmount()
-  })
-})
-
-describe('notes worktree boundaries', () => {
-  test('refreshes the mixed shelf when the editor emits changed', async () => {
-    let notes = [note('git-note', 'src/a.ts', 1)]
-    const { fake, element, unmount } = await open(notes, (context) => {
-      context.on('quirky.git/notes', () => ({ notes }))
-    })
-    expect(qa(element, '[data-note-row]').map((row) => row.getAttribute('data-note-path'))).toEqual(['src/a.ts'])
-
-    notes = [note('markdown:note-id', 'README.md', 2, 2, 'Markdown review')]
-    await act(async () => fake.emit({ type: 'quirky.editor/changed', data: { revision: 2 } } as never))
-    await settle()
-    expect(qa(element, '[data-note-row]').map((row) => row.getAttribute('data-note-path'))).toEqual(['README.md'])
-    expect(fake.called('quirky.git/notes')).toHaveLength(2)
-    unmount()
-  })
-
-  test('does not display the previous worktree list while the next read is pending or fails', async () => {
-    const { promise: nextRead, reject: rejectNextRead } = Promise.withResolvers<never>()
-    const { fake, element, unmount } = await open([note('a-note', 'a.md', 1)], (context) => {
-      context.on('quirky.git/notes', (params) =>
-        params.worktree === 'next' ? nextRead : { notes: [note('a-note', 'a.md', 1)] }
-      )
-    })
-
-    await act(async () => fake.setLayout(layoutFor('next')))
-    await settle()
-    expect(shelf(element)).toBeNull()
-    expect(fake.called('quirky.git/notes')).toHaveLength(2)
-
-    rejectNextRead(new Error('Markdown note storage is unavailable'))
-    await settle()
-    expect(fake.toasts).toContainEqual(['Failed to load notes', 'Markdown note storage is unavailable'])
-    expect(shelf(element)).toBeNull()
-    unmount()
+    const without = await open({})
+    expect(q(without.element, '[aria-label^="Send "]')).toBeNull()
+    without.unmount()
   })
 })
 
 describe('NA-9: rows count notes by path', () => {
   test('every row of a path shows the count; rows without notes show none', async () => {
-    const { element, unmount } = await open([note('a', 'math.ts', 5), note('b', 'math.ts', 30), note('c', 'util.ts', 2)], (fake) => {
+    const { element, unmount } = await open({ 'math.ts': 2, 'util.ts': 1 }, (fake) => {
       fake.status = statusOf([entry('math.ts', 'unstaged'), entry('util.ts', 'staged'), entry('util.ts', 'unstaged'), entry('plain.ts', 'unstaged')])
     })
-    const counts = (path: string, section: string) => q(rowContainerOf(element, path, section)!, '[data-note-count]')
-    expect(counts('math.ts', 'unstaged')?.textContent).toBe('✎ 2')
-    expect(counts('math.ts', 'unstaged')?.title).toBe('2 notes')
-    expect(counts('util.ts', 'staged')?.textContent).toBe('✎ 1')
-    expect(counts('util.ts', 'staged')?.title).toBe('1 note')
-    expect(counts('util.ts', 'unstaged')?.textContent).toBe('✎ 1')
-    expect(counts('plain.ts', 'unstaged')).toBeNull()
+    const count = (path: string) => q(rowOf(element, path)!, '[data-note-count]')
+    expect(count('math.ts')?.textContent).toBe('✎2')
+    expect(count('math.ts')?.title).toBe('2 notes')
+    expect(count('util.ts')?.textContent).toBe('✎1')
+    expect(count('util.ts')?.title).toBe('1 note')
+    expect(count('plain.ts')).toBeNull()
     unmount()
   })
 
-  test('branch rows count too', async () => {
-    const { element, unmount } = await open([note('a', 'README.md', 1)])
-    expect(q(rowContainerOf(element, 'README.md', 'branch')!, '[data-note-count]')?.title).toBe('1 note')
-    unmount()
-  })
-})
-
-describe('NA-10: the shelf lists, opens and orders notes', () => {
-  test('the header reads Notes 5 and each row shows its path, line label and text', async () => {
-    const { element, unmount } = await open(FIVE.map((n) => (n.id === 'n5' ? { ...n, body: 'Use a constant' } : n)))
-    expect(q(element, '[aria-label="5 notes"]')?.textContent).toBe('5')
-    const rows = qa(element, '[data-note-row]').map((row) => [row.getAttribute('data-note-path'), q(row, '[data-note-line]')?.textContent, q(row, '[data-note-body]')?.textContent])
-    expect(rows).toEqual([
-      ['README.md', 'Line 1', 'Note n1'],
-      ['gone.ts', 'Line 3', 'Note n2'],
-      ['math.ts', 'Line 5', 'Note n3'],
-      ['math.ts', 'Line 30', 'Note n4'],
-      ['util.ts', 'Lines 2-4', 'Use a constant']
-    ])
+  test('a file that is only committed on the branch counts too', async () => {
+    const { element, unmount } = await open({ 'README.md': 1 })
+    expect(q(rowOf(element, 'README.md')!, '[data-note-count]')?.title).toBe('1 note')
     unmount()
   })
 
-  test('clicking a note opens the diff the opening rule picks and names the note', async () => {
-    const { fake, element, unmount } = await open(FIVE)
-    const rows = qa(element, '[data-note-row] .ui-list-row__main')
-    for (const row of rows) await click(row)
-    const w = 'feat'
-    expect(fake.views.map((v) => v.input)).toEqual([
-      { worktree: w, mode: 'file', source: 'branch', path: 'README.md', noteId: 'n1' },
-      { worktree: w, mode: 'file', source: 'unstaged', path: 'gone.ts', noteId: 'n2' },
-      { worktree: w, mode: 'file', source: 'unstaged', path: 'math.ts', noteId: 'n3' },
-      { worktree: w, mode: 'file', source: 'unstaged', path: 'math.ts', noteId: 'n4' },
-      { worktree: w, mode: 'file', source: 'staged', path: 'util.ts', noteId: 'n5' }
-    ])
-    expect(fake.views.every((v) => v.id === 'view:quirky.git/diff')).toBe(true)
-    unmount()
-  })
-
-  test('an untracked path opens its untracked diff; an unstaged change wins over a staged one', async () => {
-    const { fake, element, unmount } = await open([note('a', 'notes.txt', 1), note('b', 'both.ts', 1)], (f) => {
-      f.status = statusOf([entry('notes.txt', 'untracked'), entry('both.ts', 'staged'), entry('both.ts', 'unstaged')])
-    })
-    for (const row of qa(element, '[data-note-row] .ui-list-row__main')) await click(row)
-    expect(fake.views.map((v) => (v.input as { source: string }).source)).toEqual(['unstaged', 'unstaged'])
-    unmount()
-  })
-
-  test('a note on a renamed staged file keeps the old path', async () => {
-    const { fake, element, unmount } = await open([note('a', 'new.ts', 1)], (f) => {
-      f.status = statusOf([entry('new.ts', 'staged', 'renamed', { oldPath: 'old.ts' })])
-    })
-    await click(q(element, '[data-note-row] .ui-list-row__main'))
-    expect(fake.views.at(-1)?.input).toEqual({ worktree: 'feat', mode: 'file', source: 'staged', path: 'new.ts', oldPath: 'old.ts', noteId: 'a' })
-    unmount()
-  })
-})
-
-describe('NA-11: notes are copied as their prompt text', () => {
-  const clipboard = () => {
-    const copied: string[] = []
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => void copied.push(text) } })
-    return copied
-  }
-
-  test('copy all and copy note write the formatNotes text', async () => {
-    const copied = clipboard()
-    const { fake, element, unmount } = await open([note('a', 'math.ts', 5), note('b', 'util.ts', 2)], (f) => {
-      f.on('quirky.git/formatNotes', (params) => ({ text: params.ids ? `one:${(params.ids as string[]).join()}` : 'all', count: 1 }))
-    })
-    await click(byLabel(element, 'Copy all notes to clipboard'))
-    await click(qa(element, '[aria-label="Copy note"]')[1])
-    expect(copied).toEqual(['all', 'one:b'])
-    expect(fake.called('quirky.git/formatNotes').map((c) => c.params)).toEqual([{ worktree: 'feat' }, { worktree: 'feat', ids: ['b'] }])
-    unmount()
-  })
-
-  test('a refused clipboard write shows the toast', async () => {
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => Promise.reject(new Error('denied')) } })
-    const { fake, element, unmount } = await open([note('a', 'math.ts', 5)], (f) => {
-      f.on('quirky.git/formatNotes', () => ({ text: 'x', count: 1 }))
-    })
-    await click(byLabel(element, 'Copy all notes to clipboard'))
-    await click(q(element, '[aria-label="Copy note"]'))
-    expect(fake.toasts.map((t) => t[0])).toEqual(['Failed to copy notes', 'Failed to copy notes'])
-    unmount()
-  })
-})
-
-describe('NA-12: notes are cleared per file or all at once, after a yes', () => {
-  const dialog = () => q(document.body, '[role="dialog"]')
-  const dialogTitle = () => {
-    const titleId = dialog()?.getAttribute('aria-labelledby')
-    return titleId ? document.getElementById(titleId)?.textContent ?? null : null
-  }
-
-  async function openClear(element: HTMLElement, label: string) {
-    await click(byLabel(element, 'More note actions'))
-    await click(buttonText(document.body, label))
-  }
-
-  test('the menu offers Clear all notes... then one entry per path', async () => {
-    const { element, unmount } = await open([note('a', 'math.ts', 5), note('b', 'math.ts', 30), note('c', 'util.ts', 2)])
-    await click(byLabel(element, 'More note actions'))
-    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['Clear all notes...', 'Clear notes for math.ts', 'Clear notes for util.ts'])
-    unmount()
-  })
-
-  test('a file clear asks with the daemon text, then clears with yes', async () => {
-    const { fake, element, unmount } = await open([note('a', 'math.ts', 5), note('b', 'math.ts', 30), note('c', 'util.ts', 2)], (f) => {
-      f.on('quirky.git/describeClearNotes', (params) => (params.path ? `Clear 2 notes from ${params.path}?` : 'Clear 3 notes from this workspace?'))
-      f.on('quirky.git/clearNotes', () => ({ cleared: 2 }))
-    })
-    await openClear(element, 'Clear notes for math.ts')
-    expect(dialogTitle()).toBe('Clear 2 notes from math.ts?')
-    expect(qa(dialog()!, 'footer button').map((b) => b.textContent)).toEqual(['Cancel', 'Clear'])
-    expect(fake.called('quirky.git/clearNotes')).toHaveLength(0)
-    await click(buttonText(dialog()!, 'Clear'))
-    expect(fake.called('quirky.git/clearNotes').map((c) => c.params)).toEqual([{ worktree: 'feat', path: 'math.ts', yes: true }])
-    expect(dialog()).toBeNull()
-    unmount()
-  })
-
-  test('cancelling the clear-all dialog deletes nothing', async () => {
-    const { fake, element, unmount } = await open([note('a', 'math.ts', 5)], (f) => {
-      f.on('quirky.git/describeClearNotes', () => 'Clear 1 note from this workspace?')
-      f.on('quirky.git/clearNotes', () => ({ cleared: 1 }))
-    })
-    await openClear(element, 'Clear all notes...')
-    expect(dialogTitle()).toBe('Clear 1 note from this workspace?')
-    await click(buttonText(dialog()!, 'Cancel'))
-    expect(fake.called('quirky.git/clearNotes')).toHaveLength(0)
-    expect(dialog()).toBeNull()
-    unmount()
-  })
-
-  test('a failed clear shows the toast', async () => {
-    const { fake, element, unmount } = await open([note('a', 'math.ts', 5)], (f) => {
-      f.on('quirky.git/describeClearNotes', () => 'Clear 1 note from this workspace?')
-      f.on('quirky.git/clearNotes', () => {
-        throw failure('store is read-only')
-      })
-    })
-    await openClear(element, 'Clear all notes...')
-    await click(buttonText(dialog()!, 'Clear'))
-    expect(fake.toasts).toEqual([['Failed to clear notes.', 'store is read-only']])
+  test('the count follows the review model when notes change', async () => {
+    const { fake, element, unmount } = await open({ 'math.ts': 1 })
+    expect(q(rowOf(element, 'math.ts')!, '[data-note-count]')?.textContent).toBe('✎1')
+    fake.noteCounts['math.ts'] = 3
+    await act(async () => fake.emit({ type: 'quirky.git/reviewChanged', data: { worktreeId: 'feat' } } as never))
+    await settle()
+    expect(q(rowOf(element, 'math.ts')!, '[data-note-count]')?.textContent).toBe('✎3')
+    delete fake.noteCounts['math.ts']
+    await act(async () => fake.emit({ type: 'quirky.git/reviewChanged', data: { worktreeId: 'feat' } } as never))
+    await settle()
+    expect(q(rowOf(element, 'math.ts')!, '[data-note-count]')).toBeNull()
     unmount()
   })
 })
@@ -511,63 +309,5 @@ describe('NA-17: the send menu offers scopes, then targets', () => {
     expect(trigger(empty.element).disabled).toBe(true)
     expect(trigger(empty.element).title).toBe('All notes sent')
     await empty.unmount()
-  })
-
-  test('the shelf offers only All unsent notes and the card scope This note', async () => {
-    const { fake, element, unmount } = await open([note('a', 'math.ts', 5)])
-    await click(q(shelf(element)!, '[aria-label="Send notes to an agent"]'))
-    expect(menus()).toHaveLength(1)
-    expect(menus()[0]!.getAttribute('aria-label')).toBe('Send notes')
-    await click(menuButtons(menus()[0]!).find((b) => b.textContent?.startsWith('Claude'))!)
-    expect(fake.called('quirky.git/sendNotes').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'all', session: 's1' })
-    unmount()
-  })
-})
-
-describe('NA-22: Send Review Notes to Agent opens the shelf menu', () => {
-  test('with no notes nothing happens', async () => {
-    const { fake, unmount } = await open([])
-    const shown: Array<[string, boolean]> = []
-    fake.context.togglePanel = ((id: string, show: boolean) => void shown.push([id, show])) as never
-    await commandHandlers(fake.context)['send-review-notes']!()
-    await settle()
-    expect(shown).toEqual([])
-    expect(menus()).toHaveLength(0)
-    unmount()
-  })
-
-  test('with a note the panel opens and the shelf menu opens on All unsent notes', async () => {
-    const { fake, unmount } = await open([note('a', 'math.ts', 5)])
-    const shown: Array<[string, boolean]> = []
-    fake.context.togglePanel = ((id: string, show: boolean) => void shown.push([id, show])) as never
-    await commandHandlers(fake.context)['send-review-notes']!()
-    await settle()
-    expect(shown).toEqual([['panel:quirky.git/source-control', true]])
-    expect(menus()).toHaveLength(1)
-    expect(menuText(menus()[0]!)).toContain('Send notes to')
-    unmount()
-  })
-
-  test('a request older than 5 seconds is dropped', async () => {
-    const { unmount } = await open([note('a', 'math.ts', 5)])
-    await act(async () => postSendRequest({ nonce: 1, issuedAt: Date.now() - 5001 }))
-    await settle()
-    expect(menus()).toHaveLength(0)
-    await act(async () => postSendRequest({ nonce: 2, issuedAt: Date.now() }))
-    await settle()
-    expect(menus()).toHaveLength(1)
-    unmount()
-  })
-
-  test('a request posted before the panel shows is answered when it mounts', async () => {
-    const fake = fakeContext(layoutFor('feat'))
-    fake.status = statusOf([entry('math.ts', 'unstaged')])
-    fake.on('quirky.git/notes', () => ({ notes: [note('a', 'math.ts', 5)] }))
-    fake.on('quirky.git/noteTargets', () => TARGETS)
-    postSendRequest({ nonce: 3, issuedAt: Date.now() })
-    const mounted = mountPanel(fake)
-    await settle()
-    expect(menus()).toHaveLength(1)
-    mounted.unmount()
   })
 })

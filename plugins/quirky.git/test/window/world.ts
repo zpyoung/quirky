@@ -221,7 +221,7 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
   } else {
     await agent.callAny('ui.panel.open', { id: PANEL })
     await win.waitFor(() => document.querySelector('[data-git-panel]'))
-    await win.waitFor(async () => (await world.report())?.primary)
+    await win.waitFor(async () => (await world.report())?.branch)
   }
   return world
 }

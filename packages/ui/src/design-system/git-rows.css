@@ -29,12 +29,12 @@
   background: var(--ui-transparent);
 }
 
-.git-rows .git-row .ui-list-row--interactive:focus-within:not(.ui-list-row--selected) {
-  background: var(--ui-selected);
+.git-rows:focus-visible {
+  outline: var(--ui-border-width) solid var(--ui-accent);
+  outline-offset: calc(var(--ui-border-width) * -1);
 }
 
-.git-rows .git-row .ui-list-row__body,
-.git-rows .git-row .ui-list-row__title {
+.git-rows .git-row .ui-list-row__main {
   min-width: 0;
   overflow: hidden;
 }
@@ -51,16 +51,36 @@
 }
 
 .git-rows .git-row__text {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.git-rows .git-row__added {
+  color: var(--ui-working);
+  font-size: var(--ui-font-label);
+}
+
+.git-rows .git-row__removed {
+  color: var(--ui-failing);
+  font-size: var(--ui-font-label);
+}
+
+.git-rows .git-row__notes {
+  color: var(--ui-muted);
+  font-size: var(--ui-font-label);
+}
+
+.git-rows .git-folder-head {
+  gap: var(--ui-space-4);
+}
+
 .git-rows .git-row__end {
   flex: none;
+  flex-wrap: nowrap;
   gap: var(--ui-space-6);
-  position: relative;
 }
 
 .git-rows .git-row__status {
@@ -91,54 +111,22 @@
   color: var(--ui-muted);
 }
 
-[data-panel-focused] .git-rows .ui-list-row--selected .git-row__status {
+[data-panel-focused] .git-rows .ui-list-row--selected .git-row__status,
+[data-panel-focused] .git-rows .ui-list-row--selected .git-row__added,
+[data-panel-focused] .git-rows .ui-list-row--selected .git-row__removed,
+[data-panel-focused] .git-rows .ui-list-row--selected .git-row__notes,
+[data-panel-focused] .git-rows .ui-list-row--selected .git-row__dir {
   color: inherit;
 }
 
-.git-rows .git-row__end .git-row__reveal {
-  background: var(--ui-selected);
-  border-radius: var(--ui-radius-mark);
-  flex-wrap: nowrap;
-  inset-block-start: 50%;
-  inset-inline-end: 100%;
-  padding-inline: var(--ui-space-4);
-  position: absolute;
-  transform: translateY(-50%);
-}
-
-.git-rows .git-row__end .git-row__reveal .git-row__buttons {
-  flex-wrap: nowrap;
-}
-
-[data-panel-focused] .git-rows .ui-list-row--selected .git-row__end .git-row__reveal {
-  background: var(--ui-accent);
-}
-
-.git-rows .git-row__reveal,
-.git-section .git-section__reveal {
-  opacity: 0;
-}
-
-.git-rows .git-row:hover .git-row__reveal,
-.git-rows .git-row:focus-within .git-row__reveal,
-.git-rows .git-folder-head:hover .git-row__reveal,
-.git-rows .git-folder-head:focus-within .git-row__reveal,
-.git-section .ui-section-header:hover .git-section__reveal,
-.git-section .ui-section-header:focus-within .git-section__reveal {
-  opacity: 1;
-}
-
-.git-rows .ui-button--destructive,
-.git-section .ui-button--destructive {
+.git-rows .ui-button--destructive {
   background: var(--ui-selected);
   border-color: var(--ui-border);
   color: var(--ui-failing);
 }
 
 .git-rows .ui-button--destructive:hover:not(:disabled),
-.git-rows .ui-button--destructive:focus-visible,
-.git-section .ui-button--destructive:hover:not(:disabled),
-.git-section .ui-button--destructive:focus-visible {
+.git-rows .ui-button--destructive:focus-visible {
   background: var(--ui-failing);
   border-color: var(--ui-failing);
   color: var(--ui-surface);
@@ -169,7 +157,8 @@
 .git-rows .git-row__dir {
   color: var(--ui-muted);
   direction: rtl;
-  flex: 0 1 auto;
+  flex: 0 3 auto;
+  font-size: var(--ui-font-label);
   min-width: 0;
   overflow: hidden;
   text-align: start;

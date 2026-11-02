@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { RpcErrorCode, type GitStatus, type UiPluginContext } from '@quirky/protocol'
-import { Badge, Button } from '@quirky/ui'
 import type { FixAction } from '../ai/types'
 
 export type GitHubReviewTarget = { worktree: string; branch: string; head: string }
@@ -200,100 +199,9 @@ export function useGitHubReview(context: UiPluginContext, worktree: string, stat
   return stored.value
 }
 
-type HostingAiAction = Extract<FixAction, 'branchSummary' | 'pullRequestDetails' | 'pullRequestReview' | 'reviewConversation'>
-type HostingAiFlow = { action: HostingAiAction; label: string }
-
-const BRANCH_FLOW: HostingAiFlow = { action: 'branchSummary', label: 'Summarize branch with AI' }
-const PR_FLOWS: readonly HostingAiFlow[] = [
+/** The AI actions that read or answer an open pull request, offered in the panel's ⋯ menu while one is linked. */
+export const PR_AI_ACTIONS: ReadonlyArray<{ action: Extract<FixAction, 'pullRequestDetails' | 'pullRequestReview' | 'reviewConversation'>; label: string }> = [
   { action: 'pullRequestDetails', label: 'Read pull request details with AI' },
   { action: 'pullRequestReview', label: 'Review pull request with AI' },
   { action: 'reviewConversation', label: 'Draft conversation reply with AI' }
 ]
-
-type GitHubReviewStatusProps = {
-  context: UiPluginContext
-  lookup: GitHubReviewLookup
-  aiEnabled?: boolean
-  busy?: boolean
-  onLaunch?(action: HostingAiAction): void
-}
-
-/** Current branch review link and status; AI actions launch against this exact branch/PR source. */
-export function GitHubReviewStatus({ context, lookup, aiEnabled = false, busy = false, onLaunch }: GitHubReviewStatusProps) {
-  if (lookup.kind === 'waiting') return null
-  const actions = (pullRequest: boolean) => {
-    if (!aiEnabled || !onLaunch) return null
-    const flows = pullRequest ? [BRANCH_FLOW, ...PR_FLOWS] : [BRANCH_FLOW]
-    return (
-      <div className="ui-cluster">
-        {flows.map(({ action, label }) => (
-          <Button key={action} disabled={busy} onClick={() => onLaunch(action)}>
-            {label}
-          </Button>
-        ))}
-      </div>
-    )
-  }
-  if (lookup.kind === 'unsupported') return actions(false)
-  if (lookup.kind === 'loading') {
-    return (
-      <div className="ui-stack">
-        <p role="status" style={{ margin: 0 }}>
-          <Badge tone="neutral">
-            <span data-scm-review-status data-state="loading">Checking for a pull request…</span>
-          </Badge>
-        </p>
-        {actions(false)}
-      </div>
-    )
-  }
-  if (lookup.kind === 'unavailable') {
-    return (
-      <div className="ui-stack">
-        <p role="status" data-scm-review-status data-state="unavailable" className="ui-text-muted" style={{ margin: 0, overflowWrap: 'anywhere' }}>
-          GitHub pull-request lookup unavailable: {lookup.message}
-        </p>
-        {actions(false)}
-      </div>
-    )
-  }
-  if (lookup.kind === 'no-review') {
-    return (
-      <div className="ui-stack">
-        <p role="status" data-scm-review-status data-state="no-review" className="ui-text-muted" style={{ margin: 0, overflowWrap: 'anywhere' }}>
-          No pull request is linked to this branch.
-        </p>
-        {actions(false)}
-      </div>
-    )
-  }
-
-  const label = lookup.review.state === 'open' ? 'Open'
-    : lookup.review.state === 'draft' ? 'Draft'
-      : lookup.review.state === 'closed' ? 'Closed' : 'Merged'
-  const tone = lookup.review.state === 'merged' ? 'accent'
-    : lookup.review.state === 'draft' ? 'needs-you'
-      : lookup.review.state === 'closed' ? 'neutral' : 'working'
-  const openReview = async () => {
-    try {
-      await context.call('quirky.reviews/openLink', { url: lookup.review.url })
-    } catch (error) {
-      context.toast('Could not open pull request', errorMessage(error))
-    }
-  }
-  return (
-    <div className="ui-stack">
-      <p className="ui-cluster" role="status" style={{ margin: 0 }}>
-        <Badge tone={tone}>
-          <span data-scm-review-status data-state="found">Pull request #{lookup.review.number} · {label}</span>
-        </Badge>
-      </p>
-      <div className="ui-cluster">
-        <Button aria-label={`Open pull request #${lookup.review.number}`} onClick={() => void openReview()}>
-          Open PR #{lookup.review.number}
-        </Button>
-        {actions(true)}
-      </div>
-    </div>
-  )
-}

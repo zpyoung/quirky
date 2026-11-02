@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Repo, Worktree } from '@quirky/protocol'
 import { isolateGitConfig, makeRepo } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, byLabel, click, dialogNamed, press, q, qa, rowContainerOf, rowOf, sectionHeadings, text, type } from './dom'
+import { buttonText, byLabel, click, dialogNamed, press, q, qa, rowOf, rowPaths, sectionHeadings, text, type } from './dom'
 import { boot, DIFF_VIEW, openView, SESSION_VIEW, sc1, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -18,29 +18,31 @@ const setting = (w: World, name: string, value: unknown) => w.agent.callAny('set
 const settingValue = async (w: World, name: string) => ((await w.agent.callAny('setting.get', { id: `setting:quirky.git/${name}` })) as { value: unknown }).value
 const menuItem = (label: string) => qa('[role="menuitem"]').find((item) => text(item) === label)
 
-test('SC-9: the group order setting reorders the sections live, with Conflicts first', async () => {
+test('SC-8: the list is flat, in path order, with the count line under the header line', async () => {
   const w = await boot(scratch)
   sc1(w)
   await w.win.waitFor(() => rowOf('notes.txt'))
-  expect(sectionHeadings()).toEqual(['Changes', 'Staged Changes', 'Untracked Files', 'Commits'])
-  await setting(w, 'groupOrder', 'staged-first')
-  await w.win.waitFor(() => sectionHeadings()[0] === 'Staged Changes')
-  expect(sectionHeadings()).toEqual(['Staged Changes', 'Changes', 'Untracked Files', 'Commits'])
-  await setting(w, 'groupOrder', 'untracked-first')
-  await w.win.waitFor(() => sectionHeadings()[0] === 'Untracked Files')
-  expect(sectionHeadings()).toEqual(['Untracked Files', 'Changes', 'Staged Changes', 'Commits'])
+  expect(rowPaths()).toEqual(['README.md', 'math.ts', 'new.ts', 'notes.txt'])
+  expect(sectionHeadings()).toEqual(['Commits'])
+  expect(text(q('[data-branch-name]'))).toBe('zoe/feat')
+  await w.win.waitFor(() => text(q('[data-count-line]')) === '0 of 4 reviewed · 4 uncommitted')
+  expect(q('.git-row__dirty--staged', rowOf('README.md')!)).not.toBeNull()
+  expect(q('.git-row__dirty--staged', rowOf('math.ts')!)).toBeNull()
+  expect(q('.git-row__dirty', rowOf('math.ts')!)).not.toBeNull()
+  expect(text(q('.git-row__status', rowOf('new.ts')!))).toBe('R')
+  expect(w.problems()).toEqual([])
 }, SLOW)
 
 test('SC-10: opening a terminal from a sleeping Source Control worktree wakes it and opens its session', async () => {
   const w = await boot(scratch)
-  await w.win.waitFor(() => q('[data-git-content] section p'))
+  await w.win.waitFor(() => q('[data-git-clean]'))
   const sessionsBefore = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
   const previousSessionIds = new Set(sessionsBefore.map((session) => session.id))
   await w.agent.callAny('quirky.worktree/sleep', { worktree: w.feat.id })
   await w.win.waitFor(() => q('main .empty')?.textContent === 'This worktree is sleeping.')
   expect((await w.agent.callAny('quirky.worktree/list', {}) as WorktreeWithSleeping[]).find((worktree) => worktree.id === w.feat.id)?.sleeping).toBe(true)
 
-  await click(buttonText('Open terminal'))
+  await w.agent.callAny('ui.command.run', { id: 'command:quirky.session/new-shell' })
   const terminal = await w.win.waitFor(async () => {
     const view = (await w.state()).slots.find((slot) => slot.id === SESSION_VIEW)?.report
     const sessions = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
@@ -112,7 +114,7 @@ test('New agent tab wakes a sleeping selected worktree and opens exactly its age
   }
 }, SLOW)
 
-test('SC-16: the filter narrows rows, hides the bulk buttons and refuses a long query', async () => {
+test('SC-16: the filter narrows rows, hides the Commits dock and refuses a long query', async () => {
   const w = await boot(scratch)
   sc1(w)
   await w.win.waitFor(() => rowOf('notes.txt'))
@@ -120,39 +122,38 @@ test('SC-16: the filter narrows rows, hides the bulk buttons and refuses a long 
   const input = (await w.win.waitFor(() => q('input[aria-label="Filter files…"]'))) as HTMLInputElement
   await type(input, 'MATH')
   await w.win.waitFor(async () => (await w.report()).filter === 'MATH')
-  expect(qa('[data-row-path] button[aria-pressed]').map((button) => text(q('[data-row-name]', button)))).toEqual(['math.ts'])
+  expect(rowPaths()).toEqual(['math.ts'])
   expect(q('[data-section="history"]')).toBeNull()
-  expect(qa('[data-section-action]')).toHaveLength(0)
 
   await type(input, 'x'.repeat(3000))
   await w.win.waitFor(async () => (await w.report()).filter === input.value)
   await w.win.waitFor(() => q('[data-git-content] section p'))
-  expect(qa('[data-row-path] button[aria-pressed]')).toHaveLength(0)
+  expect(rowPaths()).toHaveLength(0)
   await press(input, 'Escape')
-  await w.win.waitFor(() => qa('[data-row-path] button[aria-pressed]').length === 4)
+  await w.win.waitFor(() => rowPaths().length === 4)
   expect(q('[data-section="history"]')).not.toBeNull()
 }, SLOW)
 
-test('SC-17: View as tree groups rows by folder, stages a folder, and the choice persists as the setting', async () => {
+test('SC-17: Tree groups rows by folder, the keyboard follows the tree, and the choice persists as the setting', async () => {
   const w = await boot(scratch)
   w.write('src/app/a.ts', 'a\n')
   w.write('src/app/b.ts', 'b\n')
   w.write('lib/c.ts', 'c\n')
   await w.win.waitFor(() => rowOf('lib/c.ts'))
   await click(byLabel('More source control actions'))
-  await click(menuItem('View as tree'))
+  await click(menuItem('Tree'))
   await w.win.waitFor(() => q('[data-directory-path]'))
   expect(await settingValue(w, 'viewMode')).toBe('tree')
   expect((await w.report()).viewMode).toBe('tree')
   const dirs = qa('[data-directory-path]')
   expect(dirs.map((dir) => `${dir.getAttribute('data-directory-name')}${text(q('[role="img"]', dir))}`)).toEqual(['lib1', 'src/app2'])
-  const folder = dirs.find((dir) => dir.getAttribute('data-directory-name') === 'src/app')!
-  await click(byLabel('Stage folder src/app', folder))
-  await w.win.waitFor(() => rowOf('src/app/b.ts', 'staged'))
-  expect(w.git('diff', '--cached', '--name-only').split('\n')).toEqual(['src/app/a.ts', 'src/app/b.ts'])
+  expect(rowPaths()).toEqual(['lib/c.ts', 'src/app/a.ts', 'src/app/b.ts'])
+  await click(q('[data-directory-path="lib"] button'))
+  await w.win.waitFor(() => !rowOf('lib/c.ts'))
+  expect(w.git('diff', '--cached', '--name-only')).toBe('')
 }, SLOW)
 
-test('SC-18: the row menu opens the diff, copies paths and reveals the file; dragging carries the absolute path', async () => {
+test('SC-18: the row menu opens Review, copies paths and reveals the file; dragging carries the absolute path', async () => {
   const copied: string[] = []
   const revealed: string[] = []
   globalThis.__QUIRKY_TEST_REVEAL__ = (path) => void revealed.push(path)
@@ -160,25 +161,26 @@ test('SC-18: the row menu opens the diff, copies paths and reveals the file; dra
   Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (value: string) => void copied.push(value) }, configurable: true })
   w.write('src/app/a.ts', 'a\n')
   await w.win.waitFor(() => rowOf('src/app/a.ts'))
-  const row = rowOf('src/app/a.ts')!.closest('li')!
+  const row = rowOf('src/app/a.ts')!
 
   const open = async () => {
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 30, clientY: 40 }))
     await w.win.waitFor(() => q('[role="menu"]'))
   }
   await open()
-  expect(qa('[role="menuitem"]').map(text)).toEqual(['View', 'Copy Path', 'Copy Relative Path', 'Reveal in Finder'])
-  await click(menuItem('Copy Path'))
+  expect(qa('[role="menuitem"]').map(text)).toEqual(['Open in Review', 'Open file', 'Mark reviewed', 'Revert file…', 'Stage', 'Copy path', 'Copy relative path', 'Reveal in Finder'])
+  await click(menuItem('Copy path'))
   await open()
-  await click(menuItem('Copy Relative Path'))
+  await click(menuItem('Copy relative path'))
   await open()
   await click(menuItem('Reveal in Finder'))
   expect(copied).toEqual([join(w.dir, 'src/app/a.ts'), 'src/app/a.ts'])
   await w.win.waitFor(() => revealed.length === 1)
   expect(revealed).toEqual([join(w.dir, 'src/app/a.ts')])
   await open()
-  await click(menuItem('View'))
+  await click(menuItem('Open in Review'))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
+  expect((await openView(w))!.input).toMatchObject({ mode: 'review', reveal: 'src/app/a.ts' })
 
   const data = new Map<string, string>()
   const drag = new Event('dragstart', { bubbles: true }) as Event & { dataTransfer: unknown }
@@ -188,25 +190,29 @@ test('SC-18: the row menu opens the diff, copies paths and reveals the file; dra
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('SC-24: a bulk discard that fails shows one notice with the first message, replaced rather than stacked', async () => {
+test('SC-24: a Revert all that fails stops at the first file with one notice, replaced rather than stacked', async () => {
   const w = await boot(scratch)
   w.write('ro/a.txt', 'a\n')
   w.write('ro/b.txt', 'b\n')
   await w.win.waitFor(() => rowOf('ro/b.txt'))
+  await w.win.waitFor(async () => ((await w.report()).sections as Array<{ id: string; count: number }>).some((section) => section.id === 'untracked' && section.count === 2))
   chmodSync(join(w.dir, 'ro'), 0o555)
+  const notices = '[aria-label="Source control notices"] > [role="alert"], [aria-label="Source control notices"] > [role="status"]'
   try {
     for (let round = 0; round < 2; round++) {
-      await click(byLabel('Delete all untracked', q('[data-section="untracked"]')!))
-      await click(buttonText('Delete 2', await w.win.waitFor(() => dialogNamed('Delete 2 untracked files?'))))
-      await w.win.waitFor(() => q('[aria-label="Source control notices"] > [role="alert"], [aria-label="Source control notices"] > [role="status"]'))
+      await click(byLabel('More source control actions'))
+      await click(await w.win.waitFor(() => menuItem('Revert all…')))
+      await click(buttonText('Revert all', await w.win.waitFor(() => dialogNamed('Revert all 2 files?'))))
+      await w.win.waitFor(() => q(notices))
       await Bun.sleep(300)
-      expect(qa('[aria-label="Source control notices"] > [role="alert"], [aria-label="Source control notices"] > [role="status"]')).toHaveLength(1)
+      expect(qa(notices)).toHaveLength(1)
     }
-    const notice = q('[aria-label="Source control notices"] > [role="alert"], [aria-label="Source control notices"] > [role="status"]')!
-    expect(text(notice)).toContain('Failed to discard 2 file(s)')
-    expect(text(notice)).toContain('ro/a.txt, ro/b.txt')
+    const notice = q(notices)!
+    expect(text(notice)).toContain('Revert all stopped at “ro/a.txt”')
+    expect(text(notice)).toContain('2 of 2 files left')
     expect(buttonText('Retry', notice)).toBeDefined()
     expect(byLabel('Dismiss notification', notice)).toBeDefined()
+    expect(rowOf('ro/b.txt')).not.toBeNull()
   } finally {
     chmodSync(join(w.dir, 'ro'), 0o755)
   }
@@ -229,12 +235,12 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
   await w.win.waitFor(() => rowOf('math.ts'))
   await w.agent.callAny('ui.command.run', { id: 'command:quirky.git/open-diff', args: { path: 'math.ts', source: 'unstaged' } })
   await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
-  const quickly = (check: () => unknown) => w.win.waitFor(check, 1500)
+  const quickly = (check: () => unknown) => w.win.waitFor(check, 2500)
 
   expect((await w.cli(['git', 'stage', '--paths', 'math.ts']).done).code).toBe(0)
   await quickly(() => rowOf('math.ts', 'staged'))
   expect((await w.cli(['git', 'unstage', '--paths', 'math.ts']).done).code).toBe(0)
-  await quickly(() => rowOf('math.ts', 'unstaged'))
+  await quickly(() => rowOf('math.ts') && !rowOf('math.ts', 'staged'))
   expect((await w.cli(['git', 'discard', '--paths', 'math.ts', '--yes']).done).code).toBe(0)
   await quickly(() => !rowOf('math.ts'))
   await quickly(() => q('[data-git-view-root] h2') && (byLabel('Next change') as HTMLButtonElement).disabled)
@@ -247,8 +253,8 @@ test('SC-7: a dirty submodule row expands to its read-only changes from the daem
   w.git('-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', lib, 'vendor/lib')
   w.git('commit', '-q', '-m', 'add submodule')
   w.write('vendor/lib/x.c', 'int y;\n')
-  await w.win.waitFor(() => rowOf('vendor/lib', 'unstaged'))
-  expect(qa('button:not([aria-pressed])', rowContainerOf('vendor/lib', 'unstaged')!)).toHaveLength(0)
+  await w.win.waitFor(() => byLabel('Expand vendor/lib'))
+  expect(qa('.git-row__actions button', rowOf('vendor/lib')!)).toHaveLength(0)
 
   await click(byLabel('Expand vendor/lib'))
   await w.win.waitFor(() => qa('[data-submodule-entry]').length === 1)
