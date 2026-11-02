@@ -216,7 +216,8 @@ describe('review fixtures', () => {
       expect(reviewed.every((mark) => mark.worktree === 'wt-1')).toBe(true)
       const paths = reviewed.map((mark) => String(mark.path))
       const changed = paths.filter((path) => readFileSync(join(root, path), 'utf8') !== contentAtMark.get(path))
-      expect(changed).toHaveLength(1)
+      expect(paths.sort()).toEqual(['src/app.ts', 'src/review-note.ts'])
+      expect(changed).toEqual(['src/review-note.ts'])
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

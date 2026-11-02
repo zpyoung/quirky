@@ -138,12 +138,21 @@ function hostExtensions(options: MergeOptions, host: Element, side: 'a' | 'b'): 
   return extensions
 }
 
-/** The Revert button of a side whose owner decides whether a press goes through. */
-function ownedRevertButton(): HTMLButtonElement {
+/**
+ * The Revert button of a side whose owner decides whether a press goes through: labelled in the
+ * inline view, icon-only in the side-by-side gutter, which is too narrow for text.
+ */
+function ownedRevertButton(layout: 'inline' | 'gutter'): HTMLButtonElement {
   const button = document.createElement('button')
   button.type = 'button'
-  button.textContent = '↶ Revert'
   button.setAttribute('aria-label', 'Revert change')
+  if (layout === 'gutter') {
+    button.textContent = '↶'
+    button.title = 'Revert change'
+    button.className = 'git-review__revert-icon'
+  } else {
+    button.textContent = '↶ Revert'
+  }
   return button
 }
 
@@ -166,7 +175,7 @@ function revertOnlyControls(type: 'reject' | 'accept', action: (event: MouseEven
 function ownedRevertControls(onRevert: (apply: () => boolean) => void) {
   return (type: 'reject' | 'accept', action: (event: MouseEvent) => void): HTMLElement => {
     if (type === 'accept') return revertOnlyControls(type, action)
-    const button = ownedRevertButton()
+    const button = ownedRevertButton('inline')
     button.name = 'reject'
     const press = (event: MouseEvent) => {
       event.preventDefault()
@@ -224,7 +233,7 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
       collapseUnchanged: collapse,
       diffConfig,
       ...(options.editable || options.onRevert ? { revertControls: 'a-to-b' as const } : {}),
-      ...(options.onRevert ? { renderRevertControl: ownedRevertButton } : {})
+      ...(options.onRevert ? { renderRevertControl: () => ownedRevertButton('gutter') } : {})
     })
     editor = view.b
     sideA = view.a

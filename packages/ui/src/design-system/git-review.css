@@ -99,3 +99,20 @@
   margin: 0;
   padding: var(--ui-space-4) var(--ui-space-12);
 }
+
+.git-review .git-review__revert-icon {
+  color: var(--ui-muted);
+  overflow: hidden;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.git-review .git-review__revert-icon:hover {
+  color: var(--ui-text);
+}
+
+.git-review .git-review__revert-icon:focus-visible {
+  color: var(--ui-text);
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: calc(var(--ui-focus-width) * -1);
+}

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Page } from 'playwright'
 import type { UiModel } from '@quirky/protocol'
-import { PRIMARY_PROJECT, type RegisteredCaptureFixtures } from './fixtures'
+import { CHANGED_SOURCE, CHANGED_SINCE_REVIEW_FILE, PRIMARY_PROJECT, REVIEWED_FILE, REVIEW_NOTE_SOURCE, seedReviewMarks, type RegisteredCaptureFixtures } from './fixtures'
 import { CLONE_ATTRIBUTE, OPEN_POPUP_SELECTOR, cloneOpenPopupExpression, removeClonesExpression, separateClonesExpression } from './popups'
 
 /** What the scenes need from the capture run; `CaptureRuntime` satisfies it. */
@@ -30,14 +30,14 @@ const PROJECT_SWITCHER = 0
 const WORKTREE_SWITCHER = 1
 
 const SEEDED_FILES: readonly (readonly [string, string])[] = [
+  [REVIEWED_FILE, CHANGED_SOURCE],
+  [CHANGED_SINCE_REVIEW_FILE, REVIEW_NOTE_SOURCE],
   ['src/ToolShell.tsx', 'export const toolShell = 1\n'],
   ['src/tool-shell.css', '.tool-shell { display: grid; }\n'],
   ['src/project-tile.ts', 'export const tile = 1\n'],
   ['package.json', '{ "name": "ui-review-fixture" }\n'],
   ['old-notes.md', '# Notes\n']
 ]
-const REVIEWED_FILE = 'src/ToolShell.tsx'
-const CHANGED_SINCE_REVIEW_FILE = 'src/project-tile.ts'
 const SEEDED_LEDGER_TITLES = ['Ran the UI tests', 'Asked to approve a merge', 'typecheck failed in design-window', 'Finished and opened a review']
 
 const TERMINAL_OUTPUT = [
@@ -115,10 +115,7 @@ export async function seedRows(runtime: SceneRuntime, worktree: { id: string; pa
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, text)
   }
-  for (const path of [REVIEWED_FILE, CHANGED_SINCE_REVIEW_FILE]) {
-    await call(runtime, 'quirky.git/setReviewMark', { worktree: worktree.id, path, reviewed: true })
-  }
-  writeFileSync(join(worktree.path, CHANGED_SINCE_REVIEW_FILE), 'export const tile = 2\nexport const tileGap = 8\n')
+  await seedReviewMarks(runtime.client, worktree, runtime.options)
   for (const title of SEEDED_LEDGER_TITLES) {
     await call(runtime, 'quirky.ledger/file', {
       target: { workspaceId: worktree.id },

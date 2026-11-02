@@ -241,7 +241,9 @@ describe.each([false, true])('createMerge onRevert (side by side: %p)', (sideByS
     const asked: Array<() => boolean> = []
     const merge = await mount((apply) => void asked.push(apply))
     expect(parent.querySelectorAll(sideBySide ? '.cm-merge-revert > button' : 'button[name=reject]')).toHaveLength(2)
-    expect(buttonOf(0)!.textContent).toBe('↶ Revert')
+    expect(buttonOf(0)!.textContent).toBe(sideBySide ? '↶' : '↶ Revert')
+    expect(buttonOf(0)!.getAttribute('aria-label')).toBe('Revert change')
+    if (sideBySide) expect(buttonOf(0)!.getAttribute('title')).toBe('Revert change')
     expect(parent.querySelector('.cm-content[contenteditable=true]')).toBeNull()
 
     press(buttonOf(0))
