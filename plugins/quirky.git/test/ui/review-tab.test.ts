@@ -271,6 +271,55 @@ describe('quirky.git review tab', () => {
     expect(editor()).not.toBe(before)
   })
 
+  test('a card edited on disk while folded shows the new content when expanded, with its counts unchanged', async () => {
+    model = reviewModel([reviewFile(APP)])
+    let disk = 'old\n'
+    fake.handlers['quirky.git/diff'] = (params) =>
+      textDiff({ path: params.path as string, source: 'review', original: 'base\n', modified: disk, modifiedHash: disk })
+    const element = await open()
+    await click(toggleOf(element, APP))
+    expect(bodyOf(element, APP).hidden).toBe(true)
+
+    disk = 'new\n'
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } } as never))
+    await settle()
+    await click(toggleOf(element, APP))
+    await settle()
+    expect(modifiedEditor(card(element, APP)).state.sliceDoc()).toBe('new\n')
+  })
+
+  test('F7 expands a folded card it moves into, so the active change is visible', async () => {
+    model = reviewModel([reviewFile('a.ts'), reviewFile('b.ts')])
+    diffBody = () => ({ original: numbered(10, 'line'), modified: numbered(10, 'line').replace('line 5', 'five') })
+    const element = await open()
+    await click(toggleOf(element, 'b.ts'))
+    expect(bodyOf(element, 'b.ts').hidden).toBe(true)
+
+    await act(async () => openDiffView()!.nextChange())
+    await act(async () => openDiffView()!.nextChange())
+    await settle()
+    expect(card(element, 'b.ts').hasAttribute('data-active')).toBe(true)
+    expect(bodyOf(element, 'b.ts').hidden).toBe(false)
+  })
+
+  test('a failing review read after a good one says the tab may be out of date, Retry reads again, and success clears it', async () => {
+    const element = await open()
+    expect(element.querySelector('[role=alert]')).toBeNull()
+
+    fake.handlers['quirky.git/review'] = () => {
+      throw new Error('repository unavailable')
+    }
+    await refreshModel()
+    const alert = element.querySelector('[role=alert]')!
+    expect(alert.textContent).toContain('repository unavailable')
+    expect(order(element)).toEqual([README, APP, ENABLED, FLAGS])
+
+    fake.handlers['quirky.git/review'] = () => model
+    await click(byText(alert as HTMLElement, 'Retry'))
+    await settle()
+    expect(element.querySelector('[role=alert]')).toBeNull()
+  })
+
   test('SC-15: inline below 900px and side-by-side from 900px, and the toggle overrides the width', async () => {
     fake.settings.diffDefaultView = 'side-by-side'
     const element = await open()

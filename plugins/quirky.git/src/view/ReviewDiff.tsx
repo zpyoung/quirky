@@ -79,6 +79,8 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const cardElements = useRef(new Map<string, HTMLElement>())
   const activeRef = useRef<string | null>(null)
   const revalidating = useRef(new Set<string>())
+  const skippedCollapsed = useRef(new Set<string>())
+  const pendingNav = useRef<{ key: string; go: (pane: PaneHandle) => void } | null>(null)
   const pendingReveal = useRef<string | null>(input.reveal ?? null)
   const scrollRef = useRef<HTMLElement | null>(null)
   scrollRef.current = scrollEl
@@ -232,8 +234,10 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     for (const item of expanded) {
       const loaded = sectionsRef.current[item.key]
       if (loaded?.status !== 'loaded') continue
-      if (loaded.signature !== item.signature || loaded.against !== bodyAgainst(cardFor(ui[item.key], item.mark))) {
+      const skipped = skippedCollapsed.current.delete(item.key)
+      if (skipped || loaded.signature !== item.signature || loaded.against !== bodyAgainst(cardFor(ui[item.key], item.mark))) {
         void revalidate(item.key).catch((e: unknown) => {
+          if (skipped) skippedCollapsed.current.add(item.key)
           // keeping the old side's diff would show it under the wrong label
           const now = sectionsRef.current[item.key]
           if (now?.status === 'loaded' && now.against !== bodyAgainst(viewOfRef(item))) patchSection(item.key, { status: 'error', error: messageOf(e) })
@@ -247,7 +251,9 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     () => {
       if (scope !== null) return
       for (const item of itemsRef.current) {
-        if (!isCollapsed(viewOfRef(item))) void revalidate(item.key).catch(() => undefined)
+        // a folded card's disk content can change with its counts unchanged, so expanding it refetches
+        if (isCollapsed(viewOfRef(item))) skippedCollapsed.current.add(item.key)
+        else void revalidate(item.key).catch(() => undefined)
       }
     },
     null
@@ -396,30 +402,47 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     [context, worktree, refresh, reveal]
   )
 
+  const reach = (key: string, go: (pane: PaneHandle) => void) => {
+    activate(key)
+    const item = itemsRef.current.find((i) => i.key === key)
+    if (item && isCollapsed(viewOfRef(item))) {
+      pendingNav.current = { key, go }
+      writeCard(item, { collapsed: false })
+      return
+    }
+    const pane = handles.current.get(key)
+    if (pane) go(pane)
+  }
+
+  useEffect(() => {
+    const pending = pendingNav.current
+    if (pending === null) return
+    const item = items.find((i) => i.key === pending.key)
+    if (!item) {
+      pendingNav.current = null
+      return
+    }
+    if (isCollapsed(cardFor(ui[item.key], item.mark))) return
+    pendingNav.current = null
+    const pane = handles.current.get(pending.key)
+    if (pane) pending.go(pane)
+  }, [items, ui])
+
   const navigate = (direction: 1 | -1) => {
     const keys = itemsRef.current.map((i) => i.key).filter((k) => (handles.current.get(k)?.changeCount() ?? 0) > 0)
     if (keys.length === 0) return
     const at = Math.max(0, keys.indexOf(activeRef.current ?? ''))
-    activate(keys[at])
-    const pane = handles.current.get(keys[at])!
+    const here = keys[at]
+    const pane = handles.current.get(here)!
     const current = pane.currentChange()
     const count = pane.changeCount()
     if (direction > 0) {
-      if (current === null) pane.goToChange(1)
-      else if (current < count) pane.goToChange(current + 1)
-      else {
-        const next = keys[(at + 1) % keys.length]
-        activate(next)
-        handles.current.get(next)!.goToChange(1)
-      }
-    } else if (current === null) pane.goToChange(count)
-    else if (current > 1) pane.goToChange(current - 1)
-    else {
-      const previous = keys[(at - 1 + keys.length) % keys.length]
-      activate(previous)
-      const target = handles.current.get(previous)!
-      target.goToChange(target.changeCount())
-    }
+      if (current === null) reach(here, (p) => p.goToChange(1))
+      else if (current < count) reach(here, (p) => p.goToChange(current + 1))
+      else reach(keys[(at + 1) % keys.length], (p) => p.goToChange(1))
+    } else if (current === null) reach(here, (p) => p.goToChange(count))
+    else if (current > 1) reach(here, (p) => p.goToChange(current - 1))
+    else reach(keys[(at - 1 + keys.length) % keys.length], (p) => p.goToChange(p.changeCount()))
   }
 
   bind({
@@ -472,6 +495,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       : 'Review'
   const loadError = scoped ? commitError : model === null ? error : null
   const loading = scoped ? commitData?.scope !== scope && commitError === null : model === null && error === null
+  const staleError = !scoped && model !== null ? error : null
   const notReady = !scoped && model && model.compare.status !== 'ready' ? (model.compare.message ?? null) : null
 
   return (
@@ -514,6 +538,11 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       />
       <div className="git-review__scroll" data-review-scroll ref={setScrollEl}>
         {loadError !== null && items.length === 0 && <ErrorNotice message={loadError} subject="review" />}
+        {staleError !== null && (
+          <div role="alert" className="git-review__notice">
+            Review may be out of date: {staleError} <Button onClick={refresh}>Retry</Button>
+          </div>
+        )}
         {loading && <p className="ui-text-muted git-review__notice">Loading diff...</p>}
         {notReady && <p className="ui-text-muted git-review__notice">{notReady}</p>}
         {!loading && loadError === null && items.length === 0 && (

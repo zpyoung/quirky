@@ -274,24 +274,22 @@ describe.each([false, true])('createMerge onRevert (side by side: %p)', (sideByS
     merge.destroy()
   })
 
-  if (!sideBySide) {
-    test('keyboard activation of a Revert button asks the owner once, and a mouse click does not ask twice', async () => {
-      const asked: Array<() => boolean> = []
-      const merge = await mount((apply) => void asked.push(apply))
-      const button = buttonOf(0) as HTMLButtonElement
+  test('keyboard activation of a Revert button asks the owner once, and a mouse click does not ask twice', async () => {
+    const asked: Array<() => boolean> = []
+    const merge = await mount((apply) => void asked.push(apply))
+    const button = buttonOf(0) as HTMLButtonElement
 
-      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }))
-      expect(asked).toHaveLength(1)
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }))
+    expect(asked).toHaveLength(1)
 
-      press(button)
-      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
-      expect(asked).toHaveLength(2)
+    press(button)
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
+    expect(asked).toHaveLength(2)
 
-      expect(asked[0]!()).toBe(true)
-      expect(merge.getModified()).toBe(edited.replace('line three\n', 'line 3\n'))
-      merge.destroy()
-    })
-  }
+    expect(asked[0]!()).toBe(true)
+    expect(merge.getModified()).toBe(edited.replace('line three\n', 'line 3\n'))
+    merge.destroy()
+  })
 
   if (sideBySide) {
     test('destroying the editor takes the press handler with it', async () => {
@@ -301,6 +299,7 @@ describe.each([false, true])('createMerge onRevert (side by side: %p)', (sideByS
       const gutter = button!.parentElement!
       merge.destroy()
       press(button)
+      button!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }))
       expect(asked).toHaveLength(0)
       expect(gutter.isConnected).toBe(false)
     })

@@ -244,9 +244,15 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
           return true
         })
       }
+      // enter and space click with detail 0, which the library ignores; a mouse click already ran on mousedown
+      const interceptKeyboard = (event: MouseEvent) => {
+        if (event.detail === 0) intercept(event)
+      }
       view.dom.addEventListener('mousedown', intercept, true)
+      view.dom.addEventListener('click', interceptKeyboard, true)
       destroy = () => {
         view.dom.removeEventListener('mousedown', intercept, true)
+        view.dom.removeEventListener('click', interceptKeyboard, true)
         view.destroy()
       }
     }
