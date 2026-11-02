@@ -36,6 +36,8 @@ const SEEDED_FILES: readonly (readonly [string, string])[] = [
   ['package.json', '{ "name": "ui-review-fixture" }\n'],
   ['old-notes.md', '# Notes\n']
 ]
+const REVIEWED_FILE = 'src/ToolShell.tsx'
+const CHANGED_SINCE_REVIEW_FILE = 'src/project-tile.ts'
 const SEEDED_LEDGER_TITLES = ['Ran the UI tests', 'Asked to approve a merge', 'typecheck failed in design-window', 'Finished and opened a review']
 
 const TERMINAL_OUTPUT = [
@@ -103,13 +105,20 @@ async function activateTerminalTab(runtime: SceneRuntime, worktreeId: string, ta
  * tabs open, the four default tools open, and the Worktrees panel focused. Every step goes through
  * the same methods and clicks a person's session would; only the project and worktree data is made up.
  */
-/** Gives the selected worktree uncommitted files and the project ledger entries, so Changes and Ledger show rows as the golden does. */
-async function seedRows(runtime: SceneRuntime, worktree: { id: string; path: string; repoId: string }): Promise<void> {
+/**
+ * Gives the selected worktree uncommitted files, one reviewed file and one changed since its review,
+ * and the project ledger entries, so Changes and Ledger show rows as the golden does.
+ */
+export async function seedRows(runtime: SceneRuntime, worktree: { id: string; path: string; repoId: string }): Promise<void> {
   for (const [path, text] of SEEDED_FILES) {
     const target = join(worktree.path, path)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, text)
   }
+  for (const path of [REVIEWED_FILE, CHANGED_SINCE_REVIEW_FILE]) {
+    await call(runtime, 'quirky.git/setReviewMark', { worktree: worktree.id, path, reviewed: true })
+  }
+  writeFileSync(join(worktree.path, CHANGED_SINCE_REVIEW_FILE), 'export const tile = 2\nexport const tileGap = 8\n')
   for (const title of SEEDED_LEDGER_TITLES) {
     await call(runtime, 'quirky.ledger/file', {
       target: { workspaceId: worktree.id },
