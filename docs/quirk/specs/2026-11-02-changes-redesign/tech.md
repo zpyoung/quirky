@@ -151,7 +151,7 @@ quirky.git/reviewedContent { worktree?: string, path: string } -> { content: str
 event quirky.git/reviewChanged { worktreeId: string }
 ```
 
-- `setReviewMark reviewed: true` stores the current disk content of `path` and its hash. With `expected` given (the `modifiedHash` the user was looking at), a mismatch fails with `conflict` and stores nothing, so a mark never records content the user didn't see. `null` means the file is deleted. A deleted file stores the deletion sentinel and no content.
+- `setReviewMark reviewed: true` stores the current disk content of `path` and its hash. With `expected` given (the `modifiedHash` the user was looking at), a mismatch fails with a `conflict` whose `data.reason` is `changed-on-disk` (the reason `save` uses) and stores nothing, so a mark never records content the user didn't see. `null` means the file is deleted. A deleted file stores the deletion sentinel and no content.
 - `setReviewMark reviewed: false` deletes the row. It's idempotent.
 - Content is stored for text files up to `MAX_BLOB_BYTES` (`packages/git/src/diffs.ts`, 10 MiB). Binary and larger files store the hash only, and their changed-since-review diff falls back to the existing binary or too-large notice.
 - `reviewedContent` returns the stored content for the reviewed → now diff. With no row it fails with `not-found`.
@@ -191,12 +191,12 @@ event quirky.editor/saved { path: string /* absolute */, beforeHash: string | nu
 `CONTRACT:`
 ```
 openReview(context: UiPluginContext, input: { worktree: string, reveal?: string, commit?: string | null, noteId?: string }): Promise<void>
-ReviewViewHandle { worktree: string, reveal(path: string, noteId?: string): void, setScope(commit: string | null): void }
+ReviewViewHandle { worktree: string, reveal(path: string, noteId?: string): void, scrollToTop(): void, setScope(commit: string | null): void }
 ```
 
 - At most one Review tab per worktree in a window, whatever opened it. That's done by the `'review'` key being per worktree, and by `openReview` preferring a mounted `ReviewViewHandle` for that worktree (activate its tab with `quirky.terminal/activateTab`, then `reveal`/`setScope`) over remounting.
 - When a window restores tabs from before this change, the first mounted legacy-mode tab for a worktree becomes that worktree's Review tab. Any later one closes itself (`closeHostedDiff`) after revealing its path in the surviving tab.
-- `openReview` without `reveal` scrolls the tab to the top of the stack (scenario 3).
+- With a mounted handle, `openReview` always calls `setScope(commit ?? null)` (a same-scope call is a no-op), then `reveal(path, noteId)` when `reveal` is given, else `scrollToTop()`. So `openReview` without `reveal` scrolls the tab to the top of the stack (scenario 3), and a row, palette or note open returns a commit-scoped tab to the worktree review.
 - `reveal(path)` scrolls the card into view, expands it, and makes it the active card for F7/⇧F7. `setScope(commit)` swaps the card list to `commitFiles` and shows the `ScopeChip`. `null` returns to the worktree review.
 - Card order is the panel's order: path order, or tree order when the panel is in tree mode.
 - Each card shows `against: 'base'` by default. A `'changed'` card shows `against: 'reviewed'` with a "Full diff" toggle back to `'base'`, which holds until the card's state changes.
