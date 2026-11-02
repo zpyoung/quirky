@@ -1,8 +1,8 @@
 /** Diff content for every source (staged, unstaged, branch, commit) and the guarded save of a working file. */
 import { createHash, randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, lstat, readFile, readlink, rename, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join } from 'node:path'
+import { chmod, copyFile, lstat, readFile, readlink, rename, unlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { GitDiff, GitDiffSource } from '@quirky/protocol'
 import { NotAllowedError } from './conflicts'
 import { GitError } from './index'
@@ -310,15 +310,13 @@ export async function saveWorkingFile(
   return { hash: contentHash(bytes) }
 }
 
-/**
- * The whole staged diff as one minimal, colourless patch, for the commit-message prompt. Past
- * `MAX_BLOB_BYTES` of output the process is killed and the result is `{patch: '', omitted: true}`
- * so the prompt can say the diff was too large to read. Throws `GitError` on any other failure.
- */
-export async function stagedPatch(cwd: string): Promise<{ patch: string; omitted: boolean }> {
-  const proc = Bun.spawn(['git', 'diff', '--cached', '--patch', '--minimal', '--no-color', '--no-ext-diff'], {
+const PATCH_ARGS = ['--patch', '--minimal', '--no-color', '--no-ext-diff']
+
+/** The output of `git diff` with `args`, or `omitted` once it passes `MAX_BLOB_BYTES` and the process is killed. */
+async function capturePatch(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
+  const proc = Bun.spawn(['git', 'diff', ...args], {
     cwd,
-    env: await gitEnv(cwd, { readOnly: true }),
+    env: await gitEnv(cwd, { readOnly: true, ...(env ? { env } : {}) }),
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe'
@@ -347,4 +345,51 @@ export async function stagedPatch(cwd: string): Promise<{ patch: string; omitted
     throw new GitError(`git diff failed (exit ${exitCode})${detail ? `: ${detail}` : ''}`, message, exitCode)
   }
   return { patch: new TextDecoder().decode(concat(chunks, total)), omitted: false }
+}
+
+/**
+ * The whole staged diff as one minimal, colourless patch, for the commit-message prompt. Past
+ * `MAX_BLOB_BYTES` of output the process is killed and the result is `{patch: '', omitted: true}`
+ * so the prompt can say the diff was too large to read. Throws `GitError` on any other failure.
+ */
+export async function stagedPatch(cwd: string): Promise<{ patch: string; omitted: boolean }> {
+  return capturePatch(cwd, ['--cached', ...PATCH_ARGS])
+}
+
+/**
+ * Everything uncommitted as one minimal, colourless patch from HEAD to the working tree: staged,
+ * unstaged, deleted and untracked files (ignored ones excluded), each file once. An unborn HEAD
+ * compares against the empty tree. Untracked files are made visible to the diff through a
+ * throwaway copy of the index, so the real index and the working tree are not touched (git
+ * writes the empty blob for the intent-to-add entries). Past `MAX_BLOB_BYTES` of output the result is `{patch: '', omitted: true}`. Throws
+ * `GitError` on any other failure.
+ */
+export async function workingPatch(cwd: string): Promise<{ patch: string; omitted: boolean }> {
+  const text = async (args: string[], input?: string): Promise<string> => {
+    const r = await runGit(cwd, args, { readOnly: true, ...(input === undefined ? {} : { input }) })
+    if (r.exitCode !== 0) throw new GitError(`git ${args[0]} failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
+    return new TextDecoder().decode(r.stdout)
+  }
+  const born = (await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'], { readOnly: true })).exitCode === 0
+  const base = born ? 'HEAD' : (await text(['hash-object', '-t', 'tree', '--stdin'], '')).trim()
+  const untracked = await text(['ls-files', '--others', '--exclude-standard', '-z'])
+  if (untracked === '') return capturePatch(cwd, [base, ...PATCH_ARGS])
+
+  // beside the real index so a split index still finds its shared part
+  const index = resolve(cwd, (await text(['rev-parse', '--git-path', 'index'])).trim())
+  const scratch = `${index}.quirky-${randomBytes(6).toString('hex')}`
+  try {
+    await copyFile(index, scratch).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    })
+    const added = await runGit(cwd, ['add', '--intent-to-add', '--pathspec-from-file=-', '--pathspec-file-nul'], {
+      readOnly: true,
+      input: untracked,
+      env: { GIT_INDEX_FILE: scratch }
+    })
+    if (added.exitCode !== 0) throw new GitError(`git add failed (exit ${added.exitCode}): ${added.stderr.trim()}`, added.stderr, added.exitCode)
+    return await capturePatch(cwd, [base, ...PATCH_ARGS], { GIT_INDEX_FILE: scratch })
+  } finally {
+    await unlink(scratch).catch(() => {})
+  }
 }

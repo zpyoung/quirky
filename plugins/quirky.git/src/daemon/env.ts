@@ -1,7 +1,7 @@
 import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { gitApi } from '@quirky/git'
-import type { GitStatus, GitStatusEntry, PluginCaller, PluginContext, PluginStore, Worktree } from '@quirky/protocol'
+import type { GitChange, GitStatus, GitStatusEntry, PluginCaller, PluginContext, PluginStore, Worktree } from '@quirky/protocol'
 import { GenerationLanes } from './ai-generate'
 import { HeldFailures } from './ai-fix'
 import { AiRecipes } from './ai-recipes'
@@ -9,6 +9,7 @@ import { createErrors, type Errors } from './errors'
 import { createLock, type WorktreeLock } from './lock'
 import { NoteHolds, NotesStore } from './notes'
 import { OpenedConflicts } from './opened'
+import { ReviewMarks } from './review-marks'
 
 export type WorktreeParams = { worktree?: string }
 
@@ -27,6 +28,8 @@ export type DaemonEnv = {
   notes: NotesStore
   /** Notes that running sends have taken. */
   holds: NoteHolds
+  /** Review marks: the content the user marked reviewed. */
+  reviewMarks: ReviewMarks
   /** Saved AI recipes. */
   recipes: AiRecipes
   /** Commit and push failures AI Fix can act on. */
@@ -37,11 +40,15 @@ export type DaemonEnv = {
   resolve(params: WorktreeParams, caller: PluginCaller): Promise<Worktree>
   /** Announces `quirky.git/changed` for a successful mutation. */
   changed(worktree: Worktree): void
+  /** Announces `quirky.git/reviewChanged` after a review mark was stored, moved or deleted. */
+  reviewChanged(worktree: Worktree): void
   /**
    * The status snapshot the panel shows: `statusV2` without the project's shared-directory
    * symlinks, plus `resolved_locally` conflict entries and the held lock as `busy`.
    */
   readStatus(worktree: Worktree): Promise<GitStatus>
+  /** Every path whose working-tree content differs from commit `from`, bounded and filtered like `readStatus`. */
+  changeList(worktree: Worktree, from: string): Promise<{ changes: GitChange[]; capped: boolean }>
   /** The project's shared-directory symlinks that are untracked in the worktree, relative to its root. */
   sharedSymlinks(worktree: Worktree): Promise<string[]>
 }
@@ -114,6 +121,10 @@ export function createEnv(context: PluginContext, store: PluginStore): DaemonEnv
     return { ...snapshot, entries, busy: lock.heldBy(worktree.id) }
   }
 
+  async function changeList(worktree: Worktree, from: string): Promise<{ changes: GitChange[]; capped: boolean }> {
+    return gitApi().worktreeChangeList(worktree.path, from, { sharedSymlinks: await configuredSharedDirectories(worktree) })
+  }
+
   return {
     context,
     errors,
@@ -122,11 +133,14 @@ export function createEnv(context: PluginContext, store: PluginStore): DaemonEnv
     store,
     notes: new NotesStore(store),
     holds: new NoteHolds(),
+    reviewMarks: new ReviewMarks(store),
     recipes: new AiRecipes(store, context),
     failures: new HeldFailures(),
     lanes: new GenerationLanes(),
     resolve,
     changed: (worktree) => context.emit('changed', { worktreeId: worktree.id }),
+    reviewChanged: (worktree) => context.emit('reviewChanged', { worktreeId: worktree.id }),
+    changeList,
     readStatus,
     sharedSymlinks
   }
