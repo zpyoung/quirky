@@ -413,4 +413,4 @@ The whole-change screenshot review and click-through under Rollout answer the fi
 
 ## Status & amendments
 
-Status: Draft, awaiting review.
+Status: Approved 2026-11-02.
