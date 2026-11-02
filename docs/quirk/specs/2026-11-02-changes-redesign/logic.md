@@ -38,7 +38,7 @@ A review mark is your record that you looked at a file. Marking a file reviewed 
 - Reviewed (✓): what's on disk matches the reviewed version.
 - Changed since review (amber ●): what's on disk differs from the reviewed version. Its diff shows reviewed version → now, with a link to the full diff.
 
-Only content counts. Commits, staging and rebases that leave the content alone leave the mark alone. Marks belong to Quirky and never stage, commit or block anything. They're kept per worktree across restarts, and changing the worktree's base clears them, because every diff changes with it.
+Only content counts. Commits, staging and rebases that leave the content alone leave the mark alone. Changes you make yourself in Quirky, a revert from the Review tab or a save in Quirky's editor, keep the file reviewed by moving the reviewed version to the new content. Every other write reopens it. Marks belong to Quirky and never stage, commit or block anything. They're kept per worktree across restarts, and changing the worktree's base clears them, because every diff changes with it.
 
 ```mermaid
 stateDiagram-v2
@@ -106,9 +106,9 @@ The ship bar holds, top to bottom: "Send N notes to agent ▾" when notes exist,
 4. **Marking a file reviewed**
    - **Given** src/feature/enabled.ts is selected and not reviewed
    - **When** the user presses Space in the panel, or clicks "Mark reviewed" on its card
-   - **Then** ✓ its row shows ✓; ✓ its card collapses; ✓ the count goes up by one
-   - **Data before:** **Count line**: "2 of 4 reviewed"
-   - **Data after:** **Count line**: ✓ "3 of 4 reviewed"; **enabled.ts card**: ✓ collapsed, "✓ Reviewed"; **Panel selection**: [ASK: After marking a file reviewed, should the selection and the Review tab move to the next unreviewed file, or stay put?]
+   - **Then** ✓ its row shows ✓; ✓ its card collapses; ✓ the count goes up by one; ✓ the panel selection and the Review tab move to the next file in path order that's still ○ or ●, skipping reviewed files; ✓ if none is left, the selection stays put
+   - **Data before:** **Count line**: "2 of 4 reviewed"; **Panel selection**: enabled.ts; **flags.ts**: ● changed since review
+   - **Data after:** **Count line**: ✓ "3 of 4 reviewed"; **enabled.ts card**: ✓ collapsed, "✓ Reviewed"; **Panel selection**: ✓ flags.ts; **Review tab**: ✓ scrolled to flags.ts
 5. **The agent edits a file you already reviewed**
    - **Given** src/feature/flags.ts is reviewed
    - **When** the agent adds a line to it
@@ -141,7 +141,13 @@ The ship bar holds, top to bottom: "Send N notes to agent ▾" when notes exist,
 10. **You edit a reviewed file yourself**
     - **Given** src/app.ts is reviewed
     - **When** the user changes it in Quirky's editor and saves
-    - **Then** [ASK: Should your own saves in Quirky's editor keep the file reviewed, as a revert from the Review tab does, or reopen it as changed since review, as an agent's edit does?]
+    - **Then** ✓ app.ts keeps its ✓, because the reviewed version moves to the saved content; ✓ a later edit by the agent, a terminal command or another editor reopens it as usual
+    - **Data before:** **app.ts**: ✓ reviewed, +10 −2
+    - **Walkthrough:**
+      1. The user fixes a typo on one line and saves in Quirky's editor
+      2. Quirky records the saved content as the reviewed version
+      3. The agent later rewrites another line in app.ts
+    - **Data after:** **app.ts** after step 2: ✓ reviewed, +10 −2; **app.ts** after step 3: ✓ ● changed since review, showing only the agent's line
 11. **The agent deletes a file**
     - **Given** src/legacy.ts\* exists on the base
     - **When** the agent deletes it
@@ -176,7 +182,7 @@ The ship bar holds, top to bottom: "Send N notes to agent ▾" when notes exist,
 18. **Using only the keyboard**
     - **Given** the panel has focus
     - **When** the user presses ↓, Enter, Space, then ⌫
-    - **Then** ✓ ↓ selects the next row; ✓ Enter opens it in Review; ✓ Space toggles its review mark; ✓ ⌫ starts "Revert file…" with its confirm; ✓ ⌘⇧G, F7, ⇧F7 and ⌘⇧A keep working as today
+    - **Then** ✓ ↓ selects the next row; ✓ Enter opens it in Review; ✓ Space marks it reviewed and moves to the next unreviewed file, as in scenario 4, or unmarks it and stays if it was already reviewed; ✓ ⌫ starts "Revert file…" with its confirm; ✓ ⌘⇧G, F7, ⇧F7 and ⌘⇧A keep working as today
 19. **Reverting everything**
     - **Given** the worktree has 4 changed files
     - **When** the user looks for a way to discard all of them
@@ -316,6 +322,8 @@ Rules that still hold: the panel stays in the right-top slot with focus-revealed
 - Marking a file reviewed records its content; an edit that changes the content reopens just the new part.
 - Marks persist per worktree across restarts, deleted files need review like any change, and changing the base clears marks.
 - Untracked files are ordinary changed files with status A.
+- Marking a file reviewed moves the selection and the Review tab to the next unreviewed file. This was settled at spec review.
+- Your own saves in Quirky's editor keep a file reviewed, as reverts from the Review tab do. This was settled at spec review.
 
 ### Shipping
 
@@ -385,7 +393,7 @@ The whole-change screenshot review and click-through under Rollout answer the fi
 - A redesign of the Source Control AI defaults form, and its view strip that persists across worktree switches.
 - Line-level staging and a three-way merge view.
 - `[tech-spec]` How reviewed versions are stored and kept per worktree, and when they're pruned.
-- `[tech-spec]` How Quirky tells its own reverts (and, depending on scenario 10, its own editor saves) apart from other writes to a file.
+- `[tech-spec]` How Quirky tells its own reverts and editor saves apart from other writes to a file, including a save that races an agent's write.
 - `[tech-spec]` How the reviewed version → now diff is computed, and how the merge base is found and refreshed.
 - `[tech-spec]` Which `@quirky/ui` components to add: review mark, stacked diff card, ship button with reasons, scope chip.
 - `[tech-spec]` How the panel and Review tab behave when git status is capped on a very large change.
