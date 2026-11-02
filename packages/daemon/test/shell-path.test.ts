@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { spawnPty } from '../../pty-host/src/pty-process'
 import { buildSessionEnv, commandArgv, installIntegrationFiles, shellArgv } from '../src/launch'
 import { makeTempHome, waitFor } from './helpers'
+import daemonPackage from '../package.json'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 
 let root: string
@@ -94,7 +95,20 @@ describe('inherited agent session markers', () => {
       CLAUDE_PID: '42',
       CLAUDE_CODE_MAX_OUTPUT_TOKENS: '64000'
     })
-    expect(Object.keys(env).filter((key) => key.startsWith('CLAUDE'))).toEqual(['CLAUDE_CODE_MAX_OUTPUT_TOKENS'])
+    // FORCE_SYNC_OUTPUT is Quirky's own, not inherited
+    expect(Object.keys(env).filter((key) => key.startsWith('CLAUDE'))).toEqual(['CLAUDE_CODE_MAX_OUTPUT_TOKENS', 'CLAUDE_CODE_FORCE_SYNC_OUTPUT'])
+  })
+})
+
+describe('terminal identity', () => {
+  test('a session names Quirky as its terminal, not the terminal that started the daemon', () => {
+    const env = sessionEnv('/bin/zsh', 'shell', { TERM_PROGRAM: 'Orca', TERM_PROGRAM_VERSION: '1.4.234' })
+    expect(env.TERM_PROGRAM).toBe('Quirky')
+    expect(env.TERM_PROGRAM_VERSION).toBe(daemonPackage.version)
+  })
+
+  test('Claude Code wraps its frames in synchronized output even though Quirky does not answer XTVERSION', () => {
+    expect(sessionEnv('/bin/zsh', 'claude').CLAUDE_CODE_FORCE_SYNC_OUTPUT).toBe('1')
   })
 })
 
