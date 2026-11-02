@@ -53,6 +53,12 @@ export type PaneProps = {
   onFocus?(): void
   /** Draws and takes notes on the modified side of a text diff; image, binary and too-large diffs never use it. */
   notes?: NotesBinding
+  /**
+   * Offers Revert on each change of a text diff whose modified side is the file on disk: a press
+   * asks for confirmation, puts the change back in the editor and saves the file at once with the
+   * hash the diff was read at. A refused save puts the editor back and says so.
+   */
+  revertOnDisk?: boolean
 }
 
 const STALE_TEXT = {
@@ -101,7 +107,7 @@ export function DiffPane(props: PaneProps) {
 
 const NO_NOTES: readonly Note[] = []
 
-function TextPane({ context, worktree, path, diff, editable, settings, variant, onState, bind, onSaved, onReload, onFocus, notes }: PaneProps) {
+function TextPane({ context, worktree, path, diff, editable, settings, variant, onState, bind, onSaved, onReload, onFocus, notes, revertOnDisk }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const mergeRef = useRef<MergeHandle | null>(null)
   const base = useRef<{ text: string; hash: string | null | undefined }>({ text: diff.modified, hash: diff.modifiedHash })
@@ -142,32 +148,63 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
     }
   }
 
+  const write = async (content: string, force: boolean) => {
+    const { hash } = base.current
+    const result = (await context.call('quirky.git/save', {
+      worktree,
+      path: diff.path,
+      content,
+      ...(!force && hash !== undefined ? { expected: hash } : {})
+    })) as { hash: string }
+    base.current = { text: content, hash: result.hash }
+    const now = mergeRef.current?.getModified() ?? draft.current ?? content
+    dirtyRef.current = now !== content
+    setDirty(dirtyRef.current)
+    setStale(false)
+    onSaved(content, result.hash)
+  }
+
   const save = async (force: boolean) => {
     const content = overflow ? draft.current : (mergeRef.current?.getModified() ?? null)
     if (content === null) return
-    const { hash } = base.current
     try {
-      const result = (await context.call('quirky.git/save', {
-        worktree,
-        path: diff.path,
-        content,
-        ...(!force && hash !== undefined ? { expected: hash } : {})
-      })) as { hash: string }
-      base.current = { text: content, hash: result.hash }
-      const now = mergeRef.current?.getModified() ?? draft.current ?? content
-      dirtyRef.current = now !== content
-      setDirty(dirtyRef.current)
-      setStale(false)
-      onSaved(content, result.hash)
+      await write(content, force)
     } catch (error) {
       if (reasonOf(error) === 'changed-on-disk') setStale(true)
       else context.toast('Save failed', messageOf(error))
     }
   }
 
+  const reverting = useRef(false)
+  /** Confirms, then runs `apply` on the editor and saves the result; a refused save restores the editor. */
+  const revert = async (apply: () => boolean) => {
+    const merge = mergeRef.current
+    if (reverting.current || !merge) return
+    reverting.current = true
+    try {
+      const confirmed = await context.confirm({
+        title: 'Revert this change?',
+        body: `The change is undone in ${path} on disk.`,
+        confirmLabel: 'Revert'
+      })
+      if (!confirmed || mergeRef.current !== merge) return
+      const before = merge.getModified()
+      if (!apply()) return
+      try {
+        await write(merge.getModified(), false)
+      } catch (error) {
+        if (mergeRef.current === merge) merge.setModified(before)
+        context.toast('Revert failed', messageOf(error))
+      }
+    } finally {
+      reverting.current = false
+    }
+  }
+
   const ifDirty = (force: boolean) => () => (dirtyRef.current ? save(force) : Promise.resolve())
-  const actions = useRef({ save: ifDirty(false), overwrite: ifDirty(true), reload: onReload })
-  actions.current = { save: ifDirty(false), overwrite: ifDirty(true), reload: onReload }
+  const actions = useRef({ save: ifDirty(false), overwrite: ifDirty(true), reload: onReload, revert })
+  actions.current = { save: ifDirty(false), overwrite: ifDirty(true), reload: onReload, revert }
+  const canRevert = revertOnDisk === true && !editable && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
 
   const showEditor = overflow === null
   useEffect(() => {
@@ -182,6 +219,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       showWhitespace: settings.showWhitespace,
       collapseUnchanged: settings.collapseUnchanged,
       editable,
+      ...(canRevert ? { onRevert: (apply: () => boolean) => void actions.current.revert(apply) } : {}),
       scrollToFirst: variant === 'file',
       onSave: () => void actions.current.save(),
       onDocChange: () => {
@@ -226,7 +264,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       mergeRef.current = null
       handle.destroy()
     }
-  }, [showEditor, editable, variant, withNotes, path, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
+  }, [showEditor, editable, canRevert, variant, withNotes, path, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
 
   useEffect(() => {
     mergeRef.current?.setNotes(model)
@@ -245,6 +283,8 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
     []
   )
 
+  const canRevertRef = useRef(canRevert)
+  canRevertRef.current = canRevert
   const handleRef = useRef<PaneHandle | null>(null)
   if (handleRef.current === null) {
     handleRef.current = {
@@ -253,7 +293,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       goToChange: (n) => mergeRef.current?.goToChange(n) ?? false,
       currentChange: () => mergeRef.current?.currentChange() ?? null,
       changeCount: () => mergeRef.current?.changeCount() ?? 0,
-      revertChange: () => (editable ? (mergeRef.current?.revertChange() ?? false) : false),
+      revertChange: () => (editable || canRevertRef.current ? (mergeRef.current?.revertChange() ?? false) : false),
       isDirty: () => dirtyRef.current,
       save: () => actions.current.save(),
       reload: () => reload(),

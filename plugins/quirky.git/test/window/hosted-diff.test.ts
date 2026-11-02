@@ -1,455 +1,242 @@
 import { afterEach, expect, test } from 'bun:test'
 import { EditorView } from '@codemirror/view'
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { Buffer } from 'node:buffer'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { boot, shutdown, DIFF_VIEW, type World } from './world'
-import { modifiedEditor, q, rowOf, text, toasts } from './dom'
+import { diffViewKey } from '../../src/shared/view-input'
+import { boot, shutdown, viewTabs, DIFF_VIEW, type World } from './world'
+import { buttonText, byLabel, click, modifiedEditor, q, qa, text, toasts } from './dom'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
 
 afterEach(shutdown)
 
-type RecordValue = Record<string, unknown>
-
-function record(value: unknown): RecordValue {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('expected an object')
-  return value as RecordValue
-}
-
-async function terminalWorkspace(world: World): Promise<RecordValue> {
-  const result = record(await world.agent.callAny('quirky.terminal/workspace', { workspace: world.feat.id }))
-  return record(result.workspace)
-}
-
-function groups(value: unknown): RecordValue[] {
-  const node = record(value)
-  if (node.kind === 'group') return [node]
-  if (node.kind !== 'split') return []
-  return [...groups(node.first), ...groups(node.second)]
-}
-
-function diffTabs(workspace: RecordValue): Array<{ tab: RecordValue; group: RecordValue }> {
-  return groups(workspace.root).flatMap((group) =>
-    (Array.isArray(group.tabs) ? group.tabs : [])
-      .filter((value): value is RecordValue => typeof value === 'object' && value !== null && !Array.isArray(value))
-      .filter((tab) => tab.viewId === DIFF_VIEW)
-      .map((tab) => ({ tab, group }))
-  )
-}
-
-
-function clickRow(path: string, detail = 1, init: MouseEventInit = {}): void {
-  const target = rowOf(path)
-  if (!target) throw new Error(`missing Source Control row ${path}`)
-  target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail, ...init }))
-}
 const MATH_BASE = 'a\nb\nc\nd\ne\n'
 const MATH_ON_DISK = 'a\nb\nchanged\nd\ne\n'
+const MATH_TWO_CHANGES = 'a\nB\nc\nd\nE\n'
 
-async function openChangedMath(world: World): Promise<{ tab: RecordValue & { id: string }; editor: EditorView }> {
-  world.write('math.ts', MATH_ON_DISK)
-  await world.win.waitFor(() => rowOf('math.ts'))
-  clickRow('math.ts')
-  const opened = await world.win.waitFor(async () => {
-    const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
-  })
-  const tabId = opened.tab.id
-  if (typeof tabId !== 'string') throw new Error('opened diff tab had no string identity')
-  await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
-  return {
-    tab: { ...opened.tab, id: tabId },
-    editor: modifiedEditor(EditorView, q('[data-git-view-root]')!)
-  }
+const numbered = (n: number, change: Record<number, string> = {}) =>
+  Array.from({ length: n }, (_, i) => change[i + 1] ?? `line ${i + 1}`).join('\n') + '\n'
+
+const card = (path: string) => q(`[data-git-view-root] section[data-path="${path}"]`)
+const revertButtons = (path: string) => qa('button[name="reject"]', card(path) ?? document)
+
+async function openChangedMath(world: World, content = MATH_ON_DISK): Promise<EditorView> {
+  world.write('math.ts', content)
+  await world.run('open-diff', { path: 'math.ts' })
+  await world.win.waitFor(() => card('math.ts') && q('[contenteditable]', card('math.ts')!))
+  return modifiedEditor(EditorView, card('math.ts')!)
 }
 
-function tabCloseButton(tabId: string): HTMLButtonElement {
-  const button = q(`[data-tab="${tabId}"] button.qt-tab-close`)
-  if (!button) throw new Error(`missing close button for terminal tab ${tabId}`)
-  return button as HTMLButtonElement
+const revertDialog = () => qa('[role="dialog"]').find((dialog) => text(dialog).includes('Revert this change?'))
+
+async function confirmRevert(world: World, answer: 'Revert' | 'Cancel'): Promise<void> {
+  const dialog = await world.win.waitFor(revertDialog)
+  await click(buttonText(answer, dialog))
+  await world.win.waitFor(() => revertDialog() === undefined)
 }
 
-function closeChoice(label: string): HTMLButtonElement {
-  const dialog = q('[role="dialog"]')
-  if (!dialog) throw new Error('missing unsaved-diff close dialog')
-  const button = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => text(candidate) === label)
-  if (!button) throw new Error(`missing ${label} choice in unsaved-diff close dialog`)
-  return button
+async function pressRevert(button: HTMLElement | undefined): Promise<void> {
+  if (!button) throw new Error('missing Revert button')
+  button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
 }
 
-async function waitForCloseDialog(world: World): Promise<void> {
-  await world.win.waitFor(() => q('[role="dialog"]'))
-  const dialog = q('[role="dialog"]')
-  expect(text(dialog)).toContain('Save')
-  expect(text(dialog)).toContain("Don't Save")
-  expect(text(dialog)).toContain('Cancel')
-}
-
-async function waitForDirtyTab(world: World, tabId: string): Promise<void> {
-  await world.win.waitFor(async () => {
-    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === tabId)
-    return current !== undefined && typeof current.tab.closeParams === 'object' &&
-      current.tab.closeParams !== null && record(current.tab.closeParams).dirty === true
-  })
-}
-
-
-test('Revert Block marks a hosted diff unsaved, and terminal-tab close can cancel or save it', async () => {
+test('Revert asks first, then writes the base version of that change to disk', async () => {
   const world = await boot(scratch, { published: false })
-  const { tab, editor } = await openChangedMath(world)
-  const revert = q('[data-git-view-root] button[name="reject"]')
-  if (!revert) throw new Error('missing inline Revert Block button')
-  revert.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
-  await world.win.waitFor(() => editor.state.sliceDoc() === MATH_BASE)
-  await waitForDirtyTab(world, tab.id)
-  await world.win.waitFor(() =>
-    text(q('[data-git-view-root] h2')).includes('Unsaved') &&
-    text(q(`[data-tab="${tab.id}"]`)).includes('Unsaved')
-  )
+  await openChangedMath(world)
+  expect(revertButtons('math.ts')).toHaveLength(1)
+  expect(text(revertButtons('math.ts')[0])).toBe('↶ Revert')
 
-  expect(text(q('[data-git-view-root] h2'))).toContain('Unsaved')
-  expect(text(q(`[data-tab="${tab.id}"]`))).toContain('Unsaved')
-  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
-  expect(editor.state.sliceDoc()).toBe(MATH_BASE)
-
-  tabCloseButton(tab.id).click()
-  await waitForCloseDialog(world)
-  closeChoice('Cancel').click()
-  await world.win.waitFor(() => q('[role="dialog"]') === null)
-  await waitForDirtyTab(world, tab.id)
-  expect(diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)).toBe(true)
-  expect(editor.state.sliceDoc()).toBe(MATH_BASE)
+  await pressRevert(revertButtons('math.ts')[0])
+  await confirmRevert(world, 'Cancel')
   expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
 
-  tabCloseButton(tab.id).click()
-  await waitForCloseDialog(world)
-  closeChoice('Save').click()
-  await world.win.waitFor(async () =>
-    !diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)
-  )
-  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_BASE)
-  await world.win.waitFor(() => q(`[data-tab="${tab.id}"]`) === null)
-  expect(q(`[data-tab="${tab.id}"]`)).toBeNull()
+  await pressRevert(revertButtons('math.ts')[0])
+  await confirmRevert(world, 'Revert')
+  await world.win.waitFor(() => readFileSync(join(world.dir, 'math.ts'), 'utf8') === MATH_BASE)
+  expect(world.git('status', '--porcelain')).toBe('')
+  expect(world.problems()).toEqual([])
 }, SLOW)
 
-test('header close can discard a hosted diff draft without changing disk', async () => {
+test('reverting one of two changes keeps the other on disk and in the card', async () => {
   const world = await boot(scratch, { published: false })
-  const { tab, editor } = await openChangedMath(world)
-  editor.dispatch({ changes: { from: 0, insert: 'unsaved draft\n' } })
-  const draft = editor.state.sliceDoc()
-  await waitForDirtyTab(world, tab.id)
+  const editor = await openChangedMath(world, MATH_TWO_CHANGES)
+  expect(revertButtons('math.ts')).toHaveLength(2)
 
-  const headerClose = q('[data-git-view-root] button[aria-label="Close"]')
-  if (!headerClose) throw new Error('missing diff header close button')
-  headerClose.click()
-  await waitForCloseDialog(world)
-  closeChoice("Don't Save").click()
-  await world.win.waitFor(async () =>
-    !diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)
-  )
-  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
-  await world.win.waitFor(() => q(`[data-tab="${tab.id}"]`) === null)
-  expect(q(`[data-tab="${tab.id}"]`)).toBeNull()
-
-  await world.run('open-diff', { path: 'math.ts', source: 'unstaged' })
-  await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
-  const reopened = await world.win.waitFor(async () =>
-    diffTabs(await terminalWorkspace(world)).find(({ tab: current }) => record(current.input).path === 'math.ts') ?? null
-  )
-  const reopenedEditor = modifiedEditor(EditorView, q('[data-git-view-root]')!)
-  expect(reopened.tab.id).not.toBe(tab.id)
-  expect(reopenedEditor.state.sliceDoc()).toBe(MATH_ON_DISK)
-  expect(reopenedEditor.state.sliceDoc()).not.toBe(draft)
+  await pressRevert(revertButtons('math.ts')[0])
+  await confirmRevert(world, 'Revert')
+  const expected = MATH_TWO_CHANGES.replace('B\n', 'b\n')
+  await world.win.waitFor(() => readFileSync(join(world.dir, 'math.ts'), 'utf8') === expected)
+  await world.win.waitFor(() => editor.state.sliceDoc() === expected)
+  await world.win.waitFor(() => revertButtons('math.ts').length === 1)
+  expect(world.problems()).toEqual([])
 }, SLOW)
 
-test('a failed Save from terminal-tab close keeps the dirty draft and tab open', async () => {
+test('reverting a change that is already committed writes the base lines back as an uncommitted edit', async () => {
   const world = await boot(scratch, { published: false })
-  const { tab, editor } = await openChangedMath(world)
-  editor.dispatch({ changes: { from: 0, insert: 'unsaved draft\n' } })
-  const draft = editor.state.sliceDoc()
-  await waitForDirtyTab(world, tab.id)
+  world.commit({ 'math.ts': MATH_ON_DISK }, 'change math')
+  await world.run('open-diff', { path: 'math.ts', source: 'branch' })
+  await world.win.waitFor(() => card('math.ts') && revertButtons('math.ts').length === 1)
 
+  await pressRevert(revertButtons('math.ts')[0])
+  await confirmRevert(world, 'Revert')
+  await world.win.waitFor(() => readFileSync(join(world.dir, 'math.ts'), 'utf8') === MATH_BASE)
+  expect(world.git('status', '--porcelain')).toBe('M math.ts')
+}, SLOW)
+
+test('a revert whose write fails puts the card back and says so', async () => {
+  const world = await boot(scratch, { published: false })
+  const editor = await openChangedMath(world)
   const path = join(world.dir, 'math.ts')
   rmSync(path)
   mkdirSync(path)
-  tabCloseButton(tab.id).click()
-  await waitForCloseDialog(world)
-  closeChoice('Save').click()
 
-  await world.win.waitFor(() => toasts().some((message) => message.includes('Save failed')))
-  await waitForDirtyTab(world, tab.id)
-  expect(diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)).toBe(true)
-  expect(editor.state.sliceDoc()).toBe(draft)
+  await pressRevert(revertButtons('math.ts')[0])
+  await confirmRevert(world, 'Revert')
+  await world.win.waitFor(() => toasts().some((message) => message.includes('Revert failed')))
+  expect(editor.state.sliceDoc()).toBe(MATH_ON_DISK)
   expect(statSync(path).isDirectory()).toBe(true)
 }, SLOW)
 
-
-function imageSource(html: string): string {
-  const match = /<img\b[^>]*\bsrc="([^"]+)"/i.exec(html)
-  if (!match) throw new Error('Markdown preview did not contain an image resource.')
-  return match[1]!
-}
-
-function imageUrl(world: World, source: string): string {
-  return new URL(source, `http://127.0.0.1:${world.harness.runtime.port}`).toString()
-}
-
-async function expectImageResource(world: World, source: string, bytes: Uint8Array): Promise<void> {
-  const response = await fetch(imageUrl(world, source))
-  expect(response.status).toBe(200)
-  expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([...bytes])
-}
-
-async function expectImageResourceUnavailable(world: World, source: string): Promise<void> {
-  const response = await fetch(imageUrl(world, source))
-  expect([404, 410]).toContain(response.status)
-}
-
-test('Source Control file diffs are distinguishable from an open editor tab', async () => {
+test('the Review tab is named Review in the tab strip, apart from an open editor tab', async () => {
   const world = await boot(scratch, { published: false })
   world.write('README.md', 'changed readme\n')
-  await world.agent.callAny('quirky.editor/open', {
-    worktree: `id:${world.feat.id}`,
-    path: 'README.md',
-    mode: 'source'
-  })
-  await world.win.waitFor(() => rowOf('README.md') && [...document.querySelectorAll('.qt-tab-title')].some((element) => element.textContent === 'README.md'))
+  await world.agent.callAny('quirky.editor/open', { worktree: `id:${world.feat.id}`, path: 'README.md', mode: 'source' })
+  await world.win.waitFor(() => [...document.querySelectorAll('.qt-tab-title')].some((element) => element.textContent === 'README.md'))
 
-  clickRow('README.md')
-  const opened = await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).find(({ tab }) =>
-    record(tab.input).path === 'README.md' && record(tab.input).tabId === tab.id
-  ))
-  await world.win.waitFor(() => q(`[data-tab="${String(opened.tab.id)}"] .qt-tab-title`))
+  await world.run('open-diff', { path: 'README.md' })
+  await world.win.waitFor(() => card('README.md'))
   const titles = [...document.querySelectorAll('.qt-tab-title')].map((element) => element.textContent)
   expect(titles.filter((title) => title === 'README.md')).toHaveLength(1)
-  expect(titles.some((title) => title?.includes('README.md') && /\bdiff\b/i.test(title))).toBe(true)
+  expect(titles.filter((title) => title === 'Review')).toHaveLength(1)
 }, SLOW)
 
-test('branch and commit file diffs of the same path have distinct terminal tab titles', async () => {
+test('palette, branch and history opens all land in the worktree\'s one Review tab', async () => {
   const world = await boot(scratch, { published: false })
-  const path = 'math.ts'
-  world.commit({ [path]: 'A\nb\nc\nd\ne\n' }, 'Touch math')
+  world.commit({ 'math.ts': MATH_ON_DISK }, 'change math')
   const commit = world.git('rev-parse', 'HEAD')
-
-  await world.run('open-diff', { path, source: 'branch', preview: false })
-  const branch = await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).find(({ tab }) =>
-    record(tab.input).path === path && record(tab.input).source === 'branch'
-  ) ?? null)
-
-  await world.run('open-diff', { path, source: 'commit', commit, preview: false })
-  const tabs = await world.win.waitFor(async () => {
-    const opened = diffTabs(await terminalWorkspace(world))
-    const branchTab = opened.find(({ tab }) => record(tab.input).path === path && record(tab.input).source === 'branch')
-    const commitTab = opened.find(({ tab }) => record(tab.input).path === path && record(tab.input).source === 'commit')
-    return branchTab && commitTab ? { branch: branchTab, commit: commitTab } : null
-  })
-
-  expect(tabs.branch.tab.id).toBe(branch.tab.id)
-  expect(tabs.branch.tab.preview).toBe(false)
-  expect(tabs.commit.tab.preview).toBe(false)
-  expect(tabs.branch.group.activeTab).toBe(tabs.commit.tab.id)
-  expect(tabs.branch.group.activeTab).not.toBe(tabs.branch.tab.id)
-
-  const branchTitle = await world.win.waitFor(() => q(`[data-tab="${String(tabs.branch.tab.id)}"] .qt-tab-title`))
-  const commitTitle = await world.win.waitFor(() => q(`[data-tab="${String(tabs.commit.tab.id)}"] .qt-tab-title`))
-  expect(text(branchTitle)).toBe(`${path} (Branch Diff)`)
-  expect(text(commitTitle)).toBe(`${path} (Commit Diff)`)
-
-  const closeBranch = q(`[data-tab="${String(tabs.branch.tab.id)}"] button.qt-tab-close`)
-  if (!closeBranch) throw new Error('missing inactive branch diff close button')
-  closeBranch.click()
-  await world.win.waitFor(async () =>
-    !diffTabs(await terminalWorkspace(world)).some(({ tab }) => tab.id === tabs.branch.tab.id)
-  )
-  const remaining = diffTabs(await terminalWorkspace(world))
-  expect(remaining).toHaveLength(1)
-  expect(remaining[0]?.tab.id).toBe(tabs.commit.tab.id)
-  expect(remaining[0]?.group.activeTab).toBe(tabs.commit.tab.id)
-}, SLOW)
-
-test('Source Control preview replaces only a clean hosted tab, promotes on double click or pin, and splits with Option-click', async () => {
-  const world = await boot(scratch, { published: false })
-  world.write('math.ts', 'changed math\n')
-  world.write('README.md', 'changed readme\n')
   world.write('a.ts', 'changed a\n')
-  await world.win.waitFor(() => rowOf('math.ts') && rowOf('README.md') && rowOf('a.ts'))
 
-  clickRow('math.ts')
-  const first = await world.win.waitFor(async () => {
-    const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
-  })
-  expect(first.tab.preview).toBe(true)
-  const previewId = first.tab.id
+  await world.run('open-diff', { path: 'a.ts' })
+  await world.win.waitFor(() => card('a.ts'))
+  const [first] = await viewTabs(world, DIFF_VIEW)
 
-  clickRow('README.md')
-  const replaced = await world.win.waitFor(async () => {
-    const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => tab.id === previewId && record(tab.input).path === 'README.md' && record(tab.input).tabId === tab.id) ?? null
-  })
-  expect(replaced.tab.preview).toBe(true)
-  expect(diffTabs(await terminalWorkspace(world))).toHaveLength(1)
+  await world.run('open-changes')
+  await world.run('open-branch-changes')
+  await world.run('open-diff', { path: 'math.ts', source: 'branch' })
+  await world.run('open-commit', { commit })
+  await world.win.waitFor(() => text(q('[data-git-view-root] .ui-scope-chip')).includes(`Commit ${commit.slice(0, 7)}`))
 
-  clickRow('README.md', 2)
-  const promoted = await world.win.waitFor(async () => {
-    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === previewId)
-    return current?.tab.preview === false && record(current.tab.input).tabId === current.tab.id && record(current.tab.input).preview === false ? current : null
-  })
-  expect(promoted.tab.id).toBe(previewId)
+  const tabs = await viewTabs(world, DIFF_VIEW)
+  expect(tabs).toHaveLength(1)
+  expect(tabs[0]!.id).toBe(first!.id)
+  expect(qa('[data-review-tab]')).toHaveLength(1)
 
-  clickRow('a.ts', 1, { altKey: true })
-  const split = await world.win.waitFor(async () => {
-    const workspace = await terminalWorkspace(world)
-    const tabs = diffTabs(workspace)
-    return groups(workspace.root).length === 2
-      ? tabs.find(({ tab, group }) => record(tab.input).path === 'a.ts' && record(tab.input).split === true && record(tab.input).groupId === group.id) ?? null
-      : null
-  })
-  const splitWorkspace = await terminalWorkspace(world)
-  expect(groups(splitWorkspace.root)).toHaveLength(2)
-  expect(record(split.tab.input)).toMatchObject({ worktree: world.feat.id, path: 'a.ts', split: true, groupId: split.group.id })
-  expect(split.tab.preview).toBe(false)
-
-
-  await world.agent.callAny('quirky.terminal/pinTab', { tab: previewId, pinned: true })
-  await world.win.waitFor(async () => {
-    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === previewId)
-    return current?.tab.pinned === true && current.tab.preview === false
-  })
+  await world.run('open-changes')
+  await world.win.waitFor(() => q('[data-git-view-root] .ui-scope-chip') === null && card('a.ts'))
 }, SLOW)
 
-test('dirty hosted diffs refuse close and are never replaced by another preview', async () => {
+test('restoring two legacy diff tabs leaves one Review tab showing both asks', async () => {
   const world = await boot(scratch, { published: false })
-  world.write('math.ts', 'changed math\n')
-  world.write('README.md', 'changed readme\n')
-  await world.win.waitFor(() => rowOf('math.ts') && rowOf('README.md'))
-  clickRow('math.ts')
-  const opened = await world.win.waitFor(async () => {
-    const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
-  })
-  await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
-  const editor = modifiedEditor(EditorView, q('[data-diff-editor]')!)
-  editor.dispatch({ changes: { from: 0, insert: 'unsaved draft ' } })
-  await world.win.waitFor(async () => {
-    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === opened.tab.id)
-    return current !== undefined && typeof current.tab.closeParams === 'object' &&
-      current.tab.closeParams !== null && record(current.tab.closeParams).dirty === true
-  })
-
-  const closeFailure = await world.agent.callAny('quirky.terminal/closeTab', { tab: opened.tab.id, yes: true }).then(
-    () => null,
-    (error: unknown) => (error instanceof Error ? error.message : String(error))
+  world.write('math.ts', MATH_ON_DISK)
+  world.write('a.ts', 'changed a\n')
+  await world.win.waitFor(() => q('[data-git-panel]'))
+  const workspaceId = `id:${world.feat.id}`
+  type Workspace = { revision: number; activeGroup: string }
+  const workspace = async () => ((await world.agent.callAny('quirky.terminal/workspace', { workspace: workspaceId })) as { workspace: Workspace }).workspace
+  /** Runs a revision-checked call, again when another tab moved the revision first. */
+  const withRevision = async <T>(call: (state: Workspace) => Promise<T>): Promise<T> => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await call(await workspace())
+      } catch (error) {
+        if (attempt >= 3) throw error
+      }
+    }
+  }
+  /** A diff tab as an older version left it: the legacy mode's key and an input that names its own tab. */
+  const openLegacy = async (input: Record<string, unknown>, activate = true) => {
+    const legacy = { worktree: world.feat.id, ...input }
+    const { tab } = await withRevision(
+      async ({ activeGroup, revision }) =>
+        (await world.agent.callAny('quirky.terminal/openViewTab', {
+          workspace: workspaceId,
+          group: activeGroup,
+          viewId: DIFF_VIEW,
+          key: diffViewKey(legacy as never),
+          input: legacy,
+          title: 'Diff',
+          reuse: true,
+          activate,
+          closeMethod: 'quirky.git/diffCloseGuard',
+          closeParams: { worktree: world.feat.id, dirty: false },
+          closeContext: true,
+          revision
+        })) as { tab: string }
+    )
+    await withRevision(({ revision }) =>
+      world.agent.callAny('quirky.terminal/rekeyViewTabs', {
+        workspace: workspaceId,
+        viewId: DIFF_VIEW,
+        changes: [{ tab, key: diffViewKey(legacy as never), input: { ...legacy, tabId: tab } }],
+        revision
+      })
+    )
+    return tab
+  }
+  await openLegacy({ mode: 'file', source: 'unstaged', path: 'math.ts' })
+  await world.win.waitFor(() => qa('[data-review-tab]').length === 1)
+  const second = await openLegacy({ mode: 'combined', area: 'unstaged' }, false)
+  await withRevision(({ activeGroup, revision }) =>
+    world.agent.callAny('quirky.terminal/moveTab', { tab: second, split: 'right', of: activeGroup, revision })
   )
-  expect(closeFailure).toContain('refused to close')
-  clickRow('README.md')
-  await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).some(({ tab }) => record(tab.input).path === 'README.md'))
-  const remaining = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === opened.tab.id)
-  expect(record(remaining?.tab.input).path).toBe('math.ts')
-  expect(record(remaining?.tab.closeParams).dirty).toBe(true)
+  await world.agent.callAny('quirky.terminal/activateTab', { tab: second })
+
+  await world.win.waitFor(async () => {
+    const tabs = await viewTabs(world, DIFF_VIEW)
+    return tabs.length === 1 && tabs[0]!.id !== second
+  })
+  await world.win.waitFor(() => qa('.qt-tab-title').some((title) => text(title) === 'Review'))
+  expect(qa('[data-review-tab]')).toHaveLength(1)
+  await world.win.waitFor(() => card('math.ts') && card('a.ts'))
+  expect(toasts()).toEqual([])
+  expect(world.problems()).toEqual([])
 }, SLOW)
 
-test('Markdown diff previews the modified side with an authorized image and releases only its hosted lease', async () => {
-  const world = await boot(scratch, { published: false })
-  const imageBytes = new Uint8Array(Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+cS6sAAAAASUVORK5CYII=',
-    'base64'
-  ))
-  const markdownPath = 'docs/Guide.md'
-  const imagePath = 'docs/images/chart.png'
-  const committedText = '# Committed heading\n\nHEAD body.\n\n![Chart](images/chart.png)\n'
-  const modifiedText = '# Draft heading\n\nModified body.\n\n![Chart](images/chart.png)\n'
-  world.write(markdownPath, committedText)
-  mkdirSync(join(world.dir, 'docs', 'images'), { recursive: true })
-  writeFileSync(join(world.dir, imagePath), imageBytes)
-  world.git('add', 'docs')
-  world.git('commit', '-q', '-m', 'Add Markdown guide and chart')
-  world.write(markdownPath, modifiedText)
+test('the header toggles the layout for this tab only, and the menu writes the wrap and whitespace settings', async () => {
+  const world = await boot(scratch, { published: false, files: { 'math.ts': numbered(60) } })
+  world.write('math.ts', numbered(60, { 3: 'line three', 50: 'line fifty' }))
+  await world.run('open-diff', { path: 'math.ts' })
+  await world.win.waitFor(() => card('math.ts') && q('[contenteditable]', card('math.ts')!))
+  const editors = () => qa('[role="textbox"][contenteditable]', card('math.ts')!).length
+  const settingValue = async (name: string) =>
+    ((await world.agent.callAny('setting.get', { id: `setting:quirky.git/${name}` })) as { value: unknown }).value
+  const before = await settingValue('diffDefaultView')
 
-  const editorStateBefore = record(await world.agent.callAny('quirky.editor/state', { worktree: world.feat.id }))
-  const buffersBefore = editorStateBefore.buffers
-  if (!Array.isArray(buffersBefore)) throw new Error('Editor state did not include its buffers.')
-  const bufferCountBefore = buffersBefore.length
-  const tabsBefore = groups((await terminalWorkspace(world)).root).reduce(
-    (count, group) => count + (Array.isArray(group.tabs) ? group.tabs.length : 0), 0
-  )
-  await world.run('open-diff', { path: markdownPath, source: 'unstaged', display: 'preview', preview: true })
-  await world.win.waitFor(() => q('[data-git-view-root] [data-markdown-preview] img'))
-  const preview = q('[data-git-view-root] [data-markdown-preview]')!
-  expect(text(preview)).toContain('Draft heading')
-  expect(text(preview)).toContain('Modified body.')
-  expect(text(preview)).not.toContain('Committed heading')
-  expect(text(preview)).not.toContain('HEAD body.')
-  expect(q('[data-git-view-root] [data-markdown-preview-notice]')).not.toBeNull()
+  await click(byLabel('Switch to side-by-side diff'))
+  await world.win.waitFor(() => editors() === 2)
+  expect(byLabel('Switch to inline diff')).not.toBeNull()
+  expect(await settingValue('diffDefaultView')).toBe(before)
 
-  const hostedPreviewSrc = q('[data-git-view-root] [data-markdown-preview] img')?.getAttribute('src')
-  expect(hostedPreviewSrc).toBeTruthy()
-  await expectImageResource(world, hostedPreviewSrc!, imageBytes)
-  expect(readFileSync(join(world.dir, markdownPath), 'utf8')).toBe(modifiedText)
-  const editorStateAfter = record(await world.agent.callAny('quirky.editor/state', { worktree: world.feat.id }))
-  const buffersAfter = editorStateAfter.buffers
-  if (!Array.isArray(buffersAfter)) throw new Error('Editor state did not include its buffers.')
-  expect(buffersAfter.length).toBe(bufferCountBefore)
-  const tabsAfter = groups((await terminalWorkspace(world)).root).reduce(
-    (count, group) => count + (Array.isArray(group.tabs) ? group.tabs.length : 0), 0
-  )
-  expect(tabsAfter).toBe(tabsBefore + 1)
+  const item = (name: string) => qa('[role="menuitemcheckbox"]').find((candidate) => text(candidate).endsWith(name))
+  await click(byLabel('More actions'))
+  await click(item('Word wrap'))
+  expect(await settingValue('diffWordWrap')).toBe(true)
+  await click(byLabel('More actions'))
+  await click(item('Show whitespace'))
+  expect(await settingValue('diffShowWhitespace')).toBe(true)
+}, SLOW)
 
-  const siblingLeaseId = crypto.randomUUID()
-  const sibling = record(await world.agent.callAny('quirky.editor/markdownPreview', {
-    action: 'render',
-    leaseId: siblingLeaseId,
-    worktree: `id:${world.feat.id}`,
-    path: markdownPath,
-    text: modifiedText
-  }))
-  expect(sibling).toMatchObject({ leaseId: siblingLeaseId, worktreeId: world.feat.id, path: markdownPath })
-  const siblingSrc = imageSource(typeof sibling.html === 'string' ? sibling.html : '')
-  await expectImageResource(world, siblingSrc, imageBytes)
+test('SC-57: a change whose merge base cannot be read says so instead of looking empty', async () => {
+  const world = await boot(scratch, { files: { 'math.ts': numbered(60) } })
+  world.commit({ 'math.ts': numbered(60, { 3: 'line three' }) }, 'change math')
+  const blob = world.git('rev-parse', 'origin/main:math.ts')
+  const common = world.git('rev-parse', '--git-common-dir')
+  const loose = join(common.startsWith('/') ? common : join(world.dir, common), 'objects', blob.slice(0, 2), blob.slice(2))
+  rmSync(loose)
 
-  const sourceBuffer = record(await world.agent.callAny('quirky.editor/open', {
-    worktree: `id:${world.feat.id}`,
-    path: markdownPath,
-    mode: 'preview',
-    focus: false
-  }))
-  const sourcePreview = record(await world.agent.callAny('quirky.editor/markdown', {
-    action: 'capabilities',
-    bufferId: sourceBuffer.id,
-    includePreview: true
-  }))
-  const sourceImageUrls = record(sourcePreview.imageUrls)
-  const sourceSrc = Object.values(sourceImageUrls).find((value): value is string => typeof value === 'string')
-  expect(sourceSrc).toBeTruthy()
-  await expectImageResource(world, sourceSrc!, imageBytes)
-
-  const hostedBefore = await world.win.waitFor(async () => {
-    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => record(tab.input).path === markdownPath)
-    return current ?? null
-  })
-  const hostedTabId = hostedBefore.tab.id
-  q('button[aria-label="Show Source"]')?.click()
-  await world.win.waitFor(async () => {
-    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === hostedTabId)
-    return current !== undefined && record(current.tab.input).display === 'source'
-  })
-  expect(diffTabs(await terminalWorkspace(world))).toHaveLength(1)
-  expect(diffTabs(await terminalWorkspace(world))[0]?.tab.id).toBe(hostedTabId)
-  await world.win.waitFor(async () => {
-    const response = await fetch(imageUrl(world, hostedPreviewSrc!))
-    return response.status === 404 || response.status === 410
-  })
-  await expectImageResourceUnavailable(world, hostedPreviewSrc!)
-  await expectImageResource(world, siblingSrc, imageBytes)
-  await expectImageResource(world, sourceSrc!, imageBytes)
-
-  expect(await world.agent.callAny('quirky.editor/markdownPreview', {
-    action: 'release',
-    leaseId: siblingLeaseId
-  })).toMatchObject({ leaseId: siblingLeaseId, released: true })
-  await expectImageResourceUnavailable(world, siblingSrc)
-  await expectImageResource(world, sourceSrc!, imageBytes)
+  await world.run('open-diff', { path: 'math.ts', source: 'branch' })
+  await world.win.waitFor(() => q('[data-git-view-root] [role="alert"]'))
+  expect(q('[data-git-view-root] [contenteditable]')).toBeNull()
 }, SLOW)

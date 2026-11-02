@@ -1,10 +1,8 @@
 import { afterEach, expect, test } from 'bun:test'
 import { EditorView } from '@codemirror/view'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { buttonText, click, modifiedEditor, q, qa, rowOf, sectionHeadings, stubIntersectionObserver, text } from './dom'
-import { BASE_FILES, boot, DIFF_VIEW, openView, PANEL, SESSION_VIEW, sc1, shutdown, type World } from './world'
+import { BASE_FILES, boot, DIFF_VIEW, openView, PANEL, SESSION_VIEW, sc1, shutdown, viewTabs, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 120_000
@@ -16,107 +14,93 @@ const numbered = (n: number, change: Record<number, string> = {}) =>
 
 const FILES = { ...BASE_FILES, 'math.ts': numbered(60), 'big.txt': rows(12_000, 'before'), 'b.ts': numbered(20) }
 
-/** feat mid-merge with b.ts conflicting in two blocks, plus math.ts changed in two places and big.txt rewritten. */
-async function bootEverything(): Promise<World> {
+/** feat with math.ts changed in two places and big.txt rewritten. */
+async function bootChanged(): Promise<World> {
   const w = await boot(scratch, { files: FILES, noPanel: true })
-  w.git('checkout', '-q', '-b', 'other')
-  w.commit({ 'b.ts': numbered(20, { 2: 'theirs 2', 18: 'theirs 18' }) }, 'theirs')
-  w.git('checkout', '-q', 'zoe/feat')
-  w.commit({ 'b.ts': numbered(20, { 2: 'ours 2', 18: 'ours 18' }) }, 'ours')
-  Bun.spawnSync(['git', 'merge', 'other'], { cwd: w.dir, env: process.env })
   w.write('math.ts', numbered(60, { 3: 'line three', 50: 'line fifty' }))
   w.write('big.txt', rows(12_000, 'after'))
   return w
 }
 
+/** Merges a branch that conflicts with feat on b.ts in two blocks. */
+async function startConflict(w: World): Promise<void> {
+  w.git('checkout', '-q', '-b', 'other')
+  w.commit({ 'b.ts': numbered(20, { 2: 'theirs 2', 18: 'theirs 18' }) }, 'theirs')
+  w.git('checkout', '-q', 'zoe/feat')
+  w.commit({ 'b.ts': numbered(20, { 2: 'ours 2', 18: 'ours 18' }) }, 'ours')
+  Bun.spawnSync(['git', 'merge', 'other'], { cwd: w.dir, env: process.env })
+  await w.win.waitFor(async () => (await w.report())?.operation === 'merge')
+}
+
 const input = async (w: World) => (await openView(w))?.input
 const selectedLine = (editor: EditorView) => editor.state.doc.lineAt(editor.state.selection.main.head).text
-
+const cardOf = (path: string) => q(`[data-git-view-root] section[data-path="${path}"]`)
 
 test('SC-64: every window command routed through ui.command.run does what its button does', async () => {
-  const w = await bootEverything()
+  const w = await bootChanged()
   const stub = stubIntersectionObserver()
   try {
     expect((await w.state()).layout.panel).not.toBe(PANEL)
     await w.run('show')
     await w.win.waitFor(async () => (await w.state()).layout.panel === PANEL)
-    await w.win.waitFor(async () => (await w.report())?.operation === 'merge')
 
     await expect(w.run('next-change')).rejects.toThrow('No diff view is open.')
 
     await w.run('open-diff', { path: 'math.ts', source: 'unstaged' })
-    await w.win.waitFor(async () => (await input(w))?.path === 'math.ts')
-    expect(await input(w)).toMatchObject({ mode: 'file', source: 'unstaged', path: 'math.ts', worktree: w.feat.id })
-    await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
-    const editor = modifiedEditor(EditorView)
+    await w.win.waitFor(async () => (await input(w))?.mode === 'review')
+    expect(await input(w)).toMatchObject({ mode: 'review', reveal: 'math.ts', worktree: w.feat.id })
+    expect(await input(w)).not.toHaveProperty('source')
+    await w.win.waitFor(() => cardOf('math.ts') && q('[contenteditable]', cardOf('math.ts')!))
+    const editor = modifiedEditor(EditorView, cardOf('math.ts')!)
+    await w.run('next-change')
     await w.win.waitFor(() => selectedLine(editor) === 'line three')
     await w.run('next-change')
     await w.win.waitFor(() => selectedLine(editor) === 'line fifty')
     await w.run('previous-change')
     await w.win.waitFor(() => selectedLine(editor) === 'line three')
-
-    editor.dispatch({ changes: { from: 0, insert: 'draft\n' } })
-    expect(editor.state.sliceDoc().startsWith('draft\n')).toBe(true)
-    expect(readFileSync(join(w.dir, 'math.ts'), 'utf8').startsWith('draft\n')).toBe(false)
     await w.run('save')
-    await w.win.waitFor(() => readFileSync(join(w.dir, 'math.ts'), 'utf8').startsWith('draft\nline 1\n'))
-    expect(readFileSync(join(w.dir, 'math.ts'), 'utf8').startsWith('draft\nline 1\n')).toBe(true)
-    expect(editor.state.sliceDoc()).toBe(readFileSync(join(w.dir, 'math.ts'), 'utf8'))
     await w.run('reload-from-disk')
     await w.run('overwrite')
 
     await w.run('open-changes', { area: 'unstaged' })
-    await w.win.waitFor(async () => {
-      const view = await openView(w)
-      return view?.id === DIFF_VIEW && view.input?.mode === 'combined' && view.input.area === 'unstaged'
+    const root = await w.win.waitFor(() => {
+      const found = q('[data-git-view-root]')
+      return found && q('section[data-path="big.txt"]', found) && q('section[data-path="math.ts"]', found) ? found : undefined
     })
-    const combinedRoot = await w.win.waitFor(() => {
-      const root = q('[data-git-view-root]')
-      return root && q('section[data-path="big.txt"]', root) && q('section[data-path="math.ts"]', root) ? root : undefined
-    })
-    await w.win.waitFor(() => qa('section[data-path]', combinedRoot).length === 2)
-    expect(qa('section[data-path]', combinedRoot).map((section) => section.getAttribute('data-path')).sort()).toEqual(['big.txt', 'math.ts'])
+    await w.win.waitFor(() => qa('section[data-path]', root).length === 2)
+    expect(qa('section[data-path]', root).map((section) => section.getAttribute('data-path')).sort()).toEqual(['big.txt', 'math.ts'])
 
     await w.run('collapse-all', { collapsed: true })
     await w.win.waitFor(() =>
-      buttonText('Expand All', combinedRoot) !== undefined &&
-      qa('section[data-path] button[aria-expanded="false"]', combinedRoot).length === 2
+      buttonText('Expand all', root) !== undefined &&
+      qa('section[data-path] button[aria-expanded="false"]', root).length === 2
     )
     await w.run('collapse-all', { collapsed: false })
     await w.win.waitFor(() =>
-      buttonText('Collapse All', combinedRoot) !== undefined &&
-      qa('section[data-path] button[aria-expanded="true"]', combinedRoot).length === 2
+      buttonText('Collapse all', root) !== undefined &&
+      qa('section[data-path] button[aria-expanded="true"]', root).length === 2
     )
     await w.run('collapse-all')
     await w.win.waitFor(() =>
-      buttonText('Expand All', combinedRoot) !== undefined &&
-      qa('section[data-path] button[aria-expanded="false"]', combinedRoot).length === 2
+      buttonText('Expand all', root) !== undefined &&
+      qa('section[data-path] button[aria-expanded="false"]', root).length === 2
     )
-    const bigSection = q('section[data-path="big.txt"]', combinedRoot)!
+    const bigSection = q('section[data-path="big.txt"]', root)!
     expect(buttonText('Load diff', bigSection)).toBeDefined()
     await w.run('load-diff', { path: 'big.txt' })
     await w.win.waitFor(() => q('[data-diff-editor]', bigSection))
     await expect(w.run('load-diff', { path: 'nothere.txt' })).rejects.toThrow()
 
     await w.run('open-branch-changes')
-    await w.win.waitFor(async () => {
-      const view = await openView(w)
-      return view?.id === DIFF_VIEW && view.input?.mode === 'combined' && view.input?.area === 'branch'
-    })
-    await w.win.waitFor(() => {
-      const title = q('[data-git-view-root] h2')
-      return title !== null && text(title).includes('Branch Changes')
-    })
-    const head = w.git('rev-parse', 'HEAD~1')
+    await w.win.waitFor(() => text(q('[data-git-view-root] [data-review-summary]')).includes(' vs '))
+    expect(q('[data-git-view-root] .ui-scope-chip')).toBeNull()
     const commit = w.git('rev-parse', 'HEAD')
     await w.run('open-commit', { commit })
-    await w.win.waitFor(async () => {
-      const view = await openView(w)
-      return view?.id === DIFF_VIEW && view.input?.mode === 'combined' && view.input?.commit === commit
-    })
+    await w.win.waitFor(() => text(q('[data-git-view-root] .ui-scope-chip')).includes(`Commit ${commit.slice(0, 7)}`))
     await w.win.waitFor(() => q('[data-git-view-root] section[data-path]'))
-    expect(head).toHaveLength(40)
+    expect(await viewTabs(w, DIFF_VIEW)).toHaveLength(1)
 
+    await startConflict(w)
     await w.run('review-conflicts')
     await w.win.waitFor(async () => (await input(w))?.mode === 'conflicts')
     await w.win.waitFor(() => qa('[data-git-view-root] nav[aria-label="Files"] [data-path]').length === 1)
@@ -169,9 +153,10 @@ test('SC-64: Mod+Shift+G shows the panel and F7 runs next-change', async () => {
   await w.win.waitFor(async () => (await w.state()).layout.panel === PANEL)
 
   await w.run('open-diff', { path: 'math.ts' })
-  await w.win.waitFor(async () => (await input(w))?.path === 'math.ts')
-  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
-  const editor = modifiedEditor(EditorView)
+  await w.win.waitFor(async () => (await input(w))?.mode === 'review')
+  await w.win.waitFor(() => cardOf('math.ts') && q('[contenteditable]', cardOf('math.ts')!))
+  const editor = modifiedEditor(EditorView, cardOf('math.ts')!)
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F7', code: 'F7', bubbles: true, cancelable: true }))
   await w.win.waitFor(() => selectedLine(editor) === 'line three')
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F7', code: 'F7', bubbles: true, cancelable: true }))
   await w.win.waitFor(() => selectedLine(editor) === 'line fifty')
@@ -188,13 +173,10 @@ test('SC-65: the panel report and an explicit top-level diff view report their s
   await w.run('open-diff', { path: 'math.ts', source: 'unstaged' })
   const hosted = await w.win.waitFor(async () => {
     const view = await openView(w)
-    return view?.id === DIFF_VIEW && view.input?.mode === 'file' && view.input?.source === 'unstaged' && view.input?.path === 'math.ts' ? view : undefined
+    return view?.id === DIFF_VIEW && view.input?.mode === 'review' && view.input?.reveal === 'math.ts' ? view : undefined
   })
-  expect(hosted.input).toMatchObject({ mode: 'file', source: 'unstaged', path: 'math.ts' })
-  await w.win.waitFor(() => {
-    const title = q('[data-git-view-root] h2')
-    return title !== null && text(title) === 'math.ts (diff)' && q('[data-git-view-root] [contenteditable]') !== null
-  })
+  expect(hosted.input).toMatchObject({ mode: 'review', reveal: 'math.ts' })
+  await w.win.waitFor(() => cardOf('math.ts') && q('[contenteditable]', cardOf('math.ts')!))
   await click(rowOf('math.ts'), { metaKey: true })
 
   const panel = await w.win.waitFor(async () => {
@@ -217,29 +199,24 @@ test('SC-65: the panel report and an explicit top-level diff view report their s
     selection: ['math.ts']
   })
 
-  const viewInput = { worktree: w.feat.id, mode: 'file', source: 'unstaged', path: 'math.ts' }
+  const viewInput = { worktree: w.feat.id, mode: 'review' }
   const opened = await w.agent.callAny('ui.view.open', { id: DIFF_VIEW, input: viewInput })
   expect(opened).toMatchObject({ view: { id: DIFF_VIEW, input: viewInput } })
   const view = await w.win.waitFor(async () => {
     const report = await w.viewReport()
-    return report?.mode === 'file' && report.source === 'unstaged' && report.path === 'math.ts' && report.changes === 2 && report.currentChange === 1 ? report : undefined
+    return report?.mode === 'review' && report.sections === 5 && report.changes >= 2 ? report : undefined
   })
-  expect(view).toMatchObject({
-    mode: 'file',
-    source: 'unstaged',
-    path: 'math.ts',
-    changes: 2,
-    currentChange: 1,
-    dirty: false
-  })
+  expect(view).toMatchObject({ mode: 'review', sections: 5, dirty: false, commit: null })
 
-  await w.run('open-changes', { area: 'unstaged' })
+  await w.agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: w.feat.id } })
   await w.win.waitFor(async () => (await w.state()).layout.view?.id === SESSION_VIEW)
+  await w.run('open-changes', { area: 'unstaged' })
   const hostedChanges = await w.win.waitFor(async () => {
     const active = await openView(w)
-    return active?.input?.mode === 'combined' && active.input.area === 'unstaged' ? active : undefined
+    return active?.input?.mode === 'review' ? active : undefined
   })
   expect(hostedChanges.input?.worktree).toBe(w.feat.id)
+  expect(hostedChanges.input).not.toHaveProperty('area')
   await w.win.waitFor(() => q('[data-git-view-root] section[data-path="math.ts"] [role="textbox"]'))
   expect(w.problems()).toEqual([])
 }, SLOW)

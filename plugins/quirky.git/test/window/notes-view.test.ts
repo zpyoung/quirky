@@ -24,14 +24,14 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
   w.write('math.ts', numbered(30, { 3: 'line three' }))
   await w.win.waitFor(() => rowOf('math.ts'))
   expect(q('section[aria-label="Notes"]')).toBeNull()
-  await click(rowOf('math.ts'))
+  await w.run('open-diff', { path: 'math.ts' })
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const view = modifiedEditor(EditorView)
-  expect(q('[data-git-view-root] button[aria-label^="Show "][aria-label*="AI note"]')).toBeNull()
+  expect(byLabel('Add note on line 12')).toBeNull()
 
   lineContent(view, 12).dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))
-  const plus = await w.win.waitFor(() => byLabel('Add note for the AI'))
+  const plus = await w.win.waitFor(() => byLabel('Add note on line 12'))
   await click(plus)
   const draft = await w.win.waitFor(() => q('[data-note-card="draft"]'))
   expect(text(q('h2', draft))).toBe('Line 12')
@@ -47,6 +47,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
   expect(await stored(w)).toMatchObject([{ path: 'math.ts', startLine: 12, line: 12, body: 'Handle the empty list' }])
   await w.win.waitFor(() => text(q('[data-note-count]', rowContainerOf('math.ts')!)).includes('1'))
   expect(text(q('section[aria-label="Notes"] [aria-label="1 note"]'))).toBe('1')
+  await w.win.waitFor(() => text(q('[data-git-view-root] section[data-path="math.ts"] header')).includes('✎ 1 note'), 10_000)
 
   await click(byLabel('Edit note', card))
   const editor = q('textarea', card) as HTMLTextAreaElement
@@ -57,16 +58,16 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
 
   await click(byLabel('Delete note', q('[data-note-card="saved"]')!))
   await w.win.waitFor(async () => (await stored(w)).length === 0)
-  await w.win.waitFor(() => q('[data-note-card="saved"]') === null && q('[data-git-view-root] button[aria-label^="Show "][aria-label*="AI note"]') === null && q('section[aria-label="Notes"]') === null)
+  await w.win.waitFor(() => q('[data-note-card="saved"]') === null && q('section[aria-label="Notes"]') === null)
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('NA-2, NA-14: a command-opened draft and the combined view over a real daemon', async () => {
+test('NA-2: a command-opened draft in the Review tab over a real daemon', async () => {
   const w = await boot(scratch, { files: { ...BASE_FILES, 'math.ts': numbered(30) } })
   w.write('math.ts', numbered(30, { 3: 'line three' }))
   await w.agent.callAny('quirky.git/addNote', { worktree: w.feat.id, path: 'math.ts', line: 5, body: 'Existing' })
   await w.win.waitFor(() => rowOf('math.ts'))
-  await w.run('open-changes', { area: 'unstaged' })
+  await w.run('open-changes')
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   const card = await w.win.waitFor(() => q('[data-note-card="saved"]'))
   expect(text(q('h2', card))).toBe('Note line 5')

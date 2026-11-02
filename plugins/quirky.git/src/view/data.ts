@@ -13,29 +13,19 @@ export function reasonOf(error: unknown): string | undefined {
   return typeof reason === 'string' ? reason : undefined
 }
 
-export type DiffRequest = { path: string; source: GitDiffSource; oldPath?: string; commit?: string }
+export type DiffRequest = { path: string; source: GitDiffSource; oldPath?: string; commit?: string; against?: 'base' | 'reviewed' }
 
 /** One file's diff from the daemon. Rejects with git's message when the sides cannot be read. */
 export async function fetchDiff(context: UiPluginContext, worktree: string, request: DiffRequest): Promise<GitDiff> {
-  const { path, source, oldPath, commit } = request
+  const { path, source, oldPath, commit, against } = request
   return (await context.call('quirky.git/diff', {
     worktree,
     path,
     source,
     ...(oldPath ? { oldPath } : {}),
-    ...(commit ? { commit } : {})
+    ...(commit ? { commit } : {}),
+    ...(against ? { against } : {})
   })) as GitDiff
-}
-
-/** Whether a diff of this shape can take edits: an unstaged, readable text file that is still on disk. */
-export function isEditable(source: GitDiffSource, diff: GitDiff): boolean {
-  return (
-    source === 'unstaged' &&
-    diff.kind === 'text' &&
-    !diff.binary &&
-    diff.tooLarge === undefined &&
-    diff.modifiedDeleted !== true
-  )
 }
 
 /**

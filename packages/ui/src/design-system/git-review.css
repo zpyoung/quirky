@@ -1,1 +1,101 @@
 /* Owner: the Review tab. Review card and diff styles live here. */
+
+.git-review {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.git-review .git-review__heading {
+  align-items: center;
+  display: flex;
+  gap: var(--ui-space-8);
+  min-width: 0;
+  text-transform: none;
+}
+
+.git-review .git-review__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--ui-space-4);
+  justify-content: flex-end;
+  width: max-content;
+}
+
+.git-review .git-review__scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.git-review .git-review__notice {
+  padding: var(--ui-space-8) var(--ui-space-12);
+}
+
+.git-review .git-review__card {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.git-review .git-review__card-head {
+  align-items: center;
+  background: var(--ui-surface);
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--ui-space-8);
+  min-width: 0;
+  padding: var(--ui-space-4) var(--ui-space-8);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.git-review .git-review__title {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-review .git-review__dir,
+.git-review .git-review__notes {
+  color: var(--ui-muted);
+}
+
+.git-review .git-review__counts,
+.git-review .git-review__review {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  gap: var(--ui-space-6);
+}
+
+.git-review .git-review__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.git-review .git-review__body[hidden] {
+  display: none;
+}
+
+.git-review .git-review__since {
+  align-items: center;
+  display: flex;
+  gap: var(--ui-space-6);
+  margin: 0;
+  padding: var(--ui-space-4) var(--ui-space-12);
+}
