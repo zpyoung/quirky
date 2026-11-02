@@ -1438,6 +1438,7 @@ export class EditorDaemon {
         if (trigger !== 'overwrite' && currentBaseline === null) {
           throw this.context.error('conflict', 'Cannot save because this buffer has no verified disk baseline.')
         }
+        const existedBefore = trigger === 'overwrite' ? false : await lstat(savedPath).then(() => true, () => false)
         let writeResult: 'written' | 'changed' | 'missing'
         try {
           writeResult = trigger === 'overwrite'
@@ -1482,6 +1483,11 @@ export class EditorDaemon {
         latest.verified = true
         if (trigger === 'user' || trigger === 'overwrite') latest.autosaveHold = false
         this.persist(latest)
+        this.context.emit('saved', {
+          path: savedPath,
+          beforeHash: existedBefore ? currentBaseline : null,
+          afterHash: hash
+        })
         this.emit()
         return { kind: 'saved', buffer: next }
       })
