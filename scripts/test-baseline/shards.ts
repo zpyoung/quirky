@@ -28,22 +28,6 @@ export function medianDurations(runs: Record<string, number>[]): Record<string, 
   return Object.fromEntries([...seen].map(([file, list]) => [file, median(list)]))
 }
 
-function weigh(files: string[], durations: Record<string, number>): { file: string; ms: number }[] {
-  const known = Object.values(durations)
-  const fallback = known.length > 0 ? median(known) : UNKNOWN_DURATION_MS
-  return files
-    .map((file) => ({ file, ms: file in durations ? durations[file]! : fallback }))
-    .sort((a, b) => b.ms - a.ms || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
-}
-
-/**
- * `files` longest first by `durations`, with the same fallback and tie-breaking as `splitShards`, so a
- * job that runs several files at once starts its longest file first rather than last.
- */
-export function longestFirst(files: string[], durations: Record<string, number>): string[] {
-  return weigh(files, durations).map(({ file }) => file)
-}
-
 /**
  * Splits `files` into balanced shards by recorded duration, longest first onto the least-loaded
  * shard. A file with no entry in `durations` counts as the median of every duration in `durations`,
@@ -58,7 +42,11 @@ export function splitShards(
   opts: { targetMs: number; maxShards: number }
 ): string[][] {
   if (files.length === 0) return []
-  const weighted = weigh(files, durations)
+  const known = Object.values(durations)
+  const fallback = known.length > 0 ? median(known) : UNKNOWN_DURATION_MS
+  const weighted = files
+    .map((file) => ({ file, ms: file in durations ? durations[file]! : fallback }))
+    .sort((a, b) => b.ms - a.ms || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
   const total = weighted.reduce((sum, { ms }) => sum + ms, 0)
   const count = Math.max(1, Math.min(opts.maxShards, Math.ceil(total / opts.targetMs), files.length))
   const shards: string[][] = Array.from({ length: count }, () => [])

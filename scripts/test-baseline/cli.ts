@@ -7,7 +7,7 @@ import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
 import { renderComment, renderLocal } from './report'
 import { findSpawners, selectTests } from './select'
-import { DURATION_BASELINES, longestFirst, MAX_SHARDS_MAIN, MAX_SHARDS_PR, medianDurations, SHARD_TARGET_MS, splitShards } from './shards'
+import { DURATION_BASELINES, MAX_SHARDS_MAIN, MAX_SHARDS_PR, medianDurations, SHARD_TARGET_MS, splitShards } from './shards'
 import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
 
 const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
@@ -279,7 +279,7 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   const durationsOf = (run: Baseline) => Object.fromEntries(Object.entries(run.files).map(([file, info]) => [file, info.durationMs]))
   const timedRuns = [baseline, ...timings].filter((run): run is Baseline => run !== null)
   const durations = medianDurations(timedRuns.map(durationsOf))
-  const macos = longestFirst(selection.files.filter((file) => macosList.has(file) && !notOnCiList.has(file)), durations)
+  const macos = selection.files.filter((file) => macosList.has(file) && !notOnCiList.has(file))
   const linux = selection.files.filter((file) => !macosList.has(file) && !notOnCiList.has(file))
   const linuxShards = splitShards(linux, durations, { targetMs: SHARD_TARGET_MS, maxShards: affectedOnly ? MAX_SHARDS_PR : MAX_SHARDS_MAIN })
 

@@ -270,15 +270,14 @@ describe('plan', () => {
     expect(out.join('')).toContain('plugins/x/src/a.ts')
   })
 
-  test('weights files by their median duration over recent main baselines and runs the macOS list longest first', async () => {
-    const macos = 'plugins/x/test/a.test.ts  needs chrome\nplugins/y/test/b.test.ts  needs chrome\n'
-    const { dir, base } = makeRepo({ 'scripts/test-on-macos.txt': macos })
+  test('weights files by their median duration over recent main baselines', async () => {
+    const { dir, base } = makeRepo()
     const middle = commitAll(dir, 'middle')
     const newest = commitAll(dir, 'newest')
     const head = commitAll(dir, 'head')
     const timed = (a: number) => ({
-      'plugins/x/test/a.test.ts': { platform: 'macos' as const, durationMs: a, fileError: null, flaky: false },
-      'plugins/y/test/b.test.ts': { platform: 'macos' as const, durationMs: 500, fileError: null, flaky: false },
+      'plugins/x/test/a.test.ts': { platform: 'linux' as const, durationMs: a, fileError: null, flaky: false },
+      'plugins/y/test/b.test.ts': { platform: 'linux' as const, durationMs: 500, fileError: null, flaky: false },
     })
     seedBaseline(dir, baselineOf(base, {}, timed(100)))
     seedBaseline(dir, baselineOf(middle, {}, timed(100)))
@@ -290,7 +289,9 @@ describe('plan', () => {
 
     const plan = readJson<Plan>(join(outDir, 'plan.json'))
     expect(plan.baseline?.commit).toBe(newest)
-    expect(plan.macos).toEqual(['plugins/y/test/b.test.ts', 'plugins/x/test/a.test.ts'])
+    // a shard lists its files longest first, so b (500) ahead of a means a weighed its median 100, not the newest 900
+    const order = plan.linuxShards.flat()
+    expect(order.indexOf('plugins/y/test/b.test.ts')).toBeLessThan(order.indexOf('plugins/x/test/a.test.ts'))
     expect(out.join('')).toContain('median of 3 main runs')
   })
 
