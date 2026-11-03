@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
-import { callsTo, click, conceptualWorkspace, fakeDaemon, loadWorkspace, mountFixture, session, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
+import { callsTo, click, conceptualWorkspace, fire, fakeDaemon, loadWorkspace, mountFixture, session, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
 
 let mounted: MountedWorkspace | null = null
 
@@ -28,6 +28,37 @@ describe('the tab strip draws session badges', () => {
     expect(chips[0]!.getAttribute('title')).toBe('Jump to the source')
     expect(chips[1]!.hasAttribute('title')).toBe(false)
     expect(chips[0]!.previousElementSibling).toBe(tab.querySelector('.qt-tab-title'))
+  })
+
+  test('a chip with a command is an icon button named by its label, which shows only when it expands', async () => {
+    mounted = await mountFixture(fakeDaemon(simpleWorkspace(), { sessions: [session('s-1', { badges })] }))
+    const [command, plain] = mounted.qa('.qt-tab .qt-badge')
+    expect(command!.tagName).toBe('BUTTON')
+    expect(command!.classList.contains('qt-badge-command')).toBe(true)
+    expect(command!.getAttribute('aria-label')).toBe('from Claude')
+    expect(command!.querySelector('svg')).not.toBeNull()
+    expect(command!.querySelector('.qt-badge-label')!.textContent).toBe('from Claude')
+    expect(plain!.classList.contains('qt-badge-command')).toBe(false)
+  })
+
+  test('pointing at or focusing a command chip expands it into the title\'s place until the pointer or focus leaves', async () => {
+    mounted = await mountFixture(fakeDaemon(simpleWorkspace(), { sessions: [session('s-1', { badges })] }))
+    const command = mounted.q('.qt-tab .qt-badge-command')!
+    const title = mounted.q('.qt-tab .qt-tab-title')!
+    const expanded = () => [command.classList.contains('qt-badge-expanded'), title.classList.contains('qt-tab-title-yielded')]
+    expect(expanded()).toEqual([false, false])
+
+    // React derives pointerenter and pointerleave from pointerover and pointerout
+    await fire(command, new MouseEvent('pointerover', { bubbles: true, relatedTarget: document.body }))
+    expect(expanded()).toEqual([true, true])
+    expect(title.getAttribute('role')).toBe('tab')
+    await fire(command, new MouseEvent('pointerout', { bubbles: true, relatedTarget: document.body }))
+    expect(expanded()).toEqual([false, false])
+
+    await fire(command, new FocusEvent('focusin', { bubbles: true }))
+    expect(expanded()).toEqual([true, true])
+    await fire(command, new FocusEvent('focusout', { bubbles: true }))
+    expect(expanded()).toEqual([false, false])
   })
 
   test('a session with no badges draws none', async () => {

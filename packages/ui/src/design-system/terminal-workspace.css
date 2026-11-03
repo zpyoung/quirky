@@ -136,6 +136,12 @@
   line-height: 1.3;
 }
 button.qt-badge.ui-button { padding: var(--ui-space-2) var(--ui-space-6); }
+.qt-badge-command { gap: var(--ui-space-4); }
+button.qt-badge-command.ui-button { padding: var(--ui-space-2) var(--ui-space-4); }
+.qt-badge-command .qt-badge-label { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qt-badge-command.qt-badge-expanded { max-width: none; justify-content: flex-start; }
+.qt-badge-expanded .qt-badge-label { display: inline; min-width: 0; }
+.qt-tab-title.qt-tab-title-yielded { flex: 0 0 0; width: 0; min-width: 0; }
 .qt-dot { display: inline-block; flex: none; width: var(--ui-status-dot-size); height: var(--ui-status-dot-size); border-radius: 50%; background: var(--ui-muted); }
 .qt-dot-waiting { background: var(--ui-needs-you); }
 .qt-dot-working,
