@@ -79,6 +79,7 @@ describe('browser window model', () => {
     const document = { path: '/work/report/index.html' }
     expect(paneAddress({ url: 'quirky-preview://0123/index.html', document })).toBe('/work/report/index.html')
     expect(paneAddress({ url: 'https://example.com/' })).toBe('https://example.com/')
+    expect(paneAddress({ url: 'about:blank' })).toBe('')
     expect(paneHistoryControls({ canGoBack: false, canGoForward: false })).toEqual({ back: false, forward: false })
     expect(paneHistoryControls({ canGoBack: false, canGoForward: false, convertedFrom: { kind: 'url', url: 'about:blank' } }))
       .toEqual({ back: true, forward: false })

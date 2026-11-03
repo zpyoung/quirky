@@ -451,7 +451,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     const selected = paneForView(next.tabs, next.active, requestedPaneId)
     setPane(selected)
     if (selected) {
-      if (!editingAddress) setAddress(selected.url)
+      if (!editingAddress) setAddress(paneAddress(selected))
       if (selected.id !== findPaneIdRef.current || !editingFindRef.current) {
         findPaneIdRef.current = selected.id
         findTextRef.current = selected.find.text
@@ -536,15 +536,18 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   }, [context, refresh, updateState])
 
   useEffect(() => {
-    if (pane) {
-      if (!editingAddress) setAddress(paneAddress(pane))
-      if (pane.id !== findPaneIdRef.current || !editingFindRef.current) {
-        findPaneIdRef.current = pane.id
-        findTextRef.current = pane.find.text
-        setFindText(pane.find.text)
-      }
+    setEditingAddress(false)
+  }, [pane?.id])
+  useEffect(() => {
+    if (pane && !editingAddress) setAddress(paneAddress(pane))
+  }, [pane?.id, pane?.url, pane?.document?.path, editingAddress])
+  useEffect(() => {
+    if (pane && (pane.id !== findPaneIdRef.current || !editingFindRef.current)) {
+      findPaneIdRef.current = pane.id
+      findTextRef.current = pane.find.text
+      setFindText(pane.find.text)
     }
-  }, [pane?.id, pane?.url, pane?.document?.path, pane?.find.text, editingAddress])
+  }, [pane?.id, pane?.url, pane?.document?.path, pane?.find.text])
   useEffect(() => {
     const activePrompts = new Set(pane?.prompts.map((prompt) => prompt.id) ?? [])
     setPromptValues((current) => {
@@ -874,7 +877,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   }, [context, pane?.id, pane?.worktreeId, address, suggestionsOpen])
 
   const navigate = useCallback(async (inputValue: string) => {
-    if (!pane) return
+    if (!pane || inputValue.trim() === '') return
     setEditingAddress(false)
     setSuggestionsOpen(false)
     setMessage(null)
@@ -908,7 +911,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     setEditingAddress(false)
     setSuggestionsOpen(false)
     try {
-      if (address !== pane.url) await context.call('quirky.browser/paneNavigate', { pane: pane.id, input: address })
+      if (address !== '' && address !== pane.url) await context.call('quirky.browser/paneNavigate', { pane: pane.id, input: address })
       const result = await context.call('quirky.browser/paneWatch', { pane: pane.id })
       const id = typeof result === 'object' && result !== null ? Reflect.get(result, 'watchId') : null
       if (typeof id !== 'string' || id === '') throw new Error('Watch did not return a lease ID')
@@ -1200,9 +1203,9 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
               value={address}
               placeholder="Search or enter address"
               style={paneStyles.addressField}
-              onFocus={() => { setEditingAddress(true); setSuggestionsOpen(true) }}
-              onBlur={() => { window.setTimeout(() => setSuggestionsOpen(false), 120); setEditingAddress(false) }}
-              onChange={(event) => { setAddress(event.target.value); setSuggestionsOpen(true) }}
+              onFocus={() => setSuggestionsOpen(true)}
+              onBlur={() => { window.setTimeout(() => setSuggestionsOpen(false), 120) }}
+              onChange={(event) => { setEditingAddress(true); setAddress(event.target.value); setSuggestionsOpen(true) }}
               onKeyDown={(event) => {
                 if (event.key === 'ArrowDown' && suggestions.length > 0) {
                   event.preventDefault()
@@ -1216,6 +1219,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
                   void navigate(suggestion?.url ?? address)
                 } else if (event.key === 'Escape') {
                   setSuggestionsOpen(false)
+                  setEditingAddress(false)
                   addressRef.current?.blur()
                 }
               }}
@@ -1457,7 +1461,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
             <Button onClick={() => setNativeState(null)}>Dismiss</Button>
           </div>
         </div></div> : null}
-        {pane?.mode === 'native' && context.nativeBrowser.available && !nativeError && !pane.loading && pane.url === 'about:blank' && !nativeState?.error ? <div className="qbp-overlay" data-quirky-native-mask style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+        {pane?.mode === 'native' && context.nativeBrowser.available && !nativeError && !pane.loading && pane.url === 'about:blank' && !nativeState?.error ? <div className="qbp-overlay" data-quirky-native-mask style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.stackedCard}>
           <SectionHeader title="New Tab" />
           <EmptyState message="Type a URL or search above to start browsing." />
           <p className="qbp-muted" style={paneStyles.mutedText}>Home page: {settings.homePage || 'not set'} · Search: {settings.searchEngine}</p>
