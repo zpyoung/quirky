@@ -220,3 +220,44 @@ test('a Native pane without a native view never shows Stop loading', async () =>
   expect(container.querySelector('[aria-label="Stop loading"]')).toBeNull()
   expect(container.querySelector('[aria-label="Reload"]')).not.toBeNull()
 })
+
+function addressField(): HTMLInputElement {
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Address and search"]')
+  if (!input) throw new Error('address field not found')
+  return input
+}
+
+test('a new tab leaves the address field empty so its placeholder shows', async () => {
+  paneState = stateOf(pane({ url: 'about:blank', title: '' }))
+  await mountWindow()
+  expect(addressField().value).toBe('')
+  await emitPaneChanged(stateOf(pane({ url: 'about:blank', title: '' })))
+  expect(addressField().value).toBe('')
+})
+
+test('typed address text survives blur and pane updates until Escape reverts it', async () => {
+  await mountWindow()
+  const input = await typeAddress('example.org/draft')
+  await act(async () => { input.blur(); await new Promise((resolve) => setTimeout(resolve, 150)); await settleUI() })
+  expect(addressField().value).toBe('example.org/draft')
+  await emitPaneChanged(stateOf(pane({ title: 'Example, retitled' })))
+  expect(addressField().value).toBe('example.org/draft')
+  await act(async () => { input.focus(); await settleUI() })
+  await press(input, 'Escape')
+  expect(addressField().value).toBe('https://example.test/page')
+})
+
+test('the Native New Tab card stacks its content', async () => {
+  paneState = stateOf(pane({ url: 'about:blank', title: '' }))
+  const context = makeContext()
+  Object.assign(context.nativeBrowser, { available: true })
+  await act(async () => {
+    root = createRoot(container)
+    root.render(<BrowserPaneWindow context={context} input={{ pane: 'pane-1' }} />)
+    await settleUI()
+  })
+  const heading = [...container.querySelectorAll('*')].find((node) => node.children.length === 0 && node.textContent === 'New Tab')
+  const card = heading?.closest<HTMLElement>('.qbp-card')
+  if (!card) throw new Error('the New Tab card was not rendered')
+  expect(card.style.flexDirection).toBe('column')
+})
