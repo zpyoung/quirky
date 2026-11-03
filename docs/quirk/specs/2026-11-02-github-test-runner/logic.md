@@ -128,6 +128,6 @@ Skipped. These are choices about this repo's own move off a host. The 2026-10-30
 
 ## Status & amendments
 
-**Status:** Draft.
+**Status:** Approved. Tech spec: [tech.md](tech.md), because the change touches more than three source files.
 
 **Amendments:** None.
