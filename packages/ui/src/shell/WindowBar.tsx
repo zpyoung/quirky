@@ -217,6 +217,12 @@ export function launchableAgents(listing: unknown, commands: ReadonlySet<string>
   return [...choices.filter((choice) => choice.isDefault), ...choices.filter((choice) => !choice.isDefault)]
 }
 
+/** The New agent button's text: it names the default agent when that agent can be launched, else stays generic. */
+export function newAgentLabel(agents: readonly AgentChoice[]): string {
+  const preferred = agents.find((agent) => agent.isDefault)
+  return preferred ? `New ${preferred.label}` : 'New agent'
+}
+
 /** The New agent caret's rows: each launchable agent under its icon, then Agent settings. */
 export function newAgentItems(agents: readonly AgentChoice[], run: (command: string) => void, openSettings: () => void): PopupItem[] {
   return [
@@ -462,7 +468,7 @@ function NewAgent() {
     <>
       <BarButton className="window-bar__new-agent" onClick={() => run(NEW_AGENT_TAB)}>
         <ControlIcon name="plus" />
-        <span>New agent</span>
+        <span>{newAgentLabel(agents)}</span>
       </BarButton>
       <BarButton buttonRef={popup.ref} popup expanded={popup.open} icon label="Choose agent" onClick={popup.toggle}>
         <Caret />
