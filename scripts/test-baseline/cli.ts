@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
-import type { bunTestFile, Host, hostFor, runInHostCopy } from '../suite'
+import type { bunTestFile } from '../suite'
 import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
-import { renderComment, renderLocal } from './report'
+import { renderComment } from './report'
 import { findSpawners, selectTests } from './select'
 import { MAX_SHARDS_MAIN, MAX_SHARDS_PR, SHARD_TARGET_MS, splitShards } from './shards'
 import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
@@ -17,15 +17,13 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
   rerun      --plan <dir> --in <dir> --out <file>
   verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
   issues     --plan <dir> --baseline <file> --only <open|close>
-  affected   [--json] [--jobs <n>] [--list]
-  run-files  --jobs <n> --slots <n>
+  affected   [--json]
 `
 
 const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
 const RERUN_FILE = 'rerun.json'
-const FILE_RESULTS_PREFIX = 'file-results '
 
 /**
  * What the commands touch outside their arguments. Tests replace `gh`, the clock, the process
@@ -40,9 +38,6 @@ export type Context = {
   err: (text: string) => void
   run?: typeof bunTestFile
   download?: (args: string[], dest: string) => Promise<void>
-  chooseHost?: typeof hostFor
-  runInHost?: typeof runInHostCopy
-  stdin?: () => Promise<string>
 }
 
 /** A bad command line. `runCli` answers it with the usage text and exit code 2. */
@@ -443,114 +438,47 @@ async function issuesCommand(args: string[], ctx: Context): Promise<number> {
   return 0
 }
 
-/** The worker `affected` starts on a test host: runs the files named on stdin and prints their results on one line. */
-async function runFilesCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { jobs: { type: 'string' }, slots: { type: 'string' } })
-  for (const name of ['jobs', 'slots'] as const) {
-    if (!/^[1-9]\d*$/.test(need(values[name], name))) throw new UsageError(`--${name} must be a positive integer`)
-  }
-  const input = await (ctx.stdin ?? (() => Bun.stdin.text()))()
-  const { slottedTestFile } = await import('../suite')
-  const { FILE_LIMIT_MS, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = {
-    cwd: ctx.cwd,
-    files: input.split('\n').filter(Boolean),
-    platform: 'linux' as const,
-    jobs: Number(values.jobs),
-    limitMs: FILE_LIMIT_MS,
-    run: ctx.run ?? slottedTestFile(Number(values.slots)),
-  }
-  const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
-  ctx.out(`${FILE_RESULTS_PREFIX}${JSON.stringify(rerun)}\n`)
-  return 0
-}
-
-async function runFilesOnHost(ctx: Context, host: Host, files: string[]): Promise<{ results: FileResult[]; skipped: boolean }> {
-  const { runInHostCopy } = await import('../suite')
-  const command = `bun scripts/test-baseline/cli.ts run-files --jobs ${host.jobs ?? 4} --slots ${host.slots ?? 8}`
-  const run = await (ctx.runInHost ?? runInHostCopy)(ctx.cwd, host.host, command, files.join('\n'), false)
-  const line = run?.output.split('\n').find((text) => text.startsWith(FILE_RESULTS_PREFIX))
-  if (!line) throw new Error(`${host.host} couldn't finish the tests, so this run stops${run ? `\n${run.output}` : ''}`)
-  return JSON.parse(line.slice(FILE_RESULTS_PREFIX.length)) as { results: FileResult[]; skipped: boolean }
-}
-
+/**
+ * Prints the tests a push of the working tree would run, and why, without running any: the same
+ * selection CI makes, against the nearest baseline or the merge base with origin/main.
+ */
 async function affectedCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { json: { type: 'boolean' }, jobs: { type: 'string' }, list: { type: 'boolean' } })
-  if (values.jobs !== undefined && !/^[1-9]\d*$/.test(values.jobs)) throw new UsageError('--jobs must be a positive integer')
+  const values = parse(args, { json: { type: 'boolean' } })
 
-  let baseline: Baseline | null = null
   let base: string | null = null
   try {
     const repo = repoOf(ctx)
     const found = await findBaseline({ cwd: ctx.cwd, head: headOf(ctx), repo, gh: ctx.gh })
     if (found) {
-      baseline = await fetchBaseline(found, { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download })
+      await fetchBaseline(found, { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download })
       base = found.commit
     } else {
-      ctx.err('no baseline found; selecting from the merge base with origin/main, and every failure counts as new\n')
+      ctx.err('no baseline found; selecting from the merge base with origin/main\n')
     }
   } catch (error) {
     if (!(error instanceof BaselineUnavailable)) throw error
-    ctx.err(`baseline unavailable: ${error.message}\nselecting from the merge base with origin/main, and every failure counts as new\n`)
+    ctx.err(`baseline unavailable: ${error.message}\nselecting from the merge base with origin/main\n`)
   }
   base ??= gitOrNull(ctx.cwd, ['merge-base', 'HEAD', 'origin/main'])
 
-  let changed: ChangedPath[] = []
   let selection: Selection
   if (base) {
-    changed = [...changesBetween(ctx.cwd, base, null), ...untrackedFiles(ctx.cwd).map((path): ChangedPath => ({ path, status: 'A' }))]
+    const changed = [...changesBetween(ctx.cwd, base, null), ...untrackedFiles(ctx.cwd).map((path): ChangedPath => ({ path, status: 'A' }))]
     const codeFiles = git(ctx.cwd, ['ls-files', '-co', '--exclude-standard', '-z']).split('\0').filter(Boolean)
     selection = (await selectFrom(ctx, changed, codeFiles)).selection
   } else {
     selection = await allTests(ctx, 'no merge base with origin/main, so every test runs')
   }
 
-  if (values.list) {
-    ctx.out(values.json ? JSON.stringify(selection, null, 2) + '\n' : selection.files.map((file) => `${file}\n`).join(''))
+  if (values.json) {
+    ctx.out(JSON.stringify(selection, null, 2) + '\n')
     return 0
   }
-
-  const { macosOnly, hostFor } = await import('../suite')
-  const macosList = macosOnly(join(ctx.cwd, MACOS_LIST))
-  const hostable = selection.files.filter((file) => !macosList.has(file))
-  const choice = hostable.length > 0 ? await (ctx.chooseHost ?? hostFor)(ctx.cwd) : undefined
-  if (choice && 'error' in choice) throw new Error(choice.error)
-  if (choice?.note) ctx.err(`${choice.note}\n`)
-  // full runs belong on GitHub, and a shared host shouldn't take one just because a change touched the test tooling
-  if (choice && selection.mode === 'all') {
-    ctx.err(`this change selects every test, so nothing ran on ${choice.host.host}: ${selection.reasons.join('; ')}\nGet a full run through a PR: gh pr edit <number> --add-label full-suite\n`)
-    if (values.json) ctx.out(`${JSON.stringify({ skipped: 'every test selected', reasons: selection.reasons })}\n`)
-    return 0
-  }
-  const there = choice ? hostable : []
-  const here = choice ? selection.files.filter((file) => macosList.has(file)) : selection.files
-  if (choice) ctx.err(`running ${there.length} test files on ${choice.host.host} and ${here.length} macOS-only files here\n`)
-
-  const { FILE_LIMIT_MS, FILES_AT_ONCE_LOCAL, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = {
-    cwd: ctx.cwd,
-    files: here,
-    platform: process.platform === 'darwin' ? ('macos' as const) : ('linux' as const),
-    jobs: values.jobs ? Number(values.jobs) : FILES_AT_ONCE_LOCAL,
-    limitMs: FILE_LIMIT_MS,
-    run: ctx.run,
-  }
-  const runHere = async () => rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
-  const [away, local] = await Promise.all([choice ? runFilesOnHost(ctx, choice.host, there) : { results: [], skipped: false }, runHere()])
-  const rerun = { results: [...away.results, ...local.results], skipped: away.skipped || local.skipped }
-  if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files failed, so none were rerun\n`)
-
-  const verdict: Verdict = compareResults({
-    baseline,
-    results: rerun.results,
-    selection,
-    deleted: await deletedTests(changed),
-    notOnCi: [],
-    advisory: true,
-    runBroken: false,
-  })
-  ctx.out(values.json ? JSON.stringify(verdict, null, 2) + '\n' : renderLocal(verdict, ctx.now()))
-  return verdict.new.length > 0 || verdict.incomplete.length > 0 ? 1 : 0
+  const why = ['why:', ...selection.reasons.map((reason) => `  ${reason}`)].map((line) => `${line}\n`).join('')
+  if (selection.mode === 'all') ctx.out(`This change selects every test, so the next push runs the whole suite.\n${why}`)
+  else if (selection.mode === 'none') ctx.out(`No tests are needed for this change.\n${why}`)
+  else ctx.out(selection.files.map((file) => `${file}\n`).join('') + why)
+  return 0
 }
 
 const COMMANDS: Record<string, (args: string[], ctx: Context) => Promise<number>> = {
@@ -560,7 +488,6 @@ const COMMANDS: Record<string, (args: string[], ctx: Context) => Promise<number>
   verdict: verdictCommand,
   issues: issuesCommand,
   affected: affectedCommand,
-  'run-files': runFilesCommand,
 }
 
 /**

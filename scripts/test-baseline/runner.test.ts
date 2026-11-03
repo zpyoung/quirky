@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { bunTestFile } from '../suite'
-import { FILE_LIMIT_MS, FILES_AT_ONCE_CI, FILES_AT_ONCE_LOCAL, RERUN_LIMIT, TEST_LIMIT_MS, rerunFailed, runTestFiles } from './runner'
+import { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, TEST_LIMIT_MS, rerunFailed, runTestFiles } from './runner'
 import type { FileResult, Platform } from './types'
 
 type Run = typeof bunTestFile
@@ -46,7 +46,7 @@ function fake(script: Record<string, { code: number; tests?: Record<string, 'pas
 }
 
 test('the settings have the values the spec fixes', () => {
-  expect([FILES_AT_ONCE_CI, FILES_AT_ONCE_LOCAL, FILE_LIMIT_MS, RERUN_LIMIT]).toEqual([3, 2, 600_000, 5])
+  expect([FILES_AT_ONCE_CI, FILE_LIMIT_MS, RERUN_LIMIT]).toEqual([3, 600_000, 5])
 })
 
 test('runs real files: passing, failing, failing to load', async () => {
