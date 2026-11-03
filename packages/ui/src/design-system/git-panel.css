@@ -24,6 +24,28 @@
   color: var(--ui-failing);
 }
 
+[data-git-panel] .git-ship__notes .ui-icon-button {
+  aspect-ratio: auto;
+  padding-inline: var(--ui-space-8);
+}
+
+[data-git-panel] .git-ship__notes .ui-icon-button__icon {
+  font-size: var(--ui-font-label);
+  line-height: 1.25;
+}
+
+[data-git-panel] .git-ship__error .ui-inline-error {
+  align-items: flex-start;
+}
+
+[data-git-panel] .git-ship__error .ui-inline-error__message {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 [data-git-panel] .git-ship__field {
   position: relative;
 }

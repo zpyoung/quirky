@@ -70,7 +70,7 @@ describe('NA-13: the panel has no notes shelf', () => {
     expect(shelf(element)).toBeNull()
     expect(q(element, '[data-note-row]')).toBeNull()
     await click(byLabel(element, 'More source control actions'))
-    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => (b.textContent ?? '').replace('✓', ''))).toEqual(['List', 'Tree', 'Change base…', 'Refresh', 'Revert all…'])
+    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => (b.textContent ?? '').replace('✓', ''))).toEqual(['List', 'Tree', 'Change base…', 'Refresh', 'AI settings…', 'Revert all…'])
     expect(fake.called('quirky.git/notes')).toHaveLength(1)
     unmount()
   })

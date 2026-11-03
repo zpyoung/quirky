@@ -5,7 +5,7 @@ import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, Review
 import { CommitSparkle } from '../ai/CommitSparkle'
 import { FixSplitButton, type FixButtonProps } from '../ai/FixSplitButton'
 import { LaunchDialog } from '../ai/LaunchDialog'
-import type { FixAction } from '../ai/types'
+import { AI_SETTINGS_VIEW_ID, type FixAction } from '../ai/types'
 import { useAiFix } from '../ai/useAiFix'
 import { openReview } from '../review/open'
 import { reviewOrder } from '../review/order'
@@ -73,6 +73,8 @@ type ShipFailure = {
   fetch?: boolean
   details?: { title: 'Commit Failed' | 'Push Failed'; output: string }
   fix?: 'fixCommitFailure' | 'fixPushFailure'
+  /** The line asks for a commit message, so typing one or starting ✦ takes it away. */
+  emptyMessage?: true
 }
 type PushTargetPurpose = 'review' | 'creation'
 type ReviewPushTarget =
@@ -288,10 +290,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   )
   const shown = useMemo(() => displayOrder(visibleFiles, viewMode, collapsedDirs), [visibleFiles, viewMode, collapsedDirs])
 
+  const dropEmptyMessageError = () => setShipError((prev) => (prev?.emptyMessage ? null : prev))
+
   const setMessage = (text: string) => {
     edits.current += 1
     setMessageState(text)
     drafts.set(worktree, text)
+    if (text.trim() !== '') dropEmptyMessageError()
   }
 
   const refreshAll = useCallback(async () => {
@@ -854,7 +859,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const commitWith = async (mode: 'staged' | 'all' | 'selected', chain?: { head: string; stillCurrent: () => boolean }): Promise<boolean> => {
     const text = message.trim()
     if (text === '') {
-      failWith({ message: EMPTY_MESSAGE })
+      failWith({ message: EMPTY_MESSAGE, emptyMessage: true })
       focusMessage()
       return false
     }
@@ -1003,7 +1008,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     } catch (error) {
       if (stillCurrent()) {
         const text = messageOf(error)
-        failWith({ message: text })
+        failWith(text === EMPTY_MESSAGE ? { message: text, emptyMessage: true } : { message: text })
         if (text === EMPTY_MESSAGE) focusMessage()
       }
     } finally {
@@ -1179,6 +1184,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         onViewMode={setViewMode}
         onChangeBase={() => setDialog({ kind: 'base' })}
         onRefresh={() => void refreshAll().then(refreshReview)}
+        onAiSettings={() => context.openView(AI_SETTINGS_VIEW_ID, { worktree })}
         onSummarize={aiEnabled ? () => setLaunch('branchSummary') : undefined}
         prActions={aiEnabled && githubReview.kind === 'found' && githubReview.review.state !== 'closed' && githubReview.review.state !== 'merged' ? PR_AI_ACTIONS.map(({ action, label }) => ({ label, onSelect: () => setLaunch(action) })) : []}
         revertable={revertable.length}
@@ -1294,6 +1300,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 />
               ) : undefined
             }
+            onGenerate={dropEmptyMessageError}
             writtenBy={writtenBy}
             error={errorView}
             onDismissError={() => setShipError(null)}

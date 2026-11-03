@@ -19,13 +19,15 @@ type HeaderProps = {
   onSummarize?(): void
   /** The pull-request AI actions, listed after Summarize while a pull request is open for the branch. */
   prActions?: ReadonlyArray<{ label: string; onSelect(): void }>
+  /** Opens the Source Control AI settings view. */
+  onAiSettings?(): void
   /** How many files "Revert all…" would revert; 0 leaves it disabled. */
   revertable: number
   onRevertAll(): void
 }
 
 /** The panel's filter toggle and ⋯ menu (frame header), with the filter box in the body. */
-export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefresh, onSummarize, prActions = [], revertable, onRevertAll }: HeaderProps) {
+export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefresh, onSummarize, prActions = [], onAiSettings, revertable, onRevertAll }: HeaderProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number; trigger: HTMLButtonElement } | null>(null)
   const select = (action?: () => void) => () => {
     menuAt?.trigger.focus()
@@ -38,6 +40,7 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
     { label: 'Refresh', onSelect: select(onRefresh) },
     ...(onSummarize ? [{ label: 'Summarize branch with AI', onSelect: select(onSummarize) }] : []),
     ...prActions.map((item) => ({ label: item.label, onSelect: select(item.onSelect) })),
+    ...(onAiSettings ? [{ label: 'AI settings…', separatorBefore: true, onSelect: select(onAiSettings) }] : []),
     {
       label: 'Revert all…',
       separatorBefore: true,

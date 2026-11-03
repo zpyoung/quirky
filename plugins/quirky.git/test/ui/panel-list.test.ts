@@ -1,4 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcErrorCode } from '@quirky/protocol'
 import { registerDom } from './register-dom'
@@ -602,7 +604,7 @@ describe('the ⋯ menu', () => {
   test('lists List, Tree, Change base…, Refresh and Revert all…', async () => {
     const { element, unmount } = await open()
     await click(byLabel(element, 'More source control actions'))
-    expect(menuLabels()).toEqual(['List', 'Tree', 'Change base…', 'Refresh', 'Revert all…'])
+    expect(menuLabels()).toEqual(['List', 'Tree', 'Change base…', 'Refresh', 'AI settings…', 'Revert all…'])
     expect(qa(document.body, '[role="menu"] [aria-checked="true"]').map((item) => item.textContent?.replace('✓', ''))).toEqual(['List'])
     unmount()
   })
@@ -613,7 +615,15 @@ describe('the ⋯ menu', () => {
       f.settings['ai-enabled'] = true
     })
     await click(byLabel(element, 'More source control actions'))
-    expect(menuLabels()).toEqual(['List', 'Tree', 'Change base…', 'Refresh', 'Summarize branch with AI', 'Revert all…'])
+    expect(menuLabels()).toEqual(['List', 'Tree', 'Change base…', 'Refresh', 'Summarize branch with AI', 'AI settings…', 'Revert all…'])
+    unmount()
+  })
+
+  test('AI settings… opens the Source Control AI settings view for the worktree', async () => {
+    const { fake, element, unmount } = await open()
+    await click(byLabel(element, 'More source control actions'))
+    await click(buttonText(document.body, 'AI settings…'))
+    expect(fake.views.at(-1)).toEqual({ id: 'view:quirky.git/ai-settings', input: { worktree: 'feat' } })
     unmount()
   })
 
@@ -628,6 +638,33 @@ describe('the ⋯ menu', () => {
     await press(listbox(element), 'ArrowDown')
     expect(selectedPaths(element)).toEqual(['src/feature/flags.ts'])
     unmount()
+  })
+
+  test('tree rows leave the folder text out, and list rows keep it', async () => {
+    const { element, unmount } = await open((f) => {
+      four(f)
+      f.settings.viewMode = 'tree'
+    })
+    expect(rowPaths(element)).toContain('src/feature/enabled.ts')
+    expect(qa(element, '[data-row-dir]')).toHaveLength(0)
+    await click(byLabel(element, 'More source control actions'))
+    await click(buttonText(document.body, 'List'))
+    expect(q(rowOf(element, 'src/feature/enabled.ts')!, '[data-row-dir]')?.getAttribute('data-row-dir')).toBe('src/feature')
+    unmount()
+  })
+
+  test('the folder is the shrinkable part of a row, ahead of the counts and the name', () => {
+    const css = readFileSync(join(import.meta.dir, '../../../../packages/ui/src/design-system/git-rows.css'), 'utf8')
+    const shrinkOf = (selector: string): number => {
+      const rule = css.split('}').find((block) => block.split('{')[0]!.split(',').some((part) => part.trim() === selector))
+      return Number(/flex: 0 (\d+) auto/.exec(rule ?? '')?.[1])
+    }
+    const folder = shrinkOf('.git-rows .git-row__title > .git-row__dir')
+    const counts = shrinkOf('.git-rows .git-row__end > .git-row__added')
+    const name = shrinkOf('.git-rows .git-row__title > .git-row__text')
+    expect(folder).toBeGreaterThan(counts)
+    expect(counts).toBeGreaterThan(name)
+    expect(name).toBeGreaterThan(0)
   })
 
   test('a Review selection inside a collapsed folder expands it so the row is selected and announced', async () => {

@@ -22,7 +22,10 @@
 
 .git-rows .git-row .ui-list-row {
   border: 0;
+  cursor: pointer;
   flex-wrap: nowrap;
+  gap: var(--ui-space-6);
+  overflow: hidden;
 }
 
 .git-rows .git-row .ui-list-row:not(.ui-list-row--selected) {
@@ -34,23 +37,29 @@
   outline-offset: calc(var(--ui-border-width) * -1);
 }
 
-.git-rows .git-row .ui-list-row__main {
-  min-width: 0;
-  overflow: hidden;
+/* the row's parts share one flex line, so the squeeze order is set by shrink weights: folder, then counts, then the name */
+.git-rows .git-row .ui-list-row__main,
+.git-rows .git-row .ui-list-row__trailing,
+.git-rows .git-row__title {
+  display: contents;
 }
 
-.git-rows .git-row__title {
-  align-items: center;
-  display: flex;
-  gap: var(--ui-space-6);
-  min-width: 0;
+.git-rows .git-row__end {
+  display: contents;
+  flex-wrap: nowrap;
+}
+
+.git-rows .git-row .ui-list-row > *,
+.git-rows .git-row__title > *,
+.git-rows .git-row__end > * {
+  flex: none;
 }
 
 .git-rows .git-row__title .ui-file-icon {
   flex: none;
 }
 
-.git-rows .git-row__text {
+.git-rows .git-row__title > .git-row__text {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -77,10 +86,18 @@
   gap: var(--ui-space-4);
 }
 
-.git-rows .git-row__end {
-  flex: none;
-  flex-wrap: nowrap;
-  gap: var(--ui-space-6);
+.git-rows .git-row__spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.git-rows .git-row__end > .git-row__added,
+.git-rows .git-row__end > .git-row__removed,
+.git-rows .git-row__end > .git-row__notes {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .git-rows .git-row__status {
@@ -154,10 +171,10 @@
   background: var(--ui-needs-you);
 }
 
-.git-rows .git-row__dir {
+.git-rows .git-row__title > .git-row__dir {
   color: var(--ui-muted);
   direction: rtl;
-  flex: 0 3 auto;
+  flex: 0 1000000 auto;
   font-size: var(--ui-font-label);
   min-width: 0;
   overflow: hidden;

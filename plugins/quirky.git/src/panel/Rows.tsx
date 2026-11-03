@@ -114,8 +114,8 @@ function Dot({ item }: { item: RowItem }) {
   )
 }
 
-/** The commit checkbox, the review mark, file icon, name and the folder dimmed after it. */
-function RowTitle({ item, checkbox }: { item: RowItem; checkbox?: ReactNode }) {
+/** The commit checkbox, the review mark, file icon, name and, outside the tree, the folder dimmed after it. */
+function RowTitle({ item, checkbox, tree }: { item: RowItem; checkbox?: ReactNode; tree: boolean }) {
   const { name, dir } = splitPath(item.path)
   return (
     <span className="git-row__title">
@@ -123,7 +123,8 @@ function RowTitle({ item, checkbox }: { item: RowItem; checkbox?: ReactNode }) {
       {item.mark !== undefined && <span className="git-row__mark"><ReviewMark state={item.mark} /></span>}
       <FileIcon path={item.path} />
       <span className="git-row__text" data-row-name>{name}</span>
-      {dir !== '' && <span className="git-row__dir" data-row-dir={dir} title={dir}><bdi>{dir}</bdi></span>}
+      {!tree && dir !== '' && <span className="git-row__dir" data-row-dir={dir} title={dir}><bdi>{dir}</bdi></span>}
+      <span className="git-row__spacer" aria-hidden="true" />
     </span>
   )
 }
@@ -153,6 +154,7 @@ function SubmoduleEntries({ expansion, indent }: { expansion: Expansion; indent:
                     <FileIcon path={inside.path} />
                     <span className="git-row__text" data-row-name>{name}</span>
                     {dir !== '' && <span className="git-row__dir" data-row-dir={dir}><bdi>{dir}</bdi></span>}
+                    <span className="git-row__spacer" aria-hidden="true" />
                   </span>
                 }
                 trailing={
@@ -218,6 +220,7 @@ export function FileRow({ item, depth, tree, selected, option, id, handlers }: F
           <span className="ui-list-row__main">
             <RowTitle
               item={item}
+              tree={tree}
               checkbox={
                 checked === null ? undefined : (
                   <input

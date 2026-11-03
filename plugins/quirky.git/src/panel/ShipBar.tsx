@@ -33,6 +33,8 @@ type Props = {
   locked: boolean
   /** The ✦ at the right end of the message field, when Source Control AI actions are on. */
   sparkle?: ReactNode
+  /** The ✦ was pressed to start a generation. */
+  onGenerate?(): void
   /** The agent that wrote the message in the box, until the message is edited. */
   writtenBy: string | null
   error: ShipErrorView | null
@@ -44,6 +46,8 @@ type Props = {
 }
 
 const CARET_LABEL = 'More commit and remote actions'
+
+const GENERATE_LABEL = 'Generate commit message with AI'
 
 const toMenu = (items: readonly ShipMenuItem[]): ContextMenuItem[] =>
   items.map((item) => ({
@@ -81,7 +85,7 @@ function QuietStep({ step, items, onChoose }: Pick<Props, 'step' | 'items' | 'on
 /** The error line on its own, for the conflict card that takes the ship bar's place. */
 export function ShipErrorLine({ error, onDismiss }: { error: ShipErrorView; onDismiss(): void }) {
   return (
-    <div className="ui-stack git-ship__error">
+    <div className="ui-stack git-ship__error" title={error.message}>
       <InlineError message={error.message} action={error.action} onDismiss={onDismiss} />
       {error.extra}
     </div>
@@ -94,13 +98,13 @@ export function ShipErrorLine({ error, onDismiss }: { error: ShipErrorView; onDi
  * It holds no logic; the panel owns what each step does.
  */
 export function ShipBar(props: Props) {
-  const { context, worktree, step, items, busy, onStep, onChoose, showMessage, message, onMessage, messageRef, locked, sparkle, writtenBy, error, onDismissError, selecting, aside } = props
+  const { context, worktree, step, items, busy, onStep, onChoose, showMessage, message, onMessage, messageRef, locked, sparkle, onGenerate, writtenBy, error, onDismissError, selecting, aside } = props
   const notes = useNotes(context, worktree)
   const noteLabel = `Send ${notes.length} ${notes.length === 1 ? 'note' : 'notes'} to agent`
   return (
     <div className="ui-stack git-ship" data-git-ship-bar>
       {notes.length > 0 && (
-        <div className="ui-cluster">
+        <div className="ui-cluster git-ship__notes" data-git-send-notes>
           <SendMenu
             context={context}
             worktree={worktree}
@@ -114,7 +118,12 @@ export function ShipBar(props: Props) {
       )}
       {showMessage && (
         <FormRow label="Commit message" htmlFor="source-control-commit-message">
-          <div className="git-ship__field">
+          <div
+            className="git-ship__field"
+            onClickCapture={(event) => {
+              if (event.target instanceof Element && event.target.closest(`[aria-label="${GENERATE_LABEL}"]`)) onGenerate?.()
+            }}
+          >
             <textarea
               id="source-control-commit-message"
               ref={messageRef}

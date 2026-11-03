@@ -112,6 +112,9 @@ describe('scenario 20: sending review notes', () => {
     expect(q(element, 'section[aria-label="Notes"]')).toBeNull()
     const send = byLabel(element, 'Send 2 notes to agent')!
     expect(send.textContent).toBe('Send 2 notes to agent ▾')
+    expect(send.tagName).toBe('BUTTON')
+    expect(q(element, '[data-git-ship-bar]')!.contains(send)).toBe(true)
+    expect(send.closest('.git-ship__notes')).not.toBeNull()
     expect(send.compareDocumentPosition(message(element)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     await click(send)
@@ -352,6 +355,45 @@ describe('scenario 26: committing without a message', () => {
     unmount()
   })
 
+  test('typing a message takes the empty-message line away', async () => {
+    const { element, unmount } = await open(three)
+    await click(shipButton(element))
+    expect(errorLine(element)).not.toBeNull()
+    await type(message(element)!, 'a')
+    expect(errorLine(element)).toBeNull()
+    unmount()
+  })
+
+  test('typing only spaces leaves the empty-message line', async () => {
+    const { element, unmount } = await open(three)
+    await click(shipButton(element))
+    await type(message(element)!, '  ')
+    expect(errorLine(element)).not.toBeNull()
+    unmount()
+  })
+
+  test('typing leaves a commit failure on the line', async () => {
+    const { element, unmount } = await open((f) => {
+      three(f)
+      f.on('quirky.git/stage', () => {
+        throw failure('Nothing could be staged', { reason: 'failed' })
+      })
+    })
+    await type(message(element)!, 'msg')
+    await click(shipButton(element))
+    expect(errorLine(element)?.textContent).toContain('Nothing could be staged')
+    await type(message(element)!, 'msg two')
+    expect(errorLine(element)?.textContent).toContain('Nothing could be staged')
+    unmount()
+  })
+
+  test('the error line carries its full text as a title, so a long one is not lost to wrapping', async () => {
+    const { element, unmount } = await open(three)
+    await click(shipButton(element))
+    expect(q(element, '.git-ship__error')?.title).toBe('Write a commit message, or click ✦')
+    unmount()
+  })
+
   test('a whitespace message counts as empty', async () => {
     const { fake, element, unmount } = await open(three)
     await type(message(element)!, '   ')
@@ -377,6 +419,38 @@ describe('scenario 27: generating the message', () => {
     expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat', scope: 'all' }])
     expect(message(element)?.value).toBe('Rename x')
     expect(q(element, '[data-git-written-by]')?.textContent).toBe('Written by Claude')
+    unmount()
+  })
+
+  test('starting ✦ takes the empty-message line away before the message arrives', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const { element, unmount } = await open((f) => {
+      aiOn(f)
+      f.on('quirky.git/generateCommitMessage', () => new Promise((resolve) => void (finish = resolve)))
+    })
+    await click(shipButton(element))
+    expect(errorLine(element)?.textContent).toContain('Write a commit message, or click ✦')
+    await click(sparkle(element))
+    expect(byLabel(element, 'Stop generating commit message')).not.toBeNull()
+    expect(errorLine(element)).toBeNull()
+    await act(async () => finish({ message: 'Rename x', subject: 'Rename x', body: '', agent: 'claude' }))
+    unmount()
+  })
+
+  test('starting ✦ leaves a different error on the line', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const { element, unmount } = await open((f) => {
+      aiOn(f)
+      f.on('quirky.git/stage', () => {
+        throw failure('Nothing could be staged', { reason: 'failed' })
+      })
+      f.on('quirky.git/generateCommitMessage', () => new Promise((resolve) => void (finish = resolve)))
+    })
+    await type(message(element)!, 'msg')
+    await click(shipButton(element))
+    await click(sparkle(element))
+    expect(errorLine(element)?.textContent).toContain('Nothing could be staged')
+    await act(async () => finish({ message: 'Rename x', subject: 'Rename x', body: '', agent: 'claude' }))
     unmount()
   })
 
