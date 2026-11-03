@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Banner } from '../../../plugins/quirky.feedback/src/mode/Banner'
 import { Button, Tabs } from '../src/design-system'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
-import { launchableAgents, newAgentItems, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
+import { launchableAgents, newAgentItems, newAgentLabel, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
 import { attentionStoreFor } from '../src/shell/attention'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
@@ -94,10 +94,11 @@ describe('window bar', () => {
       ].map((path) => Bun.file(new URL(path, import.meta.url)).text()))
       const css = `${styles.join('\n')}\nbody { margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }`
       const labelSets = [
-        { project: 'alpha', worktree: 'main' },
+        { project: 'alpha', worktree: 'main', agent: 'New agent' },
         {
           project: 'extraordinarily-long-project-label-for-window-bar-layout',
-          worktree: 'extraordinarily-long-worktree-label-for-window-bar-layout'
+          worktree: 'extraordinarily-long-worktree-label-for-window-bar-layout',
+          agent: 'New Claude Code'
         }
       ]
 
@@ -110,6 +111,7 @@ describe('window bar', () => {
               const [project, worktree] = header.querySelectorAll<HTMLElement>('.window-bar__label')
               project!.textContent = labels.project
               worktree!.textContent = labels.worktree
+              header.querySelector<HTMLElement>('.window-bar__new-agent span')!.textContent = labels.agent
             }, labels)
 
             const geometry = await page.locator(BAR).evaluate((header) => {
@@ -146,7 +148,7 @@ describe('window bar', () => {
               page.getByRole('button', { name: 'New worktree', exact: true }),
               page.getByRole('button', { name: 'Back', exact: true }),
               page.getByRole('button', { name: 'Forward', exact: true }),
-              page.getByRole('button', { name: 'New agent', exact: true }),
+              page.locator(`${BAR} .window-bar__new-agent`),
               page.getByRole('button', { name: 'Choose agent', exact: true })
             ]) {
               expect(await control.isVisible()).toBe(true)
@@ -483,6 +485,12 @@ describe('the New agent caret', () => {
   test('offers installed enabled agents that have a tab command, the default first', () => {
     expect(launchableAgents(listing, commands).map((agent) => agent.id)).toEqual(['claude', 'codex'])
     expect(launchableAgents(null, commands)).toEqual([])
+  })
+
+  test('the New agent button names the default agent, or stays generic when it cannot be launched', () => {
+    expect(newAgentLabel(launchableAgents(listing, commands))).toBe('New Claude')
+    expect(newAgentLabel(launchableAgents({ ...listing, defaultAgent: 'aider', agents: listing.agents.map((agent) => ({ ...agent, isDefault: agent.id === 'aider' })) }, commands))).toBe('New agent')
+    expect(newAgentLabel([])).toBe('New agent')
   })
 })
 
