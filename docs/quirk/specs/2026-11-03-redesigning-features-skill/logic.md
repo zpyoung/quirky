@@ -161,7 +161,7 @@ The set-up phase turns the feature name into a list of plugins and surfaces, whi
 14. **SC-14 The Redesign checks section**
     - **Given** the design is approved
     - **When** `logic.md` is written
-    - **Then** it has a Redesign checks section listing the confirmed goals (marking any the design removes), the before scores, the two gates and the real-app goals; SDD plans from , so the after pass is planned as part of the build
+    - **Then** it has a Redesign checks section listing the confirmed goals (marking any the design removes), the before scores, the two gates and the real-app goals; SDD plans from `logic.md`, so the after pass is planned as part of the build
 
 15. **SC-15 Bugs from the walk**
     - **Given** `current-state.md` lists bugs
@@ -339,7 +339,7 @@ Research ran on 2026-11-02 and 2026-11-03. Brave Search was unavailable on the p
 | Capability list | Every action and state the current UI offers, which the design must keep, move or cut |
 | Gate | A check every redesign must clear before its PR opens: the score gate and the goal replay |
 | Companion page | Brainstorming's local web page that shows one question per screen |
-| likeuser | The driver behind  |
+| likeuser | The driver behind `quirk:using-apps-like-a-user` |
 
 ## Status & amendments
 
