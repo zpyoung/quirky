@@ -37,8 +37,15 @@ interface EmulatorInternals {
   _core?: {
     buffer?: { savedX?: number; savedY?: number; savedCurAttrData?: StyleSource; scrollTop?: number; scrollBottom?: number }
     coreService?: { decPrivateModes?: { origin?: boolean } }
+    coreMouseService?: { activeEncoding?: string }
     _inputHandler?: { _curAttrData?: StyleSource }
   }
+}
+
+/** The DECSET that selects each mouse report encoding xterm supports besides the X10 default. */
+const MOUSE_ENCODING_MODES: Record<string, string> = {
+  SGR: '\x1b[?1006h',
+  SGR_PIXELS: '\x1b[?1016h'
 }
 
 const COLOR_MODE_P16 = 0x1000000
@@ -133,14 +140,17 @@ export class Screen {
 
   /**
    * The whole buffer, with up to `scrollback` rows above the viewport (all of them when omitted),
-   * then the scroll region and origin mode, the DEC saved cursor, and the cursor position, style
-   * and pending wrap, in that order because setting a region or origin mode homes the cursor.
+   * then the mouse report encoding, the scroll region and origin mode, the DEC saved cursor, and
+   * the cursor position, style and pending wrap, in that order because setting a region or origin
+   * mode homes the cursor.
    */
   serialize(options?: { scrollback?: number }): string {
     const { x, y } = this.cursor()
     const core = (this.term as unknown as EmulatorInternals)._core
     const current = core?._inputHandler?._curAttrData
     let ansi = this.addon.serialize({ scrollback: options?.scrollback })
+    // the addon restores mouse tracking but not its encoding, so a reattached pane would report in X10
+    ansi += MOUSE_ENCODING_MODES[core?.coreMouseService?.activeEncoding ?? ''] ?? ''
 
     const origin = core?.coreService?.decPrivateModes?.origin === true
     const { scrollTop = 0, scrollBottom = this.term.rows - 1 } = core?.buffer ?? {}
