@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { QuirkyClient, Repo, UiLayout, Worktree, WorktreeCreateResult } from '@quirky/protocol'
@@ -9,6 +9,9 @@ import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { makeRepo, commitFiles, git, isolateGitConfig, failure } from '../../quirky.repo/test/git-fixtures'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 import type { CleanupCandidate, CleanupRemovalResult, StockWorktreeOptions, WorktreeSleepState } from '../src/control-types'
+
+// each test starts a daemon and real git repos, which takes several seconds on a loaded machine
+setDefaultTimeout(60_000)
 
 const { scratch } = isolateGitConfig()
 
