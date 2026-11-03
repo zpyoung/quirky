@@ -59,7 +59,9 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
       await refresh().catch(() => {})
     } catch (cause) {
       if (request !== profileSelectionRequest.current) return
-      setActionError(errorMessage(cause))
+      // inline rows sit in a menu that closes on the pick, so the menu's own alert would never be seen
+      if (inline) onError(errorMessage(cause))
+      else setActionError(errorMessage(cause))
     } finally {
       if (request === profileSelectionRequest.current) {
         profileSwitchingRef.current = false
@@ -94,7 +96,7 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
         <legend style={{ color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', fontWeight: 600 }}>Browser profiles</legend>
         {profiles.map(({ profile }) => {
           const sourceLabel = profileSourceLabel(profile)
-          return <label key={profile.id} style={PROFILE_ROW_STYLE}>
+          return <label key={profile.id} className="ui-menu__item" style={PROFILE_ROW_STYLE}>
             <input
               type="radio"
               style={{ appearance: 'auto', accentColor: 'var(--ui-accent)' }}

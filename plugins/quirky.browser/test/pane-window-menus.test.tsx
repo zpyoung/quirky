@@ -16,12 +16,16 @@ const calls: { method: string; params?: Record<string, unknown> }[] = []
 const requests: NativeBrowserRequest[] = []
 
 const PREFERENCES_STATE = {
-  profiles: [{ profile: { id: 'default', label: 'Default', scope: 'default' as const }, active: true }],
+  profiles: [
+    { profile: { id: 'default', label: 'Default', scope: 'default' as const }, active: true },
+    { profile: { id: 'review', label: 'Review', scope: 'isolated' as const }, active: false }
+  ],
   identity: { selected: 'clean' as const, active: 'clean' as const, restartRequired: false, nativeSupported: false as const },
   imports: { available: true as const, destination: 'managed-chrome' as const, nativeSupported: false as const, reason: 'Cookie imports are stored in managed Chrome, not Native.' },
-  localhostLabels: { available: false as const, reason: 'A reachable worktree host mapping is not configured.' }
+  localhostLabels: { available: true as const, enabled: false, reason: 'Loopback links get worktree labels.', labels: [] }
 }
 const FAILED_URL = 'http://127.0.0.1:9/closed'
+let profileSetError: string | null = null
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -114,6 +118,7 @@ function makeContext(): UiPluginContext {
       calls.push({ method, ...(params ? { params } : {}) })
       if (method === 'quirky.browser/paneState') return paneState
       if (method === 'quirky.browser/preferencesState') return PREFERENCES_STATE
+      if (method === 'quirky.browser/profileSet' && profileSetError) throw new Error(profileSetError)
       if (method === 'quirky.browser/identityGet') return { active: 'native' }
       if (method === 'quirky.browser/paneSuggestions') return { suggestions: [] }
       return undefined
@@ -247,5 +252,36 @@ test('popovers override the menu list min-width: 100% so they cannot outgrow the
   for (const label of ['Browser menu', 'Browser history']) {
     const popover = detailsFor(label).querySelector<HTMLElement>(':scope > .ui-menu__list')
     expect(['0', '0px']).toContain(popover?.style.minWidth ?? '')
+  }
+})
+
+async function pickProfile(label: string): Promise<HTMLDetailsElement> {
+  await mountWindow()
+  const details = detailsFor('Browser menu')
+  details.open = true
+  const radio = container.querySelector<HTMLInputElement>(`input[aria-label="Use ${label} profile"]`)
+  if (!radio) throw new Error(`no ${label} profile choice`)
+  await act(async () => { radio.closest('label')!.click(); await settleUI() })
+  return details
+}
+
+test('the Browser menu closes after a profile is picked', async () => {
+  profileSetError = null
+  const details = await pickProfile('Review')
+  expect(calls).toContainEqual({ method: 'quirky.browser/profileSet', params: { pane: 'pane-1', profile: 'review' } })
+  expect(details.open).toBe(false)
+  expect(document.activeElement).toBe(details.querySelector('summary'))
+})
+
+test('a failed profile switch is reported outside the closed Browser menu', async () => {
+  profileSetError = 'The browser for that profile could not be started.'
+  try {
+    const details = await pickProfile('Review')
+    expect(details.open).toBe(false)
+    const alerts = [...container.querySelectorAll('[role="alert"]')].filter((node) => node.textContent?.includes('could not be started'))
+    expect(alerts).toHaveLength(1)
+    expect(details.contains(alerts[0]!)).toBe(false)
+  } finally {
+    profileSetError = null
   }
 })
