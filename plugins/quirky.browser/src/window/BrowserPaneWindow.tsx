@@ -332,9 +332,14 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+const REASON_CODES = /^(?:(?:browser_[a-z_]+|invalid_argument):\s*)+/
+
+/** A daemon or Chrome error in plain words: Chrome load codes are explained and the daemon's leading reason codes are dropped. */
 function readableError(raw: string): string {
   const described = describeNavigationError(raw)
-  return described ? `${described.summary} (${described.detail})` : raw
+  if (described) return `${described.summary} (${described.detail})`
+  const text = raw.replace(REASON_CODES, '')
+  return text === '' ? raw : text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 function isPaneState(value: unknown): value is PaneState {
@@ -1352,7 +1357,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       </div> : null}
       {pane?.mode === 'watch' && frame && (watchError || (pane.error && !pane.watchEnded)) ? <div className="qbp-message" data-kind="error" role="alert" style={paneStyles.message}>
         <StatusDot status="failing" label={watchError ? 'Watch error' : 'Page error'} />
-        <span style={{ ...paneStyles.messageText, ...paneStyles.errorText }}>{watchError ?? readableError(pane.error!)}</span>
+        <span style={{ ...paneStyles.messageText, ...paneStyles.errorText }}>{readableError(watchError ?? pane.error!)}</span>
         {watchError ? <Button onClick={() => setWatchRevision((revision) => revision + 1)}>Retry this Watch</Button> : null}
       </div> : null}
 
@@ -1403,7 +1408,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
             <SectionHeader title="Native browsing is unavailable here" />
             <p className="ui-help-text" style={paneStyles.helpText}>Native browsing needs the Quirky desktop app. In the web client, use Watch to view this address in a managed Chrome page you can Grab, Annotate and Draw on.</p>
             {nativeError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{nativeError}</p> : null}
-            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{watchError}</p> : null}
+            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{readableError(watchError)}</p> : null}
             <div className="qbp-actions" style={paneStyles.actions}>
               <Button onClick={() => void startWatchHere()} disabled={watchStarting}>{watchStarting ? 'Starting Watch…' : 'Watch this address in an owned page'}</Button>
               <Button onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading pages…' : 'Choose an existing agent page'}</Button>
@@ -1427,8 +1432,8 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         {pane?.mode === 'watch' && !frame ? (
           <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
             <SectionHeader title={pane.error && pane.watchEnded ? 'Watch ended' : 'Connecting to Watch'} />
-            <EmptyState message={(pane.error ? readableError(pane.error) : null) ?? watchError ?? (pane.page ? 'Connecting to the selected managed page…' : 'This Watch pane has no managed page selected.')} />
-            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{watchError}</p> : null}
+            <EmptyState message={(pane.error ? readableError(pane.error) : null) ?? (watchError ? readableError(watchError) : null) ?? (pane.page ? 'Connecting to the selected managed page…' : 'This Watch pane has no managed page selected.')} />
+            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{readableError(watchError)}</p> : null}
             {!pane.page ? <Button onClick={() => void loadAgentPages()}>Choose an agent page to Watch</Button> : null}
             {pageListError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{pageListError}</p> : null}
             {pageList ? <div className="ui-menu__list qbp-menu-popover" role="list" aria-label="Managed pages" style={{ ...paneStyles.menuPopover, ...paneStyles.menuItems }}>

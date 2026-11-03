@@ -98,3 +98,28 @@ test('a failed Watch start from the Native-unavailable card shows its error once
   const alerts = [...container.querySelectorAll('[role="alert"]')].filter((node) => node.textContent?.includes('stopped responding'))
   expect(alerts).toHaveLength(1)
 })
+
+test('a Watch start error drops the daemon reason codes', async () => {
+  container = document.createElement('div')
+  document.body.append(container)
+  const failing = {
+    ...context,
+    call: async (method: string, params?: unknown) => {
+      if (method === 'quirky.browser/paneWatch') throw new Error('browser_error: browser_timeout: navigation to https://example.test/ timed out')
+      return (context.call as (method: string, params?: unknown) => Promise<unknown>)(method, params)
+    }
+  } as unknown as UiPluginContext
+  await act(async () => {
+    root = createRoot(container)
+    root.render(<BrowserPaneWindow context={failing} input={{ pane: 'pane-1' }} />)
+    for (let index = 0; index < 5; index++) await Promise.resolve()
+  })
+  const button = [...container.querySelectorAll('button')].find((node) => node.textContent === 'Watch this address in an owned page')
+  if (!button) throw new Error('the Watch button was not rendered')
+  await act(async () => {
+    button.click()
+    for (let index = 0; index < 10; index++) await Promise.resolve()
+  })
+  const alerts = [...container.querySelectorAll('[role="alert"]')].map((node) => node.textContent).filter((text) => text?.includes('timed out'))
+  expect(alerts).toEqual(['Navigation to https://example.test/ timed out'])
+})
