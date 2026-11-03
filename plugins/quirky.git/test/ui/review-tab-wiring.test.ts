@@ -442,9 +442,9 @@ describe('Revert puts one change back on disk', () => {
     const { element } = await open()
     await resize.resize(1000)
     await wait(60)
-    const buttons = [...cardOf(element, APP).querySelectorAll<HTMLButtonElement>('.cm-merge-revert button')]
+    const buttons = [...cardOf(element, APP).querySelectorAll<HTMLButtonElement>('button[aria-label="Revert change"]')]
     expect(buttons).toHaveLength(2)
-    expect(buttons[0]!.textContent).toBe('↶ Revert')
+    expect(buttons[0]!.textContent).toBe('↶')
 
     await mousedown(buttons[0])
     expect(confirmations).toHaveLength(1)

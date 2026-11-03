@@ -540,10 +540,11 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const layout = layoutFor(width, override)
   const paneSettings = useMemo(() => ({ ...settings, sideBySide: layout === 'side-by-side' }), [settings, layout])
   const scoped = scope !== null
+  const compared = model ? `${model.branch ?? 'HEAD'} vs ${model.base.name}` : null
   const sinceTitle = scoped
-    ? plural(items.length, 'file')
+    ? [compared, plural(items.length, 'file')].filter(Boolean).join(' · ')
     : model
-      ? `${model.branch ?? 'HEAD'} vs ${model.base.name} · ${plural(model.counts.files, 'file')} · ${model.counts.reviewed} reviewed`
+      ? `${compared} · ${plural(model.counts.files, 'file')} · ${model.counts.reviewed} reviewed`
       : 'Review'
   const loadError = scoped ? commitError : model === null ? error : null
   const loading = scoped ? commitData?.scope !== scope && commitError === null : model === null && error === null
@@ -555,11 +556,12 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       <SectionHeader
         title={
           <span className="git-review__heading">
-            <span data-review-summary>{sinceTitle}</span>
+            <span className="git-review__summary" data-review-summary title={sinceTitle}>
+              {sinceTitle}
+            </span>
             {scope !== null && <ScopeChip label={`Commit ${shortOid(commitData?.scope === scope ? commitData.commit : scope)}`} onRemove={() => setScopeState(null)} />}
           </span>
         }
-        titleTooltip={sinceTitle}
         actions={
           <div className="git-review__actions">
             <Button onClick={() => setAllCollapsed(!allCollapsed)}>{allCollapsed ? 'Expand all' : 'Collapse all'}</Button>

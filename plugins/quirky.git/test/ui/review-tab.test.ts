@@ -567,7 +567,7 @@ describe('quirky.git review tab', () => {
     expect(byText(element, 'Mark reviewed')).toBeNull()
     expect(element.querySelector('[role="img"][aria-label="Not reviewed"]')).toBeNull()
     expect(fake.callsTo('quirky.git/diff').at(-1)!.params).toMatchObject({ source: 'commit', commit: COMMIT })
-    expect(element.querySelector('[data-review-summary]')?.textContent).toBe('2 files')
+    expect(element.querySelector('[data-review-summary]')?.textContent).toBe('feat vs main · 2 files')
 
     act(() => handle.setScope(COMMIT))
     await settle()
@@ -577,6 +577,19 @@ describe('quirky.git review tab', () => {
     expect(element.querySelector('.ui-scope-chip')).toBeNull()
     expect(order(element)).toEqual([README, APP, ENABLED, FLAGS])
     expect(byText(card(element, APP), 'Mark reviewed')).not.toBeNull()
+  })
+
+  test('SC-33: the commit-scope header keeps its summary and chip as separate elements, the summary titled with its full text', async () => {
+    const element = await open({ worktree: 'w1', mode: 'review', commit: COMMIT })
+    const summary = element.querySelector('[data-review-summary]')!
+    const chip = element.querySelector('.ui-scope-chip')!
+    expect(summary.textContent).toBe('feat vs main · 2 files')
+    expect(summary.getAttribute('title')).toBe(summary.textContent)
+    expect(summary.textContent).toContain('feat vs main')
+    expect(summary.contains(chip)).toBe(false)
+    expect(chip.contains(summary)).toBe(false)
+    expect(summary.parentElement).toBe(chip.parentElement)
+    expect(chip.textContent).toContain('Commit f5429a1')
   })
 
   test('SC-33: a tab opened with a commit starts in that scope', async () => {

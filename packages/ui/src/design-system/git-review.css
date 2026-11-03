@@ -9,12 +9,40 @@
   overflow: hidden;
 }
 
+.git-review .ui-section-header {
+  flex: none;
+  flex-wrap: nowrap;
+  padding: var(--ui-space-4) var(--ui-space-8);
+}
+
+.git-review .ui-section-header__title {
+  flex: 1 1 0;
+}
+
+.git-review .ui-section-header__actions {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
 .git-review .git-review__heading {
   align-items: center;
   display: flex;
   gap: var(--ui-space-8);
   min-width: 0;
   text-transform: none;
+}
+
+.git-review .git-review__summary {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-review .git-review__heading .ui-scope-chip {
+  flex: none;
+  max-width: none;
 }
 
 .git-review .git-review__actions {
