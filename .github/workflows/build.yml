@@ -49,6 +49,13 @@ jobs:
 
       - name: Build
         run: bun run build
+        env:
+          QUIRKY_RELEASE_BUILD: '1'
+
+      - name: Check the release bundle id
+        run: |
+          id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' apps/desktop/build/Quirky.app/Contents/Info.plist)"
+          test "$id" = dev.quirky.app || { echo "release build has bundle id $id, expected dev.quirky.app"; exit 1; }
 
       - name: Package
         run: |
