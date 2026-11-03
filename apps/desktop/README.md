@@ -135,6 +135,12 @@ since it started. Daemon changes made while the app is open apply on the next la
 `quirky daemon restart`. To run two checkouts side by side, give each its own `QUIRKY_HOME`, because
 the later launch takes over a shared one.
 
+To start from the newest code in one step, run `bun run dev:latest`. It fast-forwards the branch
+from its upstream, runs `bun install`, restarts a daemon whose sources differ from this checkout,
+then runs `bun run dev`. `--no-pull` skips the pull and `--no-launch` stops before opening the app.
+The PTY host is never restarted, because stopping it ends every terminal. When it comes from
+another build, the script prints its command line so you can stop it yourself.
+
 ## Logs
 
 - Daemon: `$QUIRKY_HOME/logs/daemon.log` (default `~/.quirky/logs/daemon.log`).
