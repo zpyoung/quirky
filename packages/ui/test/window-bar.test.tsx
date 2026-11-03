@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Banner } from '../../../plugins/quirky.feedback/src/mode/Banner'
 import { Button, Tabs } from '../src/design-system'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
-import { launchableAgents, newAgentItems, newAgentLabel, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
+import { launchableAgents, newAgentItems, newAgentLabel, newTabButtons, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
 import { attentionStoreFor } from '../src/shell/attention'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
@@ -112,6 +112,13 @@ describe('window bar', () => {
               project!.textContent = labels.project
               worktree!.textContent = labels.worktree
               header.querySelector<HTMLElement>('.window-bar__new-agent span')!.textContent = labels.agent
+              // the boot fixture loads no terminal, browser or loops plugin, so stand in for their three icon buttons
+              const caret = header.querySelector<HTMLElement>('[aria-label="Choose agent"]')!
+              for (const label of ['New loop', 'New browser', 'New terminal']) {
+                const button = caret.cloneNode(true) as HTMLElement
+                button.setAttribute('aria-label', label)
+                caret.after(button)
+              }
             }, labels)
 
             const geometry = await page.locator(BAR).evaluate((header) => {
@@ -491,6 +498,19 @@ describe('the New agent caret', () => {
     expect(newAgentLabel(launchableAgents(listing, commands))).toBe('New Claude')
     expect(newAgentLabel(launchableAgents({ ...listing, defaultAgent: 'aider', agents: listing.agents.map((agent) => ({ ...agent, isDefault: agent.id === 'aider' })) }, commands))).toBe('New agent')
     expect(newAgentLabel([])).toBe('New agent')
+  })
+})
+
+describe('the New terminal, New browser and New loop buttons', () => {
+  test('each shows only when its command is registered, in that order', () => {
+    const all = new Set(['command:quirky.session/new-shell', 'command:quirky.browser/new-tab', 'command:quirky.loops/new'])
+    expect(newTabButtons(all).map((button) => [button.label, button.command])).toEqual([
+      ['New terminal', 'command:quirky.session/new-shell'],
+      ['New browser', 'command:quirky.browser/new-tab'],
+      ['New loop', 'command:quirky.loops/new']
+    ])
+    expect(newTabButtons(new Set(['command:quirky.browser/new-tab'])).map((button) => button.label)).toEqual(['New browser'])
+    expect(newTabButtons(new Set())).toEqual([])
   })
 })
 
