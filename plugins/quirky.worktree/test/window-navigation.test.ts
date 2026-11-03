@@ -1,12 +1,15 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { RpcErrorCode, type QuirkyClient, type Repo, type UiLayout, type UiState, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { makeHomeWithoutAutoHooks } from '../../../packages/daemon/test/helpers'
 import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { git, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
+
+// each test starts a daemon and real git repos, which takes several seconds on a loaded machine
+setDefaultTimeout(60_000)
 
 const { scratch } = isolateGitConfig()
 const controlPlugins = ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.git', 'quirky.cli']
