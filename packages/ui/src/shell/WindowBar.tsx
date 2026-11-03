@@ -217,6 +217,18 @@ export function launchableAgents(listing: unknown, commands: ReadonlySet<string>
   return [...choices.filter((choice) => choice.isDefault), ...choices.filter((choice) => !choice.isDefault)]
 }
 
+export type NewTabButton = { label: string; command: string; icon: ReactNode }
+
+/** The New terminal, New browser and New loop buttons, each only when the plugin that runs its command is loaded. */
+export function newTabButtons(commands: ReadonlySet<string>): NewTabButton[] {
+  const buttons: NewTabButton[] = [
+    { label: 'New terminal', command: 'command:quirky.session/new-shell', icon: <ToolIcon name="terminal-window" hue="cyan" /> },
+    { label: 'New browser', command: 'command:quirky.browser/new-tab', icon: <ControlIcon name="globe" /> },
+    { label: 'New loop', command: 'command:quirky.loops/new', icon: <ControlIcon name="arrows-clockwise" /> }
+  ]
+  return buttons.filter((button) => commands.has(button.command))
+}
+
 /** The New agent button's text: it names the default agent when that agent can be launched, else stays generic. */
 export function newAgentLabel(agents: readonly AgentChoice[]): string {
   const preferred = agents.find((agent) => agent.isDefault)
@@ -466,14 +478,32 @@ function NewAgent() {
 
   return (
     <>
-      <BarButton className="window-bar__new-agent" onClick={() => run(NEW_AGENT_TAB)}>
+      <BarButton className="window-bar__new-agent" label={newAgentLabel(agents)} onClick={() => run(NEW_AGENT_TAB)}>
         <ControlIcon name="plus" />
-        <span>{newAgentLabel(agents)}</span>
+        <span aria-hidden="true">{newAgentLabel(agents)}</span>
       </BarButton>
       <BarButton buttonRef={popup.ref} popup expanded={popup.open} icon label="Choose agent" onClick={popup.toggle}>
         <Caret />
       </BarButton>
       {popup.anchor && <PopupMenu anchor={popup.anchor} items={items} title="New agent" onClose={popup.close} />}
+    </>
+  )
+}
+
+function NewTabs() {
+  const connection = useConnection()
+  const host = usePluginHost()
+  const { model } = usePluginState()
+  const buttons = newTabButtons(new Set((model?.commands ?? []).map((command) => command.id)))
+  return (
+    <>
+      {buttons.map((button) => (
+        <BarButton key={button.command} icon label={button.label} onClick={() => {
+          void host.runCommand(button.command).catch((error) => showError(connection, `Could not open a ${button.label.slice(4)}`, error))
+        }}>
+          {button.icon}
+        </BarButton>
+      ))}
     </>
   )
 }
@@ -534,6 +564,7 @@ export function WindowBar({ onSettings }: WindowBarProps) {
           <ControlIcon name="caret-right" />
         </BarButton>
         <NewAgent />
+        <NewTabs />
       </div>
       <div className="window-bar__group window-bar__group--end">
         {needsYou !== null && (

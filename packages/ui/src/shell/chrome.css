@@ -117,6 +117,12 @@
   }
 }
 
+@media (max-width: 64rem) {
+  .window-bar__new-agent > span {
+    display: none;
+  }
+}
+
 .shell-statusbar {
   align-items: center;
   background: var(--ui-rail);
