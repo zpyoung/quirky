@@ -343,3 +343,38 @@ test('the CLI runs everything on this machine even when remote-tests.json names 
   expect(existsSync(marker)).toBe(true)
   expect(existsSync(sshCalled)).toBe(false)
 }, 30_000)
+
+test('discover throws with git stderr outside a git repository', () => {
+  expect(() => discover(dir, ['pkg'])).toThrow(/not a git repository/i)
+})
+
+const runCli = async (args: string[], env: Record<string, string> = {}) => {
+  const child = Bun.spawn(['bun', join(import.meta.dir, 'suite.ts'), ...args], {
+    cwd: dir,
+    env: { ...process.env, ...env },
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+  return { out, err, code }
+}
+
+test('the CLI fails and runs nothing when its path matches no test file', async () => {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
+  const marker = join(dir, 'ran')
+  write('a.test.ts', `test('runs', () => writeFileSync(${JSON.stringify(marker)}, ''))`)
+  const { out, err, code } = await runCli(['no-such-dir'])
+  expect(code, out + err).toBe(1)
+  expect(err).toContain('No tests found')
+  expect(existsSync(marker)).toBe(false)
+}, 30_000)
+
+test('the CLI fails and runs nothing when git discovery fails', async () => {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
+  const marker = join(dir, 'ran')
+  write('a.test.ts', `test('runs', () => writeFileSync(${JSON.stringify(marker)}, ''))`)
+  const { out, err, code } = await runCli(['pkg'], { GIT_DIR: join(dir, 'nonexistent') })
+  expect(code, out + err).toBe(1)
+  expect(err).toMatch(/not a git repository/i)
+  expect(existsSync(marker)).toBe(false)
+}, 30_000)

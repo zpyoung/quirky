@@ -182,10 +182,15 @@ export async function runFiles(
   return failed.length === 0 ? { ok: true, flaky: [] } : rerunAlone(cwd, failed.sort(), flags, limit, true)
 }
 
-/** The test files `bun test <args>` would run: tracked or untracked and not ignored, under any path argument. */
+/**
+ * The test files `bun test <args>` would run: tracked or untracked and not ignored, under any path argument.
+ * Throws, with git's stderr, when `git ls-files` fails, so an unlistable tree is never mistaken for an empty one.
+ */
 export function discover(cwd: string, args: string[]): string[] {
   const paths = args.filter((arg) => !arg.startsWith('-')).map((arg) => arg.replace(/^\.\//, ''))
-  const listed = Bun.spawnSync(['git', 'ls-files', '-co', '--exclude-standard', '-z'], { cwd }).stdout.toString().split('\0')
+  const git = Bun.spawnSync(['git', 'ls-files', '-co', '--exclude-standard', '-z'], { cwd })
+  if (git.exitCode !== 0) throw new Error(`git ls-files failed (exit ${git.exitCode}): ${git.stderr.toString().trim()}`)
+  const listed = git.stdout.toString().split('\0')
   return [...new Set(listed)]
     .filter((file) => TEST_FILE.test(file) && !file.split('/').includes('node_modules'))
     .filter((file) => paths.length === 0 || paths.some((path) => file.includes(path)))
@@ -207,10 +212,21 @@ async function installLocalDependencies(cwd: string): Promise<boolean> {
 
 async function main(argv: string[]): Promise<boolean> {
   const cwd = process.cwd()
+  let files: string[]
+  try {
+    files = discover(cwd, argv)
+  } catch (error) {
+    console.error(`could not list test files: ${error instanceof Error ? error.message : error}`)
+    return false
+  }
+  if (files.length === 0) {
+    console.error(`No tests found matching: ${argv.filter((arg) => !arg.startsWith('-')).join(' ') || '(all paths)'}`)
+    return false
+  }
   if (!(await installLocalDependencies(cwd))) return false
   const flags = argv.filter((arg) => arg.startsWith('-'))
   const jobs = process.env.QUIRKY_TEST_PROFILE === '1' ? 1 : LOCAL_JOBS
-  return (await runFiles(cwd, discover(cwd, argv), flags, jobs)).ok
+  return (await runFiles(cwd, files, flags, jobs)).ok
 }
 
 if (import.meta.main) process.exitCode = (await main(Bun.argv.slice(2))) ? 0 : 1
