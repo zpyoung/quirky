@@ -12,6 +12,7 @@ import {
   viewReport,
   waitFor,
   waitForScreen,
+  WORKTREE_VIEW,
   type Features
 } from './features-support'
 
@@ -38,6 +39,9 @@ const searchInput = (f: Features) => waitFor(
 )
 const enter = (input: HTMLInputElement, shift = false) => press(shift ? 'shift+enter' : 'enter', input)
 const toggle = (title: string) => document.querySelector<HTMLButtonElement>(`[data-pane-search] button[title="${title}"]`)!
+// other plugins' slots (source control, sidebar sections) report on their own timers, whatever the terminal does
+const isTerminalUiCall = (call: Features['calls'][number]) =>
+  call.method.startsWith('ui.') && (call.method !== 'ui.report' || call.params.slot === WORKTREE_VIEW)
 const reads = (text: string) => waitFor(`the counter to read ${text}`, () => (statusText() === text ? true : undefined))
 
 test(
@@ -133,7 +137,7 @@ test(
     await press('mod+g')
     await Bun.sleep(200)
     expect((await viewReport(f, 'still closed')).panes[0]!.search).toBeNull()
-    expect(f.calls.slice(revision).filter((call) => call.method.startsWith('ui.'))).toEqual([])
+    expect(f.calls.slice(revision).filter(isTerminalUiCall)).toEqual([])
 
     await press('mod+f')
     await searchInput(f)
@@ -154,8 +158,9 @@ test(
     expect(await runCommand(f, 'search', { query: '19' })).toEqual({ ok: true })
     await searchInput(f)
     expect(await runCommand(f, 'search-next')).toEqual({ ok: true })
+    await searchOf(f, 'the second match', (search) => search.current === 2)
     const state = JSON.parse(await h.ok(['ui', 'state', '--json'])) as { slots: { id: string; report: { panes: { pane: string; search: unknown }[] } }[] }
-    const report = state.slots.find((slot) => slot.id === 'view:quirky.session/worktree')!.report
+    const report = state.slots.find((slot) => slot.id === WORKTREE_VIEW)!.report
     expect(report.panes.find((candidate) => candidate.pane === pane)!.search).toMatchObject({ query: '19', current: 2, total: 12 })
 
     expect(await runCommand(f, 'search-previous')).toEqual({ ok: true })
