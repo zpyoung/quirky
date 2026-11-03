@@ -3,9 +3,11 @@ import * as fs from 'node:fs'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Terminal } from '@xterm/headless'
 import { HistoryLog, LogReader, newestOffset, oldestOffset } from '../src/history/log'
 import { composeReplay, formatCursor, pageBefore, parseCursor, scratchControlRows, textLinesAbove } from '../src/history/reader'
 import { Screen } from '../src/screen'
+import { mouseEncoding, wheelUp } from './mouse'
 
 const realFs = { ...fs }
 
@@ -558,6 +560,28 @@ describe('composeReplay', () => {
     expect(fresh.scrollbackRows).toBeGreaterThanOrEqual(50)
     live.dispose()
     fresh.dispose()
+  })
+
+  test('keeps the mouse encoding a program set before the replay window', async () => {
+    const output = `\x1b[?1003h\x1b[?1006h${numbered('h', 1, 500)}`
+    const dir = logWith(output)
+    const live = liveScreen(output)
+    await live.settled()
+
+    const { replay, historyCursor } = await composeReplay(dir, { historyLines: 50, live: live.snapshot() })
+    // a cursor means older output was left out, so the mode sequences at the start never reach the scratch screen
+    expect(historyCursor).not.toBeNull()
+
+    const pane = new Terminal({ cols: 80, rows: 24, scrollback: 1000, allowProposedApi: true })
+    await new Promise<void>((resolve) => pane.write(replay, resolve))
+    expect(mouseEncoding(pane)).toBe('SGR')
+    expect(await wheelUp(pane)).toBe('data:\x1b[<64;11;6M')
+
+    const rows: string[] = []
+    for (let y = 0; y < pane.buffer.active.length; y++) rows.push(pane.buffer.active.getLine(y)!.translateToString(true))
+    expect(rows).toEqual(live.lines().slice(-(50 + 24)).map((row) => row.text))
+    live.dispose()
+    pane.dispose()
   })
 })
 
