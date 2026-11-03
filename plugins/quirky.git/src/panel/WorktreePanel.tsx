@@ -1297,10 +1297,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                     setWrittenBy(agent)
                   }}
                   onError={(text) => failWith({ message: text })}
+                  onGenerateStart={dropEmptyMessageError}
                 />
               ) : undefined
             }
-            onGenerate={dropEmptyMessageError}
             writtenBy={writtenBy}
             error={errorView}
             onDismissError={() => setShipError(null)}

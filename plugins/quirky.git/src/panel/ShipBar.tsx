@@ -33,8 +33,6 @@ type Props = {
   locked: boolean
   /** The ✦ at the right end of the message field, when Source Control AI actions are on. */
   sparkle?: ReactNode
-  /** The ✦ was pressed to start a generation. */
-  onGenerate?(): void
   /** The agent that wrote the message in the box, until the message is edited. */
   writtenBy: string | null
   error: ShipErrorView | null
@@ -46,8 +44,6 @@ type Props = {
 }
 
 const CARET_LABEL = 'More commit and remote actions'
-
-const GENERATE_LABEL = 'Generate commit message with AI'
 
 const toMenu = (items: readonly ShipMenuItem[]): ContextMenuItem[] =>
   items.map((item) => ({
@@ -98,7 +94,7 @@ export function ShipErrorLine({ error, onDismiss }: { error: ShipErrorView; onDi
  * It holds no logic; the panel owns what each step does.
  */
 export function ShipBar(props: Props) {
-  const { context, worktree, step, items, busy, onStep, onChoose, showMessage, message, onMessage, messageRef, locked, sparkle, onGenerate, writtenBy, error, onDismissError, selecting, aside } = props
+  const { context, worktree, step, items, busy, onStep, onChoose, showMessage, message, onMessage, messageRef, locked, sparkle, writtenBy, error, onDismissError, selecting, aside } = props
   const notes = useNotes(context, worktree)
   const noteLabel = `Send ${notes.length} ${notes.length === 1 ? 'note' : 'notes'} to agent`
   return (
@@ -118,12 +114,7 @@ export function ShipBar(props: Props) {
       )}
       {showMessage && (
         <FormRow label="Commit message" htmlFor="source-control-commit-message">
-          <div
-            className="git-ship__field"
-            onClickCapture={(event) => {
-              if (event.target instanceof Element && event.target.closest(`[aria-label="${GENERATE_LABEL}"]`)) onGenerate?.()
-            }}
-          >
+          <div className="git-ship__field">
             <textarea
               id="source-control-commit-message"
               ref={messageRef}

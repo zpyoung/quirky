@@ -437,6 +437,24 @@ describe('scenario 27: generating the message', () => {
     unmount()
   })
 
+  test('generating from the Choose agent dialog takes the empty-message line away before the message arrives', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const { element, unmount } = await open((f) => {
+      aiOn(f)
+      f.on('quirky.git/generateCommitMessage', () => new Promise((resolve) => void (finish = resolve)))
+    })
+    await click(shipButton(element))
+    expect(errorLine(element)?.textContent).toContain('Write a commit message, or click ✦')
+    await click(byLabel(element, 'Commit message options'))
+    await click(menuItem('Choose agent…'))
+    expect(errorLine(element)?.textContent).toContain('Write a commit message, or click ✦')
+    await click(Array.from(qa(document.body, '[role="dialog"] button')).find((b) => b.textContent === 'Generate')!)
+    expect(byLabel(element, 'Stop generating commit message')).not.toBeNull()
+    expect(errorLine(element)).toBeNull()
+    await act(async () => finish({ message: 'Rename x', subject: 'Rename x', body: '', agent: 'claude' }))
+    unmount()
+  })
+
   test('starting ✦ leaves a different error on the line', async () => {
     let finish: (value: unknown) => void = () => {}
     const { element, unmount } = await open((f) => {

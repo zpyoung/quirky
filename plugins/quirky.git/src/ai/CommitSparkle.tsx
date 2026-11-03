@@ -26,6 +26,8 @@ type Props = {
   onResult(text: string, agent: string): void
   /** A failed generation, for the ship bar's error line. */
   onError(message: string): void
+  /** A generation began, from the ✦ or from the Generate dialog. */
+  onGenerateStart?(): void
 }
 
 type Run = { stopped: boolean }
@@ -43,7 +45,7 @@ function agentLabel(list: AgentList | null, id: unknown): string {
  * began (typing then deleting counts) and Stop was not pressed. Clicks are ignored while a
  * generation runs.
  */
-export function CommitSparkle({ context, worktree, scope, files, message, committing, edits, onResult, onError }: Props) {
+export function CommitSparkle({ context, worktree, scope, files, message, committing, edits, onResult, onError, onGenerateStart }: Props) {
   const agents = useAgents(context, true)
   const latestList = useRef<AgentList | null>(null)
   latestList.current = agents.list
@@ -60,6 +62,7 @@ export function CommitSparkle({ context, worktree, scope, files, message, commit
     const mine: Run = { stopped: false }
     current.current = mine
     setGenerating(true)
+    onGenerateStart?.()
     try {
       const result = (await context.call('quirky.git/generateCommitMessage', { worktree, scope, ...params })) as { message: string; agent?: string }
       if (!mine.stopped && edits.current === editsAtStart) onResult(result.message, agentLabel(latestList.current, result.agent))
