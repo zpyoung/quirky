@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import hutchConfig from '../hutch.config'
 
 const RELEASES = 'https://github.com/zpyoung/electrobun/releases/download'
@@ -74,14 +74,30 @@ export async function resolveElectrobunDevkit(version: string, options: DevkitOp
   return root
 }
 
+/**
+ * The environment the wrapped command runs with. The Hutch installer puts `hutch` in ~/.hutch/bin,
+ * which shells that skip the user's profile (agent and CI shells) don't have on PATH, so that
+ * directory is appended to PATH when Hutch is installed there. A `hutch` already on PATH still wins.
+ */
+export function commandEnv(env: Record<string, string | undefined>, home = homedir()): Record<string, string | undefined> {
+  const hutchBin = join(home, '.hutch', 'bin')
+  const path = env.PATH ?? ''
+  if (!existsSync(join(hutchBin, 'hutch')) || path.split(delimiter).includes(hutchBin)) return env
+  return { ...env, PATH: path === '' ? hutchBin : `${path}${delimiter}${hutchBin}` }
+}
+
 if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2)
   if (!command) throw new Error('usage: with-electrobun-devkit.ts <command> [args...]')
   const root = await resolveElectrobunDevkit(hutchConfig.electrobun.version)
+  const env = commandEnv(process.env)
   const result = spawnSync(command, args, {
     stdio: 'inherit',
-    env: root ? { ...process.env, HUTCH_ELECTROBUN_DEVKIT_ROOT: root } : process.env
+    env: root ? { ...env, HUTCH_ELECTROBUN_DEVKIT_ROOT: root } : env
   })
+  if ((result.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+    throw new Error(`${command} was not found on PATH or in ~/.hutch/bin; install Hutch or add its directory to PATH`)
+  }
   if (result.error) throw result.error
   process.exit(result.status ?? 1)
 }

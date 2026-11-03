@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { resolveElectrobunDevkit } from '../scripts/with-electrobun-devkit'
+import { dirname, join } from 'node:path'
+import { commandEnv, resolveElectrobunDevkit } from '../scripts/with-electrobun-devkit'
 
 const VERSION = '2.0.5-quirky.1'
 const macOS = { platform: 'darwin', arch: 'arm64', env: {} }
@@ -79,5 +79,50 @@ describe('Electrobun devkit resolution', () => {
     const { fetchAsset } = releaseAssets('0'.repeat(64))
     await expect(resolveElectrobunDevkit(VERSION, { ...macOS, cacheRoot, fetchAsset })).rejects.toThrow('failed its checksum')
     expect(existsSync(join(cacheRoot, VERSION))).toBe(false)
+  })
+})
+
+/** A home directory whose ~/.hutch/bin/hutch prints its arguments, like a Hutch install. */
+function hutchHome(): string {
+  const home = tempDir()
+  mkdirSync(join(home, '.hutch', 'bin'), { recursive: true })
+  const hutch = join(home, '.hutch', 'bin', 'hutch')
+  writeFileSync(hutch, '#!/bin/sh\necho "hutch $*"\n')
+  chmodSync(hutch, 0o755)
+  return home
+}
+
+describe('finding Hutch', () => {
+  test('~/.hutch/bin joins the end of PATH when Hutch is installed there', () => {
+    const home = hutchHome()
+    expect(commandEnv({ PATH: '/usr/bin:/bin' }, home).PATH).toBe(`/usr/bin:/bin:${join(home, '.hutch', 'bin')}`)
+  })
+
+  test('PATH is left alone when it already has ~/.hutch/bin or Hutch is not installed there', () => {
+    const home = hutchHome()
+    const withHutch = `${join(home, '.hutch', 'bin')}:/usr/bin`
+    expect(commandEnv({ PATH: withHutch }, home).PATH).toBe(withHutch)
+    expect(commandEnv({ PATH: '/usr/bin' }, tempDir()).PATH).toBe('/usr/bin')
+  })
+
+  // a shell that skipped the user's profile has only the system dirs and bun on PATH
+  const bareShell = (home: string) => ({
+    HOME: home,
+    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+    HUTCH_ELECTROBUN_DEVKIT_ROOT: tempDir()
+  })
+  const script = join(import.meta.dir, '..', 'scripts', 'with-electrobun-devkit.ts')
+
+  test('the wrapper runs ~/.hutch/bin/hutch from a shell without it on PATH', () => {
+    const run = spawnSync(process.execPath, [script, 'hutch', 'electrobun', 'prepare'], { env: bareShell(hutchHome()), encoding: 'utf8' })
+    expect(run.stderr).toBe('')
+    expect(run.stdout.trim()).toBe('hutch electrobun prepare')
+    expect(run.status).toBe(0)
+  })
+
+  test('the wrapper names ~/.hutch/bin when Hutch is nowhere to be found', () => {
+    const run = spawnSync(process.execPath, [script, 'hutch', 'electrobun', 'prepare'], { env: bareShell(tempDir()), encoding: 'utf8' })
+    expect(run.status).not.toBe(0)
+    expect(run.stderr).toContain('~/.hutch/bin')
   })
 })
