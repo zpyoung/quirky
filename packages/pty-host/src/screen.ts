@@ -1,6 +1,8 @@
 import { Terminal } from '@xterm/headless'
+import { version as xtermVersion } from '@xterm/headless/package.json'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { answerXtversion } from '@quirky/protocol'
 
 export interface ScreenSnapshot {
   ansi: string
@@ -91,6 +93,7 @@ export class Screen {
     this.term.loadAddon(new Unicode11Addon() as never)
     this.term.unicode.activeVersion = '11'
     this.term.loadAddon(this.addon as never)
+    answerXtversion(this.term, xtermVersion)
     this.term.onData((reply) => {
       if (!this.seeding) onReply?.(encoder.encode(reply))
     })
