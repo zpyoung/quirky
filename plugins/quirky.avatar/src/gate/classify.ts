@@ -313,14 +313,52 @@ function classifyTool(tool: string | undefined, args: string[]): ActionClass[] {
   return ['other']
 }
 
-function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyContext): ActionClass[] {
+const GIT_ENV_REDIRECT = /^(?:GIT_DIR|GIT_WORK_TREE)=(.*)$/s
+
+/**
+ * True when the repository or worktree a git command acts on lies outside every handed-off path.
+ * Considers the call's cwd, `-C`, `--git-dir`, `--work-tree`, `-c core.worktree` and the
+ * `GIT_DIR` / `GIT_WORK_TREE` variables; a value that needs shell expansion counts as outside.
+ */
+function gitTargetsOutside(cwd: string, chdirs: string[], redirects: string[], ctx: ClassifyContext): boolean {
+  const rootPaths = roots(ctx)
+  const dynamic = (value: string) => /[$`]/.test(value)
+  let gitCwd = cwd
+  for (const dir of chdirs) {
+    if (dynamic(dir)) return true
+    gitCwd = resolvePath(dir, gitCwd, ctx.home)
+  }
+  if (!isInside(gitCwd, rootPaths)) return true
+  return redirects.some((value) => dynamic(value) || !isInside(resolvePath(value, gitCwd, ctx.home), rootPaths) || !isInside(resolvePath(value, cwd, ctx.home), rootPaths))
+}
+
+function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyContext, cwd: string): ActionClass[] {
   const classes: ActionClass[] = []
+  const chdirs: string[] = []
+  const redirects: string[] = []
   let sub: string | undefined
   let subIndex = -1
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
-    if (arg === '-C' || arg === '--git-dir' || arg === '--work-tree' || arg === '-c') {
-      if (arg === '-c' && /^core\.hooksPath=/i.test(args[i + 1] ?? '')) classes.push('skip-hooks')
+    if (arg === '-C') {
+      if (args[i + 1] !== undefined) chdirs.push(args[++i])
+      continue
+    }
+    if (arg.startsWith('-C') && arg.length > 2) {
+      chdirs.push(arg.slice(2))
+      continue
+    }
+    const redirect = /^--(?:git-dir|work-tree)(?:=(.*))?$/s.exec(arg)
+    if (redirect) {
+      const value = redirect[1] ?? args[++i]
+      if (value !== undefined && value !== '') redirects.push(value)
+      continue
+    }
+    if (arg === '-c') {
+      const config = args[i + 1] ?? ''
+      if (/^core\.hooksPath=/i.test(config)) classes.push('skip-hooks')
+      const worktree = /^core\.worktree=(.*)$/is.exec(config)
+      if (worktree && worktree[1] !== '') redirects.push(worktree[1])
       i++
       continue
     }
@@ -329,15 +367,21 @@ function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyCont
     subIndex = i
     break
   }
+  for (const assignment of envAssignments) {
+    const value = GIT_ENV_REDIRECT.exec(assignment)?.[1]
+    if (value !== undefined && value !== '') redirects.push(value)
+  }
+  const outside = gitTargetsOutside(cwd, chdirs, redirects, ctx)
+  const localEdit: ActionClass = outside ? 'edit-outside' : 'edit-inside'
   const rest = subIndex >= 0 ? args.slice(subIndex + 1) : []
   const hooksEnv = envAssignments.some((a) => /^(HUSKY|HUSKY_SKIP_HOOKS|SKIP_HOOKS)=(0|1|true)$/.test(a))
   if ((hooksEnv && ['commit', 'push', 'merge', 'rebase'].includes(sub ?? '')) || rest.includes('--no-verify') || (sub === 'commit' && rest.includes('-n')) || rest.some((arg) => /core\.hooksPath/i.test(arg))) classes.push('skip-hooks')
   if (sub === undefined) return classes.length ? classes : ['read']
-  if (sub === 'push') return [...classes, ...classifyPush(rest, ctx)]
-  if (sub === 'rebase') return [...classes, 'push-force', 'edit-inside']
+  if (sub === 'push') return [...classes, ...classifyPush(rest, ctx), ...(outside ? ['edit-outside' as const] : [])]
+  if (sub === 'rebase') return [...classes, 'push-force', localEdit]
   if (sub === 'ls-remote' || sub === 'clone') return [...classes, 'network-read']
   if (GIT_READ_SUBCOMMANDS.has(sub)) return [...classes, 'read']
-  if (GIT_LOCAL_SUBCOMMANDS.has(sub)) return [...classes, 'edit-inside']
+  if (GIT_LOCAL_SUBCOMMANDS.has(sub)) return [...classes, localEdit]
   return [...classes, 'other']
 }
 
@@ -410,12 +454,13 @@ function isWriteCommand(cmd: string, args: string[]): boolean {
 
 type Analysis = { classes: ActionClass[]; parts: string[] }
 
-function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext, depth = 0): Analysis {
+function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext, depth = 0, inheritedEnv: string[] = []): Analysis {
   const classes: ActionClass[] = []
   const parts: string[] = []
   if (depth > 4) return { classes: ['other'], parts }
   let cwd = startCwd
   let downloadInPipeline = false
+  const shellEnv = [...inheritedEnv]
 
   if (/\b(?:ba|z|da|k)?sh\b[^|;&\n]*(?:\$\(|<\(|`)\s*(?:curl|wget)\b/.test(command)) classes.push('pipe-to-shell')
 
@@ -424,6 +469,8 @@ function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext,
     const { words, targets } = extractRedirects(tokenize(segment.text))
     const parsed = parseSegment(words)
     const { cmd, args } = parsed
+    if (cmd === '') shellEnv.push(...parsed.envAssignments)
+    else if (cmd === 'export') shellEnv.push(...args)
     if (cmd === '' && targets.length === 0) continue
 
     const partClasses: ActionClass[] = []
@@ -435,18 +482,18 @@ function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext,
       if (target !== undefined) cwd = resolvePath(target, cwd, ctx.home)
       partClasses.push('read')
     } else if (isShell && commandFlag >= 0 && args[commandFlag + 1] !== undefined) {
-      const inner = analyzeCommand(args[commandFlag + 1], cwd, ctx, depth + 1)
+      const inner = analyzeCommand(args[commandFlag + 1], cwd, ctx, depth + 1, [...shellEnv, ...parsed.envAssignments])
       partClasses.push(...inner.classes)
       parts.push(...inner.parts)
     } else if (cmd === 'eval' && args.length > 0) {
-      const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1)
+      const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, [...shellEnv, ...parsed.envAssignments])
       partClasses.push(...inner.classes)
       parts.push(...inner.parts)
     } else if (isShell) {
       partClasses.push(downloadInPipeline ? 'pipe-to-shell' : 'other')
     } else if (cmd !== '') {
       parts.push(parsed.text)
-      partClasses.push(...classifyMainCommand(parsed, ctx))
+      partClasses.push(...classifyMainCommand(parsed, ctx, cwd, shellEnv))
     }
 
     if (DOWNLOAD_CMDS.has(cmd)) downloadInPipeline = true
@@ -466,12 +513,12 @@ function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext,
   return { classes, parts }
 }
 
-function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext): ActionClass[] {
+function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string, shellEnv: string[]): ActionClass[] {
   const { cmd, args, text, envAssignments } = parsed
   const deploy = matchesCommandList(text, ctx.deployCommands) || isBuiltinDeploy(cmd, args)
   if (deploy) return ['deploy']
   let classes: ActionClass[]
-  if (cmd === 'git') classes = classifyGit(args, envAssignments, ctx)
+  if (cmd === 'git') classes = classifyGit(args, [...shellEnv, ...envAssignments], ctx, cwd)
   else if (cmd === 'gh' || cmd === 'glab') classes = classifyPullRequestCli(cmd, args)
   else if (DOWNLOAD_CMDS.has(cmd)) classes = classifyDownload(args)
   else if (cmd === 'security') classes = ['credential']
