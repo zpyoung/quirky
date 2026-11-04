@@ -183,10 +183,7 @@ describe('Codex runner', () => {
   })
 
   test('deny-all declines every command and patch approval without an ask', async () => {
-    // the shared fixture pins the default approval enums; deny-all uses stricter ones
-    patchFixture((script) =>
-      script.replace("message.params.approvalPolicy !== 'on-request' || message.params.sandbox !== 'workspace-write'", 'false')
-    )
+    allowDenyAllEnums()
     await runner.start(session, '[approve twice]', { toolPolicy: 'deny-all' })
     await until(() => rec.statuses.includes('done'))
     const threadStart = fixture.requests().find((request) => request.method === 'thread/start')
@@ -195,6 +192,80 @@ describe('Codex runner', () => {
     expect(replies.map((reply) => reply.result)).toEqual([{ decision: 'decline' }, { decision: 'decline' }])
     expect(rec.asks).toEqual([])
     expect(rec.statuses).not.toContain('waiting')
+  })
+
+  // the shared fixture pins the default approval enums; deny-all uses stricter ones
+  const allowDenyAllEnums = () =>
+    patchFixture((script) =>
+      script.replace("message.params.approvalPolicy !== 'on-request' || message.params.sandbox !== 'workspace-write'", 'false')
+    )
+
+  const recordArgv = () =>
+    patchFixture((script) =>
+      script.replace(
+        "let input = ''",
+        `require('node:fs').writeFileSync(${JSON.stringify(fixture.logPath + '.argv')}, JSON.stringify(process.argv.slice(2)))\nlet input = ''`
+      )
+    )
+  const launchArgv = (): string[] => JSON.parse(readFileSync(fixture.logPath + '.argv', 'utf8'))
+
+  test('deny-all starts the app-server with its shell, web search and app tools switched off', async () => {
+    allowDenyAllEnums()
+    recordArgv()
+    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
+    await until(() => rec.statuses.includes('done'))
+    const argv = launchArgv()
+    expect(argv[0]).toBe('app-server')
+    for (const feature of ['shell_tool', 'apps', 'plugins', 'browser_use', 'computer_use', 'multi_agent']) {
+      expect(argv.join(' ')).toContain(`--disable ${feature}`)
+    }
+    expect(argv.join(' ')).toContain('-c web_search="disabled"')
+  })
+
+  test('an unset policy starts the app-server with no extra arguments', async () => {
+    recordArgv()
+    await runner.start(session, 'hello')
+    await until(() => rec.statuses.includes('done'))
+    expect(launchArgv()).toEqual(['app-server'])
+  })
+
+  test('deny-all interrupts a turn that starts a tool without asking, journals the refusal and settles done', async () => {
+    allowDenyAllEnums()
+    patchFixture((script) =>
+      script.replace(
+        "if (text.includes('[failed]'))",
+        `if (text.includes('[exec]')) {
+    notify('item/started', { threadId, turnId: turn.id, item: { id: 'exec-1', type: 'commandExecution', status: 'inProgress', command: 'cat secrets' } })
+    return
+  }
+  if (text.includes('[failed]'))`
+      )
+    )
+    await runner.start(session, '[exec]', { toolPolicy: 'deny-all' })
+    await until(() => rec.statuses.includes('done'))
+    expect(fixture.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(1)
+    expect(rec.messages.filter((m) => m.role === 'system' && m.text === 'tools are disabled for this session')).toHaveLength(1)
+    expect(rec.messages.filter((m) => m.role === 'tool')).toEqual([])
+    expect(rec.statuses).not.toContain('exited')
+    expect(rec.asks).toEqual([])
+  })
+
+  test('an unset policy leaves a started tool running and journals it', async () => {
+    patchFixture((script) =>
+      script.replace(
+        "if (text.includes('[failed]'))",
+        `if (text.includes('[exec]')) {
+    notify('item/started', { threadId, turnId: turn.id, item: { id: 'exec-1', type: 'commandExecution', status: 'inProgress', command: 'ls' } })
+    notify('item/completed', { threadId, turnId: turn.id, item: { id: 'exec-1', type: 'commandExecution', status: 'completed', command: 'ls', aggregatedOutput: 'file.txt' } })
+    return finish(threadId, turn)
+  }
+  if (text.includes('[failed]'))`
+      )
+    )
+    await runner.start(session, '[exec]')
+    await until(() => rec.statuses.includes('done'))
+    expect(fixture.requests().some((request) => request.method === 'turn/interrupt')).toBe(false)
+    expect(rec.messages.filter((m) => m.role === 'tool')).toHaveLength(1)
   })
 
   test('an unset policy keeps the on-request workspace-write flow and asks', async () => {

@@ -11,6 +11,9 @@ const STATE_REQUEST_ID = 'quirky-state'
 
 type PiAgent = 'pi' | 'omp'
 
+// omp's --no-tools only drops built-in tools, so extension discovery has to go too
+const DENY_ALL_ARGS = ['--no-tools', '--no-extensions']
+
 /**
  * Finds the user's `pi` or `omp` executable the way their terminal would: `command -v` in a login
  * shell, so PATH entries added by shell profiles count. Throws when nothing is found.
@@ -78,6 +81,7 @@ type Running = {
   agent: PiAgent
   toolPolicy: ToolPolicy
   child: ChildProcessWithoutNullStreams
+  decoder: TextDecoder
   buffer: string
   stderr: string
   contextWindow: number | null
@@ -93,7 +97,7 @@ type Running = {
  * no PTY: JSON lines in (prompts), JSON lines out (events). Assistant messages are journaled as
  * they end and `agent_end` settles the session as done.
  *
- * A `deny-all` session starts the CLI with no tools; any tool execution that happens anyway aborts
+ * A `deny-all` session starts the CLI with no tools and no extensions; any tool execution that happens anyway aborts
  * the turn and is journaled as refused. Extension dialogs are always cancelled, never answered.
  */
 export function createPiRunner(context: StructuredContext): StructuredRunner {
@@ -129,7 +133,7 @@ class PiRunner implements StructuredRunner {
     const args = [
       '--mode',
       'rpc',
-      ...(toolPolicy === 'deny-all' ? ['--no-tools'] : []),
+      ...(toolPolicy === 'deny-all' ? DENY_ALL_ARGS : []),
       ...(typeof options.model === 'string' ? ['--model', options.model] : [])
     ]
     const child = spawn(executable, args, {
@@ -144,6 +148,7 @@ class PiRunner implements StructuredRunner {
       agent,
       toolPolicy,
       child,
+      decoder: new TextDecoder(),
       buffer: '',
       stderr: '',
       contextWindow: null,
@@ -240,7 +245,7 @@ class PiRunner implements StructuredRunner {
   }
 
   private read(run: Running, chunk: Buffer): void {
-    run.buffer += chunk.toString('utf8')
+    run.buffer += run.decoder.decode(chunk, { stream: true })
     if (run.buffer.length > MAX_FRAME_CHARS) {
       run.buffer = ''
       this.append(run, 'system', 'dropped an oversized rpc frame')
