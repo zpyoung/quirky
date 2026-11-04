@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "stage": 2,
   "title": "Avatar",
-  "status": "Approved",
+  "status": "Approved · Tech spec: authored (tech.md; gate fired: crosses subsystems, >3 files)",
   "amendments": [],
   "sections": {
     "purpose": "The avatar stands in for you over the worktrees you hand it. It supervises the agents working there while you're away: it answers their questions, decides their permission requests, gets stuck ones moving, has their work reviewed by another model family, and merges when the mandate allows it. When you come back, a report puts the few things only you can decide at the top.",

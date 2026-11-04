@@ -4,7 +4,7 @@
 
 ## Status & amendments
 
-**Status:** Approved
+**Status:** Approved · Tech spec: authored (tech.md; gate fired: crosses subsystems, >3 files)
 
 **Amendments:**
 none
