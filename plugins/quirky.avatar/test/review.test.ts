@@ -354,6 +354,60 @@ describe('reviewer findings', () => {
     expect(t.review.reviewedSha('wt-1')).toBe(fullHead)
   })
 
+  describe('a full review closing partial-review needs', () => {
+    function concurrent() {
+      let big = true
+      let n = 0
+      const t = setup({
+        calls: { 'quirky.structured/create': () => ({ id: `rev-${++n}` }) },
+        git: (cwd, args, maxChars) => (big ? oversize(cwd, args, maxChars) : Promise.resolve({ ok: true, stdout: DIFF, capped: false }))
+      })
+      let clock = 1000
+      t.app.now = () => clock
+      const run = async (head: string, partial: boolean, at: number) => {
+        clock = at
+        big = partial
+        t.setHead(head)
+        await t.review.startReview('wt-1')
+        return `rev-${n}`
+      }
+      const finish = (sessionId: string, at: number) => {
+        clock = at
+        return t.settle({ sessionId, lastAssistantMessage: reviewerOutput() })
+      }
+      return { t, run, finish }
+    }
+
+    test('an older-head full review finishing after a newer-head partial need leaves that need open', async () => {
+      const { t, run, finish } = concurrent()
+      const full = await run(HEAD, false, 1000)
+      const partial = await run(NEXT, true, 2000)
+      await finish(partial, 2500)
+      expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(1)
+      await finish(full, 3000)
+      const open = t.app.needs.list({ worktreeId: 'wt-1', open: true })
+      expect(open).toHaveLength(1)
+      expect(open[0]?.detail.headSha).toBe(NEXT)
+    })
+
+    test('a full review of the same head closes its partial need', async () => {
+      const { t, run, finish } = concurrent()
+      const full = await run(NEXT, false, 1000)
+      const partial = await run(NEXT, true, 2000)
+      await finish(partial, 2500)
+      await finish(full, 3000)
+      expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(0)
+    })
+
+    test('a partial need for an older head created before the full review started is closed', async () => {
+      const { t, run, finish } = concurrent()
+      await finish(await run(HEAD, true, 1000), 1500)
+      expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(1)
+      await finish(await run(NEXT, false, 2000), 2500)
+      expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(0)
+    })
+  })
+
   test('a whole diff still marks the commit reviewed and raises no need', async () => {
     const t = setup()
     await t.review.startReview('wt-1')
