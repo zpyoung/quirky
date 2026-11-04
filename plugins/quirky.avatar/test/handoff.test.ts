@@ -54,6 +54,8 @@ function setup(options: Options = {}) {
       ...options.calls
     }
   })
+  const frozenNow = 1_700_000_000_000
+  t.app.now = () => frozenNow
   const gate = { markers: [] as unknown[][], removed: [] as string[], checks: [] as string[], approved: [] as string[], passthrough: [] as string[], checkResult: { ok: true, reason: '' } }
   t.app.services.gate.writeMarker = (...args) => void gate.markers.push(args)
   t.app.services.gate.removeMarker = (id) => void gate.removed.push(id)
