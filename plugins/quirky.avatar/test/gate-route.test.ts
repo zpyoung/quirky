@@ -27,13 +27,23 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-function avatarPluginsDir(): string {
+type ListedWorktree = { id: string; path: string; branch: string; repoId: string; isMain: boolean }
+
+function avatarPluginsDir(worktrees: ListedWorktree[]): string {
   const dir = mkdtempSync(join(tmpdir(), 'qav-route-bi-'))
   dirs.push(dir)
   symlinkSync(PLUGIN_DIR, join(dir, 'quirky.avatar'))
   for (const id of DEPENDENCIES) {
     mkdirSync(join(dir, id))
-    writeFileSync(join(dir, id, 'quirky-plugin.json'), JSON.stringify({ id, apiVersion: '1.0.0', name: id, version: '0.1.0', activation: 'lazy' }))
+    const manifest: Record<string, unknown> = { id, apiVersion: '1.0.0', name: id, version: '0.1.0', activation: 'lazy' }
+    if (id === 'quirky.worktree') {
+      Object.assign(manifest, { main: 'main.ts', contributes: { method: [{ id: 'list', description: 'Worktrees.', readOnly: true, params: { type: 'object' }, result: { type: 'array' } }] } })
+      writeFileSync(
+        join(dir, id, 'main.ts'),
+        `export function activate(context) {\n  context.provide('method:quirky.worktree/list', () => ${JSON.stringify(worktrees)})\n}\n`
+      )
+    }
+    writeFileSync(join(dir, id, 'quirky-plugin.json'), JSON.stringify(manifest))
   }
   return dir
 }
@@ -55,15 +65,16 @@ function fileStore(path: string): PluginStore {
 }
 
 /** A daemon with the avatar loaded and `wt-1` handed off with a marker for session `sess-1`. */
-async function boot(level: Level = 'own-branch') {
-  const harness = await startHarness({ home: makeTempHome('qav-route-'), builtinPluginsDir: avatarPluginsDir() })
+async function boot(level: Level = 'own-branch', options: { listWorktree?: boolean } = {}) {
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'qav-route-wt-')))
+  dirs.push(cwd)
+  const listed: ListedWorktree[] = options.listWorktree === false ? [] : [{ id: 'wt-1', path: cwd, branch: 'feature', repoId: 'repo', isMain: false }]
+  const harness = await startHarness({ home: makeTempHome('qav-route-'), builtinPluginsDir: avatarPluginsDir(listed) })
   harnesses.add(harness)
   const store = createAvatarStore(fileStore(join(harness.home, 'plugin-data', 'quirky.avatar', 'store.db')))
   store.mandates.put(sampleMandate({ level }))
   store.handoffs.put({ worktreeId: 'wt-1', state: 'working', sessionId: 'sess-1', active: true, handedOffAt: 1, takenBackAt: null })
   writeMarkerFile(harness.home, 'sess-1', { worktreeId: 'wt-1', level })
-  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'qav-route-wt-')))
-  dirs.push(cwd)
   const base = `http://127.0.0.1:${harness.runtime.port}`
 
   async function gate(agent: string, payload: Record<string, unknown>, query = 'session=sess-1&event=PreToolUse&deadline=5000'): Promise<ToolGateDecision> {
@@ -138,6 +149,14 @@ describe('/gate/ through the real daemon with the avatar loaded', () => {
   test('a session with no marker is passthrough, and so is one the avatar does not supervise', async () => {
     const s = await boot()
     expect(await s.gate('claude', sshWrite, 'session=someone-else&event=PreToolUse&deadline=5000')).toMatchObject({ decision: 'passthrough', encoded: '{}' })
+  })
+
+  test('a worktree the daemon cannot list is refused with the retry reason, even for a read', async () => {
+    const s = await boot('own-branch', { listWorktree: false })
+    const decision = await s.gate('claude', read(s.cwd))
+    expect(decision.decision).toBe('deny')
+    expect(JSON.parse(decision.encoded!).hookSpecificOutput.permissionDecisionReason).toBe("Quirky's avatar gate couldn't confirm the worktree; try again shortly.")
+    expect(s.store.journalPage({ worktreeId: 'wt-1' })[0]!.data.outcome).toBe('retry')
   })
 
   test('Shadow answers passthrough for a write that would be held', async () => {

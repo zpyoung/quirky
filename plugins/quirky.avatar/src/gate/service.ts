@@ -23,6 +23,7 @@ const PERMISSION_RECEIPT_WINDOW_MS = 5 * 60_000
 
 const RETRY_REASON = "The avatar hasn't decided yet; try the same call again shortly."
 const SHADOW_REASON = 'Shadow: the avatar only logs what it would have decided.'
+const UNCONFIRMED_WORKTREE_REASON = "Quirky's avatar gate couldn't confirm the worktree; try again shortly."
 const UNREADABLE_REASON = "The avatar couldn't read this tool call, so it was refused."
 const heldReason = (why: string): string => `Held for the user to decide: ${why}. Carry on with anything else, and don't retry this call until you're told.`
 
@@ -117,19 +118,21 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
     }
   }
 
-  async function classifyContext(call: ToolCall): Promise<ClassifyContext> {
+  /** Null when the call's worktree can't be resolved to a real path; the call's own cwd is never trusted as the root. */
+  async function classifyContext(call: ToolCall): Promise<ClassifyContext | null> {
     const list = await worktrees()
     const self = list.find((entry) => entry.id === call.worktreeId)
+    if (self === undefined) return null
     const settings = app.settings()
     const others = app.services.handoff
       .active()
       .filter((row) => row.worktreeId !== call.worktreeId)
       .flatMap((row) => list.filter((entry) => entry.id === row.worktreeId).flatMap((entry) => [entry.path, realPath(entry.path)]))
     return {
-      worktreePath: self === undefined ? call.cwd : realPath(self.path),
-      handedOffPaths: [...new Set([...(self === undefined ? [] : [self.path]), ...others])],
-      defaultBranch: list.find((entry) => self !== undefined && entry.repoId === self.repoId && entry.isMain)?.branch ?? 'main',
-      ownBranch: self?.branch ?? 'HEAD',
+      worktreePath: realPath(self.path),
+      handedOffPaths: [...new Set([self.path, ...others])],
+      defaultBranch: list.find((entry) => entry.repoId === self.repoId && entry.isMain)?.branch ?? 'main',
+      ownBranch: self.branch ?? 'HEAD',
       home: agentEnv.home,
       allowCommands: settings.allowCommands,
       denyCommands: settings.denyCommands,
@@ -263,6 +266,10 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
     let rule: RuleDecision
     try {
       const ctx = await classifyContext(call)
+      if (ctx === null) {
+        const trace: Trace = [{ step: 'floor-core', result: 'deny', note: 'the worktree could not be confirmed; retry' }]
+        return conclude(entry, mandate, { outcome: 'retry', reason: UNCONFIRMED_WORKTREE_REASON, reliedOn: 'an unconfirmed worktree', trace, step: null })
+      }
       rule = decide({ call, classes: classifyCall(call, ctx), mandate, switches: mandate.switches, level: mandate.level, ctx })
     } catch (error) {
       const reason = `The avatar couldn't classify this call: ${error instanceof Error ? error.message : String(error)}`
