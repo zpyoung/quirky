@@ -1,0 +1,1323 @@
+{
+  "id": "quirky.avatar",
+  "apiVersion": "1.2.0",
+  "name": "Avatar",
+  "version": "0.1.0",
+  "description": "Supervises worktrees you hand off: gates their tool calls, briefs and steers the agents, and carries the work to a merge-ready pull request.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "ui": "dist/ui.js",
+  "activation": "startup",
+  "dependencies": [
+    "quirky.worktree",
+    "quirky.session",
+    "quirky.agent-status",
+    "quirky.agents",
+    "quirky.ask",
+    "quirky.checks",
+    "quirky.git",
+    "quirky.hosting",
+    "quirky.structured",
+    "quirky.heimdall",
+    "quirky.notifications"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "eligibility",
+        "description": "Every local worktree as a hand-off sheet row, with the reason when it cannot be selected.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "worktreeId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "projectName": {
+                "type": "string"
+              },
+              "groupId": {
+                "description": "The group, or null."
+              },
+              "groupName": {
+                "description": "The group name, or null."
+              },
+              "agent": {
+                "description": "The agent, or null."
+              },
+              "running": {
+                "type": "boolean"
+              },
+              "handedOff": {
+                "type": "boolean"
+              },
+              "eligible": {
+                "type": "boolean"
+              },
+              "reason": {
+                "description": "Why the row cannot be selected, or null."
+              },
+              "ungatedNote": {
+                "description": "A note when the agent cannot be gated, or null."
+              }
+            },
+            "required": [
+              "worktreeId",
+              "name",
+              "projectId",
+              "projectName",
+              "running",
+              "handedOff",
+              "eligible"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      {
+        "id": "handoff",
+        "description": "Hands worktrees to the avatar. Each item is validated on its own, and re-handing off a worktree updates its mandate.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "doneWhen": {
+                    "type": "string"
+                  },
+                  "doneWhenKind": {
+                    "type": "string",
+                    "enum": [
+                      "command",
+                      "prose"
+                    ]
+                  },
+                  "guidelines": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "shadow",
+                      "local",
+                      "own-branch",
+                      "full"
+                    ]
+                  },
+                  "switches": {
+                    "type": "object",
+                    "properties": {
+                      "messaging": {
+                        "type": "boolean"
+                      },
+                      "historyRewrite": {
+                        "type": "boolean"
+                      },
+                      "deploys": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "messaging",
+                      "historyRewrite",
+                      "deploys"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "agent": {
+                    "description": "The agent to run, or null for the default."
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "allowSplit": {
+                    "type": "boolean"
+                  },
+                  "sharedGoal": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "goal": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "goal"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "worktreeId",
+                  "goal",
+                  "doneWhen",
+                  "level"
+                ],
+                "additionalProperties": true,
+                "description": "One worktree to hand off."
+              }
+            }
+          },
+          "required": [
+            "items"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "worktreeId",
+                  "ok"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "results"
+          ],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "takeBack",
+        "description": "Takes worktrees back from the avatar, or all of them. Agents keep running; open needs close as handed back.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktreeIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Worktrees to take back."
+            },
+            "all": {
+              "type": "boolean",
+              "description": "Take back every handed-off worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "handedBackWith": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "worktreeId",
+                  "ok",
+                  "handedBackWith"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "results"
+          ],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "status",
+        "description": "The handed-off worktrees and how many needs wait on the person; feeds the pill and panel.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "handoffs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "checking",
+                      "gate-failed",
+                      "briefing",
+                      "working",
+                      "waiting-on-you",
+                      "checking-done",
+                      "in-review",
+                      "merge-ready",
+                      "merged",
+                      "pr-ready",
+                      "committed",
+                      "parked",
+                      "done"
+                    ]
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "shadow",
+                      "local",
+                      "own-branch",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "worktreeId",
+                  "name",
+                  "state",
+                  "level"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "needsYouCount": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "handoffs",
+            "needsYouCount"
+          ],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "sidebarStatus",
+        "description": "Avatar status by worktree ID, for the worktree sidebar.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": true,
+          "description": "AvatarWorktreeStatus by worktree ID: {state, level, needsYou}."
+        }
+      },
+      {
+        "id": "report",
+        "description": "The report: what needs the person, a story per worktree and a summary of decisions.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "needsYou": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "held-call",
+                      "question",
+                      "guess",
+                      "mandate-edit",
+                      "parked",
+                      "gate-failed",
+                      "brain-error",
+                      "merge-blocked"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": true
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "allow-once",
+                        "deny",
+                        "confirm",
+                        "redo",
+                        "review-accept",
+                        "review-reject",
+                        "answer",
+                        "restart",
+                        "take-back",
+                        "restart-to-handoff"
+                      ]
+                    }
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "resolvedAt": {
+                    "description": "Epoch ms, or null while open."
+                  },
+                  "resolution": {
+                    "description": "How it was resolved, or null."
+                  }
+                },
+                "required": [
+                  "id",
+                  "worktreeId",
+                  "kind",
+                  "title",
+                  "detail",
+                  "actions",
+                  "createdAt"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "stories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "switchesOn": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "story": {
+                    "type": "string"
+                  },
+                  "handedBackWith": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "worktreeId",
+                  "name",
+                  "switchesOn",
+                  "story",
+                  "handedBackWith"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "decisions": {
+                  "type": "integer"
+                },
+                "allowed": {
+                  "type": "integer"
+                },
+                "denied": {
+                  "type": "integer"
+                },
+                "held": {
+                  "type": "integer"
+                },
+                "guesses": {
+                  "type": "integer"
+                },
+                "sleeps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "number"
+                      },
+                      "durationMs": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "durationMs"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "keptAwake": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "decisions",
+                "allowed",
+                "denied",
+                "held",
+                "guesses",
+                "sleeps",
+                "keptAwake"
+              ],
+              "additionalProperties": true
+            },
+            "topSkippedCalls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "at": {
+                    "type": "number"
+                  },
+                  "worktreeId": {
+                    "description": "The worktree, or null."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "handoff",
+                      "take-back",
+                      "gate",
+                      "event",
+                      "brain-action",
+                      "brain-error",
+                      "rotation",
+                      "ask",
+                      "guess",
+                      "stuck",
+                      "ladder",
+                      "done-check",
+                      "finding",
+                      "outbox",
+                      "skipped-call",
+                      "sleep",
+                      "mandate-proposal",
+                      "notify"
+                    ]
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "seq",
+                  "at",
+                  "kind",
+                  "data"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "needsYou",
+            "stories",
+            "summary",
+            "topSkippedCalls"
+          ],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "log",
+        "description": "Journal entries, newest first, optionally for one worktree and before a sequence number.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "before": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Only entries with a smaller sequence number."
+            }
+          }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer"
+              },
+              "at": {
+                "type": "number"
+              },
+              "worktreeId": {
+                "description": "The worktree, or null."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "handoff",
+                  "take-back",
+                  "gate",
+                  "event",
+                  "brain-action",
+                  "brain-error",
+                  "rotation",
+                  "ask",
+                  "guess",
+                  "stuck",
+                  "ladder",
+                  "done-check",
+                  "finding",
+                  "outbox",
+                  "skipped-call",
+                  "sleep",
+                  "mandate-proposal",
+                  "notify"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "kind",
+              "data"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      {
+        "id": "resolveNeed",
+        "description": "Answers one needs-you item with a one-click action.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "needId": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "allow-once",
+                "deny",
+                "confirm",
+                "redo",
+                "review-accept",
+                "review-reject",
+                "answer",
+                "restart",
+                "take-back",
+                "restart-to-handoff"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "description": "Free text for the answer action."
+            }
+          },
+          "required": [
+            "needId",
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "mandate",
+        "description": "The stored mandate of a worktree, kept after take-back, or null.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktreeId"
+          ]
+        },
+        "result": {
+          "description": "The mandate, or null.",
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "settings",
+        "description": "The avatar settings in effect.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "defaultLevel": {
+              "type": "string",
+              "enum": [
+                "shadow",
+                "local",
+                "own-branch",
+                "full"
+              ]
+            },
+            "switches": {
+              "type": "object",
+              "properties": {
+                "messaging": {
+                  "type": "boolean"
+                },
+                "historyRewrite": {
+                  "type": "boolean"
+                },
+                "deploys": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "messaging",
+                "historyRewrite",
+                "deploys"
+              ],
+              "additionalProperties": false
+            },
+            "houseRules": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "denyCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "deployCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "brainAgent": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex",
+                "pi",
+                "omp"
+              ]
+            },
+            "brainModel": {
+              "description": "The brain model, or null for the agent default."
+            },
+            "judgmentTimeoutSeconds": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "defaultLevel",
+            "switches",
+            "houseRules",
+            "allowCommands",
+            "denyCommands",
+            "deployCommands",
+            "brainAgent",
+            "brainModel",
+            "judgmentTimeoutSeconds"
+          ],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "setSettings",
+        "description": "Changes avatar settings; fields left out keep their value.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "defaultLevel": {
+              "type": "string",
+              "enum": [
+                "shadow",
+                "local",
+                "own-branch",
+                "full"
+              ]
+            },
+            "switches": {
+              "type": "object",
+              "properties": {
+                "messaging": {
+                  "type": "boolean"
+                },
+                "historyRewrite": {
+                  "type": "boolean"
+                },
+                "deploys": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "houseRules": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "denyCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "deployCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "brainAgent": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex",
+                "pi",
+                "omp"
+              ]
+            },
+            "brainModel": {
+              "description": "The brain model, or null for the agent default."
+            },
+            "judgmentTimeoutSeconds": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "defaultLevel": {
+              "type": "string",
+              "enum": [
+                "shadow",
+                "local",
+                "own-branch",
+                "full"
+              ]
+            },
+            "switches": {
+              "type": "object",
+              "properties": {
+                "messaging": {
+                  "type": "boolean"
+                },
+                "historyRewrite": {
+                  "type": "boolean"
+                },
+                "deploys": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "messaging",
+                "historyRewrite",
+                "deploys"
+              ],
+              "additionalProperties": false
+            },
+            "houseRules": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "denyCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "deployCommands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "brainAgent": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex",
+                "pi",
+                "omp"
+              ]
+            },
+            "brainModel": {
+              "description": "The brain model, or null for the agent default."
+            },
+            "judgmentTimeoutSeconds": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "defaultLevel",
+            "switches",
+            "houseRules",
+            "allowCommands",
+            "denyCommands",
+            "deployCommands",
+            "brainAgent",
+            "brainModel",
+            "judgmentTimeoutSeconds"
+          ],
+          "additionalProperties": true
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "The avatar journal, needs queue, a worktree state or the set of handed-off worktrees changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": true
+        }
+      }
+    ],
+    "tool-gate": [
+      {
+        "id": "gate",
+        "description": "Decides each tool call of a supervised session before the agent runs it.",
+        "agents": [
+          "claude",
+          "codex",
+          "pi",
+          "omp"
+        ]
+      }
+    ],
+    "launch-hook": [
+      {
+        "id": "gate-hooks",
+        "description": "Installs the gate hooks into the agent launch.",
+        "agents": [
+          "claude",
+          "codex",
+          "pi",
+          "omp"
+        ]
+      }
+    ],
+    "job": [
+      {
+        "id": "watchdog",
+        "description": "Looks for stuck workers and unanswered needs.",
+        "interval": "1m"
+      },
+      {
+        "id": "records",
+        "description": "Checks session records against the gate receipts.",
+        "interval": "15s"
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "handoff",
+        "words": "handoff",
+        "summary": "hand a worktree to the avatar with a goal and a done-when",
+        "positionals": [
+          {
+            "name": "worktree",
+            "description": "the worktree to hand off",
+            "required": true
+          }
+        ],
+        "flags": {
+          "goal": {
+            "type": "string",
+            "description": "what the worker should achieve",
+            "required": true
+          },
+          "done-when": {
+            "type": "string",
+            "description": "a command or sentence that says when the work is done",
+            "required": true
+          },
+          "level": {
+            "type": "string",
+            "description": "how far the avatar may act on its own",
+            "enum": [
+              "shadow",
+              "local",
+              "own-branch",
+              "full"
+            ]
+          },
+          "agent": {
+            "type": "string",
+            "description": "the agent to start when none is running"
+          },
+          "guideline": {
+            "type": "string",
+            "description": "a guideline for the worker",
+            "repeatable": true
+          },
+          "notes": {
+            "type": "string",
+            "description": "extra notes for the worker"
+          },
+          "allow-messaging": {
+            "type": "boolean",
+            "description": "let the worker message people"
+          },
+          "allow-history-rewrite": {
+            "type": "boolean",
+            "description": "let the worker rewrite git history"
+          },
+          "allow-deploys": {
+            "type": "boolean",
+            "description": "let the worker deploy"
+          },
+          "allow-split": {
+            "type": "boolean",
+            "description": "let the avatar split work into new worktrees"
+          },
+          "shared-goal": {
+            "type": "string",
+            "description": "a shared goal this worktree contributes to"
+          }
+        },
+        "methods": [
+          "quirky.avatar/eligibility",
+          "quirky.avatar/handoff"
+        ]
+      },
+      {
+        "id": "status",
+        "words": "status",
+        "summary": "show the handed-off worktrees and how many wait on you",
+        "flags": {},
+        "methods": [
+          "quirky.avatar/status"
+        ]
+      },
+      {
+        "id": "report",
+        "words": "report",
+        "summary": "show the avatar report",
+        "flags": {},
+        "methods": [
+          "quirky.avatar/report"
+        ]
+      },
+      {
+        "id": "log",
+        "words": "log",
+        "summary": "show the avatar journal, newest first",
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "only this worktree"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "how many entries to show"
+          },
+          "before": {
+            "type": "integer",
+            "description": "only entries with a smaller sequence number"
+          }
+        },
+        "methods": [
+          "quirky.avatar/log"
+        ]
+      },
+      {
+        "id": "take-back",
+        "words": "take-back",
+        "summary": "take a worktree back from the avatar, or every worktree with --all",
+        "positionals": [
+          {
+            "name": "worktree",
+            "description": "the worktree to take back"
+          }
+        ],
+        "flags": {
+          "all": {
+            "type": "boolean",
+            "description": "take back every handed-off worktree"
+          }
+        },
+        "methods": [
+          "quirky.avatar/takeBack"
+        ]
+      }
+    ],
+    "window-bar-item": [
+      {
+        "id": "pill",
+        "title": "Avatar",
+        "description": "Shows how many worktrees the avatar supervises and how many wait on you."
+      }
+    ],
+    "panel": [
+      {
+        "id": "panel",
+        "title": "Avatar",
+        "description": "The handed-off worktrees and what needs you.",
+        "defaultSlot": "left-bottom"
+      }
+    ],
+    "view": [
+      {
+        "id": "avatar",
+        "title": "Avatar",
+        "description": "Live, Report and Log."
+      }
+    ],
+    "overlay": [
+      {
+        "id": "sheet",
+        "title": "Hand off to Avatar",
+        "description": "Pick worktrees and write the mandate for each."
+      }
+    ],
+    "command": [
+      {
+        "id": "handoff",
+        "title": "Hand off to Avatar\u2026",
+        "description": "Opens the hand-off sheet, optionally for given worktrees."
+      },
+      {
+        "id": "open-report",
+        "title": "Open Avatar report",
+        "description": "Opens the Avatar view on its Report tab."
+      }
+    ],
+    "setting": [
+      {
+        "id": "default-level",
+        "type": "enum",
+        "title": "Default level",
+        "description": "How far the avatar may act on its own in a new hand-off.",
+        "default": "full",
+        "values": [
+          "shadow",
+          "local",
+          "own-branch",
+          "full"
+        ]
+      },
+      {
+        "id": "switch-messaging",
+        "type": "boolean",
+        "title": "Allow messaging people",
+        "description": "New hand-offs may message people.",
+        "default": false
+      },
+      {
+        "id": "switch-history-rewrite",
+        "type": "boolean",
+        "title": "Allow history rewrites",
+        "description": "New hand-offs may rewrite git history.",
+        "default": false
+      },
+      {
+        "id": "switch-deploys",
+        "type": "boolean",
+        "title": "Allow deploys",
+        "description": "New hand-offs may deploy.",
+        "default": false
+      },
+      {
+        "id": "house-rules",
+        "type": "string",
+        "title": "House rules",
+        "description": "Rules every worker follows, one per line.",
+        "default": ""
+      },
+      {
+        "id": "allow-commands",
+        "type": "string",
+        "title": "Always-allowed commands",
+        "description": "Commands the gate allows without judgment, one per line.",
+        "default": ""
+      },
+      {
+        "id": "deny-commands",
+        "type": "string",
+        "title": "Always-denied commands",
+        "description": "Commands the gate always denies, one per line.",
+        "default": ""
+      },
+      {
+        "id": "deploy-commands",
+        "type": "string",
+        "title": "Deploy commands",
+        "description": "Commands that count as a deploy, one per line.",
+        "default": ""
+      },
+      {
+        "id": "brain-agent",
+        "type": "enum",
+        "title": "Brain agent",
+        "description": "The agent that runs the avatar brain.",
+        "default": "claude",
+        "values": [
+          "claude",
+          "codex",
+          "pi",
+          "omp"
+        ]
+      },
+      {
+        "id": "brain-model",
+        "type": "string",
+        "title": "Brain model",
+        "description": "The brain model; empty uses the agent default.",
+        "default": ""
+      },
+      {
+        "id": "judgment-timeout-seconds",
+        "type": "number",
+        "title": "Judgment timeout (seconds)",
+        "description": "How long the gate waits for the brain before asking the agent to retry.",
+        "default": 55,
+        "minimum": 1
+      }
+    ],
+    "settings-section": [
+      {
+        "id": "avatar",
+        "title": "Avatar",
+        "description": "Defaults for hand-offs and the avatar brain."
+      }
+    ]
+  }
+}
