@@ -272,7 +272,7 @@ describe('handoff', () => {
     expect(s.svc.active().map((entry) => entry.worktreeId)).toEqual(['wt-1'])
   })
 
-  test('re-handing off updates the mandate, keeps the state and the gate check, and re-briefs', async () => {
+  test('re-handing off updates the mandate, returns to checking, reruns the gate check and re-briefs', async () => {
     const s = setup({ sessions: [session('s1', 'wt-1')] })
     await handOff(s, input('wt-1'))
     s.svc.setState('wt-1', 'working', 'on it')
@@ -281,8 +281,8 @@ describe('handoff', () => {
 
     expect(await handOff(s, input('wt-1', { goal: 'New goal', level: 'full' }))).toEqual([{ worktreeId: 'wt-1', ok: true }])
     expect(s.svc.mandate('wt-1')).toMatchObject({ goal: 'New goal', level: 'full' })
-    expect(stateOf(s, 'wt-1')).toBe('working')
-    expect(s.gate.checks).toEqual([])
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+    expect(s.gate.checks).toEqual(['wt-1'])
     expect(s.gate.markers.at(-1)).toEqual(['s1', 'wt-1', 'full'])
     expect(s.sent).toHaveLength(1)
     expect(s.sent[0]!.text).toContain('New goal')

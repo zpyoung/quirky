@@ -260,7 +260,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
           app.store.mandates.put(stored)
           app.store.handoffs.put(
             previous !== null
-              ? { ...previous, sessionId: session?.id ?? previous.sessionId }
+              ? { ...previous, state: 'checking', sessionId: session?.id ?? previous.sessionId }
               : { worktreeId: fields.worktreeId, state: 'checking', sessionId: session?.id ?? null, active: true, handedOffAt: app.now(), takenBackAt: null }
           )
           app.journal(fields.worktreeId, 'handoff', { updated: previous !== null, mandate: stored })
@@ -278,7 +278,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
         if (!('mandate' in outcome)) return outcome
         const { mandate, session, isNew } = outcome
         const id = mandate.worktreeId
-        if (isNew) app.emit({ type: 'state-changed', worktreeId: id, state: 'checking' })
+        app.emit({ type: 'state-changed', worktreeId: id, state: 'checking' })
         if (session !== undefined) {
           app.services.gate.writeMarker(session.id, id, mandate.level)
           await deliverBrief(id, session, briefText(mandate, !isNew))
@@ -297,7 +297,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
           if (row !== null) app.store.handoffs.put({ ...row, sessionId: started.sessionId })
           app.services.gate.writeMarker(started.sessionId, id, mandate.level)
         }
-        if (isNew) startGateCheck(id)
+        startGateCheck(id)
         return { worktreeId: id, ok: true }
       })
     )
