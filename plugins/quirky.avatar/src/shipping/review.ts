@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { QuirkyEvent } from '@quirky/protocol'
 import type { AvatarApp, Finding, Mandate } from '../contracts'
 import { quoteAsData, sanitize } from '../sanitize'
-import { type Outbox, readCompare, readHead, runCheck, shellQuote } from './outbox'
+import { type Outbox, readCompare, readHead } from './outbox'
 
 type ReviewerAgent = 'claude' | 'codex'
 type Pending = { worktreeId: string; headSha: string; agent: ReviewerAgent }
@@ -19,6 +19,8 @@ export type Review = {
 }
 
 const SETTLED = 'quirky.structured/settled'
+const MAX_DIFF_CHARS = 400_000
+const GIT_TIMEOUT_MS = 60_000
 const MAX_SUMMARY = 300
 const MAX_BODY = 2000
 const REPEAT_LIMIT = 3
@@ -41,6 +43,91 @@ export function pickReviewerAgent(workerAgent: string | null, workerModel?: stri
     return 'codex'
   }
   return 'codex'
+}
+
+export type GitRun = { ok: boolean; stdout: string; capped: boolean; error?: string }
+
+/** Runs git in `cwd` and returns at most `maxChars` of stdout, with `capped` set when there was more. */
+export type GitRunner = (cwd: string, args: string[], maxChars: number) => Promise<GitRun>
+
+/** The default {@link GitRunner}: a direct `git` spawn, so the output is not cut to the checks tail. */
+const spawnGit: GitRunner = async (cwd, args, maxChars) => {
+  const proc = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
+  const timer = setTimeout(() => proc.kill(), GIT_TIMEOUT_MS)
+  try {
+    const decoder = new TextDecoder()
+    const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
+    let stdout = ''
+    let capped = false
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      stdout += decoder.decode(value, { stream: true })
+      if (stdout.length > maxChars) {
+        capped = true
+        stdout = stdout.slice(0, maxChars)
+        proc.kill()
+        break
+      }
+    }
+    const stderr = capped ? '' : await new Response(proc.stderr as ReadableStream<Uint8Array>).text()
+    const code = await proc.exited
+    if (!capped && code !== 0) return { ok: false, stdout, capped, error: stderr.trim().slice(-300) || `git exited with ${code}` }
+    return { ok: true, stdout, capped }
+  } catch (error) {
+    return { ok: false, stdout: '', capped: false, error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+type ReviewDiff = { text: string; omitted: string[]; cutAt: string | null }
+
+/**
+ * The diff the reviewer sees. The whole `base...HEAD` diff when it fits `MAX_DIFF_CHARS`; otherwise
+ * whole per-file diffs up to that bound, with the files left out named so the prompt can say so.
+ * `ok` is false when git could not produce a diff.
+ */
+async function readReviewDiff(git: GitRunner, cwd: string, base: string): Promise<{ ok: true; diff: ReviewDiff } | { ok: false; error: string }> {
+  const range = `${base}...HEAD`
+  if (base.startsWith('-')) return { ok: false, error: 'the base ref is not a valid ref' }
+  const whole = await git(cwd, ['diff', '--no-ext-diff', '--no-color', range], MAX_DIFF_CHARS)
+  if (!whole.ok) return { ok: false, error: whole.error ?? 'could not read the diff' }
+  if (!whole.capped) return { ok: true, diff: { text: whole.stdout, omitted: [], cutAt: null } }
+
+  const names = await git(cwd, ['diff', '--no-ext-diff', '--name-only', '-z', range], MAX_DIFF_CHARS)
+  if (!names.ok) return { ok: false, error: names.error ?? 'could not list the changed files' }
+  const files = names.stdout.split('\0').filter((name) => name !== '')
+  const parts: string[] = []
+  const omitted: string[] = []
+  let used = 0
+  let cutAt: string | null = null
+  for (const file of files) {
+    const remaining = MAX_DIFF_CHARS - used
+    if (remaining <= 0) {
+      omitted.push(file)
+      continue
+    }
+    const one = await git(cwd, ['diff', '--no-ext-diff', '--no-color', range, '--', file], remaining)
+    if (!one.ok || one.capped) {
+      if (one.ok && parts.length === 0 && cutAt === null) {
+        parts.push(one.stdout)
+        used += one.stdout.length
+        cutAt = file
+      } else omitted.push(file)
+      continue
+    }
+    parts.push(one.stdout)
+    used += one.stdout.length
+  }
+  return { ok: true, diff: { text: parts.join(''), omitted, cutAt } }
+}
+
+/** The path of a worktree from `quirky.worktree/list`, or null when it is not listed. */
+async function worktreePath(app: AvatarApp, worktreeId: string): Promise<string | null> {
+  const raw = await app.context.call('quirky.worktree/list', {})
+  const entry = (Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []).find((item) => item?.id === worktreeId)
+  return typeof entry?.path === 'string' && entry.path !== '' ? entry.path : null
 }
 
 /** The model a pi or omp worker session runs, from its launch settings or session record; null when none is known. */
@@ -100,8 +187,16 @@ function parseFindings(text: string): { summary: string; detail: Record<string, 
   return null
 }
 
-function reviewPrompt(mandate: Mandate, diff: string, truncated: boolean): string {
+function reviewPrompt(mandate: Mandate, diff: ReviewDiff): string {
   const mandateText = [`Goal: ${mandate.goal}`, `Done when: ${mandate.doneWhen}`, ...mandate.guidelines.map((line) => `Guideline: ${line}`)].join('\n')
+  const incomplete = diff.omitted.length > 0 || diff.cutAt !== null
+  const notice = incomplete
+    ? 'The diff was too large to include in full: you were given whole per-file diffs up to a size bound. The files listed in the "diff coverage" block are cut off or not shown at all and still need to be read with git diff. Do not treat anything you were not shown as reviewed, and say in a finding that those parts were not reviewed.'
+    : null
+  const coverage = [
+    ...(diff.cutAt === null ? [] : [`cut off at its end: ${diff.cutAt}`]),
+    ...diff.omitted.map((file) => `not shown: ${file}`)
+  ].join('\n')
   return [
     'You are an independent code reviewer for a change another agent made. You have no tools and cannot edit anything.',
     'Review the diff against the mandate. Report only real problems: bugs, missing handling, broken or missing tests, and anything that does not meet the goal.',
@@ -109,7 +204,8 @@ function reviewPrompt(mandate: Mandate, diff: string, truncated: boolean): strin
     'Reply with JSON only, in this shape, with an empty list when you find nothing:',
     '{"findings":[{"summary":"one sentence","path":"file","line":1,"severity":"blocking or minor","detail":"why it matters"}]}',
     quoteAsData('mandate', mandateText),
-    quoteAsData(truncated ? 'git diff (truncated, last part only)' : 'git diff', diff)
+    ...(notice === null ? [] : [notice, quoteAsData('diff coverage', coverage)]),
+    quoteAsData(incomplete ? 'git diff (partial)' : 'git diff', diff.text)
   ].join('\n\n')
 }
 
@@ -117,9 +213,10 @@ function reviewPrompt(mandate: Mandate, diff: string, truncated: boolean): strin
  * Builds the review service. The reviewer gets the mandate and the diff, never the worker's
  * summary, and runs with all tools denied. Findings from the reviewer, from bot and human threads
  * on the PR and from review skills all land in `findings` rows for the avatar to judge (R-29, R-30).
- * `outbox` carries the thread replies.
+ * `outbox` carries the thread replies. `git` reads the diff directly, so a long diff reaches the
+ * reviewer whole.
  */
-export function createReview(app: AvatarApp, outbox: Outbox): Review {
+export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = spawnGit): Review {
   const pending = new Map<string, Pending>()
   const call = (method: string, params: Record<string, unknown>): Promise<unknown> => app.context.call(method, params)
 
@@ -192,8 +289,11 @@ export function createReview(app: AvatarApp, outbox: Outbox): Review {
         if (head === null) return { started: false, reason: 'the worktree has no commit to review' }
         const { base } = await readCompare(app, worktreeId)
         if (base === null) return { started: false, reason: 'there is no base branch to compare against' }
-        const diff = await runCheck(app, worktreeId, `git diff ${shellQuote(base)}...HEAD`)
-        if (!diff.ran || !diff.pass) return { started: false, reason: diff.error ?? 'could not read the diff' }
+        const cwd = await worktreePath(app, worktreeId)
+        if (cwd === null) return { started: false, reason: 'the worktree has no path' }
+        const read = await readReviewDiff(git, cwd, base)
+        if (!read.ok) return { started: false, reason: read.error }
+        const diff = read.diff
 
         const workerAgent = mandate.agent
         const ownFamily = workerAgent === 'pi' || workerAgent === 'omp'
@@ -205,7 +305,7 @@ export function createReview(app: AvatarApp, outbox: Outbox): Review {
           agent,
           background: true,
           title: 'Avatar review',
-          prompt: reviewPrompt(mandate, diff.stdout, diff.truncated),
+          prompt: reviewPrompt(mandate, diff),
           options: { toolPolicy: 'deny-all' },
           lifetime: 'plugin',
           lifetimeKey: `avatar-review:${worktreeId}`
@@ -213,7 +313,7 @@ export function createReview(app: AvatarApp, outbox: Outbox): Review {
         const sessionId = str(session.id)
         if (sessionId === null) return { started: false, reason: 'the reviewer session had no id' }
         pending.set(sessionId, { worktreeId, headSha: head, agent })
-        app.journal(worktreeId, 'finding', { reviewStarted: true, headSha: head, reviewer: agent, workerAgent: mandate.agent, sessionId, ...(ownFamily ? { workerModel: model } : {}), ...(familyUnknown ? { familyUnknown: true } : {}) })
+        app.journal(worktreeId, 'finding', { reviewStarted: true, headSha: head, reviewer: agent, workerAgent: mandate.agent, sessionId, ...(ownFamily ? { workerModel: model } : {}), ...(familyUnknown ? { familyUnknown: true } : {}), ...(diff.omitted.length > 0 || diff.cutAt !== null ? { diffPartial: true, diffOmitted: diff.omitted.length } : {}) })
         return { started: true }
       } catch (error) {
         return { started: false, reason: error instanceof Error ? error.message : String(error) }
