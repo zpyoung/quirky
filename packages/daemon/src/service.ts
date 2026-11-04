@@ -1,4 +1,11 @@
-import type { ClientRole, PluginNotification, QuirkyEvent } from '@quirky/protocol'
+import type {
+  ClientRole,
+  PluginNotification,
+  QuirkyEvent,
+  ToolGateDecision,
+  ToolGateProvider,
+  ToolGateRequest
+} from '@quirky/protocol'
 import { sendNotification, type Notifier } from './notify'
 import type { PtyClient } from './pty-client'
 import type { ClientConn } from './types'
@@ -27,6 +34,7 @@ export type CoreOptions = {
  */
 export class Core {
   private readonly connected = new Set<ClientConn>()
+  private toolGateProvider: ((agent: string) => Promise<ToolGateProvider | null>) | null = null
 
   constructor(private readonly options: CoreOptions) {}
 
@@ -87,6 +95,43 @@ export class Core {
     this.options.onEvent?.(event)
   }
 
+  /** Sets how `requestToolGate` finds the active `tool-gate` provider; null from it means none. */
+  setToolGateProvider(find: (agent: string) => Promise<ToolGateProvider | null>): void {
+    this.toolGateProvider = find
+  }
+
+  /**
+   * Asks the active `tool-gate` provider to decide `request`. Resolves `unavailable` when there is
+   * no provider, it throws, or `request.deadlineMs` passes (which also aborts the provider's
+   * signal). Never rejects and never resolves to `allow` on a failure.
+   */
+  async requestToolGate(request: ToolGateRequest): Promise<ToolGateDecision> {
+    const unavailable = (reason: string): ToolGateDecision => ({ decision: 'unavailable', reason, encoded: null })
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<ToolGateDecision>((resolve) => {
+      timer = setTimeout(() => {
+        resolve(unavailable(`the tool gate did not answer within ${request.deadlineMs} ms`))
+        controller.abort()
+      }, request.deadlineMs)
+    })
+    const answer = (async (): Promise<ToolGateDecision> => {
+      try {
+        const provider = this.toolGateProvider ? await this.toolGateProvider(request.agent) : null
+        if (provider === null) return unavailable('no tool gate provider is active')
+        const decision = await provider(request, controller.signal)
+        return isToolGateDecision(decision) ? decision : unavailable('the tool gate returned an invalid decision')
+      } catch (error) {
+        return unavailable(`the tool gate failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    })()
+    try {
+      return await Promise.race([answer, deadline])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   status() {
     return {
       daemonVersion: this.options.daemonVersion,
@@ -116,4 +161,15 @@ export class Core {
       n
     )
   }
+}
+
+function isToolGateDecision(value: unknown): value is ToolGateDecision {
+  if (typeof value !== 'object' || value === null) return false
+  const { decision, reason, encoded, exitCode } = value as Record<string, unknown>
+  return (
+    (decision === 'allow' || decision === 'deny' || decision === 'passthrough' || decision === 'unavailable') &&
+    typeof reason === 'string' &&
+    (encoded === null || typeof encoded === 'string') &&
+    (exitCode === undefined || (typeof exitCode === 'number' && Number.isInteger(exitCode)))
+  )
 }

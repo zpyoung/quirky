@@ -1,4 +1,4 @@
-import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RPC_PATH } from '@quirky/protocol'
+import { GATE_PATH_PREFIX, HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RPC_PATH } from '@quirky/protocol'
 import { HEALTH_PATH } from '@quirky/protocol/node'
 import { servePluginFile } from './plugin-files'
 import { FILE_RESOURCE_ROUTE, type FileResourceRegistry } from './file-resources'
@@ -45,6 +45,16 @@ function agentIdentity(url: URL): { agentPid?: number; agentStart?: string; even
   }
 }
 
+const DEFAULT_GATE_DEADLINE_MS = 30_000
+const MAX_GATE_DEADLINE_MS = 10 * 60_000
+
+/** The `deadline` query value in milliseconds, clamped to a sane range; the default when absent or malformed. */
+function gateDeadline(url: URL): number {
+  const raw = url.searchParams.get('deadline')
+  const ms = raw !== null && /^\d{1,9}$/.test(raw) ? Number(raw) : 0
+  return ms > 0 ? Math.min(ms, MAX_GATE_DEADLINE_MS) : DEFAULT_GATE_DEADLINE_MS
+}
+
 /** The single loopback HTTP server: health, the RPC WebSocket, agent hooks and the static UI. */
 export function startServer(options: ServerOptions) {
   const { core, handle } = options
@@ -71,6 +81,33 @@ export function startServer(options: ServerOptions) {
       options.log(`hook.received delivery failed: ${(error as Error)?.stack ?? error}`)
     }
     return json({ ok: true })
+  }
+
+  async function handleGate(request: Request, url: URL): Promise<Response> {
+    if (!tokensMatch(core.hookToken, request.headers.get(HOOK_TOKEN_HEADER))) {
+      return json({ error: 'unauthorized' }, 401)
+    }
+    const agent = url.pathname.slice(GATE_PATH_PREFIX.length)
+    const sessionId = url.searchParams.get('session')
+    if (!agent || !sessionId) return json({ error: 'agent and session are required' }, 400)
+    let payload: unknown = null
+    const body = await request.text()
+    if (body.trim() !== '') {
+      try {
+        payload = JSON.parse(body)
+      } catch {
+        return json({ error: 'body must be JSON' }, 400)
+      }
+    }
+    const requestedEvent = url.searchParams.get('event')
+    const payloadEvent = (payload as { hook_event_name?: unknown } | null)?.hook_event_name
+    const event =
+      requestedEvent !== null && HOOK_EVENT_NAME.test(requestedEvent)
+        ? requestedEvent
+        : typeof payloadEvent === 'string' && HOOK_EVENT_NAME.test(payloadEvent)
+          ? payloadEvent
+          : ''
+    return json(await core.requestToolGate({ agent, sessionId, event, deadlineMs: gateDeadline(url), payload }))
   }
 
   const server = Bun.serve<SocketData>({
@@ -104,6 +141,10 @@ export function startServer(options: ServerOptions) {
       if (url.pathname.startsWith(HOOK_PATH_PREFIX)) {
         if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
         return handleHook(request, url)
+      }
+      if (url.pathname.startsWith(GATE_PATH_PREFIX)) {
+        if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+        return handleGate(request, url)
       }
       if (url.pathname.startsWith(FILE_RESOURCE_ROUTE)) {
         return options.fileResources.serve(request, url.pathname)

@@ -271,6 +271,130 @@ fi
 exit 0
 `
 
+/**
+ * Reads the decision JSON the daemon answers a gate request with and writes `encoded` (decoded,
+ * byte for byte) to the file named by `-v out=`. Prints `<hasEncoded> <exitCode>` on stdout.
+ * Scans top-level keys only, so the field order of the answer does not matter.
+ */
+const GATE_DECISION_AWK = String.raw`
+function hexval(ch) { return index("0123456789abcdef", tolower(ch)) - 1 }
+function hex4(str,   v, k) { v = 0; for (k = 1; k <= 4; k++) v = v * 16 + hexval(substr(str, k, 1)); return v }
+function utf8(cp) {
+  if (cp < 128) return sprintf("%c", cp)
+  if (cp < 2048) return sprintf("%c%c", 192 + int(cp / 64), 128 + cp % 64)
+  if (cp < 65536) return sprintf("%c%c%c", 224 + int(cp / 4096), 128 + int(cp / 64) % 64, 128 + cp % 64)
+  return sprintf("%c%c%c%c", 240 + int(cp / 262144), 128 + int(cp / 4096) % 64, 128 + int(cp / 64) % 64, 128 + cp % 64)
+}
+BEGIN { RS = "\001"; depth = 0; expect = ""; key = ""; has = 0; code = 0 }
+{
+  s = $0; n = length(s); i = 1
+  while (i <= n) {
+    c = substr(s, i, 1)
+    if (c == "\"") {
+      i++; val = ""
+      while (i <= n) {
+        c = substr(s, i, 1)
+        if (c == "\"") break
+        if (c == "\\") {
+          i++; e = substr(s, i, 1)
+          if (e == "n") val = val "\n"
+          else if (e == "t") val = val "\t"
+          else if (e == "r") val = val "\r"
+          else if (e == "b") val = val "\b"
+          else if (e == "f") val = val "\f"
+          else if (e == "u") {
+            cp = hex4(substr(s, i + 1, 4)); i += 4
+            if (cp >= 55296 && cp < 56320 && substr(s, i + 1, 2) == "\\u") {
+              lo = hex4(substr(s, i + 3, 4))
+              if (lo >= 56320 && lo < 57344) { cp = 65536 + (cp - 55296) * 1024 + (lo - 56320); i += 6 }
+            }
+            val = val utf8(cp)
+          } else val = val e
+        } else val = val c
+        i++
+      }
+      i++
+      if (depth == 1 && expect == "key") { key = val; expect = "colon" }
+      else if (depth == 1 && expect == "value") {
+        if (key == "encoded") { printf "%s", val > out; has = 1 }
+        expect = "comma"
+      }
+    } else if (c == "{" || c == "[") {
+      depth++; i++
+      if (depth == 1) expect = "key"
+      else if (depth == 2 && expect == "value") expect = "comma"
+    } else if (c == "}" || c == "]") { depth--; i++ }
+    else if (c == ":") { if (depth == 1) expect = "value"; i++ }
+    else if (c == ",") { if (depth == 1) expect = "key"; i++ }
+    else if (c ~ /[ \t\r\n]/) i++
+    else {
+      lit = ""
+      while (i <= n && substr(s, i, 1) !~ /[ \t\r\n,}\]]/) { lit = lit substr(s, i, 1); i++ }
+      if (depth == 1 && expect == "value") {
+        if (key == "exitCode" && lit ~ /^[0-9]+$/) code = lit + 0
+        expect = "comma"
+      }
+    }
+  }
+}
+END { close(out); printf "%d %d\n", has, code }
+`
+
+/**
+ * The tool-gate shim agents call as `quirky-gate <agent> [deadline-ms]`. It answers `{}` and exits
+ * 0 at once, with no network call, unless the session has a supervision marker. With one it posts
+ * the hook payload to the daemon's `/gate/<agent>` route, prints the `encoded` text of the
+ * decision verbatim and exits with its `exitCode`. When the daemon cannot be reached, answers
+ * with anything but a decision or has no encoded answer, it exits 2 with a retry message on
+ * stderr, the exit both Claude and Codex treat as blocking. It never builds decision JSON.
+ */
+export const QUIRKY_GATE_SCRIPT = String.raw`#!/bin/sh
+agent="$1"
+deadline="$2"
+[ -n "$deadline" ] || deadline="$QUIRKY_GATE_DEADLINE_MS"
+case "$deadline" in ''|*[!0-9]*) deadline=30000 ;; esac
+[ "$deadline" -gt 0 ] || deadline=30000
+payload="$({ command -p cat || cat; })"
+event="$QUIRKY_HOOK_EVENT"
+if [ -z "$event" ]; then
+  event="$(printf '%s' "$payload" | tr '\n\r' '  ' | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9_.-]*\)".*/\1/p' | head -n 1)"
+fi
+case "$QUIRKY_SESSION_ID" in ''|*/*|.*) printf '{}\n'; exit 0 ;; esac
+[ -n "$QUIRKY_HOME" ] && [ -e "$QUIRKY_HOME/plugin-data/quirky.avatar/supervised/$QUIRKY_SESSION_ID" ] || { printf '{}\n'; exit 0; }
+unavailable() {
+  printf '%s\n' "Quirky's avatar gate is unavailable; try again shortly." >&2
+  exit 2
+}
+url=""
+if [ -r "$QUIRKY_HOME/runtime.json" ]; then
+  port="$(sed -n 's/.*"port": *\([0-9][0-9]*\).*/\1/p' "$QUIRKY_HOME/runtime.json" | head -n 1)"
+  [ -z "$port" ] || url="http://127.0.0.1:$port/gate"
+fi
+if [ -z "$url" ] && [ -n "$QUIRKY_HOOK_URL" ]; then
+  url="$(printf '%s' "$QUIRKY_HOOK_URL" | sed 's#/hook$#/gate#')"
+fi
+[ -n "$url" ] || unavailable
+case "$agent" in ''|*[!A-Za-z0-9_.-]*) unavailable ;; esac
+query="session=$QUIRKY_SESSION_ID&deadline=$deadline"
+case "$event" in ''|*[!A-Za-z0-9_.-]*) ;; *) query="$query&event=$event" ;; esac
+tmp="$(mktemp -d 2>/dev/null)" || unavailable
+trap 'rm -rf "$tmp"' EXIT
+timeout=$(( (deadline + 999) / 1000 + 5 ))
+status="$(printf '%s' "$payload" | curl -s -m "$timeout" --connect-timeout 2 --noproxy '*' -o "$tmp/body" -w '%{http_code}' -X POST \
+  -H "x-quirky-hook-token: $QUIRKY_HOOK_TOKEN" \
+  -H 'content-type: application/json' \
+  --data-binary @- \
+  "$url/$agent?$query")" || unavailable
+[ "$status" = 200 ] || unavailable
+parsed="$(LC_ALL=C awk -v out="$tmp/encoded" '${GATE_DECISION_AWK}' "$tmp/body")" || unavailable
+set -- $parsed
+has="$1"
+code="$2"
+[ "$has" = 1 ] || unavailable
+cat "$tmp/encoded"
+exit "$code"
+`
+
 export function quirkyShimScript(cliEntry: string): string {
   return `#!/bin/sh\nexec ${doubleQuote(process.execPath)} ${doubleQuote(cliEntry)} "$@"\n`
 }
@@ -473,14 +597,17 @@ export function installShellWrappers(home: string): void {
   writeFileSync(bashRcfilePath(home), bashRcfile(binDir))
 }
 
-/** Writes the `quirky-hook` and `quirky` shims and the shell wrappers under `home`. */
+/** Writes the `quirky-hook`, `quirky-gate` and `quirky` shims and the shell wrappers under `home`. */
 export function installIntegrationFiles(home: string, cliEntry: string): void {
   mkdirSync(join(home, 'bin'), { recursive: true })
   const hookPath = join(home, 'bin', 'quirky-hook')
+  const gatePath = join(home, 'bin', 'quirky-gate')
   const shimPath = join(home, 'bin', 'quirky')
   writeFileSync(hookPath, QUIRKY_HOOK_SCRIPT)
+  writeFileSync(gatePath, QUIRKY_GATE_SCRIPT)
   writeFileSync(shimPath, quirkyShimScript(cliEntry))
   chmodSync(hookPath, 0o755)
+  chmodSync(gatePath, 0o755)
   chmodSync(shimPath, 0o755)
   installShellWrappers(home)
 }

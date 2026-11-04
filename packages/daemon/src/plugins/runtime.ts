@@ -7,7 +7,8 @@ import {
   type LaunchHookInput,
   type PluginContext,
   type PluginStore,
-  type StoreMigration
+  type StoreMigration,
+  type ToolGateProvider
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
 import { createRpcHandler, nextConnId } from '../rpc-handler'
@@ -425,6 +426,13 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       return { env: {}, args: [] }
     }
   }
+
+  core.setToolGateProvider(async (agent) => {
+    const [gate] = plugins.contributions({ kind: 'tool-gate' })
+    if (gate === undefined) return null
+    if (Array.isArray(gate.data.agents) && !gate.data.agents.includes(agent)) return null
+    return (await plugins.resolveImplementation(gate.id)) as ToolGateProvider
+  })
 
   return { extension, dispatcher, events, hostPower, scheduler, layout, distros, fileResources, prepareLaunch }
 }

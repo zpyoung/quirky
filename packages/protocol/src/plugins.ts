@@ -400,6 +400,31 @@ export type LaunchPatch = {
 /** Adjusts a session's launch environment, args and JSON args before the agent starts. */
 export type LaunchHook = (launch: LaunchHookInput) => LaunchPatch | void | Promise<LaunchPatch | void>
 
+/** A blocking question from an agent hook to the plugin that provides `tool-gate`. */
+export type ToolGateRequest = {
+  agent: string
+  sessionId: string
+  event: string
+  /** How long the daemon waits for the provider before answering `unavailable`. */
+  deadlineMs: number
+  /** The agent's hook payload, passed through untouched. */
+  payload: unknown
+}
+
+/**
+ * The provider's answer. `encoded` is the exact stdout text the agent must see, or null when there
+ * is none; `exitCode` defaults to 0. `unavailable` is never an approval.
+ */
+export type ToolGateDecision = {
+  decision: 'allow' | 'deny' | 'passthrough' | 'unavailable'
+  reason: string
+  encoded: string | null
+  exitCode?: number
+}
+
+/** Answers one tool-gate request; `signal` aborts when the deadline passes. */
+export type ToolGateProvider = (request: ToolGateRequest, signal: AbortSignal) => Promise<ToolGateDecision>
+
 export type JobRunStatus = 'running' | 'ok' | 'failed' | 'timed-out'
 
 /** One execution of a job. */
