@@ -72,6 +72,49 @@ describe('gateCommand', () => {
     expect(result.stdout.toString()).toBe('{}\n')
   })
 
+  describe('when the shim is missing or not executable', () => {
+    const sessionEnv = (home: string, sessionId = 's-1') => ({ QUIRKY_HOME: home, QUIRKY_SESSION_ID: sessionId })
+
+    test('a supervised session is denied with exit 2 and a retry reason', () => {
+      const home = scratch()
+      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+      for (const agent of ['claude', 'codex']) {
+        const result = run(gateCommand(agent, 60000), sessionEnv(home))
+        expect(result.exitCode).toBe(2)
+        expect(result.stderr.toString()).toContain('try again')
+        expect(result.stdout.toString()).toBe('')
+      }
+    })
+
+    test('a shim that exists but is not executable still denies a supervised session', () => {
+      const home = scratch()
+      mkdirSync(join(home, 'bin'))
+      writeFileSync(join(home, 'bin', 'quirky-gate'), '#!/bin/sh\nprintf ok\n', { mode: 0o644 })
+      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+      expect(run(gateCommand('claude', 60000), sessionEnv(home)).exitCode).toBe(2)
+    })
+
+    test('a session with no marker, or another session id, or no session id, is passed through', () => {
+      const home = scratch()
+      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+      for (const env of [sessionEnv(home, 's-2'), { QUIRKY_HOME: home }, sessionEnv(scratch())]) {
+        const result = run(gateCommand('claude', 60000), env)
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString()).toBe('{}\n')
+      }
+    })
+
+    test('with the shim present a marker does not stop the shim from deciding', () => {
+      const home = scratch()
+      mkdirSync(join(home, 'bin'))
+      writeFileSync(join(home, 'bin', 'quirky-gate'), '#!/bin/sh\nprintf "%s" "$1"\n', { mode: 0o755 })
+      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+      const result = run(gateCommand('claude', 60000), sessionEnv(home))
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toBe('claude')
+    })
+  })
+
   test('runs the shim with the agent and the deadline when it is present', () => {
     const home = scratch()
     mkdirSync(join(home, 'bin'))
@@ -240,6 +283,78 @@ describe('Codex hooks.json', () => {
     expect(installed.hooks.Stop).toEqual(JSON.parse(original).hooks.Stop)
     expect(removeCodexHooks(env)).toBe(true)
     expect(read(env)).toBe(original)
+  })
+
+  describe('surgical edits keep every other byte of hooks.json', () => {
+    const seed = (original: string): AgentEnv => {
+      const env = agentEnv()
+      mkdirSync(join(env.home, '.codex'))
+      writeFileSync(codexHooksPath(env), original)
+      return env
+    }
+    const other = '{"type":"command","command":"echo   hi"}'
+
+    test('a tab-indented file with compact inline hooks only gains the avatar entries', () => {
+      const original = `{\n\t"hooks": {"Stop": [ { "hooks": [${other}] } ] },\n\t"model":   "x"\n}\n`
+      const env = seed(original)
+      expect(installCodexHooks(env, 55)).toBe(true)
+      const installed = read(env)
+      expect(installed).toContain(`"Stop": [ { "hooks": [${other}] } ]`)
+      expect(installed).toContain(`{"Stop": [ { "hooks": [${other}] } ],"PreToolUse": [`)
+      expect(installed.startsWith('{\n\t"hooks": {"Stop": [ { "hooks": [')).toBe(true)
+      expect(installed.endsWith(`,\n\t"model":   "x"\n}\n`)).toBe(true)
+      expect(codexHooksInstalled(env)).toBe(true)
+      expect(installCodexHooks(env, 55)).toBe(false)
+      expect(removeCodexHooks(env)).toBe(true)
+      expect(read(env)).toBe(original)
+    })
+
+    test('a fully compact single-line file keeps its text through install and remove', () => {
+      const original = `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[${other}]}],"Stop":[]},"x":1}`
+      const env = seed(original)
+      installCodexHooks(env, 55)
+      const installed = read(env)
+      expect(installed).not.toContain('\n')
+      expect(installed).toContain(`{"matcher":"Bash","hooks":[${other}]}`)
+      expect(installed).toContain('],"Stop":[],"PermissionRequest":[')
+      expect(installed.endsWith('}]}]},"x":1}')).toBe(true)
+      expect(removeCodexHooks(env)).toBe(true)
+      expect(read(env)).toBe(original)
+    })
+
+    test('other agents entries under the same events are untouched when the avatar entry is updated', () => {
+      const env = seed(`{\n\t"hooks": {\n\t\t"PreToolUse": [\n\t\t\t${other.replace('echo   hi', 'a  b')}\n\t\t]\n\t}\n}\n`)
+      installCodexHooks(env, 55)
+      const withGate = read(env)
+      installCodexHooks(env, 30)
+      const updated = read(env)
+      expect(updated).toContain(`\t\t\t${other.replace('echo   hi', 'a  b')},\n`)
+      expect(updated.split('\n\t\t\t').length).toBe(withGate.split('\n\t\t\t').length)
+      expect(JSON.parse(updated).hooks.PreToolUse).toHaveLength(2)
+      expect(JSON.parse(updated).hooks.PreToolUse[1].hooks[0].command).toMatch(/codex 35000$/)
+      removeCodexHooks(env)
+      expect(read(env)).toBe(`{\n\t"hooks": {\n\t\t"PreToolUse": [\n\t\t\t${other.replace('echo   hi', 'a  b')}\n\t\t]\n\t}\n}\n`)
+    })
+
+    test('an object with no hooks key or an empty hooks object gains them without touching the rest', () => {
+      const bare = seed('{\n    "model": "x"  ,\n    "n": [1,2]\n}')
+      installCodexHooks(bare, 55)
+      expect(read(bare).startsWith('{\n    "model": "x"  ,\n    "n": [1,2],\n    "hooks": {')).toBe(true)
+      expect(read(bare).endsWith('\n}')).toBe(true)
+      removeCodexHooks(bare)
+      expect(read(bare)).toBe('{\n    "model": "x"  ,\n    "n": [1,2]\n}')
+      const empty = seed('{\n  "hooks": {}\n}\n')
+      installCodexHooks(empty, 55)
+      expect(codexHooksInstalled(empty)).toBe(true)
+      expect(read(empty).endsWith('\n}\n')).toBe(true)
+    })
+
+    test('a hooks.json that held only the avatar entries is deleted by remove', () => {
+      const env = seed('{}\n')
+      installCodexHooks(env, 55)
+      expect(removeCodexHooks(env)).toBe(true)
+      expect(existsSync(codexHooksPath(env))).toBe(false)
+    })
   })
 
   test('remove empties out entries it created and deletes a file that held nothing else', () => {
