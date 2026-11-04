@@ -18,6 +18,7 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   event: ['description', 'data'],
   job: ['description', 'interval', 'initialDelay', 'timeout'],
   'launch-hook': ['description', 'agents'],
+  'tool-gate': ['description', 'agents'],
   'cli-command': ['description', 'words', 'summary', 'method', 'positionals', 'flags', 'methods'],
 }
 
@@ -192,7 +193,7 @@ function checkCliCommand(label: string, entry: Entry, errors: string[]): void {
 
 /**
  * Checks the fields of a contribution of one of the daemon's own kinds (`method`, `event`, `job`,
- * `launch-hook`, `cli-command`) or of a UI kind (delegated to `ui-kinds.ts`) and appends one message per problem
+ * `launch-hook`, `tool-gate`, `cli-command`) or of a UI kind (delegated to `ui-kinds.ts`) and appends one message per problem
  * to `errors`. Other kinds are left alone.
  * `label` prefixes every message and names the entry, e.g. `job tick` or `override job:acme.poll/tick`.
  */
@@ -227,5 +228,5 @@ export function checkKindEntry(kind: string, label: string, entry: Entry, errors
     }
   }
   if (kind === 'cli-command') checkCliCommand(label, entry, errors)
-  if (kind === 'launch-hook' && entry.agents !== undefined) checkAgents(label, entry.agents, errors)
+  if ((kind === 'launch-hook' || kind === 'tool-gate') && entry.agents !== undefined) checkAgents(label, entry.agents, errors)
 }
