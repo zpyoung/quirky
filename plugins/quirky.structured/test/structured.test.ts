@@ -431,7 +431,7 @@ try {
   })
 
   test('validates agent, worktree and session kind', async () => {
-    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'pi', prompt: 'x' }))).toMatchObject({
+    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'gemini', prompt: 'x' }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
     })
     expect(await failure(call('quirky.structured/create', { worktree: 'nope', agent: 'claude', prompt: 'x' }))).toMatchObject({
