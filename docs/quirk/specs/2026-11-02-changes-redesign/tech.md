@@ -207,6 +207,23 @@ ReviewViewHandle { worktree: string, reveal(path: string, noteId?: string): void
 - Notes: unchanged storage and composer. Note counts appear on the card header (`✎ N notes`) and on the panel row.
 - Commit scope: no review controls, and Revert is hidden, because the modified side isn't the working tree.
 
+### Editing and Markdown preview in a card ([Editing in the Review tab](logic.md#editing-in-the-review-tab), scenarios 34-40)
+
+- A card is editable when it is outside a commit scope and its diff is text (`kind: 'text'`, not `binary`, no `tooLarge`), its modified side isn't deleted, and its `modifiedHash` is a string. `ReviewCard` passes `editable` to `DiffPane`. A `'changed'` card showing `against: 'reviewed'` is editable too, because its modified side is still the disk.
+- Save is the pane's existing path: Mod+S in the editor, or the view's `save`, calls `quirky.git/save { path, content, expected }` with the hash the pane last read or wrote. That `expected` is what keeps a reviewed mark under the Own writes rule. A `changed-on-disk` refusal raises the pane's stale bar. Any other failure toasts `Save failed` and keeps the draft.
+- Revert on an editable card: with no unsaved edits it is unchanged (confirm, then save at once). With unsaved edits it reverts the chunk in the draft only, with no confirm, and the draft stays unsaved.
+- The card header shows an `Unsaved` label while its pane is dirty.
+- Refresh under a draft: when a card's pane is dirty, the read loop never replaces its diff. When the fresh read differs from the held diff (`reuseGitDiff` returns a new object), it calls the pane's `markStale()`. Either way it records the read as loaded, so the loop ends. Reload from Disk replaces the diff through `onReload`, dropping the draft. Overwrite saves without `expected`, so the mark doesn't move.
+- A dirty card whose path leaves the model keeps rendering from its last item, with the stale bar, until its draft is saved, reloaded or discarded. It is ordered where it last sat.
+- Scope change under drafts: `setScope` to a different scope, from the chip or from `openReview`, first asks through `context.confirm` (`Discard unsaved edits in N files?`, confirm label `Discard`) when any card is dirty. Cancel keeps the current scope and the drafts.
+- Close: `ReviewDiff` binds `isDirty` (any card's pane is dirty), `save` (saves each dirty card in card order and stops at the first that stays dirty), and `reloadFromDisk` and `overwrite` (the active card when it is stale, else the first stale card). Its report sets `dirty` and `stale` from the panes, which drives `updateHostedDiffDirty` close protection and the Save / Don't Save / Cancel dialog in `DiffWindow`.
+- Markdown preview: a card whose path ends in `.md` or `.markdown` (any case), with a text diff whose modified side isn't deleted, has a Preview / Source button in its header. The choice is card component state and isn't saved.
+  - Preview renders `PaneHandle.modifiedText()` (the draft when there is one) through `quirky.editor/markdownPreview { action: 'render', leaseId, worktree: 'id:<worktree id>', path, text }`. The reply must echo `leaseId`, `worktreeId` and `path` and carry a string `html`, or the card shows `The Markdown preview renderer returned invalid content.`
+  - Each render takes a fresh `leaseId`. The card releases it (`action: 'release'`, failures ignored) when the preview is replaced, switched off or unmounted.
+  - It renders again when the card's diff revision changes while shown.
+  - The `DiffPane` stays mounted and hidden under the preview, so the draft and cursor survive the switch.
+  - A render failure shows `Markdown preview unavailable: <message>` in the card, with Source still available.
+
 ### Ship button ([The ship bar](logic.md#the-ship-bar), scenario 22)
 
 `CONTRACT:`
@@ -346,9 +363,9 @@ Where tests run follows `AGENTS.md`: `bun test <file>` here while editing, `bun 
   - `generateCommitMessage { scope: 'all' }` with nothing staged.
 - `plugins/quirky.editor/test`: `saved` is emitted once per successful save with the right hashes, and not on a failed guarded write.
 - `plugins/quirky.git/test/pure`: `nextStep` returns the right step for every row of logic scenario 22's table, plus their precedence. `shipMenu` gives the right reasons for no remote, no upstream, base branch and nothing to force. Also cover the keyboard selection reducer, including auto-advance.
-- `plugins/quirky.git/test/ui` (happy-dom, fake context): scenarios 1-4, 8 and 14-33 at the panel and Review-tab level, including the confirms, toasts and error lines they name.
+- `plugins/quirky.git/test/ui` (happy-dom, fake context): scenarios 1-4, 8, 14-33 and 34-40 at the panel and Review-tab level, including the confirms, toasts and error lines they name.
   - Delete or rewrite tests that assert the removed sections, the selection footer, `CombinedDiff` or `FileDiff`. Never leave a skipped test behind.
-- `plugins/quirky.git/test/window` (headless window, real daemon): one Review tab per worktree across row, palette, history and note opens. Restoring a layout with two legacy diff tabs leaves one Review tab.
+- `plugins/quirky.git/test/window` (headless window, real daemon): one Review tab per worktree across row, palette, history and note opens. Restoring a layout with two legacy diff tabs leaves one Review tab. A save from a card keeps a reviewed mark, a dirty Review tab refuses a plain close and saves or discards through the dialog, and a Markdown card previews the disk side with an authorized relative image.
 - `packages/ui/test`: each new component's states, roles and labels, dark and light classes, and the caret menu's disabled items with `detail`.
 - Done criteria ([How we know it's done](logic.md#how-we-know-its-done)):
   - Criteria 1-3 are asserted in `test/window`. Criterion 1 measures the first row's top against the panel's client height at a 720 px window.

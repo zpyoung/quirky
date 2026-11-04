@@ -75,6 +75,8 @@ Clicking a row in the panel scrolls the Review tab to that file, opening the tab
 
 A commit opened from the Commits section shows in the same tab, scoped to that commit, with a chip such as `Commit f5429a1 ×`. In that scope the cards show the commit's own diff and no review controls. Removing the chip goes back to the worktree review.
 
+Outside a commit scope you can type into a card's disk side and save it with ⌘S. A save from the card is your own write, so a reviewed file stays reviewed. A card with unsaved edits says Unsaved in its header, and closing the tab asks whether to save them. A Markdown card has a Preview button that shows the disk side rendered, your unsaved edits included, and Source goes back to the diff.
+
 ### The ship bar
 
 The ship bar holds, top to bottom: "Send N notes to agent ▾" when notes exist, the message field while there's something to commit, the error line when the last step failed, and the ship button with its caret. ✦ is a clickable button at the right end of the message field. The button names the next step, worked out from the worktree's state (the table is under scenario 22). The caret lists every other step, and a step that can't run stays in the list, greyed, with its reason.
@@ -271,6 +273,39 @@ The ship bar holds, top to bottom: "Send N notes to agent ▾" when notes exist,
     - **When** the user clicks commit f5429a1\*
     - **Then** ✓ the Review tab shows that commit's files with the chip `Commit f5429a1 ×` and no review controls; ✓ removing the chip returns to the worktree review
 
+### Editing in the Review tab
+
+34. **Editing a file in its card**
+    - **Given** src/app.ts is reviewed and its card is expanded
+    - **When** the user types in the disk side of the diff and presses ⌘S
+    - **Then** ✓ the card header shows Unsaved from the first keystroke until the save; ✓ the save writes the file to disk; ✓ app.ts keeps its ✓, because the reviewed version moves to the saved content
+    - **Data before:** **app.ts**: ✓ reviewed, +10 −2
+    - **Data after:** **app.ts**: ✓ reviewed, +11 −2
+35. **Closing the tab with unsaved edits**
+    - **Given** app.ts and flags.ts have unsaved edits in their cards
+    - **When** the user closes the Review tab
+    - **Then** ✓ a dialog asks Save, Don't Save or Cancel; ✓ Save writes both files and closes the tab; ✓ Don't Save closes it and leaves the disk alone; ✓ Cancel keeps the tab and both drafts; ✓ if a save fails, the tab stays open with that file's draft
+36. **The file changes on disk under unsaved edits**
+    - **Given** app.ts has unsaved edits in its card
+    - **When** the agent writes app.ts
+    - **Then** ✓ the card keeps the draft and says the file changed on disk since your edits, with Reload from Disk and Overwrite; ✓ ⌘S shows the same choice instead of writing; ✓ Reload from Disk drops the draft and shows the agent's version; ✓ Overwrite writes the draft over the agent's change, and a reviewed file then reads as changed since review
+37. **Reverting a change while edits are unsaved**
+    - **Given** app.ts has unsaved edits in its card
+    - **When** the user presses ↶ Revert on another change in that card
+    - **Then** ✓ the change is undone in the draft, with no confirm; ✓ it reaches disk with the next save. Without unsaved edits, Revert asks and writes at once, as in scenario 8.
+38. **Previewing a Markdown file**
+    - **Given** docs/guide.md\* changed and its card is expanded
+    - **When** the user presses Preview on its card
+    - **Then** ✓ the card shows the disk side rendered, with its relative images; ✓ unsaved edits show in the preview; ✓ Source returns to the diff with the draft intact; ✓ each Markdown card keeps its own choice until the tab closes; ✓ in a commit scope, Preview shows the commit's version
+39. **A file stops differing from the base while edits are unsaved**
+    - **Given** README.md has unsaved edits in its card
+    - **When** the agent's next write leaves README.md matching the base
+    - **Then** ✓ its row leaves the panel; ✓ its card stays with the draft and the changed-on-disk choice from scenario 36; ✓ Reload from Disk then removes the card
+40. **Opening a commit while edits are unsaved**
+    - **Given** app.ts has unsaved edits in its card
+    - **When** the user opens commit f5429a1\* from the Commits section
+    - **Then** ✓ Quirky asks before discarding the edits in 1 file; ✓ Cancel keeps the worktree review and the draft; ✓ Discard shows the commit and drops the draft
+
 ## How we know it's done
 
 All four hold, checked against the whole change before it lands:
@@ -324,6 +359,7 @@ Rules that still hold: the panel stays in the right-top slot with focus-revealed
 - Untracked files are ordinary changed files with status A.
 - Marking a file reviewed moves the selection and the Review tab to the next unreviewed file. This was settled at spec review.
 - Your own saves in Quirky's editor keep a file reviewed, as reverts from the Review tab do. This was settled at spec review.
+- You can edit and save a file inside its Review card, and Markdown cards can show a rendered preview. This was settled after the build; I had recommended leaving both out, with Open file for edits.
 
 ### Shipping
 
@@ -418,3 +454,5 @@ Status: Approved 2026-11-02. Tech spec: required, because the work crosses `pack
 **Amendments:**
 
 - 2026-11-02, while writing the tech spec: two existing features the design didn't place keep a home. The PR AI actions (read pull request details, review pull request, draft conversation reply) move into the panel's ⋯ menu while a PR is open for the branch. Fast-forward and Rebase from base stay in the ship button's caret beside the steps scenario 22 lists, greyed with a reason when they can't run. When nothing is left to do but no step can run, such as everything pushed with no GitHub remote, the ship bar shows a quiet line like "Pushed to origin/ui-review-ready" with the caret beside it instead of a disabled button.
+- 2026-11-02, during the click-through: AI settings move into the panel's ⋯ menu, because the redesign had left them no entry point.
+- 2026-11-04, after the build: editing inside a diff and the rendered Markdown preview come back, inside the Review cards (scenarios 34-40). The first build left them out with the old diff tabs, and the user chose to keep both.
