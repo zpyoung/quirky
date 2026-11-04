@@ -106,12 +106,20 @@ export function gateHookTimeoutSeconds(judgmentTimeoutSeconds: number): number {
   return Math.ceil(judgmentTimeoutSeconds + 15)
 }
 
+const SHIM_UNAVAILABLE_REASON = 'The Quirky avatar gate is unavailable; try again shortly.'
+
 /**
- * The hook command for `agent`. It answers passthrough when Quirky's shim is absent, so an agent
- * outside a Quirky session is never blocked, and otherwise runs the shim with the deadline.
+ * The hook command for `agent`. With the shim in place it runs the shim with the deadline. With the
+ * shim missing or not executable it answers passthrough, so an agent outside a Quirky session is
+ * never blocked, unless the session has a supervision marker: then it exits 2 with a retry reason,
+ * so a supervised session fails closed.
  */
 export function gateCommand(agent: string, deadlineMs: number): string {
-  return `[ -x "\${QUIRKY_HOME-}/bin/${GATE_SHIM}" ] || { printf '{}\\n'; exit 0; }; exec "$QUIRKY_HOME/bin/${GATE_SHIM}" ${agent} ${deadlineMs}`
+  const shim = `"\${QUIRKY_HOME-}/bin/${GATE_SHIM}"`
+  const marker = `"$QUIRKY_HOME/plugin-data/quirky.avatar/supervised/$QUIRKY_SESSION_ID"`
+  const supervised = `[ -n "\${QUIRKY_HOME-}" ] && [ -n "\${QUIRKY_SESSION_ID-}" ] && [ -e ${marker} ]`
+  const failClosed = `if ${supervised}; then printf '%s\\n' '${SHIM_UNAVAILABLE_REASON}' >&2; exit 2; fi`
+  return `[ -x ${shim} ] || { ${failClosed}; printf '{}\\n'; exit 0; }; exec "$QUIRKY_HOME/bin/${GATE_SHIM}" ${agent} ${deadlineMs}`
 }
 
 const isGateCommand = (command: unknown): boolean => typeof command === 'string' && command.includes(GATE_SHIM)
@@ -241,49 +249,213 @@ function codexDefinition(judgmentTimeoutSeconds: number): Json {
   }
 }
 
-type HooksFile = { doc: Json; text: string | null; indent: string | number }
+type HooksFile = { doc: Json; text: string | null }
 
 function readHooksFile(path: string): HooksFile {
   let text: string | null = null
   try {
     text = readFileSync(path, 'utf8')
   } catch {
-    return { doc: {}, text: null, indent: 2 }
+    return { doc: {}, text: null }
   }
   const parsed: unknown = text.trim() === '' ? {} : JSON.parse(text)
   if (!isRecord(parsed)) throw new Error(`${path} is not a JSON object`)
-  return { doc: parsed, text, indent: /^([ \t]+)"/m.exec(text)?.[1] ?? 2 }
+  return { doc: parsed, text }
 }
 
-function writeHooksFile(path: string, file: HooksFile): boolean {
-  const trailing = file.text === null || file.text.endsWith('\n') ? '\n' : ''
-  const next = JSON.stringify(file.doc, null, file.indent) + trailing
-  if (next === file.text) return false
+// surgical JSON edits: only the avatar's entries are inserted or removed, so every other byte stays
+
+type Span = { start: number; end: number }
+type JsonNode = Span & { members: Member[] | null; elements: JsonNode[] | null }
+type Member = Span & { key: string; keyEnd: number; value: JsonNode }
+
+/** Parses JSON text that `JSON.parse` already accepted, keeping the offset of every object, array and member. */
+function parseSpans(text: string): JsonNode {
+  let i = 0
+  const skipWs = (): void => {
+    while (i < text.length && /\s/.test(text[i]!)) i++
+  }
+  const scanString = (): void => {
+    i++
+    while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1
+    i++
+  }
+  const parseValue = (): JsonNode => {
+    skipWs()
+    const start = i
+    const ch = text[i]
+    if (ch === '{') {
+      const members: Member[] = []
+      i++
+      skipWs()
+      while (text[i] !== '}') {
+        const keyStart = i
+        scanString()
+        const keyEnd = i
+        skipWs()
+        i++
+        const value = parseValue()
+        members.push({ start: keyStart, end: value.end, key: JSON.parse(text.slice(keyStart, keyEnd)) as string, keyEnd, value })
+        skipWs()
+        if (text[i] === ',') i++
+        skipWs()
+      }
+      i++
+      return { start, end: i, members, elements: null }
+    }
+    if (ch === '[') {
+      const elements: JsonNode[] = []
+      i++
+      skipWs()
+      while (text[i] !== ']') {
+        elements.push(parseValue())
+        skipWs()
+        if (text[i] === ',') i++
+        skipWs()
+      }
+      i++
+      return { start, end: i, members: null, elements }
+    }
+    if (ch === '"') scanString()
+    else while (i < text.length && !/[\s,\]}]/.test(text[i]!)) i++
+    return { start, end: i, members: null, elements: null }
+  }
+  return parseValue()
+}
+
+const splice = (text: string, start: number, end: number, insert: string): string => text.slice(0, start) + insert + text.slice(end)
+
+const detectIndent = (text: string): string => /^([ \t]+)"/m.exec(text)?.[1] ?? '  '
+
+function lineIndent(text: string, pos: number): string {
+  return /^[ \t]*/.exec(text.slice(text.lastIndexOf('\n', pos - 1) + 1))![0]
+}
+
+/** The whitespace before `pos` on its line when nothing else precedes it there, else null. */
+function ownLinePrefix(text: string, pos: number): string | null {
+  const before = text.slice(text.lastIndexOf('\n', pos - 1) + 1, pos)
+  return /^[ \t]*$/.test(before) && text.lastIndexOf('\n', pos - 1) >= 0 ? before : null
+}
+
+function render(value: unknown, prefix: string | null, unit: string): string {
+  return prefix === null ? JSON.stringify(value) : JSON.stringify(value, null, unit).replaceAll('\n', `\n${prefix}`)
+}
+
+/** Appends `child` to an object or array node, copying the separator and layout of its last child. */
+function appendChild(text: string, container: JsonNode, child: { key?: string; value: unknown }): string {
+  const unit = detectIndent(text)
+  const children: Span[] = container.members ?? container.elements!
+  const last = children[children.length - 1]
+  const entry = (prefix: string | null, colon: string): string =>
+    child.key === undefined ? render(child.value, prefix, unit) : `${JSON.stringify(child.key)}${colon}${render(child.value, prefix, unit)}`
+  if (last === undefined) {
+    const multiline = text.trim().includes('\n')
+    const base = lineIndent(text, container.start)
+    const body = multiline ? `\n${base}${unit}${entry(`${base}${unit}`, ': ')}\n${base}` : entry(null, ':')
+    return splice(text, container.start + 1, container.end - 1, body)
+  }
+  const before = children[children.length - 2]
+  const between = before !== undefined ? text.slice(before.end, last.start) : `,${text.slice(container.start + 1, last.start)}`
+  const separator = between.slice(between.indexOf(','))
+  const prefix = separator.includes('\n') ? separator.slice(separator.lastIndexOf('\n') + 1) : null
+  const lastMember = container.members?.[container.members.length - 1]
+  const colon = lastMember === undefined ? '' : text.slice(lastMember.keyEnd, lastMember.value.start)
+  return splice(text, last.end, last.end, separator + entry(prefix, colon))
+}
+
+/** Removes child `index` of a container together with one adjoining comma. */
+function removeChild(text: string, container: JsonNode, index: number): string {
+  const children: Span[] = container.members ?? container.elements!
+  const child = children[index]!
+  if (children.length === 1) return splice(text, container.start + 1, container.end - 1, '')
+  if (index < children.length - 1) return splice(text, child.start, children[index + 1]!.start, '')
+  return splice(text, children[index - 1]!.end, child.end, '')
+}
+
+const memberOf = (node: JsonNode, key: string): Member | undefined => node.members?.filter((member) => member.key === key).at(-1)
+
+function replaceElement(text: string, element: JsonNode, value: unknown): string {
+  return splice(text, element.start, element.end, render(value, ownLinePrefix(text, element.start), detectIndent(text)))
+}
+
+const elementValue = (text: string, element: JsonNode): unknown => JSON.parse(text.slice(element.start, element.end))
+
+function installIntoText(path: string, text: string, definition: Json): string {
+  let next = text
+  const root = parseSpans(next)
+  const hooksMember = memberOf(root, 'hooks')
+  if (hooksMember === undefined) {
+    const hooks = Object.fromEntries(GATE_EVENTS.map((event) => [event, [definition]]))
+    return appendChild(next, root, { key: 'hooks', value: hooks })
+  }
+  if (hooksMember.value.members === null) throw new Error(`${path} has a hooks value that is not an object`)
+  for (const event of GATE_EVENTS) {
+    const hooks = memberOf(parseSpans(next), 'hooks')!.value
+    const member = memberOf(hooks, event)
+    if (member === undefined) {
+      next = appendChild(next, hooks, { key: event, value: [definition] })
+      continue
+    }
+    if (member.value.elements === null) throw new Error(`${path} has a ${event} value that is not a list`)
+    const owned = member.value.elements.filter((element) => ownsGate(elementValue(next, element)))
+    if (owned.length === 1 && sameJson(elementValue(next, owned[0]!), definition)) continue
+    if (owned.length === 0) {
+      next = appendChild(next, member.value, { value: definition })
+      continue
+    }
+    next = replaceElement(next, owned[0]!, definition)
+    for (let extra = owned.length - 1; extra >= 1; extra--) {
+      const current = memberOf(memberOf(parseSpans(next), 'hooks')!.value, event)!.value
+      const index = current.elements!.findIndex((element, at) => at > 0 && ownsGate(elementValue(next, element)))
+      if (index >= 0) next = removeChild(next, current, index)
+    }
+  }
+  return next
+}
+
+function removeFromText(text: string): string {
+  let next = text
+  for (;;) {
+    const hooks = memberOf(parseSpans(next), 'hooks')
+    if (hooks?.value.members == null) return next
+    const target = hooks.value.members.find((member) => member.value.elements?.some((element) => ownsGate(elementValue(next, element))))
+    if (target === undefined) return next
+    const elements = target.value.elements!
+    const index = elements.findIndex((element) => ownsGate(elementValue(next, element)))
+    if (elements.length > 1) {
+      next = removeChild(next, target.value, index)
+      continue
+    }
+    next = removeChild(next, hooks.value, hooks.value.members.indexOf(target))
+    const root = parseSpans(next)
+    const remaining = memberOf(root, 'hooks')!
+    if (remaining.value.members!.length === 0) next = removeChild(next, root, root.members!.indexOf(remaining))
+  }
+}
+
+function writeIfChanged(path: string, next: string, current: string | null): boolean {
+  if (next === current) return false
+  JSON.parse(next)
   writeAtomically(path, next)
   return true
 }
 
 /**
- * Adds the avatar's PreToolUse and PermissionRequest entries to Codex's `hooks.json`. Entries it
- * does not own are left as they are, and an up-to-date install changes nothing. Returns whether
- * the file changed. Throws when the file is not a JSON object, rather than overwrite it.
+ * Adds the avatar's PreToolUse and PermissionRequest entries to Codex's `hooks.json`. The file is
+ * edited as text, so every byte outside the avatar's own entries is preserved, and an up-to-date
+ * install changes nothing. Returns whether the file changed. Throws when the file is not a JSON
+ * object, rather than overwrite it.
  */
 export function installCodexHooks(agentEnv: AgentEnv, judgmentTimeoutSeconds: number): boolean {
   const path = codexHooksPath(agentEnv)
   const file = readHooksFile(path)
   if (file.doc.hooks !== undefined && !isRecord(file.doc.hooks)) throw new Error(`${path} has a hooks value that is not an object`)
-  const hooks: Json = (file.doc.hooks as Json | undefined) ?? {}
   const definition = codexDefinition(judgmentTimeoutSeconds)
-  for (const event of GATE_EVENTS) {
-    const current = hooks[event]
-    if (current !== undefined && !Array.isArray(current)) throw new Error(`${path} has a ${event} value that is not a list`)
-    const existing = (current as unknown[] | undefined) ?? []
-    const owned = existing.filter(ownsGate)
-    if (owned.length === 1 && sameJson(owned[0], definition)) continue
-    hooks[event] = [...existing.filter((entry) => !ownsGate(entry)), definition]
+  if (file.text === null || file.text.trim() === '') {
+    const hooks = Object.fromEntries(GATE_EVENTS.map((event) => [event, [definition]]))
+    return writeIfChanged(path, `${JSON.stringify({ hooks }, null, 2)}\n`, file.text)
   }
-  file.doc.hooks = hooks
-  return writeHooksFile(path, file)
+  return writeIfChanged(path, installIntoText(path, file.text, definition), file.text)
 }
 
 /** Removes the avatar's entries from Codex's `hooks.json` and nothing else. Returns whether the file changed. */
@@ -291,22 +463,13 @@ export function removeCodexHooks(agentEnv: AgentEnv): boolean {
   const path = codexHooksPath(agentEnv)
   const file = readHooksFile(path)
   if (file.text === null || !isRecord(file.doc.hooks)) return false
-  const hooks = file.doc.hooks
-  let removed = false
-  for (const [event, entries] of Object.entries(hooks)) {
-    if (!Array.isArray(entries) || !entries.some(ownsGate)) continue
-    removed = true
-    const kept = entries.filter((entry) => !ownsGate(entry))
-    if (kept.length === 0) delete hooks[event]
-    else hooks[event] = kept
-  }
-  if (!removed) return false
-  if (Object.keys(hooks).length === 0) delete file.doc.hooks
-  if (Object.keys(file.doc).length === 0) {
+  const next = removeFromText(file.text)
+  if (next === file.text) return false
+  if (Object.keys(JSON.parse(next) as Json).length === 0) {
     rmSync(path, { force: true })
     return true
   }
-  return writeHooksFile(path, file)
+  return writeIfChanged(path, next, file.text)
 }
 
 /** True when both avatar entries are present in Codex's `hooks.json`. */
