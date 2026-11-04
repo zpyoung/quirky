@@ -409,7 +409,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   app.context.provide('tool-gate:quirky.avatar/gate', provider)
   app.context.provide(
     'launch-hook:quirky.avatar/gate-hooks',
-    createGateLaunchHook({ judgmentTimeoutSeconds: () => app.settings().judgmentTimeoutSeconds, claudeVersion })
+    createGateLaunchHook({ judgmentTimeoutSeconds: () => app.settings().judgmentTimeoutSeconds, claudeVersion, dataDir: app.context.dataDir })
   )
 
   const guarded = !isRealHomeInTest(agentEnv)
