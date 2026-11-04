@@ -6,6 +6,7 @@ import {
 const STARTED_BEFORE_HOOK = "started before the avatar's hook was installed"
 const NOT_REACHING_GATE = 'tool calls are not reaching the gate'
 const RECEIPT_WINDOW_MS = 60_000
+const STOPPED: GateCheckResult = { ok: false, reason: 'the gate check was stopped' }
 
 export type GateCheckResult = { ok: boolean; reason: string }
 
@@ -19,6 +20,7 @@ export type GateCheckDeps = {
 }
 
 type Observed = { fingerprint: string; at: number }
+type RunToken = { aborted: boolean }
 
 /** Splits a recorded launch-args string into words the way the launch pipeline's `joinCommand` quoted them; null when a quote is left open. */
 function splitLaunchArgs(text: string): string[] | null {
@@ -75,8 +77,10 @@ export type GateChecker = {
   noteReceipt(sessionId: string): void
   /** Tells waiting checks the session record showed a tool call the gate may not have seen. */
   noteObserved(sessionId: string, fingerprint: string, at: number): void
-  /** Ends any waiting check for the worktree without failing it, because it was handed back. */
+  /** Stops the worktree's check, waiting or mid-step, without failing it, because it was handed back. */
   cancel(worktreeId: string): void
+  /** Stops every check for good: none touches the store afterwards, and later checks resolve at once without running. */
+  dispose(): void
 }
 
 /**
@@ -87,11 +91,15 @@ export type GateChecker = {
  * dynamic step fails when any call seen in the session record has no receipt of its own after the
  * grace period, and passes once a receipt has arrived since hand-off and no seen call is unmatched. A failure removes the marker,
  * sets `gate-failed` and queues `restart-to-handoff`; a pass moves `checking` to `briefing`.
+ * A check that is cancelled or disposed resolves quietly with a not-ok result and writes nothing:
+ * every await point re-checks before it reads or writes the store, so a plugin that deactivates
+ * mid-check never sees a closed store touched.
  */
 export function createGateChecker(deps: GateCheckDeps): GateChecker {
   const { app, agentEnv } = deps
   const graceMs = deps.graceMs ?? 10_000
-  const running = new Map<string, Promise<GateCheckResult>>()
+  const running = new Map<string, { promise: Promise<GateCheckResult>; token: RunToken }>()
+  let disposed = false
   const waiters = new Map<string, Set<() => void>>()
   const cancels = new Map<string, Set<() => void>>()
   const observed = new Map<string, Observed[]>()
@@ -131,7 +139,7 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
     return { ok: false, reason: `${agent || 'this agent'} has no permission hook` }
   }
 
-  function dynamicStep(worktreeId: string, sessionId: string, since: number): Promise<GateCheckResult & { cancelled?: boolean }> {
+  function dynamicStep(worktreeId: string, sessionId: string, since: number, token: RunToken): Promise<GateCheckResult & { cancelled?: boolean }> {
     return new Promise((resolve) => {
       let timer: ReturnType<typeof setTimeout> | null = null
       const finish = (result: GateCheckResult & { cancelled?: boolean }) => {
@@ -142,6 +150,7 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
       }
       const cancel = () => finish({ ok: false, reason: 'no longer supervised', cancelled: true })
       function evaluate() {
+        if (disposed || token.aborted) return cancel()
         const row = app.store.handoffs.get(worktreeId)
         if (row === null || !row.active || row.sessionId !== sessionId || !hasMarkerFile(app.context.home, sessionId)) return cancel()
         const unseen = (observed.get(sessionId) ?? []).filter((call) => !hasReceiptNear(sessionId, call.fingerprint, call.at))
@@ -182,15 +191,19 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
     return { ok: false, reason }
   }
 
-  async function run(worktreeId: string): Promise<GateCheckResult> {
+  async function run(worktreeId: string, token: RunToken): Promise<GateCheckResult> {
+    const stopped = () => disposed || token.aborted
+    if (stopped()) return STOPPED
     const row = app.store.handoffs.get(worktreeId)
     if (row === null || !row.active) return { ok: false, reason: 'not handed off' }
     if (row.sessionId === null) return fail(worktreeId, '', '', 'there is no session to check')
     const sessionId = row.sessionId
     const { agent, ...stepOne } = await staticStep(sessionId)
+    if (stopped()) return STOPPED
     if (!stepOne.ok) return fail(worktreeId, sessionId, agent, stepOne.reason)
-    const stepTwo = await dynamicStep(worktreeId, sessionId, row.handedOffAt)
+    const stepTwo = await dynamicStep(worktreeId, sessionId, row.handedOffAt, token)
     if (stepTwo.cancelled) return { ok: false, reason: stepTwo.reason }
+    if (stopped()) return STOPPED
     if (!stepTwo.ok) return fail(worktreeId, sessionId, agent, stepTwo.reason)
     app.journal(worktreeId, 'event', { type: 'gate-check', ok: true, agent })
     if (app.store.handoffs.get(worktreeId)?.state === 'checking') app.services.handoff.setState(worktreeId, 'briefing', 'the gate check passed')
@@ -199,11 +212,20 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
 
   return {
     check(worktreeId) {
+      if (disposed) return Promise.resolve(STOPPED)
       const existing = running.get(worktreeId)
-      if (existing !== undefined) return existing
-      const started = run(worktreeId).finally(() => running.delete(worktreeId))
-      running.set(worktreeId, started)
-      return started
+      if (existing !== undefined) return existing.promise
+      const token: RunToken = { aborted: false }
+      const promise = run(worktreeId, token)
+        .catch((error): GateCheckResult => {
+          if (disposed || token.aborted) return STOPPED
+          throw error
+        })
+        .finally(() => {
+          if (running.get(worktreeId)?.token === token) running.delete(worktreeId)
+        })
+      running.set(worktreeId, { promise, token })
+      return promise
     },
     noteReceipt(sessionId) {
       for (const evaluate of [...(waiters.get(sessionId) ?? [])]) evaluate()
@@ -216,7 +238,17 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
       for (const evaluate of [...(waiters.get(sessionId) ?? [])]) evaluate()
     },
     cancel(worktreeId) {
+      const current = running.get(worktreeId)
+      if (current !== undefined) {
+        current.token.aborted = true
+        running.delete(worktreeId)
+      }
       for (const cancel of [...(cancels.get(worktreeId) ?? [])]) cancel()
+    },
+    dispose() {
+      disposed = true
+      for (const cancelSet of [...cancels.values()]) for (const cancel of [...cancelSet]) cancel()
+      running.clear()
     }
   }
 }

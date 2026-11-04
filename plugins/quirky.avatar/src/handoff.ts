@@ -77,11 +77,13 @@ function briefText(mandate: Mandate, updated: boolean): string {
 /**
  * Installs `app.services.handoff`: which worktrees can be handed off, hand-off and take-back with
  * their briefing, and the one-click answers to the needs-you queue. Returns a disposer that stops
- * the settled listener.
+ * the settled listener and ends every gate check still running for a handed-off worktree; after it
+ * runs, a gate check's failure is dropped instead of journaled, because the store may be closed.
  */
 export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
   const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
   const pendingBriefs = new Map<string, Brief>()
+  let disposed = false
   const call = <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => app.context.call(method, params) as Promise<T>
 
   const activeRow = (worktreeId: string): HandoffRow | null => {
@@ -229,7 +231,14 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
   })
 
   function startGateCheck(worktreeId: string): void {
-    app.services.gate.gateCheck(worktreeId).catch((error) => app.journal(worktreeId, 'event', { type: 'gate-check-error', error: errorText(error) }))
+    app.services.gate.gateCheck(worktreeId).catch((error) => {
+      if (disposed) return
+      try {
+        app.journal(worktreeId, 'event', { type: 'gate-check-error', error: errorText(error) })
+      } catch {
+        return
+      }
+    })
   }
 
   type Prepared = { mandate: Mandate; session: SessionInfo | undefined; isNew: boolean }
@@ -453,5 +462,13 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     setState: writeState,
     resolveNeed
   }
-  return offSettled
+  return () => {
+    disposed = true
+    offSettled()
+    try {
+      for (const row of app.store.handoffs.list({ active: true })) app.services.gate.resolveInFlight(row.worktreeId, 'passthrough')
+    } catch {
+      return
+    }
+  }
 }
