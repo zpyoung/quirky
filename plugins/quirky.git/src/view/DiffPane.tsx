@@ -177,11 +177,21 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   }
 
   const reverting = useRef(false)
-  const savingRevert = useRef(false)
+  const ownEdit = useRef(false)
+  /** Runs `change` on the editor without it counting as the user's edit. */
+  const silently = <T,>(change: () => T): T => {
+    ownEdit.current = true
+    try {
+      return change()
+    } finally {
+      ownEdit.current = false
+    }
+  }
   /**
    * Runs `apply` on the editor. With unsaved edits that is all it does, so the change reaches disk
    * with the next save. Otherwise it confirms first and saves the result at once; a refused save
-   * restores the editor.
+   * restores the editor unless the user typed meanwhile, in which case their text and the
+   * reverted change stay in the draft.
    */
   const revert = async (apply: () => boolean) => {
     const merge = mergeRef.current
@@ -203,17 +213,23 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
         return
       }
       const before = merge.getModified()
-      // the revert's own edits are not the user's, so the pane stays clean while it saves
-      savingRevert.current = true
-      if (!apply()) return
+      if (!silently(apply)) return
+      const reverted = merge.getModified()
       try {
-        await write(merge.getModified(), false)
+        await write(reverted, false)
       } catch (error) {
-        if (mergeRef.current === merge) merge.setModified(before)
+        if (mergeRef.current === merge) {
+          if (merge.getModified() === reverted) {
+            silently(() => merge.setModified(before))
+            dirtyRef.current = false
+          } else {
+            dirtyRef.current = true
+          }
+          setDirty(dirtyRef.current)
+        }
         context.toast('Revert failed', messageOf(error))
       }
     } finally {
-      savingRevert.current = false
       reverting.current = false
     }
   }
@@ -240,7 +256,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       scrollToFirst: variant === 'file',
       onSave: () => void actions.current.save(),
       onDocChange: () => {
-        if (savingRevert.current) return
+        if (ownEdit.current) return
         dirtyRef.current = true
         setDirty(true)
         if (timer.current !== null) clearTimeout(timer.current)

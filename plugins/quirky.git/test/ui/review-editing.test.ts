@@ -582,6 +582,95 @@ describe('SC-37: reverting a change while edits are unsaved', () => {
   })
 })
 
+describe('SC-37: typing while a Revert save is pending', () => {
+  const twenty = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n') + '\n'
+  const twoChanges = twenty.replace('line 3\n', 'three\n').replace('line 15\n', 'fifteen\n')
+  const reverted = twoChanges.replace('three\n', 'line 3\n')
+  let settleSave: { ok(): void; fail(): void }
+  let pendingElement: HTMLElement
+
+  const typeAtEnd = async (text: string) => {
+    const view = modifiedEditor(card(pendingElement, APP))
+    act(() => {
+      view.dispatch({ changes: { from: view.state.doc.length, insert: text } })
+    })
+    await settle()
+  }
+
+  beforeEach(async () => {
+    model = reviewModel([reviewFile(APP)])
+    disk.set(APP, { original: twenty, modified: twoChanges, hash: 'app-1' })
+    fake.handlers['quirky.git/save'] = (params) => {
+      saves.push(params)
+      return new Promise((resolve, reject) => {
+        settleSave = {
+          ok: () => resolve({ hash: 'saved:revert' }),
+          fail: () => reject(failure('disk full'))
+        }
+      })
+    }
+    pendingElement = await open()
+    const first = card(pendingElement, APP).querySelector<HTMLButtonElement>('button[name="reject"]')!
+    await act(async () => void first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })))
+    await wait(20)
+    expect(saves.map((save) => save.content)).toEqual([reverted])
+  })
+
+  test('SC-37: keystrokes during the pending save mark the card unsaved', async () => {
+    expect(unsaved(pendingElement, APP)).toBe(false)
+    await typeAtEnd('typed\n')
+    expect(unsaved(pendingElement, APP)).toBe(true)
+    expect(mounted!.report().dirty).toBe(true)
+  })
+
+  test('SC-37: when the save succeeds the card holds the reverted text plus the typing, unsaved', async () => {
+    await typeAtEnd('typed\n')
+    await act(async () => settleSave.ok())
+    await settle()
+    expect(draftOf(pendingElement, APP)).toBe(reverted + 'typed\n')
+    expect(unsaved(pendingElement, APP)).toBe(true)
+    expect(mounted!.report().dirty).toBe(true)
+    expect(fake.toasts).toEqual([])
+
+    fake.handlers['quirky.git/save'] = (params) => {
+      saves.push(params)
+      return { hash: 'saved:next' }
+    }
+    await saveWithKeyboard(pendingElement, APP)
+    expect(saves.at(-1)).toEqual({ worktree: 'w1', path: APP, content: reverted + 'typed\n', expected: 'saved:revert' })
+  })
+
+  test('SC-37: when the save fails after typing, the typing and the reverted change stay, unsaved', async () => {
+    await typeAtEnd('typed\n')
+    await act(async () => settleSave.fail())
+    await settle()
+    expect(draftOf(pendingElement, APP)).toBe(reverted + 'typed\n')
+    expect(unsaved(pendingElement, APP)).toBe(true)
+    expect(mounted!.report().dirty).toBe(true)
+    expect(fake.toasts).toEqual([['Revert failed', 'disk full']])
+
+    fake.handlers['quirky.git/save'] = (params) => {
+      saves.push(params)
+      return { hash: 'saved:next' }
+    }
+    await saveWithKeyboard(pendingElement, APP)
+    expect(saves.at(-1)).toEqual({ worktree: 'w1', path: APP, content: reverted + 'typed\n', expected: 'app-1' })
+    expect(unsaved(pendingElement, APP)).toBe(false)
+  })
+
+  test('SC-37: when the save fails with no typing, the editor is restored and the card stays clean', async () => {
+    expect(draftOf(pendingElement, APP)).toBe(reverted)
+    await act(async () => settleSave.fail())
+    await settle()
+    expect(draftOf(pendingElement, APP)).toBe(twoChanges)
+    expect(unsaved(pendingElement, APP)).toBe(false)
+    expect(mounted!.report().dirty).toBe(false)
+    expect(fake.toasts).toEqual([['Revert failed', 'disk full']])
+    await wait(350)
+    expect(unsaved(pendingElement, APP)).toBe(false)
+  })
+})
+
 describe('SC-38: previewing a Markdown file', () => {
   let renders: number
   let renderReply: (params: Record<string, unknown>) => unknown
