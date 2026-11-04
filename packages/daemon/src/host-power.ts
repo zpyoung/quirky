@@ -102,6 +102,7 @@ export class HostPowerService {
   /**
    * Holds the host awake for `owner` until the returned disposer runs or the owner is revoked.
    * Holds from every owner share one native assertion; the disposer is idempotent.
+   * Keep-awake is a no-op unless the source can both create and release assertions.
    */
   keepAwake(owner: string, reason: string): () => void {
     if (this.#disposed) throw new Error('Host power service is disposed')
@@ -193,7 +194,7 @@ export class HostPowerService {
 
   #acquire(reason: string, container: Set<Hold>): () => void {
     const hold: Hold = { active: true, container }
-    if (!this.#source?.createAssertion) return () => { hold.active = false }
+    if (!this.#source?.createAssertion || !this.#source.releaseAssertion) return () => { hold.active = false }
     container.add(hold)
     this.#holdCount++
     if (this.#assertionId === null) this.#createAssertion(reason)
@@ -226,7 +227,7 @@ export class HostPowerService {
     this.#assertionId = null
     if (id === null) return
     try {
-      this.#source!.releaseAssertion?.(id)
+      this.#source!.releaseAssertion!(id)
     } catch (error) {
       this.#logSafely(`Host power keep-awake release failed: ${errorMessage(error)}`)
     }
