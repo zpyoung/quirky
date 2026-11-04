@@ -19,6 +19,52 @@ export type GateCheckDeps = {
 }
 
 type Observed = { fingerprint: string; at: number }
+
+/** Splits a recorded launch-args string into words the way the launch pipeline's `joinCommand` quoted them; null when a quote is left open. */
+function splitLaunchArgs(text: string): string[] | null {
+  const words: string[] = []
+  let current = ''
+  let inWord = false
+  let quote: '"' | "'" | null = null
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (quote === "'") {
+      if (ch === "'") quote = null
+      else current += ch
+    } else if (quote === '"') {
+      if (ch === '"') quote = null
+      else if (ch === '\\' && i + 1 < text.length && '$`"\\\n'.includes(text[i + 1]!)) {
+        if (text[i + 1] !== '\n') current += text[i + 1]
+        i++
+      } else current += ch
+    } else if (ch === "'" || ch === '"') {
+      quote = ch
+      inWord = true
+    } else if (ch === '\\' && i + 1 < text.length) {
+      if (text[i + 1] !== '\n') {
+        current += text[i + 1]
+        inWord = true
+      }
+      i++
+    } else if (/\s/.test(ch)) {
+      if (inWord) words.push(current)
+      current = ''
+      inWord = false
+    } else {
+      current += ch
+      inWord = true
+    }
+  }
+  if (quote !== null) return null
+  if (inWord) words.push(current)
+  return words
+}
+
+/** The recorded launch args as words, from either the stored string or an already-split list. */
+function launchArgWords(args: unknown): unknown[] {
+  if (Array.isArray(args)) return args
+  return typeof args === 'string' ? (splitLaunchArgs(args) ?? []) : []
+}
 type SessionRecord = { agent?: unknown; createdAt?: unknown; launch?: { args?: unknown; env?: unknown } | null }
 
 /** The gate check for supervised worktrees (R-9, R-41): proves an agent's tool calls reach the gate before and while it is supervised. */
@@ -37,8 +83,8 @@ export type GateChecker = {
  * Builds the checker. The static step is per agent: Claude's launch args hold the avatar's
  * `--settings` hook and Claude is new enough to fail closed, Codex's `hooks.json` holds both
  * entries, and pi and omp have the extension file installed before the session started. The
- * dynamic step passes on the first receipt from the session after hand-off and fails when a call
- * seen in the session record has no receipt after the grace period. A failure removes the marker,
+ * dynamic step fails when any call seen in the session record has no receipt of its own after the
+ * grace period, and passes once a receipt has arrived since hand-off and no seen call is unmatched. A failure removes the marker,
  * sets `gate-failed` and queues `restart-to-handoff`; a pass moves `checking` to `briefing`.
  */
 export function createGateChecker(deps: GateCheckDeps): GateChecker {
@@ -67,8 +113,7 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
   async function checkAgent(agent: string, session: SessionRecord): Promise<GateCheckResult> {
     if (agent === 'claude') {
       if (!claudeVersionAtLeast(await deps.claudeVersion().catch(() => null))) return { ok: false, reason: 'Claude is too old to fail closed; update Claude' }
-      const args = Array.isArray(session.launch?.args) ? (session.launch.args as unknown[]) : []
-      return launchHasGateHook(args) ? { ok: true, reason: '' } : { ok: false, reason: STARTED_BEFORE_HOOK }
+      return launchHasGateHook(launchArgWords(session.launch?.args)) ? { ok: true, reason: '' } : { ok: false, reason: STARTED_BEFORE_HOOK }
     }
     if (agent === 'codex') {
       return codexHooksInstalled(agentEnv) ? { ok: true, reason: '' } : { ok: false, reason: "the avatar's entries are missing from Codex's hooks.json" }
@@ -97,10 +142,12 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
       function evaluate() {
         const row = app.store.handoffs.get(worktreeId)
         if (row === null || !row.active || row.sessionId !== sessionId || !hasMarkerFile(app.context.home, sessionId)) return cancel()
-        if (app.store.receipts.list({ sessionId }).some((receipt) => receipt.at >= since)) return finish({ ok: true, reason: '' })
-        const unseen = (observed.get(sessionId) ?? []).find((call) => !hasReceiptNear(sessionId, call.fingerprint, call.at))
-        if (unseen === undefined) return
-        const due = unseen.at + graceMs
+        const unseen = (observed.get(sessionId) ?? []).filter((call) => !hasReceiptNear(sessionId, call.fingerprint, call.at))
+        if (unseen.length === 0) {
+          if (app.store.receipts.list({ sessionId }).some((receipt) => receipt.at >= since)) return finish({ ok: true, reason: '' })
+          return
+        }
+        const due = Math.min(...unseen.map((call) => call.at)) + graceMs
         if (app.now() >= due) return finish({ ok: false, reason: NOT_REACHING_GATE })
         if (timer !== null) clearTimeout(timer)
         timer = setTimeout(evaluate, Math.max(1, due - app.now()))

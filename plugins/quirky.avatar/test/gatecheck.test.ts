@@ -14,7 +14,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-type Session = { agent: string; createdAt?: number; launch?: { args?: unknown[]; env?: Record<string, string> } | null }
+type Session = { agent: string; createdAt?: number; launch?: { args?: unknown[] | string; env?: Record<string, string> } | null }
 
 function setup(options: { session?: Session; version?: string | null; state?: WorktreeState; graceMs?: number } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'avatar-gatecheck-'))
@@ -43,6 +43,8 @@ function setup(options: { session?: Session; version?: string | null; state?: Wo
   return { ...t, agentEnv, session, states, checker, receive, needs, home }
 }
 
+const shellQuote = (text: string) => `'${text.replaceAll("'", `'"'"'`)}'`
+
 const marked = (s: ReturnType<typeof setup>, sessionId: string) => hasMarkerFile(s.context.home, sessionId)
 
 describe('Claude', () => {
@@ -56,6 +58,18 @@ describe('Claude', () => {
     expect(s.states).toEqual([['wt-1', 'briefing', 'the gate check passed']])
     expect(marked(s, 's-1')).toBe(true)
     expect(s.needs()).toEqual([])
+  })
+
+  test('passes with the launch args recorded as one shell-quoted string, as the session store keeps them', async () => {
+    const s = setup({ session: { agent: 'claude', launch: { args: `--model x --settings ${shellQuote(JSON.stringify(claudeGateSettings({}, 55)))}` } } })
+    const check = s.checker.check('wt-1')
+    s.receive()
+    expect(await check).toEqual({ ok: true, reason: '' })
+  })
+
+  test('fails when the recorded launch args string has no avatar --settings', async () => {
+    const s = setup({ session: { agent: 'claude', launch: { args: `--model x --settings ${shellQuote('{"hooks":{}}')}` } } })
+    expect(await s.checker.check('wt-1')).toEqual({ ok: false, reason: "started before the avatar's hook was installed" })
   })
 
   test('fails when the launch record has no avatar --settings, with the reason an old agent gets', async () => {
@@ -115,6 +129,27 @@ describe('the dynamic step', () => {
     await Bun.sleep(10)
     s.checker.noteObserved('s-1', 'fp-seen', Date.now())
     s.receive('s-1', 'fp-seen')
+    expect((await check).ok).toBe(true)
+  })
+
+  test('an unmatched call fails the check even when another call from the session has a receipt', async () => {
+    const s = setup({ graceMs: 30 })
+    const check = s.checker.check('wt-1')
+    await Bun.sleep(10)
+    s.checker.noteObserved('s-1', 'fp-ungated', Date.now())
+    s.receive('s-1', 'fp-other')
+    expect(await check).toEqual({ ok: false, reason: 'tool calls are not reaching the gate' })
+    expect(s.states.at(-1)).toEqual(['wt-1', 'gate-failed', 'tool calls are not reaching the gate'])
+  })
+
+  test('every observed call matched by its own receipt passes', async () => {
+    const s = setup({ graceMs: 30 })
+    const check = s.checker.check('wt-1')
+    await Bun.sleep(10)
+    s.checker.noteObserved('s-1', 'fp-a', Date.now())
+    s.checker.noteObserved('s-1', 'fp-b', Date.now())
+    s.receive('s-1', 'fp-a')
+    s.receive('s-1', 'fp-b')
     expect((await check).ok).toBe(true)
   })
 
