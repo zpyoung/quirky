@@ -157,6 +157,54 @@ describe('classifyCall bash', () => {
     expect(bash('git commit -m "fix: tidy"')).toEqual(['edit-inside'])
   })
 
+  test('git directory overrides that leave every handed-off path are edits outside', () => {
+    for (const command of [
+      'git -C /other/repo clean -fd',
+      'git -C ../elsewhere reset --hard',
+      'git -C /work/wt -C /other/repo clean -fd',
+      'git --git-dir /other/repo/.git clean -fd',
+      'git --git-dir=/other/repo/.git clean -fd',
+      'git --work-tree /other/repo checkout -- .',
+      'git --work-tree=/other/repo checkout -- .',
+      'git -c core.worktree=/other/repo clean -fd',
+      'git --work-tree=$TARGET clean -fd',
+      'GIT_DIR=/other/repo/.git git clean -fd',
+      'GIT_WORK_TREE=/other/repo git checkout -- .',
+      'env GIT_DIR=/other/repo/.git git rm -r .',
+      'GIT_DIR=/other/repo/.git; git clean -fd',
+      'export GIT_WORK_TREE=/other/repo && git clean -fd',
+      'GIT_DIR=/other/repo/.git bash -c "git clean -fd"',
+      'cd /other/repo && git clean -fd',
+      'cd /other/repo && git stash drop',
+      'git -C /other/repo branch -D x',
+      'git -C /other/repo worktree remove y',
+      'git -C /other/repo restore .'
+    ]) expect([command, bash(command).includes('edit-outside'), bash(command).includes('edit-inside')]).toEqual([command, true, false])
+    expect(has(bash('git -C /other/repo rebase origin/main'), 'push-force', 'edit-outside')).toBe(true)
+    expect(has(bash('git -C /other/repo push origin feat/x'), 'push-own', 'edit-outside')).toBe(true)
+  })
+
+  test('git overrides resolve against the call cwd and stay inside when they land in a handed-off path', () => {
+    expect(bash('git -C src clean -fd')).toEqual(['edit-inside'])
+    expect(bash('git -C /work/other clean -fd')).toEqual(['edit-inside'])
+    expect(bash('git -C .. clean -fd', {}, '/work/wt/src')).toEqual(['edit-inside'])
+    expect(bash('git -C ../.. clean -fd', {}, '/work/wt/src')).toEqual(['edit-outside'])
+    expect(bash('git --git-dir=.git --work-tree=. checkout -- .')).toEqual(['edit-inside'])
+    expect(bash('git --git-dir=/work/wt/.git reset --hard')).toEqual(['edit-inside'])
+    expect(bash('GIT_DIR=.git git clean -fd')).toEqual(['edit-inside'])
+    expect(bash('cd src && git clean -fd')).toEqual(['read', 'edit-inside'])
+    expect(bash('git clean -fd', {}, '/elsewhere')).toEqual(['edit-outside'])
+  })
+
+  test('destructive local git subcommands inside the worktree stay edit-inside', () => {
+    for (const command of ['git clean -fd', 'git reset --hard', 'git checkout -- .', 'git restore .', 'git rm -r src', 'git stash drop', 'git branch -D old', 'git worktree remove ../x']) expect([command, bash(command)]).toEqual([command, ['edit-inside']])
+  })
+
+  test('git reads against a repository outside stay read', () => {
+    expect(bash('git -C /other/repo status')).toEqual(['read'])
+    expect(bash('git --git-dir=/other/repo/.git log')).toEqual(['read'])
+  })
+
   test('writes through shell commands and redirects resolve against cwd', () => {
     expect(bash('touch a.txt')).toEqual(['edit-inside'])
     expect(bash('rm -rf /tmp/x')).toEqual(['edit-outside'])
