@@ -168,7 +168,7 @@ const started = new Set<Harness>()
 const avatars = new Set<Avatar>()
 const databases: Database[] = []
 const directories: string[] = []
-const restorePath: (() => void)[] = []
+const restoreSpawn: (() => void)[] = []
 
 /** Stops every daemon started through `startAvatar` and removes what it created; call from `afterEach`. */
 export async function cleanupAll(): Promise<void> {
@@ -177,7 +177,7 @@ export async function cleanupAll(): Promise<void> {
   for (const db of databases.splice(0)) db.close()
   for (const harness of [...started]) await harness.cleanup()
   started.clear()
-  for (const restore of restorePath.splice(0)) restore()
+  for (const restore of restoreSpawn.splice(0)) restore()
   for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true })
 }
 
@@ -197,17 +197,28 @@ function fileStore(path: string): PluginStore {
   }
 }
 
-/** Puts a `claude` that reports a new-enough version first on PATH, so no test depends on the installed one. */
-function fakeClaudeOnPath(): void {
+/**
+ * Makes every `Bun.spawn(['claude', ...])` run a stand-in that reports a new-enough version, so no
+ * test depends on the installed one. Changing `process.env.PATH` does not do it: Bun finds the
+ * command on the PATH it started with, so an installed Claude that is too old (or missing) wins.
+ */
+function fakeClaudeSpawn(): void {
   const bin = mkdtempSync(join(tmpdir(), 'qav-e2e-bin-'))
   directories.push(bin)
-  writeFileSync(join(bin, 'claude'), '#!/bin/sh\necho "2.1.300 (Claude Code)"\n')
-  chmodSync(join(bin, 'claude'), 0o755)
-  const before = process.env.PATH
-  process.env.PATH = `${bin}:${before ?? ''}`
-  restorePath.push(() => {
-    if (before === undefined) delete process.env.PATH
-    else process.env.PATH = before
+  const fake = join(bin, 'claude')
+  writeFileSync(fake, '#!/bin/sh\necho "2.1.300 (Claude Code)"\n')
+  chmodSync(fake, 0o755)
+  const original = Bun.spawn
+  const redirect = (command: string): string => (command === 'claude' ? fake : command)
+  const patched = ((first: unknown, ...rest: unknown[]) => {
+    if (Array.isArray(first)) return (original as (...args: unknown[]) => unknown)([redirect(first[0] as string), ...first.slice(1)], ...rest)
+    const options = first as { cmd?: string[] }
+    if (options?.cmd !== undefined) return (original as (...args: unknown[]) => unknown)({ ...options, cmd: [redirect(options.cmd[0]!), ...options.cmd.slice(1)] }, ...rest)
+    return (original as (...args: unknown[]) => unknown)(first, ...rest)
+  }) as typeof Bun.spawn
+  Bun.spawn = patched
+  restoreSpawn.push(() => {
+    Bun.spawn = original
   })
 }
 
@@ -217,7 +228,7 @@ function fakeClaudeOnPath(): void {
  * sends, so the hand-off, gate, report and take-back paths run end to end without agents or git.
  */
 export async function startAvatar(options: { brain?: BrainMode } = {}): Promise<Avatar> {
-  if (restorePath.length === 0) fakeClaudeOnPath()
+  if (restoreSpawn.length === 0) fakeClaudeSpawn()
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'qav-e2e-')))
   directories.push(root)
   const pluginsDir = join(root, 'builtin')
