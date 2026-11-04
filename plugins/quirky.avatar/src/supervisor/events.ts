@@ -11,6 +11,13 @@ const WATCHED_STATES: ReadonlySet<WorktreeState> = new Set(['working', 'briefing
 const SETTLED_TEXT_CHARS = 2000
 const JOURNAL_WINDOW = 200
 const IDLE_HOSTING_STATUSES: ReadonlySet<string> = new Set(['queued', 'in-flight', 'paused', 'skipped'])
+const OPEN_ASK_STATUSES: ReadonlySet<string> = new Set(['pending', 'partial'])
+const PLAIN_LIST_LIMIT = 100
+const PLAIN_DEPTH = 4
+const REVIEW_KEYS = [
+  'number', 'url', 'title', 'body', 'state', 'headRefName', 'baseRefName', 'headRefOid', 'baseRefOid', 'mergeable', 'checksStatus',
+  'reviewDecision', 'mergeStateStatus', 'reviews', 'requestedReviewers', 'checks', 'additions', 'deletions', 'changedFiles'
+] as const
 
 export type SupervisorDeps = {
   stepIn?: StepInDeps
@@ -20,6 +27,42 @@ export type SupervisorDeps = {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const str = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+/** Copies event data for the journal: text goes through `sanitize()` and is capped, lists and nesting are bounded, anything else is dropped. */
+function plain(value: unknown, depth = PLAIN_DEPTH): unknown {
+  if (typeof value === 'string') return sanitize(value).slice(0, SETTLED_TEXT_CHARS)
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value
+  if (depth <= 0) return undefined
+  if (Array.isArray(value)) return value.slice(0, PLAIN_LIST_LIMIT).map((item) => plain(item, depth - 1))
+  if (!isRecord(value)) return undefined
+  const copy: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    const kept = plain(item, depth - 1)
+    if (kept !== undefined) copy[key] = kept
+  }
+  return copy
+}
+
+function pickPlain(source: Record<string, unknown>, keys: readonly string[], into: Record<string, unknown>): void {
+  for (const key of keys) {
+    const kept = source[key] === undefined ? undefined : plain(source[key])
+    if (kept !== undefined) into[key] = kept
+  }
+}
+
+function hostingDetail(record: Record<string, unknown>, detail: Record<string, unknown>): void {
+  pickPlain(record, ['sequence', 'reason', 'status', 'skippedReason', 'partial', 'completedSteps', 'repoId'], detail)
+  const outcome = isRecord(record.outcome) ? record.outcome : null
+  if (outcome === null) return
+  const kept: Record<string, unknown> = {}
+  pickPlain(outcome, ['kind', 'reason', 'message'], kept)
+  if (isRecord(outcome.review)) {
+    const review: Record<string, unknown> = {}
+    pickPlain(outcome.review, REVIEW_KEYS, review)
+    kept.review = review
+  }
+  detail.outcome = kept
+}
 
 const EVENTS = {
   'quirky.agent-status/settled': 'agent-settled',
@@ -141,9 +184,45 @@ export function register(app: AvatarApp, deps: SupervisorDeps = {}): () => void 
     return sessionId == null ? null : (app.services.handoff.active().find((entry) => entry.sessionId === sessionId)?.worktreeId ?? null)
   }
 
-  function onEvent(type: string, data: unknown): void {
+  /** The worktree an ask belongs to: the avatar's own `question` need first, then ids on the event, then the ask's own record. */
+  async function askOrigin(askId: string, data: unknown): Promise<{ worktreeId: string | null; row: Record<string, unknown> | null }> {
+    const need = app.needs.list().find((item) => item.kind === 'question' && item.detail.askId === askId)
+    if (need !== undefined) return { worktreeId: need.worktreeId, row: null }
+    const direct = worktreeOf(data)
+    if (direct !== null) return { worktreeId: direct, row: null }
+    const listing = await call<unknown>('quirky.ask/list', { askId }).catch(() => null)
+    const row = Array.isArray(listing) ? (listing.filter(isRecord).find((item) => item.id === askId) ?? null) : null
+    return { worktreeId: row === null ? null : worktreeOf(row), row }
+  }
+
+  async function onAskResolved(type: string, data: unknown): Promise<void> {
+    const record = isRecord(data) ? data : {}
+    const askId = str(record.askId)
+    if (askId === null) return
+    const origin = await askOrigin(askId, data)
+    const worktreeId = origin.worktreeId
+    if (worktreeId === null || activeRow(worktreeId) === undefined) return
+    const envelope = isRecord(record.envelope) ? record.envelope : isRecord(origin.row?.envelope) ? origin.row.envelope : {}
+    const status = str(envelope.status)
+    const sessionId = str(record.sessionId) ?? str(envelope.sessionId) ?? str(origin.row?.sessionId)
+    const at = typeof record.at === 'number' ? record.at : app.now()
+    evidence.noteActivity(worktreeId, at)
+
+    const detail: Record<string, unknown> = { type: 'ask-resolved', source: type, askId }
+    if (sessionId !== null) detail.sessionId = sessionId
+    pickPlain(envelope, ['status', 'answers', 'skipped', 'summary', 'reason'], detail)
+    app.store.transaction(() => {
+      app.journal(worktreeId, 'event', detail)
+      if (status === null || OPEN_ASK_STATUSES.has(status)) return
+      for (const need of app.needs.list({ worktreeId, open: true })) if (need.kind === 'question' && need.detail.askId === askId) app.needs.close(need.id, status)
+    })
+    app.services.brain.wake()
+  }
+
+  function onEvent(type: string, data: unknown): void | Promise<void> {
     const label = EVENTS[type as keyof typeof EVENTS]
     if (label === undefined) return
+    if (label === 'ask-resolved') return onAskResolved(type, data).catch((error) => app.context.log(`avatar ask intake failed: ${message(error)}`))
     const worktreeId = worktreeOf(data)
     if (worktreeId === null || activeRow(worktreeId) === undefined) return
     const record = isRecord(data) ? data : {}
@@ -166,13 +245,12 @@ export function register(app: AvatarApp, deps: SupervisorDeps = {}): () => void 
       lastStates.set(sessionId, state)
       promptTimes.set(sessionId, at)
       detail.state = state
-    } else if (label === 'ask-resolved') {
-      detail.askId = record.askId
     } else {
       if (label === 'hosting-refresh' && typeof record.status === 'string' && IDLE_HOSTING_STATUSES.has(record.status)) return
       const digest = createHash('sha256').update(JSON.stringify(record.outcome ?? record.sequence ?? label)).digest('hex')
       if (hostingDigests.get(`${worktreeId}\0${label}`) === digest) return
       hostingDigests.set(`${worktreeId}\0${label}`, digest)
+      hostingDetail(record, detail)
     }
     app.journal(worktreeId, 'event', detail)
     app.services.brain.wake()
