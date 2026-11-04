@@ -30,10 +30,11 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   setting: ['type', 'default', 'title', 'description', 'category', 'section', 'minimum', 'maximum', 'values', 'menu', 'whenSetting'],
   theme: ['title', 'appearance', 'colors', 'description'],
   'menu-item': ['menu', 'title', 'command', 'when', 'after'],
+  'window-bar-item': ['title', 'description', 'order'],
 } satisfies Record<(typeof UI_KINDS)[number], readonly string[]>
 
 const SETTING_TYPES = ['boolean', 'number', 'string', 'enum'] as const
-const TITLE_REQUIRED = new Set(['status-bar', 'sidebar-section', 'activity-item', 'panel', 'settings-section', 'overlay', 'setting', 'theme', 'menu-item'])
+const TITLE_REQUIRED = new Set(['status-bar', 'sidebar-section', 'activity-item', 'panel', 'settings-section', 'overlay', 'setting', 'theme', 'menu-item', 'window-bar-item'])
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== ''
