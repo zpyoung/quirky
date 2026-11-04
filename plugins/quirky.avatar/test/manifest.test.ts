@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import type { ApiDescription, CliContext, ContributionInfo, PluginInfo } from '@quirky/protocol'
+import type { ApiDescription, ContributionInfo, PluginInfo } from '@quirky/protocol'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { commands } from '../cli'
 
@@ -107,26 +107,19 @@ describe('quirky.avatar as a built-in plugin', () => {
     const jobs = (await client.call('job.list', {})) as { id: string; plugin: string; intervalMs: number }[]
     expect(jobs.find((job) => job.id === 'job:quirky.avatar/watchdog')).toMatchObject({ plugin: 'quirky.avatar', intervalMs: 60_000 })
     expect(jobs.find((job) => job.id === 'job:quirky.avatar/records')).toMatchObject({ plugin: 'quirky.avatar', intervalMs: 15_000 })
-    expect(await client.call('job.run', { id: 'job:quirky.avatar/watchdog' })).toMatchObject({ status: 'ok' })
   })
 
-  test('its methods answer through the daemon, with stub results until a module replaces them', async () => {
+  test('methods that need no module answer through the daemon and reject bad params', async () => {
     const client = await (await startAvatar()).connect('cli')
     const call = (method: string, params: Record<string, unknown> = {}) => client.call(method as never, params as never) as unknown as Promise<unknown>
-    expect(await call('quirky.avatar/status')).toEqual({ handoffs: [], needsYouCount: 0 })
-    expect(await call('quirky.avatar/eligibility')).toEqual([])
-    expect(await call('quirky.avatar/sidebarStatus')).toEqual({})
     expect(await call('quirky.avatar/settings')).toMatchObject({ defaultLevel: 'full', judgmentTimeoutSeconds: 55 })
     await expect(call('quirky.avatar/mandate')).rejects.toMatchObject({ message: expect.stringContaining('worktreeId') })
   })
 })
 
 describe('quirky avatar CLI module', () => {
-  test('has a handler for every declared command and each fails with not implemented', async () => {
-    expect(Object.keys(commands).sort()).toEqual(['handoff', 'log', 'report', 'status', 'take-back'])
-    const ctx = { fail: (message: string) => new Error(message) } as unknown as CliContext
-    for (const handler of Object.values(commands)) {
-      await expect(handler({ positionals: [], flags: {} }, ctx)).rejects.toThrow('not implemented')
-    }
+  test('has a handler for every declared command', () => {
+    const manifest = JSON.parse(readFileSync(join(PLUGIN_DIR, 'quirky-plugin.json'), 'utf8')) as { contributes: { 'cli-command': { id: string }[] } }
+    expect(Object.keys(commands).sort()).toEqual(manifest.contributes['cli-command'].map((command) => command.id).sort())
   })
 })

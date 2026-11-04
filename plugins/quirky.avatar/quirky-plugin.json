@@ -1111,6 +1111,11 @@
           "shared-goal": {
             "type": "string",
             "description": "a shared goal this worktree contributes to"
+          },
+          "switch": {
+            "type": "string",
+            "description": "turn a switch on (messaging, history-rewrite, deploys), or off with name=false",
+            "repeatable": true
           }
         },
         "methods": [

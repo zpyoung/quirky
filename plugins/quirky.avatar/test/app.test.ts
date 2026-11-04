@@ -1,10 +1,11 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { activate, announceChanges, deactivate } from '../main'
-import type { AvatarBusEvent } from '../src/contracts'
+import * as appModule from '../src/app'
+import type { AvatarApp, AvatarBusEvent } from '../src/contracts'
 import { createAvatarStore } from '../src/store'
-import { makeTestApp, sampleMandate } from './support'
+import { makeTestApp, sampleMandate, type TestApp } from './support'
 
 describe('avatar app stubs', () => {
   test('every stub method resolves to an unavailable or empty result and never throws', async () => {
@@ -161,37 +162,105 @@ describe('avatar settings', () => {
   })
 })
 
+/**
+ * Activates the plugin on a fake context and hands back the app `activate` built, so a test can
+ * replace `app.services.*` with fakes: the methods read the services at call time, so nothing a
+ * registered module does to them matters once they are replaced.
+ */
+async function activateWithApp(overrides: Parameters<typeof makeTestApp>[0] = {}): Promise<{ test: TestApp; app: AvatarApp; callsSince(): TestApp['calls'] }> {
+  const test = makeTestApp(overrides)
+  let built: AvatarApp | undefined
+  const real = appModule.createApp
+  const spy = spyOn(appModule, 'createApp').mockImplementation((...args) => (built = real(...args)))
+  try {
+    await activate(test.context)
+  } finally {
+    spy.mockRestore()
+  }
+  const baseline = test.calls.length
+  return { test, app: built!, callsSince: () => test.calls.slice(baseline) }
+}
+
+const method = (test: TestApp, name: string) => test.provided.get(`method:quirky.avatar/${name}`) as (params: Record<string, unknown>) => Promise<unknown>
+
 describe('avatar main wiring', () => {
   const manifest = JSON.parse(readFileSync(join(import.meta.dir, '..', 'quirky-plugin.json'), 'utf8')) as { contributes: { method: { id: string }[] } }
 
   test('activate provides every manifest method and nothing the manifest lacks', async () => {
-    const test = makeTestApp()
-    await activate(test.context)
+    const { test } = await activateWithApp()
     const provided = [...test.provided.keys()].filter((id) => id.startsWith('method:')).sort()
-    expect(provided).toEqual(manifest.contributes.method.map((method) => `method:quirky.avatar/${method.id}`).sort())
+    expect(provided).toEqual(manifest.contributes.method.map((entry) => `method:quirky.avatar/${entry.id}`).sort())
     await deactivate()
   })
 
-  test('methods delegate to the services', async () => {
-    const test = makeTestApp()
-    await activate(test.context)
-    const call = (name: string, params: Record<string, unknown> = {}) => (test.provided.get(`method:quirky.avatar/${name}`) as (params: Record<string, unknown>) => unknown)(params)
+  test('methods delegate to the services and return what they return', async () => {
+    const { test, app } = await activateWithApp()
+    const seen: unknown[][] = []
+    const record = <T>(name: string, result: T) => (...args: unknown[]) => {
+      seen.push([name, ...args])
+      return result
+    }
+    const eligibility = [{ worktreeId: 'w' }]
+    const status = { handoffs: [], needsYouCount: 3 }
+    const report = { needsYou: [], stories: [], topSkippedCalls: [] }
+    app.services.handoff = {
+      ...app.services.handoff,
+      eligibility: record('eligibility', Promise.resolve(eligibility)) as never,
+      handoff: record('handoff', Promise.resolve([{ worktreeId: 'w', ok: true }])) as never,
+      takeBack: record('takeBack', Promise.resolve([{ worktreeId: 'w', ok: true, handedBackWith: [] }])) as never,
+      mandate: record('mandate', null) as never,
+      resolveNeed: record('resolveNeed', Promise.resolve({ ok: true })) as never
+    }
+    app.services.report = {
+      status: record('status', status) as never,
+      sidebarStatus: record('sidebarStatus', { w: 'x' }) as never,
+      report: record('report', report) as never
+    }
 
-    expect(await call('status')).toEqual({ handoffs: [], needsYouCount: 0 })
-    expect(await call('takeBack', { all: true })).toEqual({ results: [] })
-    expect(await call('mandate', { worktreeId: 'w' })).toBeNull()
-    expect(await call('resolveNeed', { needId: 'n', action: 'deny' })).toMatchObject({ ok: false })
-    expect(await call('handoff', { items: [{ worktreeId: 'w' }] })).toEqual({ results: [{ worktreeId: 'w', ok: false, error: 'unavailable' }] })
-    expect(await call('settings')).toMatchObject({ defaultLevel: 'full' })
+    expect(await method(test, 'eligibility')({})).toBe(eligibility)
+    expect(await method(test, 'status')({})).toBe(status)
+    expect(await method(test, 'sidebarStatus')({})).toEqual({ w: 'x' })
+    expect(await method(test, 'report')({})).toBe(report)
+    expect(await method(test, 'mandate')({ worktreeId: 'w' })).toBeNull()
+    expect(await method(test, 'resolveNeed')({ needId: 'n', action: 'answer', text: 'yes' })).toEqual({ ok: true })
+    expect(await method(test, 'takeBack')({ all: true })).toEqual({ results: [{ worktreeId: 'w', ok: true, handedBackWith: [] }] })
+    expect(await method(test, 'takeBack')({ worktreeIds: ['a', 'b'] })).toEqual({ results: [{ worktreeId: 'w', ok: true, handedBackWith: [] }] })
+    expect(await method(test, 'handoff')({ items: [{ worktreeId: 'w' }] })).toEqual({ results: [{ worktreeId: 'w', ok: true }] })
 
-    expect(test.emitted).toEqual([])
+    expect(seen).toEqual([
+      ['eligibility'],
+      ['status'],
+      ['sidebarStatus'],
+      ['report'],
+      ['mandate', 'w'],
+      ['resolveNeed', 'n', 'answer', 'yes'],
+      ['takeBack', { all: true }],
+      ['takeBack', { worktreeIds: ['a', 'b'] }],
+      ['handoff', [{ worktreeId: 'w' }]]
+    ])
     await deactivate()
   })
 
-  test('bad params are rejected as invalid-params', async () => {
-    const test = makeTestApp()
-    await activate(test.context)
-    const call = (name: string, params: Record<string, unknown>) => (test.provided.get(`method:quirky.avatar/${name}`) as (params: Record<string, unknown>) => unknown)(params)
+  test('settings reads through the app', async () => {
+    const { test } = await activateWithApp({ settings: { 'default-level': 'local' } })
+    expect(await method(test, 'settings')({})).toMatchObject({ defaultLevel: 'local', judgmentTimeoutSeconds: 55 })
+    await deactivate()
+  })
+
+  test('bad params are rejected as invalid-params before any service or call runs', async () => {
+    const { test, app, callsSince } = await activateWithApp()
+    const touched: string[] = []
+    const trap = (name: string) => () => {
+      touched.push(name)
+      throw new Error(`${name} must not run`)
+    }
+    app.services.handoff = {
+      ...app.services.handoff,
+      handoff: trap('handoff') as never,
+      takeBack: trap('takeBack') as never,
+      mandate: trap('mandate') as never,
+      resolveNeed: trap('resolveNeed') as never
+    }
     const rejection = async (run: () => unknown) => {
       try {
         await run()
@@ -201,23 +270,22 @@ describe('avatar main wiring', () => {
       return null
     }
 
-    expect(await rejection(() => call('handoff', {}))).toBe('invalid-params')
-    expect(await rejection(() => call('takeBack', { worktreeIds: 'w' }))).toBe('invalid-params')
-    expect(await rejection(() => call('mandate', {}))).toBe('invalid-params')
-    expect(await rejection(() => call('resolveNeed', { needId: 'n', action: 'explode' }))).toBe('invalid-params')
-    expect(await rejection(() => call('log', { limit: -1 }))).toBe('invalid-params')
-    expect(await rejection(() => call('setSettings', { defaultLevel: 'reckless' }))).toBe('invalid-params')
-    expect(await rejection(() => call('setSettings', { surprise: true }))).toBe('invalid-params')
-    expect(test.calls).toEqual([])
+    expect(await rejection(() => method(test, 'handoff')({}))).toBe('invalid-params')
+    expect(await rejection(() => method(test, 'takeBack')({ worktreeIds: 'w' }))).toBe('invalid-params')
+    expect(await rejection(() => method(test, 'mandate')({}))).toBe('invalid-params')
+    expect(await rejection(() => method(test, 'resolveNeed')({ needId: 'n', action: 'explode' }))).toBe('invalid-params')
+    expect(await rejection(() => method(test, 'log')({ limit: -1 }))).toBe('invalid-params')
+    expect(await rejection(() => method(test, 'setSettings')({ defaultLevel: 'reckless' }))).toBe('invalid-params')
+    expect(await rejection(() => method(test, 'setSettings')({ surprise: true }))).toBe('invalid-params')
+    expect(touched).toEqual([])
+    expect(callsSince()).toEqual([])
     await deactivate()
   })
 
   test('setSettings writes each changed setting through setting.set', async () => {
-    const test = makeTestApp({ fakeCalls: { 'setting.set': () => ({}) } })
-    await activate(test.context)
-    const setSettings = test.provided.get('method:quirky.avatar/setSettings') as (params: Record<string, unknown>) => Promise<unknown>
-    await setSettings({ defaultLevel: 'local', switches: { deploys: true }, houseRules: ['a', 'b'], brainModel: null })
-    expect(test.calls).toEqual([
+    const { test, callsSince } = await activateWithApp({ fakeCalls: { 'setting.set': () => ({}) } })
+    await method(test, 'setSettings')({ defaultLevel: 'local', switches: { deploys: true }, houseRules: ['a', 'b'], brainModel: null })
+    expect(callsSince()).toEqual([
       { method: 'setting.set', params: { id: 'setting:quirky.avatar/default-level', value: 'local' } },
       { method: 'setting.set', params: { id: 'setting:quirky.avatar/switch-deploys', value: true } },
       { method: 'setting.set', params: { id: 'setting:quirky.avatar/house-rules', value: 'a\nb' } },
@@ -241,22 +309,12 @@ describe('avatar main wiring', () => {
   })
 
   test('the log method pages the journal the plugin opened', async () => {
-    const test = makeTestApp()
-    await activate(test.context)
+    const { test } = await activateWithApp()
     const store = createAvatarStore(test.openedStores[0]!)
     const first = store.appendJournal({ at: 1, worktreeId: 'a', kind: 'gate', data: {} })
     const second = store.appendJournal({ at: 2, worktreeId: 'b', kind: 'gate', data: {} })
-    const log = test.provided.get('method:quirky.avatar/log') as (params: Record<string, unknown>) => unknown
-    expect(log({ worktreeId: 'a' })).toEqual([first])
-    expect(log({ limit: 1 })).toEqual([second])
-    await deactivate()
-  })
-
-  test('the gate placeholder answers unavailable, which is never an approval', async () => {
-    const test = makeTestApp()
-    await activate(test.context)
-    const gate = test.provided.get('tool-gate:quirky.avatar/gate') as () => Promise<unknown>
-    expect(await gate()).toMatchObject({ decision: 'unavailable', encoded: null })
+    expect(await method(test, 'log')({ worktreeId: 'a' })).toEqual([first])
+    expect(await method(test, 'log')({ limit: 1 })).toEqual([second])
     await deactivate()
   })
 })
