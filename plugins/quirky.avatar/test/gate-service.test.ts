@@ -472,6 +472,30 @@ describe('per-agent translation', () => {
     expect(s.gateEntries()[0]!.data.outcome).toBe('allow')
   })
 
+  test('a failed worktree lookup is a retry, never an allow, even for a write outside the real worktree', async () => {
+    const s = setup()
+    s.fakeCalls['quirky.worktree/list'] = () => {
+      throw new Error('worktree service down')
+    }
+    const outside = scratch()
+    const decision = await s.ask({ tool_name: 'Write', tool_input: { file_path: join(outside, 'evil.ts'), content: 'x' } }, {})
+    expect(decision.decision).toBe('deny')
+    expect(String(claudeJson(decision).hookSpecificOutput.permissionDecisionReason)).toBe("Quirky's avatar gate couldn't confirm the worktree; try again shortly.")
+    expect(s.denials).toEqual([['wt-1', false]])
+    expect(s.gateEntries()[0]!.data).toMatchObject({ outcome: 'retry' })
+    expect(s.app.store.receipts.list()[0]!.outcome).toBe('retry')
+    expect(s.brainCalls).toEqual([])
+  })
+
+  test('a worktree list that omits the call\'s worktree is a retry, even for a read', async () => {
+    const s = setup()
+    s.fakeCalls['quirky.worktree/list'] = () => [{ id: 'other', path: scratch(), branch: 'main', repoId: 'repo', isMain: true }]
+    const decision = await s.ask({ tool_name: 'Read', tool_input: { file_path: join(s.worktreePath, 'a.ts') } })
+    expect(decision.decision).toBe('deny')
+    expect(s.denials).toEqual([['wt-1', false]])
+    expect(s.gateEntries()[0]!.data).toMatchObject({ outcome: 'retry', reliedOn: 'an unconfirmed worktree' })
+  })
+
   test('an edit outside every handed-off worktree is held', async () => {
     const s = setup()
     const decision = await s.ask({ tool_name: 'Edit', tool_input: { file_path: join(scratch(), 'elsewhere.ts'), old_string: 'a', new_string: 'b' } })
