@@ -7,7 +7,7 @@
 **Status:** Approved · Tech spec: authored (tech.md; gate fired: crosses subsystems, >3 files)
 
 **Amendments:**
-none
+- 2026-11-04 — R-36 / C-brain: Codex can't fully turn off its shell (exec_command stays on). A Codex brain runs with most tools disabled, a read-only sandbox, and every tool start interrupted and refused; a read-only command may start before the interrupt lands. Settings show a note when Codex is the brain. Decided by the user during the build.
 
 ## Purpose
 
