@@ -1,0 +1,369 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Avatar UX mock</title>
+<style>
+:root{--rail:#0c0d0f;--surf:#17181b;--surf2:#1f2125;--surf3:#26282d;--bd:#2c2f35;--tx:#e6e7ea;--mu:#8b8f98;--dim:#5d616a;--ac:#7b7ff6;--acs:rgba(123,127,246,.16);--gr:#3fb97a;--ye:#e5b33d;--re:#e5534b;--bl:#6c8cf5;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+*{box-sizing:border-box}html,body{margin:0;background:var(--rail);color:var(--tx);font:12.5px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}
+.top{max-width:1240px;margin:0 auto;padding:18px 16px 6px}.top h1{margin:0;font-size:18px;font-weight:600}.top p{margin:4px 0 0;color:var(--mu)}
+.nav{display:flex;gap:4px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--bd);background:#101114;position:sticky;top:0;z-index:50;justify-content:center}
+.nav button{background:var(--surf2);border:1px solid var(--bd);border-radius:6px;padding:3px 9px;color:var(--mu)}
+.nav button.on{background:var(--acs);border-color:var(--ac);color:var(--tx)}
+.nav .hint{color:var(--dim);align-self:center;font-size:11px;margin-left:6px}
+.capwrap{max-width:1240px;margin:0 auto;padding:10px 16px;display:flex;gap:16px;align-items:flex-start;min-height:64px}.cap{color:var(--mu);font-size:13px;flex:1}
+.cap b{color:var(--tx)}
+.win{position:relative;margin:0 auto 16px;max-width:1240px;border:1px solid var(--bd);border-radius:10px;overflow:hidden;background:var(--rail);min-width:940px}
+.bar{height:36px;display:flex;align-items:center;gap:14px;padding:0 12px}
+.dots span{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px}
+.bar .t{color:var(--tx);font-weight:500}.bar .m{color:var(--mu)}
+.bar .sp{flex:1}
+.pill{display:flex;align-items:center;gap:6px;border:1px solid var(--bd);border-radius:999px;padding:2px 10px 2px 4px;background:var(--surf2)}
+.pill.live{border-color:var(--ac)}
+.av{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#7b7ff6,#b57bf6);display:inline-grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+.needs{color:var(--ye)}
+.main{display:grid;grid-template-columns:34px 260px 1fr;gap:5px;padding:0 5px 0 0;height:max(470px,calc(100vh - 270px))}
+.stripe{display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:8px;color:var(--mu);font-size:14px}
+.stripe .on{color:var(--ac)}
+.card{background:var(--surf);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card h4{margin:0;padding:10px 12px 6px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card h4 .r{margin-left:auto;color:var(--mu);font-weight:400;font-size:11.5px}
+.left{display:grid;grid-template-rows:1fr 190px;gap:5px}
+.proj{display:flex;align-items:center;gap:7px;padding:6px 12px 2px;font-weight:600}
+.pb{font-size:9px;font-weight:700;border-radius:4px;padding:1px 3px;color:#fff}
+.wt{display:flex;gap:9px;padding:4px 12px 4px 16px;align-items:flex-start;border-radius:7px;margin:0 5px}
+.wt.sel{background:var(--acs)}
+.dot{width:9px;height:9px;border-radius:50%;margin-top:4px;flex:none;position:relative}
+.dot.ring::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1.5px solid var(--ac)}
+.wt .n{color:var(--tx)}.wt .s{color:var(--mu);font-size:11.5px}
+.wt .s .a{color:var(--ac)}
+.dot.g,.st i.g{background:var(--gr)}.dot.y,.st i.y{background:var(--ye)}.dot.r,.st i.r{background:var(--re)}.dot.b,.st i.b{background:var(--bl)}.dot.k,.st i.k{background:var(--dim)}.dot.p,.st i.p{background:var(--ac)}
+.apanel .row{display:flex;align-items:center;gap:8px;padding:4px 12px}
+.apanel .row .n{flex:1}
+.chip{font-size:10.5px;border:1px solid var(--bd);border-radius:4px;padding:0 5px;color:var(--mu);white-space:nowrap}
+.chip.full{border-color:var(--ac);color:var(--ac)}
+.chip.sh{border-style:dashed}
+.btn{background:var(--surf3);border:1px solid var(--bd);border-radius:6px;padding:3px 10px}
+.btn.pri{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600}
+.btn.sm{padding:1px 8px;font-size:11.5px;white-space:nowrap}
+.btn.ghost{background:transparent}
+.center .tabs{display:flex;gap:16px;padding:8px 14px 0;border-bottom:1px solid var(--bd);color:var(--mu)}
+.center .tabs span{padding-bottom:7px}.center .tabs .on{color:var(--tx);border-bottom:2px solid var(--ac)}
+.body{padding:12px 14px;overflow:auto;flex:1;min-height:0}.card{min-height:0}.left{min-height:0}.left>.card{overflow:auto}
+.term{font-family:var(--mono);font-size:12px;color:#c9ccd3;white-space:pre;line-height:1.55}
+.term .ok{color:var(--gr)}.term .c{color:var(--ac)}.term .mu{color:var(--mu)}.term .ye{color:var(--ye)}
+.status{height:26px;display:flex;align-items:center;gap:16px;padding:0 12px;color:var(--mu);font-size:11.5px}
+.status .sp{flex:1}
+.ovl{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding-top:44px;z-index:5}
+.pop{width:640px;max-height:410px;overflow:auto;background:var(--surf2);border:1px solid var(--bd);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.pop .hd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--bd);font-weight:600;position:sticky;top:0;background:var(--surf2)}
+.pop .hd .r{margin-left:auto;color:var(--mu);font-weight:400}
+.pop .sec{padding:10px 14px;border-bottom:1px solid var(--bd)}
+.pop .ft{display:flex;gap:8px;justify-content:flex-end;align-items:center;padding:10px 14px;position:sticky;bottom:0;background:var(--surf2);border-top:1px solid var(--bd)}
+.pop .ft .l{margin-right:auto;color:var(--mu);font-size:11.5px}
+.lbl{color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 4px}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:3px 16px}
+.pick label{display:flex;gap:7px;align-items:center}
+.pick .dis{color:var(--dim)}
+.box{width:13px;height:13px;border:1.5px solid var(--mu);border-radius:3px;display:inline-grid;place-items:center;font-size:9px;flex:none}
+.box.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.mcard{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:6px 0;background:var(--surf)}
+.mcard .h{display:flex;gap:8px;align-items:center;font-weight:600;margin-bottom:4px}
+.mcard .h .r{margin-left:auto;font-weight:400;color:var(--mu);font-size:11.5px}
+.f{display:grid;grid-template-columns:92px 1fr;gap:6px;align-items:center;margin:3px 0}
+.f .k{color:var(--mu)}
+.inp{background:var(--rail);border:1px solid var(--bd);border-radius:5px;padding:3px 7px;color:var(--tx)}
+.inp.mono{font-family:var(--mono);font-size:11.5px}
+.seg{display:inline-flex;border:1px solid var(--bd);border-radius:6px;overflow:hidden}
+.seg span{padding:1px 9px;color:var(--mu);border-right:1px solid var(--bd)}.seg span:last-child{border:0}
+.seg .on{background:var(--acs);color:var(--tx)}
+.sw{display:inline-flex;gap:14px;flex-wrap:wrap}.sw label{display:flex;gap:6px;align-items:center;color:var(--mu)}
+.q{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:6px 0;background:var(--surf)}
+.q .w{color:var(--mu);font-size:11.5px}
+.opts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.opt{border:1px solid var(--bd);border-radius:6px;padding:2px 9px}
+.opt.rec{border-color:var(--ac)}
+.lv{width:100%;border-collapse:collapse}
+.lv td,.lv th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd);vertical-align:top}
+.lv th{color:var(--mu);font-weight:500;font-size:11.5px}
+.st{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.st i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.feed{margin-top:10px;border-top:1px solid var(--bd);padding-top:8px}
+.ev{display:grid;grid-template-columns:44px 110px 1fr;gap:8px;padding:2px 0;color:var(--mu)}
+.ev .x{color:var(--tx)}
+code{font-family:var(--mono);font-size:11.5px;background:var(--rail);border:1px solid var(--bd);border-radius:4px;padding:0 4px}
+.toast{position:absolute;right:16px;bottom:36px;width:330px;background:var(--surf2);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);z-index:6}
+.toast .h{display:flex;gap:8px;align-items:center;font-weight:600}
+.phone{width:210px;flex:none;background:#000;border:6px solid #2a2a2e;border-radius:22px;padding:18px 8px 12px}
+.phone .nb{background:rgba(60,60,66,.9);border-radius:12px;padding:8px;font-size:11px}
+.phone .nb b{display:block;font-size:11.5px}
+.need{border:1px solid rgba(229,179,61,.5);border-radius:8px;padding:8px 10px;margin:6px 0;display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;background:rgba(229,179,61,.05)}
+.need .w{color:var(--mu);font-size:11.5px;grid-column:1}
+.need .acts{grid-row:1 / span 2;grid-column:2;display:flex;gap:6px}
+.story{border:1px solid var(--bd);border-radius:8px;padding:7px 10px;margin:6px 0;background:var(--surf)}
+.story .h{display:flex;gap:8px;align-items:center}
+.story .h .r{margin-left:auto;color:var(--mu);font-size:11.5px}
+.story .w{color:var(--mu);font-size:11.5px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:5px 12px;margin:8px 0}
+.kv .k{color:var(--mu)}
+.path{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.path span{border:1px solid var(--bd);border-radius:5px;padding:1px 7px;color:var(--mu)}
+.path .hit{border-color:var(--ac);color:var(--tx)}
+.path i{color:var(--dim);font-style:normal}
+.set{display:grid;grid-template-columns:200px 1fr;gap:10px 16px;align-items:start}
+.set .k{color:var(--tx)}.set .k small{display:block;color:var(--mu)}
+.tog{width:28px;height:16px;border-radius:999px;background:var(--surf3);border:1px solid var(--bd);position:relative;display:inline-block;vertical-align:middle}
+.tog::after{content:"";position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:var(--mu)}
+.tog.on{background:var(--ac);border-color:var(--ac)}.tog.on::after{left:13px;background:#fff}
+.hide{display:none!important}
+.pop.wide{width:900px;max-height:440px}
+.tb{display:flex;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--bd)}
+.bulk{display:flex;gap:12px;align-items:center;padding:6px 14px;background:var(--acs);border-bottom:1px solid var(--bd)}
+.bulk .lnk{color:var(--ac)}.bulk .sep{flex:0}
+.ht{width:100%;border-collapse:collapse;font-size:12px}
+.ht th{color:var(--mu);font-weight:500;text-align:left;padding:5px 6px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--surf2)}
+.ht td{padding:4px 6px;border-bottom:1px solid rgba(44,47,53,.6);vertical-align:middle}
+.ht .grp td{background:var(--surf);font-weight:600;padding-top:6px}
+.ht .prj td{font-weight:600}
+.ht .i1{padding-left:26px}
+.ht .mu,.mu{color:var(--mu)}.ht .mono{font-family:var(--mono);font-size:11.5px}
+.ht .dis td{color:var(--dim)}
+.ht .open td{background:rgba(123,127,246,.06)}.ht .exp td{background:rgba(123,127,246,.06);padding:2px 6px 8px 26px}
+.cell{border:1px solid var(--bd);border-radius:4px;padding:1px 6px;background:var(--rail);display:inline-block;max-width:270px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.cell.mono{font-family:var(--mono);font-size:11px}
+.shared{border:1px dashed var(--ac);border-radius:4px;padding:0 6px;color:var(--ac);white-space:nowrap}
+.box.part{background:var(--surf3);border-color:var(--ac);color:var(--ac)}
+.sgoal{padding:8px 14px;border-top:1px solid var(--bd);color:var(--tx);font-size:12px;line-height:1.9}
+.main.withright{grid-template-columns:34px 260px 1fr 330px}
+.right{display:none}.main.withright .right{display:flex}
+.qpanel{display:flex;flex-direction:column;gap:8px;padding:10px 12px;overflow:auto}
+.qh{font-weight:600;display:flex;gap:8px;align-items:center}.qh .r{margin-left:auto;color:var(--mu)}
+.badge{background:var(--ye);color:#000;border-radius:999px;padding:0 6px;font-size:11px;font-weight:700}
+.qnote{display:flex;gap:8px;border:1px solid var(--bd);border-radius:8px;padding:8px;background:var(--surf2);color:var(--mu)}.qnote b{color:var(--tx)}
+.qc{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;background:var(--surf2)}
+.qc.dim{opacity:.6}
+.qm{display:flex;gap:6px;align-items:center;color:var(--mu);font-size:11.5px;margin-bottom:4px}
+.av.sm{width:15px;height:15px;font-size:8px}
+.qq{margin-bottom:6px}
+.ro{display:flex;gap:8px;align-items:center;padding:3px 0}.ro.on{color:var(--tx)}
+.rd{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--mu);flex:none}.rd.on{border:4px solid var(--ac)}
+.rec{font-size:10.5px;color:var(--ac);border:1px solid var(--ac);border-radius:4px;padding:0 4px}
+.qa{display:flex;gap:6px;margin-top:6px}
+</style></head>
+<body>
+<div class="top"><h1>Avatar UX mock</h1><p>One night with the avatar in Quirky: hand off four worktrees, the avatar works overnight, you come back to a report. Click the screens or use the arrow keys. Answer in the companion.</p></div>
+<div class="nav" id="nav"></div>
+<div class="capwrap"><div class="cap" id="cap"></div><div class="phone hide" id="phone"></div></div>
+<div class="win">
+  <div class="bar">
+    <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+    <span class="t">&#9638; All projects &#9662;</span><span class="m">&#5833; provider-host &#9662;</span><span class="m">+</span>
+    <span class="sp"></span>
+    <span class="m">+ New agent &#9662;</span>
+    <span class="pill" id="pill"><span class="av">A</span><span id="pilltx">Avatar &middot; idle</span></span>
+    <span class="needs" id="needs">&#9679; 1</span>
+    <span class="m">&#9906; Search &#8984;K</span>
+  </div>
+  <div class="main" id="main">
+    <div class="stripe"><span>&#5833;</span><span>&#9744;</span><span>&#9776;</span><span class="on" id="stripeav">&#9673;</span><span>&#8645;</span><span>&#9783;</span></div>
+    <div class="left">
+      <div class="card">
+        <h4>Worktrees <span class="r">&#8943;</span></h4>
+        <div class="proj"><span class="pb" style="background:#4b63d8">QU</span>quirky</div>
+        <div class="wt"><i class="dot g"></i><div><div class="n">fix-desktop</div><div class="s" id="s-fd">Claude &middot; Running tests</div></div></div>
+        <div class="wt sel"><i class="dot y" id="d-ph"></i><div><div class="n">provider-host</div><div class="s" id="s-ph">Codex &middot; Needs you</div></div></div>
+        <div class="wt"><i class="dot r" id="d-sb"></i><div><div class="n">sa-browser</div><div class="s" id="s-sb">Claude &middot; 2 checks failing</div></div></div>
+        <div class="proj"><span class="pb" style="background:#5f9a4e">OR</span>orca</div>
+        <div class="wt"><i class="dot g" id="d-at"></i><div><div class="n">agent-tabs</div><div class="s" id="s-at">Claude &middot; Writing the plan</div></div></div>
+        <div class="wt"><i class="dot k"></i><div><div class="n">main</div><div class="s">Idle &middot; main</div></div></div>
+        <div class="proj"><span class="pb" style="background:#8a55d0">KE</span>kestrel</div>
+        <div class="wt"><i class="dot b"></i><div><div class="n">main</div><div class="s">Codex &middot; Done</div></div></div>
+      </div>
+      <div class="card apanel" id="apanel">
+        <h4><span class="av">A</span> Avatar <span class="r"><button class="btn sm" data-go="sheet">Hand off&hellip;</button></span></h4>
+        <div id="apbody"></div>
+      </div>
+    </div>
+    <div class="card center">
+      <div class="tabs" id="ctabs"></div>
+      <div class="body" id="cbody"></div>
+    </div>
+    <div class="card right" id="rpanel"></div>
+  </div>
+  <div class="status"><span>quirky &rsaquo; provider-host</span><span class="sp"></span><span id="stav"></span><span>&#9679; 2 working</span><span>Checks 12/14</span><span>Usage 62%</span></div>
+  <div class="ovl hide" id="ovl"><div class="pop" id="pop"></div></div>
+  <div class="toast hide" id="toast"></div>
+</div>
+<div style="max-width:1240px;margin:0 auto;padding:4px 16px 28px;color:var(--mu)"><div style="color:var(--tx);font-weight:600;margin-bottom:4px">Where the avatar lives</div>
+<ul style="margin:0;padding-left:18px;line-height:1.7">
+<li><b style="color:var(--tx)">Window bar pill</b>: <i>Avatar &middot; 4 handed off</i>, next to the needs-you count. Click it for the hand-off sheet or the report.</li>
+<li><b style="color:var(--tx)">Stripe icon and Avatar panel</b> (left-bottom slot by default): handed-off worktrees with state and level, plus Hand off&hellip; and Take back all.</li>
+<li><b style="color:var(--tx)">Worktree sidebar</b>: handed-off rows get an accent ring on the status dot and an <i>Avatar &middot;</i> prefix.</li>
+<li><b style="color:var(--tx)">Avatar view</b> (center tab) with Live, Report and Log.</li>
+<li><b style="color:var(--tx)">Hand-off sheet</b>, in the shared popup shape. It opens from the panel, the pill, a worktree's context menu, or a sidebar multi-select.</li>
+<li><b style="color:var(--tx)">Settings &rarr; Avatar</b> for defaults, and <code>quirky avatar &hellip;</code> on the CLI.</li></ul>
+<p style="margin-top:10px">Names, numbers and timestamps are illustrative. Styling follows the PyCharm-shell golden screens; a real build would use the shared graphite components and tokens.</p></div>
+<script>
+const S = {
+ before:{n:"1 Before",cap:"<b>Before hand-off.</b> The avatar is idle. It has its own pill in the window bar, a stripe icon, and a panel in the left-bottom slot (where Tasks usually sits). Nothing is handed off yet."},
+ sheet:{n:"2 Hand-off sheet",cap:"<b>The hand-off sheet is a table.</b> Rows are grouped by project group, then project, with a filter, a sort and an 'only with a running agent' toggle. A group or project checkbox selects all its worktrees in one click, and the bulk bar sets level or switches, or gives the selection one shared goal. Each row edits goal, done when and level inline, and expands for guidelines, switches and the agent. Rows that can't be handed off stay visible with the reason."},
+ questions:{n:"3 Its questions",cap:"<b>The avatar's questions are ordinary quirky asks.</b> When you press Hand off, the sheet closes, the avatar starts whatever its questions don't touch, and asks at most three questions per worktree. They appear in the existing Questions panel (right-top by default), with the same cards your agents' asks use, and on your phone. Unanswered questions hold only the parts they affect, so you can just leave."},
+ live:{n:"4 While away",cap:"<b>While away.</b> Handed-off worktrees get an accent ring on their status dot and an 'Avatar' prefix. The Avatar view shows each one's state, level and latest decision, with a live feed below. You can watch, but nothing pauses when you're at the desk. Take back is explicit."},
+ notify:{n:"5 Notification",cap:"<b>The only notification it sends:</b> every handed-off worktree is waiting on you, or a floor-held action is the only way forward. It reaches the phone only while the phone is connected (LAN or tailnet), and answering there resumes work."},
+ report:{n:"6 Report",cap:"<b>The report on return</b> opens on what needs you: each item has its one-click answer. Below it, one short story per worktree, then a summary line. The full decision log is one tab over."},
+ decision:{n:"7 A decision",cap:"<b>Every decision is traceable.</b> The log shows what was asked, the path through the floor, rules and judgment, the mandate clause relied on, and what went back to the worker. The judgment saw only the mandate and the command, never the worker's explanation."},
+ settings:{n:"8 Settings",cap:"<b>Settings &rarr; Avatar</b> holds the defaults every hand-off starts from: level, floor switches, house rules, which agent and model run the avatar, and keep-awake."},
+ cli:{n:"9 CLI",cap:"<b>The CLI</b> takes the same mandate fields as the sheet, and reads the same report and log."}
+};
+const order=Object.keys(S);
+const $=id=>document.getElementById(id);
+function nav(cur){$("nav").innerHTML=order.map(k=>`<button data-go="${k}" class="${k==cur?'on':''}">${S[k].n}</button>`).join("")+'<span class="hint">&larr; &rarr;</span>';}
+const terminal=`<div class="term"><span class="mu">codex</span> &rsaquo; restart handling for provider host
+<span class="ok">&#10003;</span> read packages/daemon/src/provider-host.ts
+<span class="ok">&#10003;</span> edit  packages/daemon/src/provider-host.ts  (+42 -9)
+<span class="ye">?</span> Run <span class="c">bun test packages/daemon/provider-host</span>?  [y/n]
+</div>`;
+function tabs(list,on){$("ctabs").innerHTML=list.map(t=>`<span class="${t==on?'on':''}">${t}</span>`).join("");}
+function handedOff(on){
+ const set=(id,txt)=>{$(id).innerHTML=txt};
+ if(on){
+  const L=on=="live";
+  set("s-ph",'<span class="a">Avatar</span> &middot; Codex &middot; '+(L?'Nudged':'Parked'));$("d-ph").className="dot "+(L?"y":"k")+" ring";
+  set("s-sb",'<span class="a">Avatar</span> &middot; Claude &middot; '+(L?'Working':'PR #318 green'));$("d-sb").className="dot g ring";
+  set("s-at",'<span class="a">Avatar</span> &middot; Claude &middot; '+(L?'Waiting on avatar':'Waiting on you'));$("d-at").className="dot "+(L?"p":"y")+" ring";
+  set("s-fd",'<span class="a">Avatar</span> &middot; Claude &middot; '+(L?'Working':'Green, ready'));
+  document.querySelector(".wt .dot.g").classList.add("ring");
+  $("pill").classList.add("live");$("pilltx").innerHTML="Avatar &middot; 4 handed off";
+  $("stav").innerHTML='<span style="color:var(--ac)">&#9673;</span> Avatar: '+(L?'2 working &middot; 1 waiting on avatar &middot; 1 nudged':'0 working &middot; 3 waiting on you &middot; 1 parked');
+  $("apbody").innerHTML=(L?[["fix-desktop","g","Full"],["provider-host","y","Full"],["sa-browser","g","Own branch"],["agent-tabs","p","Full"]]:[["fix-desktop","g","Full"],["provider-host","k","Full"],["sa-browser","g","Own branch"],["agent-tabs","y","Full"]]).map(r=>`<div class="row"><i class="dot ${r[1]}"></i><span class="n">${r[0]}</span><span class="chip ${r[2]=='Full'?'full':''}">${r[2]}</span></div>`).join("")+'<div class="row" style="justify-content:flex-end"><button class="btn sm ghost">Take back all</button></div>';
+ } else {
+  set("s-ph","Codex &middot; Needs you");$("d-ph").className="dot y";
+  set("s-sb","Claude &middot; 2 checks failing");$("d-sb").className="dot r";
+  set("s-at","Claude &middot; Writing the plan");$("d-at").className="dot g";
+  set("s-fd","Claude &middot; Running tests");document.querySelector(".wt .dot.g").classList.remove("ring");
+  $("pill").classList.remove("live");$("pilltx").innerHTML="Avatar &middot; idle";$("stav").innerHTML="";
+  $("apbody").innerHTML='<div class="row" style="color:var(--mu)">Nothing handed off.</div><div class="row" style="color:var(--dim);font-size:11.5px">Hand off a worktree with a goal and a done-when check. The avatar answers its agents, decides their permission requests and merges when the mandate allows.</div>';
+ }
+}
+const sheet=`<div class="hd"><span class="av">A</span> Hand off to avatar <span class="r">Esc</span></div>
+<div class="tb"><span class="inp" style="flex:1;color:var(--mu)">&#9906; Filter worktrees, branches, agents&hellip;</span><span class="inp">Group by: Group &rsaquo; Project &#9662;</span><span class="inp">Sort: Recent activity &#9662;</span><label class="sw"><label><span class="box"></span>Only with a running agent</label></label></div>
+<div class="bulk"><b>4 selected</b><span class="sep"></span><span class="lnk">Set level &#9662;</span><span class="lnk">Set switches &#9662;</span><span class="lnk">Give one shared goal&hellip;</span><span class="lnk">Clear</span></div>
+<table class="ht"><thead><tr><th style="width:26px"></th><th>Worktree</th><th>Agent</th><th>Goal</th><th>Done when</th><th>Level</th><th></th></tr></thead><tbody>
+<tr class="grp"><td><span class="box part">&ndash;</span></td><td colspan="6">&#9662; Desktop <span class="mu">group &middot; 4 of 5 selected</span></td></tr>
+<tr class="prj"><td><span class="box on">&#10003;</span></td><td colspan="6">&#9662; <span class="pb" style="background:#4b63d8">QU</span> quirky <span class="mu">3 of 3</span></td></tr>
+<tr><td><span class="box on">&#10003;</span></td><td class="i1">fix-desktop</td><td class="mu">Claude &middot; idle</td><td><span class="shared">Shared: Tab badges end to end</span></td><td class="mono mu">(shared)</td><td><span class="chip full">Full</span></td><td class="mu">&#9656;</td></tr>
+<tr class="open"><td><span class="box on">&#10003;</span></td><td class="i1">provider-host</td><td class="mu">Codex &middot; working</td><td><span class="cell">Finish restart handling for the provider host</span></td><td><span class="cell mono">bun test packages/daemon/provider-host</span></td><td><span class="chip full">Full</span></td><td class="mu">&#9662;</td></tr>
+<tr class="exp"><td></td><td colspan="6"><div class="f"><span class="k">Guidelines</span><span class="inp">Keep the public API unchanged. Rebase on main before the PR.</span></div><div class="f"><span class="k">Switches</span><span class="sw"><label><span class="box"></span>Message people</label><label><span class="box"></span>Rewrite history</label><label><span class="box"></span>Deploy / migrate</label></span></div><div class="f"><span class="k">Agent</span><span class="mu">Keep running Codex, brief it at its next idle prompt &#9662;</span></div></td></tr>
+<tr><td><span class="box on">&#10003;</span></td><td class="i1">sa-browser</td><td class="mu">Claude &middot; 2 checks failing</td><td><span class="cell">Fix the 2 failing checks</span></td><td><span class="cell mono">CI green on the PR</span></td><td><span class="chip">Own branch</span></td><td class="mu">&#9656;</td></tr>
+<tr class="prj"><td><span class="box part">&ndash;</span></td><td colspan="6">&#9662; <span class="pb" style="background:#5f9a4e">OR</span> orca <span class="mu">1 of 2</span></td></tr>
+<tr><td><span class="box on">&#10003;</span></td><td class="i1">agent-tabs</td><td class="mu">Claude &middot; planning</td><td><span class="shared">Shared: Tab badges end to end</span></td><td class="mono mu">(shared)</td><td><span class="chip full">Full</span></td><td class="mu">&#9656;</td></tr>
+<tr class="dis"><td><span class="box"></span></td><td class="i1">main</td><td>Idle</td><td colspan="4">Can't hand off: a Heimdall watcher supervises it</td></tr>
+<tr class="grp"><td><span class="box"></span></td><td colspan="6">&#9662; Ungrouped <span class="mu">0 of 1</span></td></tr>
+<tr class="prj"><td><span class="box"></span></td><td colspan="6">&#9662; <span class="pb" style="background:#8a55d0">KE</span> kestrel <span class="mu">0 of 1</span></td></tr>
+<tr class="dis"><td><span class="box"></span></td><td class="i1">main</td><td>Gemini</td><td colspan="4">Can't hand off: Gemini has no permission hook</td></tr>
+</tbody></table>
+<div class="sgoal"><b>Shared goal</b> &middot; fix-desktop + agent-tabs: <span class="cell">Ship tab command badges end to end: orca API, then quirky UI</span> &middot; done when <span class="cell mono">bun test packages/ui/badges &amp;&amp; orca: bun test api/tabs</span> &middot; <span class="mu">notes: agent-tabs merges first</span></div>
+<div class="ft"><span class="l">House rules from Settings apply to all &middot; Floor always held: outside these worktrees, credentials</span><button class="btn ghost">Cancel</button><button class="btn pri" data-go="questions">Hand off 4 worktrees</button></div>`;
+const questions=`<div class="qpanel"><div class="qh">Questions <span class="badge">3</span><span class="r">&#8943;</span></div>
+<div class="qnote"><span class="av">A</span><div><b>Avatar has started all 4 worktrees.</b> These 3 questions hold only the parts they affect. Answer now, or later from your phone.</div></div>
+<div class="qc"><div class="qm"><span class="av sm">A</span> Avatar &middot; agent-tabs <span class="mu">shared goal</span></div><div class="qq">The badge payload has no version field. Keep the v1 shape, or add <code>version: 2</code> now?</div>
+<label class="ro on"><span class="rd on"></span>Keep v1 <span class="rec">Recommended</span></label><label class="ro"><span class="rd"></span>Add version 2</label><label class="ro"><span class="rd"></span>Other&hellip;</label><div class="qa"><button class="btn sm pri">Answer</button><button class="btn sm ghost">Skip</button></div></div>
+<div class="qc"><div class="qm"><span class="av sm">A</span> Avatar &middot; provider-host</div><div class="qq">Restart handling touches the exported <code>ProviderHost.start()</code>. Does 'public API unchanged' allow a new optional parameter?</div>
+<label class="ro"><span class="rd"></span>Yes, additive is fine <span class="rec">Recommended</span></label><label class="ro"><span class="rd"></span>No changes at all</label></div>
+<div class="qc dim"><div class="qm"><span class="av sm">A</span> Avatar &middot; sa-browser</div><div class="qq">One failing check is a flaky e2e test that already retries 3 times. Is quarantining it an acceptable fix?</div></div>
+</div>`;
+const live=`<table class="lv"><tr><th>Worktree</th><th>State</th><th>Level</th><th>Latest</th><th></th></tr>
+<tr><td>sa-browser<div style="color:var(--mu);font-size:11.5px">Claude</div></td><td><span class="st"><i class="g"></i>Working</span></td><td><span class="chip">Own branch</span></td><td>Denied <code>bunx playwright test -u</code>: guideline 1 &middot; 23:04</td><td><button class="btn sm">Take back</button></td></tr>
+<tr><td>agent-tabs<div style="color:var(--mu);font-size:11.5px">Claude &middot; shared goal</div></td><td><span class="st"><i class="p"></i>Waiting on avatar</span></td><td><span class="chip full">Full</span></td><td>Codex reviewing the diff before merge &middot; 23:20</td><td><button class="btn sm">Take back</button></td></tr>
+<tr><td>fix-desktop<div style="color:var(--mu);font-size:11.5px">Claude &middot; shared goal</div></td><td><span class="st"><i class="g"></i>Working</span></td><td><span class="chip full">Full</span></td><td>Answered: "use the v1 payload" (your answer, Q1) &middot; 23:12</td><td><button class="btn sm">Take back</button></td></tr>
+<tr><td>provider-host<div style="color:var(--mu);font-size:11.5px">Codex</div></td><td><span class="st"><i class="y"></i>Nudged</span></td><td><span class="chip full">Full</span></td><td>Same failure 3&times;: sent "check the restart backoff clock" &middot; 23:41</td><td><button class="btn sm">Take back</button></td></tr>
+</table>
+<div class="feed"><div class="lbl">Live</div>
+<div class="ev"><span>23:41</span><span>provider-host</span><span class="x">Stuck: same assertion failing 3 times. Nudged.</span></div>
+<div class="ev"><span>23:20</span><span>agent-tabs</span><span class="x">Done-when passes. Started Codex as cross-family reviewer.</span></div>
+<div class="ev"><span>23:12</span><span>fix-desktop</span><span class="x">Answered a question from your hand-off answer.</span></div>
+<div class="ev"><span>23:04</span><span>sa-browser</span><span class="x">Denied a snapshot update (guideline 1).</span></div>
+<div class="ev"><span>23:02</span><span>sa-browser</span><span class="x">Allowed <code>bun test e2e/tabs</code> (rule: tests in this worktree).</span></div>
+</div>`;
+const liveMorning=`<table class="lv"><tr><th>Worktree</th><th>State</th><th>Level</th><th>Latest</th><th></th></tr>
+<tr><td>sa-browser<div style="color:var(--mu);font-size:11.5px">Claude</div></td><td><span class="st"><i class="y"></i>Waiting on you</span></td><td><span class="chip">Own branch</span></td><td>PR #318 green. Proposed a mandate edit for snapshot updates &middot; 06:10</td><td><button class="btn sm">Take back</button></td></tr>
+<tr><td>agent-tabs<div style="color:var(--mu);font-size:11.5px">Claude &middot; shared goal</div></td><td><span class="st"><i class="y"></i>Waiting on you</span></td><td><span class="chip full">Full</span></td><td>Meets the merge bar; waits on fix-desktop's guess &middot; 05:02</td><td><button class="btn sm">Take back</button></td></tr>
+<tr><td>fix-desktop<div style="color:var(--mu);font-size:11.5px">Claude &middot; shared goal</div></td><td><span class="st"><i class="y"></i>Waiting on you</span></td><td><span class="chip full">Full</span></td><td>Guess to confirm: tooltip shows the full command &middot; 04:47</td><td><button class="btn sm">Take back</button></td></tr>
+<tr><td>provider-host<div style="color:var(--mu);font-size:11.5px">Codex</div></td><td><span class="st"><i class="k"></i>Parked</span></td><td><span class="chip full">Full</span></td><td>Held: force-push after rebase (rewrite history) &middot; 03:12</td><td><button class="btn sm">Take back</button></td></tr>
+</table>
+<div class="feed"><div class="lbl">Live</div>
+<div class="ev"><span>06:10</span><span>sa-browser</span><span class="x">Everything in reach is done. Waiting on you for the snapshot edit.</span></div>
+<div class="ev"><span>06:10</span><span>all</span><span class="x">All 4 worktrees waiting on you. Sent one notification.</span></div>
+<div class="ev"><span>05:02</span><span>agent-tabs</span><span class="x">Codex approved. Holding the merge until the shared goal's guess is confirmed.</span></div>
+<div class="ev"><span>04:47</span><span>fix-desktop</span><span class="x">Made a reversible guess (tooltip text) and flagged it.</span></div>
+<div class="ev"><span>03:12</span><span>provider-host</span><span class="x">Second restart failed to push without a force-push. Parked.</span></div>
+</div>`;
+const report=`<div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:14px">Good morning. 3 things need you.</b><span style="color:var(--mu)">18:40 &rarr; 07:55 &middot; 4 worktrees</span></div>
+<div class="need"><div><b>Allow a force-push?</b> provider-host rebased onto main; pushing needs <code>--force-with-lease</code>.</div><div class="w">Held by floor switch: rewrite history. Parked since 03:12.</div><div class="acts"><button class="btn sm pri">Allow once</button><button class="btn sm">Deny</button></div></div>
+<div class="need"><div><b>Confirm a guess?</b> fix-desktop assumed the tab badge tooltip shows the full command.</div><div class="w">2 commits rest on it. The shared goal can't merge until you confirm.</div><div class="acts"><button class="btn sm pri">Confirm</button><button class="btn sm">Redo</button></div></div>
+<div class="need"><div><b>Proposed mandate edit</b> for sa-browser: allow updating snapshots under <code>e2e/__snapshots__/tabs</code>.</div><div class="w">The new tab layout changed them on purpose. Guideline 1 blocks it.</div><div class="acts"><button class="btn sm pri">Review edit</button></div></div>
+<div class="lbl" style="margin-top:12px">While you were away</div>
+<div class="story"><div class="h"><i class="dot y"></i><b>Tab badges end to end</b> <span class="chip full">Full</span><span class="r">shared goal</span></div><div class="w">agent-tabs and fix-desktop both pass done-when, Codex approved both diffs, no open threads. Will merge agent-tabs, then fix-desktop, once you confirm the guess above.</div></div>
+<div class="story"><div class="h"><i class="dot g"></i><b>sa-browser</b> <span class="chip">Own branch</span><span class="r">PR #318</span></div><div class="w">Fixed the race in the flaky e2e test (no quarantine, per your answer). 14/14 checks green. Draft PR open; merging is above this level.</div></div>
+<div class="story"><div class="h"><i class="dot k"></i><b>provider-host</b> <span class="chip full">Full</span><span class="r">parked 03:12</span></div><div class="w">Nudged once, restarted twice with recovery notes. Tests pass locally. Parked on the force-push above.</div></div>
+<div style="color:var(--mu);margin-top:8px">186 decisions: 171 allowed, 9 denied, 3 held, 3 guesses. Mac kept awake all night. <a style="color:var(--ac)">Open decision log &rarr;</a></div>`;
+const decision=`<div class="ev" style="color:var(--mu)"><span>23:02</span><span>sa-browser</span><span>Allowed <code>bun test e2e/tabs</code> &middot; rule: tests in this worktree</span></div>
+<div style="border:1px solid var(--ac);border-radius:8px;padding:10px 12px;margin:6px 0;background:var(--surf2)">
+<div style="display:flex;gap:8px;align-items:center"><b>23:04 &middot; sa-browser &middot; Denied</b><span class="chip">permission request</span><span style="margin-left:auto;color:var(--mu)">#d-0412</span></div>
+<div class="kv"><span class="k">Request</span><span>Claude wants to run Bash: <code>bunx playwright test -u</code></span>
+<span class="k">Path</span><span class="path"><span>Floor core: no</span><i>&rarr;</i><span>Switches: no</span><i>&rarr;</i><span>Level: Own branch, ok</span><i>&rarr;</i><span>Fixed rules: no match</span><i>&rarr;</i><span class="hit">Judgment: deny</span></span>
+<span class="k">Relied on</span><span>Mandate, guideline 1: "Don't update snapshots to make failing tests pass."</span>
+<span class="k">Judgment saw</span><span>The mandate and the command. Not the worker's explanation.</span>
+<span class="k">Sent to worker</span><span>"Denied by your avatar: updating snapshots is outside the mandate (guideline 1). Fix the cause of the diff instead."</span>
+<span class="k">Follow-up</span><span>3 more snapshot diffs looked intentional, so it proposed a mandate edit (in your report).</span></div></div>
+<div class="ev" style="color:var(--mu)"><span>23:12</span><span>fix-desktop</span><span>Answered a question &middot; your hand-off answer Q1</span></div>
+<div class="ev" style="color:var(--mu)"><span>23:20</span><span>agent-tabs</span><span>Started Codex reviewer &middot; merge bar step 2</span></div>`;
+const settings=`<div class="set">
+<span class="k">Default level<small>Each hand-off can change it</small></span><span class="seg"><span>Shadow</span><span>Local</span><span>Own branch</span><span class="on">Full</span></span>
+<span class="k">Floor switches<small>Held unless switched on</small></span><span class="sw" style="flex-direction:column;gap:4px"><label><span class="tog"></span> Message people (PR comments, reviews, issues, chat)</label><label><span class="tog"></span> Rewrite history or delete remote branches</label><label><span class="tog"></span> Deploy or run migrations</label></span>
+<span class="k">Always held<small>Can't be changed</small></span><span style="color:var(--mu)">Anything outside the handed-off worktrees &middot; credentials</span>
+<span class="k">House rules<small>Added to every mandate</small></span><span class="inp" style="min-height:44px">Use bun, not npm. Never skip tests. Conventional commit titles.</span>
+<span class="k">Avatar runs on</span><span><span class="inp">Claude &#9662;</span> <span class="inp">claude-opus-5-5 &#9662;</span> <span style="color:var(--mu)">Codex, pi and omp also work</span></span>
+<span class="k">Merge reviewer</span><span style="color:var(--mu)">A different model family from the worker, picked automatically</span>
+<span class="k">Agent gates<small>Tested at every hand-off</small></span><span>Claude &#10003; &middot; Codex &#10003; &middot; omp &#10003; &middot; pi &#10003; <span style="color:var(--mu)">If a gate can't reach the avatar, the request is refused and the worker waits.</span></span>
+<span class="k">Keep the Mac awake<small>Display can still sleep</small></span><span><span class="tog on"></span> while any handed-off worktree has active work</span>
+</div>`;
+const cli=`<div class="term"><span class="mu">$</span> quirky avatar handoff provider-host \\
+    --goal "Finish restart handling for the provider host" \\
+    --done-when "bun test packages/daemon/provider-host" \\
+    --guidelines "Keep the public API unchanged" --level full
+<span class="ok">handed off</span> provider-host <span class="mu">(1 question waiting: quirky avatar questions)</span>
+
+<span class="mu">$</span> quirky avatar status
+<span class="mu">WORKTREE        STATE            LEVEL       LATEST</span>
+sa-browser      working          own-branch  denied snapshot update (guideline 1)
+agent-tabs      waiting-avatar   full        cross-family review running
+provider-host   parked           full        held: force-push (rewrite history)
+
+<span class="mu">$</span> quirky avatar report        <span class="mu"># needs-you first, then stories</span>
+<span class="mu">$</span> quirky avatar log --worktree sa-browser
+<span class="mu">$</span> quirky avatar take-back sa-browser
+<span class="mu">$</span> quirky avatar take-back --all</div>`;
+function show(k){
+ nav(k);$("cap").innerHTML=S[k].cap;
+ $("ovl").classList.add("hide");$("toast").classList.add("hide");$("phone").classList.add("hide");
+ const post=["live","notify","report","decision"].includes(k);
+ handedOff(post?(k=="live"?"live":"morn"):(k=="questions"?"live":null));
+ $("needs").style.visibility=post?"hidden":"visible";
+ if(k=="before"||k=="sheet"||k=="questions"){tabs(["Codex","Claude","zsh","App.tsx"],"Codex");$("cbody").innerHTML=terminal;}
+ $("main").classList.remove("withright");$("pop").classList.remove("wide");
+ if(k=="sheet"){$("pop").innerHTML=sheet;$("pop").classList.add("wide");$("ovl").classList.remove("hide");}
+ if(k=="questions"){$("rpanel").innerHTML=questions;$("main").classList.add("withright");}
+ if(k=="live"||k=="notify"){tabs(["Avatar","Codex","Claude"],"Avatar");$("cbody").innerHTML='<div class="tabs" style="padding:0 0 6px;border:0;gap:12px"><span class="on">Live</span><span>Report</span><span>Log</span></div>'+(k=="live"?live:liveMorning);}
+ if(k=="notify"){$("toast").innerHTML='<div class="h"><span class="av">A</span> Avatar needs you <span style="margin-left:auto;color:var(--mu)">&times;</span></div><div style="margin:4px 0 8px;color:var(--mu)">All 4 handed-off worktrees are waiting on you: 1 held force-push, 1 guess to confirm, 1 mandate edit.</div><div style="display:flex;gap:8px"><button class="btn sm pri" data-go="report">Open report</button><button class="btn sm ghost">Later</button></div>';$("toast").classList.remove("hide");
+  $("phone").innerHTML='<div class="nb"><b>Quirky &middot; Avatar needs you</b>All 4 worktrees are waiting on you. Tap to answer.</div>';$("phone").classList.remove("hide");}
+ if(k=="report"){tabs(["Avatar","Codex","Claude"],"Avatar");$("cbody").innerHTML='<div class="tabs" style="padding:0 0 6px;border:0;gap:12px"><span>Live</span><span class="on">Report</span><span>Log</span></div>'+report;}
+ if(k=="decision"){tabs(["Avatar","Codex","Claude"],"Avatar");$("cbody").innerHTML='<div class="tabs" style="padding:0 0 6px;border:0;gap:12px"><span>Live</span><span>Report</span><span class="on">Log</span></div>'+decision;}
+ if(k=="settings"){tabs(["Settings"],"Settings");$("cbody").innerHTML='<div style="font-weight:600;margin-bottom:10px">Avatar</div>'+settings;}
+ if(k=="cli"){tabs(["zsh"],"zsh");$("cbody").innerHTML=cli;}
+ cur=k;
+}
+let cur="before";
+document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g)show(g.dataset.go);});
+document.addEventListener("keydown",e=>{const i=order.indexOf(cur);if(e.key=="ArrowRight"&&i<order.length-1)show(order[i+1]);if(e.key=="ArrowLeft"&&i>0)show(order[i-1]);});
+show("before");
+</script>
+</body></html>
