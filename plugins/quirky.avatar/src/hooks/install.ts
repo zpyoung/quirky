@@ -219,17 +219,49 @@ export function launchHasGateHook(args: readonly unknown[]): boolean {
   return false
 }
 
-type LaunchHookDeps = { judgmentTimeoutSeconds(): number; claudeVersion(): Promise<string | null> }
+/** What the launch hook recorded about a session it patched with the gate settings. */
+export type HookedRecord = { agent: string; at: number; claudeVersion: string | null }
+
+/** Where launch-hook records live; the session launch record does not keep hook-added args, so this is the proof a session was patched. */
+export function hookedDir(dataDir: string): string {
+  return join(dataDir, 'hooked')
+}
+
+/** Writes the record that `sessionId` was launched with the gate settings (mode 0600); an id that is not a plain file name is ignored. */
+export function writeHookedRecord(dataDir: string, sessionId: string, record: HookedRecord): void {
+  if (!safeSessionId(sessionId)) return
+  writeAtomically(join(hookedDir(dataDir), sessionId), JSON.stringify(record), 0o600)
+}
+
+/** True when the launch hook recorded that it added the gate settings to `sessionId`'s launch. */
+export function hasHookedRecord(dataDir: string, sessionId: string): boolean {
+  if (!safeSessionId(sessionId)) return false
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(join(hookedDir(dataDir), sessionId), 'utf8'))
+    return isRecord(parsed) && typeof parsed.agent === 'string'
+  } catch {
+    return false
+  }
+}
+
+type LaunchHookDeps = { judgmentTimeoutSeconds(): number; claudeVersion(): Promise<string | null>; dataDir?: string }
 
 /**
- * The launch hook that adds the avatar's `--settings` to a Claude launch. A Claude older than
- * 2.1.295 or of unknown version gets nothing, so its gate check fails instead of running unguarded.
- * Codex, pi and omp are gated through files, not launch args.
+ * The launch hook that adds the avatar's `--settings` to a Claude launch and records the session as
+ * hooked under `dataDir` when one is given. A Claude older than 2.1.295 or of unknown version gets nothing and no
+ * record, so its gate check fails instead of running unguarded. Codex, pi and omp are gated through
+ * files, not launch args.
  */
 export function createGateLaunchHook(deps: LaunchHookDeps): LaunchHook {
   return async (launch) => {
     if (launch.agent !== 'claude') return {}
-    if (!claudeVersionAtLeast(await deps.claudeVersion())) return {}
+    const version = await deps.claudeVersion()
+    if (!claudeVersionAtLeast(version)) return {}
+    try {
+      if (deps.dataDir !== undefined) writeHookedRecord(deps.dataDir, launch.sessionId, { agent: launch.agent, at: Date.now(), claudeVersion: parseClaudeVersion(version) })
+    } catch {
+      // an unwritable record leaves the session unprovable, which the gate check reports
+    }
     return { jsonArgs: { '--settings': claudeGateSettings(launch.jsonArgs['--settings'], deps.judgmentTimeoutSeconds()) } }
   }
 }

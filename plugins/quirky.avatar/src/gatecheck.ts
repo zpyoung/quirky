@@ -1,6 +1,6 @@
 import type { AvatarApp } from './contracts'
 import {
-  claudeVersionAtLeast, codexHooksInstalled, hasMarkerFile, launchHasGateHook, piExtensionMtimeMs, removeMarkerFile, type AgentEnv
+  claudeVersionAtLeast, codexHooksInstalled, hasHookedRecord, hasMarkerFile, launchHasGateHook, piExtensionMtimeMs, removeMarkerFile, type AgentEnv
 } from './hooks/install'
 
 const STARTED_BEFORE_HOOK = "started before the avatar's hook was installed"
@@ -80,8 +80,9 @@ export type GateChecker = {
 }
 
 /**
- * Builds the checker. The static step is per agent: Claude's launch args hold the avatar's
- * `--settings` hook and Claude is new enough to fail closed, Codex's `hooks.json` holds both
+ * Builds the checker. The static step is per agent: the avatar's launch hook recorded patching
+ * the Claude session (or its launch args hold the avatar's `--settings` hook) and Claude is new
+ * enough to fail closed, Codex's `hooks.json` holds both
  * entries, and pi and omp have the extension file installed before the session started. The
  * dynamic step fails when any call seen in the session record has no receipt of its own after the
  * grace period, and passes once a receipt has arrived since hand-off and no seen call is unmatched. A failure removes the marker,
@@ -106,14 +107,15 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
       return { ok: false, agent: '', reason: `could not read the session: ${error instanceof Error ? error.message : String(error)}` }
     }
     const agent = typeof session?.agent === 'string' ? session.agent : ''
-    const result = checkAgent(agent, session)
+    const result = checkAgent(agent, sessionId, session)
     return { ...(await result), agent }
   }
 
-  async function checkAgent(agent: string, session: SessionRecord): Promise<GateCheckResult> {
+  async function checkAgent(agent: string, sessionId: string, session: SessionRecord): Promise<GateCheckResult> {
     if (agent === 'claude') {
       if (!claudeVersionAtLeast(await deps.claudeVersion().catch(() => null))) return { ok: false, reason: 'Claude is too old to fail closed; update Claude' }
-      return launchHasGateHook(launchArgWords(session.launch?.args)) ? { ok: true, reason: '' } : { ok: false, reason: STARTED_BEFORE_HOOK }
+      const hooked = hasHookedRecord(app.context.dataDir, sessionId) || launchHasGateHook(launchArgWords(session.launch?.args))
+      return hooked ? { ok: true, reason: '' } : { ok: false, reason: STARTED_BEFORE_HOOK }
     }
     if (agent === 'codex') {
       return codexHooksInstalled(agentEnv) ? { ok: true, reason: '' } : { ok: false, reason: "the avatar's entries are missing from Codex's hooks.json" }

@@ -7,7 +7,7 @@ import { codexInstaller } from '../../quirky.agent-status/src/install/claude-jso
 import { claudeSettings } from '../../quirky.agent-status/src/claude-settings'
 import {
   claudeGateSettings, claudeVersionAtLeast, clearMarkerFiles, codexHooksInstalled, codexHooksPath, createGateLaunchHook, gateCommand,
-  hasMarkerFile, installCodexHooks, installPiExtensions, launchHasGateHook, markerDir, parseClaudeVersion, piExtensionPath,
+  hasHookedRecord, hasMarkerFile, hookedDir, installCodexHooks, installPiExtensions, launchHasGateHook, markerDir, parseClaudeVersion, piExtensionPath,
   readMarkerFile, removeCodexHooks, removeMarkerFile, writeMarkerFile, type AgentEnv
 } from '../src/hooks/install'
 import { GATE_EXTENSION_FILE, gateExtensionSource } from '../src/hooks/pi-extension'
@@ -127,7 +127,10 @@ describe('gateCommand', () => {
 describe('Claude launch hook', () => {
   const launch = (agent: string, jsonArgs: Record<string, Record<string, unknown>> = {}) =>
     ({ sessionId: 's', worktreeId: 'w', repoId: 'r', cwd: '/x', agent, env: {}, args: [], jsonArgs }) as never
-  const hook = (version: string | null, seconds = 55) => createGateLaunchHook({ judgmentTimeoutSeconds: () => seconds, claudeVersion: async () => version })
+  const dataDir = mkdtempSync(join(tmpdir(), 'avatar-hooked-'))
+  afterEach(() => rmSync(dataDir, { recursive: true, force: true }))
+  const hook = (version: string | null, seconds = 55) =>
+    createGateLaunchHook({ judgmentTimeoutSeconds: () => seconds, claudeVersion: async () => version, dataDir })
 
   test('adds PreToolUse and PermissionRequest command hooks that fail closed', async () => {
     const patch = (await hook('2.1.300 (Claude Code)')(launch('claude'))) as { jsonArgs: Record<string, { hooks: Record<string, any[]> }> }
@@ -149,6 +152,32 @@ describe('Claude launch hook', () => {
 
   test.each([['2.1.294'], ['1.9.9'], [null], ['claude: not found']])('a Claude version of %p gets no gate hook', async (version) => {
     expect(await hook(version)(launch('claude'))).toEqual({})
+  })
+
+  test('records the session as hooked (mode 0600) only when it adds the gate settings', async () => {
+    await hook('2.1.300 (Claude Code)')(launch('claude'))
+    expect(hasHookedRecord(dataDir, 's')).toBe(true)
+    const file = join(hookedDir(dataDir), 's')
+    expect(statSync(file).mode & 0o777).toBe(0o600)
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ agent: 'claude', claudeVersion: '2.1.300' })
+    expect(typeof JSON.parse(readFileSync(file, 'utf8')).at).toBe('number')
+  })
+
+  test.each([['2.1.294'], [null]])('a Claude version of %p leaves no hooked record', async (version) => {
+    await hook(version)(launch('claude'))
+    expect(hasHookedRecord(dataDir, 's')).toBe(false)
+  })
+
+  test('other agents leave no hooked record', async () => {
+    for (const agent of ['codex', 'pi', 'omp', 'shell']) await hook('2.1.300')(launch(agent))
+    expect(existsSync(hookedDir(dataDir))).toBe(false)
+  })
+
+  test('a session id that is not a plain file name is not recorded', async () => {
+    const odd = { sessionId: '../escape', worktreeId: 'w', repoId: 'r', cwd: '/x', agent: 'claude', env: {}, args: [], jsonArgs: {} } as never
+    await hook('2.1.300')(odd)
+    expect(existsSync(join(dataDir, 'escape'))).toBe(false)
+    expect(hasHookedRecord(dataDir, '../escape')).toBe(false)
   })
 
   test('other agents are not given Claude settings', async () => {

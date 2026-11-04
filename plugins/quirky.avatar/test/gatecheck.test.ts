@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { WorktreeState } from '../src/contracts'
 import { createGateChecker } from '../src/gatecheck'
 import {
-  claudeGateSettings, hasMarkerFile, installCodexHooks, installPiExtensions, piExtensionPath, writeMarkerFile, type AgentEnv
+  claudeGateSettings, hasMarkerFile, installCodexHooks, installPiExtensions, piExtensionPath, writeHookedRecord, writeMarkerFile, type AgentEnv
 } from '../src/hooks/install'
 import { makeTestApp } from './support'
 
@@ -65,6 +65,26 @@ describe('Claude', () => {
     const check = s.checker.check('wt-1')
     s.receive()
     expect(await check).toEqual({ ok: true, reason: '' })
+  })
+
+  test('passes on the launch hook record when the string-form launch args lack --settings', async () => {
+    const s = setup({ session: { agent: 'claude', launch: { args: '--model x' } } })
+    writeHookedRecord(s.context.dataDir, 's-1', { agent: 'claude', at: 1, claudeVersion: '2.1.300' })
+    const check = s.checker.check('wt-1')
+    s.receive()
+    expect(await check).toEqual({ ok: true, reason: '' })
+  })
+
+  test('fails without the launch hook record when the string-form launch args lack --settings', async () => {
+    const s = setup({ session: { agent: 'claude', launch: { args: '--model x' } } })
+    writeHookedRecord(s.context.dataDir, 's-2', { agent: 'claude', at: 1, claudeVersion: '2.1.300' })
+    expect(await s.checker.check('wt-1')).toEqual({ ok: false, reason: "started before the avatar's hook was installed" })
+  })
+
+  test('the launch hook record does not excuse a Claude too old to fail closed', async () => {
+    const s = setup({ session: { agent: 'claude', launch: { args: '' } }, version: '2.1.294' })
+    writeHookedRecord(s.context.dataDir, 's-1', { agent: 'claude', at: 1, claudeVersion: '2.1.294' })
+    expect(await s.checker.check('wt-1')).toEqual({ ok: false, reason: 'Claude is too old to fail closed; update Claude' })
   })
 
   test('fails when the recorded launch args string has no avatar --settings', async () => {
