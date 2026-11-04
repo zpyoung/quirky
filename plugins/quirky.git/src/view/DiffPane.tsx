@@ -219,12 +219,8 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
         await write(reverted, false)
       } catch (error) {
         if (mergeRef.current === merge) {
-          if (merge.getModified() === reverted) {
-            silently(() => merge.setModified(before))
-            dirtyRef.current = false
-          } else {
-            dirtyRef.current = true
-          }
+          if (merge.getModified() === reverted) silently(() => merge.setModified(before))
+          dirtyRef.current = merge.getModified() !== base.current.text
           setDirty(dirtyRef.current)
         }
         context.toast('Revert failed', messageOf(error))

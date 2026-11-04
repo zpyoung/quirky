@@ -658,6 +658,28 @@ describe('SC-37: typing while a Revert save is pending', () => {
     expect(unsaved(pendingElement, APP)).toBe(false)
   })
 
+  test('SC-37: typing that a later save wrote stays clean when the earlier revert save fails', async () => {
+    await typeAtEnd('typed\n')
+    await wait(350)
+    expect(unsaved(pendingElement, APP)).toBe(true)
+    const failRevert = settleSave.fail
+    fake.handlers['quirky.git/save'] = (params) => {
+      saves.push(params)
+      return { hash: 'saved:typed' }
+    }
+    await saveWithKeyboard(pendingElement, APP)
+    expect(saves.at(-1)).toMatchObject({ content: reverted + 'typed\n' })
+    expect(unsaved(pendingElement, APP)).toBe(false)
+    expect(mounted!.report().dirty).toBe(false)
+
+    await act(async () => failRevert())
+    await settle()
+    expect(draftOf(pendingElement, APP)).toBe(reverted + 'typed\n')
+    expect(unsaved(pendingElement, APP)).toBe(false)
+    expect(mounted!.report().dirty).toBe(false)
+    expect(fake.toasts).toEqual([['Revert failed', 'disk full']])
+  })
+
   test('SC-37: when the save fails with no typing, the editor is restored and the card stays clean', async () => {
     expect(draftOf(pendingElement, APP)).toBe(reverted)
     await act(async () => settleSave.fail())
