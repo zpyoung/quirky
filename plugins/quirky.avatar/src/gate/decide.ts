@@ -1,5 +1,5 @@
 import type { ActionClass, DecideInput, Level, RuleDecision, StepId, Switches } from '../contracts'
-import { commandParts } from './classify'
+import { commandParts, pushDestinations } from './classify'
 
 type Trace = RuleDecision['trace']
 type StepResult = { result: 'pass' | 'allow' | 'deny' | 'held'; note: string; reliedOn?: string }
@@ -12,6 +12,7 @@ const DENIED_BY_FIXED_RULES: Partial<Record<ActionClass, string>> = {
 }
 
 const LEVEL_RANK: Record<Level, number> = { shadow: 0, local: 0, 'own-branch': 1, full: 2 }
+const OWN_BRANCH_RANK = LEVEL_RANK['own-branch']
 const LEVEL_REQUIREMENT: Partial<Record<ActionClass, { rank: number; what: string }>> = {
   'push-own': { rank: 1, what: 'pushing' },
   'pr-draft': { rank: 1, what: 'opening a draft PR' },
@@ -46,8 +47,14 @@ function floorSwitch(classes: ActionClass[], switches: Switches): StepResult {
   return { result: 'pass', note: 'every switch the call needs is on' }
 }
 
-function levelGate(classes: ActionClass[], level: Level): StepResult {
+
+function levelGate(input: DecideInput): StepResult {
+  const { classes, level } = input
   const rank = LEVEL_RANK[level]
+  if (rank === OWN_BRANCH_RANK && classes.includes('push-own')) {
+    const foreign = pushDestinations(input.call, input.ctx).find((dest) => dest !== input.ctx.ownBranch)
+    if (foreign !== undefined) return { result: 'deny', note: `pushing to ${foreign}, which is not this hand-off's own branch, is not allowed at level ${level}` }
+  }
   const exceeding = classes
     .map((cls) => ({ cls, req: LEVEL_REQUIREMENT[cls] }))
     .filter((item): item is { cls: ActionClass; req: { rank: number; what: string } } => item.req !== undefined && item.req.rank > rank)
@@ -91,7 +98,7 @@ export function decide(input: DecideInput): RuleDecision {
     const steps: [StepId, () => StepResult][] = [
       ['floor-core', () => floorCore(classes)],
       ['floor-switch', () => floorSwitch(classes, switches)],
-      ['level', () => levelGate(classes, level)],
+      ['level', () => levelGate(input)],
       ['fixed-rules', () => fixedRules(input)]
     ]
     const trace: Trace = []
