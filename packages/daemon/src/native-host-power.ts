@@ -1,6 +1,6 @@
 import { dlopen, JSCallback, ptr, type Pointer } from 'bun:ffi'
 import { randomUUID } from 'node:crypto'
-import type { HostPowerTransition, NativeHostPowerSource } from './host-power-contracts'
+import type { HostPowerState, HostPowerTransition, NativeHostPowerSource } from './host-power-contracts'
 
 type NativePointer = Pointer | null
 
@@ -9,6 +9,9 @@ const CORE_FOUNDATION_FRAMEWORK = '/System/Library/Frameworks/CoreFoundation.fra
 const PRIVATE_RUN_LOOP_MODE = 'quirky.host-power.private'
 const POLL_INTERVAL_MS = 250
 const CF_STRING_ENCODING_UTF8 = 0x08000100
+const ASSERTION_TYPE_PREVENT_IDLE_SYSTEM_SLEEP = 'PreventUserIdleSystemSleep'
+const ASSERTION_LEVEL_ON = 255
+const BATTERY_POWER_SOURCE = 'Battery Power'
 const MESSAGE_CAN_SYSTEM_SLEEP = 0xe0000270
 const MESSAGE_SYSTEM_WILL_SLEEP = 0xe0000280
 const MESSAGE_SYSTEM_HAS_POWERED_ON = 0xe0000300
@@ -22,6 +25,36 @@ function openIOKit() {
     IOAllowPowerChange: { args: ['u32', 'ptr'], returns: 'i32' },
     IOServiceClose: { args: ['u32'], returns: 'i32' }
   })
+}
+
+function openIOKitPower() {
+  return dlopen(IOKIT_FRAMEWORK, {
+    IOPMAssertionCreateWithName: { args: ['ptr', 'u32', 'ptr', 'ptr'], returns: 'i32' },
+    IOPMAssertionRelease: { args: ['u32'], returns: 'i32' },
+    IOPSCopyPowerSourcesInfo: { args: [], returns: 'ptr' },
+    IOPSGetProvidingPowerSourceType: { args: ['ptr'], returns: 'ptr' }
+  })
+}
+
+function openCoreFoundationStrings() {
+  return dlopen(CORE_FOUNDATION_FRAMEWORK, {
+    CFStringCreateWithCString: { args: ['ptr', 'cstring', 'u32'], returns: 'ptr' },
+    CFStringGetCString: { args: ['ptr', 'ptr', 'i64', 'u32'], returns: 'bool' },
+    CFRelease: { args: ['ptr'], returns: 'void' }
+  })
+}
+
+function createCFString(cf: ReturnType<typeof openCoreFoundationStrings>, value: string): NativePointer {
+  const bytes = Buffer.from(`${value}\0`)
+  return cf.symbols.CFStringCreateWithCString(null, ptr(bytes), CF_STRING_ENCODING_UTF8) as NativePointer
+}
+
+function readCFString(cf: ReturnType<typeof openCoreFoundationStrings>, value: NativePointer): string | null {
+  if (!value) return null
+  const buffer = Buffer.alloc(256)
+  if (!cf.symbols.CFStringGetCString(value, ptr(buffer), buffer.length, CF_STRING_ENCODING_UTF8)) return null
+  const end = buffer.indexOf(0)
+  return buffer.toString('utf8', 0, end === -1 ? buffer.length : end)
 }
 
 function openCoreFoundation() {
@@ -58,6 +91,53 @@ export function createMacOSHostPowerSource(log: (message: string) => void = mess
   }
 
   return {
+    createAssertion(reason: string): number | null {
+      const io = openIOKitPower()
+      const cf = openCoreFoundationStrings()
+      let type: NativePointer = null
+      let name: NativePointer = null
+      try {
+        type = createCFString(cf, ASSERTION_TYPE_PREVENT_IDLE_SYSTEM_SLEEP)
+        name = createCFString(cf, reason)
+        if (!type || !name) throw new Error('CFStringCreateWithCString returned null for the assertion strings')
+        const idSlot = Buffer.alloc(4)
+        const result = io.symbols.IOPMAssertionCreateWithName(type, ASSERTION_LEVEL_ON, name, ptr(idSlot))
+        if (result !== 0) return null
+        const id = idSlot.readUInt32LE(0)
+        return id === 0 ? null : id
+      } finally {
+        if (type) cf.symbols.CFRelease(type)
+        if (name) cf.symbols.CFRelease(name)
+        cf.close()
+        io.close()
+      }
+    },
+
+    releaseAssertion(id: number): void {
+      const io = openIOKitPower()
+      try {
+        io.symbols.IOPMAssertionRelease(id)
+      } finally {
+        io.close()
+      }
+    },
+
+    powerState(): HostPowerState {
+      const io = openIOKitPower()
+      const cf = openCoreFoundationStrings()
+      let info: NativePointer = null
+      try {
+        info = io.symbols.IOPSCopyPowerSourcesInfo() as NativePointer
+        if (!info) return { onBattery: false, externalDisplay: null }
+        const providing = readCFString(cf, io.symbols.IOPSGetProvidingPowerSourceType(info) as NativePointer)
+        return { onBattery: providing === BATTERY_POWER_SOURCE, externalDisplay: null }
+      } finally {
+        if (info) cf.symbols.CFRelease(info)
+        cf.close()
+        io.close()
+      }
+    },
+
     start(listener: (transition: HostPowerTransition) => void): () => void {
       let io: ReturnType<typeof openIOKit> | null = null
       let cf: ReturnType<typeof openCoreFoundation> | null = null
