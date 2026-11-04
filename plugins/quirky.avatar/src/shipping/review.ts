@@ -5,7 +5,7 @@ import { quoteAsData, sanitize } from '../sanitize'
 import { type Outbox, readCompare, readHead } from './outbox'
 
 type ReviewerAgent = 'claude' | 'codex'
-type Pending = { worktreeId: string; headSha: string; agent: ReviewerAgent }
+type Pending = { worktreeId: string; headSha: string; agent: ReviewerAgent; partial: ReviewDiff | null }
 type Thread = { id: string; resolved: boolean; human: boolean }
 
 /** Cross-family review, finding intake from the reviewer, bots, humans and skills, and the avatar's judgment of each finding. */
@@ -23,6 +23,7 @@ const MAX_DIFF_CHARS = 400_000
 const GIT_TIMEOUT_MS = 60_000
 const MAX_SUMMARY = 300
 const MAX_BODY = 2000
+const MAX_LISTED_FILES = 100
 const REPEAT_LIMIT = 3
 const ANTHROPIC_MODEL = /claude|anthropic|sonnet|opus|haiku/i
 const OPENAI_MODEL = /gpt|openai|codex|\bo\d/i
@@ -81,11 +82,14 @@ const spawnGit: GitRunner = async (cwd, args, maxChars) => {
   }
 }
 
-type ReviewDiff = { text: string; omitted: string[]; cutAt: string | null }
+type ReviewDiff = { text: string; omitted: string[]; cutAt: string | null; namesTruncated: boolean }
+
+const isPartial = (diff: ReviewDiff): boolean => diff.omitted.length > 0 || diff.cutAt !== null || diff.namesTruncated
 
 /**
  * The diff the reviewer sees. The whole `base...HEAD` diff when it fits `MAX_DIFF_CHARS`; otherwise
  * whole per-file diffs up to that bound, with the files left out named so the prompt can say so.
+ * `namesTruncated` is set when the file list itself hit the output cap, so the omitted files are not all known.
  * `ok` is false when git could not produce a diff.
  */
 async function readReviewDiff(git: GitRunner, cwd: string, base: string): Promise<{ ok: true; diff: ReviewDiff } | { ok: false; error: string }> {
@@ -93,11 +97,14 @@ async function readReviewDiff(git: GitRunner, cwd: string, base: string): Promis
   if (base.startsWith('-')) return { ok: false, error: 'the base ref is not a valid ref' }
   const whole = await git(cwd, ['diff', '--no-ext-diff', '--no-color', range], MAX_DIFF_CHARS)
   if (!whole.ok) return { ok: false, error: whole.error ?? 'could not read the diff' }
-  if (!whole.capped) return { ok: true, diff: { text: whole.stdout, omitted: [], cutAt: null } }
+  if (!whole.capped) return { ok: true, diff: { text: whole.stdout, omitted: [], cutAt: null, namesTruncated: false } }
 
   const names = await git(cwd, ['diff', '--no-ext-diff', '--name-only', '-z', range], MAX_DIFF_CHARS)
   if (!names.ok) return { ok: false, error: names.error ?? 'could not list the changed files' }
-  const files = names.stdout.split('\0').filter((name) => name !== '')
+  const listed = names.stdout.split('\0')
+  // a capped list ends mid-name, so its last entry is not a real file
+  if (names.capped) listed.pop()
+  const files = listed.filter((name) => name !== '')
   const parts: string[] = []
   const omitted: string[] = []
   let used = 0
@@ -120,7 +127,7 @@ async function readReviewDiff(git: GitRunner, cwd: string, base: string): Promis
     parts.push(one.stdout)
     used += one.stdout.length
   }
-  return { ok: true, diff: { text: parts.join(''), omitted, cutAt } }
+  return { ok: true, diff: { text: parts.join(''), omitted, cutAt, namesTruncated: names.capped } }
 }
 
 /** The path of a worktree from `quirky.worktree/list`, or null when it is not listed. */
@@ -189,13 +196,14 @@ function parseFindings(text: string): { summary: string; detail: Record<string, 
 
 function reviewPrompt(mandate: Mandate, diff: ReviewDiff): string {
   const mandateText = [`Goal: ${mandate.goal}`, `Done when: ${mandate.doneWhen}`, ...mandate.guidelines.map((line) => `Guideline: ${line}`)].join('\n')
-  const incomplete = diff.omitted.length > 0 || diff.cutAt !== null
+  const incomplete = isPartial(diff)
   const notice = incomplete
-    ? 'The diff was too large to include in full: you were given whole per-file diffs up to a size bound. The files listed in the "diff coverage" block are cut off or not shown at all and still need to be read with git diff. Do not treat anything you were not shown as reviewed, and say in a finding that those parts were not reviewed.'
+    ? `The diff was too large to include in full: you were given whole per-file diffs up to a size bound. Some files were not included${diff.namesTruncated ? ', and the list of changed files was itself cut off, so more files than the ones named in the "diff coverage" block were left out' : ', and they are named in the "diff coverage" block'}. Your review covers only what you were shown. Do not treat anything you were not shown as reviewed.`
     : null
   const coverage = [
     ...(diff.cutAt === null ? [] : [`cut off at its end: ${diff.cutAt}`]),
-    ...diff.omitted.map((file) => `not shown: ${file}`)
+    ...diff.omitted.map((file) => `not shown: ${file}`),
+    ...(diff.namesTruncated ? ['the list of changed files was cut off: further files are not named here'] : [])
   ].join('\n')
   return [
     'You are an independent code reviewer for a change another agent made. You have no tools and cannot edit anything.',
@@ -205,7 +213,7 @@ function reviewPrompt(mandate: Mandate, diff: ReviewDiff): string {
     '{"findings":[{"summary":"one sentence","path":"file","line":1,"severity":"blocking or minor","detail":"why it matters"}]}',
     quoteAsData('mandate', mandateText),
     ...(notice === null ? [] : [notice, quoteAsData('diff coverage', coverage)]),
-    quoteAsData(incomplete ? 'git diff (partial)' : 'git diff', diff.text)
+    quoteAsData(incomplete ? 'partial diff' : 'git diff', diff.text)
   ].join('\n\n')
 }
 
@@ -249,6 +257,38 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
     })
   }
 
+  /** Records that a review saw only part of the diff, so the commit is never counted as reviewed, and asks the human once per head. */
+  const blockPartial = (run: Pending, diff: ReviewDiff, sessionId: string, count: number): void => {
+    const files = [...(diff.cutAt === null ? [] : [diff.cutAt]), ...diff.omitted]
+    const listed = files.slice(0, MAX_LISTED_FILES)
+    const extra = files.length - listed.length
+    app.journal(run.worktreeId, 'finding', {
+      reviewed: false,
+      partial: true,
+      headSha: run.headSha,
+      reviewer: run.agent,
+      sessionId,
+      count,
+      omitted: listed,
+      omittedCount: files.length,
+      namesTruncated: diff.namesTruncated
+    })
+    const duplicate = app.needs.list({ worktreeId: run.worktreeId, open: true }).some((need) => need.kind === 'merge-blocked' && need.detail.diffPartial === true && need.detail.headSha === run.headSha)
+    if (duplicate) return
+    const lines = [
+      'The diff was too large for the reviewer to see in full, so this commit has not been fully reviewed. Split the work into smaller changes or review it yourself.',
+      ...(diff.namesTruncated ? ['The list of changed files was itself cut off, so more files than those named here were not reviewed.'] : []),
+      ...(listed.length === 0 ? [] : ['Not reviewed in full:', ...listed.map((file) => `- ${file}`), ...(extra > 0 ? [`and ${extra} more`] : [])])
+    ]
+    app.needs.add({
+      worktreeId: run.worktreeId,
+      kind: 'merge-blocked',
+      title: 'Diff too large for a full review',
+      detail: { diffPartial: true, headSha: run.headSha, omitted: listed, omittedCount: files.length, namesTruncated: diff.namesTruncated, text: lines.join('\n') },
+      actions: ['take-back']
+    })
+  }
+
   const complete = async (sessionId: string, run: Pending, text: string): Promise<void> => {
     const parsed = parseFindings(text)
     if (parsed === null) {
@@ -263,10 +303,12 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
       if (!duplicate) saveFinding(run.worktreeId, 'reviewer', item.summary, item.detail, null, run.headSha)
     }
     for (const row of known) {
+      if (run.partial !== null) break
       const earlier = row.source === 'reviewer' && row.detail.human !== true && row.valid === true && row.commitSha !== run.headSha
       if (earlier && !raised.has(normalize(row.summary))) markFixed(row, `not raised again on ${run.headSha}`)
     }
-    app.journal(run.worktreeId, 'finding', { reviewed: true, headSha: run.headSha, reviewer: run.agent, sessionId, count: parsed.length })
+    if (run.partial === null) app.journal(run.worktreeId, 'finding', { reviewed: true, headSha: run.headSha, reviewer: run.agent, sessionId, count: parsed.length })
+    else blockPartial(run, run.partial, sessionId, parsed.length)
     await call('quirky.structured/stop', { session: sessionId }).catch(() => undefined)
     await review.intakeComments(run.worktreeId).catch(() => undefined)
     app.services.brain.wake()
@@ -312,8 +354,8 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
         })) as Record<string, unknown>
         const sessionId = str(session.id)
         if (sessionId === null) return { started: false, reason: 'the reviewer session had no id' }
-        pending.set(sessionId, { worktreeId, headSha: head, agent })
-        app.journal(worktreeId, 'finding', { reviewStarted: true, headSha: head, reviewer: agent, workerAgent: mandate.agent, sessionId, ...(ownFamily ? { workerModel: model } : {}), ...(familyUnknown ? { familyUnknown: true } : {}), ...(diff.omitted.length > 0 || diff.cutAt !== null ? { diffPartial: true, diffOmitted: diff.omitted.length } : {}) })
+        pending.set(sessionId, { worktreeId, headSha: head, agent, partial: isPartial(diff) ? diff : null })
+        app.journal(worktreeId, 'finding', { reviewStarted: true, headSha: head, reviewer: agent, workerAgent: mandate.agent, sessionId, ...(ownFamily ? { workerModel: model } : {}), ...(familyUnknown ? { familyUnknown: true } : {}), ...(isPartial(diff) ? { diffPartial: true, diffOmitted: diff.omitted.length, ...(diff.namesTruncated ? { namesTruncated: true } : {}) } : {}) })
         return { started: true }
       } catch (error) {
         return { started: false, reason: error instanceof Error ? error.message : String(error) }

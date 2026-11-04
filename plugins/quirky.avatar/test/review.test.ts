@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { createOutbox } from '../src/shipping/outbox'
+import { mergeReady } from '../src/shipping/mergebar'
 import { createReview, type GitRunner, pickReviewerAgent } from '../src/shipping/review'
 import { type FakeCalls, makeTestApp, sampleMandate } from './support'
 
@@ -133,8 +134,35 @@ describe('startReview', () => {
     expect(prompt).toContain('diff c.ts')
     expect(prompt).toContain('not shown: big.ts')
     expect(prompt).not.toContain('yyyy')
-    expect(prompt).toContain('read with git diff')
+    expect(prompt).not.toContain('git diff')
+    expect(prompt).toContain('covers only what you were shown')
     expect(t.app.store.journalPage({ worktreeId: 'wt-1', limit: 20 }).find((entry) => entry.data.reviewStarted === true)?.data).toMatchObject({ diffPartial: true, diffOmitted: 1 })
+  })
+
+  const oversizeGit = (names: { list: string; capped: boolean }): GitRunner => {
+    const files: Record<string, string> = { 'a.ts': 'diff a.ts\n+1\n', 'b.ts': 'diff b.ts\n+2\n' }
+    return async (_cwd, args, maxChars) => {
+      if (args.includes('--name-only')) return { ok: true, stdout: names.list, capped: names.capped }
+      if (!args.includes('--')) return { ok: true, stdout: 'x'.repeat(maxChars), capped: true }
+      return { ok: true, stdout: files[args[args.indexOf('--') + 1] ?? ''] ?? '', capped: false }
+    }
+  }
+
+  test('a name list that hits the cap is a partial diff, drops its cut last name and says the list was cut off', async () => {
+    const t = setup({ git: oversizeGit({ list: 'a.ts\0b.ts\0c.t', capped: true }) })
+    expect(await t.review.startReview('wt-1')).toEqual({ started: true })
+    const prompt = promptOf(t)
+    expect(prompt).toContain('diff a.ts')
+    expect(prompt).toContain('diff b.ts')
+    expect(prompt).toContain('list of changed files was itself cut off')
+    expect(prompt).not.toContain('c.t\n')
+    expect(prompt).not.toContain('git diff')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1', limit: 20 }).find((entry) => entry.data.reviewStarted === true)?.data).toMatchObject({ diffPartial: true, namesTruncated: true })
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    const need = t.app.needs.list({ worktreeId: 'wt-1', open: true })
+    expect(need).toHaveLength(1)
+    expect(String(need[0]?.detail.text)).toContain('cut off')
+    expect(need[0]?.detail).toMatchObject({ namesTruncated: true })
   })
 
   test('a failed git diff does not start a review', async () => {
@@ -237,6 +265,75 @@ describe('reviewer findings', () => {
     await t.settle({ lastAssistantMessage: reviewerOutput() })
     expect(t.app.store.findings.list()).toHaveLength(0)
     expect(t.review.reviewedSha('wt-1')).toBe(HEAD)
+  })
+
+  const mergeInput = (t: ReturnType<typeof setup>) => ({
+    level: 'full' as const,
+    checks: [],
+    findings: [],
+    threads: [],
+    guessesOpen: 0,
+    headSha: HEAD,
+    reviewedSha: t.review.reviewedSha('wt-1'),
+    checkedSha: HEAD,
+    sharedGoalOrder: null,
+    mergedIds: []
+  })
+  const oversizeFiles: Record<string, string> = { 'a.ts': 'diff a.ts\n+1\n', 'big.ts': 'diff big.ts\n+2\n' }
+  const oversize: GitRunner = async (_cwd, args, maxChars) => {
+    if (args.includes('--name-only')) return { ok: true, stdout: 'a.ts\0big.ts\0', capped: false }
+    if (!args.includes('--')) return { ok: true, stdout: 'x'.repeat(maxChars), capped: true }
+    const file = args[args.indexOf('--') + 1] ?? ''
+    return file === 'big.ts' ? { ok: true, stdout: 'y'.repeat(maxChars), capped: true } : { ok: true, stdout: oversizeFiles[file] ?? '', capped: false }
+  }
+
+  test('an oversize diff with an empty reply is never marked reviewed, blocks the merge and raises one need', async () => {
+    const t = setup({ git: oversize })
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(t.review.reviewedSha('wt-1')).toBeNull()
+    const entries = t.app.store.journalPage({ worktreeId: 'wt-1', limit: 50 }).filter((entry) => entry.kind === 'finding')
+    expect(entries.some((entry) => entry.data.reviewed === true)).toBe(false)
+    expect(entries.find((entry) => entry.data.partial === true)?.data).toMatchObject({ reviewed: false, headSha: HEAD, omitted: ['big.ts'] })
+    const needs = t.app.needs.list({ worktreeId: 'wt-1', open: true })
+    expect(needs).toHaveLength(1)
+    expect(needs[0]).toMatchObject({ kind: 'merge-blocked', title: 'Diff too large for a full review' })
+    expect(String(needs[0]?.detail.text)).toContain('big.ts')
+    expect(String(needs[0]?.detail.text)).toContain('Split the work')
+    expect(mergeReady(mergeInput(t)).ready).toBe(false)
+  })
+
+  test('a second partial review of the same head does not add another need, and findings it raises still land', async () => {
+    const t = setup({ git: oversize })
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput('null check') })
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(1)
+    expect(t.app.store.findings.list({ worktreeId: 'wt-1' })).toHaveLength(1)
+  })
+
+  test('a partial review does not mark earlier valid findings fixed', async () => {
+    let big = false
+    const t = setup({ git: (cwd, args, maxChars) => (big ? oversize(cwd, args, maxChars) : Promise.resolve({ ok: true, stdout: DIFF, capped: false })) })
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput('null check') })
+    const [row] = t.app.store.findings.list()
+    await t.review.judgeFinding('wt-1', row!.id, true, 'real')
+    big = true
+    t.setHead(NEXT)
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(t.app.store.findings.get(row!.id)?.detail.fixed).not.toBe(true)
+  })
+
+  test('a whole diff still marks the commit reviewed and raises no need', async () => {
+    const t = setup()
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(t.review.reviewedSha('wt-1')).toBe(HEAD)
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(0)
+    expect(mergeReady(mergeInput(t)).ready).toBe(true)
   })
 
   test('reads the last assistant message when the settled event carries none', async () => {
