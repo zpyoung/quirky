@@ -160,53 +160,47 @@ describe('judgeFinding', () => {
     id: 'f1', worktreeId: 'wt-1', source: 'bot', summary: 'rename tmp to pending', detail: { number: 7 }, valid: null, reason: null, threadId: 'th-1', commitSha: 'abc', createdAt: 1, ...over
   })
 
-  test('valid: records the verdict and sends the finding to the worker', async () => {
+  const judge = (valid: boolean, reason = 'r', findingId = 'f1'): BrainAction => ({ type: 'judgeFinding', worktreeId: 'wt-1', findingId, valid, reason })
+
+  test('valid: delegates once to shipping and sends nothing itself', async () => {
     const t = setup([wt('full')])
     t.app.store.findings.put(finding())
-    await dispatchActions(t.app, [{ type: 'judgeFinding', worktreeId: 'wt-1', findingId: 'f1', valid: true, reason: 'real' }])
-    expect(t.names()).toEqual(['judgeFinding', 'send'])
-    expect(t.recorded[1]?.args[1]).toContain('rename tmp to pending')
+    await dispatchActions(t.app, [judge(true, 'real')])
+    expect(t.recorded).toEqual([{ name: 'judgeFinding', args: ['wt-1', 'f1', true, 'real'] }])
+    expect(journal(t.app)[0]?.data).toMatchObject({ outcome: 'done' })
   })
 
-  test('invalid from a bot: enqueues a thread reply then resolves the thread', async () => {
+  test('invalid: delegates once to shipping with no outbox row and no thread resolution from dispatch', async () => {
     const t = setup([wt('full')], { 'quirky.hosting/resolveThread': () => ({ resolved: true }) })
     t.app.store.findings.put(finding())
-    await dispatchActions(t.app, [{ type: 'judgeFinding', worktreeId: 'wt-1', findingId: 'f1', valid: false, reason: 'tmp is intentional' }])
-    const rows = t.app.store.outbox.list({ worktreeId: 'wt-1' })
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ kind: 'thread-reply', state: 'recorded' } satisfies Partial<OutboxRow>)
-    expect(rows[0]?.payload).toMatchObject({ threadId: 'th-1', text: 'tmp is intentional' })
-    const resolve = t.calls.find((c) => c.method === 'quirky.hosting/resolveThread')
-    expect(resolve?.params).toMatchObject({ threadId: 'th-1', number: 7, action: 'resolve' })
-    expect(t.names()).not.toContain('send')
-  })
-
-  test('invalid from a human with messaging off: merge-blocked need, thread untouched (SC-21)', async () => {
-    const t = setup([wt('full')])
-    t.app.store.findings.put(finding({ source: 'reviewer', detail: { number: 7, human: true } }))
-    await dispatchActions(t.app, [{ type: 'judgeFinding', worktreeId: 'wt-1', findingId: 'f1', valid: false, reason: 'disagree' }])
-    expect(t.app.needs.list({ open: true }).map((n) => n.kind)).toEqual(['merge-blocked'])
+    await dispatchActions(t.app, [judge(false, 'tmp is intentional')])
+    expect(t.recorded).toEqual([{ name: 'judgeFinding', args: ['wt-1', 'f1', false, 'tmp is intentional'] }])
     expect(t.app.store.outbox.list()).toEqual([])
     expect(t.calls.some((c) => c.method === 'quirky.hosting/resolveThread')).toBe(false)
   })
 
-  test('invalid from a human with messaging on: replies and resolves', async () => {
-    const t = setup([wt('full', 'wt-1', { switches: { messaging: true, historyRewrite: false, deploys: false } })], { 'quirky.hosting/resolveThread': () => ({ resolved: true }) })
+  test('a human finding is delegated unchanged: the messaging-switch rule lives in shipping', async () => {
+    const t = setup([wt('full')])
     t.app.store.findings.put(finding({ source: 'reviewer', detail: { number: 7, human: true } }))
-    await dispatchActions(t.app, [{ type: 'judgeFinding', worktreeId: 'wt-1', findingId: 'f1', valid: false, reason: 'disagree' }])
-    expect(t.app.store.outbox.list()).toHaveLength(1)
+    await dispatchActions(t.app, [judge(false, 'disagree')])
+    expect(t.names()).toEqual(['judgeFinding'])
     expect(t.app.needs.list({ open: true })).toEqual([])
+    expect(t.app.store.outbox.list()).toEqual([])
   })
 
-  test('a valid finding sent three times without a fix is reported as a stuck signal', async () => {
+  test('repeated valid verdicts never record a denial from dispatch', async () => {
     const t = setup([wt('full')])
     t.app.store.findings.put(finding())
-    const action: BrainAction = { type: 'judgeFinding', worktreeId: 'wt-1', findingId: 'f1', valid: true, reason: 'real' }
-    await dispatchActions(t.app, [action])
-    await dispatchActions(t.app, [action])
-    expect(t.names().filter((n) => n === 'recordDenial')).toEqual([])
-    await dispatchActions(t.app, [action])
-    expect(t.recorded.filter((r) => r.name === 'recordDenial')).toEqual([{ name: 'recordDenial', args: ['wt-1', true] }])
+    for (let i = 0; i < 3; i++) await dispatchActions(t.app, [judge(true, 'real')])
+    expect(t.names()).toEqual(['judgeFinding', 'judgeFinding', 'judgeFinding'])
+  })
+
+  test('an unknown finding or one from another worktree is refused without delegating', async () => {
+    const t = setup([wt('full')])
+    t.app.store.findings.put(finding({ worktreeId: 'wt-2' }))
+    await dispatchActions(t.app, [judge(true), judge(true, 'r', 'missing')])
+    expect(t.recorded).toEqual([])
+    expect(journal(t.app).map((e) => e.data.outcome)).toEqual(['refused', 'refused'])
   })
 })
 
