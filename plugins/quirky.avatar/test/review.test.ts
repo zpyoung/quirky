@@ -69,9 +69,9 @@ describe('pickReviewerAgent', () => {
     expect(pickReviewerAgent('omp', 'openai/o4-mini')).toBe('claude')
   })
 
-  test('pi and omp with an unknown model are their own family and get claude', () => {
-    expect(pickReviewerAgent('pi')).toBe('claude')
-    expect(pickReviewerAgent('omp', 'kimi-k2')).toBe('claude')
+  test('pi and omp with an unknown model get codex', () => {
+    expect(pickReviewerAgent('pi')).toBe('codex')
+    expect(pickReviewerAgent('omp', 'kimi-k2')).toBe('codex')
   })
 
   test('an unknown worker agent gets codex, which is never the worker that runs most often', () => {
@@ -103,6 +103,41 @@ describe('startReview', () => {
     const t = setup({ mandate: { agent: 'codex' } })
     await t.review.startReview('wt-1')
     expect(t.calls.find((call) => call.method === 'quirky.structured/create')?.params.agent).toBe('claude')
+  })
+
+  const sessionsFor = (agent: string, extra: Record<string, unknown>) => ({
+    'quirky.session/list': () => [{ id: 's1', agent, worktreeId: 'wt-1', status: 'working', lastActivityAt: 5, ...extra }]
+  })
+  const reviewerFor = (t: ReturnType<typeof setup>) => t.calls.find((call) => call.method === 'quirky.structured/create')?.params.agent
+  const startedEntry = (t: ReturnType<typeof setup>) => t.app.store.journalPage({ worktreeId: 'wt-1', limit: 20 }).find((entry) => entry.data.reviewStarted === true)
+
+  test('a pi worker on an Anthropic model gets a codex reviewer', async () => {
+    const t = setup({ mandate: { agent: 'pi' }, calls: sessionsFor('pi', { model: 'claude-sonnet-4' }) })
+    await t.review.startReview('wt-1')
+    expect(reviewerFor(t)).toBe('codex')
+    expect(startedEntry(t)?.data).toMatchObject({ workerModel: 'claude-sonnet-4' })
+    expect(startedEntry(t)?.data.familyUnknown).toBeUndefined()
+  })
+
+  test('an omp worker on an OpenAI model, named in its launch settings, gets a claude reviewer', async () => {
+    const t = setup({ mandate: { agent: 'omp' }, calls: sessionsFor('omp', { launchSettings: { agent: 'omp', summary: 'omp', options: { model: { value: 'gpt-5', source: 'explicit' } } } }) })
+    await t.review.startReview('wt-1')
+    expect(reviewerFor(t)).toBe('claude')
+  })
+
+  test('a pi worker whose model cannot be found gets codex and the journal says the family was unknown', async () => {
+    for (const calls of [sessionsFor('pi', {}), {}]) {
+      const t = setup({ mandate: { agent: 'pi' }, calls })
+      expect(await t.review.startReview('wt-1')).toEqual({ started: true })
+      expect(reviewerFor(t)).toBe('codex')
+      expect(startedEntry(t)?.data).toMatchObject({ familyUnknown: true })
+    }
+  })
+
+  test('does not ask for the worker model when the worker is claude or codex', async () => {
+    const t = setup()
+    await t.review.startReview('wt-1')
+    expect(t.calls.some((call) => call.method === 'quirky.session/list')).toBe(false)
   })
 
   test('does not start without a mandate, a base or a head', async () => {

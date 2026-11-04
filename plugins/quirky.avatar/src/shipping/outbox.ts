@@ -26,7 +26,7 @@ export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
 
-export type CheckRun = { ran: boolean; pass: boolean; output: string; stdout: string; timedOut: boolean; truncated: boolean; error?: string }
+export type CheckRun = { ran: boolean; pass: boolean; output: string; stdout: string; timedOut: boolean; truncated: boolean; exitCode: number | null; error?: string }
 
 /** Runs `command` in the worktree through `quirky.checks/run` and flattens the bounded result. */
 export async function runCheck(app: AvatarApp, worktreeId: string, command: string, timeoutSeconds = 60): Promise<CheckRun> {
@@ -40,7 +40,8 @@ export async function runCheck(app: AvatarApp, worktreeId: string, command: stri
     output: output.length > OUTPUT_LIMIT ? output.slice(-OUTPUT_LIMIT) : output,
     stdout,
     timedOut: raw.timedOut === true,
-    truncated: raw.stdoutTruncated === true || raw.stderrTruncated === true
+    truncated: raw.stdoutTruncated === true || raw.stderrTruncated === true,
+    exitCode: typeof raw.exitCode === 'number' ? raw.exitCode : null
   }
   if (typeof raw.error === 'string') result.error = raw.error
   return result
@@ -141,6 +142,34 @@ export function createOutbox(app: AvatarApp): Outbox {
     } catch (error) {
       return { kind: 'unknown', error: error instanceof Error ? error.message : String(error) }
     }
+  }
+
+  /**
+   * What a `running` merge-main-in row left in the worktree: a merge still in progress, the default
+   * branch already an ancestor of HEAD, or neither. Only a clean "neither" lets the merge run again.
+   */
+  async function mergeEvidence(row: OutboxRow): Promise<Evidence | { kind: 'partial'; reason: string }> {
+    const branch = str(row.payload.defaultBranch)
+    if (branch === null) return { kind: 'absent' }
+    try {
+      const midway = await runCheck(app, row.worktreeId, 'test -f "$(git rev-parse --git-path MERGE_HEAD)"')
+      if (!midway.ran) return { kind: 'unknown', error: midway.error ?? 'could not look for a merge in progress' }
+      if (midway.pass) return { kind: 'partial', reason: 'a merge was left in progress in the worktree; resolve or abort it, then ask again' }
+      const ancestor = await runCheck(app, row.worktreeId, `git merge-base --is-ancestor ${shellQuote(`${REMOTE}/${branch}`)} HEAD`)
+      if (ancestor.ran && ancestor.pass) return { kind: 'done', result: { conflict: false, alreadyMerged: true } }
+      if (ancestor.ran && ancestor.exitCode === 1) return { kind: 'absent' }
+      return { kind: 'unknown', error: ancestor.error ?? 'could not tell whether the default branch is already merged in' }
+    } catch (error) {
+      return { kind: 'unknown', error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  async function reconcileMergeMainIn(row: OutboxRow): Promise<void> {
+    const seen = await mergeEvidence(row)
+    if (seen.kind === 'done') record({ ...row, state: 'done', result: seen.result }, 'reconciled: already happened')
+    else if (seen.kind === 'partial') record({ ...row, state: 'failed', result: { error: seen.reason } }, 'reconciled: merge left half-done, not repeated')
+    else if (seen.kind === 'absent') record({ ...row, state: 'recorded' }, 'reconciled: did not happen, not repeated')
+    else if (seen.kind === 'unknown') app.journal(row.worktreeId, 'outbox', { id: row.id, kind: row.kind, state: row.state, note: 'reconcile: could not check what happened, not repeated', error: seen.error })
   }
 
   async function execute(row: OutboxRow): Promise<Payload> {
@@ -248,6 +277,10 @@ export function createOutbox(app: AvatarApp): Outbox {
     async reconcile() {
       for (const row of app.store.outbox.list()) {
         if (row.state !== 'recorded' && row.state !== 'running') continue
+        if (row.kind === 'merge-main-in') {
+          if (row.state === 'running') await reconcileMergeMainIn(row)
+          continue
+        }
         const seen = await evidence(row)
         if (seen.kind === 'done') record({ ...row, state: 'done', result: seen.result }, 'reconciled: already happened')
         else if (row.state === 'running') record({ ...row, state: 'recorded' }, 'reconciled: did not happen, not repeated')

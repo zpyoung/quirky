@@ -27,8 +27,8 @@ const OPENAI_MODEL = /gpt|openai|codex|\bo\d/i
 
 /**
  * The reviewer's agent for a worker, from a different model family (R-29). Claude and Codex
- * review each other. pi and omp count by their model's provider when it is known, and are their
- * own family otherwise, which gets Claude. An unknown worker agent gets Codex.
+ * review each other. pi and omp count by their model's provider when it is known; an unknown
+ * model gets Codex, as does an unknown worker agent.
  */
 export function pickReviewerAgent(workerAgent: string | null, workerModel?: string | null): ReviewerAgent {
   if (workerAgent === 'claude') return 'codex'
@@ -38,9 +38,27 @@ export function pickReviewerAgent(workerAgent: string | null, workerModel?: stri
       if (ANTHROPIC_MODEL.test(workerModel)) return 'codex'
       if (OPENAI_MODEL.test(workerModel)) return 'claude'
     }
-    return 'claude'
+    return 'codex'
   }
   return 'codex'
+}
+
+/** The model a pi or omp worker session runs, from its launch settings or session record; null when none is known. */
+async function workerModel(app: AvatarApp, worktreeId: string, agent: string): Promise<string | null> {
+  try {
+    const listed = await app.context.call('quirky.session/list', { worktree: worktreeId })
+    const sessions = (Array.isArray(listed) ? listed : []) as Record<string, unknown>[]
+    const live = sessions
+      .filter((session) => session.agent === agent && session.status !== 'exited' && (session.worktreeId === undefined || session.worktreeId === worktreeId))
+      .sort((a, b) => (typeof b.lastActivityAt === 'number' ? b.lastActivityAt : 0) - (typeof a.lastActivityAt === 'number' ? a.lastActivityAt : 0))[0]
+    if (live === undefined) return null
+    const settings = (typeof live.launchSettings === 'object' && live.launchSettings !== null ? live.launchSettings : {}) as Record<string, unknown>
+    const options = (typeof settings.options === 'object' && settings.options !== null ? settings.options : {}) as Record<string, unknown>
+    const picked = (typeof options.model === 'object' && options.model !== null ? options.model : {}) as Record<string, unknown>
+    return str(picked.value) ?? str(live.model) ?? str(settings.summary)
+  } catch {
+    return null
+  }
 }
 
 const normalize = (text: string): string => text.toLowerCase().replace(/\s+/g, ' ').trim()
@@ -177,7 +195,11 @@ export function createReview(app: AvatarApp, outbox: Outbox): Review {
         const diff = await runCheck(app, worktreeId, `git diff ${shellQuote(base)}...HEAD`)
         if (!diff.ran || !diff.pass) return { started: false, reason: diff.error ?? 'could not read the diff' }
 
-        const agent = pickReviewerAgent(mandate.agent)
+        const workerAgent = mandate.agent
+        const ownFamily = workerAgent === 'pi' || workerAgent === 'omp'
+        const model = ownFamily ? await workerModel(app, worktreeId, workerAgent) : null
+        const agent = pickReviewerAgent(workerAgent, model)
+        const familyUnknown = ownFamily && (model === null || !(ANTHROPIC_MODEL.test(model) || OPENAI_MODEL.test(model)))
         const session = (await call('quirky.structured/create', {
           worktree: worktreeId,
           agent,
@@ -191,7 +213,7 @@ export function createReview(app: AvatarApp, outbox: Outbox): Review {
         const sessionId = str(session.id)
         if (sessionId === null) return { started: false, reason: 'the reviewer session had no id' }
         pending.set(sessionId, { worktreeId, headSha: head, agent })
-        app.journal(worktreeId, 'finding', { reviewStarted: true, headSha: head, reviewer: agent, workerAgent: mandate.agent, sessionId })
+        app.journal(worktreeId, 'finding', { reviewStarted: true, headSha: head, reviewer: agent, workerAgent: mandate.agent, sessionId, ...(ownFamily ? { workerModel: model } : {}), ...(familyUnknown ? { familyUnknown: true } : {}) })
         return { started: true }
       } catch (error) {
         return { started: false, reason: error instanceof Error ? error.message : String(error) }
