@@ -16,12 +16,12 @@ afterEach(() => {
 
 type Session = { agent: string; createdAt?: number; launch?: { args?: unknown[] | string; env?: Record<string, string> } | null }
 
-function setup(options: { session?: Session; version?: string | null; state?: WorktreeState; graceMs?: number } = {}) {
+function setup(options: { session?: Session; version?: string | null; state?: WorktreeState; graceMs?: number; sessionReady?: Promise<void> } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'avatar-gatecheck-'))
   dirs.push(home)
   const agentEnv: AgentEnv = { home, env: {} }
   const session: Session = options.session ?? { agent: 'claude', createdAt: 5_000, launch: { args: ['--settings', JSON.stringify(claudeGateSettings({}, 55))] } }
-  const t = makeTestApp({ fakeCalls: { 'quirky.session/get': () => session } })
+  const t = makeTestApp({ fakeCalls: { 'quirky.session/get': async () => { await options.sessionReady; return session } } })
   const states: [string, WorktreeState, string][] = []
   t.app.services.handoff.setState = (worktreeId, state, note) => {
     states.push([worktreeId, state, note])
@@ -223,6 +223,44 @@ describe('the dynamic step', () => {
     s.app.store.handoffs.put({ ...s.app.store.handoffs.get('wt-1')!, active: false })
     s.checker.cancel('wt-1')
     expect(await check).toEqual({ ok: false, reason: 'no longer supervised' })
+    expect(s.states).toEqual([])
+    expect(s.needs()).toEqual([])
+  })
+
+  test('a check stopped mid-static-step resolves quietly and never touches the store afterwards', async () => {
+    let release: () => void = () => undefined
+    const s = setup({ sessionReady: new Promise<void>((resolve) => { release = resolve }) })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const check = s.checker.check('wt-1')
+      await Bun.sleep(10)
+      s.checker.dispose()
+      const closed = () => { throw new Error('store is closed') }
+      s.app.store.handoffs.get = closed
+      s.app.store.receipts.list = closed
+      s.app.journal = closed
+      s.app.needs.add = closed
+      release()
+      expect(await check).toEqual({ ok: false, reason: 'the gate check was stopped' })
+      await Bun.sleep(60)
+      expect(unhandled).toEqual([])
+      expect(s.states).toEqual([])
+      expect(await s.checker.check('wt-1')).toEqual({ ok: false, reason: 'the gate check was stopped' })
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  test('handing the worktree back mid-static-step stops the check without failing it', async () => {
+    let release: () => void = () => undefined
+    const s = setup({ sessionReady: new Promise<void>((resolve) => { release = resolve }) })
+    const check = s.checker.check('wt-1')
+    await Bun.sleep(10)
+    s.checker.cancel('wt-1')
+    release()
+    expect(await check).toEqual({ ok: false, reason: 'the gate check was stopped' })
     expect(s.states).toEqual([])
     expect(s.needs()).toEqual([])
   })
