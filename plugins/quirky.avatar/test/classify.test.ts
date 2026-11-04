@@ -197,7 +197,28 @@ describe('classifyCall bash', () => {
   })
 
   test('destructive local git subcommands inside the worktree stay edit-inside', () => {
-    for (const command of ['git clean -fd', 'git reset --hard', 'git checkout -- .', 'git restore .', 'git rm -r src', 'git stash drop', 'git branch -D old', 'git worktree remove ../x']) expect([command, bash(command)]).toEqual([command, ['edit-inside']])
+    for (const command of ['git clean -fd', 'git reset --hard', 'git checkout -- .', 'git restore .', 'git rm -r src', 'git stash drop', 'git branch -D old', 'git worktree remove src/x', 'git worktree remove --force /work/other/wt2', 'git worktree move src/a src/b', 'git worktree add src/new feat/y', 'git worktree add -b feat/z src/new2', 'git worktree prune']) expect([command, bash(command)]).toEqual([command, ['edit-inside']])
+  })
+
+  test('git worktree add, remove and move that touch a path outside every handed-off path are edits outside', () => {
+    for (const command of [
+      'git worktree remove /other/wt',
+      'git worktree remove --force ../sibling',
+      'git worktree remove ../x',
+      'git worktree remove src/ok /other/wt',
+      'git worktree move src/a /other/b',
+      'git worktree move /other/a src/b',
+      'git worktree add /other/new feat/y',
+      'git worktree add -b feat/z ../new2',
+      'git worktree add --detach "$TARGET"',
+      'git worktree remove ~/wt',
+      'git -C src worktree remove ../../../sibling',
+      'cd /work && git worktree remove other-wt'
+    ]) expect([command, bash(command).includes('edit-outside'), bash(command).includes('edit-inside')]).toEqual([command, true, false])
+    expect(bash('git worktree remove --force /other/wt', {}, '/work')).toEqual(['edit-outside'])
+    expect(bash('git worktree remove --force ../sibling', { handedOffPaths: ['/work'], worktreePath: '/work' }, '/work')).toEqual(['edit-outside'])
+    expect(bash('git worktree remove other', { handedOffPaths: ['/work'], worktreePath: '/work' }, '/work')).toEqual(['edit-inside'])
+    expect(bash('git -C src worktree remove ../a')).toEqual(['edit-inside'])
   })
 
   test('git reads against a repository outside stay read', () => {
