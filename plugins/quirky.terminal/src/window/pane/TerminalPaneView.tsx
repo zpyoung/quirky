@@ -6,7 +6,8 @@ import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { ClipboardAddon, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard'
-import { RpcError, RpcErrorCode, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
+import { version as xtermVersion } from '@xterm/xterm/package.json'
+import { RpcError, RpcErrorCode, answerXtversion, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
 import type { TerminalPalette } from '@quirky/protocol'
 import { shellEscapePaths } from '../../shell-escape'
 import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTREE_PATHS_MIME } from './drop'
@@ -332,6 +333,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       theme: theme(initial, colors),
       linkHandler: createOscLinkHandler()
     })
+    answerXtversion(term, xtermVersion)
 
     const fit = new FitAddon()
     const searchAddon = new SearchAddon({ highlightLimit: HIGHLIGHT_LIMIT })

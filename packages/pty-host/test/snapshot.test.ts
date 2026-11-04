@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Terminal } from '@xterm/headless'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { version as xtermVersion } from '@xterm/headless/package.json'
 import { Screen } from '../src/screen'
 
 const ESC = '\x1b'
@@ -213,6 +214,27 @@ describe('Screen query replies', () => {
     screen.write(`${ESC}[6n`)
     await screen.settled()
     expect(replies).toHaveLength(2)
+  })
+
+  test('a program asking which terminal this is hears xterm.js and its version', async () => {
+    const replies: string[] = []
+    const screen = new Screen({ cols: 10, rows: 3, onReply: (bytes) => replies.push(new TextDecoder().decode(bytes)) })
+    screen.write(`${ESC}[>q`)
+    await screen.settled()
+    expect(replies).toEqual([`${ESC}P>|xterm.js(${xtermVersion})${ESC}\\`])
+
+    screen.seeding = true
+    screen.write(`${ESC}[>q`)
+    await screen.settled()
+    expect(replies).toHaveLength(1)
+  })
+
+  test('XTVERSION with a nonzero parameter gets no reply', async () => {
+    const replies: string[] = []
+    const screen = new Screen({ cols: 10, rows: 3, onReply: (bytes) => replies.push(new TextDecoder().decode(bytes)) })
+    screen.write(`${ESC}[>1q`)
+    await screen.settled()
+    expect(replies).toEqual([])
   })
 })
 

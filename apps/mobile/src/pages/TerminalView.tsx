@@ -3,8 +3,9 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { Terminal } from '@xterm/xterm'
+import { version as xtermVersion } from '@xterm/xterm/package.json'
 import '@xterm/xterm/css/xterm.css'
-import type { MobileTerminalState, PtySnapshot, PtySubscription, Session } from '@quirky/protocol'
+import { answerXtversion, type MobileTerminalState, type PtySnapshot, type PtySubscription, type Session } from '@quirky/protocol'
 import type { MobilePageBridge } from '../contracts'
 import { dispatchTerminalLink } from './terminal-links'
 import { errorMessage } from './components'
@@ -141,6 +142,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
       linkHandler: { activate: (_event, uri) => openLink(uri) },
       theme: { background: '#101318', foreground: '#e7ebf0', cursor: '#d9e7f8', selectionBackground: '#496486' }
     })
+    answerXtversion(current, xtermVersion)
     const fit = new FitAddon()
     current.loadAddon(fit)
     current.loadAddon(new Unicode11Addon())
