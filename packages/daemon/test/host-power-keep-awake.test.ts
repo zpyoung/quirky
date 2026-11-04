@@ -195,4 +195,23 @@ describe('host power keep-awake', () => {
     expect(power.powerState()).toEqual({ onBattery: false, externalDisplay: null })
     service.dispose()
   })
+
+  test('a source that can create but not release assertions never takes one', () => {
+    const created: string[] = []
+    const source: NativeHostPowerSource = {
+      start: () => () => {},
+      createAssertion(reason) {
+        created.push(reason)
+        return 1
+      }
+    }
+    const service = new HostPowerService(() => {}, source)
+    const power = service.forPlugin('acme.a', () => false)
+    const release = power.keepAwake('x')
+    expect(created).toEqual([])
+    expect(() => release()).not.toThrow()
+    expect(() => service.keepAwake('acme.b', 'y')()).not.toThrow()
+    expect(created).toEqual([])
+    service.dispose()
+  })
 })
