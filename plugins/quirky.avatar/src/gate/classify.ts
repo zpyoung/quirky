@@ -28,6 +28,7 @@ const BUILD_TOOLS = new Set(['tsc', 'eslint', 'oxlint', 'biome', 'ruff', 'mypy',
 const UPDATE_FLAGS = new Set(['-u', '--update-snapshots', '--update-snapshot', '--updateSnapshot', '--snapshot-update'])
 const GIT_READ_SUBCOMMANDS = new Set(['status', 'diff', 'log', 'show', 'blame', 'ls-files', 'ls-tree', 'rev-parse', 'rev-list', 'describe', 'remote', 'grep', 'shortlog', 'reflog', 'cat-file', 'name-rev', 'merge-base', 'diff-tree', 'for-each-ref', 'fetch', 'version', 'help', 'count-objects', 'check-ignore', 'ls-remote'])
 const GIT_LOCAL_SUBCOMMANDS = new Set(['add', 'commit', 'checkout', 'switch', 'restore', 'reset', 'stash', 'merge', 'rebase', 'cherry-pick', 'pull', 'revert', 'apply', 'am', 'mv', 'rm', 'tag', 'branch', 'clean', 'config', 'init', 'submodule', 'worktree', 'notes', 'bisect'])
+const GIT_WORKTREE_VALUE_FLAGS = new Set(['-b', '-B', '--reason', '--expire'])
 const GIT_PUSH_VALUE_FLAGS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec'])
 const GH_READ_SUBCOMMANDS = new Set(['view', 'list', 'diff', 'checks', 'status', 'ls'])
 const GH_MESSAGE_SUBCOMMANDS = new Set(['comment', 'review', 'reply'])
@@ -332,6 +333,18 @@ function gitTargetsOutside(cwd: string, chdirs: string[], redirects: string[], c
   return redirects.some((value) => dynamic(value) || !isInside(resolvePath(value, gitCwd, ctx.home), rootPaths) || !isInside(resolvePath(value, cwd, ctx.home), rootPaths))
 }
 
+/**
+ * True when a `git worktree add|remove|move` names a path outside every handed-off path.
+ * Paths resolve against the directory git runs in after `-C` hops; a value needing shell
+ * expansion counts as outside.
+ */
+function worktreeTargetsOutside(rest: string[], gitCwd: string, ctx: ClassifyContext): boolean {
+  const [action, ...operands] = positionals(rest, GIT_WORKTREE_VALUE_FLAGS)
+  const targets = action === 'remove' ? operands : action === 'move' ? operands.slice(0, 2) : action === 'add' ? operands.slice(0, 1) : []
+  const rootPaths = roots(ctx)
+  return targets.some((target) => /[$`]/.test(target) || !isInside(resolvePath(target, gitCwd, ctx.home), rootPaths))
+}
+
 function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyContext, cwd: string): ActionClass[] {
   const classes: ActionClass[] = []
   const chdirs: string[] = []
@@ -381,6 +394,10 @@ function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyCont
   if (sub === 'rebase') return [...classes, 'push-force', localEdit]
   if (sub === 'ls-remote' || sub === 'clone') return [...classes, 'network-read']
   if (GIT_READ_SUBCOMMANDS.has(sub)) return [...classes, 'read']
+  if (sub === 'worktree') {
+    const gitCwd = chdirs.reduce((dir, chdir) => resolvePath(chdir, dir, ctx.home), cwd)
+    return [...classes, outside || worktreeTargetsOutside(rest, gitCwd, ctx) ? 'edit-outside' : 'edit-inside']
+  }
   if (GIT_LOCAL_SUBCOMMANDS.has(sub)) return [...classes, localEdit]
   return [...classes, 'other']
 }
