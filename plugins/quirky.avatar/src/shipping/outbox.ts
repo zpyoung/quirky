@@ -93,6 +93,17 @@ export function createOutbox(app: AvatarApp): Outbox {
     })
   }
 
+  /** Moves `recorded` to `running` in one transaction before any await, so only one concurrent `run` of a row proceeds. */
+  function claim(id: string): { won: true; row: OutboxRow } | { won: false; row: OutboxRow | null } {
+    return app.store.transaction(() => {
+      const row = app.store.outbox.get(id)
+      if (row === null || row.state !== 'recorded') return { won: false, row }
+      const running: OutboxRow = { ...row, state: 'running' }
+      record(running, 'running')
+      return { won: true, row: running }
+    })
+  }
+
   async function evidence(row: OutboxRow): Promise<Evidence> {
     const p = row.payload
     const worktree = row.worktreeId
@@ -249,8 +260,9 @@ export function createOutbox(app: AvatarApp): Outbox {
     },
 
     async run(id) {
-      const row = app.store.outbox.get(id)
-      if (row === null || row.state !== 'recorded') return row
+      const claimed = claim(id)
+      if (claimed.won === false) return claimed.row
+      const row: OutboxRow = { ...claimed.row, state: 'recorded' }
       const seen = await evidence(row)
       if (seen.kind === 'done') {
         const done: OutboxRow = { ...row, state: 'done', result: seen.result }
@@ -258,10 +270,12 @@ export function createOutbox(app: AvatarApp): Outbox {
         return done
       }
       if (seen.kind === 'unknown') {
-        app.journal(row.worktreeId, 'outbox', { id: row.id, kind: row.kind, state: row.state, note: 'not run: could not check what happened', error: seen.error })
+        app.store.transaction(() => {
+          app.store.outbox.put(row)
+          app.journal(row.worktreeId, 'outbox', { id: row.id, kind: row.kind, state: row.state, note: 'not run: could not check what happened', error: seen.error })
+        })
         return row
       }
-      record({ ...row, state: 'running' }, 'running')
       try {
         const result = await execute(row)
         const done: OutboxRow = { ...row, state: 'done', result }

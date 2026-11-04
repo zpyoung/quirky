@@ -78,6 +78,23 @@ describe('outbox run', () => {
     expect(methods(t.calls).filter((method) => method === 'quirky.git/push')).toHaveLength(1)
   })
 
+  test('two concurrent runs of one row push once', async () => {
+    let pushes = 0
+    const t = setup({
+      'quirky.checks/run': () => check(''),
+      'quirky.git/push': async () => {
+        pushes++
+        await Promise.resolve()
+        return { remote: 'origin', branch: 'feature', upstream: 'origin/feature' }
+      }
+    })
+    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature' })
+    const [first, second] = await Promise.all([t.outbox.run(row.id), t.outbox.run(row.id)])
+    expect(pushes).toBe(1)
+    expect([first?.state, second?.state].sort()).toEqual(['done', 'running'])
+    expect(t.app.store.outbox.get(row.id)?.state).toBe('done')
+  })
+
   test('a throwing call leaves the row failed with the error', async () => {
     const t = setup({ 'quirky.checks/run': () => check(''), 'quirky.git/push': () => { throw new Error('rejected') } })
     const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'f', branch: 'f' })
