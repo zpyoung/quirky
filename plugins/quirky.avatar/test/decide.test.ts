@@ -226,3 +226,28 @@ describe('decide trace and totality', () => {
     expect(decide(withClasses(['read', 'other'], 'full'))).toMatchObject({ outcome: 'judgment' })
   })
 })
+
+describe('decide code-executing read lookalikes and foreign pushes', () => {
+  const on: Switches = { messaging: true, historyRewrite: true, deploys: true }
+
+  test('awk system() is not allowed by the fixed rules', () => {
+    const result = run(bashCall(`awk 'BEGIN {system("touch /tmp/outside-avatar")}'`), 'own-branch')
+    expect(result.outcome).toBe('judgment')
+    expect(run(bashCall(`awk '{print $1}' a.txt`), 'own-branch')).toMatchObject({ step: 'fixed-rules', outcome: 'allow' })
+  })
+
+  // push-own carries no destination, so the level step re-reads the call: at own-branch only ctx.ownBranch may be pushed
+  test('pushing to another branch is denied at own-branch and passes at full', () => {
+    expect(run(bashCall('git push origin HEAD:other-team-branch'), 'own-branch', on)).toMatchObject({ step: 'level', outcome: 'deny' })
+    expect(run(bashCall('git push origin other-team-branch'), 'own-branch', on)).toMatchObject({ step: 'level', outcome: 'deny' })
+    expect(run(bashCall('bash -c "git push origin HEAD:other-team-branch"'), 'own-branch', on)).toMatchObject({ step: 'level', outcome: 'deny' })
+    expect(run(bashCall('git push origin feat/x && git push origin other'), 'own-branch', on)).toMatchObject({ step: 'level', outcome: 'deny' })
+    expect(run(bashCall('git push origin HEAD:other-team-branch'), 'full', on)).toMatchObject({ step: null, outcome: 'judgment' })
+  })
+
+  test('pushing the own branch still reaches judgment at own-branch', () => {
+    for (const command of ['git push', 'git push origin HEAD', 'git push -u origin feat/x', 'git push origin HEAD:feat/x', 'git push origin HEAD:refs/heads/feat/x']) {
+      expect(run(bashCall(command), 'own-branch', on)).toMatchObject({ step: null, outcome: 'judgment' })
+    }
+  })
+})

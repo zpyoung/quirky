@@ -15,7 +15,9 @@ const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'filePath', 'file']
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
 const WRAPPERS = new Set(['sudo', 'doas', 'nohup', 'time', 'command', 'exec', 'builtin', 'nice', 'ionice', 'stdbuf', 'xargs', 'env', 'timeout'])
 const WRAPPER_VALUE_FLAGS = new Set(['-u', '-g', '-h', '-p', '-C', '-n', '-I', '-L', '-P', '-s', '-k'])
-const READ_CMDS = new Set(['ls', 'cat', 'head', 'tail', 'wc', 'pwd', 'echo', 'printf', 'which', 'whereis', 'type', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'awk', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'stat', 'file', 'tree', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink', 'true', 'false', 'test', '[', 'date', 'whoami', 'uname', 'id', 'less', 'more', 'column', 'fmt', 'nl', 'tac', 'od', 'xxd', 'hexdump', 'md5sum', 'shasum', 'sha256sum', 'du', 'df', 'cd', 'pushd', 'popd', 'sleep', 'ps', 'lsof'])
+const READ_CMDS = new Set(['ls', 'cat', 'head', 'tail', 'wc', 'pwd', 'echo', 'printf', 'which', 'whereis', 'type', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'stat', 'file', 'tree', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink', 'true', 'false', 'test', '[', 'date', 'whoami', 'uname', 'id', 'column', 'fmt', 'nl', 'tac', 'od', 'xxd', 'hexdump', 'md5sum', 'shasum', 'sha256sum', 'du', 'df', 'cd', 'pushd', 'popd', 'sleep', 'ps', 'lsof'])
+const AWK_CMDS = new Set(['awk', 'gawk', 'mawk', 'nawk'])
+const FIND_UNSAFE_PRIMARY = /^-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)$/
 const WRITE_ALL_CMDS = new Set(['rm', 'rmdir', 'touch', 'tee', 'mkdir', 'truncate', 'unlink', 'mv', 'shred'])
 const WRITE_SKIP_FIRST_CMDS = new Set(['chmod', 'chown', 'chgrp'])
 const WRITE_DEST_CMDS = new Set(['cp', 'rsync', 'install', 'ln'])
@@ -345,7 +347,7 @@ function worktreeTargetsOutside(rest: string[], gitCwd: string, ctx: ClassifyCon
   return targets.some((target) => /[$`]/.test(target) || !isInside(resolvePath(target, gitCwd, ctx.home), rootPaths))
 }
 
-function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyContext, cwd: string): ActionClass[] {
+function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyContext, cwd: string, pushDests: string[]): ActionClass[] {
   const classes: ActionClass[] = []
   const chdirs: string[] = []
   const redirects: string[] = []
@@ -390,7 +392,7 @@ function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyCont
   const hooksEnv = envAssignments.some((a) => /^(HUSKY|HUSKY_SKIP_HOOKS|SKIP_HOOKS)=(0|1|true)$/.test(a))
   if ((hooksEnv && ['commit', 'push', 'merge', 'rebase'].includes(sub ?? '')) || rest.includes('--no-verify') || (sub === 'commit' && rest.includes('-n')) || rest.some((arg) => /core\.hooksPath/i.test(arg))) classes.push('skip-hooks')
   if (sub === undefined) return classes.length ? classes : ['read']
-  if (sub === 'push') return [...classes, ...classifyPush(rest, ctx), ...(outside ? ['edit-outside' as const] : [])]
+  if (sub === 'push') return [...classes, ...classifyPush(rest, ctx, pushDests), ...(outside ? ['edit-outside' as const] : [])]
   if (sub === 'rebase') return [...classes, 'push-force', localEdit]
   if (sub === 'ls-remote' || sub === 'clone') return [...classes, 'network-read']
   if (GIT_READ_SUBCOMMANDS.has(sub)) return [...classes, 'read']
@@ -402,7 +404,7 @@ function classifyGit(args: string[], envAssignments: string[], ctx: ClassifyCont
   return [...classes, 'other']
 }
 
-function classifyPush(args: string[], ctx: ClassifyContext): ActionClass[] {
+function classifyPush(args: string[], ctx: ClassifyContext, pushDests: string[]): ActionClass[] {
   const classes: ActionClass[] = []
   const flags = args.filter(isFlag)
   const refspecs = positionals(args, GIT_PUSH_VALUE_FLAGS).slice(1)
@@ -419,6 +421,7 @@ function classifyPush(args: string[], ctx: ClassifyContext): ActionClass[] {
     if (colon === 0) classes.push('remote-delete')
     let dest = (colon >= 0 ? spec.slice(colon + 1) : spec).replace(/^refs\/heads\//, '')
     if (dest === '' || dest === 'HEAD') dest = ctx.ownBranch
+    pushDests.push(dest)
     classes.push(dest === ctx.defaultBranch ? 'push-default' : 'push-own')
   }
   return classes
@@ -450,6 +453,131 @@ function classifyDownload(args: string[]): ActionClass[] {
   return mutating ? ['other'] : ['network-read']
 }
 
+const longOptionIs = (arg: string, ...words: string[]) => {
+  if (!arg.startsWith('--')) return false
+  const name = arg.slice(2).split('=')[0]
+  return name !== '' && words.some((word) => word.startsWith(name))
+}
+const shortClusterHas = (arg: string, letters: string) => new RegExp(`^-[a-zA-Z0-9]*[${letters}]`).test(arg)
+
+/** awk programs can run commands (`system`, pipes, `getline`) and write files (`print >`), so only a plain inline program counts as a read. */
+function awkIsReadOnly(args: string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === '--') return !AWK_UNSAFE_PROGRAM.test(args[i + 1] ?? '')
+    if (arg === '-F' || arg === '-v') {
+      i++
+      continue
+    }
+    if (/^-[Fv]./.test(arg)) continue
+    if (isFlag(arg)) return false
+    return !AWK_UNSAFE_PROGRAM.test(arg)
+  }
+  return false
+}
+const AWK_UNSAFE_PROGRAM = /system|getline|[|>@]/
+
+/**
+ * Scans a sed script and returns false for anything that can execute or write: the `e`, `w` and
+ * `W` commands and the `e` and `w` flags of `s`. Unknown syntax counts as unsafe.
+ */
+function sedScriptIsReadOnly(script: string): boolean {
+  const skipDelimited = (from: number, delim: string): number => {
+    for (let i = from; i < script.length; i++) {
+      if (script[i] === '\\') i++
+      else if (script[i] === delim) return i + 1
+    }
+    return -1
+  }
+  const skipLine = (from: number): number => {
+    const end = script.indexOf('\n', from)
+    return end < 0 ? script.length : end
+  }
+  let i = 0
+  while (i < script.length) {
+    const c = script[i]
+    if (/[\s;{}!0-9$,~+IM]/.test(c)) i++
+    else if (c === '/' || c === '\\') {
+      const delim = c === '/' ? '/' : script[i + 1]
+      if (delim === undefined) return false
+      const next = skipDelimited(c === '/' ? i + 1 : i + 2, delim)
+      if (next < 0) return false
+      i = next
+    } else if (c === 's' || c === 'y') {
+      const delim = script[i + 1]
+      if (delim === undefined || /[\s\\\n]/.test(delim)) return false
+      const afterRegex = skipDelimited(i + 2, delim)
+      const afterReplacement = afterRegex < 0 ? -1 : skipDelimited(afterRegex, delim)
+      if (afterReplacement < 0) return false
+      i = afterReplacement
+      if (c === 's') {
+        const flags = /^[a-zA-Z0-9]*/.exec(script.slice(i))?.[0] ?? ''
+        if (/[ew]/.test(flags)) return false
+        i += flags.length
+      }
+    } else if ('pdDnNgGhHxlqQ=zFP'.includes(c)) i++
+    else if ('aicrR'.includes(c)) i = skipLine(i + 1)
+    else if (c === ':' || c === 'b' || c === 't' || c === 'T') {
+      const stop = /[;\n]/.exec(script.slice(i + 1))
+      i = stop === null ? script.length : i + 1 + stop.index
+    } else return false
+  }
+  return true
+}
+
+function sedIsReadOnly(args: string[]): boolean {
+  const scripts: string[] = []
+  const operands: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === '--') {
+      operands.push(...args.slice(i + 1))
+      break
+    }
+    if (arg.startsWith('--')) {
+      const [name, value] = [arg.slice(2).split('=')[0], arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : undefined]
+      if (name === 'expression') scripts.push(value ?? args[++i] ?? '')
+      else if (!['quiet', 'silent', 'regexp-extended', 'separate', 'unbuffered', 'null-data', 'posix', 'debug', 'sandbox'].includes(name)) return false
+    } else if (isFlag(arg)) {
+      for (let j = 1; j < arg.length; j++) {
+        const letter = arg[j]
+        if (letter === 'e') {
+          scripts.push(arg.slice(j + 1) || (args[++i] ?? ''))
+          break
+        }
+        if (!'nErsuzb'.includes(letter)) return false
+      }
+    } else operands.push(arg)
+  }
+  if (scripts.length === 0) {
+    const [script] = operands
+    if (script === undefined) return false
+    scripts.push(script)
+  }
+  return scripts.every(sedScriptIsReadOnly)
+}
+
+const READ_INVOCATION_GUARDS: Record<string, (args: string[]) => boolean> = {
+  sort: (args) => !args.some((arg) => shortClusterHas(arg, 'o') && !arg.startsWith('--') || longOptionIs(arg, 'output', 'compress-program')),
+  uniq: (args) => positionals(args, new Set(['-f', '-s', '-w', '--skip-fields', '--skip-chars', '--check-chars'])).length <= 1,
+  tree: (args) => !args.some((arg) => (shortClusterHas(arg, 'o') && !arg.startsWith('--')) || longOptionIs(arg, 'output')),
+  yq: (args) => !args.some((arg) => (shortClusterHas(arg, 'is') && !arg.startsWith('--')) || longOptionIs(arg, 'inplace', 'split-exp') || arg.includes('system')),
+  file: (args) => !args.some((arg) => (shortClusterHas(arg, 'C') && !arg.startsWith('--')) || longOptionIs(arg, 'compile')),
+  diff: (args) => !args.some((arg) => (shortClusterHas(arg, 'l') && !arg.startsWith('--')) || longOptionIs(arg, 'paginate')),
+  rg: (args) => !args.some((arg) => /^--(pre|hostname-bin)(=|$)/.test(arg)),
+  ag: (args) => !args.some((arg) => longOptionIs(arg, 'pager')),
+  date: (args) => !args.some((arg) => /^-[ur]*s/.test(arg) || longOptionIs(arg, 'set')),
+  xxd: (args) => positionals(args, new Set(['-c', '-g', '-l', '-s', '-o', '-n', '-b'])).length <= 1
+}
+
+/**
+ * True when this invocation of a read-only command cannot run another program or write a file.
+ * False sends the call to judgment as `other`.
+ */
+function readInvocationIsSafe(cmd: string, args: string[]): boolean {
+  return READ_INVOCATION_GUARDS[cmd]?.(args) ?? true
+}
+
 function writeTargets(parsed: Parsed): string[] {
   const { cmd, args } = parsed
   const operands = positionals(args)
@@ -469,12 +597,13 @@ function isWriteCommand(cmd: string, args: string[]): boolean {
   return WRITE_ALL_CMDS.has(cmd) || WRITE_SKIP_FIRST_CMDS.has(cmd) || WRITE_DEST_CMDS.has(cmd)
 }
 
-type Analysis = { classes: ActionClass[]; parts: string[] }
+type Analysis = { classes: ActionClass[]; parts: string[]; pushDests: string[] }
 
 function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext, depth = 0, inheritedEnv: string[] = []): Analysis {
   const classes: ActionClass[] = []
   const parts: string[] = []
-  if (depth > 4) return { classes: ['other'], parts }
+  const pushDests: string[] = []
+  if (depth > 4) return { classes: ['other'], parts, pushDests }
   let cwd = startCwd
   let downloadInPipeline = false
   const shellEnv = [...inheritedEnv]
@@ -502,15 +631,17 @@ function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext,
       const inner = analyzeCommand(args[commandFlag + 1], cwd, ctx, depth + 1, [...shellEnv, ...parsed.envAssignments])
       partClasses.push(...inner.classes)
       parts.push(...inner.parts)
+      pushDests.push(...inner.pushDests)
     } else if (cmd === 'eval' && args.length > 0) {
       const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, [...shellEnv, ...parsed.envAssignments])
       partClasses.push(...inner.classes)
       parts.push(...inner.parts)
+      pushDests.push(...inner.pushDests)
     } else if (isShell) {
       partClasses.push(downloadInPipeline ? 'pipe-to-shell' : 'other')
     } else if (cmd !== '') {
       parts.push(parsed.text)
-      partClasses.push(...classifyMainCommand(parsed, ctx, cwd, shellEnv))
+      partClasses.push(...classifyMainCommand(parsed, ctx, cwd, shellEnv, pushDests))
     }
 
     if (DOWNLOAD_CMDS.has(cmd)) downloadInPipeline = true
@@ -527,15 +658,15 @@ function analyzeCommand(command: string, startCwd: string, ctx: ClassifyContext,
 
     classes.push(...partClasses)
   }
-  return { classes, parts }
+  return { classes, parts, pushDests }
 }
 
-function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string, shellEnv: string[]): ActionClass[] {
+function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string, shellEnv: string[], pushDests: string[]): ActionClass[] {
   const { cmd, args, text, envAssignments } = parsed
   const deploy = matchesCommandList(text, ctx.deployCommands) || isBuiltinDeploy(cmd, args)
   if (deploy) return ['deploy']
   let classes: ActionClass[]
-  if (cmd === 'git') classes = classifyGit(args, [...shellEnv, ...envAssignments], ctx, cwd)
+  if (cmd === 'git') classes = classifyGit(args, [...shellEnv, ...envAssignments], ctx, cwd, pushDests)
   else if (cmd === 'gh' || cmd === 'glab') classes = classifyPullRequestCli(cmd, args)
   else if (DOWNLOAD_CMDS.has(cmd)) classes = classifyDownload(args)
   else if (cmd === 'security') classes = ['credential']
@@ -545,9 +676,10 @@ function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string, 
   else if (cmd === 'make') classes = testOrBuild(scriptClass(positionals(args)[0]), args)
   else if (cmd === 'cargo' || cmd === 'go') classes = classifyCargoOrGo(args)
   else if (cmd === 'python' || cmd === 'python3') classes = args[0] === '-m' && (args[1] === 'pytest' || args[1] === 'unittest') ? testOrBuild('test', args) : ['other']
-  else if (cmd === 'find') classes = args.some((arg) => arg === '-delete' || arg === '-exec' || arg === '-execdir') ? ['other'] : ['read']
-  else if (READ_CMDS.has(cmd)) classes = ['read']
-  else if ((cmd === 'sed' || cmd === 'perl') && !isWriteCommand(cmd, args)) classes = ['read']
+  else if (cmd === 'find') classes = args.some((arg) => FIND_UNSAFE_PRIMARY.test(arg)) ? ['other'] : ['read']
+  else if (AWK_CMDS.has(cmd)) classes = awkIsReadOnly(args) ? ['read'] : ['other']
+  else if (cmd === 'sed' && !isWriteCommand(cmd, args)) classes = sedIsReadOnly(args) ? ['read'] : ['other']
+  else if (READ_CMDS.has(cmd)) classes = readInvocationIsSafe(cmd, args) ? ['read'] : ['other']
   else if (isWriteCommand(cmd, args)) classes = []
   else classes = classifyTool(cmd, args)
   if (classes.length === 1 && classes[0] === 'other' && matchesCommandList(text, ctx.allowCommands)) return ['build']
@@ -599,24 +731,24 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
   const tool = call.toolName.toLowerCase()
   if (SHELL_TOOLS.has(tool)) {
     const shell = shellCommandOf(call.toolInput)
-    if (shell === null || shell.command.trim() === '') return { classes: ['other'], parts: [] }
+    if (shell === null || shell.command.trim() === '') return { classes: ['other'], parts: [], pushDests: [] }
     return analyzeCommand(shell.command, shell.cwd ?? call.cwd, ctx)
   }
   if (tool === 'apply_patch') {
     const paths = patchPaths(call.toolInput)
-    if (paths.length === 0) return { classes: ['other'], parts: [] }
-    return { classes: paths.flatMap((path) => writeClasses(path, call.cwd, ctx)), parts: [] }
+    if (paths.length === 0) return { classes: ['other'], parts: [], pushDests: [] }
+    return { classes: paths.flatMap((path) => writeClasses(path, call.cwd, ctx)), parts: [], pushDests: [] }
   }
   if (READ_TOOLS.has(tool)) {
     const path = pathOf(call.toolInput)
-    return { classes: path === null ? ['read'] : readClasses(resolvePath(path, call.cwd, ctx.home), ctx), parts: [] }
+    return { classes: path === null ? ['read'] : readClasses(resolvePath(path, call.cwd, ctx.home), ctx), parts: [], pushDests: [] }
   }
   if (WRITE_TOOLS.has(tool)) {
     const path = pathOf(call.toolInput)
-    return { classes: path === null ? ['other'] : writeClasses(path, call.cwd, ctx), parts: [] }
+    return { classes: path === null ? ['other'] : writeClasses(path, call.cwd, ctx), parts: [], pushDests: [] }
   }
-  if (NETWORK_TOOLS.has(tool)) return { classes: ['network-read'], parts: [] }
-  return { classes: ['other'], parts: [] }
+  if (NETWORK_TOOLS.has(tool)) return { classes: ['network-read'], parts: [], pushDests: [] }
+  return { classes: ['other'], parts: [], pushDests: [] }
 }
 
 /**
@@ -643,6 +775,18 @@ export function classifyCall(call: ToolCall, ctx: ClassifyContext): ActionClass[
 export function commandParts(call: ToolCall, ctx: ClassifyContext): string[] {
   try {
     return analyzeCall(call, ctx).parts
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The destination branch of every `git push` a Bash-style call runs, `HEAD` and an empty
+ * destination resolved to `ctx.ownBranch`. Empty for any other call.
+ */
+export function pushDestinations(call: ToolCall, ctx: ClassifyContext): string[] {
+  try {
+    return analyzeCall(call, ctx).pushDests
   } catch {
     return []
   }

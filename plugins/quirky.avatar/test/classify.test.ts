@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { ActionClass, ClassifyContext, ToolCall } from '../src/contracts'
-import { classifyCall } from '../src/gate/classify'
+import { classifyCall, pushDestinations } from '../src/gate/classify'
 
 const ctx: ClassifyContext = {
   worktreePath: '/work/wt',
@@ -260,6 +260,77 @@ describe('classifyCall bash', () => {
     expect(classifyCall(call('shell', { command: ['git', 'status'] }), ctx)).toEqual(['read'])
     expect(has(classifyCall(call('exec_command', { cmd: 'touch a', workdir: '/tmp' }), ctx), 'edit-outside')).toBe(true)
     expect(classifyCall(call('bash', { command: 'ls' }), ctx)).toEqual(['read'])
+  })
+
+  test('plain read commands stay read', () => {
+    for (const command of ["awk '{print $1}' a.txt", "awk -F: '{print $2}' a.txt", "awk -v n=2 'NR==n' a.txt", "sed -n 1p a.txt", "sed -n '/error/p' a.txt", "sed -E 's/a(b)/\\1/g' a.txt", "sed -e 's/a/b/' -e '2d' a.txt", 'find . -name x', 'sort a.txt', 'sort -n -r -k2 a.txt', 'uniq -c a.txt', 'rg foo src', 'date -Iseconds', 'yq .a b.yaml', 'diff a b', 'xxd a.bin']) {
+      expect(bash(command)).toEqual(['read'])
+    }
+  })
+
+  test('read commands that can run code or write are not read', () => {
+    const escapes = [
+      `awk 'BEGIN {system("touch /tmp/outside-avatar")}'`,
+      `gawk 'BEGIN {system("id")}'`,
+      `mawk 'BEGIN {"id" | getline x; print x}'`,
+      `awk '{print > "/tmp/x"}' a.txt`,
+      `awk '{print | "sh"}' a.txt`,
+      `awk -f prog.awk a.txt`,
+      `awk -i inplace '{print}' a.txt`,
+      `sed 's/a/b/e' a.txt`,
+      `sed 's/a/b/w /tmp/out' a.txt`,
+      `sed -n '1w /tmp/out' a.txt`,
+      `sed '1e id' a.txt`,
+      `sed -f script.sed a.txt`,
+      `sed --file=script.sed a.txt`,
+      `find . -exec sh -c id ;`,
+      `find . -execdir id ;`,
+      `find . -ok id ;`,
+      `find . -okdir id ;`,
+      `find . -delete`,
+      `find . -fprint /tmp/out`,
+      `find . -fprintf /tmp/out %p`,
+      `find . -fls /tmp/out`,
+      `xargs sh -c 'touch /tmp/x'`,
+      `env sh -c 'touch /tmp/x'`,
+      `env awk 'BEGIN {system("id")}'`,
+      `nice awk 'BEGIN {system("id")}'`,
+      `nohup sh -c 'touch /tmp/x'`,
+      `timeout 5 sh -c 'touch /tmp/x'`,
+      `time sh -c 'touch /tmp/x'`,
+      `stdbuf -oL sh -c 'touch /tmp/x'`,
+      `watch id`,
+      `perl -e 'system("id")'`,
+      `less '+!id' a.txt`,
+      `sort -o /tmp/out a.txt`,
+      `sort --output=/tmp/out a.txt`,
+      `sort --compress-program=sh a.txt`,
+      `uniq in.txt /tmp/out`,
+      `tree -o /tmp/out`,
+      `yq -i '.a=1' b.yaml`,
+      `rg --pre sh foo`,
+      `rg --pre=sh foo`,
+      `ag --pager sh foo`,
+      `date -s 2020-01-01`,
+      `xxd -r in.hex /tmp/out`
+    ]
+    for (const command of escapes) expect({ command, classes: bash(command) }).toEqual({ command, classes: expect.not.arrayContaining(['read']) })
+  })
+
+  test('a wrapper classifies the command it wraps', () => {
+    expect(bash('env ls')).toEqual(['read'])
+    expect(bash('nohup cat a.txt')).toEqual(['read'])
+    expect(has(bash('env rm -rf /tmp/x'), 'edit-outside')).toBe(true)
+    expect(has(bash('xargs git push origin main'), 'push-default')).toBe(true)
+  })
+
+  test('git push destinations', () => {
+    expect(bash('git push origin HEAD:other-team-branch')).toEqual(['push-own'])
+    expect(pushDestinations(call('Bash', { command: 'git push origin HEAD:other-team-branch' }), ctx)).toEqual(['other-team-branch'])
+    expect(pushDestinations(call('Bash', { command: 'git push origin HEAD' }), ctx)).toEqual(['feat/x'])
+    expect(pushDestinations(call('Bash', { command: 'git push' }), ctx)).toEqual(['feat/x'])
+    expect(pushDestinations(call('Bash', { command: 'bash -c "git push origin theirs"' }), ctx)).toEqual(['theirs'])
+    expect(pushDestinations(call('Read', { file_path: '/work/wt/a' }), ctx)).toEqual([])
   })
 
   test('never returns an empty list and never throws', () => {
