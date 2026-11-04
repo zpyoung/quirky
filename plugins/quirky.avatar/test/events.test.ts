@@ -251,6 +251,25 @@ describe('event intake', () => {
 })
 
 describe('starting and restarting', () => {
+  test('a gate check that fails after the plugin is disposed neither journals nor rejects', async () => {
+    const t = setup({ agent: 'pi' })
+    let fail: (error: Error) => void = () => undefined
+    t.app.services.gate.gateCheck = () => new Promise((_resolve, reject) => { fail = reject })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      await t.app.services.supervisor.startSession('wt-1', 'brief me')
+      for (const dispose of disposers.splice(0)) dispose()
+      t.app.journal = () => { throw new Error('store is closed') }
+      fail(new Error('late failure'))
+      await Bun.sleep(20)
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
   test('startSession creates the mandate agent session with the note, marks it and checks the gate', async () => {
     const t = setup({ agent: 'pi' })
     const result = await t.app.services.supervisor.startSession('wt-1', 'brief me')
