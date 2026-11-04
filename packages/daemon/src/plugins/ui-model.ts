@@ -412,6 +412,7 @@ export function buildUiModel(input: {
 
   const sidebarSections = slot('sidebar-section').sort(byOrder)
   const statusBars = slot('status-bar').sort(byOrder)
+  const windowBarItems = slot('window-bar-item').sort(byOrder)
   const activityItems = slot('activity-item').sort(byOrder)
   const panels = slot('panel').sort(byOrder)
   const settingsSections = slot('settings-section').sort(byOrder)
@@ -420,6 +421,7 @@ export function buildUiModel(input: {
   const model: UiModel = {
     sidebarSections,
     statusBars,
+    windowBarItems,
     activityItems,
     panels,
     settingsSections,
