@@ -93,7 +93,7 @@ function avatarStatusOf(worktree: Worktree): AvatarWorktreeStatus | null {
 const AVATAR_RING_STYLE: CSSProperties = {
   display: 'inline-flex',
   borderRadius: '50%',
-  boxShadow: '0 0 0 2px var(--ui-accent)'
+  boxShadow: '0 0 0 var(--ui-focus-width) var(--ui-accent)'
 }
 
 /** The status dot of an avatar-supervised workspace, ringed in the accent colour. */
