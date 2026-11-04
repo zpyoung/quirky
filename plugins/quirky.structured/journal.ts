@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
+import type { ToolPolicy } from './runner'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
 
@@ -30,6 +31,12 @@ const CREATE_SEND_RECEIPTS_TABLE = `
   );
   CREATE INDEX IF NOT EXISTS structured_send_receipts_updated_at ON structured_send_receipts(updated_at)
 `
+
+const CREATE_TOOL_POLICY_TABLE = `
+  CREATE TABLE IF NOT EXISTS structured_tool_policy (
+    session_id TEXT PRIMARY KEY,
+    tool_policy TEXT NOT NULL CHECK (tool_policy IN ('default', 'deny-all'))
+  )`
 
 const CREATE_TABLE = `
   CREATE TABLE IF NOT EXISTS structured_messages (
@@ -73,7 +80,33 @@ export function journalMigrations(home: string): StoreMigration[] {
 
 /** The structured sessions' message journal. */
 export class Journal {
+  private toolPolicyTableReady = false
+
   constructor(private readonly store: PluginStore) {}
+
+  /** Created on first use so the store's schema version stays where existing journals expect it. */
+  private ensureToolPolicyTable(): void {
+    if (this.toolPolicyTableReady) return
+    this.store.exec(CREATE_TOOL_POLICY_TABLE)
+    this.toolPolicyTableReady = true
+  }
+
+  /** Records a session's tool policy so a resumed session keeps it. */
+  setToolPolicy(sessionId: string, policy: ToolPolicy): void {
+    this.ensureToolPolicyTable()
+    this.store.run(
+      'INSERT INTO structured_tool_policy (session_id, tool_policy) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET tool_policy = excluded.tool_policy',
+      sessionId,
+      policy
+    )
+  }
+
+  /** The session's recorded tool policy; `default` when none was set. */
+  toolPolicy(sessionId: string): ToolPolicy {
+    this.ensureToolPolicyTable()
+    const row = this.store.get<{ tool_policy: ToolPolicy }>('SELECT tool_policy FROM structured_tool_policy WHERE session_id = ?', sessionId)
+    return row?.tool_policy ?? 'default'
+  }
 
   sendReceipt(operationId: string): StructuredSendReceipt | null {
     const row = this.store.get<StoredSendReceipt>(
@@ -189,9 +222,11 @@ export class Journal {
 
   /** Drops the session's messages and send receipts atomically. */
   remove(sessionId: string): void {
+    this.ensureToolPolicyTable()
     this.store.transaction(() => {
       this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
       this.store.run('DELETE FROM structured_send_receipts WHERE session_id = ?', sessionId)
+      this.store.run('DELETE FROM structured_tool_policy WHERE session_id = ?', sessionId)
     })
   }
 }
