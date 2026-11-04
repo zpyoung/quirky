@@ -115,6 +115,14 @@ export type PluginHostPower = {
   readonly suspended: boolean
   /** Replays suspend synchronously if already sleeping. The disposer is idempotent. */
   subscribe(listener: HostPowerListener): () => void
+  /**
+   * Prevents idle system sleep (the display may still sleep) until the returned disposer runs.
+   * Holds are ref-counted across the host, the disposer is idempotent, and revoking the plugin releases its holds.
+   * A no-op on platforms without a native source.
+   */
+  keepAwake(reason: string): () => void
+  /** `{ onBattery: false, externalDisplay: null }` where unsupported; `externalDisplay` is null when unknown. */
+  powerState(): { onBattery: boolean; externalDisplay: boolean | null }
 }
 
 /** Trusted transports authenticate peers before admission; authorization is checked on every call. */
