@@ -27,6 +27,8 @@ export type WorkspaceMenuHandlers = {
   setSleeping(worktree: Worktree, sleeping: boolean, withDescendants: boolean): void
   openIn(worktree: Worktree, target: 'terminal' | 'changes'): void
   archive(worktree: Worktree, archived: boolean): void
+  /** Hands the workspace to the avatar; the menu shows its item only when this is provided. */
+  handoffToAvatar?(worktree: Worktree): void
 }
 
 /** The items of a workspace card's menu, in order. */
@@ -79,6 +81,7 @@ export function workspaceMenu(
         { label: 'Changes', onSelect: () => on.openIn(worktree, 'changes') }
       ]
     },
+    ...(on.handoffToAvatar ? [{ label: 'Hand off to Avatar…', onSelect: () => on.handoffToAvatar!(worktree) }] : []),
     { label: 'Copy Path', onSelect: () => on.copy(worktree.path) },
     { label: 'Copy Worktree Name', onSelect: () => on.copy(worktree.name) },
     worktree.pinned
