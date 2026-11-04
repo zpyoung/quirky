@@ -234,7 +234,8 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
       const page = app.store.journalPage({ worktreeId, limit: 200, ...(before === undefined ? {} : { before }) })
       if (page.length === 0) return null
       for (const entry of page) {
-        if (entry.kind === 'finding' && entry.data.reviewed === true && typeof entry.data.headSha === 'string') return entry.data.headSha
+        if (entry.kind !== 'finding' || typeof entry.data.reviewed !== 'boolean') continue
+        return entry.data.reviewed && typeof entry.data.headSha === 'string' ? entry.data.headSha : null
       }
       before = page[page.length - 1]?.seq
     }
@@ -307,8 +308,12 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
       const earlier = row.source === 'reviewer' && row.detail.human !== true && row.valid === true && row.commitSha !== run.headSha
       if (earlier && !raised.has(normalize(row.summary))) markFixed(row, `not raised again on ${run.headSha}`)
     }
-    if (run.partial === null) app.journal(run.worktreeId, 'finding', { reviewed: true, headSha: run.headSha, reviewer: run.agent, sessionId, count: parsed.length })
-    else blockPartial(run, run.partial, sessionId, parsed.length)
+    if (run.partial === null) {
+      app.journal(run.worktreeId, 'finding', { reviewed: true, headSha: run.headSha, reviewer: run.agent, sessionId, count: parsed.length })
+      for (const need of app.needs.list({ worktreeId: run.worktreeId, open: true })) {
+        if (need.kind === 'merge-blocked' && need.detail.diffPartial === true) app.needs.close(need.id, 'superseded by a full review')
+      }
+    } else blockPartial(run, run.partial, sessionId, parsed.length)
     await call('quirky.structured/stop', { session: sessionId }).catch(() => undefined)
     await review.intakeComments(run.worktreeId).catch(() => undefined)
     app.services.brain.wake()

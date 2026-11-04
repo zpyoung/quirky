@@ -327,6 +327,33 @@ describe('reviewer findings', () => {
     expect(t.app.store.findings.get(row!.id)?.detail.fixed).not.toBe(true)
   })
 
+  test('a partial review after a full review of the same head revokes the review', async () => {
+    let big = false
+    const t = setup({ git: (cwd, args, maxChars) => (big ? oversize(cwd, args, maxChars) : Promise.resolve({ ok: true, stdout: DIFF, capped: false })) })
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(mergeReady(mergeInput(t)).ready).toBe(true)
+    big = true
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(t.review.reviewedSha('wt-1')).toBeNull()
+    expect(mergeReady(mergeInput(t)).ready).toBe(false)
+  })
+
+  test.each([HEAD, NEXT])('a full review of %s closes the open partial-review need', async (fullHead) => {
+    let big = true
+    const t = setup({ git: (cwd, args, maxChars) => (big ? oversize(cwd, args, maxChars) : Promise.resolve({ ok: true, stdout: DIFF, capped: false })) })
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(1)
+    big = false
+    t.setHead(fullHead)
+    await t.review.startReview('wt-1')
+    await t.settle({ lastAssistantMessage: reviewerOutput() })
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toHaveLength(0)
+    expect(t.review.reviewedSha('wt-1')).toBe(fullHead)
+  })
+
   test('a whole diff still marks the commit reviewed and raises no need', async () => {
     const t = setup()
     await t.review.startReview('wt-1')
