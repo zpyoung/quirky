@@ -162,11 +162,24 @@ describe('pi rpc runner', () => {
   test('deny-all starts with no tools and refuses a tool that runs anyway', async () => {
     await runner.start(session, '[tool]', { toolPolicy: 'deny-all' })
     await until(settled)
-    expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', '--no-tools'])
+    expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', '--no-tools', '--no-extensions'])
     expect(fake.commands().some((c) => c.type === 'abort')).toBe(true)
     expect(messages.filter((m) => m.role === 'tool')).toEqual([])
     expect(messages.some((m) => m.role === 'system' && m.text === 'tools are disabled for this session')).toBe(true)
     expect(asks).toEqual([])
+  })
+
+  test('deny-all on omp also starts with no extensions, since --no-tools only drops built-in tools', async () => {
+    build('omp')
+    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
+    await until(settled)
+    expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', '--no-tools', '--no-extensions'])
+  })
+
+  test('assistant text survives a multibyte character split across stdout chunks', async () => {
+    await runner.start(session, '[split]')
+    await until(settled)
+    expect(messages.find((m) => m.role === 'assistant')?.text).toBe('caf\u00e9 \u2615')
   })
 
   test('refuses an agent other than pi or omp and refuses resume', async () => {

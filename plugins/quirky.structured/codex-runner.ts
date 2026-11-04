@@ -8,6 +8,38 @@ const APPROVAL_POLICY = 'on-request'
 const SANDBOX = 'workspace-write'
 const DENY_ALL_APPROVAL_POLICY = 'untrusted'
 const DENY_ALL_SANDBOX = 'read-only'
+const TOOLS_DISABLED = 'tools are disabled for this session'
+// unified_exec (exec_command) and configured MCP servers have no off switch here, so
+// refuseToolItem is the only thing stopping those
+const DENY_ALL_SERVER_ARGS = [
+  ...[
+    'shell_tool',
+    'view_image',
+    'sleep_tool',
+    'apps',
+    'plugins',
+    'browser_use',
+    'computer_use',
+    'in_app_browser',
+    'image_generation',
+    'multi_agent',
+    'multi_agent_v2'
+  ].flatMap((feature) => ['--disable', feature]),
+  '-c',
+  'web_search="disabled"'
+]
+const TOOL_ITEM_TYPES = new Set([
+  'commandExecution',
+  'fileChange',
+  'mcpToolCall',
+  'dynamicToolCall',
+  'collabAgentToolCall',
+  'subAgentActivity',
+  'webSearch',
+  'imageView',
+  'sleep',
+  'imageGeneration'
+])
 const INTERRUPT_TIMEOUT_MS = 1_000
 const MAX_DEFERRED_EVENTS = 512
 const SUMMARY_LIMIT = 180
@@ -76,6 +108,7 @@ type Running = {
   totalTokenUsage: TokenCounts | null
   turnUsageBaseline: TokenCounts | null
   activeTurnId: string | null
+  refusedTurnId: string | null
   pendingApprovalCount: number
   pendingCompletion: PendingCompletion | null
   inputQueue: Promise<void>
@@ -284,7 +317,8 @@ class CodexRunner implements StructuredRunner {
         notification: (message) => this.onNotification(run, message),
         serverRequest: (request) => this.onServerRequest(run, request),
         failure: (error) => this.onFailure(run, error)
-      }
+      },
+      toolPolicy === 'deny-all' ? DENY_ALL_SERVER_ARGS : []
     )
     run = {
       sessionId: session.id,
@@ -296,6 +330,7 @@ class CodexRunner implements StructuredRunner {
       totalTokenUsage: null,
       turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
       activeTurnId: null,
+      refusedTurnId: null,
       pendingApprovalCount: 0,
       pendingCompletion: null,
       inputQueue: Promise.resolve(),
@@ -489,7 +524,15 @@ class CodexRunner implements StructuredRunner {
         run.assistantDeltas.set(itemId, (run.assistantDeltas.get(itemId) ?? '') + delta)
         return
       }
+      case 'item/started': {
+        const item = params.item
+        if (run.toolPolicy !== 'deny-all' || typeof item !== 'object' || item === null || Array.isArray(item)) return
+        const type = (item as Record<string, unknown>).type
+        if (typeof type === 'string' && TOOL_ITEM_TYPES.has(type)) this.refuseToolItem(run, params, item)
+        return
+      }
       case 'item/commandExecution/outputDelta': {
+        if (run.toolPolicy === 'deny-all') return
         const itemId = params.itemId
         const delta = params.delta
         if (typeof itemId !== 'string' || typeof delta !== 'string') return
@@ -523,6 +566,11 @@ class CodexRunner implements StructuredRunner {
       }
     }
     const status = turn.status
+    if (status === 'interrupted' && run.refusedTurnId === turnId) {
+      run.activeTurnId = null
+      this.finishCompletedTurn(run, turn)
+      return
+    }
     if (status === 'completed') {
       run.activeTurnId = null
       if (run.pendingApprovalCount > 0) {
@@ -544,6 +592,7 @@ class CodexRunner implements StructuredRunner {
   private finishCompletedTurn(run: Running, turn: Record<string, unknown>): void {
     this.flushAssistantDeltas(run)
     run.pendingCompletion = null
+    run.refusedTurnId = null
     const usage = run.turnUsage
     run.turnUsage = null
     this.context.appendMessage({
@@ -572,9 +621,24 @@ class CodexRunner implements StructuredRunner {
     }
   }
 
+  /**
+   * Ends a deny-all turn that started a tool anyway. The refusal is journaled once and the turn is
+   * interrupted; its interrupted completion then settles the session as done, not failed.
+   */
+  private refuseToolItem(run: Running, params: Record<string, unknown>, item: object): void {
+    const turnId = typeof params.turnId === 'string' ? params.turnId : run.activeTurnId
+    if (turnId === null || run.refusedTurnId === turnId) return
+    run.refusedTurnId = turnId
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: item })
+    run.connection
+      .request('turn/interrupt', { threadId: run.threadId, turnId }, INTERRUPT_TIMEOUT_MS)
+      .catch(() => {})
+  }
+
   private journalItem(run: Running, item: Record<string, unknown>): void {
     const type = item.type
     const id = typeof item.id === 'string' ? item.id : undefined
+    if (run.toolPolicy === 'deny-all' && typeof type === 'string' && TOOL_ITEM_TYPES.has(type)) return
     if (type === 'agentMessage') {
       if (id && run.emittedAssistantIds.has(id)) return
       const text = typeof item.text === 'string' ? item.text : (id ? run.assistantDeltas.get(id) : undefined) ?? ''

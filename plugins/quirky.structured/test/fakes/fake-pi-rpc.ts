@@ -13,7 +13,8 @@ export type FakePiRpcFixture = {
  * Writes a scripted `pi --mode rpc` stand-in under a test's temporary home. It speaks JSON lines
  * on stdio and never contacts a provider. The prompt text picks the script: `[tool]` runs a tool,
  * `[ui]` raises an extension dialog, `[hold]` waits for a steer or abort, `[reject]` refuses the
- * prompt, anything else answers with one assistant message.
+ * prompt, `[split]` answers with one message whose multibyte character straddles two stdout writes,
+ * anything else answers with one assistant message.
  */
 export function createFakePiRpc(home: string, options: { contextWindow?: number | null } = {}): FakePiRpcFixture {
   mkdirSync(home, { recursive: true })
@@ -43,6 +44,13 @@ function runPrompt(text) {
   send({ type: 'agent_start' })
   if (text.includes('[reject]')) return
   if (text.includes('[hold]')) { held = true; return }
+  if (text.includes('[split]')) {
+    const raw = Buffer.from(JSON.stringify({ type: 'message_end', message: assistant('caf\u00e9 \u2615') }) + '\\n')
+    const cut = raw.indexOf(Buffer.from('\u00e9')) + 1
+    process.stdout.write(raw.subarray(0, cut))
+    setTimeout(() => { process.stdout.write(raw.subarray(cut)); send({ type: 'agent_end', messages: [] }) }, 30)
+    return
+  }
   if (text.includes('[ui]')) {
     waitingUi = true
     send({ type: 'extension_ui_request', id: 'ui-1', method: 'confirm', title: 'Allow?', message: 'run it' })
