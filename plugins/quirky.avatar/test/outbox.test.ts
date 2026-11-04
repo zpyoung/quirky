@@ -152,6 +152,61 @@ describe('outbox reconcile on activation', () => {
     expect(methods(t.calls)).not.toContain('quirky.hosting/merge')
   })
 
+  describe('a merge-main-in row left running by a crash', () => {
+    const crashed = (command: (command: string) => ReturnType<typeof check>) => {
+      const commands: string[] = []
+      const t = setup({
+        'quirky.checks/run': (params) => {
+          commands.push(String(params.command))
+          return command(String(params.command))
+        }
+      })
+      const row = t.outbox.enqueue('merge-main-in', 'wt-1', { headSha: SHA, target: 'main@1', defaultBranch: 'main' })
+      t.app.store.outbox.put({ ...row, state: 'running' })
+      return { t, row, commands }
+    }
+    const merges = (commands: string[]) => commands.filter((command) => command.startsWith('git merge '))
+
+    test('a merge that already completed is done and never re-run', async () => {
+      const { t, row, commands } = crashed((command) => (command.includes('MERGE_HEAD') ? check('', false) : check('')))
+      await t.outbox.reconcile()
+      expect(t.app.store.outbox.get(row.id)).toMatchObject({ state: 'done', result: { conflict: false } })
+      expect(commands.some((command) => command.includes('merge-base --is-ancestor') && command.includes('origin/main'))).toBe(true)
+      expect(merges(commands)).toEqual([])
+      await t.outbox.run(row.id)
+      expect(merges(commands)).toEqual([])
+    })
+
+    test('a merge left half-done is failed with a reason and never re-run', async () => {
+      const { t, row, commands } = crashed((command) => (command.includes('MERGE_HEAD') ? check('') : check('', false)))
+      await t.outbox.reconcile()
+      const stored = t.app.store.outbox.get(row.id)
+      expect(stored?.state).toBe('failed')
+      expect(String((stored?.result as { error?: string }).error)).toContain('in progress')
+      expect(merges(commands)).toEqual([])
+    })
+
+    test('a merge that clearly did not apply goes back to recorded, and running it then merges once', async () => {
+      const { t, row, commands } = crashed((command) => {
+        if (command.includes('MERGE_HEAD')) return check('', false)
+        if (command.includes('--is-ancestor')) return check('', false)
+        return check('Merge made')
+      })
+      await t.outbox.reconcile()
+      expect(t.app.store.outbox.get(row.id)?.state).toBe('recorded')
+      expect(merges(commands)).toEqual([])
+      expect(await t.outbox.run(row.id)).toMatchObject({ state: 'done' })
+      expect(merges(commands)).toHaveLength(1)
+    })
+
+    test('when git cannot say, the row stays running and nothing is re-run', async () => {
+      const { t, row, commands } = crashed((command) => (command.includes('--is-ancestor') ? { ...check('', false), exitCode: 128 } : check('', false)))
+      await t.outbox.reconcile()
+      expect(t.app.store.outbox.get(row.id)?.state).toBe('running')
+      expect(merges(commands)).toEqual([])
+    })
+  })
+
   test('a push is compared with the remote branch SHA and a pr with a fresh branch lookup', async () => {
     const t = setup({
       'quirky.checks/run': (params) => check(String(params.command).includes('ls-remote') ? `${SHA}\trefs/heads/f` : ''),
