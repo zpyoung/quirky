@@ -426,6 +426,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   }
 
   return () => {
+    checker.dispose()
     for (const entry of [...inFlight]) passInFlight(entry)
     clearMarkerFiles(quirkyHome)
     if (guarded) {

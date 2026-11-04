@@ -86,6 +86,7 @@ export function register(app: AvatarApp, deps: SupervisorDeps = {}): () => void 
   const lastStates = new Map<string, string>()
   const hostingDigests = new Map<string, string>()
   const heads = new Map<string, string>()
+  let disposed = false
 
   const stepin = createStepIn(app, { promptAt: (sessionId) => promptTimes.get(sessionId) ?? null, ...deps.stepIn })
 
@@ -121,7 +122,14 @@ export function register(app: AvatarApp, deps: SupervisorDeps = {}): () => void 
       app.services.gate.writeMarker(sessionId, worktreeId, mandate.level)
       evidence.clear(worktreeId)
       if (replacing) app.services.handoff.setState(worktreeId, 'checking', 'restarted, checking the gate again')
-      app.services.gate.gateCheck(worktreeId).catch((error) => app.journal(worktreeId, 'event', { type: 'gate-check-error', error: message(error) }))
+      app.services.gate.gateCheck(worktreeId).catch((error) => {
+        if (disposed) return
+        try {
+          app.journal(worktreeId, 'event', { type: 'gate-check-error', error: message(error) })
+        } catch {
+          // the store can close between the disposed check and the write
+        }
+      })
       return { sessionId }
     } catch (error) {
       return { sessionId: null, error: message(error) }
@@ -329,6 +337,7 @@ export function register(app: AvatarApp, deps: SupervisorDeps = {}): () => void 
   app.context.provide('job:quirky.avatar/records', () => records.check())
 
   return () => {
+    disposed = true
     unsubscribe()
     records.dispose()
   }

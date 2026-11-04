@@ -88,6 +88,24 @@ const waitFor = async <T>(check: () => T | undefined | false | null, ms = 2000):
   }
 }
 
+describe('disposing the registration', () => {
+  test('stops an in-flight gate check quietly without touching the store afterwards', async () => {
+    const s = setup()
+    let release: () => void = () => undefined
+    s.fakeCalls['quirky.session/get'] = () => new Promise((resolve) => { release = () => resolve({ agent: 'claude' }) })
+    const check = s.app.services.gate.gateCheck('wt-1')
+    await Bun.sleep(10)
+    disposers.splice(0).forEach((dispose) => dispose())
+    const closed = () => { throw new Error('store is closed') }
+    s.app.store.handoffs.get = closed
+    s.app.store.receipts.list = closed
+    s.app.journal = closed
+    s.app.needs.add = closed
+    release()
+    expect(await check).toEqual({ ok: false, reason: 'the gate check was stopped' })
+  })
+})
+
 describe('supervision lookup', () => {
   test('a session with no marker is passthrough and leaves no trace', async () => {
     const s = setup()
