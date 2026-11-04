@@ -1,11 +1,13 @@
 import type { AskEnvelope, AskSpec, Session, SessionProviderSession } from '@quirky/protocol'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
-import type { StructuredContext, StructuredLaunchOptions, StructuredRunner, StructuredStartOptions } from './runner'
+import type { StructuredContext, StructuredLaunchOptions, StructuredRunner, StructuredStartOptions, ToolPolicy, TurnUsage } from './runner'
 import { nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
 
 const CLIENT_INFO = { name: 'quirky', title: 'Quirky', version: '0.1.0' }
 const APPROVAL_POLICY = 'on-request'
 const SANDBOX = 'workspace-write'
+const DENY_ALL_APPROVAL_POLICY = 'untrusted'
+const DENY_ALL_SANDBOX = 'read-only'
 const INTERRUPT_TIMEOUT_MS = 1_000
 const MAX_DEFERRED_EVENTS = 512
 const SUMMARY_LIMIT = 180
@@ -54,8 +56,20 @@ function tokenUsageDelta(total: TokenCounts, baseline: TokenCounts | null): Toke
   return Object.keys(delta).length === 0 ? null : delta
 }
 
+function turnContextUsage(update: Record<string, unknown>, last: TokenCounts | null, delta: TokenCounts | null): TurnUsage | null {
+  const counts = last ?? delta
+  if (counts === null) return null
+  const window = update.modelContextWindow ?? update.model_context_window
+  return {
+    contextTokens: (counts.inputTokens ?? 0) + (counts.outputTokens ?? 0),
+    contextWindow: typeof window === 'number' && Number.isFinite(window) && window > 0 ? window : null
+  }
+}
+
 type Running = {
   sessionId: string
+  toolPolicy: ToolPolicy
+  turnUsage: TurnUsage | null
   threadId: string
   connection: CodexConnection
   options: StructuredLaunchOptions
@@ -113,7 +127,10 @@ class CodexRunner implements StructuredRunner {
         ...(typeof startOptions.model === 'string' ? { model: startOptions.model } : {}),
         ...(typeof startOptions.effort === 'string' ? { effort: startOptions.effort } : {})
       }
-      const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env)
+      const toolPolicy = startOptions.toolPolicy ?? 'default'
+      const approvalPolicy = toolPolicy === 'deny-all' ? DENY_ALL_APPROVAL_POLICY : APPROVAL_POLICY
+      const sandbox = toolPolicy === 'deny-all' ? DENY_ALL_SANDBOX : SANDBOX
+      const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env, toolPolicy)
       startup.run = run
       startup.connection = run.connection
       const connection = run.connection
@@ -126,8 +143,8 @@ class CodexRunner implements StructuredRunner {
         const response = await connection.request('thread/resume', {
           threadId: providerSession.id,
           cwd: session.cwd,
-          approvalPolicy: APPROVAL_POLICY,
-          sandbox: SANDBOX,
+          approvalPolicy,
+          sandbox,
           excludeTurns: true,
           ...(options.model === undefined ? {} : { model: options.model })
         })
@@ -142,8 +159,8 @@ class CodexRunner implements StructuredRunner {
       } else {
         const response = await connection.request('thread/start', {
           cwd: session.cwd,
-          approvalPolicy: APPROVAL_POLICY,
-          sandbox: SANDBOX,
+          approvalPolicy,
+          sandbox,
           ...(options.model === undefined ? {} : { model: options.model })
         })
         run.threadId = this.threadIdFromResponse(response, 'thread/start')
@@ -255,7 +272,8 @@ class CodexRunner implements StructuredRunner {
     executable: string,
     threadId: string,
     options: StructuredLaunchOptions,
-    envPatch?: Record<string, string | null>
+    envPatch?: Record<string, string | null>,
+    toolPolicy: ToolPolicy = 'default'
   ): Running {
     let run!: Running
     const connection = new CodexConnection(
@@ -270,6 +288,8 @@ class CodexRunner implements StructuredRunner {
     )
     run = {
       sessionId: session.id,
+      toolPolicy,
+      turnUsage: null,
       threadId,
       connection,
       options,
@@ -428,6 +448,7 @@ class CodexRunner implements StructuredRunner {
         const last = tokenCounts(usage.last)
         if (total) run.totalTokenUsage = total
         const turnUsage = last ?? (total ? tokenUsageDelta(total, run.turnUsageBaseline) : null)
+        run.turnUsage = turnContextUsage(usage, last, turnUsage) ?? run.turnUsage
         this.context.appendMessage({
           sessionId: run.sessionId,
           role: 'system',
@@ -523,7 +544,14 @@ class CodexRunner implements StructuredRunner {
   private finishCompletedTurn(run: Running, turn: Record<string, unknown>): void {
     this.flushAssistantDeltas(run)
     run.pendingCompletion = null
-    this.context.appendMessage({ sessionId: run.sessionId, role: 'result', text: 'Codex turn completed', data: turn })
+    const usage = run.turnUsage
+    run.turnUsage = null
+    this.context.appendMessage({
+      sessionId: run.sessionId,
+      role: 'result',
+      text: 'Codex turn completed',
+      data: usage ? { ...turn, usage } : turn
+    })
     this.context.setStatus(run.sessionId, 'done')
     run.assistantDeltas.clear()
     run.emittedAssistantIds.clear()
@@ -628,6 +656,10 @@ class CodexRunner implements StructuredRunner {
     if (request.method === 'item/tool/requestUserInput') return this.handleNativeQuestion(run, request)
     if (request.method !== 'item/commandExecution/requestApproval' && request.method !== 'item/fileChange/requestApproval') {
       run.connection.respondError(request.id, -32601, `Method not found: ${request.method}`)
+      return
+    }
+    if (run.toolPolicy === 'deny-all') {
+      run.connection.respond(request.id, { decision: 'decline' })
       return
     }
     if (typeof request.params !== 'object' || request.params === null || Array.isArray(request.params)) {

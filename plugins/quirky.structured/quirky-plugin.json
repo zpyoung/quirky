@@ -3,7 +3,7 @@
   "apiVersion": "1.0.0",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background native Claude and Codex sessions without terminals: journaled messages and permission prompts as asks.",
+  "description": "Background native Claude, Codex, Pi and Oh My Pi sessions without terminals: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -11,7 +11,7 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) Claude or Codex conversation, optionally with model and effort picks. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
+        "description": "Starts a structured (no PTY) Claude, Codex, Pi or Oh My Pi conversation, optionally with model and effort picks and a tool policy. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
@@ -20,7 +20,7 @@
               "type": "boolean",
               "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
             },
-            "agent": { "type": "string", "enum": ["claude", "codex"], "description": "The structured provider to run." },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"], "description": "The structured provider to run." },
             "prompt": { "type": "string" },
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },
@@ -30,7 +30,14 @@
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean."
+              "properties": {
+                "toolPolicy": {
+                  "type": "string",
+                  "enum": ["default", "deny-all"],
+                  "description": "With deny-all the session runs no tools: every tool or approval request is refused without an ask. Omit for the provider's normal approval flow."
+                }
+              },
+              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean. `toolPolicy` is handled by this plugin and is not an agent catalog option."
             },
             "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." }
           },
@@ -109,7 +116,7 @@
           "properties": {
             "id": { "type": "string" },
             "kind": { "type": "string", "enum": ["structured"] },
-            "agent": { "type": "string", "enum": ["claude", "codex"] },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] },
             "worktreeId": { "type": "string" },
             "cwd": { "type": "string" },
             "title": { "type": "string" },
