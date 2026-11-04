@@ -26,6 +26,7 @@ import {
   loadModeOf,
   orderChanges,
   reconcileCards,
+  withHeld,
   type CardUi,
   type DiffLayout,
   type ReviewItem
@@ -46,6 +47,9 @@ type CardVersion = { wanted: number; loaded: number; stamp: string }
 
 /** The disk-side hash `setReviewMark` checks: null when the diff shows the file deleted, undefined when the diff carries none. */
 const diskHashOf = (diff: GitDiff): string | null | undefined => (diff.modifiedDeleted === true ? null : diff.modifiedHash)
+
+/** Whether `fresh` has a different disk side than `held`, as opposed to only a different original. */
+const diskMoved = (held: GitDiff, fresh: GitDiff): boolean => held.modifiedHash !== fresh.modifiedHash || held.modifiedDeleted !== fresh.modifiedDeleted
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -121,13 +125,27 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     for (const note of notes) counts.set(note.path, (counts.get(note.path) ?? 0) + 1)
     return counts
   }, [notes])
-  const items = useMemo<readonly ReviewItem[]>(() => {
+  const modelItems = useMemo<readonly ReviewItem[]>(() => {
     if (scope !== null) {
       if (commitData?.scope !== scope) return NO_ITEMS
       return orderChanges(commitData.entries, viewMode).map((change) => itemFromChange(change, commitData.commit, noteCounts.get(change.path) ?? 0))
     }
     return files === undefined ? NO_ITEMS : reviewOrder(files, viewMode).map(itemFromFile)
   }, [scope, commitData, files, viewMode, noteCounts])
+  // a card with unsaved edits stays, from its last item and where it last sat, after its file leaves the model
+  const lastItems = useRef<{ scope: string | null; items: readonly ReviewItem[] }>({ scope, items: NO_ITEMS })
+  const items = useMemo<readonly ReviewItem[]>(() => {
+    const previous = lastItems.current
+    let next = modelItems
+    if (previous.scope === scope) {
+      const listed = new Set(modelItems.map((item) => item.key))
+      const held = previous.items.filter((item) => !listed.has(item.key) && (handles.current.get(item.key)?.isDirty() ?? paneStates[item.key]?.dirty === true))
+      if (held.length > 0) next = withHeld(modelItems, previous.items, held)
+    }
+    if (next.length === previous.items.length && next.every((item, n) => item === previous.items[n])) next = previous.items
+    lastItems.current = { scope, items: next }
+    return next
+  }, [modelItems, scope, paneStates])
   const itemsRef = useRef(items)
   itemsRef.current = items
   const filesRef = useRef(files)
@@ -172,7 +190,10 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
    * The card's single read loop. While the shown diff is older than `wanted` and the card is open
    * (or the read was asked for by name) it reads, shows the result and records what it was read
    * at; an invalidation that lands mid-read only raises `wanted`, which the next check sees. A
-   * failed read leaves `loaded` alone so any later expansion, refresh or Retry reads again.
+   * failed read leaves `loaded` alone so any later expansion, refresh or Retry reads again. A card
+   * with unsaved edits keeps its diff and pane: a read whose disk side moved marks the pane stale,
+   * one that differs only in its original or fails changes nothing and leaves `loaded` behind, so
+   * the card reads again once the draft is saved or dropped.
    */
   const readLoop = async (key: string): Promise<void> => {
     try {
@@ -197,6 +218,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
           diff = await diffFor(item, against)
         } catch (e) {
           if (superseded() || versionOf(item).wanted > target) continue
+          if (handles.current.get(key)?.isDirty()) return
           patchSection(key, { status: 'error', error: messageOf(e) })
           return
         }
@@ -205,7 +227,12 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         if (!latest || !now || superseded() || now.diff !== before) continue
         if (now.status === 'loaded' && now.diff) {
           const reused = reuseGitDiff(now.diff, diff)
-          patchSection(key, { against, signature: latest.signature, ...(reused === now.diff ? {} : { diff: reused, revision: now.revision + 1 }) })
+          const pane = handles.current.get(key)
+          if (reused !== now.diff && pane?.isDirty()) {
+            // only the compared side moved: nothing changed under the draft, so the read waits for it to be saved or dropped
+            if (!diskMoved(now.diff, diff)) return
+            pane.markStale()
+          } else patchSection(key, { against, signature: latest.signature, ...(reused === now.diff ? {} : { diff: reused, revision: now.revision + 1 }) })
         } else {
           patchSection(key, { status: 'loaded', diff, error: undefined, revision: now.revision + 1, against, signature: latest.signature })
         }
@@ -271,8 +298,20 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     if (!same) commitSections(kept)
     for (const key of [...versions.current.keys()]) if (!kept[key]) versions.current.delete(key)
     for (const key of [...handles.current.keys()]) if (!kept[key]) handles.current.delete(key)
+    const gone = Object.keys(paneStatesRef.current).filter((key) => !kept[key])
+    if (gone.length > 0) {
+      const remaining = { ...paneStatesRef.current }
+      for (const key of gone) delete remaining[key]
+      paneStatesRef.current = remaining
+      setPaneStates(remaining)
+    }
     setUi((prev) => reconcileCards(prev, items))
   }, [items])
+
+  useEffect(() => {
+    const listed = new Set(modelItems.map((item) => item.key))
+    for (const item of items) if (!listed.has(item.key)) handles.current.get(item.key)?.markStale()
+  }, [items, modelItems])
 
   useEffect(() => {
     const expanded = items.filter((item) => !isCollapsed(cardFor(ui[item.key], item.mark)))
@@ -317,11 +356,14 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     if (item && loadModeOf(item) === 'auto' && !isCollapsed(cardFor(uiRef.current[key], item.mark))) void loader.current?.request(key)
   }, [])
 
+  const catchUpRef = useRef(catchUp)
+  catchUpRef.current = catchUp
   const onPaneState = useCallback((key: string, state: PaneState) => {
     const current = paneStatesRef.current[key]
     if (current && JSON.stringify(current) === JSON.stringify(state)) return
     paneStatesRef.current = { ...paneStatesRef.current, [key]: state }
     setPaneStates(paneStatesRef.current)
+    if (current?.dirty && !state.dirty) catchUpRef.current(key)
   }, [])
   const onPaneHandle = useCallback((key: string, handle: PaneHandle | null) => {
     if (handle) handles.current.set(key, handle)
@@ -385,13 +427,38 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     element.scrollIntoView?.({ block: 'start' })
   }, [revealTick, items, ui, writeCard, activate, loadCard])
 
+  const askingScope = useRef(false)
+  /** Shows `commit`'s files (or the worktree review for null), first asking whether to discard the unsaved edits it would drop. */
+  const changeScope = async (commit: string | null): Promise<void> => {
+    if (commit === scopeRef.current || askingScope.current) return
+    const edited = itemsRef.current.filter((item) => handles.current.get(item.key)?.isDirty()).length
+    if (edited > 0) {
+      askingScope.current = true
+      let discard = false
+      try {
+        discard = await context.confirm({
+          title: `Discard unsaved edits in ${plural(edited, 'file')}?`,
+          body: 'Showing another scope closes these cards, and their edits are lost.',
+          confirmLabel: 'Discard'
+        })
+      } finally {
+        askingScope.current = false
+      }
+      if (!discard) {
+        pendingReveal.current = null
+        return
+      }
+    }
+    setScopeState(commit)
+  }
+  const changeScopeRef = useRef(changeScope)
+  changeScopeRef.current = changeScope
+
   useEffect(() => {
     const scrollToTop = () => {
       if (scrollRef.current) scrollRef.current.scrollTop = 0
     }
-    const setScope = (commit: string | null) => {
-      setScopeState((prev) => (prev === commit ? prev : commit))
-    }
+    const setScope = (commit: string | null) => void changeScopeRef.current(commit).catch(() => undefined)
     const loadedHash = (path: string): string | null | undefined => {
       if (scopeRef.current !== null) return undefined
       const item = itemsRef.current.find((i) => i.path === path)
@@ -497,6 +564,14 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     else reach(keys[(at - 1 + keys.length) % keys.length], (p) => p.goToChange(p.changeCount()))
   }
 
+  /** The pane holding a draft the disk has moved on from: the active card's when it is one, else the first. */
+  const staleCard = (): PaneHandle | undefined => {
+    const stale = (key: string) => paneStatesRef.current[key]?.stale === true
+    const active = activeRef.current
+    const key = active !== null && stale(active) ? active : itemsRef.current.find((item) => stale(item.key))?.key
+    return key === undefined ? undefined : handles.current.get(key)
+  }
+
   bind({
     nextChange: () => navigate(1),
     previousChange: () => navigate(-1),
@@ -506,7 +581,17 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       const key = activeRef.current !== null && holdsCursor(activeRef.current) ? activeRef.current : keys.find(holdsCursor)
       if (key) handles.current.get(key)?.revertChange()
     },
-    isDirty: () => false,
+    isDirty: () => itemsRef.current.some((item) => handles.current.get(item.key)?.isDirty()),
+    save: async () => {
+      for (const item of itemsRef.current) {
+        const pane = handles.current.get(item.key)
+        if (!pane?.isDirty()) continue
+        await pane.save()
+        if (pane.isDirty()) return
+      }
+    },
+    reloadFromDisk: () => staleCard()?.reload() ?? Promise.resolve(),
+    overwrite: () => staleCard()?.overwrite() ?? Promise.resolve(),
     collapseAll: (value) => setAllCollapsed(value ?? !allCollapsed),
     loadDiff: async (path) => {
       const matches = itemsRef.current.filter((i) => i.path === path)
@@ -518,7 +603,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const states = items.map((i) => paneStates[i.key] ?? IDLE)
   const active = (activeKey ? paneStates[activeKey] : undefined) ?? states.find((s) => s.changes > 0)
   const loadedPaths = items.filter((i) => sections[i.key]?.status === 'loaded').map((i) => i.path)
-  const summary = JSON.stringify([states.map((s) => [s.changes, s.tooLarge]), active?.current ?? null, loadedPaths, items.length, allCollapsed])
+  const summary = JSON.stringify([states.map((s) => [s.changes, s.tooLarge, s.dirty, s.stale]), active?.current ?? null, loadedPaths, items.length, allCollapsed])
   useEffect(() => {
     report({
       mode: 'review',
@@ -528,8 +613,8 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       commit: scope,
       changes: states.reduce((sum, s) => sum + s.changes, 0),
       currentChange: active?.current ?? null,
-      dirty: false,
-      stale: false,
+      dirty: states.some((s) => s.dirty),
+      stale: states.some((s) => s.stale),
       tooLarge: states.some((s) => s.tooLarge),
       sections: items.length,
       loadedSections: loadedPaths,
@@ -559,7 +644,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
             <span className="git-review__summary" data-review-summary title={sinceTitle}>
               {sinceTitle}
             </span>
-            {scope !== null && <ScopeChip label={`Commit ${shortOid(commitData?.scope === scope ? commitData.commit : scope)}`} onRemove={() => setScopeState(null)} />}
+            {scope !== null && <ScopeChip label={`Commit ${shortOid(commitData?.scope === scope ? commitData.commit : scope)}`} onRemove={() => void changeScope(null)} />}
           </span>
         }
         actions={
@@ -616,6 +701,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
               scoped={scoped}
               active={activeKey === item.key}
               marking={marking.has(item.path)}
+              dirty={paneStates[item.key]?.dirty === true}
               root={scrollEl}
               settings={paneSettings}
               notes={notes}

@@ -1,11 +1,12 @@
 import { afterEach, expect, test } from 'bun:test'
 import { EditorView } from '@codemirror/view'
-import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { Buffer } from 'node:buffer'
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { diffViewKey } from '../../src/shared/view-input'
 import { boot, shutdown, viewTabs, DIFF_VIEW, type World } from './world'
-import { buttonText, byLabel, click, modifiedEditor, q, qa, text, toasts } from './dom'
+import { buttonText, byLabel, click, modifiedEditor, modS, q, qa, text, toasts } from './dom'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
@@ -239,4 +240,120 @@ test('SC-57: a change whose merge base cannot be read says so instead of looking
   await world.run('open-diff', { path: 'math.ts', source: 'branch' })
   await world.win.waitFor(() => q('[data-git-view-root] [role="alert"]'))
   expect(q('[data-git-view-root] [contenteditable]')).toBeNull()
+}, SLOW)
+
+const header = (path: string) => q('header', card(path) ?? document)
+const reviewMark = async (world: World, path: string) => {
+  const model = (await world.agent.callAny('quirky.git/review', { worktree: world.feat.id })) as { files: Array<{ path: string; mark: string }> }
+  return model.files.find((file) => file.path === path)?.mark
+}
+
+test('a save from a card keeps the file reviewed, and a write from anywhere else does not', async () => {
+  const world = await boot(scratch, { published: false })
+  const editor = await openChangedMath(world)
+  await click(buttonText('Mark reviewed', header('math.ts')!))
+  await world.win.waitFor(async () => (await reviewMark(world, 'math.ts')) === 'reviewed')
+  await click(await world.win.waitFor(() => byLabel('Expand math.ts')))
+
+  const saved = 'a\nb\nedited in the card\nd\ne\n'
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: saved } })
+  await world.win.waitFor(() => text(header('math.ts')).includes('Unsaved'))
+  await modS(editor)
+  await world.win.waitFor(() => readFileSync(join(world.dir, 'math.ts'), 'utf8') === saved)
+  await world.win.waitFor(() => !text(header('math.ts')).includes('Unsaved'))
+  expect(await reviewMark(world, 'math.ts')).toBe('reviewed')
+  expect(text(header('math.ts'))).toContain('✓ Reviewed')
+
+  world.write('math.ts', 'a\nb\nagent edit\nd\ne\n')
+  await world.win.waitFor(async () => (await reviewMark(world, 'math.ts')) === 'changed')
+  expect(world.problems()).toEqual([])
+}, SLOW)
+
+async function dirtyReviewTab(world: World): Promise<{ id: string; editor: EditorView }> {
+  const editor = await openChangedMath(world)
+  editor.dispatch({ changes: { from: 0, insert: 'unsaved draft\n' } })
+  const tab = await world.win.waitFor(async () => {
+    const [candidate] = await viewTabs(world, DIFF_VIEW)
+    const params = (candidate as { closeParams?: { dirty?: unknown } } | undefined)?.closeParams
+    return params?.dirty === true ? candidate : null
+  })
+  return { id: tab.id, editor }
+}
+
+const closeChoice = (label: string) => buttonText(label, q('[role="dialog"]') ?? document)
+const reviewTabOpen = async (world: World, id: string) => (await viewTabs(world, DIFF_VIEW)).some((tab) => tab.id === id)
+
+test('a Review tab with unsaved edits refuses a plain close, and the dialog can keep, save or drop them', async () => {
+  const world = await boot(scratch, { published: false })
+  const { id, editor } = await dirtyReviewTab(world)
+  const refused = await world.agent.callAny('quirky.terminal/closeTab', { tab: id, yes: true }).then(
+    () => null,
+    (error: unknown) => (error instanceof Error ? error.message : String(error))
+  )
+  expect(refused).toContain('refused to close')
+  expect(await reviewTabOpen(world, id)).toBe(true)
+
+  const closeButton = () => q(`[data-tab="${id}"] button.qt-tab-close`) as HTMLButtonElement
+  closeButton().click()
+  await world.win.waitFor(() => closeChoice('Cancel'))
+  await click(closeChoice('Cancel'))
+  await world.win.waitFor(() => q('[role="dialog"]') === null)
+  expect(await reviewTabOpen(world, id)).toBe(true)
+  expect(editor.state.sliceDoc().startsWith('unsaved draft\n')).toBe(true)
+  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
+
+  const draft = editor.state.sliceDoc()
+  closeButton().click()
+  await world.win.waitFor(() => closeChoice('Save'))
+  await click(closeChoice('Save'))
+  await world.win.waitFor(async () => !(await reviewTabOpen(world, id)))
+  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(draft)
+}, SLOW)
+
+test("Don't Save closes a Review tab with unsaved edits and leaves the disk alone", async () => {
+  const world = await boot(scratch, { published: false })
+  const { id } = await dirtyReviewTab(world)
+  ;(q(`[data-tab="${id}"] button.qt-tab-close`) as HTMLButtonElement).click()
+  await world.win.waitFor(() => closeChoice("Don't Save"))
+  await click(closeChoice("Don't Save"))
+  await world.win.waitFor(async () => !(await reviewTabOpen(world, id)))
+  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
+}, SLOW)
+
+test('a Markdown card previews its disk side with a relative image the window may load', async () => {
+  const world = await boot(scratch, { published: false })
+  const imageBytes = new Uint8Array(Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+cS6sAAAAASUVORK5CYII=',
+    'base64'
+  ))
+  const guide = 'docs/Guide.md'
+  const committed = '# Committed heading\n\nHEAD body.\n\n![Chart](images/chart.png)\n'
+  const modified = '# Draft heading\n\nModified body.\n\n![Chart](images/chart.png)\n'
+  world.write(guide, committed)
+  mkdirSync(join(world.dir, 'docs', 'images'), { recursive: true })
+  writeFileSync(join(world.dir, 'docs', 'images', 'chart.png'), imageBytes)
+  world.git('add', 'docs')
+  world.git('commit', '-q', '-m', 'Add Markdown guide and chart')
+  world.write(guide, modified)
+
+  await world.run('open-diff', { path: guide })
+  await world.win.waitFor(() => card(guide) && q('[contenteditable]', card(guide)!))
+  await click(buttonText('Preview', header(guide)!))
+  await world.win.waitFor(() => q('[data-markdown-preview] img', card(guide)!))
+  const preview = q('[data-markdown-preview]', card(guide)!)!
+  expect(text(preview)).toContain('Draft heading')
+  expect(text(preview)).toContain('Modified body.')
+  expect(text(preview)).not.toContain('Committed heading')
+
+  const src = q('img', preview)!.getAttribute('src')!
+  const url = new URL(src, `http://127.0.0.1:${world.harness.runtime.port}`).toString()
+  const served = await fetch(url)
+  expect(served.status).toBe(200)
+  expect([...new Uint8Array(await served.arrayBuffer())]).toEqual([...imageBytes])
+  expect(readFileSync(join(world.dir, guide), 'utf8')).toBe(modified)
+
+  await click(buttonText('Source', header(guide)!))
+  await world.win.waitFor(async () => [404, 410].includes((await fetch(url)).status))
+  expect(q('[data-markdown-preview]', card(guide)!)).toBeNull()
+  expect(world.problems()).toEqual([])
 }, SLOW)

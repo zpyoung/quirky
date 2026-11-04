@@ -123,3 +123,23 @@ export function reconcileCards(ui: Record<string, CardUi>, items: readonly Pick<
   }
   return next ?? ui
 }
+
+/**
+ * `current` with each of `held` put back where `previous` had it: after the nearest earlier item of
+ * `previous` that `current` still lists, or first when none is. `held` are items of `previous`.
+ */
+export function withHeld(current: readonly ReviewItem[], previous: readonly ReviewItem[], held: readonly ReviewItem[]): ReviewItem[] {
+  const next = [...current]
+  for (const item of held) {
+    let at = 0
+    for (let i = previous.indexOf(item) - 1; i >= 0; i--) {
+      const found = next.findIndex((shown) => shown.key === previous[i]!.key)
+      if (found !== -1) {
+        at = found + 1
+        break
+      }
+    }
+    next.splice(at, 0, item)
+  }
+  return next
+}

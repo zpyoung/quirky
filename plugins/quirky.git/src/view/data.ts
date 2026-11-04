@@ -28,6 +28,19 @@ export async function fetchDiff(context: UiPluginContext, worktree: string, requ
   })) as GitDiff
 }
 
+/** Whether a diff shows text a reader can read (not binary, image or past the display limits). */
+export function isTextDiff(diff: GitDiff): boolean {
+  return diff.kind === 'text' && !diff.binary && diff.tooLarge === undefined
+}
+
+/**
+ * Whether a Review card can take edits: its diff is text and its modified side is a file on disk
+ * with a known hash. A commit scope shows a commit's content, which is not the disk.
+ */
+export function isEditableCard(scoped: boolean, diff: GitDiff): boolean {
+  return !scoped && isTextDiff(diff) && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
+}
+
 /**
  * Runs `refresh` on every `quirky.git/changed` event and, when `intervalMs` is given, on a timer;
  * both stop with the component. The latest `refresh` is always the one called.

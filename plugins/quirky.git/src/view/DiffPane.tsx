@@ -56,14 +56,15 @@ export type PaneProps = {
   /**
    * Offers Revert on each change of a text diff whose modified side is the file on disk: a press
    * asks for confirmation, puts the change back in the editor and saves the file at once with the
-   * hash the diff was read at. A refused save puts the editor back and says so.
+   * hash the diff was read at. A refused save puts the editor back and says so. With unsaved edits
+   * in an editable pane a press undoes the change in the draft only, without asking or saving.
    */
   revertOnDisk?: boolean
 }
 
 const STALE_TEXT = {
   file: 'This file changed on disk since your edits. Use the banner to compare, reload, or overwrite.',
-  section: 'This file changed on disk since this section loaded.'
+  section: 'This file changed on disk since your edits.'
 } as const
 
 /** The banner for a file that changed on disk under unsaved edits, with the two ways out. */
@@ -176,10 +177,19 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   }
 
   const reverting = useRef(false)
-  /** Confirms, then runs `apply` on the editor and saves the result; a refused save restores the editor. */
+  const savingRevert = useRef(false)
+  /**
+   * Runs `apply` on the editor. With unsaved edits that is all it does, so the change reaches disk
+   * with the next save. Otherwise it confirms first and saves the result at once; a refused save
+   * restores the editor.
+   */
   const revert = async (apply: () => boolean) => {
     const merge = mergeRef.current
     if (reverting.current || !merge) return
+    if (dirtyRef.current) {
+      apply()
+      return
+    }
     reverting.current = true
     try {
       const confirmed = await context.confirm({
@@ -188,7 +198,13 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
         confirmLabel: 'Revert'
       })
       if (!confirmed || mergeRef.current !== merge) return
+      if (dirtyRef.current) {
+        apply()
+        return
+      }
       const before = merge.getModified()
+      // the revert's own edits are not the user's, so the pane stays clean while it saves
+      savingRevert.current = true
       if (!apply()) return
       try {
         await write(merge.getModified(), false)
@@ -197,6 +213,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
         context.toast('Revert failed', messageOf(error))
       }
     } finally {
+      savingRevert.current = false
       reverting.current = false
     }
   }
@@ -204,7 +221,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   const ifDirty = (force: boolean) => () => (dirtyRef.current ? save(force) : Promise.resolve())
   const actions = useRef({ save: ifDirty(false), overwrite: ifDirty(true), reload: onReload, revert })
   actions.current = { save: ifDirty(false), overwrite: ifDirty(true), reload: onReload, revert }
-  const canRevert = revertOnDisk === true && !editable && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
+  const canRevert = revertOnDisk === true && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
 
   const showEditor = overflow === null
   useEffect(() => {
@@ -223,6 +240,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       scrollToFirst: variant === 'file',
       onSave: () => void actions.current.save(),
       onDocChange: () => {
+        if (savingRevert.current) return
         dirtyRef.current = true
         setDirty(true)
         if (timer.current !== null) clearTimeout(timer.current)

@@ -103,6 +103,7 @@
 }
 
 .git-review .git-review__counts,
+.git-review .git-review__edit,
 .git-review .git-review__review {
   align-items: center;
   display: inline-flex;
@@ -118,6 +119,22 @@
 
 .git-review .git-review__body[hidden] {
   display: none;
+}
+
+.git-review .git-review__pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.git-review .git-review__pane[hidden] {
+  display: none;
+}
+
+.git-review .git-review__preview {
+  flex: none;
+  max-height: 70vh;
+  min-width: 0;
 }
 
 .git-review .git-review__since {
