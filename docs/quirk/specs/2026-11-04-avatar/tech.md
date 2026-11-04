@@ -67,7 +67,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 ### Host: H4 worktree surfaces (`plugins/quirky.worktree`)
 - `src/useTree.ts:108,257`: alongside `heimdallStatus`, add `avatarStatus: AvatarWorktreeStatus | null`. It is loaded by a `loadAvatar()` that calls `quirky.avatar/sidebarStatus` and refreshes on `quirky.avatar/changed`. The method failing, or the plugin being absent, gives `null` everywhere.
 - `src/Tree.tsx:75-103,240`: when `avatarStatus` is non-null, render an accent ring on the row's status dot and prefix the row label with `Avatar · `.
-- `src/Menu.tsx`: add `Hand off to Avatar…`, which runs command `quirky.avatar/handoff` with `{worktreeIds:[id]}`. Show it only when that command is in the loaded command set; this follows `newTabButtons` in `WindowBar.tsx:223`.
+- `src/Menu.tsx`: add `Hand off to Avatar…`, which runs command `command:quirky.avatar/handoff` (as the window registry stores it; the bare id is also accepted) with `{worktreeIds:[id]}`. Show it only when that command is in the loaded command set; this follows `newTabButtons` in `WindowBar.tsx:223`.
 
 ### Host: H5 structured runners (`plugins/quirky.structured`)
 - `runner.ts:43` (`StructuredRunner`): `StructuredStartOptions` gains `toolPolicy?: 'default' | 'deny-all'`. Runners report usage per turn (see Contracts).
@@ -146,6 +146,13 @@ type ToolGateProvider = (request: ToolGateRequest, signal: AbortSignal) => Promi
 ```
 - `deadlineMs` is set by the shim or extension. It is `(judgment-timeout-seconds + 5) * 1000` for Claude and Codex. For omp it is 25000, under omp's 30-second `tool_call` budget, and the avatar's judgment deadline for omp is 20 s.
 - `encoded` is the exact stdout text the agent must see. `exitCode` defaults to 0.
+- Wire format (as built):
+  - The POST body is the raw agent payload. `session`, `event` and `deadline` (ms) go in the query string.
+  - When `event` is absent, the daemon falls back to the payload's `hook_event_name`.
+  - `deadline` defaults to 30000 and is capped at 10 minutes.
+  - If the `tool-gate` declaration lists `agents` and the request's agent isn't in it, the daemon answers `unavailable` without calling the provider.
+- The shim's deadline comes from `quirky-gate <agent> [deadline-ms]`, then `$QUIRKY_GATE_DEADLINE_MS`, then 30000. The avatar's hook installer passes it as the second argument.
+- `Core.requestToolGate` gets its provider through `core.setToolGateProvider(...)`, which is wired in `packages/daemon/src/plugins/runtime.ts`.
 - The daemon passes `payload` through untouched. The provider interprets it.
 - The manifest parser rejects a second plugin declaring `tool-gate`. At runtime, at most one provider is active, and the first registered wins.
 - `requestToolGate` resolves to `{decision:'unavailable', reason}` when there is no provider, the provider throws, or `deadlineMs` elapses. In that last case it also aborts `signal`. It never resolves to `allow` on any failure path.
