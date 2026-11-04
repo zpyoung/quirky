@@ -5,7 +5,7 @@ import { quoteAsData, sanitize } from '../sanitize'
 import { type Outbox, readCompare, readHead } from './outbox'
 
 type ReviewerAgent = 'claude' | 'codex'
-type Pending = { worktreeId: string; headSha: string; agent: ReviewerAgent; partial: ReviewDiff | null }
+type Pending = { worktreeId: string; headSha: string; agent: ReviewerAgent; partial: ReviewDiff | null; startedAt: number }
 type Thread = { id: string; resolved: boolean; human: boolean }
 
 /** Cross-family review, finding intake from the reviewer, bots, humans and skills, and the avatar's judgment of each finding. */
@@ -311,7 +311,9 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
     if (run.partial === null) {
       app.journal(run.worktreeId, 'finding', { reviewed: true, headSha: run.headSha, reviewer: run.agent, sessionId, count: parsed.length })
       for (const need of app.needs.list({ worktreeId: run.worktreeId, open: true })) {
-        if (need.kind === 'merge-blocked' && need.detail.diffPartial === true) app.needs.close(need.id, 'superseded by a full review')
+        if (need.kind !== 'merge-blocked' || need.detail.diffPartial !== true) continue
+        // a need for another head raised after this run started belongs to a newer partial review this run never saw
+        if (need.detail.headSha === run.headSha || need.createdAt <= run.startedAt) app.needs.close(need.id, 'superseded by a full review')
       }
     } else blockPartial(run, run.partial, sessionId, parsed.length)
     await call('quirky.structured/stop', { session: sessionId }).catch(() => undefined)
@@ -331,6 +333,7 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
     async startReview(worktreeId) {
       const mandate = app.store.mandates.get(worktreeId)
       if (mandate === null) return { started: false, reason: 'no mandate for this worktree' }
+      const startedAt = app.now()
       try {
         const { head } = await readHead(app, worktreeId)
         if (head === null) return { started: false, reason: 'the worktree has no commit to review' }
@@ -359,7 +362,7 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
         })) as Record<string, unknown>
         const sessionId = str(session.id)
         if (sessionId === null) return { started: false, reason: 'the reviewer session had no id' }
-        pending.set(sessionId, { worktreeId, headSha: head, agent, partial: isPartial(diff) ? diff : null })
+        pending.set(sessionId, { worktreeId, headSha: head, agent, partial: isPartial(diff) ? diff : null, startedAt })
         app.journal(worktreeId, 'finding', { reviewStarted: true, headSha: head, reviewer: agent, workerAgent: mandate.agent, sessionId, ...(ownFamily ? { workerModel: model } : {}), ...(familyUnknown ? { familyUnknown: true } : {}), ...(isPartial(diff) ? { diffPartial: true, diffOmitted: diff.omitted.length, ...(diff.namesTruncated ? { namesTruncated: true } : {}) } : {}) })
         return { started: true }
       } catch (error) {
