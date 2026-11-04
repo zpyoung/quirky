@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { AvatarApp, BrainAction, Finding, HandoffInput, Level, Mandate } from '../contracts'
+import type { AvatarApp, BrainAction, HandoffInput, Level, Mandate } from '../contracts'
 
 type JudgeAction = Extract<BrainAction, { type: 'judge' }>
 type AskUserAction = Extract<BrainAction, { type: 'askUser' }>
@@ -32,7 +32,6 @@ const REQUIRED_LEVEL: Partial<Record<BrainAction['type'], Level>> = {
   mergeMainIn: 'own-branch',
   merge: 'full'
 }
-const REPEATED_VALID_SENDS = 3
 
 const done = (extra: Record<string, unknown> = {}): Result => ({ outcome: 'done', ...extra })
 const refused = (reason: string): Result => ({ outcome: 'refused', reason })
@@ -109,53 +108,12 @@ async function askUser(app: AvatarApp, action: AskUserAction, level: Level): Pro
   return done({ askId: created.askId, workerNotified: sent.sent })
 }
 
-function isHuman(finding: Finding): boolean {
-  return finding.detail.human === true || finding.detail.authorType === 'human'
-}
-
-async function replyAndResolve(app: AvatarApp, finding: Finding, worktreeId: string, reason: string, level: Level): Promise<Record<string, unknown>> {
-  if (LEVEL_RANK[level] < LEVEL_RANK['own-branch']) return { threadReply: 'skipped: level is below own-branch' }
-  if (finding.threadId === null) return { threadReply: 'skipped: finding has no thread' }
-  const idempotencyKey = `thread-reply:${finding.id}`
-  if (app.store.outbox.list({ worktreeId, kind: 'thread-reply' }).every((row) => row.idempotencyKey !== idempotencyKey)) {
-    app.store.outbox.put({ id: randomUUID(), worktreeId, kind: 'thread-reply', payload: { findingId: finding.id, threadId: finding.threadId, text: reason }, idempotencyKey, state: 'recorded', result: null })
-  }
-  const number = finding.detail.number ?? finding.detail.prNumber
-  if (typeof number !== 'number') return { threadReply: 'recorded', resolved: false, resolveSkipped: 'finding has no pull request number' }
-  await app.context.call('quirky.hosting/resolveThread', { worktree: worktreeId, number, threadId: finding.threadId, action: 'resolve' })
-  return { threadReply: 'recorded', resolved: true }
-}
-
-async function judgeFinding(app: AvatarApp, action: Extract<BrainAction, { type: 'judgeFinding' }>, mandate: Mandate): Promise<Result> {
+/** Validates the finding belongs to the worktree, then hands the verdict to shipping, which owns what a judged finding triggers. */
+async function judgeFinding(app: AvatarApp, action: Extract<BrainAction, { type: 'judgeFinding' }>): Promise<Result> {
   const finding = app.store.findings.get(action.findingId)
   if (finding === null || finding.worktreeId !== action.worktreeId) return refused(`unknown finding ${action.findingId} for this worktree`)
   await app.services.shipping.judgeFinding(action.worktreeId, action.findingId, action.valid, action.reason)
-
-  if (action.valid) {
-    const detailText = typeof finding.detail.text === 'string' ? `\n${finding.detail.text}` : ''
-    const sent = await app.services.supervisor.send(action.worktreeId, `Review finding ${finding.id}${finding.commitSha === null ? '' : ` (commit ${finding.commitSha})`}: ${finding.summary}${detailText}`)
-    const priorSends = app.store
-      .journalPage({ worktreeId: action.worktreeId, limit: 500 })
-      .filter((entry) => {
-        const prior = entry.data.action as { type?: string; findingId?: string } | undefined
-        return entry.kind === 'brain-action' && prior?.type === 'judgeFinding' && prior.findingId === finding.id && entry.data.sent === true
-      }).length
-    const repeating = sent.sent && priorSends + 1 >= REPEATED_VALID_SENDS
-    if (repeating) app.services.supervisor.recordDenial(action.worktreeId, true)
-    return done({ sent: sent.sent, repeating })
-  }
-
-  if (isHuman(finding) && !mandate.switches.messaging) {
-    app.needs.add({
-      worktreeId: action.worktreeId,
-      kind: 'merge-blocked',
-      title: 'A reviewer thread the avatar judged invalid needs you',
-      detail: { findingId: finding.id, threadId: finding.threadId, reason: action.reason },
-      actions: ['answer', 'take-back']
-    })
-    return done({ blocked: 'messaging switch is off' })
-  }
-  return done(await replyAndResolve(app, finding, action.worktreeId, action.reason, mandate.level))
+  return done({ valid: action.valid })
 }
 
 const filesKey = (files: unknown): string => (Array.isArray(files) ? [...files].map(String).sort().join('\n') : '')
@@ -255,7 +213,7 @@ async function execute(app: AvatarApp, action: BrainAction, scope: { worktreeId:
       app.needs.add({ worktreeId: action.worktreeId, kind: 'mandate-edit', title: 'Mandate edit proposed', detail: { patch: action.patch, why: action.why }, actions: ['review-accept', 'review-reject'] })
       return done()
     case 'judgeFinding':
-      return judgeFinding(app, action, mandate as Mandate)
+      return judgeFinding(app, action)
     case 'splitWorktree':
       return splitWorktree(app, action, mandate as Mandate)
     case 'setMergeOrder': {
