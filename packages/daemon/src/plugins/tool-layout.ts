@@ -51,7 +51,7 @@ const SIZE_KEYS = TOOL_SIZE_FIELDS
 
 type ToolSource = UiSlotEntry & { hue?: UiToolHue }
 
-const RULES: {
+export const RULES: {
   id: string
   body?: string
   aliases?: string[]
