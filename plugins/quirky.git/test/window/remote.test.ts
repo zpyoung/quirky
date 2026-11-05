@@ -1,15 +1,16 @@
 import { afterEach, expect, test } from 'bun:test'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, byLabel, click, dialogNamed, messageBox, primary, q, qa, rowOf, text, toasts, type } from './dom'
+import { buttonText, byLabel, caretEntry, click, dialogNamed, errorLine, messageBox, primary, primaryNow, q, qa, rowOf, text, toasts, type } from './dom'
 import { boot, installHook, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
 afterEach(shutdown)
 
-const menuLabels = () => qa('[role="menu"] [role="menuitem"]').map(text)
+const menuLabels = () => qa('[role="menu"] [role="menuitem"]').map((item) => text(q('.qt-menu-label', item)?.firstChild as Element | null))
 
 async function openChevron(w: World): Promise<void> {
+  await w.win.waitFor(async () => (await w.report())?.busy === null && byLabel('More commit and remote actions') && !byLabel('More commit and remote actions')!.disabled)
   await click(byLabel('More commit and remote actions'))
   await w.win.waitFor(() => q('[role="menu"]'))
 }
@@ -20,7 +21,7 @@ test('SC-28: Force Push confirms with the daemon\'s question, leases on the show
   w.git('push', '-q')
   w.git('commit', '-q', '--amend', '-m', 'work again')
   w.git('fetch', '-q')
-  await w.win.waitFor(() => text(primary()) === 'Force Push' && !primary().disabled)
+  await w.win.waitFor(() => text(primary()) === 'Force push 1 commit' && !primary().disabled)
 
   await click(primary())
   const dialog = await w.win.waitFor(() => dialogNamed('Force push zoe/feat to origin?'))
@@ -30,24 +31,26 @@ test('SC-28: Force Push confirms with the daemon\'s question, leases on the show
 
   await click(primary())
   await click(buttonText('Force Push', await w.win.waitFor(() => dialogNamed('Force push zoe/feat to origin?'))))
-  await w.win.waitFor(() => text(primary()) === 'Commit' && primary().disabled)
+  await w.win.waitFor(() => w.git('rev-parse', 'origin/zoe/feat') === w.git('rev-parse', 'HEAD'))
   expect(Bun.spawnSync(['git', 'rev-parse', 'refs/heads/zoe/feat'], { cwd: w.originDir }).stdout.toString().trim()).toBe(w.git('rev-parse', 'HEAD'))
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('SC-32: a rejected push shows a toast and fetches before the ladder moves to Sync', async () => {
+test('SC-32: a rejected push shows the error line, no toast, and fetches before the button moves to Sync', async () => {
   const w = await boot(scratch)
   const peer = w.peer('peer')
   peer.git('checkout', '-q', '-B', 'zoe/feat', 'origin/zoe/feat')
   peer.commit({ 'b.ts': 'peer\n' }, 'peer')
   peer.push('zoe/feat')
   w.commit({ 'c.ts': 'mine\n' }, 'mine')
-  await w.win.waitFor(() => text(primary()) === 'Push' && !primary().disabled)
+  await w.win.waitFor(() => text(primary()) === 'Push 1 commit' && !primary().disabled)
 
   await click(primary())
-  await w.win.waitFor(() => toasts().length > 0)
+  await w.win.waitFor(() => errorLine())
+  expect(text(errorLine())).toContain('Push rejected: the remote has new commits')
+  expect(text(q('.ui-inline-error__action', errorLine()!))).toBe('Pull first')
   await w.win.waitFor(() => text(primary()) === 'Sync' && !primary().disabled)
-  expect(q('#commit-area-remote-error')).not.toBeNull()
+  expect(toasts()).toEqual([])
 }, SLOW)
 
 test('SC-27: a failing pre-commit hook opens Details with the raw output', async () => {
@@ -59,8 +62,9 @@ test('SC-27: a failing pre-commit hook opens Details with the raw output', async
   await type(messageBox(), 'Add math')
   await click(primary())
 
-  const card = await w.win.waitFor(() => q('[role="alert"] article'))
-  await click(buttonText('Details', card))
+  const line = await w.win.waitFor(() => errorLine())
+  expect(toasts()).toEqual([])
+  await click(buttonText('Details', line))
   const dialog = await w.win.waitFor(() => dialogNamed('Commit Failed'))
   expect(text(q('pre', dialog))).toContain('eslint found 2 problems')
   await click(buttonText('Close', dialog))
@@ -68,16 +72,16 @@ test('SC-27: a failing pre-commit hook opens Details with the raw output', async
   expect(w.git('log', '-1', '--format=%s')).not.toBe('Add math')
 }, SLOW)
 
-test('SC-38: a failing pre-push hook shows the Push blocked card and no inline remote error', async () => {
+test('SC-38: a failing pre-push hook shows its summary in the error line with Details', async () => {
   const w = await boot(scratch)
   installHook(w, 'pre-push', 'echo "lint-staged failed"\nexit 1')
   w.commit({ 'math.ts': 'a\nB\nc\nd\ne\n' }, 'work')
-  await w.win.waitFor(() => text(primary()) === 'Push' && !primary().disabled)
+  await w.win.waitFor(() => text(primary()) === 'Push 1 commit' && !primary().disabled)
   await click(primary())
 
-  const card = await w.win.waitFor(() => q('[role="alert"] article'))
-  expect(q('#commit-area-remote-error')).toBeNull()
-  await click(buttonText('Details', card))
+  const line = await w.win.waitFor(() => errorLine())
+  expect(toasts()).toEqual([])
+  await click(buttonText('Details', line))
   expect(text(q('pre', await w.win.waitFor(() => dialogNamed('Push Failed'))))).toContain('lint-staged failed')
 }, SLOW)
 
@@ -90,24 +94,25 @@ test('SC-29: Fetch, Fast-forward and Rebase from origin/main run through the dae
   peer.commit({ 'b.ts': 'peer\n' }, 'peer')
   peer.push('zoe/feat')
   w.write('math.ts', 'a\nB\nc\nd\ne\n')
-  await w.win.waitFor(() => rowOf('math.ts'))
+  await w.win.waitFor(() => primaryNow().label === 'Commit 1 file')
 
   await openChevron(w)
-  const item = (label: string) => qa('[role="menuitem"]').find((i) => text(i) === label) as HTMLButtonElement
-  expect(item('Commit').disabled).toBe(true)
-  expect(item('Publish Branch').disabled).toBe(true)
+  const item = (label: string) => caretEntry(label) as HTMLButtonElement
+  expect(item('Commit all 1 file').disabled).toBe(false)
+  expect(item('Publish branch').disabled).toBe(true)
   await click(item('Fetch'))
   await w.win.waitFor(() => w.git('rev-parse', 'origin/zoe/feat') === peer.git('rev-parse', 'HEAD'))
   w.git('checkout', '--', 'math.ts')
   await w.win.waitFor(() => !rowOf('math.ts'))
 
   await openChevron(w)
-  expect(menuLabels()).toContain('Fast-forward (1)')
-  await click(qa('[role="menuitem"]').find((i) => text(i) === 'Fast-forward (1)'))
+  expect(menuLabels()).toContain('Fast-forward')
+  expect(caretEntry('Fast-forward')!.disabled).toBe(false)
+  await click(caretEntry('Fast-forward'))
   await w.win.waitFor(() => w.git('rev-parse', 'HEAD') === peer.git('rev-parse', 'HEAD'))
 
   await openChevron(w)
-  await click(qa('[role="menuitem"]').find((i) => text(i) === 'Rebase from origin/main'))
+  await click(caretEntry('Rebase from origin/main'))
   await w.win.waitFor(() => Bun.spawnSync(['git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'], { cwd: w.dir }).exitCode === 0)
   expect(w.problems()).toEqual([])
 }, SLOW)

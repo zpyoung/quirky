@@ -15,6 +15,12 @@ export type FixtureStatus = 'working' | 'needs-you' | 'failing' | 'done' | 'idle
 
 export const PRIMARY_PROJECT = 'ui-review-fixture'
 
+/** The two files of the primary worktree's changes that carry review marks in the captures. */
+export const REVIEWED_FILE = FIXTURE_FILES.source
+export const CHANGED_SINCE_REVIEW_FILE = 'src/review-note.ts'
+export const REVIEW_NOTE_SOURCE = 'export const reviewNote = "untracked fixture asset"\n'
+const REVIEW_NOTE_EDITED = `${REVIEW_NOTE_SOURCE}export const reviewedAt = "before the last edit"\n`
+
 /** Three projects, with worktrees spread across them so every status dot appears. */
 const PROJECT_WORKTREES: ReadonlyArray<{ project: string; worktrees: ReadonlyArray<{ name: string | null; status: FixtureStatus }> }> = [
   { project: PRIMARY_PROJECT, worktrees: [
@@ -50,7 +56,7 @@ const INITIAL_SOURCE = [
   ''
 ].join('\n')
 
-const CHANGED_SOURCE = [
+export const CHANGED_SOURCE = [
   'export function greeting(name: string): string {',
   '  return `Welcome to the UI review, ${name}.`',
   '}',
@@ -294,7 +300,7 @@ export async function prepareCaptureFixtureHome(
     }
 
     writeFile(repoPath, FIXTURE_FILES.source, CHANGED_SOURCE)
-    writeFile(repoPath, 'src/review-note.ts', 'export const reviewNote = "untracked fixture asset"\n')
+    writeFile(repoPath, CHANGED_SINCE_REVIEW_FILE, REVIEW_NOTE_SOURCE)
     return { home: root, repoPath, projects, worktreesRoot, files, cleanup }
   } catch (error) {
     cleanup()
@@ -326,6 +332,17 @@ async function callRpc(
     options.signal,
     method
   )
+}
+
+/**
+ * Marks `REVIEWED_FILE` and `CHANGED_SINCE_REVIEW_FILE` reviewed in `worktree`, then edits the second
+ * on disk so its card reads as changed since review while the first stays as reviewed.
+ */
+export async function seedReviewMarks(client: FixtureRpcClient, worktree: { id: string; path: string }, options: FixtureOptions): Promise<void> {
+  for (const path of [REVIEWED_FILE, CHANGED_SINCE_REVIEW_FILE]) {
+    await callRpc(client, 'quirky.git/setReviewMark', { worktree: worktree.id, path, reviewed: true }, options)
+  }
+  writeFile(worktree.path, CHANGED_SINCE_REVIEW_FILE, REVIEW_NOTE_EDITED)
 }
 
 /** Registers the real repository and worktrees through their public APIs. */
@@ -388,6 +405,7 @@ export async function registerCaptureFixtures(
       }
     }
     if (!primaryWorktree) throw new Error('the primary fixture project was not registered')
+    await seedReviewMarks(client, primaryWorktree, options)
     return { ...prepared, repo: { id: primaryRepoId }, primaryWorktree, worktrees }
   } catch (error) {
     prepared.cleanup()

@@ -5,13 +5,21 @@ import { registerDom } from './ui/register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./ui/panel-support')
-const { act, byLabel, buttonText, click, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, PANEL, q, rowOf, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, PANEL, q, rowOf, settle, statusOf, type } = s
 const { activate } = await import('../src/ui')
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
   document.body.innerHTML = ''
 })
+
+async function fromMenu(element: HTMLElement, path: string, label: string) {
+  await act(async () => {
+    rowOf(element, path)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }))
+  })
+  await settle()
+  await click(buttonText(document.body, label))
+}
 
 const fixture = () =>
   statusOf([entry('staged.ts', 'staged'), entry('edited.ts', 'unstaged'), entry('new.txt', 'untracked')])
@@ -21,6 +29,14 @@ describe('quirky.git source-control panel', () => {
     const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json()
     expect(manifest.ui).toBe('dist/ui.js')
     expect(manifest.contributes.panel.map((p: { id: string }) => `panel:${manifest.id}/${p.id}`)).toEqual([PANEL])
+  })
+
+  test('the manifest no longer declares the settings the flat list and the Review tab left unread', async () => {
+    const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json()
+    const ids = (manifest.contributes.setting as { id: string }[]).map((setting) => setting.id)
+    expect(ids).not.toContain('groupOrder')
+    expect(ids).not.toContain('combinedDiffFileTree')
+    expect(ids).toContain('diffDefaultView')
   })
 
   test('SC-36: activate provides exactly the panel, view, commands and status bar item the manifest declares', async () => {
@@ -52,9 +68,10 @@ describe('quirky.git source-control panel', () => {
     const { element, unmount } = mountPanel(fake)
     await settle()
     expect(fake.calls[0]).toEqual({ method: 'quirky.git/status', params: { worktree: 'fix-login' } })
-    expect(element.textContent).toContain('Staged Changes')
+    expect(fake.called('quirky.git/review').at(0)?.params).toEqual({ worktree: 'fix-login' })
     expect(element.textContent).toContain('staged.ts')
     expect(element.textContent).toContain('zoe/feat')
+    expect(element.textContent).toContain('0 of 3 reviewed · 3 uncommitted')
     expect(fake.reports.at(-1)).toMatchObject({
       worktree: 'fix-login',
       branch: 'zoe/feat',
@@ -96,11 +113,11 @@ describe('quirky.git source-control panel', () => {
     fake.status = statusOf([])
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
     await settle()
-    expect(fake.calls.slice(before).map((c) => c.method)).toEqual(['quirky.git/status'])
+    expect(fake.calls.slice(before).map((c) => c.method)).toEqual(['quirky.git/status', 'quirky.git/review'])
     unmount()
   })
 
-  test('keeps polling status every 3 seconds and compare every 30', async () => {
+  test('keeps polling status and the review model every 3 seconds and compare every 30', async () => {
     const intervals: number[] = []
     const realSetInterval = globalThis.setInterval
     globalThis.setInterval = ((handler: () => void, ms?: number, ...rest: unknown[]) => {
@@ -114,7 +131,7 @@ describe('quirky.git source-control panel', () => {
     } finally {
       globalThis.setInterval = realSetInterval
     }
-    expect(intervals).toEqual([3000, 30_000])
+    expect(intervals).toEqual([3000, 3000, 30_000])
   })
 
   test('stages a file, then refetches status', async () => {
@@ -123,21 +140,22 @@ describe('quirky.git source-control panel', () => {
     const { element, unmount } = mountPanel(fake)
     await settle()
     const before = fake.calls.length
-    await click(byLabel(element, 'Stage edited.ts'))
+    await fromMenu(element, 'edited.ts', 'Stage')
     expect(fake.calls.slice(before)).toEqual([
       { method: 'quirky.git/stage', params: { worktree: 'w1', paths: ['edited.ts'] } },
       { method: 'quirky.git/status', params: { worktree: 'w1' } },
-      { method: 'quirky.git/compare', params: { worktree: 'w1' } }
+      { method: 'quirky.git/compare', params: { worktree: 'w1' } },
+      { method: 'quirky.git/review', params: { worktree: 'w1' } }
     ])
     unmount()
   })
 
-  test('unstages all staged files', async () => {
+  test('unstages a staged file', async () => {
     const fake = fakeContext(layoutFor('w1'))
     fake.status = fixture()
     const { element, unmount } = mountPanel(fake)
     await settle()
-    await click(byLabel(element, 'Unstage all'))
+    await fromMenu(element, 'staged.ts', 'Unstage')
     expect(fake.called('quirky.git/unstage').at(-1)?.params).toEqual({ worktree: 'w1', paths: ['staged.ts'] })
     unmount()
   })
@@ -150,8 +168,9 @@ describe('quirky.git source-control panel', () => {
     })
     const { element, unmount } = mountPanel(fake)
     await settle()
-    await click(byLabel(element, 'Stage edited.ts'))
-    expect(q(element, '[role="alert"]')?.textContent).toContain('quirky.git/stage refused')
+    await fromMenu(element, 'edited.ts', 'Stage')
+    expect(noticeOf(element)?.textContent).toContain('Failed to stage “edited.ts”')
+    expect(noticeOf(element)?.textContent).toContain('quirky.git/stage refused')
     expect(element.textContent).toContain('edited.ts')
     unmount()
   })
@@ -162,8 +181,11 @@ describe('quirky.git source-control panel', () => {
     const { element, unmount } = mountPanel(fake)
     await settle()
     const box = byLabel(element, 'Commit message') as HTMLTextAreaElement
-    const commitButton = () => buttonText(element, 'Commit')
-    expect(commitButton()?.disabled).toBe(true)
+    const commitButton = () => q(element, '.ui-split-button__primary') as HTMLButtonElement
+    expect(commitButton().textContent).toBe('Commit 1 staged file')
+    await click(commitButton())
+    expect(fake.called('quirky.git/commit')).toHaveLength(0)
+    expect(q(element, '.ui-inline-error')?.textContent).toContain('Write a commit message')
     await type(box, '  fix the login  ')
     await click(commitButton())
     expect(fake.called('quirky.git/commit').at(-1)?.params).toEqual({ worktree: 'w1', message: 'fix the login' })
@@ -177,7 +199,7 @@ describe('quirky.git source-control panel', () => {
     const { element, unmount } = mountPanel(fake)
     await settle()
     await click(rowOf(element, 'edited.ts'))
-    expect(fake.views).toEqual([{ id: DIFF_VIEW, input: { worktree: 'w1', mode: 'file', source: 'unstaged', path: 'edited.ts' } }])
+    expect(fake.views).toEqual([{ id: DIFF_VIEW, input: { worktree: 'w1', mode: 'review', reveal: 'edited.ts' } }])
     expect(fake.calls.some((c) => c.method === 'quirky.git/diff')).toBe(false)
     expect(q(element, '.diff-host')).toBeNull()
     unmount()

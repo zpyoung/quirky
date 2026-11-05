@@ -4,9 +4,6 @@ import { registerDom } from './register-dom'
 
 registerDom()
 // Load ReactDOM and portal-backed components only after happy-dom registers its window.
-const { GitHubReviewStatus } = await import('../../src/panel/GitHubReview')
-const { createElement } = await import('react')
-const { createRoot } = await import('react-dom/client')
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
 const { act, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, settle, statusOf, type } = s
@@ -108,7 +105,10 @@ const message = (element: HTMLElement) => byLabel(element, 'Commit message') as 
 const dialog = () => q(document.body, '[role="dialog"]')
 const dialogTitle = () => dialog()?.querySelector('h2')?.textContent ?? dialog()?.getAttribute('aria-label')
 const menuFor = (root: ParentNode, label: string) => qa(root, 'button[aria-haspopup="menu"]').find((button) => button.getAttribute('aria-label') === label) ?? null
-const primary = (element: HTMLElement) => q(element, '[data-git-primary]') as HTMLButtonElement
+const primary = (element: HTMLElement) => q(element, '.ui-split-button__primary') as HTMLButtonElement
+const errorLine = (element: HTMLElement) => q(element, '.ui-inline-error')
+const menuEntry = (label: string) =>
+  qa(document.body, '[role="menuitem"]').find((item) => q(item, '.qt-menu-label')?.firstChild?.textContent === label) as HTMLButtonElement | undefined
 
 const up = (ahead: number, behind: number) => ({ hasUpstream: true, name: 'origin/zoe/feat', sha: 'b'.repeat(40), ahead, behind, behindPatchEquivalent: null })
 
@@ -126,13 +126,16 @@ describe('NA-24: the sparkle button', () => {
   test('is absent while Source Control AI actions are off', async () => {
     const { element, unmount } = await open((f) => void (f.settings['ai-enabled'] = false))
     expect(sparkle(element)).toBeNull()
+    expect(byLabel(element, 'Commit message options')).toBeNull()
     unmount()
   })
 
-  test('(a) nothing staged: disabled, asks to stage a file', async () => {
-    const { element, unmount } = await open((f) => void (f.status = statusOf([entry('util.ts', 'unstaged')])))
-    expect(sparkle(element)?.disabled).toBe(true)
-    expect(sparkle(element)?.title).toBe('Stage at least one file to generate a message.')
+  test('(a) nothing to commit: there is no message box and so no sparkle', async () => {
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf([], { upstreamStatus: up(1, 0) })
+    })
+    expect(message(element)).toBeNull()
+    expect(sparkle(element)).toBeNull()
     unmount()
   })
 
@@ -144,11 +147,19 @@ describe('NA-24: the sparkle button', () => {
     unmount()
   })
 
-  test('(f) staged and empty: enabled with no stop control', async () => {
+  test('(f) changes to describe and an empty box: enabled with no stop control', async () => {
     const { element, unmount } = await open()
     expect(sparkle(element)?.disabled).toBe(false)
     expect(sparkle(element)?.getAttribute('title')).toBe(sparkle(element)?.getAttribute('aria-label'))
     expect(stop(element)).toBeNull()
+    unmount()
+  })
+
+  test('the sparkle is enabled with only unstaged changes, and describes all of them', async () => {
+    const { fake, element, unmount } = await open((f) => void (f.status = statusOf([entry('util.ts', 'unstaged')])))
+    expect(sparkle(element)?.disabled).toBe(false)
+    await click(sparkle(element))
+    expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat', scope: 'all' }])
     unmount()
   })
 
@@ -170,7 +181,6 @@ describe('NA-24: the sparkle button', () => {
   test('(d) generating: a spinner and a stop square that cancels the run and leaves the box alone', async () => {
     const run = deferred()
     const { fake, element, unmount } = await open((f) => {
-      f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, { agent: 'claude' }))
       f.on('quirky.git/generateCommitMessage', () => run.promise)
     })
     await click(sparkle(element))
@@ -185,6 +195,7 @@ describe('NA-24: the sparkle button', () => {
     await settle()
     expect(message(element).value).toBe('')
     expect(fake.toasts).toEqual([])
+    expect(errorLine(element)).toBeNull()
     expect(stop(element)).toBeNull()
     expect(sparkle(element)?.disabled).toBe(false)
     unmount()
@@ -204,9 +215,42 @@ describe('NA-24: the sparkle button', () => {
 })
 
 describe('NA-25: generating a message', () => {
-  test('with no recipe the sparkle opens the Generate Commit Message dialog, which runs once and saves nothing', async () => {
+  test('the sparkle runs the agent directly, with no dialog and nothing saved', async () => {
     const { fake, element, unmount } = await open()
     await click(sparkle(element))
+    expect(dialog()).toBeNull()
+    expect(fake.called('quirky.git/aiRecipe')).toEqual([])
+    expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat', scope: 'staged' }])
+    expect(message(element).value).toBe('Rename x to count\n\nClearer name.')
+    expect(q(element, '[data-git-written-by]')?.textContent).toBe('Written by Claude')
+    expect(fake.called('quirky.git/setAiRecipe')).toEqual([])
+    unmount()
+  })
+
+  test('the Written by line names the agent that answered, from the agent list', async () => {
+    const { element, unmount } = await open((f) =>
+      f.on('quirky.git/generateCommitMessage', () => ({ message: 'Fix it', subject: 'Fix it', body: '', agent: 'codex' }))
+    )
+    await click(sparkle(element))
+    expect(q(element, '[data-git-written-by]')?.textContent).toBe('Written by Codex')
+    unmount()
+  })
+
+  test('a custom command that answers is called the custom command', async () => {
+    const { element, unmount } = await open((f) => {
+      f.settings['ai-custom-command'] = 'my-gen'
+      f.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: [] }))
+      f.on('quirky.git/generateCommitMessage', () => ({ message: 'Fix it', subject: 'Fix it', body: '', agent: 'custom' }))
+    })
+    await click(sparkle(element))
+    expect(q(element, '[data-git-written-by]')?.textContent).toBe('Written by Custom command')
+    unmount()
+  })
+
+  test('the ✦ menu offers Choose agent…; the dialog runs once with its choice and saves nothing', async () => {
+    const { fake, element, unmount } = await open()
+    await click(byLabel(element, 'Commit message options'))
+    await click(menuEntry('Choose agent…'))
     expect(dialogTitle()).toBe('Generate Commit Message')
     expect(dialog()?.textContent).toContain('Choose the agent and command template for this run.')
     expect((byLabel(dialog()!, 'Agent') as HTMLSelectElement).value).toBe('claude')
@@ -217,7 +261,7 @@ describe('NA-25: generating a message', () => {
     await click(buttonText(dialog()!, 'Generate'))
     expect(dialog()).toBeNull()
     expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([
-      { worktree: 'feat', agent: 'claude', template: '{basePrompt}\nUse Conventional Commits.' }
+      { worktree: 'feat', scope: 'staged', agent: 'claude', template: '{basePrompt}\nUse Conventional Commits.' }
     ])
     expect(message(element).value).toBe('Rename x to count\n\nClearer name.')
     expect(fake.called('quirky.git/setAiRecipe')).toEqual([])
@@ -226,10 +270,12 @@ describe('NA-25: generating a message', () => {
 
   test('the dialog can pick another agent, and Cancel runs nothing', async () => {
     const { fake, element, unmount } = await open()
-    await click(sparkle(element))
+    await click(byLabel(element, 'Commit message options'))
+    await click(menuEntry('Choose agent…'))
     await click(buttonText(dialog()!, 'Cancel'))
     expect(dialog()).toBeNull()
-    await click(sparkle(element))
+    await click(byLabel(element, 'Commit message options'))
+    await click(menuEntry('Choose agent…'))
     const select = byLabel(dialog()!, 'Agent') as HTMLSelectElement
     expect([...select.options].map((o) => o.textContent)).toEqual(['Claude', 'Codex'])
     await act(async () => {
@@ -241,50 +287,42 @@ describe('NA-25: generating a message', () => {
     unmount()
   })
 
-  test('with a configured recipe the sparkle runs directly', async () => {
-    for (const saved of [{ agent: 'codex' }, { args: '--model haiku' }, { template: '{basePrompt}\nUse Conventional Commits.' }]) {
-      document.body.innerHTML = ''
-      const { fake, element, unmount } = await open((f) => f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, saved)))
-      await click(sparkle(element))
-      expect(dialog()).toBeNull()
-      expect(fake.called('quirky.git/aiRecipe')[0]?.params).toEqual({ worktree: 'feat', action: 'commitMessage' })
-      expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat' }])
-      expect(message(element).value).toBe('Rename x to count\n\nClearer name.')
-      unmount()
-    }
+  test('a right-click on the sparkle opens the same menu', async () => {
+    const { element, unmount } = await open()
+    await act(async () => void sparkle(element)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 4, clientY: 4 })))
+    expect(menuEntry('Choose agent…')).toBeDefined()
+    unmount()
   })
 
   test('a configured custom command runs from the sparkle with no catalog agent able to generate', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.settings['ai-custom-command'] = 'my-gen'
       f.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: [] }))
-      f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, { agent: 'custom' }))
     })
     await click(sparkle(element))
     expect(fake.views).toEqual([])
-    expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat' }])
+    expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat', scope: 'staged' }])
     expect(message(element).value).toBe('Rename x to count\n\nClearer name.')
     unmount()
   })
 
-  test('with only a custom command and no recipe the dialog offers Custom command', async () => {
+  test('with only a custom command the dialog offers Custom command', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.settings['ai-custom-command'] = 'my-gen'
       f.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: [] }))
     })
-    await click(sparkle(element))
+    await click(byLabel(element, 'Commit message options'))
+    await click(menuEntry('Choose agent…'))
     expect((byLabel(dialog()!, 'Agent') as HTMLSelectElement).value).toBe('custom')
     await click(buttonText(dialog()!, 'Generate'))
     expect(fake.called('quirky.git/generateCommitMessage')[0]?.params).toMatchObject({ agent: 'custom' })
     unmount()
   })
 
-  test('clicks while the recipe lookup is pending start one generation, and its controls stay', async () => {
-    const lookup = deferred()
+  test('clicks while a generation runs start one request, and its controls stay', async () => {
     const run = deferred()
     let requests = 0
-    const { fake, element, unmount } = await open((f) => {
-      f.on('quirky.git/aiRecipe', () => lookup.promise)
+    const { element, unmount } = await open((f) => {
       f.on('quirky.git/generateCommitMessage', () => {
         requests += 1
         if (requests > 1) throw failure('A commit message is already being generated.', { reason: 'busy' })
@@ -294,12 +332,9 @@ describe('NA-25: generating a message', () => {
     const button = sparkle(element)
     await click(button)
     await click(button)
-    await act(async () => lookup.resolve(recipe('commitMessage', { agent: 'claude' })))
-    await settle()
     await click(button)
     expect(requests).toBe(1)
-    expect(fake.called('quirky.git/aiRecipe').length).toBe(1)
-    expect(fake.toasts).toEqual([])
+    expect(errorLine(element)).toBeNull()
     expect(stop(element)).not.toBeNull()
     expect(sparkle(element)?.disabled).toBe(true)
     run.resolve({ message: 'First result' })
@@ -309,16 +344,17 @@ describe('NA-25: generating a message', () => {
     unmount()
   })
 
-  test('a failed run toasts the daemon message and leaves the box empty', async () => {
+  test('a failed run puts the daemon message in the error line, not a toast, and leaves the box empty', async () => {
     const { fake, element, unmount } = await open((f) => {
-      f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, { agent: 'claude' }))
       f.on('quirky.git/generateCommitMessage', () => {
         throw failure('Claude failed: quota exceeded', { reason: 'failed' })
       })
     })
     await click(sparkle(element))
-    expect(fake.toasts.map(([, body]) => body)).toEqual(['Claude failed: quota exceeded'])
+    expect(errorLine(element)?.textContent).toContain('Claude failed: quota exceeded')
+    expect(fake.toasts).toEqual([])
     expect(message(element).value).toBe('')
+    expect(q(element, '[data-git-written-by]')).toBeNull()
     expect(sparkle(element)?.disabled).toBe(false)
     unmount()
   })
@@ -326,7 +362,6 @@ describe('NA-25: generating a message', () => {
 
 describe('NA-30: typing during a run keeps the box', () => {
   const configured = (run: ReturnType<typeof deferred>) => (f: Fake) => {
-    f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, { agent: 'claude' }))
     f.on('quirky.git/generateCommitMessage', () => run.promise)
   }
   const result = { message: 'Generated', subject: 'Generated', body: '', agent: 'claude' }
@@ -452,7 +487,8 @@ describe('NA-35: AI Fix on the Push blocked card', () => {
   test('the card starts an agent for the push failure', async () => {
     const { fake, element, unmount } = await open(pushBlocked)
     await click(primary(element))
-    expect(element.textContent).toContain('Push blocked')
+    expect(errorLine(element)?.textContent).toContain('Pre-push hook failed.')
+    expect(fake.toasts).toEqual([])
     await click(byLabel(element, 'Start the default AI agent to fix this push failure'))
     expect(fake.called('quirky.git/aiFix').map((c) => c.params)).toEqual([{ worktree: 'feat', action: 'fixPushFailure' }])
     expect(fake.toasts).toEqual([['Started an AI agent for the push failure.', '']])
@@ -865,32 +901,27 @@ describe('NA-40: the Source Control AI defaults view', () => {
     expect(fake.called('quirky.git/aiName')).toHaveLength(3)
     unmount()
   })
-  test('the current hosted branch exposes named AI source actions without launching or posting yet', async () => {
-    const fake = aiFake()
-    const element = document.createElement('div')
-    document.body.appendChild(element)
-    const root = createRoot(element)
-    const started: string[] = []
-    act(() => root.render(createElement(GitHubReviewStatus, {
-      context: fake.context,
-      lookup: {
-        kind: 'found',
-        target: { worktree: 'feat', branch: 'zoe/feat', head: 'a'.repeat(40) },
-        review: { number: 42, url: 'https://github.com/octo/quirky/pull/42', state: 'open' }
-      },
-      aiEnabled: true,
-      onLaunch: (action: string) => started.push(action)
-    })))
-    await click(buttonText(element, 'Summarize branch with AI'))
-    await click(buttonText(element, 'Read pull request details with AI'))
-    await click(buttonText(element, 'Review pull request with AI'))
-    await click(buttonText(element, 'Draft conversation reply with AI'))
-    expect(started).toEqual(['branchSummary', 'pullRequestDetails', 'pullRequestReview', 'reviewConversation'])
-    expect(fake.called('quirky.hosting/reviewConversation')).toEqual([])
-    act(() => root.unmount())
-    element.remove()
-  })
+  test('the panel menu exposes the pull-request AI actions while a PR is open, and only then', async () => {
+    const found = { kind: 'found', review: { number: 42, url: 'https://github.com/octo/quirky/pull/42', state: 'open' } }
+    const labels = () => qa(document.body, '[role="menu"] [role="menuitem"]').map((item) => (item.textContent ?? '').replace('✓', ''))
+    const withPr = await open((f) => f.on('quirky.hosting/forBranch', () => found))
+    await click(byLabel(withPr.element, 'More source control actions'))
+    expect(labels()).toContain('Summarize branch with AI')
+    expect(labels()).toContain('Read pull request details with AI')
+    expect(labels()).toContain('Review pull request with AI')
+    expect(labels()).toContain('Draft conversation reply with AI')
+    await click(qa(document.body, '[role="menuitem"]').find((item) => item.textContent === 'Review pull request with AI'))
+    expect(dialogTitle()).toContain('Pull')
+    expect(withPr.fake.called('quirky.hosting/reviewConversation')).toEqual([])
+    withPr.unmount()
+    document.body.innerHTML = ''
 
+    const noPr = await open((f) => f.on('quirky.hosting/forBranch', () => ({ kind: 'no-review' })))
+    await click(byLabel(noPr.element, 'More source control actions'))
+    expect(labels()).toContain('Summarize branch with AI')
+    expect(labels().some((label) => label.includes('pull request') || label.includes('conversation'))).toBe(false)
+    noPr.unmount()
+  })
 
   test('shows the saved recipe of each action', async () => {
     const { element, unmount } = await openSettings((f) => f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, params.action === 'fixPushFailure' ? SAVED : {})))

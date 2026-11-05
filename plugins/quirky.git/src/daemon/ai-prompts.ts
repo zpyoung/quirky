@@ -11,6 +11,7 @@ const FILE_SUMMARY_LIMIT = 6_000
 const CUSTOM_TEXT_LIMIT = 4_000
 const FAILURE_OUTPUT_LIMIT = 12_000
 const DIFF_OMITTED = '(diff omitted — too large to read; infer the change from the staged file list above)'
+const DIFF_OMITTED_ALL = '(diff omitted — too large to read; infer the change from the uncommitted file list above)'
 const FAILURE_REPLY_INSTRUCTION =
   'Reply with the root cause, files changed, validation run, final git status, and anything left for the user.'
 const UNKNOWN_WORKTREE = 'current terminal working directory'
@@ -107,7 +108,8 @@ export function truncateDiffForPrompt(diff: string, budget: number = STAGED_DIFF
 /**
  * The commit message prompt for the staged change: branch, the `--name-status` file list and the
  * patch. An empty or `patchOmitted` patch is replaced by a note telling the agent to rely on the
- * file list; `customText` is appended after a blank line.
+ * file list; `customText` is appended after a blank line. With `scope` all the files and patch
+ * are every uncommitted change (staged, unstaged and untracked), and the prompt says so.
  */
 export function buildCommitMessagePrompt(input: {
   branch: string | null
@@ -115,8 +117,10 @@ export function buildCommitMessagePrompt(input: {
   patch: string
   patchOmitted: boolean
   customText?: string
+  scope?: 'staged' | 'all'
 }): string {
-  const patch = !input.patchOmitted && input.patch.trim() ? truncateDiffForPrompt(input.patch) : DIFF_OMITTED
+  const all = input.scope === 'all'
+  const patch = !input.patchOmitted && input.patch.trim() ? truncateDiffForPrompt(input.patch) : all ? DIFF_OMITTED_ALL : DIFF_OMITTED
   const base = [
     'You are generating a single git commit message.',
     'Return only the commit message text. Do not include a preamble, quotes, or code fences.',
@@ -125,15 +129,15 @@ export function buildCommitMessagePrompt(input: {
     '- First line: imperative mood, <= 72 chars, no trailing period.',
     '- Optional body: blank line, then short wrapped bullet points or prose explaining WHY.',
     '- Capture the primary user-visible or developer-visible change.',
-    '- Use only the staged changes below as context.',
+    all ? '- Use only the uncommitted changes below (staged, unstaged and untracked) as context.' : '- Use only the staged changes below as context.',
     '- Do not include "Co-authored-by" or other git trailers.',
     '',
     `Branch: ${input.branch ?? '(detached)'}`,
     '',
-    'Staged files:',
+    all ? 'Uncommitted files (staged, unstaged and untracked):' : 'Staged files:',
     limitSection(input.stagedFiles, FILE_SUMMARY_LIMIT),
     '',
-    'Staged patch:',
+    all ? 'Uncommitted patch:' : 'Staged patch:',
     '```diff',
     patch,
     '```'

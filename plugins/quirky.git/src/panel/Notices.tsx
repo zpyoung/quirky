@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react'
 export type NoticeAction = { label: string; run(): void; expiresMs?: number }
 
 /**
- * A message pinned to the bottom of the panel. Showing a notice whose `id` is already shown
- * replaces it; `worktree` is the one it is about.
+ * A toast for a failed row action, with a Retry button that expires. Showing a notice whose `id`
+ * is already shown replaces it; `worktree` is the one it is about.
  */
 export type Notice = {
   id: string
@@ -17,6 +17,9 @@ export type Notice = {
 }
 
 type Shown = Notice & { seq: number }
+
+/** A notice leaves on its own once its Retry has had time to expire. */
+const NOTICE_MS = 12_000
 
 function NoticeCard({ notice, away, onDismiss }: { notice: Shown; away: boolean; onDismiss(): void }) {
   const [expired, setExpired] = useState<ReadonlySet<string>>(new Set())
@@ -35,14 +38,14 @@ function NoticeCard({ notice, away, onDismiss }: { notice: Shown; away: boolean;
       title={away ? `${notice.title} in ${notice.worktree}` : notice.title}
       description={notice.body}
       status={status}
-      durationMs={0}
+      durationMs={NOTICE_MS}
       action={!away && action !== undefined ? { label: action.label, onAction: action.run } : undefined}
       onDismiss={onDismiss}
     />
   )
 }
 
-/** The notices of the panel, newest last. A notice for a worktree other than `current` loses its buttons. */
+/** The notices on show, newest last. A notice for a worktree other than `current` loses its buttons. */
 export function Notices({ notices, current, onDismiss }: { notices: Shown[]; current: string | null; onDismiss(id: string): void }) {
   if (notices.length === 0) return null
   return (

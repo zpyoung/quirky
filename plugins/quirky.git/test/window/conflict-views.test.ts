@@ -22,6 +22,11 @@ async function mergeConflict(w: World, files: string[]): Promise<void> {
   await w.win.waitFor(() => cardWithAction('Review conflicts'))
 }
 
+const resolvedLocally = () =>
+  qa('[role="option"][data-row-path]')
+    .filter((row) => q('[aria-label^="Resolved locally conflict"]', row) !== null)
+    .map((row) => row.getAttribute('data-row-path'))
+
 const reviewRows = () => qa('[data-git-view-root] nav[aria-label="Files"] [data-path]').map((r) => text(r))
 
 test('SC-45: the conflict review lists the snapshot, then Refresh marks a staged file Resolved and a removed one Gone', async () => {
@@ -54,7 +59,8 @@ test('SC-41: a conflict staged in a terminal without being opened in Quirky is n
   writeFileSync(join(w.dir, 'b.ts'), 'merged b\n')
   w.git('add', 'a.ts', 'b.ts')
   await w.win.waitFor(() => cardWithAction('Continue merge'))
-  expect(qa('[data-section="conflicts"] [data-row-name]').map(text)).toEqual(['a.ts'])
+  await w.win.waitFor(() => rowOf('b.ts') && resolvedLocally().length > 0)
+  expect(resolvedLocally()).toEqual(['a.ts'])
   expect(w.problems()).toEqual([])
 }, SLOW)
 
@@ -108,5 +114,6 @@ test('SC-46: a cherry-pick with nothing left to resolve shows its banner with Co
   await click(buttonText('Continue cherry-pick', banner))
   await w.win.waitFor(async () => (await w.report())?.operation === 'none')
   expect(w.git('log', '-1', '--format=%s')).toBe('pick me')
-  expect(q('textarea[aria-label="Commit message"]')).not.toBeNull()
+  await w.win.waitFor(() => cardWithAction('Continue cherry-pick') === undefined)
+  expect(q('textarea[aria-label="Commit message"]')).toBeNull()
 }, SLOW)

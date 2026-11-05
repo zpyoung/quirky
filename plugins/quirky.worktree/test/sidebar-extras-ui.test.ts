@@ -503,7 +503,7 @@ function setup(
             view: {
               id: params.target === 'changes' ? 'view:quirky.git/diff' : 'view:quirky.session/worktree',
               input: params.target === 'changes'
-                ? { worktree: params.worktree, mode: 'combined', area: 'all' }
+                ? { worktree: params.worktree, mode: 'review' }
                 : { worktree: params.worktree }
             }
           }

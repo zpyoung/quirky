@@ -73,7 +73,7 @@ function fakeDaemonGit(git: FakeGit): void {
       original: 'old',
       modified: 'new',
       binary: false,
-      source: request.source,
+      source: request.source === 'worktree' ? 'unstaged' : request.source,
       kind: 'text'
     }
   }

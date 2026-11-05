@@ -1,6 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import type { GitStatusEntry } from '@quirky/protocol'
 import { registerDom } from './register-dom'
 
 registerDom()
@@ -8,7 +7,7 @@ const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
 
 const { dragScrollStep } = await import('../../src/notes/drag-scroll')
-const { act, byLabel, click, failure, fakeContext, layoutFor, modifiedEditor, mountView, numbered, settle, status, stubIntersectionObserver, textDiff, wait } = s
+const { act, click, failure, fakeContext, layoutFor, modifiedEditor, mountView, numbered, reviewFile, reviewModel, settle, stubIntersectionObserver, textDiff, wait } = s
 
 type TestNote = { id: string; worktreeId: string; path: string; startLine: number; line: number; body: string; createdAt: number; updatedAt: number | null }
 const note = (id: string, path: string, startLine: number, line = startLine, body = `Note ${id}`): TestNote => ({
@@ -23,7 +22,7 @@ const note = (id: string, path: string, startLine: number, line = startLine, bod
 })
 
 const TARGETS = { sessions: [], agents: [{ id: 'claude', label: 'Claude' }] }
-const input = { worktree: 'w1', mode: 'file', source: 'unstaged', path: 'math.ts' }
+const input = { worktree: 'w1', mode: 'review' }
 /** Forty lines with changes at 20 and 30, so lines 1-19 carry no deleted chunk. */
 const forty = textDiff({ original: numbered(40), modified: numbered(40).replace('line 20\n', 'twenty\n').replace('line 30\n', 'thirty\n') })
 
@@ -86,9 +85,15 @@ function serve(initial: TestNote[]) {
   return state
 }
 
-const open = async (notes: TestNote[] = [], diff = forty, viewInput: object = input) => {
+/** Mounts the Review tab on `files` (math.ts alone by default); every card shows `diff`. */
+const open = async (notes: TestNote[] = [], diff = forty, viewInput: object = input, files = [reviewFile('math.ts')]) => {
   server = serve(notes)
-  fake.handlers['quirky.git/diff'] = () => diff
+  fake.handlers['quirky.git/review'] = () => reviewModel(files)
+  fake.handlers['quirky.git/diff'] = (params) => ({ ...diff, path: params.path as string, source: params.source as typeof diff.source })
+  fake.handlers['quirky.git/commitFiles'] = (params) => ({
+    commit: String(params.commit),
+    entries: [{ path: 'util.ts', status: 'modified', added: 1, removed: 1, binary: false }]
+  })
   mounted = mountView(fake, viewInput)
   await settle()
   return mounted
@@ -137,7 +142,7 @@ async function hover(view: View, n: number): Promise<void> {
   await dispatch(lineEl(view, n), new MouseEvent('mousemove', { bubbles: true }))
 }
 
-const plusButton = (root: ParentNode) => q<HTMLButtonElement>(root, 'button[aria-label="Add note for the AI"]')
+const plusButton = (root: ParentNode) => q<HTMLButtonElement>(root, 'button[data-note-add]')
 
 /** Hovers line `n` and clicks its "+". */
 async function addAt(view: View, n: number): Promise<void> {
@@ -147,7 +152,6 @@ async function addAt(view: View, n: number): Promise<void> {
 
 const draftOf = (root: ParentNode) => q(root, '[data-note-card="draft"]')
 const cardsOf = (root: ParentNode) => qa(root, '[data-note-card="saved"]')
-const notePillOf = (root: ParentNode) => q<HTMLButtonElement>(root, 'button[aria-label^="Show "], button[aria-label="Send AI notes to an agent"]')
 const textareaOf = (card: ParentNode) => q<HTMLTextAreaElement>(card, 'textarea')!
 const buttonIn = (card: ParentNode, label: string) => qa<HTMLButtonElement>(card, 'button').find((b) => text(b) === label || b.getAttribute('aria-label') === label) ?? null
 
@@ -190,6 +194,7 @@ describe('NA-1: the "+" beside a line adds a one-line note', () => {
     await hover(view, 30)
     const plus = plusButton(element)!
     expect(plus.title).toBe('Add note for the AI')
+    expect(plus.getAttribute('aria-label')).toBe('Add note on line 30')
     expect(plus.closest('.ui-editor-action-gutter')).not.toBeNull()
     await click(plus)
 
@@ -481,15 +486,13 @@ describe('NA-6: notes are edited and deleted', () => {
     expect(fake.callsTo('quirky.git/editNote')).toHaveLength(0)
   })
 
-  test('Delete note removes the card and the pill with no confirmation', async () => {
+  test('Delete note removes the card with no confirmation', async () => {
     const { element, card } = await withNote()
-    expect(notePillOf(element)).not.toBeNull()
     await click(buttonIn(card(), 'Delete note'))
     await wait(10)
     expect(fake.callsTo('quirky.git/deleteNote')[0]!.params).toEqual({ worktree: 'w1', id: 'n1' })
     expect(server.confirms).toBe(0)
     expect(cardsOf(element)).toHaveLength(0)
-    expect(notePillOf(element)).toBeNull()
   })
 
   test('the card send menu offers only this note', async () => {
@@ -506,19 +509,11 @@ describe('NA-6: notes are edited and deleted', () => {
 describe('NA-7: a note shows in every diff of its path, never where there is no text', () => {
   const util = [note('u1', 'util.ts', 2, 4, 'Rename x')]
   const lines = (n: number) => numbered(n)
+  const utilDiff = textDiff({ path: 'util.ts', original: lines(30), modified: lines(30).replace('line 20\n', 'twenty\n') })
 
-  test('the staged, branch and commit diffs of the path show the same card under line 4', async () => {
-    for (const source of [
-      { source: 'staged' },
-      { source: 'branch' },
-      { source: 'commit', commit: 'c'.repeat(40) }
-    ]) {
-      const { element, unmount } = await open(util, textDiff({ path: 'util.ts', original: lines(30), modified: lines(30).replace('line 20\n', 'twenty\n'), source: source.source as never }), {
-        worktree: 'w1',
-        mode: 'file',
-        path: 'util.ts',
-        ...source
-      })
+  test('the worktree review and a commit scope show the same card under line 4', async () => {
+    for (const viewInput of [input, { ...input, commit: 'c'.repeat(40) }]) {
+      const { element, unmount } = await open(util, utilDiff, viewInput, [reviewFile('util.ts')])
       const view = modifiedEditor(element)
       const [card] = cardsOf(element)
       expect(text(q(card!, '.ui-tool-panel-frame__title'))).toBe('Note lines 2-4')
@@ -536,19 +531,17 @@ describe('NA-7: a note shows in every diff of its path, never where there is no 
     expect(lineEl(view, view.state.doc.lines).nextElementSibling?.contains(cardsOf(element)[0]!)).toBe(true)
   })
 
-  test('a combined section shows the card and takes new notes like a single diff', async () => {
+  test('only the card of the noted file shows the note, and every card takes new notes', async () => {
     observer = stubIntersectionObserver()
-    server = serve(util)
-    fake.handlers['quirky.git/status'] = () => status([{ path: 'util.ts', area: 'unstaged', status: 'modified', added: 1, removed: 1 } as GitStatusEntry])
-    fake.handlers['quirky.git/diff'] = () => textDiff({ path: 'util.ts', original: lines(30), modified: lines(30).replace('line 20\n', 'twenty\n') })
-    mounted = mountView(fake, { worktree: 'w1', mode: 'combined', area: 'unstaged' })
-    await settle()
-    const view = modifiedEditor(mounted.element)
-    expect(text(q(cardsOf(mounted.element)[0]!, '.ui-tool-panel-frame__title'))).toBe('Note lines 2-4')
+    const { element } = await open(util, utilDiff, input, [reviewFile('math.ts'), reviewFile('util.ts')])
+    const section = (path: string) => element.querySelector<HTMLElement>(`section[data-path="${path}"]`)!
+    expect(cardsOf(section('math.ts'))).toHaveLength(0)
+    expect(text(q(cardsOf(section('util.ts'))[0]!, '.ui-tool-panel-frame__title'))).toBe('Note lines 2-4')
+    const view = modifiedEditor(section('util.ts'))
     await addAt(view, 10)
-    expect(text(q(draftOf(mounted.element)!, '.ui-tool-panel-frame__title'))).toBe('Line 10')
-    await setValue(textareaOf(draftOf(mounted.element)!), 'Also this')
-    await press(textareaOf(draftOf(mounted.element)!), 'Enter')
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Line 10')
+    await setValue(textareaOf(draftOf(element)!), 'Also this')
+    await press(textareaOf(draftOf(element)!), 'Enter')
     expect(addCalls()).toEqual([{ worktree: 'w1', path: 'util.ts', line: 10, body: 'Also this' }])
   })
 
@@ -599,91 +592,6 @@ describe('NA-8: a failed save keeps the draft', () => {
   })
 })
 
-describe('NA-14: the diff header pill and the combined view note controls', () => {
-  const three = [note('m1', 'math.ts', 5), note('m2', 'math.ts', 30), note('u1', 'util.ts', 2, 4)]
-
-  test('the single-file header pill opens the send menu with This file and All unsent notes', async () => {
-    const { element } = await open(three)
-    const pill = notePillOf(element)!
-    expect(pill.getAttribute('aria-label')).toBe('Send AI notes to an agent')
-    expect(pill.closest('header')).not.toBeNull()
-    await click(pill)
-    const menu = q(document.body, '[role="menu"]')!
-    expect(qa(menu, '[role="presentation"]').map(text)).toEqual(['Send notes'])
-  })
-
-  test('no pill without a note on the file', async () => {
-    const { element } = await open([note('u1', 'util.ts', 2, 4)])
-    expect(notePillOf(element)).toBeNull()
-  })
-
-  async function combined(notes: TestNote[]) {
-    observer = stubIntersectionObserver()
-    server = serve(notes)
-    const entry = (path: string): GitStatusEntry => ({ path, area: 'unstaged', status: 'modified', added: 1, removed: 1 })
-    fake.handlers['quirky.git/status'] = () => status([entry('math.ts'), entry('util.ts'), entry('other.ts')])
-    fake.handlers['quirky.git/diff'] = (params) => textDiff({ path: params.path as string, original: numbered(30), modified: numbered(30).replace('line 20\n', 'twenty\n') })
-    mounted = mountView(fake, { worktree: 'w1', mode: 'combined', area: 'unstaged' })
-    await settle()
-    return mounted.element
-  }
-
-  test('the toolbar shows Show 3 AI notes and a Send menu; only sections with notes get a send icon', async () => {
-    const element = await combined(three)
-    const pill = byLabel(element, 'Show 3 AI notes')!
-    expect(pill.closest('header')).not.toBeNull()
-    const sendIcon = (path: string) => q(element.querySelector(`section[data-path="${path}"]`)!, 'header button[aria-label="Send notes to an agent"]')
-    expect(sendIcon('math.ts')).not.toBeNull()
-    expect(sendIcon('util.ts')).not.toBeNull()
-    expect(sendIcon('other.ts')).toBeNull()
-
-    await click(sendIcon('math.ts'))
-    const menu = q(document.body, '[role="menu"]')!
-    expect(qa(menu, '[role="presentation"]').map(text)).toEqual(['Send notes'])
-    await click(document.body)
-    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-
-    const send = q<HTMLButtonElement>(element, 'header button[aria-label="Send notes to an agent"]')!
-    expect(text(send)).toContain('Send')
-  })
-
-  test('no notes: no pill, no Send, no section send icon', async () => {
-    const element = await combined([])
-    expect(notePillOf(element)).toBeNull()
-    expect(q(element, 'button[aria-label="Send notes to an agent"]')).toBeNull()
-    expect(q(element, 'section[data-path] header button[aria-label="Send notes to an agent"]')).toBeNull()
-  })
-
-  test('the pill previews up to 4 notes with Copy and Clear', async () => {
-    const five = [...three, note('m3', 'math.ts', 31), note('m4', 'math.ts', 32)]
-    const element = await combined(five)
-    await click(byLabel(element, 'Show 5 AI notes'))
-    const popover = q(document.body, '[role="dialog"][aria-label="AI notes"]')!
-    expect(qa(popover, 'li[data-note-preview]')).toHaveLength(4)
-    expect(text(popover)).toContain('1 more note in Source Control')
-    expect(qa(popover, 'li[data-note-preview]').map((row) => text(q(row, '[title]')))).toEqual(['math.ts', 'math.ts', 'math.ts', 'math.ts'])
-
-    await click(buttonIn(popover, 'Copy'))
-    expect(fake.callsTo('quirky.git/formatNotes')[0]!.params).toEqual({ worktree: 'w1' })
-    expect(server.clipboard).toEqual(['format {"worktree":"w1"}'])
-
-    await click(buttonIn(popover, 'Clear'))
-    expect(fake.callsTo('quirky.git/describeClearNotes')[0]!.params).toEqual({ worktree: 'w1' })
-    expect(server.confirms).toBe(1)
-    expect(fake.callsTo('quirky.git/clearNotes')[0]!.params).toEqual({ worktree: 'w1', yes: true })
-    await wait(10)
-    expect(notePillOf(element)).toBeNull()
-  })
-
-  test('a refused clipboard write toasts Failed to copy notes', async () => {
-    const element = await combined(three)
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => Promise.reject(new Error('denied')) }, configurable: true })
-    await click(byLabel(element, 'Show 3 AI notes'))
-    await click(buttonIn(q(document.body, '[role="dialog"][aria-label="AI notes"]')!, 'Copy'))
-    expect(fake.toasts[0]![0]).toBe('Failed to copy notes')
-  })
-})
-
 describe('scrolling to a note and the add-review-note command', () => {
   test('opening with a noteId scrolls that note card into view', async () => {
     const scrolled: string[] = []
@@ -692,7 +600,7 @@ describe('scrolling to a note and the add-review-note command', () => {
       scrolled.push((this as HTMLElement).dataset.noteId ?? this.className)
     }
     try {
-      await open([note('n1', 'math.ts', 5), note('n2', 'math.ts', 30)], forty, { ...input, noteId: 'n2' })
+      await open([note('n1', 'math.ts', 5), note('n2', 'math.ts', 30)], forty, { ...input, reveal: 'math.ts', noteId: 'n2' })
       await wait(80)
       expect(scrolled).toContain('n2')
       expect(scrolled).not.toContain('n1')

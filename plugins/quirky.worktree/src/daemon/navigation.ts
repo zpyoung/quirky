@@ -141,7 +141,7 @@ async function openView(env: NavigationEnv, selected: SelectedWindow, worktree: 
   await openWindowView(env, selected.connId, target === 'terminal' ? SESSION_VIEW : DIFF_VIEW,
     target === 'terminal'
       ? { worktree: worktree.id }
-      : { worktree: worktree.id, mode: 'combined', area: 'all' })
+      : { worktree: worktree.id, mode: 'review' })
   if ('sleeping' in worktree && worktree.sleeping) {
     env.store.run('UPDATE worktrees SET sleeping = 0, sleep_changed_at = ? WHERE id = ?', Date.now(), worktree.id)
     env.changed({ repoId: worktree.repoId, worktreeId: worktree.id })

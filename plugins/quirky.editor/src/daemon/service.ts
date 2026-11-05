@@ -1438,7 +1438,7 @@ export class EditorDaemon {
         if (trigger !== 'overwrite' && currentBaseline === null) {
           throw this.context.error('conflict', 'Cannot save because this buffer has no verified disk baseline.')
         }
-        let writeResult: 'written' | 'changed' | 'missing'
+        let writeResult: 'written' | 'created' | 'changed' | 'missing'
         try {
           writeResult = trigger === 'overwrite'
             ? await this.forceWrite(savedPath, content)
@@ -1448,7 +1448,7 @@ export class EditorDaemon {
           if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return { kind: 'permission-denied' }
           throw error
         }
-        if (writeResult !== 'written') {
+        if (writeResult !== 'written' && writeResult !== 'created') {
           return { kind: 'external', external: writeResult === 'missing' ? 'deleted' : 'changed' }
         }
         const hash = hashText(content)
@@ -1482,6 +1482,11 @@ export class EditorDaemon {
         latest.verified = true
         if (trigger === 'user' || trigger === 'overwrite') latest.autosaveHold = false
         this.persist(latest)
+        this.context.emit('saved', {
+          path: savedPath,
+          beforeHash: writeResult === 'written' && trigger !== 'overwrite' ? currentBaseline : null,
+          afterHash: hash
+        })
         this.emit()
         return { kind: 'saved', buffer: next }
       })

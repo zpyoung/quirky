@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import type { CaptureTarget } from './contracts'
-import { captureCells, discoverCaptureTargets, hostingToolFor, openSurfaceTool, selectCaptureTargets, waitForStateShown } from './capture'
+import { captureCells, discoverCaptureTargets, fixtureViewInput, hostingToolFor, openSurfaceTool, selectCaptureTargets, waitForStateShown } from './capture'
 import { goldenFor } from './goldens'
+import { seedRows, type SceneRuntime } from './shell-scenes'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { UiModel, UiSlotEntry, UiToolEntry } from '@quirky/protocol'
 
 const slot = (id: string, plugin: string, title = id): UiSlotEntry => ({
@@ -177,5 +181,45 @@ describe('opening the tool that hosts a target', () => {
     await waitForStateShown(runtime as never, status)
 
     expect(calls.map((call) => call.method)).not.toContain('ui.tool.open')
+  })
+})
+
+describe('review fixtures', () => {
+  test('the git diff view opens in review mode', () => {
+    const fixtures = { primaryWorktree: { id: 'wt-1' }, repo: { id: 'repo-1' } } as Parameters<typeof fixtureViewInput>[0]
+    const input = fixtureViewInput(fixtures, { id: 'view:quirky.git/diff', plugin: 'quirky.git', kind: 'view', title: 'Diff' } as CaptureTarget, null, null)
+    expect(input).toMatchObject({ worktree: 'wt-1', mode: 'review' })
+    expect(input).not.toHaveProperty('path')
+    expect(input).not.toHaveProperty('source')
+  })
+
+  test('seeding marks two changed files reviewed and leaves one of them changed since review', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ui-review-seed-'))
+    try {
+      const marks: Array<Record<string, unknown>> = []
+      const contentAtMark = new Map<string, string>()
+      const runtime = {
+        client: {
+          async callAny(method: string, params: Record<string, unknown> = {}) {
+            if (method === 'quirky.git/setReviewMark') {
+              marks.push(params)
+              contentAtMark.set(String(params.path), readFileSync(join(root, String(params.path)), 'utf8'))
+            }
+            return {}
+          }
+        },
+        options: { timeoutMs: 1000 }
+      } as unknown as SceneRuntime
+      await seedRows(runtime, { id: 'wt-1', path: root, repoId: 'repo-1' })
+      const reviewed = marks.filter((mark) => mark.reviewed === true)
+      expect(reviewed).toHaveLength(2)
+      expect(reviewed.every((mark) => mark.worktree === 'wt-1')).toBe(true)
+      const paths = reviewed.map((mark) => String(mark.path))
+      const changed = paths.filter((path) => readFileSync(join(root, path), 'utf8') !== contentAtMark.get(path))
+      expect(paths.sort()).toEqual(['src/app.ts', 'src/review-note.ts'])
+      expect(changed).toEqual(['src/review-note.ts'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

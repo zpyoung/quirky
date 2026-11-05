@@ -132,6 +132,16 @@ const hoverField = StateField.define<number | null>({
   }
 })
 
+/** Whether the selection has been moved since the editor was built, so a card nobody has touched shows no control. */
+const movedField = StateField.define<boolean>({
+  create: () => false,
+  update: (value, tr) => value || tr.selection !== undefined
+})
+
+/** The line holding the cursor, or null while the selection has never moved. */
+const cursorLine = (state: EditorState): number | null =>
+  state.field(movedField) ? state.doc.lineAt(state.selection.main.head).number : null
+
 class AddMarker extends GutterMarker {
   constructor(readonly line: number) {
     super()
@@ -146,7 +156,7 @@ class AddMarker extends GutterMarker {
     button.type = 'button'
     button.className = 'ui-button ui-button--secondary ui-icon-button'
     button.title = 'Add note for the AI'
-    button.setAttribute('aria-label', 'Add note for the AI')
+    button.setAttribute('aria-label', `Add note on line ${this.line}`)
     button.dataset.line = String(this.line)
     button.dataset.noteAdd = ''
     button.textContent = '+'
@@ -401,7 +411,8 @@ const addNoteKeymap = keymap.of([
 ])
 
 /**
- * Notes for the modified side of a diff: a gutter "+" on the hovered line, a drag across the line
+ * Notes for the modified side of a diff: a gutter "+" on the hovered line and on the cursor line
+ * (named "Add note on line N" so keyboard and screen reader users can reach it), a drag across the line
  * numbers, Mod-Shift-a on the selection, and a block card under each note and draft. Gestures are
  * reported through `onRange`; what to draw arrives through `setNotesModel`, so the notes live
  * outside the editor and survive it being rebuilt.
@@ -411,14 +422,16 @@ export function notesExtension(config: NotesExtensionOptions): Extension {
     options.of(config),
     notesField,
     hoverField,
+    movedField,
     Prec.high(
       gutter({
         class: 'ui-editor-action-gutter',
         lineMarker(view, block) {
-          const hovered = view.state.field(hoverField)
-          return hovered !== null && view.state.doc.lineAt(block.from).number === hovered ? new AddMarker(hovered) : null
+          const line = view.state.doc.lineAt(block.from).number
+          return line === view.state.field(hoverField) || line === cursorLine(view.state) ? new AddMarker(line) : null
         },
-        lineMarkerChange: (update) => update.startState.field(hoverField) !== update.state.field(hoverField),
+        lineMarkerChange: (update) =>
+          update.startState.field(hoverField) !== update.state.field(hoverField) || update.selectionSet || update.docChanged,
         initialSpacer: () => new SpacerMarker()
       })
     ),

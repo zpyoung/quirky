@@ -15,6 +15,7 @@ import { describeDiscard, discard, stage, unstage } from './staging'
 import { noteTargets, sendNotes } from './targets'
 import { mergePreview } from './merge-preview'
 import { diffCloseGuard } from './hosted'
+import { review, reviewedContent, setReviewMark } from './review'
 
 /**
  * Every method `quirky.git` provides, by manifest name. A handler that throws has its git,
@@ -51,6 +52,9 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     sync: sync(env),
     rebaseFromBase: rebaseFromBase(env),
     compare: compare(env),
+    review: review(env),
+    setReviewMark: setReviewMark(env),
+    reviewedContent: reviewedContent(env),
     mergePreview: mergePreview(env),
     setBase: setBase(env),
     branches: branches(env),

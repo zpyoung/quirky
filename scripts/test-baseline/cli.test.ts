@@ -204,7 +204,6 @@ describe('argument handling', () => {
     ['run-shard with neither --shard nor --macos', ['run-shard', '--plan', 'p', '--out', 'o']],
     ['run-shard with both --shard and --macos', ['run-shard', '--plan', 'p', '--shard', '0', '--macos', '--out', 'o']],
     ['run-shard with a bad index', ['run-shard', '--plan', 'p', '--shard', 'one', '--out', 'o']],
-    ['rerun without --in', ['rerun', '--plan', 'p', '--out', 'o']],
     ['verdict with a bad --jobs-ok', ['verdict', '--plan', 'p', '--in', 'i', '--out', 'o', '--jobs-ok', 'maybe']],
     ['verdict without --jobs-ok', ['verdict', '--plan', 'p', '--in', 'i', '--out', 'o']],
     ['issues without --baseline', ['issues', '--plan', 'p', '--only', 'open']],
@@ -265,6 +264,49 @@ describe('plan', () => {
     expect(readJson<Baseline>(join(outDir, 'baseline.json')).commit).toBe(base)
     expect(calls.length).toBeGreaterThan(0)
     expect(out.join('')).toContain('plugins/x/src/a.ts')
+  })
+
+  test('weights files by their median duration over recent main baselines', async () => {
+    const { dir, base } = makeRepo()
+    const middle = commitAll(dir, 'middle')
+    const newest = commitAll(dir, 'newest')
+    const head = commitAll(dir, 'head')
+    const timed = (a: number) => ({
+      'plugins/x/test/a.test.ts': { platform: 'linux' as const, durationMs: a, fileError: null, flaky: false },
+      'plugins/y/test/b.test.ts': { platform: 'linux' as const, durationMs: 500, fileError: null, flaky: false },
+    })
+    seedBaseline(dir, baselineOf(base, {}, timed(100)))
+    seedBaseline(dir, baselineOf(middle, {}, timed(100)))
+    seedBaseline(dir, baselineOf(newest, {}, timed(900)))
+    const { ctx, out } = harness(dir, { gh: artifactsGh([base, middle, newest]), env: { GITHUB_REPOSITORY: 'acme/quirky', GITHUB_SHA: head } })
+    const outDir = join(dirOf('out'), 'plan')
+
+    expect(await runCli(['plan', '--event', 'push', '--out', outDir], ctx)).toBe(0)
+
+    const plan = readJson<Plan>(join(outDir, 'plan.json'))
+    expect(plan.baseline?.commit).toBe(newest)
+    // a shard lists its files longest first, so b (500) ahead of a means a weighed its median 100, not the newest 900
+    const order = plan.linuxShards.flat()
+    expect(order.indexOf('plugins/y/test/b.test.ts')).toBeLessThan(order.indexOf('plugins/x/test/a.test.ts'))
+    expect(out.join('')).toContain('median of 3 main runs')
+  })
+
+  test('an older baseline that cannot be read only drops out of the durations', async () => {
+    const { dir, base } = makeRepo()
+    const newest = commitAll(dir, 'newest')
+    const head = commitAll(dir, 'head')
+    seedBaseline(dir, baselineOf(newest))
+    const download = async () => {
+      throw new Error('artifact expired')
+    }
+    const { ctx, out, err } = harness(dir, { gh: artifactsGh([base, newest]), download, env: { GITHUB_REPOSITORY: 'acme/quirky', GITHUB_SHA: head } })
+    const outDir = join(dirOf('out'), 'plan')
+
+    expect(await runCli(['plan', '--event', 'push', '--out', outDir], ctx)).toBe(0)
+
+    expect(readJson<Plan>(join(outDir, 'plan.json')).baseline?.commit).toBe(newest)
+    expect(err.join('')).toContain(`skipping the durations from ${base}`)
+    expect(out.join('')).toContain('median of 1 main runs')
   })
 
   test('push on a repo with no baseline artifact has no baseline and no range selection', async () => {
@@ -418,7 +460,7 @@ describe('plan', () => {
 })
 
 describe('run-shard', () => {
-  test('runs the shard and exits 0 even when a test fails', async () => {
+  test('runs the shard, reruns its own failures and exits 0 even when a test keeps failing', async () => {
     const cwd = dirOf('cwd')
     const planDir = dirOf('plan')
     writePlan(planDir, planOf({ linuxShards: [['a.test.ts'], ['b.test.ts', 'c.test.ts']] }))
@@ -431,8 +473,46 @@ describe('run-shard', () => {
     expect(results.map((r) => r.file)).toEqual(['b.test.ts', 'c.test.ts'])
     expect(results.map((r) => r.platform)).toEqual(['linux', 'linux'])
     expect(results[0].first.tests[0].status).toBe('failed')
-    expect(results[0].rerun).toBeUndefined()
-    expect(calls.files.sort()).toEqual(['b.test.ts', 'c.test.ts'])
+    expect(results[0].rerun?.tests[0].status).toBe('failed')
+    expect(results[1].rerun).toBeUndefined()
+    expect(calls.files.sort()).toEqual(['b.test.ts', 'b.test.ts', 'c.test.ts'])
+  })
+
+  test('a linux shard reruns each failed file alone, after the shard finishes', async () => {
+    const planDir = dirOf('plan')
+    writePlan(planDir, planOf({ linuxShards: [['a.test.ts', 'b.test.ts', 'c.test.ts', 'd.test.ts']] }))
+    const calls: Calls = { files: [], active: 0, maxActive: 0 }
+    const run = fakeRun({
+      'a.test.ts': [{ t: 'fail' }, { t: 'pass' }],
+      'b.test.ts': [{ t: 'pass' }],
+      'c.test.ts': [{ t: 'fail' }, { t: 'pass' }],
+      'd.test.ts': [{ t: 'pass' }],
+    }, calls)
+    const out = join(dirOf('out'), 'linux-0.json')
+    const { ctx } = harness(dirOf('cwd'), { run })
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', out], ctx)).toBe(0)
+    const results = readJson<FileResult[]>(out)
+    expect(results.map((r) => [r.file, r.rerun?.tests[0].status])).toEqual([
+      ['a.test.ts', 'passed'],
+      ['b.test.ts', undefined],
+      ['c.test.ts', 'passed'],
+      ['d.test.ts', undefined],
+    ])
+    expect(calls.files.slice(4)).toEqual(['a.test.ts', 'c.test.ts'])
+  })
+
+  test('a shard with more failed files than the limit reruns none of them', async () => {
+    const files = Array.from({ length: 6 }, (_, i) => `f${i}.test.ts`)
+    const planDir = dirOf('plan')
+    writePlan(planDir, planOf({ linuxShards: [files] }))
+    const calls: Calls = { files: [], active: 0, maxActive: 0 }
+    const run = fakeRun(Object.fromEntries(files.map((file) => [file, [{ t: 'fail' as const }]])), calls)
+    const out = join(dirOf('out'), 'linux-0.json')
+    const { ctx, err } = harness(dirOf('cwd'), { run })
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', out], ctx)).toBe(0)
+    expect(readJson<FileResult[]>(out).every((r) => r.rerun === undefined)).toBe(true)
+    expect(calls.files).toHaveLength(6)
+    expect(err.join('')).toContain('none were rerun')
   })
 
   test('--macos runs the macOS list and reruns its own failures', async () => {
@@ -465,61 +545,6 @@ describe('run-shard', () => {
     const { ctx, err } = harness(dirOf('cwd'), { run: fakeRun({}) })
     expect(await runCli(['run-shard', '--plan', dirOf('empty'), '--shard', '0', '--out', join(root, 'o.json')], ctx)).toBe(1)
     expect(err.join('')).toContain('plan.json')
-  })
-})
-
-describe('rerun', () => {
-  const stageResults = (results: Record<string, FileResult[]>) => {
-    const dir = dirOf('in')
-    for (const [name, list] of Object.entries(results)) writeFileSync(join(dir, name), JSON.stringify(list))
-    return dir
-  }
-
-  test('reruns only failed linux files and writes only the files it reran', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const inDir = stageResults({
-      'linux-0.json': [fileResult('a.test.ts', attempt({ ok: 'pass' }, 'a.test.ts')), fileResult('b.test.ts', attempt({ t: 'fail' }, 'b.test.ts'))],
-      'linux-1.json': [fileResult('c.test.ts', attempt({ t: 'pass' }, 'c.test.ts'))],
-    })
-    const calls: Calls = { files: [], active: 0, maxActive: 0 }
-    const out = join(dirOf('out'), 'rerun.json')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({ 'b.test.ts': [{ t: 'pass' }] }, calls) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', out], ctx)).toBe(0)
-    const written = readJson<FileResult[]>(out)
-    expect(written.map((r) => r.file)).toEqual(['b.test.ts'])
-    expect(written[0].rerun?.tests[0].status).toBe('passed')
-    expect(calls.files).toEqual(['b.test.ts'])
-  })
-
-  test('writes an empty list and exits 0 when nothing failed', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const inDir = stageResults({ 'linux-0.json': [fileResult('a.test.ts', attempt({ ok: 'pass' }, 'a.test.ts'))] })
-    const out = join(dirOf('out'), 'rerun.json')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({}) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', out], ctx)).toBe(0)
-    expect(readJson<FileResult[]>(out)).toEqual([])
-  })
-
-  test('reruns nothing when more files failed than the limit', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const failing = Array.from({ length: 6 }, (_, i) => fileResult(`f${i}.test.ts`, attempt({ t: 'fail' }, `f${i}.test.ts`)))
-    const inDir = stageResults({ 'linux-0.json': failing })
-    const out = join(dirOf('out'), 'rerun.json')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({}) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', out], ctx)).toBe(0)
-    expect(readJson<FileResult[]>(out)).toEqual([])
-  })
-
-  test('an unreadable results file fails the job', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const inDir = dirOf('in')
-    writeFileSync(join(inDir, 'linux-0.json'), '{ nope')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({}) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', join(root, 'r.json')], ctx)).toBe(1)
   })
 })
 
@@ -574,10 +599,9 @@ describe('verdict', () => {
     expect(verdict?.baseline?.commit).toBe(baseline.commit)
   })
 
-  test('overlays rerun.json by file so a rerun that passes makes the failure flaky', async () => {
+  test('a linux shard\'s own rerun that passes makes the failure flaky', async () => {
     const staged = stage(planOf(), {
-      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }))],
-      'rerun.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }), attempt({ bad: 'pass' }))],
+      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }), attempt({ bad: 'pass' }))],
     })
     const { code, verdict } = await verdictOf(staged)
     expect(code).toBe(0)
@@ -585,10 +609,9 @@ describe('verdict', () => {
     expect(verdict?.new).toEqual([])
   })
 
-  test('takes only the rerun attempt from rerun.json', async () => {
+  test('a linux shard\'s own rerun that fails again is a new failure', async () => {
     const staged = stage(planOf(), {
-      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }))],
-      'rerun.json': [fileResult('a.test.ts', attempt({ other: 'pass' }), attempt({ bad: 'fail' }))],
+      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }), attempt({ bad: 'fail' }))],
     })
     const { code, verdict } = await verdictOf(staged)
     expect(code).toBe(1)
@@ -602,16 +625,6 @@ describe('verdict', () => {
     const { code, verdict } = await verdictOf(staged)
     expect(code).toBe(0)
     expect(verdict?.incomplete).toEqual([])
-  })
-
-  test('a rerun for a file with no first result marks the run broken', async () => {
-    const staged = stage(planOf(), {
-      'linux-0.json': [passing],
-      'rerun.json': [fileResult('ghost.test.ts', attempt({ t: 'fail' }, 'ghost.test.ts'), attempt({ t: 'pass' }, 'ghost.test.ts'))],
-    })
-    const { code, verdict } = await verdictOf(staged)
-    expect(code).toBe(1)
-    expect(verdict?.runBroken).toBe(true)
   })
 
   test('--jobs-ok false sets runBroken and exits 1 even on push', async () => {
@@ -652,16 +665,6 @@ describe('verdict', () => {
     expect(code).toBe(1)
     expect(verdict?.runBroken).toBe(true)
     expect(verdict?.ok).toBe(false)
-  })
-
-  test('a rerun.json entry with a malformed rerun attempt sets runBroken', async () => {
-    const staged = stage(planOf(), {
-      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }))],
-      'rerun.json': [{ ...fileResult('a.test.ts', attempt({ bad: 'fail' })), rerun: { exitCode: 0, fileError: null, tests: [{ key: key('a.test.ts', 'bad'), status: 'maybe' }] } }],
-    })
-    const { code, verdict } = await verdictOf(staged)
-    expect(code).toBe(1)
-    expect(verdict?.runBroken).toBe(true)
   })
 
   test('every fileError the runner can produce is accepted', async () => {
