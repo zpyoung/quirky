@@ -235,6 +235,29 @@ describe('score.ts CLI', () => {
     expect((json as unknown as GateReport).rows[0]!.result).toBe('removed')
   })
 
+  test.each([
+    ['a missing theme key', { id: 'x', plugin: 'quirky.git', dark: 90 }, 'light'],
+    ['a non-numeric score', { id: 'x', plugin: 'quirky.git', dark: '90', light: 90 }, 'dark'],
+    ['a missing plugin', { id: 'x', dark: 90, light: 90 }, 'plugin']
+  ])('gate rejects a Scores file with %s', async (_label, surface, field) => {
+    const dir = await mkdtemp(join(tmpdir(), 'redesign-score-'))
+    await writeFile(join(dir, 'b.json'), JSON.stringify(scores([['x', 90, 90]])))
+    await writeFile(join(dir, 'a.json'), JSON.stringify({ surfaces: [surface] }))
+    const { exitCode, json } = await cli('gate', '--before', join(dir, 'b.json'), '--after', join(dir, 'a.json'))
+    expect(exitCode).toBe(2)
+    expect(json.error).toContain(join(dir, 'a.json'))
+    expect(json.error).toContain('surface x')
+    expect(json.error).toContain(field)
+  })
+
+  test('gate accepts explicit null theme scores', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'redesign-score-'))
+    await writeFile(join(dir, 'b.json'), JSON.stringify(scores([['x', 90, 90]])))
+    await writeFile(join(dir, 'a.json'), JSON.stringify(scores([['x', null, 90]])))
+    const { exitCode } = await cli('gate', '--before', join(dir, 'b.json'), '--after', join(dir, 'a.json'))
+    expect(exitCode).toBe(1)
+  })
+
   test('gate with an unreadable file exits 2', async () => {
     const { exitCode, json } = await cli('gate', '--before', '/nonexistent/b.json', '--after', '/nonexistent/a.json')
     expect(exitCode).toBe(2)
