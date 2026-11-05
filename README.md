@@ -242,12 +242,11 @@ does not load local images.
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
-A PR's checks run the tests its change affects. Add the `full-suite` label to run every test on
-GitHub, on that push and later ones. `bun run test` runs the whole suite through the configured test
-host instead, which agents don't use ([AGENTS.md](AGENTS.md)). Use `bun scripts/suite.ts <dirs>` for
-affected packages and `bun test <file>` for a single file. Run `bun run test:affected` before you
-push to check only the tests your change affects against the baseline from main. It also goes
-through the test host, and it runs nothing when the change selects every test. It's advisory, and
+A PR's checks run the tests its change affects on GitHub Actions. Add the `full-suite` label to run
+every test, on that push and later ones. Agents push to a draft PR for results and don't run suites
+on this Mac ([AGENTS.md](AGENTS.md)). Use `bun test <file>` for a single file. Run
+`bun run test:affected` before you push to list the tests the push would run against the baseline
+from main. It runs nothing, and it says so when the change selects every test. It's advisory, and
 the PR check decides whether a change can merge. Test workers drain their result output before
 exiting so large runs survive slow pipes.
 
