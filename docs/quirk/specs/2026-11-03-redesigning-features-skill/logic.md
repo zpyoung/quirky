@@ -93,7 +93,7 @@ The set-up phase turns the feature name into a list of plugins and surfaces, whi
 4. **SC-4 The spec folder already has files**
    - **Given** `docs/quirk/specs/<date>-<feature>-redesign/` already holds files from an earlier session (for example `current-state.md` but no `logic.md`)
    - **When** a new session runs the skill for the same feature
-   - **Then** it starts a new run that reuses the files already there [ASK: should it show one screen offering to continue from the first missing file or start the folder over, or always continue from the first missing file without asking?]
+   - **Then** it shows one companion screen listing the files already there and offering two choices: continue from the first missing file, which reuses everything before it, or start over, which clears the folder and begins at the before pass
 
 ### The before pass
 
@@ -259,6 +259,7 @@ Not in scope:
 - One run redesigns one feature, named however you'd call it.
 - A run works in its own worktree, `<feature>-redesign`.
 - A run ends at a draft PR with the full-suite label; you merge.
+- When the spec folder already has files, one screen offers to continue from the first missing file or start over (SC-4).
 
 ### Capturing the before
 
@@ -343,4 +344,4 @@ Research ran on 2026-11-02 and 2026-11-03. Brave Search was unavailable on the p
 
 ## Status & amendments
 
-Status: Draft
+Status: Approved 2026-11-05
