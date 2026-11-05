@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FixtureInfo } from './contracts.ts'
-import { parseFixtureArgs, seedEnvironment, UsageError } from './fixture.ts'
+import { fixtureOwnership, parseFixtureArgs, seedEnvironment, UsageError } from './fixture.ts'
 
 const FIXTURE_SCRIPT = join(import.meta.dir, 'fixture.ts')
 
@@ -94,6 +94,44 @@ describe('seedEnvironment', () => {
     expect(env.GIT_COMMITTER_NAME).toBe('Redesign Fixture')
     expect(env.GIT_COMMITTER_EMAIL).toBe('redesign-fixture@localhost')
   })
+})
+
+describe('fixtureOwnership', () => {
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const ps = (startMs: number, command: string) => {
+    const d = new Date(startMs)
+    const lstart = `${DAYS[d.getDay()]} ${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${d.getFullYear()}`
+    return `${lstart} ${command}\n`
+  }
+  const mtime = new Date(2026, 10, 5, 10, 30, 0).getTime()
+  const start = '/usr/local/bin/bun /repo/scripts/redesign/fixture.ts start /tmp/fix --theme dark'
+
+  test('a fixture start that began before fixture.json was written is owned', () => {
+    expect(fixtureOwnership(ps(mtime - 60_000, start), mtime)).toBe('owned')
+  })
+
+  test('the same command started after fixture.json was written is a reused pid', () => {
+    expect(fixtureOwnership(ps(mtime + 5_000, start), mtime)).toBe('stale')
+  })
+
+  test('a sibling fixture whose out dir extends this one is stale when it started later', () => {
+    const sibling = '/usr/local/bin/bun /repo/scripts/redesign/fixture.ts start /tmp/fix-after'
+    expect(fixtureOwnership(ps(mtime + 5_000, sibling), mtime)).toBe('stale')
+  })
+
+  test('a command that is not a fixture start is stale', () => {
+    expect(fixtureOwnership(ps(mtime - 60_000, 'sleep 30'), mtime)).toBe('stale')
+    expect(fixtureOwnership(ps(mtime - 60_000, '/usr/local/bin/bun /repo/scripts/redesign/fixture.ts stop /tmp/fix'), mtime)).toBe('stale')
+  })
+
+  test.each([['empty output', ''], ['no start time', 'bun scripts/redesign/fixture.ts start /tmp/fix\n'], ['garbled output', 'not ps output at all']])(
+    'unparseable ps output (%s) is unknown',
+    (_name, output) => {
+      expect(fixtureOwnership(output, mtime)).toBe('unknown')
+    }
+  )
 })
 
 const out = mkdtempSync(join(tmpdir(), 'redesign-fixture-'))
