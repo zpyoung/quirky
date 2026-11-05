@@ -32,6 +32,11 @@ export type MergeOptions = {
   collapseUnchanged: boolean
   /** The modified side takes edits, shows Revert Block, and Mod+S calls `onSave`. */
   editable: boolean
+  /**
+   * Offers a Revert button on each change of a read-only side. A press hands `apply` to the owner,
+   * which decides whether to run it (it puts the change back in the editor and reports whether it did).
+   */
+  onRevert?(apply: () => boolean): void
   /** Select the first change on creation; default true. */
   scrollToFirst?: boolean
   onSave?(): void
@@ -55,9 +60,11 @@ export type MergeHandle = {
   /** The 1-based change holding the cursor, or null. */
   currentChange(): number | null
   changeCount(): number
-  /** Puts the change holding the cursor back to the original text, in the editor only. */
+  /** Puts the change holding the cursor back to the original text, in the editor only; with `onRevert` it asks the owner first. */
   revertChange(): boolean
   getModified(): string
+  /** Replaces the whole modified text. */
+  setModified(text: string): void
   focus(): void
   /** Replaces the notes the modified side draws; a no-op unless `options.notes` was given. */
   setNotes(model: NotesModel): void
@@ -131,6 +138,24 @@ function hostExtensions(options: MergeOptions, host: Element, side: 'a' | 'b'): 
   return extensions
 }
 
+/**
+ * The Revert button of a side whose owner decides whether a press goes through: labelled in the
+ * inline view, icon-only in the side-by-side gutter, which is too narrow for text.
+ */
+function ownedRevertButton(layout: 'inline' | 'gutter'): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.setAttribute('aria-label', 'Revert change')
+  if (layout === 'gutter') {
+    button.textContent = '↶'
+    button.title = 'Revert change'
+    button.className = 'git-review__revert-icon'
+  } else {
+    button.textContent = '↶ Revert'
+  }
+  return button
+}
+
 /** The inline view's chunk buttons: Revert Block only, since accepting would edit the comparison side. */
 function revertOnlyControls(type: 'reject' | 'accept', action: (event: MouseEvent) => void): HTMLElement {
   const button = document.createElement('button')
@@ -144,6 +169,33 @@ function revertOnlyControls(type: 'reject' | 'accept', action: (event: MouseEven
   button.setAttribute('aria-label', 'Revert Block')
   button.addEventListener('mousedown', action)
   return button
+}
+
+/** The inline view's chunk buttons for a read-only side: each press goes to `onRevert`, which runs the revert or not. */
+function ownedRevertControls(onRevert: (apply: () => boolean) => void) {
+  return (type: 'reject' | 'accept', action: (event: MouseEvent) => void): HTMLElement => {
+    if (type === 'accept') return revertOnlyControls(type, action)
+    const button = ownedRevertButton('inline')
+    button.name = 'reject'
+    const press = (event: MouseEvent) => {
+      event.preventDefault()
+      onRevert(() => {
+        try {
+          action(event)
+          return true
+        } catch {
+          // the editor was rebuilt while the owner was deciding, so this button's chunk is gone
+          return false
+        }
+      })
+    }
+    button.addEventListener('mousedown', press)
+    // enter and space click with detail 0; a mouse click already ran on mousedown
+    button.addEventListener('click', (event) => {
+      if (event.detail === 0) press(event)
+    })
+    return button
+  }
 }
 
 /** Puts `chunk` of `view` back to the text it has in `original`; the same edit `rejectChunk` makes for the inline view. */
@@ -180,11 +232,39 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
       highlightChanges: true,
       collapseUnchanged: collapse,
       diffConfig,
-      ...(options.editable ? { revertControls: 'a-to-b' as const } : {})
+      ...(options.editable || options.onRevert ? { revertControls: 'a-to-b' as const } : {}),
+      ...(options.onRevert ? { renderRevertControl: () => ownedRevertButton('gutter') } : {})
     })
     editor = view.b
     sideA = view.a
     destroy = () => view.destroy()
+    const { onRevert } = options
+    if (onRevert) {
+      // the library reverts on mousedown itself; capturing first lets the owner veto the press
+      const intercept = (event: MouseEvent) => {
+        const control = event.target instanceof Element ? event.target.closest<HTMLElement>('.cm-merge-revert > *') : null
+        const chunk = control ? chunks()[Number(control.dataset.chunk)] : undefined
+        if (!chunk) return
+        event.stopPropagation()
+        event.preventDefault()
+        onRevert(() => {
+          if (!chunks().includes(chunk)) return false
+          revertChunk(editor, chunk, sideA!.state.doc)
+          return true
+        })
+      }
+      // enter and space click with detail 0, which the library ignores; a mouse click already ran on mousedown
+      const interceptKeyboard = (event: MouseEvent) => {
+        if (event.detail === 0) intercept(event)
+      }
+      view.dom.addEventListener('mousedown', intercept, true)
+      view.dom.addEventListener('click', interceptKeyboard, true)
+      destroy = () => {
+        view.dom.removeEventListener('mousedown', intercept, true)
+        view.dom.removeEventListener('click', interceptKeyboard, true)
+        view.destroy()
+      }
+    }
   } else {
     editor = new EditorView({
       parent,
@@ -196,7 +276,7 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
             original,
             gutter: true,
             highlightChanges: true,
-            mergeControls: options.editable ? revertOnlyControls : false,
+            mergeControls: options.onRevert ? ownedRevertControls(options.onRevert) : options.editable ? revertOnlyControls : false,
             collapseUnchanged: collapse,
             diffConfig
           })
@@ -237,11 +317,17 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
     revertChange() {
       const at = currentChange()
       if (at === null) return false
-      if (!sideA) return rejectChunk(editor, editor.state.selection.main.head)
-      revertChunk(editor, chunks()[at - 1], sideA.state.doc)
+      const apply = (): boolean => {
+        if (!sideA) return rejectChunk(editor, editor.state.selection.main.head)
+        revertChunk(editor, chunks()[at - 1], sideA.state.doc)
+        return true
+      }
+      if (!options.onRevert) return apply()
+      options.onRevert(apply)
       return true
     },
     getModified: () => editor.state.sliceDoc(),
+    setModified: (text) => void editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } }),
     focus: () => editor.focus(),
     setNotes: (model) => {
       if (options.notes) setNotesModel(editor, model)

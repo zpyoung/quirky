@@ -1,64 +1,9 @@
 import type { GitArea, GitStatusEntry } from '@quirky/protocol'
 
-/** The "Source Control Group Order" setting: how Changes, Staged Changes and Untracked Files are ordered. */
-export type GroupOrder = 'changes-first' | 'staged-first' | 'untracked-first'
-
-/** The uncommitted sections; a section id is the `area` of the rows in it. */
+/** The area of a status row, which is also what its action buttons depend on. */
 export type SectionId = GitArea
 
-/** One section of the panel: its heading, and its rows already sorted for display. */
-export type Section = {
-  id: SectionId
-  /** Heading as written; the window uppercases it with CSS. */
-  heading: string
-  count: number
-  entries: GitStatusEntry[]
-}
-
-export const SECTION_HEADINGS: Readonly<Record<SectionId, string>> = {
-  conflicts: 'Conflicts',
-  staged: 'Staged Changes',
-  unstaged: 'Changes',
-  untracked: 'Untracked Files'
-}
-
-const ORDER: Readonly<Record<GroupOrder, readonly SectionId[]>> = {
-  'changes-first': ['conflicts', 'unstaged', 'staged', 'untracked'],
-  'staged-first': ['conflicts', 'staged', 'unstaged', 'untracked'],
-  'untracked-first': ['conflicts', 'untracked', 'unstaged', 'staged']
-}
-
-const collator = new Intl.Collator('en', { numeric: true })
-
-const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
-
-const conflictRank = (e: GitStatusEntry): number =>
-  e.conflict?.state === 'unresolved' ? 0 : e.conflict?.state === 'resolved_locally' ? 1 : 2
-
-/** Orca's row order: unresolved conflicts, resolved locally, then the rest; ties by natural file name, then path. */
-export function compareEntries(a: GitStatusEntry, b: GitStatusEntry): number {
-  return (
-    conflictRank(a) - conflictRank(b) ||
-    collator.compare(baseName(a.path), baseName(b.path)) ||
-    collator.compare(a.path, b.path)
-  )
-}
-
-/**
- * Groups status rows into the sections the panel shows. Conflicts always come first, the rest
- * follow `order`, and empty sections are left out. A path both staged and changed is in two
- * sections. The input is not modified.
- */
-export function groupSections(entries: readonly GitStatusEntry[], order: GroupOrder): Section[] {
-  const sections: Section[] = []
-  for (const id of ORDER[order] ?? ORDER['changes-first']) {
-    const rows = entries.filter((e) => e.area === id).sort(compareEntries)
-    if (rows.length > 0) sections.push({ id, heading: SECTION_HEADINGS[id], count: rows.length, entries: rows })
-  }
-  return sections
-}
-
-/** Which hover button a row's discard action is: "Discard changes", "Restore file" or "Delete untracked file". */
+/** Which discard a row offers: "Discard changes", "Restore file" or "Delete untracked file". */
 export type DiscardKind = 'discard' | 'restore' | 'delete'
 
 export const ROW_ACTION_LABELS = {
@@ -80,7 +25,7 @@ export type ActionContext = {
   unreadableConflicts?: ReadonlySet<string>
 }
 
-/** The hover buttons a row shows; `discard` names which one, or null for none. */
+/** The actions a row offers; `discard` names which kind, or null for none. */
 export type EntryActions = { stage: boolean; unstage: boolean; discard: DiscardKind | null }
 
 const NONE: EntryActions = { stage: false, unstage: false, discard: null }
@@ -113,33 +58,6 @@ export function entryActions(entry: GitStatusEntry, context: ActionContext = {})
 /** Whether Stage is offered for the row. */
 export const isStageable = (entry: GitStatusEntry, context: ActionContext = {}): boolean =>
   entryActions(entry, context).stage
-
-/** The section header buttons of SC-14; every field is hidden (false/null) while the filter is active. */
-export type SectionButtons = {
-  discardAll: { label: 'Discard all' | 'Delete all untracked' } | null
-  stageAll: boolean
-  unstageAll: boolean
-  /** Opens the combined diff of the section, or the conflict review for conflicts. */
-  viewAll: boolean
-}
-
-export type SectionButtonOptions = ActionContext & {
-  /** The status stopped at its entry limit: Stage all is withheld for untracked files. */
-  capped?: boolean
-  filtering?: boolean
-}
-
-export function sectionButtons(section: Section, options: SectionButtonOptions = {}): SectionButtons {
-  if (options.filtering) return { discardAll: null, stageAll: false, unstageAll: false, viewAll: false }
-  const rows = section.entries
-  const discardable = rows.some((e) => discardAllEligible(e))
-  return {
-    discardAll: discardable ? { label: section.id === 'untracked' ? 'Delete all untracked' : 'Discard all' } : null,
-    stageAll: !(section.id === 'untracked' && options.capped) && rows.some((e) => isStageable(e, options)),
-    unstageAll: rows.some((e) => entryActions(e).unstage),
-    viewAll: true
-  }
-}
 
 const discardAllEligible = (e: GitStatusEntry): boolean =>
   !e.submodule && e.area !== 'conflicts'

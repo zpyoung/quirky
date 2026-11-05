@@ -758,6 +758,7 @@
     ],
     "event": [
       { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false } },
+      { "id": "saved", "description": "A save wrote a file. beforeHash is the previous content hash, or null when the file did not exist or was overwritten without a baseline; afterHash is the sha-256 hex of the bytes written.", "data": { "type": "object", "properties": { "path": { "type": "string" }, "beforeHash": { "description": "String or null; the schema subset has no union type." }, "afterHash": { "type": "string" } }, "required": ["path", "beforeHash", "afterHash"], "additionalProperties": false } },
       { "id": "explorerChanged", "description": "Filesystem tree changed for a worktree; clients should reload its root, expanded directories and active filename filter.", "data": { "type": "object", "properties": { "worktreeId": { "type": "string" } }, "required": ["worktreeId"], "additionalProperties": false } }
     ],
     "view": [

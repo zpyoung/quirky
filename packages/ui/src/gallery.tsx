@@ -13,11 +13,15 @@ import {
   ExpandingIconButton,
   IconButton,
   InlineAgentCard,
+  InlineError,
   ListRow,
   Menu,
   PopupMenu,
   ProjectTile,
+  ReviewMark,
+  ScopeChip,
   SectionHeader,
+  SplitButton,
   StatusDot,
   Tabs,
   TextField,
@@ -50,6 +54,10 @@ type CategoryName =
   | 'FileIcon'
   | 'ProjectTile'
   | 'PopupMenu'
+  | 'ReviewMark'
+  | 'SplitButton'
+  | 'InlineError'
+  | 'ScopeChip'
 
 type CategoryProps = { name: CategoryName; theme: Theme; children: ReactNode }
 
@@ -459,6 +467,64 @@ function PopupMenuDemo({ theme }: { theme: Theme }) {
   )
 }
 
+function ReviewMarkDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="ReviewMark" theme={theme}>
+      <div className="ui-cluster">
+        <ReviewMark state="none" />
+        <ReviewMark state="reviewed" />
+        <ReviewMark state="changed" />
+      </div>
+    </Category>
+  )
+}
+
+const splitButtonItems = [
+  { id: 'commit-all', label: 'Commit all 3 files' },
+  { id: 'create-pr', label: 'Create PR', enabled: false, detail: 'no GitHub remote' }
+]
+
+function SplitButtonDemo({ theme }: { theme: Theme }) {
+  const [chosen, setChosen] = useState('none')
+  return (
+    <Category name="SplitButton" theme={theme}>
+      <div className="ui-cluster">
+        <SplitButton label="Commit 2 staged files" onClick={() => setChosen('primary')} menuLabel="More ship steps" items={splitButtonItems} onChoose={setChosen} />
+        <SplitButton label="Committing" busy onClick={() => setChosen('primary')} menuLabel="More busy steps" items={splitButtonItems} onChoose={setChosen} />
+        <SplitButton label="Nothing to ship" disabled title="No changes" onClick={() => setChosen('primary')} menuLabel="More idle steps" items={splitButtonItems} onChoose={setChosen} />
+      </div>
+      <Status name="split-button">Chosen step: {chosen}</Status>
+    </Category>
+  )
+}
+
+function InlineErrorDemo({ theme }: { theme: Theme }) {
+  const [message, setMessage] = useState('Push failed: remote rejected the update')
+  const [dismissed, setDismissed] = useState(false)
+  return (
+    <Category name="InlineError" theme={theme}>
+      {dismissed ? null : (
+        <InlineError message={message} action={{ label: 'Retry', onAction: () => setMessage('Retrying push') }} onDismiss={() => setDismissed(true)} />
+      )}
+      <InlineError message="Could not read the branch" onDismiss={() => undefined} />
+      <Status name="inline-error">Error: {dismissed ? 'dismissed' : message}</Status>
+    </Category>
+  )
+}
+
+function ScopeChipDemo({ theme }: { theme: Theme }) {
+  const [removed, setRemoved] = useState(false)
+  return (
+    <Category name="ScopeChip" theme={theme}>
+      <div className="ui-cluster">
+        {removed ? null : <ScopeChip label="Commit f5429a1" onRemove={() => setRemoved(true)} />}
+        <ScopeChip label="Commit 9c1d0e2" removeLabel="Back to worktree review" onRemove={() => undefined} />
+      </div>
+      <Status name="scope-chip">Scope: {removed ? 'worktree' : 'commit'}</Status>
+    </Category>
+  )
+}
+
 function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
   return (
     <section className="ui-gallery-theme" data-theme={theme} aria-label={`${label} theme component examples`}>
@@ -485,6 +551,10 @@ function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
         <FileIconDemo theme={theme} />
         <ProjectTileDemo theme={theme} />
         <PopupMenuDemo theme={theme} />
+        <ReviewMarkDemo theme={theme} />
+        <SplitButtonDemo theme={theme} />
+        <InlineErrorDemo theme={theme} />
+        <ScopeChipDemo theme={theme} />
       </div>
     </section>
   )

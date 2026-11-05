@@ -1,47 +1,20 @@
 import { afterEach, expect, test } from 'bun:test'
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, byLabel, click, q, qa, rowContainerOf, rowOf, text, toasts } from './dom'
-import { boot, DIFF_VIEW, openView, shutdown, type World } from './world'
+import { byLabel, click, q, qa, rowOf, text } from './dom'
+import { boot, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
-const saved = { QUIRKY_AGENT_SEARCH_DIRS: process.env.QUIRKY_AGENT_SEARCH_DIRS, HOME: process.env.HOME }
-afterEach(async () => {
-  for (const [name, value] of Object.entries(saved)) {
-    if (value === undefined) delete process.env[name]
-    else process.env[name] = value
-  }
-  await shutdown()
-})
-
-/**
- * Makes `claude` and `codex` count as installed for the daemon booted next, whatever the machine
- * has, and points HOME at an empty directory so starting their sessions can't reach real agent configs.
- */
-function installFakeAgents(): void {
-  const base = scratch()
-  const dir = join(base, 'fake-agents')
-  mkdirSync(join(base, 'home'), { recursive: true })
-  mkdirSync(dir, { recursive: true })
-  process.env.HOME = join(base, 'home')
-  for (const name of ['claude', 'codex']) {
-    writeFileSync(join(dir, name), '#!/bin/sh\nexit 0\n')
-    chmodSync(join(dir, name), 0o755)
-  }
-  process.env.QUIRKY_AGENT_SEARCH_DIRS = dir
-}
+afterEach(shutdown)
 
 type Added = { id: string }
 
 /** NA-10's notes: two on math.ts (unstaged), util.ts 2-4 (staged), README.md 1 (committed on the branch), gone.ts 3 (nowhere). */
-async function setUp(w: World): Promise<Record<string, string>> {
+async function setUp(w: World): Promise<void> {
   w.commit({ 'README.md': 'one\ntwo\nthree\n' }, 'readme')
   w.write('math.ts', 'a\nB\nc\nd\ne\n')
   w.write('util.ts', 'one\ntwo\nthree\nfour\nfive\n')
   w.git('add', 'util.ts')
-  const ids: Record<string, string> = {}
   for (const [key, path, startLine, line] of [
     ['readme', 'README.md', 1, 1],
     ['gone', 'gone.ts', 3, 3],
@@ -50,101 +23,28 @@ async function setUp(w: World): Promise<Record<string, string>> {
     ['util', 'util.ts', 2, 4]
   ] as const) {
     const { note } = (await w.agent.callAny('quirky.git/addNote', { worktree: w.feat.id, path, startLine, line, body: `Note ${key}` })) as { note: Added }
-    ids[key] = note.id
+    expect(note.id).toBeTruthy()
   }
-  await w.win.waitFor(() => qa('[data-note-row]').length === 5)
-  return ids
 }
 
-const opened = (w: World, path: string) =>
-  w.win.waitFor(async () => {
-    const view = await openView(w)
-    return view?.id === DIFF_VIEW && view.input?.path === path ? view.input : undefined
-  })
-
-test('NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item against a real daemon', async () => {
+test('NA-9, NA-13: rows carry the note counts from a real daemon, and the panel has no shelf', async () => {
   const w = await boot(scratch)
   expect(q('section[aria-label="Notes"]')).toBeNull()
-  const ids = await setUp(w)
+  await setUp(w)
 
-  expect(text(q('section[aria-label="Notes"] [aria-label="5 notes"]'))).toBe('5')
-  expect(qa('[data-note-row]').map((row) => [row.getAttribute('data-note-path'), text(q('[data-note-line]', row)), text(q('[data-note-body]', row))])).toEqual([
-    ['README.md', 'Line 1', 'Note readme'],
-    ['gone.ts', 'Line 3', 'Note gone'],
-    ['math.ts', 'Line 5', 'Note math5'],
-    ['math.ts', 'Line 30', 'Note math30'],
-    ['util.ts', 'Lines 2-4', 'Note util']
-  ])
+  await w.win.waitFor(() => q('[data-note-count]', rowOf('math.ts') ?? document.body))
+  expect(text(q('[data-note-count]', rowOf('math.ts')!))).toBe('✎2')
   await w.win.waitFor(() => rowOf('util.ts', 'staged') && rowOf('README.md', 'branch'))
-  expect(text(q('[data-note-count]', rowContainerOf('math.ts', 'unstaged')!))).toContain('2')
-  expect(text(q('[data-note-count]', rowContainerOf('util.ts', 'staged')!))).toContain('1')
-  expect(text(q('[data-note-count]', rowContainerOf('README.md', 'branch')!))).toContain('1')
+  expect(text(q('[data-note-count]', rowOf('util.ts')!))).toBe('✎1')
+  expect(text(q('[data-note-count]', rowOf('README.md')!))).toBe('✎1')
+  expect(rowOf('gone.ts')).toBeNull()
+  expect(q('section[aria-label="Notes"]')).toBeNull()
+  expect(q('[data-note-row]')).toBeNull()
 
   await click(byLabel('More source control actions'))
-  await click(buttonText('Notes 5'))
-
-  const rows = qa('[data-note-row] button[aria-pressed]')
-  const expected = [
-    ['README.md', 'branch', ids.readme],
-    ['gone.ts', 'unstaged', ids.gone],
-    ['math.ts', 'unstaged', ids.math5],
-    ['math.ts', 'unstaged', ids.math30],
-    ['util.ts', 'staged', ids.util]
-  ] as const
-  for (const [index, [path, source, noteId]] of expected.entries()) {
-    await click(rows[index])
-    expect(await opened(w, path)).toMatchObject({ worktree: w.feat.id, mode: 'file', source, path, noteId })
-    await w.win.waitFor(() => qa('[data-note-row] button[aria-pressed]').length === 5)
-  }
+  expect(qa('[role="menuitem"]').map(text)).not.toContain('Notes 5')
 
   await w.agent.callAny('quirky.git/clearNotes', { worktree: w.feat.id, yes: true })
-  await w.win.waitFor(() => q('section[aria-label="Notes"]') === null)
-  expect(q('[data-note-count]')).toBeNull()
-  expect(w.problems()).toEqual([])
-}, SLOW)
-
-test('NA-17, NA-22: the shelf sends selected notes to the chosen agent, and the command opens it', async () => {
-  installFakeAgents()
-  const w = await boot(scratch)
-  const note = (path: string, line: number, body: string) => w.agent.callAny('quirky.git/addNote', { worktree: w.feat.id, path, line, body })
-  await note('math.ts', 5, 'First')
-  await note('math.ts', 30, 'Second')
-  await note('util.ts', 2, 'Third')
-  const session = async (agent: string, title: string, state?: 'working' | 'waiting') => {
-    const made = (await w.agent.callAny('quirky.session/create', { worktree: w.feat.id, agent, title })) as { id: string }
-    if (state) {
-      const at = Date.now()
-      const agentStatus = { state, display: state, label: state, detail: '', progress: null, stateStartedAt: at, evidenceAt: at, restoredUnconfirmed: false }
-      await w.agent.callAny('quirky.session/setStatus', { session: made.id, status: state, agentStatus })
-    }
-    return made.id
-  }
-  const s1 = await session('claude', 'fix tests', 'working')
-  await session('codex', 'review', 'waiting')
-  await session('shell', 'zsh')
-  await w.win.waitFor(() => qa('[data-note-row]').length === 3)
-
-  await click(q('section[aria-label="Notes"] [aria-label="Send notes to an agent"]'))
-  const menu = await w.win.waitFor(() => q('[role="menu"][aria-label="Send notes"]'))
-  const buttons = qa('[role="menuitem"]', menu) as HTMLButtonElement[]
-  const first = buttons.find((button) => text(button).includes('fix tests'))
-  const second = buttons.find((button) => text(button).includes('review'))
-  expect(first?.disabled).toBe(false)
-  expect(second?.disabled).toBe(true)
-
-  await click(first)
-  await w.win.waitFor(() => toasts().length === 2)
-  expect(toasts()).toHaveLength(2)
-  expect(((await w.agent.callAny('quirky.git/notes', { worktree: w.feat.id })) as { notes: unknown[] }).notes).toEqual([])
-  const pasted = w.harness.pty.inputs.filter((input) => input.sessionId === s1).map((input) => input.text).join('')
-  expect(pasted).toContain('File: math.ts\nLine: 5\nUser comment: "First"')
-  await w.win.waitFor(() => q('section[aria-label="Notes"]') === null)
-
-  await note('math.ts', 1, 'Again')
-  await w.win.waitFor(() => q('section[aria-label="Notes"]'))
-  await w.agent.callAny('ui.panel.close', {})
-  await w.win.waitFor(() => q('section[aria-label="Notes"]') === null)
-  await w.run('send-review-notes')
-  await w.win.waitFor(() => q('[role="menu"][aria-label="Send notes"]'))
+  await w.win.waitFor(() => q('[data-note-count]') === null)
   expect(w.problems()).toEqual([])
 }, SLOW)

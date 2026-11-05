@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, statusOf, waitForState } = s
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, statusOf } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -31,7 +31,10 @@ const up = (ahead: number, behind: number, patchEquivalent: boolean | null = nul
   behindPatchEquivalent: patchEquivalent
 })
 
-const primary = (element: HTMLElement) => q(element, '[data-git-primary]') as HTMLButtonElement
+const primary = (element: HTMLElement) => q(element, '.ui-split-button__primary') as HTMLButtonElement
+const errorLine = (element: HTMLElement) => q(element, '.ui-inline-error')
+const menuItem = (label: string) =>
+  qa(document.body, '[role="menuitem"]').find((item) => q(item, '.qt-menu-label')?.firstChild?.textContent === label) as HTMLButtonElement | undefined
 const dialog = () => q(document.body, '[role="dialog"]')
 const dialogTitle = () => {
   const titleId = dialog()?.getAttribute('aria-labelledby')
@@ -40,22 +43,23 @@ const dialogTitle = () => {
 
 async function menu(element: HTMLElement, label: string) {
   await click(byLabel(element, 'More commit and remote actions'))
-  await click(buttonText(document.body, label))
+  await click(menuItem(label))
 }
 
-describe('the primary button runs its action, then refreshes status and compare', () => {
+describe('the ship button runs its step, then refreshes status and compare', () => {
   const cases: Array<[string, Parameters<typeof statusOf>[1], string]> = [
-    ['Push', { upstreamStatus: up(2, 0) }, 'quirky.git/push'],
-    ['Pull', { upstreamStatus: up(0, 1) }, 'quirky.git/pull'],
+    ['Push 2 commits', { upstreamStatus: up(2, 0) }, 'quirky.git/push'],
+    ['Pull 1 commit', { upstreamStatus: up(0, 1) }, 'quirky.git/pull'],
     ['Sync', { upstreamStatus: up(2, 1) }, 'quirky.git/sync'],
-    ['Publish Branch', { upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'quirky.git/push']
+    ['Publish branch', { upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'quirky.git/push']
   ]
   for (const [label, overrides, method] of cases) {
     test(`${label} calls ${method}`, async () => {
       const { fake, element, unmount } = await open((f) => {
         f.status = statusOf([], overrides)
+        f.compare = compareOf({ entries: [{ path: 'a.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1, ahead: 1 })
       })
-      if (label === 'Publish Branch') await waitForState(element, () => !primary(element).disabled)
+      expect(primary(element).textContent).toBe(label)
       const before = fake.calls.length
       await click(primary(element))
       expect(fake.calls.slice(before).map((c) => c.method)).toEqual([method, 'quirky.git/status', 'quirky.git/compare'])
@@ -64,12 +68,12 @@ describe('the primary button runs its action, then refreshes status and compare'
     })
   }
 
-  test('the menu runs Pull, Fast-forward, Rebase and Fetch', async () => {
+  test('the caret runs Pull, Fast-forward, Rebase and Fetch', async () => {
     const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf([], { upstreamStatus: up(1, 1) })
+      f.status = statusOf([], { upstreamStatus: up(0, 1) })
     })
-    await menu(element, 'Pull (1)')
-    await menu(element, 'Fast-forward (1)')
+    await menu(element, 'Pull 1 commit')
+    await menu(element, 'Fast-forward')
     await menu(element, 'Rebase from origin/main')
     await menu(element, 'Fetch')
     expect(fake.calls.map((c) => c.method).filter((m) => /pull|fastForward|rebaseFromBase|fetch/.test(m))).toEqual([
@@ -81,7 +85,7 @@ describe('the primary button runs its action, then refreshes status and compare'
     unmount()
   })
 
-  test('while the call runs the primary is disabled and only one push is sent', async () => {
+  test('while the call runs the button is disabled and only one push is sent', async () => {
     const pending = Promise.withResolvers<{ ok: true }>()
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { upstreamStatus: up(2, 0) })
@@ -98,7 +102,7 @@ describe('the primary button runs its action, then refreshes status and compare'
 })
 
 describe('SC-32: a rejected push says to pull first', () => {
-  test('toasts, shows the message under the button and fetches', async () => {
+  test('shows one error line with Pull first, fetches and raises no toast', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { upstreamStatus: up(1, 0) })
       f.on('quirky.git/push', () => {
@@ -106,13 +110,14 @@ describe('SC-32: a rejected push says to pull first', () => {
       })
     })
     await click(primary(element))
-    expect(fake.toasts).toEqual([['Push rejected — remote has changes', 'Pull first, then try again.']])
-    expect(q(element, '#commit-area-remote-error')?.textContent).toContain('non-fast-forward')
+    expect(fake.toasts).toEqual([])
+    expect(errorLine(element)?.textContent).toContain('Push rejected: the remote has new commits')
+    expect(q(errorLine(element)!, '.ui-inline-error__action')?.textContent).toBe('Pull first')
     expect(fake.called('quirky.git/fetch')).toHaveLength(1)
     unmount()
   })
 
-  test('other failures toast "<Action> failed" and a busy refusal is told as such', async () => {
+  test('other failures say "<Action> failed" with the daemon message and offer Retry', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { upstreamStatus: up(0, 1) })
       f.on('quirky.git/pull', () => {
@@ -120,12 +125,14 @@ describe('SC-32: a rejected push says to pull first', () => {
       })
     })
     await click(primary(element))
-    expect(fake.toasts).toEqual([['Pull failed', 'A push is already running in this worktree.']])
+    expect(errorLine(element)?.textContent).toContain('Pull failed. A push is already running in this worktree.')
+    expect(q(errorLine(element)!, '.ui-inline-error__action')?.textContent).toBe('Retry')
+    expect(fake.toasts).toEqual([])
     expect(fake.called('quirky.git/fetch')).toHaveLength(0)
     unmount()
   })
 
-  test('a pull that stops on conflicts toasts the continue-the-merge text', async () => {
+  test('a pull that stops on conflicts tells the person to continue the merge', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { upstreamStatus: up(0, 1) })
       f.on('quirky.git/pull', () => {
@@ -133,13 +140,27 @@ describe('SC-32: a rejected push says to pull first', () => {
       })
     })
     await click(primary(element))
-    expect(fake.toasts).toEqual([['Pull stopped with merge conflicts', 'Resolve them in Source Control, then continue the merge.']])
+    expect(errorLine(element)?.textContent).toContain('Pull stopped with merge conflicts. Resolve them in Source Control, then continue the merge.')
+    expect(q(errorLine(element)!, '.ui-inline-error__action')).toBeNull()
+    expect(fake.toasts).toEqual([])
+    unmount()
+  })
+
+  test('a push while the GitHub lookup is unavailable reports why in the line', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([], { upstreamStatus: up(1, 0) })
+      f.on('quirky.hosting/forBranch', () => ({ kind: 'unavailable', message: 'gh is not signed in' }))
+    })
+    await click(primary(element))
+    expect(errorLine(element)?.textContent).toContain('gh is not signed in')
+    expect(fake.called('quirky.git/push')).toHaveLength(0)
+    expect(fake.toasts).toEqual([])
     unmount()
   })
 })
 
 describe('SC-38: a failing pre-push hook blocks the push', () => {
-  test('shows the Push blocked card with a Push Failed details dialog and no inline error', async () => {
+  test('shows the hook summary in the error line with a Push Failed details dialog and no toast', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { upstreamStatus: up(1, 0) })
       f.on('quirky.git/push', () => {
@@ -147,12 +168,9 @@ describe('SC-38: a failing pre-push hook blocks the push', () => {
       })
     })
     await click(primary(element))
-    const card = q(element, '[role="alert"] .ui-inline-agent-card')!
-    expect(card.textContent).toContain('Push blocked')
-    expect(q(card, '[aria-label="Hook"]')?.textContent).toBe('Hook')
-    expect(q(element, '#commit-area-remote-error')).toBeNull()
+    expect(errorLine(element)?.textContent).toContain('Lint failed during push.')
     expect(fake.toasts).toEqual([])
-    await click(buttonText(card, 'Details'))
+    await click(q(errorLine(element)!, '.ui-inline-error__action'))
     expect(dialogTitle()).toBe('Push Failed')
     expect(q(dialog()!, 'pre')?.textContent).toBe('lint-staged failed')
     unmount()
@@ -167,7 +185,7 @@ describe('force push', () => {
 
   test('the primary asks with the describe text, then force-pushes with yes and the expected sha', async () => {
     const { fake, element, unmount } = await open(lease)
-    expect(primary(element).textContent).toBe('Force Push')
+    expect(primary(element).textContent).toBe('Force push 2 commits')
     await click(primary(element))
     expect(dialogTitle()).toBe('Force push zoe/feat to origin?')
     expect(dialog()?.textContent).toContain('This replaces the remote branch with your local commits.')
@@ -185,7 +203,7 @@ describe('force push', () => {
     unmount()
   })
 
-  test('a stale lease toasts "Force push rejected"', async () => {
+  test('a stale lease puts "Force push rejected" in the error line with Fetch first', async () => {
     const { fake, element, unmount } = await open((f) => {
       lease(f)
       f.on('quirky.git/forcePush', () => {
@@ -194,18 +212,20 @@ describe('force push', () => {
     })
     await click(primary(element))
     await click(buttonText(dialog()!, 'Force Push'))
-    expect(fake.toasts).toEqual([['Force push rejected — remote changed since last fetch', 'Fetch first, then try again.']])
+    expect(errorLine(element)?.textContent).toContain('Force push rejected: the remote changed since the last fetch')
+    expect(q(errorLine(element)!, '.ui-inline-error__action')?.textContent).toBe('Fetch first')
+    expect(fake.toasts).toEqual([])
     unmount()
   })
 
-  test('Commit & Force Push under the lease confirms, commits, then force-pushes', async () => {
+  test('Commit & push under the lease confirms, commits, then force-pushes', async () => {
     const { fake, element, unmount } = await open((f) => {
       lease(f)
       f.status = statusOf([entry('math.ts', 'staged')], { upstreamStatus: up(2, 2, true) })
     })
     const box = byLabel(element, 'Commit message') as HTMLTextAreaElement
     await s.type(box, 'msg')
-    await menu(element, 'Commit & Force Push')
+    await menu(element, 'Commit & push')
     await click(buttonText(dialog()!, 'Force Push'))
     expect(fake.calls.map((c) => c.method).filter((m) => m === 'quirky.git/commit' || m === 'quirky.git/forcePush')).toEqual(['quirky.git/commit', 'quirky.git/forcePush'])
     unmount()
@@ -213,7 +233,7 @@ describe('force push', () => {
 })
 
 describe('operations', () => {
-  test('Continue merge calls continue; a failure toasts "Continue merge failed"', async () => {
+  test('Continue merge calls continue; a failure shows "Continue merge failed" in the error line', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { operation: 'merge' })
       f.on('quirky.git/continue', () => {
@@ -222,11 +242,12 @@ describe('operations', () => {
     })
     await click(buttonText(element, 'Continue merge'))
     expect(fake.called('quirky.git/continue')).toHaveLength(1)
-    expect(fake.toasts).toEqual([['Continue merge failed', 'Resolve every conflict before continuing.']])
+    expect(errorLine(element)?.textContent).toContain('Continue merge failed. Resolve every conflict before continuing.')
+    expect(fake.toasts).toEqual([])
     unmount()
   })
 
-  test('SC-43: confirming Abort merge aborts with yes; a failure toasts "Abort merge failed"', async () => {
+  test('SC-43: confirming Abort merge aborts with yes; a failure shows "Abort merge failed" in the error line', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { operation: 'merge' })
       f.on('quirky.git/abort', () => {
@@ -240,7 +261,8 @@ describe('operations', () => {
     await click(buttonText(element, 'Abort merge'))
     await click(buttonText(dialog()!, 'Abort merge'))
     expect(fake.called('quirky.git/abort').at(-1)?.params).toEqual({ worktree: 'feat', yes: true })
-    expect(fake.toasts).toEqual([['Abort merge failed', 'cannot abort']])
+    expect(errorLine(element)?.textContent).toContain('Abort merge failed. cannot abort')
+    expect(fake.toasts).toEqual([])
     unmount()
   })
 

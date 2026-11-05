@@ -6,6 +6,7 @@ import { worktreeOf } from '../scm'
 import { isHeld, postSendRequest } from '../notes/SendMenu'
 import type { Note } from '../notes/useNotes'
 import { PANEL_ID, type DiffViewInput } from '../shared/view-input'
+import { openReview } from '../review/open'
 import { messageOf } from './data'
 import { openHostedDiff } from './hosted-tabs'
 import { activeView, openDiffView, requestHostedDiffClose } from './registry'
@@ -22,70 +23,62 @@ function worktreeFor(context: UiPluginContext, args: Args): string {
   return worktree
 }
 
-const SOURCES = ['unstaged', 'staged', 'branch', 'commit'] as const
-const AREAS = ['staged', 'unstaged', 'untracked', 'branch', 'all'] as const
-
-/** The file diff (or conflict file) input for an `open-diff` command. */
-function openDiffInput(worktree: string, args: Args): DiffViewInput {
+/** The conflict file input for an `open-diff` command with `source: 'conflict'`. */
+function conflictInput(worktree: string, args: Args): DiffViewInput {
   const path = text(args.path)
   if (!path) throw new Error('open-diff needs a path.')
   const groupId = text(args.groupId)
   const display: DiffViewInput['display'] = args.display === 'source' || args.display === 'preview' ? args.display : undefined
-  const placement = {
+  return {
+    worktree,
+    mode: 'conflict-file',
+    path,
     ...(typeof args.preview === 'boolean' ? { preview: args.preview } : {}),
     ...(args.split === true ? { split: true } : {}),
     ...(groupId ? { groupId } : {}),
     ...(display === undefined ? {} : { display })
-  }
-  if (args.source === 'conflict') return { worktree, mode: 'conflict-file', path, ...placement }
-  const source =
-    SOURCES.find((s) => s === args.source) ??
-    (args.area === 'staged' || args.area === 'branch' ? args.area : args.commit ? 'commit' : 'unstaged')
-  const oldPath = text(args.oldPath)
-  const commit = text(args.commit)
-  return {
-    worktree,
-    mode: 'file',
-    source,
-    path,
-    ...(oldPath ? { oldPath } : {}),
-    ...(commit ? { commit } : {}),
-    ...placement
   }
 }
 
 /**
  * Every window command of `quirky.git`, keyed by its short id. Handlers tolerate missing
  * arguments (keybindings run them with none). The view commands act on the open diff view and
- * throw when there is none; the open commands default to the open view's worktree.
+ * throw when there is none; the open commands default to the open view's worktree. Every diff
+ * command except a conflict file opens the worktree's Review tab.
  */
 export function commandHandlers(context: UiPluginContext): Record<string, (args?: unknown) => unknown> {
-  const open = async (input: DiffViewInput) => {
+  const shown = async (opening: Promise<unknown>): Promise<void> => {
     try {
-      return await openHostedDiff(context, input)
+      await opening
     } catch (error) {
       context.toast('Could not open diff', messageOf(error))
     }
   }
+  const open = (input: DiffViewInput) => shown(openHostedDiff(context, input))
+  const review = (input: Parameters<typeof openReview>[1]) => shown(openReview(context, input))
   return {
     show: () => context.togglePanel(PANEL_ID, true),
-    'open-diff': (args) => open(openDiffInput(worktreeFor(context, argsOf(args)), argsOf(args))),
+    'open-diff': (args) => {
+      const given = argsOf(args)
+      const worktree = worktreeFor(context, given)
+      if (given.source === 'conflict') return open(conflictInput(worktree, given))
+      const path = text(given.path)
+      if (!path) throw new Error('open-diff needs a path.')
+      const commit = text(given.commit)
+      return review({ worktree, reveal: path, ...(commit && (given.source === 'commit' || given.source === undefined) ? { commit } : {}) })
+    },
     'close-diff': (args) => {
       const tabId = text(argsOf(args).tabId)
       if (!tabId) throw new Error('close-diff needs a tabId.')
       return requestHostedDiffClose(tabId) ?? context.call('quirky.terminal/closeTab', { tab: tabId })
     },
-    'open-changes': (args) => {
-      const given = argsOf(args)
-      const area = AREAS.find((a) => a === given.area) ?? 'unstaged'
-      return open({ worktree: worktreeFor(context, given), mode: 'combined', area })
-    },
-    'open-branch-changes': (args) => open({ worktree: worktreeFor(context, argsOf(args)), mode: 'combined', area: 'branch' }),
+    'open-changes': (args) => review({ worktree: worktreeFor(context, argsOf(args)) }),
+    'open-branch-changes': (args) => review({ worktree: worktreeFor(context, argsOf(args)) }),
     'open-commit': (args) => {
       const given = argsOf(args)
       const commit = text(given.commit)
       if (!commit) throw new Error('open-commit needs a commit.')
-      return open({ worktree: worktreeFor(context, given), mode: 'combined', commit })
+      return review({ worktree: worktreeFor(context, given), commit })
     },
     'review-conflicts': (args) => open({ worktree: worktreeFor(context, argsOf(args)), mode: 'conflicts' }),
     'send-review-notes': async () => {

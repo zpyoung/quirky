@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, fakeContext, layoutFor, mountPanel, press, q, qa, rowContainerOf, rowOf, sectionHeadings, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, fakeContext, layoutFor, listboxOf, mountPanel, press, q, qa, rowOf, rowPaths, settle, statusOf, type } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -38,11 +38,13 @@ async function open(configure: (fake: ReturnType<typeof fakeContext>) => void = 
   return { fake, ...mounted }
 }
 
+const dialog = () => q(document.body, '[role="dialog"]')
+
 describe('SC-8: the panel layout', () => {
-  test('lists the sections in the default order, then Committed on Branch and the collapsed Commits dock', async () => {
+  test('lists every file once in path order, then the collapsed Commits dock, with no section headings', async () => {
     const { element, unmount } = await open()
-    expect(sectionHeadings(element)).toEqual(['Changes', 'Staged Changes', 'Untracked Files', 'Committed on Branch', 'Commits'])
-    expect(qa(element, '[data-section-count] .ui-badge').map((c) => c.textContent)).toEqual(['1', '2', '1', '2'])
+    expect(rowPaths(element)).toEqual(['README.md', 'math.ts', 'new.ts', 'notes.txt', 'src/math.ts', 'util.ts'])
+    expect(qa(element, '[data-section]').map((section) => section.getAttribute('data-section'))).toEqual(['history'])
     expect(q(element, '[data-section="history"] ul')).toBeNull()
     unmount()
   })
@@ -113,12 +115,11 @@ describe('SC-8: the panel layout', () => {
     }
   })
 
-  test('the branch row reads <branch> → <base> with ↑N and the line-total chip', async () => {
+  test('the header line reads <branch> → <base> with the line totals', async () => {
     const { element, unmount } = await open()
     const row = q(element, '[data-branch-row]')!
     expect(q(row, '[data-branch-name]')?.textContent).toBe('zoe/feat')
     expect(q(row, '[data-base-ref]')?.textContent).toBe('origin/main')
-    expect(q(row, '[aria-label="1 commit(s) to push"]')?.textContent).toBe('↑1')
     expect(q(row, '[aria-label*="to pull"]')).toBeNull()
     expect(q(row, '[aria-label="Lines changed on this branch"]')?.textContent).toBe('+52 −3')
     unmount()
@@ -129,51 +130,25 @@ describe('SC-8: the panel layout', () => {
       fake.status = statusOf([entry('src/app/math.ts', 'unstaged', 'modified', { added: 5, removed: 0 })])
     })
     const row = rowOf(element, 'src/app/math.ts')!
-    const details = rowContainerOf(element, 'src/app/math.ts')!
     expect(q(row, '[data-row-name]')?.textContent).toBe('math.ts')
     expect(q(row, '[data-row-dir]')?.getAttribute('data-row-dir')).toBe('src/app')
-    expect(q(details, '[aria-label="5 additions"]')?.textContent).toBe('+5')
-    expect(q(details, '[aria-label*="deletions"]')).toBeNull()
+    expect(q(row, '[aria-label="5 additions"]')?.textContent).toBe('+5')
+    expect(q(row, '[aria-label*="deletions"]')).toBeNull()
     unmount()
   })
 
   test.each([
-    ['math.ts', 'unstaged', 'modified'],
-    ['notes.txt', 'untracked', 'untracked'],
-  ])('the %s row announces its Git state instead of an agent state', async (path, section, status) => {
+    ['math.ts', 'modified'],
+    ['notes.txt', 'added']
+  ])('the %s row announces its Git state instead of an agent state', async (path, status) => {
     const { element, unmount } = await open()
     try {
-      const row = rowOf(element, path, section)!
-      const container = row.parentElement!
-      expect(q(container, '[aria-label^="Git status"]')?.getAttribute('aria-label')).toBe(`Git status ${status}`)
-      expect(q(container, '[aria-label^="Status:"]')).toBeNull()
+      const row = rowOf(element, path)!
+      expect(q(row, '[aria-label^="Git status"]')?.getAttribute('aria-label')).toBe(`Git status ${status}`)
+      expect(q(row, '[aria-label^="Status:"]')).toBeNull()
     } finally {
       unmount()
     }
-  })
-
-
-  test('the Committed on Branch heading says how many files changed against the base', async () => {
-    const { element, unmount } = await open()
-    expect(q(element, '[data-section="branch"]')?.title).toBe('2 files changed vs origin/main')
-    unmount()
-  })
-})
-
-describe('SC-9: the group order setting', () => {
-  test('reorders the sections live, keeping Conflicts first', async () => {
-    const { fake, element, unmount } = await open()
-    fake.status = statusOf([...fake.status.entries, entry('c.ts', 'conflicts', 'modified', { conflict: { kind: 'both_modified', state: 'unresolved' } })], { operation: 'merge' })
-    fake.settings.groupOrder = 'staged-first'
-    await act(async () => fake.emit({ type: 'setting.changed', id: 'setting:quirky.git/groupOrder', value: 'staged-first' }))
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
-    expect(sectionHeadings(element).slice(0, 4)).toEqual(['Conflicts', 'Staged Changes', 'Changes', 'Untracked Files'])
-    fake.settings.groupOrder = 'untracked-first'
-    await act(async () => fake.emit({ type: 'setting.changed', id: 'setting:quirky.git/groupOrder', value: 'untracked-first' }))
-    await settle()
-    expect(sectionHeadings(element).slice(0, 4)).toEqual(['Conflicts', 'Untracked Files', 'Changes', 'Staged Changes'])
-    unmount()
   })
 })
 
@@ -211,191 +186,135 @@ describe('SC-11: the uncommitted badge', () => {
   })
 })
 
-describe('SC-14: row and section buttons', () => {
-  test('rows offer the buttons their state allows', async () => {
+describe('SC-14: row actions', () => {
+  test('only the selected row carries buttons, and they are Revert and Open', async () => {
     const { element, unmount } = await open((fake) => {
-      fake.status = statusOf([
-        entry('math.ts', 'unstaged'),
-        entry('gone.ts', 'unstaged', 'deleted'),
-        entry('notes.txt', 'untracked'),
-        entry('README.md', 'staged')
-      ])
+      fake.status = statusOf([entry('math.ts', 'unstaged'), entry('gone.ts', 'unstaged', 'deleted'), entry('README.md', 'staged')])
     })
-    const labels = (path: string, section: string) => qa(rowOf(element, path, section)!.parentElement!, '.ui-list-row__trailing button').map((button) => button.getAttribute('title'))
-    expect(labels('math.ts', 'unstaged')).toEqual(['Discard changes', 'Stage'])
-    expect(labels('gone.ts', 'unstaged')).toEqual(['Restore file', 'Stage'])
-    expect(labels('notes.txt', 'untracked')).toEqual(['Delete untracked file', 'Stage'])
-    expect(labels('README.md', 'staged')).toEqual(['Unstage'])
+    const buttons = (path: string) => qa(rowOf(element, path)!, '.git-row__actions button').map((button) => button.getAttribute('title'))
+    expect(qa(element, '.git-row__actions')).toHaveLength(0)
+    await click(rowOf(element, 'math.ts'))
+    expect(buttons('math.ts')).toEqual(['Revert', 'Open'])
+    await click(rowOf(element, 'gone.ts'))
+    expect(buttons('gone.ts')).toEqual(['Revert'])
+    expect(buttons('math.ts')).toEqual([])
     unmount()
   })
 
-  test('section headings offer discard, stage or unstage all, and View all', async () => {
-    const { element, unmount } = await open()
-    const buttons = (section: string) => qa(element, `[data-section="${section}"] [data-section-action]`).map((button) => button.getAttribute('aria-label'))
-    expect(buttons('unstaged')).toEqual(['Discard all', 'Stage all', 'View all'])
-    expect(buttons('untracked')).toEqual(['Delete all untracked', 'Stage all', 'View all'])
-    expect(buttons('staged')).toEqual(['Discard all', 'Unstage all', 'View all'])
-    unmount()
-  })
-
-  test('a submodule row has no buttons and the hint "Stage inside submodule"', async () => {
-    const { element, unmount } = await open((fake) => {
-      fake.status = statusOf([entry('vendor/lib', 'unstaged', 'modified', { submodule: { commitChanged: false, trackedChanges: true, untrackedChanges: false } })])
+  test('a submodule row has no Revert, keeps the hint "Stage inside submodule", and a click expands it', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([entry('vendor/lib', 'unstaged', 'modified', { submodule: { commitChanged: false, trackedChanges: true, untrackedChanges: false } })])
+      f.on('quirky.git/submoduleStatus', () => ({ entries: [] }))
     })
     const row = rowOf(element, 'vendor/lib')!
-    expect(row.textContent).toContain('Stage inside submodule')
-    expect(qa(row.parentElement!, '.ui-list-row__trailing button')).toHaveLength(0)
+    expect(row.title).toContain('Stage inside submodule')
+    await click(row)
+    expect(fake.called('quirky.git/submoduleStatus')).toHaveLength(1)
+    expect(fake.views).toEqual([])
+    await click(byLabel(element, 'Revert vendor/lib'))
+    expect(dialog()).toBeNull()
+    expect(fake.toasts.at(-1)?.[1]).toContain('submodule')
     unmount()
   })
 })
 
-describe('opening diffs', () => {
-  test('clicking a row opens the diff view with this input', async () => {
+describe('opening Review', () => {
+  test('clicking a row, committed or not, opens the one Review tab at that file', async () => {
     const { fake, element, unmount } = await open()
     await click(rowOf(element, 'math.ts'))
-    await click(rowOf(element, 'README.md'))
-    await click(rowOf(element, 'new.ts'))
-    expect(fake.views).toEqual([
-      { id: DIFF_VIEW, input: { worktree: 'feat', mode: 'file', source: 'unstaged', path: 'math.ts' } },
-      { id: DIFF_VIEW, input: { worktree: 'feat', mode: 'file', source: 'staged', path: 'README.md' } },
-      { id: DIFF_VIEW, input: { worktree: 'feat', mode: 'file', source: 'staged', path: 'new.ts', oldPath: 'old.ts' } }
-    ])
-    unmount()
-  })
-
-  test('an untracked row opens its unstaged diff and a branch row opens its branch diff', async () => {
-    const { fake, element, unmount } = await open()
-    await click(rowOf(element, 'notes.txt'))
     await click(rowOf(element, 'util.ts'))
-    expect(fake.views.map((v) => v.input)).toEqual([
-      { worktree: 'feat', mode: 'file', source: 'unstaged', path: 'notes.txt' },
-      { worktree: 'feat', mode: 'file', source: 'branch', path: 'util.ts' }
+    await click(rowOf(element, 'new.ts'))
+    expect(fake.views.map((view) => view.input)).toEqual([
+      { worktree: 'feat', mode: 'review', reveal: 'math.ts' },
+      { worktree: 'feat', mode: 'review', reveal: 'util.ts' },
+      { worktree: 'feat', mode: 'review', reveal: 'new.ts' }
     ])
+    expect(fake.views.every((view) => view.id === DIFF_VIEW)).toBe(true)
     unmount()
   })
 
-  test.each(['util.ts', 'README.md'])('opening branch diff %s moves the highlight out of Changes', async (branchPath) => {
-    const { element, unmount } = await open((fake) => {
-      fake.status = statusOf([entry('README.md', 'unstaged')])
-      fake.compare = compareOf({
-        entries: [{ path: branchPath, status: 'modified', added: 2, removed: 1, binary: false }]
-      })
-    })
-    try {
-      await click(rowOf(element, 'README.md', 'unstaged'))
-      expect(rowOf(element, 'README.md', 'unstaged')?.getAttribute('aria-pressed')).toBe('true')
-      expect(rowOf(element, branchPath, 'branch')?.getAttribute('aria-pressed')).toBe('false')
-
-      await click(rowOf(element, branchPath, 'branch'))
-      expect(rowOf(element, 'README.md', 'unstaged')?.getAttribute('aria-pressed')).toBe('false')
-      expect(rowOf(element, branchPath, 'branch')?.getAttribute('aria-pressed')).toBe('true')
-      expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
-
-      await click(rowOf(element, 'README.md', 'unstaged'))
-      expect(rowOf(element, 'README.md', 'unstaged')?.getAttribute('aria-pressed')).toBe('true')
-      expect(rowOf(element, branchPath, 'branch')?.getAttribute('aria-pressed')).toBe('false')
-    } finally {
-      unmount()
-    }
+  test('the highlight follows the last row clicked, wherever it sits', async () => {
+    const { element, unmount } = await open()
+    await click(rowOf(element, 'README.md'))
+    expect(rowOf(element, 'README.md')?.getAttribute('aria-selected')).toBe('true')
+    await click(rowOf(element, 'util.ts'))
+    expect(rowOf(element, 'README.md')?.getAttribute('aria-selected')).toBe('false')
+    expect(rowOf(element, 'util.ts')?.getAttribute('aria-selected')).toBe('true')
+    unmount()
   })
 
-  test('a conflict row opens the conflict file; View all opens the combined diff or the conflict review', async () => {
+  test('there is no selection footer or bulk bar', async () => {
+    const { element, unmount } = await open()
+    await click(rowOf(element, 'README.md'), { metaKey: true })
+    await click(rowOf(element, 'math.ts'), { shiftKey: true })
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
+    expect(element.textContent).not.toContain('selected')
+    unmount()
+  })
+
+  test('the Review view is opened for the conflict review through the operation card, not a row', async () => {
     const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf([
-        entry('a.ts', 'conflicts', 'modified', { conflict: { kind: 'both_modified', state: 'unresolved' } }),
-        entry('math.ts', 'unstaged')
-      ], { operation: 'merge' })
+      f.status = statusOf([entry('a.ts', 'conflicts', 'modified', { conflict: { kind: 'both_modified', state: 'unresolved' } })], { operation: 'merge' })
     })
-    await click(rowOf(element, 'a.ts'))
-    await click(byLabel(q(element, '[data-section="conflicts"]')!, 'View all'))
-    await click(byLabel(q(element, '[data-section="unstaged"]')!, 'View all'))
-    await click(byLabel(q(element, '[data-section="branch"]')!, 'View all'))
-    expect(fake.views.map((v) => v.input)).toEqual([
-      { worktree: 'feat', mode: 'conflict-file', path: 'a.ts' },
-      { worktree: 'feat', mode: 'conflicts' },
-      { worktree: 'feat', mode: 'combined', area: 'unstaged' },
-      { worktree: 'feat', mode: 'combined', area: 'branch' }
-    ])
+    await click(buttonText(element, 'Review conflicts'))
+    expect(fake.views.map((view) => view.input)).toEqual([{ worktree: 'feat', mode: 'conflicts' }])
     unmount()
   })
 })
 
-describe('SC-15: selection and the bulk bar', () => {
-  const four = (fake: ReturnType<typeof fakeContext>) => {
-    fake.status = statusOf(['a.ts', 'b.ts', 'c.ts', 'd.ts'].map((p) => entry(p)))
-  }
-
-  test('click opens and selects nothing; shift selects a range; cmd toggles; escape clears', async () => {
-    const { fake, element, unmount } = await open(four)
-    await click(rowOf(element, 'a.ts'))
-    expect(fake.views).toHaveLength(1)
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
-    await click(rowOf(element, 'c.ts'), { shiftKey: true })
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('3 selected')
-    expect(buttonText(element, 'Stage (3)')).toBeDefined()
-    expect(fake.views).toHaveLength(1)
-    await click(rowOf(element, 'b.ts'), { metaKey: true })
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('2 selected')
-    expect(fake.reports.at(-1).selection).toEqual(['a.ts', 'c.ts'])
-    await press(q(element, '[data-git-panel]')!, 'Escape')
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
-    unmount()
-  })
-
-  test('the bulk Stage button stages the selected paths', async () => {
-    const { fake, element, unmount } = await open(four)
-    await click(rowOf(element, 'a.ts'), { metaKey: true })
-    await click(rowOf(element, 'b.ts'), { metaKey: true })
-    await click(buttonText(element, 'Stage (2)'))
-    expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['a.ts', 'b.ts'] })
-    unmount()
-  })
-
-  test('a context-click on an unselected row selects only it', async () => {
-    const { element, unmount } = await open(four)
-    await click(rowOf(element, 'a.ts'), { metaKey: true })
-    await act(async () => {
-      rowOf(element, 'c.ts')!.parentElement!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }))
-    })
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('1 selected')
-    unmount()
-  })
-
-  test('a pointer-down outside the panel clears the selection', async () => {
-    const { element, unmount } = await open(four)
-    await click(rowOf(element, 'a.ts'), { metaKey: true })
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).not.toBeNull()
-    await act(async () => {
-      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-    })
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
-    unmount()
-  })
-
-  test('changing the view mode clears the selection', async () => {
-    const { fake, element, unmount } = await open(four)
-    await click(rowOf(element, 'a.ts'), { metaKey: true })
+describe('SC-15: the selection', () => {
+  test('changing the view mode keeps the selected file selected', async () => {
+    const { fake, element, unmount } = await open()
+    await click(rowOf(element, 'src/math.ts'))
     fake.settings.viewMode = 'tree'
     await act(async () => fake.emit({ type: 'setting.changed', id: 'setting:quirky.git/viewMode', value: 'tree' }))
     await settle()
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
+    expect(rowOf(element, 'src/math.ts')?.getAttribute('aria-selected')).toBe('true')
+    unmount()
+  })
+
+  test('the selection shows in the panel report', async () => {
+    const { fake, element, unmount } = await open()
+    await click(rowOf(element, 'math.ts'))
+    expect(fake.reports.at(-1).selection).toEqual(['math.ts'])
+    await press(listboxOf(element)!, 'Escape')
+    expect(fake.reports.at(-1).selection).toEqual([])
+    unmount()
+  })
+
+  test('the panel reports its areas and the committed-only files', async () => {
+    const { fake, unmount } = await open()
+    expect(fake.reports.at(-1).sections).toEqual([
+      { id: 'unstaged', count: 1 },
+      { id: 'staged', count: 2 },
+      { id: 'untracked', count: 1 },
+      { id: 'branch', count: 2 }
+    ])
     unmount()
   })
 })
 
 describe('SC-16: the filter', () => {
-  test('narrows rows case-insensitively, hides the section buttons and the Commits dock, and Escape restores', async () => {
+  test('narrows rows case-insensitively, hides the Commits dock, and Escape restores', async () => {
     const { element, unmount } = await open()
     await click(byLabel(element, 'Filter files by name'))
     await type(byLabel(element, 'Filter files…') as HTMLInputElement, 'MATH')
-    expect(qa(element, '[data-row-path] button[aria-pressed]').map((button) => button.closest('[data-row-path]')?.getAttribute('title'))).toEqual(['math.ts', 'src/math.ts'])
-    expect(q(element, '[data-section-action]')).toBeNull()
+    expect(rowPaths(element)).toEqual(['math.ts', 'src/math.ts'])
     expect(q(element, '[data-section="history"]')).toBeNull()
     expect(byLabel(element, 'Filter files by name')?.getAttribute('title')).toBe('Filter: MATH')
     await press(byLabel(element, 'Filter files…')!, 'Escape')
     expect(byLabel(element, 'Filter files…')).toBeNull()
     expect(rowOf(element, 'README.md')).not.toBeNull()
     expect(q(element, '[data-section="history"]')).not.toBeNull()
+    unmount()
+  })
+
+  test('a query that matches nothing says so', async () => {
+    const { element, unmount } = await open()
+    await click(byLabel(element, 'Filter files by name'))
+    await type(byLabel(element, 'Filter files…') as HTMLInputElement, 'zzz')
+    expect(element.textContent).toContain('No files match the filter.')
+    expect(listboxOf(element)).toBeNull()
     unmount()
   })
 
@@ -415,15 +334,16 @@ describe('SC-16: the filter', () => {
 describe('SC-17: the tree view', () => {
   const tree = (fake: ReturnType<typeof fakeContext>) => {
     fake.status = statusOf([entry('src/app/a.ts'), entry('src/app/b.ts'), entry('lib/c.ts')])
+    fake.compare = compareOf()
     fake.settings.viewMode = 'tree'
   }
 
-  test('groups rows by compacted folder, folders first, and Stage folder stages its files', async () => {
-    const { fake, element, unmount } = await open(tree)
-    const dirs = qa(element, '[data-section="unstaged"] [data-directory-path]')
+  test('groups rows by compacted folder, folders first, without folder buttons', async () => {
+    const { element, unmount } = await open(tree)
+    const dirs = qa(element, '[data-directory-path]')
     expect(dirs.map((dir) => `${dir.getAttribute('data-directory-name')} ${q(dir, '[role="img"]')?.textContent}`)).toEqual(['lib 1', 'src/app 2'])
-    await click(byLabel(dirs[1]!, 'Stage folder src/app'))
-    expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['src/app/a.ts', 'src/app/b.ts'] })
+    expect(qa(element, '[data-directory-path] .git-folder-head button')).toHaveLength(2)
+    expect(rowPaths(element)).toEqual(['lib/c.ts', 'src/app/a.ts', 'src/app/b.ts'])
     unmount()
   })
 
@@ -446,7 +366,7 @@ describe('SC-17: the tree view', () => {
   test('announces singular and plural file counts on folder badges', async () => {
     const { element, unmount } = await open(tree)
     try {
-      const dirs = qa(element, '[data-section="unstaged"] [data-directory-path]')
+      const dirs = qa(element, '[data-directory-path]')
       expect(q(dirs[0]!, '[role="img"]')?.getAttribute('aria-label')).toMatch(/^1 file$/)
       expect(q(dirs[1]!, '[role="img"]')?.getAttribute('aria-label')).toMatch(/^2 files$/)
     } finally {
@@ -454,13 +374,13 @@ describe('SC-17: the tree view', () => {
     }
   })
 
-  test('View as tree changes the view and returns focus to the actions trigger', async () => {
+  test('Tree changes the view and returns focus to the actions trigger', async () => {
     const { fake, element, unmount } = await open()
     try {
       const trigger = byLabel(element, 'More source control actions')!
       trigger.focus()
       await click(trigger)
-      const action = buttonText(document.body, 'View as tree')!
+      const action = buttonText(document.body, 'Tree')!
       action.focus()
       await click(action)
       expect(fake.called('setting.set').at(-1)?.params).toEqual({ id: 'setting:quirky.git/viewMode', value: 'tree' })
@@ -471,44 +391,9 @@ describe('SC-17: the tree view', () => {
       unmount()
     }
   })
-
-  test('the more-actions menu lists View as list/tree, Change Base Ref… and Refresh branch compare', async () => {
-    const { element, unmount } = await open()
-    await click(byLabel(element, 'More source control actions'))
-    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['View as tree', 'Change Base Ref…', 'Refresh branch compare'])
-    unmount()
-  })
 })
 
-describe('SC-18: the row menu and dragging', () => {
-  async function contextMenu(element: HTMLElement, path: string) {
-    await act(async () => {
-      rowOf(element, path)!.parentElement!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }))
-    })
-    await settle()
-  }
-
-  test('offers View, Copy Path, Copy Relative Path and Reveal in Finder', async () => {
-    const copied: string[] = []
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void copied.push(t) } })
-    const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf([entry('src/app/a.ts')])
-    })
-    await contextMenu(element, 'src/app/a.ts')
-    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['View', 'Copy Path', 'Copy Relative Path', 'Reveal in Finder'])
-    await click(buttonText(document.body, 'Copy Path'))
-    await contextMenu(element, 'src/app/a.ts')
-    await click(buttonText(document.body, 'Copy Relative Path'))
-    await contextMenu(element, 'src/app/a.ts')
-    await click(buttonText(document.body, 'Reveal in Finder'))
-    await contextMenu(element, 'src/app/a.ts')
-    await click(buttonText(document.body, 'View'))
-    expect(copied).toEqual(['/repo/feat/src/app/a.ts', 'src/app/a.ts'])
-    expect(fake.called('quirky.git/reveal').at(-1)?.params).toEqual({ worktree: 'feat', path: 'src/app/a.ts' })
-    expect(fake.views.at(-1)?.input).toMatchObject({ mode: 'file', path: 'src/app/a.ts' })
-    unmount()
-  })
-
+describe('SC-18: dragging', () => {
   test('dragging a row carries its absolute path as text', async () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([entry('src/app/a.ts')])
@@ -517,7 +402,7 @@ describe('SC-18: the row menu and dragging', () => {
     const event = new Event('dragstart', { bubbles: true }) as Event & { dataTransfer?: unknown }
     event.dataTransfer = { setData: (type: string, value: string) => void (data[type] = value) }
     await act(async () => {
-      rowOf(element, 'src/app/a.ts')!.parentElement!.dispatchEvent(event)
+      rowOf(element, 'src/app/a.ts')!.dispatchEvent(event)
     })
     expect(data).toEqual({ 'text/plain': '/repo/feat/src/app/a.ts' })
     unmount()

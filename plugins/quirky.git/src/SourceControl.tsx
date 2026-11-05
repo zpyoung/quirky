@@ -9,7 +9,7 @@ type Props = { context: UiPluginContext; report: (state: ScmReport) => void }
 
 /**
  * Source control for the worktree the open view shows; follows the layout as the view changes.
- * It outlives the per-worktree panel, so notices, commit drafts and the once-per-worktree
+ * It outlives the per-worktree panel, so row-action toasts, commit drafts and the once-per-worktree
  * .gitignore offer survive switching worktrees.
  */
 export function SourceControl({ context, report }: Props) {

@@ -10,6 +10,8 @@ type Props = {
   worktree: string
   /** The base in use, marked in the list. */
   current: string | null
+  /** Reviewed or changed-since-review files; a new base clears their marks. */
+  marks?: number
   onClose(): void
   /** Runs after the base was written, so the panel can reload its compare. */
   onChanged(): Promise<void>
@@ -18,7 +20,7 @@ type Props = {
 const stripRemote = (ref: string): string => ref.replace(/^(?:refs\/)?remotes\//, '')
 
 /** "Change Base Ref": pick the branch compare target, or clear it with Use Primary. */
-export function ChangeBaseDialog({ context, worktree, current, onClose, onChanged }: Props) {
+export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClose, onChanged }: Props) {
   const [query, setQuery] = useState('')
   const [refs, setRefs] = useState<Ref[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -85,6 +87,7 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
     >
       <div className="ui-stack">
         <p className="ui-text-muted">Pick the branch compare target for this repository.</p>
+        {marks > 0 && <p role="status" data-clears-marks>{`This clears ${marks} review ${marks === 1 ? 'mark' : 'marks'}`}</p>}
         <div className="ui-cluster">
           <span className="ui-text-muted">{base === null ? 'No base ref in use' : `Current: ${base}`}</span>
           <Button disabled={saving} onClick={() => void save({ clear: true })}>

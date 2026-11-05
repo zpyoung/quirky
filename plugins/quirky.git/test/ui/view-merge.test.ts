@@ -225,3 +225,85 @@ describe('createMerge options', () => {
     open.destroy()
   })
 })
+
+describe.each([false, true])('createMerge onRevert (side by side: %p)', (sideBySide) => {
+  const press = (button: Element | null | undefined) => button!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+  /** The Revert button of change `n` (0-based): a chunk button inline, a gutter button between the panes. */
+  const buttonOf = (n: number) =>
+    [...parent.querySelectorAll(sideBySide ? '.cm-merge-revert > button' : 'button[name=reject]')][n]
+  const mount = async (onRevert: (apply: () => boolean) => void) => {
+    const merge = createMerge(parent, { ...base, sideBySide, onRevert })
+    if (sideBySide) await new Promise((resolve) => setTimeout(resolve, 50))
+    return merge
+  }
+
+  test('a read-only side gets a Revert button per change, and a press changes nothing until the owner applies it', async () => {
+    const asked: Array<() => boolean> = []
+    const merge = await mount((apply) => void asked.push(apply))
+    expect(parent.querySelectorAll(sideBySide ? '.cm-merge-revert > button' : 'button[name=reject]')).toHaveLength(2)
+    expect(buttonOf(0)!.textContent).toBe(sideBySide ? '↶' : '↶ Revert')
+    expect(buttonOf(0)!.getAttribute('aria-label')).toBe('Revert change')
+    if (sideBySide) expect(buttonOf(0)!.getAttribute('title')).toBe('Revert change')
+    expect(parent.querySelector('.cm-content[contenteditable=true]')).toBeNull()
+
+    press(buttonOf(0))
+    expect(asked).toHaveLength(1)
+    expect(merge.getModified()).toBe(edited)
+
+    expect(asked[0]!()).toBe(true)
+    expect(merge.getModified()).toBe(edited.replace('line three\n', 'line 3\n'))
+    expect(merge.changeCount()).toBe(1)
+    merge.destroy()
+  })
+
+  test('revertChange asks the owner for the change holding the cursor', async () => {
+    const asked: Array<() => boolean> = []
+    const merge = await mount((apply) => void asked.push(apply))
+    expect(merge.revertChange()).toBe(true)
+    expect(merge.getModified()).toBe(edited)
+    asked[0]!()
+    expect(merge.getModified()).toBe(edited.replace('line three\n', 'line 3\n'))
+    merge.destroy()
+  })
+
+  test('setModified replaces the whole text and the changes follow', async () => {
+    const merge = await mount(() => {})
+    merge.setModified(original)
+    expect(merge.getModified()).toBe(original)
+    expect(merge.changeCount()).toBe(0)
+    merge.setModified(edited)
+    expect(merge.changeCount()).toBe(2)
+    merge.destroy()
+  })
+
+  test('keyboard activation of a Revert button asks the owner once, and a mouse click does not ask twice', async () => {
+    const asked: Array<() => boolean> = []
+    const merge = await mount((apply) => void asked.push(apply))
+    const button = buttonOf(0) as HTMLButtonElement
+
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }))
+    expect(asked).toHaveLength(1)
+
+    press(button)
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
+    expect(asked).toHaveLength(2)
+
+    expect(asked[0]!()).toBe(true)
+    expect(merge.getModified()).toBe(edited.replace('line three\n', 'line 3\n'))
+    merge.destroy()
+  })
+
+  if (sideBySide) {
+    test('destroying the editor takes the press handler with it', async () => {
+      const asked: Array<() => boolean> = []
+      const merge = await mount((apply) => void asked.push(apply))
+      const button = buttonOf(0)
+      const gutter = button!.parentElement!
+      merge.destroy()
+      press(button)
+      button!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }))
+      expect(asked).toHaveLength(0)
+      expect(gutter.isConnected).toBe(false)
+    })
+  }
+})

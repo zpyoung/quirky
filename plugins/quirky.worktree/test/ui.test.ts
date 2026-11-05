@@ -274,7 +274,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
         case 'quirky.worktree/navigate':
         case 'quirky.worktree/openIn': {
           const id = params.target === 'changes' ? 'view:quirky.git/diff' : SESSION_VIEW
-          const input = params.target === 'changes' ? { worktree: params.worktree, mode: 'combined', area: 'all' } : { worktree: params.worktree }
+          const input = params.target === 'changes' ? { worktree: params.worktree, mode: 'review' } : { worktree: params.worktree }
           opened.push({ id, input })
           current = {
             ...current,

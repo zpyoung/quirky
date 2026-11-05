@@ -1,51 +1,61 @@
 import { afterEach, expect, test } from 'bun:test'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, click, press, q, rowOf, text } from './dom'
+import { click, listbox, press, q, rowOf, rowPaths, selectedPaths, text } from './dom'
 import { boot, DIFF_VIEW, openView, shutdown } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 60_000
 afterEach(shutdown)
 
-test('SC-15: click opens the diff, Shift-click selects a range, Cmd-click toggles, Escape clears', async () => {
+const countLine = () => text(q('[data-count-line]'))
+
+test('SC-15 and SC-18: a click selects and opens the one Review tab, and the keyboard moves, marks and clears', async () => {
   const w = await boot(scratch)
   for (const name of ['a', 'b', 'c', 'd']) w.write(`${name}.ts`, `${name} changed\n`)
   await w.win.waitFor(() => rowOf('d.ts'))
-  const selected = async () => (await w.report()).selection
-  const bar = () => q('[role="toolbar"][aria-label="Selection actions"]')
+  await w.win.waitFor(() => countLine() === '0 of 4 reviewed · 4 uncommitted')
+  const selection = async () => (await w.report()).selection
 
   await click(rowOf('a.ts'))
+  expect(selectedPaths()).toEqual(['a.ts'])
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
-  expect((await openView(w))!.input).toMatchObject({ mode: 'file', source: 'unstaged', path: 'a.ts', worktree: w.feat.id })
-  expect(bar()).toBeNull()
-  expect(await selected()).toEqual([])
+  expect((await openView(w))!.input).toMatchObject({ mode: 'review', reveal: 'a.ts', worktree: w.feat.id })
+  await w.win.waitFor(async () => (await selection()).join() === 'a.ts')
 
-  await click(rowOf('c.ts'), { shiftKey: true })
-  expect(text(bar()?.querySelector('span'))).toBe('3 selected')
-  expect(buttonText('Stage (3)', bar()!)).toBeDefined()
-  await w.win.waitFor(async () => (await selected()).length === 3)
-  expect((await selected()).sort()).toEqual(['a.ts', 'b.ts', 'c.ts'])
-  expect((await openView(w))?.input?.path).toBe('a.ts')
+  await press(listbox()!, 'ArrowDown')
+  expect(selectedPaths()).toEqual(['b.ts'])
+  await w.win.waitFor(async () => (await selection()).join() === 'b.ts')
 
-  await click(rowOf('b.ts'), { metaKey: true })
-  expect(text(bar()?.querySelector('span'))).toBe('2 selected')
-  await w.win.waitFor(async () => (await selected()).length === 2)
-  expect((await selected()).sort()).toEqual(['a.ts', 'c.ts'])
+  await press(listbox()!, ' ')
+  await w.win.waitFor(() => countLine() === '1 of 4 reviewed · 4 uncommitted')
+  expect(text(q('[aria-label="Reviewed"]', rowOf('b.ts')!))).toBe('✓')
+  await w.win.waitFor(() => selectedPaths().join() === 'c.ts')
+  expect(rowPaths()).toEqual(['a.ts', 'b.ts', 'c.ts', 'd.ts'])
 
-  await press(rowOf('d.ts')!, 'Escape')
-  expect(bar()).toBeNull()
-  await w.win.waitFor(async () => (await selected()).length === 0)
-  expect(w.problems()).toEqual([])
+  await press(listbox()!, 'Escape')
+  expect(selectedPaths()).toEqual([])
+  await w.win.waitFor(async () => (await selection()).length === 0)
 }, SLOW)
 
-test('SC-15: the bulk bar stages the selection through the daemon', async () => {
+test('SC-4: unmarking with Space keeps the selection, and a marked file survives a commit unchanged', async () => {
   const w = await boot(scratch)
-  for (const name of ['a', 'b', 'c', 'd']) w.write(`${name}.ts`, `${name} changed\n`)
-  await w.win.waitFor(() => rowOf('d.ts'))
+  w.write('a.ts', 'a changed\n')
+  w.write('b.ts', 'b changed\n')
+  await w.win.waitFor(() => rowOf('b.ts'))
   await click(rowOf('a.ts'))
-  await click(rowOf('c.ts'), { shiftKey: true })
-  await click(buttonText('Stage (3)', q('[role="toolbar"][aria-label="Selection actions"]')!))
-  await w.win.waitFor(() => rowOf('c.ts', 'staged'))
-  expect(w.git('diff', '--cached', '--name-only').split('\n')).toEqual(['a.ts', 'b.ts', 'c.ts'])
-  await w.win.waitFor(() => buttonText('Unstage (3)', q('[role="toolbar"][aria-label="Selection actions"]') ?? document))
+  await press(listbox()!, ' ')
+  await w.win.waitFor(() => countLine() === '1 of 2 reviewed · 2 uncommitted')
+  await w.win.waitFor(() => selectedPaths().join() === 'b.ts')
+  await click(rowOf('a.ts'))
+  await press(listbox()!, ' ')
+  await w.win.waitFor(() => countLine() === '0 of 2 reviewed · 2 uncommitted')
+  expect(selectedPaths()).toEqual(['a.ts'])
+  await press(listbox()!, ' ')
+  await w.win.waitFor(() => countLine() === '1 of 2 reviewed · 2 uncommitted')
+  w.git('add', '-A')
+  w.git('commit', '-q', '-m', 'both')
+  await w.win.waitFor(() => countLine() === '1 of 2 reviewed')
+  expect(q('.git-row__dirty', rowOf('a.ts')!)).toBeNull()
+  expect(text(q('[aria-label="Reviewed"]', rowOf('a.ts')!))).toBe('✓')
+  expect(w.problems()).toEqual([])
 }, SLOW)
