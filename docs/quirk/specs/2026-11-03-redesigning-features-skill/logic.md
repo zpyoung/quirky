@@ -344,4 +344,4 @@ Research ran on 2026-11-02 and 2026-11-03. Brave Search was unavailable on the p
 
 ## Status & amendments
 
-Status: Approved 2026-11-05
+Status: Approved 2026-11-05. Tech spec: written 2026-11-05 ([tech.md](tech.md)), because the build touches more than three source files.
