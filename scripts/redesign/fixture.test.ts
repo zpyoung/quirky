@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FixtureInfo } from './contracts.ts'
@@ -123,6 +123,31 @@ describe('seed and stop without a fixture', () => {
   test('seed exits 2 when fixture.json is missing', async () => {
     const result = await run(['seed', join(out, 'nowhere'), join(out, 'seed.sh')])
     expect(result.code).toBe(2)
+    expect(JSON.parse(result.stdout)).toEqual({ error: `no fixture.json in ${join(out, 'nowhere')}` })
+  })
+
+  test('a usage error prints a JSON error and exits 2', async () => {
+    const result = await run(['launch', out])
+    expect(result.code).toBe(2)
+    expect(JSON.parse(result.stdout)).toEqual({ error: 'first argument must be start, seed or stop' })
+  })
+
+  test('stop leaves an unrelated process alone when fixture.json is stale', async () => {
+    const stale = join(out, 'stale')
+    mkdirSync(stale)
+    const bystander = Bun.spawn(['sleep', '30'])
+    try {
+      const info: FixtureInfo = { url: '', port: 1, home: join(stale, 'home'), pid: bystander.pid, repos: { primary: '', worktrees: {}, projects: {} } }
+      writeFileSync(join(stale, 'fixture.json'), JSON.stringify(info))
+      const result = await run(['stop', stale])
+      expect(result.code).toBe(0)
+      expect(JSON.parse(result.stdout)).toEqual({ stopped: false, stale: true })
+      expect(existsSync(join(stale, 'fixture.json'))).toBe(false)
+      expect(bystander.exitCode).toBeNull()
+      expect(() => process.kill(bystander.pid, 0)).not.toThrow()
+    } finally {
+      bystander.kill('SIGKILL')
+    }
   })
 
   test('stop with no fixture.json reports stopped false and exits 0', async () => {

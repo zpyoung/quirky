@@ -9,11 +9,12 @@
  *   bun scripts/redesign/fixture.ts stop <out-dir>
  *
  * Every invocation prints one JSON object on stdout and diagnostics on stderr. Exit 0 is success, 1 a
- * checked failure the JSON describes, 2 bad arguments or a missing fixture.
+ * checked failure the JSON describes, 2 bad arguments or a missing fixture. Errors with no result of
+ * their own print `{"error": "<message>"}`.
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { connectDaemon, isDaemonAlive, readRuntime } from '@quirky/protocol/node'
 import { createProcessScope } from '../test-support/process-scope.ts'
@@ -103,6 +104,11 @@ function emit(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`)
 }
 
+function emitError(message: string): void {
+  console.error(message)
+  emit({ error: message })
+}
+
 function isRunning(pid: number): boolean {
   try {
     process.kill(pid, 0)
@@ -115,6 +121,18 @@ function isRunning(pid: number): boolean {
 function readInfo(out: string): FixtureInfo | undefined {
   const path = join(out, 'fixture.json')
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as FixtureInfo) : undefined
+}
+
+/** True when `pid` is a live `fixture.ts start` for `out`, so a recycled pid is never signalled. */
+function ownsFixture(pid: number, out: string): boolean {
+  const ps = spawnSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' })
+  if (ps.status !== 0) return false
+  const command = ps.stdout
+  return (
+    command.includes('scripts/redesign/fixture.ts') &&
+    command.includes(' start ') &&
+    (command.includes(out) || command.includes(relative(process.cwd(), out)))
+  )
 }
 
 async function start(command: Extract<FixtureCommand, { kind: 'start' }>): Promise<void> {
@@ -185,6 +203,7 @@ async function start(command: Extract<FixtureCommand, { kind: 'start' }>): Promi
     console.error('READY', fixtureJson)
     emit({ ready: fixtureJson })
   } catch (error) {
+    emitError(error instanceof Error ? error.message : String(error))
     console.error(error)
     await stop(1)
   }
@@ -203,7 +222,7 @@ async function waitForRuntime(home: string) {
 function seed(command: Extract<FixtureCommand, { kind: 'seed' }>): number {
   const info = readInfo(command.out)
   if (!info) {
-    console.error(`no fixture.json in ${command.out}`)
+    emitError(`no fixture.json in ${command.out}`)
     return 2
   }
   const env = { ...seedEnvironment(info, repoRoot), REDESIGN_FIXTURE_JSON: join(command.out, 'fixture.json') }
@@ -221,6 +240,11 @@ async function stopFixture(command: Extract<FixtureCommand, { kind: 'stop' }>): 
   const info = readInfo(command.out)
   if (!info || !isRunning(info.pid)) {
     emit({ stopped: false })
+    return 0
+  }
+  if (!ownsFixture(info.pid, command.out)) {
+    rmSync(join(command.out, 'fixture.json'), { force: true })
+    emit({ stopped: false, stale: true })
     return 0
   }
   process.kill(info.pid, 'SIGTERM')
@@ -241,7 +265,7 @@ async function main(argv: string[]): Promise<number | undefined> {
     command = parseFixtureArgs(argv)
   } catch (error) {
     if (!(error instanceof UsageError)) throw error
-    console.error(error.message)
+    emitError(error.message)
     return 2
   }
   if (command.kind === 'start') return start(command).then(() => undefined)
