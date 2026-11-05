@@ -194,6 +194,13 @@ async function readScores(path: string, flag: string): Promise<Scores> {
   if (!isRecord(parsed) || !Array.isArray(parsed.surfaces)) throw new Error(`${flag} ${path} is not a Scores file`)
   for (const surface of parsed.surfaces) {
     if (!isRecord(surface) || typeof surface.id !== 'string') throw new Error(`${flag} ${path} has a surface without an id`)
+    if (typeof surface.plugin !== 'string') throw new Error(`${flag} ${path} surface ${surface.id} has no plugin`)
+    for (const theme of THEMES) {
+      const value = surface[theme]
+      if (value !== null && !(typeof value === 'number' && Number.isFinite(value))) {
+        throw new Error(`${flag} ${path} surface ${surface.id} needs ${theme} as a finite number or null`)
+      }
+    }
   }
   return parsed as Scores
 }
