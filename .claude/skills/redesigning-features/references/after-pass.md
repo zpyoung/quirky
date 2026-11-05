@@ -25,7 +25,7 @@ This is the last phase. Report the PR link and stop.
    likeuser.py begin --target <url> --surface web --owner yours --unattended --goals-file <replay-goals.json>
    ```
 
-   Save screenshots to `<spec>/img/after/NN-slug.png`, reusing each goal's before filename so the pairs line up. A goal passes only when likeuser shows its effect happened (`act` returned `OBSERVED` and the screenshot shows the result), never on how the screenshot looks.
+   As in the before pass, the first action after `begin` is to select the worktree the seed prepared (`ui-review-ready` unless `seed.sh` works in another one) in the Worktrees tool, proven with `act`, before any goal, so the replay starts where the before walk did. Save screenshots to `<spec>/img/after/NN-slug.png`, reusing each goal's before filename so the pairs line up. A goal passes only when likeuser shows its effect happened (`act` returned `OBSERVED` and the screenshot shows the result), never on how the screenshot looks.
 2. Skip cut goals (SC-18). A goal that `logic.md`'s Redesign checks marks as removed is not walked. Leave it out of `<replay-goals.json>` and record it as `cut` with the spec's reason.
 3. Stop the fixture: `bun scripts/redesign/fixture.ts stop <scratch>/fixture-after`.
 4. Score and gate (SC-19). Names of removed surfaces come from `logic.md` Capabilities and Redesign checks:
@@ -55,8 +55,9 @@ This is the last phase. Report the PR link and stop.
    - If the user says no, record each goal as `not-replayed` with reason `declined`.
    - If yes, run `which hutch` first. `bun run dev` spawns `hutch electrobun dev` and throws ENOENT without it. If `hutch` is missing, do not try to install it: record each goal as `not-replayed` with reason `hutch executable missing`.
    - If `hutch` exists, run `bun run dev` in the background and replay the goals in that window with a `--surface electron` or `--surface native` likeuser run, as the likeuser skill's router says.
+   - If `bun run dev` exits early, or no dev window appears within 5 minutes, stop the dev process and record each real-app goal as `not-replayed` with the launch failure as the reason, quoting the last lines of its output. Tell the user how to get their Quirky back (below) and continue to the PR.
    - Afterwards, tell the user how to get their Quirky back: quit the dev shell, then relaunch `~/Applications/Quirky.app` from main so its own daemon starts again.
-6. Fix rounds (SC-21). If the gate or a goal failed, send the failure through the build pairing: follow build.md's brief with the failing rows, goals and reasons as the work, and targeted tests only. Then redo steps 1 to 4. Do this at most twice. After the second round, move on whatever the result.
+6. Fix rounds (SC-21). If the gate or a goal failed, send the failure through the build pairing: follow build.md's brief with the failing rows, goals and reasons as the work, and targeted tests only. Then redo steps 1 to 4, and re-check both gates in full: the score gate, the fixture replay and, when the user agreed to the real-app replay in step 5, the real-app replay too. Do not ask again, because the go-ahead covers the whole pass. If the user declined, the real-app goals stay `not-replayed` with reason `declined`. Do this at most twice. After the second round, move on whatever the result.
 7. Write `<spec>/comparison-data.json` (SC-22), shaped as `ComparisonData`:
 
    ```json
