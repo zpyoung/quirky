@@ -54,7 +54,7 @@ export type TerminalPaneHandle = {
   /** The selected text (gutter-trimmed when the setting says so), also put on the clipboard; empty when nothing is selected. */
   copy(): string
   selectAll(): void
-  /** Pastes through the same bracketed, chunked path as a real paste. */
+  /** Pastes through the same bracketed, chunked path as a real paste, so empty text still sends an empty bracketed paste. */
   paste(text: string): Promise<void>
   /** Opens the find box, or focuses it when open; with a query it also searches. Throws invalid-params for a query over 1,000 characters. */
   search(query?: string, options?: SearchOptions): void
@@ -583,7 +583,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')
         return
       }
-      if (text.length === 0) return
+      if (plan.chunks.length === 0) return
       await claimUserInput()
       if (disposed || !canSend()) return
       const outcome = await runPaste(plan.chunks, (data) => context.call('quirky.terminal/write', { session: sessionId, data }), { closer: plan.closer })
@@ -636,7 +636,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       event.preventDefault()
       event.stopPropagation()
       void context.readClipboardText()
-        .then((text) => (text ? paste(text) : undefined))
+        .then((text) => paste(text))
         .catch(() => {})
     }
     const onMouseEnter = () => {

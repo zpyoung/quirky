@@ -1303,7 +1303,7 @@ export class WorkspaceController {
   private async pasteFromClipboard(paneId: string): Promise<void> {
     try {
       const text = await this.context.readClipboardText()
-      if (text) await this.paste(text, paneId)
+      await this.paste(text, paneId)
     } catch (error) {
       this.context.toast('Could not paste', messageOf(error))
     }

@@ -93,12 +93,13 @@ function on(context: UiPluginContext, key: string, act: (controller: WorkspaceCo
 const onPane = (context: UiPluginContext, act: (controller: WorkspaceController, pane: string | undefined, args: Args) => unknown): CommandHandler =>
   on(context, 'pane', (controller, args) => act(controller, textArg(args, 'pane'), args))
 
-async function readClipboard(context: UiPluginContext): Promise<string> {
+/** The clipboard's text, or null after toasting why it could not be read. */
+async function readClipboard(context: UiPluginContext): Promise<string | null> {
   try {
     return await context.readClipboardText()
   } catch (error) {
     context.toast('Could not paste', error instanceof Error ? error.message : String(error))
-    return ''
+    return null
   }
 }
 
@@ -246,8 +247,12 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
     copy: onPane(context, (controller, pane) => controller.copy(pane)),
     'select-all': onPane(context, (controller, pane) => controller.selectAll(pane)),
     paste: onPane(context, async (controller, pane, args) => {
-      const text = typeof args.text === 'string' ? args.text : await readClipboard(context)
-      if (text !== '') await controller.paste(text, pane)
+      if (typeof args.text === 'string') {
+        if (args.text !== '') await controller.paste(args.text, pane)
+        return
+      }
+      const text = await readClipboard(context)
+      if (text !== null) await controller.paste(text, pane)
     }),
     search: onPane(context, (controller, pane, args) => controller.search(stringArg(args, 'query'), searchOptions(args), pane)),
     'search-next': onPane(context, (controller, pane) => controller.searchNext(pane)),
