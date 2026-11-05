@@ -13,8 +13,8 @@
  * their own print `{"error": "<message>"}`.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { connectDaemon, isDaemonAlive, readRuntime } from '@quirky/protocol/node'
 import { createProcessScope } from '../test-support/process-scope.ts'
@@ -123,16 +123,30 @@ function readInfo(out: string): FixtureInfo | undefined {
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as FixtureInfo) : undefined
 }
 
-/** True when `pid` is a live `fixture.ts start` for `out`, so a recycled pid is never signalled. */
-function ownsFixture(pid: number, out: string): boolean {
-  const ps = spawnSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' })
-  if (ps.status !== 0) return false
-  const command = ps.stdout
-  return (
-    command.includes('scripts/redesign/fixture.ts') &&
-    command.includes(' start ') &&
-    (command.includes(out) || command.includes(relative(process.cwd(), out)))
-  )
+/**
+ * Decides from `ps -o lstart= -o command=` output whether a pid is the `fixture.ts start` that wrote
+ * `fixture.json`. `start` writes that file once it is running, so a process that started after the
+ * file's mtime is a pid reused by something else. `unknown` means the output could not be read and
+ * the pid must not be signalled.
+ */
+export function fixtureOwnership(psOutput: string, fixtureJsonMtimeMs: number): 'owned' | 'stale' | 'unknown' {
+  const match = /^\s*([A-Z][a-z]{2} [A-Z][a-z]{2}\s+\d{1,2} \d{2}:\d{2}:\d{2} \d{4})\s+(\S.*)$/m.exec(psOutput)
+  if (!match) return 'unknown'
+  const startedMs = Date.parse(match[1]!)
+  if (Number.isNaN(startedMs)) return 'unknown'
+  const command = match[2]!
+  const isFixtureStart = command.includes('scripts/redesign/fixture.ts') && command.includes(' start ')
+  return isFixtureStart && startedMs <= fixtureJsonMtimeMs ? 'owned' : 'stale'
+}
+
+function pidOwnership(pid: number, fixtureJsonMtimeMs: number): 'owned' | 'stale' | 'unknown' {
+  const ps = spawnSync('ps', ['-p', String(pid), '-o', 'lstart=', '-o', 'command='], {
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C' }
+  })
+  if (ps.error) return 'unknown'
+  if (ps.status !== 0) return ps.stdout.trim() === '' && ps.stderr.trim() === '' ? 'stale' : 'unknown'
+  return fixtureOwnership(ps.stdout, fixtureJsonMtimeMs)
 }
 
 async function start(command: Extract<FixtureCommand, { kind: 'start' }>): Promise<void> {
@@ -242,8 +256,14 @@ async function stopFixture(command: Extract<FixtureCommand, { kind: 'stop' }>): 
     emit({ stopped: false })
     return 0
   }
-  if (!ownsFixture(info.pid, command.out)) {
-    rmSync(join(command.out, 'fixture.json'), { force: true })
+  const fixtureJson = join(command.out, 'fixture.json')
+  const ownership = pidOwnership(info.pid, statSync(fixtureJson).mtimeMs)
+  if (ownership === 'unknown') {
+    emitError(`could not identify process ${info.pid}; leaving ${fixtureJson} in place`)
+    return 1
+  }
+  if (ownership === 'stale') {
+    rmSync(fixtureJson, { force: true })
     emit({ stopped: false, stale: true })
     return 0
   }
