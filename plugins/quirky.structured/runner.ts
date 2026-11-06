@@ -31,13 +31,24 @@ export type StructuredContext = {
   resolveClaudePath(): Promise<string>
   /** The user's `codex` executable, found through their login shell. */
   resolveCodexPath(): Promise<string>
+  /** The user's `pi` or `omp` executable, found through their login shell. */
+  resolvePiPath?(agent: 'pi' | 'omp'): Promise<string>
 }
+
+/** `deny-all` runs a session with no tools: every tool or approval request is refused without an ask. */
+export type ToolPolicy = 'default' | 'deny-all'
+
+/** The context footprint a runner records on `data.usage` of the message that ends an assistant turn. */
+export type TurnUsage = { contextTokens: number; contextWindow: number | null }
 
 /** The per-session launch inputs: agent picks plus the resolved provider environment patch. */
 export type StructuredLaunchOptions = { model?: string; effort?: string; env?: Record<string, string | null> }
 
 /** Start-only provider identity; launch options remain provider-native model/effort strings. */
-export type StructuredStartOptions = StructuredLaunchOptions & { providerSession?: SessionProviderSession }
+export type StructuredStartOptions = StructuredLaunchOptions & {
+  providerSession?: SessionProviderSession
+  toolPolicy?: ToolPolicy
+}
 
 /** Drives background (no PTY) agent sessions. One runner serves every structured session. */
 export interface StructuredRunner {

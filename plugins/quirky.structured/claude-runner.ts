@@ -1,6 +1,6 @@
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredStartOptions, StructuredRunner } from './runner'
+import type { StructuredContext, StructuredStartOptions, StructuredRunner, TurnUsage } from './runner'
 import { nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
@@ -17,6 +17,7 @@ export type ClaudeRunnerDeps = {
 }
 
 const DENIED = 'Denied from Quirky'
+const TOOLS_DISABLED = 'tools are disabled for this session'
 const SUMMARY_LIMIT = 160
 const INTERRUPT_TIMEOUT_MS = 2000
 
@@ -69,6 +70,8 @@ type Running = {
   ended: boolean
 }
 
+const denyEveryTool: CanUseTool = async () => ({ behavior: 'deny', message: TOOLS_DISABLED })
+
 function userMessage(text: string, providerSessionId?: string): SDKUserMessage {
   return {
     type: 'user',
@@ -111,6 +114,30 @@ function blockText(content: unknown): string {
     .map((part) => (part && typeof part === 'object' && typeof part.text === 'string' ? part.text : ''))
     .filter(Boolean)
     .join('\n')
+}
+
+function numberOr0(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+/** The context footprint of a result message, or null when the SDK reported no usage. */
+function resultUsage(msg: any): TurnUsage | null {
+  const usage = msg?.usage
+  if (typeof usage !== 'object' || usage === null) return null
+  const windows =
+    typeof msg.modelUsage === 'object' && msg.modelUsage !== null
+      ? Object.values<any>(msg.modelUsage)
+          .map((entry) => entry?.contextWindow)
+          .filter((value): value is number => typeof value === 'number' && value > 0)
+      : []
+  return {
+    contextTokens:
+      numberOr0(usage.input_tokens) +
+      numberOr0(usage.cache_read_input_tokens) +
+      numberOr0(usage.cache_creation_input_tokens) +
+      numberOr0(usage.output_tokens),
+    contextWindow: windows.length > 0 ? Math.max(...windows) : null
+  }
 }
 
 function resultText(msg: any): string {
@@ -177,6 +204,7 @@ class ClaudeRunner implements StructuredRunner {
     launchOptions: StructuredStartOptions,
     providerSessionId: string | undefined
   ): void {
+    const denyAll = launchOptions.toolPolicy === 'deny-all'
     const input = createInputStream()
     if (prompt !== undefined && prompt !== '') {
       const first = userMessage(prompt, providerSessionId)
@@ -197,7 +225,8 @@ class ClaudeRunner implements StructuredRunner {
           pathToClaudeCodeExecutable,
           ...(launchOptions.providerSession === undefined ? {} : { resume: launchOptions.providerSession.id }),
           permissionMode: 'default',
-          canUseTool: this.canUseTool(session.id),
+          canUseTool: denyAll ? denyEveryTool : this.canUseTool(session.id),
+          ...(denyAll ? { tools: [], mcpServers: {}, strictMcpConfig: true } : {}),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
           ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
           ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort as Options['effort'] } : {})
@@ -359,7 +388,8 @@ class ClaudeRunner implements StructuredRunner {
         return
       }
       case 'result': {
-        append('result', resultText(msg), msg)
+        const usage = resultUsage(msg)
+        append('result', resultText(msg), usage ? { ...msg, usage, sdkUsage: msg.usage } : msg)
         const failed = msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error'))
         if (failed) {
           const run = this.running.get(sessionId)

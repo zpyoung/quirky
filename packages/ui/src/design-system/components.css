@@ -693,6 +693,26 @@
   max-width: min(100%, var(--ui-dialog-wide-width));
 }
 
+.ui-dialog--xwide {
+  max-width: min(100%, var(--ui-dialog-xwide-width));
+}
+
+.ui-dialog__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-4);
+  min-width: 0;
+}
+
+.ui-dialog__description {
+  color: var(--ui-muted);
+  font-size: var(--ui-font-body);
+  line-height: 1.45;
+  margin: 0;
+  max-width: 44rem;
+  text-wrap: pretty;
+}
+
 .ui-dialog__header {
   align-items: flex-start;
   display: flex;

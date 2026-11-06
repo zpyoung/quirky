@@ -38,7 +38,7 @@ export type MenuProps = { label: string; trigger?: ReactNode; items: readonly Me
 /** Nonmodal anchored dialog; outside pointer and Escape dismiss without trapping focus. */
 export type PopoverProps = { open: boolean; label: string; anchor: RefObject<HTMLElement | null>; boundary?: HTMLElement | null; onClose(): void; children: ReactNode }
 export type ToastProps = { title: string; description?: ReactNode; status?: UiStatus; action?: UiAction; onDismiss: () => void; durationMs?: number }
-export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose?: () => void; variant?: 'dialog' | 'sheet'; placement?: 'center' | 'top'; size?: 'default' | 'wide'; closeOnBackdrop?: boolean; scrollBody?: boolean }
+export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose?: () => void; variant?: 'dialog' | 'sheet'; placement?: 'center' | 'top'; size?: 'default' | 'wide' | 'xwide'; description?: ReactNode; closeOnBackdrop?: boolean; scrollBody?: boolean }
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }
 export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode }
 export type ToolPanelFrameProps = { title: string; tabs?: ReactNode; tools?: ReactNode; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
@@ -79,6 +79,15 @@ export type PopupMenuProps = {
  */
 export type StatusBarItemProps = { label: string; items?: PopupItem[]; popupTitle?: string; children: ReactNode }
 
+/** One choice in a {@link ReachMeterProps} or {@link SegmentedControlProps}; `caution` tints its name for the choice with the widest consequences. */
+export type ChoiceOption = { value: string; label: string; title?: string; caution?: boolean }
+export type ReachMeterProps = { label: string; options: ChoiceOption[]; value: string; onChange: (value: string) => void; className?: string }
+export type SegmentedControlProps = { label: string; options: ChoiceOption[]; value?: string | null; onChange: (value: string) => void; className?: string }
+export type CheckboxProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & { indeterminate?: boolean; tone?: 'needs-you'; children?: ReactNode; ref?: Ref<HTMLInputElement> }
+export type AffixInputProps = InputHTMLAttributes<HTMLInputElement> & { prefixText?: string; suffix?: ReactNode; mono?: boolean; ref?: Ref<HTMLInputElement> }
+export type LinkButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'failing' }
+export type TagButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
+export type DisclosureButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-expanded'> & { label: string; expanded: boolean }
 export type ReviewMarkState = 'none' | 'reviewed' | 'changed'
 export type ReviewMarkProps = { state: ReviewMarkState; label?: string }
 export type SplitButtonProps = {

@@ -76,7 +76,7 @@ export type PluginHostOptions = {
   }) => Map<string, PluginDiagnostic[]>
 }
 
-const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
+const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook', 'tool-gate'])
 
 const DEFAULT_TIMEOUT_MS = 10_000
 

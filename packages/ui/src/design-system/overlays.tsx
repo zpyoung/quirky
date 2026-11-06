@@ -89,11 +89,12 @@ function syncDialogIsolation(ownerDocument: Document, state: DialogState) {
   }
 }
 
-export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', placement = 'center', size = 'default', closeOnBackdrop = true, scrollBody = false }: DialogProps) {
+export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', placement = 'center', size = 'default', description, closeOnBackdrop = true, scrollBody = false }: DialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null)
   const wasOpenRef = useRef(false)
   const openerRef = useRef<HTMLElement | null>(null)
   const titleId = useId()
+  const descriptionId = useId()
 
   if (open && !wasOpenRef.current) {
     openerRef.current = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
@@ -180,15 +181,23 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     >
       <section
         ref={dialogRef}
-        className={classNames('ui-dialog', variant === 'sheet' && 'ui-dialog--sheet', size === 'wide' && 'ui-dialog--wide', scrollBody && 'ui-dialog--scroll-body')}
+        className={classNames('ui-dialog', variant === 'sheet' && 'ui-dialog--sheet', size === 'wide' && 'ui-dialog--wide', size === 'xwide' && 'ui-dialog--xwide', scrollBody && 'ui-dialog--scroll-body')}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={description !== undefined ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={onDialogKeyDown}
       >
         <header className="ui-dialog__header">
-          <h2 className="ui-dialog__title" id={titleId}>{title}</h2>
+          {description === undefined ? (
+            <h2 className="ui-dialog__title" id={titleId}>{title}</h2>
+          ) : (
+            <div className="ui-dialog__heading">
+              <h2 className="ui-dialog__title" id={titleId}>{title}</h2>
+              <p className="ui-dialog__description" id={descriptionId}>{description}</p>
+            </div>
+          )}
           {onClose && <button type="button" className="ui-dialog__close" aria-label="Close dialog" onClick={onClose}>×</button>}
         </header>
         <div className="ui-dialog__body">{children}</div>

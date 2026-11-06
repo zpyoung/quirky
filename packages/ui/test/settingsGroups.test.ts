@@ -105,3 +105,8 @@ const solar: ThemeInfo = {
 test('SC-26: a chosen theme that is no longer offered shows as the default', () => {
   expect(themePicker([DEFAULT_THEME], solar.id).selected).toBe('default')
 })
+
+test('hidden settings get no control, and a plugin with only hidden settings gets no group', () => {
+  expect(settingsGroups([{ ...fontSize, hidden: true }, mode])[0]).toMatchObject({ plugin: 'acme.notes', fields: [{ id: mode.id }] })
+  expect(settingsGroups([{ ...fontSize, hidden: true }, { ...mode, category: 'Notes', hidden: true }])).toEqual([])
+})

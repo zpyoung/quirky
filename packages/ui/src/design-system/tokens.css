@@ -62,6 +62,7 @@
   --ui-status-dot-size: 8px;
   --ui-window-inactive-opacity: 0.6;
   --ui-dialog-wide-width: 52rem;
+  --ui-dialog-xwide-width: 70rem;
   --ui-form-column-width: 16rem;
 }
 

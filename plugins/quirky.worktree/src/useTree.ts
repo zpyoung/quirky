@@ -105,7 +105,32 @@ function statusByWorktree(rows: readonly HeimdallFleetRow[]): Record<string, Hei
   return statuses
 }
 
-export type HeimdallAwareWorktree = WorktreeControl & { heimdallStatus: HeimdallWorktreeStatus | null }
+/** What the avatar reports for a workspace it supervises; structurally mirrors `quirky.avatar/sidebarStatus`. */
+export type AvatarWorktreeStatus = {
+  state: string
+  level: 'shadow' | 'local' | 'own-branch' | 'full'
+  needsYou: number
+}
+
+const AVATAR_LEVELS: readonly string[] = ['shadow', 'local', 'own-branch', 'full']
+
+function parseAvatarStatuses(value: unknown): Record<string, AvatarWorktreeStatus> {
+  const statuses: Record<string, AvatarWorktreeStatus> = {}
+  const record = objectRecord(value)
+  if (!record) return statuses
+  for (const [worktreeId, item] of Object.entries(record)) {
+    const status = objectRecord(item)
+    if (!status || typeof status.state !== 'string' || typeof status.level !== 'string' || !AVATAR_LEVELS.includes(status.level)) continue
+    if (typeof status.needsYou !== 'number' || !Number.isFinite(status.needsYou)) continue
+    statuses[worktreeId] = { state: status.state, level: status.level as AvatarWorktreeStatus['level'], needsYou: status.needsYou }
+  }
+  return statuses
+}
+
+export type HeimdallAwareWorktree = WorktreeControl & {
+  heimdallStatus: HeimdallWorktreeStatus | null
+  avatarStatus: AvatarWorktreeStatus | null
+}
 
 export type TreeData = {
   repos: Repo[]
@@ -129,10 +154,12 @@ export function useTree(context: UiPluginContext): TreeData {
   const [worktrees, setWorktrees] = useState<WorktreeControl[]>([])
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [heimdallByWorktree, setHeimdallByWorktree] = useState<Record<string, HeimdallWorktreeStatus>>({})
+  const [avatarByWorktree, setAvatarByWorktree] = useState<Record<string, AvatarWorktreeStatus>>({})
   const [loaded, setLoaded] = useState(false)
   const latestTree = useRef(0)
   const latestSessions = useRef(0)
   const latestHeimdall = useRef(Number.NEGATIVE_INFINITY)
+  const latestAvatar = useRef(0)
   const [otherClientByWorktree, setOtherClientByWorktree] = useState<ReadonlyMap<string, WorkspaceOriginView['otherClient']>>(() => new Map())
   const [hasAuthenticatedDesktopClient, setHasAuthenticatedDesktopClient] = useState(false)
   const latestOrigins = useRef(0)
@@ -200,11 +227,24 @@ export function useTree(context: UiPluginContext): TreeData {
     }
   }, [context])
 
+  const loadAvatar = useCallback(async () => {
+    const ticket = ++latestAvatar.current
+    let next: Record<string, AvatarWorktreeStatus> = {}
+    try {
+      next = parseAvatarStatuses(await context.call('quirky.avatar/sidebarStatus', {}))
+    } catch {
+      next = {}
+    }
+    if (ticket !== latestAvatar.current) return
+    setAvatarByWorktree(next)
+  }, [context])
+
   useEffect(() => {
     void loadTree()
     void loadOrigins()
     void loadSessions()
     void loadHeimdall()
+    void loadAvatar()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
       const data = (event as { data?: unknown }).data
       switch (event.type) {
@@ -228,6 +268,10 @@ export function useTree(context: UiPluginContext): TreeData {
           void loadTree()
           void loadSessions()
           void loadHeimdall()
+          void loadAvatar()
+          break
+        case 'quirky.avatar/changed':
+          void loadAvatar()
           break
         case 'quirky.heimdall/fleetChanged': {
           const incoming = parseHeimdallSnapshot(data)
@@ -246,16 +290,21 @@ export function useTree(context: UiPluginContext): TreeData {
       void loadOrigins()
       void loadSessions()
       void loadHeimdall()
+      void loadAvatar()
     })
     return () => {
       unsubscribe()
       stopConnection()
     }
-  }, [context, loadTree, loadOrigins, loadSessions, loadHeimdall])
+  }, [context, loadTree, loadOrigins, loadSessions, loadHeimdall, loadAvatar])
 
   const worktreesWithHeimdall = useMemo<HeimdallAwareWorktree[]>(
-    () => worktrees.map((worktree) => ({ ...worktree, heimdallStatus: heimdallByWorktree[worktree.id] ?? null })),
-    [heimdallByWorktree, worktrees]
+    () => worktrees.map((worktree) => ({
+      ...worktree,
+      heimdallStatus: heimdallByWorktree[worktree.id] ?? null,
+      avatarStatus: avatarByWorktree[worktree.id] ?? null
+    })),
+    [avatarByWorktree, heimdallByWorktree, worktrees]
   )
 
   return { repos, groups, worktrees: worktreesWithHeimdall, sessions, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded }

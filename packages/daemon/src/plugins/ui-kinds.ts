@@ -27,13 +27,14 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   overlay: ['title', 'description', 'order'],
   command: ['title', 'description', 'args', 'palette', 'whenSetting'],
   keybinding: ['key', 'command', 'description', 'when', 'whenSetting'],
-  setting: ['type', 'default', 'title', 'description', 'category', 'section', 'minimum', 'maximum', 'values', 'menu', 'whenSetting'],
+  setting: ['type', 'default', 'title', 'description', 'category', 'section', 'hidden', 'minimum', 'maximum', 'values', 'menu', 'whenSetting'],
   theme: ['title', 'appearance', 'colors', 'description'],
   'menu-item': ['menu', 'title', 'command', 'when', 'after'],
+  'window-bar-item': ['title', 'description', 'order'],
 } satisfies Record<(typeof UI_KINDS)[number], readonly string[]>
 
 const SETTING_TYPES = ['boolean', 'number', 'string', 'enum'] as const
-const TITLE_REQUIRED = new Set(['status-bar', 'sidebar-section', 'activity-item', 'panel', 'settings-section', 'overlay', 'setting', 'theme', 'menu-item'])
+const TITLE_REQUIRED = new Set(['status-bar', 'sidebar-section', 'activity-item', 'panel', 'settings-section', 'overlay', 'setting', 'theme', 'menu-item', 'window-bar-item'])
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== ''
@@ -128,6 +129,7 @@ function checkSetting(label: string, entry: Entry, errors: string[]): void {
       errors.push(`${label}: ${field} must be a non-empty string`)
     }
   }
+  if (entry.hidden !== undefined && typeof entry.hidden !== 'boolean') errors.push(`${label}: hidden must be a boolean`)
   const type = entry.type
   const typeValid = (SETTING_TYPES as readonly unknown[]).includes(type)
   if (!typeValid) errors.push(`${label}: type must be boolean, number, string or enum`)

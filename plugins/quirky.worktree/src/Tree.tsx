@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
 import { Badge, Button, ContextMenu, IconButton, ListRow, ProjectTile, SectionHeader, StatusDot as UiStatusDot, type ContextMenuItem, type UiStatus } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
-import type { HeimdallWorktreeStatus } from './useTree'
+import type { AvatarWorktreeStatus, HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, currentWindowId, setWorkspaceSleeping, setWorktree } from './actions'
 import { groupMenu, projectMenu, workspaceMenu } from './Menu'
@@ -75,6 +75,82 @@ function isHeimdallWorktreeStatus(value: unknown): value is HeimdallWorktreeStat
 function heimdallStatusOf(worktree: Worktree): HeimdallWorktreeStatus | null {
   if (!('heimdallStatus' in worktree)) return null
   return isHeimdallWorktreeStatus(worktree.heimdallStatus) ? worktree.heimdallStatus : null
+}
+
+const AVATAR_LEVELS = ['shadow', 'local', 'own-branch', 'full']
+
+function avatarStatusOf(worktree: Worktree): AvatarWorktreeStatus | null {
+  if (!('avatarStatus' in worktree)) return null
+  const status = worktree.avatarStatus
+  if (typeof status !== 'object' || status === null) return null
+  const candidate = status as Record<string, unknown>
+  return typeof candidate.state === 'string' && typeof candidate.level === 'string' && AVATAR_LEVELS.includes(candidate.level) &&
+    typeof candidate.needsYou === 'number'
+    ? (status as AvatarWorktreeStatus)
+    : null
+}
+
+const AVATAR_STATE_LABELS: Record<string, string> = {
+  checking: 'Checking', 'gate-failed': 'Gate failed', briefing: 'Briefing', working: 'Working', 'waiting-on-you': 'Waiting on you',
+  'checking-done': 'Checking done', 'in-review': 'In review', 'merge-ready': 'Merge ready', merged: 'Merged', 'pr-ready': 'PR ready',
+  committed: 'Committed', parked: 'Parked', done: 'Done'
+}
+
+const AVATAR_LEVEL_LABELS: Record<AvatarWorktreeStatus['level'], string> = { shadow: 'Shadow', local: 'Local', 'own-branch': 'Own branch', full: 'Full' }
+
+const AVATAR_RING_STYLE: CSSProperties = {
+  display: 'inline-flex',
+  borderRadius: '50%',
+  boxShadow: '0 0 0 var(--ui-focus-width) var(--ui-accent)'
+}
+
+/** The status dot of an avatar-supervised workspace, ringed in the accent colour. */
+function AvatarGlyph({ status }: { status: AvatarWorktreeStatus }) {
+  const dotStatus: UiStatus = status.needsYou > 0 ? 'needs-you' : status.state === 'working' ? 'working' : 'idle'
+  const state = AVATAR_STATE_LABELS[status.state] ?? status.state
+  const label = status.needsYou > 0
+    ? `${state} · ${status.needsYou} need${status.needsYou === 1 ? 's' : ''} you`
+    : state
+  return (
+    <span className="avatar-ring" data-avatar-ring="" style={AVATAR_RING_STYLE} title={`Avatar: ${label} · ${AVATAR_LEVEL_LABELS[status.level]}`}>
+      <UiStatusDot status={dotStatus} label={`Avatar ${label}`} />
+    </span>
+  )
+}
+
+const AVATAR_HANDOFF_COMMAND = 'quirky.avatar/handoff'
+
+/** The id the window registered for the avatar's hand-off command, or null while that plugin is not loaded. */
+function useAvatarHandoffCommand(context: UiPluginContext): string | null {
+  const [commandId, setCommandId] = useState<string | null>(null)
+  useEffect(() => {
+    let latest = 0
+    const load = async () => {
+      const ticket = ++latest
+      let next: string | null = null
+      try {
+        const model = (await context.call('ui.contributions', {})) as { commands?: { id?: unknown }[] } | null
+        const ids = (model?.commands ?? []).map((command) => command.id)
+        next = ids.find((id): id is string => id === `command:${AVATAR_HANDOFF_COMMAND}` || id === AVATAR_HANDOFF_COMMAND) ?? null
+      } catch {
+        next = null
+      }
+      if (ticket === latest) setCommandId(next)
+    }
+    void load()
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type === 'plugin.changed') void load()
+    })
+    const stopConnection = context.onConnection((status) => {
+      if (status === 'connected') void load()
+    })
+    return () => {
+      latest++
+      unsubscribe()
+      stopConnection()
+    }
+  }, [context])
+  return commandId
 }
 
 function HeimdallGlyph({ status, now }: { status: HeimdallWorktreeStatus; now: number }) {
@@ -238,6 +314,7 @@ function WorktreeCard({
     options.compact && 'compact'
   ].filter(Boolean).join(' ')
   const heimdall = heimdallStatusOf(worktree)
+  const avatar = avatarStatusOf(worktree)
   const provenance = worktree.automationProvenance?.kind === 'created-by-automation'
     ? worktree.automationProvenance
     : null
@@ -288,7 +365,8 @@ function WorktreeCard({
         title={
           <span className="ui-cluster">
             {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : null}
-            <span className={`${worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'} ui-text-ellipsis`} title={worktree.name}>{worktree.name}</span>
+            <span className={`${worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'} ui-text-ellipsis`} title={worktree.name}>{avatar ? `Avatar · ${worktree.name}` : worktree.name}</span>
+            {avatar && <AvatarGlyph status={avatar} />}
             {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
           </span>
         }
@@ -613,6 +691,8 @@ export function Tree({
     )
   }
 
+  const handoffCommand = useAvatarHandoffCommand(context)
+
   const openWorkspaceMenu = (worktree: Worktree, x: number, y: number, returnFocusTo?: HTMLElement) => {
     const repo = repoById.get(worktree.repoId)
     setMenu({
@@ -649,6 +729,15 @@ export function Tree({
             context.toast(`Could not open ${target}`, error instanceof Error ? error.message : String(error))
           )
         },
+        ...(handoffCommand
+          ? {
+              handoffToAvatar: (item: Worktree) => {
+                void context.executeCommand(handoffCommand, { worktreeIds: [item.id] }).catch((error: unknown) =>
+                  context.toast('Could not hand off to Avatar', error instanceof Error ? error.message : String(error))
+                )
+              }
+            }
+          : {}),
         archive: (item, archived) => {
           void context.call('quirky.worktree/archive', { worktree: item.id, archivedAt: archived ? Date.now() : null }).catch((error: unknown) =>
             context.toast(`Could not ${archived ? 'archive' : 'unarchive'} workspace`, error instanceof Error ? error.message : String(error))

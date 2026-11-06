@@ -356,6 +356,7 @@ export class LayoutService {
       })),
       ...model.sidebarSections.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
       ...model.statusBars.map((entry) => ({ entry, shown: () => true })),
+      ...(model.windowBarItems ?? []).map((entry) => ({ entry, shown: () => true })),
       ...model.panels.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
       ...model.views.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) || activeViews.has(entry.id) })),
       ...model.overlays.map((entry) => ({ entry, shown: (report?: Report) => overlayShown(report) }))

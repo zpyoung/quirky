@@ -1,4 +1,5 @@
 export { Button, ExpandingIconButton, IconButton, TextField, TextArea, SelectField, Badge, StatusDot } from './primitives'
+export { AffixInput, Checkbox, DisclosureButton, Kbd, LinkButton, ReachMeter, SegmentedControl, TagButton } from './controls'
 export { ListRow, SectionHeader, Tabs, Menu } from './navigation'
 export { ReviewMark } from './review-mark'
 export { SplitButton } from './split-button'
@@ -14,7 +15,15 @@ export { AgentIcon, ControlIcon, FileIcon, ProjectTile, ToolIcon } from './tool-
 export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, InlineAgentCard } from './panels'
 export { uiTokens, type UiTokenName } from './tokens'
 export type {
+  AffixInputProps,
   AgentIconProps,
+  CheckboxProps,
+  ChoiceOption,
+  DisclosureButtonProps,
+  LinkButtonProps,
+  ReachMeterProps,
+  SegmentedControlProps,
+  TagButtonProps,
   BadgeProps,
   ControlIconProps,
   FileIconProps,

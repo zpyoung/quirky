@@ -157,6 +157,27 @@ function markDisabled(
   }
 }
 
+const SINGLETON_KINDS = ['tool-gate']
+
+function declaresKind(plugin: RegistryPlugin, kind: string): boolean {
+  return (plugin.discovered.manifest?.contributes?.[kind]?.length ?? 0) > 0
+}
+
+/** Invalidates every enabled plugin after the first (by ID) that declares a kind only one plugin may hold. */
+function rejectDuplicateSingletons(plugins: Map<string, RegistryPlugin>): void {
+  for (const kind of SINGLETON_KINDS) {
+    let owner: string | undefined
+    for (const [id, plugin] of [...plugins].sort(([a], [b]) => compare(a, b))) {
+      if (plugin.status !== 'enabled' || !declaresKind(plugin, kind)) continue
+      if (owner === undefined) owner = id
+      else {
+        plugin.status = 'invalid'
+        addError(plugin, `only one plugin may declare ${kind}; ${owner} already does`)
+      }
+    }
+  }
+}
+
 function collectDeclarations(plugins: RegistryPlugin[]): ContributionInfo[] {
   const declarations: ContributionInfo[] = []
   for (const { discovered } of plugins) {
@@ -265,6 +286,8 @@ export function computeRegistry(
 
   markInvalid(plugins)
   markDisabled(plugins, disabled, distroSet)
+  rejectDuplicateSingletons(plugins)
+  markInvalid(plugins)
 
   const declarations = collectDeclarations([...plugins.values()].filter((plugin) => plugin.status !== 'invalid'))
   const contenders = applyDisabledIds(declarations, plugins, disabled, distroSet)
