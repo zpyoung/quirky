@@ -10,14 +10,17 @@ export type ReviewSnapshot = { entries: Array<{ path: string; kind: GitConflictK
 /**
  * What the `diff` view is opened with. `file` shows one file's diff from `source`; `combined` lists
  * a section's files (`area`, or `commit` for one commit); `conflicts` is the conflict review and
- * `conflict-file` one conflicted file. `worktree` keeps the panel on the same worktree.
+ * `conflict-file` one conflicted file; `review` is the worktree's single Review tab, which scrolls
+ * to `reveal` and shows `commit` as its scope. `worktree` keeps the panel on the same worktree.
  */
 export type DiffViewInput = {
   worktree: string
-  mode: 'file' | 'combined' | 'conflicts' | 'conflict-file'
+  mode: 'file' | 'combined' | 'conflicts' | 'conflict-file' | 'review'
   source?: GitDiffSource
   path?: string
   oldPath?: string
+  /** The path a `review` view scrolls to and expands. */
+  reveal?: string
   area?: 'staged' | 'unstaged' | 'untracked' | 'branch' | 'all'
   commit?: string
   commitMessage?: Pick<GitCommit, 'subject' | 'body'>
@@ -40,6 +43,7 @@ export type DiffViewInput = {
 
 /** The stable key for one diff identity; display and placement never change which file is open. */
 export function diffViewKey(input: DiffViewInput): string {
+  if (input.mode === 'review') return `git-diff:${JSON.stringify([input.worktree, 'review'])}`
   return `git-diff:${JSON.stringify([
     input.worktree,
     input.mode,

@@ -88,3 +88,23 @@ export type AffixInputProps = InputHTMLAttributes<HTMLInputElement> & { prefixTe
 export type LinkButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'failing' }
 export type TagButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
 export type DisclosureButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-expanded'> & { label: string; expanded: boolean }
+export type ReviewMarkState = 'none' | 'reviewed' | 'changed'
+export type ReviewMarkProps = { state: ReviewMarkState; label?: string }
+export type SplitButtonProps = {
+  label: ReactNode
+  onClick(): void
+  disabled?: boolean
+  busy?: boolean
+  title?: string
+  /** Accessible name of the caret that opens the item menu. */
+  menuLabel: string
+  /** Items set `enabled: false` plus `detail` to stay listed, greyed, with their reason. */
+  items: ContextMenuItem[]
+  onChoose(id: string): void
+}
+export type InlineErrorProps = {
+  message: string
+  action?: { label: string; onAction(): void }
+  onDismiss(): void
+}
+export type ScopeChipProps = { label: string; onRemove(): void; removeLabel?: string }

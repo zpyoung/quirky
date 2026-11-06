@@ -6,7 +6,6 @@ import { parseJunit } from './junit'
 import type { Attempt, FileError, FileResult, Platform } from './types'
 
 export const FILES_AT_ONCE_CI = 3
-export const FILES_AT_ONCE_LOCAL = 2
 export const FILE_LIMIT_MS = 600_000
 export const TEST_LIMIT_MS = 30_000
 export const RERUN_LIMIT = 5

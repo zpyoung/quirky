@@ -16,4 +16,6 @@
 @import './automations.css';
 @import './worktree-tree.css';
 @import './git-rows.css';
+@import './git-panel.css';
+@import './git-review.css';
 @import './ledger-rows.css';

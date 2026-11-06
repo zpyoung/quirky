@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, entry, fakeContext, layoutFor, mountPanel, q, qa, rowContainerOf, rowOf, settle, statusOf } = s
+const { act, buttonText, click, compareOf, entry, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, statusOf } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -25,30 +25,50 @@ async function open(configure: (fake: Fake) => void = () => {}) {
 const conflict = (path: string, kind: 'both_modified' | 'deleted_by_them' = 'both_modified', state: 'unresolved' | 'resolved_locally' = 'unresolved') =>
   entry(path, 'conflicts', 'modified', { conflict: { kind, state } })
 
+async function rightClick(element: HTMLElement, path: string) {
+  await act(async () => {
+    rowOf(element, path)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }))
+  })
+  await settle()
+}
+
+const stageItem = () =>
+  qa(document.body, '[role="menu"] [role="menuitem"]').find((item) => item.textContent?.trim().startsWith('Stage')) as HTMLButtonElement | undefined
+
+/** Whether Stage is offered for the row's context menu. */
+async function stageEnabled(element: HTMLElement, path: string): Promise<boolean> {
+  await rightClick(element, path)
+  const enabled = stageItem()?.disabled === false
+  await press(q(document.body, '[role="menu"]')!, 'Escape')
+  return enabled
+}
+
 describe('SC-41: conflicts lead to Continue', () => {
-  test('the commit box is replaced by the conflict card with Review conflicts and Abort merge', async () => {
+  test('the ship bar is replaced by the conflict card with Review conflicts and Abort merge', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([conflict('math.ts')], { operation: 'merge' })
     })
-    expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Merge conflicts: 1 unresolved')
+    expect(q(element, '[data-git-ship] [role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Merge conflicts: 1 unresolved')
     expect(element.textContent).toContain('Resolved files move back to normal changes after they leave the live conflict state.')
     expect(q(element, 'textarea')).toBeNull()
-    expect(q(element, '[data-git-primary]')).toBeNull()
+    expect(q(element, '[data-git-ship-bar]')).toBeNull()
+    expect(q(element, '.ui-split-button')).toBeNull()
     expect(buttonText(element, 'Continue merge')).toBeUndefined()
+    expect(buttonText(element, 'Abort merge')).toBeDefined()
     await click(buttonText(element, 'Review conflicts'))
     expect(fake.views.at(-1)?.input).toEqual({ worktree: 'feat', mode: 'conflicts' })
     unmount()
   })
 
-  test('the conflicts section shows the kind, an Unresolved badge and "N conflict(s)"', async () => {
+  test('the conflicted rows sit in the list with an Unresolved badge and no count chip', async () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([conflict('math.ts'), conflict('b.ts', 'deleted_by_them')], { operation: 'merge' })
     })
-    const row = rowOf(element, 'math.ts')!
-    expect(q(row, '.ui-list-row__description')?.textContent).toBe('Both modified')
-    expect(q(rowContainerOf(element, 'math.ts')!, '[aria-label="Unresolved conflict (Both modified)"]')?.textContent).toContain('⚠')
-    expect(q(rowOf(element, 'b.ts')!, '.ui-list-row__description')?.textContent).toBe('Deleted by them')
-    expect(q(element, '[data-section="conflicts"] [data-section-note]')?.textContent).toBe('2 conflict(s)')
+    expect(q(rowOf(element, 'math.ts')!, '[aria-label="Unresolved conflict (Both modified)"]')?.textContent).toContain('⚠')
+    expect(q(rowOf(element, 'b.ts')!, '[aria-label="Unresolved conflict (Deleted by them)"]')).not.toBeNull()
+    expect(rowOf(element, 'math.ts')?.getAttribute('title')).toContain('Both modified')
+    expect(element.textContent).not.toContain('conflict(s)')
+    expect(q(element, '[data-section="conflicts"]')).toBeNull()
     unmount()
   })
 
@@ -60,9 +80,10 @@ describe('SC-41: conflicts lead to Continue', () => {
         content: params.path === 'a.ts' ? 'x\n<<<<<<< ours\none\n=======\ntwo\n>>>>>>> theirs\n' : 'resolved\n'
       }))
     })
-    expect(byLabel(element, 'Stage a.ts')).toBeNull()
-    expect(byLabel(element, 'Stage b.ts')).not.toBeNull()
-    await click(byLabel(element, 'Stage b.ts'))
+    expect(await stageEnabled(element, 'a.ts')).toBe(false)
+    expect(await stageEnabled(element, 'b.ts')).toBe(true)
+    await rightClick(element, 'b.ts')
+    await click(stageItem())
     expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['b.ts'] })
     unmount()
   })
@@ -81,8 +102,8 @@ describe('SC-41: conflicts lead to Continue', () => {
         return { path: params.path, content: params.path === 'f55.ts' ? 'resolved\n' : '<<<<<<< ours\none\n=======\ntwo\n>>>>>>> theirs\n' }
       })
     })
-    expect(byLabel(element, 'Stage f55.ts')).not.toBeNull()
-    expect(byLabel(element, 'Stage f54.ts')).toBeNull()
+    expect(await stageEnabled(element, 'f55.ts')).toBe(true)
+    expect(await stageEnabled(element, 'f54.ts')).toBe(false)
     expect(widest).toBeLessThanOrEqual(8)
     unmount()
   })
@@ -95,9 +116,9 @@ describe('SC-41: conflicts lead to Continue', () => {
         return { path: params.path, content: null }
       })
     })
-    expect(byLabel(element, 'Stage gone.ts')).not.toBeNull()
-    expect(byLabel(element, 'Stage deleted-gone.ts')).toBeNull()
-    expect(byLabel(element, 'Stage broken.ts')).toBeNull()
+    expect(await stageEnabled(element, 'gone.ts')).toBe(true)
+    expect(await stageEnabled(element, 'deleted-gone.ts')).toBe(false)
+    expect(await stageEnabled(element, 'broken.ts')).toBe(false)
     unmount()
   })
 
@@ -107,36 +128,43 @@ describe('SC-41: conflicts lead to Continue', () => {
       f.status = statusOf([conflict('a.ts')], { operation: 'merge' })
       f.on('quirky.git/conflictFile', (params) => ({ path: params.path, content }))
     })
-    expect(byLabel(element, 'Stage a.ts')).toBeNull()
+    expect(await stageEnabled(element, 'a.ts')).toBe(false)
     content = 'fixed\n'
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
     await settle()
-    expect(byLabel(element, 'Stage a.ts')).not.toBeNull()
+    expect(await stageEnabled(element, 'a.ts')).toBe(true)
     unmount()
   })
 
-  test('a resolved-locally row shows its check badge and offers nothing; the banner then offers Continue merge', async () => {
+  test('a resolved-locally row shows its check badge and offers no Stage; the banner then offers Continue merge', async () => {
     const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf([conflict('math.ts', 'both_modified', 'resolved_locally'), entry('math.ts', 'staged')], { operation: 'merge' })
+      f.status = statusOf([conflict('math.ts', 'both_modified', 'resolved_locally')], { operation: 'merge' })
     })
-    const row = rowOf(element, 'math.ts', 'conflicts')!
-    expect(q(rowContainerOf(element, 'math.ts', 'conflicts')!, '[aria-label^="Resolved locally conflict"]')?.textContent).toContain('✓')
-    expect(qa(row.parentElement!, '.ui-list-row__trailing button')).toHaveLength(0)
-    expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Merge in progress')
+    expect(q(rowOf(element, 'math.ts')!, '[aria-label^="Resolved locally conflict"]')?.textContent).toContain('✓')
+    expect(q(element, '[data-git-ship] [role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Merge in progress')
     await click(buttonText(element, 'Continue merge'))
     expect(fake.called('quirky.git/continue')).toHaveLength(1)
     unmount()
   })
 
-  test('once the operation ends the commit area is back and offers Push', async () => {
+  test('once the operation ends the ship bar is back and offers Push', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { operation: 'merge' })
     })
     fake.status = statusOf([], { ahead: 2, upstreamStatus: { hasUpstream: true, name: 'origin/zoe/feat', sha: 'b'.repeat(40), ahead: 2, behind: 0, behindPatchEquivalent: null } })
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
     await settle()
-    expect(q(element, '[data-git-primary]')?.textContent).toBe('Push')
+    expect(q(element, '.ui-split-button__primary')?.textContent).toBe('Push 2 commits')
     expect(q(element, '[role="status"] .ui-inline-agent-card')).toBeNull()
+    unmount()
+  })
+
+  test('a conflict card with no ship bar behind it keeps the compare quiet', async () => {
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf([conflict('a.ts')], { operation: 'merge' })
+      f.compare = compareOf({ entries: [] })
+    })
+    expect(q(element, '[data-git-clean]')).toBeNull()
     unmount()
   })
 })

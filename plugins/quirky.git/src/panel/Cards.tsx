@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GitOperation } from '@quirky/protocol'
-import { Badge, Button, EmptyState, InlineAgentCard } from '@quirky/ui'
+import { Button, InlineAgentCard } from '@quirky/ui'
 import { FixSplitButton, type FixButtonProps } from '../ai/FixSplitButton'
 
 type OperationName = Exclude<GitOperation, 'none'>
@@ -97,42 +97,6 @@ export function HugeBanner({ onStageAll, onRetry }: { onStageAll(): void; onRetr
   )
 }
 
-type BlockedProps = {
-  title: 'Commit blocked' | 'Push blocked'
-  pill: 'Lint' | 'Hook' | 'Failed'
-  summary: string
-  /** Null when the summary says everything the output does. */
-  onDetails: (() => void) | null
-  /** AI Fix for the failure. */
-  fix?: FixButtonProps
-}
-
-/** The card for a commit or push a hook refused, or a commit failure, with its summary and Details when available. */
-export function BlockedCard({ title, pill, summary, onDetails, fix }: BlockedProps) {
-  return (
-    <div role="alert">
-      <InlineAgentCard
-        title={title}
-        status="failing"
-        description={
-          <div className="ui-stack">
-            <div className="ui-cluster">
-              <Badge tone="failing" label={pill}>{pill}</Badge>
-              <span>{summary}</span>
-            </div>
-            {(fix || onDetails) && (
-              <div className="ui-cluster">
-                {fix && <FixSplitButton {...fix} />}
-                {onDetails && <Button onClick={onDetails}>Details</Button>}
-              </div>
-            )}
-          </div>
-        }
-      />
-    </div>
-  )
-}
-
 type UnavailableProps = {
   message: string
   /** The standalone card shown when there are no uncommitted changes either. */
@@ -172,7 +136,14 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
   )
 }
 
-/** The clean-workspace message. */
-export function CleanState({ onOpenTerminal }: { onOpenTerminal(): void }) {
-  return <EmptyState message="No changes" action={{ label: 'Open terminal', onAction: onOpenTerminal }} />
+/**
+ * The one quiet line of a worktree that matches its base and its upstream. There is no ship bar
+ * with it, so nothing here can be pressed.
+ */
+export function CleanState({ base, upstream }: { base: string; upstream: string | null }) {
+  return (
+    <p className="ui-text-muted" role="status" data-git-clean>
+      {upstream === null ? `Nothing changed against ${base}` : `Nothing changed against ${base} · up to date with ${upstream}`}
+    </p>
+  )
 }

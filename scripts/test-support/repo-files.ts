@@ -1,8 +1,6 @@
-import { readdirSync } from 'node:fs'
-
-/** The repo's tracked files, or everything outside node_modules in the test host's copy of the tree, which has no .git. */
+/** The repo's tracked files, from `git ls-files`. Throws an Error naming `repo` when it isn't a git checkout. */
 export function repoFiles(repo: string): string[] {
   const listed = Bun.spawnSync(['git', 'ls-files'], { cwd: repo })
-  if (listed.success) return listed.stdout.toString().split('\n').filter(Boolean)
-  return readdirSync(repo, { recursive: true, encoding: 'utf8' }).filter((path) => !path.split('/').includes('node_modules'))
+  if (!listed.success) throw new Error(`git ls-files failed in ${repo}: ${listed.stderr.toString().trim()}`)
+  return listed.stdout.toString().split('\n').filter(Boolean)
 }

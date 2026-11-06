@@ -136,8 +136,11 @@ since it started. Daemon changes made while the app is open apply on the next la
 the later launch takes over a shared one.
 
 To start from the newest code in one step, run `bun run dev:latest`. It fast-forwards the branch
-from its upstream, runs `bun install`, restarts a daemon whose sources differ from this checkout,
-then runs `bun run dev`. `--no-pull` skips the pull and `--no-launch` stops before opening the app.
+from its upstream, runs `bun install`, deletes `resources/native-browser-preload.js` so the dev app
+bundles the preload from source, restarts a daemon whose sources differ from this checkout, then
+runs `bun run dev`. Plain `bun run dev` uses that file whenever it exists, so after a
+`bun run build` it keeps the build's preload until the file is deleted. `--no-pull` skips the pull
+and `--no-launch` stops before opening the app.
 The PTY host is never restarted, because stopping it ends every terminal. When it comes from
 another build, the script prints its command line so you can stop it yourself.
 

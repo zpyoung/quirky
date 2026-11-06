@@ -1,12 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { spawn } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import type { bunTestFile } from '../suite'
 import { type Context, runCli } from './cli'
-import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, TestStatus, Verdict } from './types'
+import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, Selection, TestStatus, Verdict } from './types'
 
 type Run = typeof bunTestFile
 
@@ -206,18 +204,15 @@ describe('argument handling', () => {
     ['run-shard with neither --shard nor --macos', ['run-shard', '--plan', 'p', '--out', 'o']],
     ['run-shard with both --shard and --macos', ['run-shard', '--plan', 'p', '--shard', '0', '--macos', '--out', 'o']],
     ['run-shard with a bad index', ['run-shard', '--plan', 'p', '--shard', 'one', '--out', 'o']],
-    ['rerun without --in', ['rerun', '--plan', 'p', '--out', 'o']],
     ['verdict with a bad --jobs-ok', ['verdict', '--plan', 'p', '--in', 'i', '--out', 'o', '--jobs-ok', 'maybe']],
     ['verdict without --jobs-ok', ['verdict', '--plan', 'p', '--in', 'i', '--out', 'o']],
     ['issues without --baseline', ['issues', '--plan', 'p', '--only', 'open']],
     ['issues without --only', ['issues', '--plan', 'p', '--baseline', 'b']],
     ['issues with an invalid --only', ['issues', '--plan', 'p', '--baseline', 'b', '--only', 'both']],
-    ['affected with a zero --jobs', ['affected', '--jobs', '0']],
-    ['affected with a non-numeric --jobs', ['affected', '--jobs', 'many']],
+    ['affected with --jobs', ['affected', '--jobs', '2']],
+    ['affected with --list', ['affected', '--list']],
     ['plan with a bad --full', ['plan', '--event', 'push', '--full', 'maybe', '--out', 'x']],
-    ['run-files without --jobs', ['run-files', '--slots', '4']],
-    ['run-files without --slots', ['run-files', '--jobs', '4']],
-    ['run-files with a zero --slots', ['run-files', '--jobs', '4', '--slots', '0']],
+    ['run-files, which no longer exists', ['run-files', '--jobs', '4', '--slots', '4']],
   ])('%s exits 2', async (_name, argv) => {
     const { ctx, err } = harness(root)
     expect(await runCli(argv, ctx)).toBe(2)
@@ -269,6 +264,49 @@ describe('plan', () => {
     expect(readJson<Baseline>(join(outDir, 'baseline.json')).commit).toBe(base)
     expect(calls.length).toBeGreaterThan(0)
     expect(out.join('')).toContain('plugins/x/src/a.ts')
+  })
+
+  test('weights files by their median duration over recent main baselines', async () => {
+    const { dir, base } = makeRepo()
+    const middle = commitAll(dir, 'middle')
+    const newest = commitAll(dir, 'newest')
+    const head = commitAll(dir, 'head')
+    const timed = (a: number) => ({
+      'plugins/x/test/a.test.ts': { platform: 'linux' as const, durationMs: a, fileError: null, flaky: false },
+      'plugins/y/test/b.test.ts': { platform: 'linux' as const, durationMs: 500, fileError: null, flaky: false },
+    })
+    seedBaseline(dir, baselineOf(base, {}, timed(100)))
+    seedBaseline(dir, baselineOf(middle, {}, timed(100)))
+    seedBaseline(dir, baselineOf(newest, {}, timed(900)))
+    const { ctx, out } = harness(dir, { gh: artifactsGh([base, middle, newest]), env: { GITHUB_REPOSITORY: 'acme/quirky', GITHUB_SHA: head } })
+    const outDir = join(dirOf('out'), 'plan')
+
+    expect(await runCli(['plan', '--event', 'push', '--out', outDir], ctx)).toBe(0)
+
+    const plan = readJson<Plan>(join(outDir, 'plan.json'))
+    expect(plan.baseline?.commit).toBe(newest)
+    // a shard lists its files longest first, so b (500) ahead of a means a weighed its median 100, not the newest 900
+    const order = plan.linuxShards.flat()
+    expect(order.indexOf('plugins/y/test/b.test.ts')).toBeLessThan(order.indexOf('plugins/x/test/a.test.ts'))
+    expect(out.join('')).toContain('median of 3 main runs')
+  })
+
+  test('an older baseline that cannot be read only drops out of the durations', async () => {
+    const { dir, base } = makeRepo()
+    const newest = commitAll(dir, 'newest')
+    const head = commitAll(dir, 'head')
+    seedBaseline(dir, baselineOf(newest))
+    const download = async () => {
+      throw new Error('artifact expired')
+    }
+    const { ctx, out, err } = harness(dir, { gh: artifactsGh([base, newest]), download, env: { GITHUB_REPOSITORY: 'acme/quirky', GITHUB_SHA: head } })
+    const outDir = join(dirOf('out'), 'plan')
+
+    expect(await runCli(['plan', '--event', 'push', '--out', outDir], ctx)).toBe(0)
+
+    expect(readJson<Plan>(join(outDir, 'plan.json')).baseline?.commit).toBe(newest)
+    expect(err.join('')).toContain(`skipping the durations from ${base}`)
+    expect(out.join('')).toContain('median of 1 main runs')
   })
 
   test('push on a repo with no baseline artifact has no baseline and no range selection', async () => {
@@ -422,7 +460,7 @@ describe('plan', () => {
 })
 
 describe('run-shard', () => {
-  test('runs the shard and exits 0 even when a test fails', async () => {
+  test('runs the shard, reruns its own failures and exits 0 even when a test keeps failing', async () => {
     const cwd = dirOf('cwd')
     const planDir = dirOf('plan')
     writePlan(planDir, planOf({ linuxShards: [['a.test.ts'], ['b.test.ts', 'c.test.ts']] }))
@@ -435,8 +473,46 @@ describe('run-shard', () => {
     expect(results.map((r) => r.file)).toEqual(['b.test.ts', 'c.test.ts'])
     expect(results.map((r) => r.platform)).toEqual(['linux', 'linux'])
     expect(results[0].first.tests[0].status).toBe('failed')
-    expect(results[0].rerun).toBeUndefined()
-    expect(calls.files.sort()).toEqual(['b.test.ts', 'c.test.ts'])
+    expect(results[0].rerun?.tests[0].status).toBe('failed')
+    expect(results[1].rerun).toBeUndefined()
+    expect(calls.files.sort()).toEqual(['b.test.ts', 'b.test.ts', 'c.test.ts'])
+  })
+
+  test('a linux shard reruns each failed file alone, after the shard finishes', async () => {
+    const planDir = dirOf('plan')
+    writePlan(planDir, planOf({ linuxShards: [['a.test.ts', 'b.test.ts', 'c.test.ts', 'd.test.ts']] }))
+    const calls: Calls = { files: [], active: 0, maxActive: 0 }
+    const run = fakeRun({
+      'a.test.ts': [{ t: 'fail' }, { t: 'pass' }],
+      'b.test.ts': [{ t: 'pass' }],
+      'c.test.ts': [{ t: 'fail' }, { t: 'pass' }],
+      'd.test.ts': [{ t: 'pass' }],
+    }, calls)
+    const out = join(dirOf('out'), 'linux-0.json')
+    const { ctx } = harness(dirOf('cwd'), { run })
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', out], ctx)).toBe(0)
+    const results = readJson<FileResult[]>(out)
+    expect(results.map((r) => [r.file, r.rerun?.tests[0].status])).toEqual([
+      ['a.test.ts', 'passed'],
+      ['b.test.ts', undefined],
+      ['c.test.ts', 'passed'],
+      ['d.test.ts', undefined],
+    ])
+    expect(calls.files.slice(4)).toEqual(['a.test.ts', 'c.test.ts'])
+  })
+
+  test('a shard with more failed files than the limit reruns none of them', async () => {
+    const files = Array.from({ length: 6 }, (_, i) => `f${i}.test.ts`)
+    const planDir = dirOf('plan')
+    writePlan(planDir, planOf({ linuxShards: [files] }))
+    const calls: Calls = { files: [], active: 0, maxActive: 0 }
+    const run = fakeRun(Object.fromEntries(files.map((file) => [file, [{ t: 'fail' as const }]])), calls)
+    const out = join(dirOf('out'), 'linux-0.json')
+    const { ctx, err } = harness(dirOf('cwd'), { run })
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', out], ctx)).toBe(0)
+    expect(readJson<FileResult[]>(out).every((r) => r.rerun === undefined)).toBe(true)
+    expect(calls.files).toHaveLength(6)
+    expect(err.join('')).toContain('none were rerun')
   })
 
   test('--macos runs the macOS list and reruns its own failures', async () => {
@@ -469,61 +545,6 @@ describe('run-shard', () => {
     const { ctx, err } = harness(dirOf('cwd'), { run: fakeRun({}) })
     expect(await runCli(['run-shard', '--plan', dirOf('empty'), '--shard', '0', '--out', join(root, 'o.json')], ctx)).toBe(1)
     expect(err.join('')).toContain('plan.json')
-  })
-})
-
-describe('rerun', () => {
-  const stageResults = (results: Record<string, FileResult[]>) => {
-    const dir = dirOf('in')
-    for (const [name, list] of Object.entries(results)) writeFileSync(join(dir, name), JSON.stringify(list))
-    return dir
-  }
-
-  test('reruns only failed linux files and writes only the files it reran', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const inDir = stageResults({
-      'linux-0.json': [fileResult('a.test.ts', attempt({ ok: 'pass' }, 'a.test.ts')), fileResult('b.test.ts', attempt({ t: 'fail' }, 'b.test.ts'))],
-      'linux-1.json': [fileResult('c.test.ts', attempt({ t: 'pass' }, 'c.test.ts'))],
-    })
-    const calls: Calls = { files: [], active: 0, maxActive: 0 }
-    const out = join(dirOf('out'), 'rerun.json')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({ 'b.test.ts': [{ t: 'pass' }] }, calls) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', out], ctx)).toBe(0)
-    const written = readJson<FileResult[]>(out)
-    expect(written.map((r) => r.file)).toEqual(['b.test.ts'])
-    expect(written[0].rerun?.tests[0].status).toBe('passed')
-    expect(calls.files).toEqual(['b.test.ts'])
-  })
-
-  test('writes an empty list and exits 0 when nothing failed', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const inDir = stageResults({ 'linux-0.json': [fileResult('a.test.ts', attempt({ ok: 'pass' }, 'a.test.ts'))] })
-    const out = join(dirOf('out'), 'rerun.json')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({}) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', out], ctx)).toBe(0)
-    expect(readJson<FileResult[]>(out)).toEqual([])
-  })
-
-  test('reruns nothing when more files failed than the limit', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const failing = Array.from({ length: 6 }, (_, i) => fileResult(`f${i}.test.ts`, attempt({ t: 'fail' }, `f${i}.test.ts`)))
-    const inDir = stageResults({ 'linux-0.json': failing })
-    const out = join(dirOf('out'), 'rerun.json')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({}) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', out], ctx)).toBe(0)
-    expect(readJson<FileResult[]>(out)).toEqual([])
-  })
-
-  test('an unreadable results file fails the job', async () => {
-    const planDir = dirOf('plan')
-    writePlan(planDir, planOf())
-    const inDir = dirOf('in')
-    writeFileSync(join(inDir, 'linux-0.json'), '{ nope')
-    const { ctx } = harness(dirOf('cwd'), { run: fakeRun({}) })
-    expect(await runCli(['rerun', '--plan', planDir, '--in', inDir, '--out', join(root, 'r.json')], ctx)).toBe(1)
   })
 })
 
@@ -578,10 +599,9 @@ describe('verdict', () => {
     expect(verdict?.baseline?.commit).toBe(baseline.commit)
   })
 
-  test('overlays rerun.json by file so a rerun that passes makes the failure flaky', async () => {
+  test('a linux shard\'s own rerun that passes makes the failure flaky', async () => {
     const staged = stage(planOf(), {
-      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }))],
-      'rerun.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }), attempt({ bad: 'pass' }))],
+      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }), attempt({ bad: 'pass' }))],
     })
     const { code, verdict } = await verdictOf(staged)
     expect(code).toBe(0)
@@ -589,10 +609,9 @@ describe('verdict', () => {
     expect(verdict?.new).toEqual([])
   })
 
-  test('takes only the rerun attempt from rerun.json', async () => {
+  test('a linux shard\'s own rerun that fails again is a new failure', async () => {
     const staged = stage(planOf(), {
-      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }))],
-      'rerun.json': [fileResult('a.test.ts', attempt({ other: 'pass' }), attempt({ bad: 'fail' }))],
+      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }), attempt({ bad: 'fail' }))],
     })
     const { code, verdict } = await verdictOf(staged)
     expect(code).toBe(1)
@@ -606,16 +625,6 @@ describe('verdict', () => {
     const { code, verdict } = await verdictOf(staged)
     expect(code).toBe(0)
     expect(verdict?.incomplete).toEqual([])
-  })
-
-  test('a rerun for a file with no first result marks the run broken', async () => {
-    const staged = stage(planOf(), {
-      'linux-0.json': [passing],
-      'rerun.json': [fileResult('ghost.test.ts', attempt({ t: 'fail' }, 'ghost.test.ts'), attempt({ t: 'pass' }, 'ghost.test.ts'))],
-    })
-    const { code, verdict } = await verdictOf(staged)
-    expect(code).toBe(1)
-    expect(verdict?.runBroken).toBe(true)
   })
 
   test('--jobs-ok false sets runBroken and exits 1 even on push', async () => {
@@ -656,16 +665,6 @@ describe('verdict', () => {
     expect(code).toBe(1)
     expect(verdict?.runBroken).toBe(true)
     expect(verdict?.ok).toBe(false)
-  })
-
-  test('a rerun.json entry with a malformed rerun attempt sets runBroken', async () => {
-    const staged = stage(planOf(), {
-      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }))],
-      'rerun.json': [{ ...fileResult('a.test.ts', attempt({ bad: 'fail' })), rerun: { exitCode: 0, fileError: null, tests: [{ key: key('a.test.ts', 'bad'), status: 'maybe' }] } }],
-    })
-    const { code, verdict } = await verdictOf(staged)
-    expect(code).toBe(1)
-    expect(verdict?.runBroken).toBe(true)
   })
 
   test('every fileError the runner can produce is accepted', async () => {
@@ -956,6 +955,7 @@ describe('issues', () => {
 
 describe('affected', () => {
   const A = 'plugins/x/test/a.test.ts'
+  const B = 'plugins/y/test/b.test.ts'
   const IMPORTS = 'plugins/test/imports.test.ts'
 
   function setup(withBaseline: Baseline | 'none' | 'down' = 'none', files: Record<string, string> = {}) {
@@ -970,377 +970,161 @@ describe('affected', () => {
     return { dir, base, gh }
   }
 
-  test('--list prints the selection from the working tree, untracked files included, and runs nothing', async () => {
+  /** A `run` that records every call, so each test can assert that listing a selection ran nothing. */
+  function watched() {
+    const calls: string[][] = []
+    const run: Run = async (_cwd, args) => {
+      calls.push(args)
+      throw new Error('affected must not run tests')
+    }
+    return { calls, run }
+  }
+
+  async function affected(dir: string, gh: GhRunner, args: string[] = [], over: Partial<Context> = {}) {
+    const { calls, run } = watched()
+    const { ctx, out, err } = harness(dir, { gh, run, ...over })
+    const code = await runCli(['affected', ...args], ctx)
+    expect(calls).toEqual([])
+    return { code, stdout: out.join(''), stderr: err.join('') }
+  }
+
+  test('lists the selected files from the working tree, untracked files included, then why with the reasons', async () => {
     const { dir, gh } = setup(baselineOf(sha(0)))
     put(dir, 'plugins/y/test/new.test.ts', 'export {}\n')
-    const { ctx, out } = harness(dir, { gh, run: fakeRun({}) })
-    expect(await runCli(['affected', '--list'], ctx)).toBe(0)
-    const lines = out.join('').trim().split('\n')
-    expect(lines).toEqual(expect.arrayContaining([A, IMPORTS, 'plugins/y/test/b.test.ts', 'plugins/y/test/new.test.ts']))
-    expect(lines).not.toContain('packages/p/test/p.test.ts')
+    const { code, stdout } = await affected(dir, gh)
+    expect(code).toBe(0)
+    const lines = stdout.trimEnd().split('\n')
+    const why = lines.indexOf('why:')
+    expect(why).toBeGreaterThan(0)
+    expect(lines.slice(0, why)).toEqual(expect.arrayContaining([A, IMPORTS, B, 'plugins/y/test/new.test.ts']))
+    expect(lines.slice(0, why)).not.toContain('packages/p/test/p.test.ts')
+    const reasons = lines.slice(why + 1)
+    expect(reasons.length).toBeGreaterThan(0)
+    for (const reason of reasons) expect(reason).toMatch(/^ {2}\S/)
+    expect(reasons.join('\n')).toContain('plugins/x/src/a.ts')
   })
 
   describe('a test file deleted from the working tree but not staged', () => {
-    const B = 'plugins/y/test/b.test.ts'
-    const bKey = key(B, 'works')
-
     test('is not selected, including by the run-everything fallback', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0), { [bKey]: 'passed' }))
+      const { dir, gh } = setup(baselineOf(sha(0), { [key(B, 'works')]: 'passed' }))
       rmSync(join(dir, B))
-      const withBaseline = harness(dir, { gh, run: fakeRun({}) })
-      expect(await runCli(['affected', '--list'], withBaseline.ctx)).toBe(0)
-      expect(withBaseline.out.join('')).toContain(A)
-      expect(withBaseline.out.join('')).not.toContain(B)
+      const withBaseline = await affected(dir, gh)
+      expect(withBaseline.code).toBe(0)
+      const listed = withBaseline.stdout.split('why:')[0].trimEnd().split('\n')
+      expect(listed).toContain(A)
+      expect(listed).not.toContain(B)
 
       git(dir, 'update-ref', '-d', 'refs/remotes/origin/main')
-      const fallback = harness(dir, { gh: brokenGh, run: fakeRun({}) })
-      expect(await runCli(['affected', '--list'], fallback.ctx)).toBe(0)
-      expect(fallback.out.join('').trim().split('\n')).toEqual([IMPORTS, A, 'packages/p/test/p.test.ts'].sort())
-    })
-
-    test('is never run and its baseline tests are reported missing', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0), { [bKey]: 'passed' }))
-      rmSync(join(dir, B))
-      const calls: Calls = { files: [], active: 0, maxActive: 0 }
-      const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] }, calls)
-      const { ctx, out } = harness(dir, { gh, run })
-      expect(await runCli(['affected', '--json'], ctx)).toBe(0)
-      expect(calls.files).not.toContain(B)
-      expect((JSON.parse(out.join('')) as Verdict).missing).toEqual([bKey])
+      const fallback = await affected(dir, brokenGh, ['--json'])
+      expect(fallback.code).toBe(0)
+      const selection = JSON.parse(fallback.stdout) as Selection
+      expect(selection.mode).toBe('all')
+      expect([...selection.files].sort()).toEqual([IMPORTS, A, 'packages/p/test/p.test.ts'].sort())
     })
   })
 
-  test('--list --json prints the selection as JSON', async () => {
+  test('--json prints the selection as JSON', async () => {
     const { dir, gh } = setup(baselineOf(sha(0)))
-    const { ctx, out } = harness(dir, { gh, run: fakeRun({}) })
-    expect(await runCli(['affected', '--list', '--json'], ctx)).toBe(0)
-    expect(JSON.parse(out.join(''))).toMatchObject({ mode: 'some', files: [IMPORTS, A] })
+    const { code, stdout } = await affected(dir, gh, ['--json'])
+    expect(code).toBe(0)
+    const selection = JSON.parse(stdout) as Selection
+    expect(selection).toMatchObject({ mode: 'some', files: [IMPORTS, A] })
+    expect(selection.reasons.length).toBeGreaterThan(0)
+    expect(stdout).toBe(JSON.stringify(selection, null, 2) + '\n')
   })
 
   test('an untracked source file selects its area', async () => {
     const { dir, gh } = setup(baselineOf(sha(0)))
     put(dir, 'packages/p/src/extra.ts', 'export const extra = 1\n')
-    const { ctx, out } = harness(dir, { gh, run: fakeRun({}) })
-    expect(await runCli(['affected', '--list'], ctx)).toBe(0)
-    expect(out.join('')).toContain('packages/p/test/p.test.ts')
+    const { code, stdout } = await affected(dir, gh)
+    expect(code).toBe(0)
+    expect(stdout).toContain('packages/p/test/p.test.ts')
   })
 
-  describe('with a test host', () => {
-    const HOST = { host: 'quirkyci@ovh', jobs: 3, slots: 5 }
-    const MAC = 'plugins/y/test/b.test.ts'
-
-    /** A `runInHost` that runs the real worker command in this process, so the results make the real round trip. */
-    function fakeHost(dir: string, script: Parameters<typeof fakeRun>[0]) {
-      const seen: { host: string; command: string; stdin: string }[] = []
-      const runInHost: NonNullable<Context['runInHost']> = async (_cwd, host, command, stdin) => {
-        seen.push({ host, command, stdin })
-        const worker = harness(dir, { run: fakeRun(script), stdin: async () => stdin })
-        const code = await runCli(command.split(' ').slice(2), worker.ctx)
-        return { code, output: `noise\n${worker.out.join('')}` }
-      }
-      return { seen, runInHost }
-    }
-
-    test('sends everything but macOS-only files to the host and judges both sets together', async () => {
-      // the list is committed, because changing it makes the selection run every test
-      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': `${MAC}  needs chrome\n` })
-      put(dir, MAC, 'export const changed = 1\n')
-      const { seen, runInHost } = fakeHost(dir, { [A]: [{ fresh: 'fail' }, { fresh: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-      const local: Calls = { files: [], active: 0, maxActive: 0 }
-      const { ctx, out, err } = harness(dir, { gh, run: fakeRun({ [MAC]: [{ mac: 'fail' }, { mac: 'fail' }] }, local), chooseHost: async () => ({ host: HOST }), runInHost })
-
-      expect(await runCli(['affected'], ctx)).toBe(1)
-
-      expect(seen).toHaveLength(1)
-      expect(seen[0].host).toBe(HOST.host)
-      expect(seen[0].command).toBe('bun scripts/test-baseline/cli.ts run-files --jobs 3 --slots 5')
-      expect(seen[0].stdin.split('\n').sort()).toEqual([IMPORTS, A].sort())
-      expect(new Set(local.files)).toEqual(new Set([MAC]))
-      expect(out.join('')).toContain(`new: ${A} > fresh`)
-      expect(out.join('')).toContain(`new: ${MAC} > mac`)
-      expect(err.join('')).toContain('running 2 test files on quirkyci@ovh and 1 macOS-only files here')
-    })
-
-    test('stops before any test when no host can be reached', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0)))
-      const calls: Calls = { files: [], active: 0, maxActive: 0 }
-      const { ctx, err } = harness(dir, { gh, run: fakeRun({}, calls), chooseHost: async () => ({ error: 'quirkyci@ovh is unreachable, so no tests ran.' }) })
-      expect(await runCli(['affected'], ctx)).toBe(1)
-      expect(err.join('')).toContain('quirkyci@ovh is unreachable')
-      expect(calls.files).toEqual([])
-    })
-
-    test.each([
-      ['the copy failed', undefined],
-      ['the worker printed no results', { code: 1, output: 'bun: command not found' }],
-    ])('fails rather than reporting a pass when %s', async (_name, result) => {
-      const { dir, gh } = setup(baselineOf(sha(0)))
-      const { ctx, err } = harness(dir, { gh, run: fakeRun({}), chooseHost: async () => ({ host: HOST }), runInHost: async () => result })
-      expect(await runCli(['affected'], ctx)).toBe(1)
-      expect(err.join('')).toContain("couldn't finish the tests")
-    })
-
-    test('runs nothing and points at the PR label when the change selects every test', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': '' })
-      put(dir, 'scripts/test-on-macos.txt', `${A}  needs chrome\n`)
-      const calls: Calls = { files: [], active: 0, maxActive: 0 }
-      const { ctx, out, err } = harness(dir, {
-        gh,
-        run: fakeRun({}, calls),
-        chooseHost: async () => ({ host: HOST }),
-        runInHost: async () => {
-          throw new Error('should not reach the host')
-        },
-      })
-      expect(await runCli(['affected', '--json'], ctx)).toBe(0)
-      expect(calls.files).toEqual([])
-      expect(err.join('')).toContain('--add-label full-suite')
-      expect(JSON.parse(out.join(''))).toMatchObject({ skipped: 'every test selected' })
-    })
-
-    test('never contacts a host when only macOS-only files are selected', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': `${A}  needs chrome\n${IMPORTS}  needs chrome\n` })
-      const { ctx } = harness(dir, {
-        gh,
-        run: fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] }),
-        chooseHost: async () => {
-          throw new Error('should not be asked')
-        },
-      })
-      expect(await runCli(['affected'], ctx)).toBe(0)
-    })
-  })
-
-  test('labels results against the baseline, prints advisory, and exits 1 on a new failure', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0), { [key(A, 'old')]: 'failed' }))
-    const run = fakeRun({ [A]: [{ old: 'fail', fresh: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(1)
-    const text = out.join('')
-    expect(text).toContain(`new: ${A} > fresh`)
-    expect(text).toContain(`known: ${A} > old`)
-    expect(text).toMatch(/^advisory: 1 new failure, 1 known failure, 0 flaky, against baseline [0-9a-f]{7}$/m)
-  })
-
-  test('exits 0 when only known failures remain', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0), { [key(A, 'old')]: 'failed' }))
-    const run = fakeRun({ [A]: [{ old: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain('advisory:')
-  })
-
-  test('--json prints the advisory verdict and still exits 1 on a new failure', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0)))
-    const run = fakeRun({ [A]: [{ fresh: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected', '--json'], ctx)).toBe(1)
-    const verdict = JSON.parse(out.join('')) as Verdict
-    expect(verdict.advisory).toBe(true)
-    expect(verdict.new).toEqual([key(A, 'fresh')])
-    expect(verdict.notOnCi).toEqual([])
-  })
-
-  test('a flaky failure that passes on rerun does not block', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0)))
-    const run = fakeRun({ [A]: [{ t: 'fail' }, { t: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain(`flaky: ${A} > t`)
-  })
-
-  test('--jobs overrides how many files run at once', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0)))
-    put(dir, 'plugins/y/test/c.test.ts', 'export {}\n')
-    const everything = {
-      [A]: [{ ok: 'pass' as const }],
-      [IMPORTS]: [{ ok: 'pass' as const }],
-      'plugins/y/test/b.test.ts': [{ ok: 'pass' as const }],
-      'plugins/y/test/c.test.ts': [{ ok: 'pass' as const }],
-    }
-    const one: Calls = { files: [], active: 0, maxActive: 0 }
-    expect(await runCli(['affected', '--jobs', '1'], harness(dir, { gh, run: fakeRun(everything, one) }).ctx)).toBe(0)
-    const dflt: Calls = { files: [], active: 0, maxActive: 0 }
-    expect(await runCli(['affected'], harness(dir, { gh, run: fakeRun(everything, dflt) }).ctx)).toBe(0)
-    const four: Calls = { files: [], active: 0, maxActive: 0 }
-    expect(await runCli(['affected', '--jobs', '4'], harness(dir, { gh, run: fakeRun(everything, four) }).ctx)).toBe(0)
-    expect([one.maxActive, dflt.maxActive, four.maxActive]).toEqual([1, 2, 4])
-  })
-
-  test('with no selected tests it says so and exits 0', async () => {
+  test('with no selected tests it says none are needed, gives the why block and exits 0', async () => {
     const { dir, base } = makeRepo()
     seedBaseline(dir, baselineOf(base))
     put(dir, 'docs/readme.md', '# changed\n')
-    const { ctx, out } = harness(dir, { gh: artifactsGh([base]), run: fakeRun({}) })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain('No tests were needed')
+    const { code, stdout } = await affected(dir, artifactsGh([base]))
+    expect(code).toBe(0)
+    const lines = stdout.trimEnd().split('\n')
+    expect(lines[0]).toBe('No tests are needed for this change.')
+    expect(lines[1]).toBe('why:')
+    expect(lines.slice(2).length).toBeGreaterThan(0)
+    for (const reason of lines.slice(2)) expect(reason).toMatch(/^ {2}\S/)
+    expect(lines.join('\n')).toContain('docs/readme.md')
   })
 
-  test('when the baseline is unavailable it says so, selects from the merge base and treats every failure as new', async () => {
+  test('a change that selects every test says the next push runs the whole suite and lists no files', async () => {
+    const { dir } = setup(baselineOf(sha(0)))
+    git(dir, 'update-ref', '-d', 'refs/remotes/origin/main')
+    const { code, stdout } = await affected(dir, brokenGh)
+    expect(code).toBe(0)
+    const lines = stdout.trimEnd().split('\n')
+    expect(lines[0]).toBe('This change selects every test, so the next push runs the whole suite.')
+    expect(lines[1]).toBe('why:')
+    expect(lines.slice(2)).toEqual([expect.stringMatching(/^ {2}no merge base/)])
+    for (const file of ALL_TESTS) expect(stdout).not.toContain(file)
+  })
+
+  test('--json for a run-everything selection lists every test file', async () => {
+    const { dir } = setup('none')
+    git(dir, 'update-ref', '-d', 'refs/remotes/origin/main')
+    const { code, stdout } = await affected(dir, brokenGh, ['--json'])
+    expect(code).toBe(0)
+    const selection = JSON.parse(stdout) as Selection
+    expect(selection.mode).toBe('all')
+    expect([...selection.files].sort()).toEqual(ALL_TESTS)
+  })
+
+  test('when the baseline is unavailable it says so on stderr and still selects from the merge base', async () => {
     const { dir, gh } = setup('down')
-    const run = fakeRun({ [A]: [{ old: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out, err } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(1)
-    expect(err.join('')).toContain('baseline unavailable')
-    expect(err.join('')).toContain('merge base')
-    expect(out.join('')).toContain(`new: ${A} > old`)
-    expect(out.join('')).toMatch(/^advisory: 1 new failure, 0 known failures, 0 flaky, no baseline$/m)
+    const { code, stdout, stderr } = await affected(dir, gh)
+    expect(code).toBe(0)
+    expect(stderr).toContain('baseline unavailable')
+    expect(stderr).toContain('merge base')
+    expect(stdout).toContain(A)
   })
 
-  test('with no baseline artifact at all it also selects from the merge base with no baseline', async () => {
+  test('with no baseline artifact at all it says so on stderr and selects from the merge base', async () => {
     const { dir, gh } = setup('none')
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain('no baseline')
+    const { code, stdout, stderr } = await affected(dir, gh)
+    expect(code).toBe(0)
+    expect(stderr).toContain('no baseline found')
+    expect(stdout).toContain(A)
   })
 
   test('--json keeps stdout parseable when the baseline is unavailable', async () => {
     const { dir, gh } = setup('down')
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected', '--json'], ctx)).toBe(0)
-    expect((JSON.parse(out.join('')) as Verdict).baseline).toBeNull()
+    const { code, stdout, stderr } = await affected(dir, gh, ['--json'])
+    expect(code).toBe(0)
+    expect(stderr).toContain('baseline unavailable')
+    expect((JSON.parse(stdout) as Selection).files).toContain(A)
   })
 
   test('without GITHUB_REPOSITORY or an origin remote the baseline is unavailable', async () => {
     const { dir } = setup('none')
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, err } = harness(dir, { env: {}, gh: forbiddenGh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(err.join('')).toContain('baseline unavailable')
+    const { code, stderr } = await affected(dir, forbiddenGh, [], { env: {} })
+    expect(code).toBe(0)
+    expect(stderr).toContain('baseline unavailable')
   })
 
   test('reads the repository from an origin remote when GITHUB_REPOSITORY is unset', async () => {
     const { dir, base } = setup(baselineOf(sha(0)))
     git(dir, 'remote', 'add', 'origin', 'git@github.com:acme/quirky.git')
     const calls: string[][] = []
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx } = harness(dir, { env: {}, gh: artifactsGh([base], calls), run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
+    const { code } = await affected(dir, artifactsGh([base], calls), [], { env: {} })
+    expect(code).toBe(0)
     expect(calls[0].join(' ')).toContain('repos/acme/quirky/actions/artifacts')
   })
-})
 
-describe('run-files process output', () => {
-  test('flushes more than 64 KiB of JSON before exiting', async () => {
-    const worker = join(root, 'worker')
-    const home = join(root, 'home')
-    const quirkyHome = join(root, 'quirky-home')
-    const bin = join(worker, 'bin')
-    mkdirSync(worker, { recursive: true })
-    mkdirSync(home)
-    mkdirSync(quirkyHome)
-    mkdirSync(bin)
-    writeFileSync(join(bin, 'flock'), '#!/bin/sh\nshift 4\nexec "$@"\n', { mode: 0o755 })
-
-    const testFile = 'large-results.test.ts'
-    const testNames = Array.from(
-      { length: 1000 },
-      (_, index) => `case-${index.toString().padStart(4, '0')}-${'x'.repeat(340)}`
-    )
-    writeFileSync(
-      join(worker, testFile),
-      `import { expect, test } from 'bun:test'\n\n${testNames.map((name) => `test(${JSON.stringify(name)}, () => expect(true).toBe(true))`).join('\n')}\n`
-    )
-    const resultQueued = join(worker, 'result-queued')
-    writeFileSync(
-      join(worker, 'stdout-marker.cjs'),
-      `const realWrite = process.stdout.write.bind(process.stdout)
-let marked = false
-process.stdout.write = function (chunk, ...args) {
-  const result = realWrite(chunk, ...args)
-  const startsResult = typeof chunk === 'string'
-    ? chunk.startsWith('file-results ')
-    : Buffer.isBuffer(chunk) && chunk.subarray(0, 13).toString() === 'file-results '
-  if (!marked && startsResult) {
-    marked = true
-    require('node:fs').writeFileSync(process.env.RESULT_QUEUED, '')
-  }
-  return result
-}
-`
-    )
-
-    const child = spawn(
-      '/bin/bash',
-      [
-        '-o', 'pipefail',
-        '-c', '"$@" | { while [ ! -e "$RESULT_QUEUED" ]; do sleep 0.1; done; sleep 0.1; cat; }',
-        '--',
-        process.execPath,
-        '--preload',
-        join(worker, 'stdout-marker.cjs'),
-        fileURLToPath(new URL('./cli.ts', import.meta.url)),
-        'run-files',
-        '--jobs', '1',
-        '--slots', '1'
-      ],
-      {
-        cwd: worker,
-        detached: true,
-        env: {
-          ...process.env,
-          RESULT_QUEUED: resultQueued,
-          HOME: home,
-          QUIRKY_HOME: quirkyHome,
-          PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`
-        },
-        stdio: 'pipe'
-      }
-    )
-    const stdout: Buffer[] = []
-    let stderr = ''
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-    child.stdout.resume()
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8')
+  for (const flag of [['--list'], ['--jobs', '2']]) {
+    test(`${flag.join(' ')} is a usage error and runs nothing`, async () => {
+      const { dir, gh } = setup(baselineOf(sha(0)))
+      const { code, stdout, stderr } = await affected(dir, gh, flag)
+      expect(code).toBe(2)
+      expect(stdout).toBe('')
+      expect(stderr).toContain('usage')
     })
-
-    const closed = Promise.withResolvers<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>()
-    child.once('error', (error) => closed.resolve({ code: null, signal: null, error }))
-    child.once('close', (code, signal) => closed.resolve({ code, signal }))
-    const killWorker = (force = false) => {
-      if (child.pid === undefined || (!force && (child.exitCode !== null || child.signalCode !== null))) return
-      try {
-        process.kill(-child.pid, 'SIGKILL')
-      } catch (error) {
-        if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error
-      }
-    }
-
-    let timedOut = false
-    // Keep the real subprocess pipeline bounded and reap its process group.
-    const timeout = setTimeout(() => {
-      timedOut = true
-      killWorker(true)
-    }, 45_000)
-    child.stdin.end(`${testFile}\n`)
-    try {
-      const exit = await closed.promise
-      const output = Buffer.concat(stdout).toString('utf8')
-
-      expect(timedOut).toBe(false)
-      expect(exit.error).toBeUndefined()
-      expect(exit.code).toBe(0)
-      expect(exit.signal).toBeNull()
-      expect(stderr).toBe('')
-      expect(output.length).toBeGreaterThan(64 * 1024)
-      expect(output.startsWith('file-results ')).toBe(true)
-
-      const payload = JSON.parse(output.slice('file-results '.length)) as { results: FileResult[]; skipped: boolean }
-      expect(payload.skipped).toBe(false)
-      expect(payload.results).toHaveLength(1)
-      expect(payload.results[0].file).toBe(testFile)
-      expect(payload.results[0].first.exitCode).toBe(0)
-      expect(payload.results[0].first.fileError).toBeNull()
-      expect(payload.results[0].first.tests).toEqual(
-        testNames.map((name) => ({ key: `${testFile}\0\0${name}`, status: 'passed' }))
-      )
-    } finally {
-      clearTimeout(timeout)
-      killWorker()
-      await closed.promise
-    }
-  }, 60_000)
+  }
 })

@@ -76,10 +76,18 @@ describe('planPaste', () => {
     expect(plan.chunks.join('')).toBe(text)
   })
 
-  test('empty text writes nothing', () => {
-    const plan = planPaste('', true)
+  test('empty text writes nothing without bracketed paste', () => {
+    const plan = planPaste('', false)
     if (plan.kind !== 'write') throw new Error('refused')
     expect(plan.chunks).toEqual([])
+  })
+
+  // claude code reads an image from the clipboard when it receives an empty bracketed paste
+  test('empty text writes an empty bracketed paste when the program enabled it', () => {
+    const plan = planPaste('', true)
+    if (plan.kind !== 'write') throw new Error('refused')
+    expect(plan.chunks).toEqual([`${BRACKETED_START}${BRACKETED_END}`])
+    expect(plan.closer).toBeNull()
   })
 })
 

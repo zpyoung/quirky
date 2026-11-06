@@ -274,19 +274,20 @@ test('SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard a
     const pending = call(h.client, 'eval', { page: pageId, expression: 'prompt(\"out-of-band\", \"default\")' })
     await dialogOpened.promise
     await call(h.client, 'dialogAccept', { page: pageId, text: 'Unicode answer — λ' })
-    await expect(pending).resolves.toEqual({ value: 'Unicode answer — λ' })
+    // bun 1.4.0 never ends a file whose test timed out inside expect(...).resolves, so await the evals directly
+    expect(await pending).toEqual({ value: 'Unicode answer — λ' })
     dialogOpened = Promise.withResolvers<void>()
     const confirmation = call(h.client, 'eval', { page: pageId, expression: 'confirm(\"dismiss this dialog?\")' })
     await dialogOpened.promise
     await call(h.client, 'dialogDismiss', { page: pageId })
-    await expect(confirmation).resolves.toEqual({ value: false })
+    expect(await confirmation).toEqual({ value: false })
     expect(await call(h.client, 'eval', { page: neighbor.browserPageId, expression: 'document.title' })).toEqual({ value: 'Events' })
   } finally {
     await h.cleanup()
     await responseServer.stop(true)
     await pageServer.stop(true)
   }
-}, 180_000)
+}, 60_000)
 
 test('SC4 rollback: a failed cookie clone restores every destination identity', async () => {
   let destinationId = ''

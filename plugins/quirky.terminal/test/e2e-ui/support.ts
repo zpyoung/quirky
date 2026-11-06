@@ -377,6 +377,9 @@ export async function startUi(options: UiOptions = {}) {
 }
 
 /** Opens a tab without waiting for its shell and gives it the custom title `name`. */
+/** A `quirky.terminal` setting as the CLI reads it back. */
+export const settingValue = async (ui: Ui, name: string) => JSON.parse(await ui.h.ok(['setting', 'get', `setting:quirky.terminal/${name}`])) as unknown
+
 export async function namedTab(ui: Ui, name: string, extra: string[] = []) {
   const opened = await openTab(ui.h, extra, { ready: false })
   await terminal(ui.h, 'tab', 'rename', opened.tab.id, name)

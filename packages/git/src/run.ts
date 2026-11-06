@@ -12,6 +12,98 @@ export type RunGitOptions = {
   network?: boolean
   /** Extra environment variables, applied last. */
   env?: Record<string, string>
+  /** How long git's output may stay unfinished after git exited before the run counts as stalled; default `PIPE_STALL_MS` (ten times that for a command that may write). */
+  stallMs?: number
+}
+
+/** Quiet time after git exited, or after its last chunk, past which a read of its output counts as stalled. */
+export const PIPE_STALL_MS = 1000
+const PIPE_STALL_ATTEMPTS = 3
+
+/**
+ * Git exited but a pipe of its output never delivered its end. Bun 1.4.0 on Linux can lose the
+ * epoll wakeup of a subprocess pipe when several children exit in one loop turn: the bytes stay
+ * queued in the socket and the read stays pending for the life of the process. The stall guard
+ * and retry built on this is a workaround for that Bun 1.4.0 bug and can go once Bun fixes it.
+ */
+class PipeStalledError extends Error {
+  constructor(readonly exitedLongAgo: boolean) {
+    super('git exited but its output did not end')
+    this.name = 'PipeStalledError'
+  }
+}
+
+/** `pending`, or a `PipeStalledError` once git has exited and `stallMs` passes before `pending` settles. */
+export async function untilStalled<T>(exited: Promise<unknown>, pending: Promise<T>, stallMs: number = PIPE_STALL_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let finished = false
+  const stalled = exited.then(
+    () =>
+      new Promise<never>((_, reject) => {
+        if (finished) return
+        timer = setTimeout(() => reject(new PipeStalledError(true)), stallMs)
+      })
+  )
+  stalled.catch(() => {})
+  try {
+    return await Promise.race([pending, stalled])
+  } finally {
+    finished = true
+    clearTimeout(timer)
+  }
+}
+
+/** One read of a git pipe, abandoning the stream when it stalls. */
+export async function readChunk(reader: ReadableStreamDefaultReader<Uint8Array>, exited: Promise<unknown>, stallMs?: number) {
+  try {
+    return await untilStalled(exited, reader.read(), stallMs)
+  } catch (err) {
+    if (err instanceof PipeStalledError) void reader.cancel().catch(() => {})
+    throw err
+  }
+}
+
+/** All the bytes of a git pipe. */
+async function drain(stream: ReadableStream<Uint8Array>, exited: Promise<unknown>, stallMs: number): Promise<Uint8Array> {
+  const reader = stream.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await readChunk(reader, exited, stallMs)
+    if (done) break
+    chunks.push(value)
+    total += value.byteLength
+  }
+  const bytes = new Uint8Array(total)
+  let at = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, at)
+    at += chunk.byteLength
+  }
+  return bytes
+}
+
+/** What `proc` writes to stderr, read in the background; a stall surfaces when the promise is awaited. */
+export function drainText(proc: { stderr: unknown; exited: Promise<unknown> }, stallMs?: number): Promise<string> {
+  const text = drain(proc.stderr as ReadableStream<Uint8Array>, proc.exited, stallMs ?? PIPE_STALL_MS).then((bytes) => new TextDecoder().decode(bytes))
+  text.catch(() => {})
+  return text
+}
+
+/**
+ * Runs `attempt` again, up to three times in all, when git's output stalls after git exited; only
+ * for work that reads and keeps no state between attempts. Fails with `GitError` when every
+ * attempt stalls.
+ */
+export async function retryStalled<T>(attempt: () => Promise<T>): Promise<T> {
+  for (let tried = 1; ; tried++) {
+    try {
+      return await attempt()
+    } catch (err) {
+      if (!(err instanceof PipeStalledError)) throw err
+      if (tried >= PIPE_STALL_ATTEMPTS) throw new GitError(`${err.message} after ${tried} attempts`, '', -1)
+    }
+  }
 }
 
 const BASE_ENV = { GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' }
@@ -43,9 +135,20 @@ export async function gitEnv(cwd: string, options: RunGitOptions = {}): Promise<
 
 /**
  * Runs `git` with an args array in `cwd`; never throws on a non-zero exit. With `timeoutMs` the
- * process is killed once it elapses and the result has `timedOut: true`.
+ * process is killed once it elapses and the result has `timedOut: true`. Output that does not end
+ * after git exited (see `PipeStalledError`) is run again when `readOnly`, else, and when every
+ * attempt stalls, fails with `GitError`.
  */
 export async function runGit(cwd: string, args: string[], options: RunGitOptions = {}): Promise<GitResult> {
+  if (!options.readOnly) {
+    return runGitOnce(cwd, args, options).catch((err) => {
+      throw err instanceof PipeStalledError ? new GitError(`git ${args[0]}: ${err.message}`, '', -1) : err
+    })
+  }
+  return retryStalled(() => runGitOnce(cwd, args, options))
+}
+
+async function runGitOnce(cwd: string, args: string[], options: RunGitOptions): Promise<GitResult> {
   let proc: ReturnType<typeof Bun.spawn>
   const input = typeof options.input === 'string' ? new TextEncoder().encode(options.input) : options.input
   try {
@@ -68,12 +171,13 @@ export async function runGit(cwd: string, args: string[], options: RunGitOptions
           proc.kill()
         }, options.timeoutMs)
   try {
+    const stallMs = options.stallMs ?? (options.readOnly ? PIPE_STALL_MS : PIPE_STALL_MS * 10)
     const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout as ReadableStream).arrayBuffer(),
-      new Response(proc.stderr as ReadableStream).text(),
+      drain(proc.stdout as ReadableStream<Uint8Array>, proc.exited, stallMs),
+      drain(proc.stderr as ReadableStream<Uint8Array>, proc.exited, stallMs),
       proc.exited
     ])
-    return { stdout: new Uint8Array(stdout), stderr, exitCode, ...(timedOut ? { timedOut } : {}) }
+    return { stdout, stderr: new TextDecoder().decode(stderr), exitCode, ...(timedOut ? { timedOut } : {}) }
   } finally {
     if (timer) clearTimeout(timer)
   }

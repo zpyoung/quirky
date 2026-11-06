@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
 import type { GitChange, GitCommit, GitHistory, UiPluginContext } from '@quirky/protocol'
 import { messageOf, relativeTime, shortOid } from './format'
-import { Rows, type RowHandlers, type RowItem } from './Rows'
+import { letterOf, Rows, type RowHandlers, type RowItem } from './Rows'
 
 const MAX_LIMIT = 200
 const NO_SELECTION: readonly string[] = []
-const NO_DIRS: ReadonlySet<string> = new Set()
 const ROW_STYLE = { gap: 'var(--ui-space-2)', listStyle: 'none', margin: 0, padding: 0 } as const
 const COMMIT_TITLE_STYLE = { alignItems: 'stretch', width: '100%' } as const
 const COMMIT_SUBJECT_STYLE = { minWidth: 0, width: '100%' } as const
@@ -129,7 +128,7 @@ type CommitRowProps = {
 
 function CommitRow({ commit, expanded, files, onToggle, onOpen, onOpenFile }: CommitRowProps) {
   const items = useMemo<RowItem[]>(
-    () => ('entries' in (files ?? {}) ? (files as { entries: GitChange[] }).entries : []).map((change) => ({ key: change.path, path: change.path, oldPath: change.oldPath, status: change.status, added: change.added, removed: change.removed })),
+    () => ('entries' in (files ?? {}) ? (files as { entries: GitChange[] }).entries : []).map((change) => ({ key: change.path, path: change.path, oldPath: change.oldPath, letter: letterOf(change.status), added: change.added, removed: change.removed })),
     [files]
   )
   const handlers = useMemo<RowHandlers>(
@@ -140,7 +139,6 @@ function CommitRow({ commit, expanded, files, onToggle, onOpen, onOpenFile }: Co
       },
       contextMenu: () => {},
       buttons: () => [],
-      folderButtons: () => [],
       dragText: (item) => item.path
     }),
     [files, onOpenFile]
@@ -187,7 +185,7 @@ function CommitRow({ commit, expanded, files, onToggle, onOpen, onOpenFile }: Co
         'error' in files ? (
           <p role="alert" style={{ color: 'var(--ui-failing)' }}>{files.error}</p>
         ) : (
-          <Rows scope={`commit:${commit.oid}`} items={items} viewMode="list" collapsedDirs={NO_DIRS} onToggleDir={() => {}} selected={NO_SELECTION} handlers={handlers} />
+          <Rows items={items} selected={NO_SELECTION} handlers={handlers} />
         )
       )}
     </li>

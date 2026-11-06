@@ -18,7 +18,8 @@ export type FileSnapshot = {
   diskWritable: boolean
 }
 
-export type GuardedWriteResult = 'written' | 'changed' | 'missing'
+/** `created` means the write made a file that did not exist; `written` means it replaced one. */
+export type GuardedWriteResult = 'written' | 'created' | 'changed' | 'missing'
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.avif', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico'])
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.flac', '.opus'])
@@ -148,7 +149,7 @@ export async function guardedWrite(
       } finally {
         await created.close()
       }
-      return 'written'
+      return 'created'
     } catch (error) {
       if ((error as NodeJS.ErrnoException | null)?.code === 'EEXIST') return 'changed'
       throw error

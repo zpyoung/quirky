@@ -91,6 +91,21 @@ test(
       expect(webReads).toBe(0)
       expect(document.body.textContent).not.toContain('Could not paste')
     }
+    // an image-only clipboard reads as empty text; with bracketed paste on, the program still gets an empty paste
+    for (const bracketed of [false, true]) {
+      const parsed = Promise.withResolvers<void>()
+      term.write(`\x1b[?2004${bracketed ? 'h' : 'l'}`, parsed.resolve)
+      await parsed.promise
+      text = ''
+      await focusTerminal(f, session)
+      const from = f.calls.length
+      expect((await press('mod+v')).defaultPrevented).toBe(true)
+      await runCommand(f, 'paste')
+      await runCommand(f, 'paste', { text: '' })
+      const expected = bracketed ? ['\x1b[200~\x1b[201~', '\x1b[200~\x1b[201~'] : []
+      await waitFor('empty clipboard pastes', () => (writes(f, from).length >= expected.length ? true : undefined))
+      expect(writes(f, from).map((call) => call.params.data)).toEqual(expected)
+    }
     nativeFailure = true
     const beforeFailure = f.calls.length
     await runCommand(f, 'paste')

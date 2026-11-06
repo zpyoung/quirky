@@ -34,7 +34,8 @@ export function compare(env: DaemonEnv): Handler {
 
 /**
  * Saves the base ref on the worktree when it has one of its own, else on the project, so that
- * every worktree without its own base follows it. `clear` removes the saved base instead.
+ * every worktree without its own base follows it. `clear` removes the saved base instead. The
+ * worktree's review marks are cleared, because every diff changes with the base.
  */
 export function setBase(env: DaemonEnv): Handler {
   return async (params, caller) => {
@@ -50,6 +51,8 @@ export function setBase(env: DaemonEnv): Handler {
     const own = worktree.baseRef !== null
     if (own) await env.context.call('quirky.worktree/set', { worktree: worktree.id, baseRef: base })
     else await env.context.call('quirky.repo/set', { repo: worktree.repoId, defaultBase: base ?? '' })
+    env.reviewMarks.clear(worktree.id)
+    env.reviewChanged(worktree)
     env.changed(worktree)
     return { target: own ? 'worktree' : 'project', base }
   }

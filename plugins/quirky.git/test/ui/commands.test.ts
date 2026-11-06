@@ -6,7 +6,7 @@ registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
 
-const { act, fakeContext, layoutFor, mountView, numbered, registerPanel, settle, textDiff } = s
+const { fakeContext, layoutFor, mountView, numbered, registerPanel, reviewFile, reviewModel, settle, stubIntersectionObserver, textDiff } = s
 
 const COMMANDS = [
   'show',
@@ -35,14 +35,25 @@ const COMMANDS = [
 let fake: ReturnType<typeof fakeContext>
 let mounted: ReturnType<typeof mountView> | null = null
 let unregister: (() => void) | null = null
+let observer: ReturnType<typeof stubIntersectionObserver>
+
+/** Mounts the Review tab with one changed file whose diff has changes far apart. */
+const openReviewTab = async () => {
+  fake.handlers['quirky.git/review'] = () => reviewModel([reviewFile('math.ts')])
+  fake.handlers['quirky.git/diff'] = () => textDiff({ source: 'review', original: numbered(30), modified: numbered(30).replace('line 3\n', 'x\n') })
+  mounted = mountView(fake, { worktree: 'w1', mode: 'review' })
+  await settle()
+}
 
 beforeEach(() => {
   document.body.innerHTML = ''
   fake = fakeContext(layoutFor('w1'))
+  observer = stubIntersectionObserver()
 })
 afterEach(() => {
   mounted?.unmount()
   mounted = null
+  observer.restore()
   unregister?.()
   unregister = null
 })
@@ -99,23 +110,22 @@ describe('quirky.git commands', () => {
     })
 
     test('after the view closes the commands say so again', async () => {
-      fake.handlers['quirky.git/diff'] = () => textDiff({ original: numbered(30), modified: numbered(30).replace('line 3\n', 'x\n') })
-      mounted = mountView(fake, { worktree: 'w1', mode: 'file', source: 'unstaged', path: 'math.ts' })
-      await settle()
+      await openReviewTab()
       await expect(fake.run('next-change')).resolves.toBeUndefined()
-      mounted.unmount()
+      mounted!.unmount()
       mounted = null
       await expect(fake.run('next-change')).rejects.toThrow('No diff view is open.')
     })
 
     test('commands that a mode has no control for do nothing', async () => {
-      fake.handlers['quirky.git/diff'] = () => textDiff()
-      mounted = mountView(fake, { worktree: 'w1', mode: 'file', source: 'staged', path: 'math.ts' })
-      await settle()
-      for (const id of ['next-conflict', 'previous-conflict', 'collapse-all']) await expect(fake.run(id)).resolves.toBeUndefined()
-      await expect(fake.run('load-diff', { path: 'x' })).resolves.toBeUndefined()
+      await openReviewTab()
+      for (const id of ['next-conflict', 'previous-conflict', 'save', 'reload-from-disk', 'overwrite']) await expect(fake.run(id)).resolves.toBeUndefined()
     })
 
+    test('load-diff names the card it cannot find', async () => {
+      await openReviewTab()
+      await expect(fake.run('load-diff', { path: 'x' })).rejects.toThrow('No section for x.')
+    })
   })
 
   describe('driving the panel', () => {
@@ -163,22 +173,5 @@ describe('quirky.git commands', () => {
         await expect(fake.run(id, {})).rejects.toThrow('Source Control is not open.')
       }
     })
-  })
-
-  test('SC-64: save, reload-from-disk and overwrite reach the open editable diff', async () => {
-    const far = { original: numbered(30), modified: numbered(30).replace('line 3\n', 'x\n') }
-    fake.handlers['quirky.git/diff'] = () => textDiff(far)
-    fake.handlers['quirky.git/save'] = () => ({ hash: 'h2' })
-    mounted = mountView(fake, { worktree: 'w1', mode: 'file', source: 'unstaged', path: 'math.ts' })
-    await settle()
-    s.edit(mounted.element, 'edited\n')
-    await act(async () => void (await fake.run('save')))
-    expect(fake.callsTo('quirky.git/save').length).toBe(1)
-    await act(async () => void (await fake.run('overwrite')))
-    expect(fake.callsTo('quirky.git/save').length).toBe(1)
-    s.edit(mounted.element, 'edited again\n')
-    await act(async () => void (await fake.run('overwrite')))
-    expect(fake.callsTo('quirky.git/save').length).toBe(2)
-    expect('expected' in fake.callsTo('quirky.git/save')[1].params).toBe(false)
   })
 })

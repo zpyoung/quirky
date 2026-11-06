@@ -1,31 +1,27 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
-import type { bunTestFile, Host, hostFor, runInHostCopy } from '../suite'
-import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline } from './baseline'
+import type { bunTestFile } from '../suite'
+import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline, findBaselines } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
-import { renderComment, renderLocal } from './report'
+import { renderComment } from './report'
 import { findSpawners, selectTests } from './select'
-import { MAX_SHARDS_MAIN, MAX_SHARDS_PR, SHARD_TARGET_MS, splitShards } from './shards'
+import { DURATION_BASELINES, MAX_SHARDS_MAIN, MAX_SHARDS_PR, medianDurations, SHARD_TARGET_MS, splitShards } from './shards'
 import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
 
 const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 
   plan       --event <pull_request|push|workflow_dispatch> [--full <true|false>] --out <dir>
   run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
-  rerun      --plan <dir> --in <dir> --out <file>
   verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
   issues     --plan <dir> --baseline <file> --only <open|close>
-  affected   [--json] [--jobs <n>] [--list]
-  run-files  --jobs <n> --slots <n>
+  affected   [--json]
 `
 
 const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
-const RERUN_FILE = 'rerun.json'
-const FILE_RESULTS_PREFIX = 'file-results '
 
 /**
  * What the commands touch outside their arguments. Tests replace `gh`, the clock, the process
@@ -40,9 +36,6 @@ export type Context = {
   err: (text: string) => void
   run?: typeof bunTestFile
   download?: (args: string[], dest: string) => Promise<void>
-  chooseHost?: typeof hostFor
-  runInHost?: typeof runInHostCopy
-  stdin?: () => Promise<string>
 }
 
 /** A bad command line. `runCli` answers it with the usage text and exit code 2. */
@@ -222,10 +215,10 @@ function jsonFilesIn(dir: string): string[] {
   return found.sort()
 }
 
-type Loaded = { results: FileResult[]; rerun: FileResult[]; problems: string[] }
+type Loaded = { results: FileResult[]; problems: string[] }
 
 function loadResults(dir: string): Loaded {
-  const loaded: Loaded = { results: [], rerun: [], problems: [] }
+  const loaded: Loaded = { results: [], problems: [] }
   let paths: string[]
   try {
     paths = jsonFilesIn(dir)
@@ -236,9 +229,7 @@ function loadResults(dir: string): Loaded {
   }
   for (const path of paths) {
     try {
-      const list = asResults(readJson(path))
-      if (path.split('/').pop() === RERUN_FILE) loaded.rerun.push(...list)
-      else loaded.results.push(...list)
+      loaded.results.push(...asResults(readJson(path)))
     } catch (error) {
       loaded.problems.push(`cannot read ${path}: ${error instanceof Error ? error.message : error}`)
     }
@@ -257,8 +248,13 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   const { macosOnly } = await import('../suite')
   const head = headOf(ctx)
   const repo = repoOf(ctx)
-  const found = await findBaseline({ cwd: ctx.cwd, head, repo, gh: ctx.gh, fromParent: event !== 'pull_request' })
-  const baseline = found ? await fetchBaseline(found, { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download }) : null
+  const fetchOptions = { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download }
+  const [found, ...older] = await findBaselines({ cwd: ctx.cwd, head, repo, gh: ctx.gh, fromParent: event !== 'pull_request' }, DURATION_BASELINES)
+  const baseline = found ? await fetchBaseline(found, fetchOptions) : null
+  const timings = await Promise.all(older.map((entry) => fetchBaseline(entry, fetchOptions).catch((error) => {
+    ctx.err(`skipping the durations from ${entry.commit}: ${error instanceof Error ? error.message : error}\n`)
+    return null
+  })))
 
   let changed: ChangedPath[] = []
   let range: Selected | null = null
@@ -275,9 +271,11 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   const notOnCiList = macosOnly(join(ctx.cwd, NOT_ON_CI_LIST))
   const macosList = macosOnly(join(ctx.cwd, MACOS_LIST))
   const notOnCi = selection.files.filter((file) => notOnCiList.has(file))
+  const durationsOf = (run: Baseline) => Object.fromEntries(Object.entries(run.files).map(([file, info]) => [file, info.durationMs]))
+  const timedRuns = [baseline, ...timings].filter((run): run is Baseline => run !== null)
+  const durations = medianDurations(timedRuns.map(durationsOf))
   const macos = selection.files.filter((file) => macosList.has(file) && !notOnCiList.has(file))
   const linux = selection.files.filter((file) => !macosList.has(file) && !notOnCiList.has(file))
-  const durations = Object.fromEntries(Object.entries(baseline?.files ?? {}).map(([file, info]) => [file, info.durationMs]))
   const linuxShards = splitShards(linux, durations, { targetMs: SHARD_TARGET_MS, maxShards: affectedOnly ? MAX_SHARDS_PR : MAX_SHARDS_MAIN })
 
   const plan: Plan = {
@@ -295,6 +293,7 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   if (baseline) writeJson(join(outDir, 'baseline.json'), baseline)
 
   ctx.out(`selection: ${selection.mode}, ${selection.files.length} files, ${linuxShards.length} linux shards, ${macos.length} macos, ${notOnCi.length} not on ci\n`)
+  ctx.out(`durations: median of ${timedRuns.length} main runs\n`)
   for (const reason of selection.reasons) ctx.out(`  ${reason}\n`)
   if (plan.rangeSelection) for (const reason of plan.rangeSelection.reasons) ctx.out(`  range: ${reason}\n`)
   if (range && range.graphMisses > 0) ctx.out(`import graph misses: ${range.graphMisses}\n`)
@@ -314,32 +313,10 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
 
   const { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
   const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }
-  let results = await runTestFiles(options)
-  if (values.macos) {
-    const rerun = await rerunFailed(options, results, RERUN_LIMIT)
-    if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} macos files failed, so none were rerun\n`)
-    results = rerun.results
-  }
-  writeJson(out, results)
-  ctx.out(`ran ${results.length} files\n`)
-  return 0
-}
-
-async function rerunCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' } })
-  const planDir = need(values.plan, 'plan')
-  const inDir = need(values.in, 'in')
-  const out = need(values.out, 'out')
-  readPlan(planDir)
-
-  const loaded = loadResults(inDir)
-  if (loaded.problems.length > 0) throw new Error(loaded.problems.join('\n'))
-  const { FILE_LIMIT_MS, RERUN_LIMIT, rerunFailed } = await import('./runner')
-  const rerun = await rerunFailed({ cwd: ctx.cwd, files: [], platform: 'linux', jobs: 1, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }, loaded.results, RERUN_LIMIT)
-  if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files failed, so none were rerun\n`)
-  const written = rerun.results.filter((result, index) => result.rerun !== undefined && loaded.results[index].rerun === undefined)
-  writeJson(out, written)
-  ctx.out(`reran ${written.length} files\n`)
+  const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
+  if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files in this job failed, so none were rerun\n`)
+  writeJson(out, rerun.results)
+  ctx.out(`ran ${rerun.results.length} files\n`)
   return 0
 }
 
@@ -385,16 +362,7 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
 
   const loaded = loadResults(inDir)
   problems.push(...loaded.problems)
-  const results = new Map<string, FileResult>(loaded.results.map((result) => [result.file, result]))
-  for (const again of loaded.rerun) {
-    const first = results.get(again.file)
-    if (!first || !again.rerun) {
-      problems.push(`${RERUN_FILE} holds ${again.file}, which has no first result`)
-      continue
-    }
-    results.set(again.file, { ...first, rerun: again.rerun })
-  }
-  const merged = [...results.values()]
+  const merged = [...new Map<string, FileResult>(loaded.results.map((result) => [result.file, result])).values()]
 
   const verdict = compareResults({
     baseline,
@@ -443,124 +411,55 @@ async function issuesCommand(args: string[], ctx: Context): Promise<number> {
   return 0
 }
 
-/** The worker `affected` starts on a test host: runs the files named on stdin and prints their results on one line. */
-async function runFilesCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { jobs: { type: 'string' }, slots: { type: 'string' } })
-  for (const name of ['jobs', 'slots'] as const) {
-    if (!/^[1-9]\d*$/.test(need(values[name], name))) throw new UsageError(`--${name} must be a positive integer`)
-  }
-  const input = await (ctx.stdin ?? (() => Bun.stdin.text()))()
-  const { slottedTestFile } = await import('../suite')
-  const { FILE_LIMIT_MS, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = {
-    cwd: ctx.cwd,
-    files: input.split('\n').filter(Boolean),
-    platform: 'linux' as const,
-    jobs: Number(values.jobs),
-    limitMs: FILE_LIMIT_MS,
-    run: ctx.run ?? slottedTestFile(Number(values.slots)),
-  }
-  const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
-  ctx.out(`${FILE_RESULTS_PREFIX}${JSON.stringify(rerun)}\n`)
-  return 0
-}
-
-async function runFilesOnHost(ctx: Context, host: Host, files: string[]): Promise<{ results: FileResult[]; skipped: boolean }> {
-  const { runInHostCopy } = await import('../suite')
-  const command = `bun scripts/test-baseline/cli.ts run-files --jobs ${host.jobs ?? 4} --slots ${host.slots ?? 8}`
-  const run = await (ctx.runInHost ?? runInHostCopy)(ctx.cwd, host.host, command, files.join('\n'), false)
-  const line = run?.output.split('\n').find((text) => text.startsWith(FILE_RESULTS_PREFIX))
-  if (!line) throw new Error(`${host.host} couldn't finish the tests, so this run stops${run ? `\n${run.output}` : ''}`)
-  return JSON.parse(line.slice(FILE_RESULTS_PREFIX.length)) as { results: FileResult[]; skipped: boolean }
-}
-
+/**
+ * Prints the tests a push of the working tree would run, and why, without running any: the same
+ * selection CI makes, against the nearest baseline or the merge base with origin/main.
+ */
 async function affectedCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { json: { type: 'boolean' }, jobs: { type: 'string' }, list: { type: 'boolean' } })
-  if (values.jobs !== undefined && !/^[1-9]\d*$/.test(values.jobs)) throw new UsageError('--jobs must be a positive integer')
+  const values = parse(args, { json: { type: 'boolean' } })
 
-  let baseline: Baseline | null = null
   let base: string | null = null
   try {
     const repo = repoOf(ctx)
     const found = await findBaseline({ cwd: ctx.cwd, head: headOf(ctx), repo, gh: ctx.gh })
     if (found) {
-      baseline = await fetchBaseline(found, { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download })
+      await fetchBaseline(found, { cwd: ctx.cwd, repo, gh: ctx.gh, download: ctx.download })
       base = found.commit
     } else {
-      ctx.err('no baseline found; selecting from the merge base with origin/main, and every failure counts as new\n')
+      ctx.err('no baseline found; selecting from the merge base with origin/main\n')
     }
   } catch (error) {
     if (!(error instanceof BaselineUnavailable)) throw error
-    ctx.err(`baseline unavailable: ${error.message}\nselecting from the merge base with origin/main, and every failure counts as new\n`)
+    ctx.err(`baseline unavailable: ${error.message}\nselecting from the merge base with origin/main\n`)
   }
   base ??= gitOrNull(ctx.cwd, ['merge-base', 'HEAD', 'origin/main'])
 
-  let changed: ChangedPath[] = []
   let selection: Selection
   if (base) {
-    changed = [...changesBetween(ctx.cwd, base, null), ...untrackedFiles(ctx.cwd).map((path): ChangedPath => ({ path, status: 'A' }))]
+    const changed = [...changesBetween(ctx.cwd, base, null), ...untrackedFiles(ctx.cwd).map((path): ChangedPath => ({ path, status: 'A' }))]
     const codeFiles = git(ctx.cwd, ['ls-files', '-co', '--exclude-standard', '-z']).split('\0').filter(Boolean)
     selection = (await selectFrom(ctx, changed, codeFiles)).selection
   } else {
     selection = await allTests(ctx, 'no merge base with origin/main, so every test runs')
   }
 
-  if (values.list) {
-    ctx.out(values.json ? JSON.stringify(selection, null, 2) + '\n' : selection.files.map((file) => `${file}\n`).join(''))
+  if (values.json) {
+    ctx.out(JSON.stringify(selection, null, 2) + '\n')
     return 0
   }
-
-  const { macosOnly, hostFor } = await import('../suite')
-  const macosList = macosOnly(join(ctx.cwd, MACOS_LIST))
-  const hostable = selection.files.filter((file) => !macosList.has(file))
-  const choice = hostable.length > 0 ? await (ctx.chooseHost ?? hostFor)(ctx.cwd) : undefined
-  if (choice && 'error' in choice) throw new Error(choice.error)
-  if (choice?.note) ctx.err(`${choice.note}\n`)
-  // full runs belong on GitHub, and a shared host shouldn't take one just because a change touched the test tooling
-  if (choice && selection.mode === 'all') {
-    ctx.err(`this change selects every test, so nothing ran on ${choice.host.host}: ${selection.reasons.join('; ')}\nGet a full run through a PR: gh pr edit <number> --add-label full-suite\n`)
-    if (values.json) ctx.out(`${JSON.stringify({ skipped: 'every test selected', reasons: selection.reasons })}\n`)
-    return 0
-  }
-  const there = choice ? hostable : []
-  const here = choice ? selection.files.filter((file) => macosList.has(file)) : selection.files
-  if (choice) ctx.err(`running ${there.length} test files on ${choice.host.host} and ${here.length} macOS-only files here\n`)
-
-  const { FILE_LIMIT_MS, FILES_AT_ONCE_LOCAL, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = {
-    cwd: ctx.cwd,
-    files: here,
-    platform: process.platform === 'darwin' ? ('macos' as const) : ('linux' as const),
-    jobs: values.jobs ? Number(values.jobs) : FILES_AT_ONCE_LOCAL,
-    limitMs: FILE_LIMIT_MS,
-    run: ctx.run,
-  }
-  const runHere = async () => rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
-  const [away, local] = await Promise.all([choice ? runFilesOnHost(ctx, choice.host, there) : { results: [], skipped: false }, runHere()])
-  const rerun = { results: [...away.results, ...local.results], skipped: away.skipped || local.skipped }
-  if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files failed, so none were rerun\n`)
-
-  const verdict: Verdict = compareResults({
-    baseline,
-    results: rerun.results,
-    selection,
-    deleted: await deletedTests(changed),
-    notOnCi: [],
-    advisory: true,
-    runBroken: false,
-  })
-  ctx.out(values.json ? JSON.stringify(verdict, null, 2) + '\n' : renderLocal(verdict, ctx.now()))
-  return verdict.new.length > 0 || verdict.incomplete.length > 0 ? 1 : 0
+  const why = ['why:', ...selection.reasons.map((reason) => `  ${reason}`)].map((line) => `${line}\n`).join('')
+  if (selection.mode === 'all') ctx.out(`This change selects every test, so the next push runs the whole suite.\n${why}`)
+  else if (selection.mode === 'none') ctx.out(`No tests are needed for this change.\n${why}`)
+  else ctx.out(selection.files.map((file) => `${file}\n`).join('') + why)
+  return 0
 }
 
 const COMMANDS: Record<string, (args: string[], ctx: Context) => Promise<number>> = {
   plan: planCommand,
   'run-shard': runShardCommand,
-  rerun: rerunCommand,
   verdict: verdictCommand,
   issues: issuesCommand,
   affected: affectedCommand,
-  'run-files': runFilesCommand,
 }
 
 /**

@@ -3,6 +3,7 @@ import type { GitDiffSource } from '@quirky/protocol'
 import { readCompare } from './compare'
 import type { DaemonEnv, Handler } from './env'
 import { containedPath } from './paths'
+import { moveMarkToWrite, reviewDiff } from './review'
 
 declare global {
   /** Test-only replacement for Finder's `open -R`; production never sets it. */
@@ -19,7 +20,8 @@ function oidParam(env: DaemonEnv, name: string, value: unknown): string | undefi
 
 /**
  * Both sides of a file diff for a source: staged, unstaged, branch (merge base to head, defaulting
- * to the current compare) or commit (first parent to commit). A diff git cannot read fails with
+ * to the current compare), commit (first parent to commit) or review (the merge base, or the
+ * reviewed content, to the working file; see `reviewDiff`). A diff git cannot read fails with
  * git's message instead of looking like "no changes".
  */
 export function diff(env: DaemonEnv): Handler {
@@ -34,6 +36,13 @@ export function diff(env: DaemonEnv): Handler {
     }
     const { rel } = await containedPath(worktree.path, params.path)
     const oldPath = params.oldPath === undefined ? undefined : (await containedPath(worktree.path, params.oldPath)).rel
+    if (source === 'review') {
+      if (params.against !== 'base' && params.against !== 'reviewed') {
+        throw env.context.error('invalid-params', 'against must be base or reviewed for source review.')
+      }
+      return reviewDiff(env, worktree, { path: rel, against: params.against, ...(oldPath !== undefined && { oldPath }) })
+    }
+    if (params.against !== undefined) throw env.context.error('invalid-params', 'against is only available for source review.')
     const request: DiffRequest = {
       path: rel,
       source,
@@ -79,12 +88,18 @@ export function serialised<T>(key: string, task: () => Promise<T>): Promise<T> {
 /**
  * Writes a working file atomically; with `expected` it refuses when the file changed on disk.
  * Saves to the same file run one at a time so the hash check and the write cannot interleave.
+ * A review mark that holds the `expected` hash moves to the saved content, so saving keeps a
+ * reviewed file reviewed.
  */
 export function save(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
     const { rel, absolute } = await containedPath(worktree.path, params.path)
-    const result = await serialised(absolute, () => gitApi().saveWorkingFile(worktree.path, rel, params.content, params.expected))
+    const result = await serialised(absolute, async () => {
+      const written = await gitApi().saveWorkingFile(worktree.path, rel, params.content, params.expected)
+      if (params.expected !== undefined) moveMarkToWrite(env, worktree, rel, params.expected, new TextEncoder().encode(params.content), written.hash)
+      return written
+    })
     env.changed(worktree)
     return result
   }

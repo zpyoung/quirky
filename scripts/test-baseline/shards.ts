@@ -1,6 +1,8 @@
 export const SHARD_TARGET_MS = 180000
 export const MAX_SHARDS_PR = 6
 export const MAX_SHARDS_MAIN = 12
+/** How many recent main baselines a plan takes file durations from. */
+export const DURATION_BASELINES = 5
 
 const UNKNOWN_DURATION_MS = 5000
 
@@ -11,11 +13,28 @@ function median(values: number[]): number {
 }
 
 /**
+ * Each file's median duration across several runs, so one slow or fast run doesn't decide where a
+ * file goes. A file counts only in the runs that recorded it.
+ */
+export function medianDurations(runs: Record<string, number>[]): Record<string, number> {
+  const seen = new Map<string, number[]>()
+  for (const run of runs) {
+    for (const [file, ms] of Object.entries(run)) {
+      const list = seen.get(file)
+      if (list) list.push(ms)
+      else seen.set(file, [ms])
+    }
+  }
+  return Object.fromEntries([...seen].map(([file, list]) => [file, median(list)]))
+}
+
+/**
  * Splits `files` into balanced shards by recorded duration, longest first onto the least-loaded
  * shard. A file with no entry in `durations` counts as the median of every duration in `durations`,
  * selected or not, or 5,000 ms when it is empty. The shard count is `min(maxShards, ceil(total / targetMs))`, at least 1, and never
  * more than the number of files so no shard is empty. Returns `[]` for no files. The result depends
  * only on the inputs' contents, not their order: ties go to the lower path, then the lower shard.
+ * Each shard lists its files longest first.
  */
 export function splitShards(
   files: string[],

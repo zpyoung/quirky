@@ -1,6 +1,10 @@
 export { Button, ExpandingIconButton, IconButton, TextField, TextArea, SelectField, Badge, StatusDot } from './primitives'
 export { AffixInput, Checkbox, DisclosureButton, Kbd, LinkButton, ReachMeter, SegmentedControl, TagButton } from './controls'
 export { ListRow, SectionHeader, Tabs, Menu } from './navigation'
+export { ReviewMark } from './review-mark'
+export { SplitButton } from './split-button'
+export { InlineError } from './inline-error'
+export { ScopeChip } from './scope-chip'
 export { ContextMenu, ContextMenuList, CONTEXT_MENU_SEPARATOR } from './context-menu'
 export type { ContextMenuItem, ContextMenuListProps, ContextMenuProps } from './context-menu-contracts'
 export { Toast, Dialog } from './overlays'
@@ -29,6 +33,7 @@ export type {
   ExpandingIconButtonProps,
   FormRowProps,
   IconButtonProps,
+  InlineErrorProps,
   InlineAgentCardProps,
   ListRowProps,
   MenuItem,
@@ -37,7 +42,11 @@ export type {
   PopupItem,
   PopupMenuProps,
   ProjectTileProps,
+  ReviewMarkProps,
+  ReviewMarkState,
+  ScopeChipProps,
   SectionHeaderProps,
+  SplitButtonProps,
   StatusBarItemProps,
   StatusDotProps,
   TabItem,

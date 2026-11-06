@@ -101,10 +101,10 @@ verification items and the remaining `m7-sweep-*` items depend on `m7-test-triag
 normal steps apply again, including step 6, so every end-phase item runs its own tests before it
 lands.
 
-1. **`m7-test-triage`** runs `bun scripts/suite.ts packages apps plugins`, `bun test scripts` and
-   `bun run typecheck` on `build/roadmap`. It adds one `fix-test-<area>-<MMDD>` item per failing
-   package, app or plugin with `queue.ts add`, each naming its failing files and tests, so the lanes
-   split the debugging. It changes no code, and lands with its report in its decision log.
+1. **`m7-test-triage`** opens a draft PR from `build/roadmap` with the `full-suite` label and reads
+   the Tests comment, then runs `bun test scripts` and `bun run typecheck`. It adds one
+   `fix-test-<area>-<MMDD>` item per failing package, app or plugin with `queue.ts add`, each naming
+   its failing files and tests, so the lanes split the debugging. It changes no code, and lands with its report in its decision log.
 2. **The fix items, the verification items and the `m7-sweep-*` items** then run in parallel. Each
    sweep dogfoods every flow in its feature docs and fixes what fails.
 3. **`m7-api-freeze`** comes last, and `queue.ts check` runs the whole suite once every item is done.
@@ -175,13 +175,12 @@ lands.
    - The feature ships as a built-in plugin that uses only the public plugin API. Its plugin
      exposes the feature's API methods and CLI command group.
    - `bun test scripts` and `bun run typecheck` pass, and so do the tests of every package, app and
-     plugin the item changed or that imports one it changed. Run those with
-     `bun scripts/suite.ts <dir> <dir> ...`, which runs them on the remote test host so lanes don't
-     compete for this Mac. A single file runs here with `bun test <file>`. For a quick check against the
-     stored baseline, `bun run test:affected` runs only the tests your change affects. Leave the
-     whole suite to `queue.ts check`, which runs `bun run test` once every item is done. When the
-     item changes code most of the repo imports, such as `packages/protocol` or
-     `scripts/test-support`, get a full run through a PR as `AGENTS.md` describes.
+     plugin the item changed or that imports one it changed. Get those results by pushing to the
+     item's draft PR, which runs the tests your change affects on GitHub Actions. A single file runs here with `bun test <file>`. To see what a push would run, use
+     `bun run test:affected`, which runs nothing. Leave the whole suite to `queue.ts check`, which
+     runs `bun run test` once every item is done. When the item changes code most of the repo
+     imports, such as `packages/protocol` or `scripts/test-support`, get a full run through a PR as
+     `AGENTS.md` describes.
    - **The UI scenarios pass when used like a user.** If the logic spec has scenarios a person sees
      in the UI, run `bun run build`, start `quirkyd` on a fresh temporary `QUIRKY_HOME`, and run
      `quirk:using-apps-like-a-user` with `--surface web --owner yours --unattended` against the

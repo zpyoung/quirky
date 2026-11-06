@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, qa, rowOf, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, qa, rowOf, rowPaths, selectedPaths, settle, statusOf, type } = s
 const { activePanel } = await import('../../src/panel/registry')
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -59,30 +59,37 @@ describe('SC-48: compare explains when it cannot run', () => {
   })
 })
 
-describe('SC-47 and SC-51: Committed on Branch refreshes', () => {
+describe('SC-47 and SC-51: the branch compare refreshes', () => {
   const branch = [{ path: 'util.ts', status: 'added' as const, added: 40, removed: 0, binary: false }]
 
-  test('Refresh branch compare in the menu reloads it immediately', async () => {
+  test('Refresh in the menu reloads it immediately', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.compare = compareOf({ entries: branch, added: 40 })
     })
     const before = fake.called('quirky.git/compare').length
     await click(byLabel(element, 'More source control actions'))
-    await click(buttonText(document.body, 'Refresh branch compare'))
+    await click(buttonText(document.body, 'Refresh'))
     expect(fake.called('quirky.git/compare').length).toBe(before + 1)
     unmount()
   })
 
-  test('the section updates at once after the panel\'s own commit', async () => {
+  test('a committed file loses its uncommitted dot once the commit lands', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
       f.compare = compareOf()
+      f.on('quirky.git/commit', () => {
+        f.status = statusOf([])
+        f.compare = compareOf({ entries: [{ path: 'math.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1 })
+        f.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } })
+        return { sha: 'd'.repeat(40) }
+      })
     })
-    expect(q(element, '[data-section="branch"]')).toBeNull()
-    fake.compare = compareOf({ entries: [{ path: 'math.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1 })
+    expect(q(rowOf(element, 'math.ts')!, '.git-row__dirty--staged')).not.toBeNull()
     await type(byLabel(element, 'Commit message') as HTMLTextAreaElement, 'msg')
-    await click(q(element, '[data-git-primary]'))
-    expect(rowOf(element, 'math.ts', 'branch')).not.toBeNull()
+    await click(q(element, '.ui-split-button__primary'))
+    expect(fake.called('quirky.git/commit')).toHaveLength(1)
+    expect(rowOf(element, 'math.ts')).not.toBeNull()
+    expect(q(rowOf(element, 'math.ts')!, '.git-row__dirty')).toBeNull()
     unmount()
   })
 
@@ -128,7 +135,7 @@ describe('SC-50: Change Base Ref', () => {
     fake.on('quirky.git/compare', () => deferCompare ? pendingCompare.promise : fake.compare)
     try {
       await click(byLabel(element, 'More source control actions'))
-      await click(buttonText(document.body, 'Change Base Ref…'))
+      await click(buttonText(document.body, 'Change base…'))
       expect(dialogTitle()).toBe('Change Base Ref')
       expect(dialog()?.textContent).toContain('Pick the branch compare target for this repository.')
       expect(qa(dialog()!, '[aria-label="Branches"] .ui-list-row__main')).toHaveLength(4)
@@ -300,8 +307,8 @@ describe('SC-50: Change Base Ref', () => {
       await settle()
       expect(dialog()).toBeNull()
       expect(q(element, '[data-base-ref]')).toBeNull()
-      const target = q(element, '[data-base-ref]') ?? byLabel(element, 'More commit and remote actions')
-      expect(target?.getAttribute('aria-label')).toBe('More commit and remote actions')
+      const target = q(element, '[data-base-ref]') ?? byLabel(element, 'More source control actions')
+      expect(target?.getAttribute('aria-label')).toBe('More source control actions')
       expect((target as HTMLButtonElement).disabled).toBe(false)
       expect(document.activeElement === target).toBe(true)
     } finally {
@@ -319,7 +326,7 @@ describe('SC-50: Change Base Ref', () => {
       const { element, unmount } = await open(setup)
       try {
         await click(byLabel(element, 'More source control actions'))
-        await click(buttonText(document.body, 'Change Base Ref…'))
+        await click(buttonText(document.body, 'Change base…'))
         if (dismissal === 'Close') await click(buttonText(dialog()!, 'Close'))
         else await press(byLabel(dialog()!, 'Search branches')!, 'Escape')
         expect(dialog()).toBeNull()
@@ -330,16 +337,16 @@ describe('SC-50: Change Base Ref', () => {
     })
   }
 
-  test('Use Primary from the menu returns focus to commit actions when the base chip disappears', async () => {
+  test('Use Primary from the menu returns focus to the panel menu when the base chip disappears', async () => {
     const { fake, element, unmount } = await open(setup)
     try {
       await click(byLabel(element, 'More source control actions'))
-      await click(buttonText(document.body, 'Change Base Ref…'))
+      await click(buttonText(document.body, 'Change base…'))
       fake.compare = compareOf({ base: null })
       await click(buttonText(dialog()!, 'Use Primary'))
       expect(dialog()).toBeNull()
       expect(q(element, '[data-base-ref]')).toBeNull()
-      expect(document.activeElement === byLabel(element, 'More commit and remote actions')).toBe(true)
+      expect(document.activeElement === byLabel(element, 'More source control actions')).toBe(true)
     } finally {
       unmount()
     }
@@ -374,7 +381,8 @@ describe('SC-50: Change Base Ref', () => {
       expect(dialogTitle()).toBe('Change Base Ref')
       await click(buttonText(dialog()!, 'Close'))
       expect(dialog()).toBeNull()
-      await click(byLabel(element, 'Delete untracked file notes.txt'))
+      await click(rowOf(element, 'notes.txt'))
+      await click(byLabel(element, 'Revert notes.txt'))
       expect(dialogTitle()).toBe('Delete "notes.txt"?')
       deferCompare = false
       const cleared = compareOf({ base: null })
@@ -436,7 +444,7 @@ describe('SC-54: the Commits dock', () => {
     }))
   }
 
-  test.each(['unstaged', 'branch', 'history'])('%s file badges distinguish one changed line from multiple lines', async (section) => {
+  test.each(['list', 'history'])('%s file badges distinguish one changed line from multiple lines', async (section) => {
     const changes = [
       { path: 'one-addition.ts', status: 'modified' as const, added: 1, removed: 2, binary: false },
       { path: 'one-deletion.ts', status: 'modified' as const, added: 2, removed: 1, binary: false }
@@ -456,8 +464,9 @@ describe('SC-54: the Commits dock', () => {
         await click(byLabel(element, 'Expand Commits'))
         await click(byLabel(element, 'Expand commit 1111111'))
       }
-      const additionRow = q(element, `[data-section="${section}"] [data-row-path="one-addition.ts"]`)!
-      const deletionRow = q(element, `[data-section="${section}"] [data-row-path="one-deletion.ts"]`)!
+      const scope = section === 'history' ? q(element, '[data-section="history"]')! : element
+      const additionRow = q(scope, '[data-row-path="one-addition.ts"]')!
+      const deletionRow = q(scope, '[data-row-path="one-deletion.ts"]')!
       expect(q(additionRow, '[aria-label="1 addition"]')?.textContent).toBe('+1')
       expect(q(additionRow, '[aria-label="2 deletions"]')?.textContent).toBe('−2')
       expect(q(deletionRow, '[aria-label="2 additions"]')?.textContent).toBe('+2')
@@ -497,23 +506,15 @@ describe('SC-54: the Commits dock', () => {
     }
   })
 
-  test('clicking a commit opens its combined diff; expanding it lists files that open their commit diff', async () => {
+  test('clicking a commit opens it in the Review tab; expanding it lists files that reveal themselves there', async () => {
     const { fake, element, unmount } = await open(history)
     await click(byLabel(element, 'Expand Commits'))
     await click(q(element, '[data-commit-row] .ui-list-row__main'))
-    expect(fake.views.at(-1)).toEqual({
-      id: DIFF_VIEW,
-      input: {
-        worktree: 'feat',
-        mode: 'combined',
-        commit: '1'.repeat(40),
-        commitMessage: { subject: 'Merge main', body: 'Merge body\ncontinued' }
-      }
-    })
+    expect(fake.views.at(-1)).toEqual({ id: DIFF_VIEW, input: { worktree: 'feat', mode: 'review', commit: '1'.repeat(40) } })
     await click(byLabel(element, 'Expand commit 1111111'))
     expect(fake.called('quirky.git/commitFiles').at(-1)?.params).toEqual({ worktree: 'feat', commit: '1'.repeat(40) })
-    await click(rowOf(element, 'new.ts', 'history'))
-    expect(fake.views.at(-1)?.input).toEqual({ worktree: 'feat', mode: 'file', source: 'commit', commit: '1'.repeat(40), path: 'new.ts', oldPath: 'old.ts' })
+    await click(q(element, '[data-section="history"] [data-row-path="new.ts"]'))
+    expect(fake.views.at(-1)?.input).toEqual({ worktree: 'feat', mode: 'review', commit: '1'.repeat(40), reveal: 'new.ts' })
     unmount()
   })
 
@@ -547,12 +548,10 @@ describe('SC-58 and SC-59: huge repositories', () => {
     )
   }
 
-  test('the banner offers Stage All (scope all) and Retry; Changes stages tracked only; Untracked has no Stage all', async () => {
+  test('the banner offers Stage All (scope all) and Retry, and no row or header offers a bulk stage', async () => {
     const { fake, element, unmount } = await open(huge)
     expect(element.textContent).toContain('Too many changes detected. Only the first 1000 are shown.')
-    expect(q(element, '[data-section="untracked"] [aria-label="Stage all"]')).toBeNull()
-    await click(byLabel(q(element, '[data-section="unstaged"]')!, 'Stage all'))
-    expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'tracked' })
+    expect(byLabel(element, 'Stage all')).toBeNull()
     await click(buttonText(q(element, '[role="status"] .ui-inline-agent-card')!, 'Stage All'))
     expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'all' })
     const before = fake.called('quirky.git/status').length
@@ -561,9 +560,10 @@ describe('SC-58 and SC-59: huge repositories', () => {
     unmount()
   })
 
-  test('the primary Stage All stages with scope all while capped', async () => {
+  test('the ship button commits with a stage of scope all while capped', async () => {
     const { fake, element, unmount } = await open(huge)
-    await click(q(element, '[data-git-primary]'))
+    await type(byLabel(element, 'Commit message') as HTMLTextAreaElement, 'msg')
+    await click(q(element, '.ui-split-button__primary'))
     expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'all' })
     unmount()
   })
@@ -602,14 +602,14 @@ describe('SC-64: the panel handle commands act on', () => {
     })
     await act(async () => activePanel().setFilter('math'))
     await settle()
-    expect(qa(element, '[data-row-path] button[aria-pressed]').map((row) => row.closest('[data-row-path]')?.getAttribute('title'))).toEqual(['math.ts'])
+    expect(rowPaths(element)).toEqual(['math.ts'])
     expect(fake.reports.at(-1).filter).toBe('math')
     await act(async () => activePanel().setFilter(''))
     await settle()
     expect(byLabel(element, 'Filter files…')).toBeNull()
     await act(async () => activePanel().select(['math.ts', 'other.ts']))
     await settle()
-    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('2 selected')
+    expect(selectedPaths(element)).toEqual(['math.ts'])
     const before = fake.called('quirky.git/compare').length
     await act(async () => activePanel().refreshCompare())
     await settle()

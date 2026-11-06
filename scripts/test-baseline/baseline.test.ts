@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { BaselineUnavailable, buildBaseline, fetchBaseline, findBaseline } from './baseline'
+import { BaselineUnavailable, buildBaseline, fetchBaseline, findBaseline, findBaselines } from './baseline'
 import type { Attempt, Baseline, FileResult, GhRunner } from './types'
 
 const REPO = 'acme/quirky'
@@ -229,6 +229,28 @@ function zipOf(scratch: string, content: string, entry = 'baseline.json'): strin
   if (result.exitCode !== 0) throw new Error(result.stderr.toString())
   return out
 }
+
+describe('findBaselines', () => {
+  test('returns up to the limit along the first-parent walk, nearest first', async () => {
+    const { dir, main, branch } = makeRepo()
+    const gh = fakeGh([
+      { id: 1, name: `test-baseline-${main[0]}` },
+      { id: 2, name: `test-baseline-${main[1]}` },
+      { id: 3, name: `test-baseline-${main[2]}` },
+      { id: 4, name: `test-baseline-${branch[0]}` },
+    ])
+    expect(await findBaselines({ cwd: dir, head: branch[1], repo: REPO, gh }, 2)).toEqual([
+      { commit: main[2], artifactId: 3 },
+      { commit: main[1], artifactId: 2 },
+    ])
+    expect(await findBaselines({ cwd: dir, head: branch[1], repo: REPO, gh }, 10)).toHaveLength(3)
+  })
+
+  test('is empty when nothing matches', async () => {
+    const { dir, branch } = makeRepo()
+    expect(await findBaselines({ cwd: dir, head: branch[1], repo: REPO, gh: fakeGh([]) }, 5)).toEqual([])
+  })
+})
 
 describe('fetchBaseline', () => {
   let dir: string

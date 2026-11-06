@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { act } from 'react'
 import { bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
 import type { ITheme } from '@xterm/xterm'
+import { version as xtermVersion } from '@xterm/xterm/package.json'
 import { fakeContext, loadPane, mountPane, paneHandlers, settings, settle, startRecording, stopRecording, terminals, unloadPane, type MountedPane } from './pane-support'
 
 let mounted: MountedPane | null = null
@@ -58,7 +59,7 @@ describe('attach, replay and input', () => {
   })
 
   test('replayed queries never answer into the live shell', async () => {
-    const { fake, pane } = await mount({}, paneHandlers({ replay: bytesToBase64(text('\x1b[6n')) }))
+    const { fake, pane } = await mount({}, paneHandlers({ replay: bytesToBase64(text('\x1b[6n\x1b[>q')) }))
     await pane.flush()
     expect(fake.callsTo('quirky.terminal/write')).toEqual([])
     await act(async () => pane.term().input('x'))
@@ -71,6 +72,20 @@ describe('attach, replay and input', () => {
     await pane.flush()
     // DECRPM status 2 is "recognized, currently reset"; 0 would mean frames draw as they arrive
     expect(fake.callsTo('quirky.terminal/write').map((call) => call.params.data)).toEqual(['\x1b[?2026;2$y'])
+  })
+
+  test('a program asking which terminal this is hears xterm.js and its version', async () => {
+    const { fake, pane } = await mount()
+    await fake.push(101, '\x1b[>q')
+    await pane.flush()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params.data)).toEqual([`\x1bP>|xterm.js(${xtermVersion})\x1b\\`])
+  })
+
+  test('XTVERSION with a nonzero parameter gets no reply', async () => {
+    const { fake, pane } = await mount()
+    await fake.push(101, '\x1b[>1q')
+    await pane.flush()
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
   })
 
   test('a pane that is not interactive ignores input', async () => {

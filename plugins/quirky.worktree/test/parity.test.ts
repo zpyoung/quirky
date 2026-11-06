@@ -263,7 +263,7 @@ describe('workspace navigation and Open in', () => {
     expect((await ui.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(main.id)
 
     await call(w.t.client, 'quirky.worktree/openIn', { worktree: second.id, target: 'changes' })
-    expect(await ui.callAny('ui.state', {})).toMatchObject({ layout: { view: { id: 'view:quirky.git/diff', input: { worktree: second.id, mode: 'combined', area: 'all' } } } })
+    expect(await ui.callAny('ui.state', {})).toMatchObject({ layout: { view: { id: 'view:quirky.git/diff', input: { worktree: second.id, mode: 'review' } } } })
   })
 
   test('navigation refuses ambiguous multi-window routing without changing the visible view', async () => {

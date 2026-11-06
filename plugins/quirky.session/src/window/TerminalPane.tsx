@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
+import { version as xtermVersion } from '@xterm/xterm/package.json'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
-import { base64ToBytes, type UiPluginContext } from '@quirky/protocol'
+import { answerXtversion, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
 import { createInputGate, writeReplay } from './replayGate'
 import { readTerminalTheme } from '@quirky/ui/terminal-theme'
 
@@ -48,6 +49,7 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
       allowProposedApi: true,
       theme: { ...initialColors }
     })
+    answerXtversion(term, xtermVersion)
     termRef.current = term
     const fit = new FitAddon()
     term.loadAddon(fit)

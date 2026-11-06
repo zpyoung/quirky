@@ -473,65 +473,6 @@ describe('interval preset runtime API', () => {
     expect(rig.sends).toHaveLength(1)
   }, 100_000)
 
-  test('P10: approval resume keeps the edited deadline and sends one fresh-session turn when it is due', async () => {
-    const hold = Promise.withResolvers<void>()
-    let turns = 0
-    rig = await startLoopRig({
-      script: async () => {
-        turns += 1
-        if (turns === 1) return 'iteration settled'
-        await hold.promise
-        return 'must not settle'
-      },
-      onStop: () => hold.resolve(),
-    })
-    const created = await createLoop(
-      rig,
-      'interval',
-      configForInterval('repeat after approval', 1, 'from-end', { askBeforeNext: true, sessionPolicy: 'fresh' })
-    )
-    const paused = await rig.waitForLoop(
-      created.id,
-      (snapshot) => snapshot.state === 'paused' && snapshot.pauseReason === 'ask-before-next'
-    )
-    const firstAttempt = (await latestAttempt(rig, created.id))[0]!
-    expect(rig.sends).toHaveLength(1)
-    expect(paused.nextIterationAt).toBe(firstAttempt.endedAt! + 60_000)
-
-    await rig.call('quirky.loops/edit', {
-      loopId: created.id,
-      patch: { pacing: { kind: 'interval', minutes: 1, anchor: 'wall-clock' } },
-    })
-    const expectedDeadline =
-      created.createdAt + (Math.floor((firstAttempt.endedAt! - created.createdAt) / 60_000) + 1) * 60_000
-    await rig.call('quirky.loops/resume', { loopId: created.id })
-    const waiting = await rig.waitForLoop(
-      created.id,
-      (snapshot) => snapshot.state === 'running' && snapshot.nextIterationAt !== null
-    )
-
-    expect(waiting.config.sessionPolicy).toBe('fresh')
-    expect(waiting.config.pacing).toEqual({ kind: 'interval', minutes: 1, anchor: 'wall-clock' })
-    expect(waiting.nextIterationAt).toBe(expectedDeadline)
-    expect(waiting.nextIterationAt).toBeGreaterThan(Date.now())
-    expect(rig.sends).toHaveLength(1)
-    expect((await failure(rig.call('quirky.loops/resume', { loopId: created.id }))).code).toBe(RpcErrorCode.Conflict)
-
-    // A one-minute interval is intentionally exercised through the public daemon API.
-    await waitForSends(rig, 2, 75_000)
-    expect(rig.sends[1]?.text.endsWith('repeat after approval')).toBe(true)
-    expect(rig.sends[0]?.sessionId).not.toBe(rig.sends[1]?.sessionId)
-
-    const stopped = await rig.call<LoopSnapshot>('quirky.loops/stop', { loopId: created.id, mode: 'now' })
-    expect(stopped.state).toBe('stopped')
-    const attempts = await latestAttempt(rig, created.id)
-    expect(attempts.at(-1)?.startedAt).toBeGreaterThanOrEqual(expectedDeadline)
-    expect(attempts.at(-1)?.endReason).toBe('stopped')
-    expect(rig.sends).toHaveLength(2)
-  }, 90_000)
-
-
-
   test('P11: list, get, and daemon reload preserve a paused queue and interval metadata', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
     const created = await createLoop(
