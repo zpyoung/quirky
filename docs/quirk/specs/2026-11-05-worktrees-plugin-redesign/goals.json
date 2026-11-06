@@ -1,0 +1,82 @@
+[
+  {
+    "id": "g1",
+    "title": "Create a new worktree in a project",
+    "tag": "fixture"
+  },
+  {
+    "id": "g2",
+    "title": "Switch to another worktree and see it open in the center",
+    "tag": "fixture"
+  },
+  {
+    "id": "g3",
+    "title": "Rename a worktree",
+    "tag": "fixture"
+  },
+  {
+    "id": "g4",
+    "title": "Pin a worktree, then unpin it",
+    "tag": "fixture"
+  },
+  {
+    "id": "g5",
+    "title": "Group the list by status and sort it by name",
+    "tag": "fixture"
+  },
+  {
+    "id": "g6",
+    "title": "Move a worktree to a different status",
+    "tag": "fixture"
+  },
+  {
+    "id": "g7",
+    "title": "Put a worktree to sleep, then wake it",
+    "tag": "fixture"
+  },
+  {
+    "id": "g8",
+    "title": "Nest one worktree under another as its parent",
+    "tag": "fixture"
+  },
+  {
+    "id": "g9",
+    "title": "Delete a worktree",
+    "tag": "fixture"
+  },
+  {
+    "id": "g10",
+    "title": "Add a second project",
+    "tag": "fixture"
+  },
+  {
+    "id": "g11",
+    "title": "Review cleanup suggestions for archived worktrees",
+    "tag": "fixture"
+  },
+  {
+    "id": "g12",
+    "title": "Put worktrees from two different projects into one group",
+    "tag": "fixture"
+  },
+  {
+    "id": "g13",
+    "title": "Tag two worktrees and filter the list to that tag",
+    "tag": "fixture"
+  },
+  {
+    "id": "g14",
+    "title": "Group the list by tag",
+    "tag": "fixture"
+  },
+  {
+    "id": "g15",
+    "title": "Save the current grouping and filters as a view, switch to it, then go back to all worktrees",
+    "tag": "fixture"
+  },
+  {
+    "id": "g16",
+    "title": "See a remote workspace and the VM environments list",
+    "tag": "real-app"
+  }
+]
