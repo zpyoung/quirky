@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { AvatarApp, HandoffInput, HandoffRow, HandoffService, Mandate, NeedAction, NeedsYouItem, SheetRow, WorktreeState } from './contracts'
+import { agentLabel } from './agent-label'
+import { HOOKED_AGENTS, NO_HOOKED_AGENT_REASON, resolveHookedAgent } from './agents'
 import { applyMandatePatch, normalizeHandoffInput, type MandatePatch } from './mandate'
 
-const HOOKED_AGENTS: ReadonlySet<string> = new Set(['claude', 'codex', 'pi', 'omp'])
 const MIN_CLAUDE_VERSION: readonly number[] = [2, 1, 295]
 const VERSION_TTL_MS = 60_000
 const CODEX_UNGATED_NOTE = "Codex's hosted tools (web search, image generation) aren't gated"
@@ -57,7 +58,10 @@ function cachedClaudeVersion(): () => Promise<string | null> {
   }
 }
 
-const agentLabel = (agent: string): string => agent.charAt(0).toUpperCase() + agent.slice(1)
+const UNGATED_TERMINAL_REASON = "Can't hand off: an agent is running in a terminal the avatar can't gate; start it from New agent"
+
+const isLiveAgentStatus = (session: SessionInfo): boolean => session.agentStatus != null && session.agentStatus.state !== 'done'
+
 
 function briefText(mandate: Mandate, updated: boolean): string {
   const lines = [
@@ -119,8 +123,13 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     const repoById = new Map(repos.map((repo) => [repo.id, repo]))
     const groupById = new Map(groups.map((group) => [group.id, group]))
     const sessions = new Map<string, SessionInfo>()
+    const ungatedTerminals = new Set<string>()
     for (const session of sessionList) {
-      if (session.agent === 'shell' || session.status === 'exited') continue
+      if (session.status === 'exited') continue
+      if (session.agent === 'shell') {
+        if (isLiveAgentStatus(session)) ungatedTerminals.add(session.worktreeId)
+        continue
+      }
       const known = sessions.get(session.worktreeId)
       if (known === undefined || (session.lastActivityAt ?? 0) >= (known.lastActivityAt ?? 0)) sessions.set(session.worktreeId, session)
     }
@@ -143,6 +152,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
       let reason: string | null = null
       if (!handedOff) {
         if (watched.has(realPath(worktree.path))) reason = "Can't hand off: a Heimdall watcher supervises it"
+        else if (ungatedTerminals.has(worktree.id)) reason = UNGATED_TERMINAL_REASON
         else if (session !== undefined && !HOOKED_AGENTS.has(session.agent)) reason = `Can't hand off: ${agentLabel(session.agent)} has no permission hook`
         else if (worktree.kind !== 'git') reason = "Can't hand off: not a git worktree"
         else if (worktree.remote === true || (typeof worktree.hostId === 'string' && worktree.hostId !== '')) reason = "Can't hand off: it lives on another machine"
@@ -156,7 +166,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
         groupId: group?.id ?? null,
         groupName: group?.name ?? null,
         agent: session?.agent ?? null,
-        running: session !== undefined,
+        running: session !== undefined || ungatedTerminals.has(worktree.id),
         handedOff,
         eligible: reason === null,
         reason,
@@ -250,16 +260,27 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     } catch (error) {
       return items.map((item) => ({ worktreeId: String((item as { worktreeId?: unknown } | null)?.worktreeId ?? ''), ok: false, error: `unavailable: ${errorText(error)}` }))
     }
-    const outcomes: ({ worktreeId: string; ok: boolean; error?: string } | Prepared)[] = items.map((raw) => {
+    const outcomes: ({ worktreeId: string; ok: boolean; error?: string } | Prepared)[] = []
+    let startAgent: string | null | undefined
+    for (const raw of items) {
+      outcomes.push(await prepare(raw))
+    }
+    async function prepare(raw: HandoffInput): Promise<{ worktreeId: string; ok: boolean; error?: string } | Prepared> {
       const normalized = normalizeHandoffInput(raw, app.settings())
       const fallbackId = String((raw as { worktreeId?: unknown } | null)?.worktreeId ?? '')
       if (!normalized.ok) return { worktreeId: fallbackId, ok: false, error: normalized.error }
       const { sharedGoal, ...fields } = normalized.value
+      if (fields.agent !== null && !HOOKED_AGENTS.has(fields.agent)) return { worktreeId: fields.worktreeId, ok: false, error: `invalid: agent ${fields.agent} has no permission hook` }
       const sheet = snap.byId.get(fields.worktreeId)
       if (sheet === undefined) return { worktreeId: fields.worktreeId, ok: false, error: 'not-eligible: unknown worktree' }
       if (!sheet.eligible) return { worktreeId: fields.worktreeId, ok: false, error: `not-eligible: ${sheet.reason}` }
       const previous = activeRow(fields.worktreeId)
       const session = snap.sessions.get(fields.worktreeId)
+      if (session === undefined && fields.agent === null) {
+        startAgent ??= await resolveHookedAgent(call)
+        if (startAgent === null) return { worktreeId: fields.worktreeId, ok: false, error: `not-eligible: ${NO_HOOKED_AGENT_REASON}` }
+        fields.agent = startAgent
+      }
       try {
         const mandate = app.store.transaction(() => {
           const before = app.store.mandates.get(fields.worktreeId)
@@ -279,7 +300,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
       } catch (error) {
         return { worktreeId: fields.worktreeId, ok: false, error: `unavailable: ${errorText(error)}` }
       }
-    })
+    }
     if (outcomes.some((outcome) => 'mandate' in outcome)) app.emit({ type: 'handoffs-changed' })
 
     return Promise.all(

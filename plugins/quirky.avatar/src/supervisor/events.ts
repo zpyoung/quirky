@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
 import type { AvatarApp, StuckRow, SupervisorService, WorktreeState } from '../contracts'
+import { NO_HOOKED_AGENT_REASON, resolveHookedAgent } from '../agents'
 import { sanitize } from '../sanitize'
 import { createLadder } from './ladder'
 import { createRecords, type RecordsDeps } from './records'
 import { createStepIn, type StepInDeps } from './stepin'
 import { createEvidence, detectStuck, outputSignature, type Evidence, type StuckWindow } from './stuck'
 
-const HOOKED_AGENTS: readonly string[] = ['claude', 'codex', 'pi', 'omp']
 const WATCHED_STATES: ReadonlySet<WorktreeState> = new Set(['working', 'briefing', 'in-review'])
 const SETTLED_TEXT_CHARS = 2000
 const JOURNAL_WINDOW = 200
@@ -92,30 +92,33 @@ export function register(app: AvatarApp, deps: SupervisorDeps = {}): () => void 
 
   const activeRow = (worktreeId: string) => app.services.handoff.active().find((entry) => entry.worktreeId === worktreeId)
 
-  async function defaultAgent(): Promise<string | null> {
-    try {
-      const listing = await call<Record<string, unknown>>('quirky.agents/list', {})
-      const chosen = str(listing.defaultAgent)
-      if (chosen !== null && HOOKED_AGENTS.includes(chosen)) return chosen
-      const agents = Array.isArray(listing.agents) ? listing.agents.filter(isRecord) : []
-      return agents.find((agent) => agent.installed === true && agent.enabled !== false && HOOKED_AGENTS.includes(String(agent.id)))?.id as string | undefined ?? null
-    } catch {
-      return null
+  function refuseUnhooked(worktreeId: string): { sessionId: null; error: string } {
+    const entry = activeRow(worktreeId)
+    if (entry !== undefined) {
+      app.store.transaction(() => {
+        app.journal(worktreeId, 'event', { type: 'start-failed', error: NO_HOOKED_AGENT_REASON })
+        if (app.needs.list({ worktreeId, open: true }).every((need) => need.kind !== 'gate-failed')) {
+          app.needs.add({ worktreeId, kind: 'gate-failed', title: `The avatar can't start an agent it can gate: ${NO_HOOKED_AGENT_REASON}`, detail: { reason: NO_HOOKED_AGENT_REASON }, actions: ['restart-to-handoff', 'take-back'] })
+        }
+      })
+      app.services.handoff.setState(worktreeId, 'gate-failed', NO_HOOKED_AGENT_REASON)
     }
+    return { sessionId: null, error: NO_HOOKED_AGENT_REASON }
   }
 
   async function launch(worktreeId: string, note: string, replacing: boolean): Promise<{ sessionId: string | null; error?: string }> {
     const mandate = app.store.mandates.get(worktreeId)
     if (mandate === null) return { sessionId: null, error: 'no mandate for this worktree' }
     try {
-      const agent = mandate.agent ?? (await defaultAgent())
+      const agent = mandate.agent ?? (await resolveHookedAgent(call))
+      if (agent === null) return refuseUnhooked(worktreeId)
       const row = app.store.handoffs.get(worktreeId)
       const previous = row?.sessionId ?? null
       if (replacing && previous !== null) {
         await call('quirky.session/close', { session: previous }).catch(() => undefined)
         app.services.gate.removeMarker(previous)
       }
-      const created = await call<Record<string, unknown>>('quirky.session/create', { worktree: worktreeId, ...(agent === null ? {} : { agent }), prompt: note })
+      const created = await call<Record<string, unknown>>('quirky.session/create', { worktree: worktreeId, agent, prompt: note })
       const sessionId = str(created.id)
       if (sessionId === null) return { sessionId: null, error: 'the session was created without an id' }
       if (row !== null) app.store.handoffs.put({ ...row, sessionId })

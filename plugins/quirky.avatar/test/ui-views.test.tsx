@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { act, type ComponentType } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import type { AvatarUiProps, JournalEntry, NeedsYouItem, ReportModel } from '../src/contracts'
+import type { AvatarUiProps, JournalEntry, ReportModel, ReportNeed } from '../src/contracts'
 
 type Reply = (params: Record<string, unknown>) => unknown
 type Fake = {
@@ -102,7 +102,7 @@ function tab(root: ParentNode, label: string): HTMLButtonElement {
 
 const status = (handoffs: { worktreeId: string; name: string; state: string; level: string }[], needsYouCount = 0) => (_params?: Record<string, unknown>) => ({ handoffs, needsYouCount })
 
-const need = (overrides: Partial<NeedsYouItem> = {}): NeedsYouItem => ({
+const need = (overrides: Partial<ReportNeed> = {}): ReportNeed => ({
   id: 'need-1',
   worktreeId: 'wt-1',
   kind: 'held-call',
@@ -112,6 +112,8 @@ const need = (overrides: Partial<NeedsYouItem> = {}): NeedsYouItem => ({
   createdAt: 1,
   resolvedAt: null,
   resolution: null,
+  worktreeName: 'provider-host',
+  projectName: 'harbor-api',
   ...overrides
 })
 
@@ -138,8 +140,8 @@ function report(overrides: Partial<ReportModel> = {}): ReportModel {
   return {
     needsYou: [need(), need({ id: 'need-2', kind: 'guess', title: 'Confirm a guess?', detail: {}, actions: ['confirm', 'redo'] })],
     stories: [
-      { worktreeId: 'wt-1', name: 'provider-host', switchesOn: ['historyRewrite'], story: 'Fix restart. Parked.', handedBackWith: [] },
-      { worktreeId: 'wt-2', name: 'sa-browser', switchesOn: [], story: 'Fix the checks. Handed back to you.', handedBackWith: ['1 held force-push'] }
+      { worktreeId: 'wt-1', name: 'provider-host', projectName: 'harbor-api', switchesOn: ['historyRewrite'], story: 'Fix restart. Parked.', handedBackWith: [] },
+      { worktreeId: 'wt-2', name: 'sa-browser', projectName: 'harbor-api', switchesOn: [], story: 'Fix the checks. Handed back to you.', handedBackWith: ['1 held force-push'] }
     ],
     summary: { decisions: 186, allowed: 171, denied: 9, held: 3, guesses: 3, sleeps: [], keptAwake: true },
     topSkippedCalls: [],
@@ -177,7 +179,7 @@ afterAll(async () => {
 })
 
 const two = [
-  { worktreeId: 'wt-1', name: 'provider-host', state: 'parked', level: 'full' },
+  { worktreeId: 'wt-1', name: 'provider-host', projectName: 'harbor-api', state: 'parked', level: 'full' },
   { worktreeId: 'wt-2', name: 'sa-browser', state: 'working', level: 'own-branch' }
 ]
 
@@ -280,6 +282,15 @@ describe('Panel', () => {
     expect(root.textContent).not.toContain('provider-host')
     expect(root.textContent).toContain('sa-browser')
   })
+
+  test('names each worktree with its project and pads the header and buttons', async () => {
+    const root = await mount(Panel, makeContext({ status: status(two, 1) }))
+    expect(root.textContent).toContain('harbor-api / provider-host')
+    const header = root.querySelector('.ui-section-header')!.parentElement as HTMLElement
+    expect(header.getAttribute('style')).toContain('padding-inline: var(--ui-space-8)')
+    expect(header.contains(button(root, 'Hand off…'))).toBe(true)
+    expect(header.contains(button(root, 'Open report · 1 need you'))).toBe(true)
+  })
 })
 
 describe('AvatarView', () => {
@@ -317,6 +328,13 @@ describe('AvatarView', () => {
     expect(summary).toBeGreaterThan(handedBack)
     expect(text).toContain('History rewrites on')
     expect(text).toContain('Mac kept awake.')
+  })
+
+  test('names worktrees with their project and keeps the story and handed-back sentences apart', async () => {
+    const root = await mount(AvatarView, makeContext({ status: status(two, 2), report: () => report(), log: () => [] }), { tab: 'report' })
+    const text = root.textContent ?? ''
+    expect(text).toContain('harbor-api / provider-host')
+    expect(text).toContain('Fix the checks. Handed back to you. Handed back with: 1 held force-push')
   })
 
   test('puts skipped calls that ran without the gate above the needs-you items', async () => {
@@ -383,7 +401,7 @@ describe('AvatarView', () => {
     const root = await mount(AvatarView, makeContext({ status: status(two), report: () => report(), log: () => [gateEntry, entry({ seq: 8, kind: 'event', data: { summary: 'Stuck: same assertion failing 3 times.' } })] }), { tab: 'log' })
 
     expect(root.textContent).not.toContain('Judgment saw')
-    expect(root.textContent).toContain('event: Stuck: same assertion failing 3 times.')
+    expect(root.textContent).toContain('Event: Stuck: same assertion failing 3 times.')
     await click(root, 'Show trace')
 
     expect(root.textContent).toContain('Request')
@@ -392,6 +410,34 @@ describe('AvatarView', () => {
     expect(root.textContent).toContain('Relied onMandate, guideline 1')
     expect(root.textContent).toContain("Judgment sawThe mandate and the command. Not the worker's explanation.")
     expect(button(root, 'Hide trace').getAttribute('aria-expanded')).toBe('true')
+  })
+
+  test('labels log kinds in words, fills a bare event and drops the list bullets', async () => {
+    const entries = [
+      entry({ seq: 1, kind: 'brain-error', data: { reason: 'session-start-failed' } }),
+      entry({ seq: 2, kind: 'notify', data: { title: 'Avatar needs you' } }),
+      entry({ seq: 3, kind: 'event', data: {} }),
+      entry({ seq: 4, kind: 'event', data: { type: 'state', from: 'working', state: 'gate-failed' } }),
+      entry({ seq: 5, kind: 'event', data: { type: 'gate-check', ok: true, agent: 'rovo' } })
+    ]
+    const root = await mount(AvatarView, makeContext({ status: status(two), log: () => entries }), { tab: 'log' })
+    const text = root.textContent ?? ''
+    expect(text).toContain('Avatar error: session start failed')
+    expect(text).toContain('Notification: Avatar needs you')
+    expect(text).toContain('State changed: Working → Gate failed')
+    expect(text).toContain('Gate check passed')
+    expect(text).not.toContain('brain-error')
+    expect(text).not.toContain('notify:')
+    const list = root.querySelector('ul') as HTMLElement
+    expect(list.style.listStyle).toBe('none')
+    expect(list.style.padding).toBe('0px')
+  })
+
+  test('shows the project and no raw event token in the live row', async () => {
+    const root = await mount(AvatarView, makeContext({ status: status(two), log: () => [entry({ seq: 2, kind: 'event', data: { type: 'state', from: 'briefing', state: 'working' } })] }), { tab: 'live' })
+    expect(root.textContent).toContain('harbor-api / provider-host')
+    expect(root.textContent).toContain('State changed: Briefing → Working')
+    expect((root.querySelector('ul') as HTMLElement).style.listStyle).toBe('none')
   })
 
   test('keeps the last data and shows the error when a refresh fails', async () => {
@@ -412,6 +458,15 @@ describe('AvatarView', () => {
 })
 
 describe('DecisionTrace', () => {
+  test('calls the agent by its display name', async () => {
+    const element = document.createElement('div')
+    document.body.append(element)
+    const root = createRoot(element)
+    await act(async () => root.render(<DecisionTrace entry={entry({ data: { agent: 'rovo', toolName: 'Bash', trace: [] } })} />))
+    unmounts.push(() => root.unmount())
+    expect(element.textContent).toContain('Rovo Dev wants to run Bash')
+  })
+
   test('notes when the judgment saw the worker explanation and what was recorded', async () => {
     const element = document.createElement('div')
     document.body.append(element)

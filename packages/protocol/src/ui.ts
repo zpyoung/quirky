@@ -157,6 +157,8 @@ export type SettingDeclaration = {
   minimum?: number
   maximum?: number
   values?: string[]
+  /** Keeps the setting stored and settable (`setting.set`/`get`) but gives it no generic Settings control, for plugins that edit it in their own settings section. */
+  hidden?: boolean
   /** Exposes a boolean setting as a checked item in the native View menu. */
   menu?: 'view'
   /** The name of a boolean setting in the same plugin that must be true for this setting's View menu row. */

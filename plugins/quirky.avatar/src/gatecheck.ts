@@ -1,4 +1,5 @@
 import type { AvatarApp } from './contracts'
+import { agentLabel } from './agent-label'
 import {
   claudeVersionAtLeast, codexHooksInstalled, hasHookedRecord, hasMarkerFile, launchHasGateHook, piExtensionMtimeMs, removeMarkerFile, type AgentEnv
 } from './hooks/install'
@@ -132,11 +133,11 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
       const launchEnv = session.launch?.env
       const env = { ...agentEnv.env, ...(typeof launchEnv === 'object' && launchEnv !== null ? (launchEnv as Record<string, string>) : {}) }
       const mtime = piExtensionMtimeMs(agent, { home: agentEnv.home, env })
-      if (mtime === null) return { ok: false, reason: `the avatar's extension is not installed for ${agent}` }
+      if (mtime === null) return { ok: false, reason: `the avatar's extension is not installed for ${agentLabel(agent)}` }
       const startedAt = typeof session.createdAt === 'number' ? session.createdAt : Number.POSITIVE_INFINITY
       return mtime < startedAt ? { ok: true, reason: '' } : { ok: false, reason: STARTED_BEFORE_HOOK }
     }
-    return { ok: false, reason: `${agent || 'this agent'} has no permission hook` }
+    return { ok: false, reason: `${agentLabel(agent)} has no permission hook` }
   }
 
   function dynamicStep(worktreeId: string, sessionId: string, since: number, token: RunToken): Promise<GateCheckResult & { cancelled?: boolean }> {
@@ -181,7 +182,7 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
         app.needs.add({
           worktreeId,
           kind: 'gate-failed',
-          title: `The avatar can't confirm it gates ${agent || 'this agent'}`,
+          title: `The avatar can't confirm it gates ${agentLabel(agent)}`,
           detail: { reason, agent, sessionId },
           actions: ['restart-to-handoff']
         })

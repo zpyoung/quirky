@@ -286,6 +286,24 @@ describe('starting and restarting', () => {
     expect(t.restarted[0]).toContain('"agent":"codex"')
   })
 
+  test('a null-agent restart skips an unhookable default and takes the first installed hooked agent', async () => {
+    const t = setup()
+    t.fakeCalls['quirky.agents/list'] = () => ({ defaultAgent: 'rovodev', agents: [{ id: 'rovodev', installed: true }, { id: 'pi', installed: true }] })
+    await t.app.services.supervisor.restartWorker('wt-1', 'recovery note')
+    expect(t.restarted[1]).toContain('"agent":"pi"')
+  })
+
+  test('with no hooked agent installed a null-agent restart creates no session and fails the gate', async () => {
+    const t = setup()
+    t.fakeCalls['quirky.agents/list'] = () => ({ defaultAgent: 'rovodev', agents: [{ id: 'rovodev', installed: true }] })
+    const result = await t.app.services.supervisor.restartWorker('wt-1', 'recovery note')
+    expect(result.sessionId).toBeNull()
+    expect(result.error).toContain('no installed agent has a permission hook')
+    expect(t.restarted).toEqual([])
+    expect(t.current.state).toBe('gate-failed')
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true }).map((need) => need.kind)).toEqual(['gate-failed'])
+  })
+
   test('restartWorker closes the old session, creates a new one with the recovery note and re-checks the gate', async () => {
     const t = setup()
     const result = await t.app.services.supervisor.restartWorker('wt-1', 'recovery note')

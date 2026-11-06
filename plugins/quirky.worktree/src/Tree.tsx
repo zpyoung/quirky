@@ -90,6 +90,14 @@ function avatarStatusOf(worktree: Worktree): AvatarWorktreeStatus | null {
     : null
 }
 
+const AVATAR_STATE_LABELS: Record<string, string> = {
+  checking: 'Checking', 'gate-failed': 'Gate failed', briefing: 'Briefing', working: 'Working', 'waiting-on-you': 'Waiting on you',
+  'checking-done': 'Checking done', 'in-review': 'In review', 'merge-ready': 'Merge ready', merged: 'Merged', 'pr-ready': 'PR ready',
+  committed: 'Committed', parked: 'Parked', done: 'Done'
+}
+
+const AVATAR_LEVEL_LABELS: Record<AvatarWorktreeStatus['level'], string> = { shadow: 'Shadow', local: 'Local', 'own-branch': 'Own branch', full: 'Full' }
+
 const AVATAR_RING_STYLE: CSSProperties = {
   display: 'inline-flex',
   borderRadius: '50%',
@@ -99,11 +107,12 @@ const AVATAR_RING_STYLE: CSSProperties = {
 /** The status dot of an avatar-supervised workspace, ringed in the accent colour. */
 function AvatarGlyph({ status }: { status: AvatarWorktreeStatus }) {
   const dotStatus: UiStatus = status.needsYou > 0 ? 'needs-you' : status.state === 'working' ? 'working' : 'idle'
+  const state = AVATAR_STATE_LABELS[status.state] ?? status.state
   const label = status.needsYou > 0
-    ? `${status.state} · ${status.needsYou} need${status.needsYou === 1 ? 's' : ''} you`
-    : status.state
+    ? `${state} · ${status.needsYou} need${status.needsYou === 1 ? 's' : ''} you`
+    : state
   return (
-    <span className="avatar-ring" data-avatar-ring="" style={AVATAR_RING_STYLE} title={`Avatar: ${label} · ${status.level}`}>
+    <span className="avatar-ring" data-avatar-ring="" style={AVATAR_RING_STYLE} title={`Avatar: ${label} · ${AVATAR_LEVEL_LABELS[status.level]}`}>
       <UiStatusDot status={dotStatus} label={`Avatar ${label}`} />
     </span>
   )

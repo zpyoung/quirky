@@ -47,6 +47,7 @@ function setup(options: Options = {}) {
       'quirky.repo/groupList': () => [{ id: 'grp-1', name: 'Work' }],
       'quirky.session/list': () => sessions,
       'quirky.heimdall/inspect': () => options.heimdall ?? [],
+      'quirky.agents/list': () => ({ defaultAgent: 'claude', agents: [{ id: 'claude', installed: true, enabled: true }] }),
       'quirky.agent-status/send': (params) => {
         sent.push({ session: String(params.session), text: String(params.text) })
         return { session: params.session, state: 'working', sentAt: 1, startedAt: 2 }
@@ -206,6 +207,47 @@ describe('handoff', () => {
     expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ sessionId: 'new-session', active: true })
     expect(s.gate.markers).toEqual([['new-session', 'wt-1', 'own-branch']])
     expect(s.gate.checks).toEqual(['wt-1'])
+  })
+
+  test('starts the configured default agent when it is hooked', async () => {
+    const s = setup({ calls: { 'quirky.agents/list': () => ({ defaultAgent: 'codex', agents: [{ id: 'codex', installed: true }] }) } })
+    expect(await handOff(s, input('wt-1'))).toEqual([{ worktreeId: 'wt-1', ok: true }])
+    expect(s.app.store.mandates.get('wt-1')?.agent).toBe('codex')
+  })
+
+  test('an unhookable default falls back to the first installed hooked agent', async () => {
+    const agents = [{ id: 'rovodev', installed: true }, { id: 'pi', installed: false }, { id: 'codex', installed: true }]
+    const s = setup({ calls: { 'quirky.agents/list': () => ({ defaultAgent: 'rovodev', agents }) } })
+    expect(await handOff(s, input('wt-1'))).toEqual([{ worktreeId: 'wt-1', ok: true }])
+    expect(s.app.store.mandates.get('wt-1')?.agent).toBe('codex')
+  })
+
+  test('refuses a row with no installed hooked agent instead of starting an unhookable one', async () => {
+    const s = setup({ calls: { 'quirky.agents/list': () => ({ defaultAgent: 'rovodev', agents: [{ id: 'rovodev', installed: true }] }) } })
+    const [result] = await handOff(s, input('wt-1'))
+    expect(result).toMatchObject({ worktreeId: 'wt-1', ok: false })
+    expect(result!.error).toContain('no installed agent has a permission hook')
+    expect(s.sup.started).toEqual([])
+    expect(s.svc.active()).toEqual([])
+  })
+
+  test('rejects an explicitly requested agent without a hook', async () => {
+    const s = setup()
+    const [result] = await handOff(s, input('wt-1', { agent: 'rovodev' }))
+    expect(result).toEqual({ worktreeId: 'wt-1', ok: false, error: 'invalid: agent rovodev has no permission hook' })
+    expect(s.sup.started).toEqual([])
+  })
+
+  test('a terminal running an agent the avatar did not launch makes the row ineligible', async () => {
+    const live = { agent: 'shell', agentStatus: { state: 'waiting' }, status: 'waiting' }
+    const s = setup({ sessions: [session('t1', 'wt-1', live), session('t2', 'wt-2', { agent: 'shell', agentStatus: { state: 'done' } }), session('t3', 'wt-3', { agent: 'shell', agentStatus: null })], worktrees: [wt('wt-1'), wt('wt-2'), wt('wt-3')] })
+    const rows = await s.svc.eligibility()
+    expect(rows[0]).toMatchObject({ worktreeId: 'wt-1', agent: null, running: true, eligible: false, reason: "Can't hand off: an agent is running in a terminal the avatar can't gate; start it from New agent" })
+    expect(rows[1]).toMatchObject({ running: false, eligible: true })
+    expect(rows[2]).toMatchObject({ running: false, eligible: true })
+    const [result] = await handOff(s, input('wt-1'))
+    expect(result).toMatchObject({ ok: false })
+    expect(s.sup.started).toEqual([])
   })
 
   test('a start that fails ends the hand-off for that worktree and says why', async () => {

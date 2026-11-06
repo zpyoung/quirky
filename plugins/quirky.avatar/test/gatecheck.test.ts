@@ -333,7 +333,14 @@ describe('pi and omp', () => {
   })
 })
 
+test('an unhooked agent is named by its display label, not its id', async () => {
+  const s = setup({ session: { agent: 'rovo' } })
+  expect((await s.checker.check('wt-1')).reason).toBe('Rovo Dev has no permission hook')
+  expect(s.needs()[0]?.title).toBe("The avatar can't confirm it gates Rovo Dev")
+})
+
 test('an agent with no permission hook fails the check', async () => {
   const s = setup({ session: { agent: 'gemini' } })
-  expect((await s.checker.check('wt-1')).reason).toBe('gemini has no permission hook')
+  expect((await s.checker.check('wt-1')).reason).toBe('Gemini has no permission hook')
+  expect(s.needs()[0]?.title).toBe("The avatar can't confirm it gates Gemini")
 })

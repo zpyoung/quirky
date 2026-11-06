@@ -13,14 +13,14 @@ afterEach(() => {
 
 type Active = { worktreeId: string; sessionId: string | null; state: WorktreeState; mandate: Mandate }
 
-function setup(active: Active[] = [], names: Record<string, string> = {}) {
+function setup(active: Active[] = [], names: Record<string, string> = {}, projects: Record<string, string> = {}) {
   const test = makeTestApp()
   const { app } = test
   app.now = () => T0
   app.services.handoff = {
     ...app.services.handoff,
     active: () => active,
-    eligibility: async () => Object.entries(names).map(([worktreeId, name]) => ({ worktreeId, name }) as SheetRow)
+    eligibility: async () => Object.entries(names).map(([worktreeId, name]) => ({ worktreeId, name, projectName: projects[worktreeId] ?? '' }) as SheetRow)
   }
   for (const entry of active) {
     app.store.mandates.put(entry.mandate)
@@ -48,8 +48,8 @@ describe('status and sidebarStatus', () => {
 
     expect(app.services.report.status()).toEqual({
       handoffs: [
-        { worktreeId: 'wt-1', name: 'provider-host', state: 'working', level: 'full' },
-        { worktreeId: 'wt-2', name: 'wt-2', state: 'waiting-on-you', level: 'own-branch' }
+        { worktreeId: 'wt-1', name: 'provider-host', projectName: '', state: 'working', level: 'full' },
+        { worktreeId: 'wt-2', name: 'wt-2', projectName: '', state: 'waiting-on-you', level: 'own-branch' }
       ],
       needsYouCount: 1
     })
@@ -112,6 +112,27 @@ describe('report', () => {
     expect(stories.map((story) => story.worktreeId)).toEqual(['wt-1', 'wt-2'])
     expect(stories[1]).toMatchObject({ switchesOn: ['historyRewrite'], handedBackWith: ['1 held force-push'] })
     expect(stories[1]?.story).toContain('Handed back to you')
+  })
+
+  test('does not claim the agent is still running after a take-back', () => {
+    const { app } = setup()
+    app.store.mandates.put(sampleMandate({ worktreeId: 'wt-2', goal: 'Fix restart' }))
+    app.store.handoffs.put({ worktreeId: 'wt-2', state: 'working', sessionId: null, active: false, handedOffAt: T0 - 6 * HOUR, takenBackAt: T0 - HOUR })
+
+    const story = app.services.report.report().stories[0]?.story
+    expect(story).toBe('Fix restart. Handed back to you. The avatar no longer decides for it.')
+    expect(story).not.toContain('still running')
+  })
+
+  test('carries the project name on stories, needs and status', async () => {
+    const { app } = setup([worker('wt-1', 'working')], { 'wt-1': 'main' }, { 'wt-1': 'harbor-api' })
+    await Bun.sleep(0)
+    addNeed(app, 'wt-1', 'guess', 'Confirm a guess?')
+
+    const model = app.services.report.report()
+    expect(model.stories[0]).toMatchObject({ name: 'main', projectName: 'harbor-api' })
+    expect(model.needsYou[0]).toMatchObject({ worktreeName: 'main', projectName: 'harbor-api' })
+    expect(app.services.report.status().handoffs[0]).toMatchObject({ name: 'main', projectName: 'harbor-api' })
   })
 
   test('counts gate decisions, guesses and sleeps from the journal since hand-off', () => {

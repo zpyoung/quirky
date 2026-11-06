@@ -90,12 +90,16 @@ describe('quirky.avatar as a built-in plugin', () => {
     expect(await contributions('overlay')).toEqual(['overlay:quirky.avatar/sheet'])
     expect(await contributions('command')).toEqual(['command:quirky.avatar/handoff', 'command:quirky.avatar/open-report'])
     expect(await contributions('settings-section')).toEqual(['settings-section:quirky.avatar/avatar'])
+    const [section] = (await client.call('plugin.contributions', { kind: 'settings-section' } as never)) as unknown as ContributionInfo[]
+    expect(section!.data.order).toBe(45)
     expect(await contributions('setting')).toEqual(
       [
         'default-level', 'switch-messaging', 'switch-history-rewrite', 'switch-deploys', 'house-rules', 'allow-commands',
         'deny-commands', 'deploy-commands', 'brain-agent', 'brain-model', 'judgment-timeout-seconds'
       ].map((name) => `setting:quirky.avatar/${name}`).sort()
     )
+    const settingEntries = (await client.call('plugin.contributions', { kind: 'setting' } as never)) as unknown as ContributionInfo[]
+    expect(settingEntries.every((entry) => entry.data.hidden === true)).toBe(true)
     const [gate] = (await client.call('plugin.contributions', { kind: 'tool-gate' } as never)) as unknown as ContributionInfo[]
     expect(gate!.data.agents).toEqual(['claude', 'codex', 'pi', 'omp'])
     const [panel] = (await client.call('plugin.contributions', { kind: 'panel' } as never)) as unknown as ContributionInfo[]

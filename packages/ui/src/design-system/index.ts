@@ -1,4 +1,5 @@
 export { Button, ExpandingIconButton, IconButton, TextField, TextArea, SelectField, Badge, StatusDot } from './primitives'
+export { AffixInput, Checkbox, DisclosureButton, Kbd, LinkButton, ReachMeter, SegmentedControl, TagButton } from './controls'
 export { ListRow, SectionHeader, Tabs, Menu } from './navigation'
 export { ContextMenu, ContextMenuList, CONTEXT_MENU_SEPARATOR } from './context-menu'
 export type { ContextMenuItem, ContextMenuListProps, ContextMenuProps } from './context-menu-contracts'
@@ -10,7 +11,15 @@ export { AgentIcon, ControlIcon, FileIcon, ProjectTile, ToolIcon } from './tool-
 export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, InlineAgentCard } from './panels'
 export { uiTokens, type UiTokenName } from './tokens'
 export type {
+  AffixInputProps,
   AgentIconProps,
+  CheckboxProps,
+  ChoiceOption,
+  DisclosureButtonProps,
+  LinkButtonProps,
+  ReachMeterProps,
+  SegmentedControlProps,
+  TagButtonProps,
   BadgeProps,
   ControlIconProps,
   FileIconProps,

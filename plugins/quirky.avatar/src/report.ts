@@ -1,5 +1,5 @@
 import type {
-  AvatarApp, AvatarBusEvent, AvatarWorktreeStatus, JournalEntry, NeedsYouItem, ReportModel, ReportService, SwitchId, WorktreeState
+  AvatarApp, AvatarBusEvent, AvatarWorktreeStatus, JournalEntry, NeedsYouItem, ReportModel, ReportNeed, ReportService, SwitchId, WorktreeState
 } from './contracts'
 
 const CHANGE_DEBOUNCE_MS = 250
@@ -46,16 +46,17 @@ function wouldHaveBeenStopped(entry: JournalEntry): boolean {
  * to one emit per 250 ms, so open views refresh without polling. Returns its disposer.
  */
 export function register(app: AvatarApp): () => void {
-  const names = new Map<string, string>()
+  const names = new Map<string, { name: string; projectName: string }>()
   let timer: ReturnType<typeof setTimeout> | null = null
   let lastEvent: AvatarBusEvent | null = null
   let disposed = false
 
-  const nameOf = (worktreeId: string): string => names.get(worktreeId) ?? worktreeId
+  const nameOf = (worktreeId: string): string => names.get(worktreeId)?.name ?? worktreeId
+  const projectOf = (worktreeId: string): string => names.get(worktreeId)?.projectName ?? ''
 
   async function refreshNames(): Promise<void> {
     try {
-      for (const row of await app.services.handoff.eligibility()) names.set(row.worktreeId, row.name)
+      for (const row of await app.services.handoff.eligibility()) names.set(row.worktreeId, { name: row.name, projectName: row.projectName ?? '' })
     } catch (error) {
       app.context.log(`avatar report could not refresh worktree names: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -70,6 +71,7 @@ export function register(app: AvatarApp): () => void {
       handoffs: app.services.handoff.active().map((handoff) => ({
         worktreeId: handoff.worktreeId,
         name: nameOf(handoff.worktreeId),
+        projectName: projectOf(handoff.worktreeId),
         state: handoff.state,
         level: handoff.mandate.level
       })),
@@ -114,6 +116,7 @@ export function register(app: AvatarApp): () => void {
       stories.push({
         worktreeId: handoff.worktreeId,
         name: nameOf(handoff.worktreeId),
+        projectName: projectOf(handoff.worktreeId),
         switchesOn: SWITCH_ORDER.filter((id) => handoff.mandate.switches[id]),
         story: [sentence(handoff.mandate.goal), sentence(phrase), waiting].filter((part) => part !== '').join(' '),
         handedBackWith: []
@@ -128,8 +131,9 @@ export function register(app: AvatarApp): () => void {
       stories.push({
         worktreeId: row.worktreeId,
         name: nameOf(row.worktreeId),
+        projectName: projectOf(row.worktreeId),
         switchesOn: switchesOf(row.worktreeId),
-        story: [goal === undefined ? '' : sentence(goal), 'Handed back to you. The agent is still running.'].filter((part) => part !== '').join(' '),
+        story: [goal === undefined ? '' : sentence(goal), 'Handed back to you. The avatar no longer decides for it.'].filter((part) => part !== '').join(' '),
         handedBackWith
       })
     }
@@ -154,7 +158,7 @@ export function register(app: AvatarApp): () => void {
     }
 
     return {
-      needsYou: open,
+      needsYou: open.map((need): ReportNeed => ({ ...need, worktreeName: nameOf(need.worktreeId), projectName: projectOf(need.worktreeId) })),
       stories,
       summary: {
         decisions: allowed + denied + held + guesses,

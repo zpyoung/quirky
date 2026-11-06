@@ -120,6 +120,16 @@ test('a row with an avatar status gets the accent ring and the Avatar prefix', a
   expect(nameOf('handed')).toBe('Avatar · handed-one')
 })
 
+test('the ring title uses the same labels as the avatar panel', async () => {
+  await mountTree(harness(), { state: 'gate-failed', level: 'own-branch', needsYou: 1 })
+  expect(ringOf('handed')!.getAttribute('title')).toBe('Avatar: Gate failed · 1 needs you · Own branch')
+})
+
+test('the ring title carries the state and level in words with nothing waiting', async () => {
+  await mountTree(harness(), STATUS)
+  expect(ringOf('handed')!.getAttribute('title')).toBe('Avatar: Working · Full')
+})
+
 test('a row without an avatar status is unchanged', async () => {
   await mountTree(harness(), STATUS)
   expect(ringOf('plain')).toBeNull()

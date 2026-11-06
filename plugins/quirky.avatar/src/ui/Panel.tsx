@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Button, EmptyState, ListRow, SectionHeader, ToolPanelFrame } from '@quirky/ui'
 import type { AvatarUiProps } from '../contracts'
-import { levelLabel, messageOf, stateLabel, uiStatusOf, useAvatarQuery, type StatusResult } from './AvatarView'
+import { levelLabel, messageOf, stateLabel, uiStatusOf, useAvatarQuery, worktreeLabel, type StatusResult } from './AvatarView'
 
 const HANDOFF_COMMAND = 'command:quirky.avatar/handoff'
 const OPEN_REPORT_COMMAND = 'command:quirky.avatar/open-report'
+
+const INSET: CSSProperties = { paddingInline: 'var(--ui-space-8)' }
 
 /**
  * The side panel: one row per handed-off worktree with its state and level and a Take back
@@ -41,24 +43,26 @@ export default function Panel({ context }: AvatarUiProps) {
   return (
     <ToolPanelFrame title="Avatar">
       <div data-avatar-ui="panel">
-        <SectionHeader
-          title="Handed off"
-          actions={
-            <>
-              <Button onClick={() => run(HANDOFF_COMMAND)}>Hand off…</Button>
-              <Button disabled={handoffs.length === 0} onClick={() => void takeBackAll()}>Take back all</Button>
-            </>
-          }
-        />
-        {(error !== null || failure !== null) && <p role="alert">{failure ?? error}</p>}
-        {needs > 0 && <Button variant="primary" onClick={() => run(OPEN_REPORT_COMMAND)}>{`Open report · ${needs} need you`}</Button>}
+        <div style={INSET}>
+          <SectionHeader
+            title="Handed off"
+            actions={
+              <>
+                <Button onClick={() => run(HANDOFF_COMMAND)}>Hand off…</Button>
+                <Button disabled={handoffs.length === 0} onClick={() => void takeBackAll()}>Take back all</Button>
+              </>
+            }
+          />
+          {(error !== null || failure !== null) && <p role="alert">{failure ?? error}</p>}
+          {needs > 0 && <Button variant="primary" onClick={() => run(OPEN_REPORT_COMMAND)}>{`Open report · ${needs} need you`}</Button>}
+        </div>
         {handoffs.length === 0 ? (
           <EmptyState message="Nothing handed off." />
         ) : (
           handoffs.map((handoff) => (
             <ListRow
               key={handoff.worktreeId}
-              title={handoff.name}
+              title={worktreeLabel(handoff.name, handoff.projectName)}
               description={`${stateLabel(handoff.state)} · ${levelLabel(handoff.level)}`}
               status={uiStatusOf(handoff.state)}
               trailing={

@@ -1,4 +1,4 @@
-import type { HandoffInput, Level, Mandate, SheetRow, Switches } from '../contracts'
+import type { HandoffInput, Level, Mandate, SheetRow, SwitchId, Switches } from '../contracts'
 
 export type SortKey = 'name' | 'project' | 'state'
 export type SheetView = { filter: string; sort: SortKey; onlyRunning: boolean }
@@ -23,6 +23,8 @@ export type RowDraft = {
 }
 
 export type DraftErrors = { goal?: string; doneWhen?: string }
+/** One line of the hand-off summary: what the avatar may do (`term`), where it applies (`names`) and how to read them (`preposition`); the Never line carries free `text` instead. */
+export type SummaryEntry = { key: string; term: string; tone: 'plain' | 'needs-you'; preposition: 'on' | 'for' | null; names: string[]; text: string | null }
 export type ScopeState = { state: 'none' | 'some' | 'all'; selected: number; total: number }
 
 const COMMAND_STARTS = new Set([
@@ -196,8 +198,8 @@ export function validateDrafts(rows: SheetRow[], selected: ReadonlySet<string>, 
   for (const row of selectedRows(rows, selected)) {
     const draft = drafts[row.worktreeId]
     const found: DraftErrors = {}
-    if (!draft || draft.goal.trim() === '') found.goal = 'Goal is required'
-    if (!draft || draft.doneWhen.trim() === '') found.doneWhen = 'Done when is required'
+    if (!draft || draft.goal.trim() === '') found.goal = 'Write a goal so the avatar knows what to do.'
+    if (!draft || draft.doneWhen.trim() === '') found.doneWhen = 'Add a check so it knows when to stop.'
     if (found.goal || found.doneWhen) errors[row.worktreeId] = found
   }
   return errors
@@ -226,4 +228,115 @@ export function buildHandoffInputs(rows: SheetRow[], selected: ReadonlySet<strin
     inputs.push(input)
   }
   return inputs
+}
+
+/** Accessible names for rows: the worktree name, plus its project when another row shares the name. */
+export function rowLabels(rows: SheetRow[]): Map<string, string> {
+  const counts = new Map<string, number>()
+  for (const row of rows) counts.set(row.name, (counts.get(row.name) ?? 0) + 1)
+  return new Map(rows.map((row) => [row.worktreeId, (counts.get(row.name) ?? 0) > 1 ? `${row.name} (${row.projectName})` : row.name]))
+}
+
+/** The primary button text: hand-offs for new rows, updates for rows that already have a mandate. */
+export function submitLabel(rows: SheetRow[], selectedIds: readonly string[]): string {
+  const chosen = new Set(selectedIds)
+  const updates = rows.filter((row) => chosen.has(row.worktreeId) && row.handedOff).length
+  const count = selectedIds.length
+  if (count > 0 && updates === count) return `Update ${count} ${count === 1 ? 'mandate' : 'mandates'}`
+  const base = `Hand off ${count} ${count === 1 ? 'worktree' : 'worktrees'}`
+  return updates === 0 ? base : `${base} (${updates} ${updates === 1 ? 'update' : 'updates'})`
+}
+
+/** The kind a done-when will be sent as: the explicit choice, or the guess from its text when the draft is on `auto`. */
+export function effectiveDoneWhenKind(draft: RowDraft): 'command' | 'prose' {
+  return draft.doneWhenKind === 'auto' ? inferDoneWhenKind(draft.doneWhen) : draft.doneWhenKind
+}
+
+/**
+ * The rows that merely repeat the goal above them: a row follows the previous row in `rows` when both
+ * carry the same shared-goal id and the same non-blank goal and done-when. Maps each follower to the
+ * first row of its run. A row whose text differs is never collapsed, so a hidden field cannot be invalid.
+ */
+export function sharedFollowers(rows: SheetRow[], drafts: Record<string, RowDraft>): Map<string, string> {
+  const followers = new Map<string, string>()
+  let leader: SheetRow | null = null
+  for (const row of rows) {
+    const draft = drafts[row.worktreeId]
+    const lead: RowDraft | undefined = leader ? drafts[leader.worktreeId] : undefined
+    const repeats = draft?.sharedGoal && lead?.sharedGoal && draft.sharedGoal.id === lead.sharedGoal.id
+      && draft.goal.trim() !== '' && draft.goal === lead.goal && draft.doneWhen.trim() !== '' && draft.doneWhen === lead.doneWhen
+    if (leader && repeats) {
+      followers.set(row.worktreeId, leader.worktreeId)
+    } else {
+      leader = draft?.sharedGoal ? row : null
+    }
+  }
+  return followers
+}
+
+/** Takes one row off its shared goal and keeps its goal and done-when text, so it can be edited on its own. */
+export function detachSharedGoal(drafts: Record<string, RowDraft>, id: string): Record<string, RowDraft> {
+  const draft = drafts[id]
+  return draft ? { ...drafts, [id]: { ...draft, sharedGoal: null } } : drafts
+}
+
+/** Whether two or more selected rows in `rows` all carry the same shared-goal id. */
+export function projectSharesOneGoal(rows: SheetRow[], selected: ReadonlySet<string>, drafts: Record<string, RowDraft>): boolean {
+  const chosen = selectedRows(rows, selected)
+  if (chosen.length < 2) return false
+  const first = drafts[chosen[0].worktreeId]?.sharedGoal?.id
+  return first !== undefined && chosen.every((row) => drafts[row.worktreeId]?.sharedGoal?.id === first)
+}
+
+/** The level every listed row is on, or null when they differ or none are listed. */
+export function commonLevel(drafts: Record<string, RowDraft>, ids: readonly string[]): Level | null {
+  const levels = new Set(ids.flatMap((id) => (drafts[id] ? [drafts[id].level] : [])))
+  return levels.size === 1 ? [...levels][0] : null
+}
+
+/** The footer link text for a blocked hand-off, such as `2 worktrees need a goal`; null when nothing is missing. */
+export function errorSummary(errors: Record<string, DraftErrors>): string | null {
+  const found = Object.values(errors)
+  if (found.length === 0) return null
+  const lacksGoal = found.some((entry) => entry.goal)
+  const lacksOnlyCheck = found.some((entry) => !entry.goal)
+  const what = lacksGoal && lacksOnlyCheck ? 'a goal or a check' : lacksGoal ? 'a goal' : 'a check'
+  return `${found.length} ${found.length === 1 ? 'worktree needs' : 'worktrees need'} ${what}`
+}
+
+const LEVEL_TERMS: { level: Level; term: string }[] = [
+  { level: 'full', term: 'Push, open PRs, merge' },
+  { level: 'own-branch', term: 'Push, draft PRs' },
+  { level: 'local', term: 'Work locally' },
+  { level: 'shadow', term: 'Only log' }
+]
+const SWITCH_TERMS: { id: SwitchId; term: string }[] = [
+  { id: 'messaging', term: 'Message people' },
+  { id: 'historyRewrite', term: 'Rewrite history' },
+  { id: 'deploys', term: 'Deploy / migrate' }
+]
+
+/**
+ * What the avatar may do across the selected rows, for the sheet footer: one entry per level in use
+ * (widest first), one per switch in use, and what it never does. Merging and deploying are named
+ * as never only when no selected row can do them. Empty when nothing is selected.
+ */
+export function summarizeHandoff(rows: SheetRow[], selectedIds: readonly string[], drafts: Record<string, RowDraft>, labels: ReadonlyMap<string, string>): SummaryEntry[] {
+  const chosen = rows.filter((row) => selectedIds.includes(row.worktreeId) && drafts[row.worktreeId])
+  if (chosen.length === 0) return []
+  const name = (row: SheetRow) => labels.get(row.worktreeId) ?? row.name
+  const entries: SummaryEntry[] = []
+  for (const { level, term } of LEVEL_TERMS) {
+    const names = chosen.filter((row) => drafts[row.worktreeId].level === level).map(name)
+    if (names.length > 0) entries.push({ key: level, term, tone: 'plain', preposition: 'on', names, text: null })
+  }
+  for (const { id, term } of SWITCH_TERMS) {
+    const names = chosen.filter((row) => drafts[row.worktreeId].switches[id]).map(name)
+    if (names.length > 0) entries.push({ key: id, term, tone: 'needs-you', preposition: 'for', names, text: null })
+  }
+  const merges = chosen.some((row) => drafts[row.worktreeId].level === 'full')
+  const deploys = chosen.some((row) => drafts[row.worktreeId].switches.deploys)
+  const never = `${merges ? '' : 'merge, '}${deploys ? '' : 'deploy, '}touch anything outside these worktrees, or use credentials`
+  entries.push({ key: 'never', term: 'Never', tone: 'plain', preposition: null, names: [], text: never })
+  return entries
 }

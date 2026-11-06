@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Badge, Button, EmptyState, ListRow, SectionHeader, Tabs, TextField, ToolPanelFrame, type UiStatus } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
-import type { AvatarUiProps, JournalEntry, Level, NeedAction, NeedsYouItem, ReportModel, SwitchId, WorktreeState } from '../contracts'
+import type { AvatarUiProps, JournalEntry, JournalKind, Level, NeedAction, NeedsYouItem, ReportModel, SwitchId, WorktreeState } from '../contracts'
 import DecisionTrace, { describeToolInput } from './DecisionTrace'
 
 /** What `quirky.avatar/status` returns. */
-export type StatusResult = { handoffs: { worktreeId: string; name: string; state: WorktreeState; level: Level }[]; needsYouCount: number }
+export type StatusResult = { handoffs: { worktreeId: string; name: string; projectName?: string; state: WorktreeState; level: Level }[]; needsYouCount: number }
 
 type Tab = 'live' | 'report' | 'log'
 
@@ -46,7 +46,49 @@ const ACTION_LABELS: Record<NeedAction, string> = {
   'restart-to-handoff': 'Restart to hand off'
 }
 
+const KIND_LABELS: Record<JournalKind, string> = {
+  handoff: 'Handed off',
+  'take-back': 'Taken back',
+  gate: 'Gate decision',
+  event: 'Event',
+  'brain-action': 'Avatar action',
+  'brain-error': 'Avatar error',
+  rotation: 'Rotation',
+  ask: 'Question',
+  guess: 'Guess',
+  stuck: 'Stuck',
+  ladder: 'Recovery step',
+  'done-check': 'Done check',
+  finding: 'Review finding',
+  outbox: 'Outbound action',
+  'skipped-call': 'Call without the gate',
+  sleep: 'Mac slept',
+  'mandate-proposal': 'Mandate proposal',
+  notify: 'Notification'
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  state: 'State changed',
+  'gate-check': 'Gate check',
+  'gate-check-error': 'Gate check error',
+  'brief-not-sent': 'Brief not sent',
+  'start-failed': 'Agent failed to start',
+  'send-failed': 'Message not sent',
+  'restart-failed': 'Restart failed',
+  progress: 'Progress',
+  'step-in': 'Stepped in',
+  'step-in-refused': 'Step-in refused',
+  'skipped-call-error': 'Skipped-call check failed',
+  'ask-resolved': 'Question answered'
+}
+
 const OUTCOME_LABELS: Record<string, string> = { allow: 'Allowed', deny: 'Denied', held: 'Held', retry: 'Asked to retry', passthrough: 'Passed through' }
+
+/** `Project / worktree`, so same-named worktrees in different projects stay apart. */
+export const worktreeLabel = (name: string, projectName?: string): string => (projectName === undefined || projectName === '' || projectName === name ? name : `${projectName} / ${name}`)
+
+/** A kind-like id ("session-start-failed") as a sentence fragment ("session start failed"). */
+const humanize = (value: string): string => (/^[a-z0-9]+(-[a-z0-9]+)+$/.test(value) ? value.replaceAll('-', ' ') : value)
 
 export const stateLabel = (state: WorktreeState): string => STATE_LABELS[state]
 export const levelLabel = (level: Level): string => LEVEL_LABELS[level]
@@ -110,6 +152,29 @@ export function useAvatarQuery<T>(context: UiPluginContext, method: string, para
 
 const timeOf = (at: number): string => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
+const DETAIL_KEYS = ['summary', 'message', 'title', 'reason', 'error', 'note']
+
+function detailOf(data: Record<string, unknown>): string | null {
+  for (const key of DETAIL_KEYS) {
+    const value = data[key]
+    if (typeof value === 'string' && value !== '') return humanize(value)
+  }
+  return null
+}
+
+function describeEvent(data: Record<string, unknown>): string {
+  const type = typeof data.type === 'string' ? data.type : null
+  if (type === 'state') {
+    const to = typeof data.state === 'string' && data.state in STATE_LABELS ? STATE_LABELS[data.state as WorktreeState] : data.state
+    const from = typeof data.from === 'string' && data.from in STATE_LABELS ? STATE_LABELS[data.from as WorktreeState] : null
+    if (typeof to === 'string') return `State changed: ${from === null ? '' : `${from} → `}${to}`
+  }
+  if (type === 'gate-check' && typeof data.ok === 'boolean') return data.ok ? 'Gate check passed' : `Gate check failed${detailOf(data) === null ? '' : `: ${detailOf(data)}`}`
+  const label = type === null ? (data.flakyRerun === true ? 'Flaky checks rerun' : data.checksGreen === true ? 'Checks passed' : 'Event') : (EVENT_LABELS[type] ?? humanize(type).replace(/^./, (first) => first.toUpperCase()))
+  const detail = detailOf(data)
+  return detail === null ? label : `${label}: ${detail}`
+}
+
 function describeEntry(entry: JournalEntry): string {
   const { data } = entry
   if (entry.kind === 'gate') {
@@ -118,19 +183,21 @@ function describeEntry(entry: JournalEntry): string {
     const input = data.toolInput === undefined ? '' : describeToolInput(data.toolInput)
     return `${outcome} ${tool}${input === '' ? '' : `: ${input}`}`
   }
-  for (const key of ['summary', 'message', 'title', 'reason']) {
-    const value = data[key]
-    if (typeof value === 'string' && value !== '') return `${entry.kind}: ${value}`
-  }
-  return entry.kind
+  if (entry.kind === 'event') return describeEvent(data)
+  const detail = detailOf(data)
+  return detail === null ? KIND_LABELS[entry.kind] : `${KIND_LABELS[entry.kind]}: ${detail}`
 }
 
 function nameMap(status: StatusResult | null, report: ReportModel | null): Map<string, string> {
   const names = new Map<string, string>()
-  for (const handoff of status?.handoffs ?? []) names.set(handoff.worktreeId, handoff.name)
-  for (const story of report?.stories ?? []) names.set(story.worktreeId, story.name)
+  for (const handoff of status?.handoffs ?? []) names.set(handoff.worktreeId, worktreeLabel(handoff.name, handoff.projectName))
+  for (const story of report?.stories ?? []) names.set(story.worktreeId, worktreeLabel(story.name, story.projectName))
+  for (const need of report?.needsYou ?? []) if (!names.has(need.worktreeId)) names.set(need.worktreeId, worktreeLabel(need.worktreeName ?? need.worktreeId, need.projectName))
   return names
 }
+
+/** Resets the browser's list bullets and indent so each entry is just its card. */
+const LIST_STYLE: CSSProperties = { listStyle: 'none', margin: 0, padding: 0 }
 
 function Failure({ message }: { message: string | null }) {
   return message === null ? null : <p role="alert">{message}</p>
@@ -165,7 +232,7 @@ function LiveTab({ context }: { context: UiPluginContext }) {
           return (
             <ListRow
               key={handoff.worktreeId}
-              title={handoff.name}
+              title={worktreeLabel(handoff.name, handoff.projectName)}
               description={`${stateLabel(handoff.state)} · ${levelLabel(handoff.level)}${latest ? ` · ${describeEntry(latest)} · ${timeOf(latest.at)}` : ''}`}
               status={uiStatusOf(handoff.state)}
               trailing={
@@ -181,7 +248,7 @@ function LiveTab({ context }: { context: UiPluginContext }) {
       {entries.length === 0 ? (
         <p>No activity yet.</p>
       ) : (
-        <ul>
+        <ul style={LIST_STYLE}>
           {entries.map((entry) => (
             <li key={entry.seq}>{`${timeOf(entry.at)} · ${entry.worktreeId === null ? 'all' : (names.get(entry.worktreeId) ?? entry.worktreeId)} · ${describeEntry(entry)}`}</li>
           ))}
@@ -278,14 +345,13 @@ function ReportTab({ context, onOpenLog }: { context: UiPluginContext; onOpenLog
         data.stories.map((story) => (
           <ListRow
             key={story.worktreeId}
-            title={story.name}
+            title={worktreeLabel(story.name, story.projectName)}
             description={
               <>
                 {story.switchesOn.map((id) => (
                   <Badge key={id} tone="accent">{SWITCH_LABELS[id]}</Badge>
                 ))}
-                <span>{story.story}</span>
-                {story.handedBackWith.length > 0 && <span>{`Handed back with: ${story.handedBackWith.join(', ')}`}</span>}
+                <span>{[story.story, story.handedBackWith.length > 0 ? `Handed back with: ${story.handedBackWith.join(', ')}` : ''].filter(Boolean).join(' ')}</span>
               </>
             }
           />
@@ -327,7 +393,7 @@ function LogTab({ context }: { context: UiPluginContext }) {
       {entries.length === 0 ? (
         <EmptyState message="The log is empty." />
       ) : (
-        <ul>
+        <ul style={LIST_STYLE}>
           {entries.map((entry) => (
             <LogEntryRow key={entry.seq} entry={entry} worktreeName={entry.worktreeId === null ? 'all' : (names.get(entry.worktreeId) ?? entry.worktreeId)} />
           ))}

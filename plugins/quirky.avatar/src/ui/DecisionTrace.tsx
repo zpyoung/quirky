@@ -1,3 +1,4 @@
+import { agentLabel } from '../agent-label'
 import type { JournalEntry, StepId } from '../contracts'
 
 const STEP_LABELS: Record<StepId, string> = {
@@ -28,7 +29,7 @@ export function describeToolInput(toolInput: unknown): string {
 }
 
 function requestOf(data: Record<string, unknown>): string {
-  const who = typeof data.agent === 'string' && data.agent !== '' ? data.agent : 'The worker'
+  const who = typeof data.agent === 'string' && data.agent !== '' ? agentLabel(data.agent) : 'The worker'
   const tool = typeof data.toolName === 'string' ? data.toolName : 'a tool'
   const input = data.toolInput === undefined ? '' : describeToolInput(data.toolInput)
   return `${who} wants to run ${tool}${input === '' ? '' : `: ${input}`}`

@@ -1232,6 +1232,7 @@
         "title": "Default level",
         "description": "How far the avatar may act on its own in a new hand-off.",
         "default": "full",
+        "hidden": true,
         "values": [
           "shadow",
           "local",
@@ -1244,49 +1245,56 @@
         "type": "boolean",
         "title": "Allow messaging people",
         "description": "New hand-offs may message people.",
-        "default": false
+        "default": false,
+        "hidden": true
       },
       {
         "id": "switch-history-rewrite",
         "type": "boolean",
         "title": "Allow history rewrites",
         "description": "New hand-offs may rewrite git history.",
-        "default": false
+        "default": false,
+        "hidden": true
       },
       {
         "id": "switch-deploys",
         "type": "boolean",
         "title": "Allow deploys",
         "description": "New hand-offs may deploy.",
-        "default": false
+        "default": false,
+        "hidden": true
       },
       {
         "id": "house-rules",
         "type": "string",
         "title": "House rules",
         "description": "Rules every worker follows, one per line.",
-        "default": ""
+        "default": "",
+        "hidden": true
       },
       {
         "id": "allow-commands",
         "type": "string",
         "title": "Always-allowed commands",
         "description": "Commands the gate allows without judgment, one per line.",
-        "default": ""
+        "default": "",
+        "hidden": true
       },
       {
         "id": "deny-commands",
         "type": "string",
         "title": "Always-denied commands",
         "description": "Commands the gate always denies, one per line.",
-        "default": ""
+        "default": "",
+        "hidden": true
       },
       {
         "id": "deploy-commands",
         "type": "string",
         "title": "Deploy commands",
         "description": "Commands that count as a deploy, one per line.",
-        "default": ""
+        "default": "",
+        "hidden": true
       },
       {
         "id": "brain-agent",
@@ -1294,6 +1302,7 @@
         "title": "Brain agent",
         "description": "The agent that runs the avatar brain.",
         "default": "claude",
+        "hidden": true,
         "values": [
           "claude",
           "codex",
@@ -1306,7 +1315,8 @@
         "type": "string",
         "title": "Brain model",
         "description": "The brain model; empty uses the agent default.",
-        "default": ""
+        "default": "",
+        "hidden": true
       },
       {
         "id": "judgment-timeout-seconds",
@@ -1314,6 +1324,7 @@
         "title": "Judgment timeout (seconds)",
         "description": "How long the gate waits for the brain before asking the agent to retry.",
         "default": 55,
+        "hidden": true,
         "minimum": 1
       }
     ],
@@ -1321,7 +1332,8 @@
       {
         "id": "avatar",
         "title": "Avatar",
-        "description": "Defaults for hand-offs and the avatar brain."
+        "description": "Defaults for hand-offs and the avatar brain.",
+        "order": 45
       }
     ]
   }
