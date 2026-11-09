@@ -602,7 +602,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const clearSource = () => invalidateSource()
 
   return (
-    <Dialog open title="New workspace" onClose={onClose} size="wide">
+    <Dialog open title="New worktree" onClose={onClose} size="wide">
       <form ref={form} className="ui-stack" onSubmit={onSubmit} onKeyDown={onKeyDown}>
         <FormRow label="Project" htmlFor="create-project">
           <select id="create-project" className="ui-text-field__input" value={repoId} onChange={(event) => onRepoChange(event.target.value)}>

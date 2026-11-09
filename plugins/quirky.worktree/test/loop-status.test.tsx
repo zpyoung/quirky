@@ -42,7 +42,8 @@ const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branc
   cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
   externalVisible: true,
   externalVisibility: 'show',
-  externalInboxSuppressed: false
+  externalInboxSuppressed: false,
+  tagIds: []
 }
 
 type LoopState = 'running' | 'needs-you' | 'paused'

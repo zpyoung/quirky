@@ -20,6 +20,7 @@ type WorkspaceProjection = {
   error?: string
   reviewReason?: ReviewReason
   reviewError?: string
+  checks: 'pending' | 'success' | 'failure' | 'neutral' | null
 }
 
 export type ActivityProjection = ExtrasState & {
@@ -204,7 +205,10 @@ function activityAt(
   return positiveTimestamp(repo?.addedAt)
 }
 
-/** Reads only canonical public APIs and projects their current facts for one client state snapshot. */
+/**
+ * Reads only canonical public APIs and projects their current facts for one client state snapshot.
+ * Per-workspace checks always come from the review cache; reviewReason and reviewError appear only while a hide-review filter is on.
+ */
 export async function projectActivity(
   context: PluginContext,
   state: ExtrasState,
@@ -223,6 +227,7 @@ export async function projectActivity(
     runtimeFacts(context, worktrees),
     readReviewDecisions(context, worktrees, state.preferences)
   ])
+  const reviewFiltering = state.preferences.hideCompletedReviewWorkspaces || state.preferences.hidePassingCheckWorkspaces
   const sessions = sessionActivity(facts.sessions)
   const cutoff = cutoffFor(state, now())
   const visibleIds: string[] = []
@@ -278,8 +283,9 @@ export async function projectActivity(
       live,
       reason,
       ...(error === undefined ? {} : { error }),
-      ...(review?.reason === undefined ? {} : { reviewReason: review.reason }),
-      ...(review?.error === undefined ? {} : { reviewError: review.error })
+      ...(!reviewFiltering || review?.reason === undefined ? {} : { reviewReason: review.reason }),
+      ...(!reviewFiltering || review?.error === undefined ? {} : { reviewError: review.error }),
+      checks: review?.checks ?? null
     })
     if (!visible) activityHiddenCount++
     const automationHidden = state.preferences.hideAutomationCreated &&

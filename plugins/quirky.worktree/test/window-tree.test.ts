@@ -7,7 +7,13 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, dialogNamed, field, listRowName, menuItem, openDisclosure, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+import { button, click, dialogNamed, field, listRowName, menuItem, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+
+/** The Worktrees panel's own header `…` button; other chrome has a More button too. */
+const worktreesMore = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="More"]')].find((candidate) =>
+    candidate.closest('header')?.querySelector('h2')?.textContent?.trim() === 'Worktrees'
+  )
 const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -168,8 +174,11 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
 
   const apiRows = projectSections.find((section) => sectionHeadingMatches(section, 'api'))!
   expect([...apiRows.querySelectorAll<HTMLElement>('[data-worktree-id]')].map(listRowName)).toEqual(['main', 'fix-login', 'child'])
-  const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!
+  const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('.worktree-child-toggle')!
   expect(childToggle.getAttribute('aria-expanded')).toBe('true')
+  expect(childToggle.getAttribute('aria-label')).toBe('1 child of fix-login')
+  expect(childToggle.querySelector('.worktree-child-count')?.textContent).toBe('1')
+  expect(card('fix-login', 'api')!.querySelectorAll('.worktree-row')).toHaveLength(1)
 
   await click(childToggle)
   await win.waitFor(() => !card('child', 'api'))
@@ -178,7 +187,7 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
   expect(card('child', 'api')).toBeUndefined()
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-progress' })
   await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-progress')
-  await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!)
+  await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('.worktree-child-toggle')!)
   await win.waitFor(() => card('child', 'api'))
   const state = await win.waitFor(async () => {
     const next = await report(agent) as SidebarReport | undefined
@@ -237,25 +246,27 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   await win.waitFor(() => card('docs', 'api'))
 
   await openMenu(win, 'fix-login', 'api')
-  await choose(win, 'Move to Status')
+  await choose(win, 'Move to status')
   await choose(win, 'In review')
   await win.waitFor(async () => (await listed(agent, fixLogin.id)).status === 'in-review')
 
   await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-review')
-  await win.waitFor(() => card('fix-login', 'api')?.textContent?.includes('In review'))
   await openMenu(win, 'fix-login', 'api')
+  await choose(win, 'More')
   await choose(win, 'Pin')
   await win.waitFor(() => card('fix-login', undefined, 'pinned'))
   expect((await listed(agent, fixLogin.id)).pinned).toBe(true)
   const pinnedSection = sidebarPanel()!.querySelector<HTMLElement>('[data-top-level-section="pinned"]')!
   expect(sectionHeading(pinnedSection)).toBe('Pinned')
   expect(pinnedSection.nextElementSibling?.getAttribute('data-top-level-section')?.startsWith('repo:')).toBe(true)
-  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, workspaceStatus: 'in-review' })
+  expect(sidebarElements('[data-worktree-id="' + fixLogin.id + '"]')).toHaveLength(1)
+  expect(await reportRow(agent, fixLogin.id)).toBeUndefined()
   expect((await report(agent)).pinned).toEqual([fixLogin.id])
 
   await agent.callAny('quirky.worktree/set', { worktree: docs!.id, unread: false })
   await openMenu(win, 'docs', 'api')
-  await choose(win, 'Mark Unread')
+  await choose(win, 'More')
+  await choose(win, 'Mark unread')
   await win.waitFor(() => card('docs', 'api')!.querySelector('[role="img"][aria-label="Unread"]'))
   expect((await listed(agent, docs!.id)).unread).toBe(true)
 
@@ -273,7 +284,7 @@ test('SC-59: the primary checkout cannot be deleted', async () => {
   expect(error.code).toBe(RpcErrorCode.Conflict)
 
   await openMenu(win, 'main', 'api')
-  const del = item('Delete') as HTMLButtonElement
+  const del = item('Delete…') as HTMLButtonElement
   expect(del.disabled).toBe(true)
   del.click()
   await Bun.sleep(20)
@@ -290,7 +301,7 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   await win.waitFor(() => card('fix-login', 'api'))
 
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, bubbles: true, cancelable: true }))
-  const dialog = await win.waitFor(() => dialogNamed('New workspace'))
+  const dialog = await win.waitFor(() => dialogNamed('New worktree'))
   expect(selectedProject(dialog)).toBe('api')
   const open = await win.waitFor(async () => {
     const next = await report(agent)
@@ -299,12 +310,12 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   expect(open.dialog).toEqual({ kind: 'create', repoId: api.id })
 
   await pressEscape()
-  await win.waitFor(() => !dialogNamed('New workspace'))
+  await win.waitFor(() => !dialogNamed('New worktree'))
   await win.waitFor(async () => (await report(agent)).dialog === null)
 
   await agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: 'web' } })
   await win.waitFor(() => {
-    const next = dialogNamed('New workspace')
+    const next = dialogNamed('New worktree')
     return next && selectedProject(next) === 'web'
   })
   const second = await win.waitFor(async () => {
@@ -316,12 +327,8 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
 
 test('workspace status icon/avatar controls persist safe plain text and render on the board', async () => {
   const { win, agent } = await boot()
-  const statusOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
-  await click(statusOptionsButton)
-  const statusOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
-  await openDisclosure('More workspace tools', statusOptions)
-  const edit = await win.waitFor(() => button(statusOptions, 'Edit workspace statuses'))
-  await click(edit)
+  await click(await win.waitFor(() => worktreesMore()))
+  await click(await win.waitFor(() => menuItem(document, 'Edit statuses')))
   const dialog = await win.waitFor(() => dialogNamed('Workspace statuses'))
   const icon = field(dialog, 'Status icon 3')
   if (!icon) throw new Error('status editor did not expose the in-review icon control')
@@ -331,12 +338,8 @@ test('workspace status icon/avatar controls persist safe plain text and render o
 
   const statuses = await agent.callAny('quirky.worktree/statusDefinitions', {}) as Array<{ id: string; icon?: string }>
   expect(statuses.find((status) => status.id === 'in-review')?.icon).toBe('🧪')
-  const boardOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
-  await click(boardOptionsButton)
-  const boardOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
-  await openDisclosure('More workspace tools', boardOptions)
-  const board = await win.waitFor(() => button(boardOptions, 'Workspace board'))
-  await click(board)
+  await click(await win.waitFor(() => worktreesMore()))
+  await click(await win.waitFor(() => menuItem(document, 'Workspace board')))
   const laneHeading = await win.waitFor(() =>
     sidebarElements<HTMLHeadingElement>('h2').find((heading) => heading.textContent?.includes('In review'))
   )

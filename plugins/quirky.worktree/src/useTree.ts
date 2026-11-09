@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiPluginContext, WorkspaceOriginView } from '@quirky/protocol'
 import type { WorktreeControl } from './control-types'
+import { fetchTags } from './actions'
+import type { Tag } from './view-types'
 
 function upsert(sessions: Session[], session: Session): Session[] {
   return sessions.some((s) => s.id === session.id)
@@ -111,8 +113,11 @@ export type TreeData = {
   repos: Repo[]
   groups: ProjectGroup[]
   worktrees: HeimdallAwareWorktree[]
-  /** Null while `quirky.session` is off. */
+  /** Null while `quirky.session` is off or still loading. */
   sessions: Session[] | null
+  /** True once the first session load has finished, so a null `sessions` then means unavailable, not pending. */
+  sessionsSettled: boolean
+  tags: Tag[]
   /** Caller-relative worktree creator classifications from the authenticated UI connection. */
   otherClientByWorktree: ReadonlyMap<string, WorkspaceOriginView['otherClient']>
   hasAuthenticatedDesktopClient: boolean
@@ -128,6 +133,9 @@ export function useTree(context: UiPluginContext): TreeData {
   const [groups, setGroups] = useState<ProjectGroup[]>([])
   const [worktrees, setWorktrees] = useState<WorktreeControl[]>([])
   const [sessions, setSessions] = useState<Session[] | null>(null)
+  const [sessionsSettled, setSessionsSettled] = useState(false)
+  const [tags, setTags] = useState<Tag[]>([])
+  const latestTags = useRef(0)
   const [heimdallByWorktree, setHeimdallByWorktree] = useState<Record<string, HeimdallWorktreeStatus>>({})
   const [loaded, setLoaded] = useState(false)
   const latestTree = useRef(0)
@@ -158,6 +166,16 @@ export function useTree(context: UiPluginContext): TreeData {
 
   const sessionsOff = useRef(true)
 
+  const loadTags = useCallback(async () => {
+    const ticket = ++latestTags.current
+    try {
+      const snapshot = await fetchTags(context)
+      if (ticket === latestTags.current && Array.isArray(snapshot?.tags)) setTags(snapshot.tags)
+    } catch (error) {
+      if (ticket === latestTags.current) context.log(`could not load tags: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }, [context])
+
   const loadTree = useCallback(async () => {
     const ticket = ++latestTree.current
     try {
@@ -187,6 +205,7 @@ export function useTree(context: UiPluginContext): TreeData {
     if (ticket !== latestSessions.current) return
     sessionsOff.current = next === null
     setSessions(next)
+    setSessionsSettled(true)
   }, [context])
 
   const loadHeimdall = useCallback(async () => {
@@ -205,6 +224,7 @@ export function useTree(context: UiPluginContext): TreeData {
     void loadOrigins()
     void loadSessions()
     void loadHeimdall()
+    void loadTags()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
       const data = (event as { data?: unknown }).data
       switch (event.type) {
@@ -212,6 +232,10 @@ export function useTree(context: UiPluginContext): TreeData {
         case 'quirky.worktree/changed':
           void loadTree()
           void loadOrigins()
+          break
+        case 'quirky.worktree/tagsChanged':
+          void loadTags()
+          void loadTree()
           break
         case 'quirky.session/changed': {
           const sessionData = data as { session?: Session } | undefined
@@ -228,6 +252,7 @@ export function useTree(context: UiPluginContext): TreeData {
           void loadTree()
           void loadSessions()
           void loadHeimdall()
+          void loadTags()
           break
         case 'quirky.heimdall/fleetChanged': {
           const incoming = parseHeimdallSnapshot(data)
@@ -246,17 +271,18 @@ export function useTree(context: UiPluginContext): TreeData {
       void loadOrigins()
       void loadSessions()
       void loadHeimdall()
+      void loadTags()
     })
     return () => {
       unsubscribe()
       stopConnection()
     }
-  }, [context, loadTree, loadOrigins, loadSessions, loadHeimdall])
+  }, [context, loadTree, loadOrigins, loadSessions, loadHeimdall, loadTags])
 
   const worktreesWithHeimdall = useMemo<HeimdallAwareWorktree[]>(
     () => worktrees.map((worktree) => ({ ...worktree, heimdallStatus: heimdallByWorktree[worktree.id] ?? null })),
     [heimdallByWorktree, worktrees]
   )
 
-  return { repos, groups, worktrees: worktreesWithHeimdall, sessions, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded }
+  return { repos, groups, worktrees: worktreesWithHeimdall, sessions, sessionsSettled, tags, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded }
 }

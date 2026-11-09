@@ -34,6 +34,8 @@ import {
 } from './src/daemon/controls'
 import { readProjectOrder, readStockOptions, reorderProjects, reorderWorktrees, setStockOptions } from './src/daemon/options'
 import { getProjectMetadata, projectMetadata, setExternalInboxSuppressed, setProjectMetadata } from './src/daemon/project'
+import { assignTag, createTag, deleteTag, listTags, updateTag } from './src/daemon/tags'
+import { ActiveViews, readViews, setViews } from './src/daemon/views'
 import { archiveWorktree, linkReference, listReferences, unlinkReference, type RecordEnv } from './src/daemon/records'
 import { readStatusDefinitions, setStatusDefinitions } from './src/daemon/statuses'
 import { navigate, navigationHistoryMove, navigationIndex, navigationState, navigationStep, openIn } from './src/daemon/navigation'
@@ -412,6 +414,8 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     for (const worktree of rows.flat()) context.emit('changed', { repoId: worktree.repoId, worktreeId: worktree.id })
   }
 
+  const activeViews = new ActiveViews({ store, fail })
+
   const handlers: Record<string, Handler> = {
     ownedIds,
     async list(params) {
@@ -581,6 +585,38 @@ export async function activate(context: PluginContext): Promise<PluginActivation
       context.emit('optionsChanged', { options: readStockOptions(store) })
       return result
     },
+    tags: () => listTags(store),
+    tagCreate(params) {
+      const { tag, created } = createTag({ store, fail }, params)
+      if (created) context.emit('tagsChanged', {})
+      return { tag }
+    },
+    tagUpdate(params) {
+      const tag = updateTag({ store, fail }, params)
+      context.emit('tagsChanged', {})
+      return { tag }
+    },
+    tagDelete(params) {
+      deleteTag({ store, fail }, params)
+      context.emit('tagsChanged', {})
+      return {}
+    },
+    tagAssign(params) {
+      assignTag({ store, fail }, params)
+      context.emit('tagsChanged', {})
+      return {}
+    },
+    views: () => readViews(store),
+    setViews(params) {
+      const state = setViews({ store, fail }, params.state)
+      context.emit('viewsChanged', {})
+      return state
+    },
+    activeView: (params, caller) => ({ viewId: activeViews.get(params.window, caller.role === 'plugin' ? undefined : caller.connection) }),
+    setActiveView(params, caller) {
+      activeViews.set(params.window, params.viewId, caller.role === 'plugin' ? undefined : caller.connection)
+      return {}
+    },
     statusDefinitions: () => readStatusDefinitions(store),
     setStatusDefinitions(params) {
       const statuses = setStatusDefinitions(store, fail, params.statuses)
@@ -629,6 +665,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
 
   await importV1Root()
   return async () => {
+    activeViews.dispose()
     releasePending?.()
     releasePending = undefined
     preparedExpiryActive = false

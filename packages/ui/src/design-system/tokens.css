@@ -60,6 +60,11 @@
   --ui-focus-offset: 2px;
   --ui-icon-size: 16px;
   --ui-status-dot-size: 8px;
+  --ui-mark-ring-width: 1.5px;
+  --ui-tag-tint: 18%;
+  --ui-swatch-size: 14px;
+  --ui-checkbox-size: 14px;
+  --ui-hover-card-width: 15rem;
   --ui-window-inactive-opacity: 0.6;
   --ui-dialog-wide-width: 52rem;
   --ui-form-column-width: 16rem;

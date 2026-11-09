@@ -44,6 +44,7 @@ type ProjectedWorkspace = {
   reason: 'selected' | 'all' | 'recent' | 'old' | 'live' | 'sleeping' | 'main' | 'folder' | 'unknown'
   error?: string
   reviewReason?: 'completed' | 'passing' | 'unknown'
+  checks?: 'pending' | 'success' | 'failure' | 'neutral' | null
   reviewError?: string
 }
 type SidebarProjection = SidebarState & {
@@ -58,7 +59,7 @@ type SidebarProjection = SidebarState & {
   workspaces: ProjectedWorkspace[]
 }
 type Mount = (element: HTMLElement, props?: { report?(state: unknown): void }) => () => void
-type Call = { method: string; params: Record<string, unknown> }
+type Call = { method: string; params: Record<string, unknown>; fromBadge?: boolean }
 type Group = ProjectGroup & { parentId: string | null }
 type RendererReport = {
   groups: { id: string; projects: { id: string }[] }[]
@@ -95,6 +96,7 @@ type TestWorld = {
   extrasFailure: Error | null
   ledgerPreview: { ledgerId: string; revision: number; entryCount: number }[] | null
   ledgerPreviewFailure: Error | null
+  activeView: string
 }
 type UiHarness = {
   world: TestWorld
@@ -239,6 +241,7 @@ const worktree = (id: string, repoId: string, name: string, extra: Partial<TestW
   externalVisible: true,
   externalVisibility: 'show',
   externalInboxSuppressed: false,
+  tagIds: [],
   lastActivityAt: 0,
   instanceId: `instance-${id}`,
   ...extra
@@ -331,6 +334,7 @@ function setup(
     extrasFailure: options.failure ?? null,
     ledgerPreview: null,
     ledgerPreviewFailure: null,
+    activeView: 'all',
     calls: [],
     logs: []
   }
@@ -354,8 +358,8 @@ function setup(
     visits: { ...world.visits },
     exits: { ...world.exits }
   })
-  const project = (client = 'desktop'): SidebarProjection => {
-    const snapshot = state(client)
+  const project = (client = 'desktop', preferences?: Preferences): SidebarProjection => {
+    const snapshot = { ...state(client), ...(preferences ? { preferences: { ...preferences } } : {}) }
     const window = snapshot.preferences.workspaceActivityWindow
     const selectedId = snapshot.active?.worktreeId ?? null
     const projected = world.worktrees.map((item): ProjectedWorkspace => {
@@ -397,6 +401,7 @@ function setup(
         reason,
         ...(visible ? {} : { error: 'hidden' }),
         reviewReason,
+        checks: usable?.checksStatus ?? null,
         ...(review?.error ? { reviewError: review.error } : {})
       }
     })
@@ -451,7 +456,9 @@ function setup(
       provided.set(id, implementation)
     },
     async call(method: string, params: Record<string, unknown> = {}) {
-      const entry = { method, params }
+      // the attention badge shares this context and issues the same methods, so its calls are tagged by origin
+      const fromBadge = new Error().stack?.includes('attention-badge') ?? false
+      const entry: Call = { method, params, fromBadge }
       calls.push(entry)
       world.calls.push(entry)
       switch (method) {
@@ -520,8 +527,11 @@ function setup(
         case 'quirky.sidebar-extras/projection': {
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
           if (world.extrasFailure) throw world.extrasFailure
-          const projection = project(typeof params.client === 'string' ? params.client : 'desktop')
-          if (nextProjectionGate) {
+          const projection = project(
+            typeof params.client === 'string' ? params.client : 'desktop',
+            typeof params.preferences === 'object' && params.preferences !== null ? params.preferences as Preferences : undefined
+          )
+          if (nextProjectionGate && !fromBadge) {
             const gate = nextProjectionGate
             nextProjectionGate = null
             gate.start()
@@ -637,6 +647,15 @@ function setup(
             ...(assigned ? {} : { reason: 'worktree identity or membership changed' })
           }
         }
+        case 'ui.window.self':
+          return { connId: 1 }
+        case 'quirky.worktree/views':
+          return { views: [], needsYouHidden: false, rowFact: 'last-activity' }
+        case 'quirky.worktree/activeView':
+          return { viewId: world.activeView }
+        case 'quirky.worktree/setActiveView':
+          world.activeView = String(params.viewId)
+          return {}
         case 'setting.set':
           return {}
         default:
@@ -744,9 +763,9 @@ function setup(
     }
   }
 }
-const optionsPopover = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Worktrees options"]')
-const optionsContent = () => optionsPopover() ?? document.body
-const buttons = (within: ParentNode = optionsContent()) => [...within.querySelectorAll<HTMLButtonElement>('button')]
+const filterPopover = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Filter"]')
+const filterContent = () => filterPopover() ?? document.body
+const buttons = (within: ParentNode = filterContent()) => [...within.querySelectorAll<HTMLButtonElement>('button')]
 const card = (name: string, within: ParentNode = host) => {
   const rows = [...within.querySelectorAll<HTMLElement>('[data-worktree-id]')]
     .filter((row) => row.querySelector('.worktree-name')?.textContent?.trim() === name)
@@ -756,7 +775,7 @@ const card = (name: string, within: ParentNode = host) => {
   })
   return canonicalRows[0] ?? rows[0]
 }
-const childChip = (name: string) => card(name)?.querySelector<HTMLButtonElement>('button[aria-expanded]')
+const childChip = (name: string) => card(name)?.querySelector<HTMLButtonElement>('.worktree-child-toggle')
 const sectionHeader = (section: HTMLElement) => section.querySelector<HTMLElement>(':scope > header')!
 const sectionForRepo = (name: string) =>
   [...host.querySelectorAll<HTMLElement>('section')].find((section) =>
@@ -780,10 +799,10 @@ const normalizedMenuLabel = (item: Element) => visibleMenuText(item).replace(/\s
 const menuItem = (name: string) => menuItems().find((item) => normalizedMenuLabel(item) === name)
 const buttonNamed = (within: ParentNode, name: string) =>
   buttons(within).find((button) => button.getAttribute('aria-label') === name || button.textContent?.trim() === name)
-const openOptions = async (h: UiHarness) => {
-  if (optionsPopover()) return
-  const trigger = buttonNamed(host, 'Worktrees options')
-  if (!trigger) throw new Error('Worktrees options are unavailable in the panel header')
+const openFilter = async (h: UiHarness) => {
+  if (filterPopover()) return
+  const trigger = buttonNamed(host, 'Filter')
+  if (!trigger) throw new Error('Filter is unavailable in the panel header')
   await h.click(trigger)
 }
 const openCardMenu = async (h: UiHarness, name: string) => {
@@ -798,30 +817,37 @@ const addFolderOwnedGitWorkspace = (h: UiHarness) => {
   h.world.worktrees.push(item)
   return { owner, item }
 }
-const setStockOption = async (h: UiHarness, label: string, value: string) => {
-  await openOptions(h)
-  const trigger = [...optionsContent().querySelectorAll<HTMLElement>('details > summary')]
-    .find((summary) => summary.textContent?.trim() === 'Workspace options')
-  if (!trigger) throw new Error('workspace options are unavailable')
-  if (!trigger.closest('details')?.open) await h.click(trigger)
-  const select = optionsContent().querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
-  if (!select) throw new Error(`no workspace option selector ${label}`)
-  const control = select
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(control, value)
-    control.dispatchEvent(new Event('change', { bubbles: true }))
-    await Promise.resolve()
-  })
-  await h.flush()
+const chooseDisplay = async (h: UiHarness, section: string | null, label: string) => {
+  await h.click(buttonNamed(host, 'Display')!)
+  const entries = [...document.body.querySelectorAll<HTMLElement>('[role="menu"] .qt-menu-heading, [role="menu"] [role="menuitem"]')]
+  let heading: string | null = null
+  for (const entry of entries) {
+    if (entry.classList.contains('qt-menu-heading')) {
+      heading = entry.textContent?.trim() ?? null
+      continue
+    }
+    const text = (entry.textContent ?? '').replace(/\s+/g, ' ').replace(/\s*✓$/, '').trim()
+    if (text === label && (section === null || heading === section)) {
+      await h.click(entry)
+      return
+    }
+  }
+  throw new Error(`no Display item ${section ? `${section} / ` : ''}${label}`)
 }
+const noStockWrites = (h: UiHarness) => h.calls.filter((call) => call.method === 'quirky.worktree/setOptions')
 const dragTransfer = (worktreeId: string): DataTransfer => ({
   effectAllowed: 'move',
   dropEffect: 'move',
   setData() {},
   getData() { return worktreeId }
 } as unknown as DataTransfer)
-const filterButton = () => buttons(optionsContent()).find((button) => button.textContent?.trim().startsWith('Activity filters'))
-const filterCount = () => filterButton()?.querySelector<HTMLElement>('[role="img"]')?.getAttribute('aria-label')?.match(/^\d+/)?.[0]
+const filterCount = () => buttonNamed(host, 'Filter')?.querySelector<HTMLElement>('.worktree-tree-header-button__count')?.textContent ?? '0'
+const sectionProjections = (h: UiHarness) => h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection' && !call.fromBadge)
+const override = (h: UiHarness) => sectionProjections(h).at(-1)?.params.preferences as Preferences | undefined
+const noSharedWrites = (h: UiHarness) => h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set')
+const hiddenNote = () => [...host.querySelectorAll<HTMLElement>('.ui-notice-line')].find((line) => /^\d+ hidden|^Showing hidden/.test(line.textContent ?? ''))
+const noticeAction = (line: Element | undefined, label: string) =>
+  [...(line?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((button) => button.textContent?.trim() === label)
 const dragAndDrop = async (
   h: UiHarness,
   source: Element,
@@ -846,27 +872,24 @@ const dragAndDrop = async (
 }
 
 const checkboxFor = (label: string) =>
-  [...optionsContent().querySelectorAll<HTMLLabelElement>('label')]
+  [...filterContent().querySelectorAll<HTMLLabelElement>('label')]
     .find((item) => item.textContent?.trim() === label)
     ?.querySelector<HTMLInputElement>('input[type="checkbox"]')
-const fieldFor = (name: string, within: ParentNode = optionsContent()) =>
+const fieldFor = (name: string, within: ParentNode = filterContent()) =>
   [...within.querySelectorAll<HTMLLabelElement>('label')]
     .find((label) => label.textContent?.replace(/\s+/g, ' ').trim() === name)
     ?.control as HTMLInputElement | undefined
-const openFilters = async (h: UiHarness) => {
-  await openOptions(h)
-  const trigger = filterButton()
-  if (!trigger) throw new Error('workspace activity filters are unavailable')
-  if (trigger.getAttribute('aria-expanded') !== 'true') await h.click(trigger)
-}
+const WINDOW_VALUES: Record<string, string> = { All: 'all', 'Live only': 'live-only', 'Past 24 hours': 'today', 'Past 7 days': 'week', 'Past 30 days': 'month', Custom: 'custom' }
 const selectWindow = async (h: UiHarness, label: string) => {
-  let option = buttons(optionsContent()).find((button) => button.textContent?.trim() === label)
-  if (!option) {
-    await openFilters(h)
-    option = buttons(optionsContent()).find((button) => button.textContent?.trim() === label)
-  }
-  if (!option) throw new Error(`no activity window option ${label}`)
-  await h.click(option)
+  await openFilter(h)
+  const select = filterContent().querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')
+  if (!select) throw new Error('the activity window selector is unavailable')
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, WINDOW_VALUES[label])
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+  })
+  await h.flush()
 }
 const commitDays = async (h: UiHarness, input: HTMLInputElement) => {
   await act(async () => {
@@ -930,6 +953,7 @@ test('project sidebar order follows repo registration order when projects are ad
 
 test('SC-03/05: loose hierarchy keeps child disclosures while delete confirmation counts canonical descendants', async () => {
   const h = setup()
+  h.world.worktrees.find((item) => item.id === 'w-feature')!.pinned = false
   await h.mount()
 
   expect(sectionForGroup('Team')).toBeDefined()
@@ -944,23 +968,25 @@ test('SC-03/05: loose hierarchy keeps child disclosures while delete confirmatio
   const notesSection = sectionForRepo('notes')!
   const featureRow = card('feature', sectionForGroup('Team')!)!
   expect(Boolean(notesSection.compareDocumentPosition(featureRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  expect(notesSection.closest('[data-top-level-section="group:g-team"]')).not.toBeNull()
   expect(Boolean(sectionForGroup('Team')!.compareDocumentPosition(sectionForRepo('api')!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   expect(lastReport(h).groups.find((entry) => entry.id === 'g-team')?.projects.some((entry) => entry.id === 'r-api')).toBe(false)
   expect(lastReport(h).projects.find((project) => project.id === 'r-api')?.worktrees.find((item) => item.id === 'w-child')?.depth).toBe(0)
   await openCardMenu(h, 'feature')
-  expect(menuItem('Delete with Descendants (1)…')).toBeDefined()
-  await h.click(menuItem('Delete with Descendants (1)…')!)
+  expect(menuItem('Delete with descendants (1)…')).toBeDefined()
+  await h.click(menuItem('Delete with descendants (1)…')!)
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Child workspaces will be deleted')
   expect(lastReport(h).dialog).toEqual({ kind: 'delete', worktreeId: 'w-feature', withDescendants: true })
 })
 
 test('SC-03: diversion keeps an empty project placeholder and returning a parent restores child nesting', async () => {
   const h = setup()
+  h.world.worktrees.find((item) => item.id === 'w-feature')!.pinned = false
   await h.mount()
 
   for (const [name, groupName] of [['main', 'Team'], ['child', 'Child']] as const) {
     await openCardMenu(h, name)
-    await h.click(menuItem('Add worktree to group')!)
+    await h.click(menuItem('Move to section')!)
     await h.click(menuItem(groupName)!)
   }
   expect(sectionForRepo('api')).toBeDefined()
@@ -969,7 +995,8 @@ test('SC-03: diversion keeps an empty project placeholder and returning a parent
 
   for (const name of ['feature', 'main', 'child', 'independent']) {
     await openCardMenu(h, name)
-    await h.click(menuItem('Remove worktree from group')!)
+    await h.click(menuItem('Move to section')!)
+    await h.click(menuItem('Remove from section')!)
   }
   expect(sectionForRepo('api')!.querySelectorAll('button[aria-label^="Open "], button[aria-label^="Wake and open "]')).toHaveLength(4)
   expect(childChip('feature')?.getAttribute('aria-expanded')).toBe('true')
@@ -991,7 +1018,7 @@ test('SC-05: the group action button is the sole menu trigger and rename selects
   await h.click(rename!)
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  const input = fieldFor('Group name', dialog)
+  const input = fieldFor('Section name', dialog)
   if (!input) throw new Error('rename group input was not rendered')
   expect(document.activeElement).toBe(input)
   expect(input!.selectionStart).toBe(0)
@@ -1005,7 +1032,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
     const team = sectionForGroup('Team')!
     const more = buttonNamed(team, 'Actions for group Team')!
     await h.click(more)
-    const remove = menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))
+    const remove = menuItems().find((item) => /delete section/i.test(item.textContent ?? ''))
     expect(remove).toBeDefined()
     await h.click(remove!)
   }
@@ -1020,7 +1047,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBe('g-team')
 
   await openDelete()
-  const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.trim() === 'Delete Group')
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.trim() === 'Delete section')
   expect(confirm?.disabled).toBe(false)
   expect(confirm).toBeDefined()
   await h.click(confirm!)
@@ -1030,7 +1057,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
   expect(h.world.worktrees.find((item) => item.id === 'w-independent')?.projectGroupId).toBeNull()
   expect(sectionForGroup('Team')).toBeUndefined()
-  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
+  expect(card('feature')?.closest('[data-top-level-section="pinned"]')).not.toBeNull()
   expect(card('independent', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
 })
 
@@ -1042,10 +1069,10 @@ test('group deletion retries ledger preview failures and sends subtree snapshots
 
   const team = sectionForGroup('Team')!
   await h.click(buttonNamed(team, 'Actions for group Team')!)
-  await h.click(menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))!)
+  await h.click(menuItems().find((item) => /delete section/i.test(item.textContent ?? ''))!)
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete Group')!
+  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete section')!
   expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('ledger backend unavailable')
   expect(confirm.disabled).toBe(true)
 
@@ -1075,10 +1102,10 @@ test('group deletion discloses an empty ledger preview only after verification',
 
   const team = sectionForGroup('Team')!
   await h.click(buttonNamed(team, 'Actions for group Team')!)
-  await h.click(menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))!)
+  await h.click(menuItems().find((item) => /delete section/i.test(item.textContent ?? ''))!)
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete Group')!
+  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete section')!
   expect(dialog.textContent).toContain('Checking retained ledger records…')
   expect(dialog.textContent).not.toContain('No affected ledgers')
   expect(confirm.disabled).toBe(true)
@@ -1112,16 +1139,17 @@ test('SC-01: new group creation is guarded by the selected Git worktree identity
   await h.mount()
   const openNewGroup = async () => {
     await openCardMenu(h, 'other')
-    const create = menuItems().find((item) => /new group from worktree/i.test(item.textContent ?? ''))
+    await h.click(menuItem('Move to section')!)
+    const create = menuItem('New section…')
     expect(create).toBeDefined()
     await h.click(create!)
   }
 
   await openNewGroup()
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
-  const input = fieldFor('Group name', dialog!)
+  const input = fieldFor('Section name', dialog!)
   if (!input) throw new Error('new worktree group dialog input was not rendered')
-  expect(input.value).toBe('other group')
+  expect(input.value).toBe('other section')
   expect(document.activeElement).toBe(input)
   expect(input.selectionStart).toBe(0)
   expect(input.selectionEnd).toBe(input.value.length)
@@ -1134,7 +1162,7 @@ test('SC-01: new group creation is guarded by the selected Git worktree identity
   const request = h.calls.find((call) => call.method === 'quirky.worktree/createGroup')
   expect(request?.params).toEqual({
     worktree: 'w-other',
-    name: 'other group',
+    name: 'other section',
     expectedInstanceId: 'instance-w-other',
     expectedProjectGroupId: null
   })
@@ -1165,7 +1193,7 @@ test('project menu opens the project group dialog', async () => {
   if (!actions) throw new Error('project actions button was not rendered')
   await h.click(actions)
 
-  const create = menuItem('New Group from Project…')
+  const create = menuItem('New section from project…')
   if (!create) throw new Error('new group menu item was not rendered')
   await h.click(create)
 
@@ -1183,7 +1211,8 @@ test('SC-06: a folder workspace row in a Git project creates a group for its pro
 
   const openProjectGroupDialog = async () => {
     await openCardMenu(h, 'notes')
-    const createProjectGroup = menuItem('New Group from Project…')
+    await h.click(menuItem('Move to section')!)
+    const createProjectGroup = menuItem('New section…')
     expect(createProjectGroup).toBeDefined()
     await h.click(createProjectGroup!)
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
@@ -1200,7 +1229,7 @@ test('SC-06: a folder workspace row in a Git project creates a group for its pro
   expect(h.world.worktrees.filter((worktree) => worktree.repoId === project.id)).toEqual(worktreesBefore)
 
   const dialog = await openProjectGroupDialog()
-  const input = fieldFor('Group name', dialog)
+  const input = fieldFor('Section name', dialog)
   if (!input) throw new Error('project group dialog input was not rendered')
   await inputValue(input, 'Notes project')
   const create = [...dialog.querySelectorAll<HTMLButtonElement>('button')]
@@ -1223,7 +1252,8 @@ test('SC-06: a folder workspace row removes its project group without changing i
   await h.mount()
 
   await openCardMenu(h, 'notes')
-  const removeProjectGroup = menuItem('Remove project from group')
+  await h.click(menuItem('Move to section')!)
+  const removeProjectGroup = menuItem('Remove from section')
   expect(removeProjectGroup).toBeDefined()
   await h.click(removeProjectGroup!)
 
@@ -1238,14 +1268,15 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   await h.mount()
 
   await openCardMenu(h, 'other')
-  await h.click(menuItem('Add worktree to group')!)
+  await h.click(menuItem('Move to section')!)
   await h.click(menuItem('Release')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-other')?.projectGroupId).toBe('g-release')
   expect(card('other', sectionForGroup('Release')!)?.closest('section')).toBe(sectionForGroup('Release')!)
   expect(sectionForRepo('web')).toBeDefined()
 
   await openCardMenu(h, 'other')
-  await h.click(menuItem('Remove worktree from group')!)
+  await h.click(menuItem('Move to section')!)
+  await h.click(menuItem('Remove from section')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-other')?.projectGroupId).toBeNull()
   expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 
@@ -1253,9 +1284,10 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   const pinnedFeature = pinned ? card('feature', pinned) : undefined
   expect(pinnedFeature).toBeDefined()
   await h.click(buttonNamed(pinnedFeature!, 'Actions for feature')!)
-  await h.click(menuItem('Remove worktree from group')!)
+  await h.click(menuItem('Move to section')!)
+  await h.click(menuItem('Remove from section')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
-  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
+  expect(card('feature')?.closest('[data-top-level-section="pinned"]')).not.toBeNull()
 })
 
 test('SC-02/06: a Git worktree with missing group membership stays removable when no groups are available', async () => {
@@ -1278,7 +1310,8 @@ test('SC-02/06: a Git worktree with missing group membership stays removable whe
   expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 
   await openCardMenu(h, 'lost-group')
-  const remove = menuItem('Remove worktree from group')
+  await h.click(menuItem('Move to section')!)
+  const remove = menuItem('Remove from section')
   expect(remove).toBeDefined()
   await h.click(remove!)
 
@@ -1295,8 +1328,8 @@ test('SC-02: moving a Git project moves every repo row without changing loose wo
   await h.mount()
   const before = h.world.worktrees.find((item) => item.id === 'w-feature')!.projectGroupId
 
-  await openCardMenu(h, 'feature')
-  await h.click(menuItem('Move project to group')!)
+  await h.click(buttonNamed(sectionForRepo('api')!, 'Actions for api')!)
+  await h.click(menuItem('Move to section')!)
   await h.click(menuItem('Release')!)
 
   expect(h.world.repos.find((item) => item.id === 'r-api')?.groupId).toBe('g-release')
@@ -1391,7 +1424,7 @@ test('SC-06: folder-owned Git worktrees keep project actions without exposing me
   await h.mount()
 
   await openCardMenu(h, 'folder-git')
-  await h.click(menuItem('Move project to group')!)
+  await h.click(menuItem('Move to section')!)
   await h.click(menuItem('Release')!)
 
   expect(owner.groupId).toBe('g-release')
@@ -1401,10 +1434,9 @@ test('SC-06: folder-owned Git worktrees keep project actions without exposing me
   expect(h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)).toHaveLength(0)
 
   await openCardMenu(h, 'folder-git')
-  const membershipActions = menuItems()
-    .map(normalizedMenuLabel)
-    .filter((label) => /^(new group from worktree|add worktree to group|remove worktree from group)/i.test(label))
-  expect(membershipActions).toEqual([])
+  await h.click(menuItem('Move to section')!)
+  await h.click(menuItem('New section…')!)
+  expect(lastReport(h).dialog).toEqual({ kind: 'group', action: 'new', repoId: owner.id })
 })
 
 test('SC-06: folder-owned Git worktrees cannot join a group by dragging', async () => {
@@ -1462,9 +1494,10 @@ test('SC-06: unknown repository owners cannot join a group by dragging', async (
 test('SC-04: membership dragging is disabled outside Project grouping', async () => {
   const h = setup()
   await h.mount()
-  await setStockOption(h, 'Group by', 'status')
-  expect(h.world.options.groupBy).toBe('status')
-  const target = sectionHeader(sectionForGroup('Team')!)
+  await chooseDisplay(h, 'Group by', 'Status')
+  expect(noStockWrites(h)).toEqual([])
+  expect(host.querySelectorAll('[data-group-target]')).toHaveLength(0)
+  const target = sectionHeader(host.querySelector<HTMLElement>('section.worktree-status-lane')!)
   setRect(target, 100, 140)
 
   const preview = await dragAndDrop(h, card('other')!, target, 'w-other', 110)
@@ -1475,7 +1508,7 @@ test('SC-04: membership dragging is disabled outside Project grouping', async ()
     membership: item.projectGroupId,
     writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
   }).toEqual({ preview: null, membership: null, writes: [] })
-  expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
+  expect(card('other')).toBeDefined()
 })
 
 test('SC-04: changing away from Project grouping mid-drag clears membership preview and blocks drop', async () => {
@@ -1494,10 +1527,10 @@ test('SC-04: changing away from Project grouping mid-drag clears membership prev
   await h.flush()
   expect(lastReport(h).dropPreview).toEqual({ kind: 'group', id: 'g-team' })
 
-  await setStockOption(h, 'Group by', 'status')
+  await chooseDisplay(h, 'Group by', 'Status')
   expect(lastReport(h).dropPreview).toBeNull()
-  expect(h.world.options.groupBy).toBe('status')
-  target = sectionHeader(sectionForGroup('Team')!)
+  expect(noStockWrites(h)).toEqual([])
+  target = sectionHeader(host.querySelector<HTMLElement>('section.worktree-status-lane')!)
   setRect(target, 100, 140)
   await act(async () => {
     target.dispatchEvent(eventAt('dragover', 110, transfer))
@@ -1525,8 +1558,8 @@ test('manual sibling reordering remains available outside Project grouping', asy
   const second = worktree('w-manual-b', 'r-api', 'manual-b', { manualOrder: 10 })
   h.world.worktrees.push(first, second)
   await h.mount()
-  await setStockOption(h, 'Group by', 'status')
-  await setStockOption(h, 'Sort by', 'manual')
+  await chooseDisplay(h, 'Group by', 'Status')
+  await chooseDisplay(h, 'Sort by', 'Manual')
   const source = card('manual-a')!
   const target = card('manual-b')!
   setRect(target, 100, 140)
@@ -1551,75 +1584,74 @@ test('manual sibling reordering remains available outside Project grouping', asy
   )).toHaveLength(0)
 })
  
-test('Worktrees options dismiss and reopen without losing applied activity filters', async () => {
+test('Filter dismisses and reopens without losing the activity window the view is showing', async () => {
   const h = setup()
   await h.mount()
 
-  const trigger = buttonNamed(host, 'Worktrees options')
+  const trigger = buttonNamed(host, 'Filter')
   expect(trigger?.getAttribute('aria-expanded')).toBe('false')
   expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog')
-  expect(optionsPopover()).toBeNull()
+  expect(filterPopover()).toBeNull()
   for (const label of ['Workspace options', 'Activity filters', 'More workspace tools']) {
     expect(host.textContent).not.toContain(label)
   }
 
   await h.click(trigger!)
-  const initialPopover = optionsPopover()
+  const initialPopover = filterPopover()
   expect(initialPopover).not.toBeNull()
-  await openFilters(h)
   await selectWindow(h, 'Past 7 days')
-  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+  expect(override(h)?.workspaceActivityWindow).toBe('week')
+  expect(h.world.preferences.workspaceActivityWindow).toBe('all')
 
   await act(async () => {
     initialPopover!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
   })
   await h.flush()
-  expect(optionsPopover()).toBeNull()
-  expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('false')
-  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+  expect(filterPopover()).toBeNull()
+  expect(buttonNamed(host, 'Filter')?.getAttribute('aria-expanded')).toBe('false')
+  expect(override(h)?.workspaceActivityWindow).toBe('week')
 
-  await h.click(buttonNamed(host, 'Worktrees options')!)
-  await openFilters(h)
-  expect(optionsContent().querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Past 7 days')
+  await h.click(buttonNamed(host, 'Filter')!)
+  expect(filterContent().querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')?.value).toBe('week')
 
   await act(async () => {
     host.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }))
   })
   await h.flush()
-  expect(optionsPopover()).toBeNull()
-  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+  expect(filterPopover()).toBeNull()
+  expect(override(h)?.workspaceActivityWindow).toBe('week')
 
-  await h.click(buttonNamed(host, 'Worktrees options')!)
-  await openFilters(h)
-  expect(optionsContent().querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Past 7 days')
+  await h.click(buttonNamed(host, 'Filter')!)
+  expect(filterContent().querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')?.value).toBe('week')
+  expect(noSharedWrites(h)).toEqual([])
 })
 
 test('SC-08/11/12: filters use exact windows, validate custom days on Enter and blur, and recover an empty list', async () => {
   const h = setup()
   await h.mount()
-  await openFilters(h)
+  await openFilter(h)
 
-  expect(optionsContent().querySelector('[role="tablist"][aria-label="Workspace activity window"]')?.querySelectorAll('[role="tab"]')).toHaveLength(6)
+  expect(filterContent().querySelectorAll('select[aria-label="Activity window"] option')).toHaveLength(6)
   await selectWindow(h, 'Past 7 days')
-  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+  expect(override(h)?.workspaceActivityWindow).toBe('week')
   expect(card('feature')).toBeUndefined()
   expect(card('other')).toBeDefined()
   expect(lastReport(h).hiddenCount).toBeGreaterThan(0)
   expect(lastReport(h).appliedFilter?.workspaceActivityWindow).toBe('week')
   expect(filterCount()).toBe('1')
-  expect(buttons().some((button) => /hidden/i.test(button.textContent ?? ''))).toBe(true)
+  expect(hiddenNote()).toBeDefined()
   await selectWindow(h, 'Past 24 hours')
   expect(card('other')).toBeUndefined()
 
   await h.setLayout({ worktree: null, view: null, panel: null, sidebar: true, focus: null })
   expect(card('other')).toBeUndefined()
-  const hidden = buttons().find((button) => /hidden/i.test(button.textContent ?? ''))
-  expect(hidden).toBeDefined()
-  await h.click(hidden!)
-  expect(h.world.preferences.workspaceActivityWindow).toBe('all')
-  expect(filterCount()).toBe('0')
+  const show = noticeAction(hiddenNote(), 'Show')
+  expect(show).toBeDefined()
+  await h.click(show!)
   expect(card('other')).toBeDefined()
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBe('g-team')
+  await h.click(noticeAction(hiddenNote(), 'Hide')!)
+  expect(card('other')).toBeUndefined()
 
   await selectWindow(h, 'Custom')
   const days = fieldFor('Custom days')
@@ -1628,23 +1660,25 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
   for (const invalid of ['0', '-1', '1.5', 'text', '9007199254740992']) {
     await inputValue(days!, invalid)
     await commitDays(h, days!)
-    expect(h.world.preferences.workspaceActivityCustomDays).toBe(30)
-    expect(optionsContent().querySelector('[role="alert"]')).not.toBeNull()
+    expect(override(h)?.workspaceActivityCustomDays).toBe(30)
+    expect(filterContent().querySelector('[role="alert"]')).not.toBeNull()
   }
   await inputValue(days!, '3')
   await commitDays(h, days!)
-  expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
-  expect(optionsContent().querySelector('[role="alert"]')).toBeNull()
+  expect(override(h)?.workspaceActivityCustomDays).toBe(3)
+  expect(filterContent().querySelector('[role="alert"]')).toBeNull()
 
   expect(buttons().some((button) => button.textContent?.trim() === 'Clear filters')).toBe(true)
   await h.click(buttons().find((button) => button.textContent?.trim() === 'Clear filters')!)
-  expect(h.world.preferences.workspaceActivityWindow).toBe('all')
+  expect(override(h)).toBeUndefined()
   await selectWindow(h, 'Past 24 hours')
-  expect(h.world.preferences.workspaceActivityWindow).toBe('today')
+  expect(override(h)?.workspaceActivityWindow).toBe('today')
   await selectWindow(h, 'Past 30 days')
-  expect(h.world.preferences.workspaceActivityWindow).toBe('month')
+  expect(override(h)?.workspaceActivityWindow).toBe('month')
   await selectWindow(h, 'All')
+  expect(override(h)).toBeUndefined()
   expect(h.world.preferences.workspaceActivityWindow).toBe('all')
+  expect(noSharedWrites(h)).toEqual([])
 })
 
 test('Custom days commits on blur without Enter and rejects an invalid blur without changing the window', async () => {
@@ -1656,8 +1690,8 @@ test('Custom days commits on blur without Enter and rejects an invalid blur with
   await inputValue(days, '3')
   await act(async () => { days.blur() })
   await h.flush()
-  expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
-  expect(h.world.preferences.workspaceActivityWindow).toBe('custom')
+  expect(override(h)?.workspaceActivityCustomDays).toBe(3)
+  expect(override(h)?.workspaceActivityWindow).toBe('custom')
   expect(card('other')).toBeDefined()
   expect(card('feature')).toBeUndefined()
 
@@ -1665,9 +1699,9 @@ test('Custom days commits on blur without Enter and rejects an invalid blur with
   await inputValue(days, '0')
   await act(async () => { days.blur() })
   await h.flush()
-  expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
-  expect(h.world.preferences.workspaceActivityWindow).toBe('custom')
-  expect(optionsContent().querySelector('[role="alert"]')).not.toBeNull()
+  expect(override(h)?.workspaceActivityCustomDays).toBe(3)
+  expect(override(h)?.workspaceActivityWindow).toBe('custom')
+  expect(filterContent().querySelector('[role="alert"]')).not.toBeNull()
   expect(card('other')).toBeDefined()
   expect(card('feature')).toBeUndefined()
 })
@@ -1679,7 +1713,7 @@ test('SC-10/13: Live preserves the selected layout worktree and keeps visits ide
   expect(card('main')).toBeDefined()
 
   await selectWindow(h, 'Live only')
-  expect(h.world.preferences.workspaceActivityWindow).toBe('live-only')
+  expect(override(h)?.workspaceActivityWindow).toBe('live-only')
   expect(card('main')).toBeDefined()
   expect(card('independent')).toBeDefined()
   expect(card('other')).toBeDefined()
@@ -1690,7 +1724,7 @@ test('SC-10/13: Live preserves the selected layout worktree and keeps visits ide
   expect(exception).not.toBeNull()
   expect(exception!.closest('label')?.textContent).toContain('Except default branch')
   await h.click(exception!)
-  expect(h.world.preferences.alwaysShowDefaultBranchWorkspace).toBe(false)
+  expect(override(h)?.alwaysShowDefaultBranchWorkspace).toBe(false)
   expect(card('main')).toBeDefined()
 
   await h.setLayout({ worktree: 'w-other', view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-other' } }, panel: null, sidebar: true, focus: 'view' })
@@ -1715,62 +1749,52 @@ test('disabled extras falls back to the ordinary tree, while ordinary failures r
   const unavailable = setup({ view: null, panel: null, sidebar: true, focus: null }, { failure: new Error('temporary sidebar extras transport failure') })
   await unavailable.mount()
   expect(card('main')).toBeDefined()
-  await openOptions(unavailable)
-  expect(optionsContent().textContent).toMatch(/unavailable/i)
+  await openFilter(unavailable)
+  expect(filterContent().textContent).toMatch(/unavailable/i)
   expect(unavailable.world.logs.join('\n')).toContain('temporary sidebar extras transport failure')
   expect(unavailable.world.preferences.workspaceActivityWindow).toBe('all')
 })
 
-test('review filters use server preferences, compose with activity, and clear independently', async () => {
+test('review filters evaluate through the projection override, compose with activity, and clear independently', async () => {
   const h = setup({ worktree: 'w-child', view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-child' } }, panel: null, sidebar: true, focus: 'view' })
   h.world.worktrees.find((item) => item.id === 'w-child')!.projectGroupId = 'g-team'
   h.world.reviews['w-child'] = { state: 'merged', checksStatus: 'failure' }
   h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
   await h.mount()
-  await openFilters(h)
+  await openFilter(h)
 
   expect(h.world.active).toEqual({ worktreeId: 'w-child', instanceId: 'instance-w-child' })
-  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
-  expect(checkboxFor('Hide passing checks')?.checked).toBe(false)
+  expect(checkboxFor('Merged/closed reviews')?.checked).toBe(false)
+  expect(checkboxFor('Passing checks')?.checked).toBe(false)
   expect(filterCount()).toBe('0')
 
-  const pendingSet = h.deferNextSet()
-  await h.click(checkboxFor('Hide merged/closed reviews')!)
-  await pendingSet.started
-  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
-  expect(card('child')).toBeDefined()
-  expect(filterCount()).toBe('0')
-  pendingSet.release()
-  await h.flush()
-
-  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(true)
-  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(true)
+  await h.click(checkboxFor('Merged/closed reviews')!)
+  expect(checkboxFor('Merged/closed reviews')?.checked).toBe(true)
+  expect(override(h)).toMatchObject({ hideCompletedReviewWorkspaces: true, hidePassingCheckWorkspaces: false })
   expect(card('child')).toBeUndefined()
   expect(childChip('feature')).toBeFalsy()
   expect(lastReport(h).hiddenIds).toContain('w-child')
   expect(lastReport(h).reviewHiddenIds).toEqual(['w-child'])
   expect(lastReport(h).reviewHiddenCount).toBe(1)
   expect(lastReport(h).appliedFilter?.hideCompletedReviewWorkspaces).toBe(true)
-  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hideCompletedReviewWorkspaces: true })
   expect(filterCount()).toBe('1')
 
-  await h.click(checkboxFor('Hide passing checks')!)
-  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(true)
+  await h.click(checkboxFor('Passing checks')!)
+  expect(override(h)).toMatchObject({ hideCompletedReviewWorkspaces: true, hidePassingCheckWorkspaces: true })
   expect(card('other')).toBeUndefined()
   expect(lastReport(h).reviewHiddenCount).toBe(2)
-  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hidePassingCheckWorkspaces: true })
   expect(filterCount()).toBe('2')
 
-  await h.click(checkboxFor('Hide merged/closed reviews')!)
-  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(false)
+  await h.click(checkboxFor('Merged/closed reviews')!)
+  expect(override(h)).toMatchObject({ hideCompletedReviewWorkspaces: false, hidePassingCheckWorkspaces: true })
   expect(card('child')).toBeDefined()
   expect(childChip('feature')).toBeDefined()
   expect(card('other')).toBeUndefined()
   expect(filterCount()).toBe('1')
 
-  await h.click(checkboxFor('Hide merged/closed reviews')!)
+  await h.click(checkboxFor('Merged/closed reviews')!)
   await selectWindow(h, 'Past 7 days')
-  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+  expect(override(h)?.workspaceActivityWindow).toBe('week')
   expect(lastReport(h).filterCount).toBe(3)
   expect(lastReport(h).hiddenCount).toBeGreaterThan(lastReport(h).reviewHiddenCount)
   expect(lastReport(h).reviewHiddenIds).toContain('w-child')
@@ -1778,58 +1802,58 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(lastReport(h).appliedFilter?.hidePassingCheckWorkspaces).toBe(true)
   expect(filterCount()).toBe('3')
 
-  const recovery = buttons().find((button) => /hidden/i.test(button.textContent ?? ''))
+  const recovery = noticeAction(hiddenNote(), 'Show')
   expect(recovery).toBeDefined()
   await h.click(recovery!)
-  expect(h.world.preferences.workspaceActivityWindow).toBe('all')
-  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(true)
-  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(true)
-  expect(lastReport(h).hiddenCount).toBe(0)
-  expect(lastReport(h).reviewHiddenCount).toBe(2)
-  expect(card('child')).toBeUndefined()
-  expect(card('other')).toBeUndefined()
-  expect(filterCount()).toBe('2')
+  expect(card('child')).toBeDefined()
+  expect(card('other')).toBeDefined()
+  expect(filterCount()).toBe('3')
 
   await h.click(buttons().find((button) => button.textContent?.trim() === 'Clear filters')!)
-  expect(h.world.preferences.workspaceActivityWindow).toBe('all')
-  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(false)
-  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(false)
-  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
-  expect(checkboxFor('Hide passing checks')?.checked).toBe(false)
+  expect(override(h)).toBeUndefined()
+  expect(checkboxFor('Merged/closed reviews')?.checked).toBe(false)
+  expect(checkboxFor('Passing checks')?.checked).toBe(false)
   expect(card('child')).toBeDefined()
   expect(card('other')).toBeDefined()
   expect(childChip('feature')).toBeDefined()
   expect(lastReport(h).reviewHiddenIds).toEqual([])
   expect(lastReport(h).reviewHiddenCount).toBe(0)
   expect(filterCount()).toBe('0')
+  expect(noSharedWrites(h)).toEqual([])
 })
 
-test('hosting review events refresh only active filters and late projections cannot restore stale visibility', async () => {
+test('hosting review events refresh the projection and late projections cannot restore stale visibility', async () => {
   const h = setup()
   h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
   h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
   await h.mount()
 
-  const offCalls = h.calls.length
-  const offReports = h.reports.length
+  const sectionCalls = () => h.calls.filter((call) => !call.fromBadge)
+  const projectionCalls = () => sectionCalls().filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+  const offProjections = projectionCalls()
   await h.emit('quirky.hosting/changed')
+  await h.flush()
+  expect(projectionCalls()).toBeGreaterThan(offProjections)
+  const afterChanged = projectionCalls()
   await h.emit('quirky.hosting/refresh')
+  await h.flush()
+  expect(projectionCalls()).toBeGreaterThan(afterChanged)
+  const afterRefresh = projectionCalls()
   await h.emit('quirky.hosting/reviewCacheChanged')
   await h.flush()
-  expect(h.calls).toHaveLength(offCalls)
-  expect(h.reports).toHaveLength(offReports)
+  expect(projectionCalls()).toBeGreaterThan(afterRefresh)
 
-  await openFilters(h)
-  await h.click(checkboxFor('Hide merged/closed reviews')!)
-  await h.click(checkboxFor('Hide passing checks')!)
-  expect(checkboxFor('Hide passing checks')?.checked).toBe(true)
+  await openFilter(h)
+  await h.click(checkboxFor('Merged/closed reviews')!)
+  await h.click(checkboxFor('Passing checks')!)
+  expect(checkboxFor('Passing checks')?.checked).toBe(true)
   expect(card('other')).toBeUndefined()
   expect(card('feature')).toBeDefined()
-  const activeCalls = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+  const activeCalls = sectionCalls().filter((call) => call.method === 'quirky.sidebar-extras/projection').length
   h.world.reviews['w-feature'] = { state: 'merged', checksStatus: 'failure' }
   await h.emit('quirky.hosting/reviewCacheChanged')
   await h.flush()
-  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length).toBeGreaterThan(activeCalls)
+  expect(sectionCalls().filter((call) => call.method === 'quirky.sidebar-extras/projection').length).toBeGreaterThan(activeCalls)
   expect(card('feature')).toBeUndefined()
 
   h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
@@ -1843,6 +1867,26 @@ test('hosting review events refresh only active filters and late projections can
   expect(card('feature')).toBeUndefined()
   expect(lastReport(h).reviewHiddenIds).toContain('w-feature')
 })
+test('a review cache change with both review filters off updates who is in Needs you', async () => {
+  const h = setup()
+  h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
+  h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
+  await h.mount()
+  const needsYouTab = () => host.querySelector<HTMLElement>('[role="tab"][data-view-id="needs-you"]')
+  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(false)
+  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(false)
+  await h.click(needsYouTab()!)
+  expect(card('feature')).toBeDefined()
+  expect(card('other')).toBeUndefined()
+
+  h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'success' }
+  h.world.reviews['w-other'] = { state: 'open', checksStatus: 'failure' }
+  await h.emit('quirky.hosting/reviewCacheChanged')
+  await h.flush()
+  expect(card('feature')).toBeUndefined()
+  expect(card('other')).toBeDefined()
+})
+
 test('quiet activity aging refreshes at sixty seconds without store events', async () => {
   const h = setup()
   h.world.preferences.workspaceActivityWindow = 'today'
@@ -1893,7 +1937,7 @@ test('sticky top-level headers suppress adjacent section separators', async () =
     await h.mount()
     const separators = lastReport(h).separators
     expect(separators.eligibleBoundaries).not.toContain('group:g-team')
-    expect(separators.eligibleBoundaries).not.toContain('group:g-release')
+    expect(separators.eligibleBoundaries).not.toContain('group:g-child')
     expect(separators.eligibleBoundaries).toContain('repo:r-web')
   } finally {
     style.remove()
@@ -1912,14 +1956,14 @@ test('automation filtering uses only durable attribution and appears in visible 
   namePrefixApi.name = 'auto-manual'
   namePrefixApi.createdBy = 'api'
   await h.mount()
-  await openFilters(h)
+  await openFilter(h)
 
-  expect(checkboxFor('Hide automation-created')?.checked).toBe(false)
+  expect(checkboxFor('Automation-created')?.checked).toBe(false)
   expect(card('auto-generated')).toBeDefined()
   expect(card('auto-manual')).toBeDefined()
-  await h.click(checkboxFor('Hide automation-created')!)
+  await h.click(checkboxFor('Automation-created')!)
 
-  expect(h.world.preferences.hideAutomationCreated).toBe(true)
+  expect(override(h)?.hideAutomationCreated).toBe(true)
   expect(card('auto-generated')).toBeUndefined()
   expect(card('auto-manual')).toBeDefined()
   expect(lastReport(h).automationHiddenIds).toEqual(['w-lost'])
@@ -1928,5 +1972,5 @@ test('automation filtering uses only durable attribution and appears in visible 
   expect(lastReport(h).appliedFilter?.hideAutomationCreated).toBe(true)
   expect(lastReport(h).filterCount).toBe(1)
   expect(filterCount()).toBe('1')
-  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hideAutomationCreated: true })
+  expect(noSharedWrites(h)).toEqual([])
 })
