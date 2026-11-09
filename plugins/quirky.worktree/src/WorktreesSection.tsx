@@ -125,6 +125,7 @@ function newViewId(): string {
 const CREATE_GRACE_MS = 5 * 60 * 1_000
 const NO_SESSIONS: Session[] = []
 const CLEANUP_REFRESH_MS = 10_000
+const VIEWS_RETRY_MS = 3_000
 
 /** Creates an empty section; worktrees and projects join it from their menus or by dragging. */
 function NewSectionDialog({ context, onClose }: { context: UiPluginContext; onClose(): void }) {
@@ -188,8 +189,9 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const [projectIdentities, setProjectIdentities] = useState<Record<string, WorktreeProjectIdentity>>({})
   const [revealHidden, setRevealHidden] = useState(false)
   const [viewsState, setViewsState] = useState<ViewsState>(DEFAULT_VIEWS_STATE)
+  const viewsLoaded = useRef(false)
   const [activeViewId, setActiveViewId] = useState<ViewId>('all')
-  const [drafts, setDrafts] = useState<Readonly<Record<string, ViewSpec>>>({})
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, ViewSpec>>(() => new Map())
   const [saveOpen, setSaveOpen] = useState(false)
   const [savingView, setSavingView] = useState(false)
   const [cleanupCount, setCleanupCount] = useState(0)
@@ -310,7 +312,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const activeId: ViewId = activeViewId === 'all' || activeViewId === 'needs-you' ? (activeViewId === 'needs-you' && viewsState.needsYouHidden ? 'all' : activeViewId) : activeView ? activeViewId : 'all'
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
-  const viewActivity = drafts[activeId]?.filter.activity ?? activeView?.spec.filter.activity ?? null
+  const viewActivity = drafts.get(activeId)?.filter.activity ?? activeView?.spec.filter.activity ?? null
   const activity = useSidebarActivity(context, selectedId, loaded, viewActivity)
   const loopStatus = useLoopStatus(context, worktrees, loaded)
   const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId
@@ -333,7 +335,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const baseSpec = activeView ? activeView.spec : allSpec
   const baseSpecRef = useRef(baseSpec)
   baseSpecRef.current = baseSpec
-  const draft = drafts[activeId]
+  const draft = drafts.get(activeId)
   const spec = draft ?? baseSpec
   const changed = draft !== undefined
   const alwaysShowPrimary = spec.filter.activity.alwaysShowDefaultBranchWorkspace
@@ -343,7 +345,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     setDrafts((previous) => {
       const id = activeIdRef.current
       const base = baseSpecRef.current
-      const edited = edit(previous[id] ?? base)
+      const edited = edit(previous.get(id) ?? base)
       const activity = edited.filter.activity
       const window = activity.workspaceActivityWindow
       const next: ViewSpec = {
@@ -357,9 +359,9 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
           }
         }
       }
-      const rest = { ...previous }
-      if (specKey(next) === specKey(base)) delete rest[id]
-      else rest[id] = next
+      const rest = new Map(previous)
+      if (specKey(next) === specKey(base)) rest.delete(id)
+      else rest.set(id, next)
       return rest
     })
   }, [])
@@ -372,8 +374,8 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const revertDraft = useCallback(() => {
     setRevealHidden(false)
     setDrafts((previous) => {
-      const rest = { ...previous }
-      delete rest[activeIdRef.current]
+      const rest = new Map(previous)
+      rest.delete(activeIdRef.current)
       return rest
     })
   }, [])
@@ -549,10 +551,23 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   }, [])
   useEffect(() => {
     let active = true
+    let retry: ReturnType<typeof setTimeout> | undefined
     const loadViews = () => {
+      clearTimeout(retry)
+      const failed = () => {
+        if (!active || viewsLoaded.current) return
+        retry = setTimeout(loadViews, VIEWS_RETRY_MS)
+      }
       void fetchViews(context).then((next) => {
-        if (active && next && Array.isArray(next.views)) setViewsState(next)
-      }).catch((error: unknown) => context.log(`could not load views: ${error instanceof Error ? error.message : String(error)}`))
+        if (!active) return
+        if (next && Array.isArray(next.views)) {
+          viewsLoaded.current = true
+          setViewsState(next)
+        } else failed()
+      }).catch((error: unknown) => {
+        context.log(`could not load views: ${error instanceof Error ? error.message : String(error)}`)
+        failed()
+      })
     }
     const loadActive = () => {
       const ticket = ++activeSeq.current
@@ -574,6 +589,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     })
     return () => {
       active = false
+      clearTimeout(retry)
       unsubscribe()
       stopConnection()
     }
@@ -614,11 +630,16 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
       }).catch(() => {})
     })
   }, [context, clearSelection])
+  const viewsReady = useCallback((): boolean => {
+    if (!viewsLoaded.current) context.toast('Views are still loading', 'Try again in a moment.')
+    return viewsLoaded.current
+  }, [context])
   const updateViews = useCallback(async (next: ViewsState): Promise<boolean> => {
+    if (!viewsReady()) return false
     const saved = await saveViews(context, next)
     if (saved) setViewsState(saved)
     return saved !== null
-  }, [context])
+  }, [context, viewsReady])
   const catalog = useMemo<FilterCatalog>(() => ({
     tags,
     sections: groups,
@@ -632,8 +653,8 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     const id = activeView.id
     const saved = await updateViews({ ...viewsState, views: viewsState.views.map((view) => (view.id === id ? { ...view, spec: draft } : view)) })
     if (saved) setDrafts((previous) => {
-      const rest = { ...previous }
-      delete rest[id]
+      const rest = new Map(previous)
+      rest.delete(id)
       return rest
     })
   }
@@ -646,29 +667,31 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     if (!saved) return
     setSaveOpen(false)
     setDrafts((previous) => {
-      const rest = { ...previous }
-      delete rest[origin]
+      const rest = new Map(previous)
+      rest.delete(origin)
       return rest
     })
     switchView(id)
   }
   const hideNeedsYou = (hidden: boolean) => {
+    if (!viewsReady()) return
     if (hidden && activeId === 'needs-you') switchView('all')
     void updateViews({ ...viewsState, needsYouHidden: hidden })
   }
   const starView = (id: string, starred: boolean) =>
     void updateViews({ ...viewsState, views: viewsState.views.map((view) => (view.id === id ? { ...view, starred } : view)) })
   const deleteView = (id: string) => {
+    if (!viewsReady()) return
     if (activeId === id) switchView('all')
     setDrafts((previous) => {
-      const rest = { ...previous }
-      delete rest[id]
+      const rest = new Map(previous)
+      rest.delete(id)
       return rest
     })
     void updateViews({ ...viewsState, views: viewsState.views.filter((view) => view.id !== id) })
   }
   const changeRowFact = (fact: RowFact) => void updateViews({ ...viewsState, rowFact: fact })
-  const changedIds = useMemo<ReadonlySet<ViewId>>(() => new Set(Object.keys(drafts)), [drafts])
+  const changedIds = useMemo<ReadonlySet<ViewId>>(() => new Set(drafts.keys()), [drafts])
 
   useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {

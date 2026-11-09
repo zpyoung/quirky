@@ -66,6 +66,7 @@ type World = {
   active: Map<number, ViewId>
   setActiveCalls: Array<{ window: number; viewId: string }>
   setViewsCalls: ViewsState[]
+  failViews: boolean
   cleanup: Array<{ worktreeId: string; name: string; fingerprint: string; reason: string; ignored: boolean; eligible: boolean; blockers: unknown[] }>
 }
 
@@ -84,6 +85,7 @@ function setup() {
     active: new Map(),
     setActiveCalls: [],
     setViewsCalls: [],
+    failViews: false,
     cleanup: []
   }
   const calls: Call[] = []
@@ -159,6 +161,7 @@ function setup() {
           return {}
         }
         case 'quirky.worktree/views':
+          if (world.failViews) throw new Error('views unavailable')
           return structuredClone(world.views)
         case 'quirky.worktree/setViews': {
           world.views = structuredClone(params.state as ViewsState)
@@ -513,6 +516,46 @@ test('SC-7: another window adding a view shows in this strip without moving this
   expect(norm(tab('view_b')?.textContent)).toBe('Elsewhere')
   expect(tab('view_b')?.getAttribute('aria-selected')).toBe('false')
   expect(tab('all')?.getAttribute('aria-selected')).toBe('true')
+})
+
+test('a failed first read of the views never overwrites the saved views, and the section loads them once the read works', async () => {
+  const h = setup()
+  const spec = allSpecFromStock(DEFAULT_STOCK_OPTIONS, DEFAULT_ACTIVITY_PREFERENCES)
+  h.world.views = { ...h.world.views, views: [{ id: 'view_keep', name: 'Keep me', starred: true, spec }] }
+  h.world.failViews = true
+  await h.mountInto(host)
+  expect(tab('view_keep')).toBeNull()
+
+  await chooseDisplay('Right side shows', 'Branch')
+  expect(h.world.setViewsCalls).toEqual([])
+  expect(h.world.views.views.map((view) => view.id)).toEqual(['view_keep'])
+
+  h.world.failViews = false
+  await h.emit('quirky.worktree/viewsChanged')
+  await settle()
+  expect(norm(tab('view_keep')?.textContent)).toBe('Keep me')
+  await chooseDisplay('Right side shows', 'Branch')
+  expect(h.world.setViewsCalls.at(-1)?.views.map((view) => view.id)).toEqual(['view_keep'])
+  expect(h.world.setViewsCalls.at(-1)?.rowFact).toBe('branch')
+})
+
+test('a view whose ID is an inherited object key opens, edits and reverts like any other view', async () => {
+  const h = setup()
+  const spec = allSpecFromStock(DEFAULT_STOCK_OPTIONS, DEFAULT_ACTIVITY_PREFERENCES)
+  h.world.views = { ...h.world.views, views: [{ id: 'toString', name: 'Odd id', starred: true, spec }] }
+  await h.mountInto(host)
+  expect(tab('all')?.getAttribute('aria-selected')).toBe('true')
+  await click(tab('toString'))
+  expect(tab('toString')?.getAttribute('aria-selected')).toBe('true')
+  expect(hasDot('toString')).toBe(false)
+  await chooseDisplay('Sort by', 'Name')
+  expect(hasDot('toString')).toBe(true)
+  await click(noticeAction(noticeWith('Changed:'), 'Save'))
+  expect(h.world.views.views[0]!.spec.display.sortBy).toBe('name')
+  expect(hasDot('toString')).toBe(false)
+  await click(tab('all'))
+  expect(tab('all')?.getAttribute('aria-selected')).toBe('true')
+  expect(hasDot('all')).toBe(false)
 })
 
 test('the view strip holds All, Needs you with its count, starred views, and a chevron menu listing every view', async () => {

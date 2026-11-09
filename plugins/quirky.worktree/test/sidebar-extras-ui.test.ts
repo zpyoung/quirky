@@ -44,6 +44,7 @@ type ProjectedWorkspace = {
   reason: 'selected' | 'all' | 'recent' | 'old' | 'live' | 'sleeping' | 'main' | 'folder' | 'unknown'
   error?: string
   reviewReason?: 'completed' | 'passing' | 'unknown'
+  checks?: 'pending' | 'success' | 'failure' | 'neutral' | null
   reviewError?: string
 }
 type SidebarProjection = SidebarState & {
@@ -95,6 +96,7 @@ type TestWorld = {
   extrasFailure: Error | null
   ledgerPreview: { ledgerId: string; revision: number; entryCount: number }[] | null
   ledgerPreviewFailure: Error | null
+  activeView: string
 }
 type UiHarness = {
   world: TestWorld
@@ -332,6 +334,7 @@ function setup(
     extrasFailure: options.failure ?? null,
     ledgerPreview: null,
     ledgerPreviewFailure: null,
+    activeView: 'all',
     calls: [],
     logs: []
   }
@@ -398,6 +401,7 @@ function setup(
         reason,
         ...(visible ? {} : { error: 'hidden' }),
         reviewReason,
+        checks: usable?.checksStatus ?? null,
         ...(review?.error ? { reviewError: review.error } : {})
       }
     })
@@ -643,6 +647,15 @@ function setup(
             ...(assigned ? {} : { reason: 'worktree identity or membership changed' })
           }
         }
+        case 'ui.window.self':
+          return { connId: 1 }
+        case 'quirky.worktree/views':
+          return { views: [], needsYouHidden: false, rowFact: 'last-activity' }
+        case 'quirky.worktree/activeView':
+          return { viewId: world.activeView }
+        case 'quirky.worktree/setActiveView':
+          world.activeView = String(params.viewId)
+          return {}
         case 'setting.set':
           return {}
         default:
@@ -1809,21 +1822,26 @@ test('review filters evaluate through the projection override, compose with acti
   expect(noSharedWrites(h)).toEqual([])
 })
 
-test('hosting review events refresh only active filters and late projections cannot restore stale visibility', async () => {
+test('hosting review events refresh the projection and late projections cannot restore stale visibility', async () => {
   const h = setup()
   h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
   h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
   await h.mount()
 
   const sectionCalls = () => h.calls.filter((call) => !call.fromBadge)
-  const offCalls = sectionCalls().length
-  const offReports = h.reports.length
+  const projectionCalls = () => sectionCalls().filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+  const offProjections = projectionCalls()
   await h.emit('quirky.hosting/changed')
+  await h.flush()
+  expect(projectionCalls()).toBeGreaterThan(offProjections)
+  const afterChanged = projectionCalls()
   await h.emit('quirky.hosting/refresh')
+  await h.flush()
+  expect(projectionCalls()).toBeGreaterThan(afterChanged)
+  const afterRefresh = projectionCalls()
   await h.emit('quirky.hosting/reviewCacheChanged')
   await h.flush()
-  expect(sectionCalls()).toHaveLength(offCalls)
-  expect(h.reports).toHaveLength(offReports)
+  expect(projectionCalls()).toBeGreaterThan(afterRefresh)
 
   await openFilter(h)
   await h.click(checkboxFor('Merged/closed reviews')!)
@@ -1849,6 +1867,26 @@ test('hosting review events refresh only active filters and late projections can
   expect(card('feature')).toBeUndefined()
   expect(lastReport(h).reviewHiddenIds).toContain('w-feature')
 })
+test('a review cache change with both review filters off updates who is in Needs you', async () => {
+  const h = setup()
+  h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
+  h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
+  await h.mount()
+  const needsYouTab = () => host.querySelector<HTMLElement>('[role="tab"][data-view-id="needs-you"]')
+  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(false)
+  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(false)
+  await h.click(needsYouTab()!)
+  expect(card('feature')).toBeDefined()
+  expect(card('other')).toBeUndefined()
+
+  h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'success' }
+  h.world.reviews['w-other'] = { state: 'open', checksStatus: 'failure' }
+  await h.emit('quirky.hosting/reviewCacheChanged')
+  await h.flush()
+  expect(card('feature')).toBeUndefined()
+  expect(card('other')).toBeDefined()
+})
+
 test('quiet activity aging refreshes at sixty seconds without store events', async () => {
   const h = setup()
   h.world.preferences.workspaceActivityWindow = 'today'

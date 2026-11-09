@@ -94,7 +94,21 @@ describe('views: the active view of each window', () => {
     expect(await activeView(w, 2)).toBe('needs-you')
     expect(await activeView(w, 3)).toBe('needs-you')
     await call(w.client, 'quirky.worktree/setActiveView', { window: 2, viewId: 'all' })
-    expect(await activeView(w, 3)).toBe('all')
+    expect(await activeView(w, 4)).toBe('all')
+  })
+
+  test('a window that never picked a view keeps the one it first read when another window switches', async () => {
+    const w = await start()
+    await setViews(w, { views: [saved('v1', 'One')], needsYouHidden: false, rowFact: 'pr' })
+    expect(await activeView(w, 2)).toBe('all')
+    await call(w.client, 'quirky.worktree/setActiveView', { window: 1, viewId: 'needs-you' })
+    expect(await activeView(w, 2)).toBe('all')
+    await call(w.client, 'quirky.worktree/setActiveView', { window: 1, viewId: 'v1' })
+    expect(await activeView(w, 2)).toBe('all')
+    expect(await activeView(w, 1)).toBe('v1')
+    expect(await activeView(w, 3)).toBe('v1')
+    await call(w.client, 'quirky.worktree/setActiveView', { window: 1, viewId: 'all' })
+    expect(await activeView(w, 3)).toBe('v1')
   })
 
   test('a deleted or hidden view resolves to All, and choosing an unknown view is refused', async () => {
