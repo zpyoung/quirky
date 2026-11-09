@@ -46,7 +46,16 @@ export const DEFAULT_PREFERENCES: Preferences = {
 }
 
 const nonLiveWindows: readonly NonLiveActivityWindow[] = ['all', 'today', 'week', 'month', 'custom']
-const READ_KEYS: Readonly<Partial<Record<string, true>>> = { client: true }
+const READ_KEYS: Readonly<Partial<Record<string, true>>> = { client: true, preferences: true }
+const PREFERENCE_KEYS: Readonly<Partial<Record<string, true>>> = {
+  workspaceActivityWindow: true,
+  workspaceActivityCustomDays: true,
+  alwaysShowDefaultBranchWorkspace: true,
+  workspaceActivityWindowBeforeLiveOnly: true,
+  hideCompletedReviewWorkspaces: true,
+  hidePassingCheckWorkspaces: true,
+  hideAutomationCreated: true
+}
 const SET_KEYS: Readonly<Partial<Record<string, true>>> = {
   client: true,
   workspaceActivityWindow: true,
@@ -97,9 +106,50 @@ export function clientFrom(params: Record<string, unknown>, context: PluginConte
   return client
 }
 
-export function validateReadParams(params: Record<string, unknown>, context: PluginContext): string {
+export function validateReadParams(
+  params: Record<string, unknown>,
+  context: PluginContext
+): { client: string; preferences?: Preferences } {
   checkKeys(params, READ_KEYS, context)
-  return clientFrom(params, context)
+  const client = clientFrom(params, context)
+  if (params.preferences === undefined) return { client }
+  return { client, preferences: validatePreferences(params.preferences, context) }
+}
+
+function validatePreferences(value: unknown, context: PluginContext): Preferences {
+  if (!isPlainRecord(value)) invalid(context, 'preferences must be an object')
+  const extra = Object.keys(value).find((key) => PREFERENCE_KEYS[key] !== true)
+  if (extra !== undefined) invalid(context, `unknown preference "${extra}"`)
+  if (!isActivityWindow(value.workspaceActivityWindow)) {
+    invalid(context, `preferences.workspaceActivityWindow must be one of ${ACTIVITY_WINDOWS.join(', ')}`)
+  }
+  if (!isPositiveSafeInteger(value.workspaceActivityCustomDays)) {
+    invalid(context, 'preferences.workspaceActivityCustomDays must be a positive safe integer')
+  }
+  if (typeof value.alwaysShowDefaultBranchWorkspace !== 'boolean') {
+    invalid(context, 'preferences.alwaysShowDefaultBranchWorkspace must be a boolean')
+  }
+  if (!isNonLiveWindow(value.workspaceActivityWindowBeforeLiveOnly)) {
+    invalid(context, `preferences.workspaceActivityWindowBeforeLiveOnly must be one of ${nonLiveWindows.join(', ')}`)
+  }
+  if (typeof value.hideCompletedReviewWorkspaces !== 'boolean') {
+    invalid(context, 'preferences.hideCompletedReviewWorkspaces must be a boolean')
+  }
+  if (typeof value.hidePassingCheckWorkspaces !== 'boolean') {
+    invalid(context, 'preferences.hidePassingCheckWorkspaces must be a boolean')
+  }
+  if (typeof value.hideAutomationCreated !== 'boolean') {
+    invalid(context, 'preferences.hideAutomationCreated must be a boolean')
+  }
+  return {
+    workspaceActivityWindow: value.workspaceActivityWindow,
+    workspaceActivityCustomDays: value.workspaceActivityCustomDays,
+    alwaysShowDefaultBranchWorkspace: value.alwaysShowDefaultBranchWorkspace,
+    workspaceActivityWindowBeforeLiveOnly: value.workspaceActivityWindowBeforeLiveOnly,
+    hideCompletedReviewWorkspaces: value.hideCompletedReviewWorkspaces,
+    hidePassingCheckWorkspaces: value.hidePassingCheckWorkspaces,
+    hideAutomationCreated: value.hideAutomationCreated
+  }
 }
 
 export function validateSetParams(
