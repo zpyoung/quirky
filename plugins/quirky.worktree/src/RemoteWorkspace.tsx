@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { UiPluginContext, Worktree } from '@quirky/protocol'
+import { Button, ListRow, SectionHeader, SelectField, StatusDot, TextField } from '@quirky/ui'
 import type { RemoteCleanupPreview, RemoteWorkspaceMirror } from './remote-types'
 import { isRecord } from './loop-status'
 import { recordOf } from './values'
@@ -15,12 +16,6 @@ type Diff = { path: string; original: string; modified: string; binary: boolean;
 type ReadScreen = { lines: string[]; cols: number; rows: number; alt: boolean }
 type HostStatus = { id: string; runtime: { id: string; name: string; endpoint: string; grantId: string }; identity: { hostId: string; generation: string }; connected: boolean; error: string | null }
 type Preview = RemoteCleanupPreview
-
-const bodyStyle: CSSProperties = { display: 'grid', gap: 'var(--ui-space-16)', padding: 'var(--ui-space-16)', maxWidth: 'var(--ui-dialog-wide-width)', margin: '0 auto' }
-const cardStyle: CSSProperties = { border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-16)' }
-const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }
-const buttonStyle: CSSProperties = { cursor: 'pointer' }
-const monoStyle: CSSProperties = { fontFamily: 'var(--ui-font-mono)', overflowWrap: 'anywhere' }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -353,111 +348,114 @@ export function RemoteWorkspace({ context, workspace }: Props) {
   const disabled = busy || loading || !connected
 
   return (
-    <main aria-label="Remote workspace" style={bodyStyle}>
-      <header style={{ ...cardStyle, ...rowStyle, justifyContent: 'space-between' }}>
-        <div>
-          <h1 style={{ margin: 0 }}>{mirror?.worktree.name ?? 'Remote workspace'}</h1>
-          <div style={{ opacity: 0.8, marginTop: 'var(--ui-space-4)' }}>
+    <main aria-label="Remote workspace" className="remote-workspace">
+      <header className="remote-workspace__header">
+        <div className="remote-workspace__identity">
+          <h1 className="remote-workspace__title">{mirror?.worktree.name ?? 'Remote workspace'}</h1>
+          <div className="ui-text-muted">
             {host ? `${host.runtime.name} · ${host.identity.hostId} · generation ${host.identity.generation}` : 'Checking owner identity…'}
           </div>
         </div>
-        <div style={rowStyle}>
-          <span role="status" aria-live="polite">{connected ? 'Connected' : 'Unavailable'}</span>
-          <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void refresh() }}>Refresh Remote Data</button>
+        <div className="ui-cluster">
+          <span className="remote-workspace__state" role="status" aria-live="polite">
+            <StatusDot status={connected ? 'working' : 'needs-you'} />
+            {connected ? 'Connected' : 'Unavailable'}
+          </span>
+          <Button disabled={busy} onClick={() => { void refresh() }}>Refresh Remote Data</Button>
         </div>
       </header>
 
-      {error && <div role="alert" style={cardStyle}>{error}</div>}
-      {notice && <div role="status" style={cardStyle}>{notice}</div>}
-      {loading && <div role="status">Loading the owner-bound workspace…</div>}
+      {error && <p className="ui-error-text" role="alert">{error}</p>}
+      {notice && <p className="ui-text-muted" role="status">{notice}</p>}
+      {loading && <p className="ui-text-muted" role="status">Loading the owner-bound workspace…</p>}
 
       {mirror && (
-        <section aria-label="Remote workspace details" style={cardStyle}>
-          <h2>Remote workspace details</h2>
-          <dl style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: 'var(--ui-space-6) var(--ui-space-16)', margin: 0 }}>
-            <dt>Host</dt><dd style={monoStyle}>{mirror.hostId}</dd>
+        <section aria-label="Remote workspace details" className="remote-workspace__section">
+          <SectionHeader title="Remote workspace details" />
+          <dl className="remote-details">
+            <dt>Host</dt><dd className="ui-text-mono">{mirror.hostId}</dd>
             <dt>Project</dt><dd>{mirror.worktree.repoId}</dd>
-            <dt>Remote path</dt><dd style={monoStyle}>{mirror.worktree.path}</dd>
+            <dt>Remote path</dt><dd className="ui-text-mono">{mirror.worktree.path}</dd>
             <dt>Branch</dt><dd>{mirror.worktree.kind === 'folder' ? 'Not applicable' : mirror.worktree.branch ?? 'Detached'}</dd>
-            <dt>HEAD</dt><dd style={monoStyle}>{mirror.worktree.kind === 'folder' ? 'Not applicable' : mirror.worktree.head}</dd>
-            <dt>Instance</dt><dd style={monoStyle}>{mirror.worktree.instanceId}</dd>
+            <dt>HEAD</dt><dd className="ui-text-mono">{mirror.worktree.kind === 'folder' ? 'Not applicable' : mirror.worktree.head}</dd>
+            <dt>Instance</dt><dd className="ui-text-mono">{mirror.worktree.instanceId}</dd>
           </dl>
-          {!mirror.connected && <p role="status">This is a saved snapshot only; remote reads and actions are blocked until the exact owner and instance are available.</p>}
-          <div style={{ ...rowStyle, marginTop: 'var(--ui-space-12)' }}>
-            <button type="button" disabled={disabled} style={buttonStyle} onClick={() => { void removeWorkspace() }}>Remove Remote Workspace…</button>
-            <button type="button" disabled={disabled} style={buttonStyle} onClick={() => { void previewCleanup() }}>Preview Canonical Cleanup</button>
+          {!mirror.connected && <p className="ui-text-muted" role="status">This is a saved snapshot only; remote reads and actions are blocked until the exact owner and instance are available.</p>}
+          <div className="ui-cluster">
+            <Button variant="destructive" disabled={disabled} onClick={() => { void removeWorkspace() }}>Remove Remote Workspace…</Button>
+            <Button disabled={disabled} onClick={() => { void previewCleanup() }}>Preview Canonical Cleanup</Button>
           </div>
         </section>
       )}
 
-      <section aria-label="Remote changes" style={cardStyle}>
-        <h2>Changes</h2>
-        {mirror?.worktree.kind === 'folder' ? <p>Folder workspaces do not have Git changes.</p> : <>
-        <div style={{ opacity: 0.8, marginBottom: 'var(--ui-space-8)' }}>Branch: {status?.branch ?? mirror?.worktree.branch ?? 'Unknown'} · Operation: {status?.operation ?? (connected ? 'unknown' : 'unavailable')}</div>
-        {files.length === 0 ? <p>{connected ? 'No changed files were reported.' : 'Remote changes are unavailable.'}</p> : (
-          <ul>{files.map((change) => (
-            <li key={changeKey(change)}>
-              <button type="button" style={{ ...buttonStyle, ...monoStyle }} disabled={disabled} onClick={() => { void showDiff(change) }}>
-                {change.path}
-              </button>
-              {change.area ? ` · ${change.area}` : ''}{change.status ? ` · ${change.status}` : ''}
-            </li>
-          ))}</ul>
-        )}
-        {diff && (
-          <div aria-label={`Diff for ${diff.path}`} style={{ marginTop: 'var(--ui-space-12)' }}>
-            <h3 style={monoStyle}>{diff.path}{diff.binary ? ' (binary)' : ''}</h3>
-            {!diff.binary && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--ui-space-8)' }}>
-              <pre style={{ ...cardStyle, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{diff.original}</pre>
-              <pre style={{ ...cardStyle, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{diff.modified}</pre>
-            </div>}
-          </div>
-        )}
+      <section aria-label="Remote changes" className="remote-workspace__section">
+        <SectionHeader title="Changes" />
+        {mirror?.worktree.kind === 'folder' ? <p className="ui-text-muted">Folder workspaces do not have Git changes.</p> : <>
+          <div className="ui-text-muted">Branch: {status?.branch ?? mirror?.worktree.branch ?? 'Unknown'} · Operation: {status?.operation ?? (connected ? 'unknown' : 'unavailable')}</div>
+          {files.length === 0 ? <p className="ui-text-muted">{connected ? 'No changed files were reported.' : 'Remote changes are unavailable.'}</p> : (
+            <ul className="remote-changes">{files.map((change) => (
+              <li key={changeKey(change)}>
+                <ListRow
+                  compact
+                  title={<span className="ui-text-mono">{change.path}</span>}
+                  trailing={<span className="remote-fact">{[change.area, change.status].filter(Boolean).join(' · ')}</span>}
+                  disabled={disabled}
+                  onClick={() => { void showDiff(change) }}
+                />
+              </li>
+            ))}</ul>
+          )}
+          {diff && (
+            <div aria-label={`Diff for ${diff.path}`} className="remote-diff">
+              <h3 className="remote-diff__path ui-text-mono">{diff.path}{diff.binary ? ' (binary)' : ''}</h3>
+              {!diff.binary && <div className="remote-diff__panes">
+                <pre className="remote-pre">{diff.original}</pre>
+                <pre className="remote-pre">{diff.modified}</pre>
+              </div>}
+            </div>
+          )}
         </>}
       </section>
 
-      <section aria-label="Remote terminal controls" style={cardStyle}>
-        <h2>Remote terminal</h2>
-        <div style={rowStyle}>
-          <label>
-            Session{' '}
-            <select value={selectedSession} onChange={(event) => setSelectedSession(event.currentTarget.value)} disabled={disabled}>
-              {sessions.map((session) => <option key={session.id} value={session.id}>{session.title ?? session.agent ?? session.id} · {session.status ?? 'unknown'}</option>)}
-            </select>
-          </label>
-          <button type="button" disabled={disabled} style={buttonStyle} onClick={() => { void createSession() }}>New Remote Shell</button>
-          <button type="button" disabled={disabled || !selectedSession} style={buttonStyle} onClick={() => { void readTerminal() }}>Read Screen</button>
+      <section aria-label="Remote terminal controls" className="remote-workspace__section">
+        <SectionHeader title="Remote terminal" />
+        <div className="ui-cluster remote-terminal__controls">
+          <SelectField label="Session" value={selectedSession} onChange={(event) => setSelectedSession(event.currentTarget.value)} disabled={disabled}>
+            {sessions.map((session) => <option key={session.id} value={session.id}>{session.title ?? session.agent ?? session.id} · {session.status ?? 'unknown'}</option>)}
+          </SelectField>
+          <Button disabled={disabled} onClick={() => { void createSession() }}>New Remote Shell</Button>
+          <Button disabled={disabled || !selectedSession} onClick={() => { void readTerminal() }}>Read Screen</Button>
         </div>
-        <form onSubmit={(event) => { void writeTerminal(event) }} style={{ ...rowStyle, marginTop: 'var(--ui-space-12)' }}>
-          <label htmlFor="remote-terminal-input">Send input to selected remote session</label>
-          <input
-            id="remote-terminal-input"
+        <form className="remote-terminal__input" onSubmit={(event) => { void writeTerminal(event) }}>
+          <TextField
+            label="Send input to selected remote session"
             value={terminalInput}
             onChange={(event) => setTerminalInput(event.currentTarget.value)}
             disabled={disabled || !selectedSession}
-            style={{ flex: '1 1 var(--ui-form-column-width)' }}
           />
-          <button type="submit" disabled={disabled || !selectedSession || terminalInput.length === 0} style={buttonStyle}>Send</button>
+          <Button type="submit" disabled={disabled || !selectedSession || terminalInput.length === 0}>Send</Button>
         </form>
         {screen && (
-          <pre aria-label="Remote terminal screen" style={{ ...cardStyle, ...monoStyle, overflow: 'auto', whiteSpace: 'pre', maxHeight: '45vh' }}>
+          <pre aria-label="Remote terminal screen" className="remote-pre remote-pre--screen">
             {screen.lines.join('\n')}
           </pre>
         )}
-        {!selectedSession && <p>No remote terminal session is attached to this workspace.</p>}
+        {!selectedSession && <p className="ui-text-muted">No remote terminal session is attached to this workspace.</p>}
       </section>
 
       {cleanup && (
-        <section aria-label="Canonical cleanup preview" style={cardStyle}>
-          <h2>Canonical cleanup preview</h2>
-          <p>Owner generation: {cleanup.identity.generation} · filesystem instance: <span style={monoStyle}>{cleanup.instanceId}</span></p>
-          {!cleanup.candidate ? <p>No canonical cleanup suggestion exists for this workspace.</p> : (
+        <section aria-label="Canonical cleanup preview" className="remote-workspace__section">
+          <SectionHeader title="Canonical cleanup preview" />
+          <p>Owner generation: {cleanup.identity.generation} · filesystem instance: <span className="ui-text-mono">{cleanup.instanceId}</span></p>
+          {!cleanup.candidate ? <p className="ui-text-muted">No canonical cleanup suggestion exists for this workspace.</p> : (
             <>
               <p>{cleanup.candidate.reason} · {cleanup.candidate.eligible ? 'eligible' : 'blocked'}</p>
-              {cleanup.candidate.blockers.length > 0 && <ul>{cleanup.candidate.blockers.map((blocker, index) => <li key={`${blocker.code}:${index}`}>{blocker.detail}</li>)}</ul>}
-              <button type="button" disabled={disabled || !cleanup.candidate.eligible} style={buttonStyle} onClick={() => { void removeCleanup() }}>
-                Remove Canonical Cleanup Suggestion…
-              </button>
+              {cleanup.candidate.blockers.length > 0 && <ul className="remote-blockers">{cleanup.candidate.blockers.map((blocker, index) => <li key={`${blocker.code}:${index}`}>{blocker.detail}</li>)}</ul>}
+              <div className="ui-cluster">
+                <Button variant="destructive" disabled={disabled || !cleanup.candidate.eligible} onClick={() => { void removeCleanup() }}>
+                  Remove Canonical Cleanup Suggestion…
+                </Button>
+              </div>
             </>
           )}
         </section>
