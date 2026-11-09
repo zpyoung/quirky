@@ -995,7 +995,7 @@ test('project menu opens its ledger and moves projects through the shared action
   }])
 
   await click(actions)
-  await click(itemNamed('Move to Group'))
+  await click(itemNamed('Move to section'))
   await click(itemNamed('services'))
   expect(h.callsTo('quirky.repo/groupAdd')).toEqual([{ group: 'g1', repo: 'r1' }])
 })

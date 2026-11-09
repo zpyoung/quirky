@@ -88,6 +88,7 @@ async function mount(options: {
   selectedId?: string | null
   props?: Partial<TreeProps>
   stock?: Partial<typeof DEFAULT_STOCK_OPTIONS>
+  display?: 'tag'
 }): Promise<Spy> {
   const spy: Spy = { opened: [], toggles: [], renames: [], dialogs: [], deletes: [], tagsOpened: [], collapsed: [] }
   const repos = options.repos ?? [REPO]
@@ -95,12 +96,13 @@ async function mount(options: {
   const groups = options.groups ?? []
   host = document.createElement('div')
   document.body.append(host)
+  const baseSpec = allSpecFromStock({ ...DEFAULT_STOCK_OPTIONS, ...options.stock }, DEFAULT_ACTIVITY_PREFERENCES)
   const model = buildTree({
     worktrees: options.worktrees,
     repos,
     groups,
     tags,
-    spec: allSpecFromStock({ ...DEFAULT_STOCK_OPTIONS, ...options.stock }, DEFAULT_ACTIVITY_PREFERENCES),
+    spec: options.display ? { ...baseSpec, display: { ...baseSpec.display, groupBy: options.display } } : baseSpec,
     viewId: 'all',
     projection: null,
     marks: new Map(Object.entries(options.marks ?? {})),
@@ -234,6 +236,25 @@ test('a worktree moved into a section shows its project as the fact', async () =
   await mount({ worktrees: [worktree('a', 'alpha', { projectGroupId: 'g1' })], groups: [section] })
   expect(rowOf('a').querySelector('.worktree-fact')?.textContent).toBe('QuirkyApp')
 })
+
+for (const groupBy of ['status', 'pr', 'tag', 'none'] as const) {
+  test(`grouping by ${groupBy} shows each worktree's project as its fact`, async () => {
+    const other: Repo = { ...REPO, id: 'r2', name: 'HarborApi', path: '/repo/HarborApi' }
+    const tags = [tag('t1', 'infra')]
+    await mount({
+      worktrees: [
+        worktree('a', 'main', { tagIds: ['t1'] }),
+        worktree('b', 'main', { repoId: 'r2', tagIds: ['t1'] })
+      ],
+      repos: [REPO, other],
+      tags,
+      stock: groupBy === 'tag' ? undefined : { groupBy },
+      display: groupBy === 'tag' ? 'tag' : undefined
+    })
+    expect(rowOf('a').querySelector('.worktree-fact')?.textContent).toBe('QuirkyApp')
+    expect(rowOf('b').querySelector('.worktree-fact')?.textContent).toBe('HarborApi')
+  })
+}
 
 test('an unread worktree carries a small accent dot', async () => {
   await mount({ worktrees: [worktree('a', 'alpha', { unread: true }), worktree('b', 'beta')] })
