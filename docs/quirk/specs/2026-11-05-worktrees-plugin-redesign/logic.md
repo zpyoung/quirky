@@ -1,6 +1,6 @@
 # Worktrees redesign
 
-**Status:** Approved
+**Status:** Approved. Tech spec: authored ([tech.md](tech.md)), tier gate fired (more than 3 files, crosses subsystems).
 
 This redesign makes the Worktrees sidebar answer one question at a glance: which worktree needs me? It also adds the organizing tools the walk found missing: tags, cross-project sections, saved views, and a fast way back to All. The input was the walk in [current-state.md](current-state.md) and the clickable mock in [mock/mock.html](mock/mock.html), which was approved on v1 with all 17 screens visited.
 
