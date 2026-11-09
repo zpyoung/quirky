@@ -14,6 +14,7 @@
 @import './tasks-detail.css';
 @import './automations.css';
 @import './worktree-tree.css';
+@import './worktree-primitives.css';
 @import './git-rows.css';
 @import './git-panel.css';
 @import './git-review.css';
