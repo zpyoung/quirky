@@ -1,5 +1,18 @@
 import { describe, expect, test } from 'bun:test'
-import type { UiToolEntry, UiToolLayout } from '@quirky/protocol'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import {
+  DEFAULT_THEME,
+  PLUGIN_API_VERSION,
+  type UiModel,
+  type UiPluginContext,
+  type UiSlotEntry,
+  type UiToolEntry,
+  type UiToolLayout
+} from '@quirky/protocol'
+import { freshToolLayout, projectTools } from '../../daemon/src/plugins/tool-layout'
+import { Badge } from '../src/design-system'
+import { WindowPluginHost } from '../src/plugins/host'
 import {
   clampToolResize,
   effectiveToolPlacement,
@@ -7,6 +20,7 @@ import {
   formatChord,
   getToolShellOpenSlots,
   hideTrailingTools,
+  toolBadge,
   toolShortcut,
   resolveToolDropId,
   resizeFromPointerDelta,
@@ -258,5 +272,156 @@ describe('tool shell geometry and gestures', () => {
       expect(toolShortcut(changes, [binding('panel:acme/changes', 'mod+k', 'shadowed')])).toBeNull()
       expect(toolShortcut(changes, [])).toBeNull()
     })
+  })
+})
+
+
+describe('rail badge tone', () => {
+  const worktrees: UiToolEntry = {
+    ...tool('tool:worktrees', 'left-top'),
+    aliases: ['sidebar-section:acme.wt/worktrees', 'panel:acme.wt/other']
+  }
+
+  test('a badge without a tone is needs-you', () => {
+    expect(toolBadge(worktrees, { 'sidebar-section:acme.wt/worktrees': 2 }, {}, {}, null)).toEqual({
+      count: 2,
+      title: '2 waiting',
+      tone: 'needs-you'
+    })
+  })
+
+  test('failing wins across aliases and renders the failing badge', () => {
+    const badge = toolBadge(
+      worktrees,
+      { 'sidebar-section:acme.wt/worktrees': 2, 'panel:acme.wt/other': 1 },
+      { 'sidebar-section:acme.wt/worktrees': '2 worktrees need you' },
+      { 'sidebar-section:acme.wt/worktrees': 'needs-you', 'panel:acme.wt/other': 'failing' },
+      null
+    )
+    expect(badge).toEqual({ count: 3, title: '2 worktrees need you', tone: 'failing' })
+    const html = renderToStaticMarkup(createElement(Badge, { tone: badge!.tone, label: badge!.title, children: badge!.count }))
+    expect(html).toContain('ui-badge--failing')
+    expect(html).not.toContain('ui-badge--needs-you')
+  })
+
+  test('the inbox badge stays needs-you and no count means no badge', () => {
+    expect(toolBadge({ ...tool('host:inbox', 'left-top') }, {}, {}, { 'host:inbox': 'failing' }, 4)).toEqual({
+      count: 4,
+      title: '4 waiting',
+      tone: 'needs-you'
+    })
+    expect(toolBadge(worktrees, {}, {}, {}, null)).toBeNull()
+  })
+})
+
+describe('setPanelBadge on sidebar sections', () => {
+  const entry = (kind: UiSlotEntry['kind'], plugin: string, name: string): UiSlotEntry => ({
+    id: `${kind}:${plugin}/${name}`,
+    kind,
+    plugin,
+    title: name,
+    order: 100,
+    module: `/plugins/${plugin}/ui.js`
+  })
+  const OWN = 'sidebar-section:acme.wt/worktrees'
+  const OTHER_PLUGIN = 'sidebar-section:acme.other/list'
+  const PANEL = 'panel:acme.wt/side'
+
+  async function booted() {
+    const model: UiModel = {
+      sidebarSections: [entry('sidebar-section', 'acme.wt', 'worktrees'), entry('sidebar-section', 'acme.other', 'list')],
+      activityItems: [],
+      statusBars: [],
+      panels: [entry('panel', 'acme.wt', 'side')],
+      settingsSections: [],
+      views: [],
+      overlays: [],
+      commands: [{ id: 'command:acme.wt/go', plugin: 'acme.wt', title: 'go', module: '/plugins/acme.wt/ui.js' }],
+      keybindings: [],
+      settings: [],
+      menuItems: [],
+      themes: [DEFAULT_THEME],
+      theme: { chosen: 'default', active: 'default' },
+      modules: {
+        'acme.wt': {
+          url: '/plugins/acme.wt/ui.js',
+          provides: [OWN, PANEL, 'command:acme.wt/go'],
+          apiVersion: PLUGIN_API_VERSION
+        },
+        'acme.other': { url: '/plugins/acme.other/ui.js', provides: [OTHER_PLUGIN], apiVersion: PLUGIN_API_VERSION }
+      }
+    }
+    model.tools = projectTools(model)
+    let context!: UiPluginContext
+    const host = new WindowPluginHost({
+      call: async (method, params) => {
+        switch (method) {
+          case 'ui.contributions':
+            return model
+          case 'ui.window.self':
+            return { connId: 1 }
+          case 'ui.window.state':
+            return {
+              connId: Number(params.connId),
+              windows: [],
+              layout: { view: null, panel: null, sidebar: true, focus: null, tools: freshToolLayout(model.tools ?? []) },
+              slots: [],
+              toasts: []
+            }
+          case 'ui.window.focused':
+          case 'ui.command.reply':
+            return { ok: true }
+          case 'setting.list':
+            return []
+          default:
+            throw new Error(`unknown method ${method}`)
+        }
+      },
+      onEvent: () => () => {},
+      importModule: async () => ({
+        activate(ctx: UiPluginContext) {
+          if (ctx.pluginId !== 'acme.wt') return
+          context = ctx
+          ctx.provide('command:acme.wt/go', () => {})
+        }
+      }),
+      onStream: () => () => {},
+      onConnection: () => () => {},
+      confirm: async () => true,
+      toast: () => {},
+      log: () => {}
+    })
+    await host.refresh()
+    await host.runCommand('command:acme.wt/go')
+    return { host, context }
+  }
+
+  test("a sidebar-section of the calling plugin takes a count, title and tone, and null clears all three", async () => {
+    const { host, context } = await booted()
+    context.setPanelBadge(OWN, 3, '3 worktrees need you, 1 errored', 'failing')
+    expect(host.getState().badges).toEqual({ [OWN]: 3 })
+    expect(host.getState().badgeTitles).toEqual({ [OWN]: '3 worktrees need you, 1 errored' })
+    expect(host.getState().badgeTones).toEqual({ [OWN]: 'failing' })
+    context.setPanelBadge(OWN, 3, '3 worktrees need you')
+    expect(host.getState().badgeTones).toEqual({ [OWN]: 'needs-you' })
+    context.setPanelBadge(OWN, null)
+    expect(host.getState().badges).toEqual({})
+    expect(host.getState().badgeTones).toEqual({})
+  })
+
+  test('a section badge survives a refresh and a panel badge keeps its tone', async () => {
+    const { host, context } = await booted()
+    context.setPanelBadge(OWN, 1, undefined, 'failing')
+    context.setPanelBadge(PANEL, 2)
+    await host.refresh()
+    expect(host.getState().badges).toEqual({ [OWN]: 1, [PANEL]: 2 })
+    expect(host.getState().badgeTones).toEqual({ [OWN]: 'failing', [PANEL]: 'needs-you' })
+  })
+
+  test('a sidebar-section of another plugin, or no contribution, still throws', async () => {
+    const { host, context } = await booted()
+    expect(() => context.setPanelBadge(OTHER_PLUGIN, 1)).toThrow(`${OTHER_PLUGIN} is not a panel of acme.wt`)
+    expect(() => context.setPanelBadge('sidebar-section:acme.wt/missing', 1)).toThrow('is not a panel of')
+    expect(host.getState().badges).toEqual({})
   })
 })
