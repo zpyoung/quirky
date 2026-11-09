@@ -179,9 +179,9 @@ function windowOf(env: ViewsEnv, value: unknown): number {
 }
 
 /**
- * Which view each window shows. A window's choice lives only as long as its connection, because
- * connection IDs are reused after a reload; the last choice is stored and is where a window with
- * no choice of its own starts.
+ * Which view each window shows. A window's view lives only as long as its connection, because
+ * connection IDs are reused after a reload; the last choice is stored and only seeds the view of a
+ * window that has none yet, so one window switching never moves another.
  */
 export class ActiveViews {
   private readonly byWindow = new Map<number, ViewId>()
@@ -189,12 +189,16 @@ export class ActiveViews {
 
   constructor(private readonly env: ViewsEnv) {}
 
-  /** The window's view, or All when that view no longer exists. */
-  get(windowParam: unknown): ViewId {
+  /** The window's view, or All when that view no longer exists. A window's first answer sticks to it. */
+  get(windowParam: unknown, connection?: CallerConnection): ViewId {
     const window = windowOf(this.env, windowParam)
     const state = readViews(this.env.store)
-    const last = stored(this.env.store, LAST_VIEW_KEY)
-    const viewId = this.byWindow.get(window) ?? (typeof last === 'string' ? last : 'all')
+    let viewId = this.byWindow.get(window)
+    if (viewId === undefined) {
+      const last = stored(this.env.store, LAST_VIEW_KEY)
+      viewId = typeof last === 'string' && exists(state, last) ? last : 'all'
+      this.remember(window, viewId, connection)
+    }
     return exists(state, viewId) ? viewId : 'all'
   }
 
@@ -203,15 +207,18 @@ export class ActiveViews {
     if (typeof viewId !== 'string' || !exists(readViews(this.env.store), viewId)) {
       throw this.env.fail('invalid-params', 'viewId must be all, needs-you (unless hidden) or the ID of a saved view')
     }
-    this.byWindow.set(window, viewId)
     put(this.env.store, LAST_VIEW_KEY, viewId)
-    if (connection) {
-      this.releases.get(window)?.()
-      this.releases.set(window, connection.onClose(() => {
-        this.byWindow.delete(window)
-        this.releases.delete(window)
-      }))
-    }
+    this.remember(window, viewId, connection)
+  }
+
+  private remember(window: number, viewId: ViewId, connection?: CallerConnection): void {
+    this.byWindow.set(window, viewId)
+    if (!connection) return
+    this.releases.get(window)?.()
+    this.releases.set(window, connection.onClose(() => {
+      this.byWindow.delete(window)
+      this.releases.delete(window)
+    }))
   }
 
   dispose(): void {

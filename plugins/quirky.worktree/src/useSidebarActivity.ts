@@ -90,7 +90,6 @@ export function useSidebarActivity(
   const storedRef = useRef<ActivityPreferences | null>(null)
   const overrideRef = useRef(override)
   const requestedKey = useRef<string | null>(null)
-  const reviewFiltersActive = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const statusRef = useRef<ActivityStatus>('loading')
   const selectedRef = useRef(selectedWorktree)
@@ -106,10 +105,6 @@ export function useSidebarActivity(
   selectedRef.current = selectedWorktree
   loadedRef.current = loaded
   overrideRef.current = override
-  if (projection) {
-    reviewFiltersActive.current =
-      projection.preferences.hideCompletedReviewWorkspaces || projection.preferences.hidePassingCheckWorkspaces
-  }
 
   const effectiveOverride = useCallback((): ActivityPreferences | null => {
     const wanted = overrideRef.current
@@ -222,7 +217,6 @@ export function useSidebarActivity(
   useEffect(() => {
     const unsubscribe = context.subscribe((event) => {
       if (!isRefreshEvent(event.type)) return
-      if (isHostingReviewEvent(event.type) && !reviewFiltersActive.current) return
       if (event.type === 'plugin.changed') {
         stateLoaded.current = false
         setProjection(null)
