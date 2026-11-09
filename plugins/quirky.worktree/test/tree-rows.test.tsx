@@ -311,6 +311,37 @@ test('headers fold, and carry an always-visible plus and menu button', async () 
   expect(project.querySelector('[data-worktree-id="a"]')).not.toBeNull()
 })
 
+const nestedSections = (parentCollapsed: boolean) => {
+  const parent: ProjectGroup = { id: 'g1', name: 'Release', parentPath: null, collapsed: parentCollapsed, order: 0, createdFrom: 'manual', repoIds: [], parentId: null }
+  const child: ProjectGroup = { id: 'g2', name: 'Hotfixes', parentPath: null, collapsed: false, order: 1, createdFrom: 'manual', repoIds: ['r2'], parentId: 'g1' }
+  const repo: Repo = { ...REPO, id: 'r2', name: 'Hotfix', path: '/repo/Hotfix', groupId: 'g2' }
+  const hotfix = worktree('h', 'hotfix', { repoId: 'r2', path: '/repo/Hotfix/h' })
+  return { groups: [parent, child], repos: [REPO, repo], worktrees: [worktree('a', 'alpha'), hotfix], marks: { h: 'waiting' } as Record<string, ActivityMarkState> }
+}
+
+test('a section with a parent section draws inside the parent block, indented one level', async () => {
+  await mount(nestedSections(false))
+  const blocks = [...host.querySelectorAll<HTMLElement>('section.group')]
+  expect(blocks).toHaveLength(2)
+  const parentBlock = host.querySelector<HTMLElement>('[data-top-level-section="group:g1"]')!
+  const childBlock = blocks.find((block) => block !== parentBlock)!
+  expect(parentBlock.contains(childBlock)).toBe(true)
+  expect(host.querySelector('[data-top-level-section="group:g2"]')).toBeNull()
+  expect(childBlock.style.getPropertyValue('--depth')).toBe('1')
+  expect(childBlock.querySelector(':scope > header .project-name')?.textContent).toBe('Hotfixes')
+  expect(childBlock.querySelector('[data-worktree-id="h"]')).not.toBeNull()
+})
+
+test('folding a parent section hides its nested sections and keeps their attention on its header', async () => {
+  await mount(nestedSections(true))
+  const parentBlock = host.querySelector<HTMLElement>('[data-top-level-section="group:g1"]')!
+  expect(parentBlock.querySelector('section.group')).toBeNull()
+  expect(rowOf('h')).toBeNull()
+  const attention = parentBlock.querySelector<HTMLElement>(':scope > header .worktree-attention')!
+  expect(attention.textContent).toBe('1')
+  expect(attention.dataset.attention).toBe('waiting')
+})
+
 test('selection tints the row, and Cmd, Ctrl and Shift clicks ask for a multi-selection', async () => {
   const spy = await mount({ worktrees: [worktree('a', 'alpha'), worktree('b', 'beta')], selectedId: 'a' })
   expect(rowOf('a').classList.contains('selected')).toBe(true)
