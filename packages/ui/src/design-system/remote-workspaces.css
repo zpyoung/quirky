@@ -1,5 +1,6 @@
 .remote-workspaces {
   gap: var(--ui-space-16);
+  padding: var(--ui-space-12);
 }
 
 .remote-form {
@@ -9,17 +10,49 @@
   min-width: 0;
 }
 
-.remote-workspaces .ui-text-field__label,
-.remote-workspace .ui-text-field__label,
-.vm-environments .ui-text-field__label {
-  font-size: var(--ui-font-body);
+.remote-workspaces .ui-text-field,
+.remote-workspace .ui-text-field,
+.vm-environments .ui-text-field {
+  gap: var(--ui-space-6);
+}
+
+.remote-workspaces .ui-text-field > .ui-text-field__label,
+.remote-workspace .ui-text-field > .ui-text-field__label,
+.vm-environments .ui-text-field > .ui-text-field__label {
+  font-size: var(--ui-font-label);
   font-weight: 500;
+  line-height: 1.35;
+}
+
+.remote-workspaces .ui-button,
+.remote-workspace .ui-button,
+.vm-environments .ui-button {
+  font-weight: 500;
+  min-height: var(--ui-row-single);
+}
+
+.remote-workspaces .ui-button:not(.ui-button--primary):not(.ui-button--destructive),
+.remote-workspace .ui-button:not(.ui-button--primary):not(.ui-button--destructive),
+.vm-environments .ui-button:not(.ui-button--primary):not(.ui-button--destructive) {
+  background: var(--ui-transparent);
+}
+
+.remote-workspaces .ui-button:not(.ui-button--primary):not(.ui-button--destructive):hover:not(:disabled),
+.remote-workspace .ui-button:not(.ui-button--primary):not(.ui-button--destructive):hover:not(:disabled),
+.vm-environments .ui-button:not(.ui-button--primary):not(.ui-button--destructive):hover:not(:disabled) {
+  background: var(--ui-selected);
 }
 
 .remote-workspaces .ui-button:disabled,
+.remote-workspace .ui-button:disabled,
 .vm-environments .ui-button:disabled {
+  background: var(--ui-transparent);
   color: var(--ui-text);
-  opacity: 0.6;
+  opacity: 0.7;
+}
+
+.vm-environments .remote-form > .ui-button {
+  align-self: flex-start;
 }
 
 .remote-replace .ui-checkbox,
@@ -37,8 +70,10 @@
   border-radius: var(--ui-radius-mark);
   box-sizing: border-box;
   display: grid;
-  margin-block: var(--ui-space-2);
+  height: calc(var(--ui-checkbox-size) - var(--ui-space-2));
+  margin: var(--ui-space-2) 0 0;
   place-content: center;
+  width: calc(var(--ui-checkbox-size) - var(--ui-space-2));
 }
 
 .remote-replace .ui-checkbox__input:checked,
