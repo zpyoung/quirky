@@ -549,9 +549,11 @@ function PendingCard({ name }: { name: string }) {
   )
 }
 
+type SectionEntry = { kind: 'section'; key: string; sectionId: string; group: ViewGroup | null; members: ViewGroup[]; children: SectionEntry[] }
+
 type Entry =
   | { kind: 'pinned'; key: string; group: ViewGroup }
-  | { kind: 'section'; key: string; sectionId: string; group: ViewGroup | null; members: ViewGroup[] }
+  | SectionEntry
   | { kind: 'project'; key: string; group: ViewGroup }
   | { kind: 'lane'; key: string; group: ViewGroup }
 
@@ -559,23 +561,31 @@ const projectKeyOf = (group: ViewGroup) => group.key.slice('project:'.length)
 
 /**
  * The top-level blocks the tree draws, in model order. In section-and-project grouping a project
- * joins its section's block, even when the section has no rows of its own and so no group.
+ * joins its section's block, even when the section has no rows of its own and so no group. A
+ * section with a parent section nests inside the parent's block, so folding the parent folds it.
  */
 function entriesOf(
   model: ViewTree,
   sectionMode: boolean,
   sectionOfRepo: (repoId: string) => string | null,
-  emptyRepos: readonly Repo[]
+  emptyRepos: readonly Repo[],
+  parentOfSection: (sectionId: string) => string | null
 ): Entry[] {
   const entries: Entry[] = []
-  const sections = new Map<string, Extract<Entry, { kind: 'section' }>>()
-  const section = (sectionId: string) => {
-    let entry = sections.get(sectionId)
-    if (!entry) {
-      entry = { kind: 'section', key: `group:${sectionId}`, sectionId, group: null, members: [] }
-      sections.set(sectionId, entry)
-      entries.push(entry)
-    }
+  const sections = new Map<string, SectionEntry>()
+  const building = new Set<string>()
+  const section = (sectionId: string): SectionEntry => {
+    const existing = sections.get(sectionId)
+    if (existing) return existing
+    building.add(sectionId)
+    const parentId = parentOfSection(sectionId)
+    // a parent cycle would recurse forever, so the section that closes it stays top-level
+    const parent = parentId !== null && !building.has(parentId) ? section(parentId) : null
+    building.delete(sectionId)
+    const entry: SectionEntry = { kind: 'section', key: `group:${sectionId}`, sectionId, group: null, members: [], children: [] }
+    sections.set(sectionId, entry)
+    if (parent) parent.children.push(entry)
+    else entries.push(entry)
     return entry
   }
   for (const group of model.groups) {
@@ -676,7 +686,14 @@ export function Tree({
     const drawn = new Set(model.groups.filter((group) => group.key.startsWith('project:')).map(projectKeyOf))
     return repos.filter((repo) => !drawn.has(repo.id))
   }, [emptyProjects, mode, model, repos])
-  const entries = useMemo(() => entriesOf(model, sectionMode, sectionOfRepo, emptyRepos), [model, sectionMode, sectionOfRepo, emptyRepos])
+  const parentOfSection = useCallback((sectionId: string): string | null => {
+    const parentId = groupById.get(sectionId)?.parentId ?? null
+    return parentId !== null && parentId !== sectionId && groupById.has(parentId) ? parentId : null
+  }, [groupById])
+  const entries = useMemo(
+    () => entriesOf(model, sectionMode, sectionOfRepo, emptyRepos, parentOfSection),
+    [model, sectionMode, sectionOfRepo, emptyRepos, parentOfSection]
+  )
   const eligibleBoundaries = useMemo(
     () => projectSeparatorBoundaries(
       entries.filter((entry) => entry.kind !== 'lane' || entry.group.kind !== 'flat').map((entry) => entry.key),
@@ -688,9 +705,13 @@ export function Tree({
 
   const pendingHomes = useMemo(() => {
     const homes = new Set<string>()
+    const addSection = (entry: SectionEntry) => {
+      for (const member of entry.members) homes.add(projectKeyOf(member))
+      for (const child of entry.children) addSection(child)
+    }
     for (const entry of entries) {
       if (entry.kind === 'project') homes.add(projectKeyOf(entry.group))
-      else if (entry.kind === 'section') for (const member of entry.members) homes.add(projectKeyOf(member))
+      else if (entry.kind === 'section') addSection(entry)
       else if (entry.kind === 'lane' && entry.group.kind === 'flat') for (const create of pending) homes.add(create.repoId)
     }
     return homes
@@ -1202,21 +1223,32 @@ export function Tree({
 
   const isFolderProject = (member: ViewGroup) => repoById.get(projectKeyOf(member))?.kind === 'folder'
 
-  const sectionBlock = (entry: Extract<Entry, { kind: 'section' }>) => {
-    const projectGroup = groupById.get(entry.sectionId)
-    const title = projectGroup?.name ?? entry.group?.title ?? entry.sectionId
+  const sectionAttention = (entry: SectionEntry): { attention: Attention; count: number } => {
     let attention: Attention = entry.group?.attention ?? 'none'
     let count = entry.group?.attentionCount ?? 0
     for (const member of entry.members) {
       attention = worse(attention, member.attention)
       count += member.attentionCount
     }
+    for (const child of entry.children) {
+      const nested = sectionAttention(child)
+      attention = worse(attention, nested.attention)
+      count += nested.count
+    }
+    return { attention, count }
+  }
+
+  const sectionBlock = (entry: SectionEntry, depth = 0) => {
+    const projectGroup = groupById.get(entry.sectionId)
+    const title = projectGroup?.name ?? entry.group?.title ?? entry.sectionId
+    const { attention, count } = sectionAttention(entry)
+    const topLevel = depth === 0
     const isFolded = projectGroup?.collapsed ?? false
     const previewing = dropPreview?.kind === 'group' && dropPreview.id === entry.sectionId
-    const className = ['group', 'ui-stack', 'ui-indent', eligibleBoundaries.includes(entry.key) && 'ui-section-separated'].filter(Boolean).join(' ')
+    const className = ['group', 'ui-stack', 'ui-indent', topLevel && eligibleBoundaries.includes(entry.key) && 'ui-section-separated'].filter(Boolean).join(' ')
     const syntheticGroup: ViewGroup = entry.group ?? { key: `section:${entry.sectionId}`, kind: 'section', title, attention, attentionCount: count, rows: [] }
     return (
-      <section className={className} key={entry.key} data-top-level-section={entry.key} style={{ '--depth': 0 } as CSSProperties}>
+      <section className={className} key={entry.key} data-top-level-section={topLevel ? entry.key : undefined} style={{ '--depth': depth } as CSSProperties}>
         {header({
           title,
           className: `group-header${previewing ? ' ui-drop-target--active' : ''}`,
@@ -1265,9 +1297,10 @@ export function Tree({
         })}
         {!isFolded && (
           <>
-            {entry.members.filter(isFolderProject).map((member) => projectBlock(member, false, 1))}
+            {entry.members.filter(isFolderProject).map((member) => projectBlock(member, false, depth + 1))}
             {entry.group && entry.group.rows.length > 0 && <ul className="worktree-list ui-tree">{rowList(entry.group)}</ul>}
-            {entry.members.filter((member) => !isFolderProject(member)).map((member) => projectBlock(member, false, 1))}
+            {entry.members.filter((member) => !isFolderProject(member)).map((member) => projectBlock(member, false, depth + 1))}
+            {entry.children.map((child) => sectionBlock(child, depth + 1))}
           </>
         )}
       </section>
