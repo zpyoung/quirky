@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { ActivityMark, Button, ContextMenu, EmptyState, IconButton, SectionHeader, SelectField, StatusDot, TextField, type ContextMenuItem, type UiActivityMarkState } from '@quirky/ui'
 import { isRecord } from './loop-status'
 import { VmRecipeSelector, type VmRecipeSelection } from './VmRecipeSelector'
 import { currentWindowId } from './actions'
@@ -8,6 +9,22 @@ type Project = { id: string; name: string }
 type VmRow = {
   id: string; name: string; vmName: string; instanceId: string; state: string
   backendState: string; error: string | null; remoteWorkspace: { id: string } | null
+}
+
+type OpenMenu = { x: number; y: number; label: string; items: ContextMenuItem[]; returnFocusTo?: HTMLElement }
+
+const transientStates = new Set(['creating', 'suspending', 'resuming', 'destroying', 'retiring'])
+
+function markState(state: string): UiActivityMarkState {
+  if (transientStates.has(state)) return 'running'
+  if (state === 'failed' || state === 'interrupted') return 'error'
+  return 'asleep'
+}
+
+function LifecycleMark({ state }: { state: string }) {
+  return state === 'running'
+    ? <StatusDot status="working" label={`Lifecycle: ${state}`} />
+    : <ActivityMark state={markState(state)} label={`Lifecycle: ${state}`} />
 }
 
 function readEnvironments(value: unknown): VmRow[] {
@@ -37,6 +54,7 @@ export function VmEnvironments({ context, initialRepo }: { context: UiPluginCont
   const [doctor, setDoctor] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [menu, setMenu] = useState<OpenMenu | null>(null)
   const mounted = useRef(false)
   const inFlight = useRef(false)
 
@@ -109,34 +127,76 @@ export function VmEnvironments({ context, initialRepo }: { context: UiPluginCont
     await context.call(`quirky.worktree/${method}`, { vm: vm.id, instanceId: vm.instanceId, ...(method === 'vmDestroy' ? { yes: true } : {}) })
   }
 
-  return <main className="form" aria-label="VM environments">
-    <h2>VM environments</h2>
-    <p>Recipes provision real Lima guests. A timed-out create may still be running: inspect its existing record before starting another VM.</p>
-    <button type="button" disabled={busy} onClick={() => { void run() }}>Refresh lifecycle state</button>
-    {doctor !== null && <details><summary>VM backend diagnostics</summary><pre>{JSON.stringify(doctor, null, 2)}</pre></details>}
-    {error && <p role="alert">{error}</p>}
-    <form onSubmit={(event) => { event.preventDefault(); void run(create) }}>
-      <label>Project
-        <select aria-label="VM project" value={repo} disabled={busy} onChange={(event) => { setRepo(event.currentTarget.value); setRecipe(null) }}>
-          {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-        </select>
-      </label>
+  function openRowMenu(vm: VmRow, x: number, y: number, returnFocusTo: HTMLElement) {
+    const live = !busy && vm.state !== 'destroyed'
+    const items: ContextMenuItem[] = []
+    if (vm.remoteWorkspace) {
+      const workspace = vm.remoteWorkspace.id
+      items.push({ id: 'open', label: 'Open guest workspace', enabled: !busy, onSelect: () => { void run(() => openWorkspace(workspace)) } })
+    }
+    items.push(
+      { id: 'suspend', label: 'Suspend', enabled: live, onSelect: () => { void run(() => lifecycle(vm, 'vmSuspend')) } },
+      { id: 'resume', label: 'Resume / reconcile', enabled: live, onSelect: () => { void run(() => lifecycle(vm, 'vmResume')) } },
+      { id: 'destroy', label: 'Destroy VM', danger: true, separatorBefore: true, enabled: live, onSelect: () => { void run(() => lifecycle(vm, 'vmDestroy')) } }
+    )
+    setMenu({ x, y, returnFocusTo, label: `Actions for ${vm.vmName}`, items })
+  }
+
+  return <main className="vm-environments" aria-label="VM environments">
+    <SectionHeader
+      title="VM environments"
+      actions={<Button type="button" disabled={busy} onClick={() => { void run() }}>Refresh lifecycle state</Button>}
+    />
+    <p className="ui-text-muted">Recipes provision real Lima guests. A timed-out create may still be running: inspect its existing record before starting another VM.</p>
+    {doctor !== null && <details className="vm-diagnostics"><summary>VM backend diagnostics</summary><pre className="vm-diagnostics__body">{JSON.stringify(doctor, null, 2)}</pre></details>}
+    {error && <p className="ui-error-text" role="alert">{error}</p>}
+    <form className="ui-stack" onSubmit={(event) => { event.preventDefault(); void run(create) }}>
+      <SelectField id="vm-project" label="Project" aria-label="VM project" value={repo} disabled={busy} onChange={(event) => { setRepo(event.currentTarget.value); setRecipe(null) }}>
+        {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+      </SelectField>
       {repo !== '' && <VmRecipeSelector context={context} repo={repo} value={recipe} disabled={busy} onChange={setRecipe} />}
-      {recipe?.checkoutMode === 'orca-worktree' && <label>Guest worktree name (optional)
-        <input aria-label="Guest worktree name" value={name} disabled={busy} onChange={(event) => setName(event.currentTarget.value)} />
-      </label>}
-      <button type="submit" disabled={busy || !recipe?.approved || repo === ''}>Create VM</button>
+      {recipe?.checkoutMode === 'orca-worktree' && <TextField label="Guest worktree name (optional)" aria-label="Guest worktree name" value={name} disabled={busy} onChange={(event) => setName(event.currentTarget.value)} />}
+      <Button type="submit" variant="primary" disabled={busy || !recipe?.approved || repo === ''}>Create VM</Button>
     </form>
-    <h3>Recorded environments</h3>
-    {environments.length === 0 && <p>No VM environments recorded.</p>}
-    {environments.map((vm) => <section key={vm.id} aria-label={vm.vmName}>
-      <strong>{vm.name}</strong> <code>{vm.vmName}</code>
-      <p>Lifecycle: {vm.state}; backend: {vm.backendState}</p>
-      {vm.error && <p role="status">{vm.error}</p>}
-      {vm.remoteWorkspace && <button type="button" disabled={busy} onClick={() => { void run(() => openWorkspace(vm.remoteWorkspace!.id)) }}>Open guest workspace</button>}
-      <button type="button" disabled={busy || vm.state === 'destroyed'} onClick={() => { void run(() => lifecycle(vm, 'vmSuspend')) }}>Suspend</button>
-      <button type="button" disabled={busy || vm.state === 'destroyed'} onClick={() => { void run(() => lifecycle(vm, 'vmResume')) }}>Resume / reconcile</button>
-      <button type="button" disabled={busy || vm.state === 'destroyed'} onClick={() => { void run(() => lifecycle(vm, 'vmDestroy')) }}>Destroy VM</button>
-    </section>)}
+    <SectionHeader title="Recorded environments" />
+    {environments.length === 0
+      ? <EmptyState message="No VM environments recorded" action={{ label: 'Create VM', onAction: () => document.getElementById('vm-project')?.focus() }} />
+      : <table className="vm-table">
+        <thead>
+          <tr>
+            <th scope="col">Environment</th>
+            <th scope="col">VM</th>
+            <th scope="col">Lifecycle</th>
+            <th scope="col">Backend</th>
+            <th scope="col"><span className="vm-table__sr">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {environments.map((vm) => <tr key={vm.id} aria-label={vm.vmName} className="vm-row">
+            <td>
+              <span className="vm-table__name">{vm.name}</span>
+              {vm.error && <span className="ui-error-text vm-table__error" role="status">{vm.error}</span>}
+            </td>
+            <td><code className="ui-text-mono">{vm.vmName}</code></td>
+            <td><span className="vm-lifecycle"><LifecycleMark state={vm.state} />{vm.state}</span></td>
+            <td className="ui-text-muted">{vm.backendState}</td>
+            <td className="vm-table__actions">
+              <span className="vm-reveal">
+                <IconButton
+                  label={`Actions for ${vm.vmName}`}
+                  aria-haspopup="menu"
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect()
+                    openRowMenu(vm, box.left, box.bottom, event.currentTarget)
+                  }}
+                >
+                  ⋯
+                </IconButton>
+              </span>
+            </td>
+          </tr>)}
+        </tbody>
+      </table>}
+    {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
   </main>
 }

@@ -504,3 +504,15 @@ test.skipIf(process.platform !== 'darwin')('refuses retirement when the register
   expect(calls.some((call) => call.method === 'quirky.worktree/remoteHostForget')).toBe(false)
   expect(calls.some((call) => call.method === 'quirky.cli/runtimeRemove')).toBe(false)
 })
+
+test('remote and VM screens use design-system components with no inline styles or bare form markup', () => {
+  const src = join(import.meta.dir, '..', 'src')
+  const offenders: string[] = []
+  for (const file of ['RemoteWorkspace.tsx', 'RemoteWorkspacesSection.tsx', 'VmEnvironments.tsx', 'VmRecipeSelector.tsx']) {
+    const source = readFileSync(join(src, file), 'utf8')
+    if (source.includes('style={')) offenders.push(`${file}: inline style`)
+    if (source.includes('className="form"') || source.includes('className="form-group"')) offenders.push(`${file}: bare form class`)
+    if (/<(button|select|input)[\s>]/.test(source)) offenders.push(`${file}: native control`)
+  }
+  expect(offenders).toEqual([])
+})
