@@ -332,6 +332,34 @@ test('a section with a parent section draws inside the parent block, indented on
   expect(childBlock.querySelector('[data-worktree-id="h"]')).not.toBeNull()
 })
 
+const indentLevels = (element: HTMLElement) => {
+  let levels = 0
+  for (let node: HTMLElement | null = element; node !== null && node !== host; node = node.parentElement) {
+    if (node.classList.contains('ui-indent')) levels += Number(node.style.getPropertyValue('--depth') || 0)
+  }
+  return levels
+}
+
+test('indentation adds one level per nesting step, not one per ancestor wrapper', async () => {
+  const groups: ProjectGroup[] = [
+    { id: 'g1', name: 'Top', parentPath: null, collapsed: false, order: 0, createdFrom: 'manual', repoIds: [], parentId: null },
+    { id: 'g2', name: 'Middle', parentPath: null, collapsed: false, order: 1, createdFrom: 'manual', repoIds: [], parentId: 'g1' },
+    { id: 'g3', name: 'Bottom', parentPath: null, collapsed: false, order: 2, createdFrom: 'manual', repoIds: ['r2'], parentId: 'g2' }
+  ]
+  const repo: Repo = { ...REPO, id: 'r2', name: 'Deep', path: '/repo/Deep', groupId: 'g3' }
+  await mount({
+    groups,
+    repos: [REPO, repo],
+    worktrees: [worktree('a', 'alpha'), worktree('d', 'deep', { repoId: 'r2', path: '/repo/Deep/d' })]
+  })
+  const section = (id: string) => host.querySelector<HTMLElement>(`[data-group-target="${id}"]`)!.closest<HTMLElement>('section.group')!
+  expect(indentLevels(section('g1'))).toBe(0)
+  expect(indentLevels(section('g2'))).toBe(1)
+  expect(indentLevels(section('g3'))).toBe(2)
+  expect(indentLevels(section('g3').querySelector<HTMLElement>('section.repo')!)).toBe(3)
+  expect(indentLevels(rowOf('d'))).toBe(3)
+})
+
 test('folding a parent section hides its nested sections and keeps their attention on its header', async () => {
   await mount(nestedSections(true))
   const parentBlock = host.querySelector<HTMLElement>('[data-top-level-section="group:g1"]')!
