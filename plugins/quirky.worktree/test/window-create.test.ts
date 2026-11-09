@@ -574,8 +574,8 @@ test('SC-42: Rename edits the sidebar display name and notes without moving the 
 
   const card = await w.win.waitFor(() => worktreeRow('fix-login'))
   await click(button(card, 'Actions for fix-login')!)
-  const rename = await w.win.waitFor(() => menuItem(document, 'Rename…'))
-  await click(rename)
+  await click(await w.win.waitFor(() => menuItem(document, 'More')))
+  await click(await w.win.waitFor(() => menuItem(document, 'Details…')))
 
   const dialog = await w.win.waitFor(() => dialogNamed('Workspace details'))
   expect(await reportedDialog(w, 'update')).toEqual({ kind: 'update', worktreeId: fix.id })
@@ -605,11 +605,12 @@ test('SC-41: the Set Parent dialog excludes the workspace and its descendants, s
   const menuFor = async (name: string, label: string) => {
     const card = worktreeRow(name)!
     await click(button(card, `Actions for ${name}`)!)
+    await click(await w.win.waitFor(() => menuItem(document, 'More')))
     const target = await w.win.waitFor(() => menuItem(document, label))
     await click(target)
   }
 
-  await menuFor('a', 'Set Parent Worktree…')
+  await menuFor('a', 'Set parent…')
   const dialog = await w.win.waitFor(() => dialogNamed('Set parent worktree'))
   expect(await reportedDialog(w, 'parent')).toEqual({ kind: 'parent', worktreeId: a.id })
   const select = field<HTMLSelectElement>(dialog, 'Parent worktree')!
@@ -622,7 +623,7 @@ test('SC-41: the Set Parent dialog excludes the workspace and its descendants, s
   await w.win.waitFor(async () => (await reportedWorktree(w, a.id))?.depth === 1)
   expect(await reportedWorktree(w, a.id)).toMatchObject({ parentId: d.id, depth: 1 })
 
-  await menuFor('a', 'Remove from Parent')
+  await menuFor('a', 'Remove from parent')
   await w.win.waitFor(async () => (await worktrees(w.agent)).find((x) => x.id === a.id)?.parentId === null)
   const rest = await worktrees(w.agent)
   expect(rest.find((x) => x.id === b.id)?.parentId).toBe(a.id)

@@ -256,8 +256,9 @@ test('lazy details preserve provenance and open the exact recorded automation an
   await h.mount()
   const attributed = rowFor('wt-auto')!
   const ordinary = rowFor('wt-api')!
-  expect(attributed.textContent).toContain('Created by automation')
-  expect(ordinary.textContent).not.toContain('Created by automation')
+  expect(attributed.querySelector('button[aria-label="Automation details for wt-auto"]')?.getAttribute('title')).toBe('Created by automation')
+  expect(ordinary.querySelector('.worktree-automation')).toBeNull()
+  expect(attributed.querySelectorAll('.worktree-row')).toHaveLength(1)
   expect(reportFor(h, 'wt-auto')?.automation).toMatchObject({
     provenance,
     expanded: false,

@@ -21,6 +21,7 @@ export type DialogState =
   | { kind: 'import'; path: string }
   | { kind: 'open-as-folder'; path: string }
   | { kind: 'group'; action: 'new'; repoId: string }
+  | { kind: 'group'; action: 'new-section' }
   | { kind: 'group'; action: 'new-worktree'; worktreeId: string; initialName: string; expectedInstanceId: string; expectedProjectGroupId: string | null }
   | { kind: 'group'; action: 'rename' | 'delete'; groupId: string }
 
@@ -172,6 +173,17 @@ export function arrangeRows(worktrees: Worktree[]): TreeRow[] {
   return rows
 }
 
+/** Every worktree nested below each worktree, by id, across the whole list and whatever the view hides. */
+export function canonicalDescendants(worktrees: Worktree[]): Map<string, string[]> {
+  const result = new Map<string, string[]>()
+  const byRepo = new Map<string, Worktree[]>()
+  for (const worktree of worktrees) byRepo.set(worktree.repoId, [...(byRepo.get(worktree.repoId) ?? []), worktree])
+  for (const list of byRepo.values()) {
+    for (const row of arrangeRows(list)) result.set(row.worktree.id, row.descendants)
+  }
+  return result
+}
+
 /** The label a project goes by in the sidebar. */
 export const repoLabel = (repo: Repo): string => repo.displayName ?? repo.name
 
@@ -202,7 +214,8 @@ export function buildTreeModel(
   }
 
   const rowsFor = (sectionWorktrees: Worktree[], looseRows = false): TreeRow[] => {
-    const visible = visibleIds ? sectionWorktrees.filter((worktree) => visibleIds.has(worktree.id)) : sectionWorktrees
+    const unpinned = sectionWorktrees.filter((worktree) => !worktree.pinned)
+    const visible = visibleIds ? unpinned.filter((worktree) => visibleIds.has(worktree.id)) : unpinned
     return arrangeRows(visible).map((row) => ({
       ...row,
       descendants: canonicalDescendants.get(row.worktree.id) ?? row.descendants,
@@ -269,27 +282,6 @@ export function buildTreeModel(
     pinned: worktrees.filter((worktree) => worktree.pinned && (!visibleIds || visibleIds.has(worktree.id))),
     groups: roots,
     projects: repos.filter((repo) => !claimedRepos.has(repo.id)).map(node)
-  }
-}
-
-/**
- * The tree narrowed to `filterRepoIds`: other projects go, and so does any group left with nothing
- * to show, so a narrowed panel carries no empty headers. An empty filter means All projects.
- */
-export function narrowTreeModel(model: TreeModel, filterRepoIds: readonly string[]): TreeModel {
-  if (filterRepoIds.length === 0) return model
-  const inScope = (project: ProjectNode) => filterRepoIds.includes(project.repo.id)
-  const narrowGroup = (node: GroupNode): GroupNode | null => {
-    const projects = node.projects.filter(inScope)
-    const children = node.children.flatMap((child) => narrowGroup(child) ?? [])
-    return projects.length > 0 || node.rows.length > 0 || node.looseRows.length > 0 || children.length > 0
-      ? { ...node, projects, children }
-      : null
-  }
-  return {
-    pinned: model.pinned.filter((worktree) => filterRepoIds.includes(worktree.repoId)),
-    groups: model.groups.flatMap((node) => narrowGroup(node) ?? []),
-    projects: model.projects.filter(inScope)
   }
 }
 

@@ -757,7 +757,7 @@ const card = (name: string, within: ParentNode = host) => {
   })
   return canonicalRows[0] ?? rows[0]
 }
-const childChip = (name: string) => card(name)?.querySelector<HTMLButtonElement>('button[aria-expanded]')
+const childChip = (name: string) => card(name)?.querySelector<HTMLButtonElement>('.worktree-child-toggle')
 const sectionHeader = (section: HTMLElement) => section.querySelector<HTMLElement>(':scope > header')!
 const sectionForRepo = (name: string) =>
   [...host.querySelectorAll<HTMLElement>('section')].find((section) =>
@@ -931,6 +931,7 @@ test('project sidebar order follows repo registration order when projects are ad
 
 test('SC-03/05: loose hierarchy keeps child disclosures while delete confirmation counts canonical descendants', async () => {
   const h = setup()
+  h.world.worktrees.find((item) => item.id === 'w-feature')!.pinned = false
   await h.mount()
 
   expect(sectionForGroup('Team')).toBeDefined()
@@ -945,23 +946,25 @@ test('SC-03/05: loose hierarchy keeps child disclosures while delete confirmatio
   const notesSection = sectionForRepo('notes')!
   const featureRow = card('feature', sectionForGroup('Team')!)!
   expect(Boolean(notesSection.compareDocumentPosition(featureRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  expect(notesSection.closest('[data-top-level-section="group:g-team"]')).not.toBeNull()
   expect(Boolean(sectionForGroup('Team')!.compareDocumentPosition(sectionForRepo('api')!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   expect(lastReport(h).groups.find((entry) => entry.id === 'g-team')?.projects.some((entry) => entry.id === 'r-api')).toBe(false)
   expect(lastReport(h).projects.find((project) => project.id === 'r-api')?.worktrees.find((item) => item.id === 'w-child')?.depth).toBe(0)
   await openCardMenu(h, 'feature')
-  expect(menuItem('Delete with Descendants (1)…')).toBeDefined()
-  await h.click(menuItem('Delete with Descendants (1)…')!)
+  expect(menuItem('Delete with descendants (1)…')).toBeDefined()
+  await h.click(menuItem('Delete with descendants (1)…')!)
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Child workspaces will be deleted')
   expect(lastReport(h).dialog).toEqual({ kind: 'delete', worktreeId: 'w-feature', withDescendants: true })
 })
 
 test('SC-03: diversion keeps an empty project placeholder and returning a parent restores child nesting', async () => {
   const h = setup()
+  h.world.worktrees.find((item) => item.id === 'w-feature')!.pinned = false
   await h.mount()
 
   for (const [name, groupName] of [['main', 'Team'], ['child', 'Child']] as const) {
     await openCardMenu(h, name)
-    await h.click(menuItem('Add worktree to group')!)
+    await h.click(menuItem('Move to section')!)
     await h.click(menuItem(groupName)!)
   }
   expect(sectionForRepo('api')).toBeDefined()
@@ -970,7 +973,8 @@ test('SC-03: diversion keeps an empty project placeholder and returning a parent
 
   for (const name of ['feature', 'main', 'child', 'independent']) {
     await openCardMenu(h, name)
-    await h.click(menuItem('Remove worktree from group')!)
+    await h.click(menuItem('Move to section')!)
+    await h.click(menuItem('Remove from section')!)
   }
   expect(sectionForRepo('api')!.querySelectorAll('button[aria-label^="Open "], button[aria-label^="Wake and open "]')).toHaveLength(4)
   expect(childChip('feature')?.getAttribute('aria-expanded')).toBe('true')
@@ -1031,7 +1035,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
   expect(h.world.worktrees.find((item) => item.id === 'w-independent')?.projectGroupId).toBeNull()
   expect(sectionForGroup('Team')).toBeUndefined()
-  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
+  expect(card('feature')?.closest('[data-top-level-section="pinned"]')).not.toBeNull()
   expect(card('independent', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
 })
 
@@ -1113,7 +1117,8 @@ test('SC-01: new group creation is guarded by the selected Git worktree identity
   await h.mount()
   const openNewGroup = async () => {
     await openCardMenu(h, 'other')
-    const create = menuItems().find((item) => /new group from worktree/i.test(item.textContent ?? ''))
+    await h.click(menuItem('Move to section')!)
+    const create = menuItem('New section…')
     expect(create).toBeDefined()
     await h.click(create!)
   }
@@ -1122,7 +1127,7 @@ test('SC-01: new group creation is guarded by the selected Git worktree identity
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
   const input = fieldFor('Group name', dialog!)
   if (!input) throw new Error('new worktree group dialog input was not rendered')
-  expect(input.value).toBe('other group')
+  expect(input.value).toBe('other section')
   expect(document.activeElement).toBe(input)
   expect(input.selectionStart).toBe(0)
   expect(input.selectionEnd).toBe(input.value.length)
@@ -1135,7 +1140,7 @@ test('SC-01: new group creation is guarded by the selected Git worktree identity
   const request = h.calls.find((call) => call.method === 'quirky.worktree/createGroup')
   expect(request?.params).toEqual({
     worktree: 'w-other',
-    name: 'other group',
+    name: 'other section',
     expectedInstanceId: 'instance-w-other',
     expectedProjectGroupId: null
   })
@@ -1184,7 +1189,8 @@ test('SC-06: a folder workspace row in a Git project creates a group for its pro
 
   const openProjectGroupDialog = async () => {
     await openCardMenu(h, 'notes')
-    const createProjectGroup = menuItem('New Group from Project…')
+    await h.click(menuItem('Move to section')!)
+    const createProjectGroup = menuItem('New section…')
     expect(createProjectGroup).toBeDefined()
     await h.click(createProjectGroup!)
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
@@ -1224,7 +1230,8 @@ test('SC-06: a folder workspace row removes its project group without changing i
   await h.mount()
 
   await openCardMenu(h, 'notes')
-  const removeProjectGroup = menuItem('Remove project from group')
+  await h.click(menuItem('Move to section')!)
+  const removeProjectGroup = menuItem('Remove from section')
   expect(removeProjectGroup).toBeDefined()
   await h.click(removeProjectGroup!)
 
@@ -1239,14 +1246,15 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   await h.mount()
 
   await openCardMenu(h, 'other')
-  await h.click(menuItem('Add worktree to group')!)
+  await h.click(menuItem('Move to section')!)
   await h.click(menuItem('Release')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-other')?.projectGroupId).toBe('g-release')
   expect(card('other', sectionForGroup('Release')!)?.closest('section')).toBe(sectionForGroup('Release')!)
   expect(sectionForRepo('web')).toBeDefined()
 
   await openCardMenu(h, 'other')
-  await h.click(menuItem('Remove worktree from group')!)
+  await h.click(menuItem('Move to section')!)
+  await h.click(menuItem('Remove from section')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-other')?.projectGroupId).toBeNull()
   expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 
@@ -1254,9 +1262,10 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   const pinnedFeature = pinned ? card('feature', pinned) : undefined
   expect(pinnedFeature).toBeDefined()
   await h.click(buttonNamed(pinnedFeature!, 'Actions for feature')!)
-  await h.click(menuItem('Remove worktree from group')!)
+  await h.click(menuItem('Move to section')!)
+  await h.click(menuItem('Remove from section')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
-  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
+  expect(card('feature')?.closest('[data-top-level-section="pinned"]')).not.toBeNull()
 })
 
 test('SC-02/06: a Git worktree with missing group membership stays removable when no groups are available', async () => {
@@ -1279,7 +1288,8 @@ test('SC-02/06: a Git worktree with missing group membership stays removable whe
   expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 
   await openCardMenu(h, 'lost-group')
-  const remove = menuItem('Remove worktree from group')
+  await h.click(menuItem('Move to section')!)
+  const remove = menuItem('Remove from section')
   expect(remove).toBeDefined()
   await h.click(remove!)
 
@@ -1296,8 +1306,8 @@ test('SC-02: moving a Git project moves every repo row without changing loose wo
   await h.mount()
   const before = h.world.worktrees.find((item) => item.id === 'w-feature')!.projectGroupId
 
-  await openCardMenu(h, 'feature')
-  await h.click(menuItem('Move project to group')!)
+  await h.click(buttonNamed(sectionForRepo('api')!, 'Actions for api')!)
+  await h.click(menuItem('Move to Group')!)
   await h.click(menuItem('Release')!)
 
   expect(h.world.repos.find((item) => item.id === 'r-api')?.groupId).toBe('g-release')
@@ -1392,7 +1402,7 @@ test('SC-06: folder-owned Git worktrees keep project actions without exposing me
   await h.mount()
 
   await openCardMenu(h, 'folder-git')
-  await h.click(menuItem('Move project to group')!)
+  await h.click(menuItem('Move to section')!)
   await h.click(menuItem('Release')!)
 
   expect(owner.groupId).toBe('g-release')
@@ -1402,10 +1412,9 @@ test('SC-06: folder-owned Git worktrees keep project actions without exposing me
   expect(h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)).toHaveLength(0)
 
   await openCardMenu(h, 'folder-git')
-  const membershipActions = menuItems()
-    .map(normalizedMenuLabel)
-    .filter((label) => /^(new group from worktree|add worktree to group|remove worktree from group)/i.test(label))
-  expect(membershipActions).toEqual([])
+  await h.click(menuItem('Move to section')!)
+  await h.click(menuItem('New section…')!)
+  expect(lastReport(h).dialog).toEqual({ kind: 'group', action: 'new', repoId: owner.id })
 })
 
 test('SC-06: folder-owned Git worktrees cannot join a group by dragging', async () => {
@@ -1465,7 +1474,8 @@ test('SC-04: membership dragging is disabled outside Project grouping', async ()
   await h.mount()
   await setStockOption(h, 'Group by', 'status')
   expect(h.world.options.groupBy).toBe('status')
-  const target = sectionHeader(sectionForGroup('Team')!)
+  expect(host.querySelectorAll('[data-group-target]')).toHaveLength(0)
+  const target = sectionHeader(host.querySelector<HTMLElement>('section.worktree-status-lane')!)
   setRect(target, 100, 140)
 
   const preview = await dragAndDrop(h, card('other')!, target, 'w-other', 110)
@@ -1476,7 +1486,7 @@ test('SC-04: membership dragging is disabled outside Project grouping', async ()
     membership: item.projectGroupId,
     writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
   }).toEqual({ preview: null, membership: null, writes: [] })
-  expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
+  expect(card('other')).toBeDefined()
 })
 
 test('SC-04: changing away from Project grouping mid-drag clears membership preview and blocks drop', async () => {
@@ -1498,7 +1508,7 @@ test('SC-04: changing away from Project grouping mid-drag clears membership prev
   await setStockOption(h, 'Group by', 'status')
   expect(lastReport(h).dropPreview).toBeNull()
   expect(h.world.options.groupBy).toBe('status')
-  target = sectionHeader(sectionForGroup('Team')!)
+  target = sectionHeader(host.querySelector<HTMLElement>('section.worktree-status-lane')!)
   setRect(target, 100, 140)
   await act(async () => {
     target.dispatchEvent(eventAt('dragover', 110, transfer))
@@ -1894,7 +1904,7 @@ test('sticky top-level headers suppress adjacent section separators', async () =
     await h.mount()
     const separators = lastReport(h).separators
     expect(separators.eligibleBoundaries).not.toContain('group:g-team')
-    expect(separators.eligibleBoundaries).not.toContain('group:g-release')
+    expect(separators.eligibleBoundaries).not.toContain('group:g-child')
     expect(separators.eligibleBoundaries).toContain('repo:r-web')
   } finally {
     style.remove()
