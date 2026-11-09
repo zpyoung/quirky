@@ -40,7 +40,8 @@ export type TreeProps = {
   groupBy?: GroupBy
   /** Called after a plain click opens a worktree. */
   onOpen?(id: string): void
-  onSelectToggle?(id: string, mode: 'toggle' | 'range'): void
+  /** `rendered` is the worktree ids on screen now, top to bottom; a range selects only those. */
+  onSelectToggle?(id: string, mode: 'toggle' | 'range', rendered?: readonly string[]): void
   onRename?(id: string, name: string): void
   onTagsOpen?(ids: string[], anchor: HTMLElement): void
   /** Returning true claims the action, and the tree skips its own handling. */
@@ -442,10 +443,10 @@ function WorktreeRowView({
             onClick={onClick}
           >
             <ActivityMark state={mark} label={markLabel(mark, pendingAsks)} />
-            <span className="worktree-name ui-text-ellipsis" title={worktree.name}>{worktree.name}</span>
+            <span className="worktree-name ui-name-share ui-text-ellipsis" title={worktree.name}>{worktree.name}</span>
             {worktree.unread ? <UnreadDot /> : loop ? <LoopGlyph label={loop.label} /> : null}
             {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
-            <TagChips tags={tags} max={2} />
+            <TagChips tags={tags} max={2} nameShare={0.4} />
           </button>
         )}
         {!renaming && provenance && (
@@ -684,6 +685,16 @@ export function Tree({
     ),
     [entries, separatorEnabled, stickySections]
   )
+
+  const pendingHomes = useMemo(() => {
+    const homes = new Set<string>()
+    for (const entry of entries) {
+      if (entry.kind === 'project') homes.add(projectKeyOf(entry.group))
+      else if (entry.kind === 'section') for (const member of entry.members) homes.add(projectKeyOf(member))
+      else if (entry.kind === 'lane' && entry.group.kind === 'flat') for (const create of pending) homes.add(create.repoId)
+    }
+    return homes
+  }, [entries, pending])
 
   useLayoutEffect(() => {
     const root = treeRoot.current
@@ -1000,7 +1011,8 @@ export function Tree({
 
   const click = (worktree: Worktree, event: MouseEvent<HTMLButtonElement>) => {
     if (event.shiftKey) {
-      onSelectToggle?.(worktree.id, 'range')
+      const rendered = [...new Set([...(treeRoot.current?.querySelectorAll<HTMLElement>('[data-worktree-id]') ?? [])].map((row) => row.dataset.worktreeId!))]
+      onSelectToggle?.(worktree.id, 'range', rendered)
       return
     }
     if (event.metaKey || event.ctrlKey) {
@@ -1314,6 +1326,8 @@ export function Tree({
     )
   }
 
+  const pendingElsewhere = pending.filter((create) => !pendingHomes.has(create.repoId))
+
   const worktreeCardAt = (target: EventTarget): HTMLElement | null =>
     target instanceof Element ? target.closest<HTMLElement>('[data-worktree-id]') : null
 
@@ -1410,6 +1424,11 @@ export function Tree({
         updatePreview(null)
       }}
     >
+      {pendingElsewhere.length > 0 && (
+        <ul className="worktree-list ui-tree">
+          {pendingElsewhere.map((create) => <PendingCard key={`pending:${create.repoId}:${create.name}`} name={create.name} />)}
+        </ul>
+      )}
       {entries.map((entry) => {
         switch (entry.kind) {
           case 'pinned':

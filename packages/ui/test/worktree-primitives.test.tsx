@@ -13,6 +13,7 @@ import {
   TagChip,
   TagChips,
 } from '../src/design-system'
+import { fitTagChipCount } from '../src/design-system/worktree-primitives'
 import type { UiActivityMarkState, UiTagColor } from '../src/design-system/contracts'
 
 let root: Root | null = null
@@ -103,6 +104,86 @@ describe('TagChips', () => {
     expect(chip).toContain('white-space: nowrap')
     expect(chip).not.toContain('text-overflow')
     expect(chip).not.toContain('overflow')
+  })
+})
+
+describe('fitTagChipCount', () => {
+  test('keeps the longest prefix of whole chips that fits beside the +N', () => {
+    expect(fitTagChipCount([30, 30, 50, 40], 4, 20, 120, 0)).toBe(2)
+    expect(fitTagChipCount([30, 30], 2, 20, 60, 0)).toBe(2)
+  })
+
+  test('counts the gap between items, including the one before +N', () => {
+    expect(fitTagChipCount([30, 30], 3, 20, 100, 10)).toBe(2)
+    expect(fitTagChipCount([30, 30], 3, 20, 99, 10)).toBe(1)
+  })
+
+  test('returns 0 when no whole chip fits, leaving only the +N', () => {
+    expect(fitTagChipCount([30, 30], 2, 20, 40, 4)).toBe(0)
+    expect(fitTagChipCount([30], 1, 20, -5, 0)).toBe(0)
+  })
+
+  test('a chip that fits alone still yields to the +N that tags beyond max need', () => {
+    expect(fitTagChipCount([30], 3, 20, 40, 4)).toBe(0)
+  })
+})
+
+describe('TagChips fitting', () => {
+  const widthOf = (element: HTMLElement) => {
+    if (element.classList.contains('ui-tag-chip')) return (element.textContent ?? '').length * 10
+    if (element.classList.contains('ui-tag-chips__probe-more')) return 20
+    return 0
+  }
+  let rowWidth = 200
+
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get(this: HTMLElement) { return widthOf(this) } })
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get(this: HTMLElement) { return this.classList.contains('row') ? rowWidth : 0 }
+    })
+  })
+
+  afterEach(() => {
+    delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth
+  })
+
+  const tags = ['one', 'two', 'three', 'four'].map((name, i) => ({ id: `t${i}`, name, color: null }))
+  const row = () => h('div', { className: 'row' }, h('span', { className: 'ui-name-share' }, 'name'), h(TagChips, { tags, max: 4, nameShare: 0.4 }))
+  const visibleChips = () => [...container.querySelectorAll('.ui-tag-chips > .ui-tag-chip')].map((chip) => chip.textContent)
+
+  test('shows only the chips that fit beside the name and counts the rest', async () => {
+    rowWidth = 200
+    await render(row())
+    expect(visibleChips()).toEqual(['one', 'two'])
+    expect(container.querySelector('.ui-tag-chips__more')!.textContent).toBe('+2')
+  })
+
+  test('a crowded row shows no chip and a +N for all of them', async () => {
+    rowWidth = 60
+    await render(row())
+    expect(visibleChips()).toEqual([])
+    expect(container.querySelector('.ui-tag-chips__more')!.textContent).toBe('+4')
+  })
+
+  test('a wide row shows every chip and no +N', async () => {
+    rowWidth = 600
+    await render(row())
+    expect(visibleChips()).toEqual(['one', 'two', 'three', 'four'])
+    expect(container.querySelector('.ui-tag-chips__more')).toBeNull()
+  })
+
+  test('chips kept off screen for measuring are hidden from assistive tech', async () => {
+    rowWidth = 60
+    await render(row())
+    expect(container.querySelector('.ui-tag-chips__probes')!.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  test('without a name to protect, the first max chips show whatever the width', async () => {
+    rowWidth = 60
+    await render(h('div', { className: 'row' }, h(TagChips, { tags, max: 3, nameShare: 0.4 })))
+    expect(visibleChips()).toEqual(['one', 'two', 'three'])
   })
 })
 

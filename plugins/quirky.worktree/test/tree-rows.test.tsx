@@ -87,6 +87,7 @@ async function mount(options: {
   rowFact?: RowFact
   selectedId?: string | null
   props?: Partial<TreeProps>
+  stock?: Partial<typeof DEFAULT_STOCK_OPTIONS>
 }): Promise<Spy> {
   const spy: Spy = { opened: [], toggles: [], renames: [], dialogs: [], deletes: [], tagsOpened: [], collapsed: [] }
   const repos = options.repos ?? [REPO]
@@ -99,7 +100,7 @@ async function mount(options: {
     repos,
     groups,
     tags,
-    spec: allSpecFromStock(DEFAULT_STOCK_OPTIONS, DEFAULT_ACTIVITY_PREFERENCES),
+    spec: allSpecFromStock({ ...DEFAULT_STOCK_OPTIONS, ...options.stock }, DEFAULT_ACTIVITY_PREFERENCES),
     viewId: 'all',
     projection: null,
     marks: new Map(Object.entries(options.marks ?? {})),
@@ -574,4 +575,58 @@ test('a project menu offers Move up and Move down only under a manual project or
   await click(buttonLabelled(host, 'Actions for Zeta'))
   expect(menuLabels()).not.toContain('Move up')
   expect(menuLabels()).not.toContain('Move down')
+})
+
+test('a shift-click range covers only the rows on screen, not rows folded behind a parent', async () => {
+  const ranges: Array<readonly string[] | undefined> = []
+  await mount({
+    worktrees: [
+      worktree('p', 'parent', { lastActivityAt: NOW - 1_000 }),
+      worktree('c1', 'child-one', { parentId: 'p' }),
+      worktree('c2', 'child-two', { parentId: 'p' }),
+      worktree('z', 'zeta', { lastActivityAt: NOW - 9_000_000 })
+    ],
+    props: { onSelectToggle: (_id, _mode, rendered) => { ranges.push(rendered) } }
+  })
+  const shiftClick = (id: string) => click(rowOf(id).querySelector('.worktree-row__main')!, { shiftKey: true })
+
+  await shiftClick('z')
+  expect(ranges.at(-1)).toEqual(['p', 'c1', 'c2', 'z'])
+
+  await click(rowOf('p').querySelector('.worktree-child-toggle')!)
+  await shiftClick('z')
+  expect(ranges.at(-1)).toEqual(['p', 'z'])
+})
+
+test('a shift-click range leaves out the rows of a folded project', async () => {
+  const other: Repo = { ...REPO, id: 'r2', name: 'Other', path: '/repo/Other' }
+  const ranges: Array<readonly string[] | undefined> = []
+  await mount({
+    repos: [REPO, other],
+    worktrees: [worktree('a', 'alpha'), worktree('b', 'beta', { repoId: 'r2' }), worktree('c', 'gamma', { repoId: 'r2' })],
+    props: { onSelectToggle: (_id, _mode, rendered) => { ranges.push(rendered) } }
+  })
+  const header = [...host.querySelectorAll<HTMLElement>('.project-header')].find((node) => node.textContent?.includes('Other'))!
+  await click(header.querySelector<HTMLButtonElement>('.worktree-fold')!)
+  await click(rowOf('a').querySelector('.worktree-row__main')!, { shiftKey: true })
+  expect(ranges.at(-1)).toEqual(['a'])
+})
+
+for (const groupBy of ['status', 'pr'] as const) {
+  test(`a pending creation still shows when grouping by ${groupBy}`, async () => {
+    await mount({
+      worktrees: [worktree('a', 'alpha')],
+      stock: { groupBy },
+      props: { pending: [{ repoId: 'r1', name: 'brand-new' }] }
+    })
+    const pending = host.querySelectorAll('.worktree.pending')
+    expect(pending).toHaveLength(1)
+    expect(pending[0]!.textContent).toContain('brand-new')
+  })
+}
+
+test('a pending creation shows once under its project when grouping by project', async () => {
+  await mount({ worktrees: [worktree('a', 'alpha')], props: { pending: [{ repoId: 'r1', name: 'brand-new' }] } })
+  expect(host.querySelectorAll('.worktree.pending')).toHaveLength(1)
+  expect(host.querySelector('.repo .worktree.pending')).not.toBeNull()
 })

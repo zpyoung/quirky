@@ -96,6 +96,27 @@
   display: inline-flex;
   flex: 0 0 auto;
   gap: var(--ui-space-4);
+  position: relative;
+}
+
+.ui-tag-chips__probes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  height: 0;
+  overflow: hidden;
+  position: absolute;
+  visibility: hidden;
+  width: 0;
+}
+
+.ui-tag-chips__probe-more {
+  font-size: var(--ui-font-section);
+  white-space: nowrap;
+}
+
+.ui-text-ellipsis.ui-name-share {
+  min-width: 40%;
 }
 
 .ui-tag-chips__more {
