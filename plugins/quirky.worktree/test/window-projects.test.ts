@@ -289,11 +289,11 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
 
   await openProjectMenu(w.win, 'api')
   await choose(w.win, 'New Group from Project…')
-  const naming = await w.win.waitFor(() => dialogNamed('New Group'))
+  const naming = await w.win.waitFor(() => dialogNamed('New section'))
   expect(await reportedDialog(w, 'group')).toMatchObject({ kind: 'group', action: 'new', repoId: api.repo.id })
   await setText(field(naming, 'Group name')!, 'backend')
   await click(button(naming, 'Create')!)
-  await closed(w, 'New Group')
+  await closed(w, 'New section')
   await w.win.waitFor(() => {
     const project = groupSection('backend')?.querySelector('section.repo')
     return project && sectionHeadingMatches(project, 'api')
@@ -315,12 +315,12 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
 
   await openGroupMenu(w.win, 'backend')
   await choose(w.win, 'Rename…')
-  const renaming = await w.win.waitFor(() => dialogNamed('Rename Group'))
+  const renaming = await w.win.waitFor(() => dialogNamed('Rename section'))
   expect(await reportedDialog(w, 'group')).toMatchObject({ kind: 'group', action: 'rename', groupId: listed[0]!.id })
   expect(field(renaming, 'Group name')!.value).toBe('backend')
   await setText(field(renaming, 'Group name')!, 'services')
   await click(button(renaming, 'Rename')!)
-  await closed(w, 'Rename Group')
+  await closed(w, 'Rename section')
   await w.win.waitFor(() => groupSection('services'))
   expect((await groups(w.agent)).map((g) => g.name)).toEqual(['services'])
 
@@ -483,13 +483,13 @@ test('SC-57: the confirmation disables future prompts and a locked workspace is 
 
   await openCardMenu(w.win, 'dirty')
   await choose(w.win, 'Delete…')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   expect(button(dialog, 'Cancel')).toBeDefined()
   expect(await reportedDialog(w, 'delete')).toMatchObject({ kind: 'delete', worktreeId: dirty.id })
 
   await click(field(dialog, "Don't ask again")!)
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === dirty.id))
   expect(existsSync(dirty.path)).toBe(false)
   expect(toastMessages().some((message) => message.includes("We'll skip this confirmation next time."))).toBe(true)
@@ -499,7 +499,7 @@ test('SC-57: the confirmation disables future prompts and a locked workspace is 
   await openCardMenu(w.win, 'locked')
   await choose(w.win, 'Delete…')
   await w.win.waitFor(() => toastContaining('Failed to delete workspace locked'))
-  expect(dialogNamed('Delete Workspace')).toBeUndefined()
+  expect(dialogNamed('Delete worktree')).toBeUndefined()
   const toast = toastContaining('Failed to delete workspace locked')!
   expect(toast.textContent).toContain(refusal.message)
   expect(refusal.message).toContain('ci holds it')
@@ -512,9 +512,9 @@ test('SC-57: canceling a dirty workspace deletion leaves it present', async () =
   writeFileSync(join(dirty.path, 'second.txt'), 'y\n')
   await openCardMenu(w.win, 'dirty')
   await choose(w.win, 'Delete…')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   await click(button(dialog, 'Cancel')!)
-  await closed(w, 'Delete Workspace')
+  await closed(w, 'Delete worktree')
   expect((await worktrees(w.agent)).some((x) => x.id === dirty.id)).toBe(true)
   expect(existsSync(dirty.path)).toBe(true)
   expect(existsSync(join(dirty.path, 'scratch.txt'))).toBe(true)
@@ -540,14 +540,14 @@ test('SC-57: deleting a selected workspace clears its view and selection', async
 
   await openCardMenu(w.win, 'selected')
   await choose(w.win, 'Delete…')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   const worktreeChanges: unknown[] = []
   w.agent.onEvent((event) => {
     if (event.type === 'quirky.worktree/changed' && 'data' in event) worktreeChanges.push(event.data)
   })
   await w.agent.callAny('events.subscribe', {})
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((worktree) => worktree.id === selected.id))
   await w.win.waitFor(() => !card('selected'))
   await w.win.waitFor(() => worktreeChanges.some((data) =>
@@ -579,9 +579,9 @@ test('SC-57: a folder workspace can be deleted', async () => {
   await w.win.waitFor(() => card('extra'))
   await openCardMenu(w.win, 'extra')
   await choose(w.win, 'Delete…')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   await Bun.sleep(200)
-  await click(button(dialog, 'Delete Workspace')!)
+  await click(button(dialog, 'Delete worktree')!)
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === extra.id))
 }, SLOW)
 
@@ -596,13 +596,13 @@ test('SC-53: Delete with descendants warns about the children and removes them w
   await openCardMenu(w.win, 'a')
   expect(item('Delete…')).toBeUndefined()
   await choose(w.win, 'Delete with descendants (2)…')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   const listed = [...dialog.querySelectorAll('ul li')].map((li) => li.textContent)
   expect(listed.sort()).toEqual(['b', 'c'])
   expect(await reportedDialog(w, 'delete')).toMatchObject({ kind: 'delete', worktreeId: a.id })
 
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => [a.id, b.id, c.id].includes(x.id)))
   expect([a, b, c].map((x) => existsSync(x.path))).toEqual([false, false, false])
 }, SLOW)
@@ -617,7 +617,7 @@ test('SC-53: with the setting off, Delete goes straight through', async () => {
   await openCardMenu(w.win, 'fix-login')
   await choose(w.win, 'Delete…')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === fix.id))
-  expect(dialogNamed('Delete Workspace')).toBeUndefined()
+  expect(dialogNamed('Delete worktree')).toBeUndefined()
 }, SLOW)
 
 test('SC-58: an unmerged branch is kept, the section offers Delete branch, and using it deletes the branch', async () => {
@@ -630,9 +630,9 @@ test('SC-58: an unmerged branch is kept, the section offers Delete branch, and u
 
   await openCardMenu(w.win, 'fix-login')
   await choose(w.win, 'Delete…')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
 
   const notice = await w.win.waitFor(() => branchNotice())
   expect(button(notice, 'Dismiss')).toBeDefined()

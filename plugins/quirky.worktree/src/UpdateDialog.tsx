@@ -46,7 +46,7 @@ export function UpdateDialog({ context, worktree, onClose }: Props) {
   }
 
   return (
-    <Dialog open title="Workspace details" onClose={onClose}>
+    <Dialog open title="Worktree details" onClose={onClose}>
       <p className="ui-text-muted">Attach reviews and tasks, and keep notes for this workspace.</p>
       <form className="ui-stack" onSubmit={save}>
         <TextField

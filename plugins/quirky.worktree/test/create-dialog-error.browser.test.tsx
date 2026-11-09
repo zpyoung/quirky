@@ -181,7 +181,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     }
     await page.addScriptTag({ content: browserBundle })
     try {
-      await page.getByRole('dialog', { name: 'New workspace' }).waitFor({ timeout: 10_000 })
+      await page.getByRole('dialog', { name: 'New worktree' }).waitFor({ timeout: 10_000 })
     } catch (error) {
       const details = clientErrors.length > 0 ? clientErrors.join('\n') : String(error)
       throw new Error(`CreateDialog browser mount failed: ${details}`)
@@ -199,7 +199,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     const errorText = (await alert.textContent()) ?? ''
     expect(errorText).toContain('Could not create worktree')
     expect(errorText).toContain(LONG_ERROR)
-    const failedLayout = await page.getByRole('dialog', { name: 'New workspace' }).evaluate((dialog) => {
+    const failedLayout = await page.getByRole('dialog', { name: 'New worktree' }).evaluate((dialog) => {
       const rect = (element: Element) => {
         const bounds = element.getBoundingClientRect()
         return { left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom, width: bounds.width, height: bounds.height }
@@ -254,7 +254,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
       const submit = dialog?.querySelector<HTMLButtonElement>('button[type="submit"]')
       return dialog !== null && document.querySelector('[role="alert"]') === null && submit?.disabled === false
     })
-    expect(await page.getByRole('dialog', { name: 'New workspace' }).count()).toBe(1)
+    expect(await page.getByRole('dialog', { name: 'New worktree' }).count()).toBe(1)
     expect(await page.getByRole('alert').count()).toBe(0)
 
     await page.getByRole('button', { name: 'Create', exact: true }).click()

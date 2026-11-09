@@ -1114,7 +1114,7 @@ test('a parent offers Delete with descendants and removes them together', async 
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
   expect(document.querySelector('[role="dialog"]')!.textContent).toContain('Child workspaces will be deleted')
   expect(lastReport(h).dialog).toEqual({ kind: 'delete', worktreeId: 'w2', withDescendants: true })
-  await click(dialogButton('Delete Workspace'))
+  await click(dialogButton('Delete worktree'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, withDescendants: true, yes: true }])
 })
 
@@ -1123,7 +1123,7 @@ test('Rename and Set Parent open their dialogs and the report names them', async
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
   await chooseMore('Details…')
-  expect(dialogName(document.querySelector<HTMLElement>('[role="dialog"]')!)).toBe('Workspace details')
+  expect(dialogName(document.querySelector<HTMLElement>('[role="dialog"]')!)).toBe('Worktree details')
   expect(lastReport(h).dialog).toEqual({ kind: 'update', worktreeId: 'w2' })
   const references = document.querySelector('[role="dialog"] [aria-label="Linked references"]')!
   expect(references.textContent).not.toMatch(/plugin/i)
@@ -1146,14 +1146,14 @@ test('SC-47: Delete asks in the window and passes force and yes with no ask card
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
   await click(itemNamed('Delete…'))
   const dialog = document.querySelector('[role="dialog"]')!
-  expect(dialogName(dialog)).toBe('Delete Workspace')
+  expect(dialogName(dialog)).toBe('Delete worktree')
   expect(dialog.textContent).toContain('/w/fix-login')
   expect(dialog.textContent).toContain('2 uncommitted or untracked changes')
   expect(dialog.textContent).not.toContain('Child workspaces')
   expect(document.activeElement).toBe(dialogButton('Cancel'))
   expect(h.confirmed).toEqual([])
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
-  await click(dialogButton('Delete Workspace'))
+  await click(dialogButton('Delete worktree'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, yes: true }])
   expect(h.callsTo('setting.set')).toEqual([])
   expect(h.callsTo('quirky.ask/answer')).toEqual([])
@@ -1168,8 +1168,8 @@ test('Delete warns that a running agent session will end and still allows deleti
   const dialog = document.querySelector('[role="dialog"]')!
   expect(dialog.textContent).toMatch(/1 agent is running/i)
   expect(dialog.textContent).toMatch(/deleting.*will end.*session/i)
-  expect(dialogButton('Delete Workspace').disabled).toBe(false)
-  await click(dialogButton('Delete Workspace'))
+  expect(dialogButton('Delete worktree').disabled).toBe(false)
+  await click(dialogButton('Delete worktree'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, yes: true }])
 })
 
@@ -1216,7 +1216,7 @@ test('Delete works without a running-agent warning when the session plugin is of
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
   await click(itemNamed('Delete…'))
   expect(document.querySelector('[role="dialog"]')!.textContent).not.toMatch(/agents? (?:is|are) running/i)
-  expect(dialogButton('Delete Workspace').disabled).toBe(false)
+  expect(dialogButton('Delete worktree').disabled).toBe(false)
 })
 
 test('the delete dialog leaves out the change count for no changes or a failed status', async () => {
@@ -1249,7 +1249,7 @@ test('Don\'t ask again turns the setting off first and toasts', async () => {
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
   await click(itemNamed('Delete…'))
   await click(document.querySelector('[role="dialog"] input[type="checkbox"]')!)
-  await click(dialogButton('Delete Workspace'))
+  await click(dialogButton('Delete worktree'))
   expect(h.calls.filter((c) => c.method === 'setting.set' || c.method === 'quirky.worktree/remove').map((c) => c.method)).toEqual(['setting.set', 'quirky.worktree/remove'])
   expect(h.callsTo('setting.set')).toEqual([{ id: 'setting:quirky.worktree/confirmDelete', value: false }])
   expect(h.toasts).toEqual([{ title: "We'll skip this confirmation next time. You can change this in Settings.", body: '' }])
@@ -1399,7 +1399,7 @@ test('the new-worktree dialog creates a worktree through a pending row and opens
   await h.mountInto(host)
   await click(buttonNamed(host, 'New worktree in api')!)
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  expect(dialogName(dialog)).toBe('New workspace')
+  expect(dialogName(dialog)).toBe('New worktree')
   await selectNameMode()
   expect(projectChosen()).toBe('api')
   expect(lastReport(h).dialog).toEqual({ kind: 'create', repoId: 'r1' })
@@ -1559,7 +1559,7 @@ test('SC-33: an untrusted script asks, and each answer retries the create its ow
     const h = setup()
     h.world.createFailures = [untrusted()]
     await submitNamed(h, 'trusted')
-    expect(dialogTitles()).toEqual(['New workspace', 'Run setup from api?'])
+    expect(dialogTitles()).toEqual(['New worktree', 'Run setup from api?'])
     expect(dialogByTitle('Run setup from api?')?.textContent).toContain('touch ran.txt')
     expect(lastReport(h).dialog).toEqual({ kind: 'trust', repoId: 'r1' })
     await click(dialogButton(label))
@@ -1573,7 +1573,7 @@ test('SC-33: a changed script is asked about with its own title', async () => {
   const h = setup()
   h.world.createFailures = [untrusted(true)]
   await submitNamed(h, 'again')
-  expect(dialogTitles()).toEqual(['New workspace', "api's setup changed — run the new version?"])
+  expect(dialogTitles()).toEqual(['New worktree', "api's setup changed — run the new version?"])
 })
 
 test('SC-33: Escape on the trust question abandons the create and leaves the form open', async () => {
@@ -1581,7 +1581,7 @@ test('SC-33: Escape on the trust question abandons the create and leaves the for
   h.world.createFailures = [untrusted()]
   await submitNamed(h, 'nope')
   await press('Escape')
-  expect(dialogTitles()).toEqual(['New workspace'])
+  expect(dialogTitles()).toEqual(['New worktree'])
   expect(h.callsTo('quirky.worktree/create').length).toBe(1)
   expect(h.toasts).toEqual([])
   expect(rowOf('nope', 'api')).toBeUndefined()
@@ -1591,11 +1591,11 @@ test('any other create failure is shown inline and keeps the dialog open', async
   const h = setup()
   h.world.createFailures = [new RpcLike('Branch "x" was not found.', RpcErrorCode.InvalidParams, { reason: 'x' })]
   await submitNamed(h, 'broken')
-  const errorText = dialogByTitle('New workspace')?.querySelector('[role="alert"]')?.textContent ?? ''
+  const errorText = dialogByTitle('New worktree')?.querySelector('[role="alert"]')?.textContent ?? ''
   expect(errorText).toContain('Could not create worktree')
   expect(errorText).toContain('Branch "x" was not found.')
   expect(h.toasts).toEqual([])
-  expect(dialogTitles()).toEqual(['New workspace'])
+  expect(dialogTitles()).toEqual(['New worktree'])
   expect(h.opened).toEqual([])
 })
 
@@ -1604,7 +1604,7 @@ test('a setup-decision-required refusal opens the setup choice instead of a toas
   h.world.createFailures = [new RpcLike('Setup decision required', RpcErrorCode.Conflict, { reason: 'setup-decision-required', repo: 'r1' })]
   await submitNamed(h, 'branchy')
   expect(h.toasts).toEqual([])
-  expect(dialogTitles()).toEqual(['New workspace'])
+  expect(dialogTitles()).toEqual(['New worktree'])
   const create = () => document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement
   expect(dialogButton('Run setup now')).toBeDefined()
   expect(create().disabled).toBe(true)
@@ -1643,7 +1643,7 @@ test('SC-42: Rename saves the display name and notes through set', async () => {
   expect(dialogTitles()).toEqual([])
 })
 
-test.each(['Cancel', 'Escape'])('Workspace details discards reference edits on %s', async (dismissal) => {
+test.each(['Cancel', 'Escape'])('Worktree details discards reference edits on %s', async (dismissal) => {
   const h = setup()
   h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
   await h.mountInto(host)
@@ -1669,7 +1669,7 @@ test.each(['Cancel', 'Escape'])('Workspace details discards reference edits on %
   expect(linked.textContent).not.toContain('Draft task')
 })
 
-test('Workspace details keeps its reference draft on failed Save and submits it with metadata on retry', async () => {
+test('Worktree details keeps its reference draft on failed Save and submits it with metadata on retry', async () => {
   const h = setup()
   h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
   await h.mountInto(host)
@@ -1682,7 +1682,7 @@ test('Workspace details keeps its reference draft on failed Save and submits it 
   await typeInto(dialogField('Display Name')!, 'Login fix')
   h.world.failSet = new Error('Workspace unavailable')
   await click(dialogButton('Save'))
-  expect(dialogTitles()).toEqual(['Workspace details'])
+  expect(dialogTitles()).toEqual(['Worktree details'])
   expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('Draft task')
   expect(h.toasts).toEqual([{ title: 'Could not update workspace', body: 'Workspace unavailable' }])
 
@@ -2331,9 +2331,9 @@ test('cleanup review prevents blocked selection and supports ignoring and restor
   const dialog = document.querySelector('[role="dialog"]') as HTMLElement
   expect(dialog.textContent).toContain('Primary worktrees cannot be deleted.')
   expect(dialog.textContent).toContain('fix-login')
-  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Ignore fix-login')!)
+  await click([...dialog.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Ignore fix-login')!)
   expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(true)
-  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Restore ignored suggestions')!)
+  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Restore ignored')!)
   expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(false)
 
   expect((dialog.querySelector('input[aria-label="Select main"]') as HTMLInputElement).disabled).toBe(true)

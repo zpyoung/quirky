@@ -15,7 +15,7 @@ const NEW_WORKTREE = 'command:quirky.worktree/new-worktree'
 const CREATE_MORE_AGENT_ID = 'worktree-create-more'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const CREATE_MORE_AGENT_LABEL = 'Worktree Create More Test Agent'
-const CREATE = 'New workspace'
+const CREATE = 'New worktree'
 const FALLBACK = 'Workspace created from a local base'
 const SLOW = 40_000
 
@@ -577,13 +577,13 @@ test('SC-42: Rename edits the sidebar display name and notes without moving the 
   await click(await w.win.waitFor(() => menuItem(document, 'More')))
   await click(await w.win.waitFor(() => menuItem(document, 'Details…')))
 
-  const dialog = await w.win.waitFor(() => dialogNamed('Workspace details'))
+  const dialog = await w.win.waitFor(() => dialogNamed('Worktree details'))
   expect(await reportedDialog(w, 'update')).toEqual({ kind: 'update', worktreeId: fix.id })
 
   await setText(field(dialog, 'Display Name')!, 'Login fix')
   await setText(field<HTMLTextAreaElement>(dialog, 'Notes')!, '## todo\n- retry flow')
   await click(button(dialog, 'Save')!)
-  await closed(w, 'Workspace details')
+  await closed(w, 'Worktree details')
 
   await w.win.waitFor(() => sidebarElements<HTMLElement>('[data-worktree-id]').some((row) => listRowName(row) === 'Login fix'))
   const after = (await worktrees(w.agent)).find((x) => x.id === fix.id)!

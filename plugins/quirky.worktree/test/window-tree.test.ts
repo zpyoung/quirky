@@ -301,7 +301,7 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   await win.waitFor(() => card('fix-login', 'api'))
 
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, bubbles: true, cancelable: true }))
-  const dialog = await win.waitFor(() => dialogNamed('New workspace'))
+  const dialog = await win.waitFor(() => dialogNamed('New worktree'))
   expect(selectedProject(dialog)).toBe('api')
   const open = await win.waitFor(async () => {
     const next = await report(agent)
@@ -310,12 +310,12 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   expect(open.dialog).toEqual({ kind: 'create', repoId: api.id })
 
   await pressEscape()
-  await win.waitFor(() => !dialogNamed('New workspace'))
+  await win.waitFor(() => !dialogNamed('New worktree'))
   await win.waitFor(async () => (await report(agent)).dialog === null)
 
   await agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: 'web' } })
   await win.waitFor(() => {
-    const next = dialogNamed('New workspace')
+    const next = dialogNamed('New worktree')
     return next && selectedProject(next) === 'web'
   })
   const second = await win.waitFor(async () => {
