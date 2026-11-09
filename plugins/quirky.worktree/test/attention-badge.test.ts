@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { QuirkyEvent, Session, UiPluginContext } from '@quirky/protocol'
-import { startAttentionBadge } from '../src/attention-badge'
+import { startAttentionBadge, type BadgeClock } from '../src/attention-badge'
 import type { WorktreeControl } from '../src/control-types'
 
 const PANEL = 'sidebar-section:quirky.worktree/worktrees'
@@ -231,4 +231,109 @@ test('dispose stops listening and stops badging', async () => {
   h.world.asks = [ask('w1')]
   await h.emit('quirky.ask/created')
   expect(h.badges.length).toBe(before)
+})
+
+function fakeClock(start = Date.now()) {
+  let now = start
+  let timer: (() => void) | null = null
+  let cleared = 0
+  const clock: BadgeClock = {
+    now: () => now,
+    setInterval(callback) {
+      timer = callback
+      return 'timer'
+    },
+    clearInterval() {
+      timer = null
+      cleared++
+    }
+  }
+  return {
+    clock,
+    advance(ms: number) {
+      now += ms
+      timer?.()
+    },
+    running: () => timer !== null,
+    cleared: () => cleared
+  }
+}
+
+test('a stale agent error ages out on the clock without refetching', async () => {
+  const h = setup({ worktrees: [wt('w1')], sessions: [failedSession('w1')] })
+  const time = fakeClock()
+  const dispose = startAttentionBadge(h.context, time.clock)
+  await h.settle()
+  expect(h.last()).toMatchObject({ count: 1, tone: 'failing' })
+
+  const loads = h.calls.length
+  time.advance(31 * 60_000)
+  expect(h.last()).toEqual({ panel: PANEL, count: null, title: undefined, tone: 'needs-you' })
+  expect(h.calls.length).toBe(loads)
+
+  dispose()
+  expect(time.running()).toBe(false)
+  expect(time.cleared()).toBe(1)
+})
+
+test('a refresh resolving after dispose raises no unhandled rejection and sets no badge', async () => {
+  const h = setup({ worktrees: [wt('w1', { unread: true })] })
+  const time = fakeClock()
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let revoked = false
+  const context = {
+    ...h.context,
+    async call(method: string, params?: unknown) {
+      await gate
+      if (revoked) throw new Error('quirky.worktree is not active')
+      return (h.context as unknown as { call(m: string, p?: unknown): Promise<unknown> }).call(method, params)
+    },
+    setPanelBadge(...args: unknown[]) {
+      if (revoked) throw new Error('quirky.worktree is not active')
+      ;(h.context.setPanelBadge as (...a: unknown[]) => void)(...args)
+    }
+  } as unknown as UiPluginContext
+
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown) => void unhandled.push(reason)
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    const dispose = startAttentionBadge(context, time.clock)
+    dispose()
+    revoked = true
+    release()
+    await h.settle()
+    await h.settle()
+    time.advance(60_000)
+    await h.settle()
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+  }
+  expect(unhandled).toEqual([])
+  expect(h.badges).toEqual([])
+})
+
+test('a revoked context during a live refresh is swallowed', async () => {
+  const h = setup({ worktrees: [wt('w1', { unread: true })] })
+  const context = {
+    ...h.context,
+    setPanelBadge() {
+      throw new Error('quirky.worktree is not active')
+    }
+  } as unknown as UiPluginContext
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown) => void unhandled.push(reason)
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    const dispose = startAttentionBadge(context, fakeClock().clock)
+    await h.settle()
+    await h.settle()
+    dispose()
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+  }
+  expect(unhandled).toEqual([])
 })

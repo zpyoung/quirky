@@ -50,36 +50,82 @@ function title(needing: number, errored: number): string {
   return errored > 0 ? `${base}, ${errored} errored` : base
 }
 
+const CLOCK_TICK_MS = 60_000
+
+/** Timer seam so tests can drive the clock. */
+export type BadgeClock = {
+  now(): number
+  setInterval(callback: () => void, ms: number): unknown
+  clearInterval(handle: unknown): void
+}
+
+const systemClock: BadgeClock = {
+  now: () => Date.now(),
+  setInterval: (callback, ms) => setInterval(callback, ms),
+  clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>)
+}
+
+type Loaded = {
+  worktrees: WorktreeControl[]
+  sessions: Session[]
+  pending: ReadonlyMap<string, number> | null
+  checks: ReadonlyMap<string, ChecksState | null>
+}
+
 /**
  * Keeps the Worktrees section's rail badge equal to the number of worktrees needing you, over all
- * worktrees and independent of the active view or whether the section is mounted. Returns its dispose.
+ * worktrees and independent of the active view or whether the section is mounted. Event-driven loads
+ * are re-evaluated every minute so clock-driven marks (stale agent evidence) age out without a
+ * refetch. Returns its dispose; after dispose, or once the host revokes the context, no work
+ * escapes as an unhandled rejection and no further badge is set.
  */
-export function startAttentionBadge(context: UiPluginContext): () => void {
+export function startAttentionBadge(context: UiPluginContext, clock: BadgeClock = systemClock): () => void {
   let active = true
   let generation = 0
+  let loaded: Loaded | null = null
 
-  const refresh = async () => {
-    const ticket = ++generation
-    const [worktrees, sessions, asks, projection] = await Promise.all([
-      optional(async () => context.call('quirky.worktree/list'), isArray),
-      optional(async () => context.call('quirky.session/list'), isArray),
-      optional(async () => context.call('quirky.ask/list', { pendingOnly: true }), isArray),
-      optional(async () => context.call('quirky.sidebar-extras/projection'), (value): value is object => typeof value === 'object' && value !== null)
-    ])
-    if (!active || ticket !== generation || worktrees === null) return
-
-    const pending = pendingByWorktree(asks)
-    const checks = checksByWorktree(projection)
-    const now = Date.now()
+  const evaluate = () => {
+    if (!active || loaded === null) return
+    const now = clock.now()
     let needing = 0
     let errored = 0
-    for (const worktree of worktrees as WorktreeControl[]) {
-      const mark = activityMark(worktree, (sessions ?? []) as Session[], pending, now)
-      if (!needsYou(worktree, mark, checks.get(worktree.id) ?? null)) continue
+    for (const worktree of loaded.worktrees) {
+      const mark = activityMark(worktree, loaded.sessions, loaded.pending, now)
+      if (!needsYou(worktree, mark, loaded.checks.get(worktree.id) ?? null)) continue
       needing++
       if (mark === 'error') errored++
     }
     context.setPanelBadge(BADGE_PANEL, needing || null, needing > 0 ? title(needing, errored) : undefined, errored > 0 ? 'failing' : 'needs-you')
+  }
+
+  const refresh = async () => {
+    try {
+      const ticket = ++generation
+      const [worktrees, sessions, asks, projection] = await Promise.all([
+        optional(async () => context.call('quirky.worktree/list'), isArray),
+        optional(async () => context.call('quirky.session/list'), isArray),
+        optional(async () => context.call('quirky.ask/list', { pendingOnly: true }), isArray),
+        optional(async () => context.call('quirky.sidebar-extras/projection'), (value): value is object => typeof value === 'object' && value !== null)
+      ])
+      if (!active || ticket !== generation || worktrees === null) return
+      loaded = {
+        worktrees: worktrees as WorktreeControl[],
+        sessions: (sessions ?? []) as Session[],
+        pending: pendingByWorktree(asks),
+        checks: checksByWorktree(projection)
+      }
+      evaluate()
+    } catch {
+      // a revoked context throws from call/setPanelBadge; the badge is already being torn down
+    }
+  }
+
+  const tick = () => {
+    try {
+      evaluate()
+    } catch {
+      // see refresh
+    }
   }
 
   const unsubscribeEvents = context.subscribe((event: QuirkyEvent) => {
@@ -88,11 +134,13 @@ export function startAttentionBadge(context: UiPluginContext): () => void {
   const unsubscribeConnection = context.onConnection((status) => {
     if (status === 'connected') void refresh()
   })
+  const timer = clock.setInterval(tick, CLOCK_TICK_MS)
   void refresh()
 
   return () => {
     active = false
     generation += 1
+    clock.clearInterval(timer)
     unsubscribeEvents()
     unsubscribeConnection()
   }
