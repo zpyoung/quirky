@@ -239,6 +239,7 @@ const worktree = (id: string, repoId: string, name: string, extra: Partial<TestW
   externalVisible: true,
   externalVisibility: 'show',
   externalInboxSuppressed: false,
+  tagIds: [],
   lastActivityAt: 0,
   instanceId: `instance-${id}`,
   ...extra

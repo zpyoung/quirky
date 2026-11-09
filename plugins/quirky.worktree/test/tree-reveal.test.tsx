@@ -20,7 +20,7 @@ const worktree = (id: string, name: string, isMain: boolean): WorktreeControl =>
   groupId: null, projectGroupId: null, lastActivityAt: 1, manualOrder: 0, sleeping: false, sleepChangedAt: null,
   references: [], archivedAt: null,
   cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
-  externalVisible: true, externalVisibility: 'show', externalInboxSuppressed: false
+  externalVisible: true, externalVisibility: 'show', externalInboxSuppressed: false, tagIds: []
 }) as WorktreeControl
 
 const row = (item: WorktreeControl): TreeRow => ({ worktree: item, depth: 0, childCount: 0, descendants: [], ancestors: [] })
