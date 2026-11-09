@@ -284,15 +284,24 @@ function removedTools(tools: readonly UiToolEntry[], layout: UiToolLayout | unde
   return sortByLayoutOrder(uniqueTools(tools, (tool) => layout?.placements[tool.id] === 'overflow'), layout)
 }
 
-function toolBadge(entry: UiToolEntry, badges: Record<string, number>, titles: Record<string, string>, inboxCount: number | null) {
+type BadgeTone = 'needs-you' | 'failing'
+
+export function toolBadge(
+  entry: UiToolEntry,
+  badges: Record<string, number>,
+  titles: Record<string, string>,
+  tones: Record<string, BadgeTone>,
+  inboxCount: number | null
+): { count: number; title: string; tone: BadgeTone } | null {
   if (entry.id === 'host:inbox') {
-    return inboxCount !== null && inboxCount > 0 ? { count: inboxCount, title: `${inboxCount} waiting` } : null
+    return inboxCount !== null && inboxCount > 0 ? { count: inboxCount, title: `${inboxCount} waiting`, tone: 'needs-you' } : null
   }
   const ids = new Set([entry.id, ...entry.aliases])
   const count = [...ids].reduce((total, id) => total + Math.max(0, badges[id] ?? 0), 0)
   if (count === 0) return null
   const title = [...ids].map((id) => titles[id]).find(Boolean) ?? `${count} waiting`
-  return { count, title }
+  const tone = [...ids].some((id) => tones[id] === 'failing') ? 'failing' : 'needs-you'
+  return { count, title, tone }
 }
 
 
@@ -374,6 +383,7 @@ function ToolItem({
   placement,
   badges,
   badgeTitles,
+  badgeTones,
   inboxCount,
   activityItemIds,
   dragging,
@@ -387,6 +397,7 @@ function ToolItem({
   placement: UiToolSlot
   badges: Record<string, number>
   badgeTitles: Record<string, string>
+  badgeTones: Record<string, BadgeTone>
   inboxCount: number | null
   activityItemIds: ReadonlySet<string>
   dragging: { current: string | null }
@@ -422,7 +433,7 @@ function ToolItem({
 
   const selected = openId === tool.id
   const activityItemId = tool.aliases.find((id) => id !== tool.contributionId && activityItemIds.has(id))
-  const badge = activityItemId ? null : toolBadge(tool, badges, badgeTitles, inboxCount)
+  const badge = activityItemId ? null : toolBadge(tool, badges, badgeTitles, badgeTones, inboxCount)
   const handleDragStart = (event: ReactDragEvent<HTMLElement>) => {
     dragging.current = tool.id
     event.dataTransfer.effectAllowed = 'move'
@@ -482,7 +493,7 @@ function ToolItem({
             <ToolIcon name={tool.icon} hue={tool.hue} />
           </IconButton>
         )}
-      {!activityItemId && badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
+      {!activityItemId && badge && <Badge tone={badge.tone} label={badge.title}>{badge.count}</Badge>}
       {menuPosition && (
         <ContextMenu
           label={`Move ${tool.title}`}
@@ -539,6 +550,7 @@ function StripeGroup({
   placementById,
   badges,
   badgeTitles,
+  badgeTones,
   inboxCount,
   activityItemIds,
   knownIds,
@@ -554,6 +566,7 @@ function StripeGroup({
   placementById: ReadonlyMap<string, UiToolSlot>
   badges: Record<string, number>
   badgeTitles: Record<string, string>
+  badgeTones: Record<string, BadgeTone>
   inboxCount: number | null
   activityItemIds: ReadonlySet<string>
   knownIds: ReadonlySet<string>
@@ -601,6 +614,7 @@ function StripeGroup({
           placement={placementById.get(tool.id) ?? slot}
           badges={badges}
           badgeTitles={badgeTitles}
+      badgeTones={badgeTones}
           inboxCount={inboxCount}
           activityItemIds={activityItemIds}
           dragging={dragging}
@@ -623,6 +637,7 @@ function ToolStripe({
   keybindings,
   badges,
   badgeTitles,
+  badgeTones,
   inboxCount,
   activityItemIds,
   knownIds,
@@ -641,6 +656,7 @@ function ToolStripe({
   keybindings: readonly UiKeybinding[]
   badges: Record<string, number>
   badgeTitles: Record<string, string>
+  badgeTones: Record<string, BadgeTone>
   inboxCount: number | null
   activityItemIds: ReadonlySet<string>
   knownIds: ReadonlySet<string>
@@ -690,6 +706,7 @@ function ToolStripe({
       placementById={placementById}
       badges={badges}
       badgeTitles={badgeTitles}
+      badgeTones={badgeTones}
       inboxCount={inboxCount}
       activityItemIds={activityItemIds}
       knownIds={knownIds}
@@ -803,7 +820,7 @@ function panelContent(entry: UiToolEntry): ReactNode {
 
 export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: ToolShellProps) {
   const host = usePluginHost()
-  const { model, layout, badges, badgeTitles } = usePluginState()
+  const { model, layout, badges, badgeTitles, badgeTones } = usePluginState()
   const panelRegion = useRegion('panel')
   const { snapshot: attention } = useAttention()
   const inboxCount = attention.asks !== null && !attention.errors.asks ? attention.asks.length : null
@@ -876,6 +893,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
           keybindings={model?.keybindings ?? []}
           badges={badges}
           badgeTitles={badgeTitles}
+      badgeTones={badgeTones}
           inboxCount={inboxCount}
           activityItemIds={activityItemIds}
           knownIds={knownIds}
