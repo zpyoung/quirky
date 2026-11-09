@@ -484,10 +484,10 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     [tree]
   )
   visibleOrder.current = useMemo(() => [...treeVisibleIds], [treeVisibleIds])
-  const selectToggle = useCallback((id: string, mode: 'toggle' | 'range') => {
+  const selectToggle = useCallback((id: string, mode: 'toggle' | 'range', rendered?: readonly string[]) => {
     setMultiSelected((previous) => {
       const next = new Set(previous)
-      const order = visibleOrder.current
+      const order = rendered ?? visibleOrder.current
       const anchor = selectionAnchor.current ?? selectedId
       const from = anchor === null ? -1 : order.indexOf(anchor)
       const to = order.indexOf(id)
