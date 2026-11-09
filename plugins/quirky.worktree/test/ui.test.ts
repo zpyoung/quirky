@@ -640,7 +640,7 @@ const selectInto = (select: HTMLSelectElement, value: string) =>
     await Promise.resolve()
   })
 
-test('the header holds muted Display, Filter, New worktree and More controls, and the body holds only the view strip', async () => {
+test('the header holds muted icon controls named Display, Filter, New worktree and More, and the body holds only the view strip', async () => {
   const h = setup()
   const unmount = await h.mountInto(host)
   const header = buttonNamed(host, 'Display')?.closest('header')
@@ -651,6 +651,11 @@ test('the header holds muted Display, Filter, New worktree and More controls, an
   expect(controls).toEqual(['Display', 'Filter', 'New worktree', 'More'])
   expect(buttonNamed(host, 'Worktrees options')).toBeUndefined()
   expect(buttonNamed(host, 'Display')?.getAttribute('aria-haspopup')).toBe('menu')
+  for (const name of ['Display', 'Filter']) {
+    const control = buttonNamed(host, name)!
+    expect(control.classList.contains('ui-icon-button')).toBe(true)
+    expect(control.title).toBe(name)
+  }
   expect(buttonNamed(host, 'Filter')?.getAttribute('aria-haspopup')).toBe('dialog')
   expect(filterPopover()).toBeNull()
   for (const label of ['Workspace options', 'Activity filters', 'More workspace tools']) {
@@ -1521,7 +1526,7 @@ test('project headers name their projects and follow the project filter', async 
   await h.mountInto(host)
   const names = () => [...host.querySelectorAll<HTMLElement>('.repo-header .project-name')].map((name) => name.textContent)
   expect(names()).toEqual(['api', 'web'])
-  expect(host.querySelector('.ui-project-tile')).toBeNull()
+  expect([...host.querySelectorAll('.repo-header .ui-project-tile')].map((tile) => tile.textContent)).toEqual(['AP', 'WE'])
   await h.emit({ type: 'quirky.worktree/optionsChanged', data: { options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: ['r1'], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] } } } as QuirkyEvent)
   expect(names()).toEqual(['api'])
 })

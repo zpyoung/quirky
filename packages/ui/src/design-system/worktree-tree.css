@@ -355,6 +355,14 @@
   color: var(--ui-text);
 }
 
+[data-tool-panel]:has(.worktree-tree-section) .ui-tool-panel-frame__actions {
+  opacity: 1;
+}
+
+.ui-button.worktree-tree-header-button--counted {
+  aspect-ratio: auto;
+}
+
 .worktree-tree-header-button__count {
   color: var(--ui-text);
   font-variant-numeric: tabular-nums;

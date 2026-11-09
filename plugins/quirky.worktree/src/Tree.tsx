@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
-import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'
+import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
@@ -1110,6 +1110,7 @@ export function Tree({
 
   const header = (props: {
     title: string
+    lead?: ReactNode
     tooltip?: string
     className: string
     foldLabel: string
@@ -1134,6 +1135,7 @@ export function Tree({
           >
             <span className="worktree-chevron" aria-hidden="true">›</span>
           </button>
+          {props.lead}
           <span className="project-name ui-text-ellipsis">{props.title}</span>
           {props.count > 0 && (
             <span
@@ -1172,6 +1174,7 @@ export function Tree({
       >
         {header({
           title: `${identity?.icon ? `${identity.icon} ` : ''}${label}`,
+          lead: <ProjectTile name={label} color={identity?.color} />,
           tooltip: repo?.path,
           className: 'project-header',
           foldLabel: `project ${label}`,
