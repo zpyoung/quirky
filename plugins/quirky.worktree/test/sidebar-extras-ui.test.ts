@@ -58,7 +58,7 @@ type SidebarProjection = SidebarState & {
   workspaces: ProjectedWorkspace[]
 }
 type Mount = (element: HTMLElement, props?: { report?(state: unknown): void }) => () => void
-type Call = { method: string; params: Record<string, unknown> }
+type Call = { method: string; params: Record<string, unknown>; fromBadge?: boolean }
 type Group = ProjectGroup & { parentId: string | null }
 type RendererReport = {
   groups: { id: string; projects: { id: string }[] }[]
@@ -452,7 +452,9 @@ function setup(
       provided.set(id, implementation)
     },
     async call(method: string, params: Record<string, unknown> = {}) {
-      const entry = { method, params }
+      // the attention badge shares this context and issues the same methods, so its calls are tagged by origin
+      const fromBadge = new Error().stack?.includes('attention-badge') ?? false
+      const entry: Call = { method, params, fromBadge }
       calls.push(entry)
       world.calls.push(entry)
       switch (method) {
@@ -522,7 +524,7 @@ function setup(
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
           if (world.extrasFailure) throw world.extrasFailure
           const projection = project(typeof params.client === 'string' ? params.client : 'desktop')
-          if (nextProjectionGate) {
+          if (nextProjectionGate && !fromBadge) {
             const gate = nextProjectionGate
             nextProjectionGate = null
             gate.start()
@@ -1821,13 +1823,14 @@ test('hosting review events refresh only active filters and late projections can
   h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
   await h.mount()
 
-  const offCalls = h.calls.length
+  const sectionCalls = () => h.calls.filter((call) => !call.fromBadge)
+  const offCalls = sectionCalls().length
   const offReports = h.reports.length
   await h.emit('quirky.hosting/changed')
   await h.emit('quirky.hosting/refresh')
   await h.emit('quirky.hosting/reviewCacheChanged')
   await h.flush()
-  expect(h.calls).toHaveLength(offCalls)
+  expect(sectionCalls()).toHaveLength(offCalls)
   expect(h.reports).toHaveLength(offReports)
 
   await openFilters(h)
@@ -1836,11 +1839,11 @@ test('hosting review events refresh only active filters and late projections can
   expect(checkboxFor('Hide passing checks')?.checked).toBe(true)
   expect(card('other')).toBeUndefined()
   expect(card('feature')).toBeDefined()
-  const activeCalls = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+  const activeCalls = sectionCalls().filter((call) => call.method === 'quirky.sidebar-extras/projection').length
   h.world.reviews['w-feature'] = { state: 'merged', checksStatus: 'failure' }
   await h.emit('quirky.hosting/reviewCacheChanged')
   await h.flush()
-  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length).toBeGreaterThan(activeCalls)
+  expect(sectionCalls().filter((call) => call.method === 'quirky.sidebar-extras/projection').length).toBeGreaterThan(activeCalls)
   expect(card('feature')).toBeUndefined()
 
   h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
