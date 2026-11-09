@@ -1,5 +1,64 @@
 .remote-workspaces {
+  gap: var(--ui-space-16);
+}
+
+.remote-form {
+  display: flex;
+  flex-direction: column;
   gap: var(--ui-space-12);
+  min-width: 0;
+}
+
+.remote-workspaces .ui-text-field__label,
+.remote-workspace .ui-text-field__label,
+.vm-environments .ui-text-field__label {
+  font-size: var(--ui-font-body);
+  font-weight: 500;
+}
+
+.remote-workspaces .ui-button:disabled,
+.vm-environments .ui-button:disabled {
+  color: var(--ui-text);
+  opacity: 0.6;
+}
+
+.remote-replace .ui-checkbox,
+.vm-recipe .ui-checkbox {
+  align-items: flex-start;
+  gap: var(--ui-space-8);
+  line-height: 1.4;
+}
+
+.remote-replace .ui-checkbox__input,
+.vm-recipe .ui-checkbox__input {
+  appearance: none;
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-mark);
+  box-sizing: border-box;
+  display: grid;
+  margin-block: var(--ui-space-2);
+  place-content: center;
+}
+
+.remote-replace .ui-checkbox__input:checked,
+.vm-recipe .ui-checkbox__input:checked {
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.remote-replace .ui-checkbox__input:checked::after,
+.vm-recipe .ui-checkbox__input:checked::after {
+  background: var(--ui-surface);
+  clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 22%, 85% 8%, 38% 70%);
+  content: '';
+  height: 70%;
+  width: 70%;
+}
+
+.remote-replace .ui-checkbox__input:disabled,
+.vm-recipe .ui-checkbox__input:disabled {
+  cursor: not-allowed;
 }
 
 .remote-replace,
@@ -7,12 +66,6 @@
   border: 0;
   margin: 0;
   min-width: 0;
-  padding: 0;
-}
-
-.vm-recipe__legend {
-  color: var(--ui-muted);
-  font-size: var(--ui-font-label);
   padding: 0;
 }
 
@@ -106,6 +159,18 @@
   margin-inline: auto;
   max-width: var(--ui-dialog-wide-width);
   min-width: 0;
+  padding: var(--ui-space-16);
+}
+
+.vm-environments > .ui-section-header > .ui-section-header__title {
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.vm-environments {
+  gap: var(--ui-space-16);
   padding: var(--ui-space-16);
 }
 

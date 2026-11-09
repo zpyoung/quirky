@@ -107,7 +107,7 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
 
   return <section aria-label="Remote workspaces" className="ui-panel-content remote-workspaces">
     <Button type="button" disabled={busy} onClick={() => context.openView('view:quirky.worktree/environments')}>VM environments</Button>
-    <form className="ui-stack" onSubmit={(event) => { event.preventDefault(); void run(register) }}>
+    <form className="remote-form" onSubmit={(event) => { event.preventDefault(); void run(register) }}>
       <TextField id="remote-owner-runtime" label="Saved owner runtime" value={runtime} disabled={busy} onChange={(event) => setRuntime(event.currentTarget.value)} placeholder="runtime ID or name" />
       <fieldset className="remote-replace" disabled={busy}>
         <Checkbox checked={replace} label="Replace a changed owner identity or grant" onChange={setReplace} />
@@ -116,7 +116,7 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
     </form>
     {error && <p className="ui-error-text" role="alert">{error}</p>}
     {hosts.length === 0
-      ? <EmptyState message="No owner hosts registered" action={{ label: 'Register host', onAction: () => document.getElementById('remote-owner-runtime')?.focus() }} />
+      ? <EmptyState message="No owner hosts registered" />
       : hosts.map((host) => {
         const hostWorkspaces = workspaces.filter((workspace) => workspace.hostId === host.id)
         const hostState = host.connected ? 'Connected' : 'Unavailable'

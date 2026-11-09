@@ -150,7 +150,7 @@ export function VmEnvironments({ context, initialRepo }: { context: UiPluginCont
     <p className="ui-text-muted">Recipes provision real Lima guests. A timed-out create may still be running: inspect its existing record before starting another VM.</p>
     {doctor !== null && <details className="vm-diagnostics"><summary>VM backend diagnostics</summary><pre className="vm-diagnostics__body">{JSON.stringify(doctor, null, 2)}</pre></details>}
     {error && <p className="ui-error-text" role="alert">{error}</p>}
-    <form className="ui-stack" onSubmit={(event) => { event.preventDefault(); void run(create) }}>
+    <form className="remote-form" onSubmit={(event) => { event.preventDefault(); void run(create) }}>
       <SelectField id="vm-project" label="Project" aria-label="VM project" value={repo} disabled={busy} onChange={(event) => { setRepo(event.currentTarget.value); setRecipe(null) }}>
         {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
       </SelectField>
@@ -160,7 +160,7 @@ export function VmEnvironments({ context, initialRepo }: { context: UiPluginCont
     </form>
     <SectionHeader title="Recorded environments" />
     {environments.length === 0
-      ? <EmptyState message="No VM environments recorded" action={{ label: 'Create VM', onAction: () => document.getElementById('vm-project')?.focus() }} />
+      ? <EmptyState message="No VM environments recorded" />
       : <table className="vm-table">
         <thead>
           <tr>
