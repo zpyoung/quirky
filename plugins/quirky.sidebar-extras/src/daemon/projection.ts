@@ -207,13 +207,12 @@ function activityAt(
 
 /**
  * Reads only canonical public APIs and projects their current facts for one client state snapshot.
- * `withChecks` reads the review cache for per-workspace checks even when no hide filter needs it.
+ * Per-workspace checks always come from the review cache; reviewReason and reviewError appear only while a hide-review filter is on.
  */
 export async function projectActivity(
   context: PluginContext,
   state: ExtrasState,
-  now: () => number,
-  options: { withChecks?: boolean } = {}
+  now: () => number
 ): Promise<ActivityProjection> {
   const [worktreeResult, repoResult] = await Promise.all([
     context.call('quirky.worktree/list'),
@@ -226,7 +225,7 @@ export async function projectActivity(
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
   const [facts, reviewDecisions] = await Promise.all([
     runtimeFacts(context, worktrees),
-    readReviewDecisions(context, worktrees, state.preferences, options.withChecks === true)
+    readReviewDecisions(context, worktrees, state.preferences)
   ])
   const reviewFiltering = state.preferences.hideCompletedReviewWorkspaces || state.preferences.hidePassingCheckWorkspaces
   const sessions = sessionActivity(facts.sessions)

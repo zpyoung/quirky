@@ -52,9 +52,7 @@ export function activate(context: PluginContext): void {
     async projection(params) {
       const { client, preferences } = validateReadParams(params, context)
       const stored = state.read(client)
-      return projectActivity(context, preferences === undefined ? stored : { ...stored, preferences }, () => Date.now(), {
-        withChecks: preferences !== undefined
-      })
+      return projectActivity(context, preferences === undefined ? stored : { ...stored, preferences }, () => Date.now())
     },
     dirty(params) {
       return readDirty(context, validateDirtyParams(params, context))
