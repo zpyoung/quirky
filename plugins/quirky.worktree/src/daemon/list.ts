@@ -9,6 +9,7 @@ import { readStockOptions } from './options'
 import { projectPreference } from './project'
 import { forgetWorktreeOrigins, insertRow, metadataOf, rowOf, type WorktreeRow } from './store'
 import { isOwnedPreparedRegistration } from './prepared'
+import { tagIdsOf } from './tags'
 
 /** What the join needs from the plugin: the store, group lookup, identity source and in-flight removes. */
 export type ListEnv = {
@@ -57,6 +58,7 @@ export function joinMetadata(facts: Facts, row: WorktreeRow, removing: boolean, 
     externalVisibility,
     externalVisible: !isExternalWorktree || externalVisibility === 'show',
     externalInboxSuppressed: preference.externalInboxSuppressed,
+    tagIds: tagIdsOf(store, row.id),
     removing
   }
 }

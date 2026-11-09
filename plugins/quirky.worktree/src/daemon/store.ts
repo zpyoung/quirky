@@ -174,7 +174,27 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
       `)
     },
     migrateRemoteWorkspaces,
-    migrateVmEnvironments
+    migrateVmEnvironments,
+    (store) => {
+      store.exec(`
+        CREATE TABLE tags (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          name_key TEXT NOT NULL UNIQUE,
+          color TEXT,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE worktree_tags (
+          worktree_id TEXT NOT NULL,
+          tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+          PRIMARY KEY (worktree_id, tag_id)
+        );
+        CREATE TRIGGER worktree_tags_forget_worktree AFTER DELETE ON worktrees
+        BEGIN
+          DELETE FROM worktree_tags WHERE worktree_id = OLD.id;
+        END;
+      `)
+    }
   ])
 }
 export type WorktreeOriginCreator = {
