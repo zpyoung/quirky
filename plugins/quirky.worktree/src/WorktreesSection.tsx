@@ -877,28 +877,30 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     <div ref={sectionRoot} className="ui-stack ui-panel-content worktree-tree-section">
       <ToolPanelActions>
         <>
-          <Button
+          <IconButton
             ref={displayButton}
             className="worktree-tree-header-button"
+            label="Display"
+            title="Display"
             aria-haspopup="menu"
             aria-expanded={menu === 'display'}
             onClick={() => setMenu((current) => (current === 'display' ? null : 'display'))}
           >
-            Display
-          </Button>
-          <Button
+            <ControlIcon name="squares-four" />
+          </IconButton>
+          <IconButton
             ref={filterButton}
-            className="worktree-tree-header-button"
-            aria-label="Filter"
+            className={`worktree-tree-header-button${filtering ? ' worktree-tree-header-button--counted' : ''}`}
+            label="Filter"
             aria-haspopup="dialog"
             aria-expanded={menu === 'filter'}
             disabled={activeId === 'needs-you'}
-            title={activeId === 'needs-you' ? 'Needs you has its own filter' : filtering ? `${chips.length} active` : undefined}
+            title={activeId === 'needs-you' ? 'Needs you has its own filter' : filtering ? `Filter: ${chips.length} active` : 'Filter'}
             onClick={() => setMenu((current) => (current === 'filter' ? null : 'filter'))}
           >
-            Filter
+            <ControlIcon name="funnel" />
             {filtering ? <span className="worktree-tree-header-button__count" aria-hidden="true">{chips.length}</span> : null}
-          </Button>
+          </IconButton>
           <IconButton
             className="worktree-tree-header-button"
             label="New worktree"

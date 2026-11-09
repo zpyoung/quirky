@@ -154,3 +154,8 @@ test('the stylesheet scopes every rule under the worktree panel classes', () => 
   expect(selectors.length).toBeGreaterThan(0)
   for (const selector of selectors) expect(selector).toMatch(/\.(repo-header|worktree-tree|worktree-hover|worktree-tags)(?![a-z])/)
 })
+
+test('the Worktrees panel keeps its header actions visible without hover', () => {
+  const css = readFileSync(STYLESHEET, 'utf8')
+  expect(css).toMatch(/\[data-tool-panel\]:has\(\.worktree-tree-section\) \.ui-tool-panel-frame__actions\s*\{[^}]*opacity:\s*1/)
+})
