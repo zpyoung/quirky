@@ -612,7 +612,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
       context.emit('viewsChanged', {})
       return state
     },
-    activeView: (params) => ({ viewId: activeViews.get(params.window) }),
+    activeView: (params, caller) => ({ viewId: activeViews.get(params.window, caller.role === 'plugin' ? undefined : caller.connection) }),
     setActiveView(params, caller) {
       activeViews.set(params.window, params.viewId, caller.role === 'plugin' ? undefined : caller.connection)
       return {}
