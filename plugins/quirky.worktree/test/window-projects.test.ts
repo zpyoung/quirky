@@ -9,6 +9,12 @@ import { commitFiles, failure, git, isolateGitConfig, makeRepo } from '../../qui
 import { githubUser, useGlobalGitConfig } from './fixtures/repos'
 import { button, click, dialogNamed, field, listRowName, menuItem, sectionHeadingMatches, setSelect, setText, toastContaining, toastMessages } from './window/dom'
 
+/** The Worktrees panel's own header `…` button; other chrome has a More button too. */
+const worktreesMore = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="More"]')].find((candidate) =>
+    candidate.closest('header')?.querySelector('h2')?.textContent?.trim() === 'Worktrees'
+  )
+
 const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SLOW = 40_000
@@ -123,7 +129,8 @@ async function openGroupMenu(win: HeadlessWindow, name: string): Promise<void> {
 
 /** Opens Add project and submits `path` from its field. */
 async function submitPath(w: World, path: string): Promise<HTMLElement> {
-  await click(await w.win.waitFor(() => button(document, 'Add project')))
+  await click(await w.win.waitFor(() => worktreesMore()))
+  await click(await w.win.waitFor(() => menuItem(document, 'Add project')))
   const dialog = await w.win.waitFor(() => dialogNamed('Add project'))
   await reportedDialog(w, 'add-project')
   await setText(field(dialog, 'Path')!, path)
