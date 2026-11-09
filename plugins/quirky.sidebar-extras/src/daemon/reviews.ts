@@ -84,16 +84,14 @@ function unknownFor(worktrees: Worktree[], error?: string): Map<string, ReviewDe
   return results
 }
 
-/** Reads only hosting's normalized review cache; filtering never triggers a provider lookup. */
+/** Reads only hosting's normalized review cache; filtering never triggers a provider lookup. Always reads, so checks fill even when no hide filter is on. */
 export async function readReviewDecisions(
   context: PluginContext,
   worktrees: Worktree[],
-  preferences: Preferences,
-  withChecks = false
-): Promise<Map<string, ReviewDecision> | undefined> {
+  preferences: Preferences
+): Promise<Map<string, ReviewDecision>> {
   const hideCompleted = preferences.hideCompletedReviewWorkspaces
   const hidePassing = preferences.hidePassingCheckWorkspaces
-  if (!hideCompleted && !hidePassing && !withChecks) return undefined
 
   const decisions = unknownFor(worktrees)
   const gitWorktrees = worktrees.filter((worktree) => worktree.kind === 'git')

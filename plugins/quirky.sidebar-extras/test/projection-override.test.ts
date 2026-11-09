@@ -185,6 +185,22 @@ describe('projection checks', () => {
     }
   })
 
+  test('is filled without an override while both stored hide filters are off', async () => {
+    env = await boot({ fakeHosting: true })
+    const repo = await createGitProject(env.client)
+    const failing = await createWorktree(env.client, repo.repo.id, 'failing')
+    await setFakeHostingCache(env.client, [entry(failing, 'open', 'failure')])
+    const projection = await project()
+    expect(checksOf(projection, failing.id)).toBe('failure')
+    expect(projection.reviewHiddenIds).toEqual([])
+    expect(projection.visibleIds).toContain(failing.id)
+    for (const workspace of projection.workspaces) {
+      expect(workspace.reviewReason).toBeUndefined()
+      expect(workspace.reviewError).toBeUndefined()
+    }
+    expect((await fakeHostingCalls(env.client)).length).toBeGreaterThan(0)
+  })
+
   test('is filled alongside the stored hide filters and reads only the review cache', async () => {
     env = await boot({ fakeHosting: true })
     const repo = await createGitProject(env.client)
