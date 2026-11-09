@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ControlIcon, EmptyState, ExpandingIconButton, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
+import { Button, ControlIcon, Dialog, EmptyState, ExpandingIconButton, IconButton, Popover, TextField, ToolPanelActions } from '@quirky/ui'
 import type { Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
-import { confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
+import { changeGroup, confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
 import { AddProjectDialog } from './AddProjectDialog'
 import { BaseFallbackDialog } from './BaseFallbackDialog'
 import { CreateDialog } from './CreateDialog'
@@ -12,9 +12,13 @@ import { Notices } from './Notices'
 import { ActivityFilters } from './ActivityFilters'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RemoveProjectDialog } from './RemoveProjectDialog'
-import { buildReport, buildTreeModel, isAddFlow, narrowTreeModel, repoLabel, type DialogState, type GroupNode, type PendingCreate, type SeparatorReport, type TreeRow, type WorktreesReport } from './report'
+import { buildReport, canonicalDescendants, isAddFlow, repoLabel, type DialogState, type PendingCreate, type SeparatorReport, type WorktreesReport } from './report'
 import { useNow } from './StatusDot'
 import { Tree } from './Tree'
+import { TagsPopover } from './TagsPopover'
+import { activityMark, buildTree, type ChecksState } from './view-model'
+import { allSpecFromStock, DEFAULT_ACTIVITY_PREFERENCES, type ActivityMarkState } from './view-types'
+import { useWorktreeAttention } from './useWorktreeAttention'
 import { TrustDialog } from './TrustDialog'
 import { UpdateDialog } from './UpdateDialog'
 import { useAutomationAvailability } from './useAutomationAvailability'
@@ -121,10 +125,41 @@ function isSleeping(worktree: WorktreeControl): boolean {
   return worktree.sleeping
 }
 const CREATE_GRACE_MS = 5 * 60 * 1_000
+const NO_SESSIONS: Session[] = []
+
+/** Creates an empty section; worktrees and projects join it from their menus or by dragging. */
+function NewSectionDialog({ context, onClose }: { context: UiPluginContext; onClose(): void }) {
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const trimmed = name.trim()
+  return (
+    <Dialog open title="New section" onClose={onClose}>
+      <form
+        className="ui-stack"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!trimmed) return
+          setBusy(true)
+          void changeGroup(context, 'Could not create section', () => context.call('quirky.repo/groupCreate', { name: trimmed })).then((ok) => {
+            setBusy(false)
+            if (ok) onClose()
+          })
+        }}
+      >
+        <TextField type="text" label="Section name" id="worktree-section-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} />
+        <div className="ui-actions">
+          <Button type="button" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={busy || !trimmed}>Create</Button>
+        </div>
+      </form>
+    </Dialog>
+  )
+}
 
 /** The sidebar's workspace tree with its menus, dialogs, add-project form and `ui state` report. */
 export function WorktreesSection({ context, report, requests, addProjectRequests }: Props) {
-  const { repos, groups, worktrees, sessions, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded } = useTree(context)
+  const { repos, groups, worktrees, sessions, sessionsSettled, tags, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded } = useTree(context)
+  const pendingAsks = useWorktreeAttention(context)
   const now = useNow()
   const [layout, setLayout] = useState(() => context.getLayout())
   const [optionsOpen, setOptionsOpen] = useState(false)
@@ -153,6 +188,11 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const [cleanupOpen, setCleanupOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
   const [statusEditorOpen, setStatusEditorOpen] = useState(false)
+  const [multiSelected, setMultiSelected] = useState<ReadonlySet<string>>(() => new Set())
+  const selectionAnchor = useRef<string | null>(null)
+  const visibleOrder = useRef<string[]>([])
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
+  const [tagsTarget, setTagsTarget] = useState<{ ids: string[]; anchor: HTMLElement } | null>(null)
 
   useEffect(() => {
     const previous = previousDialog.current
@@ -289,15 +329,6 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     ),
     [ordered, stockOptions.showSleeping, stockOptions, visibleIds, alwaysShowPrimary, hasAuthenticatedDesktopClient, otherClientByWorktree]
   )
-  const treeVisibleIds = useMemo(() => {
-    const result = new Set<string>()
-    for (const worktree of ordered) {
-      if (!revealFiltered && !passesStockFilters(worktree, stockOptions, hasAuthenticatedDesktopClient, otherClientByWorktree)) continue
-      const showSleeping = !isSleeping(worktree) || canShowSleeping(worktree)
-      if (showSleeping && (!visibleIds || visibleIds.has(worktree.id))) result.add(worktree.id)
-    }
-    return result
-  }, [ordered, stockOptions, revealFiltered, revealSleeping, visibleIds, alwaysShowPrimary, hasAuthenticatedDesktopClient, otherClientByWorktree])
   const orderedRepos = useMemo(() => {
     const activityByRepo = new Map<string, number>()
     for (const worktree of worktrees) {
@@ -411,10 +442,84 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     () => (deleting.size === 0 ? ordered : ordered.map((worktree) => (deleting.has(worktree.id) ? { ...worktree, removing: true } : worktree))),
     [ordered, deleting]
   )
-  const model = useMemo(
-    () => narrowTreeModel(buildTreeModel(orderedRepos, groups, shown, pending, treeVisibleIds), stockOptions.filterRepoIds),
-    [orderedRepos, groups, shown, pending, treeVisibleIds, stockOptions.filterRepoIds]
+  const markSessions = sessions ?? (sessionsSettled ? NO_SESSIONS : null)
+  const marks = useMemo(() => {
+    const result = new Map<string, ActivityMarkState>()
+    for (const worktree of shown) result.set(worktree.id, activityMark(worktree, markSessions, pendingAsks, now))
+    return result
+  }, [shown, markSessions, pendingAsks, now])
+  const checks = useMemo(() => {
+    const result = new Map<string, ChecksState | null>()
+    for (const entry of activityProjection?.workspaces ?? []) {
+      result.set(entry.worktreeId, (entry as { checks?: ChecksState | null }).checks ?? null)
+    }
+    return result
+  }, [activityProjection])
+  const spec = useMemo(
+    () => allSpecFromStock(stockOptions, activityProjection?.preferences ?? DEFAULT_ACTIVITY_PREFERENCES),
+    [stockOptions, activityProjection]
   )
+  const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags])
+  const tree = useMemo(
+    () => buildTree({
+      worktrees: shown,
+      repos,
+      groups,
+      tags,
+      spec,
+      viewId: 'all',
+      projection: currentProjection,
+      marks,
+      checks,
+      projectOrder,
+      sessions,
+      otherClients: { authenticated: hasAuthenticatedDesktopClient, byWorktree: otherClientByWorktree },
+      statuses: statusDefinitions,
+      reveal: { filtered: revealFiltered, asleep: revealSleeping }
+    }),
+    [shown, repos, groups, tags, spec, currentProjection, marks, checks, projectOrder, sessions, hasAuthenticatedDesktopClient, otherClientByWorktree, statusDefinitions, revealFiltered, revealSleeping]
+  )
+  const treeVisibleIds = useMemo(
+    () => new Set(tree.groups.flatMap((group) => group.rows.map((row) => row.worktree.id))),
+    [tree]
+  )
+  visibleOrder.current = useMemo(() => [...treeVisibleIds], [treeVisibleIds])
+  const selectToggle = useCallback((id: string, mode: 'toggle' | 'range') => {
+    setMultiSelected((previous) => {
+      const next = new Set(previous)
+      const order = visibleOrder.current
+      const anchor = selectionAnchor.current ?? selectedId
+      const from = anchor === null ? -1 : order.indexOf(anchor)
+      const to = order.indexOf(id)
+      if (mode === 'range' && from >= 0 && to >= 0) {
+        for (const item of order.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(item)
+      } else {
+        if (!next.delete(id)) next.add(id)
+        selectionAnchor.current = id
+      }
+      return next
+    })
+  }, [selectedId])
+  const clearSelection = useCallback(() => {
+    selectionAnchor.current = null
+    setMultiSelected((previous) => (previous.size === 0 ? previous : new Set()))
+  }, [])
+  const toggleCollapsed = useCallback((key: string) => {
+    setCollapsed((previous) => {
+      const next = new Set(previous)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
+  }, [])
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || multiSelected.size === 0) return
+      if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [role="menu"], [role="dialog"]')) return
+      clearSelection()
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [multiSelected, clearSelection])
   const state: WorktreesReport = useMemo(() => {
     // a stacked question is what the person is looking at, so it is what `ui state` reports
     const front: DialogState | null = trust
@@ -517,21 +622,10 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const dialogGroup = dialog?.kind === 'group' && (dialog.action === 'rename' || dialog.action === 'delete')
     ? groups.find((group) => group.id === dialog.groupId)
     : undefined
-  const allRows = useMemo(() => {
-    const rowsInGroups = (nodes: GroupNode[]): TreeRow[] => {
-      const rows: TreeRow[] = []
-      for (const node of nodes) {
-        rows.push(...node.rows, ...node.looseRows)
-        for (const project of node.projects) rows.push(...project.rows)
-        rows.push(...rowsInGroups(node.children))
-      }
-      return rows
-    }
-    return [...rowsInGroups(model.groups), ...model.projects.flatMap((project) => project.rows)]
-  }, [model])
+  const descendantIds = useMemo(() => canonicalDescendants(worktrees), [worktrees])
   const descendants =
     dialog?.kind === 'delete' && dialog.withDescendants && target
-      ? (allRows.find((row) => row.worktree.id === target.id)?.descendants ?? [])
+      ? (descendantIds.get(target.id) ?? [])
           .map((id) => worktrees.find((worktree) => worktree.id === id))
           .filter((worktree): worktree is NonNullable<typeof worktree> => worktree !== undefined)
       : undefined
@@ -628,10 +722,26 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
         <div className="ui-scroll ui-grow">
           <Tree
             context={context}
-            model={model}
+            model={tree}
+            tagsById={tagsById}
+            rowFact="last-activity"
+            repos={repos}
             groups={groups}
             sessions={sessions}
             selectedId={selectedId}
+            multiSelected={multiSelected}
+            pendingAsks={pendingAsks}
+            checks={checks}
+            pending={pending}
+            groupBy={spec.display.groupBy}
+            emptyProjects={tree.hidden.count === 0}
+            onOpen={clearSelection}
+            onSelectToggle={selectToggle}
+            onTagsOpen={(ids, anchor) => setTagsTarget({ ids, anchor })}
+            collapsed={collapsed}
+            onToggleCollapsed={toggleCollapsed}
+            projectOrder={orderedRepos.map((repo) => repo.id)}
+            onReorderProjects={(ids) => void reorderProjects(ids)}
             automationExpandedId={expandedAutomationId}
             automationAvailability={automationAvailability}
             onToggleAutomationDetails={toggleAutomationDetails}
@@ -692,6 +802,8 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
       {dialog?.kind === 'group' && dialog.action === 'new' && dialogRepo && (
         <NewGroupDialog context={context} repo={dialogRepo} onClose={closeDialog} />
       )}
+      {dialog?.kind === 'group' && dialog.action === 'new-section' && <NewSectionDialog context={context} onClose={closeDialog} />}
+      {tagsTarget && <TagsPopover context={context} worktreeIds={tagsTarget.ids} anchor={tagsTarget.anchor} onClose={() => setTagsTarget(null)} />}
       {dialog?.kind === 'group' && dialog.action === 'new-worktree' && (
         <NewWorktreeGroupDialog
           context={context}

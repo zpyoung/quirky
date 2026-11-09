@@ -254,7 +254,7 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   })
 
   await openMenu(win, 'feature', 'api')
-  await choose(win, 'Add worktree to group')
+  await choose(win, 'Move to section')
   await choose(win, 'Team')
   await win.waitFor(async () => ((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).find((item) => item.id === feature.id)?.projectGroupId === group.id)
   const groupSection = await win.waitFor(() => {
@@ -265,7 +265,8 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   expect((await report(agent))?.groups.some((item) => item.id === group.id)).toBe(true)
 
   await openMenu(win, 'feature')
-  await choose(win, 'Remove worktree from group')
+  await choose(win, 'Move to section')
+  await choose(win, 'Remove from section')
   await win.waitFor(async () => ((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).find((item) => item.id === feature.id)?.projectGroupId === null)
   await win.waitFor(() => card('feature', 'api'))
   expect(card('feature', 'api')).toBeDefined()

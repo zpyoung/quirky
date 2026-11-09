@@ -475,7 +475,7 @@ test('SC-57: the confirmation disables future prompts and a locked workspace is 
   const { dirty, locked } = await dirtyAndLocked(w)
 
   await openCardMenu(w.win, 'dirty')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
   expect(button(dialog, 'Cancel')).toBeDefined()
   expect(await reportedDialog(w, 'delete')).toMatchObject({ kind: 'delete', worktreeId: dirty.id })
@@ -490,7 +490,7 @@ test('SC-57: the confirmation disables future prompts and a locked workspace is 
 
   const refusal = await failure(w.agent.callAny('quirky.worktree/remove', { worktree: locked.id, yes: true, force: true }))
   await openCardMenu(w.win, 'locked')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   await w.win.waitFor(() => toastContaining('Failed to delete workspace locked'))
   expect(dialogNamed('Delete Workspace')).toBeUndefined()
   const toast = toastContaining('Failed to delete workspace locked')!
@@ -504,7 +504,7 @@ test('SC-57: canceling a dirty workspace deletion leaves it present', async () =
   const { dirty } = await dirtyAndLocked(w)
   writeFileSync(join(dirty.path, 'second.txt'), 'y\n')
   await openCardMenu(w.win, 'dirty')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
   await click(button(dialog, 'Cancel')!)
   await closed(w, 'Delete Workspace')
@@ -532,7 +532,7 @@ test('SC-57: deleting a selected workspace clears its view and selection', async
   })
 
   await openCardMenu(w.win, 'selected')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
   const worktreeChanges: unknown[] = []
   w.agent.onEvent((event) => {
@@ -571,14 +571,14 @@ test('SC-57: a folder workspace can be deleted', async () => {
   const extra = await created(w.agent, { repo: docs.id, name: 'extra' })
   await w.win.waitFor(() => card('extra'))
   await openCardMenu(w.win, 'extra')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
   await Bun.sleep(200)
   await click(button(dialog, 'Delete Workspace')!)
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === extra.id))
 }, SLOW)
 
-test('SC-53: Delete with Descendants warns about the children and removes them with the parent', async () => {
+test('SC-53: Delete with descendants warns about the children and removes them with the parent', async () => {
   const w = await boot()
   const { repo } = await addApi(w)
   const a = await created(w.agent, { repo: repo.id, name: 'a' })
@@ -587,8 +587,8 @@ test('SC-53: Delete with Descendants warns about the children and removes them w
   await w.win.waitFor(() => card('c'))
 
   await openCardMenu(w.win, 'a')
-  expect(item('Delete')).toBeUndefined()
-  await choose(w.win, 'Delete with Descendants (2)…')
+  expect(item('Delete…')).toBeUndefined()
+  await choose(w.win, 'Delete with descendants (2)…')
   const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
   const listed = [...dialog.querySelectorAll('ul li')].map((li) => li.textContent)
   expect(listed.sort()).toEqual(['b', 'c'])
@@ -608,7 +608,7 @@ test('SC-53: with the setting off, Delete goes straight through', async () => {
   await w.win.waitFor(() => card('fix-login'))
   await Bun.sleep(100)
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === fix.id))
   expect(dialogNamed('Delete Workspace')).toBeUndefined()
 }, SLOW)
@@ -622,7 +622,7 @@ test('SC-58: an unmerged branch is kept, the section offers Delete branch, and u
   await w.win.waitFor(() => card('fix-login'))
 
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
   await click(button(dialog, 'Delete Workspace')!)
   await closed(w, 'Delete Workspace')
@@ -651,7 +651,7 @@ test('SC-58: Dismiss removes the notice and keeps the branch', async () => {
   await w.win.waitFor(() => card('fix-login'))
   await Bun.sleep(100)
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const notice = await w.win.waitFor(() => branchNotice())
   await click(button(notice, 'Dismiss')!)
   await w.win.waitFor(() => !branchNotice())
@@ -667,7 +667,7 @@ test('SC-58: a branch that moved on is not deleted, and the failure toasts', asy
   await w.win.waitFor(() => card('fix-login'))
   await Bun.sleep(100)
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const notice = await w.win.waitFor(() => branchNotice())
   git(dir, 'update-ref', 'refs/heads/zoe/fix-login', git(dir, 'rev-parse', 'main'))
   await click(button(notice, 'Delete branch')!)

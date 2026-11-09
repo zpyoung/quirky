@@ -168,8 +168,11 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
 
   const apiRows = projectSections.find((section) => sectionHeadingMatches(section, 'api'))!
   expect([...apiRows.querySelectorAll<HTMLElement>('[data-worktree-id]')].map(listRowName)).toEqual(['main', 'fix-login', 'child'])
-  const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!
+  const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('.worktree-child-toggle')!
   expect(childToggle.getAttribute('aria-expanded')).toBe('true')
+  expect(childToggle.getAttribute('aria-label')).toBe('1 child of fix-login')
+  expect(childToggle.querySelector('.worktree-child-count')?.textContent).toBe('1')
+  expect(card('fix-login', 'api')!.querySelectorAll('.worktree-row')).toHaveLength(1)
 
   await click(childToggle)
   await win.waitFor(() => !card('child', 'api'))
@@ -178,7 +181,7 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
   expect(card('child', 'api')).toBeUndefined()
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-progress' })
   await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-progress')
-  await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!)
+  await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('.worktree-child-toggle')!)
   await win.waitFor(() => card('child', 'api'))
   const state = await win.waitFor(async () => {
     const next = await report(agent) as SidebarReport | undefined
@@ -237,25 +240,27 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   await win.waitFor(() => card('docs', 'api'))
 
   await openMenu(win, 'fix-login', 'api')
-  await choose(win, 'Move to Status')
+  await choose(win, 'Move to status')
   await choose(win, 'In review')
   await win.waitFor(async () => (await listed(agent, fixLogin.id)).status === 'in-review')
 
   await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-review')
-  await win.waitFor(() => card('fix-login', 'api')?.textContent?.includes('In review'))
   await openMenu(win, 'fix-login', 'api')
+  await choose(win, 'More')
   await choose(win, 'Pin')
   await win.waitFor(() => card('fix-login', undefined, 'pinned'))
   expect((await listed(agent, fixLogin.id)).pinned).toBe(true)
   const pinnedSection = sidebarPanel()!.querySelector<HTMLElement>('[data-top-level-section="pinned"]')!
   expect(sectionHeading(pinnedSection)).toBe('Pinned')
   expect(pinnedSection.nextElementSibling?.getAttribute('data-top-level-section')?.startsWith('repo:')).toBe(true)
-  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, workspaceStatus: 'in-review' })
+  expect(sidebarElements('[data-worktree-id="' + fixLogin.id + '"]')).toHaveLength(1)
+  expect(await reportRow(agent, fixLogin.id)).toBeUndefined()
   expect((await report(agent)).pinned).toEqual([fixLogin.id])
 
   await agent.callAny('quirky.worktree/set', { worktree: docs!.id, unread: false })
   await openMenu(win, 'docs', 'api')
-  await choose(win, 'Mark Unread')
+  await choose(win, 'More')
+  await choose(win, 'Mark unread')
   await win.waitFor(() => card('docs', 'api')!.querySelector('[role="img"][aria-label="Unread"]'))
   expect((await listed(agent, docs!.id)).unread).toBe(true)
 
@@ -273,7 +278,7 @@ test('SC-59: the primary checkout cannot be deleted', async () => {
   expect(error.code).toBe(RpcErrorCode.Conflict)
 
   await openMenu(win, 'main', 'api')
-  const del = item('Delete') as HTMLButtonElement
+  const del = item('Delete…') as HTMLButtonElement
   expect(del.disabled).toBe(true)
   del.click()
   await Bun.sleep(20)
