@@ -7,7 +7,13 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, dialogNamed, field, listRowName, menuItem, openDisclosure, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+import { button, click, dialogNamed, field, listRowName, menuItem, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+
+/** The Worktrees panel's own header `…` button; other chrome has a More button too. */
+const worktreesMore = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="More"]')].find((candidate) =>
+    candidate.closest('header')?.querySelector('h2')?.textContent?.trim() === 'Worktrees'
+  )
 const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -321,12 +327,8 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
 
 test('workspace status icon/avatar controls persist safe plain text and render on the board', async () => {
   const { win, agent } = await boot()
-  const statusOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
-  await click(statusOptionsButton)
-  const statusOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
-  await openDisclosure('More workspace tools', statusOptions)
-  const edit = await win.waitFor(() => button(statusOptions, 'Edit workspace statuses'))
-  await click(edit)
+  await click(await win.waitFor(() => worktreesMore()))
+  await click(await win.waitFor(() => menuItem(document, 'Edit statuses')))
   const dialog = await win.waitFor(() => dialogNamed('Workspace statuses'))
   const icon = field(dialog, 'Status icon 3')
   if (!icon) throw new Error('status editor did not expose the in-review icon control')
@@ -336,12 +338,8 @@ test('workspace status icon/avatar controls persist safe plain text and render o
 
   const statuses = await agent.callAny('quirky.worktree/statusDefinitions', {}) as Array<{ id: string; icon?: string }>
   expect(statuses.find((status) => status.id === 'in-review')?.icon).toBe('🧪')
-  const boardOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
-  await click(boardOptionsButton)
-  const boardOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
-  await openDisclosure('More workspace tools', boardOptions)
-  const board = await win.waitFor(() => button(boardOptions, 'Workspace board'))
-  await click(board)
+  await click(await win.waitFor(() => worktreesMore()))
+  await click(await win.waitFor(() => menuItem(document, 'Workspace board')))
   const laneHeading = await win.waitFor(() =>
     sidebarElements<HTMLHeadingElement>('h2').find((heading) => heading.textContent?.includes('In review'))
   )

@@ -44,51 +44,51 @@ function browserEntry(): string {
   const treeModule = join(ROOT, 'plugins/quirky.worktree/src/Tree.tsx')
   const controlTypesModule = join(ROOT, 'plugins/quirky.worktree/src/control-types.ts')
   const worktreeBoardModule = join(ROOT, 'plugins/quirky.worktree/src/WorktreeBoard.tsx')
-  const activityFiltersModule = join(ROOT, 'plugins/quirky.worktree/src/ActivityFilters.tsx')
-  const activityTypesModule = join(ROOT, 'plugins/quirky.worktree/src/useSidebarActivity.ts')
+  const filterMenuModule = join(ROOT, 'plugins/quirky.worktree/src/FilterMenu.tsx')
+  const viewTypesModule = join(ROOT, 'plugins/quirky.worktree/src/view-types.ts')
   return `
     import { createElement as h, useRef, useState } from 'react'
     import { createRoot } from 'react-dom/client'
     import { Tree } from ${JSON.stringify(treeModule)}
     import { WorktreeBoard } from ${JSON.stringify(worktreeBoardModule)}
     import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
-    import { ActivityFilters } from ${JSON.stringify(activityFiltersModule)}
-    import type { ActivityPreferencePatch, ActivityPreferences, SidebarProjection } from ${JSON.stringify(activityTypesModule)}
-    import { Badge, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+    import { FilterMenu } from ${JSON.stringify(filterMenuModule)}
+    import { DEFAULT_ACTIVITY_PREFERENCES } from ${JSON.stringify(viewTypesModule)}
+    import { Badge, Button, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
-    function ActivityFiltersRegressionFixture() {
+    function FilterMenuRegressionFixture() {
       const [open, setOpen] = useState(false)
-      const [preferences, setPreferenceState] = useState<ActivityPreferences>({
-        workspaceActivityWindow: 'week',
-        workspaceActivityCustomDays: 14,
-        alwaysShowDefaultBranchWorkspace: false,
-        workspaceActivityWindowBeforeLiveOnly: 'week',
-        hideCompletedReviewWorkspaces: false,
-        hidePassingCheckWorkspaces: false,
-        hideAutomationCreated: false
+      const [filter, setFilter] = useState({
+        tagIds: [],
+        sectionIds: [],
+        repoIds: [],
+        statuses: [],
+        hideCliCreated: false,
+        hideOtherDesktopClients: false,
+        hideDefaultBranch: false,
+        hideDetachedHead: false,
+        hideArchived: true,
+        activity: { ...DEFAULT_ACTIVITY_PREFERENCES, workspaceActivityWindow: 'week', workspaceActivityCustomDays: 14, workspaceActivityWindowBeforeLiveOnly: 'week' }
       })
       const anchor = useRef<HTMLButtonElement | null>(null)
-      const projection = {
-        preferences,
-        filterCount: 0,
-        hiddenCount: 0,
-        automationHiddenCount: 0
-      } as SidebarProjection
-      const setPreferences = async (patch: ActivityPreferencePatch): Promise<boolean> => {
-        setPreferenceState((current) => ({ ...current, ...patch }))
-        return true
-      }
       return h('div', null,
-        h(IconButton, {
+        h(Button, {
           ref: anchor,
-          label: 'Worktrees options',
           'aria-expanded': open,
           'aria-haspopup': 'dialog',
           onClick: () => setOpen((value) => !value)
-        }, '⋯'),
-        h(Popover, { open, label: 'Worktrees options', anchor, onClose: () => setOpen(false) },
-          h(ActivityFilters, { projection, error: null, setPreferences })
-        )
+        }, 'Filter'),
+        open ? h(FilterMenu, {
+          anchor,
+          filter,
+          tags: [{ id: 't1', name: 'urgent', color: null }, { id: 't2', name: 'release-2.4', color: 'blue' }],
+          sections: [{ id: 'g1', name: 'Release 2.4' }],
+          repos: [{ id: 'r1', name: 'harbor-api', displayName: null }],
+          statuses: [{ id: 'todo', label: 'Todo' }, { id: 'in-progress', label: 'In progress' }],
+          onChange: setFilter,
+          onClear: () => setFilter((current) => ({ ...current, tagIds: [] })),
+          onClose: () => setOpen(false)
+        }) : null
       )
     }
 
@@ -282,8 +282,8 @@ function browserEntry(): string {
     )
 
     createRoot(document.getElementById('root')).render(
-      document.documentElement.dataset.activityFiltersRegression === 'true'
-        ? h(ActivityFiltersRegressionFixture)
+      document.documentElement.dataset.filterMenuRegression === 'true'
+        ? h(FilterMenuRegressionFixture)
         : layout
     )
   `
@@ -1510,21 +1510,21 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the workspace board i
   }
 }, 60_000)
 
-test.skipIf(!existsSync(chromium.executablePath()))('keeps all Worktrees activity window tabs visible without horizontal scrolling', async () => {
+test.skipIf(!existsSync(chromium.executablePath()))('keeps the Filter menu inside the viewport and its activity window choices reachable', async () => {
   const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
   const page = await context.newPage()
   try {
     await page.setContent(pageMarkup())
     await page.evaluate(() => {
-      document.documentElement.dataset.activityFiltersRegression = 'true'
+      document.documentElement.dataset.filterMenuRegression = 'true'
     })
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
     await page.addScriptTag({ content: browserBundle })
-    const optionsButton = page.getByRole('button', { name: 'Worktrees options', exact: true })
-    await optionsButton.waitFor()
-    const expectedTabs = ['All', 'Live only', 'Past 24 hours', 'Past 7 days', 'Past 30 days', 'Custom']
+    const filterButton = page.getByRole('button', { name: 'Filter', exact: true })
+    await filterButton.waitFor()
+    const expectedWindows = ['All', 'Live only', 'Past 24 hours', 'Past 7 days', 'Past 30 days', 'Custom']
 
     const expectContained = (
       inner: { left: number; top: number; right: number; bottom: number },
@@ -1538,74 +1538,41 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps all Worktrees activit
 
     for (const width of [1280, 360]) {
       await page.setViewportSize({ width, height: 720 })
-      await optionsButton.click()
-      const popover = page.getByRole('dialog', { name: 'Worktrees options' })
+      await filterButton.click()
+      const popover = page.getByRole('dialog', { name: 'Filter' })
       await popover.waitFor({ state: 'visible' })
-      await popover.getByRole('button', { name: /^Activity filters/ }).click()
-      const tablist = popover.getByRole('tablist', { name: 'Workspace activity window' })
-      await tablist.waitFor({ state: 'visible' })
+      const select = popover.getByRole('combobox', { name: 'Activity window' })
+      await select.waitFor({ state: 'visible' })
 
       const geometry = await page.evaluate(() => {
-        const tablist = document.querySelector<HTMLElement>('#workspace-activity-filter-options [role="tablist"]')!
         const popover = document.querySelector<HTMLElement>('.ui-popover')!
-        const clientBounds = (element: HTMLElement) => {
-          const rect = element.getBoundingClientRect()
-          return {
-            left: rect.left + element.clientLeft,
-            top: rect.top + element.clientTop,
-            right: rect.left + element.clientLeft + element.clientWidth,
-            bottom: rect.top + element.clientTop + element.clientHeight
-          }
-        }
+        const select = popover.querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')!
         const rectBounds = (element: HTMLElement) => {
           const rect = element.getBoundingClientRect()
           return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
         }
-        const popoverBounds = clientBounds(popover)
         return {
           viewportWidth: window.innerWidth,
           viewportHeight: window.innerHeight,
           popover: rectBounds(popover),
-          visiblePopover: {
-            left: Math.max(0, popoverBounds.left),
-            top: Math.max(0, popoverBounds.top),
-            right: Math.min(window.innerWidth, popoverBounds.right),
-            bottom: Math.min(window.innerHeight, popoverBounds.bottom)
-          },
-          tablist: {
-            ...clientBounds(tablist),
-            clientWidth: tablist.clientWidth,
-            scrollWidth: tablist.scrollWidth
-          },
-          tabs: [...tablist.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => ({
-            name: tab.textContent?.trim() ?? '',
-            ...rectBounds(tab)
-          }))
+          select: rectBounds(select),
+          options: [...select.options].map((option) => option.textContent?.trim() ?? '')
         }
       })
 
       expect(geometry.viewportWidth).toBe(width)
       expect(geometry.viewportHeight).toBe(720)
-      expectContained(geometry.popover, {
-        left: 0,
-        top: 0,
-        right: geometry.viewportWidth,
-        bottom: geometry.viewportHeight
-      })
-      expect(geometry.tabs.map(({ name }) => name)).toEqual(expectedTabs)
-      expect(geometry.tablist.scrollWidth).toBeLessThanOrEqual(geometry.tablist.clientWidth)
-      for (const tab of geometry.tabs) {
-        expectContained(tab, geometry.tablist)
-        expectContained(tab, geometry.visiblePopover)
-      }
+      expectContained(geometry.popover, { left: 0, top: 0, right: geometry.viewportWidth, bottom: geometry.viewportHeight })
+      expect(geometry.options).toEqual(expectedWindows)
+      expect(geometry.select.right).toBeLessThanOrEqual(geometry.popover.right + 0.5)
 
       if (width === 360) {
-        await tablist.getByRole('tab', { name: 'Custom', exact: true }).click()
+        await select.selectOption('custom')
         const customDays = popover.getByRole('textbox', { name: 'Custom days' })
         await customDays.waitFor({ state: 'visible' })
         expect(await customDays.inputValue()).toBe('14')
       } else {
-        await optionsButton.click()
+        await filterButton.click()
       }
     }
   } finally {
