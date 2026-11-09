@@ -47,8 +47,7 @@ export function VmRecipeSelector({ context, repo, value, disabled, onChange }: {
   const current = loaded?.repo === repo ? loaded : null
   const selected = current?.recipes.find((recipe) => recipe.id === value?.id && recipe.trustHash === value.trustHash)
 
-  return <fieldset className="vm-recipe ui-stack" disabled={disabled}>
-    <legend className="vm-recipe__legend">VM environment</legend>
+  return <fieldset className="vm-recipe remote-form" disabled={disabled}>
     {current?.error && <p className="ui-error-text" role="alert">{current.error}</p>}
     <SelectField label="Environment recipe" aria-label="Environment recipe" value={value?.id ?? ''} disabled={disabled || current === null || current.error !== null} onChange={(event) => {
       const recipe = current?.recipes.find((candidate) => candidate.id === event.currentTarget.value)
