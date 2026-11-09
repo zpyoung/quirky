@@ -1154,7 +1154,7 @@ export function Tree({
     />
   )
 
-  const projectBlock = (group: ViewGroup, topLevel: boolean, depth: number) => {
+  const projectBlock = (group: ViewGroup, topLevel: boolean) => {
     const repoId = projectKeyOf(group)
     const repo = repoById.get(repoId)
     const identity = projectIdentities[repoId]
@@ -1168,7 +1168,7 @@ export function Tree({
         className={className}
         key={group.key}
         data-top-level-section={topLevel ? sectionKey : undefined}
-        style={{ '--depth': depth } as CSSProperties}
+        style={{ '--depth': topLevel ? 0 : 1 } as CSSProperties}
       >
         {header({
           title: `${identity?.icon ? `${identity.icon} ` : ''}${label}`,
@@ -1248,7 +1248,7 @@ export function Tree({
     const className = ['group', 'ui-stack', 'ui-indent', topLevel && eligibleBoundaries.includes(entry.key) && 'ui-section-separated'].filter(Boolean).join(' ')
     const syntheticGroup: ViewGroup = entry.group ?? { key: `section:${entry.sectionId}`, kind: 'section', title, attention, attentionCount: count, rows: [] }
     return (
-      <section className={className} key={entry.key} data-top-level-section={topLevel ? entry.key : undefined} style={{ '--depth': depth } as CSSProperties}>
+      <section className={className} key={entry.key} data-top-level-section={topLevel ? entry.key : undefined} style={{ '--depth': topLevel ? 0 : 1 } as CSSProperties}>
         {header({
           title,
           className: `group-header${previewing ? ' ui-drop-target--active' : ''}`,
@@ -1297,9 +1297,9 @@ export function Tree({
         })}
         {!isFolded && (
           <>
-            {entry.members.filter(isFolderProject).map((member) => projectBlock(member, false, depth + 1))}
+            {entry.members.filter(isFolderProject).map((member) => projectBlock(member, false))}
             {entry.group && entry.group.rows.length > 0 && <ul className="worktree-list ui-tree">{rowList(entry.group)}</ul>}
-            {entry.members.filter((member) => !isFolderProject(member)).map((member) => projectBlock(member, false, depth + 1))}
+            {entry.members.filter((member) => !isFolderProject(member)).map((member) => projectBlock(member, false))}
             {entry.children.map((child) => sectionBlock(child, depth + 1))}
           </>
         )}
@@ -1469,7 +1469,7 @@ export function Tree({
           case 'section':
             return sectionBlock(entry)
           case 'project':
-            return projectBlock(entry.group, true, 0)
+            return projectBlock(entry.group, true)
           case 'lane':
             return laneBlock(entry)
         }
