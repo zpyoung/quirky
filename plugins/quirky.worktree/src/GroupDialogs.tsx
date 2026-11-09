@@ -34,7 +34,7 @@ function NameForm({ title, submitLabel, initial, hint, onSubmit, onClose }: Name
       <form className="ui-stack" onSubmit={submit}>
         <TextField
           type="text"
-          label="Group name"
+          label="Section name"
           id="project-group-name"
           autoFocus
           value={name}
@@ -190,7 +190,7 @@ export function DeleteGroupDialog({ context, group, onClose }: { context: UiPlug
       <div className="ui-actions">
         <Button type="button" onClick={onClose}>Cancel</Button>
         <Button type="button" variant="destructive" autoFocus disabled={busy || preview === undefined || Boolean(previewError)} onClick={() => void remove()}>
-          Delete Group
+          Delete section
         </Button>
       </div>
     </Dialog>

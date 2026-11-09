@@ -136,13 +136,13 @@ export function projectMenu(repo: Repo, groups: ProjectGroup[], on: ProjectMenuH
   const others = groups.filter((group) => group.id !== repo.groupId)
   const targets: ContextMenuItem[] = [
     ...others.map((group) => ({ label: group.name, onSelect: () => on.moveToGroup(repo, group) })),
-    ...(repo.groupId !== null ? [{ label: 'No group', onSelect: () => on.moveToGroup(repo, null) }] : [])
+    ...(repo.groupId !== null ? [{ label: 'No section', onSelect: () => on.moveToGroup(repo, null) }] : [])
   ]
   return [
     ...(repo.kind === 'git' ? [{ label: 'Open ledger', onSelect: on.openLedger }] : []),
     { label: 'Project Settings…', onSelect: () => on.openDialog({ kind: 'project-settings', repoId: repo.id }) },
-    { label: 'New Group from Project…', onSelect: () => on.openDialog({ kind: 'group', action: 'new', repoId: repo.id }) },
-    ...(targets.length > 0 ? [{ label: 'Move to Group', submenu: targets }] : []),
+    { label: 'New section from project…', onSelect: () => on.openDialog({ kind: 'group', action: 'new', repoId: repo.id }) },
+    ...(targets.length > 0 ? [{ label: 'Move to section', submenu: targets }] : []),
     ...(on.reorder
       ? [
           { label: 'Move up', enabled: on.reorder.up !== null, onSelect: () => on.reorder?.up?.() },
@@ -158,6 +158,6 @@ export function groupMenu(group: ProjectGroup, openDialog: (dialog: DialogState)
   return [
     { label: 'Open ledger', onSelect: openLedger },
     { label: 'Rename…', onSelect: () => openDialog({ kind: 'group', action: 'rename', groupId: group.id }) },
-    { label: 'Delete Group…', onSelect: () => openDialog({ kind: 'group', action: 'delete', groupId: group.id }) }
+    { label: 'Delete section…', onSelect: () => openDialog({ kind: 'group', action: 'delete', groupId: group.id }) }
   ]
 }

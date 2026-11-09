@@ -1018,7 +1018,7 @@ test('SC-05: the group action button is the sole menu trigger and rename selects
   await h.click(rename!)
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  const input = fieldFor('Group name', dialog)
+  const input = fieldFor('Section name', dialog)
   if (!input) throw new Error('rename group input was not rendered')
   expect(document.activeElement).toBe(input)
   expect(input!.selectionStart).toBe(0)
@@ -1032,7 +1032,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
     const team = sectionForGroup('Team')!
     const more = buttonNamed(team, 'Actions for group Team')!
     await h.click(more)
-    const remove = menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))
+    const remove = menuItems().find((item) => /delete section/i.test(item.textContent ?? ''))
     expect(remove).toBeDefined()
     await h.click(remove!)
   }
@@ -1047,7 +1047,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBe('g-team')
 
   await openDelete()
-  const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.trim() === 'Delete Group')
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.trim() === 'Delete section')
   expect(confirm?.disabled).toBe(false)
   expect(confirm).toBeDefined()
   await h.click(confirm!)
@@ -1069,10 +1069,10 @@ test('group deletion retries ledger preview failures and sends subtree snapshots
 
   const team = sectionForGroup('Team')!
   await h.click(buttonNamed(team, 'Actions for group Team')!)
-  await h.click(menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))!)
+  await h.click(menuItems().find((item) => /delete section/i.test(item.textContent ?? ''))!)
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete Group')!
+  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete section')!
   expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('ledger backend unavailable')
   expect(confirm.disabled).toBe(true)
 
@@ -1102,10 +1102,10 @@ test('group deletion discloses an empty ledger preview only after verification',
 
   const team = sectionForGroup('Team')!
   await h.click(buttonNamed(team, 'Actions for group Team')!)
-  await h.click(menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))!)
+  await h.click(menuItems().find((item) => /delete section/i.test(item.textContent ?? ''))!)
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete Group')!
+  const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Delete section')!
   expect(dialog.textContent).toContain('Checking retained ledger records…')
   expect(dialog.textContent).not.toContain('No affected ledgers')
   expect(confirm.disabled).toBe(true)
@@ -1147,7 +1147,7 @@ test('SC-01: new group creation is guarded by the selected Git worktree identity
 
   await openNewGroup()
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
-  const input = fieldFor('Group name', dialog!)
+  const input = fieldFor('Section name', dialog!)
   if (!input) throw new Error('new worktree group dialog input was not rendered')
   expect(input.value).toBe('other section')
   expect(document.activeElement).toBe(input)
@@ -1193,7 +1193,7 @@ test('project menu opens the project group dialog', async () => {
   if (!actions) throw new Error('project actions button was not rendered')
   await h.click(actions)
 
-  const create = menuItem('New Group from Project…')
+  const create = menuItem('New section from project…')
   if (!create) throw new Error('new group menu item was not rendered')
   await h.click(create)
 
@@ -1229,7 +1229,7 @@ test('SC-06: a folder workspace row in a Git project creates a group for its pro
   expect(h.world.worktrees.filter((worktree) => worktree.repoId === project.id)).toEqual(worktreesBefore)
 
   const dialog = await openProjectGroupDialog()
-  const input = fieldFor('Group name', dialog)
+  const input = fieldFor('Section name', dialog)
   if (!input) throw new Error('project group dialog input was not rendered')
   await inputValue(input, 'Notes project')
   const create = [...dialog.querySelectorAll<HTMLButtonElement>('button')]
@@ -1329,7 +1329,7 @@ test('SC-02: moving a Git project moves every repo row without changing loose wo
   const before = h.world.worktrees.find((item) => item.id === 'w-feature')!.projectGroupId
 
   await h.click(buttonNamed(sectionForRepo('api')!, 'Actions for api')!)
-  await h.click(menuItem('Move to Group')!)
+  await h.click(menuItem('Move to section')!)
   await h.click(menuItem('Release')!)
 
   expect(h.world.repos.find((item) => item.id === 'r-api')?.groupId).toBe('g-release')

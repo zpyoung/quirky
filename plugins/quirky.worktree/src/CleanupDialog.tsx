@@ -127,6 +127,7 @@ export function CleanupDialog({ context, onClose }: Props) {
         <ul className="ui-tree ui-stack">
           {candidates.map((candidate) => (
             <li key={candidate.worktreeId} className="ui-tree-item ui-stack">
+              <div className="worktree-cleanup-item">
               <label className="ui-checkbox-label">
                 <input
                   type="checkbox"
@@ -137,7 +138,8 @@ export function CleanupDialog({ context, onClose }: Props) {
                 />
                 <span>{candidate.name}</span>
               </label>
-              <span className="ui-text-muted">{reasonText(candidate)}</span>
+              <span className="worktree-cleanup-item__reason">{reasonText(candidate)}</span>
+              </div>
               {candidate.blockers.length > 0 && (
                 <ul className="ui-tree">
                   {candidate.blockers.map((blocker, index) => <li className="ui-tree-item" key={`${blocker.code}:${index}`}><strong>{blocker.code}</strong>: {blocker.detail}</li>)}

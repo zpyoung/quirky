@@ -1052,6 +1052,7 @@ export function Tree({
   }
 
   const rowList = (group: ViewGroup, pendingCreates: PendingCreate[] = []) => {
+    const showProject = group.kind !== 'project' && group.kind !== 'section'
     const lineage: string[] = []
     const items: ReactNode[] = []
     for (const row of group.rows) {
@@ -1066,7 +1067,7 @@ export function Tree({
         <WorktreeRowView
           key={worktree.id}
           context={context}
-          row={row}
+          row={showProject && row.inSectionFromProject === undefined ? { ...row, inSectionFromProject: projectName } : row}
           tags={worktree.tagIds.flatMap((id) => tagsById.get(id) ?? [])}
           rowFact={rowFact}
           selected={worktree.id === selectedId}

@@ -152,7 +152,7 @@ test('the stylesheet scopes every rule under the worktree panel classes', () => 
   const css = readFileSync(STYLESHEET, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
   const selectors = [...css.matchAll(/([^{}]+)\{/g)].flatMap((match) => match[1].split(',').map((part) => part.trim())).filter((part) => !part.startsWith('@'))
   expect(selectors.length).toBeGreaterThan(0)
-  for (const selector of selectors) expect(selector).toMatch(/\.(repo-header|worktree-tree|worktree-hover|worktree-tags)(?![a-z])/)
+  for (const selector of selectors) expect(selector).toMatch(/\.(repo-header|worktree-tree|worktree-hover|worktree-tags|worktree-cleanup-item)(?![a-z])/)
 })
 
 test('the Worktrees panel keeps its header actions visible without hover', () => {

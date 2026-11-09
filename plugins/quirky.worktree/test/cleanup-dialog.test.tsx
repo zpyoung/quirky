@@ -123,3 +123,12 @@ test('the confirm uses the singular for one worktree', async () => {
   await click(button('Delete selected')!)
   expect(confirms[0]!.title).toBe('Delete 1 worktree?')
 })
+
+test('the reason sits on its own line under the name', async () => {
+  await mount([candidate({ worktreeId: 'old-experiment', reason: 'archived-7day' })])
+  const item = dialog().querySelector('.worktree-cleanup-item')!
+  const reason = item.querySelector('.worktree-cleanup-item__reason')!
+  expect(reason.textContent).toBe('Archived over 7 days ago, no unpushed work')
+  expect(item.querySelector('label')?.contains(reason)).toBe(false)
+  expect(item.querySelector('label')?.textContent).toBe('old-experiment')
+})
