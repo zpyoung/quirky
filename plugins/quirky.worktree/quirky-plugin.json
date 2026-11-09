@@ -2149,6 +2149,7 @@
         "id": "activeView",
         "description": "Read the view a window shows: its own choice this session, else the last view used; All when that view no longer exists.",
         "readOnly": true,
+        "connection": true,
         "params": {"type":"object","properties":{"window":{"type":"integer","minimum":1}},"required":["window"],"additionalProperties":false},
         "result": {"type":"object","properties":{"viewId":{"type":"string"}},"required":["viewId"],"additionalProperties":false}
       },

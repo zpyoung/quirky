@@ -145,6 +145,19 @@ describe('views: the active view of each window', () => {
     expect(await activeView(w, 8)).toBe('v2')
   })
 
+  test('a window that only read its view forgets it when its connection closes', async () => {
+    const w = await start()
+    await setViews(w, { views: [saved('v1', 'One'), saved('v2', 'Two')], needsYouHidden: false, rowFact: 'pr' })
+    await call(w.client, 'quirky.worktree/setActiveView', { window: 1, viewId: 'v1' })
+    const reader = await w.t.h.connect('cli')
+    expect(await activeView(w, 9, reader)).toBe('v1')
+    await call(w.client, 'quirky.worktree/setActiveView', { window: 1, viewId: 'v2' })
+    expect(await activeView(w, 9, reader)).toBe('v1')
+    reader.close()
+    const next = await w.t.h.connect('cli')
+    await waitForAsync(async () => ((await activeView(w, 9, next)) === 'v2' ? true : undefined))
+  })
+
   test('the last view survives a daemon restart and the per-window choices do not', async () => {
     const w = await start()
     await setViews(w, { views: [saved('v1', 'One')], needsYouHidden: false, rowFact: 'pr' })
