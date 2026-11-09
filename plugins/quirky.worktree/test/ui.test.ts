@@ -860,7 +860,8 @@ test('a plugin.changed event reloads the tree and the sessions', async () => {
   const before = h.callsTo('quirky.session/list').length
   h.world.sessions = [session('s1', 'w2', 'done')]
   await h.emit({ type: 'plugin.changed' })
-  expect(h.callsTo('quirky.session/list').length).toBe(before + 1)
+  // the tree and the plugin-lifetime attention badge each reload the sessions
+  expect(h.callsTo('quirky.session/list').length).toBe(before + 2)
   expect(await hoverCardText(rowOf('fix-login', 'api'))).toContain('Agent: s1 · Done')
 })
 
@@ -1816,10 +1817,11 @@ test('SC-62: a command that arrives before the section mounts opens the dialog o
 
 test('unmounting removes the listeners and the markup', async () => {
   const h = setup()
+  const pluginLifetimeListeners = h.listenerCount()
   const unmount = await h.mountInto(host)
-  expect(h.listenerCount()).toBeGreaterThan(0)
+  expect(h.listenerCount()).toBeGreaterThan(pluginLifetimeListeners)
   await unmount()
-  expect(h.listenerCount()).toBe(0)
+  expect(h.listenerCount()).toBe(pluginLifetimeListeners)
   expect(host.innerHTML).toBe('')
 })
 
