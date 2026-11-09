@@ -9,13 +9,22 @@ import { VmEnvironments } from './VmEnvironments'
 
 const WORKTREES_TOOL = 'sidebar-section:quirky.worktree/worktrees'
 
+let stopAttentionBadge: (() => void) | undefined
+
+/** Stops the rail badge's timer and listeners before the host revokes the plugin context. */
+export function deactivate(): void {
+  stopAttentionBadge?.()
+  stopAttentionBadge = undefined
+}
+
 /**
  * Provides the workspace tree for the `worktrees` sidebar section and the `new-worktree` command,
  * which opens the create dialog on the project it names, the open worktree's, or the first, and the
  * `add-project` command, which shows the Worktrees tool and opens its Add project dialog.
  */
 export function activate(context: UiPluginContext): void {
-  startAttentionBadge(context)
+  stopAttentionBadge?.()
+  stopAttentionBadge = startAttentionBadge(context)
   const requests = createRequests()
   const addProjectRequests = createRequests()
 
