@@ -616,9 +616,11 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
     throw env.invalid('invalid_input', 'force must be a boolean.')
   }
   const requestedWorktree = selector(env, params)
+  const ticket = env.nextRefreshTicket()
   let generation = 0
   const preClaimed = requestedWorktree !== undefined && env.read().checksByWorktree[requestedWorktree] !== undefined
   if (preClaimed) {
+    env.claimRefresh(requestedWorktree, ticket)
     env.update((state) => {
       const entry = state.checksByWorktree[requestedWorktree]!
       generation = entry.generation + 1
@@ -654,6 +656,9 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
   if (preClaimed && requestedWorktree === worktree.id) {
     if (env.read().checksByWorktree[worktree.id]?.generation !== generation) return staleResult(worktree.id)
   } else {
+    const claim = env.claimRefresh(worktree.id, ticket)
+    if (claim === 'stale') return staleResult(worktree.id)
+    if (claim === 'busy') return { ok: false, worktree: worktree.id, error: 'Too many workspaces are refreshing. Try again shortly.', stale: false }
     env.update((state) => {
       const entry = state.checksByWorktree[worktree.id]
       if (entry) {

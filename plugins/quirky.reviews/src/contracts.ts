@@ -80,6 +80,14 @@ export type ReviewsEnv = {
   view(worktree?: string): ReviewsState
   /** Mark a worktree's Checks entry recently used, and as the latest refreshed when `refreshed` is set. Never emits. */
   touchChecks(worktree: string, refreshed?: boolean): void
+  /** Orders Checks refreshes by the moment they were requested, before their worktree is resolved. */
+  nextRefreshTicket(): number
+  /**
+   * Register a refresh for a worktree once it is resolved. `stale` when a newer ticket already claimed that worktree;
+   * `busy` when the worktree has no entry and all 16 entries are loading, so no new one can be admitted. Call it
+   * synchronously with the entry write that follows `claimed`.
+   */
+  claimRefresh(worktree: string, ticket: number): 'claimed' | 'stale' | 'busy'
   /** Atomic, synchronous: increment revision, persist durable defaults/links/suppression and emit changed. Evicts least recently used Checks entries beyond the cap. */
   update(change: (state: ReviewsStore) => void): ReviewsStore
   /** Resolve through quirky.worktree/resolve, preserving caller cwd/worktree selection. */

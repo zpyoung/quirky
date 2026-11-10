@@ -22,7 +22,7 @@ function initialState(): ReviewsStore {
   return {
     revision: 0, previousView: null,
     detail: { target: null, tab: 'conversation', generation: 0, loading: false, error: null, review: null, details: null, checks: null, comments: null, files: null, audience: 'all', grouping: 'grouped', expandedChecks: [], checksCollapsed: false, queuedComments: [], selectedFile: null, diffMode: 'inline', collapsedFiles: [], fileFilter: '', fileTreeVisible: true, commentDraft: '', bodyDraft: null, pending: [], fetchedAt: 0 },
-    checksByWorktree: {}, agentDialog: null, checksHeight: DEFAULT_CHECKS_HEIGHT, audience: 'all', grouping: 'grouped', checksCollapsed: false,
+    checksByWorktree: Object.create(null) as ReviewsStore['checksByWorktree'], agentDialog: null, checksHeight: DEFAULT_CHECKS_HEIGHT, audience: 'all', grouping: 'grouped', checksCollapsed: false,
     creation: { worktree: null, generation: 0, loading: false, error: null, eligibility: null, title: '', body: '', base: '', head: '', draft: false, useTemplate: false, bases: [], generating: false, requestId: null, submitting: false, generated: false, result: null, defaults: defaults() },
     settings: { worktree: null, generation: 0, loading: false, error: null, diagnostics: null, accounts: null, configuration: null, budget: null, fetchedAt: 0 },
     defaults: defaults(), repoDefaults: {}, botOverrides: [], links: {}, suppressed: {}
@@ -87,11 +87,14 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
   const recency = new Map<string, number>()
   let tick = 0
   let latestRefreshed: string | null = null
+  let refreshTicket = 0
+  const refreshTickets = new Map<string, number>()
 
   function evictChecks(): void {
     const ids = Object.keys(state.checksByWorktree)
     for (const id of ids) if (!recency.has(id)) recency.set(id, ++tick)
     for (const id of [...recency.keys()]) if (!(id in state.checksByWorktree)) recency.delete(id)
+    for (const id of [...refreshTickets.keys()]) if (!(id in state.checksByWorktree)) refreshTickets.delete(id)
     let count = ids.length
     while (count > MAX_CHECKS_ENTRIES) {
       let oldest: string | null = null
@@ -113,6 +116,14 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
     touchChecks(worktree, refreshed = false) {
       recency.set(worktree, ++tick)
       if (refreshed) latestRefreshed = worktree
+    },
+    nextRefreshTicket: () => ++refreshTicket,
+    claimRefresh(worktree, ticket) {
+      if ((refreshTickets.get(worktree) ?? 0) > ticket) return 'stale'
+      if (!(worktree in state.checksByWorktree) && Object.keys(state.checksByWorktree).length >= MAX_CHECKS_ENTRIES
+        && Object.values(state.checksByWorktree).every((entry) => entry.loading)) return 'busy'
+      refreshTickets.set(worktree, ticket)
+      return 'claimed'
     },
     view(worktree) {
       const named = worktree !== undefined ? state.checksByWorktree[worktree] : undefined
