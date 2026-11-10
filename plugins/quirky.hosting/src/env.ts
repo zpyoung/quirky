@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
-import { isAbsolute } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { promisify } from 'node:util'
 import type { PluginCaller, PluginContext, PluginErrorKind, Worktree } from '@quirky/protocol'
 import { isHost, type AuthAccount } from './auth-inventory'
@@ -9,6 +10,15 @@ import { parseRemoteIdentity, resolveTrustedIdentity } from './identity-remote'
 import { createRuntimeRunner, type RateLimitSnapshot, type RuntimeRunner } from './runtime-runner'
 
 const execFileAsync = promisify(execFile)
+const REMOTE_URL_TTL_MS = 5_000
+const REMOTE_URL_CACHE_LIMIT = 256
+
+export type GitExec = (
+  file: 'git',
+  args: string[],
+  options: { cwd: string; timeout: number; maxBuffer: number; windowsHide: boolean }
+) => Promise<{ stdout: string }>
+export type EnvOptions = { exec?: GitExec }
 export type IssueSourcePreference = 'auto' | 'origin' | 'upstream'
 function isPreference(value: unknown): value is IssueSourcePreference {
   return value === 'auto' || value === 'origin' || value === 'upstream'
@@ -70,7 +80,11 @@ export type HostingEnv = {
 type CacheEntry = { value: unknown; expiresAt: number; generation: number; scopeGeneration: number }
 type PendingEntry = { promise: Promise<unknown>; generation: number; scopeGeneration: number }
 
-export function createEnv(context: PluginContext): HostingEnv {
+type RemoteUrlEntry = { value: string | null; stamp: string; expiresAt: number }
+type RemoteUrlPending = { promise: Promise<string | null>; stamp: string }
+
+export function createEnv(context: PluginContext, options: EnvOptions = {}): HostingEnv {
+  const exec: GitExec = options.exec ?? ((file, args, execOptions) => execFileAsync(file, args, { ...execOptions, encoding: 'utf8' }))
   const store = context.openStore([
     `CREATE TABLE IF NOT EXISTS hosting_preferences (
       repo_id TEXT PRIMARY KEY,
@@ -82,6 +96,8 @@ export function createEnv(context: PluginContext): HostingEnv {
   const cacheValues = new Map<string, CacheEntry>()
   const cacheInflight = new Map<string, PendingEntry>()
   const scopeGenerations = new Map<string, number>()
+  const remoteUrlValues = new Map<string, RemoteUrlEntry>()
+  const remoteUrlInflight = new Map<string, RemoteUrlPending>()
   const disposeCallbacks = new Set<() => void>()
   const invalidateCallbacks = new Set<(scope: Scope) => void>()
   let generation = 0
@@ -228,6 +244,54 @@ export function createEnv(context: PluginContext): HostingEnv {
     return gitWorktree(scope.worktree, args)
   }
 
+  /**
+   * Resolves `git remote get-url <remote>` for a worktree, or null when the remote is missing or
+   * the lookup fails. Results are reused until the repository's git config changes or a short TTL
+   * elapses, and are never cached when the config file cannot be located.
+   */
+  async function remoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Promise<string | null> {
+    const stamp = await configStamp(worktree.path)
+    if (stamp === null) return spawnRemoteUrl(worktree, remote)
+    const key = `${worktree.path}\0${remote}`
+    const cached = remoteUrlValues.get(key)
+    if (cached && cached.stamp === stamp && cached.expiresAt > Date.now()) return cached.value
+    const pending = remoteUrlInflight.get(key)
+    if (pending && pending.stamp === stamp) return pending.promise
+    const promise = spawnRemoteUrl(worktree, remote)
+      .then((value) => {
+        if (!disposed) {
+          remoteUrlValues.delete(key)
+          remoteUrlValues.set(key, { value, stamp, expiresAt: Date.now() + REMOTE_URL_TTL_MS })
+          while (remoteUrlValues.size > REMOTE_URL_CACHE_LIMIT) {
+            const oldest = remoteUrlValues.keys().next().value
+            if (oldest === undefined) break
+            remoteUrlValues.delete(oldest)
+          }
+        }
+        return value
+      })
+      .finally(() => {
+        if (remoteUrlInflight.get(key)?.promise === promise) remoteUrlInflight.delete(key)
+      })
+    remoteUrlInflight.set(key, { promise, stamp })
+    return promise
+  }
+
+  async function spawnRemoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Promise<string | null> {
+    try {
+      const result = await exec('git', ['remote', 'get-url', remote], {
+        cwd: worktree.path,
+        timeout: 30_000,
+        maxBuffer: 64 * 1024,
+        windowsHide: true
+      })
+      const value = result.stdout.trim()
+      return value.length > 0 ? value : null
+    } catch {
+      return null
+    }
+  }
+
   async function remoteUrls(worktree: Worktree): Promise<{ origin: string | null; upstream: string | null }> {
     const [origin, upstream] = await Promise.all([remoteUrl(worktree, 'origin'), remoteUrl(worktree, 'upstream')])
     return { origin, upstream }
@@ -316,6 +380,8 @@ export function createEnv(context: PluginContext): HostingEnv {
     cacheValues.clear()
     cacheInflight.clear()
     scopeGenerations.clear()
+    remoteUrlValues.clear()
+    remoteUrlInflight.clear()
   }
 
   return {
@@ -388,18 +454,34 @@ function provisionalScope(worktree: Worktree, identity: Identity, configuration:
   }
 }
 
-async function remoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Promise<string | null> {
+async function readRepositoryConfigPath(worktreePath: string): Promise<string | null> {
   try {
-    const result = await execFileAsync('git', ['remote', 'get-url', remote], {
-      cwd: worktree.path,
-      timeout: 30_000,
-      maxBuffer: 64 * 1024,
-      encoding: 'utf8',
-      windowsHide: true
-    })
-    const output = result.stdout
-    const value = output.trim()
-    return value.length > 0 ? value : null
+    const dotGit = join(worktreePath, '.git')
+    let gitDir = dotGit
+    if (!(await stat(dotGit)).isDirectory()) {
+      const match = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGit, 'utf8'))
+      if (!match?.[1]) return null
+      gitDir = resolvePath(worktreePath, match[1])
+    }
+    let commonDir = gitDir
+    try {
+      const common = (await readFile(join(gitDir, 'commondir'), 'utf8')).trim()
+      if (common.length > 0) commonDir = resolvePath(gitDir, common)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return null
+    }
+    return join(commonDir, 'config')
+  } catch {
+    return null
+  }
+}
+
+async function configStamp(worktreePath: string): Promise<string | null> {
+  const configPath = await readRepositoryConfigPath(worktreePath)
+  if (configPath === null) return null
+  try {
+    const info = await stat(configPath, { bigint: true })
+    return `${info.mtimeNs}:${info.ctimeNs}:${info.size}:${info.ino}`
   } catch {
     return null
   }
