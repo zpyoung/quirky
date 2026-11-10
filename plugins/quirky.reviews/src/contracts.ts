@@ -80,8 +80,16 @@ export type ReviewsEnv = {
   view(worktree?: string): ReviewsState
   /** Mark a worktree's Checks entry recently used, and as the latest refreshed when `refreshed` is set. Never emits. */
   touchChecks(worktree: string, refreshed?: boolean): void
-  /** Orders Checks refreshes by the moment they were requested, before their worktree is resolved. */
+  /**
+   * Orders Checks refreshes by the moment they were requested, before their worktree is resolved. A ticket stays live
+   * until `releaseRefresh`; a worktree's latest claimed ticket is kept while any older ticket is live, so an older
+   * request can never win over a newer one even after the worktree's entry was evicted.
+   */
   nextRefreshTicket(): number
+  /** End a ticket from `nextRefreshTicket`, dropping claims that no older live ticket can still contest. */
+  releaseRefresh(ticket: number): void
+  /** A process-wide monotonic Checks entry generation, so an evicted and recreated entry never repeats an old one. */
+  nextGeneration(): number
   /**
    * Register a refresh for a worktree once it is resolved. `stale` when a newer ticket already claimed that worktree;
    * `busy` when the worktree has no entry and all 16 entries are loading, so no new one can be admitted. Call it

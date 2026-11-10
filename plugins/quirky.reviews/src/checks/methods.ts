@@ -617,13 +617,21 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
   }
   const requestedWorktree = selector(env, params)
   const ticket = env.nextRefreshTicket()
+  try {
+    return await runRefresh(env, params, caller, force, requestedWorktree, ticket)
+  } finally {
+    env.releaseRefresh(ticket)
+  }
+}
+
+async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, caller: PluginCaller, force: boolean, requestedWorktree: string | undefined, ticket: number): Promise<JsonRecord> {
   let generation = 0
   const preClaimed = requestedWorktree !== undefined && env.read().checksByWorktree[requestedWorktree] !== undefined
   if (preClaimed) {
     env.claimRefresh(requestedWorktree, ticket)
     env.update((state) => {
       const entry = state.checksByWorktree[requestedWorktree]!
-      generation = entry.generation + 1
+      generation = env.nextGeneration()
       entry.generation = generation
       entry.loading = true
       entry.error = null
@@ -662,12 +670,12 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
     env.update((state) => {
       const entry = state.checksByWorktree[worktree.id]
       if (entry) {
-        generation = entry.generation + 1
+        generation = env.nextGeneration()
         entry.generation = generation
         entry.loading = true
         entry.error = null
       } else {
-        generation = 1
+        generation = env.nextGeneration()
         state.checksByWorktree[worktree.id] = { ...newChecksEntry(worktree.id, generation), loading: true }
       }
     })
@@ -1083,7 +1091,7 @@ async function unlinkReview(env: ReviewsEnv, worktree: Worktree): Promise<JsonRe
     delete next.links[worktree.id]
     const checks = next.checksByWorktree[worktree.id]
     if (checks) {
-      checks.generation += 1
+      checks.generation = env.nextGeneration()
       checks.lookup = { kind: 'suppressed', number: target.number, url: target.url, prRepo: target.prRepo }
       checks.eligibility = null
       checks.review = null
@@ -1495,7 +1503,7 @@ async function saveTitle(env: ReviewsEnv, params: Record<string, unknown>, calle
   const { checks, review, prRepo } = currentReview(env, worktree.id, number)
   if (review.headRefOid !== expectedHead) throw env.invalid('head_changed', 'The pull request head changed. Refresh before saving the title.')
   const priorGeneration = checks.generation
-  const generation = priorGeneration + 1
+  const generation = env.nextGeneration()
   let started = false
   env.update((state) => {
     const entry = state.checksByWorktree[worktree.id]
@@ -1706,7 +1714,7 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       env.update((state) => {
         const entry = state.checksByWorktree[worktree]
         if (entry && entry.loading && entry.titleDraft === null) {
-          entry.generation += 1
+          entry.generation = env.nextGeneration()
           entry.loading = false
           invalidated = true
         }

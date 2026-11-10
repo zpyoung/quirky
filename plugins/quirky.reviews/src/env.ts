@@ -88,13 +88,19 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
   let tick = 0
   let latestRefreshed: string | null = null
   let refreshTicket = 0
+  let checksGeneration = 0
+  const liveTickets = new Set<number>()
   const refreshTickets = new Map<string, number>()
+
+  function pruneTickets(): void {
+    const oldestLive = Math.min(...liveTickets)
+    for (const [id, ticket] of [...refreshTickets]) if (ticket <= oldestLive) refreshTickets.delete(id)
+  }
 
   function evictChecks(): void {
     const ids = Object.keys(state.checksByWorktree)
     for (const id of ids) if (!recency.has(id)) recency.set(id, ++tick)
     for (const id of [...recency.keys()]) if (!(id in state.checksByWorktree)) recency.delete(id)
-    for (const id of [...refreshTickets.keys()]) if (!(id in state.checksByWorktree)) refreshTickets.delete(id)
     let count = ids.length
     while (count > MAX_CHECKS_ENTRIES) {
       let oldest: string | null = null
@@ -117,7 +123,16 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
       recency.set(worktree, ++tick)
       if (refreshed) latestRefreshed = worktree
     },
-    nextRefreshTicket: () => ++refreshTicket,
+    nextRefreshTicket() {
+      const ticket = ++refreshTicket
+      liveTickets.add(ticket)
+      return ticket
+    },
+    releaseRefresh(ticket) {
+      liveTickets.delete(ticket)
+      pruneTickets()
+    },
+    nextGeneration: () => ++checksGeneration,
     claimRefresh(worktree, ticket) {
       if ((refreshTickets.get(worktree) ?? 0) > ticket) return 'stale'
       if (!(worktree in state.checksByWorktree) && Object.keys(state.checksByWorktree).length >= MAX_CHECKS_ENTRIES
