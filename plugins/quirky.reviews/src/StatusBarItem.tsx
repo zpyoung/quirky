@@ -34,15 +34,19 @@ const RANK: Record<Outcome, number> = { failed: 0, 'action needed': 1, running: 
 
 /**
  * The checks `quirky.reviews/checksGet` holds for `worktree`, or null when it has none. The daemon
- * keeps one worktree's checks, loaded by the Checks panel, so another worktree's are never shown as this one's.
+ * keeps checks per worktree, loaded by that worktree's Checks panel, so another worktree's are never shown as this one's.
  */
 function useChecks(context: UiPluginContext, worktree: string | null): CheckSummary[] | null {
   const [checks, setChecks] = useState<CheckSummary[] | null>(null)
   const refresh = useCallback(async (isCurrent: () => boolean) => {
+    if (worktree === null) {
+      if (isCurrent()) setChecks(null)
+      return
+    }
     try {
-      const value = await context.call('quirky.reviews/checksGet')
+      const value = await context.call('quirky.reviews/checksGet', { worktree })
       const held = isRecord(value) && isRecord(value.checks) ? value.checks : null
-      const state = worktree !== null && held?.worktree === worktree ? held : null
+      const state = held?.worktree === worktree ? held : null
       const number = state !== null && isRecord(state.review) && typeof state.review.number === 'number' ? state.review.number : null
       const parsed = state !== null && number !== null && isRecord(state.checks) ? parseChecksResult(state.checks, number) : null
       if (isCurrent()) setChecks(parsed !== null && parsed.checks.length > 0 ? parsed.checks : null)

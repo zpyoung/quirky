@@ -33,6 +33,9 @@ export type ChecksState = {
   commentDraft: string; titleDraft: string | null; height: number; fetchedAt: number
   agentDialog: { action: 'fix' | 'conflicts' | 'comments'; prompt: string; agent?: string; args?: string; surface?: 'detail' | 'checks'; target?: ReviewTarget; headOid?: string; visible?: boolean } | null
 }
+export type AgentDialog = NonNullable<ChecksState['agentDialog']>
+/** One worktree's Checks data; view prefs, panel height and the agent dialog live on the store. */
+export type ChecksEntry = Omit<ChecksState, 'audience' | 'grouping' | 'checksCollapsed' | 'height' | 'agentDialog'>
 export type CreationDefaults = { draft: boolean; useTemplate: boolean; generateDetailsOnOpen: boolean; openAfterCreate: boolean }
 export type CreationState = {
   worktree: string | null; generation: number; loading: boolean; error: string | null; eligibility: JsonRecord | null
@@ -50,15 +53,35 @@ export type ReviewsState = {
   defaults: CreationDefaults; repoDefaults: Record<string, Partial<CreationDefaults>>
   botOverrides: string[]; links: Record<string, { number: number; url: string }>; suppressed: Record<string, { number: number; url: string }>
 }
+/**
+ * The daemon-side state. Checks data is kept per worktree so clients on different worktrees never contend;
+ * `ReviewsEnv.view` projects it back into the wire-level `ReviewsState`.
+ */
+export type ReviewsStore = Omit<ReviewsState, 'checks'> & {
+  checksByWorktree: Record<string, ChecksEntry>
+  agentDialog: AgentDialog | null
+  checksHeight: number
+  audience: Audience
+  grouping: 'grouped' | 'timeline'
+  checksCollapsed: boolean
+}
 export type MethodSpec = {
   id: string; description?: string; readOnly?: boolean; destructive?: boolean; confirm?: string; describe?: string
   params: Schema; result: Schema
 }
 export type ReviewsEnv = {
   context: PluginContext
-  read(): ReviewsState
-  /** Atomic, synchronous: increment revision, persist durable defaults/links/suppression and emit changed. */
-  update(change: (state: ReviewsState) => void): ReviewsState
+  read(): ReviewsStore
+  /**
+   * The wire state for one worktree: `checks` is that worktree's entry with the shared prefs, height and agent dialog
+   * projected in, or a blank entry (`worktree: null`) when it has none. Without a worktree, the most recently refreshed
+   * entry is used. Naming a worktree marks its entry recently used; reads never bump revision or emit changed.
+   */
+  view(worktree?: string): ReviewsState
+  /** Mark a worktree's Checks entry recently used, and as the latest refreshed when `refreshed` is set. Never emits. */
+  touchChecks(worktree: string, refreshed?: boolean): void
+  /** Atomic, synchronous: increment revision, persist durable defaults/links/suppression and emit changed. Evicts least recently used Checks entries beyond the cap. */
+  update(change: (state: ReviewsStore) => void): ReviewsStore
   /** Resolve through quirky.worktree/resolve, preserving caller cwd/worktree selection. */
   resolve(params: JsonRecord, caller: PluginCaller): Promise<Worktree>
   /** Safe classified RPC error with data.reason; never return upstream secrets. */

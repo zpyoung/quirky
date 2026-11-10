@@ -1,5 +1,5 @@
 import type { PluginCaller, PluginContext, UiLayout, Worktree } from '@quirky/protocol'
-import { CHECKS_PANEL, CREATE_VIEW, REVIEW_VIEW, SETTINGS_VIEW, type CreationDefaults, type JsonRecord, type ReviewsEnv, type ReviewsState } from './contracts'
+import { CHECKS_PANEL, CREATE_VIEW, REVIEW_VIEW, SETTINGS_VIEW, type ChecksEntry, type CreationDefaults, type JsonRecord, type ReviewsEnv, type ReviewsState, type ReviewsStore } from './contracts'
 
 export function record(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -7,12 +7,22 @@ export function record(value: unknown): value is JsonRecord {
 
 const defaults = (): CreationDefaults => ({ draft: false, useTemplate: false, generateDetailsOnOpen: false, openAfterCreate: false })
 const ownViews = new Set([REVIEW_VIEW, CREATE_VIEW, SETTINGS_VIEW])
+export const MAX_CHECKS_ENTRIES = 16
+const DEFAULT_CHECKS_HEIGHT = 360
 
-function initialState(): ReviewsState {
+/** A fresh Checks entry for a worktree, or a blank one (`null`) that no refresh has claimed. */
+export function newChecksEntry(worktree: string | null, generation = 0): ChecksEntry {
+  return {
+    worktree, generation, loading: false, error: null, lookup: null, eligibility: null, review: null, checks: null, comments: null,
+    conflicts: null, expandedChecks: [], queuedComments: [], commentDraft: '', titleDraft: null, fetchedAt: 0
+  }
+}
+
+function initialState(): ReviewsStore {
   return {
     revision: 0, previousView: null,
     detail: { target: null, tab: 'conversation', generation: 0, loading: false, error: null, review: null, details: null, checks: null, comments: null, files: null, audience: 'all', grouping: 'grouped', expandedChecks: [], checksCollapsed: false, queuedComments: [], selectedFile: null, diffMode: 'inline', collapsedFiles: [], fileFilter: '', fileTreeVisible: true, commentDraft: '', bodyDraft: null, pending: [], fetchedAt: 0 },
-    checks: { worktree: null, generation: 0, loading: false, error: null, lookup: null, eligibility: null, review: null, checks: null, comments: null, conflicts: null, audience: 'all', grouping: 'grouped', expandedChecks: [], checksCollapsed: false, queuedComments: [], commentDraft: '', titleDraft: null, height: 360, fetchedAt: 0, agentDialog: null },
+    checksByWorktree: {}, agentDialog: null, checksHeight: DEFAULT_CHECKS_HEIGHT, audience: 'all', grouping: 'grouped', checksCollapsed: false,
     creation: { worktree: null, generation: 0, loading: false, error: null, eligibility: null, title: '', body: '', base: '', head: '', draft: false, useTemplate: false, bases: [], generating: false, requestId: null, submitting: false, generated: false, result: null, defaults: defaults() },
     settings: { worktree: null, generation: 0, loading: false, error: null, diagnostics: null, accounts: null, configuration: null, budget: null, fetchedAt: 0 },
     defaults: defaults(), repoDefaults: {}, botOverrides: [], links: {}, suppressed: {}
@@ -29,7 +39,7 @@ function readDefaults(value: unknown, fallback: CreationDefaults): CreationDefau
   }
 }
 
-function restoreDurable(state: ReviewsState, value: unknown): void {
+function restoreDurable(state: ReviewsStore, value: unknown): void {
   if (!record(value)) throw new Error('Invalid persisted review preferences')
   state.defaults = readDefaults(value.defaults, defaults())
   if (record(value.repoDefaults)) for (const [id, config] of Object.entries(value.repoDefaults)) {
@@ -74,12 +84,56 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
   const disposers: (() => void | Promise<void>)[] = []
   let disposed = false
   let saved = JSON.stringify({ defaults: state.defaults, repoDefaults: state.repoDefaults, botOverrides: state.botOverrides, links: state.links, suppressed: state.suppressed })
+  const recency = new Map<string, number>()
+  let tick = 0
+  let latestRefreshed: string | null = null
+
+  function evictChecks(): void {
+    const ids = Object.keys(state.checksByWorktree)
+    for (const id of ids) if (!recency.has(id)) recency.set(id, ++tick)
+    for (const id of [...recency.keys()]) if (!(id in state.checksByWorktree)) recency.delete(id)
+    let count = ids.length
+    while (count > MAX_CHECKS_ENTRIES) {
+      let oldest: string | null = null
+      for (const id of ids) {
+        if (!(id in state.checksByWorktree) || state.checksByWorktree[id]!.loading) continue
+        if (oldest === null || recency.get(id)! < recency.get(oldest)!) oldest = id
+      }
+      if (oldest === null) return
+      delete state.checksByWorktree[oldest]
+      recency.delete(oldest)
+      if (latestRefreshed === oldest) latestRefreshed = null
+      count -= 1
+    }
+  }
+
   const env: ActiveReviewsEnv = {
     context,
     read: () => state,
+    touchChecks(worktree, refreshed = false) {
+      recency.set(worktree, ++tick)
+      if (refreshed) latestRefreshed = worktree
+    },
+    view(worktree) {
+      const named = worktree !== undefined ? state.checksByWorktree[worktree] : undefined
+      if (named) env.touchChecks(worktree!)
+      const entry = worktree !== undefined ? named : latestRefreshed !== null ? state.checksByWorktree[latestRefreshed] : undefined
+      const subject = worktree ?? entry?.worktree ?? null
+      const dialog = state.agentDialog
+      const { checksByWorktree: _entries, agentDialog: _dialog, checksHeight, audience, grouping, checksCollapsed, ...shared } = state
+      return {
+        ...shared,
+        checks: {
+          ...(entry ?? newChecksEntry(null)),
+          audience, grouping, checksCollapsed, height: checksHeight,
+          agentDialog: dialog && (dialog.surface === 'detail' || (subject !== null && dialog.target?.worktree === subject)) ? dialog : null
+        }
+      }
+    },
     update(change) {
       if (disposed) throw context.error('conflict', 'The reviews plugin is inactive.')
       change(state)
+      evictChecks()
       state.revision += 1
       const durable = JSON.stringify({ defaults: state.defaults, repoDefaults: state.repoDefaults, botOverrides: state.botOverrides, links: state.links, suppressed: state.suppressed })
       if (durable !== saved) {
@@ -149,7 +203,7 @@ async function resolveReviewLinkWorktree(env: ReviewsEnv, explicit: unknown): Pr
     detailWorktree = reviewLinkWorktree(env, state.detail.target?.worktree)
   }
   if (layout.panel === CHECKS_PANEL) {
-    checksWorktree = reviewLinkWorktree(env, state.checks.worktree)
+    checksWorktree = reviewLinkWorktree(env, layout.worktree)
   }
 
   if (detailWorktree === null && checksWorktree === null) {
@@ -161,10 +215,15 @@ async function resolveReviewLinkWorktree(env: ReviewsEnv, explicit: unknown): Pr
   return detailWorktree ?? checksWorktree!
 }
 
+function viewWorktree(env: ReviewsEnv, params: JsonRecord): string | undefined {
+  if (params.worktree === undefined) return undefined
+  return reviewLinkWorktree(env, params.worktree)
+}
+
 export const parentMethods = (env: ReviewsEnv) => ({
-  state: () => env.read(),
-  close: async () => { await env.closeView(); return env.read() },
-  showChecks: async () => { await env.call('ui.panel.open', { id: CHECKS_PANEL }); return env.read() },
+  state: (params: JsonRecord) => env.view(viewWorktree(env, params)),
+  close: async (params: JsonRecord) => { await env.closeView(); return env.view(viewWorktree(env, params)) },
+  showChecks: async (params: JsonRecord) => { await env.call('ui.panel.open', { id: CHECKS_PANEL }); return env.view(viewWorktree(env, params)) },
   openLink: async (params: JsonRecord) => {
     if (typeof params.url !== 'string' || params.url.length > 8192) throw env.invalid('invalid_url', 'An HTTP(S) review URL is required.')
     let parsed: URL
