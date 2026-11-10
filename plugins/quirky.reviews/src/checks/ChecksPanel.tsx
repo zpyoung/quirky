@@ -931,6 +931,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     }
   }, [context, refresh])
 
+  const openAgentDialog = useCallback(async (action: 'fix' | 'conflicts' | 'comments') => {
+    if (!activeWorktree) return
+    await runReviewMethod('checksSetAgentDialog', { surface: 'checks', worktree: activeWorktree, action })
+  }, [activeWorktree, runReviewMethod])
+
   const openLink = useCallback(async (url: string, event?: MouseEvent<HTMLButtonElement>) => {
     if (!activeWorktree) return
     const invert = event !== undefined && routing.invert(event)
@@ -1239,11 +1244,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       {(hostConflict || broken || pending || queuedCount > 0) && <section className="ui-cluster" aria-label="Review triage" style={{ justifyContent: 'space-between' }}>
         <Badge tone={hostConflict ? 'failing' : broken ? 'failing' : pending ? 'needs-you' : 'needs-you'}>{hostConflict ? 'Conflicts block this PR' : broken ? 'Failing checks' : pending ? 'Checks pending' : `${queuedCount} queued comments`}</Badge>
         {hostConflict || localConflict ? (
-          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'conflicts' })}>Resolve</Button>
+          <Button variant="primary" onClick={() => void openAgentDialog('conflicts')}>Resolve</Button>
         ) : broken ? (
-          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'fix' })}>Fix</Button>
+          <Button variant="primary" onClick={() => void openAgentDialog('fix')}>Fix</Button>
         ) : queuedCount > 0 ? (
-          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'comments' })}>Resolve {queuedCount} Comments With AI</Button>
+          <Button variant="primary" onClick={() => void openAgentDialog('comments')}>Resolve {queuedCount} Comments With AI</Button>
         ) : <span className="ui-text-muted">Orca will refresh checks while this panel stays open.</span>}
       </section>}
 
