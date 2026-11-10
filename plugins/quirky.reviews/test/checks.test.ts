@@ -523,6 +523,48 @@ describe('Checks state bounds and ordering', () => {
     expect(env.read().checksByWorktree.wt_1!.generation).toBe(generation)
   })
 
+  test('an older unresolved refresh stays stale after the newer one completed and its entry was evicted', async () => {
+    const { env, methods } = unitEnv()
+    let release: ((value: never) => void) | undefined
+    let first = true
+    env.resolve = async (params) => {
+      if (params.worktree === 'wt_A' && first) {
+        first = false
+        return new Promise((resolve) => { release = resolve as never })
+      }
+      return { id: String(params.worktree), kind: 'folder' } as never
+    }
+    const older = methods.checksRefresh({ worktree: 'wt_A' }, {} as never)
+    expect(await methods.checksRefresh({ worktree: 'wt_A' }, {} as never)).toMatchObject({ ok: true, kind: 'folder' })
+    for (let index = 0; index < 16; index += 1) await methods.checksRefresh({ worktree: `wt_${index}` }, {} as never)
+    expect(env.view('wt_A').checks.worktree).toBeNull()
+    release!({ id: 'wt_A', kind: 'folder' } as never)
+    expect(await older).toMatchObject({ ok: false, stale: true })
+    expect(env.view('wt_A').checks.worktree).toBeNull()
+  })
+
+  test('a recreated entry never reuses a generation held by an old in-flight refresh', async () => {
+    const { env, methods } = unitEnv()
+    const rejects: ((error: Error) => void)[] = []
+    env.resolve = async (params) => ({ id: String(params.worktree), kind: params.worktree === 'A' ? 'git' : 'folder' }) as never
+    env.call = () => new Promise((_resolve, reject) => { rejects.push(reject) })
+    const old = methods.checksRefresh({ worktree: 'A' }, {} as never)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const oldGeneration = env.view('A').checks.generation
+    expect(await methods.checksInvalidate({ worktree: 'A' }, {} as never)).toMatchObject({ invalidated: true })
+    for (let index = 0; index < 16; index += 1) await methods.checksRefresh({ worktree: `B${index}` }, {} as never)
+    expect(env.view('A').checks.worktree).toBeNull()
+    const fresh = methods.checksRefresh({ worktree: 'A' }, {} as never)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(env.view('A').checks.generation).toBeGreaterThan(oldGeneration)
+    expect(env.view('A').checks.loading).toBe(true)
+    rejects[0]!(new Error('OLD request failed'))
+    expect(await old).toMatchObject({ ok: false, stale: true })
+    expect(env.view('A').checks).toMatchObject({ loading: true, error: null })
+    rejects[1]!(new Error('new failure'))
+    expect(await fresh).toMatchObject({ ok: false, error: 'new failure', stale: false })
+  })
+
   test('a just-completed newest entry is never evicted when every slot was loading', async () => {
     const { env, methods } = unitEnv()
     const pending = new Map<string, (error: Error) => void>()
