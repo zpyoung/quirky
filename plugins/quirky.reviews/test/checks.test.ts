@@ -7,6 +7,8 @@ import { bootReviews } from './support'
 import { checksFixtureState, checksGhSource, checksReview } from './checks-fixture'
 import { createChecksPollingPolicy, installChecksPolling, type ChecksPollingRuntime, type ChecksPollingTarget } from '../src/checks/ChecksPanel'
 import type { JsonRecord } from '../src/contracts'
+import { checksMethods } from '../src/checks/methods'
+import { createReviewsEnv } from '../src/env'
 
 type ReviewsTestHost = {
   client: QuirkyClient
@@ -489,4 +491,54 @@ test('hidden and unmounted Checks polling clears candidates and never runs a hid
   connectionListener('reconnecting')
   expect(scheduled.size).toBe(0)
   expect(refreshes).toBe(0)
+})
+
+function unitEnv() {
+  const env = createReviewsEnv({ openStore: () => ({ get: () => undefined, run: () => {} }), emit: () => {}, error: (_kind: string, message: string) => new Error(message) } as never)
+  return { env, methods: checksMethods(env) }
+}
+
+describe('Checks state bounds and ordering', () => {
+  test('a __proto__ worktree leaves Object.prototype untouched', async () => {
+    const { env, methods } = unitEnv()
+    env.resolve = async () => { throw new Error('unknown workspace') }
+    expect(await methods.checksRefresh({ worktree: '__proto__' }, {} as never)).toMatchObject({ ok: false, error: 'unknown workspace' })
+    for (const key of ['loading', 'error', 'generation']) expect(Object.prototype.hasOwnProperty.call(Object.prototype, key)).toBe(false)
+    expect(({} as Record<string, unknown>).loading).toBeUndefined()
+    expect(env.view('__proto__').checks.worktree).toBeNull()
+  })
+
+  test('the older of two concurrent first refreshes is stale and does not overwrite the newer', async () => {
+    const { env, methods } = unitEnv()
+    const resolvers: ((value: never) => void)[] = []
+    env.resolve = () => new Promise((resolve) => { resolvers.push(resolve as never) })
+    const older = methods.checksRefresh({ worktree: 'wt_1' }, {} as never)
+    const newer = methods.checksRefresh({ worktree: 'wt_1' }, {} as never)
+    const folder = { id: 'wt_1', kind: 'folder' } as never
+    resolvers[1]!(folder)
+    expect(await newer).toMatchObject({ ok: true, kind: 'folder' })
+    const generation = env.read().checksByWorktree.wt_1!.generation
+    resolvers[0]!(folder)
+    expect(await older).toMatchObject({ ok: false, stale: true })
+    expect(env.read().checksByWorktree.wt_1!.generation).toBe(generation)
+  })
+
+  test('a just-completed newest entry is never evicted when every slot was loading', async () => {
+    const { env, methods } = unitEnv()
+    const pending = new Map<string, (error: Error) => void>()
+    env.resolve = async (params) => ({ id: String(params.worktree), kind: 'git' }) as never
+    env.call = (_method, params) => new Promise((_resolve, reject) => { pending.set(String(params?.worktree), reject) })
+    const tasks = Array.from({ length: 40 }, (_, index) => methods.checksRefresh({ worktree: `wt_${index}` }, {} as never))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(Object.keys(env.read().checksByWorktree).length).toBe(16)
+    const admitted = [...pending.keys()]
+    expect(admitted.length).toBe(16)
+    const newest = admitted[admitted.length - 1]!
+    pending.get(newest)!(new Error('status failed'))
+    expect(await tasks[Number(newest.slice(3))]).toMatchObject({ ok: false, worktree: newest, stale: false })
+    expect(env.view(newest).checks.worktree).toBe(newest)
+    for (const [id, reject] of pending) if (id !== newest) reject(new Error('status failed'))
+    await Promise.all(tasks)
+    expect(Object.keys(env.read().checksByWorktree).length).toBeLessThanOrEqual(16)
+  })
 })
