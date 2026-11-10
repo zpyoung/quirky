@@ -224,6 +224,8 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
     initializeRepository(repoPath, branch, options)
     harness = await startHarness({ home, builtinPluginsDir })
     const client = await harness.connect('cli')
+    // bun's homedir() ignores the runtime HOME change, so the default root would be the real home
+    await client.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: join(root, 'worktrees') })
     const repository = await client.callAny('quirky.repo/add', { path: repoPath })
     if (!isRecord(repository) || typeof repository.id !== 'string') throw new Error('repository registration returned an invalid result')
     const worktrees = await client.callAny('quirky.worktree/list', { repo: repository.id })
