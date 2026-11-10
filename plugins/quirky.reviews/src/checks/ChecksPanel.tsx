@@ -767,6 +767,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const previousPending = useRef<boolean | null>(null)
   const pollController = useRef<ChecksPollingController | null>(null)
   const panelEntryWorktree = useRef<string | null>(null)
+  const mounted = useRef(true)
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
   const pollPolicy = useRef<ChecksPollingPolicy>(createChecksPollingPolicy())
   const dragCleanup = useRef<(() => void) | null>(null)
   const activeWorktree = useMemo(() => layoutWorktree(layout), [layout])
@@ -791,6 +794,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const isPanelVisible = Object.values(layout.tools?.open ?? {}).includes(CHECKS_PANEL) && windowVisible
   useEffect(() => setAuthDiagnostics(null), [activeWorktree])
 
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
   useEffect(() => context.onLayout(setLayout), [context])
 
   useEffect(() => {
@@ -807,20 +815,22 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     }
     const enteringWorktree = panelEntryWorktree.current !== activeWorktree
     panelEntryWorktree.current = activeWorktree
-    if (!activeWorktree) return
+    if (!activeWorktree || !enteringWorktree) return
     if (state.checks.worktree === activeWorktree) {
-      if (!enteringWorktree || !missingOrigin) return
+      if (!missingOrigin) return
       setActionError(null)
     }
-    let alive = true
-    context.call('quirky.reviews/checksRefresh', { worktree: activeWorktree, force: true }).then(() => {
-      if (alive) return refresh()
-      return undefined
+    context.call('quirky.reviews/checksRefresh', { worktree: activeWorktree, force: true }).then(async (result) => {
+      if (!mounted.current) return
+      await refreshRef.current()
+      if (!mounted.current) return
+      if (!isRecord(result) || result.ok !== true) {
+        setActionError(presentationError(result) ?? 'The review could not be refreshed.')
+      }
     }).catch((error: unknown) => {
-      if (alive) setActionError(messageOf(error))
+      if (mounted.current) setActionError(messageOf(error))
     })
-    return () => { alive = false }
-  }, [activeWorktree, context, isPanelVisible, missingOrigin, refresh, state.checks.worktree])
+  }, [activeWorktree, context, isPanelVisible, missingOrigin])
 
   const runRefresh = useCallback(async (reason: 'manual' | 'active', worktree = activeWorktree): Promise<boolean> => {
     if (!worktree) return false
