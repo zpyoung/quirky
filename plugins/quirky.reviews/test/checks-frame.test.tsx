@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { ToolPanelFrame } from '@quirky/ui'
 import { ChecksPanel } from '../src/checks/ChecksPanel'
-import type { ChecksState, ReviewData, ReviewsState } from '../src/contracts'
+import { CHECKS_PANEL, type ChecksState, type ReviewData, type ReviewsState } from '../src/contracts'
 
 GlobalRegistrator.register()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -29,9 +29,9 @@ const review: ReviewData = {
   autoMergeRequest: null, stack: null, mergeMethods: null
 }
 
-function stateWith(titleDraft: string | null = null): ReviewsState {
+function stateWith(titleDraft: string | null = null, worktree: string | null = WORKTREE): ReviewsState {
   const checks: ChecksState = {
-    worktree: WORKTREE, generation: 1, loading: false, error: null, lookup: null, eligibility: null, review,
+    worktree, generation: 1, loading: false, error: null, lookup: null, eligibility: null, review,
     checks: { checks: [] }, comments: { threads: [] }, conflicts: null, audience: 'all', grouping: 'grouped',
     expandedChecks: [], queuedComments: [], checksCollapsed: false, commentDraft: '', titleDraft, height: 320, fetchedAt: 0,
     agentDialog: null
@@ -45,14 +45,24 @@ function stateWith(titleDraft: string | null = null): ReviewsState {
   return { revision: 1, detail, checks } as unknown as ReviewsState
 }
 
-function mountPanel() {
+interface MountOptions {
+  panelOpen?: boolean
+  stateWorktree?: string | null
+  refreshResult?: unknown
+}
+
+function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult = { ok: true } }: MountOptions = {}) {
   const calls: { method: string; params: Record<string, unknown> }[] = []
-  const layout = { worktree: WORKTREE, view: { id: 'view:x' }, panel: null, sidebar: true, focus: 'view' } as unknown as UiLayout
+  const layout = {
+    worktree: WORKTREE, view: { id: 'view:x' }, panel: null, sidebar: true, focus: 'view',
+    ...(panelOpen ? { tools: { open: { right: CHECKS_PANEL } } } : {})
+  } as unknown as UiLayout
   const context = {
     pluginId: 'quirky.reviews',
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
       if (method === 'quirky.reviews/checksSaveTitle') return { updated: true }
+      if (method === 'quirky.reviews/checksRefresh') return refreshResult
       return { ok: true }
     },
     getLayout: () => layout,
@@ -67,7 +77,7 @@ function mountPanel() {
   document.body.appendChild(element)
   const root = createRoot(element)
   roots.push(root)
-  let state = stateWith()
+  let state = stateWith(null, stateWorktree)
   const render = () => act(() => root.render(
     <ToolPanelFrame title="Checks">
       <ChecksPanel context={context} state={state} refresh={async () => {}} />
@@ -132,4 +142,37 @@ test('editing the title in the body saves and cancels', async () => {
   expect(save?.params).toMatchObject({ worktree: WORKTREE, number: 12, title: 'Renamed review' })
   setState(stateWith(null))
   expect(element.querySelector('input[aria-label="Pull request title"]') === null).toBe(true)
+})
+
+const checksRefreshCalls = (calls: { method: string; params: Record<string, unknown> }[]) => calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')
+
+test('a visible panel force-refreshes once when the shared slot holds another worktree, however often state changes', async () => {
+  const { calls, setState } = mountPanel({ panelOpen: true, stateWorktree: '/other/tree' })
+  await act(async () => {})
+  expect(checksRefreshCalls(calls)).toHaveLength(1)
+  expect(checksRefreshCalls(calls)[0]?.params).toEqual({ worktree: WORKTREE, force: true })
+
+  for (let revision = 2; revision < 8; revision += 1) {
+    setState({ ...stateWith(null, '/other/tree'), revision } as ReviewsState)
+    await act(async () => {})
+  }
+  expect(checksRefreshCalls(calls)).toHaveLength(1)
+})
+
+test('a panel that has matched the slot does not refresh again when another client takes it over', async () => {
+  const { calls, setState } = mountPanel({ panelOpen: true })
+  await act(async () => {})
+  expect(checksRefreshCalls(calls)).toHaveLength(0)
+
+  setState(stateWith(null, '/other/tree'))
+  await act(async () => {})
+  setState(stateWith(null, '/third/tree'))
+  await act(async () => {})
+  expect(checksRefreshCalls(calls)).toHaveLength(0)
+})
+
+test('a failed entry refresh surfaces its error', async () => {
+  const { element } = mountPanel({ panelOpen: true, stateWorktree: '/other/tree', refreshResult: { ok: false, error: 'gh is unavailable' } })
+  await act(async () => {})
+  expect(element.textContent).toContain('gh is unavailable')
 })
