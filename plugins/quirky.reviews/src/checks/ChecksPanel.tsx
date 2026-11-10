@@ -773,6 +773,8 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const pollPolicy = useRef<ChecksPollingPolicy>(createChecksPollingPolicy())
   const dragCleanup = useRef<(() => void) | null>(null)
   const activeWorktree = useMemo(() => layoutWorktree(layout), [layout])
+  const activeWorktreeRef = useRef(activeWorktree)
+  activeWorktreeRef.current = activeWorktree
   const active = state.checks.worktree === activeWorktree ? state.checks : null
   const currentReview = active?.review ?? null
   useEffect(() => {
@@ -820,15 +822,16 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       if (!missingOrigin) return
       setActionError(null)
     }
+    const stillActive = () => mounted.current && activeWorktreeRef.current === activeWorktree
     context.call('quirky.reviews/checksRefresh', { worktree: activeWorktree, force: true }).then(async (result) => {
-      if (!mounted.current) return
+      if (!stillActive()) return
       await refreshRef.current()
-      if (!mounted.current) return
+      if (!stillActive()) return
       if (!isRecord(result) || result.ok !== true) {
         setActionError(presentationError(result) ?? 'The review could not be refreshed.')
       }
     }).catch((error: unknown) => {
-      if (mounted.current) setActionError(messageOf(error))
+      if (stillActive()) setActionError(messageOf(error))
     })
   }, [activeWorktree, context, isPanelVisible, missingOrigin])
 

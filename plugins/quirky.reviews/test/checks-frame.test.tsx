@@ -48,25 +48,29 @@ function stateWith(titleDraft: string | null = null, worktree: string | null = W
 interface MountOptions {
   panelOpen?: boolean
   stateWorktree?: string | null
-  refreshResult?: unknown
+  refreshResult?: unknown | ((worktree: string) => unknown)
 }
 
 function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult = { ok: true } }: MountOptions = {}) {
   const calls: { method: string; params: Record<string, unknown> }[] = []
-  const layout = {
-    worktree: WORKTREE, view: { id: 'view:x' }, panel: null, sidebar: true, focus: 'view',
+  let layoutListener: (layout: UiLayout) => void = () => {}
+  const makeLayout = (worktree: string) => ({
+    worktree, view: { id: 'view:x' }, panel: null, sidebar: true, focus: 'view',
     ...(panelOpen ? { tools: { open: { right: CHECKS_PANEL } } } : {})
-  } as unknown as UiLayout
+  }) as unknown as UiLayout
+  let layout = makeLayout(WORKTREE)
   const context = {
     pluginId: 'quirky.reviews',
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
       if (method === 'quirky.reviews/checksSaveTitle') return { updated: true }
-      if (method === 'quirky.reviews/checksRefresh') return refreshResult
+      if (method === 'quirky.reviews/checksRefresh') {
+        return typeof refreshResult === 'function' ? (refreshResult as (worktree: string) => unknown)(String(params.worktree)) : refreshResult
+      }
       return { ok: true }
     },
     getLayout: () => layout,
-    onLayout: () => () => {},
+    onLayout: (listener: (layout: UiLayout) => void) => { layoutListener = listener; return () => {} },
     onConnection: () => () => {},
     subscribe: () => () => {},
     getSetting: () => undefined,
@@ -84,7 +88,11 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
     </ToolPanelFrame>
   ))
   render()
-  return { element, calls, setState(next: ReviewsState) { state = next; render() } }
+  return {
+    element, calls,
+    setState(next: ReviewsState) { state = next; render() },
+    switchWorktree(worktree: string) { layout = makeLayout(worktree); act(() => layoutListener(layout)) }
+  }
 }
 
 const byLabel = (root: ParentNode, label: string) => root.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
@@ -175,4 +183,25 @@ test('a failed entry refresh surfaces its error', async () => {
   const { element } = mountPanel({ panelOpen: true, stateWorktree: '/other/tree', refreshResult: { ok: false, error: 'gh is unavailable' } })
   await act(async () => {})
   expect(element.textContent).toContain('gh is unavailable')
+})
+
+test('a late failed entry refresh for the previous worktree does not show on the new one', async () => {
+  const pending = new Map<string, (result: unknown) => void>()
+  const { element, calls, switchWorktree } = mountPanel({
+    panelOpen: true,
+    stateWorktree: '/other/tree',
+    refreshResult: (worktree: string) => new Promise((resolve) => { pending.set(worktree, resolve) })
+  })
+  await act(async () => {})
+  expect(checksRefreshCalls(calls)[0]?.params).toEqual({ worktree: WORKTREE, force: true })
+
+  switchWorktree('/next/tree')
+  await act(async () => {})
+  expect(checksRefreshCalls(calls)[1]?.params).toEqual({ worktree: '/next/tree', force: true })
+
+  await act(async () => { pending.get(WORKTREE)!({ ok: false, error: 'old worktree failed' }) })
+  expect(element.textContent).not.toContain('old worktree failed')
+
+  await act(async () => { pending.get('/next/tree')!({ ok: false, error: 'new worktree failed' }) })
+  expect(element.textContent).toContain('new worktree failed')
 })
