@@ -205,14 +205,21 @@ function activityAt(
   return positiveTimestamp(repo?.addedAt)
 }
 
+function activeFor(worktrees: Worktree[], id: string | null): ExtrasState['active'] {
+  const worktree = id === null ? undefined : worktrees.find((candidate) => candidate.id === id)
+  return worktree ? { worktreeId: worktree.id, instanceId: worktree.instanceId } : null
+}
+
 /**
  * Reads only canonical public APIs and projects their current facts for one client state snapshot.
  * Per-workspace checks always come from the review cache; reviewReason and reviewError appear only while a hide-review filter is on.
+ * A given `selected` worktree ID replaces the stored activation for this read only; an unknown ID selects nothing.
  */
 export async function projectActivity(
   context: PluginContext,
   state: ExtrasState,
-  now: () => number
+  now: () => number,
+  selected?: string | null
 ): Promise<ActivityProjection> {
   const [worktreeResult, repoResult] = await Promise.all([
     context.call('quirky.worktree/list'),
@@ -223,6 +230,7 @@ export async function projectActivity(
   const worktrees = worktreeResult as Worktree[]
   const repos = repoResult as Repo[]
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
+  const active = selected === undefined ? state.active : activeFor(worktrees, selected)
   const [facts, reviewDecisions] = await Promise.all([
     runtimeFacts(context, worktrees),
     readReviewDecisions(context, worktrees, state.preferences)
@@ -238,8 +246,7 @@ export async function projectActivity(
   let activityHiddenCount = 0
 
   for (const worktree of worktrees) {
-    const active = state.active
-    const selected = active?.worktreeId === worktree.id && active.instanceId === worktree.instanceId
+    const isSelected = active?.worktreeId === worktree.id && active.instanceId === worktree.instanceId
     const live = facts.liveWorktreeIds.has(worktree.id)
       ? true
       : facts.ptyError !== undefined || facts.sessionsError !== undefined || facts.agentStatusError !== undefined
@@ -250,7 +257,7 @@ export async function projectActivity(
     let reason: WorkspaceProjection['reason']
     let visible: boolean
 
-    if (selected) {
+    if (isSelected) {
       reason = 'selected'
       visible = true
     } else if (state.preferences.workspaceActivityWindow === 'all') {
@@ -299,6 +306,7 @@ export async function projectActivity(
   }
   return {
     ...state,
+    active,
     visibleIds,
     hiddenIds,
     hiddenCount: activityHiddenCount,

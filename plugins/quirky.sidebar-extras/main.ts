@@ -7,6 +7,7 @@ import {
   isPlainRecord,
   stateMigrations,
   validateDirtyParams,
+  validateProjectionParams,
   validateReadParams,
   validateSetParams,
   validateWorktreeParams,
@@ -50,9 +51,9 @@ export function activate(context: PluginContext): void {
       })
     },
     async projection(params) {
-      const { client, preferences } = validateReadParams(params, context)
+      const { client, preferences, worktree } = validateProjectionParams(params, context)
       const stored = state.read(client)
-      return projectActivity(context, preferences === undefined ? stored : { ...stored, preferences }, () => Date.now())
+      return projectActivity(context, preferences === undefined ? stored : { ...stored, preferences }, () => Date.now(), worktree)
     },
     dirty(params) {
       return readDirty(context, validateDirtyParams(params, context))

@@ -34,6 +34,7 @@ const context = {
   call: async (method: string, params: Record<string, unknown> = {}) => {
     calls.push({ method, params })
     if (method === 'quirky.worktree/tags') return tagReply
+    if (method === 'ui.window.self') return { connId: 7 }
     if (method === 'quirky.worktree/tagCreate') return { tag: { id: 'tag_new', name: params.name, color: null } }
     return []
   },
@@ -406,7 +407,7 @@ test('selection tints the row, and Cmd, Ctrl and Shift clicks ask for a multi-se
 
   await click(open)
   expect(spy.opened).toEqual(['b'])
-  expect(calls.find((call) => call.method === 'quirky.worktree/navigate')?.params).toEqual({ worktree: 'b' })
+  expect(calls.find((call) => call.method === 'quirky.worktree/navigate')?.params).toEqual({ worktree: 'b', window: 7 })
 })
 
 test('the row menu lists its actions in the fixed order with Delete set apart in danger text', async () => {
