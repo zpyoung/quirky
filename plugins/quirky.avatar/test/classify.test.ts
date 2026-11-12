@@ -1239,6 +1239,294 @@ describe('unseen arguments and directories', () => {
   })
 })
 
+describe('dynamic credential path scenarios', () => {
+  type ScenarioDecision = { outcome: 'held' | 'judgment'; step: 'floor-core' | null; reason: string }
+  type ScenarioRow = { command: string; classes: ActionClass[]; decision: ScenarioDecision; cwd?: string }
+
+  const credentialHold: ScenarioDecision = {
+    outcome: 'held',
+    step: 'floor-core',
+    reason: 'touches a credential path or command'
+  }
+  const outsideHold: ScenarioDecision = {
+    outcome: 'held',
+    step: 'floor-core',
+    reason: 'writes outside every handed-off worktree'
+  }
+  const judgment: ScenarioDecision = { outcome: 'judgment', step: null, reason: 'no code rule decided' }
+
+  const expectScenario = (command: string, classes: ActionClass[], decision: ScenarioDecision, cwd = '/work/wt') => {
+    if (cwd === '/work/wt') {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject(decision)
+      return
+    }
+
+    const input = call('Bash', { command }, cwd)
+    const actualClasses = classifyCall(input, ctx)
+    expect(sortedClasses(actualClasses)).toEqual(sortedClasses(classes))
+    expect(decide({
+      call: input,
+      classes: actualClasses,
+      mandate: sampleMandate({ level: 'local', switches: offSwitches }),
+      switches: offSwitches,
+      level: 'local',
+      ctx
+    })).toMatchObject(decision)
+  }
+
+  const expectRows = (rows: ScenarioRow[]) => {
+    for (const { command, classes, decision, cwd } of rows) expectScenario(command, classes, decision, cwd)
+  }
+
+  const backtick = String.fromCharCode(96)
+  const homeExpansion = '${HOME}'
+  const pwdExpansion = '${PWD}'
+  const parameterWithQuotedBrace = "${X:-'}'}"
+
+  test('scenario 1: holds computed argument words with fixed credential prefixes', () => {
+    expectRows([
+      { command: 'cat /home/u/.ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~/.ssh/id_$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~u/.ssh/id_rsa', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~u/.ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat "$HOME/.ssh/id_$X"`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat "${homeExpansion}/.ssh/id_$X"`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/$(echo id_rsa)', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat /home/u/.ssh/${backtick}echo id_rsa${backtick}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/$((1 + 1))', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/<(true)', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/>(true)', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat $'/home/u/.ssh/\x69d_rsa'`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/{1..3}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~/.aws/credentials$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~/.config/gh/hosts.$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~/.gnupg/secring.$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~/Library/Keychains/login.$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~/.netrc$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /tmp/p/.env.$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /tmp/p/.env$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cp /home/u/.ssh/$X a.txt', classes: ['edit-inside', 'other', 'credential'], decision: credentialHold },
+      { command: 'rm -rf ~/.ssh/$X', classes: ['edit-outside', 'credential'], decision: credentialHold },
+      { command: "bash -c 'cat /home/u/.ssh/$X'", classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`eval "cat /home/u/.ssh/\$X"`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'source ~/.ssh/$X', classes: ['other', 'credential'], decision: credentialHold }
+    ])
+  })
+
+  test('wrapper paths retain computed credential evidence at their execution directory', () => {
+    for (const command of [
+      'env -C /home/u cat .ssh/$X',
+      'xargs -a /home/u/.ssh/$X cat',
+      'env -C /home/u xargs -a .ssh/$X cat',
+      'time -o /home/u/.ssh/$X true',
+      'env -C /home/u time -o .ssh/$X true'
+    ]) {
+      expect(bash(command)).toContain('credential')
+      expect(decideReviewed(command)).toMatchObject(credentialHold)
+    }
+    const redirected = 'env -C /home/u cat < .ssh/$X'
+    expectClassSet(redirected, ['read', 'other'])
+    expect(decideReviewed(redirected)).toMatchObject(judgment)
+  })
+
+  test('scenario 2: strips argument flag values but checks redirect targets literally', () => {
+    expectRows([
+      { command: 'rg --file=/home/u/.ssh/$X foo', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'rg -f=/home/u/.ssh/$X foo', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'rg --file={/home/u/.ssh/$X,a} foo', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'rg {a,--file=/home/u/.ssh/$X} foo', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat < /home/u/.ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat < ~/.ssh/id_$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat < {/home/u/.ssh/id_rsa,$}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'echo hi > ~/.ssh/$X', classes: ['read', 'credential', 'edit-outside'], decision: credentialHold },
+      { command: 'echo hi > {/home/u/.ssh/config,$}', classes: ['read', 'credential', 'edit-outside'], decision: credentialHold },
+      { command: 'rg -e/../../.env$X src/', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat < -f=/home/u/.ssh/$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'echo hi > -f=/home/u/.ssh/$X', classes: ['read', 'edit-outside'], decision: outsideHold }
+    ])
+  })
+
+  test('scenario 3: checks brace-list alternatives with standard and brace-gobbler pairing', () => {
+    expectRows([
+      { command: 'cat {/home/u/.ssh/id_rsa,$}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {/home/u/.ssh/id_rsa,b$}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {$,/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cp {/home/u/.ssh/id_rsa,$} a.txt', classes: ['edit-inside', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {,$}HOME/.ssh/id_rsa', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat $HOME{/.ssh/id_rsa,b}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ${HOME}{/.ssh/$X,b}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {$HOME,a}/.ssh/id_rsa', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~{/.ssh/$X,/b}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {a,~/.ssh/$X}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {,/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {/home/u/.ssh/id_rsa,}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {/home/u/.ssh/id_rsa,{1..3}}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/{.ssh/id_rsa,{1..3}}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {~root,/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/{},.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {a}{x,y},/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {a},/home/u}/{b},.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {a},/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold }
+    ])
+  })
+
+  test('scenario 4: ignores braces, commas, and quotes inside nested substitutions', () => {
+    expectRows([
+      { command: "cat {$(printf ')a,}'),/home/u/.ssh/id_rsa}", classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {$(printf ")a,}"),/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {$(printf \)a,\}),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {a,${parameterWithQuotedBrace},/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {${backtick}printf 'a,}'${backtick},/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {${backtick}printf a,\}${backtick},/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: "cat {<(printf ')a,}'),/home/u/.ssh/id_rsa}", classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: "cat {>(printf ')a,}'),/home/u/.ssh/id_rsa}", classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {$'a,\}',/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {$(printf \){),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {${backtick}printf {${backtick},/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: `cat {<(printf ${'{'.repeat(32)}x${'}'.repeat(32)}),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: `cat {>(printf ${'{'.repeat(32)}x${'}'.repeat(32)}),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {$'a\'{',/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {$(echo "$(printf '"')"),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {$(printf x # "\n),/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: "cat {$(printf '%s' \"${X:-'}\"),/home/u/.ssh/id_rsa}", classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {$(printf x\r#),/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold }
+    ])
+  })
+
+  test('scenario 5: resolves fixed prefixes across command directories and redirects', () => {
+    expectRows([
+      { command: 'cat /home/u/.ssh/$X/../../notes', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat /home/u/.ssh/${backtick}echo a/b${backtick}/../../notes`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/<(true)/../../notes', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/>(true)/../../notes', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat /home/u/.ssh/{1..2}/../../notes', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat ~+/../../../home/u/.ssh/id_rsa', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat $PWD/../../home/u/.ssh/id_rsa', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat "${pwdExpansion}/../../home/u/.ssh/id_rsa"`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cd /home/u && cat ~+/.ssh/id_rsa', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cd /home/u && cat $PWD/.ssh/id_rsa', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cd /home/u && cat ~+/.ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cd /home/u && cat .ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cd /home/u; cd /work/wt; cat .ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cd $D && cat ~/.ssh/$X', classes: ['other', 'read', 'credential'], decision: credentialHold },
+      { command: 'cd /home/u && cat < .ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cd /home/u && echo hi > .ssh/$X', classes: ['read', 'credential', 'edit-outside'], decision: credentialHold },
+      { command: 'cd /work/wt; cat .ssh/$X', classes: ['read', 'other', 'credential'], decision: credentialHold, cwd: '/home/u' },
+      { command: 'cd $D && cat .ssh/$X', classes: ['other', 'read'], decision: judgment },
+      { command: 'cd $D && cat ~+/.ssh/$X', classes: ['other', 'read'], decision: judgment },
+      { command: 'cd $D && cat .env.$X', classes: ['other', 'read'], decision: judgment },
+      { command: 'cd /home/u < .ssh/$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cd /home/u > .ssh/$X', classes: ['read', 'edit-outside'], decision: outsideHold }
+    ])
+  })
+
+  test('scenario 6: leaves dynamic non-credential reads at judgment', () => {
+    expectRows([
+      { command: 'cat "$f"', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat "$f"', classes: ['read', 'other'], decision: judgment, cwd: '/home/u/.ssh' },
+      { command: 'cat .env.$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat .env$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cd /work/other && cat .env.$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~+/src/$X', classes: ['read', 'other'], decision: judgment },
+      { command: String.raw`cat "$PWD/.env.$X"`, classes: ['read', 'other'], decision: judgment },
+      { command: 'cat "$PWDX/../../home/u/.ssh/id_rsa"', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~/$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat "$HOME/$X"', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~/.config/$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~/Library/$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~/.ssh_backup_$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~/.netrc_backup_$X', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat "$HOME_VAR/../u/.ssh/id_rsa"', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~-/../../../home/u/.ssh/id_rsa', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~root/../../../home/u/.ssh/id_rsa', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat ~user/.ssh/id_rsa', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat <(true)/../../../home/u/.ssh/id_rsa', classes: ['read', 'other'], decision: judgment },
+      { command: 'cat >(true)/../../../home/u/.ssh/id_rsa', classes: ['read', 'other'], decision: judgment },
+      { command: String.raw`cat ${backtick}echo a${backtick}/../../../home/u/.ssh/id_rsa`, classes: ['read', 'other'], decision: judgment },
+      { command: 'cat {1..2}/../../../home/u/.ssh/id_rsa', classes: ['read', 'other'], decision: judgment },
+      { command: String.raw`cat $'/work/wt/\x61\x2f\x62/../../.env'`, classes: ['read', 'other'], decision: judgment },
+      { command: 'cat {a,$}b', classes: ['read', 'other'], decision: judgment },
+      { command: 'cp {a,$}b a.txt', classes: ['edit-inside', 'other'], decision: judgment },
+      { command: 'cat < {a,$}b', classes: ['read', 'other'], decision: judgment }
+    ])
+  })
+
+  test('scenario 7: holds brace expansion boundaries and finishes stress inputs under one second', () => {
+    const listCommand = (members: string[]) => `cat {${members.join(',')}}`
+    const depthCredentialCommand = (depth: number) => {
+      let expression = '/home/u/.ssh/id_rsa'
+      for (let i = 0; i < depth; i++) expression = `{$,${expression}}`
+      return `cat ${expression}`
+    }
+    const depthPrefixedCommand = (depth: number) => {
+      let expression = 'b'
+      for (let i = 0; i < depth; i++) expression = `{a,${expression}}`
+      return `cat /home/u/.ssh/${expression}`
+    }
+
+    expectRows([
+      {
+        command: listCommand(['$', ...Array.from({ length: 62 }, (_, i) => `w${i}`), '/home/u/.ssh/id_rsa']),
+        classes: ['read', 'other', 'credential'],
+        decision: credentialHold
+      },
+      {
+        command: listCommand(['$', ...Array.from({ length: 63 }, (_, i) => `w${i}`), '/home/u/.ssh/id_rsa']),
+        classes: ['read', 'other', 'edit-outside'],
+        decision: outsideHold
+      },
+      {
+        command: listCommand([...Array.from({ length: 64 }, (_, i) => `w${i}`), '/home/u/.ssh/id_rsa']),
+        classes: ['read', 'other', 'edit-outside'],
+        decision: outsideHold
+      },
+      {
+        command: `cat /home/u/{${[...Array.from({ length: 65 }, (_, i) => `w${i}`), '.ssh/id_rsa'].join(',')}}`,
+        classes: ['read', 'other', 'edit-outside'],
+        decision: outsideHold
+      },
+      {
+        command: `cat /home/u/.ssh/{${Array.from({ length: 65 }, (_, i) => `w${i}`).join(',')}}`,
+        classes: ['read', 'other', 'credential'],
+        decision: credentialHold
+      },
+      { command: depthCredentialCommand(32), classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: depthCredentialCommand(33), classes: ['read', 'other', 'edit-outside'], decision: outsideHold },
+      { command: depthPrefixedCommand(33), classes: ['read', 'other', 'credential'], decision: credentialHold }
+    ])
+
+    const stressCommands = [
+      `cat ${'{a,b}'.repeat(48_000)}`,
+      `cat /home/u/.ssh/${'{a,b}'.repeat(48_000)}`,
+      `cat {${'a,'.repeat(120_000)}/home/u/.ssh/id_rsa}`,
+      `cat ${'{'.repeat(60_000)},a${'}'.repeat(60_001)}`
+    ]
+    const stressRows: ScenarioRow[] = [
+      { command: stressCommands[0], classes: ['read', 'other', 'edit-outside'], decision: outsideHold },
+      { command: stressCommands[1], classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: stressCommands[2], classes: ['read', 'other', 'edit-outside'], decision: outsideHold },
+      { command: stressCommands[3], classes: ['read', 'other', 'edit-outside'], decision: outsideHold }
+    ]
+    const started = performance.now()
+    for (const { command, classes, decision } of stressRows) {
+      const input = call('Bash', { command })
+      const actualClasses = classifyCall(input, ctx)
+      expect(sortedClasses(actualClasses)).toEqual(sortedClasses(classes))
+      expect(decide({
+        call: input,
+        classes: actualClasses,
+        mandate: sampleMandate({ level: 'local', switches: offSwitches }),
+        switches: offSwitches,
+        level: 'local',
+        ctx
+      })).toMatchObject(decision)
+    }
+    expect(performance.now() - started).toBeLessThan(1_000)
+  })
+})
+
 describe('brace expansion', () => {
   const classRows: Array<{ scenario: string; command: string; classes: ActionClass[] }> = [
     { scenario: '9 hidden paths', command: 'rm -rf {a,/home/u/Documents}', classes: ['edit-inside', 'edit-outside'] },
@@ -1331,7 +1619,7 @@ describe('brace expansion', () => {
 
   const unpairedClosingRows: Array<{ command: string; classes: ActionClass[]; outcome: string; step: string | null }> = [
     { command: 'rm -rf {a},/home/u/Documents}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
-    { command: 'cat {a},/home/u/.ssh/id_rsa}', classes: ['read', 'other'], outcome: 'judgment', step: null },
+    { command: 'cat {a},/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], outcome: 'held', step: 'floor-core' },
     { command: 'cp a.txt {b},/home/u/x}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
     { command: 'rm -rf x/{},../../..}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
     { command: 'rm -rf {a}{x,y},/home/u/Documents}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' }
