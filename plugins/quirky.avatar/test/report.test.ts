@@ -99,6 +99,26 @@ describe('report', () => {
     expect(stories[1]).toMatchObject({ switchesOn: [], story: 'Fix restart. Parked on the force-push. 1 item needs you.' })
   })
 
+  test.each(['Gate proof not sent: user-typing', 'Gate proof not sent: prompt-stalled', 'Gate check could not finish: proof unavailable'])('shows the checking need: %s', (title) => {
+    const { app } = setup([worker('wt-1', 'checking', 'own-branch', { goal: 'Fix the build' })])
+    addNeed(app, 'wt-1', 'gate-failed', title, { sessionId: 's-wt-1' })
+    expect(app.services.report.report().stories[0]?.story).toBe(`Fix the build. ${title}. 1 item needs you.`)
+  })
+
+  test.each(['shadow', 'own-branch'] as const)('keeps passive %s proof checking generic without a matching need', (level) => {
+    const { app } = setup([worker('wt-1', 'checking', level, { goal: 'Fix the build' })])
+    expect(app.services.report.report().stories[0]?.story).toBe('Fix the build. Checking that the gate reaches the agent.')
+    addNeed(app, 'wt-1', 'gate-failed', 'Gate proof not sent: user-typing', { sessionId: 'an-old-session' })
+    addNeed(app, 'wt-1', 'question', 'Gate check could not finish: proof unavailable', { sessionId: 's-wt-1' })
+    expect(app.services.report.report().stories[0]?.story).toBe('Fix the build. Checking that the gate reaches the agent. 2 items need you.')
+  })
+
+  test('retains the actual gate-failed story rather than treating it as a pending proof', () => {
+    const { app } = setup([worker('wt-1', 'gate-failed', 'own-branch', { goal: 'Fix the build' })])
+    addNeed(app, 'wt-1', 'gate-failed', 'Gate proof not sent: user-typing', { sessionId: 's-wt-1' })
+    expect(app.services.report.report().stories[0]?.story).toBe('Fix the build. The gate check failed, so the worker is waiting for a restart. 1 item needs you.')
+  })
+
   test('adds a recently handed-back worktree with what it was handed back with', () => {
     const { app } = setup([worker('wt-1', 'working')])
     const need = addNeed(app, 'wt-2', 'held-call', '1 held force-push')

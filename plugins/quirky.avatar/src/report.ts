@@ -111,7 +111,10 @@ export function register(app: AvatarApp): () => void {
     for (const handoff of active) {
       const mine = open.filter((need) => need.worktreeId === handoff.worktreeId)
       const parkedStory = mine.map((need) => need.detail.story).find((story): story is string => typeof story === 'string' && story !== '')
-      const phrase = handoff.state === 'parked' && parkedStory !== undefined ? parkedStory : STATE_PHRASES[handoff.state]
+      const pendingProof = handoff.state === 'checking' ? mine.find((need) =>
+        need.kind === 'gate-failed' && need.detail.sessionId === handoff.sessionId &&
+        (need.title.startsWith('Gate proof not sent: ') || need.title.startsWith('Gate check could not finish: '))) : undefined
+      const phrase = pendingProof?.title ?? (handoff.state === 'parked' && parkedStory !== undefined ? parkedStory : STATE_PHRASES[handoff.state])
       const waiting = mine.length === 0 ? '' : `${mine.length} ${mine.length === 1 ? 'item needs' : 'items need'} you.`
       stories.push({
         worktreeId: handoff.worktreeId,
