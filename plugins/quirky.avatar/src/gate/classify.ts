@@ -2095,10 +2095,11 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     let treeCmd = cmd
     let treeArgs = args
     let treeCwd = parsed.execCwd
-    let unknownTreeCommand = parsed.dynamicCommand
+    let unknownTreeCommand = parsed.dynamicCommand || parsed.foreignCommand || parsed.foreignWrapper
     if (keywordIndex > commandIndex && keywordIndex < shellCommand.words.length) {
       const unwrapped = unwrapWords(shellCommand.words, undefined, commandCwd, ctx.home, keywordIndex)
       treeCwd = unwrapped.execCwd
+      unknownTreeCommand ||= unwrapped.foreignWrapper
       if (unwrapped.unknownWrapperFlag) {
         unknownTreeCommand = true
         const outerCommand = shellCommand.words[keywordIndex]
@@ -2109,6 +2110,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
         if (word === undefined || word.dynamic) unknownTreeCommand = true
         else {
           treeCmd = basename(word.text)
+          if (systemCommandName(word.text) === null && !isWorktreeTool(word, treeCwd, ctx)) unknownTreeCommand = true
           treeArgs = shellCommand.words.slice(unwrapped.commandIndex + 1).map((value) => value.text)
         }
       }

@@ -3542,3 +3542,16 @@ test('bracket globs retain their credential-ancestor directory prefix', () => {
     reason: 'touches a credential path or command'
   })
 })
+
+describe('foreign command and wrapper credential ancestors', () => {
+  const rows: ClassifierFixture[] = [
+    { id: 'foreign.1', command: './ls /home/u', classes: ['credential', 'other', 'read'], outcome: 'held', step: 'floor-core' },
+    { id: 'foreign.2', command: '/tmp/ls /home/u', classes: ['credential', 'other', 'read'], outcome: 'held', step: 'floor-core' },
+    { id: 'foreign.3', command: './env ls /home/u', classes: ['credential', 'other', 'read'], outcome: 'held', step: 'floor-core' },
+    { id: 'foreign.4', command: '{ ./ls /home/u; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'foreign.5', command: '{ ./env ls /home/u; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'foreign.6', command: '{ ./sed \'r /home/u/.ssh/id_rsa\' README.md; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'foreign.7', command: '{ /bin/ls /home/u; }', classes: ['other'], outcome: 'judgment', step: null }
+  ]
+  for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
+})
