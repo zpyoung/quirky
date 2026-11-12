@@ -115,7 +115,7 @@ describe('plugin lifecycle', () => {
     expect((await info()).state).toBe('active')
 
     // the listener is live while the plugin is active
-    await client.call('ui.sidebar.set', { visible: false })
+    await client.call('ui.palette.set', {})
     await waitFor(() => lines().includes('event ui.state.changed'))
 
     const running = client.call('job.run', { id: JOB })
@@ -132,7 +132,7 @@ describe('plugin lifecycle', () => {
 
     // events after the disable never reach the listener
     const seen = lines().filter((line) => line.startsWith('event ')).length
-    await client.call('ui.sidebar.set', { visible: true })
+    await client.call('ui.palette.set', {})
     await Bun.sleep(100)
     expect(lines().filter((line) => line.startsWith('event ')).length).toBe(seen)
 
@@ -173,7 +173,7 @@ describe('plugin lifecycle', () => {
 
     expect((await h.daemon.plugins.activate('acme.all')).state).toBe('active')
     const eventsBefore = lines().filter((line) => line === 'event ui.state.changed').length
-    await client.call('ui.sidebar.set', { visible: false })
+    await client.call('ui.palette.set', {})
     await waitFor(() => lines().filter((line) => line === 'event ui.state.changed').length > eventsBefore)
     expect(await client.callAny('acme.all/counter', {})).toEqual({ n: 2 })
   })
