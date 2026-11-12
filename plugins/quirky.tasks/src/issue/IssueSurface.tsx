@@ -208,7 +208,7 @@ function initialChoices(): IssueChoices {
   return { available: false, labels: [], assignees: [], message: null }
 }
 
-export function IssueSurface(props: TasksSurfaceProps) {
+export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: TaskItem) => void }) {
   const target = props.state.navigation.detail
   const currentKey = target ? targetKey(target) : null
   const [storedDetail, setStoredDetail] = useState<{ key: string; value: IssueDetail } | null>(null)
@@ -360,6 +360,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
       const updated = mapIssueDetail({ ...previous, item: result?.item, comments: previous.comments, participants: previous.participants, timeline: previous.timeline, partialFailures: previous.partialFailures, truncated: previous.truncated, source: previous.source })
       if (!updated) throw new Error('GitHub did not return a confirmed issue after the edit.')
       setStoredDetail({ key, value: updated })
+      props.onEdited?.(updated.item)
       if (typeof result?.refreshError === 'string') setEditError(`Saved, but could not reload the confirmed issue: ${result.refreshError}`)
       if (changes.body !== undefined) {
         const returnedItem = record(result?.item)

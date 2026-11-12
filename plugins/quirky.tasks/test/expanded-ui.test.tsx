@@ -63,6 +63,49 @@ const repository = { id: 'repo-1', name: 'quirky', path: '/work/quirky', kind: '
 const origin = { host: 'github.com', owner: 'acme', repo: 'quirky' }
 const upstream = { host: 'github.com', owner: 'upstream', repo: 'quirky' }
 
+const projectTarget = {
+  id: 'PVT_4', owner: 'acme', ownerType: 'organization' as const, number: 4,
+  url: 'https://github.com/orgs/acme/projects/4', title: 'Tasks project', viewId: 'VIEW_TABLE'
+}
+const projectStatus = { id: 'STATUS', name: 'Status', dataType: 'SINGLE_SELECT', options: [{ id: 'TODO', name: 'Todo' }, { id: 'DONE', name: 'Done' }] }
+const projectFields = [
+  projectStatus,
+  { id: 'START', name: 'Start date', dataType: 'DATE' },
+  { id: 'TARGET', name: 'Target date', dataType: 'DATE' }
+]
+const projectViews = [
+  { id: 'VIEW_TABLE', number: 1, name: 'Table', layout: 'TABLE', filter: '', fields: projectFields, groupByFields: [] },
+  { id: 'VIEW_BOARD', number: 2, name: 'Board', layout: 'BOARD', filter: '', fields: projectFields, groupByFields: [projectStatus] },
+  { id: 'VIEW_ROADMAP', number: 3, name: 'Roadmap', layout: 'ROADMAP', filter: '', fields: projectFields, groupByFields: [] }
+]
+const projectItem = {
+  id: 'PVTI_7',
+  content: {
+    kind: 'issue', number: 7, title: 'Improve project table', state: 'open',
+    url: 'https://github.com/acme/quirky/issues/7', repository: 'acme/quirky', author: 'zach', labels: [], assignees: []
+  },
+  fieldValues: [
+    { fieldId: 'STATUS', value: 'TODO' },
+    { fieldId: 'START', value: '2026-11-08' },
+    { fieldId: 'TARGET', value: '2026-11-14' }
+  ]
+}
+
+const projectHandlers: Record<string, Handler> = {
+  'quirky.tasks/projectView': (params) => {
+    if (params.action === 'list') return { views: projectViews }
+    const view = projectViews.find((candidate) => candidate.id === params.viewId) ?? projectViews[0]!
+    return { view, layout: view.layout, fields: projectFields, items: [projectItem], totalCount: 1 }
+  }
+}
+
+function setTextareaValue(element: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('Textarea value setter is unavailable')
+  setter.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 function pr(number: number, patch: Record<string, unknown> = {}) {
   return {
     kind: 'pullRequest', number, title: `Pull request ${number}`, body: `Description of ${number}`, state: 'open', url: `https://github.com/acme/quirky/pull/${number}`,
@@ -113,7 +156,7 @@ async function settle() {
   await act(async () => new Promise((resolve) => setTimeout(resolve, 20)))
 }
 
-async function mountExpanded(options: { state?: TasksState; handlers?: Record<string, Handler>; beforeMount?: () => void } = {}): Promise<Mounted> {
+async function mountExpanded(options: { state?: TasksState; handlers?: Record<string, Handler>; beforeMount?: () => void; cloneRepoIdsOnStateRead?: boolean } = {}): Promise<Mounted> {
   const provided = new Map<string, unknown>()
   const calls: Mounted['calls'] = []
   const commands: Mounted['commands'] = []
@@ -127,7 +170,10 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
   }
   const handlers: Record<string, Handler> = {
     'quirky.tasks/prepare': () => state,
-    'quirky.tasks/state': () => state,
+    'quirky.tasks/state': () => {
+      if (!options.cloneRepoIdsOnStateRead || state.navigation.repoIds === null) return state
+      return { ...state, navigation: { ...state.navigation, repoIds: [...state.navigation.repoIds] } }
+    },
     'quirky.tasks/navigate': (params) => {
       state = { ...state, revision: state.revision + 1, navigation: { ...state.navigation, ...params } as TasksState['navigation'] }
       for (const listener of listeners) listener({ type: 'quirky.tasks/changed' })
@@ -206,6 +252,19 @@ test('a review request on the viewer gives the row the needs-you dot', async () 
   expect(first.querySelector('[data-status="needs-you"], [class*="needs-you"]')).not.toBeNull()
 })
 
+test('a selected repository does not refetch the list when a row or detail-only change event occurs', async () => {
+  const { element, calls, emit, current } = await mountExpanded({
+    state: withNavigation({ repoIds: ['repo-1'] }),
+    cloneRepoIdsOnStateRead: true
+  })
+  const initialReads = calls.filter((call) => call.method === 'quirky.tasks/list').length
+  await click(rowButtons(element)[0])
+  expect(current().navigation.detail).toEqual(target(pr(274)))
+  expect(calls.filter((call) => call.method === 'quirky.tasks/list')).toHaveLength(initialReads)
+  await emit({ type: 'quirky.tasks/changed' })
+  expect(calls.filter((call) => call.method === 'quirky.tasks/list')).toHaveLength(initialReads)
+})
+
 test('clicking a pull request row selects it and does not open Review', async () => {
   const { element, calls } = await mountExpanded()
   await click(rowButtons(element)[0])
@@ -258,10 +317,54 @@ test('the issue pane shows Open workspace and Start new workspace for a linked i
   expect(button(detailColumn(element), 'Start new workspace')).toBeDefined()
 })
 
-test('the issue pane close button clears the row, and a project origin keeps Back to Project', async () => {
-  const { element, calls } = await mountExpanded({ state: withNavigation({ ...issuesNavigation, detail: target(issue(281)) }) })
-  await click(button(element.querySelector('.quirky-tasks-issue')!, 'Close'))
+test('the issue pane clears its row and offers Back to Project when opened from a project', async () => {
+  const { element, calls } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, detail: target(issue(281)), project: projectTarget })
+  })
+  const pane = element.querySelector('.quirky-tasks-issue')!
+  expect(button(pane, 'Back to Project')).toBeDefined()
+  await click(button(pane, 'Back to Project'))
   expect(calls.filter((call) => call.method === 'quirky.tasks/navigate').at(-1)?.params).toEqual({ detail: null })
+})
+
+test('the expanded issue pane keeps label, description edit, and comment actions reachable', async () => {
+  const issueEdits: Record<string, unknown>[] = []
+  const { element, calls } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, detail: target(issue(281)) }),
+    handlers: {
+      'quirky.tasks/issueEdit': (params) => {
+        issueEdits.push(params)
+        return { item: { ...issue(281), ...params } }
+      },
+      'quirky.tasks/issueComment': (params) => ({
+        comment: { id: 1, issueNumber: 281, body: params.body, author: 'zach', createdAt: '2026-11-11T00:00:00Z' }
+      })
+    }
+  })
+  const pane = detailColumn(element)
+  await click(button(pane, '+ bug'))
+  expect(issueEdits.at(-1)).toMatchObject({ labels: ['editor', 'bug'] })
+
+  await click(button(pane, 'Edit description'))
+  const description = pane.querySelector<HTMLTextAreaElement>('textarea[aria-label="Issue description"]')
+  expect(description).not.toBeNull()
+  await act(async () => setTextareaValue(description!, 'Updated issue description'))
+  await click(button(pane, 'Save description'))
+  expect(issueEdits.at(-1)).toMatchObject({ body: 'Updated issue description' })
+
+  const comment = pane.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add a comment"]')
+  expect(comment).not.toBeNull()
+  await act(async () => setTextareaValue(comment!, 'Expanded pane comment'))
+  await click(button(pane, 'Comment'))
+  expect(calls.filter((call) => call.method === 'quirky.tasks/issueComment').at(-1)?.params).toEqual({ body: 'Expanded pane comment' })
+})
+
+test('New issue is reachable from the expanded Issues tab', async () => {
+  const { element, calls } = await mountExpanded({ state: withNavigation(issuesNavigation) })
+  await click(button(element, 'New GitHub issue'))
+  expect(element.querySelector('.quirky-tasks-new-issue')).not.toBeNull()
+  expect(element.querySelector<HTMLInputElement>('#new-issue-title')).not.toBeNull()
+  expect(calls.some((call) => call.method === 'quirky.tasks/issueChoices' && call.params.kind === 'repositories')).toBe(true)
 })
 
 test('a pull request row shows the PR detail with title, state, description, checks, reviewers, assignees, labels, worktree and changes', async () => {
@@ -490,13 +593,74 @@ test('the list restores a scroll position saved for its view on mount', async ()
 
 test('a pending row focus lands on the selected row once rows render', async () => {
   const { element } = await mountExpanded({ state: prDetailState(275), beforeMount: () => place.requestFocus('row') })
-  expect(document.activeElement).toBe(rowButtons(element)[1]!)
+  expect(document.activeElement === rowButtons(element)[1]!).toBe(true)
   expect(place.takeFocus()).toBeNull()
 })
 
 test('a pending row focus falls back to the first row when none is selected', async () => {
   const { element } = await mountExpanded({ beforeMount: () => place.requestFocus('row') })
-  expect(document.activeElement).toBe(rowButtons(element)[0]!)
+  expect(document.activeElement === rowButtons(element)[0]!).toBe(true)
+})
+
+test('a row focus request expires when the expanded list initially returns no rows', async () => {
+  let reads = 0
+  const { element } = await mountExpanded({
+    beforeMount: () => place.requestFocus('row'),
+    handlers: { 'quirky.tasks/list': () => ++reads === 1 ? listResult([]) : listResult([pr(274), pr(275)]) }
+  })
+  expect(rowTitles(element)).toEqual([])
+  const refresh = button(element, 'Refresh GitHub work')!
+  refresh.focus()
+  await click(refresh)
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(document.activeElement === refresh).toBe(true)
+})
+
+test('a row focus request expires when the expanded list initially fails', async () => {
+  let reads = 0
+  const { element } = await mountExpanded({
+    state: withNavigation({ repoIds: ['repo-1'] }),
+    beforeMount: () => place.requestFocus('row'),
+    handlers: {
+      'quirky.tasks/list': () => {
+        reads += 1
+        if (reads === 1) throw new Error('offline')
+        return listResult([pr(274), pr(275)])
+      }
+    }
+  })
+  const refresh = button(element, 'Refresh GitHub work')!
+  refresh.focus()
+  await click(refresh)
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(document.activeElement === refresh).toBe(true)
+})
+
+test('a row focus request does not follow the user to a different list', async () => {
+  const { promise: delayedPullList, resolve: finishPullList } = Promise.withResolvers<unknown>()
+  const { element } = await mountExpanded({
+    beforeMount: () => place.requestFocus('row'),
+    handlers: {
+      'quirky.tasks/list': (params) => params.mode === 'prs' ? delayedPullList : listResult([issue(281), issue(279)])
+    }
+  })
+  const issuesTab = [...element.querySelectorAll<HTMLElement>('.ui-tool-panel-frame__header [role="tab"]')].find((tab) => tab.textContent?.startsWith('Issues'))!
+  issuesTab.focus()
+  await click(issuesTab)
+  expect(rowTitles(element)).toEqual(['Issue 281', 'Issue 279'])
+  await act(async () => finishPullList(listResult([pr(274), pr(275)])))
+  await settle()
+  expect(document.activeElement === issuesTab).toBe(true)
+})
+
+test('unmounting an expanded view cancels its pending row focus', async () => {
+  const { element } = await mountExpanded({ beforeMount: () => place.requestFocus('row'), handlers: { 'quirky.tasks/list': pending } })
+  expect(element.querySelector('[aria-label="Loading GitHub tasks"]')).not.toBeNull()
+  await act(async () => cleanup?.())
+  cleanup = null
+  document.body.innerHTML = ''
+  const reopened = await mountExpanded()
+  expect(document.activeElement === rowButtons(reopened.element)[0]).toBe(false)
 })
 
 test('the frame has Issues, PRs and Projects tabs with counts on the first two', async () => {
@@ -579,6 +743,45 @@ test('the issue source choice is not offered on the PRs tab', async () => {
   expect(menuLabels(element)).toEqual(['Task settings', 'Open repository in GitHub'])
 })
 
+test('the expanded repository picker can select a repository and reload that list', async () => {
+  const { element, calls } = await mountExpanded({
+    state: withNavigation({ repoIds: [] }),
+    handlers: { 'quirky.tasks/preferences': () => ({}) }
+  })
+  const initialReads = calls.filter((call) => call.method === 'quirky.tasks/list').length
+  await click(element.querySelector('.tasks-list__repo-picker button'))
+  const picker = element.querySelector('[role="group"][aria-label="Select repositories"]')!
+  const repositoryChoice = [...picker.querySelectorAll('label')].find((label) => label.textContent?.trim() === 'quirky')!
+  const checkbox = repositoryChoice.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+  expect(checkbox.checked).toBe(false)
+  await click(checkbox)
+  expect(calls.filter((call) => call.method === 'quirky.tasks/preferences').at(-1)?.params).toEqual({ defaultRepoSelection: null })
+  expect(calls.filter((call) => call.method === 'quirky.tasks/navigate').at(-1)?.params).toMatchObject({ repoIds: null, page: 1 })
+  expect(calls.filter((call) => call.method === 'quirky.tasks/list')).toHaveLength(initialReads + 1)
+})
+
+test('Escape closes the Filters dialog before clearing the selected row or collapsing', async () => {
+  const { element, calls, current } = await mountExpanded({ state: prDetailState() })
+  await click(element.querySelector('.tasks-list__toolbar button[aria-haspopup="dialog"]'))
+  expect(element.querySelector('[role="dialog"][aria-label="GitHub task filters"]')).not.toBeNull()
+  await press('Escape')
+  expect(element.querySelector('[role="dialog"][aria-label="GitHub task filters"]')).toBeNull()
+  expect(current().navigation.detail).toEqual(target(pr(274)))
+  expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
+  expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
+})
+
+test('Escape closes the repository picker before clearing the selected row or collapsing', async () => {
+  const { element, calls, current } = await mountExpanded({ state: prDetailState() })
+  await click(element.querySelector('.tasks-list__repo-picker button'))
+  expect(element.querySelector('[role="group"][aria-label="Select repositories"]')).not.toBeNull()
+  await press('Escape')
+  expect(element.querySelector('[role="group"][aria-label="Select repositories"]')).toBeNull()
+  expect(current().navigation.detail).toEqual(target(pr(274)))
+  expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
+  expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
+})
+
 test('Escape does nothing to the row or the tab while a menu is open', async () => {
   const { element, calls } = await mountExpanded({ state: prDetailState() })
   await click(button(element, 'Tasks options'))
@@ -591,9 +794,9 @@ test('Escape blurs a focused field before it clears the row or collapses', async
   const { element, calls } = await mountExpanded({ state: prDetailState() })
   const search = element.querySelector<HTMLInputElement>('[data-tasks-search]')!
   search.focus()
-  expect(document.activeElement).toBe(search)
+  expect(document.activeElement === search).toBe(true)
   await press('Escape')
-  expect(document.activeElement).not.toBe(search)
+  expect(document.activeElement === search).toBe(false)
   expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
   expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
 })
@@ -614,12 +817,30 @@ test('Escape with no row open collapses to the panel', async () => {
   expect(place.takeFocus()).toBe('row')
 })
 
-test('Projects shows the projects surface instead of the list', async () => {
-  const { element } = await mountExpanded({
-    state: withNavigation({ mode: 'projects' }),
-    handlers: { 'quirky.tasks/projects': () => ({ projects: [], recent: [], pinned: [] }) }
+test('Projects keeps its table, board and roadmap reachable and returns after Collapse', async () => {
+  const { element, calls, current } = await mountExpanded({
+    state: withNavigation({ mode: 'projects', project: projectTarget }),
+    handlers: projectHandlers
   })
+  const projectTabs = [...element.querySelectorAll<HTMLElement>('[role="tab"]')]
   expect(element.querySelector('.tasks-list')).toBeNull()
+  expect(element.querySelector('.quirky-tasks-project-table tbody tr')?.textContent).toContain('Improve project table')
+
+  await click(projectTabs.find((tab) => tab.textContent?.trim() === 'Board · Board')!)
+  expect(element.querySelector('.quirky-tasks-project-board select[aria-label="Move Improve project table"]')).not.toBeNull()
+  await click(projectTabs.find((tab) => tab.textContent?.trim() === 'Roadmap · Roadmap')!)
+  expect(element.querySelector('.quirky-tasks-project-roadmap [role="img"]')).not.toBeNull()
+
+  await click(button(element, 'Collapse Tasks'))
+  expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(true)
+  expect(current().navigation.mode).toBe('projects')
+  await act(async () => cleanup?.())
+  cleanup = null
+  document.body.innerHTML = ''
+
+  const reopened = await mountExpanded({ state: current(), handlers: projectHandlers })
+  expect([...reopened.element.querySelectorAll('.ui-tool-panel-frame__header [role="tab"]')].find((tab) => tab.textContent?.trim() === 'Projects')?.getAttribute('aria-selected')).toBe('true')
+  expect(reopened.element.querySelector('.quirky-tasks-projects__toolbar')).not.toBeNull()
 })
 
 test('an issue detail while Projects is selected fills the whole area, as it did before', async () => {
@@ -666,7 +887,7 @@ test('Escape closes the open merge menu and returns focus to its trigger, withou
   await press('Escape')
   expect(detailColumn(element).querySelector('[role="menu"]')).toBeNull()
   expect(trigger.getAttribute('aria-expanded')).toBe('false')
-  expect(document.activeElement).toBe(trigger)
+  expect(document.activeElement === trigger).toBe(true)
   expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
   expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
   await press('Escape')
@@ -681,7 +902,7 @@ test('Escape closes the reviewers dialog from inside its text box and returns fo
   box.focus()
   await press('Escape')
   expect(detailColumn(element).querySelector('[role="dialog"]')).toBeNull()
-  expect(document.activeElement).toBe(trigger)
+  expect(document.activeElement === trigger).toBe(true)
   expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
   expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
   await press('Escape')
@@ -801,7 +1022,7 @@ test('a snapshot restores the open row, its highlight and focus on the first ren
   await seedSnapshot([pr(274), pr(275)])
   const { element } = await mountExpanded({ state: prDetailState(275), beforeMount: () => place.requestFocus('row'), handlers: { 'quirky.tasks/list': pending } })
   expect([...element.querySelectorAll('.tasks-list__list .ui-list-row')].map((row) => row.classList.contains('ui-list-row--selected'))).toEqual([false, true])
-  expect(document.activeElement).toBe(rowButtons(element)[1]!)
+  expect(document.activeElement === rowButtons(element)[1]!).toBe(true)
 })
 
 test('merge metadata from a snapshot is read again, and merging waits for the fresh read', async () => {
@@ -812,6 +1033,22 @@ test('merge metadata from a snapshot is read again, and merging waits for the fr
   await click(button(detailColumn(element), 'Merge actions for PR #274'))
   await click(menuItems(detailColumn(element))[0])
   expect(confirms).toEqual([])
+  expect(calls.some((call) => call.method === 'quirky.tasks/row')).toBe(false)
+})
+
+
+test('auto-merge stays guarded while its metadata comes from a snapshot', async () => {
+  const key = ['wt-main', 'pullRequest', 274, 'https://github.com/acme/quirky/pull/274'].join('\u0000')
+  await seedSnapshot([pr(274)], { merge: { [key]: metadata() } })
+  const { element, calls } = await mountExpanded({
+    state: prDetailState(),
+    handlers: { 'quirky.tasks/mergeMetadata': pending, 'quirky.tasks/row': () => ({ kind: 'enabled' }) }
+  })
+  const pane = detailColumn(element)
+  await click(button(pane, 'Merge actions for PR #274'))
+  const enableAutoMerge = menuItems(pane).find((item) => item.textContent?.trim() === 'Enable auto-merge')!
+  await click(enableAutoMerge)
+  expect(element.querySelector('[role="alert"]')?.textContent).toContain('Merge metadata is refreshing. Try again in a moment.')
   expect(calls.some((call) => call.method === 'quirky.tasks/row')).toBe(false)
 })
 

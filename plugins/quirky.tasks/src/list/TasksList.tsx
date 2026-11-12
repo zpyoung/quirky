@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ControlIcon, EmptyState, FormRow, IconButton, ListRow, Menu, TextField, type MenuItem } from '@quirky/ui'
-import type { ItemKind, ItemTarget, TasksSurfaceProps } from '../contracts'
+import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, ListRow, Menu, TextField, type MenuItem } from '@quirky/ui'
+import type { ItemKind, ItemTarget, TaskItem, TasksSurfaceProps } from '../contracts'
 import { IssueSurface } from '../issue/IssueSurface'
 import { PrDetail, type ReviewerOptions } from './PrDetail'
 import { place } from './place'
@@ -94,9 +94,16 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   const navigation = state.navigation
   const mode = navigation.mode === 'prs' ? 'prs' : 'issues'
   const currentKey = listViewKey({ source: navigation.source, mode, repoIds: navigation.repoIds, query: navigation.query, page: navigation.page })
+
+  const repoSelectionForList = useRef({ key: currentKey, repoIds: navigation.repoIds })
+  if (repoSelectionForList.current.key !== currentKey) {
+    repoSelectionForList.current = { key: currentKey, repoIds: navigation.repoIds }
+  }
   const [seed] = useState(() => place.listSnapshot(currentKey))
   const [result, setResult] = useState<ListData | null>(seed?.list ?? null)
   const [resultKey, setResultKey] = useState<string | null>(seed ? currentKey : null)
+  const resultKeyRef = useRef(resultKey)
+  resultKeyRef.current = resultKey
   const [loading, setLoading] = useState(seed === null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -138,6 +145,11 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   const listScroll = useRef<HTMLDivElement | null>(null)
   const restoredScroll = useRef<string | null>(null)
   const wantsFocus = useRef(false)
+  const focusOwner = useRef(currentKey)
+  if (focusOwner.current !== currentKey) {
+    focusOwner.current = currentKey
+    wantsFocus.current = false
+  }
   const viewerRequested = useRef(false)
   const activity = useAgentActivity(context)
 
@@ -173,7 +185,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   const fetchList = useCallback(async (noCache: boolean): Promise<ListData> => {
     const value = await context.call('quirky.tasks/list', {
       mode,
-      repoIds: navigation.repoIds,
+      repoIds: repoSelectionForList.current.repoIds,
       query: navigation.query,
       page: navigation.page,
       ...(noCache ? { noCache: true } : {})
@@ -181,7 +193,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     const parsed = parseListResult(value)
     if (!parsed) throw new Error('The Tasks list API returned an invalid result.')
     return parsed
-  }, [context, mode, navigation.page, navigation.query, navigation.repoIds])
+  }, [context, currentKey, mode, navigation.page, navigation.query])
 
   const loadList = useCallback(async (noCache = false, deliberate = false) => {
     const key = currentKey
@@ -205,18 +217,32 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     } catch (cause) {
       if (!ownsRequest()) return
       setError(errorMessage(cause))
-      if (resultKey !== key) setResult(null)
+      if (focusOwner.current === key) wantsFocus.current = false
+      if (resultKeyRef.current !== key) setResult(null)
     } finally {
       if (ownsRequest()) {
         setLoading(false)
         setRefreshing(false)
       }
     }
-  }, [currentKey, fetchList, navigation.mode, resultKey])
+  }, [currentKey, fetchList, navigation.mode])
 
   useEffect(() => {
     void loadList()
   }, [loadList])
+
+  useEffect(() => {
+    if (!filtersOpen && !repoOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (filtersOpen) setFiltersOpen(false)
+      else if (repoOpen) setRepoOpen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape, true)
+    return () => document.removeEventListener('keydown', closeOnEscape, true)
+  }, [filtersOpen, repoOpen])
   useEffect(() => {
     checkTriggered.current.clear()
     setChecksLoading({})
@@ -891,7 +917,9 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   }, [context, result])
 
   useEffect(() => {
-    if (initialFocus === undefined ? place.takeFocus() === 'row' : initialFocus) wantsFocus.current = true
+    const requested = initialFocus === undefined ? place.takeFocus() === 'row' : initialFocus
+    wantsFocus.current = requested
+    return () => { wantsFocus.current = false }
   }, [])
 
   useEffect(() => {
@@ -911,13 +939,17 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
 
   useEffect(() => {
     const element = listScroll.current
-    if (!wantsFocus.current || !element || rows.length === 0) return
+    if (!wantsFocus.current || focusOwner.current !== currentKey || !element || !hasLoadedRows) return
+    if (rows.length === 0) {
+      wantsFocus.current = false
+      return
+    }
     wantsFocus.current = false
     const selected = element.querySelector<HTMLElement>('.ui-list-row--selected .ui-list-row__main')
     const target = selected ?? element.querySelector<HTMLElement>('.ui-list-row__main')
     if (selected) selected.scrollIntoView?.({ block: 'nearest' })
     target?.focus({ preventScroll: true })
-  }, [rows.length, currentKey])
+  }, [rows.length, currentKey, hasLoadedRows])
 
   if (navigation.mode === 'projects') return null
   const selectedSet = new Set(selectedRepoIds)
@@ -992,6 +1024,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     const when = relativeTime(item.updatedAt)
     const worktree = linkedWorktree(item)
     const resolved = rowStatus(item, { viewer, checks: checks[key], merge: mergeMetadata[key], activity: worktree === undefined ? undefined : activity.get(worktree) })
+    const pendingRefresh = kind === 'issue' && item.state === 'closed' && optimistic[key]?.keepVisible === true
     return (
       <div
         key={key}
@@ -1012,6 +1045,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
           trailing={<>
             {kind === 'pullRequest' && checks[key] ? <span className={`tasks-list__checks tasks-list__checks--${check.tone}`}>{check.label}</span> : null}
             {kind === 'issue' && item.assignees.length > 0 ? <span className="tasks-list__assignees">{item.assignees.join(', ')}</span> : null}
+            {pendingRefresh ? <Badge tone="neutral" label="Pending refresh">Pending refresh</Badge> : null}
             <span className="tasks-list__age" title={when.absolute}>{when.label}</span>
           </>}
         />
@@ -1038,11 +1072,36 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     await refresh()
     void loadList(true)
   }
+
+  const onIssueEdited = (updated: TaskItem) => {
+    if (detail?.kind !== 'issue' || updated.kind !== 'issue' || updated.state !== 'closed' || filters.status !== 'open') return
+    const item = rows.find((candidate) => candidate.number === updated.number && isOpenRow(candidate, detail))
+    if (!item || item.state === 'closed') return
+    const key = rowKey(item)
+    const generation = (mutationGenerations.current.get(key) ?? 0) + 1
+    mutationGenerations.current.set(key, generation)
+    const prior = optimistic[key]
+    const patch = absolutePatch(updated)
+    const cumulativePatch = { ...(prior?.patch ?? {}), ...patch }
+    setOptimistic((previous) => {
+      const current = previous[key]
+      return {
+        ...previous,
+        [key]: {
+          item: current?.item ?? prior?.item ?? item,
+          patch: { ...(current?.patch ?? prior?.patch ?? {}), ...patch },
+          generation,
+          keepVisible: current?.keepVisible === true || prior?.keepVisible === true || filters.status === 'open'
+        }
+      }
+    })
+    startQuietAdoption(prior?.item ?? item, generation, cumulativePatch, currentKey, currentViewGeneration)
+  }
   const prKey = selectedPrKey
   const detailBody = detail === null
     ? <div role="status" className="tasks-list__prompt"><EmptyState message="Select a task" /></div>
     : detail.kind === 'issue'
-      ? <IssueSurface context={context} state={state} refresh={refreshWithList} />
+      ? <IssueSurface context={context} state={state} refresh={refreshWithList} onEdited={onIssueEdited} />
       : selectedPr && prKey ? (
         <PrDetail
           item={selectedPr}
@@ -1097,7 +1156,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
             <div className="tasks-list__repo-picker">
               <Button type="button" aria-haspopup="listbox" aria-expanded={repoOpen} onClick={() => setRepoOpen((open) => !open)}>{repoButtonLabel} ▾</Button>
               {repoOpen ? (
-                <div role="group" aria-label="Select repositories" className="tasks-list__repo-menu">
+                <div role="group" aria-label="Select repositories" className="tasks-list__repo-menu" data-tasks-popover>
                   <label className="tasks-list__check-option">
                     <input type="checkbox" checked={navigation.repoIds === null && allRepoIds.length > 0} onChange={(event) => void selectRepositories(event.currentTarget.checked ? allRepoIds : [])} />
                     <span>All repositories</span>

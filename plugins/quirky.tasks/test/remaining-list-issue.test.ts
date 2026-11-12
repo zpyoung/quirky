@@ -322,7 +322,11 @@ test('sticky all includes repositories added later and API, CLI, and visible nav
   const state = taskState(await host.call('state'))
   expect(state.preferences.defaultRepoSelection).toBeNull()
   expect(state.navigation.repoIds).toBeNull()
-  expect(taskState(await host.call('state')).navigation).toMatchObject({ repoIds: null })
+  const finalState = taskState(await host.call('state'))
+  expect(finalState.navigation).toMatchObject({
+    mode: 'issues', repoIds: null, query: 'is:issue is:open', page: 1,
+    lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 }
+  })
 }, 30_000)
 
 test('an explicit saved repository survives a temporary Beta deep link in API, CLI, and visible navigation', async () => {
@@ -346,7 +350,12 @@ test('an explicit saved repository survives a temporary Beta deep link in API, C
   const cli = await host.cli(['--json', 'tasks', 'list', '--worktree', host.worktree, '--mode', 'issues', '--query', 'is:issue is:open'])
   expect(cli).toMatchObject({ code: 0, stderr: '' })
   expect(new Set(repoIds(JSON.parse(cli.stdout)))).toEqual(new Set([betaId]))
-  expect(taskState(await host.call('state')).navigation).toMatchObject({ repoIds: [betaId] })
+  const finalState = taskState(await host.call('state'))
+  expect(finalState.preferences.defaultRepoSelection).toEqual([host.repoId])
+  expect(finalState.navigation).toMatchObject({
+    mode: 'issues', repoIds: [betaId], query: 'is:issue is:open', page: 1,
+    lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 }
+  })
 }, 30_000)
 
 test('changing Tasks mode clears an old issue target in the navigation state', async () => {
@@ -358,7 +367,11 @@ test('changing Tasks mode clears an old issue target in the navigation state', a
   await host.call('navigate', { mode: 'prs' })
   const state = taskState(await host.call('state'))
   expect(state.navigation).toMatchObject({ mode: 'prs', query: 'is:pr is:open', detail: null })
-  expect(taskState(await host.call('state')).navigation).toMatchObject({ mode: 'prs', detail: null })
+  const finalState = taskState(await host.call('state'))
+  expect(finalState.navigation).toMatchObject({
+    mode: 'prs', query: 'is:pr is:open', detail: null,
+    lastList: { mode: 'prs', query: 'is:pr is:open', page: 1 }
+  })
 }, 20_000)
 
 test('queued PR outcomes remain open, and auto-merge enable/disable outcomes remain distinct from merge', async () => {
@@ -574,6 +587,57 @@ test('a failed assignee edit preserves an earlier successful status change in th
 
   expect(fixtureItem(host, 7).state).toBe('closed')
   expect(issueStatusSelect(mounted.container).value).toBe('closed')
+}, 30_000)
+
+test('closing an issue in its pane keeps the closed row under is:open while search results lag', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const issue = fixtureIssue('test-owner', 'test-repo', 7, '2026-10-01T00:00:00Z')
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [issue] }))
+  await host.call('navigate', {
+    mode: 'issues',
+    repoIds: [host.repoId],
+    query: 'is:issue is:open',
+    detail: { worktree: host.worktree, kind: 'issue', number: 7, url: issue.url }
+  })
+  const state = taskState(await host.call('state'))
+  const driver = uiContext(host)
+  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues')
+      && completedCall(driver.receipts, 'quirky.tasks/issue')
+      && mounted.container.querySelector('.tasks-list__row') !== null
+      && !issueStatusSelect(mounted.container).disabled,
+    'open issue row and pane'
+  )
+
+  host.writeState({
+    ...fixtureState(host),
+    lagSearch: { repository: 'test-owner/test-repo', remaining: 1, items: [issue] }
+  })
+  await chooseIssueStatus(mounted.container, 'closed-completed')
+  await waitForUi(
+    () => fixtureItem(host, 7).state === 'closed'
+      && completedCall(driver.receipts, 'quirky.tasks/issueEdit')
+      && completedCall(driver.receipts, 'quirky.tasks/list', (receipt) =>
+        receipt.params.noCache === true
+          && receipt.params.query === 'is:issue is:open'
+          && listItemState(receipt.value, 7) === 'open'),
+    'confirmed close while the open-issue search index lags'
+  )
+
+  const staleOpenRead = driver.receipts.find((receipt) =>
+    receipt.method === 'quirky.tasks/list'
+    && receipt.completed
+    && receipt.params.noCache === true
+    && receipt.params.query === 'is:issue is:open'
+    && listItemState(receipt.value, 7) === 'open')
+  expect(staleOpenRead).toBeDefined()
+  expect(fixtureItem(host, 7).state).toBe('closed')
+  const row = mounted.container.querySelector('.tasks-list__row')
+  expect(row).not.toBeNull()
+  expect(row?.querySelector('.ui-status-dot--done')).not.toBeNull()
+  expect(row?.textContent).toContain('Pending refresh')
 }, 30_000)
 
 test('quiet adoption retains a confirmed merge while search indexing lags, then adopts the indexed row', async () => {
