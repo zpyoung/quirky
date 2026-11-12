@@ -1,0 +1,83 @@
+{
+  "id": "soak.faults",
+  "name": "Soak Faults",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "description": "Injects controlled faults into a throwaway soak daemon.",
+  "main": "main.ts",
+  "contributes": {
+    "method": [
+      {
+        "id": "leak",
+        "description": "Starts child processes at a bounded interval.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "count": { "type": "integer", "minimum": 1, "maximum": 200 },
+            "everyMs": { "type": "integer", "minimum": 10, "maximum": 60000 },
+            "lifetimeSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+          },
+          "required": ["count", "everyMs", "lifetimeSeconds"]
+        }
+      },
+      {
+        "id": "zombies",
+        "description": "Starts process holders whose children become zombies.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "holders": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "each": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "lifetimeSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+          },
+          "required": ["holders", "each", "lifetimeSeconds"]
+        }
+      },
+      {
+        "id": "refresh",
+        "description": "Updates the shared owner slot and emits its value later.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" }
+          },
+          "required": ["owner"]
+        }
+      },
+      {
+        "id": "block",
+        "description": "Blocks the daemon event loop for a measured duration.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "ms": { "type": "integer", "minimum": 100, "maximum": 10000 }
+          },
+          "required": ["ms"]
+        }
+      },
+      {
+        "id": "report",
+        "description": "Returns the fault plugin's current state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "Reports the latest refreshed owner.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" }
+          },
+          "required": ["owner"]
+        }
+      }
+    ]
+  }
+}

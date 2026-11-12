@@ -172,4 +172,75 @@ describe('plugin events', () => {
     await waitFor(() => s.logs.some((line) => line.includes('acme.flaky: listener failed: flaky listener')))
     expect(s.logs.some((line) => line.includes('acme.watch: listener failed'))).toBe(false)
   })
+
+  test('SC-27: coalesces a burst for clients and plugin listeners', async () => {
+    const s = await boot([
+      {
+        manifest: {
+          id: 'acme.tools',
+          activation: 'startup',
+          contributes: { method: [{ id: 'burst' }], event: [{ id: 'changed', coalesce: [] }] }
+        },
+        behavior: {
+          activate: `
+            context.provide('method:acme.tools/burst', () => {
+              for (let n = 1; n <= 50; n++) context.emit('changed', { n })
+              return true
+            })`
+        }
+      },
+      {
+        manifest: {
+          id: 'acme.watch',
+          activation: 'startup',
+          dependencies: ['acme.tools'],
+          contributes: { method: [{ id: 'seen' }] }
+        },
+        behavior: {
+          activate: `
+            const seen = []
+            context.subscribe((event) => {
+              if (event.type === 'acme.tools/changed') seen.push(event)
+            })
+            context.provide('method:acme.watch/seen', () => seen)`
+        }
+      }
+    ])
+    const { events } = await s.harness.connectWithEvents()
+    const expected: QuirkyEvent[] = [
+      { type: 'acme.tools/changed', data: { n: 1 } },
+      { type: 'acme.tools/changed', data: { n: 50 } }
+    ]
+
+    expect(await call(s.client, 'acme.tools/burst')).toBe(true)
+    await Bun.sleep(700)
+
+    expect(events.filter((event) => event.type === 'acme.tools/changed')).toEqual(expected)
+    expect(await call(s.client, 'acme.watch/seen')).toEqual(expected)
+  })
+
+  test('SC-28: includes the worktree tag in the client event envelope', async () => {
+    const s = await boot([
+      {
+        manifest: {
+          id: 'acme.tools',
+          contributes: { method: [{ id: 'fire' }], event: [{ id: 'tree', worktree: 'worktreeId' }] }
+        },
+        behavior: {
+          activate: "context.provide('method:acme.tools/fire', () => context.emit('tree', { worktreeId: 'wt_1' }))"
+        }
+      }
+    ])
+    const { events } = await s.harness.connectWithEvents()
+
+    expect(await call(s.client, 'acme.tools/fire')).toBe(true)
+
+    const event = await waitFor(() => events.find((candidate: QuirkyEvent) => candidate.type === 'acme.tools/tree'))
+    expect(event).toEqual({
+      type: 'acme.tools/tree',
+      data: { worktreeId: 'wt_1' },
+      worktreeId: 'wt_1'
+    })
+  })
+
 })

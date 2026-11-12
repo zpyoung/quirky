@@ -295,6 +295,7 @@ export class LayoutService {
   private readonly auxiliaryWindows = new Map<string, AuxiliaryWindowRoute>()
   private readonly windowViews = new Map<number, WindowLayoutOverride>()
   private reportCounter = 0
+  private storedLayoutSettled = false
   private lastFocusedAt = 0
   private awayMs: number
 
@@ -334,6 +335,7 @@ export class LayoutService {
   }
 
   private stateFor(connId: number | undefined, fallbackReports: boolean): UiState {
+    this.settleStoredLayout()
     const layout = connId === undefined ? this.layout() : this.windowLayout(connId)
     const model = this.options.ui.contributions()
     const windows = this.windows()
@@ -382,17 +384,22 @@ export class LayoutService {
     const windows = this.openWindows()
     if (windows.length > 1) throw conflict('multiple Quirky windows are open; specify connId')
     if (windows.length === 1) return this.openWindowView(windows[0]!.id, id, input)
+    return this.showSharedView(id, input, true)
+  }
+
+  private showSharedView(id: string, input: unknown, closeExpandedHosts: boolean): UiLayout {
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
     const view = { id, ...(input !== undefined ? { input } : {}) }
     return this.change((layout) => {
       const worktree = worktreeOf(view)
-      return {
+      const opened = {
         ...layout,
         view,
         viewTabs: viewTabOpened(layout.viewTabs ?? [], view),
         worktree: worktree === undefined ? layout.worktree ?? null : worktree
       }
+      return closeExpandedHosts ? this.withExpandedHostsClosed(opened, id) : opened
     })
   }
 
@@ -415,6 +422,7 @@ export class LayoutService {
 
   /** Removes a deleted workspace from the shared layout, every window override, and auxiliary routes. */
   forgetWorktree(worktreeId: string): void {
+    this.settleStoredLayout()
     const shared = this.layout()
     const nextShared = {
       ...shared,
@@ -503,8 +511,15 @@ export class LayoutService {
     }
   }
 
-  /** Opens a view only in the exact live UI connection. */
+  /**
+   * Opens a view only in the exact live UI connection. A main window also closes the slot of a tool
+   * whose expanded view this is; an auxiliary window has no slots and leaves the main window's alone.
+   */
   openWindowView(connId: number, id: string, input?: unknown): UiLayout {
+    return this.showWindowView(connId, id, input, true)
+  }
+
+  private showWindowView(connId: number, id: string, input: unknown, closeExpandedHosts: boolean): UiLayout {
     const target = this.requireWindowById(connId)
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
@@ -530,9 +545,17 @@ export class LayoutService {
     const worktree = worktreeUpdate === undefined ? previous.worktree : worktreeUpdate
     if (this.openWindows().length === 1) {
       this.windowViews.delete(target.id)
-      return this.change((layout) => ({ ...layout, view, viewTabs, worktree }))
+      return this.change((layout) => {
+        const opened = { ...layout, view, viewTabs, worktree }
+        return closeExpandedHosts ? this.withExpandedHostsClosed(opened, id) : opened
+      })
     }
     this.windowViews.set(target.id, { ...previous, view, viewTabs, worktree })
+    if (closeExpandedHosts) {
+      const shared = this.layout()
+      const closed = this.withExpandedHostsClosed(shared, id)
+      if (closed !== shared) this.change(() => closed)
+    }
     const next = this.windowLayout(target.id)
     this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
     return next
@@ -655,8 +678,41 @@ export class LayoutService {
     })
   }
 
+  /**
+   * Opens a tool in its slot. For a tool with an expanded view, the focused (or only) main window
+   * decides: an active expanded view is closed and the slot opens, an expanded view behind another
+   * view becomes the active one and no slot opens.
+   */
   openTool(id: string): UiLayout {
     const tool = this.requireTool(id)
+    const expandedView = tool.expandedView
+    if (expandedView === undefined) return this.openToolSlot(tool)
+    const connId = this.toolWindowId()
+    if (connId === undefined) {
+      for (const window of this.mainWindows()) {
+        const current = this.windowLayout(window.id)
+        const tab = (current.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
+        if (tab !== undefined) return this.showWindowView(window.id, tab.id, tab.input, true)
+      }
+      if (this.openWindows().length > 0) return this.openToolSlot(tool)
+      const shared = this.layout()
+      const tab = (shared.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
+      if (tab === undefined) return this.openToolSlot(tool)
+      if (shared.view?.id !== tab.id) return this.showSharedView(tab.id, tab.input, false)
+      this.closeView()
+      return this.openToolSlot(tool)
+    }
+    const current = this.windowLayout(connId)
+    const tab = (current.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
+    if (tab === undefined) return this.openToolSlot(tool)
+    if (current.view?.id !== tab.id) return this.showWindowView(connId, tab.id, tab.input, true)
+    this.closeWindowView(connId)
+    this.openToolSlot(tool)
+    return this.windowLayout(connId)
+  }
+
+  private openToolSlot(tool: UiToolEntry): UiLayout {
+    const id = tool.id
     return this.change((layout) => {
       const slot = this.slotOfTool(layout.tools!, tool)
       const open = { ...layout.tools!.open, [slot]: id }
@@ -1101,13 +1157,23 @@ export class LayoutService {
       const windows = this.openWindows()
       const survivor = windows.length === 1 ? windows[0] : undefined
       if (survivor && !this.auxiliaryView(survivor.id)) {
+        const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView !== undefined)
+        if (hosts.length > 0) this.storedLayoutSettled = true
         const override = this.windowViewFor(survivor.id)
-        this.change((layout) => ({
-          ...layout,
-          view: override.view,
-          viewTabs: override.viewTabs,
-          worktree: override.worktree
-        }))
+        this.change((layout) => {
+          let merged: UiLayout = {
+            ...layout,
+            view: override.view,
+            viewTabs: override.viewTabs,
+            worktree: override.worktree
+          }
+          for (const host of hosts) {
+            if (override.viewTabs.some((tab) => tab.id === host.expandedView)) {
+              merged = this.withExpandedHostsClosed(merged, host.expandedView!)
+            }
+          }
+          return merged
+        })
       }
       this.announceWindows()
     }
@@ -1225,6 +1291,10 @@ export class LayoutService {
   private openWindows(): ClientConn[] {
     return [...this.options.clients()].filter((conn) => conn.role === 'ui' && !conn.closed)
   }
+  private mainWindows(): ClientConn[] {
+    const windows = this.openWindows()
+    return windows.filter((conn) => this.auxiliaryView(conn.id) === undefined)
+  }
   private requireWindowById(connId: number): ClientConn {
     if (!Number.isInteger(connId) || connId < 1) throw invalidParams('connId must be a positive integer')
     const target = [...this.options.clients()].find((conn) => conn.id === connId && !conn.closed)
@@ -1238,6 +1308,7 @@ export class LayoutService {
   }
 
   private windowViewFor(connId: number): WindowLayoutOverride {
+    this.settleStoredLayout()
     const existing = this.windowViews.get(connId)
     if (existing) return existing
 
@@ -1257,6 +1328,7 @@ export class LayoutService {
   }
 
   private windowLayout(connId: number): UiLayout {
+    this.settleStoredLayout()
     const layout = this.layout()
     const auxiliary = this.auxiliaryView(connId)
     if (auxiliary) {
@@ -1313,8 +1385,14 @@ export class LayoutService {
   }
 
 
-  private focusedConn(): ClientConn | undefined {
-    return this.openWindows().reduce<ClientConn | undefined>(
+  /** The focused main window, or the only main window, decides how an expanded tool opens. */
+  private toolWindowId(): number | undefined {
+    const windows = this.mainWindows()
+    return this.focusedConn(windows)?.id ?? (windows.length === 1 ? windows[0]!.id : undefined)
+  }
+
+  private focusedConn(windows: ClientConn[] = this.openWindows()): ClientConn | undefined {
+    return windows.reduce<ClientConn | undefined>(
       (best, conn) => (conn.focusedAt !== undefined && conn.focusedAt > (best?.focusedAt ?? 0) ? conn : best),
       undefined
     )
@@ -1472,6 +1550,50 @@ export class LayoutService {
     return null
   }
 
+  /** Closes the slot of every tool whose expanded view is `viewId`, as `closeTool` would. */
+  private withExpandedHostsClosed(layout: UiLayout, viewId: string): UiLayout {
+    if (!layout.tools) return layout
+    const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView === viewId)
+    let next = layout
+    for (const host of hosts) {
+      for (const slot of UI_TOOL_SLOTS) {
+        if (next.tools!.open[slot] !== host.id) continue
+        const open = { ...next.tools!.open, [slot]: null }
+        const tools = { ...next.tools!, open }
+        const panel = this.panelForOpen(tools, next.panel)
+        const focusTarget = focusTargetOfTool(host)
+        next = {
+          ...next,
+          tools,
+          panel,
+          focus: focusTarget !== undefined && next.focus === focusTarget && (focusTarget !== 'panel' || panel === null)
+            ? null
+            : next.focus
+        }
+      }
+    }
+    return next
+  }
+
+  /**
+   * Settles a stored layout that has a tool open beside its expanded view, once at most one window
+   * is connected: multiple windows can have per-window view state that has not reached shared storage.
+   */
+  private settleStoredLayout(): void {
+    if (this.storedLayoutSettled) return
+    const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView !== undefined)
+    if (hosts.length === 0 || this.openWindows().length > 1) return
+    this.storedLayoutSettled = true
+    const layout = this.layout()
+    let settled = layout
+    for (const host of hosts) {
+      if ((layout.viewTabs ?? []).some((tab) => tab.id === host.expandedView)) {
+        settled = this.withExpandedHostsClosed(settled, host.expandedView!)
+      }
+    }
+    if (settled !== layout) this.change(() => settled)
+  }
+
   private publishGlobalLayout(layout: UiLayout): void {
     this.options.broadcastNonWindows({ type: 'ui.state.changed', layout })
     for (const conn of this.openWindows()) {
@@ -1481,6 +1603,7 @@ export class LayoutService {
   }
 
   private change(update: (layout: UiLayout) => UiLayout): UiLayout {
+    this.settleStoredLayout()
     const next = update(this.layout())
     this.options.store.setUiState(LAYOUT_KEY, next)
     this.publishGlobalLayout(next)

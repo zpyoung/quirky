@@ -24,7 +24,7 @@ export function runtimeMethods(env: HostingEnv): Record<string, Handler> {
     let accounts: AuthAccount[] = []
     let ghAvailable = true
     try {
-      accounts = await env.authAccounts(scope, true)
+      accounts = await env.authAccounts(scope, optionalBooleanField(params, 'force') !== false)
     } catch (error) {
       ghAvailable = reasonOf(error) !== 'gh_unavailable'
       if (reasonOf(error) !== 'gh_unavailable') throw error

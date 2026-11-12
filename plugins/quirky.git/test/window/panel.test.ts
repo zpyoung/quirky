@@ -83,7 +83,7 @@ test('New agent tab wakes a sleeping selected worktree and opens exactly its age
 
   try {
     const w = await boot(scratch)
-    await w.win.waitFor(() => q('[data-git-content] section p'))
+    await w.win.waitFor(() => q('[data-git-clean]'))
     const sessionsBefore = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
     const previousSessionIds = new Set(sessionsBefore.map((session) => session.id))
     await w.agent.callAny('quirky.agents/setDefault', { agent: 'opencode' })

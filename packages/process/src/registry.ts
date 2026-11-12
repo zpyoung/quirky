@@ -10,11 +10,27 @@ type Entry = {
   finished: Promise<void>
 }
 const entries = new Set<Entry>()
+const retainedEntries = new Set<Entry>()
 
-/** Tracks a leader until exit and returns an idempotent removal hook. */
-export function registerProcess(runner: symbol, owner: string, command: string, child: StartedChild, stop: () => void, finished: Promise<void>): () => void {
+/** Tracks a leader until exit and can retain its operation until it settles. */
+export function registerProcess(
+  runner: symbol,
+  owner: string,
+  command: string,
+  child: StartedChild,
+  stop: () => void,
+  finished: Promise<void>,
+  retainUntilFinished = false,
+): () => void {
   const entry: Entry = { runner, info: { pid: child.pid, owner, command, startedAt: Date.now() }, stop, finished }
   entries.add(entry)
+  if (retainUntilFinished) {
+    retainedEntries.add(entry)
+    void finished.then(
+      () => retainedEntries.delete(entry),
+      () => retainedEntries.delete(entry),
+    )
+  }
   return () => { entries.delete(entry) }
 }
 
@@ -28,9 +44,10 @@ export function liveProcesses(): LiveProcess[] {
   return [...entries].map(entry => ({ ...entry.info }))
 }
 
-/** Immediately kills unfinished groups and waits for the affected runs to settle. */
+/** Immediately kills unfinished groups and waits for the affected operations to settle. */
 export async function stopProcesses(runner?: symbol): Promise<void> {
-  const selected = [...entries].filter(entry => runner === undefined || entry.runner === runner)
+  const selected = [...new Set([...entries, ...retainedEntries])]
+    .filter(entry => runner === undefined || entry.runner === runner)
   for (const entry of selected) entry.stop()
   await Promise.all(selected.map(entry => entry.finished))
 }

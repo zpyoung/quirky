@@ -69,6 +69,31 @@
                 },
                 "project": {
                   "description": "Nullable Project target: id, owner, ownerType, number, url and optional host/title/viewId/viewNumber."
+                },
+                "lastList": {
+                  "type": "object",
+                  "description": "The Issues or PRs list most recently shown; it follows every state whose mode is not projects and is not persisted.",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "issues",
+                        "prs"
+                      ]
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "query",
+                    "page"
+                  ]
                 }
               },
               "required": [
@@ -80,7 +105,8 @@
                 "scrollTop",
                 "detail",
                 "newIssue",
-                "project"
+                "project",
+                "lastList"
               ]
             },
             "preferences": {
@@ -273,7 +299,7 @@
       },
       {
         "id": "open",
-        "description": "Open Tasks, optionally deep-linked to a mode, repository selection or item.",
+        "description": "Open Tasks: the panel for a plain open, or the center tab when deep-linked to an item, a project, a new issue or Projects. A later open applies only the given fields and keeps the open item.",
         "params": {
           "type": "object",
           "properties": {
@@ -327,7 +353,7 @@
       },
       {
         "id": "navigate",
-        "description": "Change the exact Tasks view state; context changes reset paging unless an explicit page is supplied.",
+        "description": "Change the exact Tasks view state; context changes reset paging unless an explicit page is supplied. It never opens or closes the panel or the tab.",
         "params": {
           "type": "object",
           "properties": {
@@ -380,8 +406,25 @@
         }
       },
       {
+        "id": "prepare",
+        "description": "Apply the first-open Tasks defaults once and return the state; it changes no layout. The panel and the tab call it on mount.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "description": "The state projection; see the state method's result schema.",
+          "additionalProperties": true
+        }
+      },
+      {
         "id": "close",
-        "description": "Close Tasks and restore its previous view.",
+        "description": "Close Tasks: its slot, its active tab, or its background tab. Nothing else changes.",
         "params": {
           "type": "object",
           "properties": {
@@ -446,6 +489,50 @@
           "type": "object",
           "description": "The updated state projection; see the state method's result schema.",
           "additionalProperties": true
+        }
+      },
+      {
+        "id": "counts",
+        "description": "Count matching issues and pull requests across the selected repositories; a count is null when any repository could not be read.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Optional existing worktree context used by the API caller."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "issues",
+                "prs"
+              ],
+              "description": "The list whose query is given; the other list counts its default open query."
+            },
+            "query": {
+              "type": "string",
+              "description": "GitHub search query for `mode`, limited to 8192 UTF-8 bytes. Requires `mode`."
+            },
+            "repoIds": {
+              "description": "Repository IDs to include, or null for sticky all. Omit to use current Tasks navigation."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "issues": {
+              "description": "The issue count, or null when it is unknown."
+            },
+            "prs": {
+              "description": "The pull-request count, or null when it is unknown."
+            }
+          },
+          "required": [
+            "issues",
+            "prs"
+          ]
         }
       },
       {
@@ -3364,6 +3451,11 @@
         "summary": "close Tasks"
       },
       {
+        "id": "prepare",
+        "method": "prepare",
+        "summary": "apply the first-open Tasks defaults without opening anything"
+      },
+      {
         "id": "preferences",
         "method": "preferences",
         "summary": "configure Tasks preferences"
@@ -3372,6 +3464,11 @@
         "id": "list",
         "method": "list",
         "summary": "list bounded GitHub issues or pull requests across selected repositories"
+      },
+      {
+        "id": "counts",
+        "method": "counts",
+        "summary": "count open GitHub issues and pull requests across selected repositories"
       },
       {
         "id": "row",
