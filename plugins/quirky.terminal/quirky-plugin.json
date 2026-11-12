@@ -1,6 +1,6 @@
 {
   "id": "quirky.terminal",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "Terminal",
   "version": "0.1.0",
   "description": "Terminal input and output for sessions that run in a PTY.",
@@ -2648,6 +2648,7 @@
       },
       {
         "id": "title",
+        "coalesce": ["sessionId"],
         "description": "A terminal's title changed.",
         "data": {
           "type": "object",
@@ -2667,6 +2668,7 @@
       },
       {
         "id": "cwd",
+        "coalesce": ["sessionId"],
         "description": "A terminal's working directory changed.",
         "data": {
           "type": "object",

@@ -8,6 +8,16 @@ export class SelectorSyntaxError extends Error {}
 /** What `current` and relative `path:` selectors are read against. */
 export type CallerIdentity = { cwd?: string; worktreeId?: string }
 
+/** The one ID a selector can only mean, or null when it needs the full search; never throws. */
+export function selectedId(selector: string, identity: CallerIdentity = {}): string | null {
+  const text = selector.trim()
+  if (text === '') return null
+  if (text === 'current' || text === 'active') return identity.worktreeId || null
+  const prefixed = /^(id|name|branch|path):(.*)$/s.exec(text)
+  if (!prefixed) return text
+  return prefixed[1] === 'id' && prefixed[2] !== '' ? prefixed[2]! : null
+}
+
 /**
  * The workspaces `text` names: those with that name, else those whose folder has that name (their
  * identity on disk, which a display name doesn't hide). Folder workspaces of one project share a

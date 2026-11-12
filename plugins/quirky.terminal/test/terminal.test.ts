@@ -582,6 +582,127 @@ describe('SC-30 to SC-33: facts become events', () => {
       ['quirky.terminal/cwd', { sessionId: shell.id, cwd: '/tmp/w/api/src' }]
     ])
   })
+  const factData = (event: QuirkyEvent) =>
+    (event as PluginEvent).data as { sessionId: string; title?: string; exitCode?: number | null }
+
+  test('coalesces a title burst to the first and latest values', async () => {
+    const { events } = await h.connectWithEvents('ui')
+    const titles = () =>
+      events.filter(
+        (event: QuirkyEvent) =>
+          event.type === 'quirky.terminal/title' && factData(event).sessionId === shell.id
+      )
+    h.pty.fact(shell.id, { kind: 'title', title: 'a' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'b' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'c' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'd' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'e' })
+    await waitFor(() => titles().some((event) => factData(event).title === 'a'))
+    await Bun.sleep(700)
+    expect(titles().map((event) => (event as PluginEvent).data)).toEqual([
+      { sessionId: shell.id, title: 'a' },
+      { sessionId: shell.id, title: 'e' }
+    ])
+  })
+
+  test('delivers a later title without waiting for another coalescing window', async () => {
+    const { events } = await h.connectWithEvents('ui')
+    const titles = () =>
+      events.filter(
+        (event: QuirkyEvent) =>
+          event.type === 'quirky.terminal/title' && factData(event).sessionId === shell.id
+      )
+    h.pty.fact(shell.id, { kind: 'title', title: 'a' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'b' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'c' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'd' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'e' })
+    await waitFor(() => titles().some((event) => factData(event).title === 'a'))
+    await Bun.sleep(700)
+    h.pty.fact(shell.id, { kind: 'title', title: 'f' })
+    await waitFor(() => titles().some((event) => factData(event).title === 'f'))
+    expect(titles().map((event) => (event as PluginEvent).data)).toEqual([
+      { sessionId: shell.id, title: 'a' },
+      { sessionId: shell.id, title: 'e' },
+      { sessionId: shell.id, title: 'f' }
+    ])
+  })
+
+  test('coalesces title bursts independently for each session', async () => {
+    const { events } = await h.connectWithEvents('ui')
+    const other = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'x1' })
+    h.pty.fact(other.id, { kind: 'title', title: 'y1' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'x2' })
+    h.pty.fact(other.id, { kind: 'title', title: 'y2' })
+    h.pty.fact(shell.id, { kind: 'title', title: 'x3' })
+    h.pty.fact(other.id, { kind: 'title', title: 'y3' })
+    await Bun.sleep(700)
+    const titlesFor = (sessionId: string) =>
+      events
+        .filter(
+          (event: QuirkyEvent) =>
+            event.type === 'quirky.terminal/title' && factData(event).sessionId === sessionId
+        )
+        .map((event) => (event as PluginEvent).data)
+    expect(titlesFor(shell.id)).toEqual([
+      { sessionId: shell.id, title: 'x1' },
+      { sessionId: shell.id, title: 'x3' }
+    ])
+    expect(titlesFor(other.id)).toEqual([
+      { sessionId: other.id, title: 'y1' },
+      { sessionId: other.id, title: 'y3' }
+    ])
+  })
+
+  test('coalesces a cwd burst to the first and latest values', async () => {
+    const { events } = await h.connectWithEvents('ui')
+    h.pty.fact(shell.id, { kind: 'cwd', cwd: '/tmp/a' })
+    h.pty.fact(shell.id, { kind: 'cwd', cwd: '/tmp/b' })
+    h.pty.fact(shell.id, { kind: 'cwd', cwd: '/tmp/c' })
+    await Bun.sleep(700)
+    const cwds = events.filter(
+      (event: QuirkyEvent) =>
+        event.type === 'quirky.terminal/cwd' && factData(event).sessionId === shell.id
+    )
+    expect(cwds.map((event) => (event as PluginEvent).data)).toEqual([
+      { sessionId: shell.id, cwd: '/tmp/a' },
+      { sessionId: shell.id, cwd: '/tmp/c' }
+    ])
+  })
+
+  test('delivers every bell and command-finished occurrence in order', async () => {
+    const { events } = await h.connectWithEvents('ui')
+    h.pty.fact(shell.id, { kind: 'bell' })
+    h.pty.fact(shell.id, { kind: 'command-finished', exitCode: 1 })
+    h.pty.fact(shell.id, { kind: 'bell' })
+    h.pty.fact(shell.id, { kind: 'command-finished', exitCode: 2 })
+    h.pty.fact(shell.id, { kind: 'bell' })
+    h.pty.fact(shell.id, { kind: 'command-finished', exitCode: 3 })
+    const bells = () => events.filter((event: QuirkyEvent) => event.type === 'quirky.terminal/bell')
+    const finished = () =>
+      events.filter((event: QuirkyEvent) => event.type === 'quirky.terminal/commandFinished')
+    await waitFor(() => bells().length === 3 && finished().length === 3)
+    expect(bells()).toHaveLength(3)
+    expect(finished().map((event) => factData(event).exitCode)).toEqual([1, 2, 3])
+  })
+
+  test('describes coalescing only for title and cwd events', async () => {
+    const api = (await call(client, 'api.describe', {})) as ApiDescription
+    const event = (id: string) => api.events.find((entry) => entry.name === `quirky.terminal/${id}`)
+    for (const id of ['title', 'cwd']) {
+      const entry = event(id)
+      expect(entry).toBeDefined()
+      expect(entry?.coalesce).toEqual(['sessionId'])
+      expect(Object.hasOwn(entry ?? {}, 'worktree')).toBe(false)
+    }
+    for (const id of ['bell', 'commandFinished', 'notification', 'layout']) {
+      const entry = event(id)
+      expect(entry).toBeDefined()
+      expect(Object.hasOwn(entry ?? {}, 'coalesce')).toBe(false)
+      expect(Object.hasOwn(entry ?? {}, 'worktree')).toBe(false)
+    }
+  })
 })
 
 describe('SC-23: kill', () => {

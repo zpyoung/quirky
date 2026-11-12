@@ -67,6 +67,10 @@ finishes. The object exposes only `run`; `spawn` is not part of API 1.4.
 `quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
 `quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
 emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
+every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
+and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
+listeners act on the states in between.
 
 ## Manifest declaration
 
