@@ -83,7 +83,7 @@ export function createProcessRunner({ owner, start = startChild, stallMs }: Proc
       }
       const command = argv[0]!
       return executeSpawn(start, [...argv], normalized, stallMs ?? SPAWN_STALL_MS, {
-        onStart: (child, stop, finished) => registerProcess(identity, owner, command, child, stop, finished, true),
+        onStart: (child, stop, finished) => registerProcess(identity, owner, command, child, stop, finished),
       })
     },
     async run(argv, options = {}) {
