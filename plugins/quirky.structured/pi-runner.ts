@@ -87,6 +87,8 @@ type Running = {
   contextWindow: number | null
   lastContextTokens: number | null
   working: boolean
+  agentRunning: boolean
+  commandOut: boolean
   checkSequence: number
   checkId: string | null
   checkTimer: NodeJS.Timeout | null
@@ -106,7 +108,7 @@ export type PiRunnerLimits = { maxFrameBytes?: number; checkTimeoutMs?: number; 
  * they end; `agent_settled` or `session_settled` closes the turn once automatic work is finished.
  * A picked model and thinking level are passed to the CLI as `--model` and `--thinking`.
  *
- * A `deny-all` session is checked before each prompt and steer and ends when the check fails.
+ * A `deny-all` session is checked before each message and ends when the check fails.
  * Tool execution aborts the turn; a tool result other than "not found" or a stuck abort ends the session.
  * Extension dialogs are always cancelled, never answered.
  */
@@ -170,6 +172,8 @@ class PiRunner implements StructuredRunner {
       contextWindow: null,
       lastContextTokens: null,
       working: false,
+      agentRunning: false,
+      commandOut: false,
       checkSequence: 0,
       checkId: null,
       checkTimer: null,
@@ -204,7 +208,10 @@ class PiRunner implements StructuredRunner {
   async send(sessionId: string, text: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.exited) throw new Error('session is not running')
-    const command = run.working ? { type: 'steer', message: text } : { type: 'prompt', message: text }
+    // a bare steer sent to idle pi is queued and never answered
+    const command = run.working
+      ? { type: 'prompt', message: text, streamingBehavior: 'steer' }
+      : { type: 'prompt', message: text }
     this.context.appendMessage({ sessionId, role: 'user', text, data: command })
     this.context.setStatus(sessionId, 'working')
     run.working = true
@@ -228,22 +235,29 @@ class PiRunner implements StructuredRunner {
   }
 
   private checkAndWrite(run: Running, command?: Record<string, unknown>): void {
+    if (command) run.waitingCommands.push(command)
+    // pi drops a prompt written before it has answered the one before
+    if (run.commandOut || run.checkId !== null) return
     if (run.toolPolicy !== 'deny-all') {
-      if (command) this.write(run, command)
+      this.writeNext(run)
       return
     }
-    if (command) run.waitingCommands.push(command)
-    if (run.checkId !== null) return
     run.checkTimer = setTimeout(() => this.fail(run, `${run.agent} did not answer the no-tools check`), this.checkTimeoutMs)
     run.checkId = `quirky-check-${++run.checkSequence}`
     this.write(run, { id: run.checkId, type: run.agent === 'pi' ? 'get_commands' : 'get_state' })
+  }
+
+  private writeNext(run: Running): void {
+    const command = run.waitingCommands.shift()
+    if (!command) return
+    run.commandOut = true
+    this.write(run, command)
   }
 
   private clearCheck(run: Running): void {
     if (run.checkTimer !== null) clearTimeout(run.checkTimer)
     run.checkTimer = null
     run.checkId = null
-    run.waitingCommands = []
   }
 
   private fail(run: Running, reason: string): void {
@@ -271,9 +285,8 @@ class PiRunner implements StructuredRunner {
         : `omp offers tools to a session that must have none: ${names}${remaining}`)
       return
     }
-    const commands = run.waitingCommands
     this.clearCheck(run)
-    for (const command of commands) this.write(run, command)
+    this.writeNext(run)
   }
 
   private write(run: Running, command: Record<string, unknown>): void {
@@ -389,13 +402,17 @@ class PiRunner implements StructuredRunner {
         }
         if (event.success === false) {
           this.append(run, 'system', `${run.agent} rejected ${String(event.command ?? 'command')}: ${String(event.error ?? 'unknown error')}`, event)
-          if (run.working && (event.command === 'prompt' || event.command === 'steer')) this.closeTurn(run)
         }
-        if (run.working && event.command === 'prompt' && event.success === true && event.data?.disposition === 'handled') {
-          this.closeTurn(run)
+        if (event.command === 'prompt') {
+          run.commandOut = false
+          if (run.waitingCommands.length > 0) this.checkAndWrite(run)
+          if (event.success === false || (event.success === true && event.data?.disposition === 'handled')) this.closeTurn(run)
         }
         return
       }
+      case 'agent_start':
+        run.agentRunning = true
+        return
       case 'message_end': {
         const message = event.message
         if (typeof message !== 'object' || message === null || message.role !== 'assistant') return
@@ -438,6 +455,7 @@ class PiRunner implements StructuredRunner {
         return
       case 'agent_settled':
       case 'session_settled': {
+        run.agentRunning = false
         if (!run.working) return
         const contextUsage =
           run.lastContextTokens === null ? null : { contextTokens: run.lastContextTokens, contextWindow: run.contextWindow }
@@ -445,6 +463,8 @@ class PiRunner implements StructuredRunner {
           type: 'agent_end',
           ...(contextUsage ? { contextUsage } : {})
         })
+        run.lastContextTokens = null
+        this.clearAbort(run)
         this.closeTurn(run)
         return
       }
@@ -452,6 +472,7 @@ class PiRunner implements StructuredRunner {
   }
 
   private closeTurn(run: Running): void {
+    if (!run.working || run.agentRunning || run.commandOut || run.waitingCommands.length > 0) return
     this.clearAbort(run)
     run.working = false
     run.lastContextTokens = null
