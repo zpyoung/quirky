@@ -551,6 +551,93 @@ describe('settled events', () => {
   })
 })
 
+describe('SC-11 to SC-16: event delivery and catalog', () => {
+  test('SC-11: changed carries its session worktree on the event envelope and data', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+
+    const changed = rig.events.filter((event) => event.type === 'quirky.agent-status/changed').at(-1)
+    expect(changed).toMatchObject({
+      worktreeId: 'wt1',
+      data: { sessionId: 's1', worktreeId: 'wt1', row: { state: 'working' } }
+    })
+  })
+
+  test('SC-12: removing a row on exit keeps the session worktree', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await rig.exit()
+
+    const removed = await waitFor(() => rig.events.find((event) => {
+      if (event.type !== 'quirky.agent-status/changed') return false
+      if (!('data' in event) || !event.data || typeof event.data !== 'object') return false
+      return 'sessionId' in event.data && event.data.sessionId === 's1' && 'row' in event.data && event.data.row === null
+    }))
+    expect(removed).toEqual(expect.objectContaining({
+      data: { sessionId: 's1', worktreeId: 'wt1', row: null }
+    }))
+    expect(removed).toMatchObject({ worktreeId: 'wt1' })
+  })
+
+  test('SC-13: removing a row without its session leaves the event untagged', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await rig.client.callAny('quirky.session/remove', { session: 's1' })
+
+    const removed = await waitFor(() => rig.events.find((event) => {
+      if (event.type !== 'quirky.agent-status/changed') return false
+      if (!('data' in event) || !event.data || typeof event.data !== 'object') return false
+      return 'sessionId' in event.data && event.data.sessionId === 's1' && 'row' in event.data && event.data.row === null
+    }))
+    expect(removed).toEqual(expect.objectContaining({
+      data: { sessionId: 's1', row: null }
+    }))
+    expect(removed).not.toHaveProperty('worktreeId')
+  })
+
+  test('SC-14: settled carries the session worktree on the event envelope', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await rig.hook('claude', claude('Stop'))
+
+    const settled = await waitFor(() => rig.events.find((event) => event.type === 'quirky.agent-status/settled'))
+    expect(settled).toMatchObject({ worktreeId: 'wt1', data: { state: 'done' } })
+  })
+
+  test('SC-15: each changed row is delivered immediately in order', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await rig.hook('claude', claude('Stop'))
+
+    const changes = rig.events.filter((event) => {
+      if (event.type !== 'quirky.agent-status/changed') return false
+      if (!('data' in event) || !event.data || typeof event.data !== 'object') return false
+      return 'sessionId' in event.data && event.data.sessionId === 's1'
+    })
+    expect(changes).toMatchObject([
+      { data: { sessionId: 's1', row: { state: 'working' } } },
+      { data: { sessionId: 's1', row: { state: 'done' } } }
+    ])
+  })
+
+  test('SC-16: the catalog tags changed and settled without coalescing them', async () => {
+    rig = await Rig.start()
+    const api = await rig.client.callAny('api.describe', {}) as {
+      events: { name: string; worktree?: string; coalesce?: string[] }[]
+    }
+
+    const changed = api.events.find((event) => event.name === 'quirky.agent-status/changed')
+    const settled = api.events.find((event) => event.name === 'quirky.agent-status/settled')
+    const activityChanged = api.events.find((event) => event.name === 'quirky.agent-status/activityChanged')
+    expect(changed).toMatchObject({ worktree: 'worktreeId' })
+    expect(changed).not.toHaveProperty('coalesce')
+    expect(settled).toMatchObject({ worktree: 'worktreeId' })
+    expect(settled).not.toHaveProperty('coalesce')
+    expect(activityChanged).not.toHaveProperty('worktree')
+    expect(activityChanged).not.toHaveProperty('coalesce')
+  })
+})
+
 describe('rows and sessions', () => {
   test('an exited session loses its row and a removed session does too', async () => {
     rig = await Rig.start({ sessions: [{}, { id: 's2' }] })

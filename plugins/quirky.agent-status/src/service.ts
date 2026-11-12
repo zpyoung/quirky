@@ -228,7 +228,10 @@ export class AgentStatusService {
       this.cancelTranscriptPoll(sessionId)
       this.oscTurns.delete(sessionId)
       this.cancelProgramRetry(sessionId)
-      this.context.emit('changed', { sessionId, row: null })
+      this.context.emit(
+        'changed',
+        session ? { sessionId, worktreeId: session.worktreeId, row: null } : { sessionId, row: null }
+      )
     })
   }
 
@@ -877,7 +880,7 @@ export class AgentStatusService {
       this.activity.sync(session, row, startsTurn)
     })
     await this.publish(session, row)
-    this.context.emit('changed', { sessionId: session.id, row })
+    this.context.emit('changed', { sessionId: session.id, worktreeId: session.worktreeId, row })
     this.wake(session.id)
   }
 
