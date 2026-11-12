@@ -66,6 +66,20 @@ function setup(options: SetupOptions = {}) {
   return { ...t, states, sent, shipping: t.app.services.shipping }
 }
 
+function flakyBuildCalls(checkDetails: FakeCalls[string]): FakeCalls {
+  return {
+    'quirky.hosting/checks': () => ({
+      number: 7,
+      headSha: HEAD,
+      rollup: 'failure',
+      checks: [{ kind: 'check_run', name: 'build', status: 'completed', conclusion: 'failure', checkRunId: 1 }],
+      partial: false,
+      partialFailures: []
+    }),
+    'quirky.hosting/checkDetails': checkDetails
+  }
+}
+
 describe('shipping hand-off checks', () => {
   test('openPr, merge, and mergeMainIn refuse an absent or inactive hand-off without recording work', async () => {
     for (const inactive of [false, true]) {
@@ -220,6 +234,111 @@ describe('shipping hand-off checks', () => {
     expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/rerunChecks')
     expect(t.sent).toEqual([])
     expect(t.states).toEqual([])
+  })
+
+  test('take-back during check details prevents rerunning a previously green failed build', async () => {
+    const details = deferred<unknown>()
+    const entered = deferred<void>()
+    const t = setup({
+      calls: flakyBuildCalls(() => {
+        entered.resolve()
+        return details.promise
+      })
+    })
+    t.app.journal('wt-1', 'event', { checksGreen: true, headSha: HEAD, names: ['build'] })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).some((entry) =>
+      entry.kind === 'event' && entry.data.checksGreen === true && entry.data.headSha === HEAD &&
+      Array.isArray(entry.data.names) && entry.data.names.includes('build')
+    )).toBe(true)
+
+    const merging = t.shipping.merge('wt-1')
+    await entered.promise
+    expect(t.calls.map((call) => call.method)).toContain('quirky.hosting/checkDetails')
+    expect(takeBack(t.app)).toBe(0)
+    details.resolve({ logTails: ['src/a.ts:3 type error'], annotations: [] })
+
+    expect(await merging).toEqual({ ok: false, reason: 'this worktree is not handed off' })
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/rerunChecks')
+    expect(t.app.store.journalSince(0).some((entry) =>
+      entry.kind === 'event' && entry.data.flakyRerun === true && entry.data.headSha === HEAD
+    )).toBe(false)
+    expect(t.sent).toEqual([])
+    expect(t.states).toEqual([])
+  })
+
+  test('a previously green failed build reruns checks without take-back', async () => {
+    const t = setup({ calls: flakyBuildCalls(() => ({ logTails: ['src/a.ts:3 type error'], annotations: [] })) })
+    t.app.journal('wt-1', 'event', { checksGreen: true, headSha: HEAD, names: ['build'] })
+
+    expect(await t.shipping.merge('wt-1')).toEqual({
+      ok: false,
+      reason: 'required check build looks flaky, rerunning once'
+    })
+    expect(t.calls.map((call) => call.method)).toContain('quirky.hosting/rerunChecks')
+    expect(t.app.store.journalSince(0)).toContainEqual(expect.objectContaining({
+      kind: 'event',
+      data: expect.objectContaining({ flakyRerun: true, headSha: HEAD, checks: 'build' })
+    }))
+    expect(t.sent).toEqual([])
+    expect(t.states).toEqual([])
+  })
+
+  test('take-back while create is held records the PR row but refuses openPr completion', async () => {
+    const create = deferred<unknown>()
+    const entered = deferred<void>()
+    const t = setup({
+      level: 'own-branch',
+      calls: {
+        'quirky.hosting/forBranch': () => ({ kind: 'no-review', fetchedAt: 0 }),
+        'quirky.hosting/create': () => {
+          entered.resolve()
+          return create.promise
+        }
+      }
+    })
+    const opening = t.shipping.openPr('wt-1')
+    await entered.promise
+
+    expect(takeBack(t.app)).toBe(0)
+    create.resolve({ number: 7, url: 'https://example.test/7', existing: false })
+
+    expect(await opening).toEqual({ ok: false, reason: 'this worktree is not handed off' })
+    const pr = t.app.store.outbox.list({ kind: 'pr' })[0]!
+    expect(pr.state).toBe('done')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).find((entry) =>
+      entry.kind === 'outbox' && entry.data.id === pr.id
+    )).toMatchObject({ data: { state: 'done', note: 'done after take-back' } })
+    expect(t.calls.map((call) => call.method)).toContain('quirky.hosting/create')
+    expect(t.states).toEqual([])
+  })
+
+  test('take-back while merge is held records the merge row without setting merged state', async () => {
+    const merge = deferred<unknown>()
+    const entered = deferred<void>()
+    const t = setup({
+      calls: {
+        'quirky.hosting/merge': () => {
+          entered.resolve()
+          return merge.promise
+        }
+      }
+    })
+    const merging = t.shipping.merge('wt-1')
+    await entered.promise
+    expect(t.states).toEqual(['merge-ready'])
+
+    expect(takeBack(t.app)).toBe(0)
+    const statesAtTakeBack = [...t.states]
+    merge.resolve({ state: 'merged', number: 7, head: HEAD })
+
+    expect(await merging).toEqual({ ok: false, reason: 'this worktree is not handed off' })
+    const mergeRow = t.app.store.outbox.list({ kind: 'merge' })[0]!
+    expect(mergeRow.state).toBe('done')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).find((entry) =>
+      entry.kind === 'outbox' && entry.data.id === mergeRow.id
+    )).toMatchObject({ data: { state: 'done', note: 'done after take-back' } })
+    expect(t.states).toEqual(statesAtTakeBack)
+    expect(t.states).not.toContain('merged')
   })
 
   test('take-back during fetch prevents merge-main-in from starting', async () => {

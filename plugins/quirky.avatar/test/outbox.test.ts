@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import type { OutboxRow } from '../src/contracts'
 import { register } from '../src/shipping/index'
 import { createOutbox, outboxKey, type Outbox } from '../src/shipping/outbox'
-import { forBranchFake, handOff, lsRemote, manifestChecked, readyPushTarget } from './shipping-support'
+import { forBranchFake, handOff, lsRemote, manifestChecked, readyPushTarget, takeBack } from './shipping-support'
 import { type FakeCalls, makeTestApp, sampleMandate } from './support'
 
 const SHA = 'a'.repeat(40)
@@ -45,6 +45,10 @@ const mergeRow = (t: ReturnType<typeof setup>, extra: Record<string, unknown> = 
   t.outbox.enqueue('merge', 'wt-1', { headSha: SHA, target: '7', number: 7, reviewedSha: SHA, checkedSha: SHA, method: 'squash', action: 'direct', ...extra })
 
 const methods = (calls: { method: string }[]) => calls.map((call) => call.method)
+function deferred() {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  return { promise, resolve }
+}
 
 describe('outbox enqueue', () => {
   test('records the row before any call and keys it by kind, worktree, head and target', () => {
@@ -547,13 +551,96 @@ describe('outbox send authorization', () => {
     expect(await t.outbox.run(next.id)).toMatchObject({ state: 'done' })
   })
 
+  test('refuses a recorded push if the mandate is lowered while remote evidence is checking', async () => {
+    const entered = deferred()
+    const release = deferred()
+    const t = setup({
+      'quirky.checks/run': async (params) => {
+        if (String(params.command ?? '').includes('ls-remote')) {
+          entered.resolve()
+          await release.promise
+          return check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER }))
+        }
+        return check('')
+      },
+      'quirky.git/push': () => ({ remote: 'origin', branch: 'feature' })
+    })
+    const handoff = t.app.store.handoffs.get('wt-1')!
+    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature' })
+    const running = t.outbox.run(row.id)
+    await entered.promise
+    expect(t.app.store.outbox.get(row.id)?.state).toBe('running')
+    t.app.store.mandates.put(sampleMandate({ level: 'local' }))
+    expect(t.app.store.handoffs.get('wt-1')).toEqual(handoff)
+    expect(t.app.store.handoffs.get('wt-1')?.active).toBe(true)
+    release.resolve()
+    expect(await running).toMatchObject({
+      state: 'cancelled', result: { error: 'level local does not allow push' }
+    })
+    expect(t.app.store.outbox.get(row.id)).toMatchObject({
+      state: 'cancelled', result: { error: 'level local does not allow push' }
+    })
+    expect(methods(t.calls)).toContain('quirky.checks/run')
+    expect(methods(t.calls)).not.toContain('quirky.git/push')
+  })
+
+  test('does not let an old held push refusal overwrite a same-key row from a new hand-off', async () => {
+    const entered = deferred()
+    const release = deferred()
+    let holdEvidence = true
+    const t = setup({
+      'quirky.checks/run': async (params) => {
+        if (String(params.command ?? '').includes('ls-remote')) {
+          if (holdEvidence) {
+            holdEvidence = false
+            entered.resolve()
+            await release.promise
+          }
+          return check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER }))
+        }
+        return check('')
+      },
+      'quirky.git/push': () => ({ remote: 'origin', branch: 'feature' })
+    })
+    const payload = { headSha: SHA, target: 'feature', branch: 'feature' }
+    const old = t.outbox.enqueue('push', 'wt-1', payload)
+    const oldRun = t.outbox.run(old.id)
+    await entered.promise
+    expect(t.app.store.outbox.get(old.id)?.state).toBe('running')
+    t.app.services.shipping.cancelOutbox = (worktreeId) => t.outbox.cancel(worktreeId)
+    expect(takeBack(t.app)).toBe(1)
+    handOff(t.app, 'wt-1', 2)
+    const current = t.outbox.enqueue('push', 'wt-1', payload)
+    expect(current).toMatchObject({
+      id: old.id, state: 'recorded', payload: { ...payload, handedOffAt: 2 }, result: null
+    })
+    release.resolve()
+    expect(await oldRun).toMatchObject({
+      state: 'cancelled', result: { error: 'this worktree was taken back and handed off again' }
+    })
+    expect(t.app.store.outbox.get(current.id)).toEqual(current)
+    expect(methods(t.calls)).not.toContain('quirky.git/push')
+
+    const finished = await t.outbox.run(current.id)
+    expect(finished).toMatchObject({
+      state: 'done', payload: { ...payload, handedOffAt: 2 }, result: { remote: 'origin', branch: 'feature' }
+    })
+    expect(methods(t.calls)).toContain('quirky.git/push')
+  })
+
   test.each([
     ['merge', 'own-branch'],
     ['thread-reply', 'local'],
-    ['push', 'shadow']
+    ['push', 'shadow'],
+    ['pr-ready', 'own-branch'],
+    ['merge-main-in', 'shadow']
   ] as const)('refuses a directly run %s at %s', async (kind, level) => {
     const t = setup()
-    const row = t.outbox.enqueue(kind, 'wt-1', { headSha: SHA, target: '7', number: 7 })
+    const payload = kind === 'merge-main-in'
+      ? { headSha: SHA, target: `main@${SHA}`, defaultBranch: 'main' }
+      : { headSha: SHA, target: '7', number: 7 }
+    const row = t.outbox.enqueue(kind, 'wt-1', payload)
+    expect(row.state).toBe('recorded')
     t.app.store.mandates.put(sampleMandate({ level }))
     expect(await t.outbox.run(row.id)).toMatchObject({
       state: 'cancelled', result: { error: `level ${level} does not allow ${kind}` }

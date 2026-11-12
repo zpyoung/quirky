@@ -350,6 +350,31 @@ describe('shipping openPr', () => {
     expect(t.states).toEqual(['pr-ready'])
   })
 
+  test('push row uses main when the compare base is origin/main', async () => {
+    const t = await ship({ calls: { 'quirky.hosting/forBranch': () => ({ kind: 'no-review' }) } })
+    expect(await t.shipping.openPr('wt-1')).toEqual({ ok: true })
+    const push = t.app.store.outbox.list({ kind: 'push' })[0]
+    expect(push).toMatchObject({ state: 'done' })
+    expect(push?.payload.base).toBe('main')
+    expect(t.methods()).toContain('quirky.git/push')
+    expect(t.methods()).toContain('quirky.hosting/create')
+  })
+
+  test('push row omits its own base key when the compare base is absent', async () => {
+    const t = await ship({
+      calls: {
+        'quirky.git/compare': () => ({ status: 'invalid-base', base: null, entries: [] }),
+        'quirky.hosting/forBranch': () => ({ kind: 'no-review' })
+      }
+    })
+    expect(await t.shipping.openPr('wt-1')).toEqual({ ok: true })
+    const push = t.app.store.outbox.list({ kind: 'push' })[0]
+    expect(push).toMatchObject({ state: 'done' })
+    expect(Object.prototype.hasOwnProperty.call(push?.payload ?? {}, 'base')).toBe(false)
+    expect(t.methods()).toContain('quirky.git/push')
+    expect(t.methods()).toContain('quirky.hosting/create')
+  })
+
   test('Local stops at a commit and Shadow does nothing', async () => {
     const local = await ship({ level: 'local' })
     expect(await local.shipping.openPr('wt-1')).toMatchObject({ ok: false })

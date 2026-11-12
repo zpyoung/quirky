@@ -80,7 +80,6 @@ function expectedBranchParam(env: DaemonEnv, branch: unknown): string | undefine
   return branch
 }
 
-
 /** Pushes HEAD to its configured target, or to a fresh validated GitHub target for review/creation. */
 export function push(env: DaemonEnv): Handler {
   return async (params, caller) => {

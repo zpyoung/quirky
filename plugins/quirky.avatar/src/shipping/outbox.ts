@@ -16,7 +16,6 @@ export type Outbox = {
 const REMOTE = 'origin'
 const OUTPUT_LIMIT = 4000
 
-
 const LEVEL_RANK: Record<Level, number> = { shadow: 0, local: 1, 'own-branch': 2, full: 3 }
 
 /** Identifies the active hand-off that may authorize a shipping workflow. */
