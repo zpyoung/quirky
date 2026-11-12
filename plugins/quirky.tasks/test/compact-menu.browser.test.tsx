@@ -198,4 +198,79 @@ describe.skipIf(!existsSync(executable))('compact row action menu in a browser',
       expect(effects.commands).toEqual([])
     }, 60_000)
   }
+  test('Enter and Space activate the first action immediately after Enter opens the row menu', async () => {
+    const page = await mountCompact(280)
+    const trigger = page.getByRole('button', { name: `More actions for #${FIRST_NUMBER}` })
+    const menu = page.locator('[role="menu"]')
+
+    for (const key of ['Enter', 'Space'] as const) {
+      await trigger.focus()
+      await page.keyboard.press('Enter')
+      await settled(page)
+      expect(await menu.count()).toBe(1)
+
+      await page.keyboard.press(key)
+      await settled(page)
+      const workspaceCalls = await page.evaluate(() => {
+        const log = (window as unknown as { compactMenuMock: FixtureLog }).compactMenuMock
+        return log.calls.filter((call) => call.method === 'quirky.tasks/workspace')
+      })
+      expect(workspaceCalls).toHaveLength(key === 'Enter' ? 1 : 2)
+      expect(workspaceCalls.at(-1)).toEqual({
+        method: 'quirky.tasks/workspace',
+        params: {
+          target: {
+            worktree: 'wt-main',
+            kind: 'pullRequest',
+            number: FIRST_NUMBER,
+            url: `https://github.com/acme/quirky/pull/${FIRST_NUMBER}`
+          },
+          action: 'start'
+        }
+      })
+      expect(await menu.count()).toBe(0)
+    }
+  }, 60_000)
+
+  test('keyboard selection of Copy link closes the menu and restores trigger focus', async () => {
+    const page = await mountCompact(280)
+    const trigger = page.getByRole('button', { name: `More actions for #${FIRST_NUMBER}` })
+    const menu = page.locator('[role="menu"]')
+    await trigger.focus()
+    await page.keyboard.press('Enter')
+    await settled(page)
+    expect(await menu.count()).toBe(1)
+
+    await page.keyboard.press('ArrowUp')
+    await page.keyboard.press('Enter')
+    await settled(page)
+    const effects = await page.evaluate(() => {
+      const log = (window as unknown as { compactMenuMock: FixtureLog }).compactMenuMock
+      return { commands: log.commands, calls: log.calls }
+    })
+    expect(effects.commands).toEqual([{
+      id: 'command:quirky.tasks/copy-link',
+      args: { url: `https://github.com/acme/quirky/pull/${FIRST_NUMBER}` }
+    }])
+    expect(effects.calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
+    expect(await menu.count()).toBe(0)
+    expect(await trigger.evaluate((element) => document.activeElement === element)).toBe(true)
+  }, 60_000)
+
+  test('Tab closes a button-opened menu and Escape afterward leaves it closed', async () => {
+    const page = await mountCompact(280)
+    const trigger = page.getByRole('button', { name: `More actions for #${FIRST_NUMBER}` })
+    const menu = page.locator('[role="menu"]')
+    await trigger.focus()
+    await page.keyboard.press('Enter')
+    await settled(page)
+    expect(await menu.count()).toBe(1)
+
+    await page.keyboard.press('Tab')
+    await settled(page)
+    expect(await menu.count()).toBe(0)
+    await page.keyboard.press('Escape')
+    await settled(page)
+    expect(await menu.count()).toBe(0)
+  }, 60_000)
 })

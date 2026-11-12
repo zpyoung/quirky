@@ -123,6 +123,27 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
     if (place.takeFocus() === 'row') wantsFocus.current = true
   }, [])
 
+  useEffect(() => {
+    if (!menu?.returnFocusTo) return
+    const trigger = menu.returnFocusTo
+    const menuLabel = `Actions for #${menu.item.number}`
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      const menuRoot = document.querySelector<HTMLElement>(`.qt-menu-anchor [role="menu"][aria-label="${menuLabel}"]`)
+      if (!trigger.contains(target) && !menuRoot?.contains(target)) setMenu(null)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') setMenu(null)
+    }
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menu])
+
   const kind: ItemKind = list.view.mode === 'prs' ? 'pullRequest' : 'issue'
   const rows = list.result?.items.filter((item) => item.kind === kind) ?? []
   const filter = state ? filterLine(list.view.query, kind, state.preferences.defaultTaskViewPreset) : null
@@ -323,7 +344,15 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
       align={menu.returnFocusTo ? 'end' : 'start'}
       y={menu.y}
       onClose={() => setMenu(null)}
-      items={actionsFor(menu.item).map((action) => ({ id: action.id, label: action.label, onSelect: action.run }))}
+      highlightFirst={Boolean(menu.returnFocusTo)}
+      items={actionsFor(menu.item).map((action) => ({
+        id: action.id,
+        label: action.label,
+        onSelect: () => {
+          if (menu.returnFocusTo) menu.returnFocusTo.focus()
+          action.run()
+        }
+      }))}
     />}
   </div>
 }

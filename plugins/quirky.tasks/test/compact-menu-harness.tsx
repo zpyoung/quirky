@@ -83,6 +83,8 @@ const context = {
         return { cards: [] }
       case 'quirky.reviews/open':
         return null
+      case 'quirky.tasks/workspace':
+        return null
       default:
         throw new Error(`Unexpected browser fixture call: ${method}`)
     }
