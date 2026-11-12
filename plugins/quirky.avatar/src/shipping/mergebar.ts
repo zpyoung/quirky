@@ -42,6 +42,7 @@ export function stopAt(level: Level): StopStep {
 export function mergeReady(input: MergeInput): { ready: boolean; reasons: string[] } {
   const reasons: string[] = []
   if (input.level !== 'full') reasons.push(`level ${input.level} stops at ${stopAt(input.level)}`)
+  if (input.checks.length === 0) reasons.push('no checks have reported on the pull request')
 
   for (const check of input.checks) {
     if (check.required && !(check.conclusion !== null && GREEN.has(check.conclusion))) {

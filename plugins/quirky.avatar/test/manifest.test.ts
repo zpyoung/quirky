@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { ApiDescription, ContributionInfo, PluginInfo } from '@quirky/protocol'
-import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { commands } from '../cli'
+import { avatarBuiltins, cleanupDaemons, startAvatarHarness, useTempAgentHome } from './daemon-support'
+
+useTempAgentHome()
 
 const PLUGIN_DIR = resolve(import.meta.dir, '..')
 const DEPENDENCIES = [
@@ -12,31 +13,10 @@ const DEPENDENCIES = [
   'quirky.git', 'quirky.hosting', 'quirky.structured', 'quirky.heimdall', 'quirky.notifications'
 ]
 
-const harnesses = new Set<Harness>()
-const tempDirs: string[] = []
+afterEach(cleanupDaemons)
 
-afterEach(async () => {
-  for (const harness of [...harnesses]) await harness.cleanup()
-  harnesses.clear()
-  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
-})
-
-/** Built-ins holding the avatar and an empty plugin for each of its dependencies, so only the avatar's own code runs. */
-function avatarPluginsDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'qav-bi-'))
-  tempDirs.push(dir)
-  symlinkSync(PLUGIN_DIR, join(dir, 'quirky.avatar'))
-  for (const id of DEPENDENCIES) {
-    mkdirSync(join(dir, id))
-    writeFileSync(join(dir, id, 'quirky-plugin.json'), JSON.stringify({ id, apiVersion: '1.0.0', name: id, version: '0.1.0', activation: 'lazy' }))
-  }
-  return dir
-}
-
-async function startAvatar(): Promise<Harness> {
-  const harness = await startHarness({ home: makeTempHome('qav-'), builtinPluginsDir: avatarPluginsDir() })
-  harnesses.add(harness)
-  return harness
+async function startAvatar() {
+  return startAvatarHarness(avatarBuiltins())
 }
 
 const ids = (contributions: unknown) => (contributions as { id: string }[]).map((entry) => entry.id).sort()

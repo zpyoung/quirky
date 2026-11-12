@@ -1,17 +1,12 @@
-import { Database } from 'bun:sqlite'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-import { HOOK_TOKEN_HEADER, PLUGIN_API_VERSION, type PluginStore, type QuirkyClient, type ToolGateDecision } from '@quirky/protocol'
-import { makeTempHome, startHarness, waitFor, type Harness } from '../../../../packages/daemon/test/helpers'
-import type { HandoffInput, Level } from '../../src/contracts'
+import { join } from 'node:path'
+import { HOOK_TOKEN_HEADER, type QuirkyClient, type ToolGateDecision } from '@quirky/protocol'
+import { makeTempHome, waitFor, type Harness } from '../../../../packages/daemon/test/helpers'
+import type { AvatarStore, HandoffInput, Level } from '../../src/contracts'
 import { claudeGateSettings, markerDir } from '../../src/hooks/install'
-import { createAvatarStore } from '../../src/store'
+import { avatarBuiltins, cleanupDaemons, openAvatarStore, runGateShim, startAvatarHarness, type StandIn, type TempAgentHome } from '../daemon-support'
 
-export const PLUGIN_DIR = resolve(import.meta.dir, '../..')
-
-const LOOSE = { type: 'object', additionalProperties: true }
-const DEPENDENCIES = ['quirky.session', 'quirky.agents', 'quirky.ask', 'quirky.checks', 'quirky.git', 'quirky.hosting', 'quirky.notifications']
 const BRAIN_READY_REPLY = '```json\n[{"type":"noop","reason":"ready"}]\n```'
 
 export type StubWorktree = { id: string; name: string; repoId: string; path: string; branch: string; head: string; isMain: boolean; kind: 'git' | 'folder' }
@@ -40,12 +35,17 @@ declare global {
   var __avatarE2E: Record<string, StubState> | undefined
 }
 
-const STUBS: Record<string, { methods: string[]; events?: string[]; source: string }> = {
+const STUBS: Record<string, StandIn> = {
   'quirky.worktree': {
-    methods: ['list'],
+    methods: ['list', 'resolve'],
     source: `export function activate(context) {
   const state = () => globalThis.__avatarE2E[context.home]
   context.provide('method:quirky.worktree/list', () => state().worktrees)
+  context.provide('method:quirky.worktree/resolve', (params) => {
+    const worktree = state().worktrees.find((entry) => entry.name === params.selector || entry.id === params.selector)
+    if (!worktree) throw new Error('no worktree ' + params.selector)
+    return worktree
+  })
 }`
   },
   'quirky.repo': {
@@ -112,30 +112,6 @@ const STUBS: Record<string, { methods: string[]; events?: string[]; source: stri
   }
 }
 
-function writeStub(root: string, id: string, stub: (typeof STUBS)[string]): void {
-  const dir = join(root, id)
-  mkdirSync(dir, { recursive: true })
-  const manifest = {
-    id,
-    apiVersion: PLUGIN_API_VERSION,
-    name: id,
-    version: '0.1.0',
-    activation: 'lazy',
-    main: 'main.ts',
-    contributes: {
-      method: stub.methods.map((method) => ({ id: method, params: LOOSE })),
-      ...(stub.events === undefined ? {} : { event: stub.events.map((event) => ({ id: event, data: LOOSE })) })
-    }
-  }
-  writeFileSync(join(dir, 'quirky-plugin.json'), JSON.stringify(manifest))
-  writeFileSync(join(dir, 'main.ts'), stub.source)
-}
-
-function writeEmptyStub(root: string, id: string): void {
-  const dir = join(root, id)
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'quirky-plugin.json'), JSON.stringify({ id, apiVersion: '1.0.0', name: id, version: '0.1.0', activation: 'lazy' }))
-}
 
 export type Avatar = {
   harness: Harness
@@ -153,7 +129,7 @@ export type Avatar = {
   /** Runs the real `quirky-gate` shim for `session` and returns what it printed and exited with. */
   shim(session: string, payload: Record<string, unknown>): Promise<{ stdout: string; stderr: string; code: number }>
   /** The avatar's own store file, opened for reading and checking. */
-  store(): ReturnType<typeof createAvatarStore>
+  store(): AvatarStore
   /**
    * Lets every gate check that is still waiting finish, by having each such worker make one read
    * the gate sees. A check still running when the daemon stops would journal into a closed store.
@@ -164,9 +140,7 @@ export type Avatar = {
   handoff(items: { worktree: StubWorktree; level: Level; goal?: string }[]): Promise<{ worktreeId: string; ok: boolean; error?: string }[]>
 }
 
-const started = new Set<Harness>()
 const avatars = new Set<Avatar>()
-const databases: Database[] = []
 const directories: string[] = []
 const restoreSpawn: (() => void)[] = []
 
@@ -174,28 +148,11 @@ const restoreSpawn: (() => void)[] = []
 export async function cleanupAll(): Promise<void> {
   for (const avatar of [...avatars]) await avatar.settle().catch(() => undefined)
   avatars.clear()
-  for (const db of databases.splice(0)) db.close()
-  for (const harness of [...started]) await harness.cleanup()
-  started.clear()
+  await cleanupDaemons()
   for (const restore of restoreSpawn.splice(0)) restore()
   for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true })
 }
 
-function fileStore(path: string): PluginStore {
-  const db = new Database(path)
-  databases.push(db)
-  return {
-    version: 0,
-    run: (sql, ...params) => {
-      const result = db.query(sql).run(...(params as never[]))
-      return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
-    },
-    get: (sql, ...params) => (db.query(sql).get(...(params as never[])) as never) ?? null,
-    all: (sql, ...params) => db.query(sql).all(...(params as never[])) as never,
-    exec: (sql) => db.exec(sql),
-    transaction: (work) => db.transaction(work)()
-  }
-}
 
 /**
  * Makes every `Bun.spawn(['claude', ...])` run a stand-in that reports a new-enough version, so no
@@ -227,15 +184,14 @@ function fakeClaudeSpawn(): void {
  * stand-ins that answer the calls the avatar makes (worktrees, sessions, sends) and record what it
  * sends, so the hand-off, gate, report and take-back paths run end to end without agents or git.
  */
-export async function startAvatar(options: { brain?: BrainMode } = {}): Promise<Avatar> {
+export async function startAvatar(
+  options: { brain?: BrainMode } = {},
+  agent: Pick<TempAgentHome, 'childEnv'>
+): Promise<Avatar> {
   if (restoreSpawn.length === 0) fakeClaudeSpawn()
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'qav-e2e-')))
   directories.push(root)
-  const pluginsDir = join(root, 'builtin')
-  mkdirSync(pluginsDir)
-  symlinkSync(PLUGIN_DIR, join(pluginsDir, 'quirky.avatar'))
-  for (const [id, stub] of Object.entries(STUBS)) writeStub(pluginsDir, id, stub)
-  for (const id of DEPENDENCIES) if (!(id in STUBS)) writeEmptyStub(pluginsDir, id)
+  const builtins = avatarBuiltins(STUBS)
 
   const makeWorktree = (name: string, kind: 'git' | 'folder'): StubWorktree => {
     const path = join(root, name)
@@ -269,11 +225,10 @@ export async function startAvatar(options: { brain?: BrainMode } = {}): Promise<
   }
   globalThis.__avatarE2E = { ...globalThis.__avatarE2E, [home]: state }
 
-  const harness = await startHarness({ home, builtinPluginsDir: pluginsDir })
-  started.add(harness)
+  const harness = await startAvatarHarness(builtins, { home })
   const client = await harness.connect('cli', 'avatar-e2e')
   const base = `http://127.0.0.1:${harness.runtime.port}`
-  let store: ReturnType<typeof createAvatarStore> | null = null
+  let store: AvatarStore | null = null
 
   const avatar: Avatar = {
     harness,
@@ -293,18 +248,16 @@ export async function startAvatar(options: { brain?: BrainMode } = {}): Promise<
       if (response.status !== 200) throw new Error(`gate answered ${response.status}`)
       return (await response.json()) as ToolGateDecision
     },
-    async shim(sessionId, payload) {
-      const proc = Bun.spawn(['sh', join(harness.home, 'bin', 'quirky-gate'), 'claude', '5000'], {
-        env: { PATH: process.env.PATH ?? '', QUIRKY_HOME: harness.home, QUIRKY_SESSION_ID: sessionId, QUIRKY_HOOK_TOKEN: harness.runtime.hookToken },
-        stdin: Buffer.from(JSON.stringify({ hook_event_name: 'PreToolUse', ...payload })),
-        stdout: 'pipe',
-        stderr: 'pipe'
-      })
-      const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-      return { stdout, stderr, code }
+    shim(sessionId, payload) {
+      return runGateShim(harness.home, ['claude', '5000'], {
+        ...agent.childEnv,
+        QUIRKY_HOME: harness.home,
+        QUIRKY_SESSION_ID: sessionId,
+        QUIRKY_HOOK_TOKEN: harness.runtime.hookToken
+      }, { hook_event_name: 'PreToolUse', ...payload })
     },
     store() {
-      store ??= createAvatarStore(fileStore(join(harness.home, 'plugin-data', 'quirky.avatar', 'store.db')))
+      store ??= openAvatarStore(harness.home)
       return store
     },
     async settle() {

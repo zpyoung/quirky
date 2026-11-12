@@ -6,6 +6,9 @@ import { QUIRKY_GATE_SCRIPT } from '../../../../packages/daemon/src/launch'
 import type { GateOutcome } from '../../src/contracts'
 import { encodeDecision } from '../../src/hooks/encode'
 import { codexHooksInstalled, installCodexHooks, writeMarkerFile } from '../../src/hooks/install'
+import { runGateShim, useTempAgentHome } from '../daemon-support'
+
+const agent = useTempAgentHome()
 
 const binary = Bun.which('codex')
 const suite = binary === null ? describe.skip : describe
@@ -32,8 +35,9 @@ function rig(outcome: GateOutcome | 'down') {
     const server = Bun.serve({
       port: 0,
       async fetch(request) {
-        requests.push({ url: request.url, body: await request.text() })
-        const event = new URL(request.url).searchParams.get('event') as 'PreToolUse' | 'PermissionRequest'
+        const body = await request.text()
+        requests.push({ url: request.url, body })
+        const event = (new URL(request.url).searchParams.get('event') ?? JSON.parse(body).hook_event_name) as 'PreToolUse' | 'PermissionRequest'
         const decision = outcome === 'allow' || outcome === 'passthrough' ? outcome : 'deny'
         return Response.json({ decision, reason: 'because', encoded: encodeDecision('codex', event, { outcome, reason: 'because' }), exitCode: 0 })
       }
@@ -43,14 +47,12 @@ function rig(outcome: GateOutcome | 'down') {
   }
   writeFileSync(join(home, 'runtime.json'), JSON.stringify({ port }))
   async function hook(payload: Record<string, unknown>) {
-    const proc = Bun.spawn(['sh', join(home, 'bin', 'quirky-gate'), 'codex', '5000'], {
-      env: { PATH: process.env.PATH ?? '', QUIRKY_HOME: home, QUIRKY_SESSION_ID: 'sess-1', QUIRKY_HOOK_TOKEN: 'token' },
-      stdin: Buffer.from(JSON.stringify(payload)),
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-    const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-    return { stdout, stderr, code }
+    return runGateShim(home, ['codex', '5000'], {
+      ...agent.childEnv,
+      QUIRKY_HOME: home,
+      QUIRKY_SESSION_ID: 'sess-1',
+      QUIRKY_HOOK_TOKEN: 'token'
+    }, payload)
   }
   return { hook, requests }
 }
@@ -59,7 +61,7 @@ const pre = { hook_event_name: 'PreToolUse', tool_name: 'shell_command', tool_in
 
 suite(title, () => {
   test('the installed Codex runs, and the avatar writes its entries into a hooks.json beside the user\'s', async () => {
-    const proc = Bun.spawn([binary!, '--version'], { stdout: 'pipe', stderr: 'ignore' })
+    const proc = Bun.spawn([binary!, '--version'], { env: agent.childEnv, stdout: 'pipe', stderr: 'ignore' })
     expect(await new Response(proc.stdout).text()).toMatch(/\d+\.\d+\.\d+/)
     const codexHome = mkdtempSync(join(tmpdir(), 'avatar-conf-codex-home-'))
     dirs.push(codexHome)
