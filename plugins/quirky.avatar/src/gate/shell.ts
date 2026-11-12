@@ -107,6 +107,7 @@ class WordBuilder {
   readonly before: Entry[] = []
   length = 0
   dynamic = false
+  ambiguousBraceDollar = false
 
   constructor(private readonly source: string, private readonly home: string) {}
 
@@ -681,6 +682,9 @@ class ShellReader {
           consumed = true
           continue
         }
+        if (cursor + 1 < limit && (this.source[cursor + 1] === ',' || this.source[cursor + 1] === '}')) {
+          builder.ambiguousBraceDollar = true
+        }
         cursor++
         segmentStart = cursor - 1
         consumed = true
@@ -923,6 +927,7 @@ class ShellReader {
     }
     if (hasList && unmatchedOpens.length > 1) return null
     if (hasList) {
+      if (builder.ambiguousBraceDollar) return null
       let activeIndex = 0
       for (const home of builder.homes) {
         if (home.braced) continue

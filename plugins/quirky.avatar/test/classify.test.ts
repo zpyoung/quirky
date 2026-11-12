@@ -1120,4 +1120,27 @@ describe('brace expansion', () => {
       expect(decideReviewed(command)).toMatchObject({ outcome, step })
     })
   }
+
+  const ambiguousDollarRows: Array<{ command: string; classes: ActionClass[] }> = [
+    { command: 'cat {a,$}b', classes: ['read', 'other'] },
+    { command: 'head {a,$}b', classes: ['read', 'other'] },
+    { command: 'cat < {a,$}b', classes: ['read', 'other'] },
+    { command: 'cp {a,$}b a.txt', classes: ['edit-inside', 'other'] },
+    { command: 'git checkout {a,$}b', classes: ['edit-inside', 'other'] },
+    { command: 'git reset --hard {a,$}b', classes: ['edit-inside', 'other'] },
+    { command: 'git branch -D {a,$}b', classes: ['edit-inside', 'other'] }
+  ]
+  for (const { command, classes } of ambiguousDollarRows) {
+    test(`classifies a dollar joined by brace expansion as unseen: ${command}`, () => expectClassSet(command, classes))
+    test(`sends a dollar joined by brace expansion to judgment: ${command}`, () => {
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'judgment', step: null })
+    })
+  }
+
+  for (const command of ['rm -rf {,$}HOME/Documents', 'cp a.txt {b,$}HOME/x']) {
+    test(`keeps a dollar joined to HOME by brace expansion held: ${command}`, () => {
+      expectClassSet(command, ['edit-outside'])
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    })
+  }
 })

@@ -741,6 +741,19 @@ describe('brace expansion', () => {
     })
   })
 
+  describe('literal dollar context boundaries', () => {
+    const rows: Array<{ source: string; words: string[] }> = [
+      { source: 'a$}b', words: ['a$}b'] },
+      { source: '{a$}b', words: ['{a$}b'] },
+      { source: '{a,"$"}b', words: ['ab', '$b'] },
+      { source: '{a,\\$}b', words: ['ab', '$b'] },
+      { source: '{a,b}$', words: ['a$', 'b$'] }
+    ]
+    for (const { source, words: expected } of rows) {
+      test(`preserves a literal dollar without an ambiguous brace boundary: ${source}`, () => expectEchoWords(source, expected))
+    }
+  })
+
   describe('scenario 3: quoted and escaped syntax is inactive', () => {
     const rows: Array<{ source: string; words: string[] }> = [
       { source: "'{a,b}'", words: ['{a,b}'] },
@@ -812,6 +825,15 @@ describe('brace expansion', () => {
 
     for (const source of ['{{{a,b}', '{x{{a,b}', '{{x{a,b}', 'a{b{c{d,e}', '{{,{,}']) {
       test(`keeps multiple unmatched opening braces dynamic when expanding: ${source}`, () => dynamicWord(source))
+    }
+
+    const ambiguousDollarCases = [
+      '{a,$}b', '{$,a}b', '{,$}HOME/x', '{a,$,b}c', '{a,{b,$}}c',
+      '{,$}{HOME}', '{a,$}{b,c}', '{a,b$}',
+      '{,$}a', '{$,}a', '{,a$}a', '{{,$}a', '{,$}$'
+    ]
+    for (const source of ambiguousDollarCases) {
+      test(`keeps a plain dollar before a brace delimiter dynamic when expanding: ${source}`, () => dynamicWord(source))
     }
 
     const sequenceCases = [
