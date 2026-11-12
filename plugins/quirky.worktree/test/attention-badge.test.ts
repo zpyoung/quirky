@@ -176,30 +176,122 @@ test('the badge reads the unfiltered projection and passes no preferences overri
   dispose()
 })
 
-test('ask, worktree, session and connection events refresh the count', async () => {
+test('refresh events reload only affected badge sources and update the count', async () => {
   const h = setup({ worktrees: [wt('w1')] })
   const dispose = startAttentionBadge(h.context)
   await h.settle()
+  const allSources = [
+    'quirky.worktree/list',
+    'quirky.session/list',
+    'quirky.ask/list',
+    'quirky.sidebar-extras/projection'
+  ].sort()
+  expect(h.calls.map((call) => call.method).sort()).toEqual(allSources)
   expect(h.last().count).toBeNull()
 
+  const methodsSince = (start: number) => h.calls.slice(start).map((call) => call.method).sort()
+  let start = h.calls.length
   h.world.asks = [ask('w1')]
   await h.emit('quirky.ask/created')
+  expect(methodsSince(start)).toEqual(['quirky.ask/list'])
+  expect(h.calls.at(-1)?.params).toEqual({ pendingOnly: true })
   expect(h.last().count).toBe(1)
 
+  start = h.calls.length
   h.world.asks = []
   h.world.worktrees = [wt('w1', { unread: true })]
   await h.emit('quirky.worktree/changed')
+  expect(methodsSince(start)).toEqual(allSources)
   expect(h.last().count).toBe(1)
 
   h.world.worktrees = [wt('w1')]
+  await h.emit('quirky.worktree/changed')
+  start = h.calls.length
   h.world.sessions = [failedSession('w1')]
   await h.emit('quirky.session/changed')
+  expect(methodsSince(start)).toEqual(['quirky.session/list'])
   expect(h.last()).toMatchObject({ count: 1, tone: 'failing' })
 
   h.world.sessions = []
-  await h.connect()
+  await h.emit('quirky.session/changed')
+  start = h.calls.length
+  h.world.checks = { w1: 'failure' }
+  await h.emit('quirky.hosting/reviewCacheChanged')
+  expect(methodsSince(start)).toEqual(['quirky.sidebar-extras/projection'])
+  expect(h.last()).toMatchObject({ count: 1, tone: 'needs-you' })
+
+  start = h.calls.length
+  h.world.checks = {}
+  await h.emit('quirky.sidebar-extras/changed')
+  expect(methodsSince(start)).toEqual(['quirky.sidebar-extras/projection'])
   expect(h.last().count).toBeNull()
+
+  start = h.calls.length
+  h.world.asks = [ask('w1')]
+  await h.connect()
+  expect(methodsSince(start)).toEqual(allSources)
+  expect(h.last().count).toBe(1)
   dispose()
+})
+
+test('five refresh events during a deferred load coalesce into one trailing union pass', async () => {
+  const h = setup({ worktrees: [wt('w1')] })
+  const { promise: started, resolve: startGate } = Promise.withResolvers<void>()
+  const { promise: wait, resolve: releaseGate } = Promise.withResolvers<void>()
+  let badgesBefore = 0
+  let deferNextSession = false
+  let queuedEvents = false
+  let trailingStartedAfterFirstBadge: boolean | null = null
+  const originalCall = h.context.call.bind(h.context)
+  const context = {
+    ...h.context,
+    async call(method: string, params?: unknown) {
+      if (queuedEvents && trailingStartedAfterFirstBadge === null) {
+        trailingStartedAfterFirstBadge = h.badges.length === badgesBefore + 1
+      }
+      const result = await originalCall(method, params)
+      if (method === 'quirky.session/list' && deferNextSession) {
+        deferNextSession = false
+        startGate()
+        await wait
+      }
+      return result
+    }
+  } as unknown as UiPluginContext
+  const time = fakeClock()
+  const dispose = startAttentionBadge(context, time.clock)
+  try {
+    await h.settle()
+    badgesBefore = h.badges.length
+    const callsBefore = h.calls.length
+    deferNextSession = true
+    await h.emit('quirky.session/changed')
+    await started
+
+    queuedEvents = true
+    await h.emit('quirky.session/changed')
+    await h.emit('quirky.ask/created')
+    await h.emit('quirky.hosting/changed')
+    await h.emit('quirky.sidebar-extras/changed')
+    await h.emit('quirky.worktree/changed')
+    expect(h.calls.slice(callsBefore).map((call) => call.method)).toEqual(['quirky.session/list'])
+    expect(h.badges).toHaveLength(badgesBefore)
+
+    releaseGate()
+    await h.settle()
+    expect(h.calls.slice(callsBefore).map((call) => call.method).sort()).toEqual([
+      'quirky.ask/list',
+      'quirky.session/list',
+      'quirky.session/list',
+      'quirky.sidebar-extras/projection',
+      'quirky.worktree/list'
+    ].sort())
+    expect(trailingStartedAfterFirstBadge).toBe(true)
+    expect(h.badges).toHaveLength(badgesBefore + 2)
+  } finally {
+    releaseGate()
+    dispose()
+  }
 })
 
 test('an unrelated event does not reload anything', async () => {
