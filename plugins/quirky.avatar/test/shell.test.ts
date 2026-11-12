@@ -661,9 +661,60 @@ describe('round 2 reader mutation guards', () => {
     expect(parse("y='$(printf RAN)'; echo ${x:-${(e)y}}")).toBeNull()
   })
 
+  test('reads heredocs with closing parentheses inside standalone backticks', () => {
+    const cases: [string, ShellScript][] = [
+      [
+        'echo `cat <<EOF\n)\nEOF\n`; printf RAN',
+        script([
+          command(words('cat'), { scope: 1, redirects: [redirect('heredoc', ')\n')] }),
+          command([word('echo'), word('`cat <<EOF\n)\nEOF\n`', true, [1])]),
+          command(words('printf', 'RAN'), { sep: ';' })
+        ], [-1, 0])
+      ],
+      [
+        "echo `cat <<'EOF'\n)\nEOF\n`; printf RAN",
+        script([
+          command(words('cat'), { scope: 1, redirects: [redirect('heredoc', ')\n')] }),
+          command([word('echo'), word("`cat <<'EOF'\n)\nEOF\n`", true, [1])]),
+          command(words('printf', 'RAN'), { sep: ';' })
+        ], [-1, 0])
+      ],
+      [
+        'echo "`cat <<\'EOF\'\n)\nEOF\n`"; printf RAN',
+        script([
+          command(words('cat'), { scope: 1, redirects: [redirect('heredoc', ')\n')] }),
+          command([word('echo'), word("`cat <<'EOF'\n)\nEOF\n`", true, [1])]),
+          command(words('printf', 'RAN'), { sep: ';' })
+        ], [-1, 0])
+      ],
+      [
+        "echo `(cat <<'EOF'\n)\nEOF\n)`; printf RAN",
+        script([
+          command(words('cat'), { scope: 2, redirects: [redirect('heredoc', ')\n')] }),
+          command([word('echo'), word("`(cat <<'EOF'\n)\nEOF\n)`", true, [1])]),
+          command(words('printf', 'RAN'), { sep: ';' })
+        ], [-1, 0, 1])
+      ],
+      [
+        'echo `echo \\`cat <<EOF\n)\nEOF\n\\``; printf RAN',
+        script([
+          command(words('cat'), { scope: 2, redirects: [redirect('heredoc', ')\n')] }),
+          command([word('echo'), word('`cat <<EOF\n)\nEOF\n`', true, [2])], { scope: 1 }),
+          command([word('echo'), word('`echo \\`cat <<EOF\n)\nEOF\n\\``', true, [1])]),
+          command(words('printf', 'RAN'), { sep: ';' })
+        ], [-1, 0, 1])
+      ]
+    ]
+
+    for (const [source, expected] of cases) {
+      expect(parse(source)).toEqual(expected)
+    }
+  })
+
   const ambiguous: [string, string][] = [
     ['a nested subshell', 'echo $( (cat <<EOF\n)\nEOF\n) ); printf RAN'],
     ['a balanced pair before a stray closing parenthesis', 'echo $(cat <<EOF\n( ) )\nEOF\n); printf RAN'],
+    ['a backtick scope inside command substitution', 'echo $(echo `cat <<EOF\n)\nEOF\n`); printf RAN'],
     ['an earlier backtick scope', 'echo `printf EARLIER`; echo $(cat <<EOF\n)\nEOF\n); printf RAN']
   ]
   for (const [name, source] of ambiguous) {
