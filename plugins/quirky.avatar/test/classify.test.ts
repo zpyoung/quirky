@@ -3056,6 +3056,7 @@ describe('directory uncertainty scenarios', () => {
       ["time export x=$y; cd src; touch a",["edit-inside","other","read"],"judgment",null],
       ["for i in 1; do export x=$y; done; cd src; touch a",["edit-inside","other","read"],"judgment",null],
       ["while export x=$y; do break; done; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      // the function body is read again with a later directory
       ["f() { local x=$1; cd src; touch a; }; f",["edit-outside","other","read"],"held","floor-core"],
     ]
     for (const [command, classes, outcome, step] of rows) {
@@ -3063,6 +3064,14 @@ describe('directory uncertainty scenarios', () => {
       expect(decideReviewed(command)).toMatchObject({ outcome, step })
     }
   })
+
+  for (const declaration of ['declare', 'typeset', 'readonly']) {
+    test(`a readable ${declaration} name preserves the search path before a relative write`, () => {
+      const command = `${declaration} x=$1; cd src; touch a`
+      expectClassSet(command, ['edit-inside', 'other', 'read'])
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'judgment', step: null })
+    })
+  }
 
   test('computed name 2: printf with a name it cannot read', () => {
     const rows: [string, ActionClass[], string, string | null][] = [
