@@ -148,8 +148,15 @@ export function createAvatarStore(store: PluginStore): AvatarStore {
       )
       return { seq: lastInsertRowid, ...entry }
     },
-    journalSince: (seq) =>
-      store.all<JournalRow>('SELECT seq, at, worktree_id, kind, data FROM journal WHERE seq > ? ORDER BY seq', seq).map(journalEntry),
+    journalSince(seq, only) {
+      if (only === undefined) return store.all<JournalRow>('SELECT seq, at, worktree_id, kind, data FROM journal WHERE seq > ? ORDER BY seq', seq).map(journalEntry)
+      if (only.kinds.length === 0) return []
+      const placeholders = only.kinds.map(() => '?').join(', ')
+      return store.all<JournalRow>(
+        `SELECT seq, at, worktree_id, kind, data FROM journal WHERE seq > ? AND at >= ? AND kind IN (${placeholders}) ORDER BY seq`,
+        seq, only.since, ...only.kinds
+      ).map(journalEntry)
+    },
     journalPage(opts = {}) {
       const clauses: string[] = []
       const params: StoreValue[] = []

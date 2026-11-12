@@ -3,7 +3,7 @@ import { describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { waitFor } from '../../../packages/daemon/test/helpers'
-import { activate, announceChanges, deactivate } from '../main'
+import { activate, deactivate } from '../main'
 import * as appModule from '../src/app'
 import type { AvatarApp, AvatarBusEvent } from '../src/contracts'
 import { codexHooksInstalled } from '../src/hooks/install'
@@ -400,20 +400,6 @@ describe('avatar main wiring', () => {
       { method: 'setting.set', params: { id: 'setting:quirky.avatar/brain-model', value: '' } }
     ])
     await deactivate()
-  })
-
-  test('bus events announce `changed`', () => {
-    const test = makeTestApp()
-    const stop = announceChanges(test.context, test.app)
-    test.app.journal('a', 'gate', {})
-    test.app.needs.add({ worktreeId: 'a', kind: 'question', title: 'Q', detail: {}, actions: ['answer'] })
-    expect(test.emitted).toEqual([
-      { event: 'changed', data: { type: 'journal' } },
-      { event: 'changed', data: { type: 'needs-changed' } }
-    ])
-    stop()
-    test.app.emit({ type: 'handoffs-changed' })
-    expect(test.emitted).toHaveLength(2)
   })
 
   test('the log method pages the journal the plugin opened', async () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import type { Level, WorktreeState } from '../src/contracts'
+import type { AvatarApp, Level, WorktreeState } from '../src/contracts'
 import { register } from '../src/shipping/index'
 import { type MergeInput, looksFlaky, mergeReady, nextFlakyStep, predecessorsOf, stopAt } from '../src/shipping/mergebar'
 import { forBranchFake, handOff, lsRemote, manifestChecked, readyPushTarget } from './shipping-support'
@@ -15,6 +15,7 @@ afterEach(() => {
 
 const ready = (): MergeInput => ({
   level: 'full',
+  reviewDecision: 'NONE',
   checks: [
     { name: 'build', required: true, conclusion: 'success' },
     { name: 'lint', required: false, conclusion: 'failure' }
@@ -136,9 +137,29 @@ const MOVED = 'b'.repeat(40)
 const ok = (stdout = '', pass = true) => ({ ran: true, pass, exitCode: pass ? 0 : 1, timedOut: false, aborted: false, stdoutTail: stdout, stderrTail: '' })
 const greenChecks = () => ({ number: 7, headSha: HEAD, rollup: 'success', checks: [{ kind: 'check_run', name: 'build', status: 'completed', conclusion: 'success', checkRunId: 1 }] })
 
-type Options = { level?: Level; prState?: string; prHead?: string; checks?: unknown; comments?: unknown[]; calls?: FakeCalls; reviewed?: string | null; mandate?: Parameters<typeof sampleMandate>[0] }
+type Options = {
+  level?: Level
+  prState?: string
+  prHead?: string
+  checks?: unknown
+  comments?: unknown[]
+  calls?: FakeCalls
+  reviewed?: string | null
+  reviewDecision?: unknown
+  missingReviewDecision?: boolean
+  mandate?: Parameters<typeof sampleMandate>[0]
+}
 
 async function ship(options: Options = {}) {
+  const review: Record<string, unknown> = {
+    number: 7,
+    state: options.prState ?? 'open',
+    headRefOid: options.prHead ?? HEAD,
+    mergeQueueRequired: false,
+    reviewDecision: 'NONE'
+  }
+  if (Object.hasOwn(options, 'reviewDecision')) review.reviewDecision = options.reviewDecision
+  if (options.missingReviewDecision) delete review.reviewDecision
   const checked = manifestChecked({
     'quirky.git/status': () => ({ head: HEAD, branch: 'feature' }),
     'quirky.git/compare': () => ({ status: 'ready', base: 'origin/main', entries: [{ path: 'src/a.ts' }] }),
@@ -148,11 +169,8 @@ async function ship(options: Options = {}) {
     'quirky.checks/run': (params) => String(params.command ?? '').includes('ls-remote')
       ? ok(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: 'b'.repeat(40) }))
       : ok(''),
-    'quirky.hosting/forBranch': forBranchFake({
-      branch: 'feature',
-      review: { number: 7, state: options.prState ?? 'open', headRefOid: options.prHead ?? HEAD, mergeQueueRequired: false }
-    }),
-    'quirky.hosting/review': () => ({ kind: 'found', review: { number: 7, state: options.prState ?? 'open', headRefOid: options.prHead ?? HEAD } }),
+    'quirky.hosting/forBranch': forBranchFake({ branch: 'feature', review }),
+    'quirky.hosting/review': () => ({ kind: 'found', review: { ...review } }),
     'quirky.hosting/checks': () => options.checks ?? greenChecks(),
     'quirky.hosting/comments': () => ({ number: 7, comments: options.comments ?? [], partial: false, partialFailures: [] }),
     'quirky.hosting/merge': () => ({ state: 'merged', number: 7, head: HEAD }),
@@ -177,8 +195,170 @@ async function ship(options: Options = {}) {
   await t.app.services.shipping.reconcileOutbox()
   t.calls.length = 0
   const methods = () => t.calls.map((call) => call.method)
-  return { ...t, states, sent, methods, shipping: t.app.services.shipping }
+  return {
+    ...t,
+    states,
+    sent,
+    methods,
+    setReviewDecision: (reviewDecision: unknown) => { review.reviewDecision = reviewDecision },
+    setChecks: (checks: unknown) => { options.checks = checks },
+    shipping: t.app.services.shipping
+  }
 }
+
+const unknownReviewReason = 'pull request review decision is unknown'
+const blockedReviews: { label: string; value: unknown; reason: string; missing?: boolean }[] = [
+  { label: 'required approval', value: 'REVIEW_REQUIRED', reason: 'required pull request approval is missing' },
+  { label: 'changes requested', value: 'CHANGES_REQUESTED', reason: 'pull request review has changes requested' },
+  ...[
+    ['unknown', 'UNKNOWN'], ['missing', undefined], ['null', null], ['blank', ''],
+    ['number', 1], ['object', {}], ['array', ['APPROVED']], ['lowercase', 'approved'],
+    ['leading whitespace', ' APPROVED'], ['trailing whitespace', 'APPROVED '],
+    ['newline', 'APPROVED\n'], ['zero-width suffix', 'APPROVED\u200b'], ['long value', 'x'.repeat(10_000)]
+  ].map(([label, value]) => ({ label: label as string, value, reason: unknownReviewReason, missing: label === 'missing' }))
+]
+const approval = { kind: 'approval' as const, name: 'GitHub Actions #5', status: 'action_required', conclusion: 'action_required', checkRunId: null }
+const approvalReason = 'workflow GitHub Actions #5 is waiting for maintainer approval'
+
+function expectNoMergeMutation(t: { app: AvatarApp; methods(): string[] }) {
+  expect(t.methods()).not.toContain('quirky.hosting/updateReview')
+  expect(t.methods()).not.toContain('quirky.hosting/merge')
+  expect(t.app.store.outbox.list()).toEqual([])
+}
+
+describe('review and workflow merge conditions', () => {
+  test.each(blockedReviews)('the pure bar refuses $label', ({ value, reason, missing }) => {
+    const input = { ...ready(), reviewDecision: value } as MergeInput
+    if (missing) delete (input as Partial<MergeInput>).reviewDecision
+    expect(mergeReady(input)).toEqual({ ready: false, reasons: [reason] })
+  })
+
+  test.each(blockedReviews)('shipping refuses $label before open or draft mutations', async ({ value, reason, missing }) => {
+    for (const prState of ['open', 'draft']) {
+      const t = await ship({ prState, reviewDecision: value, missingReviewDecision: missing })
+      expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason })
+      expect(t.states).toEqual([])
+      expect(t.sent).toEqual([])
+      expectNoMergeMutation(t)
+    }
+  })
+
+  test.each(['open', 'draft'])('refuses a %s PR before hosting would reject its missing approval', async (prState) => {
+    const t = await ship({
+      prState, reviewDecision: 'REVIEW_REQUIRED',
+      calls: { 'quirky.hosting/merge': () => { throw new Error('Required reviews are still missing.') } }
+    })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'required pull request approval is missing' })
+    expect(t.states).toEqual([])
+    expectNoMergeMutation(t)
+  })
+
+  test.each(['APPROVED', 'NONE'])('a fresh %s decision clears the bar on the same SHA', async (decision) => {
+    const t = await ship({ reviewDecision: 'REVIEW_REQUIRED', prState: 'draft' })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'required pull request approval is missing' })
+    expect(t.states).toEqual([])
+    expectNoMergeMutation(t)
+    t.setReviewDecision(decision)
+    expect(mergeReady({ ...ready(), reviewDecision: decision })).toEqual({ ready: true, reasons: [] })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: true })
+    expect(t.states).toEqual(['merge-ready', 'merged'])
+    expect(t.app.store.outbox.list({ kind: 'pr-ready' })[0]?.state).toBe('done')
+    expect(t.app.store.outbox.list({ kind: 'merge' })[0]?.state).toBe('done')
+  })
+
+  test('hosting still has the final say after the avatar bar passes', async () => {
+    const t = await ship({
+      reviewDecision: 'APPROVED',
+      calls: { 'quirky.hosting/merge': () => { throw new Error('Branch protection changed.') } }
+    })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'Branch protection changed.' })
+    expect(t.app.store.outbox.list({ kind: 'merge' })[0]?.state).toBe('failed')
+  })
+
+  test.each(['action_required', 'success', null, 42])('a required approval is a wait even with conclusion %p', async (conclusion) => {
+    const waiting = { ...approval, conclusion }
+    expect(mergeReady({
+      ...ready(), reviewDecision: 'APPROVED',
+      checks: [{ ...waiting, required: true, conclusion: conclusion as string | null }]
+    })).toEqual({ ready: false, reasons: [approvalReason] })
+    const t = await ship({ reviewDecision: 'APPROVED', checks: { ...greenChecks(), checks: [...greenChecks().checks, waiting] } })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: approvalReason })
+    expect(t.states).toEqual([])
+    expect(t.sent).toEqual([])
+    expect(t.methods()).not.toContain('quirky.hosting/checkDetails')
+    expect(t.methods()).not.toContain('quirky.hosting/rerunChecks')
+    expectNoMergeMutation(t)
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).filter((entry) => entry.data.checksGreen === true).map((entry) => entry.data.names)).toEqual([['build']])
+    t.setChecks(greenChecks())
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: true })
+  })
+
+  test('approval-only results never become ordinary green history', async () => {
+    const t = await ship({ reviewDecision: 'APPROVED', checks: { ...greenChecks(), checks: [{ ...approval, conclusion: 'success' }] } })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: approvalReason })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).filter((entry) => entry.data.checksGreen === true)).toEqual([])
+    expectNoMergeMutation(t)
+  })
+
+  test('aggregates review, workflow and guess blockers in order', async () => {
+    const reasons = ['required pull request approval is missing', approvalReason, '1 guess is unconfirmed']
+    expect(mergeReady({
+      ...ready(), reviewDecision: 'REVIEW_REQUIRED', guessesOpen: 1,
+      checks: [{ name: 'build', required: true, conclusion: 'success' }, { ...approval, required: true }]
+    })).toEqual({ ready: false, reasons })
+    const t = await ship({ reviewDecision: 'REVIEW_REQUIRED', checks: { ...greenChecks(), checks: [...greenChecks().checks, approval] } })
+    t.app.store.guesses.put({ id: 'g1', worktreeId: 'wt-1', question: 'q', choice: 'c', confirmedAt: null, redoneAt: null, commitsSince: [] })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: reasons.join('; ') })
+    expect(t.states).toEqual([])
+    expectNoMergeMutation(t)
+  })
+
+  test('keeps the complete bar reason groups in order', () => {
+    expect(mergeReady({
+      ...ready(), level: 'own-branch', reviewDecision: 'REVIEW_REQUIRED', checks: [],
+      findings: [{ id: 'f', valid: null, fixed: false }], threads: [{ id: 't', resolved: false }],
+      guessesOpen: 1, reviewedSha: null, sharedGoalOrder: ['wt-0']
+    }).reasons).toEqual([
+      'level own-branch stops at draft-pr', 'required pull request approval is missing',
+      'no checks have reported on the pull request', 'finding f is not judged',
+      'thread t is unresolved', '1 guess is unconfirmed',
+      'the head, reviewed and checked commits are not all known', 'wt-0 must merge first'
+    ])
+  })
+
+  test.each([
+    { label: 'PR approval', reviewDecision: 'REVIEW_REQUIRED', waiting: false },
+    { label: 'workflow approval', reviewDecision: 'APPROVED', waiting: true }
+  ])('ordinary CI repair continues while waiting for $label', async ({ reviewDecision, waiting }) => {
+    for (const flaky of [false, true]) {
+      const output = flaky ? 'ECONNRESET' : 'src/a.ts:3 expected 1 got 2'
+      const t = await ship({
+        reviewDecision,
+        checks: { ...greenChecks(), checks: [
+          ...(waiting ? [approval] : []),
+          { ...greenChecks().checks[0], conclusion: 'failure' }
+        ] },
+        calls: { 'quirky.hosting/checkDetails': () => ({ logTails: [output], annotations: [] }) }
+      })
+      if (flaky) {
+        expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'required check build looks flaky, rerunning once' })
+        expect(t.calls.filter((call) => call.method === 'quirky.hosting/rerunChecks')).toHaveLength(1)
+        expect(t.states).toEqual([])
+        expect(t.sent).toEqual([])
+        expectNoMergeMutation(t)
+      }
+      expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'required check build failed and went back to the worker' })
+      expect(t.states).toEqual(['working'])
+      expect(t.sent).toHaveLength(1)
+      expect(t.sent[0]).toContain('Required check build failed on the pull request. Fix it and say when it is done.')
+      expect(t.sent[0]).toContain(output)
+      expect(t.sent[0]).not.toContain(approval.name)
+      expect(t.calls.filter((call) => call.method === 'quirky.hosting/checkDetails').map((call) => call.params.checkRunId)).toEqual(flaky ? [1, 1] : [1])
+      expect(t.calls.filter((call) => call.method === 'quirky.hosting/rerunChecks')).toHaveLength(flaky ? 1 : 0)
+      expectNoMergeMutation(t)
+    }
+  })
+})
 
 describe('shipping merge', () => {
   test('merges the reviewed and checked commit at Full once the bar is met', async () => {

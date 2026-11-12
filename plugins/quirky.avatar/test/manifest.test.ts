@@ -26,7 +26,7 @@ describe('quirky.avatar as a built-in plugin', () => {
     const client = await (await startAvatar()).connect('cli')
     const plugins = (await client.call('plugin.list', {})) as PluginInfo[]
     const info = plugins.find((plugin) => plugin.id === 'quirky.avatar')!
-    expect(info).toMatchObject({ source: 'builtin', activation: 'startup', apiVersion: '1.2.0', dependencies: DEPENDENCIES })
+    expect(info).toMatchObject({ source: 'builtin', activation: 'startup', apiVersion: '1.3.0', dependencies: DEPENDENCIES })
     expect(info.diagnostics.filter((diagnostic) => diagnostic.level === 'error')).toEqual([])
     expect(info.state).toBe('active')
   })
@@ -57,6 +57,13 @@ describe('quirky.avatar as a built-in plugin', () => {
       'avatar status',
       'avatar take-back'
     ])
+  })
+
+  test('declares `changed` as one coalesced stream with no key', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    const events = (await client.call('plugin.contributions', { kind: 'event' } as never)) as unknown as ContributionInfo[]
+    const changed = events.find((entry) => entry.id === 'event:quirky.avatar/changed')
+    expect(changed).toMatchObject({ plugin: 'quirky.avatar', data: { coalesce: [] } })
   })
 
   test('declares the gate, hooks, jobs and every UI contribution', async () => {

@@ -45,7 +45,7 @@ function setup(options: { calls?: FakeCalls; mandate?: Parameters<typeof sampleM
     'quirky.worktree/list': () => [{ id: 'wt-1', path: '/work/wt-1' }],
     'quirky.structured/create': () => ({ id: 'rev-1' }),
     'quirky.structured/stop': () => ({ ok: true }),
-    'quirky.hosting/forBranch': forBranchFake({ branch: 'feature', review: { number: 7, state: 'draft' } }),
+    'quirky.hosting/forBranch': forBranchFake({ branch: 'feature', review: { number: 7, state: 'draft', reviewDecision: 'NONE' } }),
     'quirky.hosting/comments': () => ({ number: 7, comments, partial: false, partialFailures: [] }),
     'quirky.hosting/reviewComment': () => ({ number: 7, action: 'reply', comment: { id: 99 } }),
     'quirky.hosting/resolveThread': () => ({ threadId: 'T1', action: 'resolve', resolved: true }),
@@ -284,6 +284,7 @@ describe('reviewer findings', () => {
 
   const mergeInput = (t: ReturnType<typeof setup>) => ({
     level: 'full' as const,
+    reviewDecision: 'NONE',
     checks: [{ name: 'build', required: true, conclusion: 'success' }],
     findings: [],
     threads: [],

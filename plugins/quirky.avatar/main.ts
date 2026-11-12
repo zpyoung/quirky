@@ -154,11 +154,6 @@ function provideMethods(context: PluginContext, app: AvatarApp): void {
   })
 }
 
-/** Broadcasts `quirky.avatar/changed` for every bus event, so windows refresh without polling; returns the unsubscribe. */
-export function announceChanges(context: PluginContext, app: AvatarApp): () => void {
-  return app.on((event) => void context.emit('changed', { type: event.type }))
-}
-
 /** Builds the avatar app, registers its modules, and restores hand-offs after every service is ready. */
 export async function activate(context: PluginContext): Promise<void> {
   disposerLog = (message) => context.log(message)
@@ -169,7 +164,7 @@ export async function activate(context: PluginContext): Promise<void> {
   context.provide(`job:${PLUGIN}/watchdog`, async () => {})
   context.provide(`job:${PLUGIN}/records`, async () => {})
 
-  disposers = [announceChanges(context, app)]
+  disposers = []
   for (const register of [registerGate, registerHandoff, registerBrain, registerSupervisor, registerShipping, registerReport, registerKeepAwake, registerNotify]) {
     const dispose = register(app)
     if (typeof dispose === 'function') disposers.push(dispose)

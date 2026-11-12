@@ -39,8 +39,8 @@ function setup(options: SetupOptions = {}) {
       if (command.includes('git merge --no-edit')) return check('Already up to date.')
       return check('')
     },
-    'quirky.hosting/forBranch': forBranchFake({ branch: 'feature', review: { number: 7, state: options.prState ?? 'open', headRefOid: HEAD, mergeQueueRequired: false } }),
-    'quirky.hosting/review': () => ({ kind: 'found', review: { number: 7, state: options.prState ?? 'open', headRefOid: HEAD } }),
+    'quirky.hosting/forBranch': forBranchFake({ branch: 'feature', review: { number: 7, state: options.prState ?? 'open', headRefOid: HEAD, mergeQueueRequired: false, reviewDecision: 'NONE' } }),
+    'quirky.hosting/review': () => ({ kind: 'found', review: { number: 7, state: options.prState ?? 'open', headRefOid: HEAD, reviewDecision: 'NONE' } }),
     'quirky.hosting/checks': () => ({ number: 7, headSha: HEAD, rollup: 'success', checks: [{ kind: 'check_run', name: 'build', status: 'completed', conclusion: 'success', checkRunId: 1 }], partial: false, partialFailures: [] }),
     'quirky.hosting/checkDetails': () => ({ logTails: [], annotations: [] }),
     'quirky.hosting/comments': () => ({ number: 7, comments: [], partial: false, partialFailures: [] }),

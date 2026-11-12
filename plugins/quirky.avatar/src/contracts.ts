@@ -88,8 +88,8 @@ export type AvatarStore = {
   brainSessions: TableAccess<BrainSession>
   /** Appends a row and returns it with its assigned `seq`; `delivered_to_brain` starts false. */
   appendJournal(entry: { at: number; worktreeId: string | null; kind: JournalKind; data: Record<string, unknown> }): JournalEntry
-  /** Entries with `seq` greater than `seq`, oldest first. */
-  journalSince(seq: number): JournalEntry[]
+  /** Entries after `seq`, oldest first; `only` keeps the listed kinds at or after `since`. */
+  journalSince(seq: number, only?: { since: number; kinds: readonly JournalKind[] }): JournalEntry[]
   /** Newest-first page of the journal, optionally for one worktree and before a `seq`. */
   journalPage(opts?: { worktreeId?: string; limit?: number; before?: number }): JournalEntry[]
   /** Entries not yet delivered to the brain, oldest first. */
