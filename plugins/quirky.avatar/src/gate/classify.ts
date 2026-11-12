@@ -1,6 +1,6 @@
 import { basename, isAbsolute, resolve, sep } from 'node:path'
 import type { ActionClass, ClassifyContext, ToolCall } from '../contracts'
-import { parseShell, MAX_BRACE_WORDS, MAX_SHELL_DEPTH, type ShellCommand, type ShellWord } from './shell'
+import { parseShell, MAX_BRACE_WORDS, MAX_SHELL_DEPTH, type ShellCommand, type ShellScript, type ShellWord } from './shell'
 
 type ShellAssignment = ShellCommand['assignments'][number]
 type WordAssignment = ShellAssignment & { word: ShellWord }
@@ -1708,6 +1708,7 @@ type Analysis = {
   env?: Map<string, ShellWord>
   envChanges?: Set<string>
   nonDirectoryRead?: boolean
+  loose?: boolean
 }
 
 /** A tracked assignment cannot clear uncertainty introduced by an unfollowed search-path reference. */
@@ -1731,6 +1732,11 @@ function namesSearchPath(command: ShellCommand, cmd: string, commandIndex: numbe
   return false
 }
 
+/** A hook switch a later pass of a loop or a called function may have set; it reads as set and stays so. */
+const UNKNOWN_HOOK_SWITCH: ShellWord = { text: '1', dynamic: false, subs: [] }
+const HOOK_SWITCH_NAMES: Record<string, true> = { HUSKY: true, HUSKY_SKIP_HOOKS: true, SKIP_HOOKS: true }
+const TRACKED_NAMES = Object.keys(TRACKED_ENV_NAMES)
+const EMPTY_TRACKED_VALUES: readonly (ShellWord | undefined)[] = []
 const DECLARATION_SETTERS: Record<string, true> = {
   declare: true, typeset: true, local: true, readonly: true, export: true, private: true
 }
@@ -1832,10 +1838,113 @@ function setsUnreadName(command: ShellCommand, commandIndex: number): boolean {
   return false
 }
 
-
 function setTrackedValue(env: Map<string, ShellWord>, name: string, value: ShellWord): void {
-  if (name === 'CDPATH' && env.get(name) === UNKNOWN_SEARCH_PATH) return
+  const current = env.get(name)
+  if (current === UNKNOWN_SEARCH_PATH || current === UNKNOWN_HOOK_SWITCH) return
   env.set(name, value)
+}
+
+/** The most commands one call may reread, nested bodies included, before it is held as unreadable. */
+const MAX_REREAD_COMMANDS = 200_000
+
+const LOOP_WORDS: Record<string, true> = { for: true, while: true, until: true, select: true, repeat: true, foreach: true }
+const BLOCK_END_WORDS: Record<string, true> = { done: true, fi: true, esac: true, end: true }
+const BLOCK_LEAD_WORDS: Record<string, true> = { '{': true, '}': true, '!': true, if: true, then: true, else: true, elif: true, do: true, time: true, '-p': true, always: true, coproc: true }
+
+type DeferredRegion = {
+  kind: 'loop' | 'function'
+  scope: number
+  start: number
+  end: number
+  dirs: DirectorySet | undefined
+  names: Set<string>
+  loose: boolean
+}
+
+function blockWords(words: ShellWord[]): { loop: boolean; definition: boolean; end: boolean } {
+  let loop = false
+  let definition = false
+  let end = false
+  let leading = true
+  for (const word of words) {
+    if (word.text.includes('}')) end = true
+    if (word.dynamic) {
+      leading = false
+      continue
+    }
+    if (BLOCK_END_WORDS[word.text] === true) {
+      if (leading) end = true
+    } else if (word.text === ']]') leading = true
+    else if (!leading) continue
+    else if (LOOP_WORDS[word.text] === true) loop = true
+    else if (word.text === 'function') {
+      definition = true
+      leading = false
+    } else if (BLOCK_LEAD_WORDS[word.text] !== true) leading = false
+  }
+  return { loop, definition, end }
+}
+
+/**
+ * Finds, per scope, the commands a loop can run again and the commands a function definition may run later.
+ * A region ends at the scope's last block-closing word, or at the scope's end when none follows its last opener,
+ * because the reader does not say which closing word is quoted.
+ */
+function deferredRegions(script: ShellScript): DeferredRegion[] {
+  type Marks = { loopStart?: number; loopLast?: number; functionStart?: number; functionLast?: number; lastEnd?: number }
+  const marks = new Map<number, Marks>()
+  const first: (number | undefined)[] = new Array(script.parents.length).fill(undefined)
+  const final: number[] = new Array(script.parents.length).fill(-1)
+  for (let index = 0; index < script.commands.length; index++) {
+    const command = script.commands[index]
+    let start = index
+    for (let scope = command.scope; scope >= 0; scope = script.parents[scope]) {
+      final[scope] = index
+      if (first[scope] === undefined) first[scope] = index
+    }
+    const ownStart = (word: ShellWord) => {
+      for (const scope of word.subs) {
+        const firstCommand = first[scope]
+        if (firstCommand !== undefined && firstCommand < start) start = firstCommand
+      }
+    }
+    for (const word of command.words) ownStart(word)
+    for (const assignment of command.assignments) ownStart(assignment.value)
+    for (const redirect of command.redirects) ownStart(redirect.target)
+    let mark = marks.get(command.scope)
+    if (mark === undefined) marks.set(command.scope, mark = {})
+    const found = blockWords(command.words)
+    if (found.loop) {
+      mark.loopStart ??= start
+      mark.loopLast = index
+    }
+    if (found.definition) {
+      mark.functionStart ??= start
+      mark.functionLast = index
+    }
+    if (found.end) mark.lastEnd = index
+    const named = script.commands[index - 1]
+    if (named?.defines === true) {
+      let namedMark = marks.get(named.scope)
+      if (namedMark === undefined) marks.set(named.scope, namedMark = {})
+      namedMark.functionStart ??= index
+      namedMark.functionLast = index
+    }
+  }
+  const regions: DeferredRegion[] = []
+  for (const [scope, mark] of marks) {
+    if (mark.loopStart !== undefined) {
+      const last = mark.loopLast!
+      const end = mark.lastEnd !== undefined && mark.lastEnd > last ? mark.lastEnd : final[scope]
+      regions.push({ kind: 'loop', scope, start: mark.loopStart, end, dirs: undefined, names: new Set(), loose: false })
+    }
+    if (mark.functionStart !== undefined) {
+      const last = mark.functionLast!
+      const end = mark.lastEnd !== undefined && mark.lastEnd > last ? mark.lastEnd : final[scope]
+      regions.push({ kind: 'function', scope, start: mark.functionStart, end, dirs: undefined, names: new Set(), loose: false })
+    }
+  }
+  return regions.sort((left, right) => left.scope - right.scope)
 }
 
 function unknownGitValue(value: ShellWord): ShellWord {
@@ -1853,10 +1962,15 @@ function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>): 
   return env
 }
 
-function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: ClassifyContext, depth = 0, inheritedEnv: Map<string, ShellWord> = new Map()): Analysis {
+function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: ClassifyContext, depth = 0, inheritedEnv: Map<string, ShellWord> = new Map(), inheritedLoose = false, definitionsUnknown = false, budget = { reread: 0 }, rereading = false, replay?: { script: ShellScript; regions: DeferredRegion[]; pass: number }): Analysis {
   if (depth > 4) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
-  const script = parseShell(command, { home: ctx.home })
+  const script = replay?.script ?? parseShell(command, { home: ctx.home })
   if (script === null) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
+  const pass = replay?.pass ?? 1
+  if (pass > 1 || rereading) {
+    budget.reread += script.commands.length
+    if (budget.reread > MAX_REREAD_COMMANDS) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
+  }
   const rootPaths = roots(ctx)
 
   const scopeDownloads = new Array(script.parents.length).fill(false) as boolean[]
@@ -1875,13 +1989,34 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
   for (let scope = scopeDownloads.length - 1; scope > 0; scope--) {
     if (scopeDownloads[scope]) scopeDownloads[script.parents[scope]] = true
   }
-
+  const regions = replay?.regions ?? deferredRegions(script)
+  const regionStarts = new Map<number, DeferredRegion[]>()
+  const loopRegions = new Map<number, DeferredRegion>()
+  const functionRegions = new Map<number, DeferredRegion>()
+  const regionEnds = new Map<number, DeferredRegion[]>()
+  for (const region of regions) {
+    if (region.kind === 'function') {
+      const ending = regionEnds.get(region.end)
+      if (ending === undefined) regionEnds.set(region.end, [region])
+      else ending.push(region)
+    }
+    const starting = regionStarts.get(region.start)
+    if (starting === undefined) regionStarts.set(region.start, [region])
+    else starting.push(region)
+    if (region.kind === 'loop') loopRegions.set(region.scope, region)
+    else functionRegions.set(region.scope, region)
+  }
   const classes: ActionClass[] = []
   const parts: string[] = []
   const pushDests: string[] = []
   const envChanges = new Set<string>()
   let cwdChanged = false
   let nonDirectoryRead = false
+  const loose = new Set<number>(inheritedLoose ? [0] : [])
+  const heads = new Map<DeferredRegion, DirectoryState>()
+  const saved = new Map<DeferredRegion, { state: DirectoryState; env: Map<string, ShellWord> }>()
+  const seen = new Map<DeferredRegion, { dirs: DirectorySet | undefined; names: Set<string>; moved: boolean }>()
+
   const environments = new Map<number, Map<string, ShellWord>>([[0, new Map(inheritedEnv)]])
   const environmentFor = (scope: number): Map<string, ShellWord> => {
     const existing = environments.get(scope)
@@ -1898,15 +2033,35 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     const parent = directoryFor(script.parents[scope])
     const owner = scopeCommands.get(scope)
     if (owner === undefined) parent.certain = parent.possible
-    const start = owner?.sep === '&&' ? parent.certain : parent.possible
+    if (loose.has(script.parents[scope])) loose.add(scope)
+    const start = owner?.sep === '&&' && !loose.has(scope) ? parent.certain : parent.possible
     const state = { possible: start, certain: start }
     directories.set(scope, state)
     return state
   }
-  for (const shellCommand of script.commands) {
+  for (let commandNumber = 0; commandNumber < script.commands.length; commandNumber++) {
+    const shellCommand = script.commands[commandNumber]
+    const startingRegions = regionStarts.get(commandNumber)
+    if (startingRegions !== undefined) {
+      for (const region of startingRegions) {
+        const regionEnv = environmentFor(region.scope)
+        const head = directoryFor(region.scope)
+        if (region.kind === 'function') saved.set(region, { state: { possible: head.possible, certain: head.possible }, env: new Map(regionEnv) })
+        if (region.dirs !== undefined) {
+          head.possible = joinDirectories(head.possible, region.dirs)
+          head.certain = joinDirectories(head.certain, region.dirs)
+        }
+        for (const name of region.names) regionEnv.set(name, HOOK_SWITCH_NAMES[name] === true ? UNKNOWN_HOOK_SWITCH : UNKNOWN_SEARCH_PATH)
+        if (region.loose) loose.add(region.scope)
+        heads.set(region, { possible: head.possible, certain: head.certain })
+        seen.set(region, { dirs: undefined, names: new Set(), moved: false })
+      }
+    }
     const shellEnv = environmentFor(shellCommand.scope)
     const state = directoryFor(shellCommand.scope)
-    const commandCwd = shellCommand.sep === '&&' ? state.certain : state.possible
+    const trackedBefore = regions.length === 0 ? EMPTY_TRACKED_VALUES : TRACKED_NAMES.map((name) => shellEnv.get(name))
+    let nestedDirectories: DirectorySet | undefined
+    const commandCwd = shellCommand.sep === '&&' && !loose.has(shellCommand.scope) ? state.certain : state.possible
     const previousCertain = state.certain
     let cwd = commandCwd
     let possible = state.possible
@@ -2005,8 +2160,9 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       }
     } else if (isShell && commandFlag >= 0 && args[commandFlag + 1] !== undefined) {
       const body = parsed.argWords[commandFlag + 1]
-      const inner = analyzeCommand(body.text, parsed.execCwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
+      const inner = analyzeCommand(body.text, parsed.execCwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv), loose.has(shellCommand.scope), false, budget, rereading || pass > 1)
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
+      nestedDirectories = inner.directories === undefined ? null : inner.directories.possible
       nestedNonDirectoryRead = inner.nonDirectoryRead ?? false
       append(partClasses, inner.classes)
       append(parts, inner.parts)
@@ -2015,8 +2171,9 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       if (!downloadInPipeline) partClasses.push('other')
     } else if (cmd === 'eval' && args.length > 0) {
       const dynamicEval = parsed.argWords.some((word) => word.dynamic)
-      const inner = analyzeCommand(args.join(' '), parsed.execCwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
+      const inner = analyzeCommand(args.join(' '), parsed.execCwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv), loose.has(shellCommand.scope), true, budget, rereading || pass > 1)
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
+      if (inner.loose) loose.add(shellCommand.scope)
       nestedNonDirectoryRead = inner.nonDirectoryRead ?? false
       if (shellCommand.scope === 0 && inner.cwdChanged) cwdChanged = true
       if (shellCommand.detached) {
@@ -2052,7 +2209,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
         if (shellCommand.detached) {
           for (const name of changedNames) {
             const value = inner.env?.get(name) ?? shellEnv.get(name)
-            if (value !== undefined) shellEnv.set(name, unknownGitValue(value))
+            if (value !== undefined) setTrackedValue(shellEnv, name, unknownGitValue(value))
           }
         } else {
           for (const [name, value] of inner.env ?? []) shellEnv.set(name, value)
@@ -2165,8 +2322,82 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     }
     append(classes, partClasses)
     directories.set(shellCommand.scope, { possible, certain })
+    if (regions.length === 0) continue
+    const changedNames: string[] = []
+    for (let index = 0; index < TRACKED_NAMES.length; index++) {
+      if (shellEnv.get(TRACKED_NAMES[index]) !== trackedBefore[index]) changedNames.push(TRACKED_NAMES[index])
+    }
+    const moved = changedNames.length > 0 || !directoriesEqual(certain, commandCwd) || !directoriesEqual(possible, state.possible)
+    const loop = loopRegions.get(shellCommand.scope)
+    const loopSeen = loop === undefined ? undefined : seen.get(loop)
+    if (loop !== undefined && loopSeen !== undefined && commandNumber <= loop.end) {
+      loopSeen.dirs = possible
+      if (moved) loopSeen.moved = true
+      for (const name of changedNames) loopSeen.names.add(name)
+    }
+    for (let scope = shellCommand.scope; scope >= 0; scope = script.parents[scope]) {
+      const definition = functionRegions.get(scope)
+      const definitionSeen = definition === undefined ? undefined : seen.get(definition)
+      if (definition === undefined || definitionSeen === undefined) continue
+      let reached = definitionSeen.dirs === undefined ? possible : joinDirectories(definitionSeen.dirs, possible)
+      reached = joinDirectories(reached, parsed.execCwd)
+      if (nestedDirectories !== undefined) reached = joinDirectories(reached, nestedDirectories)
+      definitionSeen.dirs = reached
+      for (const name of changedNames) definitionSeen.names.add(name)
+      if (moved && scope === shellCommand.scope && commandNumber <= definition.end) definitionSeen.moved = true
+    }
+    const endingRegions = regionEnds.get(commandNumber)
+    if (endingRegions !== undefined) {
+      for (const region of endingRegions) {
+        const before = saved.get(region)
+        if (before === undefined) continue
+        const regionSeen = seen.get(region)
+        if (region.loose || regionSeen?.moved) loose.add(region.scope)
+        else if (region.dirs !== undefined || region.names.size > 0) {
+          directories.set(region.scope, before.state)
+          environments.set(region.scope, before.env)
+        }
+      }
+    }
   }
-  return { classes, parts, pushDests, directories: directoryFor(0), cwdChanged, env: environmentFor(0), envChanges, nonDirectoryRead }
+  let unsettled = false
+  for (const region of regions) {
+    const found = seen.get(region)
+    const head = heads.get(region)
+    if (found === undefined || head === undefined) continue
+    const dirs = region.kind === 'loop' && !found.moved ? undefined : found.dirs
+    let grows = false
+    if (dirs !== undefined) {
+      grows = !directoriesEqual(joinDirectories(head.certain, dirs), head.certain)
+      if (grows) region.dirs = region.dirs === undefined ? dirs : joinDirectories(region.dirs, dirs)
+    }
+    for (const name of found.names) {
+      if (region.names.has(name)) continue
+      region.names.add(name)
+      grows = true
+    }
+    if (region.kind === 'function' && found.moved && !region.loose) {
+      region.loose = true
+      grows = true
+    }
+    if (grows) unsettled = true
+  }
+  if (definitionsUnknown && pass === 1) {
+    for (const region of regions) {
+      if (region.kind !== 'function') continue
+      region.dirs = null
+      for (const name of TRACKED_NAMES) region.names.add(name)
+      region.loose = true
+      unsettled = true
+    }
+  }
+  if (!unsettled) return { classes, parts, pushDests, directories: directoryFor(0), cwdChanged, env: environmentFor(0), envChanges, nonDirectoryRead, loose: loose.has(0) }
+  if (pass >= 2) {
+    for (const region of regions) region.dirs = null
+  }
+  const result = analyzeCommand(command, startDirectories, ctx, depth, inheritedEnv, inheritedLoose, definitionsUnknown, budget, rereading, { script, regions, pass: pass + 1 })
+  if (!result.unreadable && classes.includes('credential') && !result.classes.includes('credential')) result.classes.push('credential')
+  return result
 }
 
 function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[]): ActionClass[] {

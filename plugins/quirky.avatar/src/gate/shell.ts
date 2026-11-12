@@ -32,6 +32,8 @@ export type ShellCommand = {
   words: ShellWord[]
   /** One entry per file the shell opens. A target with a comma list in braces is one entry per word. */
   redirects: ShellRedirect[]
+  /** True when an empty `()` follows the words with nothing between, so they name a function and the next command starts its body. */
+  defines?: true
 }
 export type ShellScript = {
   /** Every command at every depth. One scope's commands keep source order, and a scope's commands come before the command that holds it. */
@@ -287,8 +289,11 @@ class ShellReader {
       }
 
       if (character === '(') {
+        const named = nextSeparator === null ? members[members.length - 1] : undefined
         const child = this.openScope(scope, depth, this.index, 1, ')', limit, 'subshell')
         if (child === null) return null
+        if (named?.kind === 'command' && named.command.words.length > 0 &&
+          child.entry.kind === 'scope' && child.entry.entries.length === 0) named.command.defines = true
         entries.push(child.entry)
         if (pipelineNext) this.markDetached(child.entry)
         members.push(child.entry)
