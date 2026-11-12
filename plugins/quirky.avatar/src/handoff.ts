@@ -252,6 +252,14 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     })
   }
 
+  /** Clears decisions that no longer belong to this hand-off or mandate. */
+  function forgetDecisions(worktreeId: string, approvals: boolean): void {
+    for (const answer of app.store.lateAnswers.list({ worktreeId })) app.store.lateAnswers.delete(answer.fingerprint)
+    if (approvals) {
+      for (const approval of app.store.approvals.list({ worktreeId, usedAt: null })) app.store.approvals.delete(approval.id)
+    }
+  }
+
   type Prepared = { mandate: Mandate; session: SessionInfo | undefined; isNew: boolean }
 
   async function handoff(items: HandoffInput[]): ReturnType<HandoffService['handoff']> {
@@ -289,6 +297,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
           if (before?.sharedGoalId && before.sharedGoalId !== sharedGoalId) leaveSharedGoal(fields.worktreeId, before.sharedGoalId)
           const stored: Mandate = { ...fields, sharedGoalId, updatedAt: app.now() }
           app.store.mandates.put(stored)
+          forgetDecisions(fields.worktreeId, previous === null)
           app.store.handoffs.put(
             previous !== null
               ? { ...previous, state: 'checking', sessionId: session?.id ?? previous.sessionId }
@@ -354,6 +363,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
         for (const need of open) app.needs.close(need.id, 'handed-back')
         const cancelled = app.services.shipping.cancelOutbox(worktreeId)
         app.store.handoffs.put({ ...row, active: false, takenBackAt: app.now() })
+        forgetDecisions(worktreeId, true)
         const titles = open.map((need) => need.title)
         app.journal(worktreeId, 'take-back', { handedBackWith: titles, cancelledOutbox: cancelled, state: row.state })
         return titles
@@ -429,6 +439,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
           if (!applied.ok) return { ok: false, error: applied.error }
           app.store.transaction(() => {
             app.store.mandates.put(applied.value)
+            forgetDecisions(worktreeId, false)
             closeNeed(need, action, 'accepted', { patch: { goal, doneWhen, guidelines, notes } }, 'mandate-proposal')
           })
           app.services.brain.wake()
