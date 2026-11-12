@@ -553,7 +553,7 @@ describe('pi rpc runner', () => {
     const handled = agent === 'pi' ? '[handled]' : '[no-agent]'
     test(`${agent}: a first message the CLI handles by itself does not end the turn while another waits`, async () => {
       build(agent)
-      await runner.start(session, `first ${handled} [slow-ack]`)
+      await runner.start(session, `first ${handled} [slow-ack]`, { toolPolicy: 'deny-all' })
       await runner.send(session.id, 'second')
       await until(() => results().length === 1)
 
