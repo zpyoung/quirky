@@ -58,6 +58,7 @@ export function startFault(options: {
   const unsubscribes: (() => void)[] = []
   let timer: ReturnType<typeof setTimeout> | undefined
   let wake: (() => void) | undefined
+  const cancellation = Promise.withResolvers<void>()
 
   const closeDrivers = () => {
     driversStopped = true
@@ -67,6 +68,7 @@ export function startFault(options: {
   const stop = () => {
     if (stopped) return
     stopped = true
+    cancellation.resolve()
     clearTimeout(timer)
     wake?.()
     closeDrivers()
@@ -78,6 +80,10 @@ export function startFault(options: {
   const ensureRunning = () => {
     if (stopped) throw new Error('soak fault was stopped before completion')
   }
+  const untilStopped = <T>(task: Promise<T>): Promise<T> => Promise.race([
+    task,
+    cancellation.promise.then((): never => { throw new Error('soak fault was stopped before completion') })
+  ])
   const call = (client: QuirkyClient, method: string, params: Record<string, unknown>) => {
     ensureRunning()
     return client.callAny(`${FAULT_PLUGIN_ID}/${method}`, params, { timeoutMs: 30_000 })
@@ -130,10 +136,10 @@ export function startFault(options: {
     async finish() {
       if (failed) throw failure
       if (at === undefined) throw new Error('soak fault was not injected before the run ended')
-      await injected
+      await untilStopped(injected)
       ensureRunning()
       if (failed) throw failure
-      const report = await call(options.control, 'report', {}) as PluginReport
+      const report = await untilStopped(call(options.control, 'report', {})) as PluginReport
       ensureRunning()
       return {
         kind: options.kind,

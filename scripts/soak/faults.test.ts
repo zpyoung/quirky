@@ -83,3 +83,35 @@ test('a rejected injection cannot be replaced with a successful closing report',
     fault.stop()
   }
 })
+
+for (const phase of ['injection', 'report'] as const) {
+  test(`abort releases finalization while the ${phase} RPC is still pending`, async () => {
+    const abort = new AbortController()
+    const pending = Promise.withResolvers<unknown>()
+    const entered = Promise.withResolvers<void>()
+    const control = { callAny: async (method: string) => {
+      if (method === (phase === 'injection' ? 'soak.faults/block' : 'soak.faults/report')) {
+        entered.resolve()
+        return pending.promise
+      }
+      return { blockedMs: 3000 }
+    } } as unknown as QuirkyClient
+    const fault = startFault({ kind: 'block', home: '/unused', control, runSeconds: 24, startedAt: performance.now() - 2100, signal: abort.signal })
+    const finished = fault.finish().catch((error: unknown) => error)
+    const timeout = Promise.withResolvers<string>()
+    let timer: Timer | undefined
+    try {
+      await entered.promise
+      abort.abort()
+      timer = setTimeout(() => timeout.resolve('still waiting for RPC'), 500)
+      const result = await Promise.race([finished, timeout.promise])
+      expect(result).toBeInstanceOf(Error)
+      expect((result as Error).message).toBe('soak fault was stopped before completion')
+    } finally {
+      clearTimeout(timer)
+      fault.stop()
+      pending.resolve({ leaked: [], holders: [], refreshes: 0, blockedMs: 3000 })
+      await finished
+    }
+  })
+}
