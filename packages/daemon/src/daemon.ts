@@ -43,6 +43,8 @@ export type DaemonOptions = {
   builtinPluginsDir?: string | null
   /** Bounds each plugin activation and deactivate; defaults to 10 seconds. */
   pluginActivationTimeoutMs?: number
+  /** Bounds all plugin shutdown work together; defaults to 5 seconds. */
+  pluginStopTimeoutMs?: number
   /** Bounds each launch hook when a session starts; defaults to 5 seconds. */
   launchHookTimeoutMs?: number
   /** Longest a job timer sleeps before re-checking the clock; defaults to 60 seconds. */
@@ -298,7 +300,19 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       await server.stop(true)
       pluginRuntime.scheduler.stop()
       try {
-        await plugins.stop()
+        const pluginStopTimeoutMs = options.pluginStopTimeoutMs ?? 5000
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          const timedOut = await Promise.race([
+            plugins.stop().then(() => false),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(() => resolve(true), pluginStopTimeoutMs)
+            })
+          ])
+          if (timedOut) log(`plugins did not stop within ${pluginStopTimeoutMs} ms; continuing shutdown`)
+        } finally {
+          clearTimeout(timer)
+        }
       } finally {
         try {
           await stopAllProcesses()
