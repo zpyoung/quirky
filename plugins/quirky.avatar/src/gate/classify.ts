@@ -9,6 +9,7 @@ type Parsed = {
   args: string[]
   argWords: ShellWord[]
   text: string
+  rawText: string
   assignments: readonly ShellAssignment[]
   wrapperAssignments: WordAssignment[]
   credential: boolean
@@ -888,12 +889,15 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
   for (const word of argWords) args.push(word.text)
   const systemName = commandWord === undefined || commandWord.dynamic ? null : systemCommandName(commandWord.text)
   const pathNamed = commandWord !== undefined && !commandWord.dynamic && commandWord.text.includes('/')
-  const text = commandWord === undefined ? '' : (systemName ?? commandWord.text) + (args.length === 0 ? '' : ` ${args.join(' ')}`)
+  const argumentText = args.length === 0 ? '' : ` ${args.join(' ')}`
+  const rawText = commandWord === undefined ? '' : commandWord.text + argumentText
+  const text = commandWord === undefined || systemName === null || systemName === commandWord.text ? rawText : systemName + argumentText
   return {
     cmd: commandWord === undefined ? '' : basename(commandWord.text),
     args,
     argWords,
     text,
+    rawText,
     assignments: command.assignments,
     wrapperAssignments,
     credential: unwrapped.credential,
@@ -913,11 +917,29 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
 }
 
 
-function matchesCommandList(text: string, list: string[]): boolean {
+function bareCommandText(text: string): string {
+  const space = text.indexOf(' ')
+  const command = space < 0 ? text : text.slice(0, space)
+  const name = systemCommandName(command)
+  return name === null || name === command ? text : name + (space < 0 ? '' : text.slice(space))
+}
+
+/**
+ * Matches owner prefixes without widening path-qualified allow entries.
+ * Deny and deploy entries treat exact system paths as their bare command name;
+ * foreign paths stay literal on every list.
+ */
+export function matchesCommandList(text: string, list: string[], kind: 'allow' | 'deny' | 'deploy'): boolean {
+  if (list.length === 0) return false
   const normalized = text.replace(/\s+/g, ' ').trim()
+  const bareText = bareCommandText(normalized)
   return list.some((entry) => {
     const pattern = entry.replace(/\s+/g, ' ').trim()
-    return pattern !== '' && (normalized === pattern || normalized.startsWith(pattern + ' '))
+    if (pattern === '') return false
+    const barePattern = bareCommandText(pattern)
+    const matchText = kind === 'allow' && barePattern !== pattern ? normalized : bareText
+    const matchPattern = kind === 'allow' ? pattern : barePattern
+    return matchText === matchPattern || matchText.startsWith(matchPattern + ' ')
   })
 }
 
@@ -1612,7 +1634,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
         const isWriteTarget = writeTargetWords[writeTargetIndex] === word
         if (isWriteTarget) writeTargetIndex++
         if (!word.dynamic || i === bodyIndex || isWriteTarget) continue
-        commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
+        commandAllowed ??= matchesCommandList(parsed.rawText, ctx.allowCommands, 'allow')
         if (!commandAllowed) {
           countedDynamic = true
           break
@@ -1624,7 +1646,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       const xargsShellBody = isShell && commandFlag >= 0
       if (isWriteCommand(cmd, args) || xargsShellBody || cmd === 'eval') partClasses.push('edit-outside')
       else if (!parsed.argumentExempt) {
-        commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
+        commandAllowed ??= matchesCommandList(parsed.rawText, ctx.allowCommands, 'allow')
         if (!commandAllowed) partClasses.push('other')
       }
     }
@@ -1634,8 +1656,8 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     }
     if (parsed.foreignWrapper) partClasses.push('other')
     if (parsed.foreignCommand) {
-      commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
-      if (!commandAllowed && !matchesCommandList(parsed.text, ctx.deployCommands)) partClasses.push('other')
+      commandAllowed ??= matchesCommandList(parsed.rawText, ctx.allowCommands, 'allow')
+      if (!commandAllowed && !matchesCommandList(parsed.text, ctx.deployCommands, 'deploy')) partClasses.push('other')
     }
     if (keywordChangesDirectory(shellCommand.words)) cwd = possible = null
 
@@ -1699,7 +1721,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
 function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[]): ActionClass[] {
   const { cmd, args, text } = parsed
   if (parsed.dynamicCommand) return ['other']
-  const deploy = matchesCommandList(text, ctx.deployCommands) || isBuiltinDeploy(cmd, args)
+  const deploy = matchesCommandList(text, ctx.deployCommands, 'deploy') || isBuiltinDeploy(cmd, args)
   if (deploy) return ['deploy']
   let classes: ActionClass[]
   if (cmd === 'git') classes = classifyGit(parsed.argWords, commandEnvironment(parsed, shellEnv), ctx, cwd, pushDests)
@@ -1718,7 +1740,7 @@ function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string |
   else if (READ_CMDS.has(cmd)) classes = readInvocationIsSafe(cmd, args) ? ['read'] : ['other']
   else if (isWriteCommand(cmd, args)) classes = []
   else classes = classifyTool(cmd, args)
-  if (classes.length === 1 && classes[0] === 'other' && matchesCommandList(text, ctx.allowCommands)) return ['build']
+  if (classes.length === 1 && classes[0] === 'other' && matchesCommandList(parsed.rawText, ctx.allowCommands, 'allow')) return ['build']
   return classes
 }
 

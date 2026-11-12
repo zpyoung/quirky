@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { ActionClass, ClassifyContext, DecideInput, Level, Switches, ToolCall } from '../src/contracts'
-import { classifyCall } from '../src/gate/classify'
+import { classifyCall, commandParts } from '../src/gate/classify'
 import { decide } from '../src/gate/decide'
 import { sampleMandate } from './support'
 
@@ -249,5 +249,46 @@ describe('decide code-executing read lookalikes and foreign pushes', () => {
     for (const command of ['git push', 'git push origin HEAD', 'git push -u origin feat/x', 'git push origin HEAD:feat/x', 'git push origin HEAD:refs/heads/feat/x']) {
       expect(run(bashCall(command), 'own-branch', on)).toMatchObject({ step: null, outcome: 'judgment' })
     }
+  })
+})
+
+describe('path-qualified owner command lists', () => {
+  const rows: {
+    list: 'denyCommands' | 'deployCommands' | 'allowCommands'
+    entry: string
+    command: string
+    classes: ActionClass[]
+    part: string
+    outcome: string
+    step: string | null
+  }[] = [
+    { list: 'denyCommands', entry: '/usr/bin/git commit', command: 'git commit -m x', classes: ['edit-inside'], part: 'git commit -m x', outcome: 'deny', step: 'fixed-rules' },
+    { list: 'denyCommands', entry: '/usr/bin/git commit', command: '/usr/bin/git commit -m x', classes: ['edit-inside'], part: 'git commit -m x', outcome: 'deny', step: 'fixed-rules' },
+    { list: 'denyCommands', entry: '/usr/bin/git commit', command: '/usr/local/bin/git commit -m x', classes: ['edit-inside'], part: 'git commit -m x', outcome: 'deny', step: 'fixed-rules' },
+    { list: 'denyCommands', entry: '/usr/bin/git commit', command: './git commit -m x', classes: ['edit-inside', 'other'], part: './git commit -m x', outcome: 'judgment', step: null },
+    { list: 'deployCommands', entry: '/usr/bin/make ship', command: 'make ship', classes: ['deploy'], part: 'make ship', outcome: 'held', step: 'floor-switch' },
+    { list: 'deployCommands', entry: '/usr/bin/make ship', command: '/usr/bin/make ship', classes: ['deploy'], part: 'make ship', outcome: 'held', step: 'floor-switch' },
+    { list: 'deployCommands', entry: '/usr/bin/make ship', command: '/usr/local/bin/make ship', classes: ['deploy'], part: 'make ship', outcome: 'held', step: 'floor-switch' },
+    { list: 'deployCommands', entry: '/usr/bin/make ship', command: './make ship', classes: ['other'], part: './make ship', outcome: 'judgment', step: null },
+    { list: 'allowCommands', entry: '/usr/bin/make smoke', command: 'make smoke', classes: ['other'], part: 'make smoke', outcome: 'judgment', step: null },
+    { list: 'allowCommands', entry: '/usr/bin/make smoke', command: '/usr/bin/make smoke', classes: ['build'], part: 'make smoke', outcome: 'allow', step: 'fixed-rules' },
+    { list: 'allowCommands', entry: '/usr/bin/make smoke', command: '/opt/homebrew/bin/make smoke', classes: ['other'], part: 'make smoke', outcome: 'judgment', step: null },
+    { list: 'allowCommands', entry: '/usr/bin/make smoke', command: './make smoke', classes: ['other'], part: './make smoke', outcome: 'judgment', step: null }
+  ]
+  for (const row of rows) {
+    test(`owner path ${row.list}: ${row.command}`, () => {
+      const context = { ...ctx, [row.list]: [row.entry] }
+      const input = bashCall(row.command)
+      expect([...classifyCall(input, context)].sort()).toEqual([...row.classes].sort())
+      expect(commandParts(input, context)).toEqual([row.part])
+      expect(run(input, 'local', off, context)).toMatchObject({ outcome: row.outcome, step: row.step })
+    })
+  }
+
+  test('foreign command lookup stays at judgment with empty lists', () => {
+    const input = bashCall('./command -v ls')
+    expect([...classifyCall(input, ctx)].sort()).toEqual(['other', 'read'])
+    expect(commandParts(input, ctx)).toEqual(['./command -v ls'])
+    expect(run(input, 'local')).toMatchObject({ outcome: 'judgment', step: null })
   })
 })
