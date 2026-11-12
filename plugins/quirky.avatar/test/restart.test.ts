@@ -58,7 +58,7 @@ function pluginsDir(cwd: string): string {
     if (id === 'quirky.agents') {
       const listing = { defaultAgent: 'claude', agents: [{ id: 'codex', installed: true, enabled: true }] }
       Object.assign(manifest, { main: 'main.ts', contributes: { method: [{ id: 'list', description: 'Agents.', readOnly: true, params: { type: 'object' }, result: { type: 'object' } }] } })
-      writeFileSync(join(dir, id, 'main.ts'), `export function activate(context) { context.provide('method:quirky.agents/list', () => ${JSON.stringify(listing)}) }\n`)
+      writeFileSync(join(dir, id, 'main.ts'), `export function activate(context) { context.provide('method:quirky.agents/list', () => (${JSON.stringify(listing)})) }\n`)
     }
     writeFileSync(join(dir, id, 'quirky-plugin.json'), JSON.stringify(manifest))
   }
