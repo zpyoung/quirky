@@ -207,11 +207,12 @@ type StructuredStartOptions = { /* existing */ toolPolicy?: 'default' | 'deny-al
   - Post:
     - markers are removed
     - in-flight gate requests are resolved with passthrough
-    - `recorded` outbox rows are cancelled
+    - outbox actions not yet sent are cancelled, including this process's `running` rows that are still checking; a leftover `running` row from another process waits for reconciliation
     - open needs are closed with resolution `handed-back` and listed in `handedBackWith`
     - `handoffs.active = 0`
     - the mandate is kept
     - keep-awake is re-evaluated
+    - a call already sent may finish and is journaled as `done after take-back`; its workflow records no later action or state, even if the worktree is handed off again
   - Agents are never stopped.
 - Every mutating method writes a journal entry in the same store transaction as its state change.
 - Methods called from the brain dispatcher go through the same functions. **The brain has no extra authority.**
@@ -365,15 +366,17 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
 - **Flaky checks** (R-31): a required check failing on a SHA where it passed before, or whose failure output matches no file in the diff, gets one `quirky.hosting/rerunChecks {failedOnly:true}`. A second failure goes back to the worker.
 
 ### Outbox (`src/shipping/outbox.ts`)
-- `enqueue(kind, worktreeId, payload)` inserts a row `{state:'recorded', idempotencyKey}` before any call. `idempotencyKey` is `sha256(kind, worktreeId, headSha, target)`.
-- `run(id)` sets `running`, makes the call, then sets `done` or `failed` with the result.
+- `enqueue(kind, worktreeId, payload)` inserts a row before any call. `idempotencyKey` is `sha256(kind, worktreeId, headSha, target)`; `payload.handedOffAt` identifies the hand-off that requested it.
+- Every send checks that the hand-off is active, its epoch still matches, and its mandate level permits the action, with no await between that check and the call. Local permits `merge-main-in`; Own branch also permits pushes, draft PRs and thread replies; Full also permits ready and merge.
+- `run(id)` claims the row as `running`, checks what already happened, sends only while authorized, then records `done` or `failed`. Checking is not an in-flight send.
+- Before a push, `quirky.git/pushTarget {purpose:'creation'}` must match the recorded branch and commit. `git ls-remote --symref` reads the selected remote's default branch and the exact destination ref. The default branch and the compare base are refused; an unknown default branch leaves the action recorded. The send is `quirky.git/push {purpose:'creation'}`, never an upstream-directed push.
 - On activation, every `recorded` or `running` row is reconciled first:
-  - `push`: compare the remote branch SHA via `quirky.git/status` or a fetch.
-  - `pr`: `quirky.hosting/forBranch {fresh:true}`.
+  - `push`: compare the exact remote branch SHA with `git ls-remote`.
+  - `pr`: `quirky.hosting/forBranch {branch, headOid, fresh:true}`.
   - `merge`: `quirky.hosting/review` state `merged`.
-- Reconciliation marks each row `done` or back to `recorded` without repeating it (R-34).
-- Merge calls always pass `expectedHead` equal to the reviewed and checked SHA (R-31).
-- Take-back cancels rows in state `recorded` (R-49).
+- Reconciliation marks observed actions `done` without repeating them (R-34). Unsent actions from an ended or replaced hand-off become `cancelled`; an authorized action known not to have happened can remain `recorded`.
+- Merge calls always pass `yes:true` and `expectedHead` equal to the reviewed and checked SHA (R-31). No reported checks, partly read checks or threads, and threads read for another PR all block the merge.
+- Take-back cancels actions not yet sent, including rows still checking in this process (R-49). A sent call may finish and records `done after take-back`; subsequent actions and state changes stop. Re-handing off never authorizes an old workflow.
 
 ## Data models
 
