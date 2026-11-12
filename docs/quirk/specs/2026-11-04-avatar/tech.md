@@ -311,7 +311,8 @@ type ClassifyContext = { worktreePath: string; handedOffPaths: string[]; default
 type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; switches: Switches; level: Level; ctx: ClassifyContext }
 ```
 - `classifyCall(call, ctx)` returns a non-empty `ActionClass[]`, with `['other']` when nothing matches.
-- `parseShell` reads a Bash command into simple commands at every depth; each is classified, so the classes are their union. A write whose target is computed by the shell or supplied by `xargs`, and a relative write after a `cd` to a computed directory, is `edit-outside`. A computed command name is `other`. `sudo` and `doas` add `credential`. A command that can't be read is `['other', 'edit-outside']`.
+- `parseShell` reads a Bash command into simple commands at every depth; each is classified, so the classes are their union. A write whose target is computed by the shell or supplied by `xargs`, and a relative write after a `cd` to a computed directory, is `edit-outside`. A computed command name is `other`. `sudo` and `doas` add `credential`, including shell-only invocations; wrapper value flags are specific to each wrapper. A command that can't be read consistently across supported shells is `['other', 'edit-outside']`.
+- Directory and Git environment state are inherited per parsed scope; a substitution or subshell cannot change its parent's state. `eval` inherits the current directory and returns directory changes to the current scope. Git directory values using unknown tilde expansions in `env` arguments count as dynamic.
 - File tools (`Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, Codex `apply_patch`, pi `read`/`edit`/`write`) classify by resolved path against `ctx`.
 - `decide(input)` never throws.
 

@@ -23,7 +23,11 @@ const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'filePath', 'file']
 
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
 const WRAPPERS = new Set(['sudo', 'doas', 'nohup', 'time', 'command', 'exec', 'builtin', 'nice', 'ionice', 'stdbuf', 'xargs', 'env', 'timeout'])
-const WRAPPER_VALUE_FLAGS = new Set(['-u', '-g', '-h', '-p', '-C', '-n', '-I', '-L', '-P', '-s', '-k'])
+const WRAPPER_VALUE_FLAGS: Partial<Record<string, Readonly<Record<string, true>>>> = {
+  sudo: { '-u': true, '-g': true, '-h': true, '-p': true, '-C': true, '-T': true, '-R': true, '-D': true, '-r': true, '-t': true, '--user': true, '--group': true, '--host': true, '--prompt': true, '--close-from': true, '--command-timeout': true, '--chroot': true, '--chdir': true, '--role': true, '--type': true },
+  doas: { '-u': true, '-C': true },
+  xargs: { '-I': true, '-L': true, '-P': true, '-n': true, '-s': true, '-E': true }
+}
 const READ_CMDS = new Set(['ls', 'cat', 'head', 'tail', 'wc', 'pwd', 'echo', 'printf', 'which', 'whereis', 'type', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'stat', 'file', 'tree', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink', 'true', 'false', 'test', '[', 'date', 'whoami', 'uname', 'id', 'column', 'fmt', 'nl', 'tac', 'od', 'xxd', 'hexdump', 'md5sum', 'shasum', 'sha256sum', 'du', 'df', 'cd', 'pushd', 'popd', 'sleep', 'ps', 'lsof'])
 const AWK_CMDS = new Set(['awk', 'gawk', 'mawk', 'nawk'])
 const FIND_UNSAFE_PRIMARY = /^-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)$/
@@ -114,7 +118,7 @@ function assignmentFromWord(word: ShellWord): ShellAssignment | null {
   if (assignment === null) return null
   return {
     name: assignment[1],
-    value: { text: assignment[2], dynamic: word.dynamic, subs: word.subs }
+    value: { text: assignment[2], dynamic: word.dynamic || /^~[^/]/.test(assignment[2]), subs: word.subs }
   }
 }
 
@@ -135,7 +139,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: ShellAssignment[])
       const assignment = wrapper === 'env' ? assignmentFromWord(option) : null
       if (assignment === null && (option.dynamic || !isFlag(option.text))) break
       if (assignment !== null && GIT_ENV_NAMES.has(assignment.name)) wrapperAssignments?.push(assignment)
-      const takesValue = (wrapper === 'sudo' || wrapper === 'doas' || wrapper === 'xargs') && WRAPPER_VALUE_FLAGS.has(option.text)
+      const takesValue = WRAPPER_VALUE_FLAGS[wrapper]?.[option.text] === true
       commandIndex += takesValue ? 2 : 1
     }
     if (wrapper === 'timeout' && commandIndex < words.length) commandIndex++
@@ -586,7 +590,7 @@ function isWriteCommand(cmd: string, args: string[]): boolean {
   if (cmd === 'sed' || cmd === 'perl') return args.some((arg) => /^-[a-zA-Z]*i/.test(arg) || arg === '--in-place')
   return WRITE_ALL_CMDS.has(cmd) || WRITE_SKIP_FIRST_CMDS.has(cmd) || WRITE_DEST_CMDS.has(cmd)
 }
-type Analysis = { classes: ActionClass[]; parts: string[]; pushDests: string[]; unreadable?: boolean }
+type Analysis = { classes: ActionClass[]; parts: string[]; pushDests: string[]; unreadable?: boolean; cwd?: string | null }
 
 function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>): Map<string, ShellWord> {
   const env = new Map(inherited)
@@ -625,9 +629,17 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     return env
   }
   const pipelineDownloads = new Map<number, boolean>()
-  let cwd = startCwd
+  const directories = new Map<number, string | null>([[0, startCwd]])
+  const directoryFor = (scope: number): string | null => {
+    if (directories.has(scope)) return directories.get(scope)!
+    const directory = directoryFor(script.parents[scope])
+    directories.set(scope, directory)
+    return directory
+  }
   for (const shellCommand of script.commands) {
     const shellEnv = environmentFor(shellCommand.scope)
+    const commandCwd = directoryFor(shellCommand.scope)
+    let cwd = commandCwd
     let downloadInPipeline = pipelineDownloads.get(shellCommand.scope) ?? false
     if (shellCommand.sep !== '|') downloadInPipeline = false
 
@@ -661,7 +673,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     if (isShell && downloadInPipeline) partClasses.push('pipe-to-shell')
 
     const commandFlag = isShell ? args.findIndex((arg) => /^-[a-zA-Z]*c$/.test(arg)) : -1
-    if (parsed.credential && cmd !== '') partClasses.push('credential')
+    if (parsed.credential) partClasses.push('credential')
     if (parsed.dynamicCommand) {
       partClasses.push('other')
     } else if (cmd === 'cd' || cmd === 'pushd') {
@@ -687,6 +699,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     } else if (cmd === 'eval' && args.length > 0) {
       const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
+      cwd = inner.cwd === undefined ? null : inner.cwd
       append(partClasses, inner.classes)
       append(parts, inner.parts)
       append(pushDests, inner.pushDests)
@@ -720,13 +733,14 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       if (redirect.kind !== 'write') continue
       const target = redirect.target
       if (!target.dynamic && ['/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty'].includes(target.text)) continue
-      if (target.dynamic || (cwd === null && !isAbsolute(expandHome(target.text, ctx.home)))) partClasses.push('edit-outside')
-      else append(partClasses, writeClasses(target.text, cwd ?? '/', ctx, rootPaths))
+      if (target.dynamic || (commandCwd === null && !isAbsolute(expandHome(target.text, ctx.home)))) partClasses.push('edit-outside')
+      else append(partClasses, writeClasses(target.text, commandCwd ?? '/', ctx, rootPaths))
     }
 
     append(classes, partClasses)
+    directories.set(shellCommand.scope, cwd)
   }
-  return { classes, parts, pushDests }
+  return { classes, parts, pushDests, cwd: directoryFor(0) }
 }
 
 function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[]): ActionClass[] {

@@ -43,12 +43,15 @@ type PendingHeredoc = {
   stripTabs: boolean
   quoted: boolean
   before: Entry[]
+  ownerScope: number
+  ownerDepth: number
 }
 type RedirectOperator = { start: number; end: number; op: string }
 type HomeMarker = { start: number; end: number }
 type ExpansionFrame =
   | { kind: 'parameter'; braces: number; quote: string; doubleQuoted: boolean }
   | { kind: 'arithmetic'; parentheses: number; quote: string; doubleQuoted: boolean }
+type ScopeKind = 'root' | 'subshell' | 'command-substitution' | 'process-substitution' | 'backtick'
 type ScopeResult = { id: number; entry: Entry }
 
 class WordBuilder {
@@ -125,9 +128,20 @@ class WordBuilder {
 
 class ShellReader {
   index = 0
-  readonly parents: number[] = [-1]
+  readonly parents: number[]
+  private readonly scopeKinds: ScopeKind[]
+  private readonly eligibleHeredocs: PendingHeredoc[] = []
+  private eligibleHeredocIndex = 0
 
-  constructor(readonly source: string, readonly home: string) {}
+  constructor(
+    readonly source: string,
+    readonly home: string,
+    parents: number[] = [-1],
+    scopeKinds: ScopeKind[] = ['root']
+  ) {
+    this.parents = parents
+    this.scopeKinds = scopeKinds
+  }
 
   parse(): ShellScript | null {
     const entries = this.parseScope(0, 0, null, this.source.length)
@@ -150,8 +164,7 @@ class ShellReader {
 
   private parseScope(scope: number, depth: number, close: ')' | '`' | null, limit: number): Entry[] | null {
     const entries: Entry[] = []
-    const directCommands: ShellCommand[] = []
-    const pending: PendingHeredoc[] = []
+    const members: Entry[] = []
     let nextSeparator: ShellSeparator | null = null
     let pipelineNext = false
     let listStart = 0
@@ -159,22 +172,21 @@ class ShellReader {
     while (true) {
       this.skipInline(limit)
       if (this.index >= limit) {
-        if (pending.length > 0 || close !== null) return null
+        if (this.hasEligibleHeredocs() || close !== null) return null
         return entries
       }
 
       const character = this.source[this.index]
       if (character === '\n') {
         this.index++
-        if (pending.length > 0) {
-          if (!this.consumeHeredocs(pending, scope, depth, limit)) return null
-          pending.length = 0
+        if (this.hasEligibleHeredocs()) {
+          if (!this.consumeHeredocs(limit)) return null
           nextSeparator = ';'
-          listStart = directCommands.length
+          listStart = members.length
           pipelineNext = false
         } else if (nextSeparator !== '|' && nextSeparator !== '&&' && nextSeparator !== '||') {
-          nextSeparator = directCommands.length === 0 ? null : ';'
-          listStart = directCommands.length
+          nextSeparator = members.length === 0 ? null : ';'
+          listStart = members.length
           pipelineNext = false
         }
         continue
@@ -187,14 +199,12 @@ class ShellReader {
 
       if (close !== null && character === close) {
         this.index++
-        if (pending.length > 0) return null
         return entries
       }
 
       if (character === ')') {
         if (close === ')') {
           this.index++
-          if (pending.length > 0) return null
           return entries
         }
         this.index++
@@ -204,9 +214,13 @@ class ShellReader {
       }
 
       if (character === '(') {
-        const child = this.openScope(scope, depth, this.index, 1, ')', limit)
+        const child = this.openScope(scope, depth, this.index, 1, ')', limit, 'subshell')
         if (child === null) return null
         entries.push(child.entry)
+        if (pipelineNext) this.markDetached(child.entry)
+        members.push(child.entry)
+        nextSeparator = null
+        pipelineNext = false
         continue
       }
 
@@ -214,20 +228,20 @@ class ShellReader {
         this.index++
         if (this.index < limit && (this.source[this.index] === ';' || this.source[this.index] === '&')) this.index++
         nextSeparator = ';'
-        listStart = directCommands.length
+        listStart = members.length
         pipelineNext = false
         continue
       }
 
       if (character === '|') {
-        if (directCommands.length === 0) return null
-        const previous = directCommands[directCommands.length - 1]
+        if (members.length === 0) return null
+        const previous = members[members.length - 1]
         if (this.index + 1 < limit && this.source[this.index + 1] === '|') {
           this.index += 2
           nextSeparator = '||'
           pipelineNext = false
         } else {
-          previous.detached = true
+          this.markDetached(previous)
           this.index += this.index + 1 < limit && this.source[this.index + 1] === '&' ? 2 : 1
           nextSeparator = '|'
           pipelineNext = true
@@ -237,29 +251,41 @@ class ShellReader {
 
       if (character === '&' && !(this.index + 1 < limit && this.source[this.index + 1] === '>')) {
         if (this.index + 1 < limit && this.source[this.index + 1] === '&') {
-          if (directCommands.length === 0) return null
+          if (members.length === 0) return null
           this.index += 2
           nextSeparator = '&&'
           pipelineNext = false
         } else {
-          if (directCommands.length === 0) return null
+          if (members.length === 0) return null
           this.index++
-          for (let i = listStart; i < directCommands.length; i++) directCommands[i].detached = true
-          listStart = directCommands.length
+          for (let i = listStart; i < members.length; i++) this.markDetached(members[i])
+          listStart = members.length
           nextSeparator = '&'
           pipelineNext = false
         }
         continue
       }
 
-      const result = this.parseSimple(scope, depth, limit, close, nextSeparator, pipelineNext, pending)
-      if (result === null) return null
-      if (result.entry === null) return null
+      const result = this.parseSimple(scope, depth, limit, close, nextSeparator, pipelineNext)
+      if (result === null || result.entry === null) return null
+      for (const item of result.heredocs) this.eligibleHeredocs.push(item)
       entries.push(result.entry)
-      directCommands.push(result.entry.command)
+      members.push(result.entry)
       nextSeparator = null
       pipelineNext = false
     }
+  }
+
+  private markDetached(entry: Entry): void {
+    if (entry.kind === 'command') {
+      entry.command.detached = true
+      return
+    }
+    for (const child of entry.entries) this.markDetached(child)
+  }
+
+  private hasEligibleHeredocs(): boolean {
+    return this.eligibleHeredocIndex < this.eligibleHeredocs.length
   }
 
   private parseSimple(
@@ -268,9 +294,9 @@ class ShellReader {
     limit: number,
     close: ')' | '`' | null,
     separator: ShellSeparator | null,
-    pipelineNext: boolean,
-    pending: PendingHeredoc[]
-  ): { entry: Extract<Entry, { kind: 'command' }> | null } | null {
+    pipelineNext: boolean
+  ): { entry: Extract<Entry, { kind: 'command' }> | null; heredocs: PendingHeredoc[] } | null {
+    const heredocs: PendingHeredoc[] = []
     const active: ActiveCommand = {
       command: {
         scope,
@@ -306,12 +332,14 @@ class ShellReader {
           if (target.word.dynamic) return null
           const item: ShellRedirect = { kind: 'heredoc', target: target.word }
           command.command.redirects.push(item)
-          pending.push({
+          heredocs.push({
             redirect: item,
             delimiter: target.word.text,
             stripTabs: op === '<<-',
             quoted: target.quoted,
-            before: command.before
+            before: command.before,
+            ownerScope: scope,
+            ownerDepth: depth
           })
         } else {
           let kind: ShellRedirect['kind']
@@ -348,9 +376,11 @@ class ShellReader {
       command.assignmentAllowed = false
     }
 
-    if (active.command.words.length === 0 && active.command.assignments.length === 0 && active.command.redirects.length === 0) return { entry: null }
+    if (active.command.words.length === 0 && active.command.assignments.length === 0 && active.command.redirects.length === 0) {
+      return { entry: null, heredocs }
+    }
     if (pipelineNext) active.command.detached = true
-    return { entry: { kind: 'command', command: active.command, before: active.before } }
+    return { entry: { kind: 'command', command: active.command, before: active.before }, heredocs }
   }
 
   private findRedirectOperator(limit: number): RedirectOperator | null {
@@ -386,7 +416,7 @@ class ShellReader {
   private skipRedirectSpace(limit: number): number | null {
     while (this.index < limit) {
       const character = this.source[this.index]
-      if (character === ' ' || character === '\t' || character === '\r') {
+      if (character === ' ' || character === '\t') {
         this.index++
       } else if (character === '\\' && this.index + 1 < limit && this.source[this.index + 1] === '\n') {
         this.index += 2
@@ -488,7 +518,7 @@ class ShellReader {
         }
         if (character === '`' && mode !== 'delimiter') {
           builder.appendRange(segmentStart, cursor)
-          const nested = this.openScope(scope, depth, cursor, 1, '`', limit)
+          const nested = this.openBacktickScope(scope, depth, cursor, limit)
           if (nested === null) return null
           builder.dynamic = true
           builder.appendRange(cursor, this.index)
@@ -498,6 +528,7 @@ class ShellReader {
           consumed = true
           continue
         }
+
         cursor++
         consumed = true
         continue
@@ -519,7 +550,7 @@ class ShellReader {
         cursor += 2
         segmentStart = cursor
         consumed = consumed || next !== '\n'
-        quoted = true
+        if (next !== '\n') quoted = true
         continue
       }
 
@@ -564,7 +595,7 @@ class ShellReader {
 
       if (character === '`') {
         builder.appendRange(segmentStart, cursor)
-        const nested = this.openScope(scope, depth, cursor, 1, '`', limit)
+        const nested = this.openBacktickScope(scope, depth, cursor, limit)
         if (nested === null) return null
         builder.dynamic = true
         builder.appendRange(cursor, this.index)
@@ -599,7 +630,7 @@ class ShellReader {
         this.source[cursor + 1] === '('
       ) {
         builder.appendRange(segmentStart, cursor)
-        const nested = this.openScope(scope, depth, cursor, 2, ')', limit)
+        const nested = this.openScope(scope, depth, cursor, 2, ')', limit, 'process-substitution')
         if (nested === null) return null
         builder.dynamic = true
         builder.appendRange(cursor, this.index)
@@ -632,6 +663,7 @@ class ShellReader {
     const start = this.index
     if (start + 1 >= limit) return false
     const next = this.source[start + 1]
+    if (mode === 'delimiter' && next === '"') return null
 
     if (next === '(' && start + 2 < limit && this.source[start + 2] === '(') {
       builder.dynamic = true
@@ -641,7 +673,7 @@ class ShellReader {
     }
 
     if (next === '(') {
-      const nested = this.openScope(scope, depth, start, 2, ')', limit)
+      const nested = this.openScope(scope, depth, start, 2, ')', limit, 'command-substitution')
       if (nested === null) return null
       builder.dynamic = true
       this.appendExpansionRange(builder, start, this.index, mode, stripTabs)
@@ -731,6 +763,7 @@ class ShellReader {
     if (depth >= MAX_SHELL_DEPTH) return false
     const frames: ExpansionFrame[] = []
     if (initial === 'parameter') {
+      if (this.source[this.index + 2] === '(') return false
       this.index += 2
       frames.push({ kind: 'parameter', braces: 1, quote: '', doubleQuoted })
     } else {
@@ -743,7 +776,7 @@ class ShellReader {
       const frame = frames[frames.length - 1]
       const character = this.source[this.index]
 
-      if (character === '\\') {
+      if (character === '\\' && frame.quote !== "'") {
         this.index += this.index + 1 < limit ? 2 : 1
         continue
       }
@@ -777,13 +810,14 @@ class ShellReader {
           continue
         }
         if (character === '$' && this.index + 1 < limit && this.source[this.index + 1] === '(') {
-          const nested = this.openScope(scope, depth + frames.length, this.index, 2, ')', limit)
+          const nested = this.openScope(scope, depth + frames.length, this.index, 2, ')', limit, 'command-substitution')
           if (nested === null) return false
           builder.addScope(nested)
           continue
         }
         if (character === '$' && this.index + 1 < limit && this.source[this.index + 1] === '{') {
           if (depth + frames.length >= MAX_SHELL_DEPTH) return false
+          if (this.source[this.index + 2] === '(') return false
           this.index += 2
           frames.push({
             kind: 'parameter',
@@ -794,7 +828,7 @@ class ShellReader {
           continue
         }
         if (character === '`') {
-          const nested = this.openScope(scope, depth + frames.length, this.index, 1, '`', limit)
+          const nested = this.openBacktickScope(scope, depth + frames.length, this.index, limit)
           if (nested === null) return false
           builder.addScope(nested)
           continue
@@ -807,7 +841,7 @@ class ShellReader {
           this.index + 1 < limit &&
           this.source[this.index + 1] === '('
         ) {
-          const nested = this.openScope(scope, depth + frames.length, this.index, 2, ')', limit)
+          const nested = this.openScope(scope, depth + frames.length, this.index, 2, ')', limit, 'process-substitution')
           if (nested === null) return false
           builder.addScope(nested)
           continue
@@ -853,33 +887,91 @@ class ShellReader {
     start: number,
     openingLength: number,
     close: ')' | '`',
-    limit: number
+    limit: number,
+    kind: Exclude<ScopeKind, 'root' | 'backtick'>
   ): ScopeResult | null {
     if (depth >= MAX_SHELL_DEPTH) return null
     const id = this.parents.length
     this.parents.push(parent)
+    this.scopeKinds.push(kind)
     this.index = start + openingLength
     const entries = this.parseScope(id, depth + 1, close, limit)
     if (entries === null) return null
     return { id, entry: { kind: 'scope', entries } }
   }
 
-  private consumeHeredocs(items: PendingHeredoc[], scope: number, depth: number, limit: number): boolean {
-    for (const item of items) {
+  private openBacktickScope(parent: number, depth: number, start: number, limit: number): ScopeResult | null {
+    if (depth >= MAX_SHELL_DEPTH) return null
+    const bodyStart = start + 1
+    let cursor = bodyStart
+    let segmentStart = bodyStart
+    const chunks: string[] = []
+
+    while (cursor < limit) {
+      const character = this.source[cursor]
+      const next = cursor + 1 < limit ? this.source[cursor + 1] : ''
+      if (character === '\\' && (next === '`' || next === '$' || next === '\\')) {
+        chunks.push(this.source.slice(segmentStart, cursor), next)
+        cursor += 2
+        segmentStart = cursor
+        continue
+      }
+      if (character === '`') {
+        if (chunks.length === 0) chunks.push(this.source.slice(bodyStart, cursor))
+        else if (segmentStart < cursor) chunks.push(this.source.slice(segmentStart, cursor))
+        const id = this.parents.length
+        this.parents.push(parent)
+        this.scopeKinds.push('backtick')
+        const reader = new ShellReader(chunks.join(''), this.home, this.parents, this.scopeKinds)
+        const entries = reader.parseScope(id, depth + 1, null, reader.source.length)
+        if (entries === null) return null
+        this.index = cursor + 1
+        return { id, entry: { kind: 'scope', entries } }
+      }
+      cursor++
+    }
+    return null
+  }
+
+  private isInsideCommandSubstitution(scope: number): boolean {
+    for (let current = scope; current > 0; current = this.parents[current]) {
+      if (this.scopeKinds[current] === 'command-substitution' || this.scopeKinds[current] === 'backtick') return true
+    }
+    return false
+  }
+
+  private hasUnmatchedClosingParen(start: number, end: number): boolean {
+    let openings = 0
+    for (let cursor = start; cursor < end; cursor++) {
+      if (this.source[cursor] === '(') openings++
+      else if (this.source[cursor] === ')') {
+        if (openings === 0) return true
+        openings--
+      }
+    }
+    return false
+  }
+
+  private consumeHeredocs(limit: number): boolean {
+    while (this.hasEligibleHeredocs()) {
+      const item = this.eligibleHeredocs[this.eligibleHeredocIndex++]
       const body = this.findHeredocBody(item.delimiter, item.stripTabs, item.quoted, limit)
       if (body === null) return false
+      if (this.isInsideCommandSubstitution(item.ownerScope) && this.hasUnmatchedClosingParen(body.start, body.end)) return false
       if (item.quoted) {
         const builder = new WordBuilder(this.source, this.home)
         builder.appendHeredocRange(body.start, body.end, item.stripTabs, true)
         item.redirect.target = builder.finish()
       } else {
-        const target = this.readHeredocExpansions(body.start, body.end, item.stripTabs, scope, depth)
+        const target = this.readHeredocExpansions(body.start, body.end, item.stripTabs, item.ownerScope, item.ownerDepth)
         if (target === null) return false
         item.redirect.target = target.word
         this.appendEntries(item.before, target.before)
       }
       this.index = body.after
     }
+    this.eligibleHeredocs.length = 0
+    this.eligibleHeredocIndex = 0
     return true
   }
 
@@ -992,7 +1084,7 @@ class ShellReader {
       if (character === '`') {
         builder.appendHeredocRange(segmentStart, cursor, stripTabs, segmentAtLineStart)
         this.index = cursor
-        const nested = this.openScope(scope, depth, cursor, 1, '`', end)
+        const nested = this.openBacktickScope(scope, depth, cursor, end)
         if (nested === null) return null
         builder.dynamic = true
         builder.appendHeredocRange(cursor, this.index, stripTabs, false)
@@ -1012,7 +1104,6 @@ class ShellReader {
     return { word: builder.finish(), before: builder.before, quoted: false, consumed: end > start }
   }
 
-
   private appendEntries(target: Entry[], source: Entry[]): void {
     for (const entry of source) target.push(entry)
   }
@@ -1020,7 +1111,7 @@ class ShellReader {
   private skipInline(limit: number = this.source.length): void {
     while (this.index < limit) {
       const character = this.source[this.index]
-      if (character === ' ' || character === '\t' || character === '\r') {
+      if (character === ' ' || character === '\t') {
         this.index++
       } else if (character === '\\' && this.index + 1 < limit && this.source[this.index + 1] === '\n') {
         this.index += 2
@@ -1037,7 +1128,7 @@ class ShellReader {
   }
 
   private isWordBreak(character: string): boolean {
-    return character === ' ' || character === '\t' || character === '\r' || character === '\n' ||
+    return character === ' ' || character === '\t' || character === '\n' ||
       character === ';' || character === '&' || character === '|' || character === '<' || character === '>' ||
       character === '(' || character === ')'
   }

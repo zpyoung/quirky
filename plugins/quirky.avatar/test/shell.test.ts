@@ -458,3 +458,62 @@ describe('parseShell totality and linear-time families', () => {
     })
   }
 })
+
+describe('reviewed shell reader boundaries', () => {
+  const marker = "printf 'RAN%s\\n' 1"
+  const bt = '`'
+  const bs = '\\'
+  const sources: [string, string][] = [
+    ['escaped nested backticks', `echo ${bt}echo ${bs}${bt}${marker}${bs}${bt}${bt}`],
+    ['escaped double quotes in backticks', `echo ${bt}echo ${bs}${bs}"; ${marker}; echo ${bs}${bs}"${bt}`],
+    ['escaped double quotes in double-quoted backticks', `echo "${bt}echo ${bs}${bs}"; ${marker}; echo ${bs}${bs}"${bt}"`],
+    ['comments ending at the backtick boundary', `echo ${bt}echo a #${bt} ; ${marker}\n: ${bt} # ${bt}`],
+    ['carriage return within a word', `echo a\r#x; ${marker}`],
+    ['carriage return starting a word', `echo a;\r# ; ${marker}`],
+    ['vertical tab within a word', `echo a\v#x; ${marker}`],
+    ['form feed within a word', `echo a\f#x; ${marker}`],
+    ['continued heredoc delimiter', `cat <<E${bs}\nOF\n$(${marker})\nEOF`],
+    ['outer heredoc followed by multiline subshell', `cat <<'EOF'; (echo a\nEOF\n)\n${marker}\nEOF`],
+    ['literal backslash in parameter single quotes', `echo \${x:-'${bs}'} ; ${marker} ; : '}'${bs}'`]
+  ]
+  for (const [name, source] of sources) {
+    test(name, () => {
+      const parsed = parse(source)
+      expect(parsed).not.toBeNull()
+      expect(parsed?.commands.some((item) => item.words[0]?.text === 'printf')).toBe(true)
+    })
+  }
+
+  const ambiguous: [string, string][] = [
+    ['single quotes across backtick boundaries', `echo ${bt}echo 'a${bt} ; ${marker} ; echo ${bt}b'${bt}`],
+    ['locale-quoted heredoc delimiter', `cat <<$"EOF"\nEOF\n${marker}\n$EOF`],
+    ['unmatched closing parenthesis in command-substitution heredoc', `echo $(cat <<'EOF'\na) ; ${marker}; : $(cat <<'EOF'\nEOF\n)`],
+    ['zsh evaluating parameter flag', `x='$(${marker})'; echo \${(e)x}`]
+  ]
+  for (const [name, source] of ambiguous) {
+    test(`holds shell-dependent ${name}`, () => {
+      expect(parse(source)).toBeNull()
+    })
+  }
+
+  const supported: [string, string][] = [
+    ['subshell and-list', `(echo a) && ${marker}`],
+    ['subshell pipeline', `(echo a) | cat; ${marker}`],
+    ['subshell or-list', `(echo a) || (${marker})`],
+    ['heredoc after closed subshell', `(cat <<EOF)\n$(${marker})\nEOF`],
+    ['two heredocs across command substitution', `cat <<A; echo $(cat <<B\n1\nA\n2\nB\n); ${marker}`]
+  ]
+  for (const [name, source] of supported) {
+    test(`reads ${name}`, () => {
+      const parsed = parse(source)
+      expect(parsed).not.toBeNull()
+      expect(parsed?.commands.some((item) => item.words[0]?.text === 'printf')).toBe(true)
+    })
+  }
+
+  test('does not split non-shell whitespace into a comment boundary', () => {
+    for (const separator of ['\r', '\v', '\f']) {
+      expect(parse(`echo a${separator}#b`)).toEqual(script([command(words('echo', `a${separator}#b`))]))
+    }
+  })
+})
