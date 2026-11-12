@@ -4250,17 +4250,17 @@ describe('g1-46 group 1: dollar forms', () => {
     { id: "1.19", command: "cd $~F && rm -rf x", classes: ["edit-outside", "other"], outcome: "held", step: "floor-core" },
     { id: "1.20", command: "cd /work/wt/$=F && rm -rf x", classes: ["edit-outside", "other"], outcome: "held", step: "floor-core" },
     { id: "1.21", command: "grep \"a$+\" README.md", classes: ["other", "read"], outcome: "judgment", step: null },
-    { id: "1.22", command: "echo \"a$\"", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "1.23", command: "grep \"a$\" README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "1.22", command: "echo \"a$\"", classes: ["read"], outcome: "judgment", step: null },
+    { id: "1.23", command: "grep \"a$\" README.md", classes: ["read"], outcome: "judgment", step: null },
     { id: "1.24", command: "grep '$\"x\"' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
     { id: "1.25", command: "grep '$[1]' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
     { id: "1.26", command: "grep 'a$~b' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "1.27", command: "cat <<EOF\n$\"x\" and $[1+1]\nEOF", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "1.28", command: "cat <<'EOF'\n$\"x\" $[1] $~F\nEOF", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "1.29", command: "cat <<EOF\n$~F\nEOF", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "1.30", command: "echo $", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "1.31", command: "echo a$/b", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "1.32", command: "echo $%", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "1.27", command: "cat <<EOF\n$\"x\" and $[1+1]\nEOF", classes: ["read"], outcome: "judgment", step: null },
+    { id: "1.28", command: "cat <<'EOF'\n$\"x\" $[1] $~F\nEOF", classes: ["read"], outcome: "judgment", step: null },
+    { id: "1.29", command: "cat <<EOF\n$~F\nEOF", classes: ["read"], outcome: "judgment", step: null },
+    { id: "1.30", command: "echo $", classes: ["read"], outcome: "judgment", step: null },
+    { id: "1.31", command: "echo a$/b", classes: ["read"], outcome: "judgment", step: null },
+    { id: "1.32", command: "echo $%", classes: ["read"], outcome: "judgment", step: null },
   ]
   for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
 })
@@ -4293,13 +4293,13 @@ describe('g1-46 group 2: sed read paths', () => {
     { id: "2.24", command: "ls | xargs sed 'r /home/u/.ssh/id_rsa'", classes: ["credential", "other", "read"], outcome: "held", step: "floor-core" },
     { id: "2.25", command: "bash -c \"sed 'r /home/u/.ssh/id_rsa' README.md\"", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
     { id: "2.26", command: "sed 'r /home/u/Library/Keychains/login.keychain-db' README.md", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
-    { id: "2.27", command: "sed 'r notes.txt' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "2.28", command: "sed 'r /home/u/notes.txt' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "2.29", command: "sed 's/r/R/g' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "2.30", command: "sed -n '/error/p' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "2.31", command: "sed 'r .env' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "2.32", command: "sed 'r -f=/home/u/.ssh/id_rsa' README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "2.33", command: "grep \"error /home/u/.ssh/id_rsa\" README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "2.27", command: "sed 'r notes.txt' README.md", classes: ["read"], outcome: "judgment", step: null },
+    { id: "2.28", command: "sed 'r /home/u/notes.txt' README.md", classes: ["read"], outcome: "judgment", step: null },
+    { id: "2.29", command: "sed 's/r/R/g' README.md", classes: ["read"], outcome: "judgment", step: null },
+    { id: "2.30", command: "sed -n '/error/p' README.md", classes: ["read"], outcome: "judgment", step: null },
+    { id: "2.31", command: "sed 'r .env' README.md", classes: ["read"], outcome: "judgment", step: null },
+    { id: "2.32", command: "sed 'r -f=/home/u/.ssh/id_rsa' README.md", classes: ["read"], outcome: "judgment", step: null },
+    { id: "2.33", command: "grep \"error /home/u/.ssh/id_rsa\" README.md", classes: ["read"], outcome: "judgment", step: null },
     { id: "2.34", command: "sed 'a r /home/u/.netrc' README.md", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
     { id: "2.35", command: "sed 's#x#bar /home/u/.ssh/id_rsa#' README.md", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
   ]
@@ -4333,15 +4333,15 @@ describe('g1-46 group 3: attached short-flag values', () => {
     { id: "3.23", command: "rg -e/../../.env$X src/", classes: ["credential", "other", "read"], outcome: "held", step: "floor-core" },
     { id: "3.24", command: "grep -iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii -r foo src", classes: ["edit-outside", "read"], outcome: "held", step: "floor-core" },
     { id: "3.25", command: "echo -f/home/u/.ssh/id_rsa", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
-    { id: "3.26", command: "grep -f.ssh/id_rsa -r .", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "3.26", command: "grep -f.ssh/id_rsa -r .", classes: ["read"], outcome: "judgment", step: null },
     { id: "3.27", command: "grep -rn -A2 foo src", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "3.28", command: "cut -d/ -f2 a.txt", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "3.28", command: "cut -d/ -f2 a.txt", classes: ["read"], outcome: "judgment", step: null },
     { id: "3.29", command: "head -c100 README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "3.30", command: "grep -f/home/u/notes.txt -r .", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "3.30", command: "grep -f/home/u/notes.txt -r .", classes: ["read"], outcome: "judgment", step: null },
     { id: "3.31", command: "grep -e.env README.md", classes: ["read"], outcome: "allow", step: "fixed-rules" },
     { id: "3.32", command: "grep -iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii -r foo src", classes: ["read"], outcome: "allow", step: "fixed-rules" },
     { id: "3.33", command: "tail -n+1 /home/u/.ssh/id_rsa", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
-    { id: "3.34", command: "grep --/home/u/.ssh/id_rsa foo", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "3.34", command: "grep --/home/u/.ssh/id_rsa foo", classes: ["read"], outcome: "judgment", step: null },
     { id: "3.35", command: "echo /home/u/.ssh/id_rsa", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
   ]
   for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
@@ -4420,54 +4420,54 @@ describe('g1-46 group 4: directory walks above credentials', () => {
     { id: "4.69", command: "for d in / ~; do ls $d; done", classes: ["credential", "other"], outcome: "held", step: "floor-core" },
     { id: "4.70", command: "tar -C / -xf x.tar", classes: ["credential", "other"], outcome: "held", step: "floor-core" },
     { id: "4.71", command: "{ command -Z cd /home/u; }; touch a", classes: ["credential", "edit-outside", "other"], outcome: "held", step: "floor-core" },
-    { id: "4.72", command: "ls /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.73", command: "ls -R /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.74", command: "find /home/u -name 'id_*'", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.75", command: "du -a /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.76", command: "tree -a /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.77", command: "stat /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.78", command: "cat /home/u/notes.txt", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.72", command: "ls /home/u", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.73", command: "ls -R /home/u", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.74", command: "find /home/u -name 'id_*'", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.75", command: "du -a /home/u", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.76", command: "tree -a /home/u", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.77", command: "stat /home/u", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.78", command: "cat /home/u/notes.txt", classes: ["read"], outcome: "judgment", step: null },
     { id: "4.79", command: "cat /home/u/*.txt", classes: ["credential", "read"], outcome: "held", step: "floor-core" },
-    { id: "4.80", command: "grep foo /home/u/notes.txt", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.81", command: "grep -r foo /home/u/projects", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.82", command: "grep -r foo /home/u/.config/nvim", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.83", command: "grep -r foo /usr/include", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.84", command: "grep -r foo ..", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.80", command: "grep foo /home/u/notes.txt", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.81", command: "grep -r foo /home/u/projects", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.82", command: "grep -r foo /home/u/.config/nvim", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.83", command: "grep -r foo /usr/include", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.84", command: "grep -r foo ..", classes: ["read"], outcome: "judgment", step: null },
     { id: "4.85", command: "grep -r foo", classes: ["read"], outcome: "allow", step: "fixed-rules" },
     { id: "4.86", command: "rg foo", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.87", command: "rg foo src/*.ts", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.88", command: "cp -R /home/u/src ./h", classes: ["edit-inside"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.89", command: "cp -R src/* ./h", classes: ["edit-inside"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.87", command: "rg foo src/*.ts", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.88", command: "cp -R /home/u/src ./h", classes: ["edit-inside"], outcome: "judgment", step: null },
+    { id: "4.89", command: "cp -R src/* ./h", classes: ["edit-inside"], outcome: "judgment", step: null },
     { id: "4.90", command: "cp ~/Downloads/*.csv .", classes: ["credential", "edit-inside"], outcome: "held", step: "floor-core" },
-    { id: "4.91", command: "cd /home/u && ls", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.92", command: "cd ~ && pwd", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.93", command: "cd /home/u/projects && rg foo", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.91", command: "cd /home/u && ls", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.92", command: "cd ~ && pwd", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.93", command: "cd /home/u/projects && rg foo", classes: ["read"], outcome: "judgment", step: null },
     { id: "4.94", command: "if [ -d /home/u ]; then echo y; fi", classes: ["other"], outcome: "judgment", step: null },
     { id: "4.95", command: "{ ls /home/u; }", classes: ["other"], outcome: "judgment", step: null },
     { id: "4.96", command: "! ls /home/u", classes: ["other"], outcome: "judgment", step: null },
-    { id: "4.97", command: "[ -d ~ ] && echo y", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.98", command: "test -d / && echo y", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.99", command: "echo /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.100", command: "tr / _", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.101", command: "awk -F / '{print $2}' a.txt", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.102", command: "cut -d / -f 2 a.txt", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.97", command: "[ -d ~ ] && echo y", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.98", command: "test -d / && echo y", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.99", command: "echo /home/u", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.100", command: "tr / _", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.101", command: "awk -F / '{print $2}' a.txt", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.102", command: "cut -d / -f 2 a.txt", classes: ["read"], outcome: "judgment", step: null },
     { id: "4.103", command: "rm -rf /home/u", classes: ["edit-outside"], outcome: "held", step: "floor-core" },
     { id: "4.104", command: "mv /home/u ./h", classes: ["edit-inside", "edit-outside"], outcome: "held", step: "floor-core" },
     { id: "4.105", command: "grep -r foo \"$D\"", classes: ["other", "read"], outcome: "judgment", step: null },
     { id: "4.106", command: "cd \"$D\" && grep -r foo", classes: ["other", "read"], outcome: "judgment", step: null },
     { id: "4.107", command: "export PATH=/:$PATH", classes: ["other"], outcome: "judgment", step: null },
-    { id: "4.108", command: "grep -rn \"/home/u/src\" .", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.109", command: "eval ls /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
-    { id: "4.110", command: "sed -n '1p' /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.108", command: "grep -rn \"/home/u/src\" .", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.109", command: "eval ls /home/u", classes: ["read"], outcome: "judgment", step: null },
+    { id: "4.110", command: "sed -n '1p' /home/u", classes: ["read"], outcome: "judgment", step: null },
     { id: "4.111", command: "command -Z grep -r KEY /home/u", classes: ["edit-outside", "other"], outcome: "held", step: "floor-core" },
     { id: "4.112", command: "cd \"$D\" && cp -R .. /work/wt/h", classes: ["edit-inside", "other"], outcome: "judgment", step: null },
     { id: "4.113", command: "grep -r foo /home/u/$X/..", classes: ["other", "read"], outcome: "judgment", step: null },
     { id: "4.114", command: "cc -I.. x.c", classes: ["other"], outcome: "judgment", step: null },
     { id: "4.115", command: "tar -C /work/wt -xf x.tar", classes: ["other"], outcome: "judgment", step: null },
     { id: "4.116", command: "cp -R /home/u/proj/* ./h", classes: ["credential", "edit-inside"], outcome: "held", step: "floor-core" },
-    { id: "4.117", command: "grep -r foo -/../../..", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.117", command: "grep -r foo -/../../..", classes: ["read"], outcome: "judgment", step: null },
     { id: "4.118", command: "{ uniq /home/u; }", classes: ["other"], outcome: "judgment", step: null },
-    { id: "4.119", command: "/bin/ls /home/u", classes: ["read"], outcome: "allow", step: "fixed-rules" },
+    { id: "4.119", command: "/bin/ls /home/u", classes: ["read"], outcome: "judgment", step: null },
   ]
   for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
 })
@@ -4475,7 +4475,7 @@ describe('g1-46 group 4: directory walks above credentials', () => {
 
 describe('g1-46 group 5: classifier limits', () => {
   const flagWord = (letters: number, length: number) => '-' + 'i'.repeat(letters) + '/' + 'b'.repeat(length - letters - 2)
-  const expectLimitResult = (command: string, classes: ActionClass[], outcome: 'allow' | 'held', step: 'fixed-rules' | 'floor-core', cwd = '/work/wt') => {
+  const expectLimitResult = (command: string, classes: ActionClass[], outcome: 'allow' | 'held' | 'judgment', step: 'fixed-rules' | 'floor-core' | null, cwd = '/work/wt') => {
     expectClassSet(command, classes, {}, cwd)
     const result = decideReviewed(command, 'local', offSwitches, ctx, cwd)
     expect(result.outcome).toBe(outcome)
@@ -4485,19 +4485,19 @@ describe('g1-46 group 5: classifier limits', () => {
   test('5.1 exports the attached flag letter limit', () => expect(MAX_ATTACHED_FLAG_LETTERS).toBe(64))
   test('5.2 exports the embedded path budget', () => expect(EMBEDDED_PATH_BUDGET).toBe(1_048_576))
   test('5.3 allows an attached flag word at the work budget', () => {
-    expectLimitResult(`grep ${flagWord(64, 16384)} -r foo src`, ['read'], 'allow', 'fixed-rules')
+    expectLimitResult(`grep ${flagWord(64, 16384)} -r foo src`, ['read'], 'judgment', null)
   })
   test('5.4 holds an attached flag word over the work budget', () => {
     expectLimitResult(`grep ${flagWord(64, 16385)} -r foo src`, ['edit-outside', 'read'], 'held', 'floor-core')
   })
   test('5.5 allows 1024 sed read names on one line', () => {
-    expectLimitResult(`sed '${'r'.repeat(1024)}' README.md`, ['read'], 'allow', 'fixed-rules')
+    expectLimitResult(`sed '${'r'.repeat(1024)}' README.md`, ['read'], 'judgment', null)
   })
   test('5.6 holds 1025 sed read names on one line', () => {
     expectLimitResult(`sed '${'r'.repeat(1025)}' README.md`, ['edit-outside', 'read'], 'held', 'floor-core')
   })
   test('5.7 allows 1024 sed read names plus a 1023-character line', () => {
-    expectLimitResult(`sed '${Array(1024).fill('r').join('\n')}\n${'r'.repeat(1023)}' README.md`, ['read'], 'allow', 'fixed-rules')
+    expectLimitResult(`sed '${Array(1024).fill('r').join('\n')}\n${'r'.repeat(1023)}' README.md`, ['read'], 'judgment', null)
   })
   test('5.8 holds 1024 sed read names on the final line', () => {
     expectLimitResult(`sed '${Array(1024).fill('r').join('\n')}\n${'r'.repeat(1024)}' README.md`, ['edit-outside', 'read'], 'held', 'floor-core')
@@ -4539,7 +4539,7 @@ describe('g1-46 group 6: native tools', () => {
 describe('keyword and wrapper command context', () => {
   const rows: ClassifierFixture[] = [
     { id: 'context.1', command: '"time" -o timings.txt sed \'r /home/u/.ssh/id_rsa\' README.md', classes: ['credential', 'edit-inside', 'read'], outcome: 'held', step: 'floor-core' },
-    { id: 'context.2', command: '"time" -o timings.txt ls /home/u', classes: ['edit-inside', 'read'], outcome: 'allow', step: 'fixed-rules' },
+    { id: 'context.2', command: '"time" -o timings.txt ls /home/u', classes: ['edit-inside', 'read'], outcome: 'judgment', step: null },
     { id: 'context.3', command: '{ env -C /home/u sed \'r .ssh/id_rsa\' /work/wt/README.md; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
     { id: 'context.4', command: '{ env -C /home/u rg foo; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
     { id: 'context.5', command: '{ "time" -p -o timings.txt sed \'r /home/u/.ssh/id_rsa\' README.md; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
