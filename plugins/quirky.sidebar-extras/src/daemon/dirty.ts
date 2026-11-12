@@ -7,6 +7,7 @@ const WORKTREE_ID_PATTERN = /^wt_[0-9a-f]{12}$/
 
 export type DirtyResult = {
   worktreeId: string | null
+  instanceId: string | null
   count: number
   capped: boolean
   title: string
@@ -26,9 +27,10 @@ function canonicalIdFromSelector(selector: string): string | null {
   return WORKTREE_ID_PATTERN.test(candidate) ? candidate : null
 }
 
-function unavailable(worktreeId: string | null, error: unknown): DirtyResult {
+function unavailable(worktreeId: string | null, error: unknown, instanceId: string | null = null): DirtyResult {
   return {
     worktreeId,
+    instanceId,
     count: 0,
     capped: false,
     title: STOCK_TITLE,
@@ -41,6 +43,7 @@ function unavailable(worktreeId: string | null, error: unknown): DirtyResult {
 function noActiveWorkspace(): DirtyResult {
   return {
     worktreeId: null,
+    instanceId: null,
     count: 0,
     capped: false,
     title: STOCK_TITLE,
@@ -115,6 +118,10 @@ export async function readDirty(
     return unavailable(canonicalIdFromSelector(selector), error)
   }
 
+  const instanceId = typeof worktree.instanceId === 'string' && worktree.instanceId.length > 0
+    ? worktree.instanceId
+    : null
+
   try {
     const status = await context.call('quirky.git/status', { worktree: `id:${worktree.id}` })
     if (!isPlainRecord(status) || !Array.isArray(status.entries) || typeof status.capped !== 'boolean') {
@@ -124,6 +131,7 @@ export async function readDirty(
     const count = panelRowCount(entries)
     return {
       worktreeId: worktree.id,
+      instanceId,
       count,
       capped,
       title: statusTitle(count, capped),
@@ -131,6 +139,6 @@ export async function readDirty(
       available: true
     }
   } catch (error) {
-    return unavailable(worktree.id, error)
+    return unavailable(worktree.id, error, instanceId)
   }
 }
