@@ -90,6 +90,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/contracts.ts` | Every shared type in Data models. **Created first; other units import from here only.** |
 | `src/store.ts` | Typed access over the store; the journal is append-only. |
 | `src/gate/classify.ts` | Pure: `classifyCall(call, ctx) → ActionClass[]`. |
+| `src/gate/shell.ts` | Pure: `parseShell(source, env) → ShellScript \| null`, the one reader of shell text. |
 | `src/gate/decide.ts` | Pure: `decide(input) → RuleDecision` (floor core → switches → level → fixed rules → `judgment`). |
 | `src/gate/service.ts` | The `tool-gate` provider: supervision lookup, Shadow, approvals, late answers, brain judgment with deadline, receipts, journal. |
 | `src/hooks/install.ts` | Claude: the `launch-hook` returns `LaunchPatch.jsonArgs['--settings']` with `PreToolUse` and `PermissionRequest` entries (matcher `*`, command `quirky-gate claude`, timeout `judgment-timeout-seconds + 15`, `onFailure: "block"`). It merges with agent-status's `--settings` the same way `plugins/quirky.agent-status/main.ts:16` does. Codex: `PreToolUse` and `PermissionRequest` entries in `$CODEX_HOME/hooks.json`, falling back to `~/.codex/hooks.json`, installed on activation. pi/omp: the extension file `quirky-avatar-gate.ts` written into the same `extensions/` dirs `piFamilyInstaller` uses (`plugins/quirky.agent-status/src/install/other-installers.ts:44`). Plus supervision markers. |
@@ -310,7 +311,7 @@ type ClassifyContext = { worktreePath: string; handedOffPaths: string[]; default
 type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; switches: Switches; level: Level; ctx: ClassifyContext }
 ```
 - `classifyCall(call, ctx)` returns a non-empty `ActionClass[]`, with `['other']` when nothing matches.
-- A Bash command is split on `&&`, `||`, `;` and `|`, and every part is classified, so the classes of a compound command are the union.
+- `parseShell` reads a Bash command into simple commands at every depth; each is classified, so the classes are their union. A write whose target is computed by the shell or supplied by `xargs`, and a relative write after a `cd` to a computed directory, is `edit-outside`. A computed command name is `other`. `sudo` and `doas` add `credential`. A command that can't be read is `['other', 'edit-outside']`.
 - File tools (`Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, Codex `apply_patch`, pi `read`/`edit`/`write`) classify by resolved path against `ctx`.
 - `decide(input)` never throws.
 
@@ -525,6 +526,7 @@ Tests run with `bun test <file>` on this Mac. The full suite runs in CI through 
 | H5 | `plugins/quirky.structured/test/tool-policy.test.ts`, `test/pi-runner.test.ts` | `deny-all` refuses tools on fake runners; usage reported; the pi/omp runner against a scripted fake rpc process. |
 | decide | `plugins/quirky.avatar/test/decide.test.ts` | Every row of the SC-10 decision table; order precedence; level denies and never holds; guideline text can't change the outcome. |
 | classify | `test/classify.test.ts` | Each `ActionClass` from Bash, Edit/Write paths, MCP and pi tool shapes. |
+| shell | `test/shell.test.ts` | Quoting, continuations, comments, redirects, heredocs, nested substitutions, unreadable input and linear-time bounds. |
 | gate service | `test/gate-service.test.ts` | Allow-once used exactly once (SC-14); late answer reused (SC-12); timeout gives retry and is not a stuck denial; Shadow gives passthrough plus wouldHave (SC-13); take-back resolves an in-flight request as passthrough. |
 | encodings | `test/encode.test.ts` | Each table cell. |
 | hooks | `test/hooks-install.test.ts` | Claude launch patch contains a PreToolUse `*` matcher with `onFailure: block` when the version allows; Codex hooks.json idempotent install and removal; pi extension source blocks on gate deny and on fetch error. |
