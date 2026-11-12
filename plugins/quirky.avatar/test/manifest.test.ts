@@ -95,7 +95,7 @@ describe('quirky.avatar as a built-in plugin', () => {
     expect(await contributions('setting')).toEqual(
       [
         'default-level', 'switch-messaging', 'switch-history-rewrite', 'switch-deploys', 'house-rules', 'allow-commands',
-        'deny-commands', 'deploy-commands', 'brain-agent', 'brain-model', 'judgment-timeout-seconds'
+        'deny-commands', 'deploy-commands', 'brain-agent', 'brain-model', 'judgment-timeout-seconds', 'agent-hooks'
       ].map((name) => `setting:quirky.avatar/${name}`).sort()
     )
     const settingEntries = (await client.call('plugin.contributions', { kind: 'setting' } as never)) as unknown as ContributionInfo[]
