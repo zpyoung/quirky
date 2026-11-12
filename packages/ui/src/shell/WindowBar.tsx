@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import type { AgentDisplayState, Ask, Repo, Session, SessionStatus, Worktree } from '@quirky/protocol'
 import { AgentIcon, Badge, CONTEXT_MENU_SEPARATOR, ControlIcon, PopupMenu, ProjectTile, StatusDot, ToolIcon, type PopupItem, type UiStatus } from '../design-system'
 import { useConnection, usePluginHost, usePluginState } from '../context'
+import { PluginSlot } from '../plugins/PluginSlot'
 import type { Connection } from '../connection'
 import { useAttention, type ProjectIdentity } from './attention'
 import { isAgentStatusStale, useNow } from './freshness'
@@ -508,6 +509,21 @@ function NewTabs() {
   )
 }
 
+function WindowBarItems() {
+  const { model } = usePluginState()
+  return <>{(model?.windowBarItems ?? []).map((entry) => <PluginSlot key={entry.id} id={entry.id} />)}</>
+}
+
+/** The new-tab buttons followed by the plugin-contributed window-bar items, in contribution order. */
+export function WindowBarNewTabs() {
+  return (
+    <>
+      <NewTabs />
+      <WindowBarItems />
+    </>
+  )
+}
+
 function Overflow({ onSettings }: { onSettings(): void }) {
   const popup = useAnchoredPopup()
   const items: PopupItem[] = [{ label: 'Settings', lead: <ControlIcon name="gear" />, onSelect: onSettings }]
@@ -564,7 +580,7 @@ export function WindowBar({ onSettings }: WindowBarProps) {
           <ControlIcon name="caret-right" />
         </BarButton>
         <NewAgent />
-        <NewTabs />
+        <WindowBarNewTabs />
       </div>
       <div className="window-bar__group window-bar__group--end">
         {needsYou !== null && (

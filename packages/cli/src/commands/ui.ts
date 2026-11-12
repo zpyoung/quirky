@@ -47,6 +47,7 @@ function renderModel(model: UiModel): string {
     ['SIDEBAR', model.sidebarSections, () => slotTable(model.sidebarSections)],
     ['ACTIVITY ITEMS', model.activityItems, () => slotTable(model.activityItems)],
     ['STATUS BARS', model.statusBars, () => slotTable(model.statusBars)],
+    ['WINDOW BAR ITEMS', model.windowBarItems ?? [], () => slotTable(model.windowBarItems ?? [])],
     ['PANELS', model.panels, () => slotTable(model.panels)],
     ['TOOLS', model.tools ?? [], () => toolTable(model.tools ?? [])],
     ['VIEWS', model.views, () => slotTable(model.views)],

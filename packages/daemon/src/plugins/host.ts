@@ -76,7 +76,7 @@ export type PluginHostOptions = {
   }) => Map<string, PluginDiagnostic[]>
 }
 
-const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
+const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook', 'tool-gate'])
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -462,6 +462,7 @@ export class PluginHost {
       this.assertEnabled(id)
     } catch (error) {
       disabledMidway = !this.isEnabled(id)
+      if (!disabledMidway && imported.module) await this.callDeactivate(id, imported.module, runtime)
       attempt.revoked = true
       attempt.implementations.clear()
       runtime.attempt = undefined

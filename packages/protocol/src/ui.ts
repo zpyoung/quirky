@@ -3,10 +3,10 @@ import type { QuirkyEvent } from './rpc'
 import type { UiToolEntry, UiToolLayout, UiToolSlot } from './tool-slots'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['status-bar', 'sidebar-section', 'activity-item', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'settings-section', 'theme', 'menu-item'] as const
+export const UI_KINDS = ['status-bar', 'sidebar-section', 'activity-item', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'settings-section', 'theme', 'menu-item', 'window-bar-item'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
-export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'activity-item', 'settings-section', 'overlay', 'command'] as const
+export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'activity-item', 'settings-section', 'overlay', 'command', 'window-bar-item'] as const
 
 /** The color slots a theme fills; window tokens map to CSS custom properties `--<token>`. */
 export const THEME_TOKENS = [
@@ -85,10 +85,10 @@ export const LIGHT_THEME: ThemeInfo = {
 
 export type ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 
-/** A code-backed status bar, sidebar section, activity item, panel, view, overlay, or generic settings section in the UI model. */
+/** A code-backed status bar, window-bar item, sidebar section, activity item, panel, view, overlay, or generic settings section in the UI model. */
 export type UiSlotEntry = {
   id: string
-  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay' | 'settings-section'
+  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay' | 'settings-section' | 'window-bar-item'
   /** The plugin whose declaration is in effect. */
   plugin: string
   title: string
@@ -157,6 +157,8 @@ export type SettingDeclaration = {
   minimum?: number
   maximum?: number
   values?: string[]
+  /** Keeps the setting stored and settable (`setting.set`/`get`) but gives it no generic Settings control, for plugins that edit it in their own settings section. */
+  hidden?: boolean
   /** Exposes a boolean setting as a checked item in the native View menu. */
   menu?: 'view'
   /** The name of a boolean setting in the same plugin that must be true for this setting's View menu row. */
@@ -180,6 +182,8 @@ export type UiModel = {
   sidebarSections: UiSlotEntry[]
   /** Order ascending, then ID. */
   statusBars: UiSlotEntry[]
+  /** Order ascending, then ID. Rendered in the window bar after the new-tab buttons. */
+  windowBarItems?: UiSlotEntry[]
   /** Order ascending, then ID. */
   activityItems: UiSlotEntry[]
   /** Order ascending, then ID. */
@@ -251,7 +255,7 @@ export const DESKTOP_AWAY_MS = 180_000
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
   id: string
-  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay' | 'settings-section'
+  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay' | 'settings-section' | 'window-bar-item'
   plugin: string
   title: string
   shown: boolean
