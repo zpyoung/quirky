@@ -37,6 +37,14 @@ function stringField(value: Record<string, unknown>, key: string): string {
   return field
 }
 
+function invocationText(call: { args: string[]; input: string }): string {
+  const args = call.args.map((argument) => {
+    try { return decodeURIComponent(argument) } catch { return argument }
+  })
+  return [...args, call.input].join(' ')
+}
+
+
 function listResult(value: unknown): ListResult {
   const result = record(value)
   const itemsValue = result.items
@@ -55,11 +63,6 @@ function listResult(value: unknown): ListResult {
     failures,
     sources: record(result.sources)
   }
-}
-
-function stateCalls(value: unknown): unknown[] {
-  const calls = record(value).calls
-  return Array.isArray(calls) ? calls : []
 }
 
 function initRepo(path: string, remote?: string): void {
@@ -110,11 +113,14 @@ test('list fans out by repository, pages directly, and strips a qualifying repo 
   expect(pageTwo).toMatchObject({ page: 2, totalPages: 2 })
   expect(pageTwo.items).toHaveLength(8)
 
-  const before = stateCalls(host.readState()).length
+  const earlierCalls = host.invocations()
+  expect(earlierCalls.some((call) => invocationText(call).includes('other-owner/other-repo'))).toBe(true)
+  const beforeQualifiedRead = host.invocations().length
   const qualified = listResult(await host.call('list', { mode: 'issues', repoIds: [host.repoId, secondRepoId], query: 'repo:test-owner/test-repo is:open', page: 1 }))
   expect(qualified.items).toHaveLength(36)
-  const calls = stateCalls(host.readState()).slice(before)
-  expect(calls.some((call) => JSON.stringify(call).includes('other-owner/other-repo'))).toBe(false)
+  const callsSinceQualifiedRead = host.invocations().slice(beforeQualifiedRead).map(invocationText)
+  expect(callsSinceQualifiedRead.join(' ')).not.toContain('other-owner/other-repo')
+
 })
 
 test('PR mode returns pull-request rows with the selected per-repository count', async () => {
@@ -185,14 +191,10 @@ test('assignee row updates use idempotent set semantics over public Hosting muta
   const target = { worktree: host.worktree, kind: 'issue', number: 7, url: item.url }
   const updated = record(await host.call('row', { target, action: 'assignees', assignees: ['reviewer-two'] }))
   expect(updated.item).toMatchObject({ number: 7, assignees: ['reviewer-two'] })
-  const editCount = () => stateCalls(host.readState()).filter((call) => {
-    const args = record(call).args
-    return Array.isArray(args) && args[0] === 'issue' && args[1] === 'edit'
-  }).length
-  const beforeNoop = editCount()
+  expect(host.invocations().filter((call) => call.args[0] === 'issue' && call.args[1] === 'edit')).toHaveLength(1)
   const noChange = record(await host.call('row', { target, action: 'assignees', assignees: ['reviewer-two'] }))
   expect(noChange).toMatchObject({ kind: 'updated', noChange: true })
-  expect(editCount()).toBe(beforeNoop)
+  expect(host.invocations().filter((call) => call.args[0] === 'issue' && call.args[1] === 'edit')).toHaveLength(1)
 })
 
 test('row adds parsed reviewers through the public Hosting mutation', async () => {

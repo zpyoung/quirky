@@ -126,7 +126,7 @@ function repoIds(value: unknown): string[] {
   return values(result.items).map((item) => record(item).repoId).filter((id): id is string => typeof id === 'string')
 }
 
-type CallWaiter = { method: string; resolve(): void }
+type CallWaiter = { method: string; afterCall: number; resolve(): void }
 type CallReceipt = { method: string; params: Record<string, unknown>; value?: unknown; error?: unknown; completed: boolean }
 type CallHold = {
   method: string
@@ -140,16 +140,18 @@ type CallHold = {
   finish(): void
   wasFinished(): boolean
 }
-function uiContext(host: TasksTest) {
+function uiContext(host: Pick<TasksTest, 'client' | 'worktree'>) {
   const waiters: CallWaiter[] = []
   const holds: CallHold[] = []
   const receipts: CallReceipt[] = []
+  let callSequence = 0
   const context = {
     call: async (method: string, params: Record<string, unknown> = {}) => {
+      const sequence = ++callSequence
       const receipt: CallReceipt = { method, params, completed: false }
       receipts.push(receipt)
-      const completeWaiters = () => {
-        const index = waiters.findIndex((waiter) => waiter.method === method)
+      const completeWaiter = () => {
+        const index = waiters.findIndex((waiter) => waiter.method === method && waiter.afterCall < sequence)
         if (index >= 0) waiters.splice(index, 1)[0]!.resolve()
       }
       let result: unknown
@@ -158,11 +160,11 @@ function uiContext(host: TasksTest) {
       } catch (error) {
         receipt.error = error
         receipt.completed = true
-        completeWaiters()
+        completeWaiter()
         throw error
       }
       receipt.value = result
-      completeWaiters()
+      completeWaiter()
       const holdIndex = holds.findIndex((hold) => hold.method === method && (!hold.predicate || hold.predicate(params)))
       if (holdIndex >= 0) {
         const hold = holds.splice(holdIndex, 1)[0]!
@@ -183,7 +185,7 @@ function uiContext(host: TasksTest) {
     receipts,
     wait(method: string): Promise<void> {
       const deferred = Promise.withResolvers<void>()
-      waiters.push({ method, resolve: deferred.resolve })
+      waiters.push({ method, afterCall: callSequence, resolve: deferred.resolve })
       return deferred.promise
     },
     hold(method: string, predicate?: (params: Record<string, unknown>) => boolean) {
@@ -209,6 +211,36 @@ function uiContext(host: TasksTest) {
     }
   }
 }
+
+test("the driver's wait resolves for a call that starts after it, not for one already running", async () => {
+  const pending: { resolve(value: unknown): void; reject(reason: unknown): void }[] = []
+  const client = {
+    callAny: () => {
+      const deferred = Promise.withResolvers<unknown>()
+      pending.push({ resolve: deferred.resolve, reject: deferred.reject })
+      return deferred.promise
+    }
+  } as unknown as TasksTest['client']
+  const driver = uiContext({ client, worktree: 'wt-test' })
+
+  const firstCall = driver.context.call('quirky.tasks/list')
+  let waitResolved = false
+  const wait = driver.wait('quirky.tasks/list').then(() => { waitResolved = true })
+  pending[0]!.resolve({})
+  await firstCall
+  expect(waitResolved).toBe(false)
+
+  const stateCall = driver.context.call('quirky.tasks/state')
+  pending[1]!.resolve({})
+  await stateCall
+  expect(waitResolved).toBe(false)
+
+  const laterCall = driver.context.call('quirky.tasks/list')
+  pending[2]!.reject(new Error('later failed'))
+  await expect(laterCall).rejects.toThrow('later failed')
+  await wait
+  expect(waitResolved).toBe(true)
+})
 
 function completedCall(
   receipts: CallReceipt[],

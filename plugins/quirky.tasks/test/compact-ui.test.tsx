@@ -551,6 +551,26 @@ test('a pending Collapse focus expires when the initial list fails', async () =>
   expect(document.activeElement === firstRow).toBe(false)
 })
 
+test('a pending Collapse focus expires when the first list read fails with nothing cached', async () => {
+  flushSnapshots()
+  place.requestFocus('row')
+  const { element, emit } = await mountCompact({
+    handlers: {
+      'quirky.tasks/state': () => ({ ...prsState, revision: prsState.revision + 1 }),
+      'quirky.tasks/list': () => { throw new Error('list unavailable') }
+    }
+  })
+  expect(element.querySelector('[role="alert"].tasks-compact__problem')?.textContent).toContain('list unavailable')
+  expect(rowTitles(element)).toEqual([])
+
+  await seedSnapshot([pr(274), pr(275)])
+  await emit({ type: 'quirky.tasks/changed' })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  const firstRow = element.querySelector('.ui-list-row__main')!
+  expect(document.activeElement).not.toBe(firstRow)
+  expect(element.contains(document.activeElement)).toBe(false)
+})
+
 test('a pending Collapse focus expires when the list changes before the first read completes', async () => {
   let state = prsState
   const prsRead = Promise.withResolvers<unknown>()
