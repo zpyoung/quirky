@@ -517,3 +517,54 @@ describe('reviewed shell reader boundaries', () => {
     }
   })
 })
+
+describe('round 2 reader mutation guards', () => {
+  test('unescapes backslash-dollar in a double-quoted backtick body', () => {
+    const parsed = parse('echo `echo "\\$(printf RAN)"`')
+    expect(parsed?.commands.map((item) => item.words.map((item) => item.text))).toEqual([
+      ['printf', 'RAN'],
+      ['echo', '$(printf RAN)'],
+      ['echo', '`echo "\\$(printf RAN)"`']
+    ])
+  })
+
+  for (const [name, prefix] of [['vertical tab', '\v'], ['form feed', '\f']]) {
+    test(`keeps word-start ${name} from turning a following hash into a comment`, () => {
+      expect(parse(`${prefix}#x; printf RAN`)).toEqual(script([
+        command(words(`${prefix}#x`)),
+        command(words('printf', 'RAN'), { sep: ';' })
+      ]))
+    })
+  }
+
+  test('resets the heredoc queue before a later command with a quoted body character', () => {
+    expect(parse("cat <<A\nx\nA\ncat <<B\n'\nB\nprintf RAN #'\n")).toEqual(script([
+      command(words('cat'), { redirects: [redirect('heredoc', 'x\n')] }),
+      command(words('cat'), { sep: ';', redirects: [redirect('heredoc', "'\n")] }),
+      command(words('printf', 'RAN'), { sep: ';' })
+    ]))
+  })
+
+  test('refuses an evaluating zsh flag nested in a parameter fallback', () => {
+    expect(parse("y='$(printf RAN)'; echo ${x:-${(e)y}}")).toBeNull()
+  })
+
+  const ambiguous: [string, string][] = [
+    ['a nested subshell', 'echo $( (cat <<EOF\n)\nEOF\n) ); printf RAN'],
+    ['a balanced pair before a stray closing parenthesis', 'echo $(cat <<EOF\n( ) )\nEOF\n); printf RAN'],
+    ['an earlier backtick scope', 'echo `printf EARLIER`; echo $(cat <<EOF\n)\nEOF\n); printf RAN']
+  ]
+  for (const [name, source] of ambiguous) {
+    test(`refuses a substitution heredoc with ${name}`, () => {
+      expect(parse(source)).toBeNull()
+    })
+  }
+
+  test('shares scope ids and parents with a command substitution inside backticks', () => {
+    expect(parse('echo `echo $(printf RAN)`')).toEqual(script([
+      command(words('printf', 'RAN'), { scope: 2 }),
+      command([word('echo'), word('$(printf RAN)', true, [2])], { scope: 1 }),
+      command([word('echo'), word('`echo $(printf RAN)`', true, [1])])
+    ], [-1, 0, 1]))
+  })
+})

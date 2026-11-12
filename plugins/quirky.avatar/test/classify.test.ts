@@ -722,3 +722,24 @@ test('eval redirects resolve before its directory change and following writes re
   expectClassSet('eval "cd /home/u" > out.txt', ['read', 'edit-inside'])
   expectClassSet('eval "cd /home/u" > out.txt; touch x', ['read', 'edit-inside', 'edit-outside'])
 })
+describe('round 2 scoped directory and wrapper guards', () => {
+  const scopedDirectoryCommands = [
+    '(cd /home/u; rm -rf Documents)',
+    'echo $(cd /home/u; rm -rf Documents)',
+    '(cd /home/u && echo hi > .zshrc)'
+  ]
+
+  for (const command of scopedDirectoryCommands) {
+    test(`preserves outside scope for ${command}`, () => {
+      expectClassSet(command, ['read', 'edit-outside'])
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    })
+  }
+
+  test('preserves the command wrapped by doas', () => {
+    const command = 'doas -u root rm -rf /etc/x'
+    expectClassSet(command, ['credential', 'edit-outside'])
+    expect(commandParts(call('Bash', { command }), ctx)).toEqual(['rm -rf /etc/x'])
+    expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+  })
+})
