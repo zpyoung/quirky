@@ -244,7 +244,7 @@ export function createOutbox(app: AvatarApp): Outbox {
     const worktree = row.worktreeId
     if (row.kind === 'push') {
       begin(row)
-      return (await call('quirky.git/push', { worktree, purpose: 'creation' })) as Payload
+      return (await call('quirky.git/push', { worktree, purpose: 'creation', expectedHead: p.headSha, expectedBranch: p.branch })) as Payload
     }
     if (row.kind === 'pr') {
       const base = str(p.base)
@@ -368,7 +368,10 @@ export function createOutbox(app: AvatarApp): Outbox {
         return done
       } catch (error) {
         if (error instanceof SendRefused) return cancelRow(row, error.message)
-        const failed: OutboxRow = { ...row, state: 'failed', result: { error: error instanceof Error ? error.message : String(error) } }
+        const data = typeof error === 'object' && error !== null && 'data' in error ? error.data : null
+        const staleTarget = row.kind === 'push' && typeof data === 'object' && data !== null && 'reason' in data && data.reason === 'stale-target'
+        const detail = error instanceof Error ? error.message : String(error)
+        const failed: OutboxRow = { ...row, state: 'failed', result: { error: staleTarget ? `push refused (stale-target): ${detail}` : detail } }
         record(failed, 'failed')
         return failed
       } finally {

@@ -429,8 +429,21 @@ describe('creation push safety', () => {
     expect(t.calls).toEqual([
       { method: 'quirky.git/pushTarget', params: { worktree: 'wt-1', purpose: 'creation' } },
       { method: 'quirky.checks/run', params: { worktree: 'wt-1', command: "git ls-remote --symref 'origin' HEAD 'refs/heads/feature'", timeoutSeconds: 60 } },
-      { method: 'quirky.git/push', params: { worktree: 'wt-1', purpose: 'creation' } }
+      { method: 'quirky.git/push', params: { worktree: 'wt-1', purpose: 'creation', expectedHead: SHA, expectedBranch: 'feature' } }
     ])
+  })
+
+  test('fails a stale-target push without treating it as an unknown outcome', async () => {
+    const message = 'The local branch or HEAD changed since push-target validation.'
+    const t = setup({
+      'quirky.git/push': () => { throw Object.assign(new Error(message), { data: { reason: 'stale-target' } }) }
+    })
+    const row = push(t)
+    expect(await t.outbox.run(row.id)).toMatchObject({
+      state: 'failed', result: { error: `push refused (stale-target): ${message}` }
+    })
+    expect(t.app.store.outbox.get(row.id)?.state).toBe('failed')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).find((entry) => entry.kind === 'outbox')?.data.note).toBe('failed')
   })
 
   test.each([

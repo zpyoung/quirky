@@ -785,6 +785,77 @@ describe('quirky.hosting PR reads', () => {
     expect(gitOutput(testHost, ['--git-dir', forkBare, 'rev-parse', 'refs/heads/feature'])).toBe(localHead)
   }, 20_000)
 
+  test('review push requires expectedBranch to match both local and destination branch names', async () => {
+    const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
+    hosts.push(testHost)
+    const remoteHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
+    const baseBare = join(testHost.root, 'base.git')
+    const forkBare = join(testHost.root, 'fork-push.git')
+    const pushLog = join(testHost.root, 'pushes.log')
+    writeFileSync(pushLog, '')
+    git(testHost, ['init', '--bare', baseBare])
+    git(testHost, ['init', '--bare', forkBare])
+    git(testHost, ['push', baseBare, 'refs/heads/main:refs/heads/main'])
+    commitFeature(testHost)
+    const pullHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
+    git(testHost, ['push', forkBare, 'HEAD:refs/heads/feature'])
+    git(testHost, ['push', baseBare, 'HEAD:refs/pull/7/head'])
+    git(testHost, ['checkout', 'main'])
+    git(testHost, ['remote', 'add', 'fork', 'https://github.com/test-owner/fork-repo.git'])
+    testHost.writeState(fixtureState({
+      prs: [pr({
+        headRefOid: pullHead,
+        baseRefOid: remoteHead,
+        headRepositoryOwner: { login: 'test-owner' },
+        headRepository: { name: 'fork-repo', owner: { login: 'test-owner' } }
+      })]
+    }))
+    installLocalGitTransport(testHost, forkBare, pushLog, baseBare)
+
+    const worktrees = await testHost.client.callAny('quirky.worktree/list', {})
+    if (!Array.isArray(worktrees)) throw new Error('expected registered worktrees')
+    const initial = worktrees.find((value) => isRecord(value) && value.id === testHost.worktree)
+    if (!isRecord(initial) || typeof initial.repoId !== 'string') throw new Error('expected registered repository identity')
+    const created = recordOf(await testHost.client.callAny('quirky.worktree/create', {
+      repo: initial.repoId,
+      github: 'https://github.com/test-owner/test-repo/pull/7'
+    }))
+    const forkWorktree = recordOf(created.worktree)
+    if (typeof forkWorktree.id !== 'string' || typeof forkWorktree.path !== 'string') {
+      throw new Error('expected a created pull-request worktree')
+    }
+    const forkWorktreeId = forkWorktree.id
+    const forkWorktreePath = forkWorktree.path
+    git(testHost, ['-C', forkWorktreePath, 'branch', '-m', 'local-renamed'])
+
+    const target = recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: forkWorktreeId,
+      purpose: 'review'
+    }))
+    expect(target).toMatchObject({
+      ready: true,
+      localBranch: 'local-renamed',
+      branch: 'feature',
+      headOid: pullHead,
+      number: 7
+    })
+
+    for (const expectedBranch of ['local-renamed', 'feature']) {
+      expect(reasonOf(await rejection(testHost.client.callAny('quirky.git/push', {
+        worktree: forkWorktreeId,
+        purpose: 'review',
+        expectedBranch
+      })))).toBe('stale-target')
+    }
+    expect(readFileSync(pushLog, 'utf8')).toBe('')
+    expect(gitOutput(testHost, ['--git-dir', forkBare, 'rev-parse', 'refs/heads/feature'])).toBe(pullHead)
+    expect(gitOutput(testHost, ['--git-dir', forkBare, 'for-each-ref', '--format=%(refname)', 'refs/heads']))
+      .toBe('refs/heads/feature')
+    expect(gitOutput(testHost, ['--git-dir', baseBare, 'rev-parse', 'refs/heads/main'])).toBe(remoteHead)
+    expect(gitOutput(testHost, ['--git-dir', baseBare, 'rev-parse', 'refs/pull/7/head'])).toBe(pullHead)
+  }, 20_000)
+
+
   test('creation push publishes the current branch under its own name', async () => {
     const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
     hosts.push(testHost)
@@ -810,13 +881,92 @@ describe('quirky.hosting PR reads', () => {
       localHead
     })
 
-    await testHost.client.callAny('quirky.git/push', { worktree: testHost.worktree, purpose: 'creation' })
+    await testHost.client.callAny('quirky.git/push', {
+      worktree: testHost.worktree,
+      purpose: 'creation',
+      expectedHead: target.localHead,
+      expectedBranch: target.branch
+    })
 
     expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/feature'])).toBe(localHead)
     const pushes = readFileSync(pushLog, 'utf8').trim().split('\n')
     expect(pushes).toHaveLength(1)
     expect(pushes[0]?.endsWith(':refs/heads/feature')).toBe(true)
   }, 20_000)
+  test('creation push rejects expected parameters without a purpose and invalid expected heads', async () => {
+    const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
+    hosts.push(testHost)
+    testHost.writeState(fixtureState({ authenticated: true }))
+    const bare = join(testHost.root, 'creation.git')
+    const pushLog = join(testHost.root, 'pushes.log')
+    writeFileSync(pushLog, '')
+    git(testHost, ['init', '--bare', bare])
+    git(testHost, ['push', bare, 'refs/heads/main:refs/heads/main'])
+    commitFeature(testHost)
+    installLocalGitTransport(testHost, bare, pushLog)
+    const mainHead = gitOutput(testHost, ['rev-parse', 'main'])
+
+    for (const params of [
+      { worktree: testHost.worktree, expectedHead: 'a'.repeat(40) },
+      { worktree: testHost.worktree, expectedBranch: 'feature' }
+    ]) {
+      const failure = await rejection(testHost.client.callAny('quirky.git/push', params))
+      expect(failure).toMatchObject({
+        code: -32602,
+        message: 'expectedHead and expectedBranch may only be used with purpose.'
+      })
+    }
+    const invalidHead = await rejection(testHost.client.callAny('quirky.git/push', {
+      worktree: testHost.worktree,
+      purpose: 'creation',
+      expectedHead: 'not-a-commit-id'
+    }))
+    expect(invalidHead).toMatchObject({
+      code: -32602,
+      message: 'expectedHead must be a full 40- or 64-character commit id.'
+    })
+
+    expect(readFileSync(pushLog, 'utf8')).toBe('')
+    expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/main'])).toBe(mainHead)
+    expect(gitOutput(testHost, ['--git-dir', bare, 'for-each-ref', '--format=%(refname)', 'refs/heads']))
+      .toBe('refs/heads/main')
+  }, 20_000)
+
+  test('creation push refuses an expected branch after the current branch changes', async () => {
+    const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
+    hosts.push(testHost)
+    testHost.writeState(fixtureState({ authenticated: true }))
+    const bare = join(testHost.root, 'creation-branch-race.git')
+    const pushLog = join(testHost.root, 'pushes.log')
+    writeFileSync(pushLog, '')
+    git(testHost, ['init', '--bare', bare])
+    git(testHost, ['push', bare, 'refs/heads/main:refs/heads/main'])
+    commitFeature(testHost)
+    installLocalGitTransport(testHost, bare, pushLog)
+    const mainHead = gitOutput(testHost, ['rev-parse', 'main'])
+    const target = recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: testHost.worktree,
+      purpose: 'creation'
+    }))
+    expect(target).toMatchObject({ ready: true, branch: 'feature', localBranch: 'feature' })
+
+    git(testHost, ['checkout', '-b', 'switched'])
+    expect(recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: testHost.worktree,
+      purpose: 'creation'
+    }))).toMatchObject({ ready: true, branch: 'switched', localBranch: 'switched' })
+    expect(reasonOf(await rejection(testHost.client.callAny('quirky.git/push', {
+      worktree: testHost.worktree,
+      purpose: 'creation',
+      expectedBranch: target.branch
+    })))).toBe('stale-target')
+
+    expect(readFileSync(pushLog, 'utf8')).toBe('')
+    expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/main'])).toBe(mainHead)
+    expect(gitOutput(testHost, ['--git-dir', bare, 'for-each-ref', '--format=%(refname)', 'refs/heads']))
+      .toBe('refs/heads/main')
+  }, 20_000)
+
 
   test('creation push refuses a branch whose upstream is another branch', async () => {
     const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
@@ -851,18 +1001,29 @@ describe('quirky.hosting PR reads', () => {
     const pushLog = join(testHost.root, 'pushes.log')
     writeFileSync(pushLog, '')
     git(testHost, ['init', '--bare', bare])
+    git(testHost, ['push', bare, 'refs/heads/main:refs/heads/main'])
     commitFeature(testHost)
     installLocalGitTransport(testHost, bare, pushLog, bare)
-    const recordedHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
-    expect(await testHost.client.callAny('quirky.git/pushTarget', {
-      worktree: testHost.worktree, purpose: 'creation'
-    })).toMatchObject({ ready: true, branch: 'feature', localHead: recordedHead })
+    const mainHead = gitOutput(testHost, ['rev-parse', 'main'])
+    const target = recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: testHost.worktree,
+      purpose: 'creation'
+    }))
+    expect(target).toMatchObject({ ready: true, branch: 'feature', localHead: gitOutput(testHost, ['rev-parse', 'HEAD']) })
 
     writeFileSync(join(testHost.repoPath, 'late.txt'), 'a commit made while the avatar checks the remote\n')
     git(testHost, ['add', 'late.txt'])
     git(testHost, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.invalid', 'commit', '-m', 'late worker commit'])
-    await testHost.client.callAny('quirky.git/push', { worktree: testHost.worktree, purpose: 'creation' })
-    expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/feature'])).toBe(recordedHead)
+    expect(reasonOf(await rejection(testHost.client.callAny('quirky.git/push', {
+      worktree: testHost.worktree,
+      purpose: 'creation',
+      expectedHead: target.localHead
+    })))).toBe('stale-target')
+
+    expect(readFileSync(pushLog, 'utf8')).toBe('')
+    expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/main'])).toBe(mainHead)
+    expect(gitOutput(testHost, ['--git-dir', bare, 'for-each-ref', '--format=%(refname)', 'refs/heads']))
+      .toBe('refs/heads/main')
   }, 20_000)
 
 
