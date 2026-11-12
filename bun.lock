@@ -88,6 +88,13 @@
         "@quirky/protocol": "workspace:*",
       },
     },
+    "packages/process": {
+      "name": "@quirky/process",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "packages/protocol": {
       "name": "@quirky/protocol",
       "version": "0.1.0",
@@ -1180,6 +1187,8 @@
     "@quirky/plugin-vault": ["@quirky/plugin-vault@workspace:plugins/quirky.vault"],
 
     "@quirky/plugin-worktree": ["@quirky/plugin-worktree@workspace:plugins/quirky.worktree"],
+
+    "@quirky/process": ["@quirky/process@workspace:packages/process"],
 
     "@quirky/protocol": ["@quirky/protocol@workspace:packages/protocol"],
 
