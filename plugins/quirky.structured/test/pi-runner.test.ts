@@ -687,6 +687,25 @@ describe('pi rpc runner', () => {
     })
   }
 
+  for (const agent of ['pi', 'omp'] as const) {
+    test(`${agent} journals a message that arrives with no open turn and keeps its token count out of the next result`, async () => {
+      build(agent)
+      await runner.start(session, undefined, { toolPolicy: 'deny-all' })
+      await until(() => fake.commands().some((command) => command.id === 'quirky-check-1'))
+      process.kill(await pidOf(), 'SIGUSR2')
+      await until(() => existsSync(join(home, 'wake-frames-sent')))
+      await until(() => messages.length > 0)
+      // allow the other process's flushed frames to reach the runner
+      await Bun.sleep(100)
+      expect(journal()).toEqual([['assistant', 'woke on its own']])
+      expect(statuses).toEqual(['running'])
+      await runner.send(session.id, '[tool]')
+      await until(settled)
+      expect(messages.filter((message) => message.role === 'result').map((message) => message.data)).toEqual([{ type: 'agent_end' }])
+      expect(statuses).toEqual(['running', 'working', 'done'])
+    })
+  }
+
   test('starts idle without a prompt and runs a later send', async () => {
     await runner.start(session)
     expect(statuses).toEqual(['running'])
@@ -991,7 +1010,7 @@ exit 0
     })
   }
 
-  test('reads CRLF-terminated frames', async () => {
+  test('reads CRLF-terminated frames and skips a blank CRLF line', async () => {
     await runner.start(session, '[crlf]')
     await until(settled)
     expect(messages.map((message) => message.role)).toEqual(['user', 'assistant', 'result'])
@@ -1032,7 +1051,7 @@ exit 0
     expect(systemMessages()).toHaveLength(1)
   }, 15_000)
 
-  test('an unreadable JSON line is journaled and a non-object value is ignored', async () => {
+  test('an unreadable JSON line is journaled, and an empty line and a non-object value are ignored', async () => {
     await runner.start(session, '[unreadable]')
     await until(settled)
     expect(messages.filter((message) => message.role === 'system').map((message) => message.text)).toEqual([
