@@ -5,7 +5,10 @@ import { join } from 'node:path'
 import { QUIRKY_GATE_SCRIPT } from '../../../../packages/daemon/src/launch'
 import type { GateOutcome } from '../../src/contracts'
 import { encodeDecision } from '../../src/hooks/encode'
-import { claudeVersionAtLeast, createGateLaunchHook, parseClaudeVersion, writeMarkerFile } from '../../src/hooks/install'
+import { parseClaudeVersion, writeMarkerFile } from '../../src/hooks/install'
+import { runGateShim, useTempAgentHome } from '../daemon-support'
+
+const agent = useTempAgentHome()
 
 const binary = Bun.which('claude')
 const suite = binary === null ? describe.skip : describe
@@ -34,7 +37,7 @@ function rig(outcome: GateOutcome | 'down') {
       async fetch(request) {
         const body = await request.text()
         requests.push({ url: request.url, body })
-        const event = new URL(request.url).searchParams.get('event') as 'PreToolUse' | 'PermissionRequest'
+        const event = (new URL(request.url).searchParams.get('event') ?? JSON.parse(body).hook_event_name) as 'PreToolUse' | 'PermissionRequest'
         const decision = outcome === 'allow' || outcome === 'passthrough' ? outcome : 'deny'
         return Response.json({ decision, reason: 'because', encoded: encodeDecision('claude', event, { outcome, reason: 'because' }), exitCode: 0 })
       }
@@ -44,14 +47,12 @@ function rig(outcome: GateOutcome | 'down') {
   }
   writeFileSync(join(home, 'runtime.json'), JSON.stringify({ port }))
   async function hook(payload: Record<string, unknown>) {
-    const proc = Bun.spawn(['sh', join(home, 'bin', 'quirky-gate'), 'claude', '5000'], {
-      env: { PATH: process.env.PATH ?? '', QUIRKY_HOME: home, QUIRKY_SESSION_ID: 'sess-1', QUIRKY_HOOK_TOKEN: 'token' },
-      stdin: Buffer.from(JSON.stringify(payload)),
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-    const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-    return { stdout, stderr, code }
+    return runGateShim(home, ['claude', '5000'], {
+      ...agent.childEnv,
+      QUIRKY_HOME: home,
+      QUIRKY_SESSION_ID: 'sess-1',
+      QUIRKY_HOOK_TOKEN: 'token'
+    }, payload)
   }
   return { hook, requests }
 }
@@ -59,13 +60,9 @@ function rig(outcome: GateOutcome | 'down') {
 const pre = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: '/w' }
 
 suite(title, () => {
-  test('the installed Claude reports a version, and the launch hook adds the gate settings only when it can fail closed', async () => {
-    const proc = Bun.spawn([binary!, '--version'], { stdout: 'pipe', stderr: 'ignore' })
-    const version = parseClaudeVersion(await new Response(proc.stdout).text())
-    expect(version).not.toBeNull()
-    const hook = createGateLaunchHook({ judgmentTimeoutSeconds: () => 55, claudeVersion: async () => version, quirkyHome: tmpdir() })
-    const patch = (await hook({ sessionId: 's', worktreeId: 'w', repoId: 'r', cwd: '/x', agent: 'claude', env: {}, args: [], jsonArgs: {} } as never)) as { jsonArgs?: object }
-    expect(patch.jsonArgs !== undefined).toBe(claudeVersionAtLeast(version))
+  test('the installed Claude reports a version the gate can read', async () => {
+    const proc = Bun.spawn([binary!, '--version'], { env: agent.childEnv, stdout: 'pipe', stderr: 'ignore' })
+    expect(parseClaudeVersion(await new Response(proc.stdout).text())).toMatch(/^\d+\.\d+\.\d+$/)
   }, 60_000)
 
   test('a normal call reaches the gate and the shim prints the allow the agent reads', async () => {

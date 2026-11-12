@@ -1,77 +1,31 @@
-import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-import { HOOK_TOKEN_HEADER, type PluginStore, type ToolGateDecision } from '@quirky/protocol'
-import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { HOOK_TOKEN_HEADER, type ToolGateDecision } from '@quirky/protocol'
 import type { Level } from '../src/contracts'
 import { writeMarkerFile } from '../src/hooks/install'
-import { createAvatarStore } from '../src/store'
 import { sampleMandate } from './support'
+import { answering, avatarBuiltins, cleanupDaemons, openAvatarStore, runGateShim, startAvatarHarness, useTempAgentHome } from './daemon-support'
+const agent = useTempAgentHome()
 
-const PLUGIN_DIR = resolve(import.meta.dir, '..')
-const DEPENDENCIES = [
-  'quirky.worktree', 'quirky.session', 'quirky.agent-status', 'quirky.agents', 'quirky.ask', 'quirky.checks',
-  'quirky.git', 'quirky.hosting', 'quirky.structured', 'quirky.heimdall', 'quirky.notifications'
-]
-
-const harnesses = new Set<Harness>()
 const dirs: string[] = []
-const databases: Database[] = []
 
 afterEach(async () => {
-  for (const db of databases.splice(0)) db.close()
-  for (const harness of [...harnesses]) await harness.cleanup()
-  harnesses.clear()
+  await cleanupDaemons()
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
 type ListedWorktree = { id: string; path: string; branch: string; repoId: string; isMain: boolean }
-
-function avatarPluginsDir(worktrees: ListedWorktree[]): string {
-  const dir = mkdtempSync(join(tmpdir(), 'qav-route-bi-'))
-  dirs.push(dir)
-  symlinkSync(PLUGIN_DIR, join(dir, 'quirky.avatar'))
-  for (const id of DEPENDENCIES) {
-    mkdirSync(join(dir, id))
-    const manifest: Record<string, unknown> = { id, apiVersion: '1.0.0', name: id, version: '0.1.0', activation: 'lazy' }
-    if (id === 'quirky.worktree') {
-      Object.assign(manifest, { main: 'main.ts', contributes: { method: [{ id: 'list', description: 'Worktrees.', readOnly: true, params: { type: 'object' }, result: { type: 'array' } }] } })
-      writeFileSync(
-        join(dir, id, 'main.ts'),
-        `export function activate(context) {\n  context.provide('method:quirky.worktree/list', () => ${JSON.stringify(worktrees)})\n}\n`
-      )
-    }
-    writeFileSync(join(dir, id, 'quirky-plugin.json'), JSON.stringify(manifest))
-  }
-  return dir
-}
-
-function fileStore(path: string): PluginStore {
-  const db = new Database(path)
-  databases.push(db)
-  return {
-    version: 0,
-    run: (sql, ...params) => {
-      const result = db.query(sql).run(...(params as never[]))
-      return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
-    },
-    get: (sql, ...params) => (db.query(sql).get(...(params as never[])) as never) ?? null,
-    all: (sql, ...params) => db.query(sql).all(...(params as never[])) as never,
-    exec: (sql) => db.exec(sql),
-    transaction: (work) => db.transaction(work)()
-  }
-}
 
 /** A daemon with the avatar loaded and `wt-1` handed off with a marker for session `sess-1`. */
 async function boot(level: Level = 'own-branch', options: { listWorktree?: boolean } = {}) {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'qav-route-wt-')))
   dirs.push(cwd)
   const listed: ListedWorktree[] = options.listWorktree === false ? [] : [{ id: 'wt-1', path: cwd, branch: 'feature', repoId: 'repo', isMain: false }]
-  const harness = await startHarness({ home: makeTempHome('qav-route-'), builtinPluginsDir: avatarPluginsDir(listed) })
-  harnesses.add(harness)
-  const store = createAvatarStore(fileStore(join(harness.home, 'plugin-data', 'quirky.avatar', 'store.db')))
+  const builtins = avatarBuiltins({ 'quirky.worktree': answering('quirky.worktree', { list: listed }) })
+  const harness = await startAvatarHarness(builtins)
+  const store = openAvatarStore(harness.home)
   store.mandates.put(sampleMandate({ level }))
   store.handoffs.put({ worktreeId: 'wt-1', state: 'working', sessionId: 'sess-1', active: true, handedOffAt: 1, takenBackAt: null })
   writeMarkerFile(harness.home, 'sess-1', { worktreeId: 'wt-1', level })
@@ -87,28 +41,21 @@ async function boot(level: Level = 'own-branch', options: { listWorktree?: boole
     return (await response.json()) as ToolGateDecision
   }
 
-  async function shim(agent: string, payload: Record<string, unknown>, env: Record<string, string> = {}) {
-    const proc = Bun.spawn(['sh', join(harness.home, 'bin', 'quirky-gate'), agent, '5000'], {
-      env: {
-        PATH: process.env.PATH ?? '',
-        QUIRKY_HOME: harness.home,
-        QUIRKY_SESSION_ID: 'sess-1',
-        QUIRKY_HOOK_TOKEN: harness.runtime.hookToken,
-        ...env
-      },
-      stdin: Buffer.from(JSON.stringify({ cwd, ...payload })),
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-    const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-    return { stdout, stderr, code }
+  async function shim(agentName: string, payload: Record<string, unknown>, env: Record<string, string> = {}) {
+    return runGateShim(harness.home, [agentName, '5000'], {
+      ...agent.childEnv,
+      QUIRKY_HOME: harness.home,
+      QUIRKY_SESSION_ID: 'sess-1',
+      QUIRKY_HOOK_TOKEN: harness.runtime.hookToken,
+      ...env
+    }, { cwd, ...payload })
   }
 
   return { harness, store, cwd, gate, shim }
 }
 
 const read = (cwd: string) => ({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: join(cwd, 'src', 'a.ts') } })
-const sshWrite = { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: join(homedir(), '.ssh', 'config'), content: 'x' } }
+const sshWrite = { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: agent.sshConfig, content: 'x' } }
 
 describe('/gate/ through the real daemon with the avatar loaded', () => {
   test('allows a read in the worktree, encoded for Claude', async () => {
@@ -142,7 +89,7 @@ describe('/gate/ through the real daemon with the avatar loaded', () => {
     expect(JSON.parse(permission.encoded!)).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } })
     const piRead = { hook_event_name: 'tool_call', tool_name: 'read', tool_input: { path: join(s.cwd, 'a.ts') } }
     expect(await s.gate('pi', piRead, 'session=sess-1&event=tool_call&deadline=5000')).toMatchObject({ decision: 'allow', encoded: '' })
-    const piHeld = await s.gate('omp', { hook_event_name: 'tool_call', tool_name: 'write', tool_input: { path: join(homedir(), '.ssh', 'config') } }, 'session=sess-1&event=tool_call&deadline=5000')
+    const piHeld = await s.gate('omp', { hook_event_name: 'tool_call', tool_name: 'write', tool_input: { path: agent.sshConfig } }, 'session=sess-1&event=tool_call&deadline=5000')
     expect(JSON.parse(piHeld.encoded!)).toMatchObject({ block: true })
   })
 
