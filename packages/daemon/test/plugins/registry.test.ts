@@ -522,6 +522,138 @@ describe('computeRegistry: the tool gate', () => {
     })
   })
 
+  test('a plugin that declares the gate and overrides one never owns it', () => {
+    const registry = compute([
+      plugin('aaa', { contributes: gate, overrides: [{ id: 'tool-gate:bbb/gate' }] }),
+      plugin('bbb', { contributes: gate }),
+      plugin('ccc', { contributes: gate }),
+    ])
+
+    expect(entry(registry, 'aaa').status).toBe('invalid')
+    expect(entry(registry, 'aaa').diagnostics).toEqual([{
+      level: 'error',
+      message: "tool-gate can't be overridden: tool-gate:bbb/gate",
+    }])
+    expect(entry(registry, 'bbb').status).toBe('enabled')
+    expect(entry(registry, 'bbb').diagnostics).toEqual([])
+    expect(entry(registry, 'ccc').status).toBe('invalid')
+    expect(entry(registry, 'ccc').diagnostics).toEqual([{
+      level: 'error',
+      message: 'only one plugin may declare tool-gate; bbb already does',
+    }])
+    expect(registry.effective.get('tool-gate:bbb/gate')?.plugin).toBe('bbb')
+    expect(registry.declarations.map((d) => d.plugin)).toEqual(['bbb'])
+  })
+
+  test('a built-in plugin that declares the gate and overrides one leaves it to an installed plugin', () => {
+    const registry = compute([
+      plugin('zzz.core', {
+        contributes: gate,
+        overrides: [{ id: 'tool-gate:ghost/gate' }],
+      }, 'builtin'),
+      plugin('aaa.user', { contributes: gate }, 'installed'),
+    ])
+
+    expect(entry(registry, 'zzz.core').status).toBe('invalid')
+    expect(entry(registry, 'zzz.core').diagnostics).toEqual([{
+      level: 'error',
+      message: "tool-gate can't be overridden: tool-gate:ghost/gate",
+    }])
+    expect(entry(registry, 'aaa.user').status).toBe('enabled')
+    expect(entry(registry, 'aaa.user').diagnostics).toEqual([])
+    expect(registry.effective.get('tool-gate:aaa.user/gate')?.plugin).toBe('aaa.user')
+  })
+
+  test('a second declarer that also overrides the gate gets both errors in order', () => {
+    const registry = compute([
+      plugin('aaa', { contributes: gate }),
+      plugin('bbb', { contributes: gate, overrides: [{ id: 'tool-gate:aaa/gate' }] }),
+    ])
+
+    expect(entry(registry, 'aaa').status).toBe('enabled')
+    expect(entry(registry, 'bbb').status).toBe('invalid')
+    expect(entry(registry, 'bbb').diagnostics).toEqual([
+      {
+        level: 'error',
+        message: 'only one plugin may declare tool-gate; aaa already does',
+      },
+      {
+        level: 'error',
+        message: "tool-gate can't be overridden: tool-gate:aaa/gate",
+      },
+    ])
+    expect(registry.effective.get('tool-gate:aaa/gate')?.plugin).toBe('aaa')
+  })
+
+  test('a gate owner that overrides another kind keeps the gate', () => {
+    const registry = compute([
+      plugin('aaa', {
+        contributes: gate,
+        overrides: [{ id: 'command:base/run', title: 'Better' }],
+      }),
+      plugin('base', { contributes: cmd('run') }),
+      plugin('bbb', { contributes: gate }),
+    ])
+
+    expect(entry(registry, 'aaa').status).toBe('enabled')
+    expect(entry(registry, 'aaa').diagnostics).toEqual([])
+    expect(entry(registry, 'bbb').status).toBe('invalid')
+    expect(entry(registry, 'bbb').diagnostics).toEqual([{
+      level: 'error',
+      message: 'only one plugin may declare tool-gate; aaa already does',
+    }])
+    expect(registry.effective.get('tool-gate:aaa/gate')?.plugin).toBe('aaa')
+    expect(registry.effective.get('command:base/run')?.plugin).toBe('aaa')
+  })
+
+  test('each gate override in a manifest gets its own error in manifest order', () => {
+    const registry = compute([
+      plugin('base', { contributes: { ...gate, ...cmd('run') } }),
+      plugin('over', {
+        overrides: [
+          { id: 'tool-gate:zeta/gate' },
+          { id: 'command:base/run', title: 'Better' },
+          { id: 'tool-gate:base/gate' },
+        ],
+      }),
+    ])
+
+    expect(entry(registry, 'over').status).toBe('invalid')
+    expect(entry(registry, 'over').diagnostics).toEqual([
+      {
+        level: 'error',
+        message: "tool-gate can't be overridden: tool-gate:zeta/gate",
+      },
+      {
+        level: 'error',
+        message: "tool-gate can't be overridden: tool-gate:base/gate",
+      },
+    ])
+    expect(registry.effective.get('command:base/run')?.plugin).toBe('base')
+  })
+
+  test('a dependant of a refused gate override is invalid, and so is its own dependant', () => {
+    const registry = compute([
+      plugin('base', { contributes: gate }),
+      plugin('over', { overrides: [{ id: 'tool-gate:base/gate' }] }),
+      plugin('needs', { dependencies: ['over'], contributes: cmd('go') }),
+      plugin('needs.more', { dependencies: ['needs'] }),
+    ])
+
+    expect(entry(registry, 'needs').status).toBe('invalid')
+    expect(entry(registry, 'needs').diagnostics).toEqual([{
+      level: 'error',
+      message: 'dependency over is invalid',
+    }])
+    expect(entry(registry, 'needs.more').status).toBe('invalid')
+    expect(entry(registry, 'needs.more').diagnostics).toEqual([{
+      level: 'error',
+      message: 'dependency needs is invalid',
+    }])
+    expect(registry.effective.has('command:needs/go')).toBe(false)
+    expect(entry(registry, 'base').status).toBe('enabled')
+  })
+
   test('statuses and diagnostics do not depend on input order', () => {
     const plugins = [
       plugin('zzz.core', { contributes: gate }, 'builtin'),
