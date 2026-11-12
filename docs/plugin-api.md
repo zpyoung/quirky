@@ -150,6 +150,8 @@ Local module hosts check the declaring plugin's floor independently. The CLI che
 
 The stable contract includes the existing daemon, CLI and UI activation shapes, context methods, contribution schemas and cleanup behavior. Daemon `activate(context)` may return an activation disposer; modules may also implement `deactivate()`. UI modules implement `activate(context)` and may implement `deactivate()`. UI mount functions return cleanup functions when they own DOM or other mounted resources. Context subscription methods return unsubscribe functions. Plugins should release resources they create and must not assume a context remains usable after its activation ends.
 
+The daemon also calls `deactivate()` after an `activate()` that threw or timed out, so it must cope with partial setup. The daemon retries a failed plugin on a delay from 1 second to 5 minutes; `quirky plugin activate <id>` retries immediately, including its dependencies.
+
 Manifest activation policy, dependencies, stable contribution IDs, schemas, overrides and existing cleanup semantics remain in effect. Plugin API compatibility is not a security boundary: plugins are full-trust code, not sandboxed. Install only code you trust; `--yes` skips the existing confirmation prompt but does not reduce the plugin's authority.
 
 ## Version domains and evolution
