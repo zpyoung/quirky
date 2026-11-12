@@ -59,6 +59,10 @@ every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-
 and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
 listeners act on the states in between.
 
+`quirky.reviews/changed` carries a worktree tag for updates confined to one Checks entry and its
+Checks dialog. Shared updates and evictions remain untagged. It is not coalesced because draft
+fields consume daemon echoes.
+
 ### API 1.4: Process runner
 
 API 1.4 adds `context.process` to daemon plugin contexts. `context.process.run(argv, options)`
