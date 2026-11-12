@@ -93,6 +93,352 @@ async function click(root: ParentNode, label: string): Promise<void> {
   await act(async () => button(root, label).click())
   await settle()
 }
+function controlsForLabel(root: ParentNode, label: string): HTMLElement[] {
+  return [...root.querySelectorAll('label')]
+    .filter((entry) => entry.textContent?.trim() === label)
+    .flatMap((entry) => {
+      const control = [...root.querySelectorAll<HTMLElement>('[id]')].find((candidate) => candidate.id === entry.htmlFor)
+      return control === undefined ? [] : [control]
+    })
+}
+
+async function setControlValue(field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string): Promise<void> {
+  await act(async () => {
+    const prototype = field instanceof HTMLInputElement
+      ? window.HTMLInputElement.prototype
+      : field instanceof HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLSelectElement.prototype
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set
+    if (!setter) throw new Error('Control has no value setter')
+    setter.call(field, value)
+    field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
+  })
+  await settle()
+}
+
+async function setCheckbox(field: HTMLInputElement, checked: boolean): Promise<void> {
+  await act(async () => {
+    if (field.checked !== checked) field.click()
+  })
+  await settle()
+}
+
+function fieldForLabel<T extends HTMLElement>(root: ParentNode, label: string, index = 0): T {
+  const field = controlsForLabel(root, label)[index]
+  if (!field) throw new Error(`Control not found: ${label}`)
+  return field as T
+}
+
+
+  test('shows a guess choice and mandate-edit before/after across loading, loaded, null and failed mandate fetches', async () => {
+    const pendingMandate = Promise.withResolvers<unknown>()
+    const guess = need({
+      id: 'need-guess',
+      kind: 'guess',
+      title: 'Confirm a guess: Keep v1?',
+      detail: { guessId: 'g1', question: 'Keep v1?', choice: 'Keep v1 payload shape' },
+      actions: ['confirm', 'redo']
+    })
+    const edit = need({
+      id: 'need-edit',
+      kind: 'mandate-edit',
+      title: 'Update the mandate?',
+      detail: {
+        patch: {
+          goal: 'Ship v2 badges',
+          doneWhen: '',
+          guidelines: ['Keep commits small', 'Allow snapshot updates'],
+          notes: 'No credentials'
+        },
+        why: 'Layout changed'
+      },
+      actions: ['review-accept', 'review-reject']
+    })
+    const emptyGuidelinesEdit = need({
+      id: 'need-empty-guidelines',
+      worktreeId: 'wt-2',
+      kind: 'mandate-edit',
+      title: 'Clear guidelines?',
+      detail: { patch: { guidelines: [] }, why: 'Remove old guidance' },
+      actions: ['review-accept', 'review-reject']
+    })
+    const currentMandate = {
+      worktreeId: 'wt-1',
+      goal: 'Ship v1 badges',
+      doneWhen: 'bun test',
+      doneWhenKind: 'command',
+      guidelines: ['Keep commits small'],
+      level: 'full',
+      switches: { messaging: false, historyRewrite: false, deploys: false },
+      agent: null,
+      sharedGoalId: null,
+      notes: '',
+      allowSplit: false,
+      updatedAt: 1
+    }
+    const fake = makeContext({
+      status: status(two, 3),
+      report: () => report({ needsYou: [guess, edit, emptyGuidelinesEdit] }),
+      log: () => [],
+      mandate: (params) => params.worktreeId === 'wt-2'
+        ? { ...currentMandate, worktreeId: 'wt-2', guidelines: [] }
+        : pendingMandate.promise
+    })
+    const root = await mount(AvatarView, fake, { tab: 'report' })
+    const textWhileLoading = root.textContent ?? ''
+
+    expect(textWhileLoading).toContain('Chose: Keep v1 payload shape')
+    expect(textWhileLoading.match(/Keep v1\?/g)).toHaveLength(1)
+    expect(textWhileLoading).toContain('Layout changed')
+    expect(textWhileLoading).toContain('Goal: loading… → Ship v2 badges')
+    expect(textWhileLoading).toContain('Done when: loading… → none')
+    expect(textWhileLoading).toContain('Guidelines: loading… → Keep commits small; Allow snapshot updates')
+    expect(textWhileLoading).toContain('Notes: loading… → No credentials')
+    expect(textWhileLoading).toContain('Guidelines: none → none')
+    const emptyGuidelinesRow = [...root.querySelectorAll('.ui-list-row')].find((row) => row.textContent?.includes('Clear guidelines?'))
+    expect(emptyGuidelinesRow?.textContent).not.toContain('Goal:')
+    expect(emptyGuidelinesRow?.textContent).not.toContain('Done when:')
+    expect(emptyGuidelinesRow?.textContent).not.toContain('Notes:')
+
+    await act(async () => pendingMandate.resolve(currentMandate))
+    await settle()
+    const loadedText = root.textContent ?? ''
+    expect(loadedText).toContain('Goal: Ship v1 badges → Ship v2 badges')
+    expect(loadedText).toContain('Done when: bun test → none')
+    expect(loadedText).toContain('Guidelines: Keep commits small → Keep commits small; Allow snapshot updates')
+    expect(loadedText).toContain('Notes: none → No credentials')
+
+    const noMandateNeed = need({
+      id: 'need-no-mandate',
+      kind: 'mandate-edit',
+      title: 'Set a goal?',
+      detail: { patch: { goal: 'Start here' }, why: 'No mandate exists yet' },
+      actions: ['review-accept']
+    })
+    const noMandateRoot = await mount(AvatarView, makeContext({
+      status: status(two, 1),
+      report: () => report({ needsYou: [noMandateNeed] }),
+      log: () => [],
+      mandate: () => null
+    }), { tab: 'report' })
+    expect(noMandateRoot.textContent).toContain('Goal: no mandate → Start here')
+
+    const unavailableRoot = await mount(AvatarView, makeContext({
+      status: status(two, 1),
+      report: () => report({ needsYou: [noMandateNeed] }),
+      log: () => [],
+      mandate: () => { throw new Error('offline') }
+    }), { tab: 'report' })
+    expect(unavailableRoot.textContent).toContain('Goal: unavailable → Start here')
+  })
+
+  test('renders typed ask controls and sends exact answers for every question type', async () => {
+    const question = need({
+      id: 'need-q',
+      kind: 'question',
+      title: 'A few decisions',
+      detail: {
+        askId: 'ask-1',
+        blocks: 'the schema',
+        questions: [
+          { id: 'q_select', type: 'select', question: 'Version?', required: true, options: [{ value: 'v1', label: 'Keep v1' }, { value: 'v2', label: 'Add v2', description: 'Adds version field' }] },
+          { id: 'q_multi', type: 'multiselect', question: 'OS?', required: true, options: [{ value: 'mac', label: 'macOS' }, { value: 'linux', label: 'Linux' }] },
+          { id: 'q_text', type: 'text', question: 'Prefix?', pattern: '^[a-z]+$', format: 'email', required: true },
+          { id: 'q_area', type: 'text', question: 'Body?', multiline: true, required: true },
+          { id: 'q_num', type: 'number', question: 'Retries?', integer: true, min: 1, max: 5, required: true },
+          { id: 'q_date', type: 'date', question: 'Freeze?', required: true },
+          { id: 'q_confirm', type: 'confirm', question: 'Drop table?', required: true },
+          { id: 'q_opt', type: 'text', question: 'Extra note?', required: false }
+        ]
+      },
+      actions: ['answer']
+    })
+    const fake = makeContext({
+      status: status(two, 1),
+      report: () => report({ needsYou: [question] }),
+      log: () => [],
+      resolveNeed: () => ({ ok: true })
+    })
+    const root = await mount(AvatarView, fake, { tab: 'report' })
+    const select = fieldForLabel<HTMLSelectElement>(root, 'Version?')
+    expect(button(root, 'Answer').disabled).toBe(true)
+    expect([...select.options].map((option) => option.textContent)).toEqual(['Choose…', 'Keep v1', 'Add v2 — Adds version field'])
+    expect(root.querySelectorAll('input[type="checkbox"]')).toHaveLength(2)
+    expect(fieldForLabel<HTMLInputElement>(root, 'Retries?').type).toBe('number')
+    expect(fieldForLabel<HTMLInputElement>(root, 'Retries?').step).toBe('1')
+    expect(fieldForLabel<HTMLInputElement>(root, 'Retries?').min).toBe('1')
+    expect(fieldForLabel<HTMLInputElement>(root, 'Retries?').max).toBe('5')
+    expect(fieldForLabel<HTMLInputElement>(root, 'Freeze?').type).toBe('date')
+    expect(fieldForLabel<HTMLInputElement>(root, 'Freeze?').parentElement?.textContent).toContain('YYYY-MM-DD')
+    expect(fieldForLabel<HTMLInputElement>(root, 'Prefix?').parentElement?.textContent).toContain('Format: email · Pattern: ^[a-z]+$')
+    expect(fieldForLabel<HTMLTextAreaElement>(root, 'Body?').getAttribute('rows')).toBe('3')
+    expect(root.querySelector('[role="radiogroup"][aria-label="Drop table?"]')).not.toBeNull()
+    expect(root.textContent).toContain('(optional)')
+    expect(root.textContent).toContain('Blocks: the schema')
+
+    await setControlValue(select, 'v2')
+    const ownAnswers = controlsForLabel(root, 'Add your own answer')
+    await setControlValue(ownAnswers[0] as HTMLInputElement, '  soon  ')
+    const linux = [...root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((entry) => entry.closest('label')?.textContent?.trim() === 'Linux')
+    const mac = [...root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((entry) => entry.closest('label')?.textContent?.trim() === 'macOS')
+    if (!linux || !mac) throw new Error('Multi-select options not found')
+    await setCheckbox(linux, true)
+    await setCheckbox(mac, true)
+    await setControlValue(ownAnswers[1] as HTMLInputElement, ' win ')
+    await setControlValue(fieldForLabel<HTMLInputElement>(root, 'Prefix?'), 'feat')
+    await setControlValue(fieldForLabel<HTMLTextAreaElement>(root, 'Body?'), 'line 1\nline 2')
+    await setControlValue(fieldForLabel<HTMLInputElement>(root, 'Freeze?'), '2026-11-15')
+    await setControlValue(fieldForLabel<HTMLInputElement>(root, 'Retries?'), 'Infinity')
+    await click(root, 'No')
+    expect(button(root, 'Answer').disabled).toBe(true)
+    await setControlValue(fieldForLabel<HTMLInputElement>(root, 'Retries?'), '3')
+    expect(button(root, 'Answer').disabled).toBe(false)
+    await click(root, 'Answer')
+
+    expect(fake.calls.filter((call) => call.method.endsWith('resolveNeed'))).toEqual([{
+      method: 'quirky.avatar/resolveNeed',
+      params: {
+        needId: 'need-q',
+        action: 'answer',
+        answers: {
+          q_select: { value: 'v2', label: 'Add v2', note: 'soon', source: 'option' },
+          q_multi: { values: ['mac', 'linux'], labels: ['macOS', 'Linux'], other: 'win', source: 'options' },
+          q_text: { value: 'feat', source: 'input' },
+          q_area: { value: 'line 1\nline 2', source: 'input' },
+          q_num: { value: 3, source: 'input' },
+          q_date: { value: '2026-11-15', source: 'input' },
+          q_confirm: { value: false, source: 'input' }
+        }
+      }
+    }])
+  })
+
+  test('fails closed on unreadable questions and malformed options', async () => {
+    const unreadable: unknown[] = [
+      null,
+      { type: 'text', question: 'Missing ID?' },
+      { id: '', type: 'text', question: 'Empty ID?' },
+      { id: '   ', type: 'text', question: 'Blank ID?' },
+      { id: 'missing-question', type: 'text' },
+      { id: 'empty-question', type: 'text', question: '' },
+      { id: 'missing-type', question: 'Missing type?' },
+      { id: 'unknown-type', type: 'password', question: 'Unknown type?' },
+      { id: 'select-empty', type: 'select', question: 'No options?', options: [] },
+      { id: 'select-malformed', type: 'select', question: 'Bad option?', options: [{ value: 'v1' }] },
+      { id: 'multiselect-missing', type: 'multiselect', question: 'Missing options?' },
+      { id: 'multiselect-empty', type: 'multiselect', question: 'No targets?', options: [] },
+      { id: 'multiselect-malformed', type: 'multiselect', question: 'Bad labels?', options: [{ value: 'linux', label: 42 }] }
+    ]
+
+    for (const [index, raw] of unreadable.entries()) {
+      const badNeed = need({
+        id: `need-bad-${index}`,
+        kind: 'question',
+        title: 'Unreadable question',
+        detail: { questions: [raw] },
+        actions: ['answer']
+      })
+      const root = await mount(AvatarView, makeContext({
+        status: status(two, 1),
+        report: () => report({ needsYou: [badNeed] }),
+        log: () => []
+      }), { tab: 'report' })
+      expect(root.textContent).toContain('Question cannot be read')
+      expect(button(root, 'Answer').disabled).toBe(true)
+    }
+  })
+
+  test('keeps legacy question needs as a trimmed free-text answer with or without an empty questions array', async () => {
+    for (const questions of [undefined, []]) {
+      const legacyNeed = need({
+        id: `legacy-${questions === undefined ? 'missing' : 'empty'}`,
+        kind: 'question',
+        title: 'Legacy question',
+        detail: questions === undefined ? { askId: 'ask-legacy' } : { askId: 'ask-legacy', questions },
+        actions: ['answer']
+      })
+      const fake = makeContext({
+        status: status(two, 1),
+        report: () => report({ needsYou: [legacyNeed] }),
+        log: () => [],
+        resolveNeed: () => ({ ok: true })
+      })
+      const root = await mount(AvatarView, fake, { tab: 'report' })
+      expect(controlsForLabel(root, 'Your answer')).toHaveLength(1)
+      await setControlValue(fieldForLabel<HTMLInputElement>(root, 'Your answer'), '  proceed  ')
+      await click(root, 'Answer')
+      expect(fake.calls.filter((call) => call.method.endsWith('resolveNeed'))[0]?.params).toEqual({
+        needId: legacyNeed.id,
+        action: 'answer',
+        text: 'proceed'
+      })
+    }
+  })
+
+  test('keeps each resolving need and its typed controls disabled until that call settles', async () => {
+    const question = need({
+      id: 'need-a',
+      kind: 'question',
+      title: 'Answer these',
+      detail: {
+        questions: [
+          { id: 'q-select', type: 'select', question: 'Choice?', required: true, options: [{ value: 'one', label: 'One' }] },
+          { id: 'q-text', type: 'text', question: 'Text?', required: true },
+          { id: 'q-area', type: 'text', question: 'Details?', multiline: true, required: true }
+        ]
+      },
+      actions: ['answer', 'deny']
+    })
+    const approval = need({
+      id: 'need-b',
+      kind: 'held-call',
+      title: 'Confirm this call?',
+      actions: ['confirm', 'redo']
+    })
+    const first = Promise.withResolvers<{ ok: boolean }>()
+    const second = Promise.withResolvers<{ ok: boolean }>()
+    const pending = { 'need-a': first, 'need-b': second }
+    const fake = makeContext({
+      status: status(two, 2),
+      report: () => report({ needsYou: [question, approval] }),
+      log: () => [],
+      resolveNeed: (params) => pending[params.needId as keyof typeof pending].promise
+    })
+    const root = await mount(AvatarView, fake, { tab: 'report' })
+
+    await setControlValue(fieldForLabel<HTMLSelectElement>(root, 'Choice?'), 'one')
+    await setControlValue(fieldForLabel<HTMLInputElement>(root, 'Text?'), 'ready')
+    await setControlValue(fieldForLabel<HTMLTextAreaElement>(root, 'Details?'), 'details')
+    await act(async () => {
+      button(root, 'Answer').click()
+      button(root, 'Answer').click()
+      await Promise.resolve()
+    })
+    await settle()
+    expect(fake.calls.filter((call) => call.method.endsWith('resolveNeed'))).toHaveLength(1)
+    expect(button(root, 'Answer').disabled).toBe(true)
+    expect(button(root, 'Deny').disabled).toBe(true)
+    expect(fieldForLabel<HTMLSelectElement>(root, 'Choice?').disabled).toBe(true)
+    expect(fieldForLabel<HTMLInputElement>(root, 'Add your own answer').disabled).toBe(true)
+    expect(fieldForLabel<HTMLInputElement>(root, 'Text?').disabled).toBe(true)
+    expect(fieldForLabel<HTMLTextAreaElement>(root, 'Details?').disabled).toBe(true)
+
+    await click(root, 'Confirm')
+    expect(button(root, 'Answer').disabled).toBe(true)
+    expect(button(root, 'Confirm').disabled).toBe(true)
+    expect(button(root, 'Redo').disabled).toBe(true)
+    await act(async () => second.resolve({ ok: true }))
+    await settle()
+    expect(button(root, 'Answer').disabled).toBe(true)
+    expect(button(root, 'Confirm').disabled).toBe(false)
+    expect(button(root, 'Redo').disabled).toBe(false)
+
+    await act(async () => first.resolve({ ok: true }))
+    await settle()
+    expect(button(root, 'Answer').disabled).toBe(false)
+    expect(button(root, 'Deny').disabled).toBe(false)
+  })
 
 function tab(root: ParentNode, label: string): HTMLButtonElement {
   const match = [...root.querySelectorAll('[role="tab"]')].find((entry) => entry.textContent?.startsWith(label))
@@ -380,11 +726,32 @@ describe('AvatarView', () => {
     expect(fake.calls.find((call) => call.method.endsWith('resolveNeed'))?.params).toEqual({ needId: 'need-q', action: 'answer', text: 'Keep v1' })
   })
 
-  test('shows why a one-click answer was refused', async () => {
-    const fake = makeContext({ status: status(two, 2), report: () => report(), log: () => [], resolveNeed: () => ({ ok: false, error: 'already resolved' }) })
+  test('shows resolve failures and refreshes report after each outcome', async () => {
+    let reports = 0
+    let reject = false
+    const fake = makeContext({
+      status: status(two, 2),
+      report: () => {
+        reports += 1
+        return report()
+      },
+      log: () => [],
+      resolveNeed: () => {
+        if (reject) throw new Error('offline')
+        return { ok: false, error: 'already resolved' }
+      }
+    })
     const root = await mount(AvatarView, fake, { tab: 'report' })
+    expect(reports).toBe(1)
+
     await click(root, 'Deny')
     expect(root.querySelector('[role="alert"]')?.textContent).toBe('already resolved')
+    expect(reports).toBe(2)
+
+    reject = true
+    await click(root, 'Allow once')
+    expect(root.querySelector('[role="alert"]')?.textContent).toBe('offline')
+    expect(reports).toBe(3)
   })
 
   test('links the report to the log', async () => {

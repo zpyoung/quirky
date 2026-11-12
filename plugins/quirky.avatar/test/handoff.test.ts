@@ -648,7 +648,7 @@ describe('resolveNeed', () => {
     await handOff(restartSetup, input('wt-1'))
     const parked = addNeed(restartSetup, 'wt-1', 'parked', ['restart'])
     const restart = deferred<{ sessionId: string | null; error?: string }>()
-    restartSetup.sup.restartWorker = async (worktreeId, note) => {
+    restartSetup.app.services.supervisor.restartWorker = async (worktreeId, note) => {
       restartSetup.sup.restarted.push([worktreeId, note])
       return restart.promise
     }
@@ -666,7 +666,7 @@ describe('resolveNeed', () => {
     gateSetup.gate.checks.length = 0
     const gateNeed = addNeed(gateSetup, 'wt-1', 'gate-failed', ['restart-to-handoff'])
     const gatedRestart = deferred<{ sessionId: string | null; error?: string }>()
-    gateSetup.sup.restartWorker = async (worktreeId, note) => {
+    gateSetup.app.services.supervisor.restartWorker = async (worktreeId, note) => {
       gateSetup.sup.restarted.push([worktreeId, note])
       return gatedRestart.promise
     }
