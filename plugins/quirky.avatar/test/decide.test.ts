@@ -168,7 +168,7 @@ describe('decide fixed rules', () => {
     for (const command of ['git -C /other/repo clean -fd', 'git --work-tree=/other/repo checkout -- .', 'GIT_DIR=/other/repo/.git git clean -fd', 'cd /other/repo && git reset --hard']) {
       expect([command, run(bashCall(command), 'full', { messaging: true, historyRewrite: true, deploys: true })]).toEqual([command, expect.objectContaining({ step: 'floor-core', outcome: 'held' })])
     }
-    expect(run(bashCall('git clean -fd'), 'local')).toMatchObject({ step: 'fixed-rules', outcome: 'allow' })
+    expect(run(bashCall('git clean -fd'), 'local')).toMatchObject({ step: null, outcome: 'judgment' })
   })
 
   test('skipping git hooks is denied', () => {
@@ -233,7 +233,7 @@ describe('decide code-executing read lookalikes and foreign pushes', () => {
   test('awk system() is not allowed by the fixed rules', () => {
     const result = run(bashCall(`awk 'BEGIN {system("touch /tmp/outside-avatar")}'`), 'own-branch')
     expect(result.outcome).toBe('judgment')
-    expect(run(bashCall(`awk '{print $1}' a.txt`), 'own-branch')).toMatchObject({ step: 'fixed-rules', outcome: 'allow' })
+    expect(run(bashCall(`awk '{print $1}' a.txt`), 'own-branch')).toMatchObject({ step: null, outcome: 'judgment' })
   })
 
   // push-own carries no destination, so the level step re-reads the call: at own-branch only ctx.ownBranch may be pushed
