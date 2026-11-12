@@ -6,8 +6,11 @@ Plugin authors: read the [Plugin API 1.0 reference](../docs/plugin-api.md) for t
 manifest, import, compatibility and lifecycle contract. Its linked protocol declarations are the
 detailed type reference.
 
-If a daemon plugin needs a subprocess, use `context.process.run`. Plugin code must never import
-`@quirky/process` or spawn processes directly. See the [API 1.4 `context.process` section](../docs/plugin-api.md#api-14-process-runner).
+If a daemon plugin needs a subprocess, use `context.process.run` for aggregated commands or
+`context.process.spawn` for streaming and session-length children. Spawn requires `apiVersion`
+1.6.0 or later. Plugin code must never import `@quirky/process` or spawn processes directly.
+See the [process runner](../docs/plugin-api.md#api-14-process-runner) and
+[spawn reference](../docs/plugin-api.md#api-16-streaming-and-session-length-processes).
 
 ## Removing a project
 

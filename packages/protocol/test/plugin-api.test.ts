@@ -26,6 +26,7 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.3.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.4.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.5.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.5.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.1')).not.toBeNull()
     expect(pluginApiCompatibilityError('1.7.0')).not.toBeNull()
