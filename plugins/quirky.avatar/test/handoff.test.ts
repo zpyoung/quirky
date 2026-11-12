@@ -525,6 +525,193 @@ describe('resolveNeed', () => {
     expect(closed(s, empty.id).resolvedAt).toBeNull()
   })
 
+  test('question needs forward typed answers, reject empty answers, and defer event effects to onAskResolved', async () => {
+    const questions = [
+      { id: 'q1', type: 'select', question: 'Format?', required: true, options: [{ value: 'v1', label: 'Keep v1' }] },
+      { id: 'q2', type: 'confirm', question: 'Migrate?', required: true }
+    ]
+    const s = setup({ calls: { 'quirky.ask/answer': () => ({ status: 'answered', askId: 'ask-42', answers: {}, skipped: [], summary: 'Format?: Keep v1\nMigrate?: true' }) } })
+    const need = addNeed(s, 'wt-1', 'question', ['answer'], { askId: 'ask-42', questions, blocks: 'the schema' })
+    const answers = {
+      q1: { value: 'v1', label: 'Keep v1', source: 'option' },
+      q2: { value: true, source: 'input' }
+    }
+
+    expect(await s.svc.resolveNeed(need.id, 'answer', undefined, {})).toEqual({ ok: false, error: 'an answer needs text' })
+    expect(closed(s, need.id).resolvedAt).toBeNull()
+    expect(s.calls.filter((call) => call.method === 'quirky.ask/answer')).toEqual([])
+
+    expect(await s.svc.resolveNeed(need.id, 'answer', undefined, answers)).toEqual({ ok: true })
+    const answerCalls = s.calls.filter((call) => call.method === 'quirky.ask/answer')
+    expect(answerCalls).toEqual([{ method: 'quirky.ask/answer', params: { askId: 'ask-42', answers } }])
+    expect(answerCalls[0]?.params.answers).toBe(answers)
+    expect(closed(s, need.id)).toMatchObject({ resolution: 'answered' })
+    expect(s.app.store.journalSince(0).filter((entry) => entry.kind === 'ask' || entry.data.type === 'need-resolved')).toEqual([])
+
+    const eventAnswers = { q1: { value: 'v1', source: 'input' } }
+    const need2 = addNeed(s, 'wt-1', 'question', ['answer'], { askId: 'ask-43', questions })
+    s.fakeCalls['quirky.ask/answer'] = () => {
+      const event = {
+        type: 'ask-resolved',
+        source: 'quirky.ask/resolved',
+        askId: 'ask-43',
+        status: 'answered',
+        answers: eventAnswers,
+        skipped: [],
+        summary: 'q1: v1'
+      }
+      s.app.journal('wt-1', 'event', event)
+      s.app.needs.close(need2.id, 'answered')
+      s.app.services.brain.wake()
+      return { status: 'answered', askId: 'ask-43', answers: {}, skipped: [], summary: 'q1: v1' }
+    }
+
+    expect(await s.svc.resolveNeed(need2.id, 'answer', undefined, eventAnswers)).toEqual({ ok: true })
+    expect(closed(s, need2.id)).toMatchObject({ resolution: 'answered' })
+    const resolvedRows = s.app.store.journalSince(0).filter((entry) => entry.data.askId === 'ask-43')
+    expect(resolvedRows).toHaveLength(1)
+    expect(resolvedRows[0]).toMatchObject({
+      worktreeId: 'wt-1',
+      kind: 'event',
+      data: { type: 'ask-resolved', source: 'quirky.ask/resolved', askId: 'ask-43', status: 'answered', answers: eventAnswers, skipped: [], summary: 'q1: v1' }
+    })
+    expect(resolvedRows.filter((entry) => entry.kind === 'ask' || entry.data.type === 'need-resolved')).toEqual([])
+    expect(s.wakes()).toBe(1)
+  })
+
+  test('legacy text answers use the first question ID or q1 when none is available', async () => {
+    const s = setup({ calls: { 'quirky.ask/answer': () => ({ status: 'answered' }) } })
+    const needs = [
+      { askId: 'ask-first-id', questions: [{ id: 'first-question', type: 'text', question: 'First?' }], expectedId: 'first-question' },
+      { askId: 'ask-no-id', questions: [], expectedId: 'q1' }
+    ]
+
+    for (const item of needs) {
+      const need = addNeed(s, 'wt-1', 'question', ['answer'], { askId: item.askId, questions: item.questions })
+      expect(await s.svc.resolveNeed(need.id, 'answer', '  legacy answer  ')).toEqual({ ok: true })
+    }
+
+    expect(s.calls.filter((call) => call.method === 'quirky.ask/answer').map((call) => call.params)).toEqual([
+      { askId: 'ask-first-id', answers: { 'first-question': { value: 'legacy answer', source: 'input' } } },
+      { askId: 'ask-no-id', answers: { q1: { value: 'legacy answer', source: 'input' } } }
+    ])
+  })
+
+  test('stale asks close for every finished status and missing asks, while validation failures remain retryable', async () => {
+    const statuses = ['answered', 'partial', 'declined', 'timed_out', 'unavailable'] as const
+    const s = setup()
+
+    for (const status of statuses) {
+      const askId = `ask-${status}`
+      const need = addNeed(s, 'wt-1', 'question', ['answer'], { askId })
+      s.fakeCalls['quirky.ask/answer'] = () => {
+        throw new Error(`ask ${askId} is already ${status}`)
+      }
+
+      expect(await s.svc.resolveNeed(need.id, 'answer', undefined, { q1: { value: 'x', source: 'input' } })).toEqual({
+        ok: false,
+        error: `ask ${askId} is already ${status}`
+      })
+      expect(closed(s, need.id)).toMatchObject({ resolvedAt: expect.any(Number), resolution: status })
+    }
+
+    const missing = addNeed(s, 'wt-1', 'question', ['answer'], { askId: 'ask-missing' })
+    s.fakeCalls['quirky.ask/answer'] = () => {
+      throw new Error('no such ask: ask-missing')
+    }
+    expect(await s.svc.resolveNeed(missing.id, 'answer', 'answer')).toEqual({ ok: false, error: 'no such ask: ask-missing' })
+    expect(closed(s, missing.id)).toMatchObject({ resolvedAt: expect.any(Number), resolution: 'unavailable' })
+
+    const retryable = addNeed(s, 'wt-1', 'question', ['answer'], { askId: 'ask-validation' })
+    let attempts = 0
+    s.fakeCalls['quirky.ask/answer'] = () => {
+      attempts++
+      if (attempts === 1) throw new Error('answers.q1: value does not match the question pattern/format')
+      return { status: 'partial' }
+    }
+    const answers = { q1: { value: 'bad value', source: 'input' } }
+
+    expect(await s.svc.resolveNeed(retryable.id, 'answer', undefined, answers)).toEqual({
+      ok: false,
+      error: 'answers.q1: value does not match the question pattern/format'
+    })
+    expect(closed(s, retryable.id).resolvedAt).toBeNull()
+    expect(await s.svc.resolveNeed(retryable.id, 'answer', undefined, answers)).toEqual({ ok: true })
+    expect(closed(s, retryable.id)).toMatchObject({ resolution: 'partial' })
+    expect(attempts).toBe(2)
+  })
+
+  test('concurrent restart, restart-to-handoff and answer calls are refused for the same need', async () => {
+    const deferred = <T,>() => Promise.withResolvers<T>()
+
+    const restartSetup = setup({ sessions: [session('s1', 'wt-1')] })
+    await handOff(restartSetup, input('wt-1'))
+    const parked = addNeed(restartSetup, 'wt-1', 'parked', ['restart'])
+    const restart = deferred<{ sessionId: string | null; error?: string }>()
+    restartSetup.sup.restartWorker = async (worktreeId, note) => {
+      restartSetup.sup.restarted.push([worktreeId, note])
+      return restart.promise
+    }
+    const firstRestart = restartSetup.svc.resolveNeed(parked.id, 'restart')
+    const secondRestart = restartSetup.svc.resolveNeed(parked.id, 'restart')
+    restart.resolve({ sessionId: 'restart-session' })
+    const [firstRestartResult, secondRestartResult] = await Promise.all([firstRestart, secondRestart])
+    expect(firstRestartResult).toEqual({ ok: true })
+    expect(secondRestartResult).toEqual({ ok: false, error: 'need already resolved' })
+    expect(restartSetup.sup.restarted).toHaveLength(1)
+
+    const gateSetup = setup({ sessions: [session('s1', 'wt-1')] })
+    await handOff(gateSetup, input('wt-1'))
+    gateSetup.svc.setState('wt-1', 'gate-failed', 'tool calls are not reaching the gate')
+    gateSetup.gate.checks.length = 0
+    const gateNeed = addNeed(gateSetup, 'wt-1', 'gate-failed', ['restart-to-handoff'])
+    const gatedRestart = deferred<{ sessionId: string | null; error?: string }>()
+    gateSetup.sup.restartWorker = async (worktreeId, note) => {
+      gateSetup.sup.restarted.push([worktreeId, note])
+      return gatedRestart.promise
+    }
+    const firstGateRestart = gateSetup.svc.resolveNeed(gateNeed.id, 'restart-to-handoff')
+    const secondGateRestart = gateSetup.svc.resolveNeed(gateNeed.id, 'restart-to-handoff')
+    gatedRestart.resolve({ sessionId: 'restart-session' })
+    const [firstGateResult, secondGateResult] = await Promise.all([firstGateRestart, secondGateRestart])
+    expect(firstGateResult).toEqual({ ok: true })
+    expect(secondGateResult).toEqual({ ok: false, error: 'need already resolved' })
+    expect(gateSetup.sup.restarted).toHaveLength(1)
+    expect(gateSetup.gate.checks).toHaveLength(1)
+
+    const answerGate = deferred<unknown>()
+    const answerSetup = setup({ calls: { 'quirky.ask/answer': () => answerGate.promise } })
+    const question = addNeed(answerSetup, 'wt-1', 'question', ['answer'], { askId: 'ask-conc' })
+    const firstAnswer = answerSetup.svc.resolveNeed(question.id, 'answer', undefined, { q1: { value: 'x', source: 'input' } })
+    const secondAnswer = answerSetup.svc.resolveNeed(question.id, 'answer', undefined, { q1: { value: 'x', source: 'input' } })
+    answerGate.resolve({ status: 'answered' })
+    const [firstAnswerResult, secondAnswerResult] = await Promise.all([firstAnswer, secondAnswer])
+    expect(firstAnswerResult).toEqual({ ok: true })
+    expect(secondAnswerResult).toEqual({ ok: false, error: 'need already resolved' })
+    expect(answerSetup.calls.filter((call) => call.method === 'quirky.ask/answer')).toHaveLength(1)
+  })
+
+  test('failed restart actions and answers release their claim for a retry', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    await handOff(s, input('wt-1'))
+    const restart = addNeed(s, 'wt-1', 'parked', ['restart'])
+    s.sup.restartResult = { sessionId: null, error: 'no agent' }
+    expect(await s.svc.resolveNeed(restart.id, 'restart')).toEqual({ ok: false, error: 'no agent' })
+    expect(closed(s, restart.id).resolvedAt).toBeNull()
+    s.sup.restartResult = { sessionId: 'restart-session', error: undefined }
+    expect(await s.svc.resolveNeed(restart.id, 'restart')).toEqual({ ok: true })
+
+    s.svc.setState('wt-1', 'gate-failed', 'tool calls are not reaching the gate')
+    const gateNeed = addNeed(s, 'wt-1', 'gate-failed', ['restart-to-handoff'])
+    s.sup.restartResult = { sessionId: null, error: 'restart failed' }
+    expect(await s.svc.resolveNeed(gateNeed.id, 'restart-to-handoff')).toEqual({ ok: false, error: 'restart failed' })
+    expect(closed(s, gateNeed.id).resolvedAt).toBeNull()
+    s.sup.restartResult = { sessionId: 'retry-session', error: undefined }
+    expect(await s.svc.resolveNeed(gateNeed.id, 'restart-to-handoff')).toEqual({ ok: true })
+    expect(s.sup.restarted).toHaveLength(4)
+  })
+
+
   test('restart restarts the worker and take-back takes the worktree back', async () => {
     const s = setup({ sessions: [session('s1', 'wt-1')] })
     await handOff(s, input('wt-1'))
