@@ -2,8 +2,8 @@ import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Worker } from 'node:worker_threads'
 import { performance } from 'node:perf_hooks'
-import { readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { chmodSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { PluginStore, StoreMigration } from '@quirky/protocol'
 import { openPluginStore, pluginDataDir } from '../../src/plugins/stores'
 import { makeTempDir, removeTempDirs } from './fixtures'
@@ -442,5 +442,384 @@ describe('lifecycle', () => {
     const second = open(home, list)
     expect(second.store.all('SELECT id FROM items')).toHaveLength(1)
     second.close()
+  })
+})
+type Recovery = { outcome: 'repaired' | 'quarantined'; path: string; quarantinedPath: string; reason: string }
+
+type CorruptStoreFixture = { file: string; directory: string; original: Buffer }
+
+function row<T>(db: Database, sql: string): T {
+  const statement = db.query(sql)
+  try {
+    return statement.get() as T
+  } finally {
+    statement.finalize()
+  }
+}
+
+function rows<T>(db: Database, sql: string): T[] {
+  const statement = db.query(sql)
+  try {
+    return statement.all() as T[]
+  } finally {
+    statement.finalize()
+  }
+}
+
+function integrity(file: string): string[] {
+  const db = new Database(file, { readonly: true })
+  try {
+    return rows<Record<string, unknown>>(db, 'PRAGMA integrity_check(1)').map((result) => String(Object.values(result)[0]))
+  } finally {
+    db.close(true)
+  }
+}
+
+function expectCorruptBeforeOpen(file: string): void {
+  expect(integrity(file)).not.toEqual(['ok'])
+}
+
+function corruptStore(
+  home: string,
+  options: { pluginId?: string; userVersion?: number; mode?: number; damage: 'freelist' | 'index' }
+): CorruptStoreFixture {
+  const pluginId = options.pluginId ?? ID
+  const directory = pluginDataDir(home, pluginId)
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const file = join(directory, 'store.db')
+  const db = new Database(file)
+  try {
+    db.exec('PRAGMA page_size = 4096')
+    db.exec('PRAGMA journal_mode = WAL')
+    db.exec('CREATE TABLE records (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, payload TEXT NOT NULL)')
+    db.exec(`
+      WITH RECURSIVE n(value) AS (VALUES(1) UNION ALL SELECT value + 1 FROM n WHERE value < 2000)
+      INSERT INTO records (name, payload)
+      SELECT printf('row-%04d', value), printf('payload-%04d', value) FROM n
+    `)
+    db.exec('CREATE TABLE discarded (payload BLOB NOT NULL)')
+    db.exec(`
+      WITH RECURSIVE n(value) AS (VALUES(1) UNION ALL SELECT value + 1 FROM n WHERE value < 96)
+      INSERT INTO discarded SELECT zeroblob(4096) FROM n
+    `)
+    db.exec('DROP TABLE discarded')
+    db.exec(`PRAGMA user_version = ${options.userVersion ?? 7}`)
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    db.exec('PRAGMA journal_mode = DELETE')
+  } finally {
+    db.close(true)
+  }
+  rmSync(`${file}-wal`, { force: true })
+  rmSync(`${file}-shm`, { force: true })
+
+  const bytes = readFileSync(file)
+  const encodedPageSize = bytes.readUInt16BE(16)
+  const pageSize = encodedPageSize === 1 ? 65536 : encodedPageSize
+  if (options.damage === 'freelist') {
+    const trunkPage = bytes.readUInt32BE(32)
+    if (trunkPage === 0) throw new Error('fixture database has no freelist trunk')
+    bytes.writeUInt32BE(0x7fffffff, (trunkPage - 1) * pageSize + 4)
+  } else {
+    const key = Buffer.from('row-0247')
+    let keyOffset = bytes.indexOf(key)
+    let indexKeyOffset = -1
+    while (keyOffset >= 0) {
+      const pageStart = Math.floor(keyOffset / pageSize) * pageSize
+      const headerOffset = pageStart === 0 ? 100 : pageStart
+      if (bytes[headerOffset] === 0x0a) {
+        indexKeyOffset = keyOffset
+        break
+      }
+      keyOffset = bytes.indexOf(key, keyOffset + 1)
+    }
+    if (indexKeyOffset < 0) throw new Error('fixture database has no matching index entry')
+    bytes.write('row-9000', indexKeyOffset, 'utf8')
+  }
+  writeFileSync(file, bytes)
+  if (options.mode !== undefined) chmodSync(file, options.mode)
+  const original = readFileSync(file)
+  expectCorruptBeforeOpen(file)
+  return { file, directory, original }
+}
+
+function garbageStore(home: string, pluginId = ID): CorruptStoreFixture {
+  const directory = pluginDataDir(home, pluginId)
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const file = join(directory, 'store.db')
+  const original = Buffer.alloc(8192, 0x41)
+  writeFileSync(file, original)
+  return { file, directory, original }
+}
+function quarantinedFile(fixture: CorruptStoreFixture): string {
+  const name = readdirSync(fixture.directory).find((entry) => entry.startsWith('store.db.corrupt-'))
+  if (!name) throw new Error(`missing quarantined store in ${fixture.directory}`)
+  return join(fixture.directory, name)
+}
+
+function recoveredState(file: string) {
+  const db = new Database(file, { readonly: true })
+  try {
+    return {
+      version: row<{ user_version: number }>(db, 'PRAGMA user_version').user_version,
+      count: row<{ count: number }>(db, 'SELECT count(*) AS count FROM records').count,
+      integrity: rows<Record<string, unknown>>(db, 'PRAGMA integrity_check(1)').map((result) => String(Object.values(result)[0]))
+    }
+  } finally {
+    db.close(true)
+  }
+}
+
+function expectNoRepairDirectory(directory: string): void {
+  expect(readdirSync(directory).some((name) => name.startsWith('.store.db.repair-'))).toBe(false)
+}
+
+function expectNoRecoveryArtifacts(directory: string): void {
+  expect(readdirSync(directory).some((name) => name.includes('.corrupt-') || name.startsWith('.store.db.repair-'))).toBe(false)
+}
+
+function expectRecoveryShape(recovery: Recovery, outcome: Recovery['outcome'], file: string): void {
+  expect(recovery.outcome).toBe(outcome)
+  expect(recovery.path).toBe(file)
+  expect(recovery.quarantinedPath.startsWith(`${file}.corrupt-`)).toBe(true)
+  expect(recovery.quarantinedPath.slice(`${file}.corrupt-`.length)).toMatch(/^\d+-[0-9a-f]{8}$/)
+  expect(recovery.reason.trim().length).toBeGreaterThan(0)
+  expect(recovery.reason).not.toContain('\n')
+  expect(recovery.reason.length).toBeLessThanOrEqual(300)
+}
+
+describe('corrupt stores', () => {
+  test('repairs a corrupt freelist and preserves every row, version, and file mode', () => {
+    const home = makeTempDir()
+    const fixture = corruptStore(home, { damage: 'freelist', mode: 0o600 })
+    const recoveries: Recovery[] = []
+    const { store, close } = openPluginStore({
+      home,
+      pluginId: ID,
+      migrations: Array.from({ length: 7 }, () => ''),
+      isActive: () => true,
+      onRecover: (recovery) => recoveries.push(recovery)
+    })
+    try {
+      expect(store.version).toBe(7)
+      expect(store.get<{ count: number }>('SELECT count(*) AS count FROM records')).toEqual({ count: 2000 })
+    } finally {
+      close()
+    }
+    expect(recoveries).toHaveLength(1)
+    const recovery = recoveries[0]!
+    expectRecoveryShape(recovery, 'repaired', fixture.file)
+    expect(readFileSync(recovery.quarantinedPath).equals(fixture.original)).toBe(true)
+    expect(recoveredState(fixture.file)).toEqual({ version: 7, count: 2000, integrity: ['ok'] })
+    expect(statSync(fixture.file).mode & 0o777).toBe(0o600)
+    expectNoRepairDirectory(fixture.directory)
+  })
+
+  test('repairs an index that is out of step with its table', () => {
+    const home = makeTempDir()
+    const fixture = corruptStore(home, { damage: 'index' })
+    const recoveries: Recovery[] = []
+    const { store, close } = openPluginStore({
+      home,
+      pluginId: ID,
+      migrations: Array.from({ length: 7 }, () => ''),
+      isActive: () => true,
+      onRecover: (recovery) => recoveries.push(recovery)
+    })
+    try {
+      expect(store.version).toBe(7)
+      expect(store.get<{ count: number }>('SELECT count(*) AS count FROM records')).toEqual({ count: 2000 })
+    } finally {
+      close()
+    }
+    expect(recoveries).toHaveLength(1)
+    const recovery = recoveries[0]!
+    expectRecoveryShape(recovery, 'repaired', fixture.file)
+    expect(readFileSync(recovery.quarantinedPath).equals(fixture.original)).toBe(true)
+    expect(recoveredState(fixture.file)).toEqual({ version: 7, count: 2000, integrity: ['ok'] })
+    expectNoRepairDirectory(fixture.directory)
+  })
+
+  test('quarantines a non-database file and its sidecars before running migrations', () => {
+    const home = makeTempDir()
+    const fixture = garbageStore(home)
+    writeFileSync(`${fixture.file}-wal`, Buffer.alloc(0))
+    writeFileSync(`${fixture.file}-shm`, Buffer.alloc(0))
+    const recoveries: Recovery[] = []
+    const { store, close } = openPluginStore({
+      home,
+      pluginId: ID,
+      migrations: ['CREATE TABLE fresh (id INTEGER PRIMARY KEY)'],
+      isActive: () => true,
+      onRecover: (recovery) => recoveries.push(recovery)
+    })
+    try {
+      expect(store.version).toBe(1)
+      expect(store.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'fresh'")).toEqual([
+        { name: 'fresh' }
+      ])
+    } finally {
+      close()
+    }
+    expect(recoveries).toHaveLength(1)
+    const recovery = recoveries[0]!
+    expectRecoveryShape(recovery, 'quarantined', fixture.file)
+    const suffix = recovery.quarantinedPath.slice(`${fixture.file}.corrupt-`.length)
+    expect(readFileSync(recovery.quarantinedPath).equals(fixture.original)).toBe(true)
+    expect(statSync(`${fixture.file}-wal.corrupt-${suffix}`).isFile()).toBe(true)
+    expect(statSync(`${fixture.file}-shm.corrupt-${suffix}`).isFile()).toBe(true)
+    expectNoRepairDirectory(fixture.directory)
+  })
+
+  test('reports recovery before a migration fails', () => {
+    const home = makeTempDir()
+    const fixture = garbageStore(home)
+    const order: string[] = []
+    expect(() =>
+      openPluginStore({
+        home,
+        pluginId: ID,
+        migrations: [
+          () => {
+            order.push('migration')
+            throw new Error('stop after recovery')
+          }
+        ],
+        isActive: () => true,
+        onRecover: () => order.push('recovery')
+      })
+    ).toThrow(`${ID} store migration 1 failed: stop after recovery`)
+    expect(order).toEqual(['recovery', 'migration'])
+    expect(readFileSync(`${fixture.file}.corrupt-${readdirSync(fixture.directory).find((name) => name.startsWith('store.db.corrupt-'))?.slice('store.db.corrupt-'.length)}`).equals(fixture.original)).toBe(true)
+    expectNoRepairDirectory(fixture.directory)
+  })
+
+  test('opens a repaired newer schema read-only with its rows', () => {
+    const home = makeTempDir()
+    const fixture = corruptStore(home, { damage: 'freelist', userVersion: 8 })
+    const recoveries: Recovery[] = []
+    const { store, close } = openPluginStore({
+      home,
+      pluginId: ID,
+      migrations: Array.from({ length: 7 }, () => ''),
+      isActive: () => true,
+      newerVersion: 'read-only',
+      onRecover: (recovery) => recoveries.push(recovery)
+    })
+    const repairedBytes = readFileSync(fixture.file)
+    try {
+      expect(store.readOnly).toBe(true)
+      expect(store.version).toBe(8)
+      expect(store.get<{ count: number }>('SELECT count(*) AS count FROM records')).toEqual({ count: 2000 })
+      expect(() => store.run('DELETE FROM records')).toThrow()
+    } finally {
+      close()
+    }
+    expect(recoveries).toHaveLength(1)
+    expectRecoveryShape(recoveries[0]!, 'repaired', fixture.file)
+    expect(readFileSync(recoveries[0]!.quarantinedPath).equals(fixture.original)).toBe(true)
+    expect(readFileSync(fixture.file).equals(repairedBytes)).toBe(true)
+    expectNoRepairDirectory(fixture.directory)
+  })
+
+  test('does not report or alter a healthy store on open', () => {
+    const home = makeTempDir()
+    const migrations: StoreMigration[] = ['CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)']
+    const initial = open(home, migrations)
+    initial.store.run("INSERT INTO items (name) VALUES ('kept')")
+    initial.close()
+    const file = join(pluginDataDir(home, ID), 'store.db')
+    const before = readFileSync(file)
+    const recoveries: Recovery[] = []
+    const reopened = openPluginStore({
+      home,
+      pluginId: ID,
+      migrations,
+      isActive: () => true,
+      onRecover: (recovery) => recoveries.push(recovery)
+    })
+    try {
+      expect(reopened.store.version).toBe(1)
+      expect(reopened.store.get<{ name: string }>('SELECT name FROM items')).toEqual({ name: 'kept' })
+    } finally {
+      reopened.close()
+    }
+    expect(recoveries).toEqual([])
+    expect(readFileSync(file).equals(before)).toBe(true)
+    expectNoRecoveryArtifacts(dirname(file))
+  })
+
+  test('passes healthy migration and newer-version errors through without recovery', () => {
+    const home = makeTempDir()
+    open(home, []).close()
+    const file = join(pluginDataDir(home, ID), 'store.db')
+    const recoveries: Recovery[] = []
+    expect(() =>
+      openPluginStore({
+        home,
+        pluginId: ID,
+        migrations: [() => { throw new Error('migration failed') }],
+        isActive: () => true,
+        onRecover: (recovery) => recoveries.push(recovery)
+      })
+    ).toThrow(`${ID} store migration 1 failed: migration failed`)
+    expect(() =>
+      openPluginStore({
+        home,
+        pluginId: ID,
+        migrations: [
+          (async () => undefined) as unknown as StoreMigration
+        ],
+        isActive: () => true,
+        onRecover: (recovery) => recoveries.push(recovery)
+      })
+    ).toThrow(`${ID} store migration 1 failed: migrations must be synchronous`)
+    expect(recoveries).toEqual([])
+    expectNoRecoveryArtifacts(dirname(file))
+
+    const newerHome = makeTempDir()
+    const newerMigrations: StoreMigration[] = [
+      'CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)',
+      "INSERT INTO items (name) VALUES ('newer data')"
+    ]
+    open(newerHome, newerMigrations).close()
+    const newerFile = join(pluginDataDir(newerHome, ID), 'store.db')
+    const newerBytes = readFileSync(newerFile)
+    const newerRecoveries: Recovery[] = []
+    expect(() =>
+      openPluginStore({
+        home: newerHome,
+        pluginId: ID,
+        migrations: newerMigrations.slice(0, 1),
+        isActive: () => true,
+        onRecover: (recovery) => newerRecoveries.push(recovery)
+      })
+    ).toThrow(`${ID} store is at version 2, but the plugin knows 1 migrations`)
+    expect(newerRecoveries).toEqual([])
+    expect(readFileSync(newerFile).equals(newerBytes)).toBe(true)
+    expectNoRecoveryArtifacts(dirname(newerFile))
+  })
+
+  test('closes the recovered database when onRecover throws', () => {
+    const home = makeTempDir()
+    const fixture = garbageStore(home)
+    const failure = new Error('recovery callback failed')
+    let quarantinedPath = ''
+    expect(() =>
+      openPluginStore({
+        home,
+        pluginId: ID,
+        migrations: [],
+        isActive: () => true,
+        onRecover: (recovery) => {
+          quarantinedPath = recovery.quarantinedPath
+          throw failure
+        }
+      })
+    ).toThrow(failure)
+    const reopened = openPluginStore({ home, pluginId: ID, migrations: [], isActive: () => true })
+    expect(reopened.store.version).toBe(0)
+    reopened.close()
+    expect(quarantinedPath).toBe(quarantinedFile(fixture))
+    expect(readFileSync(quarantinedPath).equals(fixture.original)).toBe(true)
   })
 })

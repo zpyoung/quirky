@@ -30,6 +30,7 @@ import { LayoutService } from './layout'
 import { createPtyApi } from './pty-api'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
+import { describeSqliteRecovery } from '../sqlite'
 import { FileResourceRegistry } from '../file-resources'
 import { UiService } from './ui-service'
 
@@ -379,7 +380,14 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             return opened.store
           }
           // the handle stays usable inside deactivate; extension.revoke closes it afterwards
-          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => true, newerVersion: options?.newerVersion })
+          const created = openPluginStore({
+            home,
+            pluginId: id,
+            migrations,
+            isActive: () => true,
+            newerVersion: options?.newerVersion,
+            onRecover: (recovery) => warn(id, describeSqliteRecovery(recovery))
+          })
           opened = { ...created, migrations: migrations.length }
           openedStores.set(id, opened)
           return opened.store
