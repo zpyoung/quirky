@@ -326,13 +326,13 @@ export function executeSpawn(
 
   const write = (data: string | Uint8Array): Promise<boolean> => {
     if (!child.stdin || inputClosed || stopping || leaderDidExit) return Promise.resolve(false)
-    const bytes = typeof data === 'string' ? encoder.encode(data) : data
+    const bytes = typeof data === 'string' ? encoder.encode(data) : new Uint8Array(data)
     const pending = writeQueue.then(async () => {
       if (stopping || leaderDidExit) return false
       try {
         child.stdin!.write(bytes)
         await child.stdin!.flush()
-        return !stopping && !leaderDidExit
+        return !stopping
       } catch {
         // a stopped child can reject a flush with EPIPE while a write is pending
         return false
