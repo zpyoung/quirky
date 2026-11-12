@@ -994,7 +994,7 @@ describe('stopping during a record pass', () => {
     const first = t.app.services.handoff.active()[0]
     t.app.services.handoff.active = () => [first, { ...first, worktreeId: 'wt-2', sessionId: 's-2' }]
     t.app.store.handoffs.put({ worktreeId: 'wt-2', state: 'working', sessionId: 's-2', active: true, handedOffAt: T0, takenBackAt: null })
-    const sessions: string[] = []
+    const sessions: unknown[] = []
     const entered = Promise.withResolvers<void>()
     const held = Promise.withResolvers<unknown>()
     t.fakeCalls['quirky.session/get'] = (params) => {
