@@ -1,3 +1,5 @@
+import type { ProcessRunner, RunResult } from '@quirky/protocol'
+
 import { displayOf } from './model'
 import type { AgentRow } from './types'
 
@@ -12,29 +14,35 @@ export type IdentityEvent = {
 /** `accept` updates the row; `replace` starts a new row for the event's agent; `ignore` changes nothing. */
 export type IdentityVerdict = 'accept' | 'replace' | 'ignore'
 
-export type IsAlive = (pid: number, start: string | null) => boolean
+export type IsAlive = (pid: number, start: string | null) => Promise<boolean>
 
 const collapseSpaces = (text: string) => text.trim().replace(/\s+/g, ' ')
 
 /**
- * Whether the agent process behind a pid still runs: the pid answers a signal 0 and, when its start
- * time is known, `ps` reports that same start (a reused pid starts at another time). Synchronous
- * because the identity decision waits on it.
+ * Whether the agent process behind a pid still runs: signal 0 proves the pid exists and, when its
+ * start time is known, the plugin runner checks that `ps` reports the same start. An incomplete
+ * identity read is not evidence that the lead has exited.
  */
-export function processAlive(pid: number, start: string | null): boolean {
+export async function processAlive(pid: number, start: string | null, runner: ProcessRunner): Promise<boolean> {
   try {
     process.kill(pid, 0)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EPERM') return false
   }
   if (start === null) return true
-  const ps = Bun.spawnSync(['ps', '-o', 'lstart=', '-p', String(pid)], {
-    env: { ...process.env, TZ: 'UTC0', LC_ALL: 'C' },
-    stdout: 'pipe',
-    stderr: 'ignore'
-  })
-  if (ps.exitCode !== 0) return false
-  return collapseSpaces(ps.stdout.toString()) === collapseSpaces(start)
+
+  let result: RunResult
+  try {
+    result = await runner.run(['ps', '-o', 'lstart=', '-p', String(pid)], {
+      env: { ...process.env, TZ: 'UTC0', LC_ALL: 'C' },
+      rerunnable: true
+    })
+  } catch {
+    return true
+  }
+  if (result.stopped !== undefined || result.spawnError !== undefined || typeof result.exitCode !== 'number' || result.signal !== null) return true
+  if (result.exitCode !== 0) return false
+  return collapseSpaces(result.stdoutText) === collapseSpaces(start)
 }
 
 /**
@@ -45,11 +53,16 @@ export function processAlive(pid: number, start: string | null): boolean {
  * another kind yields to the new agent, and a `clear`/`resume` SessionStart moves the lead.
  * A lead whose process is gone yields to any event, so a successor never inherits its pid.
  */
-export function decideIdentity(row: AgentRow | null, event: IdentityEvent, now: number, isAlive: IsAlive): IdentityVerdict {
+export async function decideIdentity(
+  row: AgentRow | null,
+  event: IdentityEvent,
+  now: number,
+  isAlive: IsAlive
+): Promise<IdentityVerdict> {
   if (!row) return 'accept'
   if (row.lead.ended) return 'replace'
   // a successor can speak with no foreign provider session, so a dead lead is found before the event is judged
-  if (row.lead.agentPid !== null && !isAlive(row.lead.agentPid, row.lead.agentStart)) return 'replace'
+  if (row.lead.agentPid !== null && !(await isAlive(row.lead.agentPid, row.lead.agentStart))) return 'replace'
 
   const sameKind = event.source === row.agent
   if (!sameKind) {

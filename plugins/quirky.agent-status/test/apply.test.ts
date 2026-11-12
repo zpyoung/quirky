@@ -429,60 +429,60 @@ describe('identity', () => {
     ...extra
   })
   const ev = (extra: Partial<IdentityEvent> = {}): IdentityEvent => ({ source: 'claude', providerSession: 'abc', movesLead: false, ...extra })
-  const alive = () => true
-  const dead = () => false
+  const alive = async () => true
+  const dead = async () => false
   const probes: [number, string | null][] = []
-  const spy = (answer: boolean) => (pid: number, start: string | null) => {
+  const spy = (answer: boolean) => async (pid: number, start: string | null) => {
     probes.push([pid, start])
     return answer
   }
 
-  test('an event with no row is accepted', () => {
-    expect(decideIdentity(null, ev(), NOW, alive)).toBe('accept')
+  test('an event with no row is accepted', async () => {
+    expect(await decideIdentity(null, ev(), NOW, alive)).toBe('accept')
   })
 
-  test('the lead\'s own events are accepted while its process lives', () => {
+  test('the lead\'s own events are accepted while its process lives', async () => {
     probes.length = 0
-    expect(decideIdentity(lead(), ev(), NOW, spy(true))).toBe('accept')
+    expect(await decideIdentity(lead(), ev(), NOW, spy(true))).toBe('accept')
     expect(probes).toEqual([[10, 'x']])
   })
 
-  test('a successor of the same kind replaces a lead whose process is gone, whatever its provider session', () => {
-    expect(decideIdentity(lead(), ev({ providerSession: null }), NOW, dead)).toBe('replace')
-    expect(decideIdentity(lead({ state: 'done' }), ev({ providerSession: 'abc' }), NOW, dead)).toBe('replace')
+  test('a successor of the same kind replaces a lead whose process is gone, whatever its provider session', async () => {
+    expect(await decideIdentity(lead(), ev({ providerSession: null }), NOW, dead)).toBe('replace')
+    expect(await decideIdentity(lead({ state: 'done' }), ev({ providerSession: 'abc' }), NOW, dead)).toBe('replace')
   })
 
-  test('another provider session of the same kind is nested while the lead lives and replaces it once it is gone', () => {
+  test('another provider session of the same kind is nested while the lead lives and replaces it once it is gone', async () => {
     probes.length = 0
-    expect(decideIdentity(lead(), ev({ providerSession: 'zzz' }), NOW, spy(true))).toBe('ignore')
+    expect(await decideIdentity(lead(), ev({ providerSession: 'zzz' }), NOW, spy(true))).toBe('ignore')
     expect(probes).toEqual([[10, 'x']])
-    expect(decideIdentity(lead(), ev({ providerSession: 'zzz' }), NOW, dead)).toBe('replace')
+    expect(await decideIdentity(lead(), ev({ providerSession: 'zzz' }), NOW, dead)).toBe('replace')
   })
 
-  test('clear and resume move the lead', () => {
-    expect(decideIdentity(lead(), ev({ providerSession: 'def', movesLead: true }), NOW, alive)).toBe('accept')
+  test('clear and resume move the lead', async () => {
+    expect(await decideIdentity(lead(), ev({ providerSession: 'def', movesLead: true }), NOW, alive)).toBe('accept')
   })
 
-  test('without a lead pid, a finished row yields to a new provider session and an unfinished one does not', () => {
+  test('without a lead pid, a finished row yields to a new provider session and an unfinished one does not', async () => {
     const noPid = { agentPid: null, agentStart: null }
-    expect(decideIdentity(lead({ state: 'done' }, noPid), ev({ providerSession: 'zzz' }), NOW, alive)).toBe('replace')
-    expect(decideIdentity(lead({}, noPid), ev({ providerSession: 'zzz' }), NOW, alive)).toBe('ignore')
+    expect(await decideIdentity(lead({ state: 'done' }, noPid), ev({ providerSession: 'zzz' }), NOW, alive)).toBe('replace')
+    expect(await decideIdentity(lead({}, noPid), ev({ providerSession: 'zzz' }), NOW, alive)).toBe('ignore')
   })
 
-  test('an event without a provider session is never foreign to the same kind', () => {
-    expect(decideIdentity(lead(), ev({ providerSession: null }), NOW, alive)).toBe('accept')
+  test('an event without a provider session is never foreign to the same kind', async () => {
+    expect(await decideIdentity(lead(), ev({ providerSession: null }), NOW, alive)).toBe('accept')
   })
 
-  test('a different agent kind is ignored while the row is unfinished and fresh, and yields when it is done', () => {
-    expect(decideIdentity(lead(), ev({ source: 'gemini', providerSession: null }), NOW, alive)).toBe('ignore')
-    expect(decideIdentity(lead({ state: 'done' }), ev({ source: 'gemini', providerSession: null }), NOW, alive)).toBe('replace')
+  test('a different agent kind is ignored while the row is unfinished and fresh, and yields when it is done', async () => {
+    expect(await decideIdentity(lead(), ev({ source: 'gemini', providerSession: null }), NOW, alive)).toBe('ignore')
+    expect(await decideIdentity(lead({ state: 'done' }), ev({ source: 'gemini', providerSession: null }), NOW, alive)).toBe('replace')
   })
 
-  test('a different agent replaces an unfinished row whose lead is gone, stale or unconfirmed', () => {
+  test('a different agent replaces an unfinished row whose lead is gone, stale or unconfirmed', async () => {
     const gemini = ev({ source: 'gemini', providerSession: null })
-    expect(decideIdentity(lead(), gemini, NOW, dead)).toBe('replace')
-    expect(decideIdentity(lead({ evidenceAt: NOW - 31 * 60_000 }), gemini, NOW, alive)).toBe('replace')
-    expect(decideIdentity(lead({ restoredUnconfirmed: true }), gemini, NOW, alive)).toBe('replace')
-    expect(decideIdentity(lead({}, { ended: true }), gemini, NOW, alive)).toBe('replace')
+    expect(await decideIdentity(lead(), gemini, NOW, dead)).toBe('replace')
+    expect(await decideIdentity(lead({ evidenceAt: NOW - 31 * 60_000 }), gemini, NOW, alive)).toBe('replace')
+    expect(await decideIdentity(lead({ restoredUnconfirmed: true }), gemini, NOW, alive)).toBe('replace')
+    expect(await decideIdentity(lead({}, { ended: true }), gemini, NOW, alive)).toBe('replace')
   })
 })

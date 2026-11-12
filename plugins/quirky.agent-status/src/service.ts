@@ -154,7 +154,7 @@ export class AgentStatusService {
     private readonly context: PluginContext,
     private readonly rows: RowStore,
     private readonly activity: ActivityFeed,
-    private readonly isAlive: IsAlive = processAlive,
+    private readonly isAlive: IsAlive = (pid, start) => processAlive(pid, start, context.process),
     private readonly now: () => number = Date.now,
     private readonly timing: Timing = timingFrom(process.env)
   ) {
@@ -621,12 +621,13 @@ export class AgentStatusService {
     // a row only titles or OSC 7501 fed has no lead to protect: a hook takes it over
     const stored = this.rows.get(session.id)
     const known = stored && stored.lastHookAt !== null ? stored : null
-    const verdict = decideIdentity(
+    const verdict = await decideIdentity(
       known,
       { source: input.source, providerSession: normalized.providerSession?.id ?? null, movesLead: normalized.movesLead === true },
       now,
       this.isAlive
     )
+    if (this.stopped) return rollBack()
     if (verdict === 'ignore') return rollBack()
     this.caches.set(session.id, cache)
 
@@ -1047,7 +1048,9 @@ export class AgentStatusService {
 
   private async endIfGone(sessionId: string): Promise<void> {
     const row = this.rows.get(sessionId)
-    if (!row || row.lead.agentPid === null || row.lead.ended || this.isAlive(row.lead.agentPid, row.lead.agentStart)) return
+    if (!row || row.lead.agentPid === null || row.lead.ended) return
+    const alive = await this.isAlive(row.lead.agentPid, row.lead.agentStart)
+    if (this.stopped || alive) return
     this.caches.delete(sessionId)
     const session = await this.liveSession(sessionId)
     if (session) await this.commit(session, null)
