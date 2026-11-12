@@ -38,7 +38,8 @@ const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branc
   cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
   externalVisible: true,
   externalVisibility: 'show',
-  externalInboxSuppressed: false
+  externalInboxSuppressed: false,
+  tagIds: []
 }
 
 const REPO_DEFAULTS = { kind: 'git', displayName: null, groupId: null } as const
@@ -274,7 +275,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
         case 'quirky.worktree/navigate':
         case 'quirky.worktree/openIn': {
           const id = params.target === 'changes' ? 'view:quirky.git/diff' : SESSION_VIEW
-          const input = params.target === 'changes' ? { worktree: params.worktree, mode: 'combined', area: 'all' } : { worktree: params.worktree }
+          const input = params.target === 'changes' ? { worktree: params.worktree, mode: 'review' } : { worktree: params.worktree }
           opened.push({ id, input })
           current = {
             ...current,
@@ -526,8 +527,20 @@ const rowIn = (within: ParentNode, name: string) =>
     return label === `Open ${name}` || label === `Wake and open ${name}`
   })?.closest<HTMLElement>('li')
 const rowOf = (name: string, repoName: string) => rowIn(projectSection(repoName), name) as HTMLElement
-const subtitleOf = (row: HTMLElement) =>
-  row.querySelector<HTMLElement>('.ui-list-row__description')?.textContent?.replace(/\s+/g, ' ').trim()
+const markOf = (row: HTMLElement) => row.querySelector<HTMLElement>('.ui-activity-mark')
+const hoverCardText = async (row: HTMLElement) => {
+  const trigger = openButton(row)!
+  await act(async () => {
+    trigger.focus()
+    await Bun.sleep(450)
+  })
+  const card = document.querySelector('.worktree-hover')
+  const text = card
+    ? [card.querySelector('strong')?.textContent, ...[...card.querySelectorAll('dt')].map((term) => `${term.textContent}: ${term.nextElementSibling?.textContent}`)].join(' | ')
+    : ''
+  await act(async () => trigger.blur())
+  return text
+}
 const pendingRow = (name: string, repoName: string) =>
   [...projectSection(repoName).querySelectorAll<HTMLLIElement>('li')].find((row) => {
     const text = row.textContent?.replace(/\s+/g, ' ').trim() ?? ''
@@ -548,21 +561,39 @@ const actionButton = (row: HTMLElement) => {
   const name = row.querySelector('.worktree-name')?.textContent?.trim() ?? ''
   return buttonNamed(row, `Actions for ${name}`)
 }
-const optionsPopover = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Worktrees options"]')
-const optionsContent = () => optionsPopover() ?? document.body
-const openOptions = async () => {
-  if (optionsPopover()) return
-  const trigger = buttonNamed(host, 'Worktrees options')
-  if (!trigger) throw new Error('Worktrees options are unavailable in the panel header')
+const filterPopover = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Filter"]')
+const filterContent = () => filterPopover() ?? document.body
+const openFilter = async () => {
+  if (filterPopover()) return
+  const trigger = buttonNamed(host, 'Filter')
+  if (!trigger) throw new Error('Filter is unavailable in the panel header')
   await click(trigger)
 }
-const openDisclosure = async (name: string) => {
-  await openOptions()
-  const summary = [...document.body.querySelectorAll<HTMLElement>('details > summary')].find((item) => item.textContent?.trim() === name)
-  const disclosure = summary?.parentElement as HTMLDetailsElement | null
-  if (!summary || !disclosure) throw new Error(`no disclosure named ${name}`)
-  if (!disclosure.open) await click(summary)
+const filterCheckbox = (label: string) =>
+  [...filterContent().querySelectorAll<HTMLLabelElement>('label.ui-checkbox')]
+    .find((item) => item.textContent?.trim() === label)?.querySelector<HTMLInputElement>('input') ?? null
+const chooseFromHeader = async (button: string, section: string | null, label: string) => {
+  await click(buttonNamed(host, button)!)
+  const entries = [...document.body.querySelectorAll<HTMLElement>('[role="menu"] .qt-menu-heading, [role="menu"] [role="menuitem"]')]
+  let heading: string | null = null
+  for (const entry of entries) {
+    if (entry.classList.contains('qt-menu-heading')) {
+      heading = entry.textContent?.trim() ?? null
+      continue
+    }
+    const text = (entry.textContent ?? '').replace(/\s+/g, ' ').replace(/\s*✓$/, '').replace(/(?<=[a-z])\d+$/, '').trim()
+    if (text === label && (section === null || heading === section)) {
+      await click(entry)
+      return
+    }
+  }
+  throw new Error(`no ${button} item ${section ? `${section} / ` : ''}${label}`)
 }
+const chooseDisplay = (section: string | null, label: string) => chooseFromHeader('Display', section, label)
+const chooseMoreMenu = (label: string) => chooseFromHeader('More', null, label)
+const hiddenLine = () => [...host.querySelectorAll<HTMLElement>('.ui-notice-line')].find((line) => /^\d+ hidden|^Showing hidden/.test(line.textContent ?? ''))
+const noticeAction = (line: Element | undefined, label: string) =>
+  [...(line?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((button) => button.textContent?.trim() === label)
 const contextMenu = (element: Element, x = 30, y = 40) =>
   act(async () => {
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
@@ -578,8 +609,17 @@ const visibleMenuText = (node: Node): string => {
   return [...node.childNodes].map(visibleMenuText).join('')
 }
 const normalizeMenuLabel = (item: Element) => visibleMenuText(item).replace(/\s+/g, ' ').trim()
+const chooseMore = async (label: string) => {
+  await click(itemNamed('More'))
+  await click(itemNamed(label))
+}
+const chooseCopy = async (label: string) => {
+  await click(itemNamed('Copy'))
+  await click(itemNamed(label))
+}
 const itemLabels = () => items().map(normalizeMenuLabel)
 const itemNamed = (label: string) => items().find((item) => normalizeMenuLabel(item) === label)!
+const itemNamedStartingWith = (label: string) => items().find((item) => normalizeMenuLabel(item).startsWith(label))!
 const press = (key: string) => act(async () => {
   const active = document.activeElement
   if (active instanceof HTMLElement && active.closest('[role="menu"], [role="dialog"]')) {
@@ -600,38 +640,46 @@ const selectInto = (select: HTMLSelectElement, value: string) =>
     await Promise.resolve()
   })
 
-test('Worktrees controls are supplied by the header popover, not the closed panel body', async () => {
+test('the header holds muted icon controls named Display, Filter, New worktree and More, and the body holds only the view strip', async () => {
   const h = setup()
   const unmount = await h.mountInto(host)
-  const trigger = buttonNamed(host, 'Worktrees options')
-  expect(trigger).toBeDefined()
-  expect(trigger?.closest('header')?.querySelector('h2')?.textContent).toBe('Worktrees')
-  expect(trigger?.getAttribute('aria-expanded')).toBe('false')
-  expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog')
-  expect(optionsPopover()).toBeNull()
+  const header = buttonNamed(host, 'Display')?.closest('header')
+  expect(header?.querySelector('h2')?.textContent).toBe('Worktrees')
+  const controls = [...header!.querySelectorAll<HTMLButtonElement>('button')]
+    .map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim())
+    .filter((name) => ['Display', 'Filter', 'New worktree', 'More'].includes(name ?? ''))
+  expect(controls).toEqual(['Display', 'Filter', 'New worktree', 'More'])
+  expect(buttonNamed(host, 'Worktrees options')).toBeUndefined()
+  expect(buttonNamed(host, 'Display')?.getAttribute('aria-haspopup')).toBe('menu')
+  for (const name of ['Display', 'Filter']) {
+    const control = buttonNamed(host, name)!
+    expect(control.classList.contains('ui-icon-button')).toBe(true)
+    expect(control.title).toBe(name)
+  }
+  expect(buttonNamed(host, 'Filter')?.getAttribute('aria-haspopup')).toBe('dialog')
+  expect(filterPopover()).toBeNull()
   for (const label of ['Workspace options', 'Activity filters', 'More workspace tools']) {
     expect(host.textContent).not.toContain(label)
   }
-  expect(host.querySelector('[role="tablist"]')).toBeNull()
   expect(host.querySelector('input[type="checkbox"]')).toBeNull()
+  const tabs = [...host.querySelectorAll('[role="tablist"][aria-label="Views"] [role="tab"]')].map((tab) => tab.textContent?.trim())
+  expect(tabs).toEqual(['All', 'Needs you'])
 
-  await click(trigger!)
-  const popover = optionsPopover()
-  expect(popover).not.toBeNull()
-  expect(buttonNamed(popover!, 'Add project')).toBeUndefined()
-  const summaries = [...popover!.querySelectorAll('details > summary')].map((summary) => summary.textContent?.trim())
-  expect(summaries).toContain('Workspace options')
-  expect(summaries).toContain('More workspace tools')
-  expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('true')
-
-  const workspaceOptions = [...popover!.querySelectorAll<HTMLElement>('details > summary')]
-    .find((summary) => summary.textContent?.trim() === 'Workspace options')!
-  workspaceOptions.focus()
-  expect(document.activeElement).toBe(workspaceOptions)
+  const display = buttonNamed(host, 'Display')!
+  await click(display)
+  expect(display.getAttribute('aria-expanded')).toBe('true')
+  expect(menu()).not.toBeNull()
   await press('Escape')
-  expect(optionsPopover()).toBeNull()
-  expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('false')
-  expect(document.activeElement).toBe(trigger!)
+  expect(menu()).toBeNull()
+  expect(document.activeElement).toBe(display)
+
+  const trigger = buttonNamed(host, 'Filter')!
+  await click(trigger)
+  expect(filterPopover()).not.toBeNull()
+  expect(trigger.getAttribute('aria-expanded')).toBe('true')
+  await press('Escape')
+  expect(filterPopover()).toBeNull()
+  expect(document.activeElement).toBe(trigger)
   await unmount()
 })
 
@@ -662,27 +710,29 @@ test('SC-35: renders repos and worktrees and reports them with status and select
       }
     ]
   })
-  expect(rowOf('fix-login', 'api').querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Working')
+  expect(markOf(rowOf('fix-login', 'api'))?.dataset.state).toBe('running')
+  expect(markOf(rowOf('fix-login', 'api'))?.getAttribute('aria-label')).toBe('Running')
 })
 
-test('the header offers Add project left of the options funnel', async () => {
+test('the More menu offers Add project, the board, statuses and cleanup with its candidate count', async () => {
   const h = setup()
   await h.mountInto(host)
-  const add = buttonNamed(host, 'Add project')
-  const funnel = buttonNamed(host, 'Worktrees options')
-  expect(add?.closest('header')).toBe(funnel!.closest('header'))
-  expect(add!.compareDocumentPosition(funnel!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  await click(buttonNamed(host, 'More')!)
+  expect(itemLabels().map((label) => label.replace(/(?<=[a-z])\d+$/, ''))).toEqual(['Add project', 'Workspace board', 'Edit statuses', 'Review cleanup'])
+  expect(normalizeMenuLabel(itemNamedStartingWith('Review cleanup'))).toBe('Review cleanup1')
+  await press('Escape')
+  expect(menu()).toBeNull()
 })
 
-test('an empty tree offers Add project only from its empty state', async () => {
+test('an empty tree offers Add project from its empty state and from the More menu', async () => {
   const h = setup()
   h.world.repos = []
   await h.mountInto(host)
   const adds = [...host.querySelectorAll('button')].filter((b) => b.getAttribute('aria-label') === 'Add project' || b.textContent === 'Add project')
   expect(adds).toHaveLength(1)
   expect(adds[0]!.closest('header')).toBeNull()
-  await openOptions()
-  expect(buttonNamed(optionsContent(), 'Add project')).toBeUndefined()
+  await click(buttonNamed(host, 'More')!)
+  expect(itemLabels()).toContain('Add project')
   expect(lastReport(h)).toMatchObject({ pinned: [], groups: [], projects: [], dialog: null, notices: [] })
 })
 
@@ -734,7 +784,8 @@ test('status follows the session events', async () => {
   const h = setup()
   await h.mountInto(host)
   await h.emit({ type: 'quirky.session/changed', data: { session: session('s1', 'w2', 'waiting') } })
-  expect(rowOf('fix-login', 'api').querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Needs you')
+  expect(markOf(rowOf('fix-login', 'api'))?.dataset.state).toBe('waiting')
+  expect(markOf(rowOf('fix-login', 'api'))?.getAttribute('aria-label')).toBe('Waiting on you')
   await h.emit({ type: 'quirky.session/changed', data: { session: session('s2', 'w1', 'done') } })
   expect(lastReport(h).projects[0].worktrees[0].status).toBe('done')
   await h.emit({ type: 'quirky.session/removed', data: { sessionId: 's1' } })
@@ -759,7 +810,8 @@ test('pending questions keep attention priority in the status accessible name', 
   await h.mountInto(host)
 
   const row = rowOf('fix-login', 'api')
-  expect(row.querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe('Status: needs-you')
+  expect(markOf(row)?.dataset.state).toBe('waiting')
+  expect(markOf(row)?.getAttribute('aria-label')).toBe('Waiting on you: 1 pending question')
 })
 
 test('pending questions preserve archive metadata without a session', async () => {
@@ -781,9 +833,9 @@ test('pending questions preserve archive metadata without a session', async () =
   }]
   await h.mountInto(host)
 
-  const subtitle = subtitleOf(rowOf('fix-login', 'api'))
-  expect(subtitle).toContain('Needs you')
-  expect(subtitle).toContain('Archived')
+  const card = await hoverCardText(rowOf('fix-login', 'api'))
+  expect(card).toContain('Needs you')
+  expect(card).toContain('Archived')
 })
 
 test('session subtitle shows one identity for shell and Claude sessions', async () => {
@@ -793,25 +845,24 @@ test('session subtitle shows one identity for shell and Claude sessions', async 
     { ...session('s-claude', 'w1', 'done'), agent: 'claude', title: 'Claude' }
   ]
   await h.mountInto(host)
-  expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('Shell · Running · fix-login')
-  expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.getAttribute('aria-label')).toMatch(/Shell.*Running/i)
-  expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.getAttribute('aria-label')).not.toMatch(/queued/i)
-  expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.classList.contains('ui-status-dot--queued')).toBe(true)
-  expect(subtitleOf(rowOf('main', 'api'))).toBe('Claude · Done · main')
+  expect(await hoverCardText(rowOf('fix-login', 'api'))).toContain('Agent: Shell · Running')
+  expect(markOf(rowOf('fix-login', 'api'))?.dataset.state).toBe('running')
+  expect(await hoverCardText(rowOf('main', 'api'))).toContain('Agent: Claude · Done')
+  expect(markOf(rowOf('main', 'api'))?.dataset.state).toBe('idle')
 })
 
 test('session subtitle retains a custom title', async () => {
   const h = setup()
   h.world.sessions = [{ ...session('s1', 'w2', 'running'), title: 'Run checks' }]
   await h.mountInto(host)
-  expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('Run checks · Running · fix-login')
+  expect(await hoverCardText(rowOf('fix-login', 'api'))).toContain('Agent: Run checks · Running')
 })
 
 test('session subtitle falls back to the agent for a blank title', async () => {
   const h = setup()
   h.world.sessions = [{ ...session('s1', 'w2', 'done'), agent: 'claude', title: ' \t ' }]
   await h.mountInto(host)
-  expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('claude · Done · fix-login')
+  expect(await hoverCardText(rowOf('fix-login', 'api'))).toContain('Agent: claude · Done')
 })
 
 test('refreshes the tree on repo, group and worktree changes', async () => {
@@ -837,8 +888,9 @@ test('a plugin.changed event reloads the tree and the sessions', async () => {
   const before = h.callsTo('quirky.session/list').length
   h.world.sessions = [session('s1', 'w2', 'done')]
   await h.emit({ type: 'plugin.changed' })
-  expect(h.callsTo('quirky.session/list').length).toBe(before + 1)
-  expect(rowOf('fix-login', 'api').querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Done')
+  // the tree and the plugin-lifetime attention badge each reload the sessions
+  expect(h.callsTo('quirky.session/list').length).toBe(before + 2)
+  expect(await hoverCardText(rowOf('fix-login', 'api'))).toContain('Agent: s1 · Done')
 })
 
 test('does not report again when nothing changed', async () => {
@@ -859,7 +911,7 @@ test('SC-44: groups, pinned rows, nested children and status values', async () =
   h.world.worktrees = [
     wt('w1', 'r1', 'main', { isMain: true }),
     wt('w2', 'r1', 'fix-login', { status: 'in-review', pinned: true, unread: true }),
-    wt('w5', 'r1', 'child', { parentId: 'w2', status: 'todo' }),
+    wt('w5', 'r1', 'child', { parentId: 'w1', status: 'todo' }),
     wt('w6', 'r1', 'old', { removing: true }),
     wt('w3', 'r2', 'notes', { isMain: true, kind: 'folder', branch: null }),
     wt('w7', 'group:g1', 'shared', { kind: 'folder', branch: null, groupId: 'g1' })
@@ -871,17 +923,19 @@ test('SC-44: groups, pinned rows, nested children and status values', async () =
   const group1 = groupSection('services')!
   expect(group1.contains(projectSection('api'))).toBe(true)
   expect(rowOf('main', 'api')).toBeDefined()
-  expect(rowOf('fix-login', 'api')).toBeDefined()
+  expect(rowOf('fix-login', 'api')).toBeUndefined()
+  expect(host.querySelectorAll('[data-worktree-id="w2"]')).toHaveLength(1)
   expect(rowOf('child', 'api')).toBeDefined()
   expect(lastReport(h).groups[0].projects[0].worktrees[0].workspaceStatus).toBe('in-progress')
   expect(rowOf('old', 'api').textContent).toContain('Deleting')
 
-  const children = rowOf('fix-login', 'api').querySelector<HTMLButtonElement>('button[aria-expanded]')!
+  const children = rowOf('main', 'api').querySelector<HTMLButtonElement>('.worktree-child-toggle')!
   expect(children.getAttribute('aria-expanded')).toBe('true')
+  expect(children.getAttribute('aria-label')).toBe('1 child of main')
   await click(children)
   expect(rowOf('child', 'api')).toBeUndefined()
-  expect(rowOf('fix-login', 'api').querySelector('button[aria-expanded]')!.getAttribute('aria-expanded')).toBe('false')
-  await click(rowOf('fix-login', 'api').querySelector('button[aria-expanded]')!)
+  expect(rowOf('main', 'api').querySelector('.worktree-child-toggle')!.getAttribute('aria-expanded')).toBe('false')
+  await click(rowOf('main', 'api').querySelector('.worktree-child-toggle')!)
   expect(rowOf('child', 'api')).not.toBeUndefined()
 
   const report = lastReport(h)
@@ -899,8 +953,7 @@ test('SC-44: groups, pinned rows, nested children and status values', async () =
           kind: 'git',
           worktrees: [
             expect.objectContaining({ id: 'w1', primary: true, depth: 0 }),
-            expect.objectContaining({ id: 'w2', workspaceStatus: 'in-review', pinned: true, unread: true, depth: 0 }),
-            expect.objectContaining({ id: 'w5', parentId: 'w2', depth: 1, workspaceStatus: 'todo' }),
+            expect.objectContaining({ id: 'w5', parentId: 'w1', depth: 1, workspaceStatus: 'todo' }),
             expect.objectContaining({ id: 'w6', removing: true })
           ]
         }
@@ -942,7 +995,7 @@ test('project menu opens its ledger and moves projects through the shared action
   }])
 
   await click(actions)
-  await click(itemNamed('Move to Group'))
+  await click(itemNamed('Move to section'))
   await click(itemNamed('services'))
   expect(h.callsTo('quirky.repo/groupAdd')).toEqual([{ group: 'g1', repo: 'r1' }])
 })
@@ -1005,16 +1058,16 @@ test('SC-43: Move to Status, Pin and Mark Unread call set; the current values re
   const h = setup()
   h.world.worktrees[1] = wt('w2', 'r1', 'fix-login', { pinned: true, unread: true, parentId: 'w1' })
   await h.mountInto(host)
-  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Move to Status'))
+  await contextMenu(openButton(rowIn(host, 'fix-login')!)!)
+  await click(itemNamed('Move to status'))
   await click(itemNamed('In review'))
   expect(menu()).toBeNull()
-  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Unpin'))
-  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Mark Read'))
-  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Remove from Parent'))
+  await contextMenu(openButton(rowIn(host, 'fix-login')!)!)
+  await chooseMore('Unpin')
+  await contextMenu(openButton(rowIn(host, 'fix-login')!)!)
+  await chooseMore('Mark read')
+  await contextMenu(openButton(rowIn(host, 'fix-login')!)!)
+  await chooseMore('Remove from parent')
   expect(h.callsTo('quirky.worktree/set')).toEqual([
     { worktree: 'w2', status: 'in-review' },
     { worktree: 'w2', pinned: false },
@@ -1028,7 +1081,7 @@ test('a failed set becomes a toast', async () => {
   h.world.failSet = new RpcLike('nope', RpcErrorCode.Conflict)
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Pin'))
+  await chooseMore('Pin')
   expect(h.toasts).toEqual([{ title: 'Could not update workspace', body: 'nope' }])
 })
 
@@ -1036,13 +1089,13 @@ test('SC-43: Copy Path and Copy Worktree Name use the clipboard and a failure to
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Copy Path'))
+  await chooseCopy('Path')
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Copy Worktree Name'))
+  await chooseCopy('Worktree name')
   expect(copied).toEqual(['/w/fix-login', 'fix-login'])
   copyFails = true
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Copy Path'))
+  await chooseCopy('Path')
   expect(h.toasts).toEqual([{ title: 'Could not copy', body: 'clipboard denied' }])
 })
 
@@ -1050,23 +1103,23 @@ test('SC-59: the primary worktree cannot be deleted', async () => {
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('main', 'api'))!)
-  const del = itemNamed('Delete')
+  const del = itemNamed('Delete…')
   expect(del.disabled).toBe(true)
   await click(del)
   expect(h.confirmed).toEqual([])
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
 })
 
-test('a parent offers Delete with Descendants and removes them together', async () => {
+test('a parent offers Delete with descendants and removes them together', async () => {
   const h = setup()
   h.world.worktrees.push(wt('w5', 'r1', 'child', { parentId: 'w2' }), wt('w6', 'r1', 'grandchild', { parentId: 'w5' }))
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete with Descendants (2)…'))
+  await click(itemNamed('Delete with descendants (2)…'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
   expect(document.querySelector('[role="dialog"]')!.textContent).toContain('Child workspaces will be deleted')
   expect(lastReport(h).dialog).toEqual({ kind: 'delete', worktreeId: 'w2', withDescendants: true })
-  await click(dialogButton('Delete Workspace'))
+  await click(dialogButton('Delete worktree'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, withDescendants: true, yes: true }])
 })
 
@@ -1074,8 +1127,8 @@ test('Rename and Set Parent open their dialogs and the report names them', async
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Rename…'))
-  expect(dialogName(document.querySelector<HTMLElement>('[role="dialog"]')!)).toBe('Workspace details')
+  await chooseMore('Details…')
+  expect(dialogName(document.querySelector<HTMLElement>('[role="dialog"]')!)).toBe('Worktree details')
   expect(lastReport(h).dialog).toEqual({ kind: 'update', worktreeId: 'w2' })
   const references = document.querySelector('[role="dialog"] [aria-label="Linked references"]')!
   expect(references.textContent).not.toMatch(/plugin/i)
@@ -1085,7 +1138,7 @@ test('Rename and Set Parent open their dialogs and the report names them', async
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   expect(lastReport(h).dialog).toBeNull()
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Set Parent Worktree…'))
+  await chooseMore('Set parent…')
   expect(dialogName(document.querySelector<HTMLElement>('[role="dialog"]')!)).toBe('Set parent worktree')
   expect(lastReport(h).dialog).toEqual({ kind: 'parent', worktreeId: 'w2' })
 })
@@ -1096,16 +1149,16 @@ test('SC-47: Delete asks in the window and passes force and yes with no ask card
   h.world.changedFiles = 2
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   const dialog = document.querySelector('[role="dialog"]')!
-  expect(dialogName(dialog)).toBe('Delete Workspace')
+  expect(dialogName(dialog)).toBe('Delete worktree')
   expect(dialog.textContent).toContain('/w/fix-login')
   expect(dialog.textContent).toContain('2 uncommitted or untracked changes')
   expect(dialog.textContent).not.toContain('Child workspaces')
   expect(document.activeElement).toBe(dialogButton('Cancel'))
   expect(h.confirmed).toEqual([])
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
-  await click(dialogButton('Delete Workspace'))
+  await click(dialogButton('Delete worktree'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, yes: true }])
   expect(h.callsTo('setting.set')).toEqual([])
   expect(h.callsTo('quirky.ask/answer')).toEqual([])
@@ -1116,12 +1169,12 @@ test('Delete warns that a running agent session will end and still allows deleti
   h.world.sessions = [{ ...session('s1', 'w2', 'working'), agent: 'opencode' }]
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   const dialog = document.querySelector('[role="dialog"]')!
   expect(dialog.textContent).toMatch(/1 agent is running/i)
   expect(dialog.textContent).toMatch(/deleting.*will end.*session/i)
-  expect(dialogButton('Delete Workspace').disabled).toBe(false)
-  await click(dialogButton('Delete Workspace'))
+  expect(dialogButton('Delete worktree').disabled).toBe(false)
+  await click(dialogButton('Delete worktree'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, yes: true }])
 })
 
@@ -1136,7 +1189,7 @@ test('the running-agent warning follows live sessions without counting other wor
   ]
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   const dialog = document.querySelector('[role="dialog"]')!
   expect(dialog.textContent).toMatch(/2 agents are running/i)
   expect(dialog.textContent).toMatch(/deleting.*will end.*sessions/i)
@@ -1146,7 +1199,7 @@ test('the running-agent warning follows live sessions without counting other wor
   expect(dialog.textContent).not.toMatch(/agents? (?:is|are) running/i)
 })
 
-test('Delete with Descendants warns about agents running in child workspaces', async () => {
+test('Delete with descendants warns about agents running in child workspaces', async () => {
   const h = setup()
   h.world.worktrees.push(wt('w5', 'r1', 'child', { parentId: 'w2' }), wt('w6', 'r1', 'grandchild', { parentId: 'w5' }))
   h.world.sessions = [
@@ -1155,7 +1208,7 @@ test('Delete with Descendants warns about agents running in child workspaces', a
   ]
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete with Descendants (2)…'))
+  await click(itemNamed('Delete with descendants (2)…'))
   const dialog = document.querySelector('[role="dialog"]')!
   expect(dialog.textContent).toMatch(/2 agents are running/i)
   expect(dialog.textContent).toMatch(/deleting.*will end.*sessions/i)
@@ -1166,21 +1219,21 @@ test('Delete works without a running-agent warning when the session plugin is of
   h.world.sessions = null
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   expect(document.querySelector('[role="dialog"]')!.textContent).not.toMatch(/agents? (?:is|are) running/i)
-  expect(dialogButton('Delete Workspace').disabled).toBe(false)
+  expect(dialogButton('Delete worktree').disabled).toBe(false)
 })
 
 test('the delete dialog leaves out the change count for no changes or a failed status', async () => {
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   expect(document.querySelector('[role="dialog"]')!.textContent).not.toMatch(/\d+ uncommitted/)
   await click(dialogButton('Cancel'))
   h.world.changedFiles = null
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   expect(document.querySelector('[role="dialog"]')!.textContent).not.toMatch(/\d+ uncommitted/)
   expect(h.toasts).toEqual([])
 })
@@ -1189,7 +1242,7 @@ test('a cancelled delete removes nothing', async () => {
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   await click(dialogButton('Cancel'))
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
@@ -1199,9 +1252,9 @@ test('Don\'t ask again turns the setting off first and toasts', async () => {
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   await click(document.querySelector('[role="dialog"] input[type="checkbox"]')!)
-  await click(dialogButton('Delete Workspace'))
+  await click(dialogButton('Delete worktree'))
   expect(h.calls.filter((c) => c.method === 'setting.set' || c.method === 'quirky.worktree/remove').map((c) => c.method)).toEqual(['setting.set', 'quirky.worktree/remove'])
   expect(h.callsTo('setting.set')).toEqual([{ id: 'setting:quirky.worktree/confirmDelete', value: false }])
   expect(h.toasts).toEqual([{ title: "We'll skip this confirmation next time. You can change this in Settings.", body: '' }])
@@ -1212,7 +1265,7 @@ test('with confirmDelete off, Delete removes at once', async () => {
   h.world.confirmDelete = false
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, yes: true }])
 })
@@ -1223,7 +1276,7 @@ test('a refused delete toasts the failure with its message, and the card is not 
   h.world.failRemove = [new RpcLike('locked by git', RpcErrorCode.Conflict, { reason: 'locked' })]
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   expect(h.toasts).toEqual([{ title: 'Failed to delete workspace fix-login', body: 'locked by git' }])
   expect(rowOf('fix-login', 'api').textContent).not.toContain('Deleting')
 })
@@ -1234,7 +1287,7 @@ test('a delete that keeps its branch shows a notice whose Delete branch calls de
   h.world.keptBranch = { name: 'zoe/fix-login', head: 'abc' }
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
   const notice = host.querySelector<HTMLElement>('section[aria-label="Kept branches"]')!
   expect(notice.textContent).toContain("Kept branch zoe/fix-login because it isn't merged.")
   expect(lastReport(h).notices).toEqual([{ kind: 'kept-branch', branch: 'zoe/fix-login', repoId: 'r1' }])
@@ -1244,28 +1297,31 @@ test('a delete that keeps its branch shows a notice whose Delete branch calls de
   expect(lastReport(h).notices).toEqual([])
 })
 
-test('the header keeps Add project while projects load and only drops it once the list is empty', async () => {
+test('the More menu keeps Add project while projects load and the empty state offers it once the list is empty', async () => {
   const h = setup()
   h.world.repos = []
   let release!: () => void
   h.world.repoListGate = new Promise((resolve) => (release = resolve))
   await h.mountInto(host)
   expect(host.textContent).toContain('Loading projects and worktrees')
-  expect(buttonNamed(host, 'Add project')?.closest('header')).not.toBeNull()
+  expect(buttonNamed(host, 'More')?.closest('header')).not.toBeNull()
+  expect(buttonNamed(host, 'Add project')).toBeUndefined()
 
   await act(async () => release())
   expect(host.textContent).not.toContain('Loading projects and worktrees')
   expect(buttonNamed(host, 'Add project')?.closest('header')).toBeNull()
+  expect(buttonNamed(host, 'Add project')).toBeDefined()
 
   h.world.repos = [...repos]
   await h.emit({ type: 'quirky.repo/changed', data: {} })
-  expect(buttonNamed(host, 'Add project')?.closest('header')).not.toBeNull()
+  expect(buttonNamed(host, 'Add project')).toBeUndefined()
+  expect(buttonNamed(host, 'More')?.closest('header')).not.toBeNull()
 })
 
-test('the Add project button opens a dialog whose Add submits the trimmed path', async () => {
+test('More › Add project opens a dialog whose Add submits the trimmed path', async () => {
   const h = setup()
   await h.mountInto(host)
-  await click(buttonNamed(host, 'Add project')!)
+  await chooseMoreMenu('Add project')
   expect(lastReport(h).dialog).toEqual({ kind: 'add-project' })
   const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
   const submit = dialogButton('Add')
@@ -1278,10 +1334,8 @@ test('the Add project button opens a dialog whose Add submits the trimmed path',
 test('Add project Browse uses the native picker and cancellation preserves the typed path', async () => {
   const h = setup()
   await h.mountInto(host)
-  await openOptions()
-  // a keyboard user can reach the header button with the popover open, and no pointerdown dismisses it
-  await click(buttonNamed(host, 'Add project')!)
-  expect(optionsPopover()).toBeNull()
+  await chooseMoreMenu('Add project')
+  expect(menu()).toBeNull()
   const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
   await typeInto(input, '/draft/path')
   await click(dialogButton('Browse'))
@@ -1350,7 +1404,7 @@ test('the new-worktree dialog creates a worktree through a pending row and opens
   await h.mountInto(host)
   await click(buttonNamed(host, 'New worktree in api')!)
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-  expect(dialogName(dialog)).toBe('New workspace')
+  expect(dialogName(dialog)).toBe('New worktree')
   await selectNameMode()
   expect(projectChosen()).toBe('api')
   expect(lastReport(h).dialog).toEqual({ kind: 'create', repoId: 'r1' })
@@ -1467,13 +1521,14 @@ test('the add-project command shows the Worktrees tool and opens the Add project
   expect(lastReport(live).dialog).toEqual({ kind: 'add-project' })
 })
 
-test('a project header carries the project tile under All projects and drops it once narrowed', async () => {
+test('project headers name their projects and follow the project filter', async () => {
   const h = setup()
   await h.mountInto(host)
-  const tiles = () => [...host.querySelectorAll<HTMLElement>('.repo-header')].map((header) => header.querySelector('.ui-project-tile')?.textContent ?? null)
-  expect(tiles()).toEqual(['AP', 'WE'])
+  const names = () => [...host.querySelectorAll<HTMLElement>('.repo-header .project-name')].map((name) => name.textContent)
+  expect(names()).toEqual(['api', 'web'])
+  expect([...host.querySelectorAll('.repo-header .ui-project-tile')].map((tile) => tile.textContent)).toEqual(['AP', 'WE'])
   await h.emit({ type: 'quirky.worktree/optionsChanged', data: { options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: ['r1'], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] } } } as QuirkyEvent)
-  expect(tiles()).toEqual([null])
+  expect(names()).toEqual(['api'])
 })
 
 const untrusted = (changed = false) =>
@@ -1509,7 +1564,7 @@ test('SC-33: an untrusted script asks, and each answer retries the create its ow
     const h = setup()
     h.world.createFailures = [untrusted()]
     await submitNamed(h, 'trusted')
-    expect(dialogTitles()).toEqual(['New workspace', 'Run setup from api?'])
+    expect(dialogTitles()).toEqual(['New worktree', 'Run setup from api?'])
     expect(dialogByTitle('Run setup from api?')?.textContent).toContain('touch ran.txt')
     expect(lastReport(h).dialog).toEqual({ kind: 'trust', repoId: 'r1' })
     await click(dialogButton(label))
@@ -1523,7 +1578,7 @@ test('SC-33: a changed script is asked about with its own title', async () => {
   const h = setup()
   h.world.createFailures = [untrusted(true)]
   await submitNamed(h, 'again')
-  expect(dialogTitles()).toEqual(['New workspace', "api's setup changed — run the new version?"])
+  expect(dialogTitles()).toEqual(['New worktree', "api's setup changed — run the new version?"])
 })
 
 test('SC-33: Escape on the trust question abandons the create and leaves the form open', async () => {
@@ -1531,7 +1586,7 @@ test('SC-33: Escape on the trust question abandons the create and leaves the for
   h.world.createFailures = [untrusted()]
   await submitNamed(h, 'nope')
   await press('Escape')
-  expect(dialogTitles()).toEqual(['New workspace'])
+  expect(dialogTitles()).toEqual(['New worktree'])
   expect(h.callsTo('quirky.worktree/create').length).toBe(1)
   expect(h.toasts).toEqual([])
   expect(rowOf('nope', 'api')).toBeUndefined()
@@ -1541,11 +1596,11 @@ test('any other create failure is shown inline and keeps the dialog open', async
   const h = setup()
   h.world.createFailures = [new RpcLike('Branch "x" was not found.', RpcErrorCode.InvalidParams, { reason: 'x' })]
   await submitNamed(h, 'broken')
-  const errorText = dialogByTitle('New workspace')?.querySelector('[role="alert"]')?.textContent ?? ''
+  const errorText = dialogByTitle('New worktree')?.querySelector('[role="alert"]')?.textContent ?? ''
   expect(errorText).toContain('Could not create worktree')
   expect(errorText).toContain('Branch "x" was not found.')
   expect(h.toasts).toEqual([])
-  expect(dialogTitles()).toEqual(['New workspace'])
+  expect(dialogTitles()).toEqual(['New worktree'])
   expect(h.opened).toEqual([])
 })
 
@@ -1554,7 +1609,7 @@ test('a setup-decision-required refusal opens the setup choice instead of a toas
   h.world.createFailures = [new RpcLike('Setup decision required', RpcErrorCode.Conflict, { reason: 'setup-decision-required', repo: 'r1' })]
   await submitNamed(h, 'branchy')
   expect(h.toasts).toEqual([])
-  expect(dialogTitles()).toEqual(['New workspace'])
+  expect(dialogTitles()).toEqual(['New worktree'])
   const create = () => document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement
   expect(dialogButton('Run setup now')).toBeDefined()
   expect(create().disabled).toBe(true)
@@ -1581,7 +1636,7 @@ test('SC-42: Rename saves the display name and notes through set', async () => {
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Rename…'))
+  await chooseMore('Details…')
   await typeInto(dialogField('Display Name')!, ' Login fix ')
   await act(async () => {
     const notes = dialogField('Notes') as unknown as HTMLTextAreaElement
@@ -1593,12 +1648,12 @@ test('SC-42: Rename saves the display name and notes through set', async () => {
   expect(dialogTitles()).toEqual([])
 })
 
-test.each(['Cancel', 'Escape'])('Workspace details discards reference edits on %s', async (dismissal) => {
+test.each(['Cancel', 'Escape'])('Worktree details discards reference edits on %s', async (dismissal) => {
   const h = setup()
   h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
   await h.mountInto(host)
   await click(actionButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Rename…'))
+  await chooseMore('Details…')
   await click(dialogButton('Unlink'))
   expect(h.callsTo('quirky.worktree/unlinkReference')).toEqual([])
   expect(document.querySelector('[aria-label="Linked references"]')!.textContent).not.toContain('Saved task')
@@ -1613,18 +1668,18 @@ test.each(['Cancel', 'Escape'])('Workspace details discards reference edits on %
   else await press('Escape')
   expect(h.callsTo('quirky.worktree/set')).toEqual([])
   await click(actionButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Rename…'))
+  await chooseMore('Details…')
   const linked = document.querySelector('[aria-label="Linked references"]')!
   expect(linked.textContent).toContain('Saved task')
   expect(linked.textContent).not.toContain('Draft task')
 })
 
-test('Workspace details keeps its reference draft on failed Save and submits it with metadata on retry', async () => {
+test('Worktree details keeps its reference draft on failed Save and submits it with metadata on retry', async () => {
   const h = setup()
   h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
   await h.mountInto(host)
   await click(actionButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Rename…'))
+  await chooseMore('Details…')
   await click(dialogButton('Unlink'))
   await typeInto(dialogField('Reference URL')!, 'https://example.com/draft')
   await typeInto(dialogField('Reference label')!, ' Draft task ')
@@ -1632,7 +1687,7 @@ test('Workspace details keeps its reference draft on failed Save and submits it 
   await typeInto(dialogField('Display Name')!, 'Login fix')
   h.world.failSet = new Error('Workspace unavailable')
   await click(dialogButton('Save'))
-  expect(dialogTitles()).toEqual(['Workspace details'])
+  expect(dialogTitles()).toEqual(['Worktree details'])
   expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('Draft task')
   expect(h.toasts).toEqual([{ title: 'Could not update workspace', body: 'Workspace unavailable' }])
 
@@ -1651,7 +1706,7 @@ test('Rename from a worktree Actions button restores focus to its renamed row af
 
   const renameFromActions = async (currentName: string, nextName: string) => {
     await click(actionButton(rowOf(currentName, 'api'))!)
-    await click(itemNamed('Rename…'))
+    await chooseMore('Details…')
     await typeInto(dialogField('Display Name')!, nextName)
     await click(dialogButton('Save'))
 
@@ -1677,7 +1732,7 @@ test.each(['Cancel', 'Escape'])('Rename dismissed with %s restores focus to the 
   const row = rowOf('fix-login', 'api')
   const actions = actionButton(row)!
   await click(actions)
-  await click(itemNamed('Rename…'))
+  await chooseMore('Details…')
 
   if (dismissal === 'Cancel') await click(dialogButton('Cancel'))
   else await press('Escape')
@@ -1692,7 +1747,7 @@ test('Rename opened from the row context menu restores focus to its Actions butt
   await h.mountInto(host)
   const row = rowOf('fix-login', 'api')
   await contextMenu(openButton(row)!)
-  await click(itemNamed('Rename…'))
+  await chooseMore('Details…')
   await press('Escape')
 
   const actions = actionButton(row)!
@@ -1706,7 +1761,7 @@ test('Canceling Delete restores focus to the row Actions button after autofocus 
   const row = rowOf('fix-login', 'api')
   const actions = actionButton(row)!
   await click(actions)
-  await click(itemNamed('Delete'))
+  await click(itemNamed('Delete…'))
 
   const cancel = dialogButton('Cancel')
   expect(document.activeElement).toBe(cancel)
@@ -1737,17 +1792,20 @@ test.each([
   const pinnedSection = () => [...host.querySelectorAll<HTMLElement>('section')].find((section) => sectionHeading(section) === 'Pinned')
   const sourceRow = action === 'Unpin' ? rowIn(pinnedSection()!, 'fix-login')! : rowOf('fix-login', 'api')
   await click(actionButton(sourceRow)!)
-  await click(itemNamed(action))
+  if (action === 'Pin' || action === 'Unpin') await chooseMore(action)
+  else await click(itemNamed(action))
 
   expect(menu()).toBeNull()
   expect(h.world.worktrees.find((worktree) => worktree.id === 'w2')).toMatchObject({ pinned, sleeping })
   const listCallsBeforeRefresh = h.callsTo('quirky.worktree/list').length
   await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
   expect(h.callsTo('quirky.worktree/list').length).toBeGreaterThan(listCallsBeforeRefresh)
-  expect(openButton(rowOf('fix-login', 'api'))?.getAttribute('aria-label')).toBe(
+  const refreshedRow = pinned ? rowIn(pinnedSection()!, 'fix-login')! : rowOf('fix-login', 'api')
+  expect(openButton(refreshedRow)?.getAttribute('aria-label')).toBe(
     sleeping ? 'Wake and open fix-login' : 'Open fix-login'
   )
   expect(pinnedSection() ? rowIn(pinnedSection()!, 'fix-login') !== undefined : false).toBe(pinned)
+  expect(host.querySelectorAll('[data-worktree-id="w2"]')).toHaveLength(1)
 
   const active = document.activeElement
   expect(active instanceof HTMLButtonElement).toBe(true)
@@ -1761,7 +1819,7 @@ test('SC-41: Set Parent offers the other workspaces, not the workspace or its de
   h.world.worktrees.push(wt('w4', 'r1', 'child', { parentId: 'w2' }), wt('w5', 'r1', 'docs'))
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Set Parent Worktree…'))
+  await chooseMore('Set parent…')
   const select = dialogField('Parent worktree') as unknown as HTMLSelectElement
   expect([...select.options].map((o) => o.textContent)).toEqual(['main · api · main', 'main · web · main', 'docs · api · docs'])
   await act(async () => {
@@ -1788,10 +1846,11 @@ test('SC-62: a command that arrives before the section mounts opens the dialog o
 
 test('unmounting removes the listeners and the markup', async () => {
   const h = setup()
+  const pluginLifetimeListeners = h.listenerCount()
   const unmount = await h.mountInto(host)
-  expect(h.listenerCount()).toBeGreaterThan(0)
+  expect(h.listenerCount()).toBeGreaterThan(pluginLifetimeListeners)
   await unmount()
-  expect(h.listenerCount()).toBe(0)
+  expect(h.listenerCount()).toBe(pluginLifetimeListeners)
   expect(host.innerHTML).toBe('')
 })
 
@@ -1812,7 +1871,8 @@ describe('agent status presentation', () => {
     ...session(id, 'w2', 'working'),
     agentStatus: summary(display, label, over)
   })
-  const statusDot = () => rowOf('fix-login', 'api').querySelector<HTMLElement>('[aria-label^="Status: "]')
+  const mark = () => markOf(rowOf('fix-login', 'api'))
+  const agentCard = () => hoverCardText(rowOf('fix-login', 'api'))
 
   test.each([
     ['working', 'Working'],
@@ -1838,15 +1898,15 @@ describe('agent status presentation', () => {
     }]
     await h.mountInto(host)
 
-    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain('Claude')
-    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain('Needs you')
-    expect(subtitleOf(rowOf('fix-login', 'api'))).not.toContain(activeLabel)
+    expect(await agentCard()).toContain('Agent: Claude · Needs you')
+    expect(await agentCard()).not.toContain(activeLabel)
+    expect(mark()?.dataset.state).toBe('waiting')
 
     h.world.asks = []
     await h.emit({ type: 'quirky.ask/resolved', data: { askId: 'ask-1' } })
-    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain('Claude')
-    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain(activeLabel)
-    expect(subtitleOf(rowOf('fix-login', 'api'))).not.toContain('Needs you')
+    expect(await agentCard()).toContain(`Agent: Claude · ${activeLabel}`)
+    expect(await agentCard()).not.toContain('Needs you')
+    expect(mark()?.dataset.state).toBe('running')
   })
 
   const states: [AgentDisplayState, string][] = [
@@ -1862,27 +1922,28 @@ describe('agent status presentation', () => {
     ['idle', 'Idle'],
     ['unconfirmed', "Couldn't confirm"]
   ]
-  const statusForDisplay: Record<AgentDisplayState, string> = {
-    working: 'working',
-    monitoring: 'working',
-    waiting: 'needs-you',
-    permission: 'needs-you',
-    blocked: 'needs-you',
-    failed: 'failing',
+  const markForDisplay: Record<AgentDisplayState, string> = {
+    working: 'running',
+    monitoring: 'running',
+    waiting: 'waiting',
+    permission: 'waiting',
+    blocked: 'waiting',
+    failed: 'error',
     interrupted: 'idle',
-    done: 'done',
+    done: 'idle',
     unverifiable: 'idle',
     idle: 'idle',
     unconfirmed: 'idle'
   }
   for (const [display, label] of states) {
-    test(`${display} is readable with a semantic status`, async () => {
+    test(`${display} reads as a mark shape and in words on the hover card`, async () => {
       const h = setup()
       h.world.sessions = [withSummary('s1', display, label)]
       await h.mountInto(host)
-      expect(rowOf('fix-login', 'api').textContent).toContain(label)
-      expect(statusDot()?.getAttribute('aria-label')).toContain(label)
-      expect(statusDot()?.classList.contains(`ui-status-dot--${statusForDisplay[display]}`)).toBe(true)
+      expect(await agentCard()).toContain(label)
+      expect(mark()?.dataset.state).toBe(markForDisplay[display])
+      expect(mark()?.getAttribute('role')).toBe('img')
+      expect(mark()?.classList.contains(`ui-activity-mark--${markForDisplay[display]}`)).toBe(true)
       expect(lastReport(h).projects[0].worktrees[1]).toMatchObject({ status: 'working', display, label })
     })
   }
@@ -1891,18 +1952,19 @@ describe('agent status presentation', () => {
     const h = setup()
     h.world.sessions = [withSummary('s1', 'waiting', 'Waiting for input'), withSummary('s2', 'working', 'Working')]
     await h.mountInto(host)
-    expect(statusDot()?.getAttribute('aria-label')).toContain('Waiting for input')
+    expect(mark()?.dataset.state).toBe('waiting')
     await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done') } })
-    expect(statusDot()?.getAttribute('aria-label')).toContain('Working')
+    expect(mark()?.dataset.state).toBe('running')
     await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s2', 'done', 'Done') } })
-    expect(statusDot()?.getAttribute('aria-label')).toContain('Done')
+    expect(mark()?.dataset.state).toBe('idle')
+    expect(await agentCard()).toContain('Done')
     expect(lastReport(h).projects[0].worktrees[1].display).toBe('done')
   })
 
   test('a session with no summary keeps the coarse status', async () => {
     const h = setup()
     await h.mountInto(host)
-    expect(statusDot()?.getAttribute('aria-label')).toContain('Working')
+    expect(mark()?.dataset.state).toBe('running')
     expect(lastReport(h).projects[0].worktrees[1]).not.toHaveProperty('display')
   })
 
@@ -1910,12 +1972,11 @@ describe('agent status presentation', () => {
     const h = setup()
     h.world.sessions = [withSummary('s1', 'working', 'Working', { evidenceAt: Date.now() - 31 * MIN })]
     await h.mountInto(host)
-    expect(rowOf('fix-login', 'api').textContent).toContain('No recent update')
-    expect(statusDot()?.getAttribute('aria-label')).toContain('No recent update')
-    expect(statusDot()?.classList.contains('ui-status-dot--idle')).toBe(true)
+    expect(await agentCard()).toContain('No recent update')
+    expect(mark()?.dataset.state).toBe('idle')
     await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done', { evidenceAt: Date.now() - 90 * MIN }) } })
-    expect(statusDot()?.getAttribute('aria-label')).toContain('Done')
-    expect(statusDot()?.classList.contains('ui-status-dot--done')).toBe(true)
+    expect(await agentCard()).toContain('Done')
+    expect(mark()?.dataset.state).toBe('idle')
   })
 
   test('a one-minute tick shows decay and updates the report with no event', async () => {
@@ -1934,12 +1995,10 @@ describe('agent status presentation', () => {
       const h = setup()
       h.world.sessions = [withSummary('s1', 'working', 'Working', { evidenceAt: t0 - 29 * MIN })]
       await h.mountInto(host)
-      expect(statusDot()?.getAttribute('aria-label')).toContain('Working')
+      expect(mark()?.dataset.state).toBe('running')
       Date.now = () => t0 + 2 * MIN
       await act(async () => ticks.forEach((tick) => tick()))
-      expect(rowOf('fix-login', 'api').textContent).toContain('No recent update')
-      expect(statusDot()?.getAttribute('aria-label')).toContain('No recent update')
-      expect(statusDot()?.classList.contains('ui-status-dot--idle')).toBe(true)
+      expect(mark()?.dataset.state).toBe('idle')
       expect(lastReport(h).projects[0].worktrees[1].display).toBe('unverifiable')
     } finally {
       Date.now = realNow
@@ -1947,36 +2006,27 @@ describe('agent status presentation', () => {
     }
   })
 })
-test.each([true, false])('sleep overrides live session activity and wake restores it (show activity: %s)', async (showActivity) => {
+test('sleep overrides live session activity and wake restores it', async () => {
   const h = setup()
   h.world.sessions = [session('s1', 'w2', 'running')]
   h.world.options.showSleeping = true
-  if (!showActivity) h.world.options.showProperties = h.world.options.showProperties.filter((property) => property !== 'activity')
   await h.mountInto(host)
   const row = () => rowOf('fix-login', 'api')
-  const activeStatus = row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')
-  if (showActivity) expect(row().textContent).toContain('Running')
+  expect(markOf(row())?.dataset.state).toBe('running')
 
   await contextMenu(openButton(row())!)
   await click(itemNamed('Sleep'))
   await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
   expect(openButton(row())?.getAttribute('aria-label')).toBe('Wake and open fix-login')
-  expect(row().textContent).toContain('Sleeping')
-  expect(row().textContent).not.toContain('Running')
-  if (showActivity) {
-    expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Sleeping')
-    expect(row().querySelector('[aria-label^="Status: "]')?.classList.contains('ui-status-dot--idle')).toBe(true)
-  }
+  expect(markOf(row())?.dataset.state).toBe('asleep')
+  expect(markOf(row())?.getAttribute('aria-label')).toBe('Asleep')
+  expect(await hoverCardText(row())).toContain('Agent: Sleeping')
 
   await contextMenu(openButton(row())!)
   await click(itemNamed('Wake'))
   await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
   expect(openButton(row())?.getAttribute('aria-label')).toBe('Open fix-login')
-  expect(row().textContent).not.toContain('Sleeping')
-  if (showActivity) {
-    expect(row().textContent).toContain('Running')
-    expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe(activeStatus)
-  }
+  expect(markOf(row())?.dataset.state).toBe('running')
 })
 
 test('sleeping a hidden non-primary row restores focus outside the tree after refresh', async () => {
@@ -2023,8 +2073,8 @@ test('sleeping a temporarily revealed row restores Actions focus when sleeping r
   h.world.worktrees.push(wt('w4', 'r1', 'sleeping-other', { sleeping: true }))
   await h.mountInto(host)
 
-  await openDisclosure('Workspace options')
-  await click(buttonNamed(optionsContent(), 'Show 1 hidden sleeping worktree')!)
+  expect(hiddenLine()?.textContent).toContain('1 hidden: asleep')
+  await click(noticeAction(hiddenLine(), 'Show')!)
   expect(lastReport(h).revealSleeping).toBe(true)
 
   const row = rowOf('fix-login', 'api')
@@ -2038,36 +2088,20 @@ test('sleeping a temporarily revealed row restores Actions focus when sleeping r
   expect(document.activeElement === actionButton(refreshedRow)).toBe(true)
 })
 
-test('stock worktree controls persist options, reveal sleeping rows and wake without replacing the session', async () => {
+test('Display › Show asleep reveals sleeping rows as a draft on All, and wake leaves the session alone', async () => {
   const h = setup()
   h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'status', sortBy: 'name', showSleeping: false, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
   h.world.worktrees[1] = { ...h.world.worktrees[1]!, branch: 'topic/fix-login', comment: 'keep this note', sleeping: true }
   const unmount = await h.mountInto(host)
 
-  expect(rowOf('fix-login', 'api')).toBeUndefined()
-  await openDisclosure('Workspace options')
-  const group = optionsContent().querySelector('select[aria-label="Group by"]') as HTMLSelectElement
-  await act(async () => {
-    group.value = 'none'
-    group.dispatchEvent(new Event('change', { bubbles: true }))
-  })
-  const sort = optionsContent().querySelector('select[aria-label="Sort by"]') as HTMLSelectElement
-  await act(async () => {
-    sort.value = 'manual'
-    sort.dispatchEvent(new Event('change', { bubbles: true }))
-  })
-
-  const reveal = buttonNamed(optionsContent(), 'Show 1 hidden sleeping worktree')!
-  await click(reveal)
+  expect(rowIn(host, 'fix-login')).toBeUndefined()
+  expect(hiddenLine()?.textContent).toContain('1 hidden: asleep')
+  await chooseDisplay(null, 'Show asleep')
+  expect(host.querySelector('[role="tab"][data-view-id="all"] [aria-label="Changed"]')).not.toBeNull()
   const row = rowIn(host, 'fix-login')!
   expect(row).toBeDefined()
-  expect(row.textContent).toContain('topic/fix-login')
-  expect(row.textContent).toContain('keep this note')
-  await click(optionsContent().querySelector('input[aria-label="Compact cards"]')!)
-  await click(optionsContent().querySelector('input[aria-label="Show Branch"]')!)
-  await click(optionsContent().querySelector('input[aria-label="Show Notes"]')!)
-  expect(row.textContent).not.toContain('topic/fix-login')
-  expect(row.textContent).not.toContain('keep this note')
+  expect(markOf(row)?.dataset.state).toBe('asleep')
+  expect(await hoverCardText(row)).toContain('Agent: Sleeping')
   await contextMenu(openButton(row)!)
   expect(itemLabels()).toContain('Wake')
   await click(itemNamed('Wake'))
@@ -2075,6 +2109,7 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
   await contextMenu(openButton(rowIn(host, 'fix-login')!)!)
   expect(itemLabels()).toContain('Sleep')
   expect(itemLabels()).not.toContain('Wake')
+  expect(h.callsTo('quirky.worktree/setOptions')).toEqual([])
   await unmount()
 })
 
@@ -2100,17 +2135,9 @@ test('Group by None and Sort by Name show a flat global list across projects', a
   h.world.createGate = createGate
   await h.mountInto(host)
 
-  await openDisclosure('Workspace options')
-  const setOption = async (label: string, value: string) => {
-    const select = optionsContent().querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement
-    await act(async () => {
-      select.value = value
-      select.dispatchEvent(new Event('change', { bubbles: true }))
-    })
-  }
-  await setOption('Group by', 'none')
-  await setOption('Sort by', 'name')
-  expect(h.world.options).toMatchObject({ groupBy: 'none', sortBy: 'name' })
+  await chooseDisplay('Group by', 'None')
+  await chooseDisplay('Sort by', 'Name')
+  expect(h.callsTo('quirky.worktree/setOptions')).toEqual([])
 
   const tree = host.querySelector<HTMLElement>('.worktree-tree')!
   expect([...tree.querySelectorAll<HTMLElement>('[data-worktree-id]')]
@@ -2139,40 +2166,28 @@ test('Group by None and Sort by Name show a flat global list across projects', a
   expect(pending?.parentElement?.parentElement).toBe(tree)
   await act(async () => release())
 
-  await setOption('Group by', 'project')
+  await chooseDisplay('Group by', 'Section and project')
   expect(groupSection('services')).toBeDefined()
   expect(projectSection('api').closest('[data-top-level-section="group:g1"]')).not.toBeNull()
   expect(projectSection('web')).toBeDefined()
 })
-test('status grouping labels project-scoped lanes and keeps descendants with their parent lane', async () => {
+test('status grouping draws one lane per status and keeps descendants with their parent lane', async () => {
   const h = setup()
-  h.world.repos = [
-    { ...repos[0]!, displayName: 'API project' },
-    { ...repos[1]!, displayName: 'Web project' }
-  ]
   h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'status', filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
   h.world.worktrees.push(wt('w-child', 'r1', 'fix-login-child', { parentId: 'w2', status: 'in-review' }))
   await h.mountInto(host)
 
-  const lanes = [...host.querySelectorAll<HTMLLIElement>('li.worktree-status-lane')]
+  const lanes = [...host.querySelectorAll<HTMLElement>('section.worktree-status-lane')]
   const laneFor = (id: string) => lanes.find((lane) => lane.querySelector(`[data-worktree-id="${id}"]`))!
-  const apiLane = laneFor('w2')
-  const webLane = laneFor('w3')
-  expect(apiLane).not.toBe(webLane)
-  expect(apiLane.querySelector(':scope > header')?.textContent).toContain('API project')
-  expect(apiLane.querySelector(':scope > header')?.textContent).toContain('In progress')
-  expect(webLane.querySelector(':scope > header')?.textContent).toContain('Web project')
-  expect(webLane.querySelector(':scope > header')?.textContent).toContain('In progress')
-  expect(laneFor('w-child')).toBe(apiLane)
-  expect(apiLane.querySelector(':scope > header')?.textContent).not.toContain('In review')
+  expect(lanes.map(sectionHeading)).toEqual(['In progress'])
+  expect(laneFor('w2')).toBe(laneFor('w3'))
+  expect(laneFor('w-child')).toBe(laneFor('w2'))
+  expect(laneFor('w2').querySelector(':scope > header')?.textContent).not.toContain('In review')
+  expect(host.querySelectorAll('[data-worktree-id="w2"]')).toHaveLength(1)
 })
 
-test('PR grouping labels project-scoped missing and linked pull request lanes', async () => {
+test('PR grouping draws a lane for each linked pull request and one for none', async () => {
   const h = setup()
-  h.world.repos = [
-    { ...repos[0]!, displayName: 'API project' },
-    { ...repos[1]!, displayName: 'Web project' }
-  ]
   h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'pr', filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
   h.world.worktrees[1] = {
     ...h.world.worktrees[1]!,
@@ -2188,20 +2203,12 @@ test('PR grouping labels project-scoped missing and linked pull request lanes', 
   h.world.worktrees.push(wt('w-child', 'r1', 'fix-login-child', { parentId: 'w2' }))
   await h.mountInto(host)
 
-  const lanes = [...host.querySelectorAll<HTMLLIElement>('li.worktree-status-lane')]
+  const lanes = [...host.querySelectorAll<HTMLElement>('section.worktree-status-lane')]
   const laneFor = (id: string) => lanes.find((lane) => lane.querySelector(`[data-worktree-id="${id}"]`))!
-  const apiMissingLane = laneFor('w1')
-  const webMissingLane = laneFor('w3')
-  const apiLinkedLane = laneFor('w2')
-  expect(apiMissingLane).not.toBe(webMissingLane)
-  expect(apiMissingLane.querySelector(':scope > header')?.textContent).toContain('API project')
-  expect(apiMissingLane.querySelector(':scope > header')?.textContent).toContain('No pull request')
-  expect(webMissingLane.querySelector(':scope > header')?.textContent).toContain('Web project')
-  expect(webMissingLane.querySelector(':scope > header')?.textContent).toContain('No pull request')
-  expect(apiLinkedLane.querySelector(':scope > header')?.textContent).toContain('API project')
-  expect(apiLinkedLane.querySelector(':scope > header')?.textContent).toContain('PR #42')
-  expect(apiLinkedLane.querySelector(':scope > header')?.textContent).toContain('Add route')
-  expect(laneFor('w-child')).toBe(apiLinkedLane)
+  expect(lanes.map(sectionHeading)).toEqual(['PR #42 · Add route', 'No pull request'])
+  expect(laneFor('w1')).toBe(laneFor('w3'))
+  expect(laneFor('w2')).not.toBe(laneFor('w1'))
+  expect(laneFor('w-child')).toBe(laneFor('w2'))
 })
 
 test('PR grouping, CLI-origin filtering and filtered-row reveal change the workspace list', async () => {
@@ -2219,23 +2226,21 @@ test('PR grouping, CLI-origin filtering and filtered-row reveal change the works
     }
   }
   const unmount = await h.mountInto(host)
-  await openDisclosure('Workspace options')
-  const group = optionsContent().querySelector('select[aria-label="Group by"]') as HTMLSelectElement
-  await act(async () => {
-    group.value = 'pr'
-    group.dispatchEvent(new Event('change', { bubbles: true }))
-  })
-  const groupedRow = rowOf('fix-login', 'api')
-  const groupItem = groupedRow.parentElement?.parentElement
-  expect(groupItem?.tagName).toBe('LI')
-  expect(groupItem?.querySelector(':scope > header')).not.toBeNull()
-  expect(groupItem?.querySelector(':scope > ul')).toBe(groupedRow.parentElement)
-  expect(rowOf('fix-login', 'api').querySelector('a[aria-label="Pull request #42: Add route"]')).not.toBeNull()
+  await chooseDisplay('Group by', 'Pull request')
+  const prLane = () => [...host.querySelectorAll<HTMLElement>('section.worktree-status-lane')].find((lane) => sectionHeading(lane) === 'PR #42 · Add route')
+  const groupedRow = () => rowIn(prLane()!, 'fix-login')!
+  expect(groupedRow()).toBeDefined()
+  expect(prLane()!.querySelector(':scope > ul')).toBe(groupedRow().parentElement)
+  expect(await hoverCardText(groupedRow())).toContain('Review: #42 Add route')
 
-  await click(optionsContent().querySelector('input[aria-label="Hide CLI-created worktrees"]')!)
-  expect(rowOf('fix-login', 'api')).toBeUndefined()
-  await click(optionsContent().querySelector('button[aria-label="Show 1 filtered worktree"]')!)
-  expect(rowOf('fix-login', 'api')).toBeDefined()
+  await openFilter()
+  await click(filterCheckbox('CLI-created')!)
+  await press('Escape')
+  expect(prLane()).toBeUndefined()
+  expect(hiddenLine()?.textContent).toContain('1 hidden: CLI-created')
+  await click(noticeAction(hiddenLine(), 'Show')!)
+  expect(groupedRow()).toBeDefined()
+  expect(hiddenLine()?.textContent).toContain('Showing hidden worktrees')
   await unmount()
 })
 test('hide other desktop clients filters only known different creators for an authenticated installation', async () => {
@@ -2253,14 +2258,16 @@ test('hide other desktop clients filters only known different creators for an au
     { worktreeId: 'w5', automation: true, otherClient: null }
   ]
   const unmount = await h.mountInto(host)
-  await openDisclosure('Workspace options')
-  await click(optionsContent().querySelector('input[aria-label="Hide worktrees from other desktop clients"]')!)
+  await openFilter()
+  await click(filterCheckbox('Other desktop clients')!)
+  await press('Escape')
   expect(rowOf('fix-login', 'api')).toBeUndefined()
   expect(rowOf('main', 'api')).toBeDefined()
   expect(rowOf('main', 'web')).toBeDefined()
   expect(rowOf('phone-origin', 'web')).toBeDefined()
   expect(rowOf('automation-origin', 'web')).toBeDefined()
-  await click(optionsContent().querySelector('button[aria-label="Show 1 filtered worktree"]')!)
+  expect(hiddenLine()?.textContent).toContain('1 hidden: other desktop client')
+  await click(noticeAction(hiddenLine(), 'Show')!)
   expect(rowOf('fix-login', 'api')).toBeDefined()
   await unmount()
 })
@@ -2283,8 +2290,7 @@ test('workspace board exposes status controls for a worktree with a project-defi
   const h = setup()
   h.world.worktrees[1] = { ...h.world.worktrees[1]!, status: 'blocked' as Worktree['status'] }
   const unmount = await h.mountInto(host)
-  await openDisclosure('More workspace tools')
-  await click(buttonNamed(optionsContent(), 'Workspace board')!)
+  await chooseMoreMenu('Workspace board')
   const board = host.querySelector('section[aria-label="Workspace board"]')!
   const statusControl = board.querySelector<HTMLSelectElement>('select[aria-label="Move fix-login in api to status"]')
   expect(statusControl).not.toBeNull()
@@ -2298,8 +2304,7 @@ test('workspace board identifies duplicate worktree names by project and keeps p
   h.world.worktrees[1] = wt('w2', 'r1', 'duplicate')
   h.world.worktrees.push(wt('w4', 'r2', 'duplicate'))
   const unmount = await h.mountInto(host)
-  await openDisclosure('More workspace tools')
-  await click(buttonNamed(optionsContent(), 'Workspace board')!)
+  await chooseMoreMenu('Workspace board')
 
   const board = host.querySelector<HTMLElement>('section[aria-label="Workspace board"]')!
   const apiCard = board.querySelector<HTMLSelectElement>('#worktree-status-w2')!.closest<HTMLElement>('.worktree-board-card')!
@@ -2325,16 +2330,15 @@ test('workspace board identifies duplicate worktree names by project and keeps p
 test('cleanup review prevents blocked selection and supports ignoring and restoring suggestions', async () => {
   const h = setup()
   const unmount = await h.mountInto(host)
-  await openDisclosure('Workspace options')
-  await click(buttonNamed(optionsContent(), 'Review cleanup')!)
-  expect(optionsPopover()).toBeNull()
+  await chooseMoreMenu('Review cleanup')
+  expect(menu()).toBeNull()
 
   const dialog = document.querySelector('[role="dialog"]') as HTMLElement
   expect(dialog.textContent).toContain('Primary worktrees cannot be deleted.')
   expect(dialog.textContent).toContain('fix-login')
-  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Ignore fix-login')!)
+  await click([...dialog.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Ignore fix-login')!)
   expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(true)
-  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Restore ignored suggestions')!)
+  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Restore ignored')!)
   expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(false)
 
   expect((dialog.querySelector('input[aria-label="Select main"]') as HTMLInputElement).disabled).toBe(true)
@@ -2345,9 +2349,8 @@ test('cleanup review prevents blocked selection and supports ignoring and restor
 test('Escape dismisses cleanup review and leaves the workspace available', async () => {
   const h = setup()
   const unmount = await h.mountInto(host)
-  await openDisclosure('Workspace options')
-  await click(buttonNamed(optionsContent(), 'Review cleanup')!)
-  expect(optionsPopover()).toBeNull()
+  await chooseMoreMenu('Review cleanup')
+  expect(menu()).toBeNull()
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   await press('Escape')
   expect(document.querySelector('[role="dialog"]')).toBeNull()

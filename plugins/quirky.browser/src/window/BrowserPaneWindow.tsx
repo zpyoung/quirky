@@ -15,7 +15,9 @@ import type { PaneCommand, PaneDownload, PaneFrame, PaneNativeAction, PaneNative
 import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneAddress, paneForView, paneHistoryControls, pointerToFramePoint } from './model'
 import { DesignWindow, type DesignAction } from '../design-window/DesignWindow'
 import { BrowserImportHint, BrowserProfileMenu } from '../preferences-window/BrowserProfileMenu'
+import { useDisclosureMenu } from './useDisclosureMenu'
 import { nativePaneUserAgent } from '../preferences/native-identity'
+import { describeNavigationError } from './navigation-error'
 import { Badge, Button, EmptyState, FormRow, IconButton, ListRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
@@ -119,6 +121,7 @@ const paneStyles = {
     left: 'var(--ui-space-12)',
     right: 'auto',
     zIndex: 20,
+    minWidth: 0,
     width: 'min(calc(var(--ui-row-double) * 12), calc(100% - var(--ui-space-24)))',
     maxHeight: '60vh',
     overflow: 'auto',
@@ -128,9 +131,10 @@ const paneStyles = {
     position: 'absolute',
     top: '100%',
     left: 'auto',
-    right: 0,
+    right: 'var(--ui-space-12)',
     zIndex: 20,
-    width: 'min(calc(var(--ui-row-double) * 12), calc(100vw - var(--ui-space-24)))',
+    minWidth: 0,
+    width: 'min(calc(var(--ui-row-double) * 12), calc(100% - var(--ui-space-24)))',
     maxHeight: '60vh',
     overflow: 'auto',
     margin: 'var(--ui-space-4) 0 0'
@@ -177,6 +181,17 @@ const paneStyles = {
     background: 'var(--ui-rail)'
   },
   nativeHost: { flex: '0 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0 },
+  visuallyHidden: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    margin: -1,
+    padding: 0,
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+    border: 0
+  },
   watchImage: {
     display: 'block',
     width: '100%',
@@ -201,6 +216,17 @@ const paneStyles = {
     maxHeight: '100%',
     overflow: 'auto',
     padding: 'var(--ui-space-16)'
+  },
+  stackedCard: {
+    width: '100%',
+    maxWidth: 'min(100%, calc(var(--ui-row-double) * 18))',
+    maxHeight: '100%',
+    overflow: 'auto',
+    padding: 'var(--ui-space-16)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 'var(--ui-space-12)'
   },
   actions: { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' },
   prompt: { display: 'grid', gap: 'var(--ui-space-8)' },
@@ -297,8 +323,23 @@ function worktreeSelector(worktreeId: string): string {
   return worktreeId.startsWith('id:') ? worktreeId : `id:${worktreeId}`
 }
 
+/** The bare worktree id a view input expects; the header switcher matches it against worktree ids. */
+function viewWorktree(worktreeId: string): string {
+  return worktreeId.replace(/^id:/, '')
+}
+
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+const REASON_CODES = /^(?:(?:browser_[a-z_]+|invalid_argument):\s*)+/
+
+/** A daemon or Chrome error in plain words: Chrome load codes are explained and the daemon's leading reason codes are dropped. */
+function readableError(raw: string): string {
+  const described = describeNavigationError(raw)
+  if (described) return `${described.summary} (${described.detail})`
+  const text = raw.replace(REASON_CODES, '')
+  return text === '' ? raw : text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 function isPaneState(value: unknown): value is PaneState {
@@ -333,6 +374,9 @@ function imageSource(frame: PaneFrame): string {
 export function BrowserPaneWindow({ context, input }: { context: UiPluginContext; input?: unknown }) {
   const requestedPaneId = paneIdFrom(input)
   const promptFieldsId = useId()
+  const watchHintId = useId()
+  const [watchAnnouncement, setWatchAnnouncement] = useState('')
+  const announcedPageRef = useRef<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const paneRef = useRef<PaneTab | null>(null)
   const addressRef = useRef<HTMLInputElement>(null)
@@ -364,8 +408,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const [editingAddress, setEditingAddress] = useState(false)
   const [suggestions, setSuggestions] = useState<{ url: string; title: string; kind: 'history' | 'search' | 'document' }[]>([])
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
-  const [activeSuggestion, setActiveSuggestion] = useState(0)
+  const [activeSuggestion, setActiveSuggestion] = useState(-1)
   const [findOpen, setFindOpen] = useState(false)
+  const browserMenu = useDisclosureMenu()
+  const historyMenu = useDisclosureMenu()
   const [findText, setFindText] = useState('')
   const [frame, setFrame] = useState<PaneFrame | null>(null)
   const [watchRevision, setWatchRevision] = useState(0)
@@ -405,7 +451,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     const selected = paneForView(next.tabs, next.active, requestedPaneId)
     setPane(selected)
     if (selected) {
-      if (!editingAddress) setAddress(selected.url)
+      if (!editingAddress) setAddress(paneAddress(selected))
       if (selected.id !== findPaneIdRef.current || !editingFindRef.current) {
         findPaneIdRef.current = selected.id
         findTextRef.current = selected.find.text
@@ -490,15 +536,18 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   }, [context, refresh, updateState])
 
   useEffect(() => {
-    if (pane) {
-      if (!editingAddress) setAddress(paneAddress(pane))
-      if (pane.id !== findPaneIdRef.current || !editingFindRef.current) {
-        findPaneIdRef.current = pane.id
-        findTextRef.current = pane.find.text
-        setFindText(pane.find.text)
-      }
+    setEditingAddress(false)
+  }, [pane?.id])
+  useEffect(() => {
+    if (pane && !editingAddress) setAddress(paneAddress(pane))
+  }, [pane?.id, pane?.url, pane?.document?.path, editingAddress])
+  useEffect(() => {
+    if (pane && (pane.id !== findPaneIdRef.current || !editingFindRef.current)) {
+      findPaneIdRef.current = pane.id
+      findTextRef.current = pane.find.text
+      setFindText(pane.find.text)
     }
-  }, [pane?.id, pane?.url, pane?.document?.path, pane?.find.text, editingAddress])
+  }, [pane?.id, pane?.url, pane?.document?.path, pane?.find.text])
   useEffect(() => {
     const activePrompts = new Set(pane?.prompts.map((prompt) => prompt.id) ?? [])
     setPromptValues((current) => {
@@ -574,7 +623,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       lastAckRef.current = null
       setFrame(null)
       frameRef.current = null
-      setWatchError(null)
+      if (pane?.mode !== 'native') setWatchError(null)
       return
     }
 
@@ -816,7 +865,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         if (!mounted) return
         const rows = typeof result === 'object' && result !== null ? Reflect.get(result, 'suggestions') : null
         setSuggestions(Array.isArray(rows) ? rows as typeof suggestions : [])
-        setActiveSuggestion(0)
+        setActiveSuggestion(-1)
       }).catch((error: unknown) => {
         if (mounted) setMessage({ text: errorText(error), kind: 'error' })
       })
@@ -828,7 +877,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   }, [context, pane?.id, pane?.worktreeId, address, suggestionsOpen])
 
   const navigate = useCallback(async (inputValue: string) => {
-    if (!pane) return
+    if (!pane || inputValue.trim() === '') return
     setEditingAddress(false)
     setSuggestionsOpen(false)
     setMessage(null)
@@ -845,7 +894,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     const selector = worktreeSelector(pane.worktreeId)
     const created = await invoke('paneOpen', { worktree: selector, page: pageId, mode: 'watch' }) as PaneTab | undefined
     if (!created) return
-    context.openView(WORKTREE_VIEW, { worktree: selector })
+    context.openView(WORKTREE_VIEW, { worktree: viewWorktree(pane.worktreeId) })
   }, [context, invoke, pane])
   const startWatchHere = useCallback(async () => {
     if (!pane || pane.mode !== 'native') return
@@ -862,7 +911,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     setEditingAddress(false)
     setSuggestionsOpen(false)
     try {
-      if (address !== pane.url) await context.call('quirky.browser/paneNavigate', { pane: pane.id, input: address })
+      if (address !== '' && address !== pane.url) await context.call('quirky.browser/paneNavigate', { pane: pane.id, input: address })
       const result = await context.call('quirky.browser/paneWatch', { pane: pane.id })
       const id = typeof result === 'object' && result !== null ? Reflect.get(result, 'watchId') : null
       if (typeof id !== 'string' || id === '') throw new Error('Watch did not return a lease ID')
@@ -903,6 +952,9 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       if (mountedRef.current) setPageListLoading(false)
     }
   }, [context, pane])
+
+  // a Native pane without a native view never reports back, so its loading flag would stick
+  const stoppable = Boolean(pane?.loading) && !(pane?.mode === 'native' && !context.nativeBrowser.available)
 
   const applySuggestion = (value: string) => {
     void navigate(value)
@@ -1089,6 +1141,15 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     ? { width: nativeViewport.width, height: nativeViewport.height, maxWidth: '100%', maxHeight: '100%' }
     : undefined
   const canUseWatch = pane?.mode === 'watch'
+  const watchedPageName = pane ? pane.title || pane.url : ''
+  const watchedPageKey = pane?.mode === 'watch' ? `${pane.id}\n${pane.url}\n${pane.title}` : null
+  useEffect(() => {
+    const previous = announcedPageRef.current
+    announcedPageRef.current = watchedPageKey
+    if (watchedPageKey === null || previous === null || previous === watchedPageKey) return
+    if (previous.split('\n')[0] !== watchedPageKey.split('\n')[0]) return
+    setWatchAnnouncement(`Navigated to ${watchedPageName}`)
+  }, [watchedPageKey, watchedPageName])
 
   const activePrompt = pane?.mode === 'watch' || (pane?.mode === 'native' && context.nativeBrowser.pageRequestsAvailable) ? pane.prompts[0] ?? null : null
   return (
@@ -1124,12 +1185,12 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         <IconButton label="Back" title="Back" disabled={!pane || !paneHistoryControls(pane).back} onClick={() => void control('back')} style={paneStyles.toolbarControl}>‹</IconButton>
         <IconButton label="Forward" title="Forward" disabled={!pane || !paneHistoryControls(pane).forward} onClick={() => void control('forward')} style={paneStyles.toolbarControl}>›</IconButton>
         <IconButton
-          label={pane?.loading ? 'Stop loading' : 'Reload'}
-          title={pane?.loading ? 'Stop loading' : 'Reload'}
+          label={stoppable ? 'Stop loading' : 'Reload'}
+          title={stoppable ? 'Stop loading' : 'Reload'}
           disabled={!pane}
-          onClick={() => void control(pane?.loading ? 'stop' : 'reload')}
+          onClick={() => void control(stoppable ? 'stop' : 'reload')}
           style={paneStyles.toolbarControl}
-        >{pane?.loading ? '■' : '↻'}</IconButton>
+        >{stoppable ? '■' : '↻'}</IconButton>
         <div className="qbp-address-wrap" style={paneStyles.addressWrap}>
           <div style={paneStyles.addressFieldWrap}>
             <TextField
@@ -1142,22 +1203,23 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
               value={address}
               placeholder="Search or enter address"
               style={paneStyles.addressField}
-              onFocus={() => { setEditingAddress(true); setSuggestionsOpen(true) }}
-              onBlur={() => { window.setTimeout(() => setSuggestionsOpen(false), 120); setEditingAddress(false) }}
-              onChange={(event) => { setAddress(event.target.value); setSuggestionsOpen(true) }}
+              onFocus={() => setSuggestionsOpen(true)}
+              onBlur={() => { window.setTimeout(() => setSuggestionsOpen(false), 120) }}
+              onChange={(event) => { setEditingAddress(true); setAddress(event.target.value); setSuggestionsOpen(true) }}
               onKeyDown={(event) => {
                 if (event.key === 'ArrowDown' && suggestions.length > 0) {
                   event.preventDefault()
                   setActiveSuggestion((value) => (value + 1) % suggestions.length)
                 } else if (event.key === 'ArrowUp' && suggestions.length > 0) {
                   event.preventDefault()
-                  setActiveSuggestion((value) => (value + suggestions.length - 1) % suggestions.length)
+                  setActiveSuggestion((value) => (value <= 0 ? suggestions.length - 1 : value - 1))
                 } else if (event.key === 'Enter') {
                   event.preventDefault()
-                  const suggestion = suggestionsOpen ? suggestions[activeSuggestion] : undefined
+                  const suggestion = suggestionsOpen && activeSuggestion >= 0 ? suggestions[activeSuggestion] : undefined
                   void navigate(suggestion?.url ?? address)
                 } else if (event.key === 'Escape') {
                   setSuggestionsOpen(false)
+                  setEditingAddress(false)
                   addressRef.current?.blur()
                 }
               }}
@@ -1200,7 +1262,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           onMessage={reportDesignMessage}
           actionRef={designActionRef}
         />
-        <details className="qbp-details qbp-profile-details" style={paneStyles.profileDetails}>
+        <details className="qbp-details qbp-profile-details" style={paneStyles.profileDetails} {...browserMenu}>
           <summary className="ui-menu__trigger" aria-label="Browser menu" style={paneStyles.menuSummary}>Browser menu</summary>
           <div className="ui-menu__list qbp-menu-popover" role="menu" style={paneStyles.profilePopover}>
             <div style={paneStyles.menuItems}>
@@ -1213,8 +1275,8 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
             {settings.homePage
               ? <Button className="ui-menu__item" role="menuitem" onClick={() => void navigate(settings.homePage)}>Home Page · {settings.homePage}</Button>
               : <span className="qbp-muted" style={paneStyles.mutedText}>Home page: not set</span>}
-            <Button className="ui-menu__item" role="menuitem" onClick={() => void control('zoom', { level: Math.max(-3, zoom - 0.5) })}>Zoom Out</Button>
-            <Button className="ui-menu__item" role="menuitem" onClick={() => void control('zoom', { level: Math.min(5, zoom + 0.5) })}>Zoom In</Button>
+            <Button className="ui-menu__item" role="menuitem" data-keep-open onClick={() => void control('zoom', { level: Math.max(-3, zoom - 0.5) })}>Zoom Out</Button>
+            <Button className="ui-menu__item" role="menuitem" data-keep-open onClick={() => void control('zoom', { level: Math.min(5, zoom + 0.5) })}>Zoom In</Button>
             <Button className="ui-menu__item" role="menuitem" onClick={() => void control('zoom', { level: 0 })}>Reset Zoom · {zoomPercent}%</Button>
             <details className="qbp-details" style={paneStyles.details}>
               <summary className="ui-menu__trigger" style={paneStyles.menuSummary}>Viewport · {VIEWPORTS.find((entry) => entry.id === pane?.viewport)?.label ?? 'Default'}</summary>
@@ -1229,7 +1291,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
               </div>
             </details>
             {pane?.mode === 'native' ? <Button className="ui-menu__item" role="menuitem" onClick={() => void startWatchHere()} disabled={watchStarting}>{watchStarting ? 'Starting Watch…' : 'Start Watch in an owned page…'}</Button> : null}
-            {pane ? <Button className="ui-menu__item" role="menuitem" onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading agent pages…' : 'Watch an agent page…'}</Button> : null}
+            {pane ? <Button className="ui-menu__item" role="menuitem" data-keep-open onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading agent pages…' : 'Watch an agent page…'}</Button> : null}
             {pane && pageList ? <div role="menu" aria-label="Managed pages for Watch" style={{ display: 'grid', gap: 'var(--ui-space-4)' }}>
               {pageList.length ? pageList.map((entry) => <Button className="ui-menu__item" key={entry.browserPageId} role="menuitem" onClick={() => void openWatchPage(entry.browserPageId)}>
                 <span className="qbp-suggestion-title" style={paneStyles.suggestionTitle}>{entry.title || entry.url || 'Untitled page'}</span>
@@ -1237,15 +1299,14 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
               </Button>) : <EmptyState message="No managed pages are available in this worktree." />}
             </div> : null}
             {pane?.mode === 'watch' ? <Button className="ui-menu__item" role="menuitem" onClick={() => {
-              const selector = worktreeSelector(pane.worktreeId)
-              context.openView(WORKTREE_VIEW, { worktree: selector })
+              context.openView(WORKTREE_VIEW, { worktree: viewWorktree(pane.worktreeId) })
             }}>Open worktree view</Button> : null}
             <span className="qbp-muted" style={paneStyles.mutedText}>Search engine: {settings.searchEngine}</span>
             </div>
           </div>
         </details>
         <BrowserImportHint context={context} pane={pane ?? undefined} onError={(text) => setMessage({ text, kind: 'error' })} />
-        <details className="qbp-details" style={paneStyles.details}>
+        <details className="qbp-details" style={paneStyles.profileDetails} {...historyMenu}>
           <summary className="ui-menu__trigger" aria-label="Browser history" style={paneStyles.menuSummary}>History</summary>
           <div className="ui-menu__list qbp-menu-popover qbp-history" role="menu" aria-label="Recent browser history" style={paneStyles.historyPopover}>
             <div style={paneStyles.menuItems}>
@@ -1298,10 +1359,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         <span style={message.kind === 'error' ? { ...paneStyles.messageText, ...paneStyles.errorText } : paneStyles.messageText}>{message.text}</span>
         <Button onClick={() => setMessage(null)} aria-label="Dismiss message">Dismiss</Button>
       </div> : null}
-      {pane?.mode === 'watch' && frame && (watchError || pane.error) ? <div className="qbp-message" data-kind="error" role="alert" style={paneStyles.message}>
-        <StatusDot status="failing" label="Watch error" />
-        <span style={{ ...paneStyles.messageText, ...paneStyles.errorText }}>{watchError ?? pane.error}</span>
-        <Button onClick={() => setWatchRevision((revision) => revision + 1)}>Retry this Watch</Button>
+      {pane?.mode === 'watch' && frame && (watchError || (pane.error && !pane.watchEnded)) ? <div className="qbp-message" data-kind="error" role="alert" style={paneStyles.message}>
+        <StatusDot status="failing" label={watchError ? 'Watch error' : 'Page error'} />
+        <span style={{ ...paneStyles.messageText, ...paneStyles.errorText }}>{readableError(watchError ?? pane.error!)}</span>
+        {watchError ? <Button onClick={() => setWatchRevision((revision) => revision + 1)}>Retry this Watch</Button> : null}
       </div> : null}
 
       <div
@@ -1310,6 +1371,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         style={paneStyles.page}
         aria-label={pane ? `${pane.mode === 'watch' ? 'Watched' : 'Native'} page: ${pane.title || pane.url}` : 'Browser page'}
         tabIndex={canUseWatch ? 0 : -1}
+        {...(canUseWatch ? { role: 'group', 'aria-describedby': watchHintId } : {})}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerMove={onPointerMove}
@@ -1319,6 +1381,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         onPaste={onPaste}
         onContextMenu={(event) => { if (canUseWatch) event.preventDefault() }}
       >
+        {canUseWatch ? <>
+          <span id={watchHintId} style={paneStyles.visuallyHidden}>Interactive remote page view. Click to focus it, then pointer and keyboard input go to the page. This view shows a picture of the page, so its links and fields are not exposed to assistive technology.</span>
+          <span className="qbp-watch-announcer" aria-live="polite" role="status" style={paneStyles.visuallyHidden}>{watchAnnouncement}</span>
+        </> : null}
         {pane?.mode === 'native' && pane.document && context.nativeBrowser.available && !context.nativeBrowser.previewAvailable ? (
           <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
             <SectionHeader title="Workspace document preview is unavailable here" />
@@ -1331,7 +1397,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           ref={watchImageRef}
           key={`${frame.watchId}:${frame.sequence}`}
           src={imageSource(frame)}
-          alt={`Watched page frame ${frame.width} by ${frame.height}`}
+          alt={`Live view of ${watchedPageName}`}
           draggable={false}
           style={paneStyles.watchImage}
           onLoad={() => acknowledgeFrame(frame)}
@@ -1342,10 +1408,11 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           <EmptyState message="The browser pane state could not be loaded for this tab." action={{ label: 'Retry', onAction: () => void refresh() }} />
         </div></div> : null}
         {pane?.mode === 'native' && !context.nativeBrowser.available ? (
-          <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+          <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.stackedCard}>
             <SectionHeader title="Native browsing is unavailable here" />
-            <p className="ui-help-text" style={paneStyles.helpText}>This web client cannot embed the sandboxed system webview. Watch is explicit: it creates or binds a managed agent page through the browser pane service; it never silently substitutes Chrome.</p>
+            <p className="ui-help-text" style={paneStyles.helpText}>Native browsing needs the Quirky desktop app. In the web client, use Watch to view this address in a managed Chrome page you can Grab, Annotate and Draw on.</p>
             {nativeError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{nativeError}</p> : null}
+            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{readableError(watchError)}</p> : null}
             <div className="qbp-actions" style={paneStyles.actions}>
               <Button onClick={() => void startWatchHere()} disabled={watchStarting}>{watchStarting ? 'Starting Watch…' : 'Watch this address in an owned page'}</Button>
               <Button onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading pages…' : 'Choose an existing agent page'}</Button>
@@ -1357,7 +1424,6 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
                 <span className="qbp-suggestion-detail" style={paneStyles.suggestionDetail}>{entry.active ? 'Active · ' : ''}{entry.url}</span>
               </Button>) : <EmptyState message="No managed pages are available in this worktree." />}
             </div> : null}
-            <p className="qbp-muted" style={paneStyles.mutedText}>Native browsing requires the desktop shell. Watch is an explicit opt-in to a managed agent page.</p>
           </div></div>
         ) : null}
         {pane?.mode === 'native' && context.nativeBrowser.available && nativeError ? (
@@ -1369,9 +1435,9 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         ) : null}
         {pane?.mode === 'watch' && !frame ? (
           <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
-            <SectionHeader title={pane.error ? 'Watch ended' : 'Connecting to Watch'} />
-            <EmptyState message={pane.error ?? watchError ?? (pane.page ? 'Connecting to the selected managed page…' : 'This Watch pane has no managed page selected.')} />
-            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{watchError}</p> : null}
+            <SectionHeader title={pane.error && pane.watchEnded ? 'Watch ended' : 'Connecting to Watch'} />
+            <EmptyState message={(pane.error ? readableError(pane.error) : null) ?? (watchError ? readableError(watchError) : null) ?? (pane.page ? 'Connecting to the selected managed page…' : 'This Watch pane has no managed page selected.')} />
+            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{readableError(watchError)}</p> : null}
             {!pane.page ? <Button onClick={() => void loadAgentPages()}>Choose an agent page to Watch</Button> : null}
             {pageListError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{pageListError}</p> : null}
             {pageList ? <div className="ui-menu__list qbp-menu-popover" role="list" aria-label="Managed pages" style={{ ...paneStyles.menuPopover, ...paneStyles.menuItems }}>
@@ -1395,14 +1461,14 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
             <Button onClick={() => setNativeState(null)}>Dismiss</Button>
           </div>
         </div></div> : null}
-        {pane?.mode === 'native' && context.nativeBrowser.available && !nativeError && !pane.loading && pane.url === 'about:blank' && !nativeState?.error ? <div className="qbp-overlay" data-quirky-native-mask style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+        {pane?.mode === 'native' && context.nativeBrowser.available && !nativeError && !pane.loading && pane.url === 'about:blank' && !nativeState?.error ? <div className="qbp-overlay" data-quirky-native-mask style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.stackedCard}>
           <SectionHeader title="New Tab" />
           <EmptyState message="Type a URL or search above to start browsing." />
           <p className="qbp-muted" style={paneStyles.mutedText}>Home page: {settings.homePage || 'not set'} · Search: {settings.searchEngine}</p>
         </div></div> : null}
-        {pane?.mode === 'watch' && pane.error && frame ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+        {pane?.mode === 'watch' && pane.error && pane.watchEnded && frame ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
           <SectionHeader title="Watch ended" />
-          <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{pane.error}</p>
+          <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{readableError(pane.error)}</p>
           <p className="ui-help-text" style={paneStyles.helpText}>The browser pane will not attach to another page automatically.</p>
         </div></div> : null}
       </div>

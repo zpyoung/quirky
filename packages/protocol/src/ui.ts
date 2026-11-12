@@ -353,8 +353,12 @@ export type UiPluginContext = {
   confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
   /** Shows a toast; `options` can make it a success or warning, keyed, persistent or actionable. */
   toast(title: string, body: string, options?: ToastOptions): void
-  /** Shows a count on the panel's toggle, with `title` as its tooltip (default "<count> waiting"); null clears it. */
-  setPanelBadge(panelId: string, count: number | null, title?: string): void
+  /**
+   * Shows a count on the toggle of one of this plugin's panels or sidebar sections, with `title` as
+   * its tooltip (default "<count> waiting") and `tone` as its color (default `'needs-you'`); null
+   * clears it.
+   */
+  setPanelBadge(panelId: string, count: number | null, title?: string, tone?: 'needs-you' | 'failing'): void
   /**
    * Sets a window-global context key that keybinding `when` conditions read; `undefined` clears
    * it. The window clears every key this plugin set when the plugin is deactivated.

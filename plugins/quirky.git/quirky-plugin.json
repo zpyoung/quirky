@@ -250,12 +250,21 @@
             },
             "source": {
               "type": "string",
-              "description": "Which sides to read; defaults to staged when `staged` is set, else unstaged.",
+              "description": "Which sides to read; defaults to staged when `staged` is set, else unstaged. review needs `against`.",
               "enum": [
                 "unstaged",
                 "staged",
                 "branch",
-                "commit"
+                "commit",
+                "review"
+              ]
+            },
+            "against": {
+              "type": "string",
+              "description": "For source review: base reads the merge base to the working file, reviewed reads the reviewed content to the working file. Required for source review; other sources reject it.",
+              "enum": [
+                "base",
+                "reviewed"
               ]
             },
             "oldPath": {
@@ -313,7 +322,8 @@
                 "unstaged",
                 "staged",
                 "branch",
-                "commit"
+                "commit",
+                "review"
               ]
             },
             "kind": {
@@ -1078,6 +1088,230 @@
             "entries",
             "added",
             "removed"
+          ]
+        }
+      },
+      {
+        "id": "review",
+        "description": "Every file that differs from the merge base with the base ref, once, with its status, counts, uncommitted and staged flags and review mark. When the compare cannot run, only the uncommitted files are listed.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string",
+              "description": "The worktree."
+            },
+            "branch": {
+              "description": "The checked-out branch, or null when detached."
+            },
+            "base": {
+              "type": "object",
+              "description": "The base ref compared against: name, where it came from (param, upstream, worktree, project or detected) and whether it is the current branch."
+            },
+            "compare": {
+              "type": "object",
+              "description": "status (ready, or why the compare cannot run), mergeBase, headOid and, when not ready, message."
+            },
+            "totals": {
+              "type": "object",
+              "description": "Added and removed lines over all files."
+            },
+            "counts": {
+              "type": "object",
+              "description": "files, reviewed, changed, uncommitted and staged."
+            },
+            "capped": {
+              "type": "boolean",
+              "description": "The list stopped at its entry limit."
+            },
+            "files": {
+              "type": "array",
+              "description": "The files sorted by path in UTF-8 byte order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path relative to the worktree root."
+                  },
+                  "oldPath": {
+                    "type": "string",
+                    "description": "Previous path of a renamed or copied file."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Kind of change from the merge base to the disk.",
+                    "enum": [
+                      "M",
+                      "A",
+                      "D",
+                      "R"
+                    ]
+                  },
+                  "added": {
+                    "description": "Added lines; null for a binary file."
+                  },
+                  "removed": {
+                    "description": "Removed lines; null for a binary file."
+                  },
+                  "binary": {
+                    "type": "boolean",
+                    "description": "True for a binary file."
+                  },
+                  "uncommitted": {
+                    "type": "boolean",
+                    "description": "The path has a staged, unstaged, untracked or conflicted change."
+                  },
+                  "staged": {
+                    "type": "boolean",
+                    "description": "The path has a staged change."
+                  },
+                  "conflict": {
+                    "type": "object",
+                    "description": "Set for a conflicted path: the kind and whether it is still unresolved."
+                  },
+                  "mark": {
+                    "type": "string",
+                    "description": "none: not reviewed; reviewed: the disk matches the reviewed version; changed: it differs.",
+                    "enum": [
+                      "none",
+                      "reviewed",
+                      "changed"
+                    ]
+                  },
+                  "notes": {
+                    "type": "integer",
+                    "description": "Diff notes pinned to the path."
+                  },
+                  "submodule": {
+                    "type": "object",
+                    "description": "Set for a changed submodule: which parts changed."
+                  }
+                },
+                "required": [
+                  "path",
+                  "status",
+                  "added",
+                  "removed",
+                  "binary",
+                  "uncommitted",
+                  "staged",
+                  "mark",
+                  "notes"
+                ]
+              }
+            }
+          },
+          "required": [
+            "worktreeId",
+            "branch",
+            "base",
+            "compare",
+            "totals",
+            "counts",
+            "capped",
+            "files"
+          ]
+        }
+      },
+      {
+        "id": "setReviewMark",
+        "description": "Marks a file reviewed, storing its content on disk now as the reviewed version, or clears the mark. With expected, a file that changed since is refused with a changed-on-disk conflict and nothing is stored.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "File path relative to the worktree root."
+            },
+            "reviewed": {
+              "type": "boolean",
+              "description": "True to mark reviewed, false to clear the mark."
+            },
+            "expected": {
+              "description": "sha-256 of the content the user looked at; null when the file is deleted. Omit to mark whatever is on disk."
+            }
+          },
+          "required": [
+            "path",
+            "reviewed"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "mark": {
+              "type": "string",
+              "description": "The file's mark after the call.",
+              "enum": [
+                "none",
+                "reviewed"
+              ]
+            }
+          },
+          "required": [
+            "mark"
+          ]
+        }
+      },
+      {
+        "id": "reviewedContent",
+        "description": "The content a file had when it was marked reviewed. Fails not-found when the file has no mark.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "File path relative to the worktree root."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "description": "The reviewed text; null for a binary, too-large or deleted file."
+            },
+            "hash": {
+              "type": "string",
+              "description": "sha-256 of the reviewed bytes, or deleted."
+            },
+            "binary": {
+              "type": "boolean",
+              "description": "The reviewed bytes were not kept because the file is binary or too large."
+            },
+            "tooLarge": {
+              "type": "boolean",
+              "description": "The reviewed text is too large to show."
+            }
+          },
+          "required": [
+            "content",
+            "hash",
+            "binary",
+            "tooLarge"
           ]
         }
       },
@@ -2365,7 +2599,7 @@
       },
       {
         "id": "generateCommitMessage",
-        "description": "Asks an AI agent for a commit message for the staged changes. The recipe's agent, template, arguments and launch options apply unless given here; the commit box is not touched. One run per worktree.",
+        "description": "Asks an AI agent for a commit message for the staged changes, or with scope all for every uncommitted change. The recipe's agent, template, arguments and launch options apply unless given here; the commit box is not touched. One run per worktree.",
         "params": {
           "type": "object",
           "properties": {
@@ -2391,6 +2625,14 @@
             "requestId": {
               "type": "string",
               "description": "Names the run so the agents plugin can cancel it; generated when omitted."
+            },
+            "scope": {
+              "type": "string",
+              "description": "staged (default) summarizes the staged changes and fails when none are staged; all summarizes every uncommitted change, untracked files included.",
+              "enum": [
+                "staged",
+                "all"
+              ]
             }
           }
         },
@@ -2863,6 +3105,21 @@
         }
       },
       {
+        "id": "reviewChanged",
+        "description": "A worktree's review marks changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktreeId"
+          ]
+        }
+      },
+      {
         "id": "aiChanged",
         "description": "Saved AI recipes changed.",
         "data": {
@@ -3211,18 +3468,6 @@
     ],
     "setting": [
       {
-        "id": "groupOrder",
-        "type": "enum",
-        "title": "Source Control Group Order",
-        "description": "Which section comes first after Conflicts.",
-        "default": "changes-first",
-        "values": [
-          "changes-first",
-          "staged-first",
-          "untracked-first"
-        ]
-      },
-      {
         "id": "compareBase",
         "type": "enum",
         "title": "Default Compare Base",
@@ -3275,17 +3520,6 @@
         "title": "Collapse Unchanged Regions",
         "description": "Fold long unchanged stretches in diffs.",
         "default": false
-      },
-      {
-        "id": "combinedDiffFileTree",
-        "type": "enum",
-        "title": "Default Diff File Tree",
-        "description": "Whether a combined diff opens with its file tree.",
-        "default": "hidden",
-        "values": [
-          "hidden",
-          "shown"
-        ]
       },
       {
         "id": "ai-enabled",

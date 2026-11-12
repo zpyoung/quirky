@@ -16,7 +16,7 @@ test.skipIf(!existsSync(executable))('usage chips use free status-bar space and 
   ], { stdout: 'pipe', stderr: 'pipe' })
   if (await build.exited) throw new Error(await new Response(build.stderr).text())
   const css = await Promise.all([
-    'design-system/tokens.css', 'design-system/components.css', 'styles.css',
+    'design-system/tokens.css', 'design-system/components.css', 'design-system/icons/icons.css', 'styles.css',
     'shell/chrome.css', 'design-system/accounts.css'
   ].map((path) => Bun.file(new URL(`../../../packages/ui/src/${path}`, import.meta.url)).text()))
   const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
@@ -44,12 +44,29 @@ test.skipIf(!existsSync(executable))('usage chips use free status-bar space and 
     expect(await providers.evaluateAll((chips) => chips.map((chip) => chip.getAttribute('data-provider')))).toEqual(['claude', 'codex'])
     expect(await page.locator('.usage-chips').textContent()).toContain('%')
     expect(await page.locator('.usage-chips').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    const chipGeometry = () => page.evaluate(() => ['.usage-chips', '.usage-measure'].map((scope) =>
+      [...document.querySelectorAll(`${scope} [data-provider]`)].map((chip) => {
+        const icon = chip.querySelector('.ui-agent-icon')!.getBoundingClientRect()
+        const box = chip.getBoundingClientRect()
+        return { width: box.width, height: box.height, iconWidth: icon.width, iconHeight: icon.height }
+      })))
+    const [compactChips, compactMeasures] = await chipGeometry()
+    expect(compactChips!.length).toBe(2)
+    // the measuring row has zero height, so only widths are comparable and only widths feed the overflow fit
+    expect(compactMeasures!.map((chip) => chip.width)).toEqual(compactChips!.map((chip) => chip.width))
+    for (const chip of compactChips!) {
+      expect(chip.height).toBe(26)
+      expect([chip.iconWidth, chip.iconHeight]).toEqual([16, 16])
+    }
 
     await page.getByRole('button', { name: 'Open Usage', exact: true }).click()
     await page.getByRole('tab', { name: 'Detailed', exact: true }).click()
     await page.waitForSelector('.usage-chips .usage-detailed-chip')
     expect(await providers.count()).toBe(2)
     expect(await page.locator('.usage-chips .meter').count()).toBe(4)
+    const [detailedChips, detailedMeasures] = await chipGeometry()
+    expect(detailedMeasures!.map((chip) => chip.width)).toEqual(detailedChips!.map((chip) => chip.width))
+    for (const chip of detailedChips!) expect(chip.height).toBe(26)
     await page.getByRole('button', { name: 'Close Usage', exact: true }).click()
     await page.getByRole('button', { name: /^Open Codex usage details/ }).click()
     await page.waitForSelector('.usage-popover > .provider-details[aria-label="Codex usage details"]')

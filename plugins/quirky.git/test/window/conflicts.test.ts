@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, byLabel, click, dialogNamed, modS, primary, q, qa, rowOf, text, toasts } from './dom'
+import { buttonText, byLabel, click, dialogNamed, errorLine, modS, press, primary, q, qa, rowOf, text, toasts } from './dom'
 import { boot, DIFF_VIEW, openView, shutdown } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -11,6 +11,13 @@ const SLOW = 90_000
 afterEach(shutdown)
 
 const editorIn = (root: ParentNode = document) => EditorView.findFromDOM(q('[data-git-view-root] [contenteditable]', root)!)!
+const caretlessMenuItem = (label: string) => qa('[role="menuitem"]').find((item) => text(item).startsWith(label)) as HTMLButtonElement | undefined
+
+async function rightClick(row: Element): Promise<void> {
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }))
+  await Bun.sleep(60)
+}
+
 const reviewConflictCard = () => qa('[role="status"]').find((card) => buttonText('Review conflicts', card) !== undefined)
 
 test('SC-41: a sync that stops on a conflict leads, in the window, to Continue merge and Push', async () => {
@@ -27,7 +34,8 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   const conflict = await w.win.waitFor(() => reviewConflictCard())
   expect(buttonText('Review conflicts', conflict)).toBeDefined()
   expect(buttonText('Abort merge', conflict)).toBeDefined()
-  expect(toasts()).toHaveLength(1)
+  expect(text(errorLine())).toContain('merge conflicts')
+  expect(toasts()).toEqual([])
   expect(q('textarea[aria-label="Commit message"]')).toBeNull()
   await w.win.waitFor(async () => (await w.report())?.operation === 'merge')
 
@@ -38,7 +46,9 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   expect(text(q('[data-git-view-root] [role="status"]'))).toContain('Unresolved conflict · Both modified')
   await w.win.waitFor(() => text(q('[data-git-view-root] [aria-label="Conflict 1 of 1"]')) === '1 / 1')
   expect(rowOf('math.ts', 'conflicts')).not.toBeNull()
-  expect(byLabel('Stage math.ts', q('[data-section="conflicts"]')!)).toBeNull()
+  await rightClick(rowOf('math.ts', 'conflicts')!)
+  expect(caretlessMenuItem('Stage')?.disabled).toBe(true)
+  await press(q('[role="menu"]')!, 'Escape')
 
   const editor = editorIn()
   editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: 'a\nb\nBOTH\nd\ne\n' } })
@@ -49,16 +59,22 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe('a\nb\nBOTH\nd\ne\n')
   expect(w.git('status', '--porcelain')).toBe('UU math.ts')
 
-  const stage = await w.win.waitFor(() => byLabel('Stage math.ts', q('[data-section="conflicts"]') ?? document))
-  await click(stage)
+  await w.win.waitFor(async () => {
+    await rightClick(rowOf('math.ts', 'conflicts')!)
+    const stage = caretlessMenuItem('Stage')
+    if (stage && !stage.disabled) return stage
+    if (q('[role="menu"]')) await press(q('[role="menu"]')!, 'Escape')
+    return undefined
+  })
+  await click(caretlessMenuItem('Stage'))
   const banner = await w.win.waitFor(() => qa('[role="status"]').find((card) => buttonText('Continue merge', card) !== undefined))
   expect(buttonText('Continue merge', banner)).toBeDefined()
-  expect(q('[role="img"][aria-label^="Resolved locally conflict"]')).not.toBeNull()
+  await w.win.waitFor(() => q('[aria-label^="Resolved locally conflict"]'))
   editor.dispatch({ changes: { from: 0, insert: 'unsaved draft: ' } })
   const unsavedDraft = editor.state.sliceDoc()
 
   await click(buttonText('Continue merge', banner))
-  await w.win.waitFor(() => !buttonText('Continue merge') && text(primary()) === 'Push' && !primary().disabled)
+  await w.win.waitFor(() => !buttonText('Continue merge') && text(primary()) === 'Push 2 commits' && !primary().disabled)
   expect(w.git('rev-list', '--count', 'origin/zoe/feat..HEAD')).toBe('2')
   expect(w.git('log', '-1', '--format=%p').split(' ')).toHaveLength(2)
   await w.win.waitFor(async () => (await w.report()).operation === 'none')

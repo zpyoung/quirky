@@ -31,7 +31,7 @@ describe('SC-7: submodule rows expand to their read-only changes', () => {
       }))
     })
     const row = rowOf(element, 'vendor/lib')!
-    expect(row.textContent).toContain('Stage inside submodule')
+    expect(row.title).toContain('Stage inside submodule')
     expect(fake.called('quirky.git/submoduleStatus')).toHaveLength(0)
 
     await click(byLabel(element, 'Expand vendor/lib'))

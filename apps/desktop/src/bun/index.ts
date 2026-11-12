@@ -507,7 +507,8 @@ app.on('notification-dismiss', (payload) => {
 
 void maintainConnection({
   ensure: async () => {
-    latest = await ensureDaemon({ replaceStale: true })
+    // replacing only until launch succeeds: on reconnect, two shells on one home would keep stopping each other's daemon
+    latest = await ensureDaemon({ replaceStale: latest === null })
     showDaemon(latest)
   },
   connect: () =>

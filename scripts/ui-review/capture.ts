@@ -449,7 +449,7 @@ async function openSettings(runtime: CaptureRuntime): Promise<void> {
   await runtime.page.getByRole('dialog', { name: 'Settings', exact: true }).waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
 }
 
-function fixtureViewInput(
+export function fixtureViewInput(
   fixtures: RegisteredCaptureFixtures,
   target: CaptureTarget,
   editorBuffer: EditorFixtureBuffer | null,
@@ -464,8 +464,7 @@ function fixtureViewInput(
     repoId: fixtures.repo.id
   }
   if (target.plugin === 'quirky.git' && target.id.endsWith('/diff')) {
-    input.path = 'src/app.ts'
-    input.source = 'unstaged'
+    input.mode = 'review'
   }
   if (target.plugin === 'quirky.editor' && target.id === 'view:quirky.editor/document' && editorBuffer) {
     input.bufferId = editorBuffer.id

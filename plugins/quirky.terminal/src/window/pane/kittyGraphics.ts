@@ -99,6 +99,17 @@ async function decode(command: Command, payload: string, signal: AbortSignal): P
   return { bitmap, bytes: width * height * 4 }
 }
 
+function concat(chunks: Uint8Array[]): Uint8Array {
+  if (chunks.length === 1) return chunks[0]!
+  const out = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0))
+  let at = 0
+  for (const chunk of chunks) {
+    out.set(chunk, at)
+    at += chunk.length
+  }
+  return out
+}
+
 /** Visible-pane-owned direct Kitty raster protocol; never reads files, shared memory or a second history. */
 export function createKittyGraphics(terminal: Terminal, reply: (data: string) => void, initiallyEnabled: boolean) {
   const images = new Map<number, Image>()
@@ -261,6 +272,7 @@ export function createKittyGraphics(terminal: Terminal, reply: (data: string) =>
   }
 
   let pendingOperations = 0
+  let unstartedText: Uint8Array[] | null = null
   const parseBarrier = () => {
     const { promise, resolve } = Promise.withResolvers<void>()
     terminal.write('', resolve)
@@ -268,19 +280,28 @@ export function createKittyGraphics(terminal: Terminal, reply: (data: string) =>
   }
   const enqueue = (operation: () => Promise<void>) => {
     pendingOperations++
+    unstartedText = null
     tail = tail.then(async () => {
       try { if (!disposed) await operation() } finally { pendingOperations-- }
     }).catch(() => {})
+  }
+  const queueText = (bytes: Uint8Array) => {
+    if (unstartedText) { unstartedText.push(bytes); return }
+    const chunks = [bytes]
+    enqueue(() => {
+      if (unstartedText === chunks) unstartedText = null
+      const { promise, resolve } = Promise.withResolvers<void>()
+      terminal.write(concat(chunks), resolve)
+      return promise
+    })
+    unstartedText = chunks
   }
   const decoder = new KittyGraphicsDecoder(
     (bytes) => {
       // Ordinary terminal output keeps xterm's existing fast path; only image operations queue.
       if (pendingOperations === 0) { terminal.write(bytes); return }
-      enqueue(() => {
-        const { promise, resolve } = Promise.withResolvers<void>()
-        terminal.write(bytes, resolve)
-        return promise
-      })
+      // xterm parses each write on its own timer turn once its buffer is empty, so queued text goes in one write
+      queueText(bytes)
     },
     (frame) => {
       if (!enabled || disposed) return
@@ -300,7 +321,9 @@ export function createKittyGraphics(terminal: Terminal, reply: (data: string) =>
       replay = isReplay; frameReplay ||= isReplay
       decoder.push(bytes)
       if (!decoder.pending) frameReplay = false
-      if (done) enqueue(async () => { await parseBarrier(); done() })
+      if (!done) return
+      if (pendingOperations === 0) terminal.write('', done)
+      else enqueue(async () => { await parseBarrier(); done() })
     },
     sync(value: boolean) {
       if (enabled !== value) { generation++; decoding.abort(); decoding = new AbortController() }

@@ -110,7 +110,6 @@ export async function startBrowserHarness(
       launched.push([...command])
       return scope.spawn(command, options)
     },
-    chromeArguments: ['--use-mock-keychain'],
     chromePath: null,
     downloadDirectory: join(home, 'Downloads'),
     ...extra

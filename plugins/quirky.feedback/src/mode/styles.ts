@@ -30,17 +30,16 @@ export const banner: CSSProperties = {
   overflowWrap: 'anywhere'
 }
 
+export const bannerToggle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)' }
+
 export const tray: CSSProperties = {
   ...panel,
-  right: 'var(--ui-space-12)',
-  bottom: 'calc(var(--ui-row-single) + var(--ui-space-12))',
   width: 'min(calc(var(--ui-row-double) * 12), calc(100vw - var(--ui-space-24)))',
   maxHeight: '60vh',
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden'
 }
-export const trayBar: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--ui-space-8)', padding: 'var(--ui-space-6) var(--ui-space-8)' }
 export const trayHead: CSSProperties = { padding: 'var(--ui-space-8)', borderBottom: 'var(--ui-border-width) solid var(--ui-border)' }
 export const trayBody: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-6)', padding: 'var(--ui-space-8)', overflow: 'auto' }
 export const notice: CSSProperties = { margin: 0, color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', overflowWrap: 'anywhere' }

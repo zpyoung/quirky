@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { Checkbox, SelectField } from '@quirky/ui'
 import { isRecord } from './loop-status'
 
 export type VmRecipeSelection = { id: string; trustHash: string; checkoutMode: 'orca-worktree' | 'provisioned-root'; approved: boolean }
@@ -46,27 +47,25 @@ export function VmRecipeSelector({ context, repo, value, disabled, onChange }: {
   const current = loaded?.repo === repo ? loaded : null
   const selected = current?.recipes.find((recipe) => recipe.id === value?.id && recipe.trustHash === value.trustHash)
 
-  return <fieldset className="form-group" disabled={disabled}>
-    <legend>VM environment</legend>
-    {current?.error && <p role="alert">{current.error}</p>}
-    <label>Environment recipe
-      <select aria-label="Environment recipe" value={value?.id ?? ''} disabled={disabled || current === null || current.error !== null} onChange={(event) => {
-        const recipe = current?.recipes.find((candidate) => candidate.id === event.currentTarget.value)
-        onChange(recipe ? { id: recipe.id, trustHash: recipe.trustHash, checkoutMode: recipe.checkoutMode, approved: false } : null)
-      }}>
-        <option value="">Select a VM recipe</option>
-        {current?.recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
-      </select>
-    </label>
+  return <fieldset className="vm-recipe remote-form" disabled={disabled}>
+    {current?.error && <p className="ui-error-text" role="alert">{current.error}</p>}
+    <SelectField label="Environment recipe" aria-label="Environment recipe" value={value?.id ?? ''} disabled={disabled || current === null || current.error !== null} onChange={(event) => {
+      const recipe = current?.recipes.find((candidate) => candidate.id === event.currentTarget.value)
+      onChange(recipe ? { id: recipe.id, trustHash: recipe.trustHash, checkoutMode: recipe.checkoutMode, approved: false } : null)
+    }}>
+      <option value="">Select a VM recipe</option>
+      {current?.recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
+    </SelectField>
     {selected && <>
-      <p className="muted">Lima VM; {selected.checkoutMode === 'provisioned-root' ? 'attach the recipe-provisioned guest workspace' : 'create a canonical guest worktree'}. No local checkout is created.</p>
-      <pre>{selected.commands}</pre>
-      <small>Lifecycle SHA-256: {selected.trustHash}</small>
-      <label className="check-row">
-        <input type="checkbox" checked={value?.approved === true} onChange={(event) => onChange({ id: selected.id, trustHash: selected.trustHash, checkoutMode: selected.checkoutMode, approved: event.currentTarget.checked })} />
-        <span>Approve these lifecycle commands for this one VM creation</span>
-      </label>
+      <p className="ui-text-muted">Lima VM; {selected.checkoutMode === 'provisioned-root' ? 'attach the recipe-provisioned guest workspace' : 'create a canonical guest worktree'}. No local checkout is created.</p>
+      <pre className="vm-recipe__commands">{selected.commands}</pre>
+      <span className="ui-help-text">Lifecycle SHA-256: {selected.trustHash}</span>
+      <Checkbox
+        checked={value?.approved === true}
+        label="Approve these lifecycle commands for this one VM creation"
+        onChange={(approved) => onChange({ id: selected.id, trustHash: selected.trustHash, checkoutMode: selected.checkoutMode, approved })}
+      />
     </>}
-    {value && !selected && <p role="alert">The selected recipe changed. Select it again and review its current lifecycle.</p>}
+    {value && !selected && <p className="ui-error-text" role="alert">The selected recipe changed. Select it again and review its current lifecycle.</p>}
   </fieldset>
 }

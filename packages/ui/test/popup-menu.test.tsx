@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, useState, type ReactNode } from 'react'
 import type { Root } from 'react-dom/client'
-import { CONTEXT_MENU_SEPARATOR, PopupMenu, type PopupItem } from '../src/design-system'
+import { AgentIcon, CONTEXT_MENU_SEPARATOR, PopupMenu, type PopupItem } from '../src/design-system'
 
 let createRoot: (container: HTMLElement) => Root
 let root: Root | null = null
@@ -358,4 +358,12 @@ describe('PopupMenu', () => {
     await render(<PopupMenu anchor={anchor} items={[item('One')]} onClose={() => {}} />)
     expect(document.querySelector('.ui-popup')!.hasAttribute('data-theme')).toBe(false)
   })
+})
+
+test('an agent icon in a row lead renders inside the row and stays out of its accessible text', async () => {
+  await render(<PopupMenu anchor={anchor} items={[{ label: 'Claude', lead: <AgentIcon id="claude" /> }, { label: 'OMP', lead: <AgentIcon id="omp" /> }]} onClose={() => {}} />)
+  const [claude, omp] = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]
+  expect(claude!.querySelector('svg[data-icon="claude"]')!.getAttribute('aria-hidden')).toBe('true')
+  expect(omp!.querySelector('.ui-agent-monogram')!.getAttribute('aria-hidden')).toBe('true')
+  expect(omp!.querySelector('.qt-menu-label')!.textContent).toBe('OMP')
 })

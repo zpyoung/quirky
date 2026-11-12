@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  AGENT_ICON_NAMES,
   CONTROL_ICON_NAMES,
   FILE_ICON_NAMES,
   TOOL_ICON_NAMES,
@@ -43,7 +44,7 @@ test('plain paths, groups and same-document references pass the rejection check'
 
 test('every named icon is generated and the committed files match a fresh run', () => {
   const output = generateIcons()
-  expect(Object.keys(output).sort()).toEqual(['generated-controls.ts', 'generated-files.ts', 'generated-tools.ts'])
+  expect(Object.keys(output).sort()).toEqual(['generated-agents.ts', 'generated-controls.ts', 'generated-files.ts', 'generated-tools.ts'])
   for (const [file, text] of Object.entries(output)) {
     expect(readFileSync(join(iconsDirectory, file), 'utf8')).toBe(text)
   }
@@ -73,4 +74,28 @@ test('every file icon is vendored in both Catppuccin flavors with its license an
   }
   expect(readFileSync(join(catppuccin, 'LICENSE'), 'utf8')).toContain('MIT License')
   expect(readFileSync(join(catppuccin, 'SOURCE.md'), 'utf8')).toMatch(/[0-9a-f]{40}/)
+})
+
+test('every agent mark is vendored with a source row, and the licenses it names ship beside it', () => {
+  const agents = join(iconsDirectory, 'agents')
+  const source = readFileSync(join(agents, 'SOURCE.md'), 'utf8')
+  for (const name of AGENT_ICON_NAMES) {
+    expect(existsSync(join(agents, `${name}.svg`))).toBe(true)
+    expect(source).toContain(`| ${name} |`)
+  }
+  expect(readFileSync(join(agents, 'LICENSE.simple-icons'), 'utf8')).toContain('CC0 1.0 Universal')
+  expect(readFileSync(join(agents, 'LICENSE.lobe-icons'), 'utf8')).toContain('MIT License')
+  expect(readFileSync(join(agents, 'LICENSE.octicons'), 'utf8')).toContain('MIT License')
+  expect(readFileSync(join(agents, 'LICENSE.aider'), 'utf8')).toContain('Apache License')
+})
+
+test('agent marks stay single-color and keep their root fill rule', async () => {
+  const { AGENT_ICON_MARKUP } = await import('../packages/ui/src/design-system/icons/generated-agents')
+  for (const [name, { markup, viewBox }] of Object.entries(AGENT_ICON_MARKUP)) {
+    expect(markup, name).not.toMatch(/\b(?:fill|stroke)="(?!currentColor|none)/)
+    expect(markup, name).not.toMatch(/<title|#[0-9a-f]{3}/i)
+    expect(viewBox, name).toMatch(/^0 0 \d+ \d+$/)
+  }
+  // lobe-icons puts fill-rule on the root, which the inner markup would otherwise lose and fill the mark's holes
+  expect(AGENT_ICON_MARKUP.codex.markup.startsWith('<g fill-rule="evenodd">')).toBe(true)
 })

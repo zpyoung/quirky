@@ -414,3 +414,8 @@
   height: calc(var(--tool-bottom-panel-height) * var(--compat-px-1));
   cursor: col-resize;
 }
+
+/* an open details menu renders in place, so its region must stack above the floating workspace button */
+.shell-main-region:has(details[open] > .ui-menu__list) {
+  z-index: 41;
+}

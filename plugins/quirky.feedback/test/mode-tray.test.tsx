@@ -97,6 +97,8 @@ const root = () => container().lastElementChild as HTMLElement
 const card = () => root().querySelector<HTMLElement>('[data-feedback-card]')
 const rows = () => [...root().querySelectorAll<HTMLElement>('[data-feedback-row]')]
 const dots = () => [...root().querySelectorAll<HTMLElement>('[data-feedback-dot]')]
+const toggle = () => bannerSlot().querySelector<HTMLButtonElement>('[data-feedback-toggle]')!
+const tray = () => root().querySelector<HTMLElement>('[data-feedback-tray]')
 const button = (label: string, within: ParentNode = root()) => [...within.querySelectorAll<HTMLButtonElement>('button')].find((entry) => entry.textContent === label || entry.getAttribute('aria-label') === label)!
 
 function rect(element: Element, box: { x: number; y: number; width: number; height: number }) {
@@ -107,6 +109,15 @@ async function click(element: Element) {
   await act(async () => { (element as HTMLElement).click() })
   await flush()
 }
+
+async function startOpen(seed: Comment[] = [], plugins: unknown = []) {
+  const fake = await start(seed, plugins)
+  await click(toggle())
+  return fake
+}
+
+const pressEscape = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })) })
+const leftTheMode = (fake: { calls: Calls }) => fake.calls.some((call) => call.method === 'setting.set')
 
 async function pick(element: Element) {
   document.elementsFromPoint = () => [host(), element]
@@ -143,9 +154,9 @@ afterEach(async () => {
 })
 
 describe('adding', () => {
-  test('SC-3: a click opens a card and adding it grows the tray and numbers the element', async () => {
+  test('SC-3: a click opens a card and adding it grows the count and numbers the element', async () => {
     const fake = await start()
-    expect(rows()).toHaveLength(0)
+    expect(toggle().textContent).toBe('0 comments')
     await pick(item)
     expect(card()).not.toBeNull()
     expect(button('Add').disabled).toBe(true)
@@ -157,9 +168,11 @@ describe('adding', () => {
     expect(add.params).toMatchObject({ intent: 'question', comment: 'why is this here?' })
     expect(add.params!.capture).toMatchObject({ kind: 'element', selector: expect.stringContaining('#item') })
     expect(card()).toBeNull()
-    expect(rows()).toHaveLength(1)
-    expect(root().querySelector('[data-feedback-tray]')!.textContent).toContain('1 comment')
+    expect(toggle().textContent).toBe('1 comment')
     expect(dots().map((dot) => dot.textContent)).toEqual(['1'])
+    await click(toggle())
+    expect(rows()).toHaveLength(1)
+    expect(tray()!.textContent).toContain('1 comment')
   })
 
   test('Add is disabled for text over the limit', async () => {
@@ -181,7 +194,7 @@ describe('adding', () => {
   })
 
   test('a save that finishes after Cancel leaves the next draft alone', async () => {
-    const fake = await start()
+    const fake = await startOpen()
     const call = fake.context.call
     let finish = () => {}
     fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
@@ -213,6 +226,7 @@ describe('adding', () => {
     }) as typeof fake.context.call
     await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
     await flush()
+    await click(toggle())
     await pick(item)
     await type('saved early')
     await submit()
@@ -235,6 +249,7 @@ describe('adding', () => {
     }) as typeof fake.context.call
     await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
     await flush()
+    await click(toggle())
     await pick(item)
     await type('saved early')
     await submit()
@@ -253,12 +268,13 @@ describe('adding', () => {
     }) as typeof fake.context.call
     await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
     await flush()
+    await click(toggle())
     expect(rows()).toHaveLength(1)
     await act(async () => { release(); await tick(10) })
   })
 
   test('a failed add keeps the card and shows a toast', async () => {
-    const fake = await start()
+    const fake = await startOpen()
     fake.failures.set('quirky.feedback/add', new Error('disk full'))
     await pick(item)
     await type('hello')
@@ -283,7 +299,7 @@ describe('adding', () => {
 
   test('SC-12: a full tray refuses a new selection without a card', async () => {
     const seed = Array.from({ length: MAX_COMMENTS }, (_, index) => sample(`c${index}`))
-    const fake = await start(seed)
+    const fake = await startOpen(seed)
     await pick(item)
     expect(card()).toBeNull()
     expect(fake.toasts).toHaveLength(1)
@@ -318,7 +334,7 @@ describe('source lookup', () => {
 
   test('an element with no source still adds a comment', async () => {
     process.env.QUIRKY_BUILD_CHANNEL = 'dev'
-    const fake = await start()
+    const fake = await startOpen()
     await pick(item)
     await type('x')
     await submit()
@@ -334,7 +350,7 @@ describe('rows', () => {
       { ...sample('b', { owner: 'quirky.terminal', selector: '#missing' }, 'second'), intent: 'question' as const },
       sample('c', { owner: 'acme.thing', selector: '#item' }, 'third')
     ]
-    await start(seed, [{ id: 'quirky.terminal', name: 'Terminal' }])
+    await startOpen(seed, [{ id: 'quirky.terminal', name: 'Terminal' }])
     const [first, second, third] = rows()
     expect(first!.textContent).toContain('1.')
     expect(first!.textContent).toContain('Change')
@@ -348,12 +364,12 @@ describe('rows', () => {
   })
 
   test('owner falls back to the plugin id when the list is unavailable', async () => {
-    await start([sample('a', { owner: 'quirky.terminal' })], new Error('offline'))
+    await startOpen([sample('a', { owner: 'quirky.terminal' })], new Error('offline'))
     expect(rows()[0]!.textContent).toContain('quirky.terminal')
   })
 
   test('SC-13: editing saves text and intent without recapturing', async () => {
-    const fake = await start([sample('a', {}, 'first')])
+    const fake = await startOpen([sample('a', {}, 'first')])
     await click(button('Edit comment 1'))
     expect(card()!.querySelector('textarea')!.value).toBe('first')
     await click(button('Question'))
@@ -367,7 +383,7 @@ describe('rows', () => {
   })
 
   test('a failed edit keeps the card and the row as they were', async () => {
-    const fake = await start([sample('a', {}, 'first')])
+    const fake = await startOpen([sample('a', {}, 'first')])
     fake.failures.set('quirky.feedback/update', new Error('nope'))
     await click(button('Edit comment 1'))
     await type('better')
@@ -378,7 +394,7 @@ describe('rows', () => {
   })
 
   test('delete removes the row without a confirmation', async () => {
-    const fake = await start([sample('a'), sample('b')])
+    const fake = await startOpen([sample('a'), sample('b')])
     await click(button('Delete comment 1'))
     expect(fake.confirm.count).toBe(0)
     expect(fake.calls.find((call) => call.method === 'quirky.feedback/remove')!.params).toEqual({ id: 'a' })
@@ -386,7 +402,7 @@ describe('rows', () => {
   })
 
   test('a failed delete keeps the row and shows a toast', async () => {
-    const fake = await start([sample('a')])
+    const fake = await startOpen([sample('a')])
     fake.failures.set('quirky.feedback/remove', new Error('nope'))
     await click(button('Delete comment 1'))
     expect(rows()).toHaveLength(1)
@@ -394,16 +410,16 @@ describe('rows', () => {
   })
 
   test('Esc after an untouched edit closes the card without a warning', async () => {
-    await start([sample('a')])
+    await startOpen([sample('a')])
     await click(button('Edit comment 1'))
-    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })) })
+    await pressEscape()
     expect(card()).toBeNull()
   })
 })
 
 describe('clear', () => {
   test('confirming clears every comment', async () => {
-    const fake = await start([sample('a'), sample('b')])
+    const fake = await startOpen([sample('a'), sample('b')])
     await click(button('Clear'))
     expect(fake.calls.some((call) => call.method === 'quirky.feedback/clear')).toBe(false)
     await act(async () => { fake.confirm.pending!(true) })
@@ -413,7 +429,7 @@ describe('clear', () => {
   })
 
   test('declining keeps the comments and never calls clear', async () => {
-    const fake = await start([sample('a'), sample('b')])
+    const fake = await startOpen([sample('a'), sample('b')])
     const activeZIndex = container().style.zIndex
     await click(button('Clear'))
     await act(async () => { fake.confirm.pending!(false) })
@@ -424,7 +440,7 @@ describe('clear', () => {
   })
 
   test('a failed clear keeps the comments and shows a toast', async () => {
-    const fake = await start([sample('a')])
+    const fake = await startOpen([sample('a')])
     fake.failures.set('quirky.feedback/clear', new Error('nope'))
     await click(button('Clear'))
     await act(async () => { fake.confirm.pending!(true) })
@@ -434,36 +450,152 @@ describe('clear', () => {
   })
 
   test('is disabled with no comments', async () => {
-    await start()
+    await startOpen()
     expect(button('Clear').disabled).toBe(true)
   })
 })
 
 describe('tray', () => {
-  test('collapses to a bar and expands again, staying in the mode', async () => {
+  test('starts closed with saved comments and shows only the count', async () => {
     await start([sample('a'), sample('b')])
-    await click(button('Hide'))
     expect(rows()).toHaveLength(0)
-    const tray = root().querySelector('[data-feedback-tray]')!
-    expect(tray.textContent).toContain('2 comments')
-    expect(tray.hasAttribute('data-quirky-native-mask')).toBe(true)
-    expect(bannerSlot().querySelector('[data-feedback-banner]')).not.toBeNull()
-    await click(button('Show'))
-    expect(rows()).toHaveLength(2)
+    expect(tray()).toBeNull()
+    expect(toggle().textContent).toBe('2 comments')
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(bannerSlot().querySelector('[data-feedback-banner]')!.contains(toggle())).toBe(true)
   })
 
-  test('collapse is not remembered across mode starts', async () => {
-    await start([sample('a')])
-    await click(button('Hide'))
+  test('the banner button opens and closes the panel, staying in the mode', async () => {
+    const fake = await start([sample('a'), sample('b')])
+    await click(toggle())
+    expect(rows()).toHaveLength(2)
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+    expect(tray()!.hasAttribute('data-quirky-native-mask')).toBe(true)
+    await click(toggle())
+    expect(rows()).toHaveLength(0)
+    expect(tray()).toBeNull()
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(toggle().textContent).toBe('2 comments')
+    expect(bannerSlot().querySelector('[data-feedback-banner]')).not.toBeNull()
+    expect(leftTheMode(fake)).toBe(false)
+  })
+
+  test('the panel has no Show or Hide control of its own', async () => {
+    await startOpen([sample('a')])
+    expect(button('Hide')).toBeUndefined()
+    expect(button('Show')).toBeUndefined()
+    expect(button('Show', bannerSlot())).toBeUndefined()
+  })
+
+  test('an open panel is not remembered across mode starts', async () => {
+    await startOpen([sample('a')])
+    expect(rows()).toHaveLength(1)
     await act(async () => { teardown!() })
     await start([sample('a')])
+    expect(rows()).toHaveLength(0)
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  test('adding a comment updates the count and leaves the panel closed', async () => {
+    await start([sample('a')])
+    await pick(item)
+    await type('another')
+    await submit()
+    expect(toggle().textContent).toBe('2 comments')
+    expect(tray()).toBeNull()
+  })
+
+  test('a click on the page leaves the panel as it was', async () => {
+    await start([sample('a')])
+    await pick(item)
+    expect(card()).not.toBeNull()
+    expect(tray()).toBeNull()
+    await click(button('Cancel'))
+    await click(toggle())
+    await pick(item)
+    expect(card()).not.toBeNull()
     expect(rows()).toHaveLength(1)
   })
 
-  test('shows a line when the comments file was set aside', async () => {
+  test('a click on the banner button never starts a comment', async () => {
+    await start([sample('a')])
+    document.elementsFromPoint = () => [toggle()]
+    await click(toggle())
+    expect(card()).toBeNull()
+    expect(rows()).toHaveLength(1)
+  })
+
+  test('Esc closes the open panel first and the next one exits the mode', async () => {
+    const fake = await startOpen([sample('a')])
+    await pressEscape()
+    await flush()
+    expect(tray()).toBeNull()
+    expect(leftTheMode(fake)).toBe(false)
+    await pressEscape()
+    await flush()
+    expect(leftTheMode(fake)).toBe(true)
+  })
+
+  test('Esc with the panel closed exits the mode at once', async () => {
+    const fake = await start([sample('a')])
+    await pressEscape()
+    await flush()
+    expect(leftTheMode(fake)).toBe(true)
+  })
+
+  test('an open card takes Esc before the panel does', async () => {
+    const fake = await startOpen([sample('a')])
+    await pick(item)
+    await type('draft')
+    await pressEscape()
+    expect(card()!.querySelector('[role="alert"]')).not.toBeNull()
+    expect(tray()).not.toBeNull()
+    await pressEscape()
+    expect(card()).toBeNull()
+    expect(tray()).not.toBeNull()
+    await pressEscape()
+    await flush()
+    expect(tray()).toBeNull()
+    expect(leftTheMode(fake)).toBe(false)
+    await pressEscape()
+    await flush()
+    expect(leftTheMode(fake)).toBe(true)
+  })
+
+  test('a recovered comments file opens the panel so its line is visible', async () => {
     recovered.value = true
     await start()
     expect(root().querySelector('[data-feedback-recovered]')!.textContent).toContain('set aside')
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+  })
+
+  test('closing the panel after a recovered file keeps it closed until asked', async () => {
+    recovered.value = true
+    await start()
+    await click(toggle())
+    expect(tray()).toBeNull()
+    await pick(item)
+    await type('first')
+    await submit()
+    expect(tray()).toBeNull()
+    await click(toggle())
+    expect(root().querySelector('[data-feedback-recovered]')).not.toBeNull()
+  })
+
+  test('a notice that arrives while the panel is closed opens it', async () => {
+    const fake = await startOpen([sample('a', { owner: 'acme.thing' })], [{ id: 'acme.thing' }])
+    const call = fake.context.call as (method: string, params?: Record<string, unknown>) => Promise<unknown>
+    let release = () => {}
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'plugin.list') await new Promise<void>((resolve) => { release = resolve })
+      return call(method, params)
+    }) as typeof fake.context.call
+    await click(button('File issue'))
+    await click(toggle())
+    expect(tray()).toBeNull()
+    await act(async () => { release(); await tick(10) })
+    expect(root().querySelector('[data-feedback-notice]')!.textContent).toContain("can't go to GitHub")
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
   })
 
   test('a failed list shows a toast and an empty tray', async () => {
@@ -472,7 +604,8 @@ describe('tray', () => {
     await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
     await flush()
     expect(fake.toasts).toHaveLength(1)
-    expect(rows()).toHaveLength(0)
+    expect(toggle().textContent).toBe('0 comments')
+    expect(tray()).toBeNull()
   })
 
   test('Exit turns the mode off and a failure shows a toast', async () => {
@@ -486,10 +619,10 @@ describe('tray', () => {
 
   test('SC-8: comments come back on a later start and missing elements are marked', async () => {
     const seed = [sample('a'), sample('b', { selector: '#gone' })]
-    await start(seed)
+    await startOpen(seed)
     expect(rows()).toHaveLength(2)
     await act(async () => { teardown!() })
-    await start(seed)
+    await startOpen(seed)
     expect(rows()).toHaveLength(2)
     expect(dots().map((dot) => dot.getAttribute('data-feedback-dot'))).toEqual(['a'])
     expect(rows()[1]!.querySelector('[data-feedback-stale]')).not.toBeNull()
@@ -505,13 +638,13 @@ describe('dots', () => {
       sample('empty', { selector: '' }),
       sample('flat', { selector: '#flat' })
     ]
-    await start(seed)
+    await startOpen(seed)
     expect(dots().map((dot) => dot.getAttribute('data-feedback-dot'))).toEqual(['found'])
     expect(rows().map((row) => row.querySelector('[data-feedback-stale]') !== null)).toEqual([false, true, true, true, true])
   })
 
   test('are numbered by tray position, ignore the pointer and carry no native mask', async () => {
-    await start([sample('x', { selector: '#missing' }), sample('y')])
+    await startOpen([sample('x', { selector: '#missing' }), sample('y')])
     const [dot] = dots()
     expect(dot!.textContent).toBe('2')
     expect(dot!.getAttribute('aria-hidden')).toBe('true')
@@ -520,7 +653,7 @@ describe('dots', () => {
   })
 
   test('move with the element on layout changes, at most once per frame', async () => {
-    const fake = await start([sample('a')])
+    const fake = await startOpen([sample('a')])
     const left = () => dots()[0]!.style.left
     const before = left()
     rect(item, { x: 200, y: 30, width: 100, height: 20 })
@@ -534,7 +667,7 @@ describe('dots', () => {
   })
 
   test('are re-queried when the window scrolls', async () => {
-    await start([sample('a')])
+    await startOpen([sample('a')])
     rect(item, { x: 300, y: 30, width: 100, height: 20 })
     await act(async () => {
       document.getElementById('app')!.dispatchEvent(new Event('scroll'))
@@ -544,7 +677,7 @@ describe('dots', () => {
   })
 
   test('are re-queried when the page changes without a layout event', async () => {
-    await start([sample('a')])
+    await startOpen([sample('a')])
     rect(item, { x: 400, y: 30, width: 100, height: 20 })
     await act(async () => {
       document.getElementById('app')!.setAttribute('data-changed', '1')
@@ -554,7 +687,7 @@ describe('dots', () => {
   })
 
   test('are re-queried when text on the page changes', async () => {
-    await start([sample('a')])
+    await startOpen([sample('a')])
     const text = document.createTextNode('short')
     document.getElementById('app')!.append(text)
     await act(async () => { await tick(40) })
@@ -567,7 +700,7 @@ describe('dots', () => {
   })
 
   test('ignore changes inside the mode\'s own overlay', async () => {
-    await start([sample('a')])
+    await startOpen([sample('a')])
     const before = dots()[0]!.style.left
     rect(item, { x: 500, y: 30, width: 100, height: 20 })
     await act(async () => {
@@ -578,7 +711,7 @@ describe('dots', () => {
   })
 
   test('disappear when the element is hidden', async () => {
-    const fake = await start([sample('a')])
+    const fake = await startOpen([sample('a')])
     item.style.visibility = 'hidden'
     await act(async () => {
       for (const listener of [...fake.layoutListeners]) listener()
@@ -589,7 +722,7 @@ describe('dots', () => {
   })
 
   test('disappear when the element goes away', async () => {
-    const fake = await start([sample('a')])
+    const fake = await startOpen([sample('a')])
     item.remove()
     await act(async () => {
       for (const listener of [...fake.layoutListeners]) listener()
@@ -614,17 +747,16 @@ describe('dots placement', () => {
 
 describe('panels', () => {
   test('the card is stacked above the tray and fits the window', async () => {
-    await start([sample('a')])
+    await startOpen([sample('a')])
     await pick(document.getElementById('other')!)
-    const tray = root().querySelector('[data-feedback-tray]')!
-    expect(tray.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(tray()!.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(card()!.style.maxHeight).toContain('744px')
     const body = card()!.querySelector('textarea')!.closest('div[style*="overflow"]')
     expect(body).not.toBeNull()
     expect(card()!.lastElementChild!.contains(card()!.querySelector('[data-feedback-submit]'))).toBe(true)
   })
   test('the banner, card and tray are masked and the selection host is not', async () => {
-    await start([sample('a')])
+    await startOpen([sample('a')])
     await pick(item)
     const banner = bannerSlot().querySelector('[data-feedback-banner]')
     expect(banner).not.toBeNull()

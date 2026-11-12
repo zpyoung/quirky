@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 
-type Step = { name?: string; uses?: string; run?: string; if?: string | boolean; with?: Record<string, unknown>; env?: Record<string, string> }
+type Step = { id?: string; name?: string; uses?: string; run?: string; if?: string | boolean; with?: Record<string, unknown>; env?: Record<string, string> }
 type Job = {
   name?: string
   if?: string | boolean
@@ -58,16 +58,15 @@ describe('tests.yml triggers and defaults', () => {
 })
 
 describe('job graph', () => {
-  test('defines exactly the five jobs', () => {
-    expect(Object.keys(jobs).sort()).toEqual(['linux', 'macos', 'plan', 'rerun', 'tests'])
+  test('defines exactly the four jobs', () => {
+    expect(Object.keys(jobs).sort()).toEqual(['linux', 'macos', 'plan', 'tests'])
   })
 
   test('needs match the job table', () => {
     expect(needsOf('plan')).toEqual([])
     expect(needsOf('linux')).toEqual(['plan'])
     expect(needsOf('macos')).toEqual(['plan'])
-    expect([...needsOf('rerun')].sort()).toEqual(['linux', 'plan'])
-    expect([...needsOf('tests')].sort()).toEqual(['linux', 'macos', 'plan', 'rerun'])
+    expect([...needsOf('tests')].sort()).toEqual(['linux', 'macos', 'plan'])
   })
 
   test('the Tests job is named Tests and always runs', () => {
@@ -78,14 +77,31 @@ describe('job graph', () => {
   test('test jobs skip when the plan selects nothing for them', () => {
     expect(String(jobs.linux!.if)).toContain("needs.plan.outputs.linux_shards != '[]'")
     expect(String(jobs.macos!.if)).toContain("needs.plan.outputs.has_macos == 'true'")
-    expect(String(jobs.rerun!.if)).toContain("needs.plan.outputs.linux_shards != '[]'")
-    expect(String(jobs.rerun!.if)).toContain("!contains(needs.*.result, 'cancelled')")
+  })
+
+  test('every test job reruns its own failures, so no job waits on all the shards to rerun them', () => {
+    for (const name of ['linux', 'macos']) {
+      const shard = runs(name).filter(script => script.includes('cli.ts run-shard'))
+      expect(shard).toHaveLength(1)
+    }
+    expect(allRuns.filter(script => /cli\.ts rerun\b/.test(script))).toEqual([])
+  })
+
+  test('linux shards install their test tools from a cache keyed on the runner image', () => {
+    const cache = steps('linux').find(step => step.uses?.startsWith('actions/cache@'))!
+    const name = steps('linux').find(step => step.id === 'tools')!
+    expect(name.run).toContain('$ImageOS-$ImageVersion')
+    expect(cache.with?.key).toBe('${{ steps.tools.outputs.key }}')
+    const install = steps('linux').find(step => step.name === 'Install test tools')!
+    expect(steps('linux').indexOf(install)).toBeGreaterThan(steps('linux').indexOf(cache))
+    expect(install.run).toContain('apt-get install -y --download-only zsh ripgrep')
+    expect(install.run).toContain('dpkg -i')
   })
 })
 
 describe('token scope', () => {
-  test('no write permission on plan, linux, macos or rerun', () => {
-    for (const name of ['plan', 'linux', 'macos', 'rerun']) {
+  test('no write permission on plan, linux or macos', () => {
+    for (const name of ['plan', 'linux', 'macos']) {
       expect(Object.values(effectivePermissions(name)).filter(level => level === 'write')).toEqual([])
     }
   })
@@ -205,7 +221,6 @@ describe('artifacts', () => {
     expect(named('plan')).toEqual(['test-plan'])
     expect(named('linux')).toEqual(['test-results-linux-${{ matrix.shard }}'])
     expect(named('macos')).toEqual(['test-results-macos'])
-    expect(named('rerun')).toEqual(['test-results-rerun'])
     expect(named('tests')).toEqual(['test-baseline-${{ github.sha }}'])
   })
 

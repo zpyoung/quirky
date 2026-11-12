@@ -143,6 +143,7 @@ const targetButtonStyle: CSSProperties = { ...menuButtonStyle, display: 'grid', 
 const targetStatusStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-4)' }
 const targetReasonStyle: CSSProperties = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' }
 const toolbarStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--ui-space-6)' }
+const WATCH_ONLY_TITLE = 'Native browsing needs the desktop app. Switch this pane to Watch to use this tool.'
 const hintStyle: CSSProperties = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' }
 const highlightLabelStyle: CSSProperties = {
   position: 'absolute',
@@ -362,6 +363,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
   const modeReady = pane?.mode === 'native' ? nativeHandle !== null : pane?.mode === 'watch' ? Boolean(pane.page && watchReady) : false
   const active = Boolean(usablePage && modeReady && !markupScreenshot)
   const interactionLocked = Boolean(draft || selectionMenu || targetsOpen)
+  const nativeUnavailable = pane?.mode === 'native' && context.nativeBrowser?.available === false
   const drawingDisabled = pane?.mode === 'native' || !active || operationPending || interactionLocked
   const currentOperation = operation?.identity === currentIdentity ? operation : null
   const grabDisabled = !active || interactionLocked || Boolean(currentOperation && currentOperation.mode !== 'grab')
@@ -920,10 +922,15 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         const result = recordOf(await serializeGuest(() => handle.evaluate(readScript)))
         if (!stillCurrent()) return
         if (!result || result.installed !== true) {
-          onMessage('Native design shortcuts are unavailable on this document; use the toolbar or design command.', 'error')
-          return
+          // a reload or navigation drops the page-side bridge; only a document that refuses a fresh install is a failure
+          const reinstalled = await serializeGuest(() => handle.evaluate(installScript))
+          if (!stillCurrent()) return
+          if (reinstalled !== true) {
+            onMessage('Native design shortcuts are unavailable on this document; use the toolbar or design command.', 'error')
+            return
+          }
         }
-        if (result.action === 'grab' || result.action === 'annotate') {
+        if (result?.action === 'grab' || result?.action === 'annotate') {
           if (await runActionRef.current(result.action)) return
         }
       } catch (error) {
@@ -1166,7 +1173,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         aria-disabled={grabDisabled || operationPending}
         aria-busy={operationPending}
         disabled={grabDisabled}
-        title="Grab page element (Mod+C)"
+        title={nativeUnavailable ? WATCH_ONLY_TITLE : 'Grab page element (Mod+C)'}
         onClick={() => {
           if (armPendingRef.current) return
           if (currentOperation?.mode === 'grab') void cancelOperation()
@@ -1180,17 +1187,15 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         aria-disabled={annotateDisabled || operationPending}
         aria-busy={operationPending}
         disabled={annotateDisabled}
-        title="Annotate page element (Mod+Shift+C)"
+        title={nativeUnavailable ? WATCH_ONLY_TITLE : 'Annotate page element (Mod+Shift+C)'}
         onClick={() => {
           if (armPendingRef.current) return
           if (currentOperation?.mode === 'annotate') void cancelOperation()
           else void startOperation('annotate')
         }}
       >{operationPending ? 'Arming…' : 'Annotate'}{annotations.length ? ` (${annotations.length})` : ''}</Button>
-      <Button type="button" variant={Boolean(markupScreenshot) ? 'primary' : 'secondary'} aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={pane?.mode === 'native' ? 'Native Draw is unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Draw on screenshot'} onClick={() => void beginDraw()}>Draw</Button>
-      {pane?.mode === 'native' ? <span style={hintStyle}>Native cropped screenshots and Draw are unavailable: the pinned public SDK has no supported page snapshot capability.</span> : null}
+      <Button type="button" variant={Boolean(markupScreenshot) ? 'primary' : 'secondary'} aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={nativeUnavailable ? WATCH_ONLY_TITLE : pane?.mode === 'native' ? 'Draw is not available in Native mode. Switch to Watch to draw on a screenshot.' : 'Draw on screenshot'} onClick={() => void beginDraw()}>Draw</Button>
       {currentOperation ? <span style={hintStyle} role="status">{currentOperation.mode === 'grab' ? grabHint : 'Click an element to annotate. Esc cancels.'}</span> : null}
-      {pane?.mode === 'native' && !nativeHandle ? <span style={hintStyle}>Native design tools are available when its sandboxed page is ready.</span> : null}
     </div>
     {panel}
   </>

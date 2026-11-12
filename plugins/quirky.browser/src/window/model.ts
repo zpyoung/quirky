@@ -59,9 +59,10 @@ export function paneForView<T extends { id: string }>(tabs: readonly T[], active
   if (requestedPaneId !== null) return tabs.find((tab) => tab.id === requestedPaneId) ?? null
   return tabs.find((tab) => tab.id === active) ?? null
 }
-/** What the address bar shows: a document page is identified by its file, never its grant URL. */
+/** What the address bar shows: a document page is identified by its file, never its grant URL, and a new tab shows nothing so the placeholder reads. */
 export function paneAddress(pane: { url: string; document?: { path: string } }): string {
-  return pane.document ? pane.document.path : pane.url
+  if (pane.document) return pane.document.path
+  return pane.url === 'about:blank' ? '' : pane.url
 }
 
 /** Back and Forward stay live while a conversion is left to cross after guest history runs out. */

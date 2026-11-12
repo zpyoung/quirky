@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Badge, Button, Dialog, EmptyState, FormRow, IconButton, SectionHeader, Tabs } from '@quirky/ui'
+import { AgentIcon, Badge, Button, Dialog, EmptyState, FormRow, IconButton, SectionHeader, Tabs } from '@quirky/ui'
 import { useStableReport, type UiReport } from './report'
 import {
   ageLabel, accountSort, AccountsUiStore, canShowProviderVisibility, compactWindow, displayIdentity, displayPercent, formatReset, isConfigured, isCurrentSnapshot, maxUsed, providerSource,
@@ -80,16 +80,16 @@ function StatusChip({ store, snapshot, preferences }: { store: AccountsUiStore; 
     }
   }
   if (snapshot.status === 'unavailable') return <Button {...chipProps} className={`usage-chip status-${state.kind}`}>
-    <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>--</span>}
+    <AgentIcon id={snapshot.provider} />{preferences.density === 'normal' && <span>--</span>}
   </Button>
   if (snapshot.status === 'idle' || snapshot.status === 'fetching' && !headline) return <Button {...chipProps} className="usage-chip status-loading loading-indicator">
-    <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>···</span>}
+    <AgentIcon id={snapshot.provider} />{preferences.density === 'normal' && <span>···</span>}
   </Button>
   if (!headline) return <Button {...chipProps} className={`usage-chip ${snapshot.status === 'error' ? 'status-error' : 'status-loading'}`}>
-    <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>{snapshot.status === 'error' ? '! ' : ''}{state.label}</span>}
+    <AgentIcon id={snapshot.provider} />{preferences.density === 'normal' && <span>{snapshot.status === 'error' ? '! ' : ''}{state.label}</span>}
   </Button>
   return <Button {...chipProps} className="usage-chip">
-    <Letter provider={snapshot.provider} />
+    <AgentIcon id={snapshot.provider} />
     {preferences.density === 'normal' && (preferences.mode === 'compact'
       ? <span style={{ color: meterColor(headline.window.usedPercent) }}>{displayPercent(headline.window.usedPercent, preferences.direction)}% {formatReset(headline.window)}</span>
       : <span className="usage-detailed-chip">{windows.map(({ name, window }) => <span key={name} style={{ color: meterColor(window.usedPercent) }}>{name} {displayPercent(window.usedPercent, preferences.direction)}% <i className="meter" aria-hidden="true"><i style={{ width: `${displayPercent(window.usedPercent, preferences.direction)}%`, backgroundColor: meterColor(window.usedPercent) }} /></i></span>)}</span>)}

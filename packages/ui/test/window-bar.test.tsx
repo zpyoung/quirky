@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Banner } from '../../../plugins/quirky.feedback/src/mode/Banner'
 import { Button, Tabs } from '../src/design-system'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
-import { launchableAgents, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
+import { launchableAgents, newAgentItems, newAgentLabel, newTabButtons, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
 import { attentionStoreFor } from '../src/shell/attention'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
@@ -94,10 +94,11 @@ describe('window bar', () => {
       ].map((path) => Bun.file(new URL(path, import.meta.url)).text()))
       const css = `${styles.join('\n')}\nbody { margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }`
       const labelSets = [
-        { project: 'alpha', worktree: 'main' },
+        { project: 'alpha', worktree: 'main', agent: 'New agent' },
         {
           project: 'extraordinarily-long-project-label-for-window-bar-layout',
-          worktree: 'extraordinarily-long-worktree-label-for-window-bar-layout'
+          worktree: 'extraordinarily-long-worktree-label-for-window-bar-layout',
+          agent: 'New Claude Code'
         }
       ]
 
@@ -110,6 +111,14 @@ describe('window bar', () => {
               const [project, worktree] = header.querySelectorAll<HTMLElement>('.window-bar__label')
               project!.textContent = labels.project
               worktree!.textContent = labels.worktree
+              header.querySelector<HTMLElement>('.window-bar__new-agent span')!.textContent = labels.agent
+              // the boot fixture loads no terminal, browser or loops plugin, so stand in for their three icon buttons
+              const caret = header.querySelector<HTMLElement>('[aria-label="Choose agent"]')!
+              for (const label of ['New loop', 'New browser', 'New terminal']) {
+                const button = caret.cloneNode(true) as HTMLElement
+                button.setAttribute('aria-label', label)
+                caret.after(button)
+              }
             }, labels)
 
             const geometry = await page.locator(BAR).evaluate((header) => {
@@ -146,7 +155,7 @@ describe('window bar', () => {
               page.getByRole('button', { name: 'New worktree', exact: true }),
               page.getByRole('button', { name: 'Back', exact: true }),
               page.getByRole('button', { name: 'Forward', exact: true }),
-              page.getByRole('button', { name: 'New agent', exact: true }),
+              page.locator(`${BAR} .window-bar__new-agent`),
               page.getByRole('button', { name: 'Choose agent', exact: true })
             ]) {
               expect(await control.isVisible()).toBe(true)
@@ -161,7 +170,7 @@ describe('window bar', () => {
   test.skipIf(!existsSync(chromium.executablePath()))('reserved banner slot keeps toolbar and workspace controls clear and Exit reachable', async () => {
     const { env, unselectedMarkup } = await bootBar(true)
     const toolbarMarkups = [unselectedMarkup!, bar(env).outerHTML]
-    const bannerMarkup = renderToStaticMarkup(<Banner onExit={() => {}} />)
+    const bannerMarkup = renderToStaticMarkup(<Banner count={2} open={false} onToggle={() => {}} onExit={() => {}} />)
     const workspaceMarkup = renderToStaticMarkup(<div className="shell-workspace"><div className="shell-main-region"><div className="main-header shell-main-header">
       <Tabs label="Open views" items={[{ id: 'session', label: 'Session' }, { id: 'terminal', label: 'Terminal' }]} value="session" onChange={() => {}} />
       <div className="workspace-command-row"><Button>Add quick command</Button><Button>Pane actions</Button></div>
@@ -230,6 +239,12 @@ describe('window bar', () => {
           expect(layout.overlappingControls).toEqual([])
           expect(layout.blockedControls).toEqual([])
 
+          const toggle = page.getByRole('button', { name: '2 comments', exact: true })
+          expect(await toggle.getAttribute('aria-expanded')).toBe('false')
+          await toggle.evaluate((button) => button.addEventListener('click', () => button.setAttribute('data-toggle-clicked', ''), { once: true }))
+          await toggle.click()
+          expect(await toggle.getAttribute('data-toggle-clicked')).not.toBeNull()
+
           const exit = page.getByRole('button', { name: 'Exit', exact: true })
           await exit.evaluate((button) => button.addEventListener('click', () => button.setAttribute('data-exit-clicked', ''), { once: true }))
           await exit.click()
@@ -284,6 +299,26 @@ describe('window bar', () => {
     await click(env, barButton(env, 'Choose agent'))
     await env.win.waitFor(() => rowNamed(env, 'Agent settings…'))
     expect(rowsOf(env).at(-1)?.textContent).toBe('Agent settings…')
+  })
+
+  test('New agent rows lead with the agent icon and keep their labels and commands', () => {
+    const ran: string[] = []
+    const settings: string[] = []
+    const items = newAgentItems(
+      [{ id: 'claude-agent-teams', label: 'Claude Agent Teams', isDefault: true }, { id: 'omp', label: 'OMP', isDefault: false }],
+      (command) => ran.push(command),
+      () => settings.push('opened')
+    )
+    expect(items.map((item) => item.label)).toEqual(['Claude Agent Teams', 'OMP', '', 'Agent settings…'])
+    expect(items[0]!.subtitle).toBe('Default')
+    expect(renderToStaticMarkup(<>{items[0]!.lead}</>)).toContain('data-icon="claude"')
+    expect(renderToStaticMarkup(<>{items[1]!.lead}</>)).toContain('ui-agent-monogram')
+    expect(items[2]!.separator).toBe(true)
+    expect(renderToStaticMarkup(<>{items[3]!.lead}</>)).toContain('ui-control-icon')
+    items[1]!.onSelect?.()
+    items[3]!.onSelect?.()
+    expect(ran).toEqual(['command:quirky.agents/new-omp-tab'])
+    expect(settings).toEqual(['opened'])
   })
 
   test('Settings is reachable only through More', async () => {
@@ -457,6 +492,25 @@ describe('the New agent caret', () => {
   test('offers installed enabled agents that have a tab command, the default first', () => {
     expect(launchableAgents(listing, commands).map((agent) => agent.id)).toEqual(['claude', 'codex'])
     expect(launchableAgents(null, commands)).toEqual([])
+  })
+
+  test('the New agent button names the default agent, or stays generic when it cannot be launched', () => {
+    expect(newAgentLabel(launchableAgents(listing, commands))).toBe('New Claude')
+    expect(newAgentLabel(launchableAgents({ ...listing, defaultAgent: 'aider', agents: listing.agents.map((agent) => ({ ...agent, isDefault: agent.id === 'aider' })) }, commands))).toBe('New agent')
+    expect(newAgentLabel([])).toBe('New agent')
+  })
+})
+
+describe('the New terminal, New browser and New loop buttons', () => {
+  test('each shows only when its command is registered, in that order', () => {
+    const all = new Set(['command:quirky.session/new-shell', 'command:quirky.browser/new-tab', 'command:quirky.loops/new'])
+    expect(newTabButtons(all).map((button) => [button.label, button.command])).toEqual([
+      ['New terminal', 'command:quirky.session/new-shell'],
+      ['New browser', 'command:quirky.browser/new-tab'],
+      ['New loop', 'command:quirky.loops/new']
+    ])
+    expect(newTabButtons(new Set(['command:quirky.browser/new-tab'])).map((button) => button.label)).toEqual(['New browser'])
+    expect(newTabButtons(new Set())).toEqual([])
   })
 })
 

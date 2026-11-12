@@ -9,14 +9,12 @@ export type SettingName =
   | 'diffWordWrap'
   | 'diffShowWhitespace'
   | 'diffCollapseUnchanged'
-  | 'combinedDiffFileTree'
 
 export type DiffSettings = {
   sideBySide: boolean
   wrap: boolean
   showWhitespace: boolean
   collapseUnchanged: boolean
-  fileTree: boolean
 }
 
 function read(context: UiPluginContext): DiffSettings {
@@ -24,8 +22,7 @@ function read(context: UiPluginContext): DiffSettings {
     sideBySide: context.getSetting('diffDefaultView') === 'side-by-side',
     wrap: context.getSetting('diffWordWrap') === true,
     showWhitespace: context.getSetting('diffShowWhitespace') === true,
-    collapseUnchanged: context.getSetting('diffCollapseUnchanged') === true,
-    fileTree: context.getSetting('combinedDiffFileTree') === 'shown'
+    collapseUnchanged: context.getSetting('diffCollapseUnchanged') === true
   }
 }
 
@@ -39,8 +36,6 @@ function applyValue(settings: DiffSettings, name: string, value: unknown): DiffS
       return { ...settings, showWhitespace: value === true }
     case 'diffCollapseUnchanged':
       return { ...settings, collapseUnchanged: value === true }
-    case 'combinedDiffFileTree':
-      return { ...settings, fileTree: value === 'shown' }
     default:
       return settings
   }

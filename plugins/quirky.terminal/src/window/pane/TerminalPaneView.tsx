@@ -6,7 +6,8 @@ import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { ClipboardAddon, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard'
-import { RpcError, RpcErrorCode, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
+import { version as xtermVersion } from '@xterm/xterm/package.json'
+import { RpcError, RpcErrorCode, answerXtversion, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
 import type { TerminalPalette } from '@quirky/protocol'
 import { shellEscapePaths } from '../../shell-escape'
 import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTREE_PATHS_MIME } from './drop'
@@ -53,7 +54,7 @@ export type TerminalPaneHandle = {
   /** The selected text (gutter-trimmed when the setting says so), also put on the clipboard; empty when nothing is selected. */
   copy(): string
   selectAll(): void
-  /** Pastes through the same bracketed, chunked path as a real paste. */
+  /** Pastes through the same bracketed, chunked path as a real paste, so empty text still sends an empty bracketed paste. */
   paste(text: string): Promise<void>
   /** Opens the find box, or focuses it when open; with a query it also searches. Throws invalid-params for a query over 1,000 characters. */
   search(query?: string, options?: SearchOptions): void
@@ -221,12 +222,19 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   }
 
   const applySearch = (next: SearchState | null) => {
+    const previous = searchRef.current
     searchRef.current = next
     setSearchState(next)
     if (!next || !next.query) {
       setResults(EMPTY_RESULTS)
       clearHighlights()
       return
+    }
+    // @xterm/addon-search 0.16 records the new options before comparing against them, so a regex or
+    // case toggle on the same query keeps the old matches until its cached term is cleared
+    if (previous && (previous.regex !== next.regex || previous.caseSensitive !== next.caseSensitive)) {
+      const rt = runtime.current
+      if (rt) guarded(() => rt.search.clearDecorations(), undefined)
     }
     runFind('next', true)
   }
@@ -321,10 +329,11 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       scrollSensitivity: initial['scroll-sensitivity'],
       fastScrollSensitivity: initial['fast-scroll-sensitivity'],
       minimumContrastRatio: initial['minimum-contrast'],
-      overviewRulerWidth: 10,
+      overviewRuler: { width: 10 },
       theme: theme(initial, colors),
       linkHandler: createOscLinkHandler()
     })
+    answerXtversion(term, xtermVersion)
 
     const fit = new FitAddon()
     const searchAddon = new SearchAddon({ highlightLimit: HIGHLIGHT_LIMIT })
@@ -574,7 +583,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')
         return
       }
-      if (text.length === 0) return
+      if (plan.chunks.length === 0) return
       await claimUserInput()
       if (disposed || !canSend()) return
       const outcome = await runPaste(plan.chunks, (data) => context.call('quirky.terminal/write', { session: sessionId, data }), { closer: plan.closer })
@@ -627,7 +636,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       event.preventDefault()
       event.stopPropagation()
       void context.readClipboardText()
-        .then((text) => (text ? paste(text) : undefined))
+        .then((text) => paste(text))
         .catch(() => {})
     }
     const onMouseEnter = () => {

@@ -6,18 +6,31 @@ import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
 import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, isViewTab, TAB_COLOR_HEX } from '../../layout/types'
 import type { Group, GroupNode, Tab } from '../../layout/types'
-import { CollapseIcon, CloseIcon, PinIcon } from './icons'
+import { CollapseIcon, CloseIcon, JumpIcon, PinIcon } from './icons'
 import { hasCommandDrop } from './controller'
 import type { ControllerState, WorkspaceController } from './controller'
 import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
 import { StatusGlyph, UnreadBell, useNow } from './StatusGlyph'
-import { hiddenTabIndexes, tabsFit } from './tab-overflow'
+import { firstTabBeside, hiddenTabIndexes, scrollBackToFill, tabsFit, trailingScrollSlack } from './tab-overflow'
 import { leadSessionOf, tabIconOf } from './TabIcon'
 import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
+
+/**
+ * The width an expanded command badge takes so it fills the tab title's place and keeps its own
+ * right edge, which keeps it under the pointer that expanded it. Null when there is no title to
+ * replace, so the badge just grows to fit its label.
+ */
+function expandedBadgeWidth(badge: HTMLElement, title: HTMLElement | null): number | null {
+  if (!title) return null
+  const tab = badge.parentElement
+  const gap = tab ? Number.parseFloat(getComputedStyle(tab).columnGap) || 0 : 0
+  const width = badge.getBoundingClientRect().right - title.getBoundingClientRect().left - gap
+  return width > badge.getBoundingClientRect().width ? width : null
+}
 
 /** Reveals a tab at the leading edge while retaining preceding tabs that fit beside it. */
 function revealTab(tab: HTMLElement | null) {
@@ -26,16 +39,9 @@ function revealTab(tab: HTMLElement | null) {
   const target = tab.getBoundingClientRect()
   const bounds = viewport.getBoundingClientRect()
   if (target.left >= bounds.left && target.right <= bounds.right) return
-  const targetRight = target.right
-  const viewportWidth = viewport.clientWidth
-  let first = tab
-  let previous = tab.previousElementSibling as HTMLElement | null
-  while (previous) {
-    if (targetRight - previous.getBoundingClientRect().left > viewportWidth) break
-    first = previous
-    previous = previous.previousElementSibling as HTMLElement | null
-  }
-  first.scrollIntoView?.({ block: 'nearest', inline: 'start' })
+  const items = [...viewport.children] as HTMLElement[]
+  const first = firstTabBeside(bounds.width, items.map((item) => item.getBoundingClientRect()), items.indexOf(tab))
+  items[first]!.scrollIntoView?.({ block: 'nearest', inline: 'start' })
 }
 
 function TabItem({ controller, state, group, tab, index, others, now, overflow, viewportWidth, hiddenByOverflow }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean; viewportWidth: number; hiddenByOverflow: boolean }) {
@@ -47,6 +53,12 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
   const unread = leaves.map((leaf) => state.sessions[leaf.session]?.unread).find((reason) => reason)
   const title = displayTitle(tab)
   const element = useRef<HTMLDivElement>(null)
+  const titleElement = useRef<HTMLSpanElement>(null)
+  const [expandedBadge, setExpandedBadge] = useState<{ key: string; width: number | null } | null>(null)
+  const expandBadge = (key: string, badge: HTMLElement) => {
+    setExpandedBadge({ key, width: expandedBadgeWidth(badge, titleElement.current) })
+  }
+  const collapseBadge = (key: string) => setExpandedBadge((current) => (current?.key === key ? null : current))
   // macOS hides the strip's scrollbar, so a selected tab past the edge would otherwise stay out of sight
   useEffect(() => {
     if (selected) revealTab(element.current)
@@ -111,7 +123,7 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
       {renaming ? (
         <InlineField label="Tab title" initial={displayTitle(tab)} className="ui-text-field__input qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (
-        <span className="qt-tab-title" role="tab" aria-selected={selected}>
+        <span ref={titleElement} className={`qt-tab-title${expandedBadge ? ' qt-tab-title-yielded' : ''}`} role="tab" aria-selected={selected}>
           {title}
         </span>
       )}
@@ -120,14 +132,21 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
           <Button
             key={key}
             variant="secondary"
-            className="qt-badge"
+            className={`qt-badge qt-badge-command${expandedBadge?.key === key ? ' qt-badge-expanded' : ''}`}
+            style={expandedBadge?.key === key && expandedBadge.width !== null ? { width: expandedBadge.width } : undefined}
+            aria-label={badge.label}
             title={badge.tooltip}
+            onPointerEnter={(event) => expandBadge(key, event.currentTarget)}
+            onPointerLeave={() => collapseBadge(key)}
+            onFocus={(event) => expandBadge(key, event.currentTarget)}
+            onBlur={() => collapseBadge(key)}
             onClick={(event) => {
               event.stopPropagation()
               void controller.context.executeCommand(badge.command!, badge.args)
             }}
           >
-            {badge.label}
+            <JumpIcon />
+            <span className="qt-badge-label">{badge.label}</span>
           </Button>
         ) : (
           <span key={key} className="qt-badge" title={badge.tooltip}>
@@ -209,6 +228,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const tabNavigation = useRef<HTMLDivElement>(null)
   const tabViewport = useRef<HTMLDivElement>(null)
   const moreButton = useRef<HTMLButtonElement>(null)
+  const measuredLayout = useRef('')
   const [hiddenTabs, setHiddenTabs] = useState<string[]>([])
   const [viewportWidth, setViewportWidth] = useState(0)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -217,15 +237,19 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
     const viewport = tabViewport.current
     if (!navigation || !viewport) return
     const items = [...viewport.children] as HTMLElement[]
-    const rects = items.map((item) => item.getBoundingClientRect())
-    const contentWidth = rects.reduce((total, rect) => total + rect.width, 0)
+    const rectsOf = () => items.map((item) => item.getBoundingClientRect())
+    const measured = rectsOf()
+    const contentWidth = measured.reduce((total, rect) => total + rect.width, 0)
     const fits = tabsFit(navigation.clientWidth, contentWidth)
-    const lastTabRect = rects[rects.length - 1]
-    const slack = fits || !lastTabRect ? 0 : Math.max(0, viewport.clientWidth - lastTabRect.width)
+    const bounds = viewport.getBoundingClientRect()
+    const slack = fits ? 0 : trailingScrollSlack(bounds.width, measured)
     viewport.style.setProperty('--qt-tab-scroll-slack', `${slack}px`)
-    const hidden = fits
-      ? []
-      : hiddenTabIndexes(viewport.getBoundingClientRect(), rects).map((index) => items[index]!.dataset.tab!)
+    const layout = [bounds.width, ...measured.map((rect) => rect.width)].join()
+    // only on a layout change: doing this after a wheel scroll would stop it reaching tabs past a short gap
+    if (!fits && layout !== measuredLayout.current) viewport.scrollLeft -= scrollBackToFill(bounds, rectsOf())
+    measuredLayout.current = layout
+    // less slack or the scroll above moves the tabs measured earlier
+    const hidden = fits ? [] : hiddenTabIndexes(bounds, rectsOf()).map((index) => items[index]!.dataset.tab!)
     setHiddenTabs((current) => (current.length === hidden.length && current.every((id, index) => id === hidden[index]) ? current : hidden))
     setViewportWidth(viewport.clientWidth)
   }, [])

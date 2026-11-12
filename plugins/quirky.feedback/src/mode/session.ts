@@ -59,7 +59,7 @@ function pluginsOf(value: unknown): PluginInfo[] {
  * and shows a toast; nothing leaves the window except through an explicit copy or issue draft.
  */
 export function createSession(context: UiPluginContext, hooks: { suspend(suspended: boolean): void }) {
-  let state: SessionState = { comments: [], recovered: false, owners: {}, card: null, target: null, collapsed: false, notice: null }
+  let state: SessionState = { comments: [], recovered: false, owners: {}, card: null, target: null, collapsed: true, notice: null }
   let disposed = false
   let serial = 0
   let confirming = false
@@ -70,6 +70,8 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
     if (disposed) return
     const next: SessionState = { ...state, ...patch }
     if (patch.card === null || (patch.card !== undefined && patch.card.id !== null)) next.target = null
+    // these messages render inside the panel, so a closed panel would hide them
+    if (patch.recovered === true || typeof patch.notice === 'string') next.collapsed = false
     state = next
     for (const listener of [...listeners]) listener()
   }
@@ -131,7 +133,10 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
 
     escape() {
       const card = state.card
-      if (card === null) return void self.exit()
+      if (card === null) {
+        if (!state.collapsed) return commit({ collapsed: true })
+        return void self.exit()
+      }
       if (isDirty(card) && !card.warned) return patchCard({ warned: true })
       commit({ card: null })
     },

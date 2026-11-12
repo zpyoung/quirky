@@ -73,6 +73,7 @@ async function start(seed: Comment[] = []) {
 
 const container = () => document.querySelector<HTMLElement>('[data-quirky-feedback]:not([data-feedback-banner])')
 const bannerSlot = () => document.querySelector<HTMLElement>('[data-feedback-banner-slot]')!
+const openPanel = () => act(async () => { bannerSlot().querySelector<HTMLElement>('[data-feedback-toggle]')!.click() })
 const host = () => container()!.firstElementChild as HTMLElement
 const reactRoot = () => container()!.lastElementChild as HTMLElement
 
@@ -212,6 +213,7 @@ describe('container structure', () => {
     expect(banner!.querySelector('span')!.textContent).toBe('Feedback mode on · Option uses the app · Esc exits')
     expect(banner!.hasAttribute('data-quirky-feedback')).toBe(true)
     expect(banner!.hasAttribute('data-quirky-native-mask')).toBe(true)
+    await openPanel()
     expect(reactRoot().querySelector('[data-feedback-tray]')!.hasAttribute('data-quirky-native-mask')).toBe(true)
   })
 
@@ -547,6 +549,7 @@ describe('selected outline', () => {
     stack(other)
     await act(async () => { mouse(host(), 'pointermove') })
     expect(highlight().style.left).toBe('70px')
+    await openPanel()
     const edit = reactRoot().querySelector<HTMLButtonElement>('[data-feedback-row="c1"] button[aria-label="Edit comment 1"]')!
     await act(async () => { edit.click() })
     expect(reactRoot().querySelector('[data-feedback-card]')!.getAttribute('aria-label')).toBe('Edit comment')
@@ -643,6 +646,7 @@ describe('new card placement', () => {
     await start([sample('saved')])
     const banner = bannerSlot().querySelector<HTMLElement>('[data-feedback-banner]')!
     rect(banner, { x: 216, y: 52, width: 368, height: 38 })
+    await openPanel()
     const edit = reactRoot().querySelector<HTMLButtonElement>('[aria-label="Edit comment 1"]')!
     await act(async () => { edit.click() })
     await flush()
@@ -956,6 +960,7 @@ describe('escape', () => {
 
   test('is passed through while a confirm is pending', async () => {
     const fake = await start([sample('c1')])
+    await openPanel()
     await act(async () => { reactRoot().querySelector<HTMLButtonElement>('[data-feedback-clear]')!.click() })
     expect(fake.confirm.count).toBe(1)
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
@@ -972,6 +977,7 @@ describe('escape', () => {
     const fake = await start([sample('c1')])
     const activeZIndex = container()!.style.zIndex
     const activeBannerZIndex = bannerSlot().style.zIndex
+    await openPanel()
     await act(async () => { reactRoot().querySelector<HTMLButtonElement>('[data-feedback-clear]')!.click() })
     expect(host().style.getPropertyValue('display')).toBe('none')
     expect(container()!.style.zIndex).toBe('0')

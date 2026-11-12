@@ -316,6 +316,31 @@ for (const direction of ['used', 'remaining'] as const) {
   }
 }
 
+for (const [label, values] of [['with usage', { claude: 31, codex: 23 }], ['without usage', { claude: null, codex: null }]] as const) {
+  test(`status chips ${label} show the provider icon in place of the letter, in the measuring copy too`, async () => {
+    await openUsageRoster('used', values)
+    for (const provider of ['claude', 'codex'] as const) {
+      const chips = container.querySelectorAll(`[data-provider="${provider}"]`)
+      expect(chips.length).toBe(2)
+      for (const chip of chips) {
+        const icon = chip.querySelector('svg.ui-agent-icon')
+        expect(icon?.getAttribute('data-icon')).toBe(provider)
+        expect(icon?.getAttribute('aria-hidden')).toBe('true')
+        expect(chip.querySelector('.provider-letter')).toBeNull()
+      }
+      expect(chips[0]!.getAttribute('aria-label')).toStartWith(`Open ${provider === 'claude' ? 'Claude' : 'Codex'} usage details — `)
+      expect(chips[0]!.getAttribute('title')).toStartWith(provider === 'claude' ? 'Claude · ' : 'Codex · ')
+    }
+  })
+}
+
+test('the Usage popover roster keeps its provider letters', async () => {
+  await openUsageRoster('used', { claude: 31, codex: 23 })
+  const row = container.querySelector('[aria-label="Open Claude details and account switcher"]')!
+  expect(row.querySelector('.provider-letter')?.textContent).toBe('C')
+  expect(row.querySelector('svg.ui-agent-icon')).toBeNull()
+})
+
 test('no-window usage summaries retain fallback status styling', async () => {
   await openUsageRoster('used', { claude: null, codex: null })
   for (const provider of ['claude', 'codex'] as const) {

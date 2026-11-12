@@ -1,5 +1,5 @@
 import { expect } from 'bun:test'
-import type { GitDiff, GitStatus, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
+import type { GitDiff, GitStatus, QuirkyEvent, ReviewFile, ReviewModel, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 
 // the test file registers happy-dom before importing this module
@@ -265,6 +265,68 @@ export function stubIntersectionObserver() {
     },
     restore() {
       globalThis.IntersectionObserver = original
+    }
+  }
+}
+
+/** One changed file of a review model; override any field. */
+export const reviewFile = (path: string, extra: Partial<ReviewFile> = {}): ReviewFile => ({
+  path,
+  status: 'M',
+  added: 2,
+  removed: 1,
+  binary: false,
+  uncommitted: true,
+  staged: false,
+  mark: 'none',
+  notes: 0,
+  ...extra
+})
+
+/** A `quirky.git/review` result for `files`, with counts derived from their marks. */
+export function reviewModel(files: ReviewFile[], extra: Partial<ReviewModel> = {}): ReviewModel {
+  const marked = (mark: ReviewFile['mark']) => files.filter((f) => f.mark === mark).length
+  return {
+    worktreeId: 'w1',
+    branch: 'feat',
+    base: { name: 'main', source: 'detected', isCurrentBranch: false },
+    compare: { status: 'ready', mergeBase: 'b'.repeat(40), headOid: 'c'.repeat(40) },
+    totals: { added: files.reduce((n, f) => n + (f.added ?? 0), 0), removed: files.reduce((n, f) => n + (f.removed ?? 0), 0) },
+    counts: { files: files.length, reviewed: marked('reviewed'), changed: marked('changed'), uncommitted: files.length, staged: 0 },
+    capped: false,
+    files: [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+    ...extra
+  }
+}
+
+/** A stand-in for ResizeObserver whose measurements tests set by hand. */
+export function stubResizeObserver() {
+  type Entry = { callback: ResizeObserverCallback; element: Element; observer: object }
+  const entries: Entry[] = []
+  const original = globalThis.ResizeObserver
+  class Stub {
+    constructor(readonly callback: ResizeObserverCallback) {}
+    observe(element: Element) {
+      entries.push({ callback: this.callback, element, observer: this })
+    }
+    disconnect() {
+      for (let i = entries.length - 1; i >= 0; i--) if (entries[i].observer === this) entries.splice(i, 1)
+    }
+    unobserve() {}
+  }
+  globalThis.ResizeObserver = Stub as unknown as typeof ResizeObserver
+  return {
+    observed: () => entries.map((e) => e.element),
+    async resize(width: number) {
+      await act(async () => {
+        for (const entry of [...entries]) {
+          entry.callback([{ target: entry.element, contentRect: { width } } as unknown as ResizeObserverEntry], entry.observer as ResizeObserver)
+        }
+      })
+      await settle()
+    },
+    restore() {
+      globalThis.ResizeObserver = original
     }
   }
 }

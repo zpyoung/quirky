@@ -37,3 +37,9 @@ export const CloseIcon = () => (
     <path d="m3 3 6 6M9 3 3 9" />
   </Svg>
 )
+
+export const JumpIcon = () => (
+  <Svg>
+    <path d="M1.5 6h7.5M6.5 3l3 3-3 3M10.5 2v8" />
+  </Svg>
+)

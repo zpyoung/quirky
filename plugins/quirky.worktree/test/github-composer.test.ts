@@ -12,12 +12,14 @@ import type {
   WorktreeCreateResult
 } from '@quirky/protocol'
 import { DEFAULT_WORKTREE_STATUSES } from '../src/daemon/statuses'
+import { DEFAULT_STOCK_OPTIONS, type WorktreeControl } from '../src/control-types'
 import type { act as ReactAct, createElement as ReactCreateElement } from 'react'
 import type { createRoot as ReactCreateRoot } from 'react-dom/client'
 import type { CreateDialog as CreateDialogComponent } from '../src/CreateDialog'
 import type { createWorkspace as createWorkspaceAction } from '../src/actions'
 import type { ProjectSettingsDialog as ProjectSettingsDialogComponent } from '../src/ProjectSettingsDialog'
-import type { buildTreeModel as buildTreeModelFunction } from '../src/report'
+import type { buildTree as buildTreeFunction } from '../src/view-model'
+import type * as ViewTypes from '../src/view-types'
 import type { Tree as TreeComponent } from '../src/Tree'
 import type { TrustDialog as TrustDialogComponent } from '../src/TrustDialog'
 let act: typeof ReactAct
@@ -26,7 +28,9 @@ let createRoot: typeof ReactCreateRoot
 let CreateDialog: typeof CreateDialogComponent
 let createWorkspace: typeof createWorkspaceAction
 let ProjectSettingsDialog: typeof ProjectSettingsDialogComponent
-let buildTreeModel: typeof buildTreeModelFunction
+let buildTree: typeof buildTreeFunction
+let allSpecFromStock: typeof ViewTypes.allSpecFromStock
+let DEFAULT_ACTIVITY_PREFERENCES: typeof ViewTypes.DEFAULT_ACTIVITY_PREFERENCES
 let Tree: typeof TreeComponent
 let TrustDialog: typeof TrustDialogComponent
 
@@ -183,12 +187,13 @@ beforeAll(async () => {
   const react = await import('react')
   act = react.act
   createElement = react.createElement
-  const [reactDom, createDialog, actions, projectSettings, report, tree, trust] = await Promise.all([
+  const [reactDom, createDialog, actions, projectSettings, viewModel, viewTypes, tree, trust] = await Promise.all([
     import('react-dom/client'),
     import('../src/CreateDialog'),
     import('../src/actions'),
     import('../src/ProjectSettingsDialog'),
-    import('../src/report'),
+    import('../src/view-model'),
+    import('../src/view-types'),
     import('../src/Tree'),
     import('../src/TrustDialog')
   ])
@@ -196,7 +201,9 @@ beforeAll(async () => {
   CreateDialog = createDialog.CreateDialog
   createWorkspace = actions.createWorkspace
   ProjectSettingsDialog = projectSettings.ProjectSettingsDialog
-  buildTreeModel = report.buildTreeModel
+  buildTree = viewModel.buildTree
+  allSpecFromStock = viewTypes.allSpecFromStock
+  DEFAULT_ACTIVITY_PREFERENCES = viewTypes.DEFAULT_ACTIVITY_PREFERENCES
   Tree = tree.Tree
   TrustDialog = trust.TrustDialog
 })
@@ -1054,16 +1061,32 @@ test('Project Settings edits the local GitHub issue command and shows shared com
   })
 })
 
-test('sidebar renders a durable linked PR as an external link beside the editable workspace', async () => {
-  const linked: Worktree = { ...main(), isMain: false, name: 'Reword the README', linkedPR: prLink, comment: 'Keep this editable note' }
-  const linkedIssueWorktree: Worktree = { ...main('r1', 'wt-issue'), isMain: false, name: 'Add a multiply function', linkedIssue: issueLink }
-  const model = buildTreeModel([repos[0]!], [], [linked, linkedIssueWorktree], [])
+test('sidebar shows a durable linked PR and issue on the row hover card beside the editable worktree', async () => {
+  const control = { manualOrder: 0, sleeping: false, sleepChangedAt: null, references: [], archivedAt: null, externalVisible: true, tagIds: [] }
+  const linked = { ...main(), ...control, isMain: false, name: 'Reword the README', linkedPR: prLink, comment: 'Keep this editable note' } as unknown as WorktreeControl
+  const linkedIssueWorktree = { ...main('r1', 'wt-issue'), ...control, isMain: false, name: 'Add a multiply function', linkedIssue: issueLink } as unknown as WorktreeControl
+  const worktrees = [linked, linkedIssueWorktree]
+  const repo = repos[0]!
+  const model = buildTree({
+    worktrees,
+    repos: [repo],
+    groups: [],
+    tags: [],
+    spec: allSpecFromStock({ ...DEFAULT_STOCK_OPTIONS }, DEFAULT_ACTIVITY_PREFERENCES),
+    viewId: 'all',
+    projection: null,
+    marks: new Map(),
+    checks: new Map()
+  })
   const app = makeApp()
   const root = createRoot(element())
   roots.push(root)
   await act(async () => root.render(createElement(Tree, {
     context: app.context,
     model,
+    tagsById: new Map(),
+    rowFact: 'pr',
+    repos: [repo],
     groups: [],
     sessions: [],
     selectedId: null,
@@ -1080,13 +1103,23 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
     openDialog() {},
     requestDelete() {}
   })))
-  const anchor = host.querySelector<HTMLAnchorElement>(`a[href="${PR_URL}"]`)
-  expect(anchor?.textContent).toContain('PR #3')
-  expect(anchor?.target).toBe('_blank')
-  expect(anchor?.rel).toContain('noreferrer')
   const workspaceButton = [...host.querySelectorAll<HTMLButtonElement>('button[aria-label]')]
     .find((button) => button.getAttribute('aria-label') === 'Open Reword the README')
   expect(workspaceButton?.textContent).toContain('Reword the README')
-  const issueAnchor = host.querySelector<HTMLAnchorElement>(`a[href="${ISSUE_URL}"]`)
-  expect(issueAnchor?.textContent).toContain('Issue #4')
+  expect(host.querySelector('a[href]')).toBeNull()
+  const prRow = host.querySelector<HTMLElement>('[data-worktree-id="wt-main"]')!
+  expect(prRow.querySelector('.worktree-fact')?.textContent).toBe('#3')
+
+  const reviewOf = async (row: HTMLElement) => {
+    const trigger = row.querySelector<HTMLButtonElement>('.worktree-row__main')!
+    await act(async () => {
+      trigger.focus()
+      await new Promise((resolve) => setTimeout(resolve, 450))
+    })
+    const card = document.querySelector('.worktree-hover')
+    const review = [...(card?.querySelectorAll('dt') ?? [])].find((term) => term.textContent === 'Review')?.nextElementSibling?.textContent
+    await act(async () => trigger.blur())
+    return review
+  }
+  expect(await reviewOf(prRow)).toBe('#3 Reword the README')
 })

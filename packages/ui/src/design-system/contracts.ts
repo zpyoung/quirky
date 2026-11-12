@@ -52,6 +52,7 @@ export type InlineAgentCardProps = { title: string; description?: ReactNode; sta
 export type UiLayoutProps = HTMLAttributes<HTMLDivElement>
 /** Icon props: `size` is the square edge in CSS pixels (default 16); an icon is decorative unless given a `label`. */
 export type ToolIconProps = { name: string; hue: UiToolHue; size?: number; label?: string }
+export type AgentIconProps = { id: string; size?: number }
 export type ControlIconProps = { name: string; size?: number; label?: string }
 export type FileIconProps = { path: string; size?: number; label?: string }
 export type ProjectTileProps = { name: string; color?: string | null; size?: number; label?: string }
@@ -77,3 +78,36 @@ export type PopupMenuProps = {
  * `label`); without them it is plain, non-interactive content. `label` names the control for assistive tech.
  */
 export type StatusBarItemProps = { label: string; items?: PopupItem[]; popupTitle?: string; children: ReactNode }
+
+export type ReviewMarkState = 'none' | 'reviewed' | 'changed'
+export type ReviewMarkProps = { state: ReviewMarkState; label?: string }
+export type SplitButtonProps = {
+  label: ReactNode
+  onClick(): void
+  disabled?: boolean
+  busy?: boolean
+  title?: string
+  /** Accessible name of the caret that opens the item menu. */
+  menuLabel: string
+  /** Items set `enabled: false` plus `detail` to stay listed, greyed, with their reason. */
+  items: ContextMenuItem[]
+  onChoose(id: string): void
+}
+export type InlineErrorProps = {
+  message: string
+  action?: { label: string; onAction(): void }
+  onDismiss(): void
+}
+export type ScopeChipProps = { label: string; onRemove(): void; removeLabel?: string }
+
+export type UiTagColor = 'blue' | 'violet' | 'teal' | 'coral' | 'magenta' | 'mint' | 'sand' | 'rose'
+export type UiActivityMarkState = 'running' | 'waiting' | 'error' | 'idle' | 'asleep'
+export type UiTag = { id: string; name: string; color: UiTagColor | null }
+export type ActivityMarkProps = { state: UiActivityMarkState; label: string }
+export type TagChipProps = { name: string; color: UiTagColor | null }
+export type TagChipsProps = { tags: UiTag[]; max?: number }
+export type CheckboxProps = { checked: boolean; indeterminate?: boolean; label: string; onChange: (checked: boolean) => void; hideLabel?: boolean }
+export type SwatchGroupProps = { value: UiTagColor | null; onChange: (color: UiTagColor | null) => void; label: string }
+export type NoticeLineProps = { children: ReactNode; actions?: UiAction[] }
+export type HoverCardProps = { anchor: HTMLElement | null; open: boolean; children: ReactNode }
+export type BulkBarProps = { count: number; actions: UiAction[]; onClear: () => void }

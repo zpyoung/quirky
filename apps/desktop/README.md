@@ -9,7 +9,7 @@ choosing Quit Quirky in the tray menu quits only the shell; the daemon and PTY h
 From the repo root, after `bun install`:
 
 ```sh
-bun run build
+QUIRKY_RELEASE_BUILD=1 bun run build
 mkdir -p ~/Applications
 cp -R apps/desktop/build/Quirky.app ~/Applications/
 open ~/Applications/Quirky.app
@@ -17,7 +17,9 @@ open ~/Applications/Quirky.app
 
 `bun run build` builds the UI, bundles the daemon, PTY host, CLI, UI and built-in plugins into the app, prepares the pinned Electrobun SDK, and fails if any required input is missing. The result is `apps/desktop/build/Quirky.app`.
 
-`bun run typecheck` checks the root, mobile and desktop TypeScript projects. The desktop script runs `hutch electrobun prepare` before `tsc`, so the pinned Electrobun SDK is available without manual preparation. `apps/desktop/hutch.config.ts` pins a release of the fork (`zpyoung/electrobun`); `scripts/with-electrobun-devkit.ts` downloads and verifies its macOS arm64 devkit into `~/.cache/quirky/electrobun-devkit` and points Hutch at it, so run Hutch through the package scripts. Set `HUTCH_ELECTROBUN_DEVKIT_ROOT` to use a local devkit build instead. Both commands require the `hutch` CLI on `PATH`.
+Bundle ids keep the installed app apart from the ones you test, so `open -b` and macOS app data reach the right copy. `QUIRKY_RELEASE_BUILD=1` gives the release id `dev.quirky.app`, which the release workflow and the install steps above use. Without it, a local build is `dev.quirky.app.local`, and `bun run dev` builds are always `dev.quirky.app.dev`.
+
+`bun run typecheck` checks the root, mobile and desktop TypeScript projects. The desktop script runs `hutch electrobun prepare` before `tsc`, so the pinned Electrobun SDK is available without manual preparation. `apps/desktop/hutch.config.ts` pins a release of the fork (`zpyoung/electrobun`); `scripts/with-electrobun-devkit.ts` downloads and verifies its macOS arm64 devkit into `~/.cache/quirky/electrobun-devkit` and points Hutch at it, so run Hutch through the package scripts. Set `HUTCH_ELECTROBUN_DEVKIT_ROOT` to use a local devkit build instead. Both commands require the `hutch` CLI, on `PATH` or in `~/.hutch/bin`, where its installer puts it.
 
 Reinstalling over a running copy: quit Quirky first (window close or tray Quit), then repeat the
 `cp -R`. Use `rm -rf ~/Applications/Quirky.app` before copying if you want a clean replace.
@@ -127,6 +129,20 @@ bun run dev
 Builds the UI, then runs the shell from the repo sources (`packages/*/src`), so the daemon is the
 checked-out code. The dev app is `apps/desktop/build/dev-macos-arm64/Quirky-dev.app`; console
 output of the shell appears in the terminal.
+
+Each launch replaces a running daemon if it came from another checkout or its sources have changed
+since it started. Daemon changes made while the app is open apply on the next launch or
+`quirky daemon restart`. To run two checkouts side by side, give each its own `QUIRKY_HOME`, because
+the later launch takes over a shared one.
+
+To start from the newest code in one step, run `bun run dev:latest`. It fast-forwards the branch
+from its upstream, runs `bun install`, deletes `resources/native-browser-preload.js` so the dev app
+bundles the preload from source, restarts a daemon whose sources differ from this checkout, then
+runs `bun run dev`. Plain `bun run dev` uses that file whenever it exists, so after a
+`bun run build` it keeps the build's preload until the file is deleted. `--no-pull` skips the pull
+and `--no-launch` stops before opening the app.
+The PTY host is never restarted, because stopping it ends every terminal. When it comes from
+another build, the script prints its command line so you can stop it yourself.
 
 ## Logs
 

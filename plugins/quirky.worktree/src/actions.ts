@@ -1,4 +1,5 @@
 import { RpcErrorCode, type FolderPickerRequest, type FolderPickerResult, type UiPluginContext, type Worktree, type WorktreeCreateResult, type WorktreeRemoveResult } from '@quirky/protocol'
+import type { Tag, TagColor, ViewId, ViewsState } from './view-types'
 
 export const SESSION_VIEW = 'view:quirky.session/worktree'
 
@@ -408,6 +409,88 @@ export async function deleteKeptBranch(context: UiPluginContext, kept: KeptBranc
     return true
   } catch (error) {
     context.toast('Could not delete branch', messageOf(error))
+    return false
+  }
+}
+
+export type TagsSnapshot = { tags: Tag[]; assignments: Record<string, string[]> }
+
+export async function fetchTags(context: UiPluginContext): Promise<TagsSnapshot> {
+  return (await context.call('quirky.worktree/tags', {})) as TagsSnapshot
+}
+
+/** Creates a tag, or returns the existing one of that name; null after a toast when it fails. */
+export async function createTag(context: UiPluginContext, name: string, color?: TagColor | null): Promise<Tag | null> {
+  try {
+    const result = (await context.call('quirky.worktree/tagCreate', { name, ...(color === undefined ? {} : { color }) })) as { tag: Tag }
+    return result.tag
+  } catch (error) {
+    context.toast('Could not create tag', messageOf(error))
+    return null
+  }
+}
+
+/** Renames or recolors a tag (`color: null` makes it grey); null after a toast when it fails. */
+export async function updateTag(context: UiPluginContext, id: string, patch: { name?: string; color?: TagColor | null }): Promise<Tag | null> {
+  try {
+    const result = (await context.call('quirky.worktree/tagUpdate', { id, ...patch })) as { tag: Tag }
+    return result.tag
+  } catch (error) {
+    context.toast('Could not update tag', messageOf(error))
+    return null
+  }
+}
+
+export async function deleteTag(context: UiPluginContext, id: string): Promise<boolean> {
+  try {
+    await context.call('quirky.worktree/tagDelete', { id })
+    return true
+  } catch (error) {
+    context.toast('Could not delete tag', messageOf(error))
+    return false
+  }
+}
+
+/** Adds or removes one tag on each of the worktrees; true on success, else a toast says why. */
+export async function assignTag(context: UiPluginContext, worktreeIds: string[], tagId: string, assigned: boolean): Promise<boolean> {
+  try {
+    await context.call('quirky.worktree/tagAssign', { worktreeIds, tagId, assigned })
+    return true
+  } catch (error) {
+    context.toast('Could not update tags', messageOf(error))
+    return false
+  }
+}
+
+export async function fetchViews(context: UiPluginContext): Promise<ViewsState> {
+  return (await context.call('quirky.worktree/views', {})) as ViewsState
+}
+
+/** Saves the views and returns the normalised state; null after a toast when it fails. */
+export async function saveViews(context: UiPluginContext, state: ViewsState): Promise<ViewsState | null> {
+  try {
+    return (await context.call('quirky.worktree/setViews', { state })) as ViewsState
+  } catch (error) {
+    context.toast('Could not save views', messageOf(error))
+    return null
+  }
+}
+
+/** The view this window shows. */
+export async function fetchActiveView(context: UiPluginContext): Promise<ViewId> {
+  const window = await currentWindowId(context)
+  const result = (await context.call('quirky.worktree/activeView', { window })) as { viewId: ViewId }
+  return result.viewId
+}
+
+/** Switches this window's view; true on success, else a toast says why. */
+export async function selectView(context: UiPluginContext, viewId: ViewId): Promise<boolean> {
+  try {
+    const window = await currentWindowId(context)
+    await context.call('quirky.worktree/setActiveView', { window, viewId })
+    return true
+  } catch (error) {
+    context.toast('Could not switch view', messageOf(error))
     return false
   }
 }

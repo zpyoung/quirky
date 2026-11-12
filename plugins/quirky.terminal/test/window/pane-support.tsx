@@ -6,6 +6,7 @@ import type { Terminal } from '@xterm/xterm'
 import { DEFAULT_PANE_SETTINGS, type PaneSettings } from '../../src/window/pane/settings'
 import type { PaneReport, TerminalPaneHandle, TerminalPaneProps } from '../../src/window/pane/TerminalPaneView'
 import { fakeContext, paneHandlers, settle, type FakeContext } from '../ui-fake'
+import { stubXtermFontMetrics } from '../xterm-metrics'
 
 type PaneModule = typeof import('../../src/window/pane/TerminalPaneView')
 type XtermModule = typeof import('@xterm/xterm')
@@ -25,8 +26,10 @@ export async function loadPane(): Promise<void> {
   HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string) {
     return type === '2d' ? context2d : null
   } as typeof getContext
+  const restoreMetrics = stubXtermFontMetrics()
   restoreCanvas = () => {
     HTMLCanvasElement.prototype.getContext = getContext
+    restoreMetrics()
   }
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   xterm = await import('@xterm/xterm')

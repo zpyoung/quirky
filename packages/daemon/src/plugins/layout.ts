@@ -184,7 +184,9 @@ function worktreeOf(view: OpenView | null): string | null | undefined {
   if (view === null || !isRecord(view.input)) return undefined
   const worktree = view.input.worktree
   if (worktree === null) return null
-  return typeof worktree === 'string' && worktree.length > 0 ? worktree : undefined
+  if (typeof worktree !== 'string') return undefined
+  const id = worktree.startsWith('id:') ? worktree.slice(3) : worktree
+  return id.length > 0 ? id : undefined
 }
 
 function worktreeAfterViewChange(next: OpenView | null, current: string | null): string | null {

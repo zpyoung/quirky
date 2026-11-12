@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { chooseHost, discover, hostLoad, macosOnly, runFiles, runSuite, slowestFirst, usableSlots, type HostState } from './suite'
+import { discover, macosOnly, runFiles } from './suite'
 import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 let dir: string
@@ -51,35 +51,6 @@ const captureOutput = async <T>(run: () => Promise<T>) => {
   }
 }
 
-test('a green suite passes without a rerun', async () => {
-  passing('a.test.ts')
-  expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: [] })
-}, 30_000)
-
-test('a file that fails in the suite and passes alone is reported as flaky', async () => {
-  passing('a.test.ts')
-  flaky('b.test.ts')
-  expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: ['pkg/b.test.ts'] })
-}, 30_000)
-
-test('a file that fails again alone fails the run', async () => {
-  flaky('a.test.ts')
-  broken('b.test.ts')
-  expect(await runSuite(dir, ['pkg'])).toEqual({ ok: false, flaky: [] })
-}, 30_000)
-
-test('a file that fails to load fails the run, since the report cannot name it', async () => {
-  flaky('a.test.ts')
-  write('b.test.ts', `throw new Error('load')`)
-  expect(await runSuite(dir, ['pkg'])).toEqual({ ok: false, flaky: [] })
-}, 30_000)
-
-test('more failing files than the limit fail the run without a rerun', async () => {
-  flaky('a.test.ts')
-  flaky('b.test.ts')
-  expect(await runSuite(dir, ['pkg'], 1)).toEqual({ ok: false, flaky: [] })
-}, 30_000)
-
 test('runFiles runs each file in its own process and reports one that passes alone as flaky', async () => {
   passing('a.test.ts')
   flaky('b.test.ts')
@@ -124,7 +95,7 @@ test('has an isolated home', () => {
   writeFileSync(${JSON.stringify(report)}, JSON.stringify({ home, quirkyHome }))
 })`)
 
-  expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: [] })
+  expect(await runFiles(dir, ['pkg/home.test.ts'], [], 1)).toEqual({ ok: true, flaky: [] })
   const first = JSON.parse(readFileSync(report, 'utf8')) as { home: string; quirkyHome: string }
   expect(first.home).not.toBe(parentHome)
   expect(first.quirkyHome).not.toBe(parentQuirkyHome)
@@ -210,7 +181,6 @@ test('the suite CLI profiles each selected file in local mode', async () => {
     env: {
       ...process.env,
       QUIRKY_HOME: join(dir, 'home'),
-      QUIRKY_TEST_LOCAL: '1',
       QUIRKY_TEST_PROFILE: '1',
     },
     stdout: 'pipe',
@@ -231,94 +201,6 @@ test('the suite CLI profiles each selected file in local mode', async () => {
     ['cli-b.test.ts', 0],
   ])
 }, 20_000)
-
-test('the worker CLI preserves its suite result after backpressured stdout', async () => {
-  const home = join(dir, 'worker-home')
-  const quirkyHome = join(dir, 'worker-quirky-home')
-  mkdirSync(home)
-  mkdirSync(quirkyHome)
-  const filler = 'x'.repeat(300_000) + '\n'
-  const resultQueued = join(dir, 'result-queued')
-  const preload = join(dir, 'stdout-preload.ts')
-  writeFileSync(preload, `import { writeFileSync } from 'node:fs'
-process.stdout.write('x'.repeat(${filler.length - 1}) + '\\n')
-const resultQueued = process.env.RESULT_QUEUED!
-const stdoutWrite = process.stdout.write
-process.stdout.write = function (this: typeof process.stdout, ...args: unknown[]) {
-  const result: boolean = Reflect.apply(stdoutWrite, this, args)
-  if (typeof args[0] === 'string' && args[0].startsWith('suite-result ')) writeFileSync(resultQueued, '')
-  return result
-} as typeof process.stdout.write
-const consoleLog = console.log
-console.log = function (this: typeof console, ...args: unknown[]) {
-  const result: void = Reflect.apply(consoleLog, this, args)
-  if (typeof args[0] === 'string' && args[0].startsWith('suite-result ')) writeFileSync(resultQueued, '')
-  return result
-} as typeof console.log
-`)
-  const scope = createProcessScope(quirkyHome)
-  try {
-    const child = scope.spawn([
-      '/bin/bash',
-      '-o',
-      'pipefail',
-      '-c',
-      '"$@" | { while [ ! -e "$RESULT_QUEUED" ]; do sleep 0.1; done; sleep 0.1; cat; }',
-      '--',
-      process.execPath,
-      '--preload',
-      preload,
-      join(import.meta.dir, 'suite.ts'),
-      '--worker',
-      '--jobs',
-      '4',
-      '--slots',
-      '4',
-      '--land',
-      '0',
-    ], {
-      cwd: dir,
-      env: { ...process.env, HOME: home, RESULT_QUEUED: resultQueued },
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    let timedOut = false
-    let stdout: Promise<string> | undefined
-    let stderr: Promise<string> | undefined
-    const watchdog = setTimeout(() => {
-      timedOut = true
-      scope.killNow()
-      child.kill('SIGKILL')
-    }, 10_000)
-    try {
-      child.stdin.end()
-      const stdoutRead = new Response(child.stdout).text()
-      const stderrRead = new Response(child.stderr).text()
-      stdout = stdoutRead
-      stderr = stderrRead
-      const [exitCode, output, error] = await Promise.all([child.exited, stdoutRead, stderrRead])
-      expect(timedOut).toBe(false)
-      expect(exitCode, error).toBe(0)
-      expect(error).toBe('')
-      expect(output.slice(0, filler.length)).toBe(filler)
-      const resultLine = output.slice(filler.length).split(/\r?\n/).find((line) => line.startsWith('suite-result '))
-      expect(resultLine, 'suite result missing after queued stdout').toBeDefined()
-      expect(JSON.parse(resultLine!.slice('suite-result '.length))).toEqual({ ok: true, flaky: [] })
-    } finally {
-      clearTimeout(watchdog)
-      if (child.exitCode === null) {
-        scope.killNow()
-        child.kill('SIGKILL')
-      }
-      stdout ??= new Response(child.stdout).text()
-      stderr ??= new Response(child.stderr).text()
-      await Promise.allSettled([child.exited, stdout, stderr])
-    }
-  } finally {
-    await scope.cleanup()
-  }
-}, 30_000)
 
 test('discover lists the tracked and untracked test files under the given paths, as bun would', () => {
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
@@ -350,7 +232,7 @@ test('a completed test run stops detached subprocess trees left by a test', asyn
   })`)
   let pid: number | undefined
   try {
-    const result = await runSuite(dir, ['pkg'])
+    const result = await runFiles(dir, ['pkg/leftover.test.ts'], [], 1)
     pid = Number(await Bun.file(pidFile).text())
     expect(result.ok).toBe(true)
     const deadline = Date.now() + 5000
@@ -369,25 +251,13 @@ test('a completed test run stops detached subprocess trees left by a test', asyn
   }
 }, 30_000)
 
-test('usableSlots leaves all but one slot to a land while one runs', () => {
-  expect(usableSlots(6, false, false)).toBe(6)
-  expect(usableSlots(6, false, true)).toBe(1)
-  expect(usableSlots(6, true, true)).toBe(6)
-  expect(usableSlots(1, false, true)).toBe(1)
-})
-
-test('slowestFirst orders by the last logged time, with unlogged files first', () => {
-  const log = join(dir, 'durations.log')
-  writeFileSync(log, 'a.test.ts 100\nb.test.ts 900\na.test.ts 2000\n')
-  expect(slowestFirst(['a.test.ts', 'b.test.ts', 'new.test.ts'], log)).toEqual(['new.test.ts', 'a.test.ts', 'b.test.ts'])
-  expect(slowestFirst(['b.test.ts', 'a.test.ts'], join(dir, 'missing.log'))).toEqual(['b.test.ts', 'a.test.ts'])
-})
-
 test('the CLI installs frozen workspace runtime dependencies before local tests', async () => {
   const fixture = mkdtempSync(join(tmpdir(), 'suite-cli-'))
   const home = join(fixture, 'home')
+  const marker = join(fixture, 'ran')
   let scope: ProcessScope | undefined
   try {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: fixture })
     mkdirSync(home)
     mkdirSync(join(fixture, 'pkg'))
     mkdirSync(join(fixture, 'packages', 'runtime'), { recursive: true })
@@ -421,10 +291,12 @@ test('the CLI installs frozen workspace runtime dependencies before local tests'
     }))
     writeFileSync(join(fixture, 'pkg/runtime.test.ts'), `
 import { expect, test } from 'bun:test'
+import { writeFileSync } from 'node:fs'
 import { runtimeValue } from 'suite-fixture-runtime'
 
 test('resolves a declared workspace runtime dependency', () => {
   expect(runtimeValue).toBe('installed')
+  writeFileSync(${JSON.stringify(marker)}, '')
 })
 `)
 
@@ -441,6 +313,7 @@ test('resolves a declared workspace runtime dependency', () => {
       new Response(cli.stderr).text()
     ])
     expect(code, `${stdout}${stderr}`).toBe(0)
+    expect(existsSync(marker)).toBe(true)
   } finally {
     try {
       await scope?.cleanup()
@@ -450,119 +323,58 @@ test('resolves a declared workspace runtime dependency', () => {
   }
 }, 30_000)
 
-const ovh = { host: 'quirkyci@ovh', jobs: 4, slots: 4 }
-const gcloud = { host: 'quirkyci@gcloud', jobs: 8, slots: 16 }
-const withOverflow = { ...ovh, overflow: gcloud }
-
-/** Runs chooseHost against fixed host states and records which hosts it checked. */
-async function choose(remote: typeof ovh & { overflow?: typeof gcloud }, states: Record<string, HostState>, land = false) {
-  const checked: string[] = []
-  const choice = await chooseHost(remote, land, async ({ host }) => {
-    checked.push(host)
-    return states[host]
-  })
-  return { choice, checked }
-}
-
-test('a run stays on the first host when it has room, without checking the overflow host', async () => {
-  const { choice, checked } = await choose(withOverflow, { 'quirkyci@ovh': 'free', 'quirkyci@gcloud': 'down' })
-  expect(choice).toEqual({ host: withOverflow })
-  expect(checked).toEqual(['quirkyci@ovh'])
-})
-
-test('a run overflows when the first host is full and the overflow host is up', async () => {
-  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'full', 'quirkyci@gcloud': 'free' })
-  expect(choice).toEqual({ host: gcloud, note: 'quirkyci@ovh is full, so this run uses quirkyci@gcloud' })
-})
-
-test('a run queues on the first host when it is full and the overflow host is down', async () => {
-  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'full', 'quirkyci@gcloud': 'down' })
-  expect(choice).toEqual({ host: withOverflow, note: 'quirkyci@ovh is full and overflow is unavailable because quirkyci@gcloud is down, so this run queues' })
-})
-
-test('a run overflows when the first host is down', async () => {
-  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'down', 'quirkyci@gcloud': 'full' })
-  expect(choice).toEqual({ host: gcloud, note: 'quirkyci@ovh is down, so this run uses quirkyci@gcloud' })
-})
-
-test('a run stops when every host is down, naming them and the way to run locally', async () => {
-  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'down', 'quirkyci@gcloud': 'down' })
-  if (!('error' in choice)) throw new Error('expected an error')
-  expect(choice.error).toContain('quirkyci@ovh')
-  expect(choice.error).toContain('quirkyci@gcloud')
-  expect(choice.error).toContain('QUIRKY_TEST_LOCAL=1')
-})
-
-test('a land stays on a full first host, where it already takes priority', async () => {
-  const { choice, checked } = await choose(withOverflow, { 'quirkyci@ovh': 'full', 'quirkyci@gcloud': 'free' }, true)
-  expect(choice).toEqual({ host: withOverflow })
-  expect(checked).toEqual(['quirkyci@ovh'])
-})
-
-test('a land follows the overflow rules when the first host is down', async () => {
-  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'down', 'quirkyci@gcloud': 'free' }, true)
-  expect(choice).toEqual({ host: gcloud, note: 'quirkyci@ovh is down, so this run uses quirkyci@gcloud' })
-})
-
-test('with one host configured, a full host queues the run and a down host stops it', async () => {
-  expect((await choose(ovh, { 'quirkyci@ovh': 'full' })).choice).toEqual({ host: ovh, note: 'quirkyci@ovh is full, so this run queues' })
-  const { choice } = await choose(ovh, { 'quirkyci@ovh': 'down' })
-  if (!('error' in choice)) throw new Error('expected an error')
-  expect(choice.error).toContain('quirkyci@ovh')
-  expect(choice.error).toContain('QUIRKY_TEST_LOCAL=1')
-})
-
-test('hostLoad counts jobs of running workers against the slots, ignoring the shells that started them', () => {
-  const worker = 'bun scripts/suite.ts --worker --jobs 4 --slots 4 --land 0 --timeout=5000'
-  const shell = `bash -c export PATH="$HOME/.bun/bin:$PATH" && cd runs/1 && bun install --frozen-lockfile >/dev/null && ${worker}`
-  expect(hostLoad(`COMMAND\nsshd: quirkyci\n${shell}\n`, 4)).toBe('free')
-  expect(hostLoad(`COMMAND\n${shell}\n${worker}\nbun test ./a.test.ts\n`, 4)).toBe('full')
-  expect(hostLoad(`${worker.replace('--jobs 4', '--jobs 2')}\n`, 16)).toBe('free')
-  expect(hostLoad(`${worker.replace('--jobs 4', '--jobs 2')}\n${worker.replace('--jobs 4', '--jobs 2')}\n`, 4)).toBe('full')
-})
-
-/** Runs the suite CLI in a throwaway repo whose `ssh` is the given script and whose config names two hosts. */
-async function cliWithFakeSsh(ssh: string, files: Record<string, string>, macosList = '') {
+test('the CLI runs everything on this machine even when remote-tests.json names a host', async () => {
+  const marker = join(dir, 'ran')
+  const sshCalled = join(dir, 'ssh-called')
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
-  mkdirSync(join(dir, 'scripts'), { recursive: true })
   mkdirSync(join(dir, 'bin'))
   mkdirSync(join(dir, '.git', 'build-loop'))
-  writeFileSync(join(dir, '.git', 'build-loop', 'remote-tests.json'), JSON.stringify({ ...ovh, overflow: gcloud }))
-  writeFileSync(join(dir, 'scripts', 'test-on-macos.txt'), macosList)
-  writeFileSync(join(dir, 'bin', 'ssh'), `#!/bin/sh\n${ssh}\n`, { mode: 0o755 })
-  for (const [file, body] of Object.entries(files)) writeFileSync(join(dir, file), body)
+  writeFileSync(join(dir, '.git', 'build-loop', 'remote-tests.json'), JSON.stringify({ host: 'quirkyci@unreachable', jobs: 4 }))
+  writeFileSync(join(dir, 'bin', 'ssh'), `#!/bin/sh\ntouch ${JSON.stringify(sshCalled)}\necho "ssh must not run" >&2\nexit 255\n`, { mode: 0o755 })
+  write('a.test.ts', `test('runs', () => writeFileSync(${JSON.stringify(marker)}, ''))`)
   const child = Bun.spawn(['bun', join(import.meta.dir, 'suite.ts'), 'pkg'], {
     cwd: dir,
-    env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, QUIRKY_TEST_LOCAL: '' },
+    env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}` },
     stdout: 'pipe',
     stderr: 'pipe'
   })
   const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-  return { code, output: out + err }
+  expect(code, out + err).toBe(0)
+  expect(existsSync(marker)).toBe(true)
+  expect(existsSync(sshCalled)).toBe(false)
+}, 30_000)
+
+test('discover throws with git stderr outside a git repository', () => {
+  expect(() => discover(dir, ['pkg'])).toThrow(/not a git repository/i)
+})
+
+const runCli = async (args: string[], env: Record<string, string> = {}) => {
+  const child = Bun.spawn(['bun', join(import.meta.dir, 'suite.ts'), ...args], {
+    cwd: dir,
+    env: { ...process.env, ...env },
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+  return { out, err, code }
 }
 
-const marksRun = (marker: string) => `import { test } from 'bun:test'\nimport { writeFileSync } from 'node:fs'\ntest('runs', () => writeFileSync(${JSON.stringify(marker)}, ''))\n`
-
-test('the CLI starts no test when every host is down, including macOS-only files', async () => {
+test('the CLI fails and runs nothing when its path matches no test file', async () => {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
   const marker = join(dir, 'ran')
-  const { code, output } = await cliWithFakeSsh('exit 255', { 'pkg/a.test.ts': marksRun(marker), 'pkg/mac.test.ts': marksRun(marker) }, 'pkg/mac.test.ts  needs macOS\n')
-  expect(code).toBe(1)
-  expect(output).toContain('quirkyci@ovh and quirkyci@gcloud are unreachable')
+  write('a.test.ts', `test('runs', () => writeFileSync(${JSON.stringify(marker)}, ''))`)
+  const { out, err, code } = await runCli(['no-such-dir'])
+  expect(code, out + err).toBe(1)
+  expect(err).toContain('No tests found')
   expect(existsSync(marker)).toBe(false)
 }, 30_000)
 
-test('the CLI stops with an error when the chosen host fails after being picked', async () => {
+test('the CLI fails and runs nothing when git discovery fails', async () => {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
   const marker = join(dir, 'ran')
-  const ssh = `case "$*" in *'ps -eo args'*) exit 0 ;; *'rm -rf'*) exit 0 ;; *) exit 1 ;; esac`
-  const { code, output } = await cliWithFakeSsh(ssh, { 'pkg/a.test.ts': marksRun(marker) })
-  expect(code).toBe(1)
-  expect(output).toContain("quirkyci@ovh couldn't finish the tests, so this run stops")
+  write('a.test.ts', `test('runs', () => writeFileSync(${JSON.stringify(marker)}, ''))`)
+  const { out, err, code } = await runCli(['pkg'], { GIT_DIR: join(dir, 'nonexistent') })
+  expect(code, out + err).toBe(1)
+  expect(err).toMatch(/not a git repository/i)
   expect(existsSync(marker)).toBe(false)
-}, 30_000)
-
-test('the CLI needs no host for a run of only macOS-only files', async () => {
-  const marker = join(dir, 'ran')
-  const { code } = await cliWithFakeSsh('exit 255', { 'pkg/mac.test.ts': marksRun(marker) }, 'pkg/mac.test.ts  needs macOS\n')
-  expect(code).toBe(0)
-  expect(existsSync(marker)).toBe(true)
 }, 30_000)
