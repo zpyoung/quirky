@@ -25,6 +25,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: var(--ui-space-4) var(--ui-space-8);
+  padding-block-start: var(--ui-space-8);
 }
 
 .tasks-compact__row { position: relative; flex: 0 0 auto; min-width: 0; max-width: 100%; }

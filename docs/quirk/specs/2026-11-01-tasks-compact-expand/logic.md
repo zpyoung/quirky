@@ -44,7 +44,7 @@ Tasks remembers its place in all three. The tab, row, scroll position, page and 
 
 ### The panel is for glancing, the tab is for working
 
-The panel answers "where do things stand?" and offers one action. Anything that needs reading, comparing or confirming happens in the tab.
+The panel answers "where do things stand?" and offers Start or Resume inline, plus a row menu. Anything that needs reading, comparing or confirming happens in the tab.
 
 | Capability | Panel | Expanded tab |
 |---|---|---|

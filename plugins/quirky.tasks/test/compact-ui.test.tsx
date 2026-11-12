@@ -529,7 +529,7 @@ async function switchToIssuesAfterUnavailableList(firstPrsRead: () => unknown): 
       'quirky.tasks/list': (params) => params.mode === 'prs' ? firstPrsRead() : listResult([issue(12)])
     }
   })
-  const issuesTab = [...mounted.element.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
+  const issuesTab = [...mounted.element.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
   await act(async () => issuesTab.click())
   await settle()
   return mounted
@@ -551,24 +551,23 @@ test('a pending Collapse focus expires when the initial list fails', async () =>
 
 test('a pending Collapse focus expires when the list changes before the first read completes', async () => {
   let state = prsState
-  let releasePrs: ((value: unknown) => void) | null = null
-  const prsRead = new Promise<unknown>((resolve) => { releasePrs = resolve })
+  const prsRead = Promise.withResolvers<unknown>()
   place.requestFocus('row')
-  const { element } = await mountCompact({
+  const { element, calls } = await mountCompact({
     handlers: {
       'quirky.tasks/prepare': () => state,
       'quirky.tasks/navigate': () => {
         state = withNavigation({ mode: 'issues', query: 'is:issue is:open', lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 } })
         return state
       },
-      'quirky.tasks/list': (params) => params.mode === 'prs' ? prsRead : listResult([issue(12)])
+      'quirky.tasks/list': (params) => params.mode === 'prs' ? prsRead.promise : listResult([issue(12)])
     }
   })
-  const issuesTab = [...element.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
+  const issuesTab = [...element.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
   await act(async () => issuesTab.click())
   await settle()
-  if (!releasePrs) throw new Error('The initial PR list read did not start')
-  releasePrs(listResult([pr(276)]))
+  expect(calls.some((call) => call.method === 'quirky.tasks/list' && call.params.mode === 'prs')).toBe(true)
+  prsRead.resolve(listResult([pr(276)]))
   await settle()
 
   const issueRow = element.querySelector('.ui-list-row__main')!
@@ -577,11 +576,10 @@ test('a pending Collapse focus expires when the list changes before the first re
 })
 
 test('a pending Collapse focus does not survive unmount before rows load', async () => {
-  let releaseList: ((value: unknown) => void) | null = null
-  const pendingList = new Promise<unknown>((resolve) => { releaseList = resolve })
+  const pendingList = Promise.withResolvers<unknown>()
   place.requestFocus('row')
   try {
-    await mountCompact({ handlers: { 'quirky.tasks/list': () => pendingList } })
+    await mountCompact({ handlers: { 'quirky.tasks/list': () => pendingList.promise } })
     await act(async () => cleanup?.())
     cleanup = null
   } finally {
@@ -589,10 +587,8 @@ test('a pending Collapse focus does not survive unmount before rows load', async
       await act(async () => cleanup?.())
       cleanup = null
     }
-    if (releaseList) {
-      releaseList(listResult([pr(276)]))
-      await settle()
-    }
+    pendingList.resolve(listResult([pr(276)]))
+    await settle()
   }
 
   const { element } = await mountCompact()

@@ -1,6 +1,6 @@
 # Tasks compact and expanded: tech spec
 
-**Status:** Draft  
+**Status:** Approved  
 **Logic spec:** [logic.md](logic.md). Behavior and rationale live there; this file says where to work and what must hold.
 
 ## Architecture
@@ -12,7 +12,8 @@ Two mounts, one state. The tool slot mounts the compact panel and the center tab
 | Layer | Owns | Files |
 |---|---|---|
 | Daemon layout | "A tool has an expanded view": the panel and tab are never both open; `ui.tool.open` and `ui.view.open` enforce it | `packages/daemon/src/plugins/layout.ts`, `packages/daemon/src/plugins/tool-layout.ts`, `packages/protocol/src/tool-slots.ts`, `packages/protocol/src/kernel-schemas.ts` |
-| Tasks daemon | Navigation state, the `open` and `close` entry rules, counts | `plugins/quirky.tasks/src/env.ts`, `plugins/quirky.tasks/src/contracts.ts`, `plugins/quirky.tasks/src/list/methods.ts`, `plugins/quirky.tasks/quirky-plugin.json` |
+| Tasks daemon | Navigation state, the `open` and `close` entry rules, counts and source selection | `plugins/quirky.tasks/src/env.ts`, `plugins/quirky.tasks/src/contracts.ts`, `plugins/quirky.tasks/src/list/methods.ts`, `plugins/quirky.tasks/src/list/source.ts`, `plugins/quirky.tasks/quirky-plugin.json` |
+| Hosting auth inventory | Optional cached diagnosis for count reads; explicit diagnosis stays fresh | `plugins/quirky.hosting/src/runtime.ts`, `plugins/quirky.hosting/quirky-plugin.json` |
 | Row model | Pure parsing and row status, shared by both forms | `plugins/quirky.tasks/src/list/model.ts`, `plugins/quirky.tasks/src/list/row-status.ts` (new) |
 | Compact panel | The slot mount | `plugins/quirky.tasks/src/list/CompactTasks.tsx`, `plugins/quirky.tasks/src/list/useCompactList.ts`, `plugins/quirky.tasks/src/list/useAgentActivity.ts` (new) |
 | Expanded view | The center mount: list beside detail | `plugins/quirky.tasks/src/list/TasksList.tsx`, `plugins/quirky.tasks/src/list/PrDetail.tsx` (new), `plugins/quirky.tasks/src/issue/IssueSurface.tsx`, `plugins/quirky.tasks/src/ui.tsx` |
@@ -59,12 +60,12 @@ Back-link: [Tasks is in one of three places](logic.md#tasks-is-in-one-of-three-p
 type UiToolEntry = { ...existing, expandedView?: string }
 ```
 
-For a tool with `expandedView = V`, in the layout of the focused window, or of the only window, or the shared layout when none is connected:
+For a tool with `expandedView = V`, target the focused main window, or the sole main window. With several unfocused main windows, activate an existing expanded tab instead of opening a duplicate panel; with no connected main window, use the shared layout. Auxiliary focus does not override a main-window target.
 
 | Call | Layout before | Layout after |
 |---|---|---|
 | `ui.tool.open(tool)` | `V` is the active view | `V` closed as `closeView` would; tool open in its slot |
-| `ui.tool.open(tool)` | `V` in `viewTabs`, another view active | `V` active with its stored input; slots unchanged |
+| `ui.tool.open(tool)` | `V` in `viewTabs`, another view active | `V` active with its stored input; this tool's slot is cleared |
 | `ui.tool.open(tool)` | `V` not in `viewTabs` | Tool open in its slot, as today |
 | `ui.view.open(V)` or `ui.window.view.open(V)` | Tool open in a slot | `V` active; that slot is null, so the other slot on that side fills the space |
 | `ui.view.close` while `V` is active | Any | `V` closed; slots unchanged |
@@ -79,9 +80,9 @@ For a tool with `expandedView = V`, in the layout of the focused window, or of t
 Windows:
 
 - Tool layout is shared and views are per window, so the invariant holds for the focused main window, not across all windows.
-- `openTool` reads `focusedConn()`, or the only window, with `windowLayout(connId)`, and closes or activates through `closeWindowView(connId)` and `openWindowView(connId, ...)`. It never calls `closeView`, which throws a conflict with more than one window.
+- `openTool` uses the focused main window, the sole main window, or an existing expanded tab in an unfocused main window, and closes or activates through `closeWindowView(connId)` and `openWindowView(connId, ...)`. It never calls `closeView`, which throws a conflict with more than one window.
 - `openWindowView(V)` clears the slot only for a main window. An auxiliary window has no `tools`, so opening `V` there leaves the main window's slot alone.
-- Stored-layout normalization runs once at load, and only when at most one window is connected. It must not run inside `layout()`, because with two windows the shared `viewTabs` can still hold `V` after a window closed its own copy, which would keep clearing a panel the user just opened.
+- Stored-layout normalization settles only when at most one window is connected. The last-window merge also clears a slot that conflicts with the survivor's tabs before persisting. Normalization must not run inside `layout()`, because with two windows the shared `viewTabs` can still hold `V` after a window closed its own copy, which would keep clearing a panel the user just opened.
 
 ### Tasks daemon contract
 
@@ -100,7 +101,7 @@ TaskNavigation.lastList: { mode: 'issues' | 'prs', query: string, page: number }
   - Expands, meaning `ui.view.open(TASKS_VIEW, { navigation, revision })`, when `params` has a non-null `detail` or `project`, `newIssue: true`, or `mode: 'projects'`.
   - Otherwise, if `TASKS_VIEW` is in `viewTabs`, makes it active. If not, runs `ui.tool.open(TASKS_TOOL)`.
   - Returning from `TASKS_SETTINGS_VIEW` closes that view first, then applies the rule above.
-- `close()`: if the tool is open in a slot, closes that slot. If `TASKS_VIEW` is active, closes it. If `TASKS_VIEW` is a background tab, makes it active and then closes it. Otherwise does nothing. It returns `{ closed: true }` in every case.
+- `close()`: if the tool is open in a slot, closes that slot. If `TASKS_VIEW` is active, closes it. If `TASKS_VIEW` is a background tab, removes it without changing the active tab. Otherwise does nothing. It returns `{ closed: true }` in every case.
 - `settings()` keeps its worktree handling and result.
 - `counts(params)`:
 
@@ -111,6 +112,8 @@ quirky.tasks/counts({ mode?: 'issues' | 'prs', query?: string, repoIds?: string[
 ```
 
   It reads `quirky.hosting/workItemPage` with `limit: 1` and sums `totalCount` for each kind, across the same qualified repositories and worktrees `list` uses (`list/methods.ts:250-288`). `countWorkItems` is not usable here because it returns one combined count across issues and PRs. The given `mode` uses the given `query`; the other mode uses its default open query. A mode is `null` when any repository's read throws or its `totalCount` isn't a non-negative safe integer. It is read-only and adds a matching `cli-command` entry, as every other method has.
+
+  Count source reads call `quirky.hosting/diagnoseAuth` with `force: false`, reusing Hosting's account cache across repositories and both mounts. List reads and explicit diagnosis keep their fresh-read behavior. Repositories without a usable origin are not qualified count sources; their absence does not discard totals from valid repositories.
 
 The UI's own transitions don't go through `open`, so they stay safe with several windows:
 
@@ -154,7 +157,7 @@ Back-link: [Compact rows use the worktree row and its dots](logic.md#compact-row
 useAgentActivity(context) -> Map<worktreeId, { bucket: 'attention' | 'working', agent: string, label: string }>
 ```
 
-It reads `quirky.agent-status/dashboard`, re-reads on the `quirky.agent-status/activityChanged` event, and keeps only `attention` and `working` cards. For a worktree with more than one card, attention wins. Any failure, including the plugin being disabled, gives an empty map and no error UI. `quirky.tasks` adds no manifest dependency, because the panel must work without agent status.
+It reads `quirky.agent-status/dashboard` and re-reads on both `quirky.agent-status/changed` (status rows) and `quirky.agent-status/activityChanged` (acknowledgment and clear markers), keeping only `attention` and `working` cards. For a worktree with more than one card, attention wins. Any failure, including the plugin being disabled, gives an empty map and no error UI. `quirky.tasks` adds no manifest dependency, because the panel must work without agent status.
 
 ### Compact panel contract
 
@@ -181,6 +184,7 @@ Back-link: [The expanded tab](logic.md#the-expanded-tab-is-a-list-beside-a-detai
 - `TasksApp` chooses: `mode === 'projects'` shows `ProjectsSurface`, or `IssueSurface` full width when `detail` is set, as today. Otherwise it shows `TasksList`.
 - `TasksList` keeps its state machine, mutations, freshness generations and toolbar. Its body becomes a list column beside a detail column. A list row shows dot, title, `#number · repo · author`, checks and age, and it doesn't show the previous cell buttons.
 - Detail column: no `detail` shows `EmptyState` with `Select a task`. A `detail` of kind `issue` shows `IssueSurface`. A `detail` of kind `pullRequest` shows `PrDetail`.
+- `IssueSurface` reports each confirmed edit through its optional `onEdited(item: TaskItem)` callback before refreshing. The list retains that confirmed item while search indexing lags, keeps a just-closed issue visible under `is:open`, and shows `Pending refresh` until quiet adoption confirms the indexed row.
 - `PrDetail` is presentational: `TasksList` passes the item, metadata, checks and the existing handlers. It moves these out of the table unchanged: the reviewers dialog, the merge menu with all its eligibility text, `toggleAutoMerge`, `mergeItem`, `saveReviewers` and Start, Resume and Start new. Review calls `openReview(rowTarget(item), 'conversation')`, and the checks line calls `openReview(rowTarget(item), 'checks')`.
 - `PrDetail` when the target isn't on the current page: it loads `quirky.tasks/mergeMetadata` for the target, uses `review.title`, `state`, `url`, reviewers and changes from it, and omits the description.
 - Timeline: built from `review.reviews` with one line per review, newest first, and omitted when there are none or it's null.
@@ -205,7 +209,7 @@ A module-level store in `list/place.ts`, living as long as the window's plugin U
 - `place.listSnapshot(key)` and `place.setListSnapshot(key, { list, checks, merge })` hold the last list and row metadata per view, bounded to 20 views, with the key from `listViewKey` in `list/model.ts`. Both forms seed from it on mount and revalidate in the background, showing skeletons only when there's no snapshot, so moving between forms doesn't drop your rows.
 - Seeded merge metadata is display-only. `mergeItem` and `toggleAutoMerge` refuse to act until a fresh read lands, so a merge can't run from a snapshot.
 - Expand and row click request focus on `row`, which lands on the selected row or the first row.
-- Collapse requests `row`. The compact mount scrolls the selected row into view and focuses it once rows render.
+- Collapse requests `row`. The compact mount scrolls a selected row into view and focuses it once rows render. With no selected row it focuses the first row without scrolling, preserving the saved scroll position. A focus request belongs only to that transition: an empty or failed initial read, a different list, or unmount cancels it instead of letting a later refresh steal focus.
 
 ## Data models and schemas
 
@@ -236,7 +240,7 @@ No stored schema changes. `lastList` isn't durable, because `update` only persis
 - Anything that would change a Decisions Locked entry in `logic.md`.
 
 **Never**
-- Run the full test suite locally or on OVH (`AGENTS.md`). Task acceptance uses the literal commands in the plan.
+- Run the full test suite locally or on OVH (`AGENTS.md`). Worker acceptance runs one `bun test <file>` per process; the full suite runs on GitHub.
 - Add a Tasks-specific branch to `ToolShell`, `MainArea` or `host.ts`.
 - Have the panel and tab fetch different versions of the same query. Both key their reads on the effective `{ mode, query, page, repoIds }`.
 
@@ -256,18 +260,25 @@ No stored schema changes. `lastList` isn't durable, because `update` only persis
 | `plugins/quirky.tasks/test/state.test.ts` | Rewrite the tests at `:12`, `:52`, `:75` to the new `open` and `close` rules. Plain `open` keeps `detail`; `navigate` never changes layout when no tab is active; `lastList`; `prepare` applies defaults once and leaves layout alone; a `detail` open expands; settings return; `counts` per kind and null on failure |
 | `plugins/quirky.tasks/test/row-status.test.ts` (new) | Every row of the status table, priority order, null viewer, missing metadata, singular and plural |
 | `plugins/quirky.tasks/test/compact-ui.test.tsx` (new) | Tabs and counts, unknown count, row click navigates then opens the view, Expand, `prepare` on mount, row actions present in the DOM, menu items by kind, filter line and clear, More tasks, loading, empty, problem, Projects falls back to `lastList`, focus after Collapse |
+| `plugins/quirky.tasks/test/compact-menu.browser.test.tsx` | Menus in 160, 280 and 600px slots remain readable and hit-testable, without horizontal overflow; Escape returns focus |
 | `plugins/quirky.tasks/test/expanded-ui.test.tsx` (new) | Row selection, Select a task, issue and PR detail, Review opens Review, merge menu contents match eligibility, narrow data attribute, toolbar menu, Escape order, Collapse calls `ui.tool.open` |
 | `plugins/quirky.tasks/test/frame-ui.test.tsx` | Keep passing against the center mount; add Collapse |
 | `plugins/quirky.tasks/test/remaining-list-issue.test.ts`, `workspace-composer.test.tsx`, `review-navigation.test.ts` | Update only where they pin the removed table or the old `open` behavior |
 
-The bar is the four criteria in [How we know it's done](logic.md#how-we-know-its-done). The "no sideways scroll" and screenshot criteria are checked with `bun run ui:review --only quirky.tasks` and a real-app capture, since happy-dom can't measure layout.
+The bar is the four criteria in [How we know it's done](logic.md#how-we-know-its-done). A populated local `gh` stand-in drives both Tasks forms in the real renderer, with Git transport blocked locally. Screenshot review selects `sidebar-section:quirky.tasks/tasks` and `view:quirky.tasks/tasks` in dark and light; happy-dom cannot measure layout.
 
 `COMMAND:`
 ```bash
-bun scripts/suite.ts plugins/quirky.tasks packages/daemon/test/plugins
+bun test plugins/quirky.tasks/test/compact-ui.test.tsx
+bun test plugins/quirky.tasks/test/compact-menu.browser.test.tsx
+bun test plugins/quirky.tasks/test/expanded-ui.test.tsx
+bun test packages/daemon/test/plugins/tool-slots.test.ts
 bun run ui:lint
-bunx tsc --noEmit -p tsconfig.json
+bun run typecheck
+bun run ui:review -- --author-family openai --only sidebar-section:quirky.tasks/tasks --only view:quirky.tasks/tasks --output /tmp/quirky-tasks-review
 ```
+
+The review output directory must be fresh; use another absolute path for a later run.
 
 ## Non-goals
 
