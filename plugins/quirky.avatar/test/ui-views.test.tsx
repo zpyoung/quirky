@@ -872,6 +872,214 @@ describe('AvatarView', () => {
   })
 })
 
+describe('AvatarView log paging', () => {
+  function makeJournal(newest: number) {
+    let latest = newest
+    let olderPage: Reply | null = null
+    const page = (params: Record<string, unknown> = {}): JournalEntry[] => {
+      const limit = typeof params.limit === 'number' ? params.limit : 100
+      const before = typeof params.before === 'number' ? params.before : latest + 1
+      const last = Math.min(latest, before - 1)
+      const first = Math.max(1, last - limit + 1)
+      return Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => {
+        const seq = last - index
+        return entry({ seq, kind: 'event', data: { summary: `entry ${seq}.` } })
+      })
+    }
+    const fake = makeContext({
+      status: status(two),
+      log: (params) => typeof params.before === 'number' && olderPage !== null ? olderPage(params) : page(params)
+    })
+    return {
+      fake,
+      page,
+      setNewest(seq: number) {
+        latest = seq
+      },
+      setOlderPage(reply: Reply | null) {
+        olderPage = reply
+      }
+    }
+  }
+
+  function rows(root: ParentNode): number[] {
+    return [...root.querySelectorAll('[role="tabpanel"][aria-label="Log"] ul > li')].map((row) => {
+      const match = row.textContent?.match(/entry (\d+)\./)
+      if (!match) throw new Error(`Could not read journal seq from row: ${row.textContent}`)
+      return Number(match[1])
+    })
+  }
+
+  function sequence(newest: number, oldest = 1): number[] {
+    return Array.from({ length: Math.max(0, newest - oldest + 1) }, (_, index) => newest - index)
+  }
+
+  function loadOlderButton(root: ParentNode): HTMLButtonElement | undefined {
+    return [...root.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'Load older entries') as HTMLButtonElement | undefined
+  }
+
+  function logCalls(fake: Fake) {
+    return fake.calls.filter((call) => call.method === `${PREFIX}log`)
+  }
+
+  test('loads the page before the oldest entry shown, and stops offering once a page comes back short', async () => {
+    const journal = makeJournal(240)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+
+    expect(rows(root)).toEqual(sequence(240, 141))
+    expect(logCalls(journal.fake).map((call) => call.params)).toEqual([{ limit: 100 }])
+
+    await click(root, 'Load older entries')
+    expect(rows(root)).toEqual(sequence(240, 41))
+    expect(logCalls(journal.fake).at(-1)?.params).toEqual({ limit: 100, before: 141 })
+    expect(loadOlderButton(root)).toBeDefined()
+
+    await click(root, 'Load older entries')
+    expect(rows(root)).toEqual(sequence(240))
+    expect(logCalls(journal.fake).at(-1)?.params).toEqual({ limit: 100, before: 41 })
+    expect(loadOlderButton(root)).toBeUndefined()
+
+    journal.setNewest(243)
+    await journal.fake.deliverChanged()
+    expect(rows(root)).toEqual(sequence(243))
+    expect(loadOlderButton(root)).toBeUndefined()
+  })
+
+  test('offers nothing older when the first page is short', async () => {
+    const journal = makeJournal(99)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+
+    expect(rows(root)).toEqual(sequence(99))
+    expect(loadOlderButton(root)).toBeUndefined()
+  })
+
+  test('with exactly one full page, the offer loads nothing and goes away', async () => {
+    const journal = makeJournal(100)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+
+    expect(rows(root)).toEqual(sequence(100))
+    await click(root, 'Load older entries')
+    expect(rows(root)).toEqual(sequence(100))
+    expect(logCalls(journal.fake).at(-1)?.params).toEqual({ limit: 100, before: 1 })
+    expect(loadOlderButton(root)).toBeUndefined()
+  })
+
+  test('puts new entries on top on a change event and keeps the older ones it loaded', async () => {
+    const journal = makeJournal(240)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+    await click(root, 'Load older entries')
+    expect(rows(root)).toEqual(sequence(240, 41))
+
+    journal.setNewest(245)
+    await journal.fake.deliverChanged()
+    expect(rows(root)).toEqual(sequence(245, 41))
+    expect(logCalls(journal.fake).at(-1)?.params).toEqual({ limit: 100 })
+    expect(loadOlderButton(root)).toBeDefined()
+  })
+
+  test('shows only the newest page when more than a page arrived since the last reload', async () => {
+    const journal = makeJournal(240)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+    await click(root, 'Load older entries')
+
+    journal.setNewest(500)
+    await journal.fake.deliverChanged()
+    expect(rows(root)).toEqual(sequence(500, 401))
+
+    await click(root, 'Load older entries')
+    expect(logCalls(journal.fake).at(-1)?.params).toEqual({ limit: 100, before: 401 })
+    expect(rows(root)).toEqual(sequence(500, 301))
+  })
+
+  test('joins a full page of new entries that still reaches the newest one shown', async () => {
+    const journal = makeJournal(240)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+
+    journal.setNewest(339)
+    await journal.fake.deliverChanged()
+    expect(rows(root)).toEqual(sequence(339, 141))
+  })
+
+  test('keeps the list, shows the error and offers again when an older page fails', async () => {
+    const journal = makeJournal(240)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+    journal.setOlderPage(() => {
+      throw new Error('daemon went away')
+    })
+
+    await click(root, 'Load older entries')
+    expect(root.querySelector('[role="alert"]')?.textContent).toBe('daemon went away')
+    expect(rows(root)).toEqual(sequence(240, 141))
+    expect(button(root, 'Load older entries').disabled).toBe(false)
+
+    journal.setOlderPage(null)
+    await click(root, 'Load older entries')
+    expect(rows(root)).toEqual(sequence(240, 41))
+    expect(root.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  test('asks once while an older page loads, and says it is loading', async () => {
+    const journal = makeJournal(240)
+    const pending = Promise.withResolvers<unknown>()
+    journal.setOlderPage(() => pending.promise)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+
+    await click(root, 'Load older entries')
+    expect(button(root, 'Loading…').disabled).toBe(true)
+    expect(logCalls(journal.fake).filter((call) => typeof call.params.before === 'number').map((call) => call.params)).toEqual([{ limit: 100, before: 141 }])
+
+    await act(async () => pending.resolve(journal.page({ limit: 100, before: 141 })))
+    await settle()
+    expect(rows(root)).toEqual(sequence(240, 41))
+    expect(button(root, 'Load older entries').disabled).toBe(false)
+  })
+
+  test('drops an older page that answers after the list was replaced', async () => {
+    const journal = makeJournal(240)
+    const pending = Promise.withResolvers<unknown>()
+    journal.setOlderPage((params) => params.before === 141 ? pending.promise : journal.page(params))
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+
+    await click(root, 'Load older entries')
+    journal.setNewest(500)
+    await journal.fake.deliverChanged()
+    expect(rows(root)).toEqual(sequence(500, 401))
+
+    await act(async () => pending.resolve(journal.page({ limit: 100, before: 141 })))
+    await settle()
+    expect(rows(root)).toEqual(sequence(500, 401))
+    expect(loadOlderButton(root)).toBeDefined()
+  })
+
+  test('keeps the list and shows the error when a reload fails', async () => {
+    const journal = makeJournal(240)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+    journal.fake.replies.log = () => {
+      throw new Error('daemon went away')
+    }
+
+    await journal.fake.deliverChanged()
+    expect(rows(root)).toEqual(sequence(240, 141))
+    expect(root.querySelector('[role="alert"]')?.textContent).toBe('daemon went away')
+  })
+
+  test('a full final older page offers one empty probe before hiding the button', async () => {
+    const journal = makeJournal(200)
+    const root = await mount(AvatarView, journal.fake, { tab: 'log' })
+
+    expect(rows(root)).toEqual(sequence(200, 101))
+    await click(root, 'Load older entries')
+    expect(logCalls(journal.fake).at(-1)?.params).toEqual({ limit: 100, before: 101 })
+    expect(rows(root)).toEqual(sequence(200))
+    expect(loadOlderButton(root)?.disabled).toBe(false)
+
+    await click(root, 'Load older entries')
+    expect(logCalls(journal.fake).at(-1)?.params).toEqual({ limit: 100, before: 1 })
+    expect(rows(root)).toEqual(sequence(200))
+    expect(loadOlderButton(root)).toBeUndefined()
+  })
+})
+
 describe('DecisionTrace', () => {
   test('calls the agent by its display name', async () => {
     const element = document.createElement('div')
