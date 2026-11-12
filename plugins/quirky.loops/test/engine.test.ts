@@ -146,7 +146,8 @@ class Runtime {
           const handler = runtime.processHandler
           if (handler === null) throw new Error('Loop engine tests must not run subprocesses')
           return await handler(argv, options)
-        }
+        },
+        spawn: () => { throw new Error('Loop engine tests must not spawn subprocesses') },
       },
       pty: {} as PluginContext['pty'], notify: () => undefined, launch: {} as PluginContext['launch']
     } as PluginContext

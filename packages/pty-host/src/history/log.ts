@@ -31,6 +31,10 @@ const PREVIOUS_NAME = 'output.1.log'
 
 const INDEX_MIN_READ_BYTES = 32
 const INDEX_MAX_READ_BYTES = 4096
+/** Output records smaller than this join their neighbours in one index entry. */
+export const INDEX_SOLO_BYTES = 4096
+/** A joined entry is closed once its file bytes reach this. */
+export const INDEX_GROUP_BYTES = 64 * 1024
 
 export type HistoryLogOptions = {
   cols: number
@@ -171,6 +175,8 @@ export type IndexedRecord = {
   at: number
   cols?: number
   rows?: number
+  /** Set on an entry that joins several consecutive output records. */
+  joined?: true
 }
 
 export type IndexedSegment = {
@@ -179,6 +185,77 @@ export type IndexedSegment = {
   endOffset: number
   records: IndexedRecord[]
   fd: number
+}
+type WriterRecord = IndexedRecord & { fileStart?: number; recordCount?: number }
+type SegmentIndex = Omit<IndexedSegment, 'fd' | 'records'> & { records: WriterRecord[] }
+type WriterGroup = { record: WriterRecord; fileBytes: number }
+type JoinedRange = { fileStart: number; recordCount: number }
+
+function groupRecords(records: IndexedRecord[]): WriterRecord[] {
+  const grouped: WriterRecord[] = []
+  let open: WriterGroup | null = null
+  for (const record of records) {
+    if (record.kind !== 'output' || record.length >= INDEX_SOLO_BYTES) {
+      grouped.push({ ...record })
+      open = null
+      continue
+    }
+    const fileBytes = record.length + RECORD_HEAD_BYTES
+    if (open === null) {
+      const entry: WriterRecord = {
+        ...record,
+        fileStart: record.at - RECORD_HEAD_BYTES,
+        recordCount: 1
+      }
+      grouped.push(entry)
+      open = { record: entry, fileBytes }
+    } else {
+      open.record.length += record.length
+      open.record.recordCount = open.record.recordCount! + 1
+      open.record.joined = true
+      open.fileBytes += fileBytes
+    }
+    if (open.fileBytes >= INDEX_GROUP_BYTES) open = null
+  }
+  return grouped
+}
+
+function openWriterGroup(records: WriterRecord[]): WriterGroup | null {
+  const record = records.at(-1)
+  if (record?.kind !== 'output' || record.fileStart === undefined || record.recordCount === undefined) return null
+  const fileBytes = record.length + record.recordCount * RECORD_HEAD_BYTES
+  return fileBytes < INDEX_GROUP_BYTES ? { record, fileBytes } : null
+}
+
+function indexFromScan(path: string, scan: Extract<Scan, { ok: true }>): SegmentIndex {
+  let position = HEADER_BYTES
+  const records: IndexedRecord[] = scan.records.map((record) => {
+    const length = record.bytes?.length ?? (record.kind === 'resize' ? 4 : 0)
+    const indexed: IndexedRecord = {
+      kind: record.kind,
+      offset: record.offset,
+      length,
+      at: position + RECORD_HEAD_BYTES,
+      ...(record.kind === 'resize' ? { cols: record.cols, rows: record.rows } : {})
+    }
+    position += RECORD_HEAD_BYTES + length
+    return indexed
+  })
+  return {
+    path,
+    startOffset: scan.startOffset,
+    endOffset: scan.endOffset,
+    records: groupRecords(records)
+  }
+}
+
+function indexedEnd(records: WriterRecord[]): number {
+  const last = records.at(-1)
+  if (!last) return HEADER_BYTES
+  if (last.kind === 'output' && last.fileStart !== undefined && last.recordCount !== undefined) {
+    return last.fileStart + last.length + last.recordCount * RECORD_HEAD_BYTES
+  }
+  return last.at + last.length
 }
 
 function readFully(fd: number, buffer: Uint8Array, position: number): number {
@@ -256,8 +333,18 @@ function indexSegment(fd: number, path: string): IndexedSegment | null {
 export class LogReader {
   private constructor(
     readonly segments: IndexedSegment[],
-    readonly unreadable: string[]
+    readonly unreadable: string[],
+    private readonly joinedRanges = new WeakMap<IndexedRecord, JoinedRange>()
   ) {}
+
+  /** Builds a reader from the writer-maintained index. */
+  static fromWriterIndex(
+    segments: IndexedSegment[],
+    unreadable: string[],
+    joinedRanges: WeakMap<IndexedRecord, JoinedRange>
+  ): LogReader {
+    return new LogReader(segments, unreadable, joinedRanges)
+  }
 
   /** Same segments and unreadable rules as `readSegments`. */
   static open(dir: string): LogReader {
@@ -283,11 +370,47 @@ export class LogReader {
     return new LogReader(segments, unreadable)
   }
 
-  /** Bytes `[from, to)` of an output record's payload (positions relative to the record). */
+  /** Bytes `[from, to)` of an output entry's payload. */
   readOutput(segment: IndexedSegment, record: IndexedRecord, from: number, to: number): Uint8Array {
-    const bytes = Buffer.alloc(Math.max(0, Math.min(to, record.length) - from))
-    const filled = readFully(segment.fd, bytes, record.at + from)
-    return filled === bytes.length ? bytes : bytes.subarray(0, filled)
+    const start = Math.max(0, Math.min(from, record.length))
+    const end = Math.max(0, Math.min(to, record.length))
+    if (end <= start) return Buffer.alloc(0)
+
+    if (!record.joined) {
+      const bytes = Buffer.alloc(end - start)
+      const filled = readFully(segment.fd, bytes, record.at + start)
+      return filled === bytes.length ? bytes : bytes.subarray(0, filled)
+    }
+
+    const range = this.joinedRanges.get(record)!
+    const fileBytes = Buffer.alloc(record.length + range.recordCount * RECORD_HEAD_BYTES)
+    const filled = readFully(segment.fd, fileBytes, range.fileStart)
+    const output = Buffer.alloc(end - start)
+    let filePosition = 0
+    let outputPosition = 0
+    let copied = 0
+    while (filePosition + RECORD_HEAD_BYTES <= filled) {
+      const length = fileBytes.readUInt32LE(filePosition + 1)
+      const payloadAt = filePosition + RECORD_HEAD_BYTES
+      const payloadEnd = payloadAt + length
+      if (payloadEnd > filled) break
+      const outputEnd = outputPosition + length
+      const copyStart = Math.max(start, outputPosition)
+      const copyEnd = Math.min(end, outputEnd)
+      if (copyEnd > copyStart) {
+        fileBytes.copy(
+          output,
+          copyStart - start,
+          payloadAt + copyStart - outputPosition,
+          payloadAt + copyEnd - outputPosition
+        )
+        copied += copyEnd - copyStart
+      }
+      outputPosition = outputEnd
+      filePosition = payloadEnd
+      if (outputPosition >= end) break
+    }
+    return copied === output.length ? output : output.subarray(0, copied)
   }
 
   close(): void {
@@ -339,6 +462,10 @@ export class HistoryLog {
   private failed = false
   private position = 0
   private segmentBytes = 0
+  private currentIndex: SegmentIndex | null = null
+  private previousIndex: SegmentIndex | null | undefined = undefined
+  private previousUnreadable = false
+  private currentGroup: WriterGroup | null = null
   private cols: number
   private rows: number
   private readonly path: string
@@ -365,6 +492,8 @@ export class HistoryLog {
       log.prepareDir()
       rmSync(log.path, { force: true })
       rmSync(log.rotatedPath, { force: true })
+      log.previousIndex = null
+      log.previousUnreadable = false
       log.startSegment(0)
     })
     return log
@@ -386,17 +515,15 @@ export class HistoryLog {
         ftruncateSync(fd, scan.validBytes)
         log.position = scan.endOffset
         log.segmentBytes = scan.validBytes
+        log.currentIndex = indexFromScan(log.path, scan)
+        log.currentGroup = openWriterGroup(log.currentIndex.records)
         for (const record of scan.records) {
           if (record.kind === 'resize') {
             log.cols = record.cols!
             log.rows = record.rows!
           }
         }
-        if (scan.records.length === 0) {
-          const resize = encodeResize(log.cols, log.rows)
-          writeAll(fd, resize)
-          log.segmentBytes += resize.length
-        }
+        if (scan.records.length === 0 && !log.write(encodeResize(log.cols, log.rows))) return
         log.rotateIfFull()
         return
       }
@@ -415,10 +542,54 @@ export class HistoryLog {
   get disabled(): boolean {
     return this.failed
   }
+  /** A snapshot of the segments written by this log. */
+  reader(): LogReader {
+    if (this.failed) return LogReader.open(this.dir)
+    this.indexPreviousSegment()
+    const indexes: SegmentIndex[] = []
+    const unreadable: string[] = []
+    if (this.previousIndex) indexes.push(this.previousIndex)
+    else if (this.previousUnreadable && existsSync(this.rotatedPath)) unreadable.push(this.rotatedPath)
+    if (this.currentIndex === null) return LogReader.open(this.dir)
+    indexes.push(this.currentIndex)
+
+    const segments: IndexedSegment[] = []
+    const joinedRanges = new WeakMap<IndexedRecord, JoinedRange>()
+    for (const index of indexes) {
+      let fd: number | null = null
+      try {
+        fd = openSync(index.path, 'r')
+        if (fstatSync(fd).size < indexedEnd(index.records)) {
+          closeQuietly(fd)
+          for (const segment of segments) closeQuietly(segment.fd)
+          return LogReader.open(this.dir)
+        }
+        const records = index.records.map((record) => {
+          const { fileStart, recordCount, ...source } = record
+          const copy: IndexedRecord = { ...source }
+          if (record.joined) joinedRanges.set(copy, { fileStart: fileStart!, recordCount: recordCount! })
+          return copy
+        })
+        segments.push({
+          path: index.path,
+          startOffset: index.startOffset,
+          endOffset: index.endOffset,
+          records,
+          fd
+        })
+      } catch {
+        if (fd !== null) closeQuietly(fd)
+        for (const segment of segments) closeQuietly(segment.fd)
+        return LogReader.open(this.dir)
+      }
+    }
+    return LogReader.fromWriterIndex(segments, unreadable, joinedRanges)
+  }
 
   appendOutput(bytes: Uint8Array): void {
     if (!this.write(encodeRecord(KIND_OUTPUT, bytes))) return
     this.position += bytes.length
+    if (this.currentIndex) this.currentIndex.endOffset = this.position
     this.rotateIfFull()
   }
 
@@ -460,6 +631,37 @@ export class HistoryLog {
     chmodSync(this.dir, 0o700)
   }
 
+  private indexPreviousSegment(): void {
+    if (this.previousIndex !== undefined) return
+    if (!existsSync(this.rotatedPath)) {
+      this.previousIndex = null
+      this.previousUnreadable = false
+      return
+    }
+    let fd: number | null = null
+    try {
+      fd = openSync(this.rotatedPath, 'r')
+      const indexed = indexSegment(fd, this.rotatedPath)
+      if (indexed === null) {
+        this.previousIndex = null
+        this.previousUnreadable = true
+        return
+      }
+      this.previousIndex = {
+        path: indexed.path,
+        startOffset: indexed.startOffset,
+        endOffset: indexed.endOffset,
+        records: groupRecords(indexed.records)
+      }
+      this.previousUnreadable = false
+    } catch {
+      this.previousIndex = null
+      this.previousUnreadable = true
+    } finally {
+      if (fd !== null) closeQuietly(fd)
+    }
+  }
+
   private startSegment(startOffset: number): void {
     this.close()
     this.fd = openPrivate(this.path, 'w')
@@ -467,6 +669,20 @@ export class HistoryLog {
     const opening = Buffer.concat([encodeHeader(startOffset), encodeResize(this.cols, this.rows)])
     writeAll(this.fd, opening)
     this.segmentBytes = opening.length
+    this.currentIndex = {
+      path: this.path,
+      startOffset,
+      endOffset: startOffset,
+      records: [{
+        kind: 'resize',
+        offset: startOffset,
+        length: 4,
+        at: HEADER_BYTES + RECORD_HEAD_BYTES,
+        cols: this.cols,
+        rows: this.rows
+      }]
+    }
+    this.currentGroup = null
   }
 
   private rotateIfFull(): void {
@@ -474,17 +690,83 @@ export class HistoryLog {
   }
 
   private rotate(): void {
+    const previousIndex = this.currentIndex
     this.close()
     renameSync(this.path, this.rotatedPath)
+    this.previousIndex = previousIndex === null ? null : { ...previousIndex, path: this.rotatedPath }
+    this.previousUnreadable = false
     this.startSegment(this.position)
   }
 
-  private write(record: Uint8Array): boolean {
+  private write(record: Buffer): boolean {
     const fd = this.fd
     if (this.failed || fd === null) return false
+    const fileStart = this.segmentBytes
     if (!this.guard(() => writeAll(fd, record))) return false
     this.segmentBytes += record.length
+    this.indexRecord(record, fileStart)
     return true
+  }
+
+  private indexRecord(record: Buffer, fileStart: number): void {
+    const index = this.currentIndex!
+    const length = record.readUInt32LE(1)
+    const kind = record[0]
+    if (kind === KIND_OUTPUT) {
+      if (length >= INDEX_SOLO_BYTES) {
+        this.currentGroup = null
+        index.records.push({
+          kind: 'output',
+          offset: this.position,
+          length,
+          at: fileStart + RECORD_HEAD_BYTES
+        })
+      } else if (this.currentGroup === null) {
+        const entry: WriterRecord = {
+          kind: 'output',
+          offset: this.position,
+          length,
+          at: fileStart + RECORD_HEAD_BYTES,
+          fileStart,
+          recordCount: 1
+        }
+        index.records.push(entry)
+        this.currentGroup = { record: entry, fileBytes: length + RECORD_HEAD_BYTES }
+      } else {
+        this.currentGroup.record.length += length
+        this.currentGroup.record.recordCount = this.currentGroup.record.recordCount! + 1
+        this.currentGroup.record.joined = true
+        this.currentGroup.fileBytes += length + RECORD_HEAD_BYTES
+      }
+      if (this.currentGroup !== null && this.currentGroup.fileBytes >= INDEX_GROUP_BYTES) this.currentGroup = null
+    } else {
+      this.currentGroup = null
+      if (kind === KIND_RESIZE) {
+        index.records.push({
+          kind: 'resize',
+          offset: this.position,
+          length,
+          at: fileStart + RECORD_HEAD_BYTES,
+          cols: record.readUInt16LE(RECORD_HEAD_BYTES),
+          rows: record.readUInt16LE(RECORD_HEAD_BYTES + 2)
+        })
+      } else if (kind === KIND_RESTORE) {
+        index.records.push({
+          kind: 'restore',
+          offset: this.position,
+          length,
+          at: fileStart + RECORD_HEAD_BYTES
+        })
+      } else {
+        index.records.push({
+          kind: 'clear',
+          offset: this.position,
+          length,
+          at: fileStart + RECORD_HEAD_BYTES
+        })
+      }
+    }
+    index.endOffset = this.position
   }
 
   /** Runs one I/O step; the first failure disables the log and is reported once. */

@@ -211,7 +211,7 @@ async function hold(plugin: string): Promise<{ leader: number; grandchild: numbe
 }
 
 describe('PluginContext.process lifecycle', () => {
-  test('runs a command and exposes only a frozen run method', async () => {
+  test('runs a command and exposes a frozen run and spawn facade', async () => {
     await boot({ id: 'acme.proc' })
     const result = await call('acme.proc/run') as Record<string, unknown>
     expect(result).toMatchObject({ stdoutText: 'hi', exitCode: 0, signal: null })
@@ -220,9 +220,9 @@ describe('PluginContext.process lifecycle', () => {
 
     const shape = await call('acme.proc/shape')
     expect(shape).toEqual({
-      keys: ['run'],
-      frozen: true,
-      hasSpawn: false,
+      keys: ['run', 'spawn'],
+       frozen: true,
+      hasSpawn: true,
       hasDispose: false,
       hasLive: false
     })

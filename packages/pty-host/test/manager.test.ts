@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { base64ToBytes, type PtyEvent } from '@quirky/protocol'
 import { readCheckpoint, writeCheckpoint } from '../src/history/checkpoint'
-import { HistoryLog, readSegments } from '../src/history/log'
+import { HistoryLog, LogReader, readSegments } from '../src/history/log'
 import { readMeta, writeMeta } from '../src/history/meta'
 import { type CreateParams, DEFAULT_TAIL_BYTES, SessionManager, type SessionManagerOptions } from '../src/session'
 import { concat, onCleanup, runCleanups, scopeForHome, tempHome, text, trackSessionProcesses, waitFor } from './helpers'
@@ -194,6 +194,29 @@ describe('defaults', () => {
     await expect(manager.create(params('ghost', ['/bin/cat'], { restore: true }))).rejects.toThrow('session ghost is not restorable')
     await manager.create(params('live', ['/bin/cat']))
     await expect(manager.create(params('live', ['/bin/cat'], { restore: true }))).rejects.toThrow('session live is not restorable')
+  })
+})
+
+describe('writer-indexed session history', () => {
+  test('live attach, history and read use the writer index without a disk walk', async () => {
+    const { manager } = newManager()
+    await manager.create(params('indexed', sh(`seq -f 'indexed-%g' 1 200; printf ready; exec cat`)))
+    await readUntil(manager, 'indexed', 0, (lines) => lines.includes('ready'))
+    const open = LogReader.open
+    let calls = 0
+    LogReader.open = (dir) => {
+      calls++
+      return open.call(LogReader, dir)
+    }
+    try {
+      const sub = await manager.subscribe('indexed', () => {}, { mode: 'screen', historyLines: 10 })
+      expect(text(base64ToBytes(sub.replay))).toContain('indexed-')
+      expect((await manager.history('indexed', { lines: 10 })).lines.some((line) => line.startsWith('indexed-'))).toBe(true)
+      expect((await manager.read('indexed', 10)).lines).toContain('ready')
+      expect(calls).toBe(0)
+    } finally {
+      LogReader.open = open
+    }
   })
 })
 
