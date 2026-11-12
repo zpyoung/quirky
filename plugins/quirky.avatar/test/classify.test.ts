@@ -3319,3 +3319,13 @@ describe('keyword and wrapper command context', () => {
   ]
   for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
 })
+
+test('bracket globs retain their credential-ancestor directory prefix', () => {
+  const command = 'cp -R /home/u/proj[12] ./h'
+  expectClassSet(command, ['credential', 'edit-inside'])
+  expect(decideReviewed(command)).toMatchObject({
+    outcome: 'held',
+    step: 'floor-core',
+    reason: 'touches a credential path or command'
+  })
+})
