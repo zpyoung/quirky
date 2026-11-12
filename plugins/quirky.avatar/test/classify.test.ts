@@ -1151,7 +1151,9 @@ describe('dynamic credential path scenarios', () => {
       { command: `cat {>(printf ${'{'.repeat(32)}x${'}'.repeat(32)}),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
       { command: String.raw`cat {$'a\'{',/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
       { command: String.raw`cat {$(echo "$(printf '"')"),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
-      { command: 'cat {$(printf x # "\n),/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold }
+      { command: 'cat {$(printf x # "\n),/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: "cat {$(printf '%s' \"${X:-'}\"),/home/u/.ssh/id_rsa}", classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {$(printf x\r#),/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold }
     ])
   })
 
@@ -1270,7 +1272,19 @@ describe('dynamic credential path scenarios', () => {
       { command: stressCommands[3], classes: ['read', 'other', 'edit-outside'], decision: outsideHold }
     ]
     const started = performance.now()
-    expectRows(stressRows)
+    for (const { command, classes, decision } of stressRows) {
+      const input = call('Bash', { command })
+      const actualClasses = classifyCall(input, ctx)
+      expect(sortedClasses(actualClasses)).toEqual(sortedClasses(classes))
+      expect(decide({
+        call: input,
+        classes: actualClasses,
+        mandate: sampleMandate({ level: 'local', switches: offSwitches }),
+        switches: offSwitches,
+        level: 'local',
+        ctx
+      })).toMatchObject(decision)
+    }
     expect(performance.now() - started).toBeLessThan(1_000)
   })
 })

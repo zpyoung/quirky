@@ -182,11 +182,13 @@ function skipBalancedToken(
     open: '(' | '{'
     close: ')' | '}'
     quote: '' | "'" | '"'
+    doubleQuoted: boolean
     comments: boolean
     wordStart: boolean
   }
   const stack: Frame[] = [{
-    open, close, quote: '', comments: open === '(' && !(text[openIndex - 1] === '$' && text[openIndex + 1] === '('), wordStart: true
+    open, close, quote: '', doubleQuoted: false,
+    comments: open === '(' && !(text[openIndex - 1] === '$' && text[openIndex + 1] === '('), wordStart: true
   }]
   let cursor = openIndex + 1
 
@@ -214,28 +216,29 @@ function skipBalancedToken(
       cursor = newline
       continue
     }
-    if (frame.quote === '' && (character === "'" || character === '"')) {
+    if (frame.quote === '' && (character === '"' || (character === "'" && !frame.doubleQuoted))) {
       frame.quote = character
       frame.wordStart = false
       cursor++
       continue
     }
-    if (character === '`' || (frame.quote === '' && character === '$' && text[cursor + 1] === "'")) {
+    if (character === '`' || (frame.quote === '' && !frame.doubleQuoted && character === '$' && text[cursor + 1] === "'")) {
       frame.wordStart = false
       cursor = skipOpaqueToken(text, cursor)!
       continue
     }
     if (character === '$' && text[cursor + 1] === '(') {
       const arithmetic = text[cursor + 2] === '('
+      const doubleQuoted = arithmetic && (frame.doubleQuoted || frame.quote === '"')
       frame.wordStart = false
-      stack.push({ open: '(', close: ')', quote: '', comments: !arithmetic, wordStart: true })
-      if (arithmetic) stack.push({ open: '(', close: ')', quote: '', comments: false, wordStart: true })
+      stack.push({ open: '(', close: ')', quote: '', doubleQuoted, comments: !arithmetic, wordStart: true })
+      if (arithmetic) stack.push({ open: '(', close: ')', quote: '', doubleQuoted, comments: false, wordStart: true })
       cursor += arithmetic ? 3 : 2
       continue
     }
     if (character === '$' && text[cursor + 1] === '{') {
       frame.wordStart = false
-      stack.push({ open: '{', close: '}', quote: '', comments: false, wordStart: true })
+      stack.push({ open: '{', close: '}', quote: '', doubleQuoted: frame.doubleQuoted || frame.quote === '"', comments: false, wordStart: true })
       cursor += 2
       continue
     }
@@ -243,9 +246,9 @@ function skipBalancedToken(
       cursor++
       continue
     }
-    if ((character === '<' || character === '>') && text[cursor + 1] === '(') {
+    if (!frame.doubleQuoted && (character === '<' || character === '>') && text[cursor + 1] === '(') {
       frame.wordStart = false
-      stack.push({ open: '(', close: ')', quote: '', comments: true, wordStart: true })
+      stack.push({ open: '(', close: ')', quote: '', doubleQuoted: false, comments: true, wordStart: true })
       cursor += 2
       continue
     }
@@ -254,9 +257,9 @@ function skipBalancedToken(
       if (stack.length === 0) return cursor + 1
     } else if (character === frame.open) {
       frame.wordStart = true
-      stack.push({ open: frame.open, close: frame.close, quote: '', comments: frame.comments, wordStart: true })
+      stack.push({ open: frame.open, close: frame.close, quote: '', doubleQuoted: frame.doubleQuoted, comments: frame.comments, wordStart: true })
     } else {
-      frame.wordStart = character === ' ' || character === '\t' || character === '\r' ||
+      frame.wordStart = character === ' ' || character === '\t' ||
         character === '\n' || character === ';' || character === '|' || character === '&' ||
         character === '<' || character === '>'
     }
