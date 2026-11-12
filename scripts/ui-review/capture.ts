@@ -771,6 +771,83 @@ async function screenshot(runtime: CaptureRuntime, path: string, diagnostic = fa
   return evidence(path, bytes)
 }
 
+async function prepareTasksCapture(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
+  if (target.id !== 'sidebar-section:quirky.tasks/tasks' && target.id !== 'view:quirky.tasks/tasks') return
+  const { primaryWorktree, repo, tasks } = runtime.fixtures
+  const pullRequest = tasks.pullRequest
+  await rpc(runtime.client, 'quirky.tasks/prepare', {
+    worktree: primaryWorktree.id
+  }, runtime.options.timeoutMs, runtime.options.signal)
+  await rpc(runtime.client, 'quirky.tasks/navigate', {
+    worktree: primaryWorktree.id,
+    mode: 'prs',
+    repoIds: [repo.id],
+    query: 'is:pr is:open',
+    page: 1,
+    scrollTop: 0,
+    detail: {
+      worktree: primaryWorktree.id,
+      kind: 'pullRequest',
+      number: pullRequest.number,
+      url: pullRequest.url
+    }
+  }, runtime.options.timeoutMs, runtime.options.signal)
+}
+
+async function waitForTasksCapture(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
+  const compact = target.id === 'sidebar-section:quirky.tasks/tasks'
+  const expanded = target.id === 'view:quirky.tasks/tasks'
+  if (!compact && !expanded) return
+  const { pullRequest } = runtime.fixtures.tasks
+  const selectors = {
+    root: compact ? '.tasks-compact' : '.tasks-list',
+    row: compact ? '.tasks-compact__row' : '.tasks-list__row',
+    title: pullRequest.title,
+    loading: compact
+      ? '.tasks-compact__loading, .tasks-compact__skeleton, [aria-busy="true"], [role="progressbar"]'
+      : '.tasks-list__loading, .tasks-list__skeleton-row, [aria-busy="true"], [role="progressbar"]',
+    detail: expanded
+      ? `.tasks-list__detail .tasks-pr[aria-label="Pull request #${pullRequest.number}"] .tasks-pr__title`
+      : null
+  }
+  const ready = runtime.page.waitForFunction(async (expected) => {
+    const root = document.querySelector(expected.root)
+    if (!root) return false
+    const visible = (element: Element | null): boolean => {
+      if (!element) return false
+      const style = getComputedStyle(element)
+      const bounds = element.getBoundingClientRect()
+      return style.display !== 'none' && style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0
+    }
+    const hasLoading = () => {
+      if ([...root.querySelectorAll(expected.loading)].some(visible)) return true
+      return [...root.querySelectorAll('*')].some((element) =>
+        element.children.length === 0 &&
+        /^loading(?:\b|…)/i.test((element.textContent ?? '').trim()) &&
+        visible(element)
+      )
+    }
+    const findRow = () => [...root.querySelectorAll(expected.row)].find((element) =>
+      (element.textContent ?? '').includes(expected.title) && visible(element)
+    ) ?? null
+    const findDetail = () => expected.detail === null
+      ? null
+      : [...root.querySelectorAll(expected.detail)].find((element) =>
+        (element.textContent ?? '').trim() === expected.title && visible(element)
+      ) ?? null
+
+    const row = findRow()
+    const detail = findDetail()
+    if (!row || hasLoading() || (expected.detail !== null && !detail)) return false
+    const { promise: nextFrame, resolve: nextFrameReady } = Promise.withResolvers<void>()
+    requestAnimationFrame(() => nextFrameReady())
+    await nextFrame
+    if (!root.isConnected || !row.isConnected || findRow() !== row || hasLoading()) return false
+    return expected.detail === null || (detail !== null && detail.isConnected && findDetail() === detail)
+  }, selectors, { timeout: runtime.options.timeoutMs })
+  await bounded(ready, runtime.options.timeoutMs, runtime.options.signal, 'Tasks fixture rows and detail')
+}
+
 async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme: CaptureTheme): Promise<CaptureEvidence> {
   const cell = { targetId: target.id, theme }
   const reference = referenceFor(runtime.references, target.id, theme)
@@ -779,9 +856,13 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
   let image: ImageEvidence | null = null
   try {
     throwIfAborted(runtime.options.signal)
+    await prepareTasksCapture(runtime, target)
     await openTarget(runtime, target)
     await inspectSurface(runtime, target)
-    if (await verifyThemeBeforeCapture(runtime, runtime.themes[theme])) await inspectSurface(runtime, target)
+    await waitForTasksCapture(runtime, target)
+    const themeChanged = await verifyThemeBeforeCapture(runtime, runtime.themes[theme])
+    if (themeChanged) await inspectSurface(runtime, target)
+    await waitForTasksCapture(runtime, target)
     if (runtime.pageErrors.length > errorStart) {
       throw new Error(`renderer raised: ${runtime.pageErrors.slice(errorStart).join('; ')}`)
     }

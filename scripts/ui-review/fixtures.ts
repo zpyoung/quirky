@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
+import { prepareTasksFixture, type TasksFixture } from './tasks-fixture'
 
 const FIXTURE_FILES = {
   source: 'src/app.ts',
@@ -154,6 +155,7 @@ export type PreparedCaptureFixtureHome = {
   projects: FixtureProject[]
   worktreesRoot: string
   files: Record<keyof typeof FIXTURE_FILES, string>
+  tasks: TasksFixture
   cleanup(): void
 }
 
@@ -254,7 +256,7 @@ export async function prepareCaptureFixtureHome(
     path: project === PRIMARY_PROJECT ? repoPath : join(root, 'projects', project)
   }))
   const worktreesRoot = join(root, 'worktrees')
-  const createdPaths = [...projects.map((project) => project.path), worktreesRoot]
+  const createdPaths = [...projects.map((project) => project.path), worktreesRoot, join(root, 'tasks-fixture'), join(root, 'fakebin')]
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
@@ -275,6 +277,7 @@ export async function prepareCaptureFixtureHome(
     }
     mkdirSync(join(root, 'projects'), { recursive: true, mode: 0o700 })
     mkdirSync(worktreesRoot, { recursive: true, mode: 0o700 })
+    const tasks = prepareTasksFixture(root, PRIMARY_PROJECT, env)
     writeFile(repoPath, 'README.md', '# UI screenshot fixture\n\nA disposable local project for renderer capture.\n')
     writeFile(repoPath, FIXTURE_FILES.source, INITIAL_SOURCE)
     writeFile(repoPath, FIXTURE_FILES.markdown, SAMPLE_MARKDOWN)
@@ -288,6 +291,8 @@ export async function prepareCaptureFixtureHome(
     await runGit(['-C', repoPath, 'config', 'user.email', 'ui-review-fixture@localhost'], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'add', '--all'], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'commit', '-m', 'Seed UI screenshot fixture'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'remote', 'add', 'origin', tasks.originUrl], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'config', '--local', 'core.sshCommand', tasks.sshCommand], root, env, options.timeoutMs, options.signal)
 
     for (const project of projects.filter((candidate) => candidate.path !== repoPath)) {
       writeFile(project.path, 'README.md', `# ${project.name}\n\nA second disposable project for renderer capture.\n`)
@@ -301,7 +306,7 @@ export async function prepareCaptureFixtureHome(
 
     writeFile(repoPath, FIXTURE_FILES.source, CHANGED_SOURCE)
     writeFile(repoPath, CHANGED_SINCE_REVIEW_FILE, REVIEW_NOTE_SOURCE)
-    return { home: root, repoPath, projects, worktreesRoot, files, cleanup }
+    return { home: root, repoPath, projects, worktreesRoot, files, tasks, cleanup }
   } catch (error) {
     cleanup()
     throw errorInHome(error, root)
