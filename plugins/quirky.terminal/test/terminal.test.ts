@@ -582,19 +582,22 @@ describe('SC-30 to SC-33: facts become events', () => {
       ['quirky.terminal/cwd', { sessionId: shell.id, cwd: '/tmp/w/api/src' }]
     ])
   })
+  const factData = (event: QuirkyEvent) =>
+    (event as PluginEvent).data as { sessionId: string; title?: string; exitCode?: number | null }
+
   test('coalesces a title burst to the first and latest values', async () => {
     const { events } = await h.connectWithEvents('ui')
     const titles = () =>
       events.filter(
         (event: QuirkyEvent) =>
-          event.type === 'quirky.terminal/title' && (event as PluginEvent).data.sessionId === shell.id
+          event.type === 'quirky.terminal/title' && factData(event).sessionId === shell.id
       )
     h.pty.fact(shell.id, { kind: 'title', title: 'a' })
     h.pty.fact(shell.id, { kind: 'title', title: 'b' })
     h.pty.fact(shell.id, { kind: 'title', title: 'c' })
     h.pty.fact(shell.id, { kind: 'title', title: 'd' })
     h.pty.fact(shell.id, { kind: 'title', title: 'e' })
-    await waitFor(() => titles().some((event) => (event as PluginEvent).data.title === 'a'))
+    await waitFor(() => titles().some((event) => factData(event).title === 'a'))
     await Bun.sleep(700)
     expect(titles().map((event) => (event as PluginEvent).data)).toEqual([
       { sessionId: shell.id, title: 'a' },
@@ -607,17 +610,17 @@ describe('SC-30 to SC-33: facts become events', () => {
     const titles = () =>
       events.filter(
         (event: QuirkyEvent) =>
-          event.type === 'quirky.terminal/title' && (event as PluginEvent).data.sessionId === shell.id
+          event.type === 'quirky.terminal/title' && factData(event).sessionId === shell.id
       )
     h.pty.fact(shell.id, { kind: 'title', title: 'a' })
     h.pty.fact(shell.id, { kind: 'title', title: 'b' })
     h.pty.fact(shell.id, { kind: 'title', title: 'c' })
     h.pty.fact(shell.id, { kind: 'title', title: 'd' })
     h.pty.fact(shell.id, { kind: 'title', title: 'e' })
-    await waitFor(() => titles().some((event) => (event as PluginEvent).data.title === 'a'))
+    await waitFor(() => titles().some((event) => factData(event).title === 'a'))
     await Bun.sleep(700)
     h.pty.fact(shell.id, { kind: 'title', title: 'f' })
-    await waitFor(() => titles().some((event) => (event as PluginEvent).data.title === 'f'))
+    await waitFor(() => titles().some((event) => factData(event).title === 'f'))
     expect(titles().map((event) => (event as PluginEvent).data)).toEqual([
       { sessionId: shell.id, title: 'a' },
       { sessionId: shell.id, title: 'e' },
@@ -639,7 +642,7 @@ describe('SC-30 to SC-33: facts become events', () => {
       events
         .filter(
           (event: QuirkyEvent) =>
-            event.type === 'quirky.terminal/title' && (event as PluginEvent).data.sessionId === sessionId
+            event.type === 'quirky.terminal/title' && factData(event).sessionId === sessionId
         )
         .map((event) => (event as PluginEvent).data)
     expect(titlesFor(shell.id)).toEqual([
@@ -660,7 +663,7 @@ describe('SC-30 to SC-33: facts become events', () => {
     await Bun.sleep(700)
     const cwds = events.filter(
       (event: QuirkyEvent) =>
-        event.type === 'quirky.terminal/cwd' && (event as PluginEvent).data.sessionId === shell.id
+        event.type === 'quirky.terminal/cwd' && factData(event).sessionId === shell.id
     )
     expect(cwds.map((event) => (event as PluginEvent).data)).toEqual([
       { sessionId: shell.id, cwd: '/tmp/a' },
@@ -681,7 +684,7 @@ describe('SC-30 to SC-33: facts become events', () => {
       events.filter((event: QuirkyEvent) => event.type === 'quirky.terminal/commandFinished')
     await waitFor(() => bells().length === 3 && finished().length === 3)
     expect(bells()).toHaveLength(3)
-    expect(finished().map((event) => (event as PluginEvent).data.exitCode)).toEqual([1, 2, 3])
+    expect(finished().map((event) => factData(event).exitCode)).toEqual([1, 2, 3])
   })
 
   test('describes coalescing only for title and cwd events', async () => {

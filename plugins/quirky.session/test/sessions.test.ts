@@ -1001,7 +1001,8 @@ describe('session event metadata', () => {
     return {
       id: sessionData.id,
       status: 'status' in sessionData ? sessionData.status : undefined,
-      worktreeId: 'worktreeId' in sessionData ? sessionData.worktreeId : undefined,
+      worktreeId:
+        'worktreeId' in sessionData && typeof sessionData.worktreeId === 'string' ? sessionData.worktreeId : undefined,
       unread: 'unread' in sessionData ? sessionData.unread : undefined
     }
   }
