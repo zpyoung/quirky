@@ -3228,6 +3228,315 @@ describe('directory uncertainty scenarios', () => {
     }
   })
 
+  test('computed name 1: a name the classifier can read, a subshell and a later command change nothing', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["export PATH=$HOME/bin:$PATH; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["export FOO=\"$x\"; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["local x=$1 y=\"$2\"; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["declare -r x=1; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["typeset -a arr=(\"$x\" y); cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["read -r line < \"$f\"; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["read -r a b <<< \"$x\"; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["IFS= read -r -d '' x < f; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["while IFS= read -r line; do echo \"$line\"; done < f; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["getopts \"ab:\" opt; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["printf '%s\\n' \"$x\"; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["printf \"Result: $x\\n\"; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["printf -- \"$x\"; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["printf -v out '%s' \"$x\"; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["printf -vout '%s' \"$x\"; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["printf '%s' -v $a$b /tmp; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["set -- \"$@\"; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["set -euo pipefail; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["set -o pipefail; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["set -A arr a b; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["print -r -- \"$x\"; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["print -v out -- \"$x\"; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["echo \"$x\"; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["x=$(git rev-parse HEAD); echo \"$x\"; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["eval 'x=1'; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["(read $a$b <<< /tmp); cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["x=$(read $a$b <<< /tmp); cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["cd src; touch a; read $a$b <<< /tmp",["edit-inside","other","read"],"judgment",null],
+      ["[ -f \"$x\" ]; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["[[ -n $x ]]; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["./scripts/build-*.sh; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["ls *.ts; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["echo ${!v}; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["echo ${x@Q}; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["read -r line; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["export FOO; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["npm run export -- --no-lint; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["git log --grep=read -n 3; cd src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["{ export x=$y; }; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["if export FOO=$x; then :; fi; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["! export x=$y; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["time export x=$y; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["for i in 1; do export x=$y; done; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["while export x=$y; do break; done; cd src; touch a",["edit-inside","other","read"],"judgment",null],
+      ["f() { local x=$1; cd src; touch a; }; f",["edit-inside","other","read"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 2: printf with a name it cannot read', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=CD; b=PATH; printf -v $a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v \"$a$b\" /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v$a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; f=-v; printf $f $a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; f=\"-v $a$b\"; printf $f /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v x -v $a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -vx -v $a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf -v $'CD\\x50ATH' /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf -v C$\"D\"PATH /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf $\"-v\" $\"CD\"$\"PATH\" /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf -v CDPAT[H] /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf -v CDPAT? /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf [-C][vD]* /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf * /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["builtin printf -v $a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 3: read, getopts and the other builtins that take a name', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=CD; b=PATH; read $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; read -r $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; IFS= read -r \"$a$b\" <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; read -a $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=cd; b=path; read -A $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; read x $a$b <<< \"1 /tmp\"; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; echo /tmp | read $a$b; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["read $'CD\\x50ATH' <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["read $\"CD\"$\"PATH\" <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["read CDPAT? <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["read [C]DPATH <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["read C* <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; getopts / $a$b -/; cd tmp; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; mapfile -t $a$b < f; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; readarray -t $a$b < f; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; pushln /tmp; getln $a$b; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; vared -c $a$b; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; zstyle -s :x y $a$b; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; zformat -f $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=cd; b=path; zparseopts x:=$a$b; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; zregexparse $a$b q x; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; compgen -V $a$b -W /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 4: declare, typeset, local, readonly, export and private', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=CD; b=PATH; export $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; export \"$a$b=/tmp\"; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["x=CDPA; export ${x}TH=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["x=CDPA; y=TH=/tmp; export $x$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; export FOO=1 $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; declare $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; declare -x $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; typeset $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; typeset -g $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; readonly $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; f() { local $a$b=/tmp; cd src; touch a; }; f",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; private $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["export $'CD\\x50ATH'=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["declare $'CD\\120ATH'=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["export $\"CD\"$\"PATH\"=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["declare C$\"D\"PATH=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["export CDPAT?=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["export $(cat .env | xargs); cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["declare -n r=$a$b; r=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; y=\"1 $a$b=/tmp\"; builtin export x=$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; y=\"1 $a$b=/tmp\"; command export x=$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; y=\"1 $a$b=/tmp\"; builtin declare x=$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; y=(1 $a$b=/tmp); builtin typeset x=${y[@]}; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; y=\"1 $a$b=/tmp\"; X=1 export x=$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; set -- 1 $a$b=/tmp; builtin export x=\"$@\"; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; set -- 1 $a$b=/tmp; noglob export x=$@; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["local -n r; r=$a$b; r=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 5: set -A, print -v and zmodload in zsh', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=cd; b=path; set -A $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=cd; b=path; set -o pipefail -A $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["set -A cdpat? /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["f=-A; set $f $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; print -v $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; print -rv $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; print -r -v $a$b -- /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; print -f '%s' -v $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; print -v$a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["print -v CDPAT? /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["set -xA cdpat? /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["print -nv CDPAT? /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; zmodload zsh/datetime; strftime -s $a$b /tmp 0; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 6: a setter behind a keyword, a modifier or a function', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=CD; b=PATH; { read $a$b <<< /tmp; }; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; if read $a$b <<< /tmp; then :; fi; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; ! read $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; time read $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; noglob read $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; nocorrect export $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; builtin read $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; command export $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; case x in x) read $a$b <<< /tmp;; esac; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; while read $a$b; do break; done <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; for i in 1; do export $a$b=/tmp; done; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; { X=1 printf -v $a$b /tmp; }; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; function s { read \"$1\" <<< \"$2\"; }; s $a$b /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; s() { \"$@\"; }; s export $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; repeat 1 read $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 7: a command word the classifier cannot read', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=CD; b=PATH; r=read; $r $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; x=\"export $a$b=/tmp\"; $x; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; x=\"export $a$b=/tmp\"; $x && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; builtin $r $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; `echo read` $a$b <<< /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; $(cat ./f) $a$b <<< /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; `echo read` $a$b <<< /tmp && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; $(cat ./f) $a$b <<< /tmp && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; $\"export\" $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; $\"read\" $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; rea? $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; expor[t] $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; e* $a$b=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 8: eval', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=CD; b=PATH; eval \"$a$b=/tmp\" && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; eval $a$b=/tmp && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["eval $'CD\\x50ATH=/tmp' && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["eval $\"CD\"$\"PATH\"=/tmp && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["eval $\"CD\"$\"PATH\"=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; builtin eval \"$a$b=/tmp\" && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; { eval \"$a$b=/tmp\"; } && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["{ eval 'printf -v C\"\"DPATH /tmp'; } && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; noglob eval \"$a$b=/tmp\" && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; if eval \"$a$b=/tmp\"; then :; fi && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; bash -c \"$a$b=/tmp; cd src; touch a\"",["edit-outside","other"],"held","floor-core"],
+      ["eval 'eval \"$a$b=/tmp\"' | cat; cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["eval 'read $a$b <<< /tmp' | cat; cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["eval \"cd src; $X\" && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["eval \"$X; cd src\" && touch a",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 9: an expansion that assigns through a name held in a variable', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["v=$a$b; : ${!v:=/tmp}; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["v=$a$b; x=${!v=/tmp}; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      [": ${x@P}; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["cat <<EOF\n${x@P}\nEOF\ncd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 10: unknown stays unknown, and targets a search path never applies to', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["a=CD; b=PATH; read $a$b <<< /tmp; CDPATH=; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; read $a$b <<< /tmp; CDPATH= cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; (cd src; touch a)",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; bash -c 'cd src; touch a'",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; eval 'cd src'; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; pushd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; cd ./src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; cd /work/wt/src; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; touch a",["edit-inside","read"],"allow","fixed-rules"],
+      ["a=CD; b=PATH; printf -v $a$b /tmp; cd src",["other","read"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 11: commands the rule holds though no shell sets anything', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf \"$x\\n\"; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf '* %s\\n' x; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf '[%s]\\n' x; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["env read $a$b <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["grep -rn export \"$f\"; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["gh secret set NAME --body \"$x\"; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["read -p \"Continue? \" ans; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["getopts \"$spec\" opt; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["set \"$@\"; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["print \"$x\"; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["echo eval x; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["\"$BUN\" test; cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["zmodload zsh/datetime; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["function f { local x=$1; }; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["time -p export x=$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["constructor export x=$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["toString export x=$y; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('computed name 12: reads 65,000 repeated setter words in linear time', () => {
+    const commands = [
+      'read '.repeat(65_000) + 'x; cd src; touch a',
+      'export a=1 '.repeat(65_000) + 'x; cd src; touch a',
+      'set -A x '.repeat(65_000) + 'y; cd src; touch a',
+      'print -v x '.repeat(65_000) + 'y; cd src; touch a',
+      'printf -v a '.repeat(65_000) + 'x; cd src; touch a'
+    ]
+    const started = performance.now()
+    for (const command of commands) expect(bash(command)).not.toContain('edit-outside')
+    expect(performance.now() - started).toBeLessThan(5_000)
+  })
+
 
   test('scenario 5: makes directory changes behind shell keywords unknown', () => {
     const rows: [string, ActionClass[]][] = [
