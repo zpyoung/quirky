@@ -389,7 +389,7 @@ class ClaudeRunner implements StructuredRunner {
       }
       case 'result': {
         const usage = resultUsage(msg)
-        append('result', resultText(msg), usage ? { ...msg, usage, sdkUsage: msg.usage } : msg)
+        append('result', resultText(msg), usage ? { ...msg, contextUsage: usage } : msg)
         const failed = msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error'))
         if (failed) {
           const run = this.running.get(sessionId)

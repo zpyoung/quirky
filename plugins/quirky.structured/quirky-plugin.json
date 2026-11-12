@@ -100,7 +100,7 @@
       },
       {
         "id": "resume",
-        "description": "Resumes the persisted native Claude or Codex conversation into a new structured session; the optional prompt starts its first turn.",
+        "description": "Resumes the persisted native Claude or Codex conversation into a new structured session; the optional prompt starts its first turn. A session created with toolPolicy: deny-all resumes with it.",
         "params": {
           "type": "object",
           "properties": {
