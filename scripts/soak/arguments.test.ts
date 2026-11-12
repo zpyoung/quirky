@@ -2,7 +2,10 @@ import { afterEach, expect, test } from 'bun:test'
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
+
 import { parseArguments, UsageError } from './arguments.ts'
+
+const faultKinds = ['leak', 'zombies', 'storm', 'block'] as const
 
 const scratch: string[] = []
 const defaultLimits = {
@@ -76,6 +79,62 @@ test('parses --out', () => {
 
   expect(config.out).toBe(out)
 })
+
+for (const kind of faultKinds) {
+  test(`parses --fault ${kind}`, () => {
+    const out = makeTempDir()
+    const config = parseConfig(['--out', out, '--fault', kind])
+
+    expect(config.fault).toBe(kind)
+  })
+}
+
+test('does not include fault in the config when --fault is omitted', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out])
+
+  expect(Object.hasOwn(config, 'fault')).toBe(false)
+})
+
+test('accepts the minimum --minutes value for a fault run', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out, '--fault', 'storm', '--minutes', '0.25'])
+
+  expect(config.minutes).toBe(0.25)
+})
+
+test('requires at least 0.25 minutes for a fault run', () => {
+  const out = makeTempDir()
+  let caught: unknown
+  try {
+    parseArguments(['--out', out, '--fault', 'storm', '--minutes', '0.2'])
+  } catch (error) {
+    caught = error
+  }
+
+  expect(caught).toBeInstanceOf(UsageError)
+  if (caught instanceof UsageError) expect(caught.message).toBe('--fault needs --minutes 0.25 or more')
+})
+
+for (const argv of [
+  ['--fault', 'nope'],
+  ['--fault'],
+]) {
+  test(`rejects ${argv.length === 1 ? 'a missing' : 'an unknown'} --fault value with the exact error`, () => {
+    const out = makeTempDir()
+    let caught: unknown
+    try {
+      parseArguments(['--out', out, ...argv])
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(UsageError)
+    if (caught instanceof UsageError) {
+      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block')
+    }
+  })
+}
 
 const validLimits = [
   ['--max-children', '12', 'maxChildren', 12],
