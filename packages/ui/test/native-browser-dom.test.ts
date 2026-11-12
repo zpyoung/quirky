@@ -37,6 +37,7 @@ beforeAll(async () => {
   class GuestElement extends HTMLElement {
     webviewId = 7
     listeners = new Map<string, Set<(event: CustomEvent) => void>>()
+    onExecute?: (script: string) => void
     syncCalls: boolean[] = []
     onSyncDimensions?: (force?: boolean) => void
     lastExecution?: string
@@ -234,7 +235,7 @@ function installMaskFixture() {
     replace(target, 'addEventListener', function (
       this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions
     ) {
-      originalAdd.call(this, type, listener, options)
+      if (listener) originalAdd.call(this, type, listener, options)
       if (listener && watchedEvents.has(type)) {
         const capture = typeof options === 'boolean' ? options : options?.capture === true
         // the guest preload shares this fixture's window; only the host watcher uses capture.
@@ -244,7 +245,7 @@ function installMaskFixture() {
     replace(target, 'removeEventListener', function (
       this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions
     ) {
-      originalRemove.call(this, type, listener, options)
+      if (listener) originalRemove.call(this, type, listener, options)
       if (listener) {
         const capture = typeof options === 'boolean' ? options : options?.capture === true
         for (const entry of listeners) {

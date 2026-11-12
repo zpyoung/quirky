@@ -100,6 +100,7 @@ async function withControlledTimers<T>(run: (timers: ControlledTimer[]) => Promi
   const timers: ControlledTimer[] = []
   const setTimeoutMock = spyOn(globalThis, 'setTimeout')
   const clearTimeoutMock = spyOn(globalThis, 'clearTimeout')
+  // the timer stub does not need Node's promisify metadata.
   setTimeoutMock.mockImplementation(((callback: TimerHandler, delay?: number) => {
     if (typeof callback !== 'function') throw new Error('Expected a timer callback')
     let timer!: ControlledTimer
@@ -121,7 +122,7 @@ async function withControlledTimers<T>(run: (timers: ControlledTimer[]) => Promi
     timer.handle = timer as unknown as ReturnType<typeof setTimeout>
     timers.push(timer)
     return timer.handle
-  }) as typeof globalThis.setTimeout)
+  }) as unknown as typeof globalThis.setTimeout)
   clearTimeoutMock.mockImplementation(((handle: ReturnType<typeof setTimeout>) => {
     const timer = timers.find((entry) => entry.handle === handle)
     if (timer) timer.cleared = true
