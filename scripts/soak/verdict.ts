@@ -21,7 +21,7 @@ export type SoakEvidence = {
 }
 
 const EXPECTED_WORKERS = 7
-const EVENT_WINDOW_SECONDS = 5
+const EVENT_WINDOW_MS = 5000
 const ZOMBIE_PERSISTENCE_SAMPLES = 3
 const WORKER_FRESHNESS_SECONDS = 30
 const HOST_LAG_LIMIT_MS = 500
@@ -169,7 +169,8 @@ function eventPeak(records: EventRecord[]): EventPeak {
   let first = 0
   let best: EventPeak = { count: 0, at: 0 }
   for (let last = 0; last < records.length; last++) {
-    while (records[last].at - records[first].at > EVENT_WINDOW_SECONDS) first++
+    const lastAtMs = Math.round(records[last].at * 1000)
+    while (lastAtMs - Math.round(records[first].at * 1000) > EVENT_WINDOW_MS) first++
     const count = last - first + 1
     if (count > best.count) best = { count, at: records[first].at }
   }
@@ -245,8 +246,6 @@ function judgeStalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['ch
     .sort((left, right) => right.ms - left.ms || left.at - right.at)
     .slice(0, TOP_COUNT)
     .map(({ at, ms }) => ({ at, ms }))
-  const busyHostDisqualifies = chronologicalProbes.length > 0
-    && hostBusy / chronologicalProbes.length > 0.05
 
   return {
     ok: stalls === 0 && !evidence.daemonExited,

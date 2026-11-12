@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { EventRecord, ProcessRow, Sample, SoakConfig, WorkerBeat } from './contracts'
+import type { EventRecord, ProcessRow, Sample, SoakConfig, SoakReport, WorkerBeat } from './contracts'
 import type { SoakEvidence } from './verdict'
 import { judge } from './verdict'
 
@@ -342,4 +342,299 @@ test('scenario 32: qualification requires no disqualification and is independent
   expect(result.disqualified).toHaveLength(2)
   expect(result.disqualified).toContain('ran 0.4 minutes, needs 30')
   expect(result.disqualified).toContain('0 windows connected, needs 2')
+})
+function expectOnlyCheckFails(
+  result: Pick<SoakReport, 'checks' | 'verdict'>,
+  failed: keyof SoakReport['checks'],
+): void {
+  expect(result.checks.children.ok).toBe(failed !== 'children')
+  expect(result.checks.zombies.ok).toBe(failed !== 'zombies')
+  expect(result.checks.events.ok).toBe(failed !== 'events')
+  expect(result.checks.stalls.ok).toBe(failed !== 'stalls')
+  expect(result.checks.workers.ok).toBe(failed !== 'workers')
+  expect(result.verdict).toBe('fail')
+}
+
+test('child peak passes at 60 and fails at 61', () => {
+  const at = 61
+  const pass = judge(evidence({ samples: [sample(at, rowsForSample(at, 60))] }), config())
+  const fail = judge(evidence({ samples: [sample(at, rowsForSample(at, 61))] }), config())
+
+  expect(pass.checks.children).toMatchObject({ ok: true, peak: 60, peakAt: at })
+  expect(fail.checks.children).toMatchObject({ ok: false, peak: 61, peakAt: at })
+})
+
+test('child growth passes at 5 and fails at 6', () => {
+  const resultForGrowth = (growth: number) => {
+    const samples = Array.from({ length: 10 }, (_, index) => {
+      const at = 20 + index
+      const count = index < 2 ? 14 : index >= 8 ? 14 + growth : 16
+      return sample(at, rowsForSample(at, count))
+    })
+    return judge(evidence({ durationSeconds: 100, samples }), config())
+  }
+
+  expect(resultForGrowth(5).checks.children).toMatchObject({ ok: true, growth: 5 })
+  expect(resultForGrowth(6).checks.children).toMatchObject({ ok: false, growth: 6 })
+})
+
+test('post-warm-up growth is numeric at ten samples and null at nine', () => {
+  const resultForSamples = (count: number) => {
+    const samples = Array.from({ length: count }, (_, index) => {
+      const at = 61 + index
+      return sample(at, rowsForSample(at, 4))
+    })
+    return judge(evidence({ samples }), config())
+  }
+
+  expect(resultForSamples(10).checks.children).toMatchObject({
+    medianFirst: 4,
+    medianLast: 4,
+    growth: 0,
+  })
+  expect(resultForSamples(9).checks.children).toMatchObject({
+    medianFirst: null,
+    medianLast: null,
+    growth: null,
+  })
+})
+
+test('the short-run warm-up boundary sample at 20 seconds is judged', () => {
+  const result = judge(
+    evidence({
+      durationSeconds: 100,
+      samples: [sample(19, rowsForSample(19, 100)), sample(20, rowsForSample(20, 61))],
+    }),
+    config(),
+  )
+
+  expect(result.checks.children).toMatchObject({ ok: false, peak: 61, peakAt: 20 })
+})
+
+test('the 60-second warm-up boundary sample is judged', () => {
+  const result = judge(
+    evidence({
+      durationSeconds: 300,
+      samples: [sample(59, rowsForSample(59, 100)), sample(60, rowsForSample(60, 61))],
+    }),
+    config(),
+  )
+
+  expect(result.checks.children).toMatchObject({ ok: false, peak: 61, peakAt: 60 })
+})
+
+test('peak commands are sorted by frequency and cut to the top five', () => {
+  const owned: ProcessRow[] = []
+  const commandCounts = [
+    ['golf', 2],
+    ['charlie', 6],
+    ['foxtrot', 1],
+    ['echo', 4],
+    ['alpha', 7],
+    ['beta', 3],
+    ['delta', 5],
+  ] as const
+  let pid = 30_000
+  for (const [command, count] of commandCounts) {
+    for (let index = 0; index < count; index++) owned.push(processRow(pid++, command))
+  }
+  const result = judge(evidence({ samples: [sample(61, owned)] }), config())
+
+  expect(result.checks.children.peakCommands).toEqual([
+    { command: 'alpha', count: 7 },
+    { command: 'charlie', count: 6 },
+    { command: 'delta', count: 5 },
+    { command: 'echo', count: 4 },
+    { command: 'beta', count: 3 },
+  ])
+})
+
+test('a zombie with the same pid but a new start time resets its identity', () => {
+  const result = judge(evidence({
+    samples: [
+      sample(0, [processRow(4301, 'reused-pid', 'Z', 4001, 'start-a')]),
+      sample(1, [processRow(4301, 'reused-pid', 'Z', 4001, 'start-b')]),
+      sample(2, [processRow(4301, 'reused-pid', 'Z', 4001, 'start-c')]),
+    ],
+  }), config())
+
+  expect(result.checks.zombies).toMatchObject({ ok: true, peak: 1, persistent: 0, examples: [] })
+})
+
+test('a Z, Z, gone, Z sequence is not a persistent zombie', () => {
+  const zombie = processRow(4401, 'interrupted-zombie', 'Z', 4001, 'same-start')
+  const result = judge(evidence({
+    samples: [sample(0, [zombie]), sample(1, [zombie]), sample(2, []), sample(3, [zombie])],
+  }), config())
+
+  expect(result.checks.zombies).toMatchObject({ ok: true, peak: 1, persistent: 0, examples: [] })
+})
+
+test('event windows include 5000 ms at zero and 4.3 seconds, but exclude 5001 ms', () => {
+  const atOrigin = judge(evidence({ events: eventsWithin('exact-origin', 31, 0, 5) }), config())
+  const shifted = judge(evidence({ events: eventsWithin('exact-shifted', 31, 4.3, 5) }), config())
+  const outside = judge(evidence({ events: eventsWithin('outside', 31, 0, 5.001) }), config())
+
+  expect(atOrigin.checks.events).toMatchObject({ ok: false, peakPer5s: 31, peakAt: 0 })
+  expect(shifted.checks.events).toMatchObject({ ok: false, peakPer5s: 31, peakAt: 4.3 })
+  expect(outside.checks.events).toMatchObject({ ok: true, peakPer5s: 30 })
+})
+
+test('event peakAt identifies the later span with the larger peak', () => {
+  const events = [
+    ...eventsWithin('later-peak', 30, 0, 4.9),
+    ...eventsWithin('later-peak', 31, 10, 4.9),
+  ]
+  const result = judge(evidence({ events }), config())
+
+  expect(result.checks.events).toMatchObject({
+    ok: false,
+    peakPer5s: 31,
+    peakType: 'later-peak',
+    peakAt: 10,
+  })
+})
+
+test('own timer lag of 500 ms is a stall and 501 ms is host busy', () => {
+  const result = judge(evidence({
+    probes: [
+      { at: 1, ms: 1001, ownLagMs: 500, timedOut: false },
+      { at: 2, ms: 1001, ownLagMs: 501, timedOut: false },
+    ],
+  }), config())
+
+  expect(result.checks.stalls).toMatchObject({ stalls: 1, hostBusy: 1 })
+})
+
+test('host-busy probes at exactly five percent do not disqualify, just over does', () => {
+  const probesForCount = (count: number) => [
+    { at: 1, ms: 5000, ownLagMs: 3000, timedOut: false },
+    ...Array.from({ length: count - 1 }, (_, index) => ({
+      at: index + 2,
+      ms: 500,
+      ownLagMs: 0,
+      timedOut: false,
+    })),
+  ]
+  const exact = judge(evidence({ probes: probesForCount(20) }), config())
+  const over = judge(evidence({ probes: probesForCount(19) }), config())
+
+  expect(exact.checks.stalls.hostBusy).toBe(1)
+  expect(exact.disqualified).toEqual([])
+  expect(exact.qualifies).toBe(true)
+  expect(over.checks.stalls.hostBusy).toBe(1)
+  expect(over.disqualified).toContain('host too busy to judge stalls: 1 of 19 probes')
+  expect(over.qualifies).toBe(false)
+})
+
+test('a 30-second heartbeat is alive, while 30.001 seconds and null are stale', () => {
+  const workers = healthyWorkers()
+  workers[1] = { worktree: 'worktree-1', lastBeatAgeSeconds: 30.001 }
+  workers[2] = { worktree: 'worktree-2', lastBeatAgeSeconds: null }
+  const result = judge(evidence({ workers }), config())
+
+  expect(result.checks.workers).toEqual({
+    ok: false,
+    expected: 7,
+    alive: 5,
+    stale: ['worktree-1', 'worktree-2'],
+  })
+})
+
+test('a children-only failure makes the verdict fail', () => {
+  const result = judge(evidence({ samples: [sample(61, rowsForSample(61, 61))] }), config())
+
+  expectOnlyCheckFails(result, 'children')
+})
+
+test('a zombies-only failure makes the verdict fail', () => {
+  const zombie = processRow(4501, 'persistent-zombie', 'Z', 4001, 'same-start')
+  const result = judge(evidence({
+    samples: [sample(61, [zombie]), sample(62, [zombie]), sample(63, [zombie])],
+  }), config())
+
+  expectOnlyCheckFails(result, 'zombies')
+})
+
+test('an events-only failure makes the verdict fail', () => {
+  const result = judge(evidence({ events: eventsWithin('storm', 31, 0, 4.9) }), config())
+
+  expectOnlyCheckFails(result, 'events')
+})
+
+test('a stalls-only failure makes the verdict fail', () => {
+  const result = judge(evidence({
+    probes: [{ at: 1, ms: 1001, ownLagMs: 0, timedOut: false }],
+  }), config())
+
+  expectOnlyCheckFails(result, 'stalls')
+})
+
+test('a workers-only failure makes the verdict fail', () => {
+  const workers = healthyWorkers()
+  workers[0] = { worktree: 'worktree-0', lastBeatAgeSeconds: null }
+  const result = judge(evidence({ workers }), config())
+
+  expectOnlyCheckFails(result, 'workers')
+})
+
+test('loosening maxChildren passes its check but disqualifies by name', () => {
+  const result = judge(
+    evidence({ samples: [sample(61, rowsForSample(61, 61))] }),
+    config({ limits: { maxChildren: 61 } }),
+  )
+
+  expect(result.checks.children.ok).toBe(true)
+  expect(result.disqualified).toEqual(['limit loosened: maxChildren 61 > 60'])
+  expect(result.qualifies).toBe(false)
+})
+
+test('loosening maxGrowth passes its check but disqualifies by name', () => {
+  const samples = Array.from({ length: 10 }, (_, index) => {
+    const at = 61 + index
+    const count = index < 2 ? 14 : index >= 8 ? 20 : 16
+    return sample(at, rowsForSample(at, count))
+  })
+  const result = judge(
+    evidence({ samples }),
+    config({ limits: { maxGrowth: 6 } }),
+  )
+
+  expect(result.checks.children).toMatchObject({ ok: true, growth: 6 })
+  expect(result.disqualified).toEqual(['limit loosened: maxGrowth 6 > 5'])
+  expect(result.qualifies).toBe(false)
+})
+
+test('loosening maxZombies passes its check but disqualifies by name', () => {
+  const zombie = processRow(4601, 'persistent-zombie', 'Z', 4001, 'same-start')
+  const result = judge(
+    evidence({ samples: [sample(61, [zombie]), sample(62, [zombie]), sample(63, [zombie])] }),
+    config({ limits: { maxZombies: 1 } }),
+  )
+
+  expect(result.checks.zombies.ok).toBe(true)
+  expect(result.disqualified).toEqual(['limit loosened: maxZombies 1 > 0'])
+  expect(result.qualifies).toBe(false)
+})
+
+test('loosening maxEventsPer5s passes its check but disqualifies by name', () => {
+  const result = judge(
+    evidence({ events: eventsWithin('loosened', 31, 0, 4.9) }),
+    config({ limits: { maxEventsPer5s: 31 } }),
+  )
+
+  expect(result.checks.events.ok).toBe(true)
+  expect(result.disqualified).toEqual(['limit loosened: maxEventsPer5s 31 > 30'])
+  expect(result.qualifies).toBe(false)
+})
+
+test('loosening maxStallMs passes its check but disqualifies by name', () => {
+  const result = judge(
+    evidence({ probes: [{ at: 1, ms: 1001, ownLagMs: 0, timedOut: false }] }),
+    config({ limits: { maxStallMs: 1001 } }),
+  )
+
+  expect(result.checks.stalls.ok).toBe(true)
+  expect(result.disqualified).toEqual(['limit loosened: maxStallMs 1001 > 1000'])
+  expect(result.qualifies).toBe(false)
 })
