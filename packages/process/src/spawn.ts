@@ -53,6 +53,7 @@ class ByteTail {
   private readonly buffer: Uint8Array
   private length = 0
   private writeIndex = 0
+  private truncated = false
 
   constructor(capacity: number) {
     this.buffer = new Uint8Array(capacity)
@@ -60,6 +61,7 @@ class ByteTail {
 
   append(chunk: Uint8Array): void {
     const capacity = this.buffer.byteLength
+    if (this.length + chunk.byteLength > capacity) this.truncated = true
     if (chunk.byteLength >= capacity) {
       this.buffer.set(chunk.subarray(chunk.byteLength - capacity), 0)
       this.length = capacity
@@ -83,22 +85,27 @@ class ByteTail {
     bytes.set(this.buffer.subarray(start, start + firstLength), 0)
     if (firstLength < this.length) bytes.set(this.buffer.subarray(0, this.length - firstLength), firstLength)
     let prefix = 0
-    while (prefix < bytes.byteLength && (bytes[prefix]! & 0xc0) === 0x80) prefix++
+    if (this.truncated) {
+      while (prefix < bytes.byteLength && (bytes[prefix]! & 0xc0) === 0x80) prefix++
+    }
     return new TextDecoder().decode(bytes.subarray(prefix))
   }
 }
 
-/** Starts a child with demand-driven stdout, a bounded stderr tail and coordinated lifecycle controls. */
+/**
+ * Starts a child with demand-driven stdout, a bounded stderr tail and coordinated lifecycle controls.
+ * Requires the runner's validated kill grace for every stop path.
+ */
 export function executeSpawn(
   start: StartChild,
   argv: readonly string[],
-  options: SpawnOptions,
+  options: SpawnOptions & { killGraceMs: number },
   stallMs: number,
   config: SpawnConfig,
 ): SpawnedProcess {
   const startedAt = Date.now()
   if (options.signal?.aborted) {
-    return inactiveProcess({ exitCode: null, signal: null, stopped: 'aborted', durationMs: 0 }, options.killGraceMs ?? 2_000)
+    return inactiveProcess({ exitCode: null, signal: null, stopped: 'aborted', durationMs: 0 }, options.killGraceMs)
   }
 
   const stderr = new ByteTail(options.stderrTailBytes ?? DEFAULT_STDERR_TAIL_BYTES)
@@ -117,7 +124,7 @@ export function executeSpawn(
       signal: null,
       spawnError: errorDetails(error),
       durationMs: Date.now() - startedAt,
-    }, options.killGraceMs ?? 2_000)
+    }, options.killGraceMs)
   }
 
   // taking the source reader now prevents Bun from buffering an unread pipe without limit
@@ -322,13 +329,13 @@ export function executeSpawn(
 
   const write = (data: string | Uint8Array): Promise<boolean> => {
     if (!child.stdin || inputClosed || stopping || leaderDidExit) return Promise.resolve(false)
-    const bytes = typeof data === 'string' ? encoder.encode(data) : data
+    const bytes = typeof data === 'string' ? encoder.encode(data) : new Uint8Array(data)
     const pending = writeQueue.then(async () => {
       if (stopping || leaderDidExit) return false
       try {
         child.stdin!.write(bytes)
         await child.stdin!.flush()
-        return !stopping && !leaderDidExit
+        return !stopping
       } catch {
         // a stopped child can reject a flush with EPIPE while a write is pending
         return false
@@ -365,13 +372,13 @@ export function executeSpawn(
   void exitPromise.then(() => finish(), () => finish())
 
   const stop = (stopOptions?: StopOptions): Promise<SpawnExit> => {
-    const requested = validateStopOptions(stopOptions, options.killGraceMs ?? 2_000)
+    const requested = validateStopOptions(stopOptions, options.killGraceMs)
     requestStop('stop', requested.signal, requested.graceMs)
     return exitPromise
   }
 
   if (options.signal) {
-    abortListener = () => requestStop('aborted', 'SIGTERM', options.killGraceMs ?? 2_000)
+    abortListener = () => requestStop('aborted', 'SIGTERM', options.killGraceMs)
     options.signal.addEventListener('abort', abortListener, { once: true })
     if (options.signal.aborted) abortListener()
   }
@@ -379,7 +386,7 @@ export function executeSpawn(
     const deadline = startedAt + options.timeoutMs
     const armDeadline = () => {
       const remaining = deadline - Date.now()
-      if (remaining <= 0) requestStop('timeout', 'SIGTERM', options.killGraceMs ?? 2_000)
+      if (remaining <= 0) requestStop('timeout', 'SIGTERM', options.killGraceMs)
       else deadlineTimer = setTimeout(armDeadline, Math.min(remaining, MAX_TIMER_DELAY_MS))
     }
     armDeadline()
