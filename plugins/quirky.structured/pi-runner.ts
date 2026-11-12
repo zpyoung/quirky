@@ -11,8 +11,8 @@ const STATE_REQUEST_ID = 'quirky-state'
 
 type PiAgent = 'pi' | 'omp'
 
-// omp's --no-tools only drops built-in tools, so extension discovery has to go too
-const DENY_ALL_ARGS = ['--no-tools', '--no-extensions']
+// omp rejects --no-mcp, so its offered tools must be checked rather than switched off
+const DENY_ALL_ARGS = { pi: ['--no-tools', '--no-extensions', '--no-mcp'], omp: ['--no-tools', '--no-extensions'] }
 
 /**
  * Finds the user's `pi` or `omp` executable the way their terminal would: `command -v` in a login
@@ -87,31 +87,42 @@ type Running = {
   contextWindow: number | null
   lastContextTokens: number | null
   working: boolean
+  checkSequence: number
+  checkId: string | null
+  checkTimer: NodeJS.Timeout | null
+  abortTimer: NodeJS.Timeout | null
+  waitingCommands: Record<string, unknown>[]
   stopped: boolean
   exited: boolean
   closed: Promise<void>
 }
 
-/** Limits a test may lower. `maxFrameBytes` defaults to 256 MiB. */
-export type PiRunnerLimits = { maxFrameBytes?: number }
+/** Limits a test may lower. Defaults: 256 MiB, 30 seconds, 10 seconds. */
+export type PiRunnerLimits = { maxFrameBytes?: number; checkTimeoutMs?: number; abortTimeoutMs?: number }
 
 /**
  * Runs Pi and Oh My Pi sessions in the background through their `--mode rpc` stdio protocol, with
  * no PTY: JSON lines in (prompts), JSON lines out (events). Assistant messages are journaled as
  * they end; `agent_settled` or `session_settled` closes the turn once automatic work is finished.
  *
- * A `deny-all` session starts the CLI with no tools and no extensions; any tool execution that happens anyway aborts
- * the turn and is journaled as refused. Extension dialogs are always cancelled, never answered.
+ * A `deny-all` session is checked before each prompt and steer and ends when the check fails.
+ * Tool execution aborts the turn; a tool result other than "not found" or a stuck abort ends the session.
+ * Extension dialogs are always cancelled, never answered.
  */
 export function createPiRunner(context: StructuredContext, limits?: PiRunnerLimits): StructuredRunner {
-  return new PiRunner(context, limits?.maxFrameBytes ?? MAX_FRAME_BYTES)
+  return new PiRunner(context, limits?.maxFrameBytes ?? MAX_FRAME_BYTES, limits?.checkTimeoutMs ?? 30_000, limits?.abortTimeoutMs ?? 10_000)
 }
 
 class PiRunner implements StructuredRunner {
   private readonly running = new Map<string, Running>()
   private readonly starting = new Map<string, { stopped: boolean }>()
 
-  constructor(private readonly context: StructuredContext, private readonly maxFrameBytes: number) {}
+  constructor(
+    private readonly context: StructuredContext,
+    private readonly maxFrameBytes: number,
+    private readonly checkTimeoutMs: number,
+    private readonly abortTimeoutMs: number
+  ) {}
 
   async start(session: Session, prompt?: string, options: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'pi' && session.agent !== 'omp') throw new Error('structured sessions support pi and omp only')
@@ -136,7 +147,7 @@ class PiRunner implements StructuredRunner {
     const args = [
       '--mode',
       'rpc',
-      ...(toolPolicy === 'deny-all' ? DENY_ALL_ARGS : []),
+      ...(toolPolicy === 'deny-all' ? DENY_ALL_ARGS[agent] : []),
       ...(typeof options.model === 'string' ? ['--model', options.model] : [])
     ]
     const child = spawn(executable, args, {
@@ -157,6 +168,11 @@ class PiRunner implements StructuredRunner {
       contextWindow: null,
       lastContextTokens: null,
       working: false,
+      checkSequence: 0,
+      checkId: null,
+      checkTimer: null,
+      abortTimer: null,
+      waitingCommands: [],
       stopped: false,
       exited: false,
       closed: closed.promise
@@ -171,15 +187,16 @@ class PiRunner implements StructuredRunner {
     child.once('close', (code, signal) =>
       this.exit(run, closed.resolve, `${agent} exited${code === null ? ` (${signal})` : ` with code ${code}`}`)
     )
-    this.write(run, { id: STATE_REQUEST_ID, type: 'get_state' })
+    if (agent === 'pi' || toolPolicy !== 'deny-all') this.write(run, { id: STATE_REQUEST_ID, type: 'get_state' })
     if (prompt === undefined || prompt === '') {
       this.context.setStatus(session.id, 'running')
+      this.checkAndWrite(run)
       return
     }
     this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: { type: 'prompt', message: prompt } })
     this.context.setStatus(session.id, 'working')
     run.working = true
-    this.write(run, { type: 'prompt', message: prompt })
+    this.checkAndWrite(run, { type: 'prompt', message: prompt })
   }
 
   async send(sessionId: string, text: string): Promise<void> {
@@ -189,7 +206,7 @@ class PiRunner implements StructuredRunner {
     this.context.appendMessage({ sessionId, role: 'user', text, data: command })
     this.context.setStatus(sessionId, 'working')
     run.working = true
-    this.write(run, command)
+    this.checkAndWrite(run, command)
   }
 
   async stop(sessionId: string): Promise<void> {
@@ -198,12 +215,63 @@ class PiRunner implements StructuredRunner {
     const run = this.running.get(sessionId)
     if (!run || run.stopped) return
     run.stopped = true
+    this.clearCheck(run)
+    this.clearAbort(run)
     run.frameChunks = []
     run.frameBytes = 0
     this.running.delete(sessionId)
     this.terminate(run)
     await Promise.race([run.closed, new Promise((resolve) => setTimeout(resolve, TERM_GRACE_MS * 2))])
     this.context.setStatus(sessionId, 'exited')
+  }
+
+  private checkAndWrite(run: Running, command?: Record<string, unknown>): void {
+    if (run.toolPolicy !== 'deny-all') {
+      if (command) this.write(run, command)
+      return
+    }
+    if (command) run.waitingCommands.push(command)
+    if (run.checkId !== null) return
+    run.checkTimer = setTimeout(() => this.fail(run, `${run.agent} did not answer the no-tools check`), this.checkTimeoutMs)
+    run.checkId = `quirky-check-${++run.checkSequence}`
+    this.write(run, { id: run.checkId, type: run.agent === 'pi' ? 'get_commands' : 'get_state' })
+  }
+
+  private clearCheck(run: Running): void {
+    if (run.checkTimer !== null) clearTimeout(run.checkTimer)
+    run.checkTimer = null
+    run.checkId = null
+    run.waitingCommands = []
+  }
+
+  private fail(run: Running, reason: string): void {
+    this.append(run, 'system', reason)
+    void this.stop(run.session.id)
+  }
+
+  private checked(run: Running, event: Record<string, any>): void {
+    if (event.success !== true) {
+      const reason = typeof event.error === 'string' && event.error.trim() ? oneLine(event.error) : 'the check was refused'
+      this.fail(run, `${run.agent} could not confirm it has no tools: ${reason}`)
+      return
+    }
+    const list = run.agent === 'pi' ? event.data?.commands : event.data?.dumpTools
+    if (!Array.isArray(list)) {
+      this.fail(run, `${run.agent} could not confirm it has no tools: the reply lists no ${run.agent === 'pi' ? 'commands' : 'tools'}`)
+      return
+    }
+    const offered = run.agent === 'pi' ? list.filter((entry) => entry?.source === 'extension') : list
+    if (offered.length > 0) {
+      const names = offered.slice(0, 8).map((entry) => typeof entry?.name === 'string' ? oneLine(entry.name, 80) : 'unnamed').join(', ')
+      const remaining = offered.length > 8 ? ` and ${offered.length - 8} more` : ''
+      this.fail(run, run.agent === 'pi'
+        ? `pi loaded extensions in a session that must have no tools: ${names}${remaining}`
+        : `omp offers tools to a session that must have none: ${names}${remaining}`)
+      return
+    }
+    const commands = run.waitingCommands
+    this.clearCheck(run)
+    for (const command of commands) this.write(run, command)
   }
 
   private write(run: Running, command: Record<string, unknown>): void {
@@ -234,9 +302,16 @@ class PiRunner implements StructuredRunner {
     void run.closed.then(() => clearTimeout(timer))
   }
 
+  private clearAbort(run: Running): void {
+    if (run.abortTimer !== null) clearTimeout(run.abortTimer)
+    run.abortTimer = null
+  }
+
   private exit(run: Running, settle: () => void, reason: string): void {
     if (run.exited) return
     run.exited = true
+    this.clearCheck(run)
+    this.clearAbort(run)
     settle()
     if (run.stopped || this.running.get(run.session.id) !== run) return
     this.running.delete(run.session.id)
@@ -302,6 +377,12 @@ class PiRunner implements StructuredRunner {
         if (event.command === 'get_state' && event.success === true) {
           const window = event.data?.model?.contextWindow
           if (typeof window === 'number' && Number.isFinite(window) && window > 0) run.contextWindow = window
+        }
+        if (run.checkId !== null && event.id === run.checkId) {
+          this.checked(run, event)
+          return
+        }
+        if (event.command === 'get_state' && event.success === true) {
           return
         }
         if (event.success === false) {
@@ -328,14 +409,20 @@ class PiRunner implements StructuredRunner {
         if (run.toolPolicy === 'deny-all') {
           this.append(run, 'system', TOOLS_DISABLED, event)
           this.write(run, { type: 'abort' })
+          if (run.working && run.abortTimer === null) {
+            run.abortTimer = setTimeout(() => this.fail(run, `${run.agent} did not stop after a tool started`), this.abortTimeoutMs)
+          }
           return
         }
         this.append(run, 'tool', `${String(event.toolName ?? 'tool')}: ${summarizeArgs(event.args)}`, event)
         return
       }
       case 'tool_execution_end': {
-        if (run.toolPolicy === 'deny-all') return
-        this.append(run, 'tool', textOf(event.result?.content) || String(event.toolName ?? 'tool'), event)
+        const toolName = String(event.toolName ?? 'tool')
+        const text = textOf(event.result?.content)
+        if (run.toolPolicy === 'deny-all' && event.isError === true && text === `Tool ${toolName} not found`) return
+        this.append(run, 'tool', text || toolName, event)
+        if (run.toolPolicy === 'deny-all') this.fail(run, `${run.agent} ran ${toolName} in a session that must have no tools`)
         return
       }
       case 'extension_ui_request': {
@@ -364,6 +451,7 @@ class PiRunner implements StructuredRunner {
   }
 
   private closeTurn(run: Running): void {
+    this.clearAbort(run)
     run.working = false
     run.lastContextTokens = null
     this.context.setStatus(run.session.id, 'done')

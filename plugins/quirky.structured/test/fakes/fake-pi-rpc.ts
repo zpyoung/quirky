@@ -20,10 +20,21 @@ export type FakePiRpcFixture = {
  * its process group ignores EOF and SIGTERM; `[unreadable]` writes malformed and non-object JSON.
  * `[settled-result]` delays omp settlement after an invoked prompt_result with sessionSettled true.
  * SIGUSR1 emits stale settle/result frames for an idle-session check.
+ * `[grow]` adds a tool when its prompt arrives; `[tool] [missing]` and `[tool] [failed]` report a
+ * not-found or failed tool and wait for abort; `[tool] [stuck]` ignores every abort.
  */
 export function createFakePiRpc(
   home: string,
-  options: { contextWindow?: number | null; flavor?: 'pi' | 'omp' } = {}
+  options: {
+    contextWindow?: number | null
+    flavor?: 'pi' | 'omp'
+    /** Commands pi lists in `get_commands`. Default `[]`. */
+    commands?: { name: string; source: string }[]
+    /** Tools omp lists in `get_state`. Default `[]`. */
+    tools?: string[]
+    /** How a no-tools check is answered. Default `'answer'`. */
+    check?: 'answer' | 'silent' | 'refuse' | 'empty'
+  } = {}
 ): FakePiRpcFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'fake-pi')
@@ -35,6 +46,9 @@ export function createFakePiRpc(
 const fs = require('node:fs')
 fs.writeFileSync(${JSON.stringify(launchPath)}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }))
 const flavor = ${JSON.stringify(flavor)}
+const commands = ${JSON.stringify(options.commands ?? [])}
+const tools = ${JSON.stringify(options.tools ?? [])}
+const check = ${JSON.stringify(options.check ?? 'answer')}
 const send = (message) => process.stdout.write(JSON.stringify(message) + lineEnding)
 const assistant = (text) => ({
   role: 'assistant',
@@ -45,6 +59,7 @@ const assistant = (text) => ({
 let lineEnding = '\\n'
 let held = false
 let waitingUi = false
+let ignoreAbort = false
 let stubborn = false
 process.on('SIGUSR1', () => {
   send({ type: 'agent_settled', aborted: false })
@@ -187,6 +202,18 @@ function runPrompt(text) {
   if (text.includes('[tool]')) {
     held = true
     send({ type: 'tool_execution_start', toolCallId: 't1', toolName: 'bash', args: { command: 'ls -la' } })
+    if (text.includes('[stuck]')) { ignoreAbort = true; return }
+    if (text.includes('[missing]') || text.includes('[failed]')) {
+      const result = text.includes('[missing]') ? 'Tool bash not found' : 'exit 1'
+      send({
+        type: 'tool_execution_end',
+        toolCallId: 't1',
+        toolName: 'bash',
+        result: { content: [{ type: 'text', text: result }] },
+        isError: true
+      })
+      return
+    }
     if (text.includes('[allowed]')) {
       send({ type: 'tool_execution_end', toolCallId: 't1', toolName: 'bash', result: { content: [{ type: 'text', text: 'file.txt' }] }, isError: false })
       finish('listed')
@@ -205,9 +232,51 @@ function receive(message) {
   fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(message) + '\\n')
   switch (message.type) {
     case 'get_state':
-      send({ id: message.id, type: 'response', command: 'get_state', success: true, data: { model: { id: 'fake', contextWindow: ${JSON.stringify(contextWindow)} } } })
+      if (flavor === 'omp' && typeof message.id === 'string' && message.id.startsWith('quirky-check-')) {
+        if (check === 'silent') return
+        if (check === 'refuse') {
+          send({ id: message.id, type: 'response', command: 'get_state', success: false, error: 'scripted check failure' })
+          return
+        }
+        if (check === 'empty') {
+          send({ id: message.id, type: 'response', command: 'get_state', success: true, data: {} })
+          return
+        }
+      }
+      send({
+        id: message.id,
+        type: 'response',
+        command: 'get_state',
+        success: true,
+        data: {
+          model: { id: 'fake', contextWindow: ${JSON.stringify(contextWindow)} },
+          ...(flavor === 'omp' ? { dumpTools: tools.map((name) => ({ name, description: '', parameters: {} })) } : {})
+        }
+      })
+      return
+    case 'get_commands':
+      if (flavor !== 'pi') {
+        send({ id: message.id, type: 'response', command: 'get_commands', success: false, error: 'Unknown command: get_commands' })
+        return
+      }
+      if (check === 'silent') return
+      if (check === 'refuse') {
+        send({ id: message.id, type: 'response', command: 'get_commands', success: false, error: 'scripted check failure' })
+        return
+      }
+      send({
+        id: message.id,
+        type: 'response',
+        command: 'get_commands',
+        success: true,
+        data: check === 'empty' ? {} : { commands }
+      })
       return
     case 'prompt':
+      if (message.message.includes('[grow]')) {
+        if (flavor === 'pi') commands.push({ name: 'late', source: 'extension' })
+        else tools.push('mcp__late_tool')
+      }
       if (message.message.includes('[reject]')) {
         send({ type: 'response', command: 'prompt', success: false, error: 'scripted rejection' })
         return
@@ -218,6 +287,7 @@ function receive(message) {
       if (held) finish('steered: ' + message.message)
       return
     case 'abort':
+      if (ignoreAbort) return
       send({ type: 'response', command: 'abort', success: true })
       if (held) { held = false; sendTurnEnd(true) }
       return
