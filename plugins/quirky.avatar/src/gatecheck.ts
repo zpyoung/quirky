@@ -23,7 +23,7 @@ export type GateCheckDeps = {
 }
 
 type Observed = { fingerprint: string; at: number }
-type RunToken = { aborted: boolean }
+type RunToken = { aborted: boolean; probeSessionId?: string }
 
 /** Splits a recorded launch-args string into words the way the launch pipeline's `joinCommand` quoted them; null when a quote is left open. */
 function splitLaunchArgs(text: string): string[] | null {
@@ -80,6 +80,8 @@ export type GateChecker = {
   noteReceipt(sessionId: string): void
   /** Tells waiting checks the session record showed a tool call the gate may not have seen. */
   noteObserved(sessionId: string, fingerprint: string, at: number): void
+  /** Ends a proof turn without treating its settlement as evidence that the gate ran. */
+  noteProbeSettled(worktreeId: string, sessionId: string): void
   /** Stops the worktree's check, waiting or mid-step, without failing it, because it was handed back. */
   cancel(worktreeId: string): void
   /** Stops every check for good: none touches the store afterwards, and later checks resolve at once without running. */
@@ -159,6 +161,7 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
         const unseen = (observed.get(sessionId) ?? []).filter((call) => !hasReceiptNear(sessionId, call.fingerprint, call.at))
         if (unseen.length === 0) {
           if (app.store.receipts.list({ sessionId }).some((receipt) => receipt.at >= since)) return finish({ ok: true, reason: '' })
+          if (token.probeSessionId === sessionId) return finish({ ok: false, reason: 'the proof turn ended without a gate receipt' })
           return
         }
         const due = Math.min(...unseen.map((call) => call.at)) + graceMs
@@ -240,6 +243,15 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
       list.push({ fingerprint, at })
       if (list.length > 50) list.shift()
       observed.set(sessionId, list)
+      for (const evaluate of [...(waiters.get(sessionId) ?? [])]) evaluate()
+    },
+    noteProbeSettled(worktreeId, sessionId) {
+      if (disposed) return
+      const current = running.get(worktreeId)
+      if (current === undefined || current.token.aborted || current.token.probeSessionId === sessionId) return
+      const row = app.store.handoffs.get(worktreeId)
+      if (row === null || !row.active || row.sessionId !== sessionId) return
+      current.token.probeSessionId = sessionId
       for (const evaluate of [...(waiters.get(sessionId) ?? [])]) evaluate()
     },
     cancel(worktreeId) {

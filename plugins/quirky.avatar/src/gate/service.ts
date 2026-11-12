@@ -435,6 +435,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
       removeMarkerFile(quirkyHome, sessionId)
     },
     gateCheck: (worktreeId) => checker.check(worktreeId),
+    noteProbeSettled: (worktreeId, sessionId) => checker.noteProbeSettled(worktreeId, sessionId),
     approveOnce(needId) {
       const need = app.store.needs.get(needId)
       const fingerprint = need?.detail.fingerprint
