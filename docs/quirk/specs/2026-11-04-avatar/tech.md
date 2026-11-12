@@ -22,7 +22,7 @@ The avatar has three layers. Host additions come first because every later part 
 - If no supervision marker exists for that session, the shim exits with a passthrough answer at once. Unsupervised sessions never block and never depend on the daemon.
 - If a marker exists, the shim POSTs to `/gate/<agent>`. The daemon calls the single `tool-gate` provider (`quirky.avatar`) with a deadline.
 - The provider runs `decide()` (pure: floor core, switches, level, fixed rules) and, only if nothing decided, the brain's judgment.
-- The shim prints the per-agent encoding of the decision. When the daemon is unreachable or the request times out, it prints a deny with a retry reason (SC-12).
+- The shim prints the per-agent encoding of the decision. When the daemon is unreachable or the request times out, it refuses the call with a retry reason: exit 2 with the reason on stderr, or a printed denial for a hook installed with the event `PermissionRequest` (SC-12).
 
 **Event path.** The avatar subscribes to:
 - `quirky.agent-status/settled` and `quirky.agent-status/changed`
@@ -147,23 +147,24 @@ type ToolGateProvider = (request: ToolGateRequest, signal: AbortSignal) => Promi
 // context.provide('tool-gate:<pluginId>/<name>', provider)
 ```
 - `deadlineMs` is set by the shim or extension. It is `(judgment-timeout-seconds + 5) * 1000` for Claude and Codex. For omp it is 25000, under omp's 30-second `tool_call` budget, and the avatar's judgment deadline for omp is 20 s.
-- `encoded` is the exact stdout text the agent must see. `exitCode` defaults to 0.
+- `encoded` is the exact stdout text the agent must see. `exitCode` defaults to 0 and, when present, must be an integer from 0 to 255. A `deny` has `encoded: null` or text containing a character other than space, tab, carriage return or newline. An `unavailable` has `encoded: null` and no `exitCode`. An invalid provider answer becomes `{decision:'unavailable', reason:'the tool gate returned an invalid decision', encoded:null}`.
 - Wire format (as built):
   - The POST body is the raw agent payload. `session`, `event` and `deadline` (ms) go in the query string.
-  - When `event` is absent, the daemon falls back to the payload's `hook_event_name`.
+  - The event comes from the parsed payload's top-level `hook_event_name`, then the query's `event` as a fallback, then `''`. Both sources accept only `[A-Za-z0-9_.-]{1,64}`.
+  - The body is capped at 8 MiB before JSON parsing, including when no length is declared; a larger body gets HTTP 413 with `{"error":"body too large"}`.
   - `deadline` defaults to 30000 and is capped at 10 minutes.
   - If the `tool-gate` declaration lists `agents` and the request's agent isn't in it, the daemon answers `unavailable` without calling the provider.
-- The shim's deadline comes from `quirky-gate <agent> [deadline-ms]`, then `$QUIRKY_GATE_DEADLINE_MS`, then 30000. The avatar's hook installer passes it as the second argument.
+- The shim's deadline comes from `quirky-gate <agent> [deadline-ms] [event]`, then `$QUIRKY_GATE_DEADLINE_MS`, then 30000. It reads decimal digits, drops leading zeros, defaults invalid or zero values to 30000, and caps valid values at 600000. The third argument supplies the query event and selects the printed refusal for `PermissionRequest`; invalid event names are ignored. `QUIRKY_HOOK_EVENT` is not read. The avatar's hook installer passes the deadline as the second argument; passing the third argument is tracked in `g1-15`.
 - `Core.requestToolGate` gets its provider through `core.setToolGateProvider(...)`, which is wired in `packages/daemon/src/plugins/runtime.ts`.
 - The daemon passes `payload` through untouched. The provider interprets it.
-- The manifest parser rejects a second plugin declaring `tool-gate`. At runtime, at most one provider is active, and the first registered wins.
+- The registry keeps one enabled plugin declaring `tool-gate`: built-in before installed, then the lowest ID within a source. Other declarers are invalid. A `tool-gate` contribution can't be overridden; a plugin attempting it is invalid even when the base is absent or disabled. At runtime, at most one provider is active.
 - `requestToolGate` resolves to `{decision:'unavailable', reason}` when there is no provider, the provider throws, or `deadlineMs` elapses. In that last case it also aborts `signal`. It never resolves to `allow` on any failure path.
 - `quirky-gate <agent>` (shell) behaves as follows:
   - It reads stdin and `$QUIRKY_SESSION_ID`.
   - With no marker at `$QUIRKY_HOME/plugin-data/quirky.avatar/supervised/$QUIRKY_SESSION_ID`, it prints the agent's passthrough answer and exits 0.
   - Otherwise it POSTs to `/gate/<agent>?session=…` with `curl -m <deadline+5>`.
-  - It prints the encoded decision the daemon returns. The daemon returns the final agent-specific stdout string in `encoded`, so the shell never builds JSON.
-  - On any curl failure it prints the agent's **deny** encoding with the reason `"Quirky's avatar gate is unavailable; try again shortly."` and exits with the agent's blocking code: exit 2 for Claude and Codex, with the reason on stderr where the agent requires it.
+  - It prints the encoded decision the daemon returns. The daemon returns the final agent-specific stdout string in `encoded`, so the shell never builds JSON except for the fixed `PermissionRequest` refusal.
+  - It refuses when there is no daemon address, the request fails or returns a non-200 status, or the answer isn't a printable decision (`allow`, `deny` or `passthrough`, non-blank `encoded`, absent or integer `exitCode` from 0 to 255, and successful printing). Refusal writes `"Quirky's avatar gate is unavailable; try again shortly."` on stderr and exits 2, except when the third argument is exactly `PermissionRequest`: it also prints the fixed PermissionRequest denial on stdout and exits 0.
 
 ### H2 power (host)
 
