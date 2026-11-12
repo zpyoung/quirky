@@ -25,6 +25,7 @@ const emptyReport = (): ReportModel => ({
 export function createStubServices(): AvatarServices {
   return {
     gate: {
+      classifyContext: async () => null,
       decideCall: async () => ({ outcome: 'retry', reason: 'the avatar gate is not available', encoded: '' }),
       writeMarker() {},
       removeMarker() {},

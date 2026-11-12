@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AvatarApp, Level, RecordCursor, WorktreeState } from '../src/contracts'
+import type { AvatarApp, ClassifyContext, Level, RecordCursor, WorktreeState } from '../src/contracts'
+import type { AgentEnv } from '../src/hooks/install'
 import { callFingerprint } from '../src/fingerprint'
 import { createRecords } from '../src/supervisor/records'
 import { createEvidence } from '../src/supervisor/stuck'
@@ -18,12 +19,14 @@ const iso = (offsetMs: number) => new Date(T0 + offsetMs).toISOString()
 const claudeCall = (name: string, input: unknown, at = 1_000) =>
   JSON.stringify({ type: 'assistant', timestamp: iso(at), message: { role: 'assistant', content: [{ type: 'text', text: 'working' }, { type: 'tool_use', id: `tu-${at}`, name, input }] } }) + '\n'
 
-type Options = { agent?: string; level?: Level; state?: WorktreeState; graceMs?: number; sessionCreatedAt?: number | null }
+type Options = { agent?: string; level?: Level; state?: WorktreeState; graceMs?: number; sessionCreatedAt?: number | null; agentEnv?: AgentEnv }
 
-function setup({ agent = 'claude', level = 'own-branch', state = 'working', graceMs = 0, sessionCreatedAt = T0 }: Options = {}) {
+function setup({ agent = 'claude', level = 'own-branch', state = 'working', graceMs = 0, sessionCreatedAt = T0, agentEnv }: Options = {}) {
   const t = makeTestApp()
   const worktree = join(dir, 'wt')
   mkdirSync(worktree, { recursive: true })
+  const userHome = join(dir, 'agent-home')
+  mkdirSync(userHome, { recursive: true })
   const transcript = join(dir, 'transcript.jsonl')
   writeFileSync(transcript, '')
   t.app.now = () => T0 + 10 * 60_000
@@ -33,11 +36,22 @@ function setup({ agent = 'claude', level = 'own-branch', state = 'working', grac
   const current = { state }
   t.app.services.handoff.active = () => [{ worktreeId: 'wt-1', sessionId: 's-1', state: current.state, mandate }]
   t.app.services.handoff.setState = (_worktreeId, next) => void (current.state = next)
+  const settings = t.app.settings()
+  const context: ClassifyContext = {
+    worktreePath: worktree, handedOffPaths: [worktree], defaultBranch: 'main', ownBranch: 'avatar/wt-1',
+    home: userHome, allowCommands: settings.allowCommands, denyCommands: settings.denyCommands, deployCommands: settings.deployCommands
+  }
+  let gateContext: ClassifyContext | null = context
+  const contextCalls: string[] = []
 
   const observed: { sessionId: string; fingerprint: string; at: number }[] = []
   const receipts = new Set<string>()
   t.app.services.gate = {
     ...t.app.services.gate,
+    classifyContext: async (worktreeId) => {
+      contextCalls.push(worktreeId)
+      return gateContext
+    },
     noteObservedCall: (sessionId, fingerprint, at) => void observed.push({ sessionId, fingerprint, at }),
     hasReceipt: (_sessionId, fingerprint) => receipts.has(fingerprint),
     gateCheck: async () => ({ ok: true, reason: '' })
@@ -54,8 +68,6 @@ function setup({ agent = 'claude', level = 'own-branch', state = 'working', grac
   t.app.services.brain = { ...t.app.services.brain, wake: () => void wakes++ }
 
   t.fakeCalls['quirky.session/get'] = () => ({ id: 's-1', agent, cwd: worktree, createdAt: sessionCreatedAt, providerSession: { id: 'p-1', transcriptPath: transcript } })
-  t.fakeCalls['quirky.git/status'] = () => ({ head: 'sha', branch: 'avatar/wt-1' })
-  t.fakeCalls['quirky.git/compare'] = () => ({ status: 'ready', base: 'origin/main', entries: [] })
 
   let evidence = createEvidence()
   const watched: { dir: string; fire: (filename: string | null) => void; stopped: boolean }[] = []
@@ -63,7 +75,7 @@ function setup({ agent = 'claude', level = 'own-branch', state = 'working', grac
     evidence,
     graceMs,
     debounceMs: 0,
-    env: { CODEX_HOME: join(dir, 'codex-home') },
+    agentEnv: agentEnv ?? { home: userHome, env: {} },
     watch: (watchDir, fire) => {
       const entry = { dir: watchDir, fire, stopped: false }
       watched.push(entry)
@@ -76,6 +88,10 @@ function setup({ agent = 'claude', level = 'own-branch', state = 'working', grac
   return {
     ...t,
     worktree,
+    userHome,
+    contextCalls,
+    get gateContext() { return gateContext },
+    set gateContext(value: ClassifyContext | null) { gateContext = value },
     transcript,
     observed,
     receipts,
@@ -285,22 +301,54 @@ describe('Codex hosted tools', () => {
 describe('hook-config watch', () => {
   const claudeDir = (t: ReturnType<typeof setup>) => join(t.worktree, '.claude')
 
-  test('watches the directories that hold the agent hook files for each agent', async () => {
-    const cases: [string, string[]][] = [
-      ['claude', ['.claude']],
-      ['codex', ['codex-home', '.codex']],
-      ['pi', ['extensions']],
-      ['omp', ['extensions']]
-    ]
-    for (const [agent, dirs] of cases) {
-      const t = setup({ agent })
-      for (const name of dirs) mkdirSync(name.startsWith('.') ? join(t.worktree, name) : join(dir, name === 'extensions' ? join('agent-dir', 'extensions') : name), { recursive: true })
+  test('watches the user-home defaults for Codex, pi, and omp', async () => {
+    const home = join(dir, 'agent-home')
+    const worktree = join(dir, 'wt')
+    const cases = [
+      ['codex', join(home, '.codex'), join(worktree, '.codex')],
+      ['pi', join(home, '.pi', 'agent', 'extensions'), join(worktree, '.pi', 'extensions')],
+      ['omp', join(home, '.omp', 'agent', 'extensions'), join(worktree, '.omp', 'extensions')]
+    ] as const
+    for (const [agent, ...paths] of cases) {
+      for (const path of paths) mkdirSync(path, { recursive: true })
+      const t = setup({ agent, agentEnv: { home, env: {} } })
+      await t.records.check()
+      expect(t.watched.map((entry) => entry.dir)).toEqual(paths)
+      expect(t.watched.some((entry) => entry.dir.startsWith(t.context.home))).toBe(false)
       t.records.dispose()
-      const again = createRecords(t.app, { evidence: t.evidence, debounceMs: 0, env: { CODEX_HOME: join(dir, 'codex-home'), PI_CODING_AGENT_DIR: join(dir, 'agent-dir') }, watch: (watchDir, fire) => (t.watched.push({ dir: watchDir, fire, stopped: false }), () => {}) })
-      await again.check()
-      expect(t.watched.map((entry) => entry.dir.replace(`${dir}/`, '').replace('wt/', ''))).toEqual(dirs.map((name) => (name === 'extensions' ? 'agent-dir/extensions' : name)))
-      again.dispose()
     }
+  })
+
+  test('watches absolute Codex and shared pi/omp overrides', async () => {
+    const home = join(dir, 'agent-home')
+    const codexHome = join(dir, 'codex-home')
+    const agentDir = join(dir, 'agent-dir')
+    const worktree = join(dir, 'wt')
+    const env = { CODEX_HOME: codexHome, PI_CODING_AGENT_DIR: agentDir }
+    const cases = [
+      ['codex', [codexHome, join(worktree, '.codex')]],
+      ['pi', [join(agentDir, 'extensions'), join(worktree, '.pi', 'extensions')]],
+      ['omp', [join(agentDir, 'extensions'), join(worktree, '.omp', 'extensions')]]
+    ] as const
+    for (const [agent, paths] of cases) {
+      for (const path of paths) mkdirSync(path, { recursive: true })
+      const t = setup({ agent, agentEnv: { home, env } })
+      await t.records.check()
+      expect(t.watched.map((entry) => entry.dir)).toEqual([...paths])
+      expect(t.watched.some((entry) => entry.dir.startsWith(t.context.home))).toBe(false)
+      t.records.dispose()
+    }
+  })
+
+  test('ignores a relative Codex home override', async () => {
+    const home = join(dir, 'agent-home')
+    const worktree = join(dir, 'wt')
+    const paths = [join(home, '.codex'), join(worktree, '.codex')]
+    for (const path of paths) mkdirSync(path, { recursive: true })
+    const t = setup({ agent: 'codex', agentEnv: { home, env: { CODEX_HOME: 'relative/path' } } })
+    await t.records.check()
+    expect(t.watched.map((entry) => entry.dir)).toEqual(paths)
+    t.records.dispose()
   })
 
   test('a changed settings file re-runs the gate check; a passing check leaves the worker alone', async () => {
@@ -643,6 +691,92 @@ describe('durable waiting calls', () => {
   })
 })
 
+describe('classifying skipped calls from the gate context', () => {
+  test('uses the user home when recognizing credentials', async () => {
+    const t = setup()
+    const credential = { file_path: join(t.userHome, '.ssh', 'id_ed25519') }
+    t.append(claudeCall('Read', credential))
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { classes: ['credential'], outcome: 'held', wouldHaveStopped: true } }])
+    expect(t.steps).toHaveLength(1)
+  })
+
+  test('judges pushes against the gate context default branch', async () => {
+    const t = setup({ level: 'full' })
+    t.gateContext = { ...t.gateContext!, defaultBranch: 'trunk' }
+    const input = { command: 'git push origin HEAD:trunk' }
+    t.append(claudeCall('Bash', input))
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { classes: ['push-default'], outcome: 'deny', wouldHaveStopped: true } }])
+    expect(t.contextCalls).toEqual(['wt-1'])
+  })
+
+  test('uses the gate handed-off paths even without another session', async () => {
+    const t = setup()
+    const otherWorktree = join(dir, 'wt2')
+    mkdirSync(otherWorktree)
+    t.gateContext = { ...t.gateContext!, handedOffPaths: [otherWorktree] }
+    const input = { file_path: join(otherWorktree, 'a.ts'), content: 'export {}' }
+    t.append(claudeCall('Write', input))
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { classes: ['edit-inside'], outcome: 'allow', wouldHaveStopped: false } }])
+    expect(t.steps).toEqual([])
+  })
+
+  test('keeps a skipped call pending until its worktree gets confirmed', async () => {
+    const t = setup()
+    const context = t.gateContext!
+    t.gateContext = null
+    t.append(claudeCall('Bash', PUSH))
+    await t.records.check()
+    expect(t.skipped()).toEqual([])
+    expect(t.app.store.journalSince(0).filter((entry) => entry.kind === 'event' && entry.data.type === 'skipped-call-error')).toEqual([])
+    expect(t.steps).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t, PUSH, T0 + 1_000)])
+
+    t.gateContext = context
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.contextCalls).toEqual(['wt-1', 'wt-1'])
+  })
+
+  test('lets a call go after exactly five minutes without a confirmed worktree', async () => {
+    const t = setup()
+    const context = t.gateContext!
+    t.gateContext = null
+    t.append(claudeCall('Bash', PUSH))
+    await t.records.check()
+    expect(t.skipped()).toEqual([])
+
+    t.app.now = () => T0 + 900_000
+    await t.records.check()
+    expect(t.app.store.journalSince(0).filter((entry) => entry.kind === 'event' && entry.data.type === 'skipped-call-error').map((entry) => entry.data)).toEqual([
+      { type: 'skipped-call-error', error: 'the worktree could not be confirmed', fingerprint: t.fingerprint('Bash', PUSH) }
+    ])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+    const checksAtExpiry = t.contextCalls.length
+    t.gateContext = context
+    await t.records.check()
+    expect(t.contextCalls).toHaveLength(checksAtExpiry)
+    expect(t.skipped()).toEqual([])
+  })
+
+  test('starts the timeout when a restored call first gets a null context', async () => {
+    const t = setup()
+    seedCursor(t, { pending: [waitingCall(t, PUSH, T0 + 540_000)] })
+    t.gateContext = null
+    await t.records.check()
+    expect(t.skipped()).toEqual([])
+
+    t.app.now = () => T0 + 900_000
+    await t.records.check()
+    expect(t.app.store.journalSince(0).filter((entry) => entry.kind === 'event' && entry.data.type === 'skipped-call-error')).toMatchObject([
+      { data: { error: 'the worktree could not be confirmed', fingerprint: t.fingerprint('Bash', PUSH) } }
+    ])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+  })
+})
+
 describe('cursor lifecycle and failures', () => {
   test('a changed path resets the position but keeps waiting calls', async () => {
     const t = setup()
@@ -836,8 +970,9 @@ describe('stopping during a record pass', () => {
   test('a call not yet journaled remains pending when disposed during classification', async () => {
     const t = setup()
     const entered = Promise.withResolvers<void>()
-    const held = Promise.withResolvers<unknown>()
-    t.fakeCalls['quirky.git/status'] = () => {
+    const context = t.gateContext!
+    const held = Promise.withResolvers<ClassifyContext | null>()
+    t.app.services.gate.classifyContext = () => {
       entered.resolve()
       return held.promise
     }
@@ -845,12 +980,12 @@ describe('stopping during a record pass', () => {
     const pass = t.records.check()
     await entered.promise
     t.records.dispose()
-    held.resolve({ head: 'sha', branch: 'avatar/wt-1' })
+    held.resolve(context)
     await pass
     expect(t.skipped()).toEqual([])
     expect(t.steps).toEqual([])
     expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t, PUSH, T0 + 1_000)])
-    t.fakeCalls['quirky.git/status'] = () => ({ head: 'sha', branch: 'avatar/wt-1' })
+    t.app.services.gate.classifyContext = async () => context
     t.restart()
     await t.records.check()
     expect(t.skipped()).toHaveLength(1)
@@ -963,9 +1098,10 @@ describe('stopping during a record pass', () => {
   test('a stop during the first of two waiting calls starts no judgment of the second', async () => {
     const t = setup()
     const entered = Promise.withResolvers<void>()
-    const held = Promise.withResolvers<{ head: string; branch: string }>()
+    const context = t.gateContext!
+    const held = Promise.withResolvers<ClassifyContext | null>()
     let checks = 0
-    t.fakeCalls['quirky.git/status'] = () => {
+    t.app.services.gate.classifyContext = () => {
       checks++
       entered.resolve()
       return held.promise
@@ -976,7 +1112,7 @@ describe('stopping during a record pass', () => {
     const pass = t.records.check()
     await entered.promise
     t.records.dispose()
-    held.resolve({ head: 'sha', branch: 'avatar/wt-1' })
+    held.resolve(context)
     await pass
     expect(checks).toBe(1)
     expect(t.skipped()).toEqual([])

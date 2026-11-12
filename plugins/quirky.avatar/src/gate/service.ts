@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { gitApi } from '@quirky/git'
 import type { ToolGateDecision, ToolGateProvider, ToolGateRequest } from '@quirky/protocol'
 import type {
   AgentKind, AvatarApp, ClassifyContext, GateOutcome, GateService, Level, Mandate, Receipt, RuleDecision, StepId, ToolCall
@@ -20,6 +21,7 @@ const AGENTS: readonly AgentKind[] = ['claude', 'codex', 'pi', 'omp']
 const TOOL_EVENTS: readonly ToolCall['event'][] = ['PreToolUse', 'PermissionRequest', 'tool_call']
 const BRAIN_MARGIN_MS = 5_000
 const WORKTREE_TTL_MS = 5_000
+const DEFAULT_BASE_TTL_MS = 60_000
 const PERMISSION_RECEIPT_WINDOW_MS = 5 * 60_000
 
 const RETRY_REASON = "The avatar hasn't decided yet; try the same call again shortly."
@@ -38,7 +40,13 @@ type WorktreeInfo = { id: string; path: string; branch: string | null; repoId: s
 type InFlight = { call: ToolCall; fingerprint: string; receipt: Receipt; cancelled: boolean; shadow: boolean; settle(result: Result): void }
 
 /** Test seams: where agent config lives, how Claude's version is read, and how long a gate check waits on an unseen call. */
-export type GateDeps = { agentEnv?: AgentEnv; claudeVersion?: () => Promise<string | null>; graceMs?: number }
+export type GateDeps = {
+  agentEnv?: AgentEnv
+  claudeVersion?: () => Promise<string | null>
+  graceMs?: number
+  /** The repository's default base as git records it (`origin/trunk`, `main`), or null when there is none. */
+  defaultBase?: (repoPath: string) => Promise<string | null>
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -105,6 +113,10 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   const checker: GateChecker = createGateChecker({ app, agentEnv, claudeVersion, graceMs: deps.graceMs, prepare: () => hooks.sync() })
   const inFlight = new Set<InFlight>()
   let worktreeCache: { at: number; list: WorktreeInfo[] } | null = null
+  const defaultBaseReader = deps.defaultBase ?? ((repoPath: string) => gitApi().detectDefaultBase(repoPath))
+  const defaultBaseCache = new Map<string, { at: number; branch: string }>()
+  const defaultBaseInFlight = new Map<string, Promise<string>>()
+  let disposed = false
 
   async function worktrees(): Promise<WorktreeInfo[]> {
     if (worktreeCache !== null && app.now() - worktreeCache.at < WORKTREE_TTL_MS) return worktreeCache.list
@@ -122,20 +134,50 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
     }
   }
 
-  /** Null when the call's worktree can't be resolved to a real path; the call's own cwd is never trusted as the root. */
-  async function classifyContext(call: ToolCall): Promise<ClassifyContext | null> {
+  async function readDefaultBranch(worktree: WorktreeInfo): Promise<string> {
+    const key = worktree.repoId || worktree.path
+    const inFlight = defaultBaseInFlight.get(key)
+    if (inFlight !== undefined) return inFlight
+    const cached = defaultBaseCache.get(key)
+    if (cached !== undefined && app.now() - cached.at < DEFAULT_BASE_TTL_MS) return cached.branch
+
+    const lookup = (async () => {
+      let branch: string
+      try {
+        const base = await defaultBaseReader(worktree.path)
+        branch = base?.replace(/^origin\//, '') ?? 'main'
+      } catch {
+        branch = 'main'
+      }
+      defaultBaseCache.set(key, { at: app.now(), branch })
+      return branch
+    })()
+    defaultBaseInFlight.set(key, lookup)
+    try {
+      return await lookup
+    } finally {
+      if (defaultBaseInFlight.get(key) === lookup) defaultBaseInFlight.delete(key)
+    }
+  }
+
+  /** Null when the worktree can't be resolved to a listed path; a tool call's cwd is never trusted as the root. */
+  async function classifyContext(worktreeId: string): Promise<ClassifyContext | null> {
+    if (disposed) return null
     const list = await worktrees()
-    const self = list.find((entry) => entry.id === call.worktreeId)
+    if (disposed) return null
+    const self = list.find((entry) => entry.id === worktreeId)
     if (self === undefined) return null
+    const defaultBranch = await readDefaultBranch(self)
+    if (disposed) return null
     const settings = app.settings()
     const others = app.services.handoff
       .active()
-      .filter((row) => row.worktreeId !== call.worktreeId)
+      .filter((row) => row.worktreeId !== worktreeId)
       .flatMap((row) => list.filter((entry) => entry.id === row.worktreeId).flatMap((entry) => [entry.path, realPath(entry.path)]))
     return {
       worktreePath: realPath(self.path),
       handedOffPaths: [...new Set([self.path, ...others])],
-      defaultBranch: list.find((entry) => entry.repoId === self.repoId && entry.isMain)?.branch ?? 'main',
+      defaultBranch,
       ownBranch: self.branch ?? 'HEAD',
       home: agentEnv.home,
       allowCommands: settings.allowCommands,
@@ -269,7 +311,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
 
     let rule: RuleDecision
     try {
-      const ctx = await classifyContext(call)
+      const ctx = await classifyContext(call.worktreeId)
       if (ctx === null) {
         const trace: Trace = [{ step: 'floor-core', result: 'deny', note: 'the worktree could not be confirmed; retry' }]
         return conclude(entry, mandate, { outcome: 'retry', reason: UNCONFIRMED_WORKTREE_REASON, reliedOn: 'an unconfirmed worktree', trace, step: null })
@@ -380,6 +422,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   }
 
   const service: GateService = {
+    classifyContext,
     decideCall,
     writeMarker(sessionId: string, worktreeId: string, level: Level) {
       writeMarkerFile(quirkyHome, sessionId, { worktreeId, level })
@@ -446,6 +489,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   )
 
   return () => {
+    disposed = true
     checker.dispose()
     hooks.dispose()
     for (const entry of [...inFlight]) stopInFlight(entry)

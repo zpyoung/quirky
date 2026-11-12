@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto'
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, watch as fsWatch } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
-import type { AgentKind, AvatarApp, ClassifyContext, Mandate, PendingRecordCall, RecordCursor, ToolCall } from '../contracts'
+import { dirname, join, resolve, sep } from 'node:path'
+import type { AgentKind, AvatarApp, Mandate, PendingRecordCall, RecordCursor, ToolCall } from '../contracts'
 import { callFingerprint } from '../fingerprint'
 import { classifyCall } from '../gate/classify'
 import { decide } from '../gate/decide'
-import { branchName, readCompare, readHead } from '../shipping/outbox'
+import { codexHooksPath, piExtensionPath, processAgentEnv } from '../hooks/install'
+import type { AgentEnv } from '../hooks/install'
 import type { Evidence } from './stuck'
 
 const RECEIPT_WINDOW_MS = 60_000
+const CONTEXT_CONFIRMATION_TIMEOUT_MS = 300_000
 const JOURNAL_INPUT_CHARS = 4000
 const MAX_EDIT_FILE_BYTES = 1_000_000
 const HOSTED_TOOLS: Record<string, string> = { web_search_call: 'web_search', image_generation_call: 'image_generation' }
@@ -25,7 +27,8 @@ export type RecordsDeps = {
   watch?: Watcher
   /** Quiet time after a config change before the gate check re-runs. */
   debounceMs?: number
-  env?: Record<string, string | undefined>
+  /** The user's home and environment as an agent sees them; defaults to the running daemon's. */
+  agentEnv?: AgentEnv
 }
 
 export type Records = {
@@ -204,13 +207,14 @@ function summary(toolName: string, toolInput: unknown): string {
 export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
   const cursors = new Map<string, Cursor>()
   const pending: Pending[] = []
+  const contextWaitSince = new Map<Pending, number>()
   const watchers = new Map<string, () => void>()
   const syncedWorktrees = new Set<string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const checking = new Map<string, Promise<void>>()
   let stopped = false
   const watch = deps.watch ?? defaultWatch
-  const env = deps.env ?? process.env
+  const agentEnv = deps.agentEnv ?? processAgentEnv()
   const call = <T>(method: string, params: Record<string, unknown>): Promise<T> => app.context.call(method, params) as Promise<T>
   const graceMs = (): number => deps.graceMs ?? (app.settings().judgmentTimeoutSeconds + 15) * 1000
 
@@ -311,25 +315,9 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
     }
   }
 
-  async function classifyContext(worktreeId: string, cwd: string, mandate: Mandate, handedOffPaths: string[]): Promise<ClassifyContext | null> {
-    const [head, compare] = await Promise.all([readHead(app, worktreeId).catch(() => null), readCompare(app, worktreeId).catch(() => null)])
-    if (stopped) return null
-    const settings = app.settings()
-    return {
-      worktreePath: cwd,
-      handedOffPaths,
-      defaultBranch: compare?.base != null ? branchName(compare.base) : 'main',
-      ownBranch: head?.branch ?? '',
-      home: app.context.home,
-      allowCommands: settings.allowCommands,
-      denyCommands: settings.denyCommands,
-      deployCommands: settings.deployCommands
-    }
-  }
-
-  async function triage(item: Pending, handedOffPaths: string[]): Promise<void> {
+  async function triage(item: Pending): Promise<boolean> {
     const mandate = app.store.mandates.get(item.worktreeId)
-    if (mandate === null || !AGENTS.includes(item.agent)) return
+    if (mandate === null || !AGENTS.includes(item.agent)) return true
     const toolCall: ToolCall = {
       agent: item.agent as AgentKind,
       sessionId: item.sessionId,
@@ -339,8 +327,8 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
       toolInput: item.toolInput,
       event: 'PreToolUse'
     }
-    const ctx = await classifyContext(item.worktreeId, item.cwd, mandate, handedOffPaths)
-    if (stopped || ctx === null) return
+    const ctx = await app.services.gate.classifyContext(item.worktreeId)
+    if (stopped || ctx === null) return false
     const classes = classifyCall(toolCall, ctx)
     const decision = decide({ call: toolCall, classes, mandate, switches: mandate.switches, level: mandate.level, ctx })
     const base = {
@@ -357,18 +345,19 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
     }
     if (decision.outcome === 'allow') {
       app.journal(item.worktreeId, 'skipped-call', { ...base, wouldHaveStopped: false })
-      return
+      return true
     }
     app.journal(item.worktreeId, 'skipped-call', { ...base, wouldHaveStopped: true, top: true })
     const stepped = await app.services.supervisor.stepIn(
       item.worktreeId,
       `The avatar stopped you: ${summary(item.toolName, item.toolInput)} ran without passing the gate, and it would not have been allowed (${decision.reason}). Do not repeat it. Say what you were trying to do and find another way.`
     )
-    if (stopped) return
+    if (stopped) return true
     if (!stepped.sent) app.journal(item.worktreeId, 'event', { type: 'step-in-refused', reason: stepped.reason ?? 'not sent', fingerprint: item.fingerprint })
+    return true
   }
 
-  async function settlePending(handedOffPaths: string[]): Promise<void> {
+  async function settlePending(): Promise<void> {
     for (let index = 0; index < pending.length;) {
       if (stopped) return
       const item = pending[index]
@@ -379,13 +368,25 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
       }
       if (!matched) {
         try {
-          await triage(item, handedOffPaths)
+          const classified = await triage(item)
+          if (stopped) return
+          if (!classified) {
+            const now = app.now()
+            const firstNullAt = contextWaitSince.get(item) ?? now
+            contextWaitSince.set(item, firstNullAt)
+            if (now - firstNullAt < CONTEXT_CONFIRMATION_TIMEOUT_MS) {
+              index++
+              continue
+            }
+            app.journal(item.worktreeId, 'event', { type: 'skipped-call-error', error: 'the worktree could not be confirmed', fingerprint: item.fingerprint })
+          }
         } catch (error) {
           if (stopped) return
           app.journal(item.worktreeId, 'event', { type: 'skipped-call-error', error: message(error), fingerprint: item.fingerprint })
         }
         if (stopped) return
       }
+      contextWaitSince.delete(item)
       pending.splice(index, 1)
       const cursor = cursors.get(item.sessionId)
       if (cursor !== undefined) {
@@ -396,16 +397,14 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
   }
 
   function configDirs(agent: string, cwd: string): { dir: string; files: string[] | null }[] {
-    const home = app.context.home
-    const codexHome = env.CODEX_HOME && env.CODEX_HOME !== '' ? env.CODEX_HOME : join(home, '.codex')
     if (agent === 'claude') return [{ dir: join(cwd, '.claude'), files: ['settings.json', 'settings.local.json'] }]
-    if (agent === 'codex') return [{ dir: codexHome, files: ['hooks.json'] }, { dir: join(cwd, '.codex'), files: null }]
+    if (agent === 'codex') return [{ dir: dirname(codexHooksPath(agentEnv)), files: ['hooks.json'] }, { dir: join(cwd, '.codex'), files: null }]
     if (agent === 'pi' || agent === 'omp') {
-      const agentDir = env.PI_CODING_AGENT_DIR && env.PI_CODING_AGENT_DIR !== '' ? env.PI_CODING_AGENT_DIR : join(home, agent === 'pi' ? '.pi' : '.omp', 'agent')
-      return [{ dir: join(agentDir, 'extensions'), files: null }, { dir: join(cwd, agent === 'pi' ? '.pi' : '.omp', 'extensions'), files: null }]
+      return [{ dir: dirname(piExtensionPath(agent, agentEnv)), files: null }, { dir: join(cwd, `.${agent}`, 'extensions'), files: null }]
     }
     return []
   }
+
 
   function syncWatchers(worktreeId: string, agent: string, cwd: string): void {
     if (cwd === '') return
@@ -444,11 +443,11 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
     for (const worktreeId of [...syncedWorktrees]) if (!activeIds.has(worktreeId)) syncedWorktrees.delete(worktreeId)
   }
 
-  async function checkSession(worktreeId: string, sessionId: string, handedOffAt: number): Promise<SessionRead | null> {
+  async function checkSession(worktreeId: string, sessionId: string, handedOffAt: number): Promise<void> {
     const session = await readSession(sessionId)
-    if (stopped || session === null) return null
+    if (stopped || session === null) return
     syncWatchers(worktreeId, session.agent, session.cwd)
-    if (session.transcriptPath === null) return session
+    if (session.transcriptPath === null) return
     let cursor = cursors.get(sessionId)
     if (cursor === undefined) {
       cursor = restoreCursor(worktreeId, session, handedOffAt)
@@ -462,21 +461,18 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
     for (const line of readNewLines(cursor)) observe(worktreeId, session, handedOffAt, line, cursor)
     if (cursor.offset !== previousOffset) cursor.dirty = true
     saveCursor(sessionId, cursor)
-    return session
   }
 
   const records: Records = {
     async check() {
       if (stopped) return
       const active = app.services.handoff.active().filter((entry) => entry.sessionId !== null)
-      const paths: string[] = []
       for (const entry of active) {
         if (stopped) return
         const handedOffAt = app.store.handoffs.get(entry.worktreeId)?.handedOffAt ?? 0
         try {
-          const session = await checkSession(entry.worktreeId, entry.sessionId as string, handedOffAt)
+          await checkSession(entry.worktreeId, entry.sessionId as string, handedOffAt)
           if (stopped) return
-          if (session !== null && session.cwd !== '') paths.push(session.cwd)
         } catch (error) {
           app.context.log(`avatar records check failed for ${entry.worktreeId}: ${message(error)}`)
         }
@@ -486,7 +482,7 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
       for (const sessionId of [...cursors.keys()]) if (!liveSessions.has(sessionId)) cursors.delete(sessionId)
       pruneCursors(liveSessions)
       dropWatchers(new Set(active.map((entry) => entry.worktreeId)))
-      await settlePending(paths)
+      await settlePending()
     },
 
     configChanged(worktreeId) {
@@ -514,6 +510,7 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
       watchers.clear()
       for (const timer of timers.values()) clearTimeout(timer)
       timers.clear()
+      contextWaitSince.clear()
     }
   }
   return records
