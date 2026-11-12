@@ -1012,6 +1012,14 @@ describe('brace expansion', () => {
         ])
       ], [-1, 0]))
     })
+
+    test('keeps adjacent known substitutions opaque to sequence detection', () => {
+      expect(parse("touch x{\"$(cat <<'A'\na\nA\n)$(cat <<'B'\n.\nB\n)\".}")).toEqual(script([
+        command(words('cat'), { scope: 1, redirects: [redirect('heredoc', 'a\n')] }),
+        command(words('cat'), { scope: 2, redirects: [redirect('heredoc', '.\n')] }),
+        command([word('touch'), word('x{a..}', false, [1, 2])])
+      ], [-1, 0, 0]))
+    })
   })
 
   describe('scenario 8: brace parsing stays total and below the time bound', () => {

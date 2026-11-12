@@ -882,6 +882,10 @@ class ShellReader {
         if (!item.group.isList) plainDepth++
       }
 
+      while (
+        overrideIndex < builder.fallbackOverrides.length &&
+        builder.fallbackOverrides[overrideIndex]!.end <= position
+      ) overrideIndex++
       const override = builder.fallbackOverrides[overrideIndex]
       const opaqueHere = override !== undefined && override.start <= position && position < override.end
       if (
@@ -906,10 +910,6 @@ class ShellReader {
         if (!group.isList) plainDepth--
       }
       if (item !== undefined) syntaxIndex++
-      while (
-        overrideIndex < builder.fallbackOverrides.length &&
-        builder.fallbackOverrides[overrideIndex]!.end <= position
-      ) overrideIndex++
     }
 
     let hasList = false
