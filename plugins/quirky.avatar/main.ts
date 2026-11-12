@@ -9,6 +9,7 @@ import { register as registerNotify } from './src/notify'
 import { register as registerReport } from './src/report'
 import { register as registerShipping } from './src/shipping/index'
 import { register as registerSupervisor } from './src/supervisor/events'
+import { restoreHandoffs } from './src/restore'
 
 const PLUGIN = 'quirky.avatar'
 const LEVELS: readonly Level[] = ['shadow', 'local', 'own-branch', 'full']
@@ -18,6 +19,7 @@ const NEED_ACTIONS: readonly NeedAction[] = ['allow-once', 'deny', 'confirm', 'r
 type Params = Record<string, unknown>
 
 let disposers: (() => void)[] = []
+let disposerLog: (message: string) => void = () => {}
 
 function invalid(context: PluginContext, message: string): Error {
   return context.error('invalid-params', message)
@@ -145,12 +147,9 @@ export function announceChanges(context: PluginContext, app: AvatarApp): () => v
   return app.on((event) => void context.emit('changed', { type: event.type }))
 }
 
-/**
- * Builds the avatar app, provides every manifest method through `app.services`, and lets each
- * module register itself. The gate, hook and job entries are fail-safe placeholders until their
- * modules replace them.
- */
+/** Builds the avatar app, registers its modules, and restores hand-offs after every service is ready. */
 export async function activate(context: PluginContext): Promise<void> {
+  disposerLog = (message) => context.log(message)
   const app = createApp(context)
   provideMethods(context, app)
   context.provide(`tool-gate:${PLUGIN}/gate`, async () => ({ decision: 'unavailable', reason: 'the avatar gate is not available', encoded: null }))
@@ -163,11 +162,28 @@ export async function activate(context: PluginContext): Promise<void> {
     const dispose = register(app)
     if (typeof dispose === 'function') disposers.push(dispose)
   }
+  restoreHandoffs(app)
 }
 
-/** Runs every disposer a module returned, last registered first. */
+/** Runs every disposer, last first; one that throws is logged and the rest still run. */
+export function runDisposers(disposers: (() => void)[], log: (message: string) => void): void {
+  for (let i = disposers.length - 1; i >= 0; i--) {
+    try {
+      disposers[i]!()
+    } catch (error) {
+      try {
+        log(`avatar: disposer failed: ${error instanceof Error ? error.message : String(error)}`)
+      } catch {
+        continue
+      }
+    }
+  }
+}
+
 export function deactivate(): void {
-  const pending = disposers.reverse()
+  const pending = disposers
   disposers = []
-  for (const dispose of pending) dispose()
+  const log = disposerLog
+  disposerLog = () => {}
+  runDisposers(pending, log)
 }

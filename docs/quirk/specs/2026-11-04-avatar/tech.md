@@ -301,7 +301,7 @@ Each request runs these steps in order:
 7. In Shadow, whatever the path, return passthrough and journal `wouldHave` (R-20).
 8. A `held` outcome creates a needs-you item with `allow-once` and `deny`.
 
-On a take-back while a request is in flight, the provider resolves it with passthrough.
+On a take-back while a request is in flight, the provider resolves it with passthrough. When the avatar stops, an in-flight request is refused with a retry reason.
 
 `CONTRACT:` pure inputs (`src/contracts.ts`):
 ```ts
@@ -465,6 +465,7 @@ These are fixed by the logic spec.
 `CONFIG:` the supervision marker is the file `<home>/plugin-data/quirky.avatar/supervised/<sessionId>`, mode 0600, containing `{worktreeId, level}`.
 - It is written at hand-off once the gate check passes, and on every supervised session the avatar starts.
 - It is removed at take-back, at park (the session becomes passthrough), and in Shadow. Shadow keeps the marker with `level: "shadow"`, so the gate still logs.
+- On activation, the avatar writes the marker of every active hand-off that should have one, removes markers no hand-off accounts for, and starts the gate check again for a hand-off still in `checking`.
 
 `SCHEMA:` the per-agent encodings, owned by `src/hooks/encode.ts` and confirmed by the conformance tests:
 
@@ -509,7 +510,7 @@ These are fixed by the logic spec.
 - **Migration.** There is no existing data. The store is new at version 1.
 - **Rollback.**
   - Disabling the plugin removes the `tool-gate` provider. Supervised sessions then get `unavailable`, which means deny with retry.
-  - On deactivate, the avatar removes every marker so those sessions return to passthrough. Take-back-all semantics run on deactivate.
+  - Deactivating keeps every marker and every hand-off. A waiting request is refused with a retry reason, and supervised sessions are refused while the avatar is stopped (SC-12). To give sessions their own prompts back, take the worktrees back before disabling the plugin, or enable it again and take them back.
 
 ## Testing strategy
 
