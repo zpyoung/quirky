@@ -1634,6 +1634,187 @@ describe('directory uncertainty scenarios', () => {
     ]
     for (const [command, expected] of unaffectedRows) expectClassSet(command, expected)
   })
+  test('search path 1: a followed assignment, a subshell, a later command and a literal heredoc change nothing', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["CDPATH=; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["CDPATH= cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["env CDPATH= cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["export CDPATH=; cd src; touch a", ["edit-inside", "other", "read"], "judgment", null],
+      ["CDPATH=/tmp; CDPATH=; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["CDPATH=$CDPATH:/x; CDPATH=; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["CDPATH=$CDPATH:/x; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["(printf -v CDPATH /tmp); cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["cd src; touch a; printf -v CDPATH /tmp", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["cat <<'EOF'\nabout CDPATH\nEOF\ncd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["cat <<< CDPATH; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 2: CDPATH set by a builtin or an expansion', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["builtin printf -v CDPATH /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v \"CD\"PATH /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["read CDPATH <<< /tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["read -r CDPATH < f; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["echo /tmp | read CDPATH; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["declare CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["declare -x CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["typeset CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["typeset -x CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["local CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      [": ${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      [": \"${CDPATH=/tmp}\"; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["echo ${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["x=${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["x=${CDPATH:=/tmp} cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["[[ ${CDPATH:=/tmp} ]]; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["v=CDPATH; printf -v $v /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("search path 3: zsh's cdpath array", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["cdpath=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath=/tmp cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath+=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath+=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath[1]=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["export cdpath=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["read -A cdpath <<< /tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["printf -v cdpath /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["set -A cdpath /tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["typeset -a cdpath=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      [": ${CDPATH::=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 4: an unknown search path stays unknown', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["readonly CDPATH=/tmp\nCDPATH=\ncd src\ntouch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; CDPATH= cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; export CDPATH=; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; env CDPATH= cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; CDPATH=; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; unset CDPATH; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; CDPATH= bash -c 'cd src; touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; eval 'CDPATH=; cd src'; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 5: targets a search path never applies to', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; cd ./src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd ../wt/src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd /work/wt/src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd .; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd ..; touch a", ["edit-outside", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; cd; touch a", ["edit-outside", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; pushd ./src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; pushd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 6: scopes, pipes, keywords, functions and traps', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; (cd src; touch a)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["(printf -v CDPATH /tmp; cd src; touch a)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp && cd src && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp | cat; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp & cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["{ printf -v CDPATH /tmp; }; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["{ CDPATH=/tmp; }; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["if printf -v CDPATH /tmp; then :; fi; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() { CDPATH=/tmp; }; f; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["trap 'CDPATH=/tmp' DEBUG; :; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 7: nested shells and eval', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; bash -c 'cd src; touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["bash -c 'printf -v CDPATH /tmp; cd src; touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'printf -v CDPATH /tmp'; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'read CDPATH <<< /tmp; cd src; touch a'", ["edit-outside", "other"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; eval 'cd src'; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval \"$(cat <<'EOF'\nprintf -v CDPATH /tmp\nEOF\n)\"; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 8: a command that only names the search path', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["echo $CDPATH; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["grep -r cdpath docs; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["unset CDPATH; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["export CDPATH; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cd cdpath; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["env -u CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["env -u CDPATH= CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["/usr/bin/time -f CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["x=$(CDPATH= cd src && pwd); cd lib; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 9: redirect targets and heredoc bodies', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["cat < \"${CDPATH:=/tmp}/x\"; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["cat <<EOF\n${CDPATH:=/tmp}\nEOF\ncd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["cat <<< ${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 10: what follows the unknown directory', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; cd src", ["other", "read"], "judgment", null],
+      ["printf -v CDPATH /tmp; cd src; cat a", ["other", "read"], "judgment", null],
+      ["printf -v CDPATH /tmp; cd src; git status", ["other", "read"], "judgment", null]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
 
   test('scenario 5: makes directory changes behind shell keywords unknown', () => {
     const rows: [string, ActionClass[]][] = [
