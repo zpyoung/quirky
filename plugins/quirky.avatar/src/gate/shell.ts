@@ -5,7 +5,9 @@ export type ShellWord = {
   /**
    * True when the shell would compute part of the value and the reader can't know it.
    * A double-quoted `$(cat <<'DELIM' … DELIM)` on stdin is not dynamic: it contributes
-   * the heredoc body without its trailing newlines.
+   * the heredoc body without its trailing newlines. This also includes a brace expansion
+   * the reader can't follow: a sequence, more than MAX_BRACE_WORDS words, an empty word,
+   * or a form bash and zsh expand differently.
    */
   dynamic: boolean
   /** The scopes of the substitutions written directly inside this word. */
@@ -26,7 +28,9 @@ export type ShellCommand = {
   /** True when the command is one side of a pipe, or its list is sent to the background. */
   detached: boolean
   assignments: { name: string; value: ShellWord }[]
+  /** The words the shell passes, in order. A comma list in braces has been expanded, so one source word can be several entries. */
   words: ShellWord[]
+  /** One entry per file the shell opens. A target with a comma list in braces is one entry per word. */
   redirects: ShellRedirect[]
 }
 export type ShellScript = {
@@ -38,12 +42,14 @@ export type ShellScript = {
 
 export const MAX_SHELL_CHARS = 1_048_576
 export const MAX_SHELL_DEPTH = 32
+/** The most words one source word may become by brace expansion. Past it the word stays as written and is dynamic. */
+export const MAX_BRACE_WORDS = 64
 
 type Entry =
   | { kind: 'command'; command: ShellCommand; before: Entry[]; quotedHeredoc: boolean }
   | { kind: 'scope'; entries: Entry[] }
 
-type WordResult = { word: ShellWord; before: Entry[]; quoted: boolean; consumed: boolean }
+type WordResult = { word: ShellWord; words?: ShellWord[]; before: Entry[]; quoted: boolean; consumed: boolean }
 type ActiveCommand = { command: ShellCommand; before: Entry[]; assignmentAllowed: boolean }
 type PendingHeredoc = {
   redirect: ShellRedirect
@@ -56,7 +62,36 @@ type PendingHeredoc = {
   ownerDepth: number
 }
 type RedirectOperator = { start: number; end: number; op: string }
-type HomeMarker = { start: number; end: number }
+type HomeMarker = { start: number; end: number; sourceEnd: number; braced: boolean }
+type FallbackOverride = { start: number; end: number; sourceStart: number; sourceEnd: number }
+type ActiveSyntax = {
+  position: number
+  source: number
+  character: '{' | '}' | ',' | '~'
+  group?: BraceGroup
+}
+type BraceAlternative = {
+  start: number
+  end: number
+  expandingChildren: BraceGroup[] | null
+  count: number
+}
+type BraceGroup = {
+  open: number
+  close: number
+  commas: number[]
+  children: BraceGroup[]
+  expandingChildren: BraceGroup[] | null
+  alternatives: BraceAlternative[]
+  isList: boolean
+  hasList: boolean
+  canBeEmpty: boolean
+  count: number
+  rankDivisor: number
+  selectedAlternative: number
+}
+type BracePlan = { expandingRoots: BraceGroup[]; count: number; canBeEmpty: boolean; hasList: boolean }
+type BraceCandidate = { ranges: { start: number; end: number }[]; homes: HomeMarker[]; tildes: number[]; length: number; homeIndex: number; syntaxIndex: number }
 type ExpansionFrame =
   | { kind: 'parameter'; braces: number; quote: string; doubleQuoted: boolean }
   | { kind: 'arithmetic'; parentheses: number; quote: string; doubleQuoted: boolean }
@@ -66,6 +101,8 @@ type ScopeResult = { id: number; entry: Entry }
 class WordBuilder {
   readonly chunks: string[] = []
   readonly homes: HomeMarker[] = []
+  readonly syntax: ActiveSyntax[] = []
+  readonly fallbackOverrides: FallbackOverride[] = []
   readonly subs: number[] = []
   readonly before: Entry[] = []
   length = 0
@@ -108,10 +145,36 @@ class WordBuilder {
     }
     this.appendRange(segmentStart, end)
   }
-  appendHomeRange(start: number, end: number): void {
+  appendHomeRange(start: number, end: number, braced = false): void {
     const markerStart = this.length
     this.appendRange(start, end)
-    this.homes.push({ start: markerStart, end: this.length })
+    this.homes.push({ start: markerStart, end: this.length, sourceEnd: end, braced })
+  }
+
+  appendKnownExpansion(start: number, end: number, value: string): void {
+    const outputStart = this.length
+    this.append(value)
+    this.fallbackOverrides.push({ start: outputStart, end: this.length, sourceStart: start, sourceEnd: end })
+  }
+
+  fallbackText(text: string): string {
+    if (this.fallbackOverrides.length === 0) return text
+    const pieces: string[] = []
+    let cursor = 0
+    for (const marker of this.fallbackOverrides) {
+      pieces.push(text.slice(cursor, marker.start), this.source.slice(marker.sourceStart, marker.sourceEnd))
+      cursor = marker.end
+    }
+    pieces.push(text.slice(cursor))
+    return pieces.join('')
+  }
+
+  markSyntax(position: number, source: number, character: ActiveSyntax['character']): void {
+    this.syntax.push({ position, source, character })
+  }
+
+  rawText(): string {
+    return this.chunks.join('')
   }
 
   addScope(scope: ScopeResult): void {
@@ -120,7 +183,7 @@ class WordBuilder {
   }
 
   finish(): ShellWord {
-    let text = this.chunks.join('')
+    let text = this.rawText()
     if (!this.dynamic && this.homes.length > 0) {
       const pieces: string[] = []
       let cursor = 0
@@ -332,7 +395,15 @@ class ShellReader {
         this.index = redirect.end
         const targetStart = this.skipRedirectSpace(limit)
         if (targetStart === null) return null
-        const target = this.readWord(scope, depth, close, limit, redirect.op === '<<' || redirect.op === '<<-' ? 'delimiter' : 'word')
+        const target = this.readWord(
+          scope,
+          depth,
+          close,
+          limit,
+          redirect.op === '<<' || redirect.op === '<<-' ? 'delimiter' : 'word',
+          true,
+          redirect.op !== '<<<'
+        )
         if (target === null || !target.consumed) return null
         const command = active
         this.appendEntries(command.before, target.before)
@@ -353,14 +424,16 @@ class ShellReader {
             ownerDepth: depth
           })
         } else {
-          let kind: ShellRedirect['kind']
-          if (op === '<') kind = 'read'
-          else if (op === '<<<') kind = 'heredoc'
-          else if (op === '<&') kind = 'dup'
-          else if (op === '<>') kind = 'write'
-          else if (op === '>&' && !target.word.dynamic && this.isDescriptorTarget(target.word.text)) kind = 'dup'
-          else kind = 'write'
-          command.command.redirects.push({ kind, target: target.word })
+          for (const targetWord of target.words ?? [target.word]) {
+            let kind: ShellRedirect['kind']
+            if (op === '<') kind = 'read'
+            else if (op === '<<<') kind = 'heredoc'
+            else if (op === '<&') kind = 'dup'
+            else if (op === '<>') kind = 'write'
+            else if (op === '>&' && !targetWord.dynamic && this.isDescriptorTarget(targetWord.text)) kind = 'dup'
+            else kind = 'write'
+            command.command.redirects.push({ kind, target: targetWord })
+          }
         }
         continue
       }
@@ -369,7 +442,7 @@ class ShellReader {
         const assignment = this.findAssignmentPrefix(limit)
         if (assignment !== null) {
           this.index = assignment.valueStart
-          const value = this.readWord(scope, depth, close, limit, 'word', false)
+          const value = this.readWord(scope, depth, close, limit, 'word', false, false)
           if (value === null) return null
           if (assignment.append) value.word.dynamic = true
           const command = active
@@ -384,7 +457,7 @@ class ShellReader {
       if (!word.consumed) break
       const command = active
       this.appendEntries(command.before, word.before)
-      command.command.words.push(word.word)
+      for (const expandedWord of word.words ?? [word.word]) command.command.words.push(expandedWord)
       command.assignmentAllowed = false
     }
 
@@ -469,7 +542,8 @@ class ShellReader {
     close: ')' | '`' | null,
     limit: number,
     mode: 'word' | 'delimiter' = 'word',
-    commentAtStart = true
+    commentAtStart = true,
+    braceExpansion = true
   ): WordResult | null {
     const builder = new WordBuilder(this.source, this.home)
     let cursor = this.index
@@ -626,22 +700,11 @@ class ShellReader {
         continue
       }
 
-      if (mode !== 'delimiter' && !consumed && character === '~') {
-        const next = cursor + 1 < limit ? this.source[cursor + 1] : undefined
-        if (next === undefined || next === '/' || this.isWordBreak(next)) {
-          builder.appendRange(segmentStart, cursor)
-          builder.appendHomeRange(cursor, cursor + 1)
-          cursor++
-          segmentStart = cursor
-          consumed = true
-          continue
-        }
-        if (next === '+' || next === '-' || this.isNameStart(this.source.charCodeAt(cursor + 1))) {
-          builder.dynamic = true
-          consumed = true
-          cursor++
-          continue
-        }
+      if (
+        character === '{' || character === '}' || character === ',' ||
+        (character === '~' && mode !== 'delimiter')
+      ) {
+        builder.markSyntax(builder.length + cursor - segmentStart, cursor, character)
       }
 
       if (
@@ -667,8 +730,413 @@ class ShellReader {
 
     if (quote !== '') return null
     builder.appendRange(segmentStart, cursor)
+    const raw = builder.rawText()
+    const words = this.expandWord(builder, raw, braceExpansion && mode !== 'delimiter')
     this.index = cursor
-    return { word: builder.finish(), before: builder.before, quoted, consumed }
+    return { word: words[0]!, words, before: builder.before, quoted, consumed }
+  }
+
+  private expandWord(builder: WordBuilder, raw: string, expandBraces: boolean): ShellWord[] {
+    if (builder.dynamic) return [this.dynamicWord(builder, raw)]
+    if (!expandBraces) {
+      const word = this.resolveWord(raw, builder.homes, this.tildePositions(builder.syntax), builder.subs)
+      return word.dynamic ? [this.dynamicWord(builder, raw)] : [word]
+    }
+
+    const plan = this.planBraces(raw, builder)
+    if (plan === null || (plan.hasList && (plan.count > MAX_BRACE_WORDS || plan.canBeEmpty))) {
+      return [this.dynamicWord(builder, raw)]
+    }
+    if (!plan.hasList) {
+      const word = this.resolveWord(raw, builder.homes, this.tildePositions(builder.syntax), builder.subs)
+      return word.dynamic ? [this.dynamicWord(builder, raw)] : [word]
+    }
+
+    const words: ShellWord[] = []
+    for (let rank = 0; rank < plan.count; rank++) {
+      this.selectBraceSequence(plan.expandingRoots, rank)
+      const candidate: BraceCandidate = {
+        ranges: [],
+        homes: [],
+        tildes: [],
+        length: 0,
+        homeIndex: 0,
+        syntaxIndex: 0
+      }
+      this.renderBraceSequence(raw, builder.homes, builder.syntax, candidate, plan.expandingRoots, 0, raw.length)
+      const word = this.resolveWord(
+        this.joinBraceCandidate(raw, candidate),
+        candidate.homes,
+        candidate.tildes,
+        builder.subs
+      )
+      if (word.dynamic) return [this.dynamicWord(builder, raw)]
+      words.push(word)
+    }
+    return words
+  }
+
+  private dynamicWord(builder: WordBuilder, raw: string): ShellWord {
+    return { text: builder.fallbackText(raw), dynamic: true, subs: builder.subs.slice() }
+  }
+
+  private tildePositions(syntax: ActiveSyntax[]): number[] {
+    const positions: number[] = []
+    for (const item of syntax) if (item.character === '~') positions.push(item.position)
+    return positions
+  }
+
+  private resolveWord(text: string, homes: HomeMarker[], tildes: number[], subs: number[]): ShellWord {
+    let tildeHome = false
+    for (const position of tildes) {
+      if (position !== 0) continue
+      const next = text[1]
+      if (next === undefined || next === '/' || this.isWordBreak(next)) {
+        tildeHome = true
+      } else if (next === '+' || next === '-' || this.isNameStart(text.charCodeAt(1))) {
+        return { text, dynamic: true, subs: subs.slice() }
+      }
+      break
+    }
+
+    if (homes.length === 0 && !tildeHome) return { text, dynamic: false, subs: subs.slice() }
+    const pieces: string[] = []
+    let homeIndex = 0
+    let cursor = 0
+    let tildePending = tildeHome
+    while (homeIndex < homes.length || tildePending) {
+      const marker = homes[homeIndex]
+      const start = tildePending ? 0 : marker?.start ?? text.length
+      if (marker !== undefined && marker.start < start) {
+        pieces.push(text.slice(cursor, marker.start), this.home)
+        cursor = marker.end
+        homeIndex++
+      } else if (tildePending) {
+        pieces.push(text.slice(cursor, 0), this.home)
+        cursor = 1
+        tildePending = false
+      } else if (marker !== undefined) {
+        pieces.push(text.slice(cursor, marker.start), this.home)
+        cursor = marker.end
+        homeIndex++
+      }
+    }
+    pieces.push(text.slice(cursor))
+    return { text: pieces.join(''), dynamic: false, subs: subs.slice() }
+  }
+
+  private planBraces(text: string, builder: WordBuilder): BracePlan | null {
+    const syntax = builder.syntax
+    const unmatchedOpens: ActiveSyntax[] = []
+    const groups: BraceGroup[] = []
+    for (const item of syntax) {
+      if (item.character === '{') {
+        unmatchedOpens.push(item)
+      } else if (item.character === '}' && unmatchedOpens.length > 0) {
+        const opening = unmatchedOpens.pop()!
+        const group: BraceGroup = {
+          open: opening.position,
+          close: item.position,
+          commas: [],
+          children: [],
+          expandingChildren: null,
+          alternatives: [],
+          isList: false,
+          hasList: false,
+          canBeEmpty: false,
+          count: 1,
+          rankDivisor: 1,
+          selectedAlternative: 0
+        }
+        opening.group = group
+        item.group = group
+        groups.push(group)
+      }
+    }
+
+    const roots: BraceGroup[] = []
+    const parents: BraceGroup[] = []
+    for (const item of syntax) {
+      if (item.character === '{' && item.group !== undefined) {
+        if (parents.length >= MAX_SHELL_DEPTH) return null
+        const parent = parents[parents.length - 1]
+        if (parent === undefined) roots.push(item.group)
+        else parent.children.push(item.group)
+        parents.push(item.group)
+      } else if (item.character === ',' && parents.length > 0) {
+        parents[parents.length - 1]!.commas.push(item.position)
+      } else if (item.character === '}' && item.group !== undefined) {
+        parents.pop()
+      }
+    }
+    for (const group of groups) group.isList = group.commas.length > 0
+
+    let syntaxIndex = 0
+    let plainDepth = 0
+    const openGroups: BraceGroup[] = []
+    let overrideIndex = 0
+    for (let position = 0; position < text.length; position++) {
+      const item = syntax[syntaxIndex]?.position === position ? syntax[syntaxIndex] : undefined
+      if (item?.character === '{' && item.group !== undefined) {
+        openGroups.push(item.group)
+        if (!item.group.isList) plainDepth++
+      }
+
+      const override = builder.fallbackOverrides[overrideIndex]
+      const opaqueHere = override !== undefined && override.start <= position && position < override.end
+      if (
+        plainDepth > 0 &&
+        text.charCodeAt(position) === 46 &&
+        position + 1 < text.length &&
+        text.charCodeAt(position + 1) === 46
+      ) {
+        let nextOverrideIndex = overrideIndex
+        while (
+          nextOverrideIndex < builder.fallbackOverrides.length &&
+          builder.fallbackOverrides[nextOverrideIndex]!.end <= position + 1
+        ) nextOverrideIndex++
+        const nextOverride = builder.fallbackOverrides[nextOverrideIndex]
+        const opaqueNext = nextOverride !== undefined &&
+          nextOverride.start <= position + 1 && position + 1 < nextOverride.end
+        if (!opaqueHere && !opaqueNext) return null
+      }
+
+      if (item?.character === '}' && item.group !== undefined) {
+        const group = openGroups.pop()!
+        if (!group.isList) plainDepth--
+      }
+      if (item !== undefined) syntaxIndex++
+      while (
+        overrideIndex < builder.fallbackOverrides.length &&
+        builder.fallbackOverrides[overrideIndex]!.end <= position
+      ) overrideIndex++
+    }
+
+    let hasList = false
+    for (const group of groups) {
+      if (!group.isList) continue
+      hasList = true
+    }
+    if (hasList) {
+      let activeIndex = 0
+      for (const home of builder.homes) {
+        if (home.braced) continue
+        while (activeIndex < syntax.length && syntax[activeIndex]!.source < home.sourceEnd) activeIndex++
+        const following = syntax[activeIndex]
+        if (
+          following !== undefined &&
+          following.source === home.sourceEnd &&
+          (following.character === '{' || following.character === '}' || following.character === ',')
+        ) return null
+      }
+    }
+
+    for (const group of groups) {
+      if (group.isList) {
+        let childStart = 0
+        let alternativeStart = group.open + 1
+        let count = 0
+        let canBeEmpty = false
+        for (let alternativeIndex = 0; alternativeIndex <= group.commas.length; alternativeIndex++) {
+          const boundary = alternativeIndex < group.commas.length
+            ? group.commas[alternativeIndex]!
+            : group.close
+          let childEnd = childStart
+          while (childEnd < group.children.length && group.children[childEnd]!.open < boundary) childEnd++
+          const stats = this.countBraceSequence(group.children, childStart, childEnd, alternativeStart, boundary)
+          const expandingChildren = this.expandingBraceChildren(group.children, childStart, childEnd)
+          group.alternatives.push({
+            start: alternativeStart,
+            end: boundary,
+            expandingChildren,
+            count: stats.count
+          })
+          count = Math.min(MAX_BRACE_WORDS + 1, count + stats.count)
+          canBeEmpty ||= stats.canBeEmpty
+          childStart = childEnd
+          alternativeStart = boundary + 1
+        }
+        group.count = count
+        group.canBeEmpty = canBeEmpty
+      } else {
+        const stats = this.countBraceSequence(group.children, 0, group.children.length, group.open + 1, group.close)
+        group.count = stats.count
+        group.canBeEmpty = false
+      }
+      group.expandingChildren = this.expandingBraceChildren(group.children, 0, group.children.length)
+      group.hasList = group.isList || group.expandingChildren !== null
+    }
+
+    const stats = this.countBraceSequence(roots, 0, roots.length, 0, text.length)
+    return {
+      expandingRoots: this.expandingBraceChildren(roots, 0, roots.length) ?? [],
+      count: stats.count,
+      canBeEmpty: stats.canBeEmpty,
+      hasList
+    }
+  }
+
+  private countBraceSequence(
+    children: BraceGroup[],
+    first: number,
+    last: number,
+    start: number,
+    end: number
+  ): { count: number; canBeEmpty: boolean } {
+    let count = 1
+    let canBeEmpty = true
+    let cursor = start
+    for (let index = first; index < last; index++) {
+      const child = children[index]!
+      count = Math.min(MAX_BRACE_WORDS + 1, count * child.count)
+      if (child.open !== cursor || !child.canBeEmpty) canBeEmpty = false
+      cursor = child.close + 1
+    }
+    if (cursor !== end) canBeEmpty = false
+
+    let divisor = 1
+    for (let index = last - 1; index >= first; index--) {
+      const child = children[index]!
+      child.rankDivisor = divisor
+      divisor = Math.min(MAX_BRACE_WORDS + 1, divisor * child.count)
+    }
+    return { count, canBeEmpty }
+  }
+
+  private expandingBraceChildren(children: BraceGroup[], first: number, last: number): BraceGroup[] | null {
+    let expanding: BraceGroup[] | null = null
+    for (let index = first; index < last; index++) {
+      const child = children[index]!
+      if (!child.hasList) continue
+      if (expanding === null) expanding = []
+      expanding.push(child)
+    }
+    return expanding
+  }
+
+  private selectBraceSequence(children: BraceGroup[], rank: number): void {
+    for (const group of children) {
+      const childRank = Math.floor(rank / group.rankDivisor) % group.count
+      this.selectBraceGroup(group, childRank)
+    }
+  }
+
+  private selectBraceGroup(group: BraceGroup, rank: number): void {
+    if (!group.isList) {
+      this.selectBraceSequence(group.expandingChildren ?? [], rank)
+      return
+    }
+    let alternativeIndex = 0
+    let alternativeRank = rank
+    for (; alternativeIndex < group.alternatives.length; alternativeIndex++) {
+      const alternative = group.alternatives[alternativeIndex]!
+      if (alternativeRank < alternative.count) break
+      alternativeRank -= alternative.count
+    }
+    group.selectedAlternative = alternativeIndex
+    const alternative = group.alternatives[alternativeIndex]!
+    this.selectBraceSequence(alternative.expandingChildren ?? [], alternativeRank)
+  }
+
+  private renderBraceSequence(
+    text: string,
+    homes: HomeMarker[],
+    syntax: ActiveSyntax[],
+    candidate: BraceCandidate,
+    children: BraceGroup[],
+    start: number,
+    end: number
+  ): void {
+    let cursor = start
+    for (const group of children) {
+      this.appendBraceRange(text, homes, syntax, candidate, cursor, group.open)
+      this.renderBraceGroup(text, homes, syntax, candidate, group)
+      cursor = group.close + 1
+    }
+    this.appendBraceRange(text, homes, syntax, candidate, cursor, end)
+  }
+
+  private renderBraceGroup(
+    text: string,
+    homes: HomeMarker[],
+    syntax: ActiveSyntax[],
+    candidate: BraceCandidate,
+    group: BraceGroup
+  ): void {
+    if (group.isList) {
+      const alternative = group.alternatives[group.selectedAlternative]!
+      this.renderBraceSequence(
+        text,
+        homes,
+        syntax,
+        candidate,
+        alternative.expandingChildren ?? [],
+        alternative.start,
+        alternative.end
+      )
+      return
+    }
+    this.appendBraceRange(text, homes, syntax, candidate, group.open, group.open + 1)
+    this.renderBraceSequence(
+      text,
+      homes,
+      syntax,
+      candidate,
+      group.expandingChildren ?? [],
+      group.open + 1,
+      group.close
+    )
+    this.appendBraceRange(text, homes, syntax, candidate, group.close, group.close + 1)
+  }
+
+  private appendBraceRange(
+    text: string,
+    homes: HomeMarker[],
+    syntax: ActiveSyntax[],
+    candidate: BraceCandidate,
+    start: number,
+    end: number
+  ): void {
+    if (end <= start) return
+    const outputStart = candidate.length
+    while (candidate.homeIndex < homes.length && homes[candidate.homeIndex]!.start < start) {
+      candidate.homeIndex++
+    }
+    while (candidate.homeIndex < homes.length && homes[candidate.homeIndex]!.start < end) {
+      const marker = homes[candidate.homeIndex]!
+      if (marker.start >= start) {
+        candidate.homes.push({
+          start: outputStart + marker.start - start,
+          end: outputStart + marker.end - start,
+          sourceEnd: marker.sourceEnd,
+          braced: marker.braced
+        })
+      }
+      candidate.homeIndex++
+    }
+    while (candidate.syntaxIndex < syntax.length && syntax[candidate.syntaxIndex]!.position < start) {
+      candidate.syntaxIndex++
+    }
+    while (candidate.syntaxIndex < syntax.length && syntax[candidate.syntaxIndex]!.position < end) {
+      const item = syntax[candidate.syntaxIndex]!
+      if (item.character === '~') candidate.tildes.push(outputStart + item.position - start)
+      candidate.syntaxIndex++
+    }
+
+    const previous = candidate.ranges[candidate.ranges.length - 1]
+    if (previous !== undefined && previous.end === start) previous.end = end
+    else candidate.ranges.push({ start, end })
+    candidate.length += end - start
+  }
+
+  private joinBraceCandidate(text: string, candidate: BraceCandidate): string {
+    if (candidate.ranges.length === 1) {
+      const range = candidate.ranges[0]!
+      if (range.start === 0 && range.end === text.length) return text
+    }
+    const pieces: string[] = []
+    for (const range of candidate.ranges) pieces.push(text.slice(range.start, range.end))
+    return pieces.join('')
   }
 
   private readDollar(
@@ -700,7 +1168,7 @@ class ShellReader {
         builder.dynamic = true
         this.appendExpansionRange(builder, start, this.index, mode, stripTabs)
       } else {
-        builder.append(knownValue)
+        builder.appendKnownExpansion(start, this.index, knownValue)
       }
       builder.addScope(nested)
       return true
@@ -709,7 +1177,7 @@ class ShellReader {
     if (next === '{') {
       if (start + 7 <= limit && this.source.startsWith('${HOME}', start)) {
         if (mode === 'delimiter') builder.appendRange(start, start + 7)
-        else builder.appendHomeRange(start, start + 7)
+        else builder.appendHomeRange(start, start + 7, true)
         this.index = start + 7
         return true
       }

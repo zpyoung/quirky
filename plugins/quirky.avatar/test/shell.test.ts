@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { MAX_SHELL_CHARS, MAX_SHELL_DEPTH, parseShell } from '../src/gate/shell'
+import * as shellModule from '../src/gate/shell'
 import type { ShellCommand, ShellRedirect, ShellScript, ShellWord } from '../src/gate/shell'
 
 const env = { home: '/home/u' }
@@ -146,8 +147,7 @@ describe('parseShell dynamic words and known home values', () => {
       ["$'ab'", word('ab')],
       ['*.ts', word('*.ts')],
       ['src/**/[ab]?.ts', word('src/**/[ab]?.ts')],
-      ['{a,b}', word('{a,b}')],
-      ['a{1..3}', word('a{1..3}')],
+      ['a{1..3}', word('a{1..3}', true)],
       ['{}', word('{}')]
     ]
     for (const [source, expected, nestedCommands = [], parents = [-1]] of cases) {
@@ -678,5 +678,440 @@ describe('round 2 reader mutation guards', () => {
       command([word('echo'), word('$(printf RAN)', true, [2])], { scope: 1 }),
       command([word('echo'), word('`echo $(printf RAN)`', true, [1])])
     ], [-1, 0, 1]))
+  })
+})
+
+describe('brace expansion', () => {
+  const expectEchoWords = (source: string, expected: string[]) => {
+    expect(parse(`echo ${source}`)).toEqual(script([
+      command(words('echo', ...expected))
+    ]))
+  }
+
+  describe('scenario 1: lists expand in shell order', () => {
+    const rows: Array<{ name: string; source: string; words: string[] }> = [
+      { name: 'a list is one word per alternative', source: '{a,b}', words: ['a', 'b'] },
+      { name: 'keeps text before and after a list', source: 'x{a,b}y', words: ['xay', 'xby'] },
+      { name: 'takes the product of two lists', source: '{a,b}{c,d}', words: ['ac', 'ad', 'bc', 'bd'] },
+      { name: 'leftmost list changes slowest across three lists', source: '{a,b}{c,d}{e,f}', words: ['ace', 'acf', 'ade', 'adf', 'bce', 'bcf', 'bde', 'bdf'] },
+      { name: 'expands a nested list', source: '{a,{b,c}}', words: ['a', 'b', 'c'] },
+      { name: 'expands nested products inside an alternative', source: '{a,b,{c,d}{e,f}}', words: ['a', 'b', 'ce', 'cf', 'de', 'df'] },
+      { name: 'retains hidden path components', source: 'x/.{,a}./y', words: ['x/../y', 'x/.a./y'] },
+      { name: 'keeps an empty alternative when surrounding text makes a word', source: 'a.txt{,.bak}', words: ['a.txt', 'a.txt.bak'] },
+      { name: 'keeps repeated empty alternatives', source: '{,,}x', words: ['x', 'x', 'x'] },
+      { name: 'treats a dotted list alternative as literal text', source: '{a..b,c}', words: ['a..b', 'c'] },
+      { name: 'preserves an assignment-like prefix', source: 'x={a,b}', words: ['x=a', 'x=b'] },
+      { name: 'preserves a glob suffix', source: '{a,b}*', words: ['a*', 'b*'] }
+    ]
+
+    for (const { name, source, words: expected } of rows) {
+      test(`expands ${source}: ${name}`, () => expectEchoWords(source, expected))
+    }
+  })
+
+  describe('scenario 2: plain and unpaired braces stay literal', () => {
+    const rows: Array<{ source: string; words: string[] }> = [
+      { source: '{}', words: ['{}'] },
+      { source: '{a}', words: ['{a}'] },
+      { source: 'stash@{0}', words: ['stash@{0}'] },
+      { source: 'HEAD@{upstream}', words: ['HEAD@{upstream}'] },
+      { source: '{a,b', words: ['{a,b'] },
+      { source: 'a,b}', words: ['a,b}'] },
+      { source: '{a,{b}', words: ['{a,{b}'] },
+      { source: '{a},{b}', words: ['{a},{b}'] },
+      { source: '{a,b}}', words: ['a}', 'b}'] },
+      { source: '{{a,b}', words: ['{a', '{b'] },
+      { source: '{{{a,b}', words: ['{{a', '{{b'] },
+      { source: '{a,{b,c}', words: ['{a,b', '{a,c'] },
+      { source: '{{a,b},c', words: ['{a,c', '{b,c'] },
+      { source: '{a,b}{', words: ['a{', 'b{'] },
+      { source: '}{a,b}', words: ['}a', '}b'] },
+      { source: '{a{b,c}}', words: ['{ab}', '{ac}'] },
+      { source: '{a,{},b}', words: ['a', '{}', 'b'] },
+      { source: '{a,{b},c}', words: ['a', '{b}', 'c'] },
+      { source: '{a,b}{}', words: ['a{}', 'b{}'] }
+    ]
+
+    for (const { source, words: expected } of rows) {
+      test(`preserves unmatched or plain braces in ${source}`, () => expectEchoWords(source, expected))
+    }
+
+    test('keeps spaces in a brace expression as ordinary word boundaries', () => {
+      expect(parse('echo {a , b}')).toEqual(script([
+        command(words('echo', '{a', ',', 'b}'))
+      ]))
+    })
+  })
+
+  describe('scenario 3: quoted and escaped syntax is inactive', () => {
+    const rows: Array<{ source: string; words: string[] }> = [
+      { source: "'{a,b}'", words: ['{a,b}'] },
+      { source: '"{a,b}"', words: ['{a,b}'] },
+      { source: '\\{a,b}', words: ['{a,b}'] },
+      { source: '\\{a,b\\}', words: ['{a,b}'] },
+      { source: '{a\\,b}', words: ['{a,b}'] },
+      { source: '{a,b\\}', words: ['{a,b}'] },
+      { source: "$'{a,b}'", words: ['{a,b}'] },
+      { source: '{a,"b,c"}', words: ['a', 'b,c'] },
+      { source: '"{a,b}"{c,d}', words: ['{a,b}c', '{a,b}d'] },
+      { source: "{a,b}'{c,d}'", words: ['a{c,d}', 'b{c,d}'] },
+      { source: '"a"{b,c}"d"', words: ['abd', 'acd'] },
+      { source: '{a,b}\\ c', words: ['a c', 'b c'] },
+      { source: '{\\{,a}', words: ['{', 'a'] },
+      { source: '\\${a,b}', words: ['$a', '$b'] },
+      { source: "'$'{a,b}", words: ['$a', '$b'] },
+      { source: '"$"{a,b}', words: ['$a', '$b'] }
+    ]
+
+    for (const { source, words: expected } of rows) {
+      test(`expands only active syntax in ${source}`, () => expectEchoWords(source, expected))
+    }
+  })
+
+  describe('scenario 4: home and leading tilde resolve per produced word', () => {
+    const rows: Array<{ source: string; words: string[] }> = [
+      { source: '~/{a,b}', words: ['/home/u/a', '/home/u/b'] },
+      { source: '$HOME/{a,b}', words: ['/home/u/a', '/home/u/b'] },
+      { source: '${HOME}/{a,b}', words: ['/home/u/a', '/home/u/b'] },
+      { source: '{~/a,~/b}', words: ['/home/u/a', '/home/u/b'] },
+      { source: '~{/a,/b}', words: ['/home/u/a', '/home/u/b'] },
+      { source: '{~,x}/y', words: ['/home/u/y', 'x/y'] },
+      { source: '{,x}~/y', words: ['/home/u/y', 'x~/y'] },
+      { source: "{'~',x}/y", words: ['~/y', 'x/y'] },
+      { source: 'a{~,b}', words: ['a~', 'ab'] },
+      { source: '${HOME}{a,b}', words: ['/home/ua', '/home/ub'] },
+      { source: '"$HOME"{a,b}', words: ['/home/ua', '/home/ub'] }
+    ]
+
+    for (const { source, words: expected } of rows) {
+      test(`resolves home values after expansion of ${source}`, () => expectEchoWords(source, expected))
+    }
+  })
+
+  describe('scenario 5: unsupported brace words stay dynamic', () => {
+    const dynamicWord = (source: string, text = source) => {
+      expect(parse(`echo ${source}`)).toEqual(script([
+        command([word('echo'), word(text, true)])
+      ]))
+    }
+
+    const sequenceCases = [
+      '{1..3}', 'a{1..3}', '{a..c}', '-{o..o}', '{01..03}', '{1..b}', '{a..}', '{..}',
+      '{{1..3},x}', '{a,b}{1..2}', '{a..b}{c,d}'
+    ]
+    for (const source of sequenceCases) {
+      test(`leaves sequence syntax dynamic in ${source}`, () => dynamicWord(source))
+    }
+
+    for (const source of ['{a,}', '{,}', '{,a}{,}']) {
+      test(`leaves an expansion that could produce an empty word dynamic in ${source}`, () => dynamicWord(source))
+    }
+
+    test('exposes the supported brace-word limit', () => {
+      expect(shellModule).toHaveProperty('MAX_BRACE_WORDS', 64)
+    })
+
+    const overLimitList = '{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}'
+    test('marks a product beyond MAX_BRACE_WORDS dynamic', () => dynamicWord(overLimitList))
+
+    const sixtyFiveAlternatives = '{' + Array.from({ length: 65 }, (_, index) => `w${index}`).join(',') + '}'
+    test('marks 65 alternatives dynamic', () => dynamicWord(sixtyFiveAlternatives))
+
+    test('expands exactly MAX_BRACE_WORDS in left-to-right shell order', () => {
+      const parsed = parse('echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}')
+      const expanded = parsed?.commands[0]?.words.slice(1)
+      expect(expanded).toHaveLength(64)
+      expect(expanded?.every((item) => !item.dynamic)).toBe(true)
+      expect([expanded?.[0]?.text, expanded?.at(-1)?.text]).toEqual(['acegik', 'bdfhjl'])
+    })
+
+    test('expands at MAX_SHELL_DEPTH but leaves deeper nesting dynamic', () => {
+      const atLimit = '{a,'.repeat(MAX_SHELL_DEPTH) + 'b' + '}'.repeat(MAX_SHELL_DEPTH)
+      expect(parse(`echo ${atLimit}`)).toEqual(script([
+        command([word('echo'), ...Array.from({ length: MAX_SHELL_DEPTH }, () => word('a')), word('b')])
+      ]))
+
+      const tooDeep = '{a,'.repeat(MAX_SHELL_DEPTH + 1) + 'b' + '}'.repeat(MAX_SHELL_DEPTH + 1)
+      expect(parse(`echo ${tooDeep}`)).toEqual(script([
+        command([word('echo'), word(tooDeep, true)])
+      ]))
+    })
+
+    for (const source of ['{~root,x}', '{~+,x}', '~{a,b}']) {
+      test(`leaves dynamic tilde syntax unseen in ${source}`, () => dynamicWord(source))
+    }
+
+    const ambiguousHomeCases: Array<[string, string]> = [
+      ['$HOME{a,b}', '$HOME{a,b}'],
+      ["$HOME{'a',b}", '$HOME{a,b}'],
+      ['{a,$HOME}x', '{a,$HOME}x'],
+      ['{$HOME,a}/x', '{$HOME,a}/x'],
+      ['{a,$HOME}', '{a,$HOME}']
+    ]
+    for (const [source, text] of ambiguousHomeCases) {
+      test(`leaves an ambiguous unbraced HOME reference dynamic in ${source}`, () => dynamicWord(source, text))
+    }
+
+    for (const [source, text] of [
+      ['{a,$X}', '{a,$X}'],
+      ['{a,b}"$X"', '{a,b}$X']
+    ]) {
+      test(`does not partially expand a word dynamic for another reason: ${source}`, () => dynamicWord(source, text))
+    }
+
+    test('does not expand a brace list in a command-substitution word that is otherwise dynamic', () => {
+      expect(parse('echo {a,b}$(echo x)')).toEqual(script([
+        command(words('echo', 'x'), { scope: 1 }),
+        command([word('echo'), word('{a,b}$(echo x)', true, [1])])
+      ], [-1, 0]))
+    })
+
+    test('keeps known substitutions while falling back from an unsupported brace sequence', () => {
+      expect(parse("echo {1..3}\"$(cat <<'EOF'\nx\nEOF\n)\"")).toEqual(script([
+        command(words('cat'), {
+          scope: 1,
+          redirects: [redirect('heredoc', 'x\n')]
+        }),
+        command([
+          word('echo'),
+          word("{1..3}$(cat <<'EOF'\nx\nEOF\n)", true, [1])
+        ])
+      ], [-1, 0]))
+    })
+  })
+
+  describe('scenario 6: expansion applies to command words and redirect targets only', () => {
+    test('expands the command name and words after a prefix assignment', () => {
+      expect(parse('X=1 {ls,-la}')).toEqual(script([
+        command(words('ls', '-la'), { assignments: [assignment('X', '1')] })
+      ]))
+    })
+
+    test('does not expand a prefix assignment value', () => {
+      expect(parse('Y={a,b} ls')).toEqual(script([
+        command(words('ls'), { assignments: [assignment('Y', '{a,b}')] })
+      ]))
+    })
+
+    const redirectCases: Array<[string, ShellRedirect['kind'], string[]]> = [
+      ['< {a,b}', 'read', ['a', 'b']],
+      ['> {a,b}.txt', 'write', ['a.txt', 'b.txt']],
+      ['>> {a,b}', 'write', ['a', 'b']],
+      ['>| {a,b}', 'write', ['a', 'b']],
+      ['<> {a,b}', 'write', ['a', 'b']],
+      ['&> {a,b}', 'write', ['a', 'b']],
+      ['&>> {a,b}', 'write', ['a', 'b']],
+      ['>& {a,b}', 'write', ['a', 'b']],
+      ['<& {a,b}', 'dup', ['a', 'b']]
+    ]
+    for (const [operatorAndTarget, kind, targets] of redirectCases) {
+      test(`creates one ${kind} redirect per brace-expanded target for ${operatorAndTarget}`, () => {
+        expect(parse(`echo hi ${operatorAndTarget}`)).toEqual(script([
+          command(words('echo', 'hi'), { redirects: targets.map((target) => redirect(kind, target)) })
+        ]))
+      })
+    }
+
+    test('classifies each expanded descriptor or file target separately', () => {
+      expect(parse('echo hi >& {1,out.txt}')).toEqual(script([
+        command(words('echo', 'hi'), { redirects: [redirect('dup', '1'), redirect('write', 'out.txt')] })
+      ]))
+    })
+
+    test('keeps a dynamic sequence or empty redirect target as one redirect', () => {
+      expect(parse('echo hi > o{3..3}')).toEqual(script([
+        command(words('echo', 'hi'), { redirects: [redirect('write', word('o{3..3}', true))] })
+      ]))
+      expect(parse('echo hi >> {a,}')).toEqual(script([
+        command(words('echo', 'hi'), { redirects: [redirect('write', word('{a,}', true))] })
+      ]))
+    })
+
+    test('does not expand a here-string word', () => {
+      expect(parse('cat <<< {a,b}')).toEqual(script([
+        command(words('cat'), { redirects: [redirect('heredoc', '{a,b}')] })
+      ]))
+    })
+
+    test('does not expand a heredoc delimiter or its body', () => {
+      expect(parse('cat <<{a,b}\n{x,y}\n{a,b}\n')).toEqual(script([
+        command(words('cat'), { redirects: [redirect('heredoc', '{x,y}\n')] })
+      ]))
+    })
+
+    test('does not expand brace-like text inside parameter or arithmetic expansions', () => {
+      expect(parse('echo ${X:-{a,b}} $(({a,b}))')).toEqual(script([
+        command([word('echo'), word('${X:-{a,b}}', true), word('$(({a,b}))', true)])
+      ]))
+    })
+
+    const nestedScopeCases: Array<[string, ShellScript]> = [
+      ['echo "$(ls {a,b})"', script([
+        command(words('ls', 'a', 'b'), { scope: 1 }),
+        command([word('echo'), word('$(ls {a,b})', true, [1])])
+      ], [-1, 0])],
+      ['echo "`ls {a,b}`"', script([
+        command(words('ls', 'a', 'b'), { scope: 1 }),
+        command([word('echo'), word('`ls {a,b}`', true, [1])])
+      ], [-1, 0])],
+      ['(ls {a,b})', script([
+        command(words('ls', 'a', 'b'), { scope: 1 })
+      ], [-1, 0])],
+      ['echo <(ls {a,b})', script([
+        command(words('ls', 'a', 'b'), { scope: 1 }),
+        command([word('echo'), word('<(ls {a,b})', true, [1])])
+      ], [-1, 0])],
+      ['echo >(ls {a,b})', script([
+        command(words('ls', 'a', 'b'), { scope: 1 }),
+        command([word('echo'), word('>(ls {a,b})', true, [1])])
+      ], [-1, 0])]
+    ]
+    for (const [source, expected] of nestedScopeCases) {
+      test(`expands command words inside nested scope ${source}`, () => expect(parse(source)).toEqual(expected))
+    }
+  })
+
+  describe('scenario 7: expanded words retain source substitutions', () => {
+    test('copies a known substitution scope to every produced word', () => {
+      expect(parse("echo {a,b}\"$(cat <<'EOF'\nx\nEOF\n)\"")).toEqual(script([
+        command(words('cat'), {
+          scope: 1,
+          redirects: [redirect('heredoc', 'x\n')]
+        }),
+        command([
+          word('echo'),
+          word('ax', false, [1]),
+          word('bx', false, [1])
+        ])
+      ], [-1, 0]))
+    })
+    test('does not reactivate braces produced by a known substitution', () => {
+      expect(parse("echo \"$(cat <<'EOF'\n{a,b}\nEOF\n)\"{c,d}")).toEqual(script([
+        command(words('cat'), {
+          scope: 1,
+          redirects: [redirect('heredoc', '{a,b}\n')]
+        }),
+        command([
+          word('echo'),
+          word('{a,b}c', false, [1]),
+          word('{a,b}d', false, [1])
+        ])
+      ], [-1, 0]))
+    })
+
+    test('does not expand a leading tilde produced by a known substitution', () => {
+      expect(parse("echo \"$(cat <<'EOF'\n~/x\nEOF\n)\"{a,b}")).toEqual(script([
+        command(words('cat'), {
+          scope: 1,
+          redirects: [redirect('heredoc', '~/x\n')]
+        }),
+        command([
+          word('echo'),
+          word('~/xa', false, [1]),
+          word('~/xb', false, [1])
+        ])
+      ], [-1, 0]))
+    })
+  })
+
+  describe('scenario 8: brace parsing stays total and below the time bound', () => {
+    const cases: Array<{
+      name: string
+      source: () => string
+      assert: (parsed: ShellScript) => void
+    }> = [
+      {
+        name: '240,000 unmatched opening braces',
+        source: () => 'echo ' + '{'.repeat(240_000),
+        assert: (parsed) => {
+          const item = parsed.commands[0]?.words[1]
+          expect(parsed.commands[0]?.words).toHaveLength(2)
+          expect(item?.text).toHaveLength(240_000)
+          expect(item?.dynamic).toBe(false)
+        }
+      },
+      {
+        name: '48,000 adjacent brace lists',
+        source: () => 'echo ' + '{a,b}'.repeat(48_000),
+        assert: (parsed) => {
+          const item = parsed.commands[0]?.words[1]
+          expect(parsed.commands[0]?.words).toHaveLength(2)
+          expect(item?.dynamic).toBe(true)
+          expect(item?.text).toBe('{a,b}'.repeat(48_000))
+        }
+      },
+      {
+        name: '120,001 alternatives in one list',
+        source: () => 'echo {' + 'a,'.repeat(120_000) + 'b}',
+        assert: (parsed) => {
+          const item = parsed.commands[0]?.words[1]
+          expect(parsed.commands[0]?.words).toHaveLength(2)
+          expect(item?.dynamic).toBe(true)
+          expect(item?.text).toBe('{' + 'a,'.repeat(120_000) + 'b}')
+        }
+      },
+      {
+        name: '100,000 nested brace groups',
+        source: () => 'echo ' + '{a,'.repeat(100_000) + 'b' + '}'.repeat(100_000),
+        assert: (parsed) => {
+          const item = parsed.commands[0]?.words[1]
+          expect(parsed.commands[0]?.words).toHaveLength(2)
+          expect(item?.dynamic).toBe(true)
+        }
+      },
+      {
+        name: '120,000 nested plain groups',
+        source: () => 'echo ' + '{'.repeat(120_000) + '}'.repeat(120_000),
+        assert: (parsed) => {
+          const item = parsed.commands[0]?.words[1]
+          expect(parsed.commands[0]?.words).toHaveLength(2)
+          expect(item?.dynamic).toBe(true)
+        }
+      },
+      {
+        name: '200,000 plain groups followed by one list',
+        source: () => 'echo ' + '{x}'.repeat(200_000) + '{a,b}',
+        assert: (parsed) => {
+          const items = parsed.commands[0]?.words.slice(1)
+          expect(items).toHaveLength(2)
+          expect(items?.map((item) => item.text.length)).toEqual([600_001, 600_001])
+          expect(items?.map((item) => item.text.slice(-1))).toEqual(['a', 'b'])
+          expect(items?.every((item) => !item.dynamic)).toBe(true)
+        }
+      },
+      {
+        name: '340,000 words from repeated brace lists',
+        source: () => 'echo ' + '{a,b} '.repeat(170_000),
+        assert: (parsed) => {
+          const items = parsed.commands[0]?.words.slice(1)
+          expect(items).toHaveLength(340_000)
+          expect(items?.slice(0, 4).map((item) => item.text)).toEqual(['a', 'b', 'a', 'b'])
+          expect(items?.slice(-2).map((item) => item.text)).toEqual(['a', 'b'])
+        }
+      },
+      {
+        name: '57,600 products of six brace lists',
+        source: () => 'echo ' + ('x'.repeat(1_000) + '{a,b}{c,d}{e,f}{g,h}{i,j}{k,l} ').repeat(900),
+        assert: (parsed) => {
+          const items = parsed.commands[0]?.words.slice(1)
+          expect(items).toHaveLength(57_600)
+          expect(items?.[0]?.text).toBe('x'.repeat(1_000) + 'acegik')
+          expect(items?.at(-1)?.text).toBe('x'.repeat(1_000) + 'bdfhjl')
+        }
+      }
+    ]
+
+    for (const { name, source, assert } of cases) {
+      test(`parses ${name} in under 1000 ms`, () => {
+        const input = source()
+        const started = performance.now()
+        const parsed = parse(input)
+        const elapsed = performance.now() - started
+        expect(parsed).not.toBeNull()
+        expect(elapsed).toBeLessThan(1_000)
+        if (parsed === null) throw new Error('parseShell returned null')
+        assert(parsed)
+      })
+    }
   })
 })
