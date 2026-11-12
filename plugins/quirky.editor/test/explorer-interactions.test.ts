@@ -101,7 +101,7 @@ test('Explorer changes respect the daemon coalescing window', async () => {
   // the real daemon clock must pass its default window without releasing the 60-second hold.
   await Bun.sleep(500)
   const changes = world.events.filter((event) => event.type === 'quirky.editor/changed')
-  expect(changes.map((event) => event.data)).toEqual([{ revision: 1 }])
+  expect(changes).toEqual([{ type: 'quirky.editor/changed', data: { revision: 1 } }])
 })
 
 test('Explorer navigation clamps, pages, contracts anchored ranges and toggles membership independently of focus', async () => {
