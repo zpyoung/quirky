@@ -3,7 +3,7 @@
   "apiVersion": "1.0.0",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background native Claude, Codex, Pi and Oh My Pi sessions without terminals: journaled messages and permission prompts as asks.",
+  "description": "Background native Claude, Codex, Pi and Oh My Pi sessions without terminals: journaled messages, with Claude and Codex permission prompts as asks. Pi and Oh My Pi run their tools without asking.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -20,7 +20,7 @@
               "type": "boolean",
               "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
             },
-            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"], "description": "The structured provider to run." },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"], "description": "The structured provider to run. `pi` and `omp` have no permission prompts: under the default tool policy they run their tools without an ask." },
             "prompt": { "type": "string" },
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },
