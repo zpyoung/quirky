@@ -17,7 +17,7 @@ import {
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
-import { createCodexRunner } from '../codex-runner'
+import { createCodexRunner, type CodexRunnerDeps } from '../codex-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner, StructuredRunnerFactory, StructuredStartOptions } from '../runner'
 import {
   createCodexAppServerFixture,
@@ -216,16 +216,17 @@ describe('Codex runner', () => {
     configureDenyAll({ turnScript: { notifications, interrupt, hold: true } })
     await runner.start(session, 'scripted turn', { toolPolicy: 'deny-all' })
   }
+  const createRunner = (deps: CodexRunnerDeps = {}) => createCodexRunner(
+    { ...rec.context, resolveCodexPath: async () => fixture.executable },
+    { env: isolatedProviderEnvironment(home), ...deps }
+  )
 
   beforeEach(() => {
     home = mkdtempSync(join(tmpdir(), 'tool-policy-codex-'))
     configureFixture()
     rec = recorder()
     session = sessionFor('codex', home)
-    runner = createCodexRunner(
-      { ...rec.context, resolveCodexPath: async () => fixture.executable },
-      { env: isolatedProviderEnvironment(home) }
-    )
+    runner = createRunner()
   })
 
   afterEach(async () => {
@@ -320,21 +321,42 @@ describe('Codex runner', () => {
   for (const mode of ['start', 'resume'] as const) {
     for (const failure of configFailures) {
       test(`a ${failure.name} while reading MCP config aborts ${mode}`, async () => {
-        configureDenyAll({ configRead: failure.configRead })
+        const timeout = failure.name === 'timeout'
+        configureDenyAll({
+          configRead: failure.configRead,
+          ...(timeout ? { replyDelayMs: { initialize: 500 } } : {})
+        })
+        if (timeout) runner = createRunner({ configReadTimeoutMs: 100 })
         const providerSession = mode === 'resume' ? { id: 'existing-thread', transcriptPath: null } : undefined
-        await expect(runner.start(session, 'hello', {
+        const startedAt = performance.now()
+        const outcome = await runner.start(session, 'hello', {
           toolPolicy: 'deny-all',
           ...(providerSession === undefined ? {} : { providerSession })
-        })).rejects.toThrow(
+        }).then(() => undefined, (error: unknown) => error)
+        const elapsed = performance.now() - startedAt
+        expect(outcome).toBeInstanceOf(Error)
+        expect((outcome as Error).message).toContain(
           "could not read Codex's MCP servers, so a session without tools can't start"
         )
+        if (timeout) expect(elapsed).toBeGreaterThanOrEqual(500)
         const requests = fixture.requests()
         expect(requests.some((request) => request.method === 'config/read')).toBe(true)
         expect(requests.some((request) => request.method === 'thread/start' || request.method === 'thread/resume')).toBe(false)
         await expectFixtureStopped(fixture)
-      }, failure.name === 'timeout' ? 45_000 : undefined)
+      })
     }
   }
+
+  test('with no timeout set, a slow MCP config reply still starts the session', async () => {
+    configureDenyAll({
+      configRead: { mcpServers: { github: { enabled: true } } },
+      replyDelayMs: { 'config/read': 600 }
+    })
+    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
+    await until(() => rec.statuses.includes('done'))
+    const threadStart = fixture.requests().find((request) => request.method === 'thread/start')
+    expect(threadStart?.params).toMatchObject({ config: { mcp_servers: { github: { enabled: false } } } })
+  })
 
   test('an unset policy does not read config or add thread settings or process arguments', async () => {
     await runner.start(session, 'hello')

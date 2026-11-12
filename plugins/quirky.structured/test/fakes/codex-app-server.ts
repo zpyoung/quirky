@@ -33,6 +33,7 @@ type CodexAppServerOptions = {
   configRead?: FixtureConfigRead
   turnScript?: FixtureTurnScript
   threadNotifications?: FixtureNotification[]
+  replyDelayMs?: Record<string, number>
 }
 
 export type CodexAppServerFixture = {
@@ -79,6 +80,7 @@ const allowDenyAllEnums = ${JSON.stringify(options?.allowDenyAllEnums ?? false)}
 const configRead = JSON.parse(${JSON.stringify(JSON.stringify(options?.configRead ?? null))})
 const turnScript = ${JSON.stringify(options?.turnScript ?? null)}
 const threadNotifications = ${JSON.stringify(options?.threadNotifications ?? [])}
+const replyDelayMs = ${JSON.stringify(options?.replyDelayMs ?? {})}
 let input = ''
 let nextTurn = 1
 let nextApproval = 1
@@ -339,7 +341,12 @@ process.stdin.on('data', (chunk) => {
     if (newline < 0) break
     const line = input.slice(0, newline).replace(/\\r$/, '')
     input = input.slice(newline + 1)
-    if (line) receive(JSON.parse(line))
+    if (line) {
+      const message = JSON.parse(line)
+      const delay = message.method ? replyDelayMs[message.method] : undefined
+      if (delay > 0) setTimeout(() => receive(message), delay)
+      else receive(message)
+    }
   }
 })
 process.stdin.on('end', () => process.exit(0))
