@@ -634,6 +634,148 @@ function fixedCredentialPrefix(candidate: string, home: string, stripFlagPrefix:
   return pieces.join('')
 }
 
+/** The most readings one path text may have once a pattern can name `.` or `..`. */
+export const MAX_PATTERN_READINGS = 16
+
+type CredentialSegment = string | { pattern: string } | null
+
+function credentialSegment(text: string): CredentialSegment {
+  let onlyStars = text.length >= 2
+  let pattern = false
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index]
+    if (character !== '*') onlyStars = false
+    if ('*?[^~#'.includes(character)) pattern = true
+    if ('[^~#'.includes(character)) {
+      const end = character === '#' ? Math.max(0, index - 1) : index
+      return { pattern: text.slice(0, end) + '*' }
+    }
+  }
+  return onlyStars ? null : pattern ? { pattern: text } : text
+}
+
+/** Matches without backtracking; prefix mode admits any suffix after the required name. */
+function credentialPatternMatches(pattern: string, name: string, prefix = false): boolean {
+  const positions = new Uint8Array(name.length + 1)
+  positions[0] = 1
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index]
+    let active = false
+    if (character === '*') {
+      for (let position = 1; position <= name.length; position++) {
+        positions[position] ||= positions[position - 1]
+      }
+      active = positions.some(Boolean)
+    } else {
+      for (let position = name.length; position > 0; position--) {
+        positions[position] = positions[position - 1] && (character === '?' || character === name[position - 1]) ? 1 : 0
+        active ||= positions[position] === 1
+      }
+      positions[0] = 0
+    }
+    if (prefix && positions[name.length]) return true
+    if (!active) return false
+  }
+  return positions[name.length] === 1
+}
+
+/** Keeps directory names literal and bounds the shell's alternative dot-directory readings. */
+function credentialReadings(text: string, directory: string): CredentialSegment[][] | null {
+  const readings: CredentialSegment[][] = [
+    isAbsolute(text) ? [] : resolve(directory).split('/').filter(Boolean)
+  ]
+  for (const part of text.split('/')) {
+    if (part === '' || part === '.') continue
+    const count = readings.length
+    if (part === '..') {
+      for (let index = 0; index < count; index++) {
+        const reading = readings[index]
+        if (reading[reading.length - 1] === null) readings.push(reading.slice(0, -2))
+        else reading.pop()
+      }
+    } else {
+      const segment = credentialSegment(part)
+      const dot = segment !== null && typeof segment !== 'string' && segment.pattern.startsWith('.')
+      const current = dot && credentialPatternMatches(segment.pattern.slice(1), '')
+      const parent = dot && credentialPatternMatches(segment.pattern.slice(1), '.')
+      for (let index = 0; index < count; index++) {
+        const reading = readings[index]
+        if (current) readings.push(reading.slice())
+        if (parent) {
+          if (reading[reading.length - 1] === null) {
+            readings.push(reading.slice(), reading.slice(0, -2))
+          } else readings.push(reading.slice(0, -1))
+        }
+        reading.push(segment)
+      }
+    }
+    if (readings.length > MAX_PATTERN_READINGS) return null
+    if (part.includes('~')) {
+      for (const reading of readings) reading.push(null)
+      break
+    }
+  }
+  return readings
+}
+
+function credentialSegmentsMatch(reading: CredentialSegment[], target: string[], descendants: boolean): boolean {
+  let positions = new Uint8Array(target.length + 1)
+  let next = new Uint8Array(target.length + 1)
+  positions[0] = 1
+  for (const segment of reading) {
+    next.fill(0)
+    let active = false
+    if (segment === null) {
+      for (let position = 0; position <= target.length; position++) {
+        active ||= positions[position] === 1
+        next[position] = active ? 1 : 0
+      }
+    } else {
+      for (let position = 0; position < target.length; position++) {
+        if (positions[position] && (typeof segment === 'string'
+          ? segment === target[position]
+          : credentialPatternMatches(segment.pattern, target[position]))) {
+          next[position + 1] = 1
+          active = true
+        }
+      }
+    }
+    if (descendants && next[target.length]) return true
+    if (!active) return false
+    const previous = positions
+    positions = next
+    next = previous
+  }
+  return positions[target.length] === 1
+}
+
+function credentialReadingMatches(reading: CredentialSegment[], ctx: ClassifyContext, rootPaths: string[]): boolean {
+  const home = resolve(ctx.home).split('/').filter(Boolean)
+  for (const dir of CREDENTIAL_HOME_DIRS) {
+    if (credentialSegmentsMatch(reading, home.concat(dir.split('/')), true)) return true
+  }
+  for (const file of CREDENTIAL_HOME_FILES) {
+    if (credentialSegmentsMatch(reading, home.concat(file), false)) return true
+  }
+  const last = reading[reading.length - 1]
+  if (last === undefined || (typeof last === 'string' ? !last.startsWith('.env')
+    : last !== null && !credentialPatternMatches(last.pattern, '.env', true))) return false
+  const names: string[] = []
+  for (const segment of reading) {
+    if (typeof segment !== 'string') break
+    names.push(segment)
+  }
+  return !isInside('/' + names.join('/'), rootPaths)
+}
+
+function credentialPathText(
+  text: string, directory: string, ctx: ClassifyContext, rootPaths: string[]
+): 'credential' | 'edit-outside' | null {
+  const readings = credentialReadings(text, directory)
+  if (readings === null) return 'edit-outside'
+  return readings.some((reading) => credentialReadingMatches(reading, ctx, rootPaths)) ? 'credential' : null
+}
+
 function wordTouchesCredential(
   word: ShellWord,
   directories: DirectorySet,
@@ -650,13 +792,15 @@ function wordTouchesCredential(
     }
     if (value === '') return null
     const expanded = expandHome(value, ctx.home)
+    let cutOff = false
     for (const directory of directories ?? UNKNOWN_DIRECTORY) {
       if (directory === null && !isAbsolute(expanded)) continue
-      if (isCredentialPath(resolvePath(value, directory ?? '/', ctx.home), ctx, rootPaths)) {
-        return 'credential'
-      }
+      const result = credentialPathText(expanded, directory ?? '/', ctx, rootPaths)
+      if (result === 'credential') return result
+      cutOff ||= result === 'edit-outside'
+      if (isAbsolute(expanded)) break
     }
-    return null
+    return cutOff ? 'edit-outside' : null
   }
 
   const candidates = new Set([word.text])
@@ -676,8 +820,10 @@ function wordTouchesCredential(
     const absolute = isAbsolute(prefix)
     for (const directory of directories ?? UNKNOWN_DIRECTORY) {
       if (directory === null && !absolute) continue
-      const path = absolute ? resolve(prefix) : resolve(directory ?? '/', prefix)
-      if (isCredentialPath(path, ctx, rootPaths)) return 'credential'
+      const result = credentialPathText(prefix, directory ?? '/', ctx, rootPaths)
+      if (result === 'credential') return result
+      cutOff ||= result === 'edit-outside'
+      if (absolute) break
     }
   }
   return cutOff ? 'edit-outside' : null
@@ -2038,6 +2184,8 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * A computed argument or redirect word whose non-empty fixed prefix resolves
  * under an active directory to a credential path adds `credential`; brace expansion
  * cut off by the 64-word or 32-depth limit without proving it adds `edit-outside`.
+ * Path patterns in words or fixed prefixes add `credential` if any reading can name a credential path.
+ * More than 16 dot-directory readings adds `edit-outside` unless another path text proves `credential`.
  * A relative write target with an unknown cwd returns `edit-outside`.
  * A file a `curl` or `wget` call writes is a write target; an unreadable written path returns `edit-outside`.
  * Paths are judged under every possible shell directory; a write is inside only
