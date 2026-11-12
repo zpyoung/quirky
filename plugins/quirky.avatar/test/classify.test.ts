@@ -1149,7 +1149,9 @@ describe('dynamic credential path scenarios', () => {
       { command: String.raw`cat {${backtick}printf {${backtick},/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
       { command: `cat {<(printf ${'{'.repeat(32)}x${'}'.repeat(32)}),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
       { command: `cat {>(printf ${'{'.repeat(32)}x${'}'.repeat(32)}),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
-      { command: String.raw`cat {$'a\'{',/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold }
+      { command: String.raw`cat {$'a\'{',/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: String.raw`cat {$(echo "$(printf '"')"),/home/u/.ssh/id_rsa}`, classes: ['read', 'other', 'credential'], decision: credentialHold },
+      { command: 'cat {$(printf x # "\n),/home/u/.ssh/id_rsa}', classes: ['read', 'other', 'credential'], decision: credentialHold }
     ])
   })
 
