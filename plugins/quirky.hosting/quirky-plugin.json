@@ -27,7 +27,7 @@
         "id": "diagnoseAuth",
         "description": "Safely report GitHub CLI availability, authenticated accounts, and required host status.",
         "readOnly": true,
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}}},
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "force": {"type": "boolean"}}},
         "result": {"type": "object", "properties": {"ghAvailable": {"type": "boolean"}, "activeAccount": {}, "accounts": {"type": "array", "items": {"type": "object"}}, "envTokenInProcess": {"type": "boolean"}, "missingScopes": {"type": "array", "items": {"type": "string"}}, "requiredScopes": {"type": "array", "items": {"type": "string"}}, "hasKeyringFallback": {"type": "boolean"}, "requiredHost": {"type": "string"}, "requiredHostAuthenticated": {"type": "boolean"}}, "required": ["ghAvailable", "accounts", "envTokenInProcess", "missingScopes", "requiredScopes", "hasKeyringFallback", "requiredHostAuthenticated"]}
       },
       {

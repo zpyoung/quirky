@@ -10,6 +10,7 @@
 @import './agents.css';
 @import './vault.css';
 @import './tasks-shell.css';
+@import './tasks-compact.css';
 @import './tasks-list.css';
 @import './tasks-detail.css';
 @import './automations.css';

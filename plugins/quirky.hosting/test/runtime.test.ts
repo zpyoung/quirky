@@ -83,6 +83,23 @@ describe('GH01-GH08: GitHub runtime boundary', () => {
     })
     expect(enterprise.invocations().some((item) => item.args.includes('github.enterprise.test'))).toBe(false)
   })
+
+  test('diagnoseAuth keeps fresh results by default and can reuse the cached inventory', async () => {
+    const host = await boot()
+    await host.call('diagnoseAuth')
+    const authStatuses = () => host.invocations().filter(({ args }) => args[0] === 'auth' && args[1] === 'status')
+    const before = authStatuses().length
+    expect(before).toBeGreaterThan(0)
+
+    host.writeState({ authStatus: 'No authentication configured for github.com\n' })
+    const cached = await host.call('diagnoseAuth', { force: false }) as { requiredHostAuthenticated: boolean }
+    expect(cached.requiredHostAuthenticated).toBe(true)
+    expect(authStatuses()).toHaveLength(before)
+
+    const fresh = await host.call('diagnoseAuth') as { requiredHostAuthenticated: boolean }
+    expect(fresh.requiredHostAuthenticated).toBe(false)
+    expect(authStatuses()).toHaveLength(before + 1)
+  })
   const standardEnterpriseAuthStatuses = [
     [
       'decorated standard output',

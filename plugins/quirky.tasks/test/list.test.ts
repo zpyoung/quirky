@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { bootTasks } from './helpers'
 import { fixtureIssue, fixturePullRequest, listFixtureSource, seedListFixture } from './fixtures/list'
+import { bootWorkspace, workspaceItemUrl } from './fixtures/workspace'
 
 type CleanupHost = { cleanup(): Promise<void> }
 type RepoRegistrationHost = {
@@ -61,7 +62,7 @@ function stateCalls(value: unknown): unknown[] {
   return Array.isArray(calls) ? calls : []
 }
 
-function initRepo(path: string, remote: string): void {
+function initRepo(path: string, remote?: string): void {
   mkdirSync(path, { recursive: true })
   const commands = [
     ['init', '-b', 'main', path],
@@ -75,20 +76,21 @@ function initRepo(path: string, remote: string): void {
   writeFileSync(join(path, 'README.md'), 'fixture\n')
   const commitCommands = [
     ['-C', path, 'add', 'README.md'],
-    ['-C', path, 'commit', '-m', 'fixture'],
-    ['-C', path, 'remote', 'add', 'origin', remote]
+    ['-C', path, 'commit', '-m', 'fixture']
   ]
+  if (remote !== undefined) commitCommands.push(['-C', path, 'remote', 'add', 'origin', remote])
   for (const args of commitCommands) {
     const result = spawnSync('git', args, { encoding: 'utf8' })
     if (result.status !== 0) throw new Error(result.stderr)
   }
 }
 
-async function addRepo(host: RepoRegistrationHost, path: string, remote: string): Promise<string> {
+async function addRepo(host: RepoRegistrationHost, path: string, remote?: string): Promise<string> {
   initRepo(path, remote)
   const result = record(await host.client.callAny('quirky.repo/add', { path }))
   return stringField(result, 'id')
 }
+
 
 test('list fans out by repository, pages directly, and strips a qualifying repo before host fanout', async () => {
   const host = await bootTasks(listFixtureSource)
@@ -363,11 +365,16 @@ test('row closes a duplicate issue through the stateful Hosting API', async () =
 
 
 test('workspace uses exact URL links, retains a visible composer request, and creates through worktree API', async () => {
-  const host = await bootTasks(listFixtureSource)
+  const host = await bootWorkspace()
   hosts.push(host)
+  await host.client.callAny('quirky.repo/set', { repo: host.repoId, defaultBase: 'main' })
+  const workspaceRoot = join(host.root, 'workspaces')
+  await host.client.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: workspaceRoot })
+  await host.client.callAny('setting.set', { id: 'setting:quirky.worktree/nestWorkspaces', value: false })
+  await host.client.callAny('setting.set', { id: 'setting:quirky.worktree/branchPrefix', value: 'none' })
   const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-02T00:00:00Z')
-  host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 7, '2026-10-01T00:00:00Z'), pull] }))
-  const target = { worktree: host.worktree, kind: 'issue', number: 7, url: 'https://github.com/test-owner/test-repo/issues/7' } as const
+  host.seedItems({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 7, '2026-10-01T00:00:00Z'), pull] })
+  const target = { worktree: host.worktree, kind: 'issue', number: 7, url: workspaceItemUrl('issue', 7) } as const
 
   const request = record(await host.call('workspace', { target, action: 'start' }))
   expect(request).toMatchObject({ kind: 'composer', target, repoId: host.repoId, title: 'Issue 7' })
@@ -397,14 +404,19 @@ test('workspace uses exact URL links, retains a visible composer request, and cr
   await host.call('workspace', { target: withoutUrl, action: 'unlink' })
 
   const fresh = record(await host.call('workspace', { target, action: 'start' }))
-  const created = await host.call('workspace', { target, action: 'start', newWorkspace: true, composerRequestId: stringField(fresh, 'requestId'), setup: 'skip', name: 'tasks-issue-7' })
+  const created = await host.call('workspace', { target, action: 'start', newWorkspace: true, composerRequestId: stringField(fresh, 'requestId'), setup: 'skip', issueCommand: 'skip', agent: '', name: 'tasks-issue-7' })
   expect(created).toMatchObject({ kind: 'created', worktree: { repoId: host.repoId } })
   const createdWorkspace = record(record(created).worktree)
   const resolved = record(await host.client.callAny('quirky.worktree/resolve', { selector: createdWorkspace.id }))
-  expect(resolved).toMatchObject({ repoId: host.repoId, linkedIssue: { kind: 'issue', number: 7, url: target.url } })
-  expect(stringField(resolved, 'path').endsWith('/tasks-issue-7')).toBe(true)
+  expect(resolved).toMatchObject({
+    repoId: host.repoId,
+    name: 'Issue 7',
+    branch: 'tasks-issue-7',
+    linkedIssue: { kind: 'issue', number: 7, url: target.url }
+  })
+  expect(stringField(resolved, 'path')).toBe(join(workspaceRoot, 'tasks-issue-7'))
   expect(await host.call('workspaceComposerState')).toBeNull()
-})
+}, 30_000)
 
 
 test('PR Open preference persists the mode-specific default preset key', async () => {
@@ -424,3 +436,103 @@ test('generated Tasks CLI command reaches the same bounded list method', async (
   expect(result).toMatchObject({ code: 0, stderr: '' })
   expect(JSON.parse(result.stdout)).toMatchObject({ page: 1, totalPages: 1, perRepo: 36 })
 })
+
+test('counts reads one item per repository and sums each kind separately, with the given mode using the given query', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const secondRepoId = await addRepo(host, join(host.root, 'repo-c'), 'https://github.com/other-owner/other-repo.git')
+  const closed = { ...fixtureIssue('test-owner', 'test-repo', 3, '2026-10-01T00:00:00Z'), state: 'closed' as const }
+  host.writeState(seedListFixture({
+    'test-owner/test-repo': [
+      fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z'),
+      fixtureIssue('test-owner', 'test-repo', 2, '2026-10-01T00:00:00Z'),
+      closed,
+      fixturePullRequest('test-owner', 'test-repo', 11, '2026-10-01T00:00:00Z')
+    ],
+    'other-owner/other-repo': [
+      fixtureIssue('other-owner', 'other-repo', 101, '2026-10-01T00:00:00Z'),
+      fixturePullRequest('other-owner', 'other-repo', 111, '2026-10-01T00:00:00Z'),
+      fixturePullRequest('other-owner', 'other-repo', 112, '2026-10-01T00:00:00Z')
+    ]
+  }))
+  const repoIds = [host.repoId, secondRepoId]
+
+  expect(await host.call('counts', { repoIds })).toEqual({ issues: 3, prs: 3 })
+  expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: 2, prs: 1 })
+  expect(await host.call('counts', { repoIds, mode: 'issues', query: 'is:issue is:closed' })).toEqual({ issues: 1, prs: 3 })
+  expect(await host.call('counts', { repoIds, mode: 'prs', query: 'repo:other-owner/other-repo is:pr' })).toEqual({ issues: 3, prs: 2 })
+  expect(await host.call('counts', { repoIds: [] })).toEqual({ issues: 0, prs: 0 })
+
+  expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: 2, prs: 1 })
+}, 60_000)
+
+test('counts reports unavailable totals when GitHub authentication is missing', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }, { auth: false }))
+  expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: null, prs: null })
+}, 30_000)
+
+test('counts shares forced GitHub auth checks across repositories and repeated calls', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const secondRepoId = await addRepo(host, join(host.root, 'repo-count-auth'), 'https://github.com/other-owner/other-repo.git')
+  host.writeState(seedListFixture({
+    'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')],
+    'other-owner/other-repo': []
+  }))
+  const before = host.invocations().length
+
+  const params = { repoIds: [host.repoId, secondRepoId] }
+  expect(await host.call('counts', params)).toEqual({ issues: 1, prs: 0 })
+  expect(await host.call('counts', params)).toEqual({ issues: 1, prs: 0 })
+  const authStatuses = host.invocations().slice(before).filter(({ args }) => args[0] === 'auth' && args[1] === 'status')
+  expect(authStatuses).toHaveLength(1)
+}, 30_000)
+
+test('counts falls back to the current Tasks selection when no repositories are given', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }))
+  await host.call('navigate', { repoIds: [host.repoId] })
+  expect(await host.call('counts')).toEqual({ issues: 1, prs: 0 })
+  await host.call('navigate', { repoIds: [] })
+  expect(await host.call('counts')).toEqual({ issues: 0, prs: 0 })
+}, 30_000)
+
+for (const [label, failure] of [['a response without a total', { unknownCount: true }], ['a failed list read', { failList: 'test-owner/test-repo' }]] as const) {
+  test(`counts is null for both kinds after ${label}`, async () => {
+    const host = await bootTasks(listFixtureSource)
+    hosts.push(host)
+    host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }, failure))
+    expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: null, prs: null })
+  }, 30_000)
+}
+
+test('counts is null for both kinds when a selected repository has no resolvable source', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const brokenRepoId = await addRepo(host, join(host.root, 'repo-d'), 'https://example.invalid/not-github.git')
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }))
+  expect(await host.call('counts', { repoIds: [host.repoId] })).toEqual({ issues: 1, prs: 0 })
+  expect(await host.call('counts', { repoIds: [host.repoId, brokenRepoId] })).toEqual({ issues: null, prs: null })
+}, 30_000)
+
+test('counts keeps valid totals when a selected repository has no origin', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const originlessRepoId = await addRepo(host, join(host.root, 'repo-without-origin'))
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 1, '2026-10-01T00:00:00Z')] }))
+  expect(await host.call('counts', { repoIds: [host.repoId, originlessRepoId] })).toEqual({ issues: 1, prs: 0 })
+}, 30_000)
+
+test('counts refuses a query without a mode, a bad mode and an over-limit query before any GitHub read', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [] }))
+  const before = host.invocations().length
+  await expect(host.call('counts', { query: 'is:open' })).rejects.toThrow(/mode/)
+  await expect(host.call('counts', { mode: 'projects' })).rejects.toThrow(/mode/)
+  await expect(host.call('counts', { mode: 'issues', query: 'x'.repeat(8193) })).rejects.toThrow(/8192/)
+  expect(host.invocations()).toHaveLength(before)
+}, 20_000)
