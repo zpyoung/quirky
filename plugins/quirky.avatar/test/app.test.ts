@@ -1,3 +1,4 @@
+import type { ToolGateProvider } from '@quirky/protocol'
 import { describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -167,8 +168,12 @@ describe('avatar settings', () => {
  * replace `app.services.*` with fakes: the methods read the services at call time, so nothing a
  * registered module does to them matters once they are replaced.
  */
-async function activateWithApp(overrides: Parameters<typeof makeTestApp>[0] = {}): Promise<{ test: TestApp; app: AvatarApp; callsSince(): TestApp['calls'] }> {
+async function activateWithApp(
+  overrides: Parameters<typeof makeTestApp>[0] = {},
+  prepare?: (test: TestApp) => void
+): Promise<{ test: TestApp; app: AvatarApp; callsSince(): TestApp['calls'] }> {
   const test = makeTestApp(overrides)
+  prepare?.(test)
   let built: AvatarApp | undefined
   const real = appModule.createApp
   const spy = spyOn(appModule, 'createApp').mockImplementation((...args) => (built = real(...args)))
@@ -181,6 +186,58 @@ async function activateWithApp(overrides: Parameters<typeof makeTestApp>[0] = {}
   return { test, app: built!, callsSince: () => test.calls.slice(baseline) }
 }
 
+const STOPPING = 'The avatar is stopping; try the same call again shortly.'
+
+const withStillWaiting = <T>(promise: Promise<T>): Promise<T | 'still waiting'> => {
+  const { promise: timeout, resolve } = Promise.withResolvers<'still waiting'>()
+  // a real-time bound keeps a missing disposer from hanging Bun's runner
+  const timer = setTimeout(() => resolve('still waiting'), 1000)
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+async function waitingGateRequest(prepare?: (test: TestApp) => void) {
+  const { test, app } = await activateWithApp({}, prepare)
+  test.fakeCalls['quirky.worktree/list'] = () => [
+    { id: 'wt-1', path: '/work/wt-1', branch: 'feature', repoId: 'repo', isMain: false },
+    { id: 'main', path: '/work/main', branch: 'main', repoId: 'repo', isMain: true }
+  ]
+  app.store.mandates.put(sampleMandate())
+  app.store.handoffs.put({ worktreeId: 'wt-1', state: 'working', sessionId: 's-1', active: true, handedOffAt: 1, takenBackAt: null })
+  app.services.gate.writeMarker('s-1', 'wt-1', 'own-branch')
+
+  const brainReached = Promise.withResolvers<void>()
+  app.services.brain.judge = () => {
+    brainReached.resolve()
+    return new Promise<never>(() => {})
+  }
+  const provider = test.provided.get('tool-gate:quirky.avatar/gate') as ToolGateProvider
+  const controller = new AbortController()
+  const pending = provider(
+    {
+      agent: 'claude',
+      sessionId: 's-1',
+      event: 'PreToolUse',
+      deadlineMs: 60_000,
+      payload: {
+        hook_event_name: 'PreToolUse',
+        cwd: '/work/wt-1',
+        tool_name: 'Bash',
+        tool_input: { command: 'bun test --update-snapshots' }
+      }
+    },
+    controller.signal
+  )
+  void pending.catch(() => {})
+  try {
+    expect(await withStillWaiting(brainReached.promise)).toBeUndefined()
+  } catch (error) {
+    controller.abort()
+    await deactivate()
+    throw error
+  }
+  return { test, app, answer: () => withStillWaiting(pending), abort: () => controller.abort() }
+}
+
 const method = (test: TestApp, name: string) => test.provided.get(`method:quirky.avatar/${name}`) as (params: Record<string, unknown>) => Promise<unknown>
 
 describe('avatar main wiring', () => {
@@ -191,6 +248,42 @@ describe('avatar main wiring', () => {
     const provided = [...test.provided.keys()].filter((id) => id.startsWith('method:')).sort()
     expect(provided).toEqual(manifest.contributes.method.map((entry) => `method:quirky.avatar/${entry.id}`).sort())
     await deactivate()
+  })
+
+  test('deactivate refuses a waiting gate request and stops announcing changes', async () => {
+    const waiting = await waitingGateRequest()
+    try {
+      waiting.app.emit({ type: 'handoffs-changed' })
+      expect(waiting.test.emitted.filter((entry) => entry.event === 'changed').length).toBeGreaterThan(0)
+
+      await deactivate()
+
+      expect(await waiting.answer()).toMatchObject({ decision: 'deny', reason: STOPPING })
+      const changedCount = waiting.test.emitted.filter((entry) => entry.event === 'changed').length
+      waiting.app.emit({ type: 'handoffs-changed' })
+      expect(waiting.test.emitted.filter((entry) => entry.event === 'changed')).toHaveLength(changedCount)
+    } finally {
+      waiting.abort()
+      await deactivate()
+    }
+  })
+
+  test('deactivate logs a disposer that throws and still refuses the waiting request', async () => {
+    const lines: string[] = []
+    const waiting = await waitingGateRequest((test) => {
+      test.context.log = (message: string) => { lines.push(message) }
+      test.hostPower.subscribe = () => () => { throw new Error('power listener broke') }
+    })
+
+    try {
+      await deactivate()
+
+      expect(await waiting.answer()).toMatchObject({ decision: 'deny', reason: STOPPING })
+      expect(lines.filter((line) => line.includes('disposer failed'))).toEqual(['avatar: disposer failed: power listener broke'])
+    } finally {
+      waiting.abort()
+      await deactivate()
+    }
   })
 
   test('methods delegate to the services and return what they return', async () => {

@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, spyOn, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,6 +6,7 @@ import type { ToolGateProvider, ToolGateRequest } from '@quirky/protocol'
 import type { HandoffRow, Mandate, WorktreeState } from '../src/contracts'
 import { register as registerGate } from '../src/gate/service'
 import { claudeGateSettings, listMarkerFiles, markerDir, readMarkerFile, writeMarkerFile, type AgentEnv } from '../src/hooks/install'
+import * as install from '../src/hooks/install'
 import { register as registerHandoff } from '../src/handoff'
 import { restoreHandoffs, type RestoreResult } from '../src/restore'
 import { runDisposers } from '../main'
@@ -224,11 +225,16 @@ test('does not create or journal a marker without a session', () => {
   const t = appSetup()
   gateSetup(t)
   addHandoff(t, { sessionId: null })
+  const lines: string[] = []
+  t.context.log = (message: string) => { lines.push(message) }
 
   const result = restoreHandoffs(t.app)
 
   expect(result).toEqual({ markersWritten: [], markersRemoved: [], checksResumed: [] })
   expect(restoredEntries(t)).toEqual([])
+  expect(t.app.store.journalPage()).toEqual([])
+  expect(lines).toEqual([])
+  expect(listMarkerFiles(t.context.home)).toEqual([])
 })
 
 test('removes a marker when its active hand-off has no mandate', () => {
@@ -266,6 +272,36 @@ test('removes stale markers by worktree, sorts their names, and logs them once',
   expect(t.app.store.journalPage().filter((entry) => entry.worktreeId !== 'wt-1')).toEqual([])
 })
 
+test('logs a stale marker it cannot remove and still removes the others', () => {
+  const t = appSetup()
+  gateSetup(t)
+  addHandoff(t)
+  writeMarkerFile(t.context.home, 's-1', { worktreeId: 'wt-1', level: 'own-branch' })
+  writeMarkerFile(t.context.home, 's-old', { worktreeId: 'wt-9', level: 'own-branch' })
+  writeMarkerFile(t.context.home, 's-older', { worktreeId: 'wt-8', level: 'own-branch' })
+  const lines: string[] = []
+  t.context.log = (message: string) => { lines.push(message) }
+  const realRemoveMarkerFile = install.removeMarkerFile
+  const removeSpy = spyOn(install, 'removeMarkerFile').mockImplementation((home, sessionId) => {
+    if (sessionId === 's-old') throw new Error('busy')
+    realRemoveMarkerFile(home, sessionId)
+  })
+
+  let result: RestoreResult | undefined
+  try {
+    expect(() => { result = restoreHandoffs(t.app) }).not.toThrow()
+  } finally {
+    removeSpy.mockRestore()
+  }
+
+  expect(result).toEqual({ markersWritten: [], markersRemoved: ['s-older'], checksResumed: [] })
+  expect(listMarkerFiles(t.context.home)).toEqual(['s-1', 's-old'])
+  expect(lines).toEqual([
+    'avatar restore: could not remove stale marker s-old: busy',
+    'avatar restore: removed stale supervision markers: s-older'
+  ])
+})
+
 test('keeps a second marker for a worktree with an active hand-off', () => {
   const t = appSetup()
   gateSetup(t)
@@ -297,6 +333,71 @@ test('resumes a checking hand-off and journals its marker state', () => {
   expect(restoredEntries(t, 'wt-1')[0]?.data).toEqual({
     type: 'restored', sessionId: 's-1', marker: 'written', gateCheck: true
   })
+})
+
+test('journals a kept marker when it resumes a checking hand-off', () => {
+  const t = appSetup()
+  gateSetup(t)
+  addHandoff(t, { state: 'checking' })
+  writeMarkerFile(t.context.home, 's-1', { worktreeId: 'wt-1', level: 'own-branch' })
+  const checks: string[] = []
+  t.app.services.gate.gateCheck = (worktreeId) => {
+    checks.push(worktreeId)
+    return Promise.resolve({ ok: true, reason: '' })
+  }
+
+  const result = restoreHandoffs(t.app)
+
+  expect(checks).toEqual(['wt-1'])
+  expect(result).toEqual({ markersWritten: [], markersRemoved: [], checksResumed: ['wt-1'] })
+  expect(restoredEntries(t).map((entry) => entry.data)).toEqual([
+    { type: 'restored', sessionId: 's-1', marker: 'kept', gateCheck: true }
+  ])
+})
+
+test('journals no marker when it resumes a checking hand-off that has no session', () => {
+  const t = appSetup()
+  gateSetup(t)
+  addHandoff(t, { state: 'checking', sessionId: null })
+  const checks: string[] = []
+  t.app.services.gate.gateCheck = (worktreeId) => {
+    checks.push(worktreeId)
+    return Promise.resolve({ ok: true, reason: '' })
+  }
+
+  const result = restoreHandoffs(t.app)
+
+  expect(checks).toEqual(['wt-1'])
+  expect(result).toEqual({ markersWritten: [], markersRemoved: [], checksResumed: ['wt-1'] })
+  expect(restoredEntries(t).map((entry) => entry.data)).toEqual([
+    { type: 'restored', sessionId: null, marker: 'none', gateCheck: true }
+  ])
+  expect(listMarkerFiles(t.context.home)).toEqual([])
+})
+
+test('journals a resumed check that throws at once and goes on to the next hand-off', () => {
+  const t = appSetup()
+  gateSetup(t)
+  addHandoff(t, { state: 'checking', worktreeId: 'wt-1', sessionId: 's-1' })
+  addHandoff(t, { state: 'checking', worktreeId: 'wt-2', sessionId: 's-2' })
+  const checks: string[] = []
+  t.app.services.gate.gateCheck = (worktreeId) => {
+    checks.push(worktreeId)
+    if (worktreeId === 'wt-1') throw new Error('sync boom')
+    return Promise.resolve({ ok: true, reason: '' })
+  }
+
+  const result = restoreHandoffs(t.app)
+
+  expect(checks).toEqual(['wt-1', 'wt-2'])
+  expect(result.markersWritten).toEqual(['s-1', 's-2'])
+  expect(result.checksResumed).toContain('wt-2')
+  expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+    .filter((entry) => entry.kind === 'event' && entry.data.type === 'gate-check-error')
+    .map((entry) => entry.data)).toEqual([{ type: 'gate-check-error', error: 'sync boom' }])
+  expect(restoredEntries(t, 'wt-2').map((entry) => entry.data)).toEqual([
+    { type: 'restored', sessionId: 's-2', marker: 'written', gateCheck: true }
+  ])
 })
 
 test('does not resume gate checks outside the checking state', () => {
@@ -459,6 +560,60 @@ test('returns empty results without journaling when there is nothing to restore'
   expect(t.app.store.journalPage()).toEqual([])
 })
 
+test('leaves every marker alone when the hand-offs cannot be read', () => {
+  const t = appSetup()
+  gateSetup(t)
+  writeMarkerFile(t.context.home, 's-1', { worktreeId: 'wt-1', level: 'own-branch' })
+  writeMarkerFile(t.context.home, 's-old', { worktreeId: 'wt-9', level: 'own-branch' })
+  t.app.store.handoffs.list = () => { throw new Error('db closed') }
+  const lines: string[] = []
+  t.context.log = (message: string) => { lines.push(message) }
+
+  let result: RestoreResult | undefined
+  expect(() => { result = restoreHandoffs(t.app) }).not.toThrow()
+
+  expect(result).toEqual({ markersWritten: [], markersRemoved: [], checksResumed: [] })
+  expect(listMarkerFiles(t.context.home)).toEqual(['s-1', 's-old'])
+  expect(lines).toEqual(['avatar restore: could not read active hand-offs: db closed'])
+  expect(t.app.store.journalPage()).toEqual([])
+})
+
+test('logs a journal failure and still writes the markers', () => {
+  const t = appSetup()
+  gateSetup(t)
+  addHandoff(t, { worktreeId: 'wt-1', sessionId: 's-1' })
+  addHandoff(t, { worktreeId: 'wt-2', sessionId: 's-2' })
+  t.app.journal = () => { throw new Error('journal broke') }
+  const lines: string[] = []
+  t.context.log = (message: string) => { lines.push(message) }
+
+  let result: RestoreResult | undefined
+  expect(() => { result = restoreHandoffs(t.app) }).not.toThrow()
+
+  expect(result).toEqual({ markersWritten: ['s-1', 's-2'], markersRemoved: [], checksResumed: [] })
+  expect(listMarkerFiles(t.context.home)).toEqual(['s-1', 's-2'])
+  expect(lines).toEqual([
+    'avatar restore: could not journal for wt-1: journal broke',
+    'avatar restore: could not journal for wt-2: journal broke'
+  ])
+})
+
+test('never throws when the journal and the log both fail', () => {
+  const t = appSetup()
+  gateSetup(t)
+  addHandoff(t)
+  writeMarkerFile(t.context.home, 's-old', { worktreeId: 'wt-9', level: 'own-branch' })
+  t.app.journal = () => { throw new Error('journal broke') }
+  t.context.log = () => { throw new Error('log broke') }
+
+  let result: RestoreResult | undefined
+  expect(() => { result = restoreHandoffs(t.app) }).not.toThrow()
+
+  expect(result).toEqual({ markersWritten: ['s-1'], markersRemoved: ['s-old'], checksResumed: [] })
+  expect(listMarkerFiles(t.context.home)).toEqual(['s-1'])
+})
+
+
 test('lists marker file names in sorted order and returns empty for a missing directory', () => {
   const home = scratch('avatar-marker-list-')
 
@@ -466,6 +621,7 @@ test('lists marker file names in sorted order and returns empty for a missing di
   mkdirSync(markerDir(home), { recursive: true })
   writeFileSync(join(markerDir(home), 'b'), '{}')
   writeFileSync(join(markerDir(home), 'a'), '{}')
+  mkdirSync(join(markerDir(home), 'c'))
 
   expect(listMarkerFiles(home)).toEqual(['a', 'b'])
 })
@@ -533,4 +689,18 @@ test('runs all disposers in reverse order and logs each failure', () => {
   expect(calls).toEqual(['c', 'b', 'a'])
   expect(lines).toHaveLength(1)
   expect(lines[0]).toContain('b broke')
+})
+
+test('keeps running disposers when the log itself throws', () => {
+  const calls: string[] = []
+  const dispose = (name: string, failure = false) => () => {
+    calls.push(name)
+    if (failure) throw new Error(`${name} broke`)
+  }
+
+  expect(() => runDisposers([dispose('a'), dispose('b', true), dispose('c', true)], () => {
+    throw new Error('log broke')
+  })).not.toThrow()
+
+  expect(calls).toEqual(['c', 'b', 'a'])
 })
