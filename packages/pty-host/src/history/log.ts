@@ -187,7 +187,7 @@ export type IndexedSegment = {
   fd: number
 }
 type WriterRecord = IndexedRecord & { fileStart?: number; recordCount?: number }
-type SegmentIndex = Omit<IndexedSegment, 'fd'> & { records: WriterRecord[] }
+type SegmentIndex = Omit<IndexedSegment, 'fd' | 'records'> & { records: WriterRecord[] }
 type WriterGroup = { record: WriterRecord; fileBytes: number }
 type JoinedRange = { fileStart: number; recordCount: number }
 
