@@ -4,7 +4,7 @@ import type { StructuredContext, StructuredRunner, StructuredStartOptions, ToolP
 
 const TOOLS_DISABLED = 'tools are disabled for this session'
 const STDERR_TAIL_CHARS = 16 * 1024
-const MAX_FRAME_CHARS = 4 * 1024 * 1024
+const MAX_FRAME_BYTES = 256 * 1024 * 1024
 const TERM_GRACE_MS = 2_000
 const SUMMARY_LIMIT = 160
 const STATE_REQUEST_ID = 'quirky-state'
@@ -73,7 +73,7 @@ function contextTokensOf(message: Record<string, unknown>): number | null {
   const usage = message.usage
   if (typeof usage !== 'object' || usage === null) return null
   const u = usage as Record<string, unknown>
-  return count(u.totalTokens) || count(u.input) + count(u.output) + count(u.cacheRead) + count(u.cacheWrite)
+  return (count(u.totalTokens) || count(u.input) + count(u.output) + count(u.cacheRead) + count(u.cacheWrite)) || null
 }
 
 type Running = {
@@ -81,8 +81,8 @@ type Running = {
   agent: PiAgent
   toolPolicy: ToolPolicy
   child: ChildProcessWithoutNullStreams
-  decoder: TextDecoder
-  buffer: string
+  frameChunks: Buffer[]
+  frameBytes: number
   stderr: string
   contextWindow: number | null
   lastContextTokens: number | null
@@ -92,23 +92,26 @@ type Running = {
   closed: Promise<void>
 }
 
+/** Limits a test may lower. `maxFrameBytes` defaults to 256 MiB. */
+export type PiRunnerLimits = { maxFrameBytes?: number }
+
 /**
  * Runs Pi and Oh My Pi sessions in the background through their `--mode rpc` stdio protocol, with
  * no PTY: JSON lines in (prompts), JSON lines out (events). Assistant messages are journaled as
- * they end and `agent_end` settles the session as done.
+ * they end; `agent_settled` or `session_settled` closes the turn once automatic work is finished.
  *
  * A `deny-all` session starts the CLI with no tools and no extensions; any tool execution that happens anyway aborts
  * the turn and is journaled as refused. Extension dialogs are always cancelled, never answered.
  */
-export function createPiRunner(context: StructuredContext): StructuredRunner {
-  return new PiRunner(context)
+export function createPiRunner(context: StructuredContext, limits?: PiRunnerLimits): StructuredRunner {
+  return new PiRunner(context, limits?.maxFrameBytes ?? MAX_FRAME_BYTES)
 }
 
 class PiRunner implements StructuredRunner {
   private readonly running = new Map<string, Running>()
   private readonly starting = new Map<string, { stopped: boolean }>()
 
-  constructor(private readonly context: StructuredContext) {}
+  constructor(private readonly context: StructuredContext, private readonly maxFrameBytes: number) {}
 
   async start(session: Session, prompt?: string, options: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'pi' && session.agent !== 'omp') throw new Error('structured sessions support pi and omp only')
@@ -148,8 +151,8 @@ class PiRunner implements StructuredRunner {
       agent,
       toolPolicy,
       child,
-      decoder: new TextDecoder(),
-      buffer: '',
+      frameChunks: [],
+      frameBytes: 0,
       stderr: '',
       contextWindow: null,
       lastContextTokens: null,
@@ -195,6 +198,8 @@ class PiRunner implements StructuredRunner {
     const run = this.running.get(sessionId)
     if (!run || run.stopped) return
     run.stopped = true
+    run.frameChunks = []
+    run.frameBytes = 0
     this.running.delete(sessionId)
     this.terminate(run)
     await Promise.race([run.closed, new Promise((resolve) => setTimeout(resolve, TERM_GRACE_MS * 2))])
@@ -245,18 +250,34 @@ class PiRunner implements StructuredRunner {
   }
 
   private read(run: Running, chunk: Buffer): void {
-    run.buffer += run.decoder.decode(chunk, { stream: true })
-    if (run.buffer.length > MAX_FRAME_CHARS) {
-      run.buffer = ''
-      this.append(run, 'system', 'dropped an oversized rpc frame')
-      return
-    }
-    for (;;) {
-      const newline = run.buffer.indexOf('\n')
-      if (newline < 0) return
-      const line = run.buffer.slice(0, newline).replace(/\r$/, '')
-      run.buffer = run.buffer.slice(newline + 1)
-      if (!line) continue
+    if (run.stopped || run.exited) return
+    let offset = 0
+    while (offset < chunk.length) {
+      const newline = chunk.indexOf(0x0a, offset)
+      const end = newline < 0 ? chunk.length : newline
+      const part = chunk.subarray(offset, end)
+      const frameBytes = run.frameBytes + part.length
+      if (frameBytes > this.maxFrameBytes) {
+        this.append(run, 'system', `${run.agent} sent an rpc frame too large to read`)
+        void this.stop(run.session.id)
+        return
+      }
+      if (newline < 0) {
+        run.frameChunks.push(part)
+        run.frameBytes = frameBytes
+        return
+      }
+      let frame = part
+      if (run.frameChunks.length > 0) {
+        if (part.length > 0) run.frameChunks.push(part)
+        frame = Buffer.concat(run.frameChunks, frameBytes)
+        run.frameChunks = []
+      }
+      run.frameBytes = 0
+      offset = newline + 1
+      if (frame.at(-1) === 0x0d) frame = frame.subarray(0, frame.length - 1)
+      if (frame.length === 0) continue
+      const line = frame.toString('utf8')
       let event: unknown
       try {
         event = JSON.parse(line)
@@ -265,6 +286,7 @@ class PiRunner implements StructuredRunner {
         continue
       }
       if (typeof event === 'object' && event !== null && !Array.isArray(event)) this.handle(run, event as Record<string, any>)
+      if (run.stopped || run.exited) return
     }
   }
 
@@ -284,10 +306,10 @@ class PiRunner implements StructuredRunner {
         }
         if (event.success === false) {
           this.append(run, 'system', `${run.agent} rejected ${String(event.command ?? 'command')}: ${String(event.error ?? 'unknown error')}`, event)
-          if (event.command === 'prompt' || event.command === 'steer') {
-            run.working = false
-            this.context.setStatus(run.session.id, 'done')
-          }
+          if (run.working && (event.command === 'prompt' || event.command === 'steer')) this.closeTurn(run)
+        }
+        if (run.working && event.command === 'prompt' && event.success === true && event.data?.disposition === 'handled') {
+          this.closeTurn(run)
         }
         return
       }
@@ -322,18 +344,28 @@ class PiRunner implements StructuredRunner {
         }
         return
       }
-      case 'agent_end': {
+      case 'prompt_result':
+        if (run.working && event.agentInvoked === false) this.closeTurn(run)
+        return
+      case 'agent_settled':
+      case 'session_settled': {
+        if (!run.working) return
         const contextUsage =
           run.lastContextTokens === null ? null : { contextTokens: run.lastContextTokens, contextWindow: run.contextWindow }
         run.lastContextTokens = null
-        run.working = false
         this.append(run, 'result', `${run.agent} turn completed`, {
           type: 'agent_end',
           ...(contextUsage ? { contextUsage } : {})
         })
-        this.context.setStatus(run.session.id, 'done')
+        this.closeTurn(run)
         return
       }
     }
+  }
+
+  private closeTurn(run: Running): void {
+    run.working = false
+    run.lastContextTokens = null
+    this.context.setStatus(run.session.id, 'done')
   }
 }
