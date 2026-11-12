@@ -1,5 +1,7 @@
 export { createProcessRunner } from './runner'
 export type { OwnedProcessRunner, ProcessRunnerOptions } from './runner'
+export { launchDetached } from './child'
+export type { DetachedOutput } from './child'
 export { liveProcesses, stopAllProcesses } from './registry'
 export type { LiveProcess } from './registry'
 export { ProcessStalledError, ProcessRunnerDisposedError } from './errors'

@@ -65,3 +65,34 @@ export const startChild: StartChild = (argv, init) => {
     }
   }
 }
+
+/** Where a detached child's output goes: an open file descriptor, or nowhere. */
+export type DetachedOutput = number | 'ignore'
+
+/**
+ * Starts a child that outlives its caller, with closed stdin and its own session and process group.
+ * Returns without waiting; the child is never registered, signalled or waited on by this package.
+ * Output descriptors remain open and owned by the caller. Spawn errors propagate synchronously.
+ * Kernel code only: plugins cannot use this launcher.
+ */
+export function launchDetached(
+  argv: readonly string[],
+  init: {
+    cwd?: string
+    env?: Record<string, string | undefined>
+    stdout?: DetachedOutput
+    stderr?: DetachedOutput
+  } = {}
+): { pid: number } {
+  if (argv.length === 0 || !argv[0]) throw new TypeError('argv must name a command')
+  const child = Bun.spawn([...argv], {
+    cwd: init.cwd,
+    env: init.env,
+    stdin: 'ignore',
+    stdout: init.stdout ?? 'ignore',
+    stderr: init.stderr ?? 'ignore',
+    detached: true
+  } as unknown as Bun.SpawnOptions.OptionsObject<'ignore', DetachedOutput, DetachedOutput>)
+  child.unref()
+  return { pid: child.pid }
+}
