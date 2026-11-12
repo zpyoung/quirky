@@ -91,6 +91,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/contracts.ts` | Every shared type in Data models. **Created first; other units import from here only.** |
 | `src/store.ts` | Typed access over the store; the journal is append-only. |
 | `src/gate/classify.ts` | Pure: `classifyCall(call, ctx) → ActionClass[]`. |
+| `src/gate/shell.ts` | Pure: `parseShell(source, env) → ShellScript \| null`, the one reader of shell text. |
 | `src/gate/decide.ts` | Pure: `decide(input) → RuleDecision` (floor core → switches → level → fixed rules → `judgment`). |
 | `src/gate/service.ts` | The `tool-gate` provider: supervision lookup, Shadow, approvals, late answers, brain judgment with deadline, receipts, journal. |
 | `src/hooks/install.ts` | Claude: the `launch-hook` returns `LaunchPatch.jsonArgs['--settings']` with one entry per event (`PreToolUse` and `PermissionRequest`), each passing its event to `quirky-gate`, with matcher `*`, timeout `judgment-timeout-seconds + 30` rounded up and `onFailure: "block"`. The command carries the Quirky home and session ID as quoted literals. It merges with agent-status's `--settings`. Codex: one command per event in `$CODEX_HOME/hooks.json`, falling back to `~/.codex/hooks.json`, passing the event and reading the home and session from the environment. pi/omp: `quirky-avatar-gate.ts` in the existing agent `extensions/` directories. Plus supervision markers. |
@@ -314,7 +315,8 @@ type ClassifyContext = { worktreePath: string; handedOffPaths: string[]; default
 type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; switches: Switches; level: Level; ctx: ClassifyContext }
 ```
 - `classifyCall(call, ctx)` returns a non-empty `ActionClass[]`, with `['other']` when nothing matches.
-- A Bash command is split on `&&`, `||`, `;` and `|`, and every part is classified, so the classes of a compound command are the union.
+- `parseShell` reads a Bash command into simple commands at every depth; each is classified, so the classes are their union. A write whose target is computed by the shell or supplied by `xargs`, and a relative write after a `cd` to a computed directory, is `edit-outside`. A computed command name is `other`. `sudo` and `doas` add `credential`, including shell-only invocations; wrapper value flags are specific to each wrapper. A command that can't be read consistently across supported shells is `['other', 'edit-outside']`.
+- Directory and Git environment state are inherited per parsed scope; a substitution or subshell cannot change its parent's state. `eval` inherits the current directory and returns directory changes to the current scope. Git directory values using unknown tilde expansions in `env` arguments count as dynamic.
 - File tools (`Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, Codex `apply_patch`, pi `read`/`edit`/`write`) classify by resolved path against `ctx`.
 - `decide(input)` never throws.
 
@@ -535,6 +537,7 @@ Tests run with `bun test <file>` on this Mac. The full suite runs in CI through 
 | H5 | `plugins/quirky.structured/test/tool-policy.test.ts`, `test/pi-runner.test.ts` | `deny-all` refuses tools on fake runners; usage reported; the pi/omp runner against a scripted fake rpc process. |
 | decide | `plugins/quirky.avatar/test/decide.test.ts` | Every row of the SC-10 decision table; order precedence; level denies and never holds; guideline text can't change the outcome. |
 | classify | `test/classify.test.ts` | Each `ActionClass` from Bash, Edit/Write paths, MCP and pi tool shapes. |
+| shell | `test/shell.test.ts` | Quoting, continuations, comments, redirects, heredocs, nested substitutions, unreadable input and linear-time bounds. |
 | gate service | `test/gate-service.test.ts` | Allow-once used exactly once (SC-14); late answer reused (SC-12); timeout gives retry and is not a stuck denial; Shadow gives passthrough plus wouldHave (SC-13); take-back resolves an in-flight request as passthrough. |
 | encodings | `test/encode.test.ts` | Each table cell. |
 | hooks | `test/hooks-install.test.ts`, `test/agent-hooks.test.ts` | Event-specific fail-closed commands under `sh`, Claude launch identity and version checks, Codex coexistence and removal without deleting the file, pi/omp extension ownership, installed-agent filtering, serialized synchronization and live settings. |
