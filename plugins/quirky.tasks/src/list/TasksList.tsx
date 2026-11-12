@@ -82,6 +82,12 @@ function issueSourceUrl(item: ListItem, sources: Record<string, unknown>): strin
   return `https://${identity.host ?? 'github.com'}/${identity.owner}/${identity.repo}/issues/${item.number}`
 }
 
+function canonicalIssueUrl(url: string): string | null {
+  const match = /^https:\/\/([^/]+)\/([^/]+)\/([^/]+)\/issues\/(\d+)$/.exec(url)
+  if (!match) return null
+  return `${match[1]!.toLowerCase()}/${match[2]!.toLowerCase()}/${match[3]!.toLowerCase()}/issues/${match[4]}`
+}
+
 function clearIssueRetentions(rows: Record<string, OptimisticRow>): Record<string, OptimisticRow> {
   let next: Record<string, OptimisticRow> | null = null
   for (const [key, pending] of Object.entries(rows)) {
@@ -94,12 +100,13 @@ function clearIssueRetentions(rows: Record<string, OptimisticRow>): Record<strin
 
 function issueRetentionMatches(pending: OptimisticRow, viewKey: string, sources: Record<string, unknown>): boolean {
   const retention = pending.retention
-  return retention === undefined || (
-    pending.item.kind === 'issue'
+  if (retention === undefined) return true
+  const itemUrl = canonicalIssueUrl(pending.item.url)
+  return pending.item.kind === 'issue'
     && retention.viewKey === viewKey
-    && pending.item.url === retention.sourceUrl
-    && issueSourceUrl(pending.item, sources) === retention.sourceUrl
-  )
+    && itemUrl !== null
+    && itemUrl === canonicalIssueUrl(retention.sourceUrl)
+    && itemUrl === canonicalIssueUrl(issueSourceUrl(pending.item, sources) ?? '')
 }
 
 function pruneIssueRetentions(rows: Record<string, OptimisticRow>, viewKey: string, sources: Record<string, unknown>): Record<string, OptimisticRow> {
@@ -250,7 +257,9 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     const ownerGeneration = viewGeneration.current
     const ownsRequest = () => generation === fetchGeneration.current && latestKey.current === key && viewGeneration.current === ownerGeneration
     if (deliberate) {
-      setOptimistic((previous) => Object.fromEntries(Object.entries(previous).filter(([, pending]) => !pending.keepVisible)))
+      setOptimistic((previous) => Object.fromEntries(Object.entries(previous).filter(([, pending]) =>
+        !pending.keepVisible && !(pending.item.kind === 'issue' && pending.retention !== undefined)
+      )))
       checkTriggered.current.clear()
       setChecks({})
     }
@@ -1168,7 +1177,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
           patch: { ...(current?.patch ?? prior?.patch ?? {}), ...patch },
           generation,
           keepVisible,
-          ...(keepVisible ? { retention: { viewKey: currentKey, sourceUrl: item.url } } : {})
+          retention: { viewKey: currentKey, sourceUrl: item.url }
         }
       }
     })

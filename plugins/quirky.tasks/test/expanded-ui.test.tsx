@@ -445,6 +445,34 @@ test('a same-state issue edit updates the title on a retained closed row', async
   expect(element.querySelector('.tasks-list__row')?.textContent).toContain('Pending refresh')
 })
 
+test('a closed issue stays retained when the source identity differs from its URL only by case', async () => {
+  const staleIssue = issue(281, {
+    title: 'Stale indexed title',
+    url: 'https://github.com/acme/quirky/issues/281'
+  })
+  const sourceOrigin = { host: 'GitHub.COM', owner: 'Acme', repo: 'Quirky' }
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, repoIds: ['repo-1'], detail: target(staleIssue) }),
+    handlers: {
+      'quirky.tasks/list': () => listResult([staleIssue], { sources: { 'repo-1': { status: 'ready', origin: sourceOrigin } } }),
+      'quirky.tasks/issue': () => ({ ...issueDetail(281), item: staleIssue }),
+      'quirky.tasks/issueEdit': (params) => ({ item: { ...staleIssue, ...params } })
+    }
+  })
+  const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    status.value = 'closed-completed'
+    status.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+
+  const row = element.querySelector('.tasks-list__row')
+  expect(rowTitles(element)).toEqual(['Stale indexed title'])
+  expect(row?.querySelector('.ui-status-dot--done')).not.toBeNull()
+  expect(row?.textContent).toContain('Pending refresh')
+})
+
+
 test('creating another issue preserves a closed row retained while search results lag', async () => {
   let providerIssue = issue(281, { title: 'Closed issue 281' })
   let issueCreated = false
@@ -546,6 +574,75 @@ test.each(['query', 'repository', 'page'] as const)('a pending closed issue is n
   }
   await settle()
   expect(rowTitles(element)).toEqual([])
+})
+
+test('an unfiltered issue status edit is discarded after paging away and refreshing', async () => {
+  const issueFromInitialList = issue(281, { title: 'Indexed issue title' })
+  let providerHasUpdatedIssue = false
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, query: 'is:issue', repoIds: ['repo-1'], detail: target(issueFromInitialList) }),
+    handlers: {
+      'quirky.tasks/list': (params) => {
+        const page = params.page === 2 ? 2 : 1
+        const items = page === 1
+          ? [providerHasUpdatedIssue ? issue(281, { title: 'Fresh provider title' }) : issueFromInitialList]
+          : []
+        return listResult(items, { page, totalPages: 2 })
+      },
+      'quirky.tasks/issue': () => ({ ...issueDetail(281), item: issueFromInitialList }),
+      'quirky.tasks/issueEdit': (params) => ({ item: { ...issueFromInitialList, ...params } })
+    }
+  })
+  const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    status.value = 'closed-completed'
+    status.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+  expect(element.querySelector('.tasks-list__row .ui-status-dot--done')).not.toBeNull()
+
+  const pagination = element.querySelector('nav[aria-label="GitHub task pagination"]')!
+  await click(button(pagination, 'Next page'))
+  expect(rowTitles(element)).toEqual([])
+  providerHasUpdatedIssue = true
+  await click(button(element.querySelector('nav[aria-label="GitHub task pagination"]'), 'Previous page'))
+  expect(rowTitles(element)).toEqual(['Fresh provider title'])
+  expect(element.querySelector('.tasks-list__row .ui-status-dot--done')).toBeNull()
+
+  await click(button(element, 'Refresh GitHub work'))
+  const refreshedRow = element.querySelector('.tasks-list__row')
+  expect(rowTitles(element)).toEqual(['Fresh provider title'])
+  expect(refreshedRow?.querySelector('.ui-status-dot, [class*="status-dot"]')).not.toBeNull()
+  expect(refreshedRow?.querySelector('.ui-status-dot--done')).toBeNull()
+})
+
+test('an unfiltered issue status edit is cleared by Refresh on the same list', async () => {
+  const issueFromInitialList = issue(281, { title: 'Indexed issue title' })
+  let providerHasUpdatedIssue = false
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, query: 'is:issue', repoIds: ['repo-1'], detail: target(issueFromInitialList) }),
+    handlers: {
+      'quirky.tasks/list': () => listResult([
+        providerHasUpdatedIssue ? issue(281, { title: 'Fresh provider title' }) : issueFromInitialList
+      ]),
+      'quirky.tasks/issue': () => ({ ...issueDetail(281), item: issueFromInitialList }),
+      'quirky.tasks/issueEdit': (params) => ({ item: { ...issueFromInitialList, ...params } })
+    }
+  })
+  const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    status.value = 'closed-completed'
+    status.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+  expect(element.querySelector('.tasks-list__row .ui-status-dot--done')).not.toBeNull()
+
+  providerHasUpdatedIssue = true
+  await click(button(element, 'Refresh GitHub work'))
+  const refreshedRow = element.querySelector('.tasks-list__row')
+  expect(rowTitles(element)).toEqual(['Fresh provider title'])
+  expect(refreshedRow?.querySelector('.ui-status-dot, [class*="status-dot"]')).not.toBeNull()
+  expect(refreshedRow?.querySelector('.ui-status-dot--done')).toBeNull()
 })
 
 test('retaining a closed origin issue does not contaminate the upstream issue with the same number', async () => {
