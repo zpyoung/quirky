@@ -1,7 +1,8 @@
-import { PLUGIN_API_VERSION, type ContributionInfo, type ContributionStatus, type PluginInfo } from '@quirky/protocol'
+import { KERNEL_METHOD_SCHEMAS, PLUGIN_API_VERSION, validateValue, type ContributionInfo, type ContributionStatus, type PluginInfo } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
 import { parseManifest } from '../../src/plugins/manifest'
 import { buildUiModel } from '../../src/plugins/ui-model'
+import { resolveSetting } from '../../src/plugins/ui-service'
 
 const base = { id: 'acme', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION, ui: 'ui.js' }
 
@@ -69,5 +70,46 @@ describe('window-bar items in the UI model', () => {
       chosenTheme: 'default',
     })
     expect(model.windowBarItems).toEqual([])
+  })
+})
+
+describe('published UI result schemas', () => {
+  test('ui.contributions accepts windowBarItems and validates its array shape', () => {
+    const { model } = buildUiModel({
+      declarations: [decl('acme', 'pill', { title: 'Avatar' })],
+      plugins: [plugin('acme')],
+      chosenTheme: 'default',
+    })
+    expect(model.windowBarItems?.[0]?.id).toBe('window-bar-item:acme/pill')
+    const schema = KERNEL_METHOD_SCHEMAS['ui.contributions'].result
+    const result = { ...model, settings: [], themes: [], windowBarItems: [] }
+    expect(validateValue(schema, result, 'result')).toBeNull()
+    const { windowBarItems, ...withoutItems } = result
+    expect(validateValue(schema, withoutItems, 'result')).toBeNull()
+    expect(validateValue(schema, { ...result, windowBarItems: 'bad' }, 'result')).toBe('result.windowBarItems must be an array')
+    expect(validateValue(schema, { ...result, windowBarItems: ['bad'] }, 'result')).toBe('result.windowBarItems[0] must be an object')
+  })
+
+  test('setting.list accepts resolved hidden settings and validates hidden and source', () => {
+    const setting: ContributionInfo = {
+      id: 'setting:acme/internal', kind: 'setting', name: 'internal', plugin: 'acme',
+      override: false, status: 'effective',
+      data: { title: 'Internal', type: 'boolean', default: false, hidden: true },
+    }
+    const { model } = buildUiModel({
+      declarations: [setting],
+      plugins: [plugin('acme')],
+      chosenTheme: 'default',
+    })
+    const settings = model.settings.map((entry) => resolveSetting(entry, null, null))
+    expect(settings[0]?.hidden).toBe(true)
+    expect(settings[0]?.source).toBe('default')
+    const schema = KERNEL_METHOD_SCHEMAS['setting.list'].result
+    expect(validateValue(schema, settings, 'result')).toBeNull()
+    expect(validateValue(schema, [{ ...settings[0]!, hidden: 'yes' }], 'result')).toBe('result[0].hidden must be a boolean')
+    for (const source of ['user', 'distro', 'default']) {
+      expect(validateValue(schema, [{ ...settings[0]!, source }], 'result')).toBeNull()
+    }
+    expect(validateValue(schema, [{ ...settings[0]!, source: 'other' }], 'result')).not.toBeNull()
   })
 })

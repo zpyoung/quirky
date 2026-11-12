@@ -12,12 +12,64 @@ const run = (args: string[]) => runCli(args, { home: daemon.home })
 
 describe('ui contributions', () => {
 
-  test('omits empty sections', async () => {
+  test('omits empty sections when windowBarItems is undefined', async () => {
+    expect(daemon.ui.windowBarItems).toBeUndefined()
     daemon.addUiSlot('status-bar', 'acme.notes', 'usage')
     daemon.addUiSlot('panel', 'acme.notes', 'inspector')
     const result = await run(['ui', 'contributions'])
     const headers = result.stdout.trimEnd().split('\n\n').map((section) => section.split('\n')[0])
     expect(headers).toEqual(['STATUS BARS', 'PANELS', 'THEMES'])
+  })
+
+  test('omits WINDOW BAR ITEMS when windowBarItems is empty', async () => {
+    daemon.ui.windowBarItems = []
+    daemon.addUiSlot('status-bar', 'acme.notes', 'usage')
+    daemon.addUiSlot('panel', 'acme.notes', 'inspector')
+    const result = await run(['ui', 'contributions'])
+    const headers = result.stdout.trimEnd().split('\n\n').map((section) => section.split('\n')[0])
+    expect(headers).toEqual(['STATUS BARS', 'PANELS', 'THEMES'])
+  })
+
+  test('renders WINDOW BAR ITEMS when windowBarItems is non-empty and prints shown window-bar-item slots in ui state', async () => {
+    daemon.addUiSlot('status-bar', 'acme.notes', 'usage')
+    daemon.ui.windowBarItems = [{
+      id: 'window-bar-item:quirky.avatar/pill',
+      kind: 'window-bar-item',
+      plugin: 'quirky.avatar',
+      title: 'Avatar',
+      order: 20,
+      module: '/plugins/avatar/ui.js'
+    }]
+    daemon.addUiSlot('panel', 'acme.notes', 'inspector')
+
+    const result = await run(['ui', 'contributions'])
+    const sections = result.stdout.trimEnd().split('\n\n')
+    const headers = sections.map((section) => section.split('\n')[0])
+    expect(result.code).toBe(0)
+    expect(headers).toEqual(['STATUS BARS', 'WINDOW BAR ITEMS', 'PANELS', 'THEMES'])
+    const windowBarItems = sections.find((section) => section.startsWith('WINDOW BAR ITEMS'))!
+    for (const value of ['window-bar-item:quirky.avatar/pill', 'quirky.avatar', 'Avatar', '20', '/plugins/avatar/ui.js']) {
+      expect(windowBarItems).toContain(value)
+    }
+
+    const jsonResult = await run(['ui', 'contributions', '--json'])
+    expect(JSON.parse(jsonResult.stdout).windowBarItems).toEqual(daemon.ui.windowBarItems)
+
+    daemon.results.set('ui.state', {
+      windows: [],
+      layout: { view: null, panel: null, sidebar: true, focus: null },
+      slots: [{
+        id: 'window-bar-item:quirky.avatar/pill',
+        kind: 'window-bar-item',
+        plugin: 'quirky.avatar',
+        title: 'Avatar',
+        shown: true,
+        report: { summary: '1 supervised' }
+      }],
+      toasts: []
+    })
+    const stateResult = await run(['ui', 'state'])
+    expect(stateResult.stdout).toContain('slot window-bar-item:quirky.avatar/pill: Avatar {"summary":"1 supervised"}')
   })
 
   test('says so when every section is empty', async () => {

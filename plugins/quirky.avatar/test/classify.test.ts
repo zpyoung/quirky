@@ -2945,6 +2945,213 @@ describe('words env takes as assignments', () => {
   })
 })
 
+describe('pattern command words', () => {
+  test("pattern command word 1: a pattern command word leaves the directory unknown", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c* /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["[c]d /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c?; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c*; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["*; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[d]; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp && touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp; rm -rf Documents",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp; echo hi > out.txt",["edit-outside","other","read"],"held","floor-core"],
+      ["c? /tmp; mkdir build && touch build/a",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp\ntouch zz",["edit-outside","other"],"held","floor-core"],
+      ["X=1 c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp | cat; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["cat a.txt | c? /tmp; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["c? /tmp & touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp || touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp; git add a",["edit-outside","other"],"held","floor-core"],
+      ["ev?l \"cd /tmp\"; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["p?shd /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c?=1; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["[c]d=1; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c?() { echo hi; }; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 2: behind a wrapper", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["command c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["builtin c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["command -p c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["env c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["env X=1 c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["time c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["nice c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["exec c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["nohup c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["builtin builtin c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 3: behind a keyword or a zsh modifier", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["{ c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ c?; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["if c? /tmp; then :; fi; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["! c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["while c? /tmp; do break; done; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["if true; then c? /tmp; fi; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["for i in 1; do c? /tmp; done; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["time { c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ command c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ X=1 c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["noglob c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["builtin noglob c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["- c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["repeat 1 c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ [c]d /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ c[d]; }; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 4: the other pattern characters, quoting, and a bracket bash reads across a separator", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["^zz /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c#d /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c^x /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[)d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[d)] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[;d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[&d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[|d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[\nd] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ c[;d] /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c''? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["'c?' /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["\"c?\" /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c\\? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c{?,x} /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 5: what keeps its directory", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["[ -f x ] && touch zz",["edit-inside","read"],"allow","fixed-rules"],
+      ["[ -f x ]; touch zz",["edit-inside","read"],"allow","fixed-rules"],
+      ["[[ -f x ]] && touch zz",["edit-inside","other"],"judgment",null],
+      ["[[ $x == a* ]] && touch zz",["edit-inside","other"],"judgment",null],
+      ["if [ -f x ]; then touch zz; fi",["other"],"judgment",null],
+      ["{ [ -f x ] && touch zz; }",["edit-inside","other"],"judgment",null],
+      ["! [[ -f x ]] && touch zz",["edit-inside","other"],"judgment",null],
+      ["./c? /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["/bin/c? /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["sub/c* /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["(c? /tmp); touch zz",["edit-inside","other"],"judgment",null],
+      ["echo $(c? /tmp); touch zz",["edit-inside","other","read"],"judgment",null],
+      ["bash -c 'c? /tmp'; touch zz",["edit-inside","other"],"judgment",null],
+      ["a[0]=1; touch zz",["edit-inside","other"],"judgment",null],
+      ["c[d]=1; touch zz",["edit-inside","other"],"judgment",null],
+      ["m[$k]+=v; touch zz",["edit-inside","other"],"judgment",null],
+      ["{ c[d]=1; }; touch zz",["edit-inside","other"],"judgment",null],
+      ["{ a[0]=1; }; touch zz",["edit-inside","other"],"judgment",null],
+      ["ls *.ts; touch zz",["edit-inside","read"],"allow","fixed-rules"],
+      ["rm -f *.log; touch zz",["edit-inside"],"allow","fixed-rules"],
+      ["for f in *; do echo $f; done; touch zz",["edit-inside","other"],"judgment",null],
+      ["case $x in *) echo hi;; esac; touch zz",["edit-inside","other","read"],"judgment",null],
+      ["a=(*.ts); touch zz",["edit-inside","other"],"judgment",null],
+      ["files=(\n  *.ts\n  a.js\n)\ntouch zz",["edit-inside","other"],"judgment",null],
+      ["((i*2)); touch zz",["edit-inside","other"],"judgment",null],
+      ["cd~x /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["c] /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["c? /tmp; cd /work/wt && touch zz",["edit-inside","other","read"],"judgment",null],
+      ["c? /tmp; touch /work/wt/zz",["edit-inside","other"],"judgment",null],
+      ["c? /tmp; ls",["other","read"],"judgment",null],
+      ["c? /tmp; bun test",["other","test"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 6: the command itself is classified as before", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["c?",["other"],"judgment",null],
+      ["c? /tmp",["other"],"judgment",null],
+      ["*",["other"],"judgment",null],
+      ["r? -rf /home/u/x",["other"],"judgment",null],
+      ["r? -rf x",["other"],"judgment",null],
+      ["l? -la",["other"],"judgment",null],
+      ["c? /tmp; touch /home/u/zz",["edit-outside","other"],"held","floor-core"],
+      ["g?t push --force origin main",["other"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 7: what it costs: a case pattern on its own line or after a bar reads as a command", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["case \"$1\" in\n  start) echo s;;\n  *) echo usage;;\nesac\ntouch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case \"$1\" in\n  [yY]*) echo yes;;\nesac\necho done > log.txt",["edit-outside","other","read"],"held","floor-core"],
+      ["case $x in a|b*) echo hi;; esac; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case $x in a) echo hi;; *) echo other;; esac; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case $x in a) echo hi;; *) echo other;; esac; git add a",["edit-outside","other","read"],"held","floor-core"],
+      ["case \"$1\" in\n  start) echo s;;\n  stop) echo t;;\nesac\ntouch zz",["edit-inside","other","read"],"judgment",null],
+      ["case \"$1\" in\n  start) echo s;;\n  *) echo usage;;\nesac",["other","read"],"judgment",null],
+      ["case \"$1\" in\n  *) echo usage;;\nesac\ncd /work/wt && touch zz",["edit-inside","other","read"],"judgment",null],
+      ["case $x in a) echo hi;; *) echo other;; esac; bun test",["other","read","test"],"judgment",null],
+      ["(case $x in a) echo hi;; *) echo other;; esac); touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case \"$1\" in\n  \"$y\") echo s;;\nesac\ntouch zz",["edit-outside","other","read"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 8: eval reads its text again", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["eval c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["eval 'c? /tmp'; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["eval \"c? /tmp\" && touch zz",["edit-outside","other"],"held","floor-core"],
+      ["eval '(c? /tmp)'; touch zz",["edit-inside","other"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('pattern command word 9: command lists still match by text', () => {
+    const deployContext = { ...ctx, deployCommands: ['d?ploy now'] }
+    expectClassSet('d?ploy now', ['deploy'], deployContext)
+    expect(decideReviewed('d?ploy now', 'local', offSwitches, deployContext)).toMatchObject({ outcome: 'held', step: 'floor-switch' })
+    const allowContext = { ...ctx, allowCommands: ['t?ol build'] }
+    expectClassSet('t?ol build', ['build'], allowContext)
+    expect(decideReviewed('t?ol build', 'local', offSwitches, allowContext)).toMatchObject({ outcome: 'allow', step: 'fixed-rules' })
+    expectClassSet('t?ol build; touch zz', ['build', 'edit-outside'], allowContext)
+    expect(decideReviewed('t?ol build; touch zz', 'local', offSwitches, allowContext)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    const denyContext = { ...ctx, denyCommands: ['r? -rf'] }
+    expectClassSet('r? -rf x', ['other'], denyContext)
+    expect(decideReviewed('r? -rf x', 'local', offSwitches, denyContext)).toMatchObject({ outcome: 'deny', step: 'fixed-rules' })
+    expect(commandParts(call('Bash', { command: 'c? /tmp; ls' }), ctx)).toEqual(['c? /tmp', 'ls'])
+  })
+})
+
 describe('directory uncertainty scenarios', () => {
   test('scenario 1: keeps the old and entered directories after a followed cd', () => {
     const rows: [string, ActionClass[]][] = [
@@ -3284,13 +3491,22 @@ describe('directory uncertainty scenarios', () => {
       ["time export x=$y; cd src; touch a",["edit-inside","other","read"],"judgment",null],
       ["for i in 1; do export x=$y; done; cd src; touch a",["edit-inside","other","read"],"judgment",null],
       ["while export x=$y; do break; done; cd src; touch a",["edit-inside","other","read"],"judgment",null],
-      ["f() { local x=$1; cd src; touch a; }; f",["edit-inside","other","read"],"judgment",null],
+      // the function body is read again with a later directory
+      ["f() { local x=$1; cd src; touch a; }; f",["edit-outside","other","read"],"held","floor-core"],
     ]
     for (const [command, classes, outcome, step] of rows) {
       expectClassSet(command, classes)
       expect(decideReviewed(command)).toMatchObject({ outcome, step })
     }
   })
+
+  for (const declaration of ['declare', 'typeset', 'readonly']) {
+    test(`a readable ${declaration} name preserves the search path before a relative write`, () => {
+      const command = `${declaration} x=$1; cd src; touch a`
+      expectClassSet(command, ['edit-inside', 'other', 'read'])
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'judgment', step: null })
+    })
+  }
 
   test('computed name 2: printf with a name it cannot read', () => {
     const rows: [string, ActionClass[], string, string | null][] = [
@@ -3733,4 +3949,268 @@ describe('directory uncertainty scenarios', () => {
       expect(decideReviewed(command)).toMatchObject({ outcome, step })
     }
   })
+  test("deferred 1: a loop or a function with nothing later that moves keeps its result", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["for i in 1 2; do :; touch a; done", ["edit-inside", "other"], "judgment", null],
+      ["f() { :; touch a; }; f", ["edit-inside", "other"], "judgment", null],
+      ["for i in 1 2; do :; touch a; done; cd /tmp; ls", ["edit-inside", "other", "read"], "judgment", null],
+      ["cd src; for i in 1 2; do :; touch a; done", ["edit-inside", "other", "read"], "judgment", null],
+      ["f() { :; touch a; }; cd src; f", ["edit-inside", "other", "read"], "judgment", null],
+      ["for i in 1 2; do :; touch a; cd /work/wt/src; done", ["edit-inside", "other", "read"], "judgment", null],
+      ["log() { :; echo hi; }; touch b; cd /tmp; ls", ["edit-inside", "other", "read"], "judgment", null],
+      ["for i in 1 2; do :; touch a; done; touch b; cd /tmp; echo done", ["edit-inside", "other", "read"], "judgment", null],
+      ["for i in 1 2; do :; cd /work/wt && touch a; cd /tmp; done", ["edit-inside", "other", "read"], "judgment", null],
+      ["(f() { :; touch a; }; f); cd /tmp", ["edit-inside", "other", "read"], "judgment", null],
+      ["a=(); touch a; cd /tmp", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["ls; { touch a; }; cd /tmp", ["other", "read"], "judgment", null],
+      ["if true; then :; touch a; fi; cd /tmp", ["edit-inside", "other", "read"], "judgment", null],
+      ["case x in x) touch a;; esac; cd /tmp", ["edit-inside", "other", "read"], "judgment", null],
+      ["f() { :; echo hi; }; cd /work/wt && f && touch a", ["edit-inside", "other", "read"], "judgment", null],
+      ["GIT_DIR=/work/wt/.git; for i in 1 2; do :; git add a; done", ["edit-inside", "other"], "judgment", null],
+      ["rg -n for src; touch a; cd /tmp", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["for i in 1 2; do :; touch a; break; done; cd /tmp", ["edit-inside", "other", "read"], "judgment", null],
+      ["f() { :; cd /work/wt/src && touch a; }; f", ["edit-inside", "other", "read"], "judgment", null],
+      ["for f in a b; do :; cp x out/; done; cd /tmp && ls \"${HOME}\"", ["edit-inside", "other", "read"], "judgment", null],
+      ["foreach i (1 2) :; touch a; end; cd /tmp", ["edit-inside", "other", "read"], "judgment", null],
+      ["ls; () { :; }; touch a; cd /tmp", ["edit-inside", "other", "read"], "judgment", null],
+      ["if (true) :; touch a; cd /tmp", ["edit-inside", "other", "read"], "judgment", null],
+      ["cd /tmp; f() { :; echo hi; }; cd /work/wt && f && touch a", ["edit-inside", "other", "read"], "judgment", null],
+      ["f() { :; echo hi; }; git add b; GIT_DIR=/tmp/r; f", ["edit-inside", "other", "read"], "judgment", null],
+      ["f() { :; (cd /tmp); echo hi; }; cd /work/wt && f && touch a", ["edit-inside", "other", "read"], "judgment", null],
+      ["f() { :; echo hi; }; cd /tmp; cd /work/wt && f && touch a", ["edit-inside", "other", "read"], "judgment", null],
+      ["cd /tmp; cd /work/wt && while [ -z \"$(touch a)\" ]; do :; done", ["edit-inside", "other", "read"], "judgment", null]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("deferred 2: a loop body is judged with every directory the loop can leave", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["for i in 1 2; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["while :; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["until :; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["select x in a b; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for ((i=0;i<2;i++)); do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2\ndo\ntouch a\ncd /tmp\ndone", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["repeat 2 { :; touch a; cd /tmp }", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; { :; touch a; cd /tmp }", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i (1 2) { :; touch a; cd /tmp }", ["edit-outside", "other"], "held", "floor-core"],
+      ["foreach i (1 2) :; touch a; cd /tmp; end", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["{ for i in 1 2; do :; touch a; cd /tmp; done; }", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["if true; then for i in 1 2; do :; touch a; cd /tmp; done; fi", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["! while :; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["time for i in 1 2; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["yes | while read x; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["(for i in 1 2; do :; touch a; cd /tmp; done)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["x=$(for i in 1 2; do :; touch a; cd /tmp; done)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'for i in 1 2; do :; touch a; cd /tmp; done'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["bash -c 'for i in 1 2; do :; touch a; cd /tmp; done'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do for j in 1 2; do :; touch a; done; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do (touch a); cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["while [ -z \"$(touch a)\" ]; do cd /tmp; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; do echo x > a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; git add a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["if false; then :; else for i in 1 2; do :; touch a; cd /tmp; done; fi", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["if false; then :; elif for i in 1 2; do :; touch a; cd /tmp; done; then :; fi", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["time -p for i in 1 2; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["{ :; } always { for i in 1 2; do :; touch a; cd /tmp; done }", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["coproc while :; do :; touch a; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["cd /work/wt && while [ -z \"$(touch a)\" ]; do cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["if for i in 1 2; do :; touch a; cd /tmp; done; then :; fi", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["while [ -z \"$(for i in 1 2; do :; touch a; done)\" ]; do cd /tmp; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["cd /tmp; cd /work/wt && while [ -z \"$(touch a)\" ]; do :; cd /tmp; done", ["credential", "edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("deferred 3: every way a loop body moves counts", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["for i in 1 2; do :; touch a; cd ..; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; cd src; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; pushd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; eval 'cd /tmp'; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; $x; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; { cd /tmp; }; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; if cd /tmp; then :; fi; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["while :; do :; cd src; touch a; CDPATH=/tmp; cd /work/wt; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; cd src; touch a; export CDPATH=/tmp; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; do :; cd src; touch a; declare CDPATH=/tmp; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; do :; cd src && touch a; CDPATH=/tmp; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; do :; (cd src; touch a); CDPATH=/tmp; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["while :; do :; git add a; GIT_DIR=/tmp/r; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["while :; do :; git add a; GIT_WORK_TREE=/tmp/r; done", ["edit-outside", "other"], "held", "floor-core"],
+      ["while :; do :; git commit -m x; HUSKY=0; done", ["edit-inside", "other", "skip-hooks"], "deny", "fixed-rules"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("deferred 4: a function body is judged with every directory a later command can run in", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["f() { :; touch a; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["function f { :; touch a; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["function f() { :; touch a; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f g () { :; touch a; }; cd /tmp; g", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["function f g { :; touch a; }; cd /tmp; g", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() ( touch a ); cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() touch a; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f()\n{\n:\ntouch a\n}\ncd /tmp\nf", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f ()\n{ :; touch a; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() for i in 1; do :; touch a; done; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; echo x > a; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; git add a; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd src; touch a; }; CDPATH=/tmp; f", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() { :; git add a; }; GIT_DIR=/tmp/r; f", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() { :; git commit -m x; }; HUSKY=0; f", ["edit-inside", "other", "skip-hooks"], "deny", "fixed-rules"],
+      ["f() { :; touch a; }; touch b; cd /tmp; f", ["edit-inside", "edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1; do function f { :; touch a; }; done; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["{ function f { :; touch a; }; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["if true; then function f { :; touch a; }; fi; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() if :; then { :; }; touch a; fi; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["function f { echo $(touch a); }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("deferred 5: wherever the call is", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["eval 'f() { :; git commit -m x; }'; HUSKY=0; f", ["edit-outside", "other", "skip-hooks"], "held", "floor-core"],
+      ["f() { :; touch a; }; (cd /tmp; f)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; (cd /tmp && f)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; echo $(cd /tmp; f)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; cd /tmp && f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; cd /tmp; \"$@\"", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; trap f EXIT; cd /tmp", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["chpwd() { :; touch a; }; cd /tmp", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; export -f f; env -C /tmp bash -c f", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() { :; touch a; }; export -f f; bash -c 'cd /tmp; f'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; f; f() { :; touch a; }; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; cd /tmp; [ -n \"$1\" ] || f x; }; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; g() { :; cd /tmp; }; g; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'f() { :; touch a; }'; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["sh -c 'f() { :; touch a; }; cd /tmp; f'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; export -f f; env -C /tmp bash <<< f", ["edit-outside", "other"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("deferred 6: after a function that moves is defined, a command behind && is judged with every directory", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["eval 'f() { :; cd ..; }'; cd /work/wt && f && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd /tmp; }; cd /work/wt && f && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["ls() { :; cd /tmp; }; cd /work/wt && ls && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd /tmp; }; cd /work/wt && eval ':; f' && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd /tmp; }; for i in 1 2; do :; cd /work/wt && f && touch a; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd /tmp; }; (cd /work/wt && f && touch a)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd /tmp; }; bash -c 'cd /work/wt && f && touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'f() { :; cd /tmp; }'; cd /work/wt && f && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; CDPATH=/tmp; }; CDPATH=; f; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() { :; GIT_DIR=/tmp/r; }; GIT_DIR=; f; git add a", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() { :; HUSKY=0; }; HUSKY=2; f; git commit -m x", ["edit-inside", "other", "skip-hooks"], "deny", "fixed-rules"],
+      ["g() { :; cd /work/wt && f && touch a; }; f() { :; cd /tmp; }; g", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd /tmp; }; cd /work/wt && f && echo $(touch a)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["cd() { :; builtin cd /tmp; }; cd /work/wt && echo $(touch a)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; cd /tmp; }; eval 'cd /work/wt && f && touch a'", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("deferred 7: a block end the reader can't tell from a quoted word", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["for i in 1 2; do :; touch a; \"done\"; cd /tmp; done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; \"}\"; touch a; }; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() for i in 1; do { :; }; touch a; done; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do { :; }; touch a; cd /tmp; [[ x ]] done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { { :; }; touch a; echo x}; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { { :; }; touch a; : $x} ; cd /tmp; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["repeat 2 { for i in 1; do :; done; touch a; cd /tmp }", ["edit-outside", "other"], "held", "floor-core"],
+      ["for i in 1 2; do { :; }; touch a; cd /tmp; x=1 done", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["{ :; }; for i (1 2) touch a && cd /tmp", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["repeat 2 if :; then { :; }; touch a; cd /tmp; fi", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["repeat 2 case x in x) { :; }; touch a; cd /tmp;; esac", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("deferred 8: what the rule costs", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["cd /tmp; cd /work/wt && f() { :; echo hi; } && touch b; cd /x; f", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'f() { :; touch a; }; f'", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() {\ncd src && touch a\n}\nf", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["build() {\ncd packages/ui && bun run build\n}\nbuild\ncd /work/wt && touch .done", ["build", "edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; done; cd /tmp; { ls; }", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["f() { :; touch a; }; touch b; cd /tmp; { ls; }", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["for i in 1 2; do :; touch a; done; for j in 1 2; do :; cd src; done", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+  test('deferred 9: re-reading is bounded', () => {
+    const quote = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`
+    const moving = (fillers: number) => `for i in 1;do cd b;${':;'.repeat(fillers)}done`
+    const nest = (body: string) => {
+      let nested = body
+      for (let depth = 0; depth < 4; depth++) nested = `for i in 1; do :; cd c; bash -c ${quote(nested)}; done`
+      return nested
+    }
+    const loops = 'for i in 1; do :; touch a; cd b; done; '
+    expectClassSet(moving(199_997), ['other'])
+    expectClassSet(moving(199_998), ['other', 'edit-outside'])
+    const around = (shell: string, fillers: number) => `for i in 1;do cd b;${shell} '${':;'.repeat(fillers)}';done`
+    for (const shell of ['bash -c', 'eval']) {
+      expectClassSet(around(shell, 199_996), ['other'])
+      expectClassSet(around(shell, 199_997), ['other', 'edit-outside'])
+    }
+    expectClassSet(nest(loops.repeat(20)), ['edit-outside', 'other', 'read'])
+    expectClassSet(nest(loops.repeat(6_000)), ['other', 'edit-outside'])
+    expect(decideReviewed(moving(199_998))).toMatchObject({ outcome: 'held', step: 'floor-core' })
+  }, 30_000)
+
+  test('keeps confirmed credential access when deferred directories widen to unknown', () => {
+    const command = 'cd /home/u; for i in 1 2; do :; cat .ssh/id_rsa; cd src; done'
+    expect(bash(command)).toContain('credential')
+    expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+  })
+
+  for (const command of [
+    "cd /home/u; eval 'f() { :; cat .ssh/id_rsa; }; f'",
+    "cd /home/u && eval 'f() { :; cat .ssh/id_rsa; }; f'",
+    "cd /home/u; eval 'f() { :; cat .ssh/id_rsa; }'; f",
+    "cd /home/u; eval 'function f { cat .ssh/id_rsa; }; f'",
+    "cd /home/u; eval 'f() { :; cat .aws/credentials; }; f'",
+    "cd /home/u; eval 'f() { :; cat .env; }; f'",
+    "eval 'cd /home/u; f() { :; cat .ssh/id_rsa; }; f'",
+    "cd /home/u; eval 'f() { :; cat .ssh/id_rsa; cd src; }; f'",
+    "cd /home/u; (eval 'f() { :; cat .ssh/id_rsa; }; f')",
+    "cd /home/u; x=$(eval 'f() { :; cat .ssh/id_rsa; }; f')",
+    "cd /home/u; bash -c 'eval \"f() { :; cat .ssh/id_rsa; }; f\"'",
+    "cd /home/u; eval 'f() { :; cp .ssh/id_rsa /work/wt/x; }; f'"
+  ]) {
+    test(`keeps credential evidence from eval-defined functions: ${command}`, () => {
+      expect(bash(command)).toContain('credential')
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    })
+  }
+
 })

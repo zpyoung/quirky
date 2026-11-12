@@ -41,7 +41,6 @@ export class HostPowerService {
   readonly #subscriptions = new Set<Subscription>()
   readonly #activations = new Map<string, Set<Activation>>()
   readonly #source: NativeHostPowerSource | null
-  readonly #ownerHolds = new Map<string, Set<Hold>>()
   #holdCount = 0
   #assertionId: number | null = null
   #suspended = false
@@ -99,27 +98,7 @@ export class HostPowerService {
     }
   }
 
-  /**
-   * Holds the host awake for `owner` until the returned disposer runs or the owner is revoked.
-   * Holds from every owner share one native assertion; the disposer is idempotent.
-   * Keep-awake is a no-op unless the source can both create and release assertions.
-   */
-  keepAwake(owner: string, reason: string): () => void {
-    if (this.#disposed) throw new Error('Host power service is disposed')
-    let holds = this.#ownerHolds.get(owner)
-    if (!holds) {
-      holds = new Set()
-      this.#ownerHolds.set(owner, holds)
-    }
-    return this.#acquire(reason, holds)
-  }
-
   revoke(pluginId: string): void {
-    const holds = this.#ownerHolds.get(pluginId)
-    if (holds) {
-      this.#ownerHolds.delete(pluginId)
-      this.#releaseAll(holds)
-    }
     const activations = this.#activations.get(pluginId)
     if (!activations) return
     for (const activation of [...activations]) this.#retireActivation(activation)
@@ -128,8 +107,6 @@ export class HostPowerService {
   dispose(): void {
     if (this.#disposed) return
     this.#disposed = true
-    for (const holds of [...this.#ownerHolds.values()]) this.#releaseAll(holds)
-    this.#ownerHolds.clear()
     for (const activations of [...this.#activations.values()]) {
       for (const activation of [...activations]) this.#retireActivation(activation)
     }
