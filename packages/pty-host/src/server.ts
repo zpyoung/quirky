@@ -6,6 +6,9 @@ import {
   base64ToBytes,
   encodePtyData,
   encodePtyJson,
+  negotiatePtyVersion,
+  ptyVersionRejection,
+  PTY_PROTOCOL_MIN_VERSION,
   PTY_PROTOCOL_VERSION,
   PtyFrameDecoder,
   type PtyEvent,
@@ -40,6 +43,7 @@ type Connection = {
   /** Output of sessions whose subscribe response has not been sent yet; it follows the response. */
   holding: Map<string, Uint8Array[]>
   heldBytes: number
+  protocolVersion: number | null
   authenticated: boolean
   closed: boolean
 }
@@ -91,6 +95,7 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
           socket,
           writer: new SocketWriter(socket, maxConnectionQueuedBytes),
           decoder: new PtyFrameDecoder(),
+          protocolVersion: null,
           authenticated: false,
           closed: false,
           holding: new Map(),
@@ -206,14 +211,14 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     }
 
     if (!conn.authenticated) {
-      const rejection = authenticate(request)
+      const rejection = authenticate(conn, request)
       if (rejection) {
         fail(new Error(rejection))
         conn.writer.endAfterFlush()
         return
       }
       conn.authenticated = true
-      reply({ version: PTY_PROTOCOL_VERSION, pid: process.pid } satisfies PtyResults['hello'])
+      reply({ version: conn.protocolVersion!, pid: process.pid } satisfies PtyResults['hello'])
       return
     }
 
@@ -226,19 +231,22 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     }
   }
 
-  function authenticate(request: PtyRequest): string | null {
+  function authenticate(conn: Connection, request: PtyRequest): string | null {
     if (request.type !== 'hello') return 'hello required before any other request'
     if (request.token !== token) return 'invalid token'
-    if (request.version !== PTY_PROTOCOL_VERSION) {
-      return `unsupported protocol version ${request.version}, host speaks ${PTY_PROTOCOL_VERSION}`
-    }
+    const version = negotiatePtyVersion(request, {
+      min: PTY_PROTOCOL_MIN_VERSION,
+      max: PTY_PROTOCOL_VERSION
+    })
+    if (version === null) return ptyVersionRejection(request.version, PTY_PROTOCOL_VERSION)
+    conn.protocolVersion = version
     return null
   }
 
   function dispatch(conn: Connection, request: PtyRequest): unknown {
     switch (request.type) {
       case 'hello':
-        return { version: PTY_PROTOCOL_VERSION, pid: process.pid }
+        return { version: conn.protocolVersion!, pid: process.pid }
       case 'create':
         return manager.create(request)
       case 'writeAccepted':
