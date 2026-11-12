@@ -599,7 +599,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
             {detail.item.assignees.map((login) => <label key={login} className="quirky-tasks-issue__assignee">
               <input type="checkbox" checked disabled={busy} onChange={() => void updateIssue({ assignees: detail.item.assignees.filter((entry) => entry !== login) }, { assignees: detail.item.assignees.filter((entry) => entry !== login) })} />{login}
             </label>)}
-            {choices.available && choices.assignees.filter((user) => !detail.item.assignees.includes(user.login)).slice(0, 8).map((user) => <Button key={user.login} type="button" disabled={busy} onClick={() => {
+            {choices.available && choices.assignees.filter((user) => !detail.item.assignees.includes(user.login)).map((user) => <Button key={user.login} type="button" disabled={busy} onClick={() => {
               const assignees = [...detail.item.assignees, user.login]
               void updateIssue({ assignees }, { assignees })
             }}>+ {user.login}</Button>)}
