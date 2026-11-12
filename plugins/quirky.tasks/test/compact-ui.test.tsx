@@ -224,6 +224,14 @@ test('Expand opens the expanded view with the current navigation and revision', 
   expect(place.takeFocus()).toBe('row')
 })
 
+test('Expand keeps the currently open row in the expanded view', async () => {
+  const detail = { worktree: 'wt-main', kind: 'pullRequest' as const, number: 275, url: 'https://github.com/acme/quirky/pull/275' }
+  const state = withNavigation({ detail })
+  const { element, opened } = await mountCompact({ state })
+  await act(async () => button(element, 'Expand Tasks')!.click())
+  expect(opened).toEqual([{ id: VIEW, input: { navigation: state.navigation, revision: 3 } }])
+})
+
 test('the host owns the title and Minimize, so the panel passes no Minimize of its own', async () => {
   const { element } = await mountCompact()
   expect(button(element, 'Minimize Tasks')).toBeUndefined()
@@ -245,7 +253,7 @@ test('every row keeps its Start workspace button and menu in the DOM and in tab 
 test('a pull request menu offers Start workspace, Review, Open on GitHub and Copy link', async () => {
   const { element } = await mountCompact()
   await act(async () => button(element, 'More actions for #274')!.click())
-  const items = [...element.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) => item.textContent)
+  const items = [...document.body.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) => item.textContent)
   expect(items).toEqual(['Start workspace', 'Review', 'Open on GitHub', 'Copy link'])
 })
 
@@ -253,8 +261,22 @@ test('an issue menu has no Review item', async () => {
   const state = withNavigation({ mode: 'issues', query: 'is:issue is:open', lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 } })
   const { element } = await mountCompact({ state, handlers: { 'quirky.tasks/list': () => listResult([issue(12)]) } })
   await act(async () => button(element, 'More actions for #12')!.click())
-  const items = [...element.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) => item.textContent)
+  const items = [...document.body.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) => item.textContent)
   expect(items).toEqual(['Start workspace', 'Open on GitHub', 'Copy link'])
+})
+
+test('Escape in the panel closes only the open row menu', async () => {
+  const detail = { worktree: 'wt-main', kind: 'pullRequest' as const, number: 274, url: 'https://github.com/acme/quirky/pull/274' }
+  const { element, opened } = await mountCompact({ state: withNavigation({ detail }) })
+  await act(async () => button(element, 'More actions for #274')!.click())
+  expect(document.body.querySelector('[role="menu"]')).not.toBeNull()
+  await act(async () => {
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  })
+  expect(document.body.querySelector('[role="menu"]')).toBeNull()
+  expect(element.querySelector('.ui-list-row--selected')).not.toBeNull()
+  expect(button(element, 'Expand Tasks')).toBeDefined()
+  expect(opened).toEqual([])
 })
 
 test('right-clicking a row opens the same items', async () => {
@@ -272,7 +294,7 @@ test('menu actions start the workspace, open the review, open the link and copy 
   expect(calls.find((call) => call.method === 'quirky.tasks/workspace')?.params).toEqual({ target, action: 'start' })
   for (const label of ['Review', 'Open on GitHub', 'Copy link']) {
     await act(async () => button(element, 'More actions for #274')!.click())
-    const item = [...element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === label)!
+    const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === label)!
     await act(async () => item.click())
     await settle()
   }
@@ -290,7 +312,7 @@ test('a linked row offers Resume and resumes its workspace', async () => {
   await act(async () => button(element, 'Resume for #274')!.click())
   expect(calls.find((call) => call.method === 'quirky.tasks/workspace')?.params).toMatchObject({ action: 'resume' })
   await act(async () => button(element, 'More actions for #274')!.click())
-  expect([...element.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)[0]).toBe('Resume')
+  expect([...document.body.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)[0]).toBe('Resume')
 })
 
 test('the default query shows no filter line', async () => {
@@ -376,6 +398,32 @@ test('a failed list read shows the problem state', async () => {
   expect(button(element, 'Open task sources')).toBeDefined()
 })
 
+test('a failed state reread keeps loaded rows and offers a working Retry', async () => {
+  let failStateRead = false
+  const { element, calls, emit } = await mountCompact({
+    handlers: {
+      'quirky.tasks/state': () => {
+        if (failStateRead) throw new Error('Tasks state temporarily unavailable')
+        return prsState
+      }
+    }
+  })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+
+  failStateRead = true
+  await emit({ type: 'quirky.tasks/changed', data: { revision: 4 } })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(button(element, 'Retry')).toBeDefined()
+
+  const reads = calls.filter((call) => call.method === 'quirky.tasks/prepare' || call.method === 'quirky.tasks/state').length
+  failStateRead = false
+  await act(async () => button(element, 'Retry')!.click())
+  await settle()
+  expect(calls.filter((call) => call.method === 'quirky.tasks/prepare' || call.method === 'quirky.tasks/state').length).toBeGreaterThan(reads)
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(button(element, 'Retry')).toBeUndefined()
+})
+
 test('a repository with no GitHub remote reports a status, not an alert, and offers no source action', async () => {
   const sources = { 'repo-1': { status: 'unavailable', reason: 'missing_origin', message: 'No origin remote.' } }
   const failures = [{ repoId: 'repo-1', stage: 'availability', reason: 'missing_origin', message: 'No origin remote.' }]
@@ -426,19 +474,130 @@ test('clearing filters while Projects is selected returns to the list it clears'
   expect(calls.find((call) => call.method === 'quirky.tasks/navigate')?.params).toEqual({ mode: 'prs', query: 'is:pr is:open', page: 1, scrollTop: 0 })
 })
 
+test('expanding from Projects preserves Projects and its last list', async () => {
+  const lastList = { mode: 'issues' as const, query: 'is:issue is:open assignee:@me', page: 2 }
+  const state = withNavigation({ mode: 'projects', query: 'status:todo', page: 4, lastList })
+  const { element, opened, calls } = await mountCompact({ state, handlers: { 'quirky.tasks/list': () => listResult([issue(7)]) } })
+  await act(async () => button(element, 'Expand Tasks')!.click())
+  expect(calls.find((call) => call.method === 'quirky.tasks/list')?.params).toEqual({ mode: 'issues', repoIds: null, query: lastList.query, page: lastList.page })
+  expect(opened).toEqual([{ id: VIEW, input: { navigation: state.navigation, revision: 3 } }])
+})
+
 test('the open row is highlighted and takes focus after a Collapse', async () => {
   const detail = { worktree: 'wt-main', kind: 'pullRequest' as const, number: 275, url: 'https://github.com/acme/quirky/pull/275' }
   place.requestFocus('row')
   const { element } = await mountCompact({ state: withNavigation({ detail }) })
   const selected = element.querySelector('.ui-list-row--selected')!
   expect(selected.querySelector('.ui-list-row__title')!.textContent).toBe('Pull request 275')
-  expect(document.activeElement).toBe(selected.querySelector('.ui-list-row__main'))
+  expect(document.activeElement === selected.querySelector('.ui-list-row__main')).toBe(true)
 })
 
-test('focus after a Collapse lands on the first row when no row is open', async () => {
+test('focus after Collapse reaches the first row without moving saved scroll when no row is open', async () => {
+  const key = ['github', 'prs', '*', 'is:pr is:open', 1].join('\u0000')
+  place.setScrollTop('compact', key, 72)
   place.requestFocus('row')
+  const prototype = HTMLElement.prototype
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, 'scrollIntoView')
+  let scrollCalls = 0
+  Object.defineProperty(prototype, 'scrollIntoView', {
+    configurable: true,
+    value: function () { scrollCalls += 1 }
+  })
+  try {
+    const { element } = await mountCompact()
+    const firstRow = element.querySelector<HTMLElement>('.ui-list-row__main')!
+    const scroller = element.querySelector<HTMLElement>('.tasks-compact__list')!
+    expect(document.activeElement === firstRow).toBe(true)
+    expect(scroller.scrollTop).toBe(72)
+    expect(scrollCalls).toBe(0)
+  } finally {
+    if (descriptor) Object.defineProperty(prototype, 'scrollIntoView', descriptor)
+    else Reflect.deleteProperty(prototype, 'scrollIntoView')
+  }
+})
+
+async function switchToIssuesAfterUnavailableList(firstPrsRead: () => unknown): Promise<Mounted> {
+  let state = prsState
+  place.requestFocus('row')
+  const mounted = await mountCompact({
+    handlers: {
+      'quirky.tasks/prepare': () => state,
+      'quirky.tasks/navigate': () => {
+        state = withNavigation({ mode: 'issues', query: 'is:issue is:open', lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 } })
+        return state
+      },
+      'quirky.tasks/list': (params) => params.mode === 'prs' ? firstPrsRead() : listResult([issue(12)])
+    }
+  })
+  const issuesTab = [...mounted.element.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
+  await act(async () => issuesTab.click())
+  await settle()
+  return mounted
+}
+
+test('a pending Collapse focus expires when the initial list is empty', async () => {
+  const { element } = await switchToIssuesAfterUnavailableList(() => listResult([]))
+  const issueRow = element.querySelector('.ui-list-row__main')!
+  expect(rowTitles(element)).toEqual(['Issue 12'])
+  expect(document.activeElement === issueRow).toBe(false)
+})
+
+test('a pending Collapse focus expires when the initial list fails', async () => {
+  const { element } = await switchToIssuesAfterUnavailableList(() => { throw new Error('list unavailable') })
+  const issueRow = element.querySelector('.ui-list-row__main')!
+  expect(rowTitles(element)).toEqual(['Issue 12'])
+  expect(document.activeElement === issueRow).toBe(false)
+})
+
+test('a pending Collapse focus expires when the list changes before the first read completes', async () => {
+  let state = prsState
+  let releasePrs: ((value: unknown) => void) | null = null
+  const prsRead = new Promise<unknown>((resolve) => { releasePrs = resolve })
+  place.requestFocus('row')
+  const { element } = await mountCompact({
+    handlers: {
+      'quirky.tasks/prepare': () => state,
+      'quirky.tasks/navigate': () => {
+        state = withNavigation({ mode: 'issues', query: 'is:issue is:open', lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 } })
+        return state
+      },
+      'quirky.tasks/list': (params) => params.mode === 'prs' ? prsRead : listResult([issue(12)])
+    }
+  })
+  const issuesTab = [...element.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
+  await act(async () => issuesTab.click())
+  await settle()
+  if (!releasePrs) throw new Error('The initial PR list read did not start')
+  releasePrs(listResult([pr(276)]))
+  await settle()
+
+  const issueRow = element.querySelector('.ui-list-row__main')!
+  expect(rowTitles(element)).toEqual(['Issue 12'])
+  expect(document.activeElement === issueRow).toBe(false)
+})
+
+test('a pending Collapse focus does not survive unmount before rows load', async () => {
+  let releaseList: ((value: unknown) => void) | null = null
+  const pendingList = new Promise<unknown>((resolve) => { releaseList = resolve })
+  place.requestFocus('row')
+  try {
+    await mountCompact({ handlers: { 'quirky.tasks/list': () => pendingList } })
+    await act(async () => cleanup?.())
+    cleanup = null
+  } finally {
+    if (cleanup) {
+      await act(async () => cleanup?.())
+      cleanup = null
+    }
+    if (releaseList) {
+      releaseList(listResult([pr(276)]))
+      await settle()
+    }
+  }
+
   const { element } = await mountCompact()
-  expect(document.activeElement).toBe(element.querySelector('.ui-list-row__main'))
+  const firstRow = element.querySelector('.ui-list-row__main')!
+  expect(document.activeElement === firstRow).toBe(false)
 })
 
 test('a plain mount does not take focus', async () => {
@@ -464,20 +623,30 @@ test('a failing agent activity read leaves the panel working', async () => {
   expect(element.querySelector('[role="alert"]')).toBeNull()
 })
 
-test('agent activity on a linked worktree sets the row dot and second line, and attention wins', async () => {
+test('agent activity rows update on emitted status changes, with attention taking priority', async () => {
   const linked = pr(274, { linkedWorkspace: { name: 'notebook', worktree: 'wt-linked' } })
   const card = (bucket: string, label: string) => ({ bucket, thread: { worktreeId: 'wt-linked', agent: 'Claude', label } })
+  let cards = [card('working', 'Running tests'), card('attention', 'Needs input'), card('idle', 'Done')]
   const { element, emit, calls } = await mountCompact({
     handlers: {
       'quirky.tasks/list': () => listResult([linked, pr(275)]),
-      'quirky.agent-status/dashboard': () => ({ cards: [card('working', 'Running tests'), card('attention', 'Needs input'), card('idle', 'Done')] })
+      'quirky.agent-status/dashboard': () => ({ cards })
     }
   })
   expect(rowDescriptions(element)[0]).toBe('#274 · Claude · Needs input')
   expect(element.querySelectorAll('.ui-list-row')[0]!.querySelector('[aria-label="Status: needs-you"]')).not.toBeNull()
   const reads = calls.filter((call) => call.method === 'quirky.agent-status/dashboard').length
-  await emit({ type: 'quirky.agent-status/activityChanged' })
-  expect(calls.filter((call) => call.method === 'quirky.agent-status/dashboard').length).toBe(reads + 1)
+
+  cards = [card('working', 'Running checks')]
+  await emit({ type: 'quirky.agent-status/changed', data: { sessionId: 'session-1', row: { sessionId: 'session-1' } } })
+  expect(calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(reads + 1)
+  expect(rowDescriptions(element)[0]).toBe('#274 · Claude · Running checks')
+  expect(element.querySelectorAll('.ui-list-row')[0]!.querySelector('[aria-label="Status: working"]')).not.toBeNull()
+
+  cards = [card('attention', 'Needs input')]
+  await emit({ type: 'quirky.agent-status/activityChanged', data: { sessionIds: ['session-1'] } })
+  expect(calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(reads + 2)
+  expect(rowDescriptions(element)[0]).toBe('#274 · Claude · Needs input')
 })
 
 test('a row takes its dot from checks and merge metadata when they arrive', async () => {
@@ -580,7 +749,7 @@ test('collapsing with a snapshot focuses and highlights the open row on the firs
   const { element } = await mountCompact({ state: withNavigation({ detail }), handlers: { 'quirky.tasks/list': never } })
   const selected = element.querySelector('.ui-list-row--selected')!
   expect(selected.querySelector('.ui-list-row__title')!.textContent).toBe('Pull request 275')
-  expect(document.activeElement).toBe(selected.querySelector('.ui-list-row__main'))
+  expect(document.activeElement === selected.querySelector('.ui-list-row__main')).toBe(true)
 })
 
 test('a loaded list is saved as the snapshot for its view key', async () => {

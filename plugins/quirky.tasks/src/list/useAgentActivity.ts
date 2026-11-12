@@ -44,7 +44,7 @@ export function useAgentActivity(context: UiPluginContext): ReadonlyMap<string, 
     }
     void read()
     const off = context.subscribe((event) => {
-      if (event.type === 'quirky.agent-status/activityChanged') void read()
+      if (event.type === 'quirky.agent-status/changed' || event.type === 'quirky.agent-status/activityChanged') void read()
     })
     return () => {
       generation.current += 1

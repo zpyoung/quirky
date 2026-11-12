@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, ContextMenu, ControlIcon, EmptyState, IconButton, ListRow, Menu, Tabs, ToolPanelFrame } from '@quirky/ui'
+import { Button, ContextMenu, ControlIcon, EmptyState, IconButton, ListRow, Tabs, ToolPanelFrame } from '@quirky/ui'
 import { TASKS_VIEW, type ItemKind, type TaskNavigation, type TasksState } from '../contracts'
 import { countFilters, errorMessage, filtersFromQuery, normalizedPreset, object, parseSource, presetQuery, rowKey, rowTarget, tokenize, type ListItem } from './model'
 import { place } from './place'
@@ -95,7 +95,8 @@ function useTasksState(context: UiPluginContext) {
     }
   }, [context, refresh])
 
-  return { state, error, adopt, retry: () => void refresh('quirky.tasks/prepare') }
+  const retry = useCallback(() => void refresh(state ? 'quirky.tasks/state' : 'quirky.tasks/prepare'), [refresh, state])
+  return { state, error, adopt, retry }
 }
 
 /**
@@ -108,10 +109,11 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
   const navigation = state?.navigation ?? null
   const list = useCompactList(context, navigation)
   const activity = useAgentActivity(context)
-  const [menu, setMenu] = useState<{ x: number; y: number; item: ListItem } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; item: ListItem; returnFocusTo?: HTMLElement } | null>(null)
   const scroller = useRef<HTMLDivElement | null>(null)
   const restoredKey = useRef<string | null>(null)
   const wantsFocus = useRef(false)
+  const focusViewKey = useRef<string | null>(null)
 
   const notify = useCallback((title: string, cause: unknown) => context.toast(title, errorMessage(cause)), [context])
   const openReview = useReviewNavigation(context, useCallback((message: string) => context.toast('Could not open Review', message), [context]))
@@ -134,12 +136,26 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
 
   useEffect(() => {
     const element = scroller.current
-    if (!wantsFocus.current || !element || rows.length === 0) return
+    if (!wantsFocus.current || !element) return
+    if (list.viewKey !== '') {
+      if (focusViewKey.current === null) focusViewKey.current = list.viewKey
+      else if (focusViewKey.current !== list.viewKey) {
+        focusViewKey.current = list.viewKey
+        wantsFocus.current = false
+        return
+      }
+    }
+    if (list.error || (list.result && rows.length === 0)) {
+      wantsFocus.current = false
+      return
+    }
+    if (!list.result || rows.length === 0) return
     wantsFocus.current = false
-    const target = element.querySelector<HTMLElement>('.ui-list-row--selected .ui-list-row__main') ?? element.querySelector<HTMLElement>('.ui-list-row__main')
-    target?.scrollIntoView?.({ block: 'nearest' })
+    const selected = element.querySelector<HTMLElement>('.ui-list-row--selected .ui-list-row__main')
+    const target = selected ?? element.querySelector<HTMLElement>('.ui-list-row__main')
+    selected?.scrollIntoView?.({ block: 'nearest' })
     target?.focus({ preventScroll: true })
-  }, [rows.length, list.viewKey])
+  }, [list.error, list.result, list.viewKey, rows.length])
 
   const expand = () => {
     if (!state) return
@@ -203,7 +219,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
 
   const sourceFailures = list.result?.failures.filter((failure) => failure.stage !== 'count') ?? []
   const noRepositories = navigation?.repoIds?.length === 0 || list.result?.repositories.length === 0
-  const problem = stateError ?? list.error ?? (list.result && rows.length === 0 && sourceFailures.length > 0 ? sourceFailures[0]!.message : null)
+  const problem = list.error ?? (list.result && rows.length === 0 && sourceFailures.length > 0 ? sourceFailures[0]!.message : null)
   const selectedRepos = list.result ? list.result.repositories.filter((repo) => navigation?.repoIds == null || navigation.repoIds.includes(repo.id)) : []
   const noGitHubRemote = !stateError && list.result !== null && selectedRepos.length > 0 &&
     selectedRepos.length === (navigation?.repoIds?.length ?? selectedRepos.length) &&
@@ -211,6 +227,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
   const noGitHubRemoteMessage = selectedRepos.length === 1
     ? `No GitHub remote is configured for ${selectedRepos[0]!.displayName || selectedRepos[0]!.name}. Add a GitHub remote to this repository to load GitHub tasks.`
     : `No GitHub remotes are configured for the selected ${selectedRepos.length} repositories. Add a GitHub remote to each repository to load GitHub tasks.`
+  const stateNotice = state !== null && stateError !== null
   const staleNotice = state && list.result && !noRepositories && list.refreshError !== null
 
   let body
@@ -246,7 +263,16 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
             onClick={() => void openRow(item)}
             trailing={<>
               <IconButton label={`${primary.label} for #${item.number}`} title={primary.label} onClick={primary.run}><ControlIcon name="play" /></IconButton>
-              <Menu label={`More actions for #${item.number}`} trigger={<ControlIcon name="dots-three" />} items={actions.map((action) => ({ id: action.id, label: action.label, onAction: action.run }))} />
+              <IconButton
+                label={`More actions for #${item.number}`}
+                title="More actions"
+                onClick={(event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect()
+                  setMenu({ x: bounds.right, y: bounds.bottom, item, returnFocusTo: event.currentTarget })
+                }}
+              >
+                <ControlIcon name="dots-three" />
+              </IconButton>
             </>}
           />
         </div>
@@ -279,6 +305,10 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
         ref={(element) => { scroller.current = element; list.rowsRef.current = element }}
         onScroll={(event) => { if (restoredKey.current === list.viewKey) place.setScrollTop('compact', list.viewKey, event.currentTarget.scrollTop) }}
       >
+        {stateNotice && <div role="status" className="tasks-compact__notice">
+          Couldn't refresh Tasks. Showing the last loaded tasks.
+          <Button variant="secondary" onClick={retry}>Retry</Button>
+        </div>}
         {staleNotice && <div role="status" className="tasks-compact__notice">
           Couldn't refresh. Showing the last loaded tasks.
           <Button variant="secondary" onClick={list.retry}>Retry</Button>
@@ -289,6 +319,8 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
     {menu && <ContextMenu
       label={`Actions for #${menu.item.number}`}
       x={menu.x}
+      returnFocusTo={menu.returnFocusTo}
+      align={menu.returnFocusTo ? 'end' : 'start'}
       y={menu.y}
       onClose={() => setMenu(null)}
       items={actionsFor(menu.item).map((action) => ({ id: action.id, label: action.label, onSelect: action.run }))}
