@@ -89,7 +89,6 @@ function syncDialogIsolation(ownerDocument: Document, state: DialogState) {
   }
 }
 
-/** Own focus and Escape from the opening commit, then restore focus after removal. */
 export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', placement = 'center', size = 'default', closeOnBackdrop = true, scrollBody = false }: DialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null)
   const wasOpenRef = useRef(false)
