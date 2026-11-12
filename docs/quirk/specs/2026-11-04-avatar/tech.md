@@ -74,9 +74,10 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 ### Host: H5 structured runners (`plugins/quirky.structured`)
 - `runner.ts:43` (`StructuredRunner`): `StructuredStartOptions` gains `toolPolicy?: 'default' | 'deny-all'`. Runners report usage per turn (see Contracts).
 - `claude-runner.ts:195`: when `deny-all`, `canUseTool` denies every tool and no MCP servers are passed.
-- `codex-runner.ts:7`: when `deny-all`, use approval policy and sandbox values under which every command or patch request is declined by the runner.
-- New `pi-runner.ts`: pi and omp in rpc mode (`pi --mode rpc` / `omp --mode rpc`, JSON lines on stdio). It follows the `StructuredRunner` interface and honors `deny-all` by registering no tools, or by blocking `tool_call` when the CLI can't drop them.
+- `codex-runner.ts`: when `deny-all`, disable shell, unified execution, image, sleep, app, plugin, browser, computer, agent and goal features, and web search. Read configured MCP server names before starting or resuming the thread and disable every server for that thread; fail to start if the configuration cannot be read. Decline approval, elicitation, user-input and tool-call requests without an ask. Interrupt every item outside the eight non-tool message types, retaining its journal output; stop the app-server if interruption fails or a second agent appears.
+- New `pi-runner.ts`: pi and omp in rpc mode (`pi --mode rpc` / `omp --mode rpc`, JSON lines on stdio). It follows `StructuredRunner`; `deny-all` passes `--no-tools` and `--no-extensions` and blocks `tool_call`. Further pi/omp hardening belongs to `g1-18`.
 - `main.ts`, `quirky-plugin.json`: `create.agent` accepts `'pi' | 'omp'`, and `create.options.toolPolicy` is added to the method schema.
+- The session's `launchSettings.options.toolPolicy` keeps `{ value: 'deny-all', source: 'explicit' }` for resume, and its summary ends in ` · No tools`. An absent entry means the default policy; an unreadable entry prevents resume.
 
 ### Plugin `plugins/quirky.avatar` (new)
 
@@ -181,9 +182,10 @@ type PluginHostPower = { /* existing */ keepAwake(reason: string): () => void; p
 `CONTRACT:`
 ```ts
 type StructuredStartOptions = { /* existing */ toolPolicy?: 'default' | 'deny-all' }
-// structured message `data.usage?: { contextTokens: number; contextWindow: number | null }` on every assistant turn end
+// structured result message `data.contextUsage?: { contextTokens: number; contextWindow: number | null }` at turn end
 ```
-- With `deny-all`, no tool runs, and any tool request is answered "denied" without an ask.
+- With `deny-all`, Claude registers no tools. Codex disables the tools it can switch off and every configured MCP server, declines every request without an ask, and interrupts tools that start; interruption failure or a second agent ends the session. Pi and omp pass their no-tools/no-extensions switches and block tool calls; their remaining limitations are handled by `g1-18`.
+- The context footprint is separate from provider data: Claude's `data.usage` remains the SDK object, and no runner replaces it.
 
 ### Avatar methods (`quirky.avatar/<name>`)
 
@@ -209,11 +211,12 @@ type StructuredStartOptions = { /* existing */ toolPolicy?: 'default' | 'deny-al
   - Post:
     - markers are removed
     - in-flight gate requests are resolved with passthrough
-    - `recorded` outbox rows are cancelled
+    - outbox actions not yet sent are cancelled, including this process's `running` rows that are still checking; a leftover `running` row from another process waits for reconciliation
     - open needs are closed with resolution `handed-back` and listed in `handedBackWith`
     - `handoffs.active = 0`
     - the mandate is kept
     - keep-awake is re-evaluated
+    - a call already sent may finish and is journaled as `done after take-back`; its workflow records no later action or state, even if the worktree is handed off again
   - Agents are never stopped.
 - Every mutating method writes a journal entry in the same store transaction as its state change.
 - Methods called from the brain dispatcher go through the same functions. **The brain has no extra authority.**
@@ -344,7 +347,7 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
 - Each wake sends one event prompt. The brain must answer with exactly one fenced JSON block holding `BrainAction[]`. Anything unparseable is journaled and retried once with the parse error; a second failure parks that event as a `brain-error` need.
 - Judgment prompts contain only the mandate, the house rules and the call (`toolName`, `toolInput`, `cwd`). **They never contain worker transcript text** (R-18).
 - Rotation:
-  - Rotation happens after the event in progress is fully dispatched, when `usage.contextTokens >= limit`, where `limit = min(300000, floor(0.8 * contextWindow))`.
+  - Rotation happens after the event in progress is fully dispatched, when `contextUsage.contextTokens >= limit`, where `limit = min(300000, floor(0.8 * contextWindow))`. The brain reads the footprint only from `result` messages.
   - The avatar stops the session, creates a new one from `prompt.rebuild()`, and journals `rotation {fromTokens}`.
   - Undelivered events stay in the journal queue in seq order and go to the new session first (R-38).
 - On session death, judgment requests resolve as `unavailable` until the new session is ready (R-37).
@@ -367,15 +370,17 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
 - **Flaky checks** (R-31): a required check failing on a SHA where it passed before, or whose failure output matches no file in the diff, gets one `quirky.hosting/rerunChecks {failedOnly:true}`. A second failure goes back to the worker.
 
 ### Outbox (`src/shipping/outbox.ts`)
-- `enqueue(kind, worktreeId, payload)` inserts a row `{state:'recorded', idempotencyKey}` before any call. `idempotencyKey` is `sha256(kind, worktreeId, headSha, target)`.
-- `run(id)` sets `running`, makes the call, then sets `done` or `failed` with the result.
+- `enqueue(kind, worktreeId, payload)` inserts a row before any call. `idempotencyKey` is `sha256(kind, worktreeId, headSha, target)`; `payload.handedOffAt` identifies the hand-off that requested it.
+- Every send checks that the hand-off is active, its epoch still matches, and its mandate level permits the action, with no await between that check and the call. Local permits `merge-main-in`; Own branch also permits pushes, draft PRs and thread replies; Full also permits ready and merge.
+- `run(id)` claims the row as `running`, checks what already happened, sends only while authorized, then records `done` or `failed`. Checking is not an in-flight send.
+- Before a push, `quirky.git/pushTarget {purpose:'creation'}` must match the recorded branch and commit. `git ls-remote --symref` reads the selected remote's default branch and the exact destination ref. The default branch and the compare base are refused; an unknown default branch leaves the action recorded. The send is `quirky.git/push {purpose:'creation', expectedHead, expectedBranch}`, with both expected values taken from the recorded row. The push handler compares them with the same target object it passes to git, refusing a changed HEAD or source/destination branch before any push. A `stale-target` rejection fails the row with `push refused (stale-target): <message>`; it is not an unknown outcome.
 - On activation, every `recorded` or `running` row is reconciled first:
-  - `push`: compare the remote branch SHA via `quirky.git/status` or a fetch.
-  - `pr`: `quirky.hosting/forBranch {fresh:true}`.
+  - `push`: compare the exact remote branch SHA with `git ls-remote`.
+  - `pr`: `quirky.hosting/forBranch {branch, headOid, fresh:true}`.
   - `merge`: `quirky.hosting/review` state `merged`.
-- Reconciliation marks each row `done` or back to `recorded` without repeating it (R-34).
-- Merge calls always pass `expectedHead` equal to the reviewed and checked SHA (R-31).
-- Take-back cancels rows in state `recorded` (R-49).
+- Reconciliation marks observed actions `done` without repeating them (R-34). Unsent actions from an ended or replaced hand-off become `cancelled`; an authorized action known not to have happened can remain `recorded`.
+- Merge calls always pass `yes:true` and `expectedHead` equal to the reviewed and checked SHA (R-31). No reported checks, partly read checks or threads, and threads read for another PR all block the merge.
+- Take-back cancels actions not yet sent, including rows still checking in this process (R-49). A sent call may finish and records `done after take-back`; subsequent actions and state changes stop. Re-handing off never authorizes an old workflow.
 
 ## Data models
 

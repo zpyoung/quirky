@@ -11,40 +11,90 @@ export type CodexAppServerLogEntry = {
 
 export type CodexAppServerEnvironment = { CODEX_HOME: string | null }
 
+type FixtureNotification = { method: string; params?: Record<string, unknown> }
+type FixtureServerRequest = { method: string; params?: Record<string, unknown>; id?: string | number }
+type FixtureConfigRead = {
+  mcpServers?: unknown
+  reply?: unknown
+  error?: { code: number; message: string }
+  timeout?: boolean
+}
+type FixtureTurnScript = {
+  notifications?: FixtureNotification[]
+  serverRequests?: FixtureServerRequest[]
+  interrupt?: 'success' | 'error' | 'timeout'
+  hold?: boolean
+}
+type CodexAppServerOptions = {
+  heldPrefix?: string
+  uniqueThreads?: boolean
+  rateLimitsUpdated?: Record<string, unknown>
+  allowDenyAllEnums?: boolean
+  configRead?: FixtureConfigRead
+  turnScript?: FixtureTurnScript
+  threadNotifications?: FixtureNotification[]
+}
+
 export type CodexAppServerFixture = {
   executable: string
   logPath: string
   environmentLogPath: string
   requests(): CodexAppServerLogEntry[]
+  serverRequests(): CodexAppServerLogEntry[]
   environments(): CodexAppServerEnvironment[]
+  arguments(): string[]
+  processId(): number | null
 }
 
-/**
- * Writes a deterministic native-protocol app-server executable under a test's temporary home.
- * The executable accepts `app-server`, speaks JSONL on stdio, and never contacts a provider.
- */
-export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string; uniqueThreads?: boolean; rateLimitsUpdated?: Record<string, unknown> }): CodexAppServerFixture {
+function readMessages(path: string): CodexAppServerLogEntry[] {
+  if (!existsSync(path)) return []
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const message: unknown = JSON.parse(line)
+      if (typeof message !== 'object' || message === null || Array.isArray(message)) {
+        throw new Error('Codex fixture log contains a non-object message')
+      }
+      return message as CodexAppServerLogEntry
+    })
+}
+
+export function createCodexAppServerFixture(home: string, options?: CodexAppServerOptions): CodexAppServerFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')
+  const serverRequestsPath = join(home, 'codex-app-server-server-requests.jsonl')
   const environmentLogPath = join(home, 'codex-app-server-environments.jsonl')
   const script = `#!${process.execPath}
 const fs = require('node:fs')
 const { spawn } = require('node:child_process')
 const logPath = ${JSON.stringify(logPath)}
+const serverRequestsPath = ${JSON.stringify(serverRequestsPath)}
 const environmentLogPath = ${JSON.stringify(environmentLogPath)}
 const heldPrefix = ${JSON.stringify(options?.heldPrefix ?? null)}
 const uniqueThreads = ${JSON.stringify(options?.uniqueThreads ?? false)}
 const rateLimitsUpdated = ${JSON.stringify(options?.rateLimitsUpdated ?? null)}
+const allowDenyAllEnums = ${JSON.stringify(options?.allowDenyAllEnums ?? false)}
+const configRead = JSON.parse(${JSON.stringify(JSON.stringify(options?.configRead ?? null))})
+const turnScript = ${JSON.stringify(options?.turnScript ?? null)}
+const threadNotifications = ${JSON.stringify(options?.threadNotifications ?? [])}
 let input = ''
 let nextTurn = 1
 let nextApproval = 1
 const active = new Map()
 const approvals = new Map()
+const scriptedRequests = new Map()
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
 const notify = (method, params) => send({ method, params })
 const log = (message) => fs.appendFileSync(logPath, JSON.stringify(message) + '\\n')
+const serverRequest = (message) => {
+  fs.appendFileSync(serverRequestsPath, JSON.stringify(message) + '\\n')
+  send(message)
+}
 fs.appendFileSync(environmentLogPath, JSON.stringify({ CODEX_HOME: process.env.CODEX_HOME ?? null }) + '\\n')
+fs.writeFileSync(logPath + '.argv', JSON.stringify(process.argv.slice(2)))
+fs.writeFileSync(logPath + '.pid', String(process.pid))
 const textInput = (items) => items.filter((item) => item.type === 'text').map((item) => item.text).join('\\n')
 function finish(threadId, turn, status = 'completed') {
   const state = active.get(threadId)
@@ -93,7 +143,7 @@ function ask(threadId, state, count) {
       remaining -= 1
       if (remaining === 0) finish(threadId, state.turn)
     })
-    send({
+    serverRequest({
       id,
       method: isCommand ? 'item/commandExecution/requestApproval' : 'item/fileChange/requestApproval',
       params: {
@@ -105,9 +155,31 @@ function ask(threadId, state, count) {
     })
   }
 }
+function emitThreadNotifications(threadId) {
+  if (threadNotifications.length === 0) return
+  setTimeout(() => {
+    for (const event of threadNotifications) notify(event.method, event.params ?? { threadId })
+  }, 100)
+}
+function runTurnScript(threadId, state) {
+  for (const event of turnScript.notifications ?? []) notify(event.method, event.params ?? { threadId, turnId: state.turn.id })
+  const requests = turnScript.serverRequests ?? []
+  state.scriptedRequestsRemaining = requests.length
+  for (let index = 0; index < requests.length; index++) {
+    const request = requests[index]
+    const id = request.id ?? 'scripted-' + (index + 1)
+    scriptedRequests.set(id, threadId)
+    serverRequest({
+      id,
+      method: request.method,
+      params: request.params ?? { threadId, turnId: state.turn.id }
+    })
+  }
+  if (requests.length === 0 && !turnScript.hold) finish(threadId, state.turn)
+}
 function startTurn(message, threadId, text) {
   const turn = { id: 'turn-' + nextTurn++, status: 'inProgress', items: [] }
-  const state = { turn, text, held: text.includes('[hold]') || text.includes('[descendant]') }
+  const state = { turn, text, held: text.includes('[hold]') || text.includes('[descendant]'), scriptedRequestsRemaining: 0 }
   active.set(threadId, state)
   if (text.includes('[descendant]')) {
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
@@ -137,16 +209,17 @@ function startTurn(message, threadId, text) {
     }
     return
   }
+  if (turnScript !== null) return runTurnScript(threadId, state)
   if (text.includes('[unknown]')) {
     const id = 'unknown-' + nextApproval++
     approvals.set(id, () => finish(threadId, turn))
-    send({ id, method: 'fixture/unknownRequest', params: { threadId, turnId: turn.id } })
+    serverRequest({ id, method: 'fixture/unknownRequest', params: { threadId, turnId: turn.id } })
     return
   }
   if (text.includes('[native question]') || text.includes('[native secret]')) {
     const id = 'question-' + nextApproval++
     approvals.set(id, () => finish(threadId, turn))
-    send({
+    serverRequest({
       id,
       method: 'item/tool/requestUserInput',
       params: {
@@ -169,9 +242,9 @@ function startTurn(message, threadId, text) {
 function receive(message) {
   if (message.method) {
     log(message)
-    // Stable wire enum spellings from codex app-server generate-json-schema.
     if ((message.method === 'thread/start' || message.method === 'thread/resume') &&
-        (message.params.approvalPolicy !== 'on-request' || message.params.sandbox !== 'workspace-write')) {
+        (message.params.approvalPolicy !== 'on-request' || message.params.sandbox !== 'workspace-write') &&
+        !(allowDenyAllEnums && message.params.approvalPolicy === 'untrusted' && message.params.sandbox === 'read-only')) {
       send({ id: message.id, error: { code: -32602, message: 'invalid native approvalPolicy or sandbox enum' } })
       return
     }
@@ -181,16 +254,34 @@ function receive(message) {
         return
       case 'initialized':
         return
+      case 'config/read': {
+        if (configRead === null) {
+          if (message.id !== undefined) send({ id: message.id, error: { code: -32601, message: 'Method not found' } })
+          return
+        }
+        if (configRead.timeout) return
+        if (configRead.error) {
+          send({ id: message.id, error: configRead.error })
+          return
+        }
+        const result = Object.prototype.hasOwnProperty.call(configRead, 'reply')
+          ? configRead.reply
+          : { config: { mcp_servers: configRead.mcpServers } }
+        send({ id: message.id, result })
+        return
+      }
       case 'thread/start': {
         const id = uniqueThreads ? 'scripted-thread-' + require('node:crypto').randomUUID() : 'scripted-thread'
         send({ id: message.id, result: { thread: { id, sessionId: id } } })
         notify('thread/started', { thread: { id } })
+        emitThreadNotifications(id)
         return
       }
       case 'thread/resume': {
         const id = message.params.threadId
         send({ id: message.id, result: { thread: { id, sessionId: id } } })
         notify('thread/started', { thread: { id } })
+        emitThreadNotifications(id)
         return
       }
       case 'turn/start':
@@ -209,6 +300,11 @@ function receive(message) {
         return
       }
       case 'turn/interrupt':
+        if (turnScript?.interrupt === 'timeout') return
+        if (turnScript?.interrupt === 'error') {
+          send({ id: message.id, error: { code: -32001, message: 'scripted interrupt failure' } })
+          return
+        }
         send({ id: message.id, result: {} })
         if (active.has(message.params.threadId)) finish(message.params.threadId, active.get(message.params.threadId).turn, 'interrupted')
         return
@@ -222,6 +318,17 @@ function receive(message) {
     const resolve = approvals.get(message.id)
     approvals.delete(message.id)
     resolve()
+    return
+  }
+  if (scriptedRequests.has(message.id)) {
+    log(message)
+    const threadId = scriptedRequests.get(message.id)
+    scriptedRequests.delete(message.id)
+    const state = active.get(threadId)
+    if (state) {
+      state.scriptedRequestsRemaining -= 1
+      if (state.scriptedRequestsRemaining === 0 && !turnScript.hold) finish(threadId, state.turn)
+    }
   }
 }
 process.stdin.setEncoding('utf8')
@@ -244,17 +351,10 @@ process.stdin.on('end', () => process.exit(0))
     logPath,
     environmentLogPath,
     requests() {
-      if (!existsSync(logPath)) return []
-      return readFileSync(logPath, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => {
-          const message: unknown = JSON.parse(line)
-          if (typeof message !== 'object' || message === null || Array.isArray(message)) {
-            throw new Error('Codex fixture log contains a non-object message')
-          }
-          return message as CodexAppServerLogEntry
-        })
+      return readMessages(logPath)
+    },
+    serverRequests() {
+      return readMessages(serverRequestsPath)
     },
     environments() {
       if (!existsSync(environmentLogPath)) return []
@@ -262,11 +362,18 @@ process.stdin.on('end', () => process.exit(0))
         .split('\n')
         .filter(Boolean)
         .map((line) => JSON.parse(line) as CodexAppServerEnvironment)
+    },
+    arguments() {
+      if (!existsSync(logPath + '.argv')) return []
+      return JSON.parse(readFileSync(logPath + '.argv', 'utf8')) as string[]
+    },
+    processId() {
+      if (!existsSync(logPath + '.pid')) return null
+      return Number(readFileSync(logPath + '.pid', 'utf8'))
     }
   }
 }
 
-/** A child environment that cannot read provider credentials/config from the user's home. */
 export function isolatedProviderEnvironment(home: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, QUIRKY_HOME: home }
   for (const key of [
