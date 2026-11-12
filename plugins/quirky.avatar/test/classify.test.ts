@@ -1494,7 +1494,6 @@ describe('time before keywords and zsh repeat directory uncertainty', () => {
       ['echo repeat 1 cd /tmp; touch a', ['read', 'edit-inside']],
       ['"X=1" cd /tmp; touch a', ['other', 'edit-inside']],
       ['"X+=1" cd /tmp; touch a', ['other', 'edit-inside']],
-      ['{ "$K=1" cd /tmp; }; touch a', ['other', 'edit-inside']],
       ['repeat; touch a', ['other', 'edit-inside']],
       ['repeat 1; touch a', ['other', 'edit-inside']],
       ['time; touch a', ['edit-inside']],
@@ -1529,6 +1528,201 @@ describe('time before keywords and zsh repeat directory uncertainty', () => {
     for (const [command, outcome, step] of decisions) {
       expect(decideReviewed(command)).toMatchObject({ outcome, step })
     }
+  })
+})
+
+describe('computed command words, array element assignments and modifiers after wrappers', () => {
+  test('hidden directory change 1: a computed command word leaves the directory unknown', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['$E cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['$E cd /tmp && touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['X=1 $E cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['$E builtin cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['$E pushd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['X=cd; $X /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['$E; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['"$BUN" test && touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['"$@"; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['$(echo cd) /tmp; touch zz', ['edit-outside', 'other', 'read'], 'held', 'floor-core'],
+      ['`echo cd` /tmp; touch zz', ['edit-outside', 'other', 'read'], 'held', 'floor-core'],
+      ['c[$x]; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['command $X /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['time $E cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['env $X /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['$E cd /tmp | cat; touch zz', ['edit-outside', 'other', 'read'], 'held', 'floor-core'],
+      ['$E cd /tmp & touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['$E cd /tmp; echo hi > out.txt', ['edit-outside', 'other', 'read'], 'held', 'floor-core'],
+      ['$E cd /tmp; cd /work/wt; touch zz', ['edit-outside', 'other', 'read'], 'held', 'floor-core'],
+      ['$E cd /tmp; (touch zz)', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['sh -c \'$E cd /tmp; touch zz\'', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['eval \'$E cd /tmp\'; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['nohup "$BIN" > log 2>&1 & echo $! > server.pid', ['edit-inside', 'edit-outside', 'other', 'read'], 'held', 'floor-core'],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 2: a computed command word behind a keyword leaves the directory unknown', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['{ $E cd /tmp; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['! $E cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['if $E cd /tmp; then :; fi; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['while $E cd /tmp; do break; done; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['repeat 1 $E cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['noglob $X /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['{ $E; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['{ X=1 $E cd /tmp; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['{ "$K=1" cd /tmp; }; touch a', ['edit-outside', 'other'], 'held', 'floor-core'],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 3: what a computed command word leaves alone', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['$E cd /tmp; touch /work/wt/zz', ['edit-inside', 'other'], 'judgment', null],
+      ['$E cd /tmp; cd /work/wt && touch zz', ['edit-inside', 'other', 'read'], 'judgment', null],
+      ['($E cd /tmp); touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['echo "$($E cd /tmp)"; touch zz', ['edit-inside', 'other', 'read'], 'judgment', null],
+      ['echo hi > out.txt; $E cd /tmp', ['edit-inside', 'other', 'read'], 'judgment', null],
+      ['$E cd /tmp > out.txt', ['edit-inside', 'other'], 'judgment', null],
+      ['bash -c \'$E cd /tmp\'; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['cd src && "$BUN" test', ['other', 'read'], 'judgment', null],
+      ['"$HOME/bin/x"; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['ls $E; touch zz', ['edit-inside', 'other', 'read'], 'judgment', null],
+      ['$E cd /tmp; ls', ['other', 'read'], 'judgment', null],
+      ['$E rm -rf /home/u/x', ['other'], 'judgment', null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 4: an array element assignment on its own keeps the directory', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['a[0]=1; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['a[0]+=1; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['m[$k]=v; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['arr[$i]+=x; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['arr[$i]=$(date); touch zz', ['edit-inside', 'other', 'read'], 'judgment', null],
+      ['X=1 m[$k]=v; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['for k in a b; do m[$k]=1; done; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['{ arr[$i]=x; }; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['{ a[0]=1; }; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['a[0]=1', ['other'], 'judgment', null],
+      ['echo a[0]=1 cd; touch zz', ['edit-inside', 'read'], 'allow', 'fixed-rules'],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 5: an array element assignment before a command is held', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['a[0]=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 cd /tmp && touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[1]=1 cd src && touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]+=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[$i]=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[ 0 ]=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[ 0 ]=1; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['X=1 a[0]=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 X=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 b[0]=2 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['time a[0]=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['c[d] /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 rm -rf /home/u/x', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[$i]=1 rm -rf /home/u/x', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['env a[0]=1 rm -rf /home/u/x', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0=1 cd /tmp\n]=1 rm -rf /home/u/x', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 ls', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 cat /home/u/.ssh/id_rsa', ['credential', 'edit-outside', 'other'], 'held', 'floor-core'],
+      ['a[0]=1 git push --force origin main', ['edit-outside', 'other'], 'held', 'floor-core'],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 6: an array element assignment before a command behind a keyword leaves the directory unknown', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['{ a[0]=1 cd /tmp; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['if a[0]=1 cd /tmp; then :; fi; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['{ X=1 a[0]=1 cd /tmp; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['{ a[$i]=1 cd /tmp; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['noglob a[1]=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 7: noglob or nocorrect after a wrapper is read on to the command', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['builtin noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob cd /tmp && touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin nocorrect cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin builtin noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob builtin cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob builtin noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob - cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob pushd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob eval "cd /tmp"; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob { cd /tmp; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['time builtin noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['{ builtin noglob cd /tmp; }; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['X=1 builtin noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['command noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['command -p noglob cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob builtin - cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob $X /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['builtin noglob a[0]=1 cd /tmp; touch zz', ['edit-outside', 'other'], 'held', 'floor-core'],
+      ['true && builtin noglob cd /tmp; touch zz', ['edit-outside', 'other', 'read'], 'held', 'floor-core'],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 8: what noglob or nocorrect after a wrapper leaves alone', () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['builtin noglob ls; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['builtin noglob; touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['builtin noglob cd /tmp; touch /work/wt/zz', ['edit-inside', 'other'], 'judgment', null],
+      ['(builtin noglob cd /tmp); touch zz', ['edit-inside', 'other'], 'judgment', null],
+      ['echo builtin noglob cd /tmp; touch zz', ['edit-inside', 'read'], 'allow', 'fixed-rules'],
+      ['builtin ls noglob cd /tmp; touch zz', ['edit-inside', 'read'], 'allow', 'fixed-rules'],
+      ['/usr/bin/time { cd /tmp; }; touch a', ['edit-inside', 'other'], 'judgment', null],
+      ['command time { cd /tmp; }; touch a', ['edit-inside', 'other'], 'judgment', null],
+      ['builtin if cd /tmp; touch zz', ['edit-inside', 'other'], 'judgment', null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('hidden directory change 9: reads a long modifier chain in linear time', () => {
+    const command = `${'builtin noglob '.repeat(65_000)}cd /tmp; touch a`
+    const started = performance.now()
+    expectClassSet(command, ['other', 'edit-outside'])
+    expect(performance.now() - started).toBeLessThan(5_000)
+  })
+
+  test('hidden directory change 10: omits held assignment prefixes from command parts', () => {
+    expect(commandParts(call('Bash', { command: 'a[0]=1 rm -rf x; ls' }), ctx)).toEqual(['ls'])
+    expect(commandParts(call('Bash', { command: 'a[0]=1; ls' }), ctx)).toEqual(['a[0]=1', 'ls'])
   })
 })
 

@@ -17,6 +17,8 @@ type Parsed = {
   dynamicCommand: boolean
   dynamicBeforeCommand: boolean
   unknownWrapperFlag: boolean
+  subscriptBeforeCommand: boolean
+  loneSubscriptAssignment: boolean
   argumentExempt: boolean
   execCwd: DirectorySet
   wrapperReads: WrapperTarget[]
@@ -122,26 +124,47 @@ function directoryClasses(directories: DirectorySet, classify: (directory: strin
   return classes.includes('edit-outside') ? classes.filter((value) => value !== 'edit-inside') : classes
 }
 
+/** Recognizes a prefix whose shell subscript may continue across words. */
+function startsSubscript(word: ShellWord): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*\[/.test(word.text)
+}
+
+/** Preserves directory state for a complete, standalone array element assignment. */
+function isLoneSubscriptAssignment(words: ShellWord[], index: number): boolean {
+  return index === words.length - 1 && /^[A-Za-z_][A-Za-z0-9_]*\[.*\]\+?=/s.test(words[index].text)
+}
+
 function keywordChangesDirectory(words: ShellWord[]): boolean {
+  const mainIndex = unwrapWords(words).commandIndex
   let index = 0
   while (index < words.length) {
-    const current = words[index]
-    if (!current.dynamic && (current.text === 'function' || current.text === 'repeat')) index += 2
-    else if (!current.dynamic && DIRECTORY_KEYWORDS[current.text] === true) index++
-    else if (!current.dynamic && current.text === 'time') {
-      index++
-      while (index < words.length && !words[index].dynamic && words[index].text === '-p') index++
-      if (index < words.length && !words[index].dynamic && words[index].text === '--') index++
-    } else if (index > 0 && /^[A-Za-z_][A-Za-z0-9_]*\+?=/s.test(current.text)) index++
-    else break
+    while (index < words.length) {
+      const current = words[index]
+      if (!current.dynamic && (current.text === 'function' || current.text === 'repeat')) index += 2
+      else if (!current.dynamic && DIRECTORY_KEYWORDS[current.text] === true) index++
+      else if (!current.dynamic && current.text === 'time') {
+        index++
+        while (index < words.length && !words[index].dynamic && words[index].text === '-p') index++
+        if (index < words.length && !words[index].dynamic && words[index].text === '--') index++
+      } else if (index > 0 && /^[A-Za-z_][A-Za-z0-9_]*\+?=/s.test(current.text)) index++
+      else break
+    }
+    if (index >= words.length) return false
+    const unwrapped = unwrapWords(words, undefined, null, '', index)
+    if (unwrapped.unknownWrapperFlag) return index > 0
+    const resolvedIndex = unwrapped.commandIndex
+    const word = words[resolvedIndex]
+    if (resolvedIndex > index && word !== undefined && !word.dynamic &&
+      (word.text === 'noglob' || word.text === 'nocorrect')) {
+      index = resolvedIndex
+      continue
+    }
+    if (resolvedIndex <= mainIndex || word === undefined) return false
+    if (startsSubscript(word) && resolvedIndex + 1 < words.length) return true
+    return word.dynamic ? !isLoneSubscriptAssignment(words, resolvedIndex)
+      : ['cd', 'pushd', 'popd', 'eval'].includes(basename(word.text))
   }
-  if (index === 0 || index >= words.length) return false
-  const unwrapped = unwrapWords(words.slice(index))
-  if (unwrapped.unknownWrapperFlag) return true
-  const resolvedIndex = index + unwrapped.commandIndex
-  if (resolvedIndex <= unwrapWords(words).commandIndex) return false
-  const word = words[resolvedIndex]
-  return word !== undefined && !word.dynamic && ['cd', 'pushd', 'popd', 'eval'].includes(basename(word.text))
+  return false
 }
 
 function append<T>(target: T[], source: readonly T[]): void {
@@ -223,8 +246,8 @@ function assignmentFromWord(word: ShellWord): WordAssignment | null {
   }
 }
 
-function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], commandCwd: DirectorySet = null, home = ''): UnwrappedWords {
-  let commandIndex = 0
+function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], commandCwd: DirectorySet = null, home = '', start = 0): UnwrappedWords {
+  let commandIndex = start
   let credential = false
   let throughXargs = false
   let dynamicBeforeCommand = false
@@ -393,6 +416,8 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
     dynamicCommand: commandWord?.dynamic ?? false,
     dynamicBeforeCommand: unwrapped.dynamicBeforeCommand,
     unknownWrapperFlag: unwrapped.unknownWrapperFlag,
+    subscriptBeforeCommand: commandWord !== undefined && startsSubscript(commandWord) && argWords.length > 0,
+    loneSubscriptAssignment: isLoneSubscriptAssignment(command.words, unwrapped.commandIndex),
     argumentExempt: isArgumentExemptCommand(commandWord),
     execCwd: unwrapped.execCwd,
     wrapperReads: unwrapped.wrapperReads,
@@ -982,11 +1007,12 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     const writeTargetWords = !parsed.dynamicCommand && isWriteCommand(cmd, args) ? writeTargets(parsed) : []
     let commandAllowed: boolean | undefined
     if (parsed.credential) partClasses.push('credential')
-    if (parsed.unknownWrapperFlag) {
+    if (parsed.unknownWrapperFlag || parsed.subscriptBeforeCommand) {
       partClasses.push('other', 'edit-outside')
       cwd = possible = null
     } else if (parsed.dynamicCommand) {
       partClasses.push('other')
+      if (!parsed.loneSubscriptAssignment) cwd = possible = null
     } else if (cmd === 'cd' || cmd === 'pushd' || cmd === 'popd') {
       let target: ShellWord | undefined
       let targetCount = 0
@@ -1280,6 +1306,8 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * Unreadable shell text and unknown wrapper options return `other` and `edit-outside`.
  * Computed words that no other rule accounts for add `other`; ordinary `xargs` commands
  * add `other` unless exempt, while write and shell `-c`/`eval` commands add `edit-outside`.
+ * A computed command word or an array element assignment before a command leaves
+ * the shell directory unknown; the latter also returns `other` and `edit-outside`.
  * A relative write target with an unknown cwd returns `edit-outside`.
  * Paths are judged under every possible shell directory; a write is inside only
  * when it is inside under each. A `cd` is certain only through its `&&` list.
