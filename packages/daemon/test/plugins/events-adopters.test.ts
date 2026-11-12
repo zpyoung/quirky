@@ -41,7 +41,7 @@ test('SC-29: adopted event metadata is cataloged and API floors stay compatible'
     }))
   expect(eventMetadata).toEqual([
     { name: 'quirky.editor/changed', plugin: 'quirky.editor', coalesce: [] },
-    { name: 'quirky.editor/explorerChanged', plugin: 'quirky.editor', coalesce: [], worktree: 'worktreeId' },
+    { name: 'quirky.editor/explorerChanged', plugin: 'quirky.editor', coalesce: undefined, worktree: 'worktreeId' },
     { name: 'quirky.session-info/changed', plugin: 'quirky.session-info', coalesce: ['sessionId'] }
   ])
 })
