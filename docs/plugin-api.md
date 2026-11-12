@@ -51,9 +51,9 @@ when their plugin unloads. A plugin that uses either field declares `"apiVersion
 A held event keeps a reference to the emitted payload; a plugin must not mutate it after `emit`.
 
 `quirky.session-info/changed`, `quirky.git/changed`, `quirky.git/reviewChanged` and
-`quirky.git/notesChanged` coalesce. `quirky.editor/changed` and
-`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
-emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.git/notesChanged` coalesce. `quirky.editor/changed` coalesces with one key for the
+daemon, and `quirky.editor/explorerChanged` coalesces per worktree and still carries its
+worktree tag. Editor clients refresh after their own actions rather than waiting for an event.
 `quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
 every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
 and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
