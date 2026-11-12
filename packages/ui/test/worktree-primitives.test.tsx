@@ -64,6 +64,25 @@ describe('ActivityMark', () => {
     }
     expect(seen.size).toBe(states.length)
   })
+  test('supports optional ring tones and leaves the unringed mark unchanged', async () => {
+    for (const ring of ['accent', 'needs-you'] as const) {
+      await render(h(ActivityMark, { state: 'running', label: 'Agent running', ring }))
+      expect(container.querySelector('.ui-activity-mark')?.getAttribute('data-ring')).toBe(ring)
+    }
+
+    await render(h(ActivityMark, { state: 'running', label: 'Agent running' }))
+    const mark = container.querySelector('.ui-activity-mark')!
+    expect(mark.hasAttribute('data-ring')).toBe(false)
+    expect(mark.className).toBe('ui-activity-mark ui-activity-mark--running')
+  })
+
+  test('sets a title only when provided', async () => {
+    await render(h(ActivityMark, { state: 'running', label: 'Agent running', title: 'x' }))
+    expect(container.querySelector('.ui-activity-mark')?.getAttribute('title')).toBe('x')
+
+    await render(h(ActivityMark, { state: 'running', label: 'Agent running' }))
+    expect(container.querySelector('.ui-activity-mark')?.hasAttribute('title')).toBe(false)
+  })
 })
 
 describe('TagChip', () => {
@@ -213,6 +232,34 @@ describe('Checkbox', () => {
     expect(input.getAttribute('aria-checked')).toBe('true')
     expect(input.getAttribute('aria-label')).toBe('Select feat/a')
     expect(container.querySelector('.ui-checkbox__text')).toBeNull()
+  })
+  test('needs-you tone marks the label and keeps the checked value', async () => {
+    await render(h(Checkbox, { checked: true, label: 'Message people', onChange: () => undefined, tone: 'needs-you' }))
+    const label = container.querySelector('label')!
+    expect(label.classList.contains('ui-checkbox--needs-you')).toBe(true)
+    expect(container.querySelector<HTMLInputElement>('input')!.checked).toBe(true)
+
+    await render(h(Checkbox, { checked: true, label: 'Message people', onChange: () => undefined }))
+    expect(container.querySelector('label')!.classList.contains('ui-checkbox--needs-you')).toBe(false)
+  })
+
+  test('uses an accessible name without replacing the visible label', async () => {
+    await render(h(Checkbox, {
+      checked: false,
+      label: 'Message people',
+      accessibleName: 'Message people (fix-desktop)',
+      onChange: () => undefined
+    }))
+    expect(container.querySelector('input')!.getAttribute('aria-label')).toBe('Message people (fix-desktop)')
+    expect(container.querySelector('.ui-checkbox__text')?.textContent).toBe('Message people')
+  })
+
+  test('uses the label or accessibleName as the hidden label checkbox name', async () => {
+    await render(h(Checkbox, { checked: true, label: 'Select row', hideLabel: true, onChange: () => undefined }))
+    expect(container.querySelector('input')!.getAttribute('aria-label')).toBe('Select row')
+
+    await render(h(Checkbox, { checked: true, label: 'Select row', hideLabel: true, accessibleName: 'Select row (group)', onChange: () => undefined }))
+    expect(container.querySelector('input')!.getAttribute('aria-label')).toBe('Select row (group)')
   })
 })
 

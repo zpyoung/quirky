@@ -16,8 +16,8 @@ import type {
 const swatchColors: Array<UiTagColor | null> = ['blue', 'violet', 'teal', 'coral', 'magenta', 'mint', 'sand', 'rose', null]
 
 /** A status mark whose shape, not just its color, names the state; the label is its accessible name. */
-export function ActivityMark({ state, label }: ActivityMarkProps) {
-  return <span className={`ui-activity-mark ui-activity-mark--${state}`} data-state={state} role="img" aria-label={label} />
+export function ActivityMark({ state, label, ring, title }: ActivityMarkProps) {
+  return <span className={`ui-activity-mark ui-activity-mark--${state}`} data-state={state} data-ring={ring} title={title} role="img" aria-label={label} />
 }
 
 /** A single tag, tinted by its hue (grey when the tag has none); it never wraps or truncates. */
@@ -110,20 +110,20 @@ export function TagChips({ tags, max = 2, nameShare }: TagChipsProps & { nameSha
 }
 
 /** A native checkbox that can show a mixed state; `onChange` receives the value the click asks for. */
-export function Checkbox({ checked, indeterminate = false, label, onChange, hideLabel = false }: CheckboxProps) {
+export function Checkbox({ checked, indeterminate = false, label, onChange, hideLabel = false, tone, accessibleName }: CheckboxProps) {
   const input = useRef<HTMLInputElement>(null)
   useLayoutEffect(() => {
     if (input.current) input.current.indeterminate = indeterminate
   }, [indeterminate])
   return (
-    <label className="ui-checkbox">
+    <label className={`ui-checkbox${tone === 'needs-you' ? ' ui-checkbox--needs-you' : ''}`}>
       <input
         ref={input}
         type="checkbox"
         className="ui-checkbox__input"
         checked={checked}
         aria-checked={indeterminate ? 'mixed' : checked}
-        aria-label={hideLabel ? label : undefined}
+        aria-label={accessibleName ?? (hideLabel ? label : undefined)}
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
       {hideLabel ? null : <span className="ui-checkbox__text">{label}</span>}

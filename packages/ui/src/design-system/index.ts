@@ -1,5 +1,5 @@
 export { Button, ExpandingIconButton, IconButton, TextField, TextArea, SelectField, Badge, StatusDot } from './primitives'
-export { AffixInput, Checkbox, DisclosureButton, Kbd, LinkButton, ReachMeter, SegmentedControl, TagButton } from './controls'
+export { AffixInput, DisclosureButton, Kbd, LinkButton, ReachMeter, SegmentedControl, TagButton } from './controls'
 export { ListRow, SectionHeader, Tabs, Menu } from './navigation'
 export { ReviewMark } from './review-mark'
 export { SplitButton } from './split-button'

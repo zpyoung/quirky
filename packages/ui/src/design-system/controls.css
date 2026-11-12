@@ -109,52 +109,6 @@
   color: color-mix(in srgb, var(--ui-failing) 50%, var(--ui-muted));
 }
 
-.ui-check {
-  align-items: center;
-  border-radius: var(--ui-radius-control);
-  color: var(--ui-text);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: var(--ui-font-body);
-}
-
-.ui-check:hover {
-  background: var(--ui-selected);
-}
-
-.ui-check input[type="checkbox"] {
-  accent-color: var(--ui-accent);
-  flex: 0 0 auto;
-  height: 0.9375rem;
-  margin: 0;
-  width: 0.9375rem;
-}
-
-.ui-check--box {
-  height: 2rem;
-  justify-content: center;
-  width: 2rem;
-}
-
-.ui-check--inline {
-  gap: var(--ui-space-8);
-  min-height: 2rem;
-  padding: 0 var(--ui-space-8);
-}
-
-.ui-check--needs-you {
-  color: var(--ui-needs-you);
-}
-
-.ui-check--disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.ui-check--disabled:hover {
-  background: var(--ui-transparent);
-}
-
 .ui-affix-input {
   align-items: center;
   background: var(--ui-surface);

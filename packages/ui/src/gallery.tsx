@@ -580,15 +580,23 @@ const galleryTags = [
   { id: 'infra', name: 'Infra', color: 'teal' as const }
 ]
 
+const activityMarkSamples = [
+  { state: 'running', label: 'Agent running' },
+  { state: 'waiting', label: 'Agent waiting for you' },
+  { state: 'error', label: 'Agent errored' },
+  { state: 'idle', label: 'Agent idle' },
+  { state: 'asleep', label: 'Worktree asleep' }
+] as const
+
 function ActivityMarkDemo({ theme }: { theme: Theme }) {
   return (
     <Category name="ActivityMark" theme={theme}>
       <div className="ui-cluster">
-        <ActivityMark state="running" label="Agent running" />
-        <ActivityMark state="waiting" label="Agent waiting for you" />
-        <ActivityMark state="error" label="Agent errored" />
-        <ActivityMark state="idle" label="Agent idle" />
-        <ActivityMark state="asleep" label="Worktree asleep" />
+        {activityMarkSamples.flatMap(({ state, label }) => [
+          <ActivityMark key={`${state}-plain`} state={state} label={label} />,
+          <ActivityMark key={`${state}-accent`} state={state} label={`${label}, accent ring`} ring="accent" />,
+          <ActivityMark key={`${state}-needs-you`} state={state} label={`${label}, needs-you ring`} ring="needs-you" />
+        ])}
       </div>
     </Category>
   )
@@ -616,6 +624,7 @@ function TagChipsDemo({ theme }: { theme: Theme }) {
 
 function CheckboxDemo({ theme }: { theme: Theme }) {
   const [selected, setSelected] = useState([true, false])
+  const [allowDeploys, setAllowDeploys] = useState(true)
   const count = selected.filter(Boolean).length
   return (
     <Category name="Checkbox" theme={theme}>
@@ -627,6 +636,7 @@ function CheckboxDemo({ theme }: { theme: Theme }) {
       />
       <Checkbox label="Select feat/login" checked={selected[0] ?? false} onChange={(checked) => setSelected([checked, selected[1] ?? false])} />
       <Checkbox label="Select fix/cache" hideLabel checked={selected[1] ?? false} onChange={(checked) => setSelected([selected[0] ?? false, checked])} />
+      <Checkbox label="Let the avatar deploy" checked={allowDeploys} tone="needs-you" onChange={setAllowDeploys} />
       <Status name="checkbox">Selected worktrees: {count}</Status>
     </Category>
   )

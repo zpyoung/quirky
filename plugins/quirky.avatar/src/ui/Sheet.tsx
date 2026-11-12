@@ -182,11 +182,12 @@ function RowDetails({ row, label, draft, agents, defaultAgentLabel, agentName, o
           {SWITCHES.map((entry) => (
             <Checkbox
               key={entry.id}
-              aria-label={`${entry.label} (${label})`}
+              label={entry.label}
+              accessibleName={`${entry.label} (${label})`}
               tone={draft.switches[entry.id] ? 'needs-you' : undefined}
               checked={draft.switches[entry.id]}
-              onChange={(event) => onPatch({ switches: { ...draft.switches, [entry.id]: event.target.checked } })}
-            >{entry.label}</Checkbox>
+              onChange={(checked) => onPatch({ switches: { ...draft.switches, [entry.id]: checked } })}
+            />
           ))}
         </div>
       </fieldset>
@@ -214,7 +215,7 @@ function RowDetails({ row, label, draft, agents, defaultAgentLabel, agentName, o
           value={draft.notes}
           onChange={(event) => onPatch({ notes: event.target.value })}
         />
-        <Checkbox aria-label={`Let it split work into new worktrees (${label})`} checked={draft.allowSplit} onChange={(event) => onPatch({ allowSplit: event.target.checked })}>Let it split work into new worktrees</Checkbox>
+        <Checkbox label="Let it split work into new worktrees" accessibleName={`Let it split work into new worktrees (${label})`} checked={draft.allowSplit} onChange={(checked) => onPatch({ allowSplit: checked })} />
       </div>
       <div style={{ gridColumn: '1 / -1' }}>
         {row.running ? (
@@ -263,7 +264,7 @@ function SheetRowView({ row, label, draft, errors, open, follower, agents, defau
   return (
     <div role="row" data-avatar-row={row.worktreeId} style={bandRow}>
       <div role="cell" style={{ justifySelf: 'center' }}>
-        <Checkbox aria-label={`Select ${label}`} checked={selected} onChange={onSelect} />
+        <Checkbox label={`Select ${label}`} hideLabel checked={selected} onChange={() => onSelect()} />
       </div>
       <div role="cell" style={{ ...tight, gap: 'var(--ui-space-4)', paddingTop: 'var(--ui-space-6)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--ui-space-6)', minWidth: 0 }}>
@@ -602,7 +603,7 @@ export default function Sheet({ context, input, onClose }: AvatarUiProps) {
                 <option value="project">Project</option>
                 <option value="state">State</option>
               </select>
-              <Checkbox checked={onlyRunning} onChange={(event) => setOnlyRunning(event.target.checked)}>Only with a running agent</Checkbox>
+              <Checkbox label="Only with a running agent" checked={onlyRunning} onChange={setOnlyRunning} />
             </div>
             {selectedIds.length > 0 && (
               <div style={stack}>
@@ -616,10 +617,11 @@ export default function Sheet({ context, input, onClose }: AvatarUiProps) {
                     {SWITCHES.map((entry) => (
                       <Checkbox
                         key={entry.id}
+                        label={entry.label}
                         tone={everySelectedHas(entry.id) ? 'needs-you' : undefined}
                         checked={everySelectedHas(entry.id)}
-                        onChange={(event) => setDrafts((current) => applySwitches(current, selectedIds, { [entry.id]: event.target.checked }))}
-                      >{entry.label}</Checkbox>
+                        onChange={(checked) => setDrafts((current) => applySwitches(current, selectedIds, { [entry.id]: checked }))}
+                      />
                     ))}
                   </fieldset>
                   <Button onClick={() => setSharedOpen((open) => !open)}>Give one shared goal…</Button>
@@ -659,7 +661,7 @@ export default function Sheet({ context, input, onClose }: AvatarUiProps) {
                       {groupScope.total > 0 && (
                         <div role="row" data-avatar-group={group.id ?? 'ungrouped'} style={scopeRow}>
                           <div role="cell" style={{ justifySelf: 'center' }}>
-                            <Checkbox aria-label={`Select group ${group.name}`} checked={groupScope.state === 'all'} indeterminate={groupScope.state === 'some'} onChange={() => setSelected((current) => toggleScope(current, group.rows))} />
+                            <Checkbox label={`Select group ${group.name}`} hideLabel checked={groupScope.state === 'all'} indeterminate={groupScope.state === 'some'} onChange={() => setSelected((current) => toggleScope(current, group.rows))} />
                           </div>
                           <span role="rowheader" style={scopeTitle}><b>{group.name}</b><span style={{ ...meta, ...tabular }}>{`${groupScope.selected} of ${groupScope.total} selected`}</span></span>
                         </div>
@@ -671,7 +673,7 @@ export default function Sheet({ context, input, onClose }: AvatarUiProps) {
                           <Fragment key={project.id}>
                             <div role="row" data-avatar-project={project.id} style={scopeRow}>
                               <div role="cell" style={{ justifySelf: 'center' }}>
-                                <Checkbox aria-label={`Select project ${project.name}`} checked={scope.state === 'all'} indeterminate={scope.state === 'some'} onChange={() => setSelected((current) => toggleScope(current, project.rows))} />
+                                <Checkbox label={`Select project ${project.name}`} hideLabel checked={scope.state === 'all'} indeterminate={scope.state === 'some'} onChange={() => setSelected((current) => toggleScope(current, project.rows))} />
                               </div>
                               <span role="rowheader" style={scopeTitle}>
                                 <ProjectTile name={project.name} size={18} />

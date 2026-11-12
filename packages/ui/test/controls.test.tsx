@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement as h, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { AffixInput, Checkbox, DisclosureButton, Dialog, Kbd, LinkButton, ReachMeter, SegmentedControl, TagButton, type ChoiceOption } from '../src/design-system'
+import { AffixInput, DisclosureButton, Dialog, Kbd, LinkButton, ReachMeter, SegmentedControl, TagButton, type ChoiceOption } from '../src/design-system'
 
 const OPTIONS: ChoiceOption[] = [
   { value: 'a', label: 'Alpha', title: 'First' },
@@ -114,31 +114,6 @@ describe('SegmentedControl', () => {
   })
 })
 
-describe('Checkbox', () => {
-  test('a bare box is a 2rem label target named by aria-label', async () => {
-    let on = false
-    await render(h(Checkbox, { 'aria-label': 'Select row', checked: on, onChange: () => { on = true } }))
-    const box = container.querySelector<HTMLInputElement>('input[aria-label="Select row"]')!
-    expect(box.closest('label')?.className).toContain('ui-check--box')
-    await act(async () => box.closest('label')!.click())
-    expect(on).toBe(true)
-  })
-
-  test('with children the text labels it, and needs-you tints it', async () => {
-    await render(h(Checkbox, { tone: 'needs-you', defaultChecked: true }, 'Message people'))
-    const label = container.querySelector('label')!
-    expect(label.className).toContain('ui-check--inline')
-    expect(label.className).toContain('ui-check--needs-you')
-    expect(label.textContent).toBe('Message people')
-  })
-
-  test('indeterminate is applied to the input and forwards a ref', async () => {
-    const held: { node: HTMLInputElement | null } = { node: null }
-    await render(h(Checkbox, { 'aria-label': 'All', indeterminate: true, checked: false, onChange: () => {}, ref: (value: HTMLInputElement | null) => { held.node = value } }))
-    expect(container.querySelector<HTMLInputElement>('input')!.indeterminate).toBe(true)
-    expect(held.node).toBe(container.querySelector('input'))
-  })
-})
 
 describe('AffixInput', () => {
   test('renders a decorative prefix, the input and a suffix control inside one field', async () => {

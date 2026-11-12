@@ -31,6 +31,16 @@
   border: var(--ui-mark-ring-width) dashed var(--ui-muted);
 }
 
+.ui-activity-mark[data-ring='accent'] {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: var(--ui-space-2);
+}
+
+.ui-activity-mark[data-ring='needs-you'] {
+  outline: var(--ui-focus-width) solid var(--ui-needs-you);
+  outline-offset: var(--ui-space-2);
+}
+
 @keyframes ui-activity-mark-spin {
   to {
     transform: rotate(360deg);
@@ -145,6 +155,14 @@
 .ui-checkbox__input:focus-visible {
   outline: var(--ui-focus-width) solid var(--ui-accent);
   outline-offset: var(--ui-focus-offset);
+}
+
+.ui-checkbox--needs-you {
+  color: var(--ui-needs-you);
+}
+
+.ui-checkbox--needs-you .ui-checkbox__input:checked {
+  accent-color: var(--ui-needs-you);
 }
 
 .ui-swatch-group {
