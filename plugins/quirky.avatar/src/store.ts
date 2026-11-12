@@ -1,7 +1,7 @@
 import type { PluginStore, StoreValue } from '@quirky/protocol'
 import type {
   Approval, AvatarStore, BrainSession, Finding, Guess, HandoffRow, JournalEntry, JournalKind, LateAnswer, Mandate,
-  NeedsYouItem, OutboxRow, Receipt, SharedGoal, StuckRow, TableAccess
+  NeedsYouItem, OutboxRow, Receipt, RecordCursor, SharedGoal, StuckRow, TableAccess
 } from './contracts'
 
 type Kind = 'text' | 'int' | 'bool' | 'json'
@@ -85,6 +85,11 @@ export function createAvatarStore(store: PluginStore): AvatarStore {
       table: 'handoffs',
       key: 'worktreeId',
       columns: { worktreeId: 'text', state: 'text', sessionId: 'text', active: 'bool', handedOffAt: 'int', takenBackAt: 'int' }
+    }),
+    recordCursors: tableAccess<RecordCursor>(store, {
+      table: 'record_cursors',
+      key: 'sessionId',
+      columns: { sessionId: 'text', worktreeId: 'text', path: 'text', readOffset: 'int', pending: 'json', updatedAt: 'int' }
     }),
     sharedGoals: tableAccess<SharedGoal>(store, {
       table: 'shared_goals',
