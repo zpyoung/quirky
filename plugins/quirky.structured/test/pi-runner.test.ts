@@ -123,6 +123,39 @@ const contextUsageOfResult = () =>
 const journal = () => messages.map(({ role, text }) => [role, text])
 
 describe('pi rpc runner', () => {
+  test.each([
+    { agent: 'pi' as const, options: { model: 'stub/think' }, args: ['--model', 'stub/think'] },
+    { agent: 'pi' as const, options: { model: 'stub/think', effort: 'high' }, args: ['--model', 'stub/think', '--thinking', 'high'] },
+    { agent: 'pi' as const, options: { effort: 'off' }, args: ['--thinking', 'off'] },
+    { agent: 'omp' as const, options: { model: 'stub/think' }, args: ['--model', 'stub/think'] },
+    { agent: 'omp' as const, options: { model: 'stub/think', effort: 'xhigh' }, args: ['--model', 'stub/think', '--thinking', 'xhigh'] },
+    { agent: 'omp' as const, options: { effort: 'low' }, args: ['--thinking', 'low'] }
+  ])('$agent passes the selected model and thinking level: $options', async ({ agent, options, args }) => {
+    build(agent)
+    await runner.start(session, 'hello', options)
+    await until(() => fake.launch() !== null)
+    expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', ...args])
+  })
+
+  for (const agent of ['pi', 'omp'] as const) {
+    test(`${agent} puts the selected model and thinking level after the no-tools switches`, async () => {
+      build(agent)
+      await runner.start(session, 'hello', { toolPolicy: 'deny-all', model: 'stub/think', effort: 'high' })
+      await until(() => fake.launch() !== null)
+      expect(fake.launch()?.argv).toEqual([
+        '--mode',
+        'rpc',
+        '--no-tools',
+        '--no-extensions',
+        ...(agent === 'pi' ? ['--no-mcp'] : []),
+        '--model',
+        'stub/think',
+        '--thinking',
+        'high'
+      ])
+    })
+  }
+
   test('pi deny-all checks before its first prompt', async () => {
     build('pi', undefined, undefined, { commands: [] })
     await runner.start(session, 'hello', { toolPolicy: 'deny-all' })

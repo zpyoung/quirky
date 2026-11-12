@@ -7,6 +7,8 @@ import { makeTempDir, removeTempDirs } from '../../../../packages/daemon/test/pl
 import { AUTO_PICK_ORDER, buildCatalog } from '../../src/core/catalog'
 import { validateEntry } from '../../src/core/entry'
 import type { AgentEntry } from '../../src/core/types'
+import { resolveLaunch } from '../../src/core/resolve'
+import { SelectionError, validateSelection } from '../../src/core/selection'
 
 const PLUGIN_DIR = join(import.meta.dir, '../..')
 
@@ -359,6 +361,47 @@ const CURSOR_VALUE_FLAGS = [
 ]
 
 describe('quirky.agents launchOptions data', () => {
+  const discoveredPi = (): AgentEntry => {
+    const entry = byId('pi')
+    // The service replaces these three fields after pi model discovery.
+    return {
+      ...entry,
+      launchOptions: {
+        ...entry.launchOptions!,
+        models: [
+          { id: 'stub/think', label: 'Stub Think', description: null, options: [{ id: 'effort', choices: ['off', 'high'] }] },
+          { id: 'stub/plain', label: 'Stub Plain', description: null, options: [] }
+        ],
+        unlisted: 'refuse',
+        unlistedOptions: []
+      }
+    }
+  }
+
+  const resolvePick = (
+    entry: AgentEntry,
+    pick: { model?: string; options?: Record<string, string | boolean> },
+    structured = true
+  ) => resolveLaunch({
+    entry,
+    commandTokens: [],
+    configuredArgs: [],
+    selection: validateSelection(entry, pick),
+    extras: null,
+    structured
+  })
+
+  const expectSelectionRefusal = (run: () => unknown, message: string) => {
+    let thrown: unknown
+    try {
+      run()
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(SelectionError)
+    expect((thrown as Error).message).toBe(message)
+  }
+
 
   test('SC-1: claude offers Fable, Opus, Sonnet with five effort levels and Haiku with none', () => {
     const block = rawBlock('claude')
@@ -496,7 +539,7 @@ describe('quirky.agents launchOptions data', () => {
     expect(antigravity.unlistedOptions).toEqual([{ id: 'effort' }])
 
     const omp = rawBlock('omp')
-    expect(omp.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }] })
+    expect(omp.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }], structured: 'model' })
     expect(omp.options ?? []).toEqual([])
     expect(modelsOf('omp')).toEqual([])
     expect(effectiveUnlisted(omp)).toBe('accept')
@@ -508,6 +551,127 @@ describe('quirky.agents launchOptions data', () => {
     expect(modelsOf('opencode')).toEqual([])
     expect(effectiveUnlisted(opencode)).toBe('accept')
     expect(opencode.unlistedOptions).toBeUndefined()
+  })
+
+  test('scenario 1: pi resolves a structured model into the whole launch resolution', () => {
+    const model = 'anthropic/claude-sonnet-4-5'
+    expect(resolvePick(byId('pi'), { model })).toEqual({
+      added: [],
+      args: [],
+      structured: { model },
+      shadowed: [],
+      launchSettings: {
+        agent: 'pi',
+        options: { model: { value: model, source: 'explicit' } },
+        summary: `Pi · ${model}`
+      }
+    })
+  })
+
+  test('scenario 2: omp resolves a structured model into the whole launch resolution', () => {
+    const model = 'anthropic/claude-sonnet-4-5'
+    expect(resolvePick(byId('omp'), { model })).toEqual({
+      added: [],
+      args: [],
+      structured: { model },
+      shadowed: [],
+      launchSettings: {
+        agent: 'omp',
+        options: { model: { value: model, source: 'explicit' } },
+        summary: `OMP · ${model}`
+      }
+    })
+  })
+
+  test('scenario 3: pi and omp structured resolutions without a pick have no launch settings', () => {
+    for (const agent of ['pi', 'omp']) {
+      expect(resolvePick(byId(agent), {})).toEqual({
+        added: [],
+        args: [],
+        structured: {},
+        shadowed: [],
+        launchSettings: null
+      })
+    }
+  })
+
+  test('scenario 4: pi resolves a discovered model and offered effort level', () => {
+    expect(resolvePick(discoveredPi(), { model: 'stub/think', options: { effort: 'high' } })).toEqual({
+      added: [],
+      args: [],
+      structured: { model: 'stub/think', effort: 'high' },
+      shadowed: [],
+      launchSettings: {
+        agent: 'pi',
+        options: {
+          model: { value: 'stub/think', source: 'explicit' },
+          effort: { value: 'high', source: 'explicit' }
+        },
+        summary: 'Pi · Stub Think · Thinking level: high'
+      }
+    })
+  })
+
+  test('scenario 5: terminal pi and omp resolutions retain their launch arguments', () => {
+    expect(resolvePick(discoveredPi(), { model: 'stub/think', options: { effort: 'high' } }, false).args)
+      .toEqual(['--model', 'stub/think', '--thinking', 'high'])
+    expect(resolvePick(byId('omp'), { model: 'stub/think' }, false).args).toEqual(['--model', 'stub/think'])
+  })
+
+  test('scenario 6: pi refuses an effort level the discovered model does not list', () => {
+    expectSelectionRefusal(
+      () => resolvePick(discoveredPi(), { model: 'stub/think', options: { effort: 'low' } }),
+      'Agent pi model stub/think does not support effort low.'
+    )
+  })
+
+  test('scenario 7: pi refuses an effort level for a discovered model with no levels', () => {
+    expectSelectionRefusal(
+      () => resolvePick(discoveredPi(), { model: 'stub/plain', options: { effort: 'high' } }),
+      'Agent pi model stub/plain does not support effort high.'
+    )
+  })
+
+  test('scenario 8: pi refuses an effort level before discovery for structured and terminal launches', () => {
+    const pick = { model: 'stub/think', options: { effort: 'high' } }
+    const message = 'Agent pi model stub/think does not support effort high.'
+    expectSelectionRefusal(() => resolvePick(byId('pi'), pick), message)
+    expectSelectionRefusal(() => resolvePick(byId('pi'), pick, false), message)
+  })
+
+  test('scenario 9: omp refuses every effort level', () => {
+    expectSelectionRefusal(
+      () => resolvePick(byId('omp'), { model: 'stub/think', options: { effort: 'high' } }),
+      'Agent omp model stub/think does not support effort high.'
+    )
+  })
+
+  test('scenario 10: pi declares its model and effort structured keys without listed models or unlisted options', () => {
+    const pi = rawBlock('pi')
+    expect(pi.model).toEqual({
+      flag: ['--model', '{value}'],
+      conflicts: [{ flags: ['--model'] }],
+      structured: 'model'
+    })
+    expect(pi.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Thinking level',
+        type: 'select',
+        choices: choiceList(
+          ['off', 'Off'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'],
+          ['xhigh', 'Extra high'], ['max', 'Maximum']
+        ),
+        flag: ['--thinking', '{value}'],
+        conflicts: [{ flags: ['--thinking'] }],
+        structured: 'effort'
+      }
+    ])
+    expect(pi.models).toEqual([])
+    expect(modelsOf('pi')).toEqual([])
+    expect(pi.unlisted).toBeUndefined()
+    expect(effectiveUnlisted(pi)).toBe('accept')
+    expect(pi.unlistedOptions).toBeUndefined()
   })
 
 

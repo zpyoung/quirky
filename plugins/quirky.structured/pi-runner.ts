@@ -104,6 +104,7 @@ export type PiRunnerLimits = { maxFrameBytes?: number; checkTimeoutMs?: number; 
  * Runs Pi and Oh My Pi sessions in the background through their `--mode rpc` stdio protocol, with
  * no PTY: JSON lines in (prompts), JSON lines out (events). Assistant messages are journaled as
  * they end; `agent_settled` or `session_settled` closes the turn once automatic work is finished.
+ * A picked model and thinking level are passed to the CLI as `--model` and `--thinking`.
  *
  * A `deny-all` session is checked before each prompt and steer and ends when the check fails.
  * Tool execution aborts the turn; a tool result other than "not found" or a stuck abort ends the session.
@@ -148,7 +149,8 @@ class PiRunner implements StructuredRunner {
       '--mode',
       'rpc',
       ...(toolPolicy === 'deny-all' ? DENY_ALL_ARGS[agent] : []),
-      ...(typeof options.model === 'string' ? ['--model', options.model] : [])
+      ...(typeof options.model === 'string' ? ['--model', options.model] : []),
+      ...(typeof options.effort === 'string' ? ['--thinking', options.effort] : [])
     ]
     const child = spawn(executable, args, {
       cwd: session.cwd,

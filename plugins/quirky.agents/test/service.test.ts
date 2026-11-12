@@ -1285,6 +1285,16 @@ process.stdin.on('end', () => writeFileSync(recordPath, JSON.stringify({ args: p
     })).toMatchObject({
       added: ['--model', 'provider-two/shared-model', '--thinking', 'medium']
     })
+    expect(await t.call(A('resolveLaunch'), {
+      agent: 'pi',
+      model: 'provider-two/shared-model',
+      options: { effort: 'medium' },
+      structured: true
+    })).toMatchObject({
+      added: [],
+      args: '',
+      structured: { model: 'provider-two/shared-model', effort: 'medium' }
+    })
     const record: { args: string[]; requests: { type: string }[] } = JSON.parse(readFileSync(recordPath, 'utf8'))
     expect(record.args).toEqual(['--mode', 'rpc', '--no-session'])
     expect(record.requests.map((request) => request.type)).toEqual([
@@ -1410,6 +1420,33 @@ describe('launch settings', () => {
       placeholder: null,
       message: "Extra arguments aren't supported for this agent yet."
     })
+  })
+
+  test('scenarios 12–14: pi and omp expose and resolve structured models, but refuse effort without discovery', async () => {
+    const t = await start()
+    for (const agent of ['pi', 'omp'] as const) {
+      expect(await t.call(A('options'), { agent })).toMatchObject({
+        agent,
+        supported: true,
+        unlisted: 'accept',
+        structured: true
+      })
+      expect(await t.call(A('resolveLaunch'), { agent, model: 'stub/think', structured: true })).toMatchObject({
+        added: [],
+        args: '',
+        structured: { model: 'stub/think' },
+        shadowed: []
+      })
+      expect(await failure(t.call(A('resolveLaunch'), {
+        agent,
+        model: 'stub/think',
+        options: { effort: 'high' },
+        structured: true
+      }))).toMatchObject({
+        code: RpcErrorCode.InvalidParams,
+        message: `Agent ${agent} model stub/think does not support effort high.`
+      })
+    }
   })
 
   test('SC-12: resolveLaunch uses the saved arguments and replaces the configured model flag', async () => {
