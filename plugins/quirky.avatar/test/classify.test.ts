@@ -693,7 +693,7 @@ describe('decision-changing classifier mutations', () => {
     ['attached git directory', 'git -C"$D" clean -fd', ['edit-outside', 'other'], 'held', 'floor-core'],
     ['git worktree config directory', 'git -c core.worktree=$X clean -fd', ['edit-outside', 'other'], 'held', 'floor-core'],
     ['env git directory', 'env GIT_DIR=$X git clean -fd', ['edit-outside'], 'held', 'floor-core'],
-    ['dynamic wrapper option', 'env -$X ls', ['other'], 'judgment', null],
+    ['dynamic wrapper option', 'env -$X ls', ['other', 'edit-outside'], 'held', 'floor-core'],
     ['dynamic eval argument', 'eval "echo $X"', ['read', 'other'], 'judgment', null],
     ['shell body inherits directory', "cd /home/u; bash -c 'rm -rf x'", ['read', 'edit-outside'], 'held', 'floor-core'],
     ['eval body inherits directory', "cd /home/u; eval 'rm -rf x'", ['read', 'edit-outside'], 'held', 'floor-core'],
@@ -712,6 +712,228 @@ describe('decision-changing classifier mutations', () => {
     })
   }
 })
+
+describe('g1-37 wrapper option scenarios', () => {
+  type Scenario = {
+    command: string
+    classes: ActionClass[]
+    parts?: string[]
+    decision?: { outcome: string; step: string | null }
+    destinations?: string[]
+    context?: ClassifyContext
+  }
+
+  const expectScenario = ({ command, classes, parts, decision, destinations, context = ctx }: Scenario) => {
+    expectClassSet(command, classes, context)
+    if (parts !== undefined) expect(commandParts(call('Bash', { command }), context)).toEqual(parts)
+    if (decision !== undefined) expect(decideReviewed(command, 'local', offSwitches, context)).toMatchObject(decision)
+    if (destinations !== undefined) expect(pushDestinations(call('Bash', { command }), context)).toEqual(destinations)
+  }
+
+  describe('2.B.1 wrapper value flags', () => {
+    const rows: Scenario[] = [
+      { command: 'env -u echo rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -uecho rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --unset=echo rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -P /usr/bin rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -S"rm -rf /home/u/x" echo', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --split-string="rm -rf /home/u/x" echo', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --chdir=/home/u rm -rf Documents', classes: ['edit-outside'], parts: ['rm -rf Documents'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C /home/u rm -rf Documents', classes: ['edit-outside'], parts: ['rm -rf Documents'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'exec -a echo rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'exec -aecho rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'command time -o echo rm -rf /home/u/x', classes: ['edit-inside', 'edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: '/usr/bin/time -o echo rm -rf /home/u/x', classes: ['edit-inside', 'edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: '/usr/bin/time -f echo rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'echo y | xargs -J echo rm -rf /home/u/x', classes: ['read', 'edit-outside'], parts: ['echo y', 'rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'echo y | xargs -a echo rm -rf /home/u/x', classes: ['read', 'edit-outside'], parts: ['echo y', 'rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'nice -n 5 rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'timeout -s KILL -k 5 10 rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'stdbuf -o 0 -e L rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'ionice -c 2 -n 4 rm -rf /home/u/x', classes: ['edit-outside'], parts: ['rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } }
+    ]
+    for (const row of rows) test(`classifies ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.2 known wrapper options', () => {
+    const rows: Scenario[] = [
+      { command: 'env -i -0 -v -u FOO --unset=BAR --ignore-environment --null --debug --list-signal-handling --ignore-signal=PIPE --block-signal --default-signal FOO=1 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'env - FOO=1 git status', classes: ['read'], parts: ['git status'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'env -- FOO=1 git status', classes: ['read'], parts: ['git status'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'exec -cl -a mysh ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'command -p ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'command -- ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'builtin -- echo hi', classes: ['read'], parts: ['echo hi'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nohup -- ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nice -n 5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nice -n5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nice --adjustment=5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nice --adjustment 5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nice -5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nice --5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'nice -+5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'timeout -v -s KILL -k 2 5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'timeout --preserve-status --foreground --verbose --signal=TERM --kill-after=2 5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'timeout --signal TERM --kill-after 2 -- 5 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'stdbuf -i0 -oL -e0 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'stdbuf -i 0 -o L -e 4096 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'stdbuf --input=0 --output=L --error=0 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'stdbuf --input 0 --output L --error 0 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'ionice -t -c 2 -n 7 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'ionice --ignore --class=2 --classdata=7 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'ionice --class 2 --classdata 7 ls', classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: "/usr/bin/time -alp -q -v -f '%e' -o /dev/null ls", classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: "/usr/bin/time --append --portability --quiet --verbose --format='%e' --output=/dev/null ls", classes: ['read'], parts: ['ls'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: "echo a | xargs -0 -o -p -r -t -x -E END -I {} -J % -L 1 -n 1 -P 2 -R 1 -S 255 -s 1024 -d '\\n' echo {}", classes: ['read'], parts: ['echo a', 'echo {}'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: "echo a | xargs --null --open-tty --interactive --no-run-if-empty --verbose --exit --eof=END --replace={} --max-lines=1 --delimiter='\\n' --max-args=1 --max-procs=2 --max-chars=1024 --process-slot-var=SLOT echo", classes: ['read'], parts: ['echo a', 'echo'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'echo /home/u/x | xargs --replace rm -rf {}', classes: ['read', 'edit-inside', 'edit-outside'], parts: ['echo /home/u/x', 'rm -rf {}'], decision: { outcome: 'held', step: 'floor-core' } }
+    ]
+    for (const row of rows) test(`classifies ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.3 command lookup options', () => {
+    const rows: Scenario[] = [
+      { command: 'command -v git', classes: ['read'], parts: ['command -v git'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'command -V rm', classes: ['read'], parts: ['command -V rm'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'command -pv cd', classes: ['read'], parts: ['command -pv cd'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'command -v -p rm -rf /home/u/x', classes: ['read'], parts: ['command -v -p rm -rf /home/u/x'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'env -i command -v git', classes: ['read'], parts: ['command -v git'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'command -v "$X"', classes: ['read', 'other'], parts: ['command -v $X'], decision: { outcome: 'judgment', step: null } },
+      { command: '{ command -v cd; }; touch a', classes: ['other', 'edit-inside'], parts: ['{ command -v cd', '}', 'touch a'], decision: { outcome: 'judgment', step: null } },
+      { command: '{ command -p cd src; }; touch a', classes: ['other', 'edit-outside'], parts: ['{ command -p cd src', '}', 'touch a'], decision: { outcome: 'held', step: 'floor-core' } }
+    ]
+    for (const row of rows) test(`classifies ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.4 wrapper execution directories', () => {
+    const homeWorktree: ClassifyContext = { ...ctx, worktreePath: '/home/u/wt', handedOffPaths: ['/home/u/wt'] }
+    const rows: Scenario[] = [
+      { command: 'env -C src rm -rf dist', classes: ['edit-inside'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'env --chdir=/work/other touch a.txt', classes: ['edit-inside'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'env -C /home/u rm -rf Documents', classes: ['edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --chdir /home/u rm -rf Documents', classes: ['edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'cd /home/u && env -C /work/wt -C Documents rm -rf .', classes: ['read', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C /work/wt env -C .. rm -rf x', classes: ['edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'cd /tmp && env -C /work/wt true && rm -rf x', classes: ['read', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C /home/u true && rm -rf src/dist', classes: ['read', 'edit-inside'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'env -C /home/u echo hi > out.txt', classes: ['read', 'edit-inside'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'env -C /work/wt echo hi > /home/u/out.txt', classes: ['read', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C /home/u git clean -fd', classes: ['edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C /work/other git clean -fd', classes: ['edit-inside'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: "env -C /home/u bash -c 'rm -rf Documents'", classes: ['edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C /home/u cat .ssh/id_rsa', classes: ['read', 'credential'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C "$D" rm -rf x', classes: ['other', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C "$D" ls', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'env --chdir=~other rm -rf x', classes: ['other', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'cd /tmp && env --chdir=~/wt rm -rf x', classes: ['read', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' }, context: homeWorktree },
+      { command: 'sudo -D /home/u git push origin main', classes: ['credential', 'push-default', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } }
+    ]
+    for (const row of rows) test(`classifies ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.5 wrapper file targets', () => {
+    const rows: Scenario[] = [
+      { command: '/usr/bin/time -o timings.txt ls', classes: ['read', 'edit-inside'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/usr/bin/time --output=timings.txt ls', classes: ['read', 'edit-inside'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/usr/bin/time -o /home/u/timings.txt ls', classes: ['read', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: '/usr/bin/time --output /home/u/timings.txt ls', classes: ['read', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: '/usr/bin/time -o "$OUT" ls', classes: ['read', 'other', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -C /home/u /usr/bin/time -o timings.txt ls', classes: ['read', 'edit-outside'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: '/usr/bin/time -o .claude/settings.json ls', classes: ['read', 'agent-config', 'edit-inside'], decision: { outcome: 'deny', step: 'fixed-rules' } },
+      { command: 'xargs -a list.txt echo', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'xargs -a /home/u/.ssh/id_rsa echo', classes: ['read', 'credential'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'xargs --arg-file=/home/u/.ssh/id_rsa echo', classes: ['read', 'credential'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'xargs -a "$F" echo', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'env -C /home/u xargs -a .ssh/id_rsa echo', classes: ['read', 'credential'], decision: { outcome: 'held', step: 'floor-core' } }
+    ]
+    for (const row of rows) test(`classifies ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.6 unpeelable wrapper invocations', () => {
+    const rows: Scenario[] = [
+      { command: 'env -Z ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -iZ ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --unknown ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --chd=/tmp ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --null=1 ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -S "rm -rf /home/u/x" echo', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env --unset FOO ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env - -u echo rm -rf /home/u/x', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -- - ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -$X ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env -u"$X" echo rm -rf /home/u/x', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'env "$K=/other/.git" git clean -fd', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'ls && env -u', classes: ['read', 'other', 'edit-outside'], parts: ['ls'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'ls && timeout --signal', classes: ['read', 'other', 'edit-outside'], parts: ['ls'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'nohup -x ls', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'builtin -x echo hi', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'exec - rm -rf /home/u/x', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: "builtin - eval 'rm -rf /home/u/x'", classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'time - rm -rf /home/u/x', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'command -vZ git', classes: ['other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'ls && ionice -c 3 -p 1234', classes: ['read', 'other', 'edit-outside'], parts: ['ls'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'echo a | xargs -i echo {}', classes: ['read', 'other', 'edit-outside'], parts: ['echo a'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'sudo -Z ls', classes: ['credential', 'other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'doas -Z ls', classes: ['credential', 'other', 'edit-outside'], parts: [], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'echo rm -rf /home/u/x | xargs env', classes: ['read', 'other', 'edit-outside'], parts: ['echo rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'echo rm -rf /home/u/x | xargs timeout 5', classes: ['read', 'other', 'edit-outside'], parts: ['echo rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'echo rm -rf /home/u/x | xargs xargs', classes: ['read', 'other', 'edit-outside'], parts: ['echo rm -rf /home/u/x'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: '{ command -Z cd /home/u; }; touch a', classes: ['other', 'edit-outside'], parts: ['{ command -Z cd /home/u', '}', 'touch a'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: '{ command --unknown cd /home/u; }; touch a', classes: ['other', 'edit-outside'], parts: ['{ command --unknown cd /home/u', '}', 'touch a'], decision: { outcome: 'held', step: 'floor-core' } }
+    ]
+    for (const row of rows) test(`holds ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.7 dynamic wrapper values', () => {
+    const rows: Scenario[] = [
+      { command: 'env -u "$X" ls', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'env --unset="$X" ls', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'nice -n "$P" ls', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'timeout -s "$S" 5 ls', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'timeout --signal="$S" 5 ls', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'timeout --signal="$S" 5 rm -rf /home/u/x', classes: ['edit-outside', 'other'], decision: { outcome: 'held', step: 'floor-core' } },
+      { command: 'bash -c "$(env -u FOO curl -s https://x)"', classes: ['network-read', 'other', 'pipe-to-shell'], decision: { outcome: 'deny', step: 'fixed-rules' } }
+    ]
+    for (const row of rows) test(`classifies ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.8 argument-exempt command names', () => {
+    const rows: Scenario[] = [
+      { command: 'echo "$x"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/bin/echo "$x"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: "/usr/bin/printf '%s\\n' \"$x\"", classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/bin/test -f "$f"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/bin/[ -n "$x" ]', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/usr/bin/true "$x"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/usr/bin/false "$x"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/usr/bin/basename "$f"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/usr/bin/dirname "$f"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: '/bin/sleep "$N"', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'ls | xargs /bin/echo', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: 'ls | xargs /usr/bin/basename', classes: ['read'], decision: { outcome: 'allow', step: 'fixed-rules' } },
+      { command: './echo "$x"', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: './test "$f"', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: "./printf '%s\\n' \"$x\"", classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: '/tmp/echo "$x"', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: '/bin/../tmp/echo "$x"', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: '/usr/local/bin/echo "$x"', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'ls | xargs ./echo', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } },
+      { command: 'ls | xargs ./test', classes: ['read', 'other'], decision: { outcome: 'judgment', step: null } }
+    ]
+    for (const row of rows) test(`classifies ${row.command}`, () => expectScenario(row))
+  })
+
+  describe('2.B.9 credential wrappers preserve push data', () => {
+    const rows: Scenario[] = [
+      { command: 'sudo -En -u root -g wheel git push origin main', classes: ['credential', 'push-default'], parts: ['git push origin main'], destinations: ['main'] },
+      { command: 'sudo --preserve-env=FOO --user=root rm -rf node_modules', classes: ['credential', 'edit-inside'], parts: ['rm -rf node_modules'], destinations: [] },
+      { command: 'sudo HUSKY=0 git commit -m x', classes: ['credential', 'edit-inside', 'skip-hooks'], parts: ['git commit -m x'], destinations: [] },
+      { command: 'doas -Lns -a pam -C /etc/doas.conf -u root rm -rf /etc/x', classes: ['credential', 'edit-outside'], parts: ['rm -rf /etc/x'], destinations: [] }
+    ]
+    for (const row of rows) test(`preserves wrapped command for ${row.command}`, () => expectScenario(row))
+  })
+})
+
 
 test('sudo noninteractive flag preserves the wrapped command', () => {
   expectClassSet('sudo -n ls', ['credential', 'read'])
@@ -758,7 +980,7 @@ describe('unseen arguments and directories', () => {
       ['cp a.txt "$DEST"', ['edit-outside']],
       ['timeout $T ls', ['read', 'other']],
       ['ls | xargs -n "$N" echo', ['read', 'other']],
-      ['nice -n "$P" ls', ['other']],
+      ['nice -n "$P" ls', ['read', 'other']],
       ['echo "$(cat "$f")"', ['read', 'other']],
       ['bash -c "ls $X"', ['read', 'other']],
       ['bash -c \'echo "$1"\' _ "$f"', ['read', 'other']],
@@ -1091,6 +1313,22 @@ describe('dynamic credential path scenarios', () => {
       { command: String.raw`eval "cat /home/u/.ssh/\$X"`, classes: ['read', 'other', 'credential'], decision: credentialHold },
       { command: 'source ~/.ssh/$X', classes: ['other', 'credential'], decision: credentialHold }
     ])
+  })
+
+  test('wrapper paths retain computed credential evidence at their execution directory', () => {
+    for (const command of [
+      'env -C /home/u cat .ssh/$X',
+      'xargs -a /home/u/.ssh/$X cat',
+      'env -C /home/u xargs -a .ssh/$X cat',
+      'time -o /home/u/.ssh/$X true',
+      'env -C /home/u time -o .ssh/$X true'
+    ]) {
+      expect(bash(command)).toContain('credential')
+      expect(decideReviewed(command)).toMatchObject(credentialHold)
+    }
+    const redirected = 'env -C /home/u cat < .ssh/$X'
+    expectClassSet(redirected, ['read', 'other'])
+    expect(decideReviewed(redirected)).toMatchObject(judgment)
   })
 
   test('scenario 2: strips argument flag values but checks redirect targets literally', () => {
@@ -1684,6 +1922,187 @@ describe('directory uncertainty scenarios', () => {
     ]
     for (const [command, expected] of unaffectedRows) expectClassSet(command, expected)
   })
+  test('search path 1: a followed assignment, a subshell, a later command and a literal heredoc change nothing', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["CDPATH=; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["CDPATH= cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["env CDPATH= cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["export CDPATH=; cd src; touch a", ["edit-inside", "other", "read"], "judgment", null],
+      ["CDPATH=/tmp; CDPATH=; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["CDPATH=$CDPATH:/x; CDPATH=; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["CDPATH=$CDPATH:/x; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["(printf -v CDPATH /tmp); cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["cd src; touch a; printf -v CDPATH /tmp", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["cat <<'EOF'\nabout CDPATH\nEOF\ncd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["cat <<< CDPATH; cd src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 2: CDPATH set by a builtin or an expansion', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["builtin printf -v CDPATH /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v \"CD\"PATH /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["read CDPATH <<< /tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["read -r CDPATH < f; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["echo /tmp | read CDPATH; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["declare CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["declare -x CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["typeset CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["typeset -x CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["local CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      [": ${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      [": \"${CDPATH=/tmp}\"; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["echo ${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["x=${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["x=${CDPATH:=/tmp} cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["[[ ${CDPATH:=/tmp} ]]; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["v=CDPATH; printf -v $v /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("search path 3: zsh's cdpath array", () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["cdpath=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath=/tmp cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath+=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath+=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cdpath[1]=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["export cdpath=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["read -A cdpath <<< /tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["printf -v cdpath /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["set -A cdpath /tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["typeset -a cdpath=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      [": ${CDPATH::=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 4: an unknown search path stays unknown', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["readonly CDPATH=/tmp\nCDPATH=\ncd src\ntouch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; CDPATH= cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; export CDPATH=; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["readonly CDPATH=/tmp; env CDPATH= cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; CDPATH=; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; unset CDPATH; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; CDPATH= bash -c 'cd src; touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; eval 'CDPATH=; cd src'; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 5: targets a search path never applies to', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; cd ./src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd ../wt/src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd /work/wt/src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd .; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; cd ..; touch a", ["edit-outside", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; cd; touch a", ["edit-outside", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; pushd ./src; touch a", ["edit-inside", "read"], "allow", "fixed-rules"],
+      ["printf -v CDPATH /tmp; pushd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 6: scopes, pipes, keywords, functions and traps', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; (cd src; touch a)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["(printf -v CDPATH /tmp; cd src; touch a)", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp && cd src && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp | cat; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp & cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["{ printf -v CDPATH /tmp; }; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["{ CDPATH=/tmp; }; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["if printf -v CDPATH /tmp; then :; fi; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["f() { CDPATH=/tmp; }; f; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["trap 'CDPATH=/tmp' DEBUG; :; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 7: nested shells and eval', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; bash -c 'cd src; touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["bash -c 'printf -v CDPATH /tmp; cd src; touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'printf -v CDPATH /tmp'; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval 'read CDPATH <<< /tmp; cd src; touch a'", ["edit-outside", "other"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; eval 'cd src'; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["eval \"$(cat <<'EOF'\nprintf -v CDPATH /tmp\nEOF\n)\"; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 8: a command that only names the search path', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["echo $CDPATH; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["grep -r cdpath docs; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["unset CDPATH; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["export CDPATH; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["cd cdpath; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["env -u CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["env -u CDPATH= CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["/usr/bin/time -f CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["x=$(CDPATH= cd src && pwd); cd lib; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 9: redirect targets and heredoc bodies', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["cat < \"${CDPATH:=/tmp}/x\"; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["cat <<EOF\n${CDPATH:=/tmp}\nEOF\ncd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["cat <<< ${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('search path 10: what follows the unknown directory', () => {
+    const rows: [string, ActionClass[], string, string | null][] = [
+      ["printf -v CDPATH /tmp; cd src", ["other", "read"], "judgment", null],
+      ["printf -v CDPATH /tmp; cd src; cat a", ["other", "read"], "judgment", null],
+      ["printf -v CDPATH /tmp; cd src; git status", ["other", "read"], "judgment", null]
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
 
   test('scenario 5: makes directory changes behind shell keywords unknown', () => {
     const rows: [string, ActionClass[]][] = [
