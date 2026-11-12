@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runLaunchHooks } from '../../../packages/daemon/src/plugins/launch-hooks'
@@ -11,7 +11,7 @@ import {
   readMarkerFile, removeCodexHooks, removeMarkerFile, removePiExtensions, writeMarkerFile, type AgentEnv
 } from '../src/hooks/install'
 import { QUIRKY_GATE_SCRIPT } from '../../../packages/daemon/src/launch'
-import { GATE_EXTENSION_FILE, gateExtensionSource } from '../src/hooks/pi-extension'
+import { GATE_EXTENSION_FILE, GATE_EXTENSION_MARKER, gateExtensionSource } from '../src/hooks/pi-extension'
 
 const dirs: string[] = []
 const scratch = (): string => {
@@ -385,6 +385,31 @@ describe('Claude launch hook', () => {
     }
     expect(claudeGateSettings(settings, 55, { quirkyHome: home, sessionId: 'new' })).toEqual(settings)
   })
+
+  test('a shared group in --settings keeps the other hook', () => {
+    type Settings = {
+      hooks: {
+        PreToolUse: { matcher?: string; hooks: { command: string }[] }[]
+        PermissionRequest: { hooks: { command: string }[] }[]
+      }
+    }
+    const first = claudeGateSettings({}, 55, { quirkyHome: '/q', sessionId: 'old' }) as Settings
+    const user = { type: 'command', command: 'echo mine' }
+    const shared = {
+      hooks: {
+        PreToolUse: [{ matcher: 'Bash', hooks: [user, first.hooks.PreToolUse[0]!.hooks[0]!] }],
+        PermissionRequest: first.hooks.PermissionRequest
+      }
+    }
+
+    const next = claudeGateSettings(shared, 55, { quirkyHome: '/q', sessionId: 'new' }) as Settings
+    expect(next.hooks.PreToolUse).toHaveLength(2)
+    expect(next.hooks.PreToolUse[0]).toEqual({ matcher: 'Bash', hooks: [user] })
+    expect(next.hooks.PreToolUse[1]!.hooks[0]!.command).toContain("QUIRKY_SESSION_ID='new'")
+    expect(next.hooks.PermissionRequest).toHaveLength(1)
+    expect(shared.hooks.PreToolUse[0]!.hooks).toHaveLength(2)
+    expect(launchHasGateHook(['--settings', JSON.stringify(shared)])).toBe(true)
+  })
 })
 
 describe('launchHasGateHook', () => {
@@ -572,6 +597,8 @@ describe('Codex hooks.json', () => {
 
   test('keeps a newly created hooks.json as an empty object after removal', () => {
     const env = agentEnv()
+    expect(removeCodexHooks(env)).toBe(false)
+    expect(existsSync(join(env.home, '.codex'))).toBe(false)
     installCodexHooks(env, 55)
     expect(removeCodexHooks(env)).toBe(true)
     expect(existsSync(codexHooksPath(env))).toBe(true)
@@ -624,8 +651,312 @@ describe('Codex hooks.json', () => {
     removeCodexHooks(env)
     expect(JSON.stringify(JSON.parse(read(env)).hooks.PreToolUse)).toBe(reporterBefore)
   })
+
+  test('a hooks.json that is a directory is left alone', () => {
+    const env = agentEnv()
+    const path = codexHooksPath(env)
+    mkdirSync(path, { recursive: true })
+    expect(() => installCodexHooks(env, 55)).toThrow(`${path} could not be read (EISDIR)`)
+    expect(() => removeCodexHooks(env)).toThrow(`${path} could not be read (EISDIR)`)
+    expect(codexHooksInstalled(env)).toBe(false)
+    expect(readdirSync(join(env.home, '.codex')).sort()).toEqual(['hooks.json'])
+  })
+
+  describe('a group shared with someone else', () => {
+    const USER = { type: 'command', command: 'echo   mine', timeout: 5 }
+    const PRE = (seconds: number) => ({
+      type: 'command',
+      command: gateCommand('codex', 'PreToolUse', (seconds + 5) * 1000),
+      timeout: seconds + 30
+    })
+    const PERM = (seconds: number) => ({
+      type: 'command',
+      command: gateCommand('codex', 'PermissionRequest', (seconds + 5) * 1000),
+      timeout: seconds + 30
+    })
+    const seed = (original: string): AgentEnv => {
+      const env = agentEnv()
+      mkdirSync(join(env.home, '.codex'))
+      writeFileSync(codexHooksPath(env), original)
+      return env
+    }
+
+    test('a pretty-printed shared group loses only the avatar hook', () => {
+      const env = seed(`${JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [USER, PRE(20)] }] } }, null, 2)}\n`)
+      expect(installCodexHooks(env, 55)).toBe(true)
+      const installed = JSON.parse(read(env))
+      expect(installed.hooks.PreToolUse).toEqual([{ matcher: 'Bash', hooks: [USER] }, { hooks: [PRE(55)] }])
+      expect(installed.hooks.PermissionRequest).toEqual([{ hooks: [PERM(55)] }])
+      expect(installCodexHooks(env, 55)).toBe(false)
+      expect(removeCodexHooks(env)).toBe(true)
+      expect(read(env)).toBe(`${JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [USER] }] } }, null, 2)}\n`)
+    })
+
+    const USER_TEXT = JSON.stringify(USER)
+    const GATE_TEXT = JSON.stringify(PRE(20))
+    const sharedGroupRows = [
+      ['last', `${USER_TEXT},${GATE_TEXT}`, USER_TEXT],
+      ['first', `${GATE_TEXT},${USER_TEXT}`, USER_TEXT],
+      ['middle', `${USER_TEXT},${GATE_TEXT},${USER_TEXT}`, `${USER_TEXT},${USER_TEXT}`],
+      ['twice', `${GATE_TEXT},${USER_TEXT},${GATE_TEXT}`, USER_TEXT]
+    ] as const
+
+    test.each(sharedGroupRows)('compact shared hooks preserve every other byte when the gate is %s', (_name, before, after) => {
+      const original = `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[${before}]}]},"x":1}`
+      const env = seed(original)
+      expect(installCodexHooks(env, 55)).toBe(true)
+      expect(read(env)).toBe(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[${after}]},{"hooks":[${JSON.stringify(PRE(55))}]}],"PermissionRequest":[{"hooks":[${JSON.stringify(PERM(55))}]}]},"x":1}`)
+      expect(installCodexHooks(env, 55)).toBe(false)
+      expect(removeCodexHooks(env)).toBe(true)
+      const expectedAfterRemove = `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[${after}]}]},"x":1}`
+      expect(read(env)).toBe(expectedAfterRemove)
+
+      const removeOnly = seed(original)
+      expect(removeCodexHooks(removeOnly)).toBe(true)
+      expect(read(removeOnly)).toBe(expectedAfterRemove)
+    })
+
+    test('a group holding only the avatar hooks is the avatar group regardless of its other keys', () => {
+      const env = seed(JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [PRE(20)] },
+            { hooks: [{ type: 'command', command: 'true' }] },
+            { hooks: [PRE(55)] },
+            { hooks: [PRE(20), PRE(20)] }
+          ]
+        }
+      }))
+      expect(installCodexHooks(env, 55)).toBe(true)
+      expect(JSON.parse(read(env)).hooks.PreToolUse).toEqual([
+        { hooks: [PRE(55)] },
+        { hooks: [{ type: 'command', command: 'true' }] }
+      ])
+      expect(installCodexHooks(env, 55)).toBe(false)
+    })
+
+    test('an up-to-date own group does not excuse a copy in a shared group', () => {
+      const env = seed(JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { hooks: [PRE(55)] },
+            { hooks: [{ type: 'command', command: 'true' }, PRE(55)] }
+          ],
+          PermissionRequest: [{ hooks: [PERM(55)] }]
+        }
+      }))
+      expect(installCodexHooks(env, 55)).toBe(true)
+      expect(JSON.parse(read(env)).hooks).toEqual({
+        PreToolUse: [
+          { hooks: [PRE(55)] },
+          { hooks: [{ type: 'command', command: 'true' }] }
+        ],
+        PermissionRequest: [{ hooks: [PERM(55)] }]
+      })
+    })
+
+    test('remove reaches shared groups under every event', () => {
+      const other = { type: 'command', command: 'true' }
+      const env = seed(JSON.stringify({
+        hooks: {
+          Stop: [{ hooks: [other, PRE(55)] }, { hooks: [PRE(55)] }],
+          PreToolUse: [{ hooks: [PRE(55)] }]
+        }
+      }))
+      expect(removeCodexHooks(env)).toBe(true)
+      expect(read(env)).toBe(`{"hooks":{"Stop":[{"hooks":[${JSON.stringify(other)}]}]}}`)
+    })
+
+    test('non-hook objects and other values in a hooks list are someone else’s', () => {
+      const env = seed(JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { hooks: ['weird', PRE(55), null] },
+            'str',
+            null,
+            { hooks: 'nope' },
+            { hooks: [] }
+          ]
+        }
+      }))
+      expect(installCodexHooks(env, 55)).toBe(true)
+      expect(read(env)).toBe(`{"hooks":{"PreToolUse":[{"hooks":["weird",null]},"str",null,{"hooks":"nope"},{"hooks":[]},{"hooks":[${JSON.stringify(PRE(55))}]}],"PermissionRequest":[{"hooks":[${JSON.stringify(PERM(55))}]}]}}`)
+      expect(installCodexHooks(env, 55)).toBe(false)
+    })
+  })
 })
 
+
+describe('agent files behind a link', () => {
+  test('install and remove go through a link', () => {
+    const dot = scratch()
+    const target = join(dot, 'codex-hooks.json')
+    const env = agentEnv()
+    const hooks = codexHooksPath(env)
+    const original = '{\n  "model": "x"\n}\n'
+    writeFileSync(target, original)
+    mkdirSync(join(env.home, '.codex'), { recursive: true })
+    symlinkSync(target, hooks)
+
+    expect(installCodexHooks(env, 55)).toBe(true)
+    expect(lstatSync(hooks).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(hooks)).toBe(target)
+    expect(JSON.parse(readFileSync(target, 'utf8')).model).toBe('x')
+    expect(codexHooksInstalled(env)).toBe(true)
+    expect(readdirSync(dot).sort()).toEqual(['codex-hooks.json'])
+    expect(readdirSync(join(env.home, '.codex')).sort()).toEqual(['hooks.json'])
+    const mtime = statSync(target).mtimeMs
+    expect(installCodexHooks(env, 55)).toBe(false)
+    expect(statSync(target).mtimeMs).toBe(mtime)
+    expect(removeCodexHooks(env)).toBe(true)
+    expect(readFileSync(target, 'utf8')).toBe(original)
+    expect(lstatSync(hooks).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(hooks)).toBe(target)
+  })
+
+  test('follows a chain of relative links to its end', () => {
+    const env = agentEnv()
+    const codexDir = join(env.home, '.codex')
+    const dotfiles = join(env.home, 'dotfiles')
+    const hooks = codexHooksPath(env)
+    const second = join(codexDir, 'second.json')
+    mkdirSync(codexDir, { recursive: true })
+    mkdirSync(dotfiles)
+    writeFileSync(join(dotfiles, 'hooks.json'), '{}\n')
+    symlinkSync('../dotfiles/hooks.json', second)
+    symlinkSync('second.json', hooks)
+
+    expect(installCodexHooks(env, 55)).toBe(true)
+    expect(lstatSync(hooks).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(hooks)).toBe('second.json')
+    expect(lstatSync(second).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(second)).toBe('../dotfiles/hooks.json')
+    expect(JSON.parse(readFileSync(join(dotfiles, 'hooks.json'), 'utf8')).hooks.PreToolUse).toHaveLength(1)
+    expect(readdirSync(codexDir).sort()).toEqual(['hooks.json', 'second.json'])
+    expect(readdirSync(dotfiles).sort()).toEqual(['hooks.json'])
+  })
+
+  test('a link to a file that does not exist yet creates the file', () => {
+    const dot = scratch()
+    const target = join(dot, 'hooks.json')
+    const env = agentEnv()
+    const hooks = codexHooksPath(env)
+    mkdirSync(join(env.home, '.codex'), { recursive: true })
+    symlinkSync(target, hooks)
+
+    expect(installCodexHooks(env, 55)).toBe(true)
+    expect(lstatSync(hooks).isSymbolicLink()).toBe(true)
+    expect(existsSync(target)).toBe(true)
+    expect(codexHooksInstalled(env)).toBe(true)
+  })
+
+  test('a link into a missing folder fails without creating anything', () => {
+    const dot = scratch()
+    const target = join(dot, 'gone', 'hooks.json')
+    const env = agentEnv()
+    const hooks = codexHooksPath(env)
+    mkdirSync(join(env.home, '.codex'), { recursive: true })
+    symlinkSync(target, hooks)
+
+    expect(() => installCodexHooks(env, 55)).toThrow()
+    expect(readdirSync(dot).sort()).toEqual([])
+    expect(lstatSync(hooks).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(hooks)).toBe(target)
+    expect(codexHooksInstalled(env)).toBe(false)
+  })
+
+  test('a link loop at hooks.json is reported and writes nothing', () => {
+    const env = agentEnv()
+    const hooks = codexHooksPath(env)
+    const other = join(env.home, '.codex', 'other.json')
+    mkdirSync(join(env.home, '.codex'), { recursive: true })
+    symlinkSync('other.json', hooks)
+    symlinkSync('hooks.json', other)
+
+    expect(() => installCodexHooks(env, 55)).toThrow(`${hooks} could not be read (ELOOP)`)
+    expect(() => removeCodexHooks(env)).toThrow(`${hooks} could not be read (ELOOP)`)
+    expect(codexHooksInstalled(env)).toBe(false)
+    expect(readdirSync(join(env.home, '.codex')).sort()).toEqual(['hooks.json', 'other.json'])
+  })
+
+  test('the pi extension goes through a link and keeps the target mode', () => {
+    const env = agentEnv()
+    const extensions = join(env.home, '.pi', 'agent', 'extensions')
+    const dot = scratch()
+    const target = join(dot, 'gate.ts')
+    const path = piExtensionPath('pi', env)
+    mkdirSync(extensions, { recursive: true })
+    writeFileSync(target, `// ${GATE_EXTENSION_MARKER}\nold`)
+    chmodSync(target, 0o600)
+    symlinkSync(target, path)
+
+    expect(installPiExtensions(env, ['pi'])).toEqual([path])
+    expect(lstatSync(path).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(path)).toBe(target)
+    expect(readFileSync(target, 'utf8')).toBe(gateExtensionSource())
+    expect(statSync(target).mode & 0o777).toBe(0o600)
+    expect(readdirSync(dot).sort()).toEqual(['gate.ts'])
+  })
+
+  test('a pi extension link loop is reported and writes nothing', () => {
+    const env = agentEnv()
+    const extensions = join(env.home, '.pi', 'agent', 'extensions')
+    const path = piExtensionPath('pi', env)
+    const second = join(extensions, 'b.ts')
+    mkdirSync(extensions, { recursive: true })
+    symlinkSync('b.ts', path)
+    symlinkSync('quirky-avatar-gate.ts', second)
+
+    expect(() => installPiExtensions(env, ['pi'])).toThrow(`${path} is a link that never reaches a file`)
+    expect(readdirSync(extensions).sort()).toEqual(['b.ts', 'quirky-avatar-gate.ts'])
+  })
+})
+
+describe('file modes and temp files', () => {
+  test.each([0o600, 0o640, 0o664])('an existing hooks.json keeps mode %s through install and remove', (mode) => {
+    const env = agentEnv()
+    const hooks = codexHooksPath(env)
+    mkdirSync(join(env.home, '.codex'), { recursive: true })
+    writeFileSync(hooks, '{}\n')
+    chmodSync(hooks, mode)
+
+    expect(installCodexHooks(env, 55)).toBe(true)
+    expect(statSync(hooks).mode & 0o777).toBe(mode)
+    expect(removeCodexHooks(env)).toBe(true)
+    expect(statSync(hooks).mode & 0o777).toBe(mode)
+  })
+
+  test('a requested marker mode wins over the existing file mode', () => {
+    const home = scratch()
+    const directory = markerDir(home)
+    const path = join(directory, 's-1')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(path, 'old')
+    chmodSync(path, 0o644)
+
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(readMarkerFile(home, 's-1')).toEqual({ worktreeId: 'wt-1', level: 'full' })
+  })
+
+  test('a failed marker rename leaves no temp file', () => {
+    const home = scratch()
+    const directory = markerDir(home)
+    mkdirSync(join(directory, 's-1'), { recursive: true })
+
+    expect(() => writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })).toThrow()
+    expect(readdirSync(directory).sort()).toEqual(['s-1'])
+  })
+
+  test('a failed pi extension rename leaves no temp file', () => {
+    const env = agentEnv()
+    const extensions = join(env.home, '.pi', 'agent', 'extensions')
+    mkdirSync(join(extensions, 'quirky-avatar-gate.ts'), { recursive: true })
+
+    expect(() => installPiExtensions(env, ['pi'])).toThrow()
+    expect(readdirSync(extensions).sort()).toEqual(['quirky-avatar-gate.ts'])
+  })
+})
 describe('pi and omp extension file', () => {
   const withAgentDirs = (): AgentEnv => {
     const env = agentEnv()

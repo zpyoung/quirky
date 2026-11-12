@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import type { Stats } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { LaunchHook } from '@quirky/protocol'
 import type { Level } from '../contracts'
 import { GATE_EXTENSION_FILE, GATE_EXTENSION_MARKER, gateExtensionSource } from './pi-extension'
@@ -42,11 +43,46 @@ function dirOverride(value: string | undefined, fallback: string): string {
   return trimmed && isAbsolute(trimmed) ? trimmed : fallback
 }
 
+function writePath(path: string): { path: string; mode?: number } {
+  let current = path
+  let links = 0
+  for (;;) {
+    let info: Stats
+    try {
+      info = lstatSync(current)
+    } catch (error) {
+      const code = isRecord(error) && typeof error.code === 'string' ? error.code : undefined
+      if (code === 'ENOENT') return { path: current }
+      if (code === 'ELOOP') throw new Error(`${path} is a link that never reaches a file`)
+      throw error
+    }
+    if (!info.isSymbolicLink()) return { path: current, mode: info.mode & 0o777 }
+    if (links === 40) throw new Error(`${path} is a link that never reaches a file`)
+    let target: string
+    try {
+      target = readlinkSync(current)
+    } catch (error) {
+      const code = isRecord(error) && typeof error.code === 'string' ? error.code : undefined
+      if (code === 'ELOOP') throw new Error(`${path} is a link that never reaches a file`)
+      throw error
+    }
+    current = isAbsolute(target) ? target : resolve(dirname(current), target)
+    links++
+  }
+}
+
 function writeAtomically(path: string, text: string, mode?: number): void {
   mkdirSync(dirname(path), { recursive: true })
-  const temp = `${path}.${process.pid}.tmp`
-  writeFileSync(temp, text, mode === undefined ? undefined : { mode })
-  renameSync(temp, path)
+  const target = writePath(path)
+  const temp = `${target.path}.${process.pid}.tmp`
+  try {
+    writeFileSync(temp, text)
+    const targetMode = mode ?? target.mode
+    if (targetMode !== undefined) chmodSync(temp, targetMode)
+    renameSync(temp, target.path)
+  } finally {
+    rmSync(temp, { force: true })
+  }
 }
 
 
@@ -144,10 +180,18 @@ export function gateCommand(agent: 'claude' | 'codex', event: GateHookEvent, dea
 
 const isGateCommand = (command: unknown): boolean => typeof command === 'string' && command.includes(GATE_SHIM)
 
+const ownsGateHook = (hook: unknown): boolean => isRecord(hook) && isGateCommand(hook.command)
+
 function ownsGate(definition: unknown): boolean {
   if (!isRecord(definition)) return false
   if (isGateCommand(definition.command)) return true
-  return Array.isArray(definition.hooks) && definition.hooks.some((hook) => isRecord(hook) && isGateCommand(hook.command))
+  return Array.isArray(definition.hooks) && definition.hooks.some(ownsGateHook)
+}
+
+function ownsGateGroup(definition: unknown): boolean {
+  if (!isRecord(definition)) return false
+  if (isGateCommand(definition.command)) return true
+  return Array.isArray(definition.hooks) && definition.hooks.length > 0 && definition.hooks.every(ownsGateHook)
 }
 
 const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
@@ -202,8 +246,13 @@ export function claudeGateSettings(existing: unknown, judgmentTimeoutSeconds: nu
   const deadlineMs = gateDeadlineMs(judgmentTimeoutSeconds)
   const timeout = gateHookTimeoutSeconds(judgmentTimeoutSeconds)
   for (const event of GATE_EVENTS) {
-    const others = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]).filter((entry) => !ownsGate(entry)) : []
-    hooks[event] = [...others, {
+    const entries = Array.isArray(hooks[event]) ? hooks[event] as unknown[] : []
+    hooks[event] = entries.flatMap((entry) => {
+      if (ownsGateGroup(entry)) return []
+      if (!isRecord(entry) || !Array.isArray(entry.hooks)) return [entry]
+      const otherHooks = entry.hooks.filter((hook) => !ownsGateHook(hook))
+      return otherHooks.length === entry.hooks.length ? [entry] : [{ ...entry, hooks: otherHooks }]
+    }).concat([{
       matcher: '*',
       hooks: [{
         type: 'command',
@@ -211,7 +260,7 @@ export function claudeGateSettings(existing: unknown, judgmentTimeoutSeconds: nu
         timeout,
         onFailure: 'block'
       }]
-    }]
+    }])
   }
   return { ...base, hooks }
 }
@@ -303,8 +352,10 @@ function readHooksFile(path: string): HooksFile {
   let text: string | null = null
   try {
     text = readFileSync(path, 'utf8')
-  } catch {
-    return { doc: {}, text: null }
+  } catch (error) {
+    const code = isRecord(error) && typeof error.code === 'string' ? error.code : 'unknown'
+    if (code === 'ENOENT') return { doc: {}, text: null }
+    throw new Error(`${path} could not be read (${code})`)
   }
   const parsed: unknown = text.trim() === '' ? {} : JSON.parse(text)
   if (!isRecord(parsed)) throw new Error(`${path} is not a JSON object`)
@@ -438,25 +489,45 @@ function installIntoText(path: string, text: string, definitions: Record<GateHoo
   }
   if (hooksMember.value.members === null) throw new Error(`${path} has a hooks value that is not an object`)
   for (const event of GATE_EVENTS) {
-    const definition = definitions[event]
     const hooks = memberOf(parseSpans(next), 'hooks')!.value
     const member = memberOf(hooks, event)
     if (member === undefined) {
-      next = appendChild(next, hooks, { key: event, value: [definition] })
+      next = appendChild(next, hooks, { key: event, value: [definitions[event]] })
       continue
     }
     if (member.value.elements === null) throw new Error(`${path} has a ${event} value that is not a list`)
-    const owned = member.value.elements.filter((element) => ownsGate(elementValue(next, element)))
-    if (owned.length === 1 && sameJson(elementValue(next, owned[0]!), definition)) continue
-    if (owned.length === 0) {
-      next = appendChild(next, member.value, { value: definition })
-      continue
+    const groups = member.value.elements.map((element) => elementValue(next, element))
+    const ownedIndexes = groups.flatMap((group, index) => ownsGateGroup(group) ? [index] : [])
+    const hasSharedOwnedHooks = groups.some((group) => !ownsGateGroup(group) && ownsGate(group))
+    const firstOwned = ownedIndexes[0]
+    if (ownedIndexes.length === 1 && sameJson(groups[firstOwned!]!, definitions[event]) && !hasSharedOwnedHooks) continue
+    for (let index = groups.length - 1; index >= 0; index--) {
+      const list = memberOf(memberOf(parseSpans(next), 'hooks')!.value, event)!.value
+      const groupNode = list.elements![index]!
+      const group = elementValue(next, groupNode)
+      if (ownsGateGroup(group)) {
+        if (index === firstOwned) {
+          if (!sameJson(group, definitions[event])) next = replaceElement(next, groupNode, definitions[event])
+        } else {
+          next = removeChild(next, list, index)
+        }
+        continue
+      }
+      if (!ownsGate(group)) continue
+      const groupHooks = memberOf(groupNode, 'hooks')?.value
+      if (groupHooks?.elements === null || groupHooks === undefined) continue
+      for (let hookIndex = groupHooks.elements.length - 1; hookIndex >= 0; hookIndex--) {
+        const currentList = memberOf(memberOf(parseSpans(next), 'hooks')!.value, event)!.value
+        const currentGroup = currentList.elements![index]!
+        const currentHooks = memberOf(currentGroup, 'hooks')!.value
+        if (ownsGateHook(elementValue(next, currentHooks.elements![hookIndex]!))) {
+          next = removeChild(next, currentHooks, hookIndex)
+        }
+      }
     }
-    next = replaceElement(next, owned[0]!, definition)
-    for (let extra = owned.length - 1; extra >= 1; extra--) {
-      const current = memberOf(memberOf(parseSpans(next), 'hooks')!.value, event)!.value
-      const index = current.elements!.findIndex((element, at) => at > 0 && ownsGate(elementValue(next, element)))
-      if (index >= 0) next = removeChild(next, current, index)
+    if (firstOwned === undefined) {
+      const list = memberOf(memberOf(parseSpans(next), 'hooks')!.value, event)!.value
+      next = appendChild(next, list, { value: definitions[event] })
     }
   }
   return next
@@ -465,20 +536,38 @@ function installIntoText(path: string, text: string, definitions: Record<GateHoo
 function removeFromText(text: string): string {
   let next = text
   for (;;) {
-    const hooks = memberOf(parseSpans(next), 'hooks')
+    const root = parseSpans(next)
+    const hooks = memberOf(root, 'hooks')
     if (hooks?.value.members == null) return next
-    const target = hooks.value.members.find((member) => member.value.elements?.some((element) => ownsGate(elementValue(next, element))))
+    let target: Member | undefined
+    let groupIndex = -1
+    for (const member of hooks.value.members) {
+      groupIndex = member.value.elements?.findIndex((element) => ownsGate(elementValue(next, element))) ?? -1
+      if (groupIndex >= 0) {
+        target = member
+        break
+      }
+    }
     if (target === undefined) return next
-    const elements = target.value.elements!
-    const index = elements.findIndex((element) => ownsGate(elementValue(next, element)))
-    if (elements.length > 1) {
-      next = removeChild(next, target.value, index)
+    const groups = target.value.elements!
+    const groupNode = groups[groupIndex]!
+    const group = elementValue(next, groupNode)
+    if (ownsGateGroup(group)) {
+      next = removeChild(next, target.value, groupIndex)
+      if (groups.length === 1) {
+        const currentRoot = parseSpans(next)
+        const currentHooks = memberOf(currentRoot, 'hooks')!
+        const eventIndex = currentHooks.value.members!.findIndex((member) => member.start === target.start)
+        next = removeChild(next, currentHooks.value, eventIndex)
+        const rootAfter = parseSpans(next)
+        const remaining = memberOf(rootAfter, 'hooks')
+        if (remaining?.value.members?.length === 0) next = removeChild(next, rootAfter, rootAfter.members!.indexOf(remaining))
+      }
       continue
     }
-    next = removeChild(next, hooks.value, hooks.value.members.indexOf(target))
-    const root = parseSpans(next)
-    const remaining = memberOf(root, 'hooks')!
-    if (remaining.value.members!.length === 0) next = removeChild(next, root, root.members!.indexOf(remaining))
+    const groupHooks = memberOf(groupNode, 'hooks')!.value
+    const hookIndex = groupHooks.elements!.findIndex((element) => ownsGateHook(elementValue(next, element)))
+    next = removeChild(next, groupHooks, hookIndex)
   }
 }
 
