@@ -23,6 +23,11 @@ export type FakePiRpcFixture = {
  * SIGUSR2 emits an independent assistant message with usage and the flavor's settle frame.
  * `[grow]` adds a tool when its prompt arrives; `[tool] [missing]` and `[tool] [failed]` report a
  * not-found or failed tool and wait for abort; `[tool] [stuck]` ignores every abort.
+ * `[settle-at-check]` settles a held turn when the next no-tools check arrives.
+ * `[late]` settles a held turn before its prompt runs.
+ * `[slow-ack]` delays its prompt response and logs when it is answered.
+ * `[double]` starts a second tool.
+ * `[missing-ok]` marks a not-found tool result successful.
  */
 export function createFakePiRpc(
   home: string,
@@ -45,7 +50,8 @@ export function createFakePiRpc(
   const flavor = options.flavor ?? 'pi'
   const script = `#!${process.execPath}
 const fs = require('node:fs')
-fs.writeFileSync(${JSON.stringify(launchPath)}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }))
+fs.writeFileSync(${JSON.stringify(`${launchPath}.tmp`)}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }))
+fs.renameSync(${JSON.stringify(`${launchPath}.tmp`)}, ${JSON.stringify(launchPath)})
 const flavor = ${JSON.stringify(flavor)}
 const commands = ${JSON.stringify(options.commands ?? [])}
 const tools = ${JSON.stringify(options.tools ?? [])}
@@ -61,6 +67,8 @@ let lineEnding = '\\n'
 let held = false
 let waitingUi = false
 let ignoreAbort = false
+let settleAtCheck = false
+let backgroundWork = false
 let stubborn = false
 process.on('SIGUSR1', () => {
   send({ type: 'agent_settled', aborted: false })
@@ -102,6 +110,7 @@ function finish(text) {
   send({ type: 'message_end', message: assistant(text) })
   sendTurnEnd()
   held = false
+  settleAtCheck = false
 }
 function runPrompt(text) {
   lineEnding = text.includes('[crlf]') ? '\\r\\n' : '\\n'
@@ -114,14 +123,23 @@ function runPrompt(text) {
   if (text.includes('[crlf]')) process.stdout.write('\\r\\n')
   if (text.includes('[handled]')) return
   if (text.includes('[no-agent]') && flavor === 'omp') {
-    send({ type: 'prompt_result', agentInvoked: false, status: 'completed', sessionSettled: true })
+    send({
+      type: 'prompt_result',
+      agentInvoked: false,
+      status: 'completed',
+      sessionSettled: !held
+    })
     if (text.includes('[twice]')) {
       setTimeout(() => send({ type: 'prompt_result', agentInvoked: false, status: 'completed', sessionSettled: true }), 30)
     }
     return
   }
   send({ type: 'agent_start' })
-  if (text.includes('[hold]')) { held = true; return }
+  if (text.includes('[hold]')) {
+    held = true
+    settleAtCheck = text.includes('[settle-at-check]')
+    return
+  }
   if (text.includes('[reject]')) return
   if (text.includes('[end-only]')) {
     send({ type: 'message_end', message: assistant(flavor + ': ' + text) })
@@ -152,8 +170,17 @@ function runPrompt(text) {
   if ((text.includes('[background]') || text.includes('[settled-result]')) && flavor === 'omp') {
     send({ type: 'message_end', message: assistant('omp: background work') })
     sendAgentEnd(false)
-    send({ type: 'prompt_result', agentInvoked: true, status: 'completed', sessionSettled: text.includes('[settled-result]') })
-    setTimeout(() => sendSettle(), 300)
+    send({
+      type: 'prompt_result',
+      agentInvoked: true,
+      status: 'completed',
+      sessionSettled: text.includes('[settled-result]')
+    })
+    backgroundWork = true
+    setTimeout(() => {
+      backgroundWork = false
+      sendSettle()
+    }, 300)
     return
   }
   if (text.includes('[zero-last]')) {
@@ -187,7 +214,8 @@ function runPrompt(text) {
     process.on('SIGTERM', () => fs.appendFileSync(${JSON.stringify(join(home, 'flood-signals'))}, 'parent\\n'))
     const descendant = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(`const fs = require('node:fs'); process.on('SIGTERM', () => fs.appendFileSync(${JSON.stringify(join(home, 'flood-signals'))}, 'child\\n')); setInterval(() => {}, 1000); process.send('ready')`)}], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
     descendant.once('message', () => {
-      fs.writeFileSync(${JSON.stringify(join(home, 'flood-pids.json'))}, JSON.stringify({ parent: process.pid, child: descendant.pid }))
+      fs.writeFileSync(${JSON.stringify(join(home, 'flood-pids.json.tmp'))}, JSON.stringify({ parent: process.pid, child: descendant.pid }))
+      fs.renameSync(${JSON.stringify(join(home, 'flood-pids.json.tmp'))}, ${JSON.stringify(join(home, 'flood-pids.json'))})
       process.stdout.write('x'.repeat(2 * 1024 * 1024))
     })
     return
@@ -211,15 +239,18 @@ function runPrompt(text) {
   if (text.includes('[tool]')) {
     held = true
     send({ type: 'tool_execution_start', toolCallId: 't1', toolName: 'bash', args: { command: 'ls -la' } })
+    if (text.includes('[double]')) {
+      send({ type: 'tool_execution_start', toolCallId: 't2', toolName: 'bash', args: { command: 'ls -la' } })
+    }
     if (text.includes('[stuck]')) { ignoreAbort = true; return }
-    if (text.includes('[missing]') || text.includes('[failed]')) {
-      const result = text.includes('[missing]') ? 'Tool bash not found' : 'exit 1'
+    if (text.includes('[missing]') || text.includes('[missing-ok]') || text.includes('[failed]')) {
+      const result = text.includes('[failed]') ? 'exit 1' : 'Tool bash not found'
       send({
         type: 'tool_execution_end',
         toolCallId: 't1',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: result }] },
-        isError: true
+        isError: !text.includes('[missing-ok]')
       })
       return
     }
@@ -232,12 +263,46 @@ function runPrompt(text) {
   finish(flavor + ': ' + text)
   if (text.includes('[twice]')) setTimeout(() => sendSettle(), 30)
 }
+function handlePrompt(message) {
+  const text = message.message
+  if (text.includes('[grow]')) {
+    if (flavor === 'pi') commands.push({ name: 'late', source: 'extension' })
+    else tools.push('mcp__late_tool')
+  }
+  if (text.includes('[late]') && held) finish('settled before the message arrived')
+  if (text.includes('[reject]')) {
+    send({ type: 'response', command: 'prompt', success: false, error: 'scripted rejection' })
+    return
+  }
+  if (message.streamingBehavior === 'steer' && held && !text.includes('[handled]') && !text.includes('[no-agent]')) {
+    if (flavor === 'pi') {
+      send({ type: 'response', command: 'prompt', success: true, data: { disposition: 'queued' } })
+    } else {
+      send({ type: 'response', command: 'prompt', success: true })
+    }
+    finish('steered: ' + text)
+    return
+  }
+  if (message.streamingBehavior === 'steer' && backgroundWork && flavor === 'omp') {
+    send({ type: 'response', command: 'prompt', success: true })
+    return
+  }
+  runPrompt(text)
+}
+function isNoToolsCheck(message) {
+  return message.type === 'get_commands' ||
+    (typeof message.id === 'string' && message.id.startsWith('quirky-check-'))
+}
 if (flavor === 'omp') {
   send({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 })
   send({ type: 'extension_ui_request', id: 'w1', method: 'setWidget', widgetKey: 'autoresearch' })
   send({ type: 'available_commands_update', commands: [] })
 }
 function receive(message) {
+  if (settleAtCheck && isNoToolsCheck(message)) {
+    settleAtCheck = false
+    finish('settled while the check waited')
+  }
   fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(message) + '\\n')
   switch (message.type) {
     case 'get_state':
@@ -282,20 +347,23 @@ function receive(message) {
       })
       return
     case 'prompt':
-      if (message.message.includes('[grow]')) {
-        if (flavor === 'pi') commands.push({ name: 'late', source: 'extension' })
-        else tools.push('mcp__late_tool')
-      }
-      if (message.message.includes('[reject]')) {
-        send({ type: 'response', command: 'prompt', success: false, error: 'scripted rejection' })
+      if (message.message.includes('[slow-ack]')) {
+        setTimeout(() => {
+          fs.appendFileSync(
+            ${JSON.stringify(logPath)},
+            JSON.stringify({ type: 'fake-answered', message: message.message }) + '\\n'
+          )
+          handlePrompt(message)
+        }, 300)
         return
       }
-      runPrompt(message.message)
+      handlePrompt(message)
       return
     case 'steer':
       if (held) finish('steered: ' + message.message)
       return
     case 'abort':
+      settleAtCheck = false
       if (ignoreAbort) return
       send({ type: 'response', command: 'abort', success: true })
       if (held) { held = false; sendTurnEnd(true) }

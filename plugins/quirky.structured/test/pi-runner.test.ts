@@ -118,6 +118,10 @@ afterEach(async () => {
 })
 
 const settled = () => statuses.includes('done')
+const results = () => messages.filter((message) => message.role === 'result')
+const prompts = () => fake.commands().filter((command) => command.type === 'prompt')
+const userCommands = () =>
+  fake.commands().filter((command) => command.type === 'prompt' || command.type === 'steer')
 const contextUsageOfResult = () =>
   (messages.find((m) => m.role === 'result')?.data as { contextUsage?: unknown } | undefined)?.contextUsage
 const journal = () => messages.map(({ role, text }) => [role, text])
@@ -287,6 +291,18 @@ describe('pi rpc runner', () => {
     expect(statuses).toEqual(['working', 'exited'])
   })
 
+  test('pi deny-all uses the refusal fallback when the error text is only spaces', async () => {
+    build()
+    useCheckResponse({ type: 'response', command: 'get_commands', success: false, error: '   ' })
+    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
+    await until(() => statuses.at(-1) === 'exited')
+    expect(journal()).toEqual([
+      ['user', 'hello'],
+      ['system', 'pi could not confirm it has no tools: the check was refused']
+    ])
+    expect(statuses).toEqual(['working', 'exited'])
+  })
+
   test('pi deny-all sanitizes and truncates a refusal reason', async () => {
     build()
     const error = `bad\n${'x'.repeat(170)}`
@@ -393,7 +409,7 @@ describe('pi rpc runner', () => {
     })
   }
 
-  test('pi deny-all checks a steer before writing it', async () => {
+  test('pi deny-all checks a message sent during a turn before writing it', async () => {
     await runner.start(session, '[hold]', { toolPolicy: 'deny-all' })
     await until(() => fake.commands().some((command) => command.type === 'prompt'))
     await runner.send(session.id, 'focus')
@@ -403,7 +419,7 @@ describe('pi rpc runner', () => {
       { id: 'quirky-check-1', type: 'get_commands' },
       { type: 'prompt', message: '[hold]' },
       { id: 'quirky-check-2', type: 'get_commands' },
-      { type: 'steer', message: 'focus' }
+      { type: 'prompt', message: 'focus', streamingBehavior: 'steer' }
     ])
     expect(journal()).toEqual([
       ['user', '[hold]'],
@@ -414,7 +430,7 @@ describe('pi rpc runner', () => {
     expect(statuses).toEqual(['working', 'working', 'done'])
   })
 
-  test('pi deny-all releases a prompt and queued steer after one check reply', async () => {
+  test('pi deny-all writes a queued message after the prompt before it is answered, behind its own check', async () => {
     await runner.start(session, '[hold]', { toolPolicy: 'deny-all' })
     await runner.send(session.id, 'focus')
     await until(settled)
@@ -422,9 +438,189 @@ describe('pi rpc runner', () => {
       { id: 'quirky-state', type: 'get_state' },
       { id: 'quirky-check-1', type: 'get_commands' },
       { type: 'prompt', message: '[hold]' },
-      { type: 'steer', message: 'focus' }
+      { id: 'quirky-check-2', type: 'get_commands' },
+      { type: 'prompt', message: 'focus', streamingBehavior: 'steer' }
     ])
     expect(statuses).toEqual(['working', 'working', 'done'])
+  })
+
+  for (const agent of ['pi', 'omp'] as const) {
+    test(`${agent} deny-all: a message whose check outlasts the turn starts a new turn`, async () => {
+      build(agent)
+      await runner.start(session, '[hold] [settle-at-check]', { toolPolicy: 'deny-all' })
+      await until(() => prompts().length === 1)
+      await runner.send(session.id, 'second')
+      await until(() => results().length === 2)
+
+      expect(userCommands()).toEqual([
+        { type: 'prompt', message: '[hold] [settle-at-check]' },
+        { type: 'prompt', message: 'second', streamingBehavior: 'steer' }
+      ])
+      expect(journal()).toEqual([
+        ['user', '[hold] [settle-at-check]'],
+        ['user', 'second'],
+        ['assistant', 'settled while the check waited'],
+        ['result', `${agent} turn completed`],
+        ['assistant', `${agent}: second`],
+        ['result', `${agent} turn completed`]
+      ])
+      expect(results().map((result) => result.data)).toEqual([
+        { type: 'agent_end', contextUsage: { contextTokens: 180, contextWindow: 200000 } },
+        { type: 'agent_end', contextUsage: { contextTokens: 180, contextWindow: 200000 } }
+      ])
+      expect(statuses).toEqual(['working', 'working', 'done'])
+    })
+
+    test(`${agent}: a message that reaches a CLI that had just settled starts a new turn`, async () => {
+      build(agent)
+      await runner.start(session, '[hold]')
+      await until(() => prompts().length === 1)
+      await runner.send(session.id, 'second [late]')
+      await until(() => results().length === 2)
+
+      expect(userCommands()).toEqual([
+        { type: 'prompt', message: '[hold]' },
+        { type: 'prompt', message: 'second [late]', streamingBehavior: 'steer' }
+      ])
+      expect(journal()).toEqual([
+        ['user', '[hold]'],
+        ['user', 'second [late]'],
+        ['assistant', 'settled before the message arrived'],
+        ['result', `${agent} turn completed`],
+        ['assistant', `${agent}: second [late]`],
+        ['result', `${agent} turn completed`]
+      ])
+      expect(statuses).toEqual(['working', 'working', 'done'])
+    })
+
+    test(`${agent}: the next message is written only after the one before it is answered`, async () => {
+      build(agent)
+      await runner.start(session, 'first [slow-ack]')
+      await runner.send(session.id, 'second')
+      await until(() => results().length === 2)
+
+      expect(fake.commands().filter((command) => command.type === 'prompt' || command.type === 'fake-answered')).toEqual([
+        { type: 'prompt', message: 'first [slow-ack]' },
+        { type: 'fake-answered', message: 'first [slow-ack]' },
+        { type: 'prompt', message: 'second', streamingBehavior: 'steer' }
+      ])
+      expect(statuses).toEqual(['working', 'working', 'done'])
+    })
+
+    test(`${agent}: a rejected message during a run leaves the turn open`, async () => {
+      build(agent)
+      await runner.start(session, '[hold]')
+      await until(() => prompts().length === 1)
+      await runner.send(session.id, 'no [reject]')
+      await until(() => messages.some((message) => message.role === 'system'))
+      await runner.send(session.id, 'focus')
+      await until(settled)
+
+      expect(journal()).toEqual([
+        ['user', '[hold]'],
+        ['user', 'no [reject]'],
+        ['system', `${agent} rejected prompt: scripted rejection`],
+        ['user', 'focus'],
+        ['assistant', 'steered: focus'],
+        ['result', `${agent} turn completed`]
+      ])
+      expect(statuses).toEqual(['working', 'working', 'working', 'done'])
+    })
+
+    const marker = agent === 'pi' ? '[handled]' : '[no-agent]'
+    test(`${agent}: a message the CLI handles by itself during a run leaves the turn open`, async () => {
+      build(agent)
+      await runner.start(session, '[hold]')
+      await until(() => prompts().length === 1)
+      await runner.send(session.id, `note ${marker}`)
+      await until(() => prompts().length === 2)
+      // Let the handled/no-agent reply reach the runner before checking the held turn.
+      await Bun.sleep(100)
+      expect(statuses).toEqual(['working', 'working'])
+
+      await runner.send(session.id, 'focus')
+      await until(settled)
+      expect(journal()).toEqual([
+        ['user', '[hold]'],
+        ['user', `note ${marker}`],
+        ['user', 'focus'],
+        ['assistant', 'steered: focus'],
+        ['result', `${agent} turn completed`]
+      ])
+      expect(statuses).toEqual(['working', 'working', 'working', 'done'])
+    })
+
+    const handled = agent === 'pi' ? '[handled]' : '[no-agent]'
+    test(`${agent}: a first message the CLI handles by itself does not end the turn while another waits`, async () => {
+      build(agent)
+      await runner.start(session, `first ${handled} [slow-ack]`, { toolPolicy: 'deny-all' })
+      await runner.send(session.id, 'second')
+      await until(() => results().length === 1)
+
+      expect(journal()).toEqual([
+        ['user', `first ${handled} [slow-ack]`],
+        ['user', 'second'],
+        ['assistant', `${agent}: second`],
+        ['result', `${agent} turn completed`]
+      ])
+      expect(statuses).toEqual(['working', 'working', 'done'])
+    })
+  }
+
+  test('pi deny-all: a result written while a message waits takes its token count with it', async () => {
+    await runner.start(session, '[hold] [settle-at-check]', { toolPolicy: 'deny-all' })
+    await until(() => prompts().length === 1)
+    await runner.send(session.id, '[tool]')
+    await until(() => results().length === 2)
+
+    expect(results().map((result) => result.data)).toEqual([
+      { type: 'agent_end', contextUsage: { contextTokens: 180, contextWindow: 200000 } },
+      { type: 'agent_end' }
+    ])
+    expect(statuses).toEqual(['working', 'working', 'done'])
+  })
+
+  test('pi deny-all: a turn that settles while a message waits takes its abort deadline with it', async () => {
+    build('pi', undefined, { abortTimeoutMs: 300 })
+    await runner.start(session, '[tool]', { toolPolicy: 'deny-all' })
+    await runner.send(session.id, '[hold]')
+    await until(() => prompts().length === 2)
+    // Wait beyond the deadline to catch an abort timer carried into the next turn.
+    await Bun.sleep(600)
+    expect(journal()).toEqual([
+      ['user', '[tool]'],
+      ['user', '[hold]'],
+      ['system', 'tools are disabled for this session'],
+      ['result', 'pi turn completed']
+    ])
+    expect(statuses).toEqual(['working', 'working'])
+    expect(userCommands()).toEqual([
+      { type: 'prompt', message: '[tool]' },
+      { type: 'prompt', message: '[hold]', streamingBehavior: 'steer' }
+    ])
+
+    await runner.send(session.id, 'go')
+    await until(settled)
+    expect(journal()).toEqual([
+      ['user', '[tool]'],
+      ['user', '[hold]'],
+      ['system', 'tools are disabled for this session'],
+      ['result', 'pi turn completed'],
+      ['user', 'go'],
+      ['assistant', 'steered: go'],
+      ['result', 'pi turn completed']
+    ])
+    expect(statuses).toEqual(['working', 'working', 'working', 'done'])
+    expect(fake.commands()).toEqual([
+      { id: 'quirky-state', type: 'get_state' },
+      { id: 'quirky-check-1', type: 'get_commands' },
+      { type: 'prompt', message: '[tool]' },
+      { id: 'quirky-check-2', type: 'get_commands' },
+      { type: 'abort' },
+      { type: 'prompt', message: '[hold]', streamingBehavior: 'steer' },
+      { id: 'quirky-check-3', type: 'get_commands' },
+      { type: 'prompt', message: 'go', streamingBehavior: 'steer' }
+    ])
   })
 
   test('pi deny-all checks an idle session before a prompt arrives', async () => {
@@ -611,13 +807,17 @@ describe('pi rpc runner', () => {
     expect(statuses).toEqual(['working'])
     expect(messages.filter((message) => message.role === 'result')).toEqual([])
     await runner.send(session.id, 'still working')
-    await until(() => fake.commands().some((command) => command.type === 'steer'))
+    await until(() =>
+      fake.commands().some((command) => command.type === 'prompt' && command.streamingBehavior === 'steer')
+    )
     expect(statuses).toEqual(['working', 'working'])
     await until(settled)
     await runner.send(session.id, 'next turn')
     await until(() => messages.filter((message) => message.role === 'result').length === 2)
-    expect(fake.commands().filter((command) => command.type === 'prompt').map((command) => command.message)).toEqual([
-      '[settled-result]', 'next turn'
+    expect(fake.commands().filter((command) => command.type === 'prompt')).toEqual([
+      { type: 'prompt', message: '[settled-result]' },
+      { type: 'prompt', message: 'still working', streamingBehavior: 'steer' },
+      { type: 'prompt', message: 'next turn' }
     ])
     expect(statuses).toEqual(['working', 'working', 'done', 'working', 'done'])
   })
@@ -646,6 +846,23 @@ describe('pi rpc runner', () => {
     expect(messages.filter((message) => message.role === 'result')).toEqual([])
     expect(statuses).toEqual(['working', 'done'])
   })
+
+  for (const [agent, text] of [
+    ['pi', 'note [handled]'],
+    ['omp', 'note [no-agent]'],
+    ['pi', 'no [reject]'],
+    ['omp', 'no [reject]']
+  ] as const) {
+    test(`${agent}: after a finished turn, "${text}" ends its own turn at once`, async () => {
+      build(agent)
+      await runner.start(session, 'hello')
+      await until(settled)
+      await runner.send(session.id, text)
+      await until(() => statuses.length === 4)
+      expect(statuses).toEqual(['working', 'done', 'working', 'done'])
+      expect(results()).toHaveLength(1)
+    })
+  }
 
   for (const [agent, marker] of [
     ['pi', '[queued]'],
@@ -786,12 +1003,20 @@ describe('pi rpc runner', () => {
     expect(messages.filter((m) => m.role === 'tool').map((m) => m.text)).toEqual(['bash: ls -la', 'file.txt'])
   })
 
-  test('a steer while working goes out as a steer command', async () => {
+  test('a message sent while working goes out as a prompt the CLI may steer with', async () => {
     await runner.start(session, '[hold]')
     await until(() => fake.commands().some((c) => c.type === 'prompt'))
     await runner.send(session.id, 'focus')
     await until(settled)
-    expect(fake.commands().find((c) => c.type === 'steer')).toEqual({ type: 'steer', message: 'focus' })
+    expect(userCommands()).toEqual([
+      { type: 'prompt', message: '[hold]' },
+      { type: 'prompt', message: 'focus', streamingBehavior: 'steer' }
+    ])
+    expect(messages.find((message) => message.role === 'user' && message.text === 'focus')?.data).toEqual({
+      type: 'prompt',
+      message: 'focus',
+      streamingBehavior: 'steer'
+    })
     expect(messages.find((m) => m.role === 'assistant')?.text).toBe('steered: focus')
   })
 
@@ -885,6 +1110,22 @@ exit 0
     expect(statuses).toEqual(['working', 'done'])
   })
 
+  test('pi deny-all keeps one abort deadline when a second tool starts', async () => {
+    build('pi', undefined, { abortTimeoutMs: 300 })
+    await runner.start(session, '[tool] [double]', { toolPolicy: 'deny-all' })
+    await until(settled)
+    // Wait past twice the deadline to catch a timer restarted by the second tool start.
+    await Bun.sleep(600)
+    expect(journal()).toEqual([
+      ['user', '[tool] [double]'],
+      ['system', 'tools are disabled for this session'],
+      ['system', 'tools are disabled for this session'],
+      ['result', 'pi turn completed']
+    ])
+    expect(fake.commands().filter((command) => command.type === 'abort')).toHaveLength(2)
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
   for (const agent of ['pi', 'omp'] as const) {
     test(`${agent} deny-all exits when a tool-start abort stays stuck`, async () => {
       build(agent, undefined, { abortTimeoutMs: 150 })
@@ -929,7 +1170,8 @@ exit 0
 
   for (const [marker, output, isError] of [
     ['[tool] [allowed]', 'file.txt', false],
-    ['[tool] [failed]', 'exit 1', true]
+    ['[tool] [failed]', 'exit 1', true],
+    ['[tool] [missing-ok]', 'Tool bash not found', false],
   ] as const) {
     test(`pi deny-all ends and journals when a tool result is ${output}`, async () => {
       await runner.start(session, marker, { toolPolicy: 'deny-all' })
