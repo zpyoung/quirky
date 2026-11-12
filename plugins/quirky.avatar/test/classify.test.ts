@@ -379,7 +379,7 @@ describe('g1-11 classification scenarios', () => {
       ['find /home/u/Documents -type f | xargs rm -f', ['read', 'edit-outside']],
       ["rg -l foo | xargs sed -i '' s/a/b/", ['read', 'edit-outside']],
       ['ls | xargs -I{} cp {} out/', ['read', 'edit-outside', 'edit-inside']],
-      ['git ls-files | xargs grep foo', ['read']],
+      ['git ls-files | xargs grep foo', ['read', 'other']],
       ['echo hi | tee', ['read']],
       ['rm -rf', ['other']],
       ['rm -rf *', ['edit-inside']],
@@ -427,8 +427,8 @@ describe('g1-11 classification scenarios', () => {
       ['cd $D && git clean -fd', ['other', 'edit-outside']],
       ['cd $D && git status', ['other', 'read']],
       ['cd ~other && touch a', ['other', 'edit-outside']],
-      ['git -C ~other/x clean -fd', ['edit-outside']],
-      ['git --git-dir="$(pwd)/.git" clean -fd', ['read', 'edit-outside']]
+      ['git -C ~other/x clean -fd', ['edit-outside', 'other']],
+      ['git --git-dir="$(pwd)/.git" clean -fd', ['read', 'edit-outside', 'other']]
     ]
     for (const [command, expected] of rows) expectClassSet(command, expected)
   })
@@ -690,8 +690,8 @@ describe('decision-changing classifier mutations', () => {
     ['user-home redirect target', 'echo hi > ~other', ['read', 'edit-outside'], 'held', 'floor-core'],
     ['process-substitution redirect target', 'echo hi > >(cat)', ['read', 'edit-outside'], 'held', 'floor-core'],
     ['dynamic command basename', '$D/ls', ['other'], 'judgment', null],
-    ['attached git directory', 'git -C"$D" clean -fd', ['edit-outside'], 'held', 'floor-core'],
-    ['git worktree config directory', 'git -c core.worktree=$X clean -fd', ['edit-outside'], 'held', 'floor-core'],
+    ['attached git directory', 'git -C"$D" clean -fd', ['edit-outside', 'other'], 'held', 'floor-core'],
+    ['git worktree config directory', 'git -c core.worktree=$X clean -fd', ['edit-outside', 'other'], 'held', 'floor-core'],
     ['env git directory', 'env GIT_DIR=$X git clean -fd', ['edit-outside'], 'held', 'floor-core'],
     ['dynamic wrapper option', 'env -$X ls', ['other'], 'judgment', null],
     ['dynamic eval argument', 'eval "echo $X"', ['read', 'other'], 'judgment', null],
@@ -741,5 +741,278 @@ describe('round 2 scoped directory and wrapper guards', () => {
     expectClassSet(command, ['credential', 'edit-outside'])
     expect(commandParts(call('Bash', { command }), ctx)).toEqual(['rm -rf /etc/x'])
     expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+  })
+})
+
+describe('unseen arguments and directories', () => {
+  test('5: counts every unaccounted dynamic word', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cat "$f"', ['read', 'other']],
+      ['git commit $OPTS -m x', ['edit-inside', 'other']],
+      ['git diff $(git merge-base HEAD main)', ['read', 'other']],
+      ['git checkout "$BRANCH"', ['edit-inside', 'other']],
+      ['git -C "$D" status', ['read', 'other']],
+      ['bun test "$f"', ['test', 'other']],
+      ['bunx prettier --write "$f"', ['edit-inside', 'other']],
+      ['cp "$SRC" out/', ['edit-inside', 'other']],
+      ['cp a.txt "$DEST"', ['edit-outside']],
+      ['timeout $T ls', ['read', 'other']],
+      ['ls | xargs -n "$N" echo', ['read', 'other']],
+      ['nice -n "$P" ls', ['other']],
+      ['echo "$(cat "$f")"', ['read', 'other']],
+      ['bash -c "ls $X"', ['read', 'other']],
+      ['bash -c \'echo "$1"\' _ "$f"', ['read', 'other']],
+      ['bash -c "rm -rf $X"', ['edit-outside']],
+      ['A="$X" ls', ['read']],
+      ['env A="$X" ls', ['read']],
+      ['ls *.ts', ['read']],
+      ['cat src/**/*.ts', ['read']],
+      ['cat ~/notes.txt', ['read']],
+      ['cat $HOME/x', ['read']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('6: exempts only the specified commands and still counts wrapper words', () => {
+    const exempt: [string, ActionClass[]][] = [
+      ['echo "exit=$?"', ['read']],
+      ['printf \'%s\\n\' "$x"', ['read']],
+      ['true $x', ['read']],
+      ['false "$x"', ['read']],
+      ['test -f "$f"', ['read']],
+      ['[ -n "$x" ]', ['read']],
+      ['basename "$f"', ['read']],
+      ['dirname "$f"', ['read']],
+      ['sleep $N', ['read']]
+    ]
+    for (const [command, expected] of exempt) expectClassSet(command, expected)
+    expectClassSet('echo "$x" > out.txt', ['read', 'edit-inside'])
+    expectClassSet('echo "$x" > "$OUT"', ['read', 'edit-outside'])
+    expectClassSet('timeout $T echo hi', ['read', 'other'])
+  })
+
+  test('7: exempts commands on the configured always-allowed list', () => {
+    expectClassSet('./scripts/check.sh "$f"', ['build'], { allowCommands: ['./scripts/check.sh'] })
+    expectClassSet('bun test "$f"', ['test'], { allowCommands: ['bun test'] })
+    expectClassSet('./scripts/check.sh "$f"', ['other'], { allowCommands: [] })
+  })
+
+  test('8: classifies known heredoc substitution values as their actual words', () => {
+    const rows: [string, ActionClass[]][] = [
+      [`git commit -m "$(cat <<'EOF'\nfix: a thing\n\nIt's (done).\nEOF\n)"`, ['read', 'edit-inside']],
+      [`git commit -m $(cat <<'EOF'\na --no-verify\nEOF\n)`, ['read', 'edit-inside', 'other']],
+      [`git commit -m "$(cat <<EOF\na\nEOF\n)"`, ['read', 'edit-inside', 'other']],
+      [`rm -rf "$(cat <<'EOF'\n/work/wt/tmp\nEOF\n)"`, ['read', 'edit-inside']],
+      [`rm -rf "$(cat <<'EOF'\n/home/u\nEOF\n)"`, ['read', 'edit-outside']],
+      [`cat "$(cat <<'EOF'\n/home/u/.ssh/id_rsa\nEOF\n)"`, ['read', 'credential']],
+      [`bash -c "$(cat <<'EOF'\nrm -rf /home/u/x\nEOF\n)"`, ['read', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('9: accounts for commands invoked through xargs', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['git ls-files | xargs grep foo', ['read', 'other']],
+      ['git ls-files -m | xargs git add', ['read', 'edit-inside', 'other']],
+      ['find . -name \'*.ts\' | xargs wc -l', ['read', 'other']],
+      ['ls | xargs echo', ['read']],
+      ['ls | xargs -n1 basename', ['read']],
+      ['ls | xargs', ['read']],
+      ['ls | xargs eval echo', ['read', 'edit-outside']],
+      ['find /home/u -maxdepth 1 | xargs -I{} sh -c \'rm -rf {}\'', ['read', 'edit-inside', 'edit-outside']],
+      ['ls | xargs sh -c \'wc -l "$@"\' _', ['read', 'other', 'edit-outside']],
+      ['xargs sh -c \'touch /tmp/x\'', ['edit-outside']],
+      ['ls | xargs -I{} cp {} out/', ['read', 'edit-outside', 'edit-inside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+    expect(bash('xargs git push origin main')).toEqual(expect.arrayContaining(['push-default', 'other']))
+  })
+
+  test('10: classifies read redirect targets without treating here-strings as paths', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cat < /home/u/.ssh/id_rsa', ['read', 'credential']],
+      ['cat < ~/.ssh/id_rsa', ['read', 'credential']],
+      ['cat <~/.netrc', ['read', 'credential']],
+      ['sort < /tmp/p/.env', ['read', 'credential']],
+      ['cat < a.txt', ['read']],
+      ['wc -l < /etc/hosts', ['read']],
+      ['cat < "$f"', ['read', 'other']],
+      ['wc -l < $(echo a)', ['read', 'other']],
+      ['grep foo <<< "$OUT"', ['read']],
+      ['cat <<< /home/u/.ssh/id_rsa', ['read']],
+      ['cat <<< "$(git push -f origin main)"', ['read', 'push-force', 'push-default']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('11: isolates working directories across every reader scope', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cd /tmp; (cd /work/wt); rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; echo "$(cd /work/wt)"; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; x=$(cd /work/wt; pwd); rm -rf y', ['read', 'edit-outside']],
+      ['(cd /tmp); touch a', ['read', 'edit-inside']],
+      ['(cd /tmp && rm -rf x); touch a', ['read', 'edit-outside', 'edit-inside']],
+      ['(cd /tmp); (touch a)', ['read', 'edit-inside']],
+      ['cd /tmp; (touch a)', ['read', 'edit-outside']],
+      ['cd src && (cd .. && touch a)', ['read', 'edit-inside']],
+      ['cd /tmp; echo "$(cd /work/wt; touch a)"; touch b', ['read', 'edit-inside', 'edit-outside']],
+      ['(cd src && bun test)', ['read', 'test']],
+      ['(export GIT_DIR=/home/u/r/.git); git clean -fd', ['other', 'edit-inside']],
+      ['cd /tmp; echo `cd /work/wt`; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; cat <(cd /work/wt); rm -rf x', ['read', 'other', 'edit-outside']],
+      ['cd /tmp; echo >(cd /work/wt); rm -rf x', ['read', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('12: handles cd, pushd and popd directory changes conservatively', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cd; rm -rf Documents', ['read', 'edit-outside']],
+      ['cd /tmp; cd; touch .zshrc', ['read', 'edit-outside']],
+      ['cd -P src && touch a', ['read', 'edit-inside']],
+      ['cd -- src && touch a', ['read', 'edit-inside']],
+      ['pushd src && touch a', ['read', 'edit-inside']],
+      ['pushd /tmp && touch a', ['read', 'edit-outside']],
+      ['cd /tmp; cd -; touch a', ['read', 'other', 'edit-outside']],
+      ['cd /tmp; cd -; touch /work/wt/a', ['read', 'other', 'edit-inside']],
+      ['cd /tmp; pushd /work/wt; popd; rm -rf x', ['read', 'other', 'edit-outside']],
+      ['pushd src && bun test && popd', ['read', 'test', 'other']],
+      ['cd a b; rm -rf x', ['other', 'edit-outside']],
+      ['pushd; rm -rf x', ['other', 'edit-outside']],
+      ['pushd +1; rm -rf x', ['other', 'edit-outside']],
+      ['pushd -n /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['cd /work/wt/a; cd /tmp | true; rm -rf x', ['read', 'other', 'edit-outside']],
+      ['true | cd /tmp; rm -rf x', ['read', 'other', 'edit-outside']],
+      ['cd /tmp && cd /work/wt & rm -rf x', ['other', 'edit-outside']],
+      ['cd -; git clean -fd', ['other', 'edit-outside']],
+      ['cd -; git status', ['other', 'read']],
+      ['cd -2; rm -rf x', ['other', 'edit-outside']],
+      ['cd +1; rm -rf x', ['other', 'edit-outside']],
+      ['cd -L -P -- src && touch a', ['read', 'edit-inside']],
+      ['cd -q src; touch a', ['other', 'edit-outside']],
+      ['pushd "$D"; rm -rf x', ['other', 'edit-outside']],
+      ['pushd -foo; rm -rf x', ['other', 'edit-outside']],
+      ['pushd +foo; rm -rf x', ['other', 'edit-outside']],
+      ['popd -n; rm -rf x', ['other', 'edit-outside']],
+      ['true | pushd src; rm -rf x', ['read', 'other', 'edit-outside']],
+      ['popd & rm -rf x', ['other', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('13: carries readable eval directory and git environment changes only in the current scope', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['eval \'cd /tmp\'; rm -rf x', ['read', 'edit-outside']],
+      ['eval \'cd /tmp; (cd /work/wt)\'; rm -rf x', ['read', 'edit-outside']],
+      ['eval \'cd src\'; touch a', ['read', 'edit-inside']],
+      ['eval \'export GIT_DIR=/home/u/r/.git\'; git clean -fd', ['other', 'edit-outside']],
+      ['bash -c \'cd /tmp\'; rm -rf x', ['read', 'edit-inside']],
+      ['bash -c \'cd /tmp && rm -rf x\'', ['read', 'edit-outside']],
+      ['eval \'export GIT_WORK_TREE=/home/u/r\'; git clean -fd', ['other', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    const sourceCommands = [
+      'source /tmp/change-directory.sh; touch a',
+      '. /tmp/change-directory.sh; touch a',
+    ]
+    for (const command of sourceCommands) {
+      const classes = bash(command)
+      expect(classes).toEqual(expect.arrayContaining(['other', 'edit-inside']))
+      expect(classes).not.toContain('edit-outside')
+    }
+    const dynamicEvals: [string, ActionClass, ActionClass][] = [
+      ['eval "cd $D"; touch a', 'edit-outside', 'edit-inside'],
+      ['eval "cd /tmp; $X"; rm -rf x', 'edit-outside', 'edit-inside'],
+      ['eval "cd /tmp" "$X"; rm -rf x', 'edit-outside', 'edit-inside'],
+      ['eval "echo $X"; touch a', 'edit-inside', 'edit-outside']
+    ]
+    for (const [command, edit, excluded] of dynamicEvals) {
+      const classes = bash(command)
+      expect(classes).toEqual(expect.arrayContaining(['other', edit]))
+      expect(classes).not.toContain(excluded)
+    }
+    expectClassSet('eval \'cd /tmp\' & rm -rf x', ['other', 'edit-outside'])
+  })
+
+  test('14: treats detached git environment assignments as unknown', () => {
+    const classes = bash('export GIT_DIR=/home/u/r/.git; true | export GIT_DIR=/work/wt/.git; git clean -fd')
+    expect(classes).toContain('edit-outside')
+    expect(classes).not.toContain('edit-inside')
+
+    const bareAssignment = bash('export GIT_DIR=/home/u/r/.git; true | GIT_DIR=/work/wt/.git; git clean -fd')
+    expect(bareAssignment).toContain('edit-outside')
+    expect(bareAssignment).not.toContain('edit-inside')
+
+    const detachedEval = bash('eval \'export GIT_DIR=/home/u/r/.git\' & git clean -fd')
+    expect(detachedEval).toContain('edit-outside')
+    expect(detachedEval).not.toContain('edit-inside')
+  })
+
+  test('keeps an empty detached git-directory assignment unknown', () => {
+    const classes = bash('export GIT_DIR=/home/u/r/.git; true | export GIT_DIR=; git clean -fd')
+    expect(classes).toContain('edit-outside')
+    expect(classes).not.toContain('edit-inside')
+  })
+
+  test('preserves explicit hook-skipping values on detached commands', () => {
+    for (const command of ['HUSKY=0 git commit -m x | cat', 'env HUSKY=0 git commit -m x &']) {
+      expect(bash(command)).toContain('skip-hooks')
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'deny', step: 'fixed-rules' })
+    }
+  })
+
+  test('holds a shell body supplied only by xargs input', () => {
+    expectClassSet('echo "\'touch /home/u/x\'" | xargs sh -c', ['read', 'other', 'edit-outside'])
+  })
+
+  test('does not use a non-stdin heredoc as the value returned by cat', () => {
+    expectClassSet(`printf '/home/u/Documents\\n' | rm -rf "$(cat 3<<'EOF'\n/work/wt/safe\nEOF\n)"`, ['read', 'edit-outside'])
+  })
+
+  test('15: holds text beyond four nested eval or shell bodies and omits unreadable parts', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['eval eval eval eval rm -rf /home/u/x', ['edit-outside']],
+      ['eval eval eval eval eval ls', ['other', 'edit-outside']],
+      ['eval eval eval eval eval rm -rf /home/u/x', ['other', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    let nestedShell = 'rm -rf /home/u/x'
+    for (let depth = 0; depth < 5; depth += 1) nestedShell = `bash -c ${JSON.stringify(nestedShell)}`
+    expectClassSet(nestedShell, ['other', 'edit-outside'])
+    for (const command of [rows[1][0], rows[2][0], nestedShell]) {
+      const input = call('Bash', { command })
+      expect(commandParts(input, ctx)).toEqual([])
+      expect(pushDestinations(input, ctx)).toEqual([])
+    }
+  })
+
+  test('16: sends unseen arguments and unsafe directory changes to the right gate decision', () => {
+    const rows: [string, string, string | null][] = [
+      ['cd /tmp; (cd /work/wt); rm -rf x', 'held', 'floor-core'],
+      ['cd; rm -rf Documents', 'held', 'floor-core'],
+      ['cd /tmp; pushd /work/wt; popd; rm -rf x', 'held', 'floor-core'],
+      ['eval \'cd /tmp\'; rm -rf x', 'held', 'floor-core'],
+      ['eval "cd $D"; rm -rf x', 'held', 'floor-core'],
+      ['cat < /home/u/.ssh/id_rsa', 'held', 'floor-core'],
+      ['find /home/u -maxdepth 1 | xargs -I{} sh -c \'rm -rf {}\'', 'held', 'floor-core'],
+      ['eval eval eval eval eval rm -rf /home/u/x', 'held', 'floor-core'],
+      [`bash -c "$(cat <<'EOF'\nrm -rf /home/u/x\nEOF\n)"`, 'held', 'floor-core'],
+      ['git commit $OPTS -m x', 'judgment', null],
+      ['cat "$f"', 'judgment', null],
+      ['timeout $T ls', 'judgment', null],
+      ['git ls-files | xargs grep foo', 'judgment', null],
+      ['git ls-files -m | xargs git add', 'judgment', null],
+      ['pushd src && bun test && popd', 'judgment', null],
+      [`git commit -m "$(cat <<'EOF'\nfix: a thing\nEOF\n)"`, 'allow', 'fixed-rules'],
+      ['echo "exit=$?"', 'allow', 'fixed-rules'],
+      ['grep foo <<< "$OUT"', 'allow', 'fixed-rules'],
+      ['(cd src && bun test)', 'allow', 'fixed-rules'],
+      ['ls | xargs -n1 basename', 'allow', 'fixed-rules']
+    ]
+    for (const [command, outcome, step] of rows) {
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
   })
 })
