@@ -13,11 +13,13 @@ export type FakePiRpcFixture = {
  * Writes a pi/omp RPC stand-in under a test's temporary home; it never contacts a provider. `[tool]`
  * runs a tool, `[ui]` raises a dialog, `[hold]` waits for steer/abort, and `[reject]` refuses.
  * `[split]` splits a multibyte character across stdout writes; `[retry]` does a pi error and retry.
- * `[end-only]` omits settling; `[twice]` sends a duplicate settle; `[background]` delays omp settle;
+ * `[end-only]` omits settling; `[twice]` duplicates settlement; `[background]` delays omp settle;
  * `[no-agent]` sends an omp result without starting an agent; `[handled]` handles a pi prompt;
  * `[queued]` responds queued; `[zero-last]` follows usage with a zero-token error; `[big]` sends a
- * 6 MiB agent_end; `[crlf]` ends frames with CRLF; `[flood]` writes 2 MiB without a newline;
- * `[unreadable]` writes malformed JSON and a non-object JSON value before a normal turn.
+ * 6 MiB agent_end; `[crlf]` ends frames with CRLF; `[flood]` writes 2 MiB without a newline while
+ * its process group ignores EOF and SIGTERM; `[unreadable]` writes malformed and non-object JSON.
+ * `[settled-result]` delays omp settlement after an invoked prompt_result with sessionSettled true.
+ * SIGUSR1 emits stale settle/result frames for an idle-session check.
  */
 export function createFakePiRpc(
   home: string,
@@ -43,6 +45,13 @@ const assistant = (text) => ({
 let lineEnding = '\\n'
 let held = false
 let waitingUi = false
+let stubborn = false
+process.on('SIGUSR1', () => {
+  send({ type: 'agent_settled', aborted: false })
+  send({ type: 'session_settled' })
+  send({ type: 'prompt_result', agentInvoked: false, status: 'completed', sessionSettled: true })
+  fs.writeFileSync(${JSON.stringify(join(home, 'idle-frames-sent'))}, '')
+})
 function sendAgentEnd(willRetry = false) {
   if (flavor === 'pi') send({ type: 'agent_end', messages: [], willRetry })
   else send({ type: 'agent_end', messages: [] })
@@ -82,6 +91,9 @@ function runPrompt(text) {
   if (text.includes('[handled]')) return
   if (text.includes('[no-agent]') && flavor === 'omp') {
     send({ type: 'prompt_result', agentInvoked: false, status: 'completed', sessionSettled: true })
+    if (text.includes('[twice]')) {
+      setTimeout(() => send({ type: 'prompt_result', agentInvoked: false, status: 'completed', sessionSettled: true }), 30)
+    }
     return
   }
   send({ type: 'agent_start' })
@@ -113,10 +125,10 @@ function runPrompt(text) {
     }, 40)
     return
   }
-  if (text.includes('[background]') && flavor === 'omp') {
+  if ((text.includes('[background]') || text.includes('[settled-result]')) && flavor === 'omp') {
     send({ type: 'message_end', message: assistant('omp: background work') })
     sendAgentEnd(false)
-    send({ type: 'prompt_result', agentInvoked: true, status: 'completed', sessionSettled: false })
+    send({ type: 'prompt_result', agentInvoked: true, status: 'completed', sessionSettled: text.includes('[settled-result]') })
     setTimeout(() => sendSettle(), 300)
     return
   }
@@ -147,7 +159,13 @@ function runPrompt(text) {
     return
   }
   if (text.includes('[flood]')) {
-    process.stdout.write('x'.repeat(2 * 1024 * 1024))
+    stubborn = true
+    process.on('SIGTERM', () => fs.appendFileSync(${JSON.stringify(join(home, 'flood-signals'))}, 'parent\\n'))
+    const descendant = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(`const fs = require('node:fs'); process.on('SIGTERM', () => fs.appendFileSync(${JSON.stringify(join(home, 'flood-signals'))}, 'child\\n')); setInterval(() => {}, 1000); process.send('ready')`)}], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
+    descendant.once('message', () => {
+      fs.writeFileSync(${JSON.stringify(join(home, 'flood-pids.json'))}, JSON.stringify({ parent: process.pid, child: descendant.pid }))
+      process.stdout.write('x'.repeat(2 * 1024 * 1024))
+    })
     return
   }
   if (text.includes('[unreadable]')) process.stdout.write('invalid-json\\n[]\\n')
@@ -220,7 +238,7 @@ process.stdin.on('data', (chunk) => {
     if (line) receive(JSON.parse(line))
   }
 })
-process.stdin.on('end', () => process.exit(0))
+process.stdin.on('end', () => { if (!stubborn) process.exit(0) })
 `
   writeFileSync(executable, script, { mode: 0o700 })
   chmodSync(executable, 0o700)

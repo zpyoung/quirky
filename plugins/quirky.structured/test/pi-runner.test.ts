@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
@@ -7,8 +7,8 @@ import { createPiRunner } from '../pi-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { createFakePiRpc, type FakePiRpcFixture } from './fakes/fake-pi-rpc'
 
-async function until(check: () => boolean) {
-  for (let i = 0; i < 400 && !check(); i++) await Bun.sleep(5)
+async function until(check: () => boolean, attempts = 400) {
+  for (let i = 0; i < attempts && !check(); i++) await Bun.sleep(5)
   expect(check()).toBe(true)
 }
 
@@ -162,11 +162,41 @@ describe('pi rpc runner', () => {
     expect(statuses).toEqual(['working', 'done'])
   })
 
+  test('omp keeps invoked prompt_result open even when sessionSettled is true', async () => {
+    build('omp')
+    await runner.start(session, '[settled-result]')
+    await until(() => messages.some((message) => message.role === 'assistant'))
+    // the spawned fixture owns the delayed settle frame, not this process's clock
+    await Bun.sleep(100)
+    expect(statuses).toEqual(['working'])
+    expect(messages.filter((message) => message.role === 'result')).toEqual([])
+    await runner.send(session.id, 'still working')
+    await until(() => fake.commands().some((command) => command.type === 'steer'))
+    expect(statuses).toEqual(['working', 'working'])
+    await until(settled)
+    await runner.send(session.id, 'next turn')
+    await until(() => messages.filter((message) => message.role === 'result').length === 2)
+    expect(fake.commands().filter((command) => command.type === 'prompt').map((command) => command.message)).toEqual([
+      '[settled-result]', 'next turn'
+    ])
+    expect(statuses).toEqual(['working', 'working', 'done', 'working', 'done'])
+  })
+
   test('omp closes a prompt that never reached the agent without a result', async () => {
     build('omp')
     await runner.start(session, '[no-agent]')
     await until(settled)
     expect(messages.filter((message) => message.role === 'result')).toEqual([])
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
+  test('omp ignores a duplicate no-agent prompt_result after the prompt closes', async () => {
+    build('omp')
+    await runner.start(session, '[no-agent] [twice]')
+    await until(settled)
+    // the duplicate is emitted by a timer in another process
+    await Bun.sleep(100)
+    expect(messages.map((message) => message.role)).toEqual(['user'])
     expect(statuses).toEqual(['working', 'done'])
   })
 
@@ -200,6 +230,20 @@ describe('pi rpc runner', () => {
       await Bun.sleep(100)
       expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
       expect(statuses).toEqual(['working', 'done'])
+    })
+  }
+
+  for (const agent of ['pi', 'omp'] as const) {
+    test(`${agent} ignores settle and prompt_result frames without an initial prompt`, async () => {
+      build(agent)
+      await runner.start(session)
+      await until(() => fake.commands().some((command) => command.type === 'get_state'))
+      process.kill(await pidOf(), 'SIGUSR1')
+      await until(() => existsSync(join(home, 'idle-frames-sent')))
+      // allow the other process's flushed frames to reach the runner
+      await Bun.sleep(100)
+      expect(messages).toEqual([])
+      expect(statuses).toEqual(['running'])
     })
   }
 
@@ -364,15 +408,32 @@ describe('pi rpc runner', () => {
   test('an over-limit unterminated frame exits once and rejects later sends', async () => {
     build('pi', undefined, { maxFrameBytes: 1024 * 1024 })
     await runner.start(session, '[flood]')
-    await until(() => statuses.at(-1) === 'exited')
+    const pidsPath = join(home, 'flood-pids.json')
+    await until(() => existsSync(pidsPath))
+    const pids = JSON.parse(readFileSync(pidsPath, 'utf8')) as { parent: number; child: number }
+    try {
+      const signalsPath = join(home, 'flood-signals')
+      await until(() => existsSync(signalsPath) && readFileSync(signalsPath, 'utf8').includes('child\n'))
+      expect(readFileSync(signalsPath, 'utf8').split('\n').filter(Boolean).sort()).toEqual(['child', 'parent'])
+      expect(process.kill(pids.parent, 0)).toBe(true)
+      expect(process.kill(pids.child, 0)).toBe(true)
+      await until(() => statuses.at(-1) === 'exited', 1000)
+      await until(() => {
+        try { process.kill(pids.child, 0); return false } catch { return true }
+      }, 1000)
+      expect(() => process.kill(pids.parent, 0)).toThrow()
+    } finally {
+      try { process.kill(-pids.parent, 'SIGKILL') } catch {}
+    }
 
     const systemMessages = () => messages.filter((message) => message.role === 'system')
     expect(systemMessages().map((message) => message.text)).toEqual(['pi sent an rpc frame too large to read'])
     expect(statuses.at(-1)).toBe('exited')
     await expect(runner.send(session.id, 'too late')).rejects.toThrow('session is not running')
+    // process-close output is asynchronous and must not append a second diagnostic
     await Bun.sleep(300)
     expect(systemMessages()).toHaveLength(1)
-  })
+  }, 15_000)
 
   test('an unreadable JSON line is journaled and a non-object value is ignored', async () => {
     await runner.start(session, '[unreadable]')
