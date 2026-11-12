@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, setSystemTime, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { afterEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test'
+import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { git as fixtureGit, isolateGitConfig, makeRepo } from '../../../plugins/quirky.repo/test/git-fixtures'
 import { compare, worktreeChangeList } from '../src/compare'
@@ -159,8 +159,10 @@ describe('scheduled git freshness', () => {
     let settled = 0
     const second = track(statusV2(repo).then((value) => { settled++; return value }))
     const third = track(statusV2(repo).then((value) => { settled++; return value }))
-    await Promise.resolve()
+    // a child that starts too early needs real event-loop time to reach the wrapper.
+    await Bun.sleep(150)
     expect(settled).toBe(0)
+    expect(fake.calls().filter((call) => call.includes('status --porcelain=v2'))).toHaveLength(1)
     writeFileSync(fake.release, '')
     const [old, next, shared] = await Promise.all([before, second, third])
     expect(old.entries.some((e) => e.path === 'a.txt' && e.area === 'unstaged')).toBe(true)
@@ -308,7 +310,7 @@ describe('git scheduler compatibility', () => {
     expect((await runner.git(repo, ['show', 'HEAD:big.txt'], { readOnly: true })).length).toBe(20971520)
     expect((await showFile(repo, 'HEAD', 'big.txt'))?.length).toBe(20971520)
     expect(runner.gitScheduler.active).toBe(0)
-  })
+  }, 30000)
 })
 
 test('write settlement bypasses a status cohort started during the write', async () => {
@@ -341,6 +343,7 @@ test('waiting read cohorts spend their timeout budget before they can spawn', as
   const repo = makeRepo(scratch())
   const fake = wrapper(`echo snapshot\ntouch "$ENTERED"\nwhile [ ! -f "$RELEASE" ]; do sleep 0.01; done`)
   const started = Date.now()
+  const spawns = spyOn(Bun, 'spawn')
   try {
     setSystemTime(started)
     const first = track(runner.runGit(repo, ['status'], { readOnly: true, timeoutMs: 10000 }))
@@ -352,8 +355,190 @@ test('waiting read cohorts spend their timeout budget before they can spawn', as
     expect(activeResult.exitCode).toBe(0)
     expect(waitingResult).toEqual({ stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true })
     expect(fake.calls()).toHaveLength(1)
+    // a one-millisecond kill can beat the wrapper log, but it cannot hide an actual child spawn.
+    expect(spawns).toHaveBeenCalledTimes(1)
     expect(runner.gitScheduler.active).toBe(0)
   } finally {
+    spawns.mockRestore()
     setSystemTime()
+  }
+})
+
+describe('git child admission', () => {
+  for (const operation of ['runGit', 'statusV2', 'worktreeChangeList'] as const) {
+    test(`${operation} waits behind all eight occupied slots before spawning`, async () => {
+      const repo = makeRepo(scratch())
+      const fake = wrapper()
+      const held = Promise.withResolvers<void>()
+      const holders = Array.from({ length: 8 }, () => runner.gitScheduler.withSlot('read', undefined, () => held.promise))
+      const spawns = spyOn(Bun, 'spawn')
+      let settled = false
+      const call = track((operation === 'runGit'
+        ? runner.runGit(repo, ['rev-parse', 'HEAD'], { readOnly: true, share: false })
+        : operation === 'statusV2'
+          ? statusV2(repo)
+          : worktreeChangeList(repo, 'HEAD')).then((result) => { settled = true; return result }))
+      try {
+        // admission crosses the OS process boundary; fake time cannot prove that no child starts.
+        await Bun.sleep(150)
+        expect(fake.calls()).toHaveLength(0)
+        expect(settled).toBe(false)
+        expect(spawns).toHaveBeenCalledTimes(0)
+      } finally {
+        held.resolve()
+        try {
+          await Promise.all([...holders, call])
+        } finally {
+          spawns.mockRestore()
+        }
+      }
+      const result = await call
+      if ('exitCode' in result) {
+        expect(result.exitCode).toBe(0)
+        expect(result.timedOut).toBeUndefined()
+      } else if ('branch' in result) {
+        expect(result.branch).toBe('main')
+        expect(result.entries).toEqual([])
+      } else {
+        expect(result.changes).toEqual([])
+      }
+      expect(settled).toBe(true)
+      expect(fake.calls().length).toBeGreaterThan(0)
+      expect(runner.gitScheduler.active).toBe(0)
+    })
+  }
+
+  test('runGit grants a queued write before an earlier queued read', async () => {
+    const repo = makeRepo(scratch())
+    const fake = wrapper(`touch "$ENTERED"\nwhile [ ! -f "$RELEASE" ]; do sleep 0.01; done\nexec "$REAL_GIT" "$@"`)
+    const gates = Array.from({ length: 8 }, () => Promise.withResolvers<void>())
+    const holders = gates.map((gate) => runner.gitScheduler.withSlot('read', undefined, () => gate.promise))
+    const read = track(runner.runGit(repo, ['rev-parse', 'HEAD'], { readOnly: true, share: false }))
+    const write = track(runner.runGit(repo, ['config', '--local', 'scheduler.priority', 'write']))
+    try {
+      // both commands must reach the admission queue while no slot can be granted.
+      await Bun.sleep(150)
+      expect(fake.calls()).toHaveLength(0)
+      gates[0].resolve()
+      await holders[0]
+      await until(() => existsSync(fake.entered))
+      expect(fake.calls()).toEqual(['config --local scheduler.priority write'])
+    } finally {
+      writeFileSync(fake.release, '')
+      for (const gate of gates) gate.resolve()
+      await Promise.all(holders)
+    }
+    const [readResult, writeResult] = await Promise.all([read, write])
+    expect(readResult.exitCode).toBe(0)
+    expect(writeResult.exitCode).toBe(0)
+    expect(fake.calls()).toEqual(['config --local scheduler.priority write', 'rev-parse HEAD'])
+    expect(runner.gitScheduler.active).toBe(0)
+  })
+})
+
+describe('composite read key isolation', () => {
+  test('statusV2 keeps same-turn repositories separate', async () => {
+    const firstRepo = makeRepo(scratch())
+    const secondRepo = makeRepo(scratch())
+    writeFileSync(join(firstRepo, 'first.txt'), 'first\n')
+    writeFileSync(join(secondRepo, 'second.txt'), 'second\n')
+    const [first, second] = await Promise.all([statusV2(firstRepo), statusV2(secondRepo)])
+    expect(first.entries.map((entry) => entry.path)).toEqual(['first.txt'])
+    expect(second.entries.map((entry) => entry.path)).toEqual(['second.txt'])
+  })
+
+  test('statusV2 keeps same-turn limits separate', async () => {
+    const repo = makeRepo(scratch())
+    for (const name of ['first.txt', 'second.txt', 'third.txt']) writeFileSync(join(repo, name), 'new\n')
+    const [limited, full] = await Promise.all([statusV2(repo, { limit: 1 }), statusV2(repo)])
+    expect(limited.capped).toBe(true)
+    expect(limited.entries).toHaveLength(1)
+    expect(full.capped).toBe(false)
+    expect(full.entries.map((entry) => entry.path)).toEqual(['first.txt', 'second.txt', 'third.txt'])
+  })
+
+  test('statusV2 keeps same-turn shared symlink exclusions separate', async () => {
+    const repo = makeRepo(scratch())
+    symlinkSync('a.txt', join(repo, 'shared'))
+    const [excluded, included] = await Promise.all([
+      statusV2(repo, { sharedSymlinks: ['shared'] }),
+      statusV2(repo)
+    ])
+    expect(excluded.entries).toEqual([])
+    expect(included.entries.map((entry) => entry.path)).toEqual(['shared'])
+  })
+
+  test('compare keeps same-turn repositories separate', async () => {
+    const firstRepo = makeRepo(scratch())
+    const secondRepo = makeRepo(scratch())
+    for (const [repo, name] of [[firstRepo, 'first.txt'], [secondRepo, 'second.txt']]) {
+      fixtureGit(repo, 'checkout', '-q', '-b', 'feature')
+      writeFileSync(join(repo, name), 'new\n')
+      fixtureGit(repo, 'add', name)
+      fixtureGit(repo, 'commit', '-qm', name)
+    }
+    const [first, second] = await Promise.all([compare(firstRepo, 'main'), compare(secondRepo, 'main')])
+    expect(first.status).toBe('ready')
+    expect(second.status).toBe('ready')
+    expect(first.entries.map((entry) => entry.path)).toEqual(['first.txt'])
+    expect(second.entries.map((entry) => entry.path)).toEqual(['second.txt'])
+  })
+
+  test('compare keeps same-turn bases separate', async () => {
+    const repo = makeRepo(scratch())
+    fixtureGit(repo, 'checkout', '-q', '-b', 'feature')
+    writeFileSync(join(repo, 'first.txt'), 'first\n')
+    fixtureGit(repo, 'add', 'first.txt')
+    fixtureGit(repo, 'commit', '-qm', 'first')
+    fixtureGit(repo, 'branch', 'middle')
+    writeFileSync(join(repo, 'second.txt'), 'second\n')
+    fixtureGit(repo, 'add', 'second.txt')
+    fixtureGit(repo, 'commit', '-qm', 'second')
+    const [fromMain, fromMiddle] = await Promise.all([compare(repo, 'main'), compare(repo, 'middle')])
+    expect(fromMain.status).toBe('ready')
+    expect(fromMiddle.status).toBe('ready')
+    expect(fromMain.entries.map((entry) => entry.path)).toEqual(['first.txt', 'second.txt'])
+    expect(fromMiddle.entries.map((entry) => entry.path)).toEqual(['second.txt'])
+    expect(fromMain.ahead).toBe(2)
+    expect(fromMiddle.ahead).toBe(1)
+  })
+
+  test('worktreeChangeList keeps same-turn from commits separate', async () => {
+    const repo = makeRepo(scratch())
+    const original = fixtureGit(repo, 'rev-parse', 'HEAD')
+    writeFileSync(join(repo, 'first.txt'), 'first\n')
+    fixtureGit(repo, 'add', 'first.txt')
+    fixtureGit(repo, 'commit', '-qm', 'first')
+    const latest = fixtureGit(repo, 'rev-parse', 'HEAD')
+    writeFileSync(join(repo, 'second.txt'), 'second\n')
+    const [fromOriginal, fromLatest] = await Promise.all([
+      worktreeChangeList(repo, original),
+      worktreeChangeList(repo, latest)
+    ])
+    expect(fromOriginal.changes.map((change) => change.path)).toEqual(['first.txt', 'second.txt'])
+    expect(fromLatest.changes.map((change) => change.path)).toEqual(['second.txt'])
+  })
+})
+
+describe('streaming early-stop child lifetime', () => {
+  for (const operation of ['statusV2', 'worktreeChangeList'] as const) {
+    test(`${operation} kills its capped child while the wrapper gate stays closed`, async () => {
+      const repo = makeRepo(scratch())
+      for (let i = 0; i < 30; i++) writeFileSync(join(repo, `untracked-${i}`), 'new\n')
+      const condition = operation === 'statusV2' ? '[ "$3" = status ]' : '[ "$1" = ls-files ]'
+      const fake = wrapper(`if ${condition}; then\n  touch "$ENTERED"\n  "$REAL_GIT" "$@"\n  while [ ! -f "$RELEASE" ]; do sleep 0.01; done\n  exit 0\nfi\nexec "$REAL_GIT" "$@"`)
+      let settled = false
+      const call = track((operation === 'statusV2'
+        ? statusV2(repo, { limit: 5 }).then((result) => ({ entries: result.entries, capped: result.capped }))
+        : worktreeChangeList(repo, 'HEAD', { limit: 5 }).then((result) => ({ entries: result.changes, capped: result.capped })))
+        .then((result) => { settled = true; return result }))
+      await until(() => settled)
+      const result = await call
+      expect(existsSync(fake.entered)).toBe(true)
+      expect(existsSync(fake.release)).toBe(false)
+      expect(result.capped).toBe(true)
+      expect(result.entries).toHaveLength(5)
+      expect(runner.gitScheduler.active).toBe(0)
+    })
   }
 })

@@ -20,6 +20,34 @@ describe('git scheduler', () => {
     }
   })
 
+  test('limits the default scheduler to eight active slots', async () => {
+    const scheduler = createGitScheduler()
+    const gates = Array.from({ length: 20 }, () => deferred<number>())
+    const started: number[] = []
+    const calls = gates.map((gate, index) => scheduler.withSlot('read', undefined, async () => {
+      started.push(index)
+      return await gate.promise
+    }))
+
+    try {
+      expect(started).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+      expect(scheduler.active).toBe(8)
+      expect(scheduler.peakActive).toBe(8)
+
+      gates[0].resolve(0)
+      await calls[0]
+      expect(started).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+
+      for (const gate of gates) gate.resolve(0)
+      await Promise.all(calls)
+      expect(scheduler.active).toBe(0)
+    } finally {
+      for (const gate of gates) gate.resolve(0)
+      await Promise.allSettled(calls)
+    }
+  })
+
+
   test('bounds active work and releases a slot when work throws synchronously', async () => {
     const scheduler = createGitScheduler({ concurrency: 2 })
     const gates = Array.from({ length: 7 }, () => deferred<number>())
@@ -145,6 +173,36 @@ describe('git scheduler', () => {
       setSystemTime()
     }
   })
+
+  test('checks an expired queued deadline when a slot releases before its timer fires', async () => {
+    const started = Date.now()
+    setSystemTime(started)
+    const scheduler = createGitScheduler({ concurrency: 1 })
+    const holder = deferred<void>()
+    const held = scheduler.withSlot('read', undefined, async () => holder.promise)
+    const timeoutMs = 10_000
+    let workInvoked = false
+    const waiting = scheduler.withSlot('read', timeoutMs, async () => {
+      workInvoked = true
+      return 'too late'
+    })
+
+    try {
+      setSystemTime(started + timeoutMs + 1)
+      holder.resolve()
+      const [heldResult, waitingResult] = await Promise.all([held, waiting])
+
+      expect(heldResult).toEqual({ timedOut: false, value: undefined })
+      expect(waitingResult).toEqual({ timedOut: true })
+      expect(workInvoked).toBe(false)
+      expect(scheduler.active).toBe(0)
+    } finally {
+      holder.resolve()
+      setSystemTime()
+      await Promise.allSettled([held, waiting])
+    }
+  })
+
 
   test('advances the write epoch on entry and in finally, including synchronous failure', async () => {
     const scheduler = createGitScheduler()
