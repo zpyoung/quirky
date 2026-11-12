@@ -54,6 +54,26 @@ describe('SocketWriter', () => {
     expect(writer.queuedForTag('B')).toBe(0)
   })
 
+  test('accepts an append that exactly fills the cap and rejects the next byte', () => {
+    const socket = new TestSocket()
+    socket.writeLimit = 0
+    const writer = new SocketWriter(socket, 5)
+    const first = text('abcd')
+    const second = text('e')
+
+    expect(writer.send(first)).toBe(true)
+    expect(writer.send(second)).toBe(true)
+    expect(writer.queuedBytes).toBe(5)
+
+    expect(writer.send(text('f'))).toBe(false)
+    expect(writer.queuedBytes).toBe(5)
+
+    socket.writeLimit = Number.POSITIVE_INFINITY
+    writer.drain()
+    expect(writer.queuedBytes).toBe(0)
+    expect(socket.writtenBytes()).toEqual(new Uint8Array([...first, ...second]))
+  })
+
   test('drops only unstarted tagged bytes and preserves a started frame stream', () => {
     const socket = new TestSocket()
     socket.writeLimit = 0

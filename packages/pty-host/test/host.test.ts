@@ -304,6 +304,119 @@ async function queuedClient(host: TestHost) {
 }
 
 describe('connection output queues', () => {
+  test('repeated subscribe holds release their bytes and preserve ordered live output', async () => {
+    const cap = 1024
+    const host = startHost({ maxConnectionQueuedBytes: cap })
+    const { client, conn } = await queuedClient(host)
+    await client.request('create', createParams('A', ['/bin/cat']))
+    const out = collect(client, 'A')
+    const expected: string[] = []
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const result = await subscribe(...args)
+      const frame = `${expected.length}:`.padEnd(400, '.')
+      expected.push(frame)
+      args[1]('A', new TextEncoder().encode(frame))
+      return result
+    })
+    try {
+      for (let round = 0; round < 16; round++) {
+        await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+        await waitFor(() => out.frames() >= round + 1, 2000, `subscribe round ${round} to flush`)
+        expect(conn.holding.size).toBe(0)
+        expect(conn.heldBytes).toBe(0)
+        expect(conn.closed).toBe(false)
+        expect(client.closed).toBe(false)
+        expect(out.frames()).toBe(round + 1)
+        expect(out.text()).toBe(expected.join(''))
+      }
+      const final = 'live-after-rounds:'.padEnd(cap - 8, '.')
+      conn.sink('A', new TextEncoder().encode(final))
+      await waitFor(() => out.frames() >= 17, 2000, 'live output after repeated holds')
+      expect(out.frames()).toBe(17)
+      expect(out.text()).toBe(expected.join('') + final)
+      expect(conn.closed).toBe(false)
+      expect(client.closed).toBe(false)
+    } finally {
+      hook.mockRestore()
+    }
+  })
+
+  test('overlapping subscribes keep the latest hold and release superseded bytes', async () => {
+    const cap = 2048
+    const host = startHost({ maxConnectionQueuedBytes: cap })
+    const control = await host.connect()
+    await control.request('create', createParams('A', sh("stty -echo; printf 'READY\\n'; exec cat")))
+    await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\n'.length)
+    const { client, conn } = await queuedClient(host)
+    const out = collect(client, 'A')
+    const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+    const taken = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    let calls = 0
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const index = calls++
+      const result = await subscribe(...args)
+      taken[index].resolve()
+      await gates[index].promise
+      return result
+    })
+    const timerFinished = Promise.withResolvers<void>()
+    const schedule = globalThis.setTimeout
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(new Proxy(schedule, {
+      apply(target, receiver, parameters) {
+        const [callback, delay, ...args] = parameters
+        if (delay !== 0 || typeof callback !== 'function') return Reflect.apply(target, receiver, parameters)
+        return Reflect.apply(target, receiver, [() => {
+          callback(...args)
+          timerFinished.resolve()
+        }, delay])
+      }
+    }))
+    try {
+      const first = client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      void first.catch(() => {})
+      await taken[0].promise
+      control.sendInput('A', new TextEncoder().encode('between\n'))
+      await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\nbetween\r\n'.length)
+      expect(conn.heldBytes).toBeGreaterThan(0)
+      expect(out.text()).toBe('')
+
+      const second = client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      void second.catch(() => {})
+      await taken[1].promise
+      control.sendInput('A', new TextEncoder().encode('after\n'))
+      await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\nbetween\r\nafter\r\n'.length)
+      expect(out.text()).toBe('')
+      // equal-deadline timers need not run FIFO, so observe the old timer before releasing the latest reply
+      gates[0].resolve()
+      const earlier = await first
+      await timerFinished.promise
+      timer.mockRestore()
+      expect(conn.holding.has('A')).toBe(true)
+      expect(out.text()).toBe('')
+      gates[1].resolve()
+      const latest = await second
+      expect(text(base64ToBytes(earlier.replay))).toBe('READY\r\n')
+      expect(text(base64ToBytes(latest.replay))).toBe('READY\r\nbetween\r\n')
+      await waitFor(() => out.all().length >= 'after\r\n'.length, 2000, 'latest subscribe hold to flush')
+      expect(text(base64ToBytes(latest.replay)) + out.text()).toBe('READY\r\nbetween\r\nafter\r\n')
+      expect(conn.heldBytes).toBe(0)
+      expect(conn.holding.size).toBe(0)
+
+      const burst = 'live-after-overlap:'.padEnd(cap - 8, '.')
+      conn.sink('A', new TextEncoder().encode(burst))
+      await waitFor(() => out.all().length >= 'after\r\n'.length + burst.length, 2000, 'near-cap live burst')
+      expect(out.text()).toBe('after\r\n' + burst)
+      expect(conn.closed).toBe(false)
+      expect(client.closed).toBe(false)
+    } finally {
+      for (const gate of gates) gate.resolve()
+      timer.mockRestore()
+      hook.mockRestore()
+    }
+  })
+
   test('live overflow drops the sink once and clears bytes before the peer closes', async () => {
     const host = startHost({ maxConnectionQueuedBytes: 1024 })
     const control = await host.connect()
@@ -410,7 +523,7 @@ describe('connection output queues', () => {
     }
   })
 
-  for (const operation of ['unsubscribe', 'forget', 'stopWithHistory', 'kill', 'SIGTERM', 'SIGKILL', 'TERM', 'KILL', 'SIGUSR1'] as const) {
+  for (const operation of ['unsubscribe', 'forget', 'stopWithHistory', 'kill', 'bare kill', 'killed SIGINT', 'SIGTERM', 'SIGKILL', 'TERM', 'KILL', 'SIGUSR1'] as const) {
     test(`${operation} reclaims only eligible session frames without breaking framing`, async () => {
       const host = startHost()
       const control = await host.connect()
@@ -438,9 +551,13 @@ describe('connection output queues', () => {
           ? client.request('unsubscribe', { sessionId: 'A' })
           : operation === 'kill'
             ? control.request('kill', { sessionId: 'A', reason: 'killed' })
-            : operation === 'SIGTERM' || operation === 'SIGKILL' || operation === 'TERM' || operation === 'KILL' || operation === 'SIGUSR1'
-              ? control.request('kill', { sessionId: 'A', signal: operation })
-              : control.request(operation, { sessionId: 'A' })
+            : operation === 'bare kill'
+              ? control.request('kill', { sessionId: 'A' })
+              : operation === 'killed SIGINT'
+                ? control.request('kill', { sessionId: 'A', signal: 'SIGINT', reason: 'killed' })
+                : operation === 'SIGTERM' || operation === 'SIGKILL' || operation === 'TERM' || operation === 'KILL' || operation === 'SIGUSR1'
+                  ? control.request('kill', { sessionId: 'A', signal: operation })
+                  : control.request(operation, { sessionId: 'A' })
         void request.catch(() => {})
         if (operation === 'unsubscribe') {
           await waitFor(() => host.server.manager.subscriberCount('A') === 0)
