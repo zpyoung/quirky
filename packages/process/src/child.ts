@@ -19,7 +19,7 @@ export type StartedChild = {
   exited: Promise<ChildExit>
   /** Present when the child was started with `stdin: 'pipe'`. */
   stdin?: ChildInput
-  /** Signals the child's whole process group; groups that are gone are ignored. */
+  /** Signals the child's whole process group. Never throws; a group that is gone is ignored. */
   killGroup(signal: 'SIGTERM' | 'SIGKILL'): void
 }
 

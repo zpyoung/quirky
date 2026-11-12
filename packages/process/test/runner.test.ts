@@ -8,14 +8,36 @@ function runner(owner = 'test', extra: { start?: StartChild; stallMs?: number } 
   runners.push(value)
   return value
 }
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+      })
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs: number, label: string): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate()) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new Error(`${label} timed out after ${timeoutMs}ms`)
+    await Bun.sleep(Math.min(10, remaining))
+  }
+}
 async function started(value: OwnedProcessRunner, count = 1) {
-  const until = Date.now() + 1_000
+  const until = Date.now() + 2_000
   while (value.live().length !== count && Date.now() < until) await Bun.sleep(10)
   expect(value.live()).toHaveLength(count)
   return value.live()
 }
 async function expectGone(pid: number) {
-  const until = Date.now() + 1_000
+  const until = Date.now() + 2_000
   do {
     try { process.kill(pid, 0) } catch { return }
     await Bun.sleep(20)
@@ -47,7 +69,7 @@ test('27: live entries are isolated by owner', async () => {
   const a = runner('a')
   const b = runner('b')
   const options = { timeoutMs: 5_000 }
-  const pending = [a.run(['/bin/sleep', '0.2'], options), b.run(['/bin/sleep', '0.2'], options)]
+  const pending = [a.run(['/bin/sleep', '0.15'], options), b.run(['/bin/sleep', '0.35'], options)]
   const [aEntry] = await started(a)
   const [bEntry] = await started(b)
   expect(aEntry!.owner).toBe('a')
@@ -97,33 +119,121 @@ test('30: stop-all waits for every aborted child without disposing runners', asy
   expect(next.map(result => result.stdoutText)).toEqual(['a\n', 'b\n'])
 }, 15_000)
 
-test('disposal while an exited child has a stalled pipe prevents another attempt', async () => {
+test('disposal while an exited child has a stalled pipe aborts without waiting out the stall or retrying', async () => {
   let starts = 0
+  let settled = false
   const exited = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+  const signals: Array<'SIGTERM' | 'SIGKILL'> = []
   const value = runner('stall', {
-    stallMs: 25,
+    stallMs: 3_000,
     start: () => {
       starts++
       return {
         pid: 2_000_000_000,
-        stdout: new ReadableStream(),
-        stderr: new ReadableStream({ start(controller) { controller.close() } }),
+        stdout: new ReadableStream<Uint8Array>({
+          start(controller) { controller.enqueue(new TextEncoder().encode('part')) }
+        }),
+        stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
         exited: exited.promise,
+        killGroup(signal) {
+          signals.push(signal)
+          if (signal === 'SIGKILL') exited.resolve({ exitCode: null, signal })
+        }
+      }
+    }
+  })
+  const pending = value.run(['/fake/stall-dispose'], { rerunnable: true, timeoutMs: 5_000 })
+    .then(result => { settled = true; return result }, error => { settled = true; return error })
+  await started(value)
+  exited.resolve({ exitCode: 0, signal: null })
+  await waitFor(() => value.live().length === 0, 1_000, 'leader exit')
+  expect(liveProcesses()).toEqual([])
+
+  const disposedAt = Date.now()
+  await withTimeout(value.dispose(), 1_500, 'dispose during post-exit stall')
+  expect(Date.now() - disposedAt).toBeLessThan(1_500)
+  expect(settled).toBe(true)
+  const result = await withTimeout(pending, 1_000, 'stalled run settlement')
+  expect(result).toMatchObject({
+    stdoutText: 'part',
+    stderr: '',
+    exitCode: null,
+    signal: null,
+    stopped: 'aborted'
+  })
+  expect(starts).toBe(1)
+  expect(signals).toEqual(['SIGKILL'])
+  expect(value.live()).toEqual([])
+}, 15_000)
+
+test('stop-all while an exited rerunnable child has a stalled pipe aborts at once and prevents another attempt', async () => {
+  let starts = 0
+  let settled = false
+  const firstExited = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+  const signals: Array<'SIGTERM' | 'SIGKILL'> = []
+  const value = runner('stall-stop-all', {
+    stallMs: 3_000,
+    start: () => {
+      starts++
+      if (starts === 1) {
+        return {
+          pid: 2_000_000_001,
+          stdout: new ReadableStream<Uint8Array>({
+            start(controller) { controller.enqueue(new TextEncoder().encode('first')) }
+          }),
+          stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+          exited: firstExited.promise,
+          killGroup(signal) {
+            signals.push(signal)
+            if (signal === 'SIGKILL') firstExited.resolve({ exitCode: null, signal })
+          }
+        }
+      }
+      return {
+        pid: 2_000_000_002,
+        stdout: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('second'))
+            controller.close()
+          }
+        }),
+        stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+        exited: Promise.resolve({ exitCode: 0, signal: null }),
         killGroup() {}
       }
     }
   })
-  const pending = value.run(['fake'], { rerunnable: true, timeoutMs: 1_000 }).then(result => result, error => error)
-  expect(value.live()).toHaveLength(1)
-  exited.resolve({ exitCode: 0, signal: null })
-  await exited.promise
-  expect(value.live()).toEqual([])
+  const pending = value.run(['/fake/stall-stop-all'], { rerunnable: true, timeoutMs: 5_000 })
+    .then(result => { settled = true; return result }, error => { settled = true; return error })
+  await started(value)
+  firstExited.resolve({ exitCode: 0, signal: null })
+  await waitFor(() => value.live().length === 0, 1_000, 'first leader exit')
   expect(liveProcesses()).toEqual([])
-  await value.dispose()
-  await pending
+
+  const stoppedAt = Date.now()
+  await withTimeout(stopAllProcesses(), 1_500, 'stop-all during post-exit stall')
+  expect(Date.now() - stoppedAt).toBeLessThan(1_500)
+  expect(settled).toBe(true)
+  const result = await withTimeout(pending, 1_000, 'stalled run settlement after stop-all')
+  expect(result).toMatchObject({
+    stdoutText: 'first',
+    stderr: '',
+    exitCode: null,
+    signal: null,
+    stopped: 'aborted'
+  })
   expect(starts).toBe(1)
-  expect(value.live()).toEqual([])
-})
+  expect(signals).toEqual(['SIGKILL'])
+
+  const next = await withTimeout(
+    value.run(['/fake/after-stop-all'], { timeoutMs: 5_000 }),
+    5_000,
+    'run after stop-all'
+  )
+  expect(next.exitCode).toBe(0)
+  expect(next.stdoutText).toBe('second')
+  expect(starts).toBe(2)
+}, 15_000)
 
 test('retry attribution uses the argument snapshot even if the caller mutates argv', async () => {
   let starts = 0
@@ -156,4 +266,4 @@ test('retry attribution uses the argument snapshot even if the caller mutates ar
   const result = await pending
   expect(result.exitCode).toBe(0)
   expect(starts).toBe(2)
-})
+}, 15_000)

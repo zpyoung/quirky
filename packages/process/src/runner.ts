@@ -83,7 +83,7 @@ export function createProcessRunner({ owner, start = startChild, stallMs }: Proc
       }
       const command = argv[0]!
       return executeSpawn(start, [...argv], normalized, stallMs ?? SPAWN_STALL_MS, {
-        onStart: (child, stop, finished) => registerProcess(identity, owner, command, child, stop, finished, true),
+        onStart: (child, stop, finished) => registerProcess(identity, owner, command, child, stop, finished),
       })
     },
     async run(argv, options = {}) {
@@ -97,7 +97,10 @@ export function createProcessRunner({ owner, start = startChild, stallMs }: Proc
       if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) throw new RangeError('maxOutputBytes must be a positive integer')
       if (options.share && (options.input !== undefined || options.signal !== undefined)) throw new TypeError('share cannot be combined with input or signal')
       const env = { ...(options.env ?? process.env) }
-      const cwd = options.cwd ?? process.cwd()
+      let cwd = options.cwd
+      if (cwd === undefined && !options.signal?.aborted) {
+        try { cwd = process.cwd() } catch {}
+      }
       const normalized: RunOptions = { ...options, cwd, env, timeoutMs, killGraceMs, maxOutputBytes }
       const key = options.share ? JSON.stringify([
         argv, cwd, Object.entries(env).filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b)),
