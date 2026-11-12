@@ -223,3 +223,49 @@ describe('projection checks', () => {
     }
   })
 })
+
+describe('projection worktree override', () => {
+  test('computes for the given worktree as selected, echoes it as active, and writes nothing', async () => {
+    env = await boot()
+    const repo = await createGitProject(env.client)
+    const other = await createWorktree(env.client, repo.repo.id, 'other')
+    await extras(env.client, 'activate', { worktree: repo.main.id })
+    await extras(env.client, 'set', { workspaceActivityWindow: 'live-only' })
+    const stored = await extras<ExtrasState>(env.client, 'state')
+
+    const projected = await extras<ActivityProjection>(env.client, 'projection', { worktree: other.id })
+    expect(projected.active).toEqual({ worktreeId: other.id, instanceId: other.instanceId })
+    expect(projected.visibleIds).toContain(other.id)
+    expect(projected.workspaces.find((workspace) => workspace.worktreeId === other.id)!.reason).toBe('selected')
+    expect(projected.workspaces.find((workspace) => workspace.worktreeId === repo.main.id)!.reason).not.toBe('selected')
+
+    expect(await extras<ExtrasState>(env.client, 'state')).toEqual(stored)
+  })
+
+  test('null or an unknown worktree projects with nothing selected', async () => {
+    env = await boot()
+    const repo = await createGitProject(env.client)
+    await extras(env.client, 'activate', { worktree: repo.main.id })
+    for (const worktree of [null, 'wt_missing']) {
+      const projected = await extras<ActivityProjection>(env.client, 'projection', { worktree })
+      expect(projected.active).toBeNull()
+      expect(projected.workspaces.some((workspace) => workspace.reason === 'selected')).toBe(false)
+    }
+  })
+
+  test('combines with a preferences override', async () => {
+    env = await boot()
+    const repo = await createGitProject(env.client)
+    const other = await createWorktree(env.client, repo.repo.id, 'other')
+    const projected = await extras<ActivityProjection>(env.client, 'projection', { worktree: other.id, preferences: OFF })
+    expect(projected.preferences).toEqual(OFF)
+    expect(projected.active?.worktreeId).toBe(other.id)
+  })
+
+  test('rejects a worktree that is neither a non-empty string nor null', async () => {
+    env = await boot()
+    for (const worktree of ['', 7, {}]) {
+      await expect(extras(env.client, 'projection', { worktree })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+    }
+  })
+})

@@ -25,7 +25,7 @@ import { useWorktreeAttention } from './useWorktreeAttention'
 import { TrustDialog } from './TrustDialog'
 import { UpdateDialog } from './UpdateDialog'
 import { useAutomationAvailability } from './useAutomationAvailability'
-import { useSidebarActivity } from './useSidebarActivity'
+import { projectionForSelection, useSidebarActivity } from './useSidebarActivity'
 import { useTree } from './useTree'
 import { useLoopStatus } from './useLoopStatus'
 import { CleanupDialog } from './CleanupDialog'
@@ -317,13 +317,12 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const loopStatus = useLoopStatus(context, worktrees, loaded)
   const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId
   const activityProjection = activity.projection
-  const activityIsCurrent = activityProjection !== null && (
-    selectedId === null
-      ? activityProjection.active === null
-      : activityProjection.active?.worktreeId === selectedId &&
-        (selectedInstance === undefined || activityProjection.active.instanceId === selectedInstance)
+  const currentProjection = useMemo(
+    () => activity.status === 'available' && activityProjection !== null
+      ? projectionForSelection(activityProjection, selectedId, selectedInstance)
+      : null,
+    [activity.status, activityProjection, selectedId, selectedInstance]
   )
-  const currentProjection = activity.status === 'available' && activityIsCurrent ? activityProjection : null
   const visibleIds = useMemo(
     () => currentProjection ? new Set(currentProjection.visibleIds) : null,
     [currentProjection]

@@ -1043,7 +1043,8 @@ export function Tree({
     onOpen?.(worktree.id)
     void (async () => {
       try {
-        await context.call('quirky.worktree/navigate', { worktree: worktree.id })
+        const window = await currentWindowId(context)
+        await context.call('quirky.worktree/navigate', { worktree: worktree.id, window })
         if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
       } catch (error) {
         context.toast('Could not open worktree', error instanceof Error ? error.message : String(error))

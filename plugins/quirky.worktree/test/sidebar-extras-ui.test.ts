@@ -358,8 +358,14 @@ function setup(
     visits: { ...world.visits },
     exits: { ...world.exits }
   })
-  const project = (client = 'desktop', preferences?: Preferences): SidebarProjection => {
-    const snapshot = { ...state(client), ...(preferences ? { preferences: { ...preferences } } : {}) }
+  const project = (client = 'desktop', preferences?: Preferences, worktree?: string | null): SidebarProjection => {
+    const selection = worktree === undefined
+      ? {}
+      : { active: (() => {
+        const item = world.worktrees.find((entry) => entry.id === worktree)
+        return item ? { worktreeId: item.id, instanceId: item.instanceId } : null
+      })() }
+    const snapshot = { ...state(client), ...(preferences ? { preferences: { ...preferences } } : {}), ...selection }
     const window = snapshot.preferences.workspaceActivityWindow
     const selectedId = snapshot.active?.worktreeId ?? null
     const projected = world.worktrees.map((item): ProjectedWorkspace => {
@@ -529,7 +535,8 @@ function setup(
           if (world.extrasFailure) throw world.extrasFailure
           const projection = project(
             typeof params.client === 'string' ? params.client : 'desktop',
-            typeof params.preferences === 'object' && params.preferences !== null ? params.preferences as Preferences : undefined
+            typeof params.preferences === 'object' && params.preferences !== null ? params.preferences as Preferences : undefined,
+            params.worktree === undefined ? undefined : params.worktree as string | null
           )
           if (nextProjectionGate && !fromBadge) {
             const gate = nextProjectionGate
@@ -1738,6 +1745,40 @@ test('SC-10/13: Live preserves the selected layout worktree and keeps visits ide
  
  
  
+test('switching worktrees keeps the activity filter while the new projection loads', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
+  h.world.preferences.workspaceActivityWindow = 'live-only'
+  await h.mount()
+  expect(card('feature')).toBeUndefined()
+
+  const delayed = h.deferNextProjection()
+  await h.setLayout({ worktree: 'w-child', view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-child' } }, panel: null, sidebar: true, focus: 'view' })
+  await delayed.started
+  expect(card('feature')).toBeUndefined()
+  expect(card('child')).toBeDefined()
+
+  delayed.release()
+  await h.flush()
+  expect(card('feature')).toBeUndefined()
+  expect(card('child')).toBeDefined()
+})
+
+test('each window projects its own selection when another window activated a different worktree', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
+  h.world.preferences.workspaceActivityWindow = 'live-only'
+  await h.mount()
+  expect(card('feature')).toBeUndefined()
+
+  // another window selected w-feature, which moves the shared stored activation
+  h.world.active = { worktreeId: 'w-feature', instanceId: 'instance-w-feature' }
+  await h.emit('quirky.session/changed')
+  await h.flush()
+  const last = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection' && !call.fromBadge).at(-1)
+  expect(last?.params.worktree).toBe('w-main')
+  expect(card('feature')).toBeUndefined()
+  expect(card('main')).toBeDefined()
+})
+
 test('disabled extras falls back to the ordinary tree, while ordinary failures report unavailability', async () => {
   const disabled = setup({ view: null, panel: null, sidebar: true, focus: null }, { disabled: true })
   await disabled.mount()

@@ -75,6 +75,28 @@ function isPreferences(value: unknown): value is ActivityPreferences {
 }
 
 /**
+ * Reads a projection as if `selectedId` were selected. A projection computed for another selection keeps
+ * its filter and only adds the newly selected worktree, unless a review or automation filter hides it.
+ */
+export function projectionForSelection(
+  projection: SidebarProjection,
+  selectedId: string | null,
+  selectedInstance: string | undefined
+): SidebarProjection {
+  const active = projection.active
+  const current = selectedId === null
+    ? active === null
+    : active?.worktreeId === selectedId && (selectedInstance === undefined || active.instanceId === selectedInstance)
+  if (current || selectedId === null || projection.visibleIds.includes(selectedId)) return projection
+  if (projection.reviewHiddenIds.includes(selectedId) || projection.automationHiddenIds.includes(selectedId)) return projection
+  return {
+    ...projection,
+    visibleIds: [...projection.visibleIds, selectedId],
+    hiddenIds: projection.hiddenIds.filter((id) => id !== selectedId)
+  }
+}
+
+/**
  * The sidebar-extras activity projection for the selected worktree. `override` evaluates the filter
  * of the view on screen without writing the stored preferences; `stored` is what All reads as its own.
  */
@@ -158,8 +180,8 @@ export function useSidebarActivity(
               setStored(loadedState.preferences)
             }
           }
+          const worktree = selectedRef.current
           if (activate) {
-            const worktree = selectedRef.current
             await context.call('quirky.sidebar-extras/activate', { worktree })
             lastActivated.current = worktree
           }
@@ -167,7 +189,7 @@ export function useSidebarActivity(
           requestedKey.current = preferences === null ? '' : JSON.stringify(preferences)
           const next = await context.call(
             'quirky.sidebar-extras/projection',
-            ...(preferences === null ? [] : [{ preferences }])
+            { worktree, ...(preferences === null ? {} : { preferences }) }
           ) as SidebarProjection
           if (ticket !== latest.current) continue
           setProjection(next)
@@ -248,8 +270,11 @@ export function useSidebarActivity(
 
   useEffect(() => {
     if (!loaded) return
-    setProjection(null)
-    setStatusValue('loading')
+    // clearing here would show every row unfiltered until the slow projection for the new selection lands
+    if (statusRef.current !== 'available') {
+      setProjection(null)
+      setStatusValue('loading')
+    }
     void refresh({ reloadState: !stateLoaded.current, activate: true })
   }, [loaded, selectedWorktree, refresh, setStatusValue])
 

@@ -199,7 +199,8 @@
               },
               "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces", "hideAutomationCreated"],
               "additionalProperties": false
-            }
+            },
+            "worktree": { "description": "Computes the projection with this worktree ID as the selected one instead of the client's stored activation, or null for none; nothing is written." }
           },
           "additionalProperties": false
         },

@@ -47,6 +47,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
 
 const nonLiveWindows: readonly NonLiveActivityWindow[] = ['all', 'today', 'week', 'month', 'custom']
 const READ_KEYS: Readonly<Partial<Record<string, true>>> = { client: true, preferences: true }
+const PROJECTION_KEYS: Readonly<Partial<Record<string, true>>> = { client: true, preferences: true, worktree: true }
 const PREFERENCE_KEYS: Readonly<Partial<Record<string, true>>> = {
   workspaceActivityWindow: true,
   workspaceActivityCustomDays: true,
@@ -114,6 +115,21 @@ export function validateReadParams(
   const client = clientFrom(params, context)
   if (params.preferences === undefined) return { client }
   return { client, preferences: validatePreferences(params.preferences, context) }
+}
+
+/** Projection reads may also name the caller's selected worktree, so each window projects its own selection. */
+export function validateProjectionParams(
+  params: Record<string, unknown>,
+  context: PluginContext
+): { client: string; preferences?: Preferences; worktree?: string | null } {
+  checkKeys(params, PROJECTION_KEYS, context)
+  const { worktree, ...read } = params
+  const result = validateReadParams(read, context)
+  if (worktree === undefined) return result
+  if (worktree !== null && (typeof worktree !== 'string' || worktree.length === 0)) {
+    invalid(context, 'worktree must be a non-empty worktree ID or null')
+  }
+  return { ...result, worktree }
 }
 
 function validatePreferences(value: unknown, context: PluginContext): Preferences {
