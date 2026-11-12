@@ -598,6 +598,10 @@ describe('shell evaluation boundaries', () => {
     })
   }
 
+  test('does not strip tabs introduced after heredoc continuation content', () => {
+    expect(bash('cat <<-EOF\nEO\\\n\tF\nrm -rf /tmp/x\nEOF')).toEqual(['read'])
+  })
+
   test('retains newly activated nested commands for the denied list', () => {
     const command = 'bash -c "echo \\$(git push origin main) $(echo x)"'
     expect(commandParts(call('Bash', { command }), ctx)).toContain('git push origin main')

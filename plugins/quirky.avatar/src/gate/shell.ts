@@ -901,7 +901,7 @@ class ShellReader {
         while (lineEnd < limit && this.source[lineEnd] !== '\n') lineEnd++
 
         let compareStart = lineStart
-        if (stripTabs) while (compareStart < lineEnd && this.source.charCodeAt(compareStart) === 9) compareStart++
+        if (stripTabs && logicalLength === 0) while (compareStart < lineEnd && this.source.charCodeAt(compareStart) === 9) compareStart++
 
         let continuation = false
         if (!quoted && lineEnd < limit) {
