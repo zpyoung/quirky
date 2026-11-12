@@ -30,9 +30,11 @@ export class PluginEvents {
   }
 
   /**
-   * Emits a declared event and returns true; when its manifest declares `coalesce`, true means it
-   * was sent or held as the latest event for its key. Returns false when disabled or overridden.
-   * Throws when undeclared or when an immediate broadcast fails. Reads the registry only.
+   * Broadcasts `event` for `pluginId` and returns true. Returns false when the event is disabled
+   * or another plugin's override replaced it. Throws when the plugin neither declares nor
+   * overrides the event, or when `broadcast` throws (for example on non-serializable `data`).
+   * Reads the registry only; never activates a plugin.
+   * For an event declaring `coalesce`, true means it was sent or is held as the latest for its key.
    */
   emit(pluginId: string, event: string, data: unknown): boolean {
     const id = event.includes(':') ? event : `${EVENT_PREFIX}${pluginId}/${event}`

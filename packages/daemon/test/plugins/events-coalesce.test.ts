@@ -386,6 +386,11 @@ describe('PluginEvents coalescing and worktree tags', () => {
     t.events.emit('acme.tools', 'changed', { n: 602 })
     expect(t.logs).toEqual(['acme.tools: acme.tools/changed merged 601 emits in the last 60 s'])
 
+    for (let n = 0; n < 598; n++) t.events.emit('acme.tools', 'changed', { n: 603 + n })
+    now = 120_000
+    t.events.emit('acme.tools', 'changed', { n: 1201 })
+    expect(t.logs).toEqual(['acme.tools: acme.tools/changed merged 601 emits in the last 60 s'])
+
     let belowThresholdNow = 0
     const belowThreshold = setup({ now: () => belowThresholdNow })
     belowThreshold.events.emit('acme.tools', 'changed', { n: 0 })
@@ -393,6 +398,22 @@ describe('PluginEvents coalescing and worktree tags', () => {
     belowThresholdNow = 60_000
     belowThreshold.events.emit('acme.tools', 'changed', { n: 600 })
     expect(belowThreshold.logs).toEqual([])
+
+    for (let n = 0; n < 598; n++) belowThreshold.events.emit('acme.tools', 'changed', { n: 601 + n })
+    belowThresholdNow = 120_000
+    belowThreshold.events.emit('acme.tools', 'changed', { n: 1199 })
+    expect(belowThreshold.logs).toEqual([])
+  })
+
+  test('logs exactly 600 replacements when the minute span ends', () => {
+    let now = 0
+    const t = setup({ now: () => now })
+    t.events.emit('acme.tools', 'changed', { n: 0 })
+    for (let n = 1; n <= 600; n++) t.events.emit('acme.tools', 'changed', { n })
+    expect(t.logs).toEqual([])
+    now = 60_000
+    t.events.emit('acme.tools', 'changed', { n: 601 })
+    expect(t.logs).toEqual(['acme.tools: acme.tools/changed merged 600 emits in the last 60 s'])
   })
 
   test('preserves emit order when a leading broadcast reenters emit', async () => {

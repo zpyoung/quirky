@@ -55,7 +55,6 @@ export class PluginEventCoalescer {
   emit(owner: string, event: PluginEvent, keyPaths: readonly string[]): void {
     const keyValues = keyPaths.map((path) => readKeyPath(event.data, path) ?? null)
     const key = JSON.stringify([event.type, event.worktreeId ?? null, ...keyValues])
-    if (key === undefined) throw new Error('could not serialize plugin event coalescing key')
 
     const active = this.windows.get(key)
     if (active) {
