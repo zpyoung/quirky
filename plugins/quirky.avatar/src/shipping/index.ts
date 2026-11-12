@@ -162,6 +162,9 @@ export function register(app: AvatarApp): () => void {
     judgeFinding: afterReconcileWithEpoch((worktreeId, epoch, findingId: string, valid: boolean, reason: string) =>
       review.judgeFinding(worktreeId, findingId, valid, reason, epoch)),
 
+    personVerdict: afterReconcileWithEpoch((worktreeId, epoch, findingId: string, valid: boolean, reason: string) =>
+      review.personVerdict(worktreeId, findingId, valid, reason, epoch)),
+
     openPr: afterReconcileWithEpoch(async (worktreeId, epoch) => {
       const refusal = handoffRefusal(worktreeId, epoch)
       if (refusal !== null) return fail(refusal)

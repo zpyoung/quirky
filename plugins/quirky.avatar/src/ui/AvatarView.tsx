@@ -40,6 +40,8 @@ const ACTION_LABELS: Record<NeedAction, string> = {
   redo: 'Redo',
   'review-accept': 'Accept edit',
   'review-reject': 'Reject edit',
+  'finding-dismiss': 'Dismiss and resolve thread',
+  'finding-valid': 'Send to worker',
   answer: 'Answer',
   restart: 'Restart',
   'take-back': 'Take back',

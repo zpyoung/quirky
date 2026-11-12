@@ -14,7 +14,7 @@ import { restoreHandoffs } from './src/restore'
 const PLUGIN = 'quirky.avatar'
 const LEVELS: readonly Level[] = ['shadow', 'local', 'own-branch', 'full']
 const AGENTS: readonly AgentKind[] = ['claude', 'codex', 'pi', 'omp']
-const NEED_ACTIONS: readonly NeedAction[] = ['allow-once', 'deny', 'confirm', 'redo', 'review-accept', 'review-reject', 'answer', 'restart', 'take-back', 'restart-to-handoff']
+const NEED_ACTIONS: readonly NeedAction[] = ['allow-once', 'deny', 'confirm', 'redo', 'review-accept', 'review-reject', 'finding-dismiss', 'finding-valid', 'answer', 'restart', 'take-back', 'restart-to-handoff']
 
 type Params = Record<string, unknown>
 
