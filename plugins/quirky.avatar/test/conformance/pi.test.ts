@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,18 +6,29 @@ import type { GateOutcome } from '../../src/contracts'
 import { encodeDecision } from '../../src/hooks/encode'
 import { writeMarkerFile } from '../../src/hooks/install'
 import { gateExtensionSource } from '../../src/hooks/pi-extension'
+import { useTempAgentHome } from '../daemon-support'
+
+const agentHome = useTempAgentHome()
 
 type Handler = (event: unknown, ctx: unknown) => Promise<unknown>
 
 const dirs: string[] = []
 const servers: ReturnType<typeof Bun.serve>[] = []
-const savedEnv = { ...process.env }
+let savedEnv: Record<string, string | undefined>
+const savedTitle = process.title
+const savedArgv = [...process.argv]
 let counter = 0
+
+beforeAll(() => {
+  savedEnv = { ...process.env }
+})
 
 afterEach(() => {
   for (const server of servers.splice(0)) server.stop(true)
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
-  for (const key of ['QUIRKY_SESSION_ID', 'QUIRKY_HOME', 'QUIRKY_HOOK_TOKEN', 'QUIRKY_HOOK_URL']) {
+  process.title = savedTitle
+  process.argv = [...savedArgv]
+  for (const key of ['QUIRKY_SESSION_ID', 'QUIRKY_HOME', 'QUIRKY_HOOK_TOKEN', 'QUIRKY_HOOK_URL', '_']) {
     if (savedEnv[key] === undefined) delete process.env[key]
     else process.env[key] = savedEnv[key]
   }
@@ -47,6 +58,9 @@ async function loadExtension(agent: string, outcome: GateOutcome | 'down') {
   process.env.QUIRKY_HOME = home
   process.env.QUIRKY_SESSION_ID = 'sess-1'
   process.env.QUIRKY_HOOK_TOKEN = 'token'
+  process.title = agent
+  process.env._ = agent
+  process.argv = [agent, agent]
   const file = join(home, `extension-${counter++}.ts`)
   writeFileSync(file, gateExtensionSource())
   const module = (await import(file)) as { default: (pi: { on(name: string, handler: Handler): void }) => void }
@@ -62,7 +76,7 @@ for (const agent of ['pi', 'omp']) {
   const suite = binary === null ? describe.skip : describe
   suite(binary === null ? `${agent} conformance (skipped: ${agent} is not installed)` : `${agent} conformance`, () => {
     test('the installed agent runs', async () => {
-      const proc = Bun.spawn([binary!, '--version'], { stdout: 'pipe', stderr: 'pipe' })
+      const proc = Bun.spawn([binary!, '--version'], { env: agentHome.childEnv, stdout: 'pipe', stderr: 'pipe' })
       await proc.exited
       expect(proc.exitCode).toBe(0)
     }, 60_000)
@@ -70,7 +84,7 @@ for (const agent of ['pi', 'omp']) {
     test('a normal call reaches the gate and an allow lets it run', async () => {
       const { handler, requests } = await loadExtension(agent, 'allow')
       expect(await handler(call, { cwd: '/w' })).toBeUndefined()
-      expect(requests).toEqual(['/gate/pi'])
+      expect(requests).toEqual([`/gate/${agent}`])
     }, 60_000)
 
     test('a call the agent would run without asking still reaches the gate, and a refusal blocks it', async () => {

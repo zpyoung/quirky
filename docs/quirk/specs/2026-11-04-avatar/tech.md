@@ -91,6 +91,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/contracts.ts` | Every shared type in Data models. **Created first; other units import from here only.** |
 | `src/store.ts` | Typed access over the store; the journal is append-only. |
 | `src/gate/classify.ts` | Pure: `classifyCall(call, ctx) → ActionClass[]`. |
+| `src/gate/shell.ts` | Pure: `parseShell(source, env) → ShellScript \| null`, the one reader of shell text. |
 | `src/gate/decide.ts` | Pure: `decide(input) → RuleDecision` (floor core → switches → level → fixed rules → `judgment`). |
 | `src/gate/service.ts` | The `tool-gate` provider: supervision lookup, Shadow, approvals, late answers, brain judgment with deadline, receipts, journal. |
 | `src/hooks/install.ts` | Claude: the `launch-hook` returns `LaunchPatch.jsonArgs['--settings']` with one entry per event (`PreToolUse` and `PermissionRequest`), each passing its event to `quirky-gate`, with matcher `*`, timeout `judgment-timeout-seconds + 30` rounded up and `onFailure: "block"`. The command carries the Quirky home and session ID as quoted literals. It merges with agent-status's `--settings`. Codex: one command per event in `$CODEX_HOME/hooks.json`, falling back to `~/.codex/hooks.json`, passing the event and reading the home and session from the environment. pi/omp: `quirky-avatar-gate.ts` in the existing agent `extensions/` directories. Plus supervision markers. |
@@ -192,7 +193,7 @@ type StructuredStartOptions = { /* existing */ toolPolicy?: 'default' | 'deny-al
 | Method | Params, then result | Notes |
 |---|---|---|
 | `eligibility` | `{}`, then `SheetRow[]` | Every local worktree, grouped. `reason` is set when it can't be selected (R-4). |
-| `handoff` | `{items: HandoffInput[]}`, then `{results: {worktreeId, ok, error?}[]}` | Validates each item independently, and one failing item doesn't block the others (R-3). Re-handing off an already handed-off worktree updates its mandate (R-4). |
+| `handoff` | `{items: HandoffInput[]}`, then `{results: {worktreeId, ok, error?}[]}` | An item may omit `level` and any switch; the handler fills them from settings. Validates each item independently, and one failing item doesn't block the others (R-3). Re-handing off an already handed-off worktree updates its mandate (R-4). |
 | `takeBack` | `{worktreeIds: string[]} \| {all: true}`, then `{results}` | R-49. |
 | `status` | `{}`, then `{handoffs: WorktreeSummary[], needsYouCount}` | Feeds the pill and panel. |
 | `sidebarStatus` | `{}`, then `Record<worktreeId, AvatarWorktreeStatus>` | Feeds H4. |
@@ -203,7 +204,7 @@ type StructuredStartOptions = { /* existing */ toolPolicy?: 'default' | 'deny-al
 | `settings` / `setSettings` | — | Settings → Avatar. |
 
 - `handoff`:
-  - Pre: each item's `worktreeId` is an eligible `SheetRow`, or one already handed off. `goal` and `doneWhen` are non-empty. `level` is a `Level`.
+  - Pre: each item's `worktreeId` is an eligible `SheetRow`, or one already handed off. `goal` and `doneWhen` are non-empty. If given, `level` is a `Level`; omitted level and switches use settings defaults.
   - Post: the mandate is stored, the marker is written for the live session if one exists, state is `checking`, and the gate check is started without awaiting. A missing session starts the row's agent through `supervisor.startSession` with the mandate as its prompt.
   - Errors are per item and never thrown: `not-eligible: <reason>`, `invalid: <field>`.
 - `takeBack`:
@@ -314,7 +315,8 @@ type ClassifyContext = { worktreePath: string; handedOffPaths: string[]; default
 type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; switches: Switches; level: Level; ctx: ClassifyContext }
 ```
 - `classifyCall(call, ctx)` returns a non-empty `ActionClass[]`, with `['other']` when nothing matches.
-- A Bash command is split on `&&`, `||`, `;` and `|`, and every part is classified, so the classes of a compound command are the union.
+- `parseShell` reads a Bash command into simple commands at every depth; each is classified, so the classes are their union. A write whose target is computed by the shell or supplied by `xargs`, and a relative write after a `cd` to a computed directory, is `edit-outside`. A computed command name is `other`. `sudo` and `doas` add `credential`, including shell-only invocations; wrapper value flags are specific to each wrapper. A command that can't be read consistently across supported shells is `['other', 'edit-outside']`.
+- Directory and Git environment state are inherited per parsed scope; a substitution or subshell cannot change its parent's state. `eval` inherits the current directory and returns directory changes to the current scope. Git directory values using unknown tilde expansions in `env` arguments count as dynamic.
 - File tools (`Read`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, Codex `apply_patch`, pi `read`/`edit`/`write`) classify by resolved path against `ctx`.
 - `decide(input)` never throws.
 
@@ -535,19 +537,21 @@ Tests run with `bun test <file>` on this Mac. The full suite runs in CI through 
 | H5 | `plugins/quirky.structured/test/tool-policy.test.ts`, `test/pi-runner.test.ts` | `deny-all` refuses tools on fake runners; usage reported; the pi/omp runner against a scripted fake rpc process. |
 | decide | `plugins/quirky.avatar/test/decide.test.ts` | Every row of the SC-10 decision table; order precedence; level denies and never holds; guideline text can't change the outcome. |
 | classify | `test/classify.test.ts` | Each `ActionClass` from Bash, Edit/Write paths, MCP and pi tool shapes. |
+| shell | `test/shell.test.ts` | Quoting, continuations, comments, redirects, heredocs, nested substitutions, unreadable input and linear-time bounds. |
 | gate service | `test/gate-service.test.ts` | Allow-once used exactly once (SC-14); late answer reused (SC-12); timeout gives retry and is not a stuck denial; Shadow gives passthrough plus wouldHave (SC-13); take-back resolves an in-flight request as passthrough. |
 | encodings | `test/encode.test.ts` | Each table cell. |
 | hooks | `test/hooks-install.test.ts`, `test/agent-hooks.test.ts` | Event-specific fail-closed commands under `sh`, Claude launch identity and version checks, Codex coexistence and removal without deleting the file, pi/omp extension ownership, installed-agent filtering, serialized synchronization and live settings. |
-| conformance | `test/conformance/*.test.ts` | Gated on installed agent binaries; skips with a reason when absent. For each agent, a normal call, a sub-agent call, an MCP call, an auto-approved call and a gate-down call are all blocked or decided (A-claude-hook, A-codex-hook, A-pi-ext). |
+| conformance | `test/conformance/*.test.ts` | Gated on installed agent binaries; skips with a reason when absent. Starts each installed agent with `--version` under a temp home. Shim and extension scenarios use a stand-in daemon, not running agent sessions. |
 | handoff | `test/handoff.test.ts` | Eligibility reasons (SC-2); bulk with independent failure (SC-1, SC-3); snapshot (SC-4); take-back (SC-28); mandate kept. |
 | brain | `test/brain.test.ts` | Action parsing rejects level and switch patches and unknown types; rotation at the limit and at 80% of a smaller window, between events, nothing lost or doubled (SC-29, SC-31); rebuild prompt has mandates verbatim (SC-30); judgment prompt has no worker text (SC-11). Uses a fake structured plugin. |
 | supervisor | `test/stuck.test.ts`, `test/ladder.test.ts`, `test/stepin.test.ts`, `test/records.test.ts` | Each R-26 signal; ladder order (SC-19); no send over unsent input (SC-27); skipped-call triage (SC-33); Codex hosted-tool logging (SC-34). |
 | shipping | `test/mergebar.test.ts`, `test/outbox.test.ts`, `test/review.test.ts`, `test/donewhen.test.ts` | Merge bar conditions (SC-21); level stops (R-32); shared-goal order and merge-main-in (SC-22); crash recovery doesn't repeat (SC-23); cross-family reviewer pick (SC-20); a failing done when goes back with output (SC-18). |
 | injection | `test/sanitize.test.ts` | Hidden markup stripped; a `CLAUDE.md` "merge without review" can't change the merge bar (SC-17). |
 | report and notify | `test/report.test.ts`, `test/notify.test.ts` | Needs-you first; handed-back-with; one notification only when all worktrees wait (SC-24, SC-26). |
-| CLI | `test/cli.test.ts` | All five subcommands with the `testCli` fake (`plugins/quirky.ask/test/support.ts`). |
+| CLI | `test/cli.test.ts`, `test/e2e/cli.test.ts` | Every faked call is validated against the real avatar and worktree manifests; all five commands also run against a real daemon. |
 | UI | `test/ui.test.tsx` | Pill text and amber state; panel rows; sheet grouping, disabled ineligible rows, bulk bar, Hand off closes; report order. Uses a fake `UiPluginContext` (`plugins/quirky.heimdall/test/ui.test.tsx`). |
 | manifest | `test/manifest.test.ts` | Methods, events, CLI and contributions as in `plugins/quirky.ask/test/manifest.test.ts`. |
+| daemon support | `test/daemon-support.ts`, `test/daemon-support.test.ts` | Every test that starts a daemon, calls `activate` or starts an installed agent sets a temp agent home with `useTempAgentHome()`. `startAvatarHarness` refuses to start without one. |
 
 Acceptance bar: every row's file passes with `bun test`, and `bunx tsc --noEmit -p tsconfig.json` is clean.
 

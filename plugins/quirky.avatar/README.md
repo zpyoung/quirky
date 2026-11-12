@@ -19,7 +19,7 @@ Turn off `agent-hooks` with `quirky setting set setting:quirky.avatar/agent-hook
 
 | Command | What it does |
 | --- | --- |
-| `quirky avatar handoff <worktree> --goal <text> --done-when <command or sentence>` | Hands a worktree off. Optional: `--level`, `--agent`, `--guideline` (repeatable), `--notes`, `--shared-goal`, `--allow-split`, `--allow-messaging`, `--allow-history-rewrite`, `--allow-deploys`, `--switch name[=false]`. |
+| `quirky avatar handoff <worktree> --goal <text> --done-when <command or sentence>` | Hands a worktree off. Without `--level`, the default level from settings applies; each unnamed switch keeps its default. Optional: `--level`, `--agent`, `--guideline` (repeatable), `--notes`, `--shared-goal`, `--allow-split`, `--allow-messaging`, `--allow-history-rewrite`, `--allow-deploys`, `--switch name[=false]`. |
 | `quirky avatar status` | Handed-off worktrees with state and level, and how many items wait on you. |
 | `quirky avatar report` | The needs-you-first report: decisions, guesses, sleeps and what was handed back. |
 | `quirky avatar log [--worktree <w>] [--limit <n>] [--before <seq>]` | The journal, newest first. |

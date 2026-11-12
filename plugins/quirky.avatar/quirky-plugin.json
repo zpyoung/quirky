@@ -126,10 +126,12 @@
                       "local",
                       "own-branch",
                       "full"
-                    ]
+                    ],
+                    "description": "How far the avatar may act. Left out, the default level from settings."
                   },
                   "switches": {
                     "type": "object",
+                    "description": "Switches to set for this worktree. One left out keeps its default from settings.",
                     "properties": {
                       "messaging": {
                         "type": "boolean"
@@ -141,11 +143,6 @@
                         "type": "boolean"
                       }
                     },
-                    "required": [
-                      "messaging",
-                      "historyRewrite",
-                      "deploys"
-                    ],
                     "additionalProperties": false
                   },
                   "agent": {
@@ -176,8 +173,7 @@
                 "required": [
                   "worktreeId",
                   "goal",
-                  "doneWhen",
-                  "level"
+                  "doneWhen"
                 ],
                 "additionalProperties": true,
                 "description": "One worktree to hand off."
