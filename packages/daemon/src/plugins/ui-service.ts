@@ -27,6 +27,14 @@ export type UiServiceOptions = {
 
 const DEFAULT_THEME_ID = 'default'
 
+function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
+  if (value === null || typeof value !== 'object' || seen.has(value)) return value
+  seen.add(value)
+  for (const child of Object.values(value)) deepFreeze(child, seen)
+  Object.freeze(value)
+  return value
+}
+
 /**
  * A setting's effective value across the layers: a valid stored value, else the distro's value
  * when it fits the declaration, else the default. `stored` carries an unusable stored value.
@@ -54,11 +62,13 @@ export function chosenThemeOf(stored: unknown, distro: DistroManifest | null): s
 
 /**
  * Serves the UI model, plugin settings and themes to the daemon's methods and to plugin contexts.
- * Nothing is cached: every call rebuilds from the host's current declarations, so enabling,
- * disabling or overriding a contribution shows up on the next call. Stored setting values are
- * deleted only by `resetSetting`, so a disabled plugin's settings survive until it returns.
+ * The model is kept until its registry, theme, keybindings, distro or visibility-setting inputs
+ * change; callers receive it deeply frozen. Stored setting values are deleted only by
+ * `resetSetting`, so a disabled plugin's settings survive until it returns.
  */
 export class UiService {
+  private cachedBuild?: { key: string; revision: number; value: { model: UiModel } }
+
   constructor(private readonly options: UiServiceOptions) {}
 
   /** The model the window renders, built for the chosen theme. */
@@ -101,8 +111,7 @@ export class UiService {
     return this.listKeybindings()
   }
 
-  private keybindingOverrides(): Record<string, string | null> {
-    const stored = this.options.store.getUiState('keybindings')
+  private keybindingOverrides(stored = this.options.store.getUiState('keybindings')): Record<string, string | null> {
     const overrides: Record<string, string | null> = Object.create(null)
     if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return overrides
     for (const [id, key] of Object.entries(stored)) {
@@ -179,15 +188,50 @@ export class UiService {
   private build() {
     const { plugins, store } = this.options
     const distro = this.layer()
-    return buildUiModel({
-      declarations: plugins.contributions({ all: true }),
-      plugins: plugins.list(),
-      chosenTheme: chosenThemeOf(store.getUiState('theme'), distro),
-      distroKeybindings: Object.entries(distro?.keybindings ?? {}).map(([key, command]) => ({ key, command })),
-      distroId: distro?.id ?? null,
-      keybindingOverrides: this.keybindingOverrides(),
-      settingValue: (entry) => resolveSetting(entry, store.getSettingValue(entry.id), distro).value
-    })
+    const theme = store.getUiState('theme')
+    const storedKeybindings = store.getUiState('keybindings')
+    const revision = plugins.revision()
+    const cached = this.cachedBuild
+    const key = this.cacheKey(revision, theme, storedKeybindings, distro, cached?.value.model.visibilitySettings)
+    if (cached?.key === key) return cached.value
+
+    const value = {
+      model: buildUiModel({
+        declarations: plugins.contributions({ all: true }),
+        plugins: plugins.list(),
+        chosenTheme: chosenThemeOf(theme, distro),
+        distroKeybindings: Object.entries(distro?.keybindings ?? {}).map(([key, command]) => ({ key, command })),
+        distroId: distro?.id ?? null,
+        keybindingOverrides: this.keybindingOverrides(storedKeybindings),
+        settingValue: (entry) => resolveSetting(entry, store.getSettingValue(entry.id), distro).value
+      }).model
+    }
+    deepFreeze(value.model)
+    this.cachedBuild = {
+      key:
+        cached?.revision === revision
+          ? key
+          : this.cacheKey(revision, theme, storedKeybindings, distro, value.model.visibilitySettings),
+      revision,
+      value
+    }
+    return value
+  }
+
+  private cacheKey(
+    revision: number,
+    theme: unknown | null,
+    keybindings: unknown | null,
+    distro: DistroManifest | null,
+    visibilitySettings: string[] | undefined
+  ): string {
+    return JSON.stringify([
+      revision,
+      theme,
+      keybindings,
+      distro,
+      (visibilitySettings ?? []).map((id) => [id, this.options.store.getSettingValue(id)])
+    ]) ?? ''
   }
 
   private entryOf(id: string): UiSettingEntry {

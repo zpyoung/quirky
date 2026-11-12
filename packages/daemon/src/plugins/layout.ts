@@ -158,7 +158,7 @@ function sameValue(a: unknown, b: unknown): boolean {
   const left = a as Record<string, unknown>
   const right = b as Record<string, unknown>
   const keys = Object.keys(left)
-  return keys.length === Object.keys(right).length && keys.every((key) => key in right && sameValue(left[key], right[key]))
+  return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]))
 }
 
 type OpenView = NonNullable<UiLayout['view']>
@@ -294,6 +294,7 @@ export class LayoutService {
   private readonly desktopCapabilitiesByWindow = new Map<number, NativeDesktopCapabilities>()
   private readonly auxiliaryWindows = new Map<string, AuxiliaryWindowRoute>()
   private readonly windowViews = new Map<number, WindowLayoutOverride>()
+  private readonly sentLayouts = new Map<number, UiLayout>()
   private reportCounter = 0
   private storedLayoutSettled = false
   private lastFocusedAt = 0
@@ -506,7 +507,7 @@ export class LayoutService {
           windows: [this.auxiliaryWindowSummary(auxiliary)]
         })
       }
-      if (conn.subscribed) this.options.sendTo(conn, { type: 'ui.state.changed', layout })
+      if (conn.subscribed) this.sendLayout(conn, layout)
     }
   }
 
@@ -534,7 +535,7 @@ export class LayoutService {
       else auxiliary.input = input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
       const next = this.windowLayout(target.id)
-      this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+      this.sendLayout(target, next)
       return next
     }
 
@@ -556,7 +557,7 @@ export class LayoutService {
       if (closed !== shared) this.change(() => closed)
     }
     const next = this.windowLayout(target.id)
-    this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+    this.sendLayout(target, next)
     return next
   }
 
@@ -579,7 +580,7 @@ export class LayoutService {
       else auxiliary.input = view.input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
       const next = this.windowLayout(target.id)
-      this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+      this.sendLayout(target, next)
       return next
     }
 
@@ -600,7 +601,7 @@ export class LayoutService {
     }
     this.windowViews.set(target.id, { view, viewTabs, worktree, ...(focus === undefined ? {} : { focus }) })
     const next = this.windowLayout(target.id)
-    this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+    this.sendLayout(target, next)
     return next
   }
 
@@ -996,7 +997,7 @@ export class LayoutService {
     if (request.title !== undefined) route.title = request.title
     this.announceDesktopWindows()
     const layout = this.windowLayout(conn.id)
-    this.options.sendTo(conn, { type: 'ui.state.changed', layout })
+    this.sendLayout(conn, layout)
     return this.auxiliaryWindowSummary(route)
   }
 
@@ -1135,6 +1136,7 @@ export class LayoutService {
     }
     this.toastReports.delete(conn.id)
     this.windowViews.delete(conn.id)
+    this.sentLayouts.delete(conn.id)
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
     }
@@ -1327,6 +1329,14 @@ export class LayoutService {
   }
 
   private windowLayout(connId: number): UiLayout {
+    const layout = this.computeWindowLayout(connId)
+    const sent = this.sentLayouts.get(connId)
+    // a state reply can replace the window's layout without an event
+    if (sent !== undefined && !sameValue(sent, layout)) this.sentLayouts.delete(connId)
+    return layout
+  }
+
+  private computeWindowLayout(connId: number): UiLayout {
     this.settleStoredLayout()
     const layout = this.layout()
     const auxiliary = this.auxiliaryView(connId)
@@ -1593,19 +1603,27 @@ export class LayoutService {
     if (settled !== layout) this.change(() => settled)
   }
 
-  private publishGlobalLayout(layout: UiLayout): void {
-    this.options.broadcastNonWindows({ type: 'ui.state.changed', layout })
-    for (const conn of this.openWindows()) {
-      if (!conn.subscribed) continue
-      this.options.sendTo(conn, { type: 'ui.state.changed', layout: this.windowLayout(conn.id) })
-    }
+  private sendLayout(conn: ClientConn, layout: UiLayout): void {
+    if (sameValue(this.sentLayouts.get(conn.id), layout)) return
+    this.options.sendTo(conn, { type: 'ui.state.changed', layout })
+    this.sentLayouts.set(conn.id, layout)
   }
 
   private change(update: (layout: UiLayout) => UiLayout): UiLayout {
     this.settleStoredLayout()
-    const next = update(this.layout())
-    this.options.store.setUiState(LAYOUT_KEY, next)
-    this.publishGlobalLayout(next)
+    const current = this.layout()
+    const next = update(current)
+    const changed = !sameValue(current, next)
+    if (changed) this.options.store.setUiState(LAYOUT_KEY, next)
+    const stale: [ClientConn, UiLayout][] = []
+    for (const conn of this.openWindows()) {
+      if (!conn.subscribed) continue
+      const layout = this.windowLayout(conn.id)
+      if (!sameValue(this.sentLayouts.get(conn.id), layout)) stale.push([conn, layout])
+    }
+    if (!changed && stale.length === 0) return next
+    this.options.broadcastNonWindows({ type: 'ui.state.changed', layout: next })
+    for (const [conn, layout] of stale) this.sendLayout(conn, layout)
     return next
   }
 }
