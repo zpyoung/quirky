@@ -184,7 +184,23 @@
         "params": {
           "type": "object",
           "properties": {
-            "client": { "type": "string", "description": "Client-local preference key; defaults to desktop." }
+            "client": { "type": "string", "description": "Client-local preference key; defaults to desktop." },
+            "preferences": {
+              "type": "object",
+              "description": "Computes the projection from these preferences instead of the client's stored ones; nothing is written.",
+              "properties": {
+                "workspaceActivityWindow": { "type": "string", "enum": ["all", "live-only", "today", "week", "month", "custom"] },
+                "workspaceActivityCustomDays": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
+                "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] },
+                "hideCompletedReviewWorkspaces": { "type": "boolean" },
+                "hidePassingCheckWorkspaces": { "type": "boolean" },
+                "hideAutomationCreated": { "type": "boolean" }
+              },
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces", "hideAutomationCreated"],
+              "additionalProperties": false
+            },
+            "worktree": { "description": "Computes the projection with this worktree ID as the selected one instead of the client's stored activation, or null for none; nothing is written." }
           },
           "additionalProperties": false
         },
@@ -232,9 +248,10 @@
                   "reason": { "type": "string", "enum": ["selected", "all", "recent", "old", "live", "sleeping", "main", "folder", "unknown"] },
                   "error": { "type": "string", "description": "Why runtime liveness could not be established, when applicable." },
                   "reviewReason": { "type": "string", "enum": ["completed", "passing", "unknown"] },
-                  "reviewError": { "type": "string" }
+                  "reviewError": { "type": "string" },
+                  "checks": { "description": "Checks status of the cached current review (pending, success, failure or neutral), or null when none is cached." }
                 },
-                "required": ["worktreeId", "activityAt", "live", "reason"],
+                "required": ["worktreeId", "activityAt", "live", "reason", "checks"],
                 "additionalProperties": false
               }
             }

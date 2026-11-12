@@ -528,13 +528,13 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   await chooseMenu(world, 'Open ledger')
   await world.win.waitFor(() => frameTitle(ledgerPage()) === group.name)
   await groupMenu(world, group.name)
-  await chooseMenu(world, 'Delete Group…')
+  await chooseMenu(world, 'Delete section…')
   const dialog = await world.win.waitFor(() => {
     const current = document.querySelector<HTMLElement>('[role="dialog"]')
-    const action = current && button(current, 'Delete Group')
+    const action = current && button(current, 'Delete section')
     return action && !action.disabled ? current : undefined
   })
-  await click(button(dialog, 'Delete Group')!)
+  await click(button(dialog, 'Delete section')!)
   await world.win.waitFor(async () => !(await world.agent.callAny('quirky.repo/groupList', {}) as ProjectGroup[]).some((item) => item.id === group.id))
   const catalog = await request(world, { operation: 'catalog' })
   expect(catalog.ledgers).toContainEqual(expect.objectContaining({ owner: null, formerOwner: groupOwner(group), entryCount: 1 }))

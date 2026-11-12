@@ -1,13 +1,14 @@
 import type { MethodHandler, Schema } from '@quirky/protocol'
 import {
   REVIEW_VIEW,
+  type ChecksEntry,
   type JsonRecord,
   type MethodSpec,
   type ReviewData,
   type ReviewMethodTable,
   type ReviewTab,
   type ReviewsEnv,
-  type ReviewsState,
+  type ReviewsStore,
 } from '../contracts'
 import {
   isRecord,
@@ -291,7 +292,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
 ]
 
 type Surface = 'detail' | 'checks'
-type ReviewTargetWithRepo = ReviewsState['detail']['target'] & { prRepo?: RepoIdentity }
+type ReviewTargetWithRepo = ReviewsStore['detail']['target'] & { prRepo?: RepoIdentity }
 type Selection = {
   surface: Surface
   worktree: string
@@ -302,6 +303,7 @@ type Selection = {
   head: string | null
   identity: string
 }
+type SurfaceTarget = Pick<Selection, 'surface' | 'worktree'>
 type Ticket = { selection: Selection; operation: string; key: string; sequence: number }
 
 type RepoLookupResult = { kind: 'found'; review: ReviewData; fetchedAt: number } | { kind: 'no-review'; fetchedAt: number } | { kind: 'unavailable'; message: string; reason: string; fetchedAt: number }
@@ -314,6 +316,13 @@ type SurfaceSnapshot = {
   repo: RepoIdentity | null
 }
 
+/** The Checks entry for a worktree the caller has already validated as the owner of its selection. */
+function checksOf(state: ReviewsStore, worktree: string): ChecksEntry {
+  const entry = state.checksByWorktree[worktree]
+  if (!entry) throw new Error(`No Checks state is held for ${worktree}.`)
+  return entry
+}
+
 function parseSurface(env: ReviewsEnv, value: unknown): Surface {
   if (value === 'detail' || value === 'checks') return value
   throw env.invalid('invalid_input', 'surface must be detail or checks.')
@@ -324,7 +333,7 @@ function selectionIdentity(worktree: string, number: number, repo: RepoIdentity 
 
 
 
-function selectionFromState(env: ReviewsEnv, state: ReviewsState, surface: Surface, needsReview: boolean): Selection {
+function selectionFromState(env: ReviewsEnv, state: ReviewsStore, surface: Surface, needsReview: boolean, checksWorktree: unknown): Selection {
   let worktree: string | null
   let number: number | null
   let generation: number
@@ -338,10 +347,11 @@ function selectionFromState(env: ReviewsEnv, state: ReviewsState, surface: Surfa
     const rawSource = (target as ReviewTargetWithRepo | null)?.prRepo
     if (rawSource !== undefined && parseRepoIdentity(rawSource) === null) throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
   } else {
-    worktree = state.checks.worktree
-    review = state.checks.review
+    const entry = typeof checksWorktree === 'string' ? state.checksByWorktree[checksWorktree] : undefined
+    worktree = entry?.worktree ?? null
+    review = entry?.review ?? null
     number = review?.number ?? null
-    generation = state.checks.generation
+    generation = entry?.generation ?? 0
   }
   if (typeof worktree !== 'string' || worktree.length === 0 || number === null || !Number.isSafeInteger(number) || number < 1) {
     throw env.invalid('no_target', `No pull request is selected on the ${surface} surface.`)
@@ -367,7 +377,7 @@ function selectionFromState(env: ReviewsEnv, state: ReviewsState, surface: Surfa
 }
 
 function selectionFromParams(env: ReviewsEnv, params: JsonRecord, surface: Surface, needsReview: boolean): Selection {
-  let selected = selectionFromState(env, env.read(), surface, needsReview)
+  let selected = selectionFromState(env, env.read(), surface, needsReview, params.worktree)
   if (params.worktree !== selected.worktree || params.number !== selected.number) {
     throw env.invalid('stale_target', 'The review method target does not match the selected surface.')
   }
@@ -384,7 +394,7 @@ function selectionFromParams(env: ReviewsEnv, params: JsonRecord, surface: Surfa
   return selected
 }
 
-function snapshotFor(state: ReviewsState, surface: Surface): SurfaceSnapshot {
+function snapshotFor(state: ReviewsStore, surface: Surface, worktree: string): SurfaceSnapshot {
   if (surface === 'detail') {
     const target = state.detail.target
     return {
@@ -395,28 +405,29 @@ function snapshotFor(state: ReviewsState, surface: Surface): SurfaceSnapshot {
       repo: parseRepoIdentity((target as ReviewTargetWithRepo | null)?.prRepo) ?? (state.detail.review ? repoFromReviewUrl(state.detail.review.url, state.detail.review.number) : null),
     }
   }
+  const entry = state.checksByWorktree[worktree]
   return {
-    worktree: state.checks.worktree,
-    number: state.checks.review?.number ?? null,
-    generation: state.checks.generation,
-    review: state.checks.review,
-    repo: parseRepoIdentity(state.checks.review?.prRepo) ?? (state.checks.review ? repoFromReviewUrl(state.checks.review.url, state.checks.review.number) : null),
+    worktree: entry?.worktree ?? null,
+    number: entry?.review?.number ?? null,
+    generation: entry?.generation ?? 0,
+    review: entry?.review ?? null,
+    repo: parseRepoIdentity(entry?.review?.prRepo) ?? (entry?.review ? repoFromReviewUrl(entry.review.url, entry.review.number) : null),
   }
 }
 
-function ownerMatches(state: ReviewsState, selection: Selection): boolean {
-  const snapshot = snapshotFor(state, selection.surface)
+function ownerMatches(state: ReviewsStore, selection: Selection): boolean {
+  const snapshot = snapshotFor(state, selection.surface, selection.worktree)
   return snapshot.worktree === selection.worktree && snapshot.number === selection.number && snapshot.generation === selection.generation
     && (selection.repo === null || snapshot.repo === null || sameRepo(selection.repo, snapshot.repo))
 }
 
-function selectionMatches(state: ReviewsState, selection: Selection): boolean {
+function selectionMatches(state: ReviewsStore, selection: Selection): boolean {
   if (!ownerMatches(state, selection)) return false
-  const current = snapshotFor(state, selection.surface).review
+  const current = snapshotFor(state, selection.surface, selection.worktree).review
   return selection.head === null || current === null || current.headRefOid.toLowerCase() === selection.head.toLowerCase()
 }
 
-function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsState) => void): boolean {
+function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsStore) => void): boolean {
   let applied = false
   env.update((state) => {
     if (!ownerMatches(state, selection)) return
@@ -429,7 +440,7 @@ function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: Rev
 function surfaceError(env: ReviewsEnv, selection: Selection, message: string | null): void {
   applyIfOwner(env, selection, (state) => {
     if (selection.surface === 'detail') state.detail.error = message
-    else state.checks.error = message
+    else checksOf(state, selection.worktree).error = message
   })
 }
 
@@ -466,52 +477,52 @@ function hostingParams(selection: Selection): JsonRecord {
   }
 }
 
-function surfaceReview(state: ReviewsState, surface: Surface): ReviewData | null {
-  return surface === 'detail' ? state.detail.review : state.checks.review
+function surfaceReview(state: ReviewsStore, target: SurfaceTarget): ReviewData | null {
+  return target.surface === 'detail' ? state.detail.review : state.checksByWorktree[target.worktree]?.review ?? null
 }
 
-function assignReview(state: ReviewsState, surface: Surface, review: ReviewData | null): void {
-  if (surface === 'detail') state.detail.review = review
-  else state.checks.review = review
+function assignReview(state: ReviewsStore, target: SurfaceTarget, review: ReviewData | null): void {
+  if (target.surface === 'detail') state.detail.review = review
+  else checksOf(state, target.worktree).review = review
 }
 
-function assignChecks(state: ReviewsState, surface: Surface, value: JsonRecord | null): void {
-  if (surface === 'detail') state.detail.checks = value
-  else state.checks.checks = value
+function assignChecks(state: ReviewsStore, target: SurfaceTarget, value: JsonRecord | null): void {
+  if (target.surface === 'detail') state.detail.checks = value
+  else checksOf(state, target.worktree).checks = value
 }
 
-function assignComments(state: ReviewsState, surface: Surface, value: JsonRecord | null): void {
-  if (surface === 'detail') state.detail.comments = value
-  else state.checks.comments = value
+function assignComments(state: ReviewsStore, target: SurfaceTarget, value: JsonRecord | null): void {
+  if (target.surface === 'detail') state.detail.comments = value
+  else checksOf(state, target.worktree).comments = value
 }
 
-function assignFiles(state: ReviewsState, surface: Surface, value: JsonRecord | null): void {
+function assignFiles(state: ReviewsStore, surface: Surface, value: JsonRecord | null): void {
   if (surface === 'detail') state.detail.files = value
 }
 
-function addPending(state: ReviewsState, surface: Surface, operation: string): void {
+function addPending(state: ReviewsStore, surface: Surface, operation: string): void {
   if (surface !== 'detail' || state.detail.pending.includes(operation)) return
   state.detail.pending = [...state.detail.pending, operation]
 }
 
-function removePending(state: ReviewsState, surface: Surface, operation: string): void {
+function removePending(state: ReviewsStore, surface: Surface, operation: string): void {
   if (surface === 'detail') state.detail.pending = state.detail.pending.filter((entry) => entry !== operation)
 }
 
-function commentState(state: ReviewsState, surface: Surface): JsonRecord | null {
-  return surface === 'detail' ? state.detail.comments : state.checks.comments
+function commentState(state: ReviewsStore, target: SurfaceTarget): JsonRecord | null {
+  return target.surface === 'detail' ? state.detail.comments : state.checksByWorktree[target.worktree]?.comments ?? null
 }
 
-function fileState(state: ReviewsState): JsonRecord | null {
+function fileState(state: ReviewsStore): JsonRecord | null {
   return state.detail.files
 }
 
-function checkState(state: ReviewsState, surface: Surface): JsonRecord | null {
-  return surface === 'detail' ? state.detail.checks : state.checks.checks
+function checkState(state: ReviewsStore, target: SurfaceTarget): JsonRecord | null {
+  return target.surface === 'detail' ? state.detail.checks : state.checksByWorktree[target.worktree]?.checks ?? null
 }
 
 function commentsFromState(env: ReviewsEnv, selection: Selection): ReviewComment[] {
-  const value = commentState(env.read(), selection.surface)
+  const value = commentState(env.read(), selection)
   const parsed = value === null ? null : parseCommentsResult(value, selection.number)
   if (parsed === null) throw env.invalid('comments_unavailable', 'Comments have not been loaded for this pull request.')
   return parsed.comments
@@ -594,7 +605,7 @@ export function queueMergeAllowed(review: ReviewData): boolean {
 function includedStackEntries(env: ReviewsEnv, selection: Selection): ReviewStackEntry[] {
   if (selection.review === null || selection.review.stack === null || selection.review.stack === undefined) return []
   const state = env.read()
-  const details = selection.surface === 'detail' ? state.detail.details : state.checks.conflicts
+  const details = selection.surface === 'detail' ? state.detail.details : state.checksByWorktree[selection.worktree]?.conflicts
   let raw = isRecord(details) ? details.reviewStack : undefined
   if (raw === undefined && isRecord(selection.review.stackDetails)) raw = selection.review.stackDetails
   const stack = parseReviewStackResult(raw, selection.number)
@@ -819,8 +830,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           state.detail.loading = true
           state.detail.error = null
         } else {
-          state.checks.loading = true
-          state.checks.error = null
+          checksOf(state, selected.worktree).loading = true
+          checksOf(state, selected.worktree).error = null
         }
       })
       const loaded = { review: false, details: false, checks: false, comments: false, files: false }
@@ -843,8 +854,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
               state.detail.loading = false
               state.detail.error = message
             } else {
-              state.checks.loading = false
-              state.checks.error = message
+              checksOf(state, selected.worktree).loading = false
+              checksOf(state, selected.worktree).error = message
             }
           })
         }
@@ -855,15 +866,15 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         errors.push(message)
         if (reads.get(readKey) === request && ownerMatches(env.read(), selected)) {
           applyIfOwner(env, selected, (state) => {
-            if (lookup?.kind === 'no-review') assignReview(state, selectedSurface, null)
+            if (lookup?.kind === 'no-review') assignReview(state, selected, null)
             if (selectedSurface === 'detail') {
               state.detail.loading = false
               state.detail.error = message
               state.detail.fetchedAt = lookup?.fetchedAt ?? Date.now()
             } else {
-              state.checks.loading = false
-              state.checks.error = message
-              state.checks.fetchedAt = lookup?.fetchedAt ?? Date.now()
+              checksOf(state, selected.worktree).loading = false
+              checksOf(state, selected.worktree).error = message
+              checksOf(state, selected.worktree).fetchedAt = lookup?.fetchedAt ?? Date.now()
             }
           })
         }
@@ -923,7 +934,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         if (stack !== null) details = { ...(details ?? {}), reviewStack: stack }
       }
-      const priorReview = surfaceReview(env.read(), selectedSurface)
+      const priorReview = surfaceReview(env.read(), selected)
       const headChanged = priorReview !== null && priorReview.headRefOid.toLowerCase() !== review.headRefOid.toLowerCase()
       const overlay = getOverlay(sourceSelection)
       if (headChanged) {
@@ -962,7 +973,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (fresh && writesUnchanged) {
         const errorsText = errors.length === 0 ? null : errors.join(' ')
         applyIfOwner(env, sourceSelection, (state) => {
-          assignReview(state, selectedSurface, nextReview)
+          assignReview(state, selected, nextReview)
           if (selectedSurface === 'detail') {
             const target = state.detail.target as ReviewTargetWithRepo | null
             if (target !== null) state.detail.target = { ...target, prRepo: source }
@@ -980,21 +991,21 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
               state.detail.collapsedFiles = []
             }
           } else {
-            state.checks.checks = checks ?? (headChanged ? null : state.checks.checks)
-            state.checks.comments = comments ?? (headChanged ? withoutInlineComments(state.checks.comments, selected.number) : state.checks.comments)
-            state.checks.error = errorsText
-            state.checks.loading = false
-            state.checks.fetchedAt = now
+            checksOf(state, selected.worktree).checks = checks ?? (headChanged ? null : checksOf(state, selected.worktree).checks)
+            checksOf(state, selected.worktree).comments = comments ?? (headChanged ? withoutInlineComments(checksOf(state, selected.worktree).comments, selected.number) : checksOf(state, selected.worktree).comments)
+            checksOf(state, selected.worktree).error = errorsText
+            checksOf(state, selected.worktree).loading = false
+            checksOf(state, selected.worktree).fetchedAt = now
             if (headChanged) {
-              state.checks.expandedChecks = []
-              state.checks.queuedComments = []
+              checksOf(state, selected.worktree).expandedChecks = []
+              checksOf(state, selected.worktree).queuedComments = []
             }
           }
         })
       } else if (fresh) {
         applyIfOwner(env, selected, (state) => {
           if (selectedSurface === 'detail') state.detail.loading = false
-          else state.checks.loading = false
+          else checksOf(state, selected.worktree).loading = false
         })
         errors.push('A newer review mutation completed while this refresh was in flight; stale data was discarded.')
       }
@@ -1019,7 +1030,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (!isAudience(audience)) throw env.invalid('invalid_input', 'audience must be all, humans, or bots.')
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.audience = audience
-        else state.checks.audience = audience
+        else state.audience = audience
       })
       return { surface: selectedSurface, audience }
     },
@@ -1031,7 +1042,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (!isGrouping(grouping)) throw env.invalid('invalid_input', 'grouping must be grouped or timeline.')
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.grouping = grouping
-        else state.checks.grouping = grouping
+        else state.grouping = grouping
       })
       return { surface: selectedSurface, grouping }
     },
@@ -1050,7 +1061,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         draftRevisions.set(key, params.draftVersion)
         applyIfOwner(env, selected, (state) => {
           if (selectedSurface === 'detail') state.detail.commentDraft = params.body as string
-          else state.checks.commentDraft = params.body as string
+          else checksOf(state, selected.worktree).commentDraft = params.body as string
         })
       }
       return { surface: selectedSurface, body: params.body, draftVersion: params.draftVersion, applied }
@@ -1110,12 +1121,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       const queueId = params.commentId
       applyIfOwner(env, selected, (state) => {
-        const queue = selectedSurface === 'detail' ? state.detail.queuedComments : state.checks.queuedComments
+        const queue = selectedSurface === 'detail' ? state.detail.queuedComments : checksOf(state, selected.worktree).queuedComments
         const next = params.queued === true
           ? [...new Set([...queue, queueId])]
           : queue.filter((id) => id !== queueId)
         if (selectedSurface === 'detail') state.detail.queuedComments = next
-        else state.checks.queuedComments = next
+        else checksOf(state, selected.worktree).queuedComments = next
       })
       return { surface: selectedSurface, commentId: queueId, queued: params.queued }
     },
@@ -1151,7 +1162,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const collapsed = params.collapsed
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.checksCollapsed = collapsed
-        else state.checks.checksCollapsed = collapsed
+        else state.checksCollapsed = collapsed
       })
       return { surface: selectedSurface, collapsed }
     },
@@ -1164,10 +1175,10 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       const checkId = params.checkId
       applyIfOwner(env, selected, (state) => {
-        const current = selectedSurface === 'detail' ? state.detail.expandedChecks : state.checks.expandedChecks
+        const current = selectedSurface === 'detail' ? state.detail.expandedChecks : checksOf(state, selected.worktree).expandedChecks
         const next = params.expanded === true ? [...new Set([...current, checkId])] : current.filter((id) => id !== checkId)
         if (selectedSurface === 'detail') state.detail.expandedChecks = next
-        else state.checks.expandedChecks = next
+        else checksOf(state, selected.worktree).expandedChecks = next
       })
       return { surface: selectedSurface, checkId, expanded: params.expanded }
     },
@@ -1195,9 +1206,9 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           throw env.invalid('stale_target', 'A newer review request or mutation owns this checks state.')
         }
         applyIfOwner(env, selected, (state) => {
-          assignChecks(state, selectedSurface, checks)
+          assignChecks(state, selected, checks)
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { surface: selectedSurface, number: selected.number, headSha, checks: checks.checks }
       } catch (error) {
@@ -1213,7 +1224,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       checkNumber(params, selected)
       const expectedHead = requireHead(env, selected, params.expectedHead)
       const checkRunId = positiveNumber(env, params.checkRunId, 'checkRunId')
-      const checks = checkState(env.read(), selectedSurface)
+      const checks = checkState(env.read(), selected)
       const parsedChecks = checks === null ? null : parseChecksResult(checks, selected.number)
       const row = parsedChecks?.checks.find((check) => check.checkRunId === checkRunId)
       if (!isRecord(row)) throw env.invalid('not_found', 'The selected check run is not in the current pull request checks list.')
@@ -1241,11 +1252,11 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           throw env.invalid('stale_head', 'The pull request or check changed while check details were loading.')
         }
         applyIfOwner(env, selected, (state) => {
-          const existing = selectedSurface === 'detail' ? state.detail.checks : state.checks.checks
+          const existing = selectedSurface === 'detail' ? state.detail.checks : checksOf(state, selected.worktree).checks
           const detailsById = isRecord(existing?.detailsById) ? { ...existing.detailsById } : {}
           detailsById[String(checkRunId)] = details
           const next = { ...(existing ?? { number: selected.number, checks: [] }), detailsById }
-          assignChecks(state, selectedSurface, next)
+          assignChecks(state, selected, next)
         })
         return { surface: selectedSurface, number: selected.number, checkRunId, details }
       } catch (error) {
@@ -1281,7 +1292,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           if (!selectionMatches(env.read(), selected) || (writeVersions.get(selected.identity) ?? 0) !== writeVersionAfterStart) {
             throw env.invalid('stale_target', 'The rerun was requested, but a newer review mutation owns the checks state.')
           }
-          refreshed = applyIfOwner(env, selected, (state) => assignChecks(state, selectedSurface, parsed))
+          refreshed = applyIfOwner(env, selected, (state) => assignChecks(state, selected, parsed))
           if (!refreshed) throw env.invalid('stale_target', 'The rerun was requested, but the selected review surface changed.')
         } catch (error) {
           refreshError = errorMessage(error)
@@ -1325,15 +1336,15 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         const overlay = getOverlay(selected)
         overlay.set(commentIdKey(comment), comment)
         applyIfOwner(env, selected, (state) => {
-          const current = commentState(state, selectedSurface)
+          const current = commentState(state, selected)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
           const comments = parsed?.comments
           const next = commentsEnvelope(selected.number, [...(comments ?? []), comment], current)
-          assignComments(state, selectedSurface, { ...next, comments: mergeOverlay(next.comments, overlay) })
+          assignComments(state, selected, { ...next, comments: mergeOverlay(next.comments, overlay) })
           if (selectedSurface === 'detail' && state.detail.commentDraft === body) state.detail.commentDraft = ''
-          if (selectedSurface === 'checks' && state.checks.commentDraft === body) state.checks.commentDraft = ''
+          if (selectedSurface === 'checks' && checksOf(state, selected.worktree).commentDraft === body) checksOf(state, selected.worktree).commentDraft = ''
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, comment: { id: comment.id as number, kind: comment.kind, body: comment.body, author: comment.author, createdAt: comment.createdAt, url: comment.url ?? null } }
       } catch (error) {
@@ -1359,11 +1370,11 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const ticket = beginMutation(env, selected, `comment:${commentId}`, mutationCounters, pendingCounts, writeVersions)
       const optimistic = { ...original, body }
       applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
         const list = updateCommentList(parsed.comments, commentId, (value) => ({ ...value, body }))
-        assignComments(state, selectedSurface, { ...parsed, comments: list })
+        assignComments(state, selected, { ...parsed, comments: list })
       })
       try {
         const raw = await env.call('quirky.hosting/reviewConversation', { ...hostingParams(selected), action: 'edit', commentId, body })
@@ -1371,19 +1382,19 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the comment edit was confirmed.')
         getOverlay(selected).set(commentIdKey(edited), edited)
         applyIfOwner(env, selected, (state) => {
-          const current = commentState(state, selectedSurface)
+          const current = commentState(state, selected)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => edited) })
+          if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => edited) })
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, commentId, body, updated: true }
       } catch (error) {
         if (isLatest(ticket, mutationCounters)) {
           applyIfOwner(env, selected, (state) => {
-            const current = commentState(state, selectedSurface)
+            const current = commentState(state, selected)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-            if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => original) })
+            if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => original) })
           })
         }
         recordError(env, selected, error)
@@ -1405,9 +1416,9 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       const ticket = beginMutation(env, selected, `comment:${commentId}`, mutationCounters, pendingCounts, writeVersions)
       applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-        if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
+        if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
       })
       try {
         const raw = await env.call('quirky.hosting/reviewConversation', { ...hostingParams(selected), action: 'delete', commentId, yes: true })
@@ -1418,20 +1429,20 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         const overlay = getOverlay(selected)
         overlay.set(`issue_comment:${commentId}`, null)
         applyIfOwner(env, selected, (state) => {
-          const current = commentState(state, selectedSurface)
+          const current = commentState(state, selected)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
+          if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, commentId, deleted: true }
       } catch (error) {
         if (isLatest(ticket, mutationCounters)) {
           applyIfOwner(env, selected, (state) => {
-            const current = commentState(state, selectedSurface)
+            const current = commentState(state, selected)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
             if (parsed !== null && commentIndex(parsed.comments, commentId) === -1) {
-              assignComments(state, selectedSurface, { ...parsed, comments: [...parsed.comments, original] })
+              assignComments(state, selected, { ...parsed, comments: [...parsed.comments, original] })
             }
           })
         }
@@ -1454,11 +1465,11 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const oldStates = comments.filter((comment) => comment.threadId === params.threadId).map((comment) => comment.isResolved)
       const ticket = beginMutation(env, selected, `thread:${params.threadId}`, mutationCounters, pendingCounts, writeVersions)
       const setResolved = (resolved: boolean | null) => applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
         const next = parsed.comments.map((comment) => comment.threadId === params.threadId ? { ...comment, isResolved: resolved } : comment)
-        assignComments(state, selectedSurface, { ...parsed, comments: next })
+        assignComments(state, selected, { ...parsed, comments: next })
       })
       setResolved(params.resolved as boolean)
       try {
@@ -1474,7 +1485,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (isLatest(ticket, mutationCounters)) {
           let offset = 0
           applyIfOwner(env, selected, (state) => {
-            const current = commentState(state, selectedSurface)
+            const current = commentState(state, selected)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
             if (parsed === null) return
             const next = parsed.comments.map((comment) => {
@@ -1483,7 +1494,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
               offset += 1
               return { ...comment, isResolved }
             })
-            assignComments(state, selectedSurface, { ...parsed, comments: next })
+            assignComments(state, selected, { ...parsed, comments: next })
           })
         }
         recordError(env, selected, error)
@@ -1506,7 +1517,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const content = params.content as typeof reactions[number]
       const ticket = beginMutation(env, selected, `reaction:${params.subjectId}:${content}`, mutationCounters, pendingCounts, writeVersions)
       const patch = (viewerHasReacted: boolean, countDelta: number) => applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
         const next = parsed.comments.map((comment) => {
@@ -1517,7 +1528,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           if (viewerHasReacted || count > 0) nextReactions.push({ content, count, viewerHasReacted })
           return { ...comment, reactions: nextReactions }
         })
-        assignComments(state, selectedSurface, { ...parsed, comments: next })
+        assignComments(state, selected, { ...parsed, comments: next })
       })
       patch(params.add as boolean, params.add === true ? 1 : -1)
       try {
@@ -1547,8 +1558,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (before === null) throw env.invalid('no_review', 'The pull request is not available.')
       const ticket = beginMutation(env, selected, 'description', mutationCounters, pendingCounts, writeVersions)
       applyIfOwner(env, selected, (state) => {
-        const current = surfaceReview(state, selectedSurface)
-        if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { body }))
+        const current = surfaceReview(state, selected)
+        if (current !== null) assignReview(state, selected, withReviewChange(current, { body }))
         if (selectedSurface === 'detail' && state.detail.details && isRecord(state.detail.details.item)) {
           state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, body } }
         }
@@ -1558,22 +1569,22 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (!parseNumberResult(raw, selected.number) || raw.updated !== true) throw env.invalid('invalid_upstream', 'The hosting API did not confirm the pull request description update.')
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the description update was confirmed.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { body }))
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, { body }))
           if (selectedSurface === 'detail') {
             if (state.detail.details && isRecord(state.detail.details.item)) {
               state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, body } }
             }
             state.detail.bodyDraft = null
             state.detail.error = null
-          } else state.checks.error = null
+          } else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, body, updated: true }
       } catch (error) {
         if (isLatest(ticket, mutationCounters)) {
           applyIfOwner(env, selected, (state) => {
-            const current = surfaceReview(state, selectedSurface)
-            if (current !== null && current.body === body) assignReview(state, selectedSurface, withReviewChange(current, { body: before.body }))
+            const current = surfaceReview(state, selected)
+            if (current !== null && current.body === body) assignReview(state, selected, withReviewChange(current, { body: before.body }))
             if (selectedSurface === 'detail' && state.detail.details && isRecord(state.detail.details.item) && state.detail.details.item.body === body) {
               state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, body: before.body } }
             }
@@ -1604,10 +1615,10 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (reviewers === null || !isRecord(raw) || raw.updated !== true) throw env.invalid('invalid_upstream', 'The hosting API did not confirm the reviewer update.')
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before reviewers were updated.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { requestedReviewers: reviewers }))
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, { requestedReviewers: reviewers }))
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, reviewers, updated: true }
       } catch (error) {
@@ -1635,13 +1646,13 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (assignees === null) throw env.invalid('invalid_upstream', 'The hosting API did not confirm the assignee update.')
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before assignees were updated.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { assignees }))
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, { assignees }))
           if (selectedSurface === 'detail' && state.detail.details && isRecord(state.detail.details.item)) {
             state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, assignees } }
           }
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, assignees }
       } catch (error) {
@@ -1711,12 +1722,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_head', 'The pull request changed before the merge was confirmed.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
+          const current = surfaceReview(state, selected)
           if (current === null) return
-          if (raw.state === 'merged') assignReview(state, selectedSurface, withReviewChange(current, { state: 'merged' }))
-          else assignReview(state, selectedSurface, withReviewChange(current, { state: 'open', autoMergeRequest: { state: raw.state, operationId: raw.operationId ?? null } }))
+          if (raw.state === 'merged') assignReview(state, selected, withReviewChange(current, { state: 'merged' }))
+          else assignReview(state, selected, withReviewChange(current, { state: 'open', autoMergeRequest: { state: raw.state, operationId: raw.operationId ?? null } }))
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return {
           number: selected.number,
@@ -1755,12 +1766,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_head', 'The pull request changed before the auto-merge state was confirmed.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, {
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, {
             autoMergeRequest: params.enabled === true ? { state: raw.state, enabled: true, method: method ?? policy.defaultMethod } : null,
           }))
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, enabled: params.enabled, state: raw.state }
       } catch (error) {
@@ -1889,8 +1900,8 @@ async function updateReviewState(
   const ticket = beginMutation(env, selected, operation, mutationCounters, pendingCounts, writeVersions)
   const optimisticState = action === 'close' ? 'closed' : 'open'
   if (action !== 'ready') applyIfOwner(env, selected, (state) => {
-    const current = surfaceReview(state, selectedSurface)
-    if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { state: optimisticState }))
+    const current = surfaceReview(state, selected)
+    if (current !== null) assignReview(state, selected, withReviewChange(current, { state: optimisticState }))
   })
   try {
     const raw = await env.call('quirky.hosting/updateReview', { ...hostingParams(selected), action })
@@ -1898,17 +1909,17 @@ async function updateReviewState(
     if (!parseReviewUpdate(raw, selected.number, expected)) throw env.invalid('invalid_upstream', `The hosting API did not confirm the pull request ${action} action.`)
     if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the state update was confirmed.')
     applyIfOwner(env, selected, (state) => {
-      const current = surfaceReview(state, selectedSurface)
-      if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { state: expected }))
+      const current = surfaceReview(state, selected)
+      if (current !== null) assignReview(state, selected, withReviewChange(current, { state: expected }))
       if (selectedSurface === 'detail') state.detail.error = null
-      else state.checks.error = null
+      else checksOf(state, selected.worktree).error = null
     })
     return { number: selected.number, state: expected, updated: true }
   } catch (error) {
     if (action !== 'ready' && mutationCounters.get(ticket.key) === ticket.sequence) {
       applyIfOwner(env, selected, (state) => {
-        const current = surfaceReview(state, selectedSurface)
-        if (current !== null && current.state === optimisticState) assignReview(state, selectedSurface, withReviewChange(current, { state: before.state }))
+        const current = surfaceReview(state, selected)
+        if (current !== null && current.state === optimisticState) assignReview(state, selected, withReviewChange(current, { state: before.state }))
       })
     }
     recordError(env, selected, error)

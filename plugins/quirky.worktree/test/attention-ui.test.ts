@@ -51,18 +51,14 @@ function row(env: WindowEnv, worktreeId: string): HTMLElement | null {
   return env.win.document.querySelector<HTMLElement>(`[data-worktree-id="${worktreeId}"]`)
 }
 
-function attentionBadges(env: WindowEnv, worktreeId: string, count: number): HTMLElement[] {
-  const label = `${count} pending ${count === 1 ? 'question' : 'questions'}`
-  return [...(row(env, worktreeId)?.querySelectorAll<HTMLElement>('.ui-badge[aria-label]') ?? [])]
-    .filter((element) => element.getAttribute('aria-label') === label)
+function waitingMark(env: WindowEnv, worktreeId: string, count: number): HTMLElement | null {
+  const label = `Waiting on you: ${count} pending ${count === 1 ? 'question' : 'questions'}`
+  return [...(row(env, worktreeId)?.querySelectorAll<HTMLElement>('.ui-activity-mark--waiting') ?? [])]
+    .find((element) => element.getAttribute('aria-label') === label) ?? null
 }
 
-function needsYouDot(env: WindowEnv, worktreeId: string): HTMLElement | null {
-  return row(env, worktreeId)?.querySelector<HTMLElement>('.ui-status-dot[aria-label="Status: needs-you"]') ?? null
-}
-
-function askBadge(env: WindowEnv, worktreeId: string, count: number): HTMLElement | null {
-  return attentionBadges(env, worktreeId, count).find((element) => element.textContent?.trim() !== '') ?? null
+function idleMark(env: WindowEnv, worktreeId: string): HTMLElement | null {
+  return row(env, worktreeId)?.querySelector<HTMLElement>('.ui-activity-mark--idle[aria-label="Idle"]') ?? null
 }
 
 async function createAsk(env: WindowEnv, worktree: Worktree): Promise<string> {
@@ -86,32 +82,30 @@ async function answerAsk(env: WindowEnv, askId: string): Promise<void> {
   })
 }
 
-test('pending asks badge only their exact worktree and updates as the real Ask authority resolves them', async () => {
+test('pending asks mark only their exact worktree as waiting and update as the real Ask authority resolves them', async () => {
   const { env, current, other } = await bootTree()
   const selectedView = env.win.host.getState().layout.view
   const currentAsk = await createAsk(env, current)
   const otherAsk1 = await createAsk(env, other)
   const otherAsk2 = await createAsk(env, other)
 
-  await env.win.waitFor(() => attentionBadges(env, current.id, 1).length === 1)
-  await env.win.waitFor(() => attentionBadges(env, other.id, 2).length === 1)
-  expect(askBadge(env, current.id, 1)?.textContent).toBe('1')
-  expect(askBadge(env, other.id, 2)?.textContent).toBe('2')
-  expect(needsYouDot(env, current.id)).not.toBeNull()
-  expect(needsYouDot(env, other.id)).not.toBeNull()
+  await env.win.waitFor(() => waitingMark(env, current.id, 1))
+  await env.win.waitFor(() => waitingMark(env, other.id, 2))
+  expect(waitingMark(env, current.id, 1)?.getAttribute('role')).toBe('img')
+  expect(row(env, other.id)?.querySelectorAll('.ui-activity-mark--waiting')).toHaveLength(1)
   expect(env.win.host.getState().layout.view).toEqual(selectedView)
 
   await answerAsk(env, otherAsk1)
-  await env.win.waitFor(() => attentionBadges(env, other.id, 1).length === 1)
+  await env.win.waitFor(() => waitingMark(env, other.id, 1))
   const remaining = await pendingAsks(env)
   expect(remaining).toHaveLength(2)
   expect(remaining.map((ask) => ask.id)).toEqual(expect.arrayContaining([currentAsk, otherAsk2]))
-  expect(askBadge(env, current.id, 1)?.textContent).toBe('1')
+  expect(waitingMark(env, current.id, 1)).not.toBeNull()
   expect(env.win.host.getState().layout.view).toEqual(selectedView)
 
   await answerAsk(env, otherAsk2)
-  await env.win.waitFor(() => askBadge(env, other.id, 1) === null && needsYouDot(env, other.id) === null)
+  await env.win.waitFor(() => waitingMark(env, other.id, 1) === null && idleMark(env, other.id) !== null)
   expect((await pendingAsks(env)).map((ask) => ask.id)).toEqual([currentAsk])
-  expect(needsYouDot(env, current.id)).not.toBeNull()
+  expect(waitingMark(env, current.id, 1)).not.toBeNull()
   expect(env.win.host.getState().layout.view).toEqual(selectedView)
 })

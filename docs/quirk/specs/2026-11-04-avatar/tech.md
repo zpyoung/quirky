@@ -13,7 +13,7 @@ The avatar has three layers. Host additions come first because every later part 
    - **H1 Tool gate channel**: a blocking request/response path from an agent hook to one daemon-side plugin provider. It adds a new `/gate/` HTTP route next to `/hook/`, a new daemon contribution kind `tool-gate`, and a new shim `$QUIRKY_HOME/bin/quirky-gate`. Backs SC-10, SC-12, SC-32 and A-host-channel.
    - **H2 Keep-awake and power state**: `context.hostPower.keepAwake(reason)` and `context.hostPower.powerState()` on top of IOKit power assertions. Backs SC-9 and A-keep-awake.
    - **H3 Window-bar items**: a new UI contribution kind `window-bar-item`, rendered by `packages/ui/src/shell/WindowBar.tsx`. Backs C-pill and R-44.
-   - **H4 Worktree surfaces**: `quirky.worktree` gains a first-party avatar status ring and prefix on sidebar rows, built the same way as `heimdallStatus`. It also gains a "Hand off to Avatar…" item in the worktree context menu, shown only when the `quirky.avatar/handoff` command is loaded. Backs R-46 and SC-5.
+   - **H4 Worktree surfaces**: `quirky.worktree` loads avatar status alongside `heimdallStatus`, adds an `ActivityMark` ring and `Avatar · ` name prefix, and uses `useAvatarHandoff` to discover the loaded hand-off command for row menus and the multi-selection bulk bar. Backs R-46 and SC-5.
    - **H5 Structured runners**: `quirky.structured` gains `toolPolicy: 'deny-all'`, per-turn context usage reporting, and pi and omp rpc runners. Backs C-brain, R-36 and R-38.
 2. **Plugin `plugins/quirky.avatar`**: the gate, store, journal, outbox, brain, supervisor, shipping, CLI and UI. Backs C-plugin.
 3. **Gate hooks per agent**, installed by the avatar: a Claude launch-hook, a Codex `hooks.json` entry, and a pi/omp extension file. Each calls `quirky-gate`, or for pi/omp, the `/gate/` route directly.
@@ -65,9 +65,11 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 - `packages/ui/src/shell/WindowBar.tsx`: render every `window-bar-item` through the existing `PluginSlot` mechanism used by `packages/ui/src/shell/StatusBar.tsx:243`, after the new-tab buttons, ordered by `order`.
 
 ### Host: H4 worktree surfaces (`plugins/quirky.worktree`)
-- `src/useTree.ts:108,257`: alongside `heimdallStatus`, add `avatarStatus: AvatarWorktreeStatus | null`. It is loaded by a `loadAvatar()` that calls `quirky.avatar/sidebarStatus` and refreshes on `quirky.avatar/changed`. The method failing, or the plugin being absent, gives `null` everywhere.
-- `src/Tree.tsx:75-103,240`: when `avatarStatus` is non-null, render an accent ring on the row's status dot and prefix the row label with `Avatar · `.
-- `src/Menu.tsx`: add `Hand off to Avatar…`, which runs command `command:quirky.avatar/handoff` (as the window registry stores it; the bare id is also accepted) with `{worktreeIds:[id]}`. Show it only when that command is in the loaded command set; this follows `newTabButtons` in `WindowBar.tsx:223`.
+- `src/useTree.ts`: loads `avatarStatus: AvatarWorktreeStatus | null` alongside `heimdallStatus` through `quirky.avatar/sidebarStatus`. Refreshes on mount, `quirky.avatar/changed`, `plugin.changed` and reconnect; only the latest load applies. A failed method or absent entry gives `null`.
+- `src/Tree.tsx`: validates avatar status before adding the name prefix and the existing `ActivityMark`'s `ring` and `title`. The ring is `accent`, or `needs-you` when avatar attention is pending; the mark's state and accessible label remain unchanged.
+- `src/useAvatarHandoff.ts`: discovers the prefixed or bare `quirky.avatar/handoff` command through `ui.contributions`, refreshing on plugin changes and reconnect. Returns a callback that executes it with `{ worktreeIds }`, or `null` when unavailable; execution failures show a toast.
+- `src/Menu.tsx` and `src/Tree.tsx`: show `Hand off to Avatar…` last in the first menu group only while the callback is available, then pass the row id to it.
+- `src/WorktreesSection.tsx`: shares `useAvatarHandoff` with the tree and adds `Hand off…` after `Sleep` in the bulk bar. It hands off selected, shown worktrees without clearing selection.
 
 ### Host: H5 structured runners (`plugins/quirky.structured`)
 - `runner.ts:43` (`StructuredRunner`): `StructuredStartOptions` gains `toolPolicy?: 'default' | 'deny-all'`. Runners report usage per turn (see Contracts).
@@ -518,7 +520,7 @@ Tests run with `bun test <file>` on this Mac. The full suite runs in CI through 
 | H1 | `packages/daemon/test/gate.test.ts` | No provider gives unavailable; provider timeout gives unavailable and aborts; provider error gives unavailable; token required; second provider rejected. The shim gives passthrough without a marker, deny when the daemon is down, and the encoded string when the daemon is up. |
 | H2 | `packages/daemon/test/host-power-keep-awake.test.ts` | Ref-count, disposer idempotence, release on revoke, using a fake native source. |
 | H3 | `packages/daemon/test/plugins/ui-kinds.test.ts` (extend), `packages/ui/test/window-bar-items.test.tsx` | The manifest accepts and validates the kind; items render in order. |
-| H4 | `plugins/quirky.worktree/test/avatar-status.test.tsx` | Ring and prefix when the status is present; nothing when the plugin is absent; menu item only when the command is loaded. |
+| H4 | `plugins/quirky.worktree/test/avatar-status.test.tsx`, `plugins/quirky.worktree/test/views-ui.test.tsx` | Validated ring, title and prefix without changing activity or attention counts; absent, malformed, failed and stale status loads; command discovery and refresh; conditional row and bulk actions, command ids, errors and preserved selection. |
 | H5 | `plugins/quirky.structured/test/tool-policy.test.ts`, `test/pi-runner.test.ts` | `deny-all` refuses tools on fake runners; usage reported; the pi/omp runner against a scripted fake rpc process. |
 | decide | `plugins/quirky.avatar/test/decide.test.ts` | Every row of the SC-10 decision table; order precedence; level denies and never holds; guideline text can't change the outcome. |
 | classify | `test/classify.test.ts` | Each `ActionClass` from Bash, Edit/Write paths, MCP and pi tool shapes. |

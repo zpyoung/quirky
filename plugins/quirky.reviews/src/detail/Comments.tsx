@@ -323,8 +323,16 @@ export function Comments(props: CommentsProps) {
 
   const sendQueued = async () => {
     if (data.queued.length === 0) return
+    if (props.surface === 'checks' && owner === null) {
+      setActionError('No pull request is selected.')
+      return
+    }
     try {
-      await props.context.call('quirky.reviews/checksSetAgentDialog', { surface: props.surface, action: 'comments' })
+      await props.context.call('quirky.reviews/checksSetAgentDialog', {
+        surface: props.surface,
+        ...(props.surface === 'checks' && owner !== null ? { worktree: owner.worktree } : {}),
+        action: 'comments',
+      })
     } catch (error) {
       setActionError(errorText(error))
     }

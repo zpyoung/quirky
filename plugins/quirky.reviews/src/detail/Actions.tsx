@@ -291,7 +291,11 @@ export function ReviewActions(props: ReviewActionsProps) {
 
   const openFixDialog = async () => {
     try {
-      await props.context.call('quirky.reviews/checksSetAgentDialog', { surface: props.surface, action: 'fix' })
+      await props.context.call('quirky.reviews/checksSetAgentDialog', {
+        surface: props.surface,
+        ...(props.surface === 'checks' ? { worktree: owner.worktree } : {}),
+        action: 'fix',
+      })
     } catch (error) {
       setErrorMessage(error)
     }

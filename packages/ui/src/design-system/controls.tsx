@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, HTMLAttributes } from 'react'
-import type { AffixInputProps, CheckboxProps, ChoiceOption, DisclosureButtonProps, LinkButtonProps, ReachMeterProps, SegmentedControlProps, TagButtonProps } from './contracts'
+import type { AffixInputProps, ChoiceOption, DisclosureButtonProps, LinkButtonProps, ReachMeterProps, SegmentedControlProps, TagButtonProps } from './contracts'
 import { classNames } from './shared'
 import { ControlIcon } from './tool-icons'
 
@@ -79,29 +79,6 @@ export function SegmentedControl({ label, options, value, onChange, className }:
         >{option.label}</button>
       ))}
     </div>
-  )
-}
-
-/**
- * A checkbox in a 2rem clickable label. Without children it is a bare box for table cells (name it
- * with `aria-label`); with children the text is the label. `tone="needs-you"` tints a label that
- * grants something held for the person.
- */
-export function Checkbox({ indeterminate = false, tone, children, className, ref, ...props }: CheckboxProps) {
-  const own = useRef<HTMLInputElement | null>(null)
-  useEffect(() => {
-    if (own.current) own.current.indeterminate = indeterminate
-  }, [indeterminate])
-  const setRef = (node: HTMLInputElement | null) => {
-    own.current = node
-    if (typeof ref === 'function') ref(node)
-    else if (ref) ref.current = node
-  }
-  return (
-    <label className={classNames('ui-check', children === undefined ? 'ui-check--box' : 'ui-check--inline', tone === 'needs-you' && 'ui-check--needs-you', props.disabled && 'ui-check--disabled', className)}>
-      <input {...props} ref={setRef} type="checkbox" />
-      {children}
-    </label>
   )
 }
 

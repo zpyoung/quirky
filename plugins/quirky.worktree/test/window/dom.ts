@@ -46,9 +46,9 @@ export function sectionHeadingMatches(section: ParentNode, name: string): boolea
   const heading = sectionHeading(section)
   return heading === name || heading?.endsWith(` ${name}`) === true
 }
-/** Returns the workspace name from the shared ListRow's accessible open action. */
+/** Returns the worktree name from the row's accessible open action. */
 export function listRowName(row: ParentNode): string | undefined {
-  const main = row.querySelector<HTMLElement>('.ui-list-row__main')
+  const main = row.querySelector<HTMLElement>('.worktree-row__main')
   const label = main ? accessibleName(main) : ''
   if (label.startsWith('Open ')) return label.slice('Open '.length)
   if (label.startsWith('Wake and open ')) return label.slice('Wake and open '.length)
