@@ -108,10 +108,11 @@ type DisabledMcpServers = { mcp_servers: Record<string, { enabled: false }> }
 
 async function readDisabledMcpServers(
   connection: CodexConnection,
-  cwd: string
+  cwd: string,
+  timeoutMs?: number
 ): Promise<DisabledMcpServers | undefined> {
   try {
-    const response = await connection.request('config/read', { cwd })
+    const response = await connection.request('config/read', { cwd }, timeoutMs)
     if (!isPlainMap(response) || !Object.hasOwn(response, 'config')) throw new Error()
     const config = response.config
     if (!isPlainMap(config)) throw new Error()
@@ -161,6 +162,8 @@ type Starting = { stopped: boolean; connection?: CodexConnection; run?: Running 
 export type CodexRunnerDeps = {
   /** A per-run child environment for isolated process tests. Production inherits the daemon environment. */
   env?: NodeJS.ProcessEnv
+  /** How long a session without tools waits for Codex's `config/read` reply. A test may lower it. Default: 15 seconds. */
+  configReadTimeoutMs?: number
 }
 
 /** Runs Codex as a native JSONL app-server conversation without allocating a terminal. */
@@ -206,7 +209,7 @@ class CodexRunner implements StructuredRunner {
       if (toolPolicy === 'deny-all') {
         run.readingMcpConfig = true
         try {
-          threadConfig = await readDisabledMcpServers(connection, session.cwd)
+          threadConfig = await readDisabledMcpServers(connection, session.cwd, this.deps.configReadTimeoutMs)
         } finally {
           run.readingMcpConfig = false
         }
