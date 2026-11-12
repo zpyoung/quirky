@@ -52,7 +52,7 @@ describe('sanitize', () => {
       mergedIds: [] as string[]
     }
     expect(mergeReady(input).ready).toBe(false)
-    expect(mergeReady({ ...input, checks: [], findings: [], threads: [], guessesOpen: 0, reviewedSha: 'a' }).ready).toBe(true)
+    expect(mergeReady({ ...input, checks: [{ name: 'ci', required: true, conclusion: 'success' }], findings: [], threads: [], guessesOpen: 0, reviewedSha: 'a' }).ready).toBe(true)
   })
 })
 
