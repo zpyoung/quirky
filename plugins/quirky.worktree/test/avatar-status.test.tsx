@@ -279,6 +279,21 @@ test('avatar needs do not change the mark state, accessible name, or tree attent
   expect(model.needsYouCount).toBe(1)
 })
 
+test('avatar attention preserves a running mark and leaves the tree attention count at zero', async () => {
+  const model = await mountTree(harness(), [
+    worktree('plain', 'plain-one'),
+    worktree('handed', 'handed-one', { avatarStatus: { state: 'gate-failed', level: 'full', needsYou: 2 } })
+  ], {
+    marks: { plain: 'running', handed: 'running' },
+    pendingAsks: new Map()
+  })
+  expect(markOf('plain').dataset.state).toBe('running')
+  expect(markOf('handed').dataset.state).toBe(markOf('plain').dataset.state)
+  expect(markOf('handed').getAttribute('aria-label')).toBe(markOf('plain').getAttribute('aria-label'))
+  expect(model.needsYouCount).toBe(0)
+  expect(markOf('plain').getAttribute('aria-label')).toBe('Running')
+})
+
 test('a menu without a hand-off callback keeps main’s actions and ordering', async () => {
   await mountTree(harness(), [worktree('plain', 'plain-one')])
   await openMenu('plain-one')
@@ -370,6 +385,29 @@ test('a failed sidebar-status call leaves every row null without logging or toas
   expect(h.toasts).toEqual([])
   expect(h.logs).toEqual([])
 })
+
+test('a failed sidebar-status refresh clears previously loaded statuses without logging or toasting', async () => {
+  let unavailable = false
+  const h = harness({
+    worktrees: [worktree('w1', 'one'), worktree('w2', 'two')],
+    sidebarStatus: () => {
+      if (unavailable) throw new Error('avatar unavailable')
+      return { w1: STATUS, w2: STATUS }
+    }
+  })
+  const data = await mountProbe(h)
+  expect(avatarStatusOf(data(), 'w1')).toEqual(STATUS)
+  expect(avatarStatusOf(data(), 'w2')).toEqual(STATUS)
+
+  unavailable = true
+  await act(async () => h.emit({ type: 'plugin.changed', data: {} } as QuirkyEvent))
+  await settle()
+  expect(avatarStatusOf(data(), 'w1')).toBeNull()
+  expect(avatarStatusOf(data(), 'w2')).toBeNull()
+  expect(h.toasts).toEqual([])
+  expect(h.logs).toEqual([])
+})
+
 type HandoffAction = ((worktreeIds: string[]) => void) | null
 
 function HandoffProbe({ context, onAction }: {
@@ -409,6 +447,11 @@ test('useAvatarHandoff ignores malformed discovery, reloads on plugin changes an
   await settle()
   expect(action()).toBeNull()
 
+  h.setContributions({ commands: [{ id: 'command:quirky.avatar/handoff' }] })
+  await act(async () => h.emit({ type: 'plugin.changed', data: {} } as QuirkyEvent))
+  await settle()
+  expect(typeof action()).toBe('function')
+
   h.setContributions({}, new Error('contributions unavailable'))
   await act(async () => h.emit({ type: 'plugin.changed', data: {} } as QuirkyEvent))
   await settle()
@@ -424,5 +467,22 @@ test('useAvatarHandoff ignores malformed discovery, reloads on plugin changes an
   await settle()
   expect(h.commands).toEqual([{ id: 'quirky.avatar/handoff', args: { worktreeIds: ['plain'] } }])
   expect(h.toasts).toEqual([{ title: 'Could not hand off to Avatar', body: 'boom' }])
-  expect(h.calls.filter((call) => call.method === 'ui.contributions')).toHaveLength(5)
+  expect(h.calls.filter((call) => call.method === 'ui.contributions')).toHaveLength(6)
+})
+
+test('useAvatarHandoff rejects unrelated commands and selects the hand-off id beside them', async () => {
+  const unrelated = 'command:quirky.session/new-shell'
+  const handoff = 'command:quirky.avatar/handoff'
+  const h = harness({ commandIds: [unrelated] })
+  const action = await mountHandoffProbe(h)
+  expect(action()).toBeNull()
+
+  h.setContributions({ commands: [{ id: unrelated }, { id: handoff }] })
+  await act(async () => h.emit({ type: 'plugin.changed', data: {} } as QuirkyEvent))
+  await settle()
+  const execute = action()
+  expect(typeof execute).toBe('function')
+  execute?.(['plain'])
+  await settle()
+  expect(h.commands).toEqual([{ id: handoff, args: { worktreeIds: ['plain'] } }])
 })

@@ -117,7 +117,6 @@ const AVATAR_LEVEL_LABELS: Record<AvatarWorktreeStatus['level'], string> = {
   full: 'Full'
 }
 
-
 function isHeimdallWorktreeStatus(value: unknown): value is HeimdallWorktreeStatus {
   if (typeof value !== 'object' || value === null) return false
   const status = value as Record<string, unknown>
@@ -132,6 +131,7 @@ function heimdallStatusOf(worktree: Worktree): HeimdallWorktreeStatus | null {
   if (!('heimdallStatus' in worktree)) return null
   return isHeimdallWorktreeStatus(worktree.heimdallStatus) ? worktree.heimdallStatus : null
 }
+
 function avatarStatusOf(worktree: Worktree): AvatarWorktreeStatus | null {
   if (!('avatarStatus' in worktree)) return null
   return isAvatarWorktreeStatus(worktree.avatarStatus) ? worktree.avatarStatus : null
@@ -144,7 +144,6 @@ function avatarStatusTitle(status: AvatarWorktreeStatus): string {
     : ''
   return `Avatar: ${state}${needsYou} · ${AVATAR_LEVEL_LABELS[status.level]}`
 }
-
 
 function HeimdallGlyph({ status, now }: { status: HeimdallWorktreeStatus; now: number }) {
   let label = status.state

@@ -705,6 +705,7 @@ test('the cleanup footer line names the count and appears only when candidates e
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   expect(withCandidate.calls.filter((call) => call.method === 'quirky.worktree/cleanupPreview').length).toBeGreaterThan(1)
 })
+
 test('row hand-off discovery handles missing, malformed and failed contributions across unload and reconnect', async () => {
   const h = setup()
   h.world.handoffContributions = {}
@@ -727,6 +728,12 @@ test('row hand-off discovery handles missing, malformed and failed contributions
   expect(menuItem('Hand off to Avatar…')).toBeUndefined()
   await pressEscape()
 
+  h.world.handoffContributions = { commands: [{ id: 'command:quirky.avatar/handoff' }] }
+  await h.emit('plugin.changed')
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  expect(menuItem('Hand off to Avatar…')).toBeDefined()
+  await pressEscape()
+
   h.world.contributionsError = new Error('contributions unavailable')
   await h.emit('plugin.changed')
   await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
@@ -741,7 +748,31 @@ test('row hand-off discovery handles missing, malformed and failed contributions
   await click(menuItem('Hand off to Avatar…'))
   expect(h.world.executeCommandCalls).toEqual([{ id: 'quirky.avatar/handoff', args: { worktreeIds: ['w-retry'] } }])
   expect(menuItems()).toHaveLength(0)
-  expect(h.calls.filter((call) => call.method === 'ui.contributions')).toHaveLength(5)
+  expect(h.calls.filter((call) => call.method === 'ui.contributions')).toHaveLength(6)
+})
+
+test('row hand-off discovery ignores unrelated session commands', async () => {
+  const h = setup()
+  h.world.handoffContributions = { commands: [{ id: 'command:quirky.session/new-shell' }] }
+  await h.mountInto(host)
+
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  expect(menuItem('Hand off to Avatar…')).toBeUndefined()
+})
+
+test('row hand-off executes the hand-off command when an unrelated command is listed first', async () => {
+  const h = setup()
+  h.world.handoffContributions = {
+    commands: [
+      { id: 'command:quirky.session/new-shell' },
+      { id: 'command:quirky.avatar/handoff' }
+    ]
+  }
+  await h.mountInto(host)
+
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  await click(menuItem('Hand off to Avatar…'))
+  expect(h.world.executeCommandCalls).toEqual([{ id: 'command:quirky.avatar/handoff', args: { worktreeIds: ['w-retry'] } }])
 })
 
 test('a loaded row hand-off follows Sleep and its descendants, runs once, and closes the menu', async () => {

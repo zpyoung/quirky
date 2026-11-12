@@ -114,7 +114,6 @@ describe('SegmentedControl', () => {
   })
 })
 
-
 describe('AffixInput', () => {
   test('renders a decorative prefix, the input and a suffix control inside one field', async () => {
     await render(h(AffixInput, { prefixText: 'Done when', 'aria-label': 'Check', mono: true, defaultValue: 'x', suffix: h(TagButton, null, 'runs it') }))

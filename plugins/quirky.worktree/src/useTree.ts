@@ -40,6 +40,7 @@ type HeimdallFleetSnapshot = { generatedAtMs: number; rows: HeimdallFleetRow[] }
 function objectRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
+
 export function isAvatarWorktreeStatus(value: unknown): value is AvatarWorktreeStatus {
   const status = objectRecord(value)
   return status !== null && typeof status.state === 'string' &&
@@ -244,6 +245,7 @@ export function useTree(context: UiPluginContext): TreeData {
       // Heimdall is optional from the worktree sidebar's perspective.
     }
   }, [context])
+
   const loadAvatar = useCallback(async () => {
     const ticket = ++latestAvatar.current
     try {
@@ -254,7 +256,6 @@ export function useTree(context: UiPluginContext): TreeData {
       if (ticket === latestAvatar.current) setAvatarByWorktree({})
     }
   }, [context])
-
 
   useEffect(() => {
     void loadTree()

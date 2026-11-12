@@ -64,6 +64,7 @@ describe('ActivityMark', () => {
     }
     expect(seen.size).toBe(states.length)
   })
+
   test('supports optional ring tones and leaves the unringed mark unchanged', async () => {
     for (const ring of ['accent', 'needs-you'] as const) {
       await render(h(ActivityMark, { state: 'running', label: 'Agent running', ring }))
@@ -233,6 +234,7 @@ describe('Checkbox', () => {
     expect(input.getAttribute('aria-label')).toBe('Select feat/a')
     expect(container.querySelector('.ui-checkbox__text')).toBeNull()
   })
+
   test('needs-you tone marks the label and keeps the checked value', async () => {
     await render(h(Checkbox, { checked: true, label: 'Message people', onChange: () => undefined, tone: 'needs-you' }))
     const label = container.querySelector('label')!
