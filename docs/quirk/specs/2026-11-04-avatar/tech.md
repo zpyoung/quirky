@@ -107,7 +107,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/supervisor/stuck.ts` | Pure stuck-signal detection (R-26). |
 | `src/supervisor/ladder.ts` | Nudge, restart, restart, park (R-27). |
 | `src/supervisor/stepin.ts` | Interrupt and redirect through the terminal, never over unsent user text (R-43, R-47). |
-| `src/supervisor/records.ts` | Session-record versus receipts check (R-40), Codex hosted tools (R-42), hook-config file watch (R-41). It tails the session file from `providerSession.transcriptPath` (`quirky.session/show`) every 15 s. Claude JSONL `tool_use` blocks, Codex JSONL `function_call` and `web_search_call` / `image_generation_call`, and pi/omp JSONL `toolCall` entries are each matched to receipts by fingerprint within ±60 s. Reuse `parseProviderTranscriptLine` in `plugins/quirky.agent-status/src/transcript.ts` where it already covers the format. |
+| `src/supervisor/records.ts` | Session-record versus receipts check (R-40), Codex hosted tools (R-42), hook-config file watch (R-41). It tails the session file from `providerSession.transcriptPath` (`quirky.session/show`) every 15 s. It keeps its byte position per session in `record_cursors`, with the calls still waiting for a receipt, so a restart reads on from where it stopped. Claude JSONL `tool_use` blocks, Codex JSONL `function_call` and `web_search_call` / `image_generation_call`, and pi/omp JSONL `toolCall` entries are each matched to receipts by fingerprint within ±60 s. Reuse `parseProviderTranscriptLine` in `plugins/quirky.agent-status/src/transcript.ts` where it already covers the format. |
 | `src/shipping/donewhen.ts` | Runs done when via `quirky.checks/run` (R-25). |
 | `src/shipping/review.ts` | Cross-family reviewer (R-29), finding intake and judgment records (R-30). |
 | `src/shipping/mergebar.ts` | Pure merge bar (R-31, R-32) and shared-goal order (R-33). |
@@ -435,6 +435,7 @@ A `proposeMandateEdit` patch can never include `level` or `switches`, and the ac
 | `shared_goals` | `id` | |
 | `journal` | `seq INTEGER PRIMARY KEY AUTOINCREMENT` | `delivered_to_brain INTEGER` marks the wake queue. |
 | `receipts` | `id` | `fingerprint`, `session_id`, `tool_name`, `at`, `outcome`, `step`. Indexed by `(session_id, at)`. |
+| `record_cursors` | `session_id` | `worktree_id`, `path`, `read_offset` (bytes), `pending` (JSON), `updated_at`; removed when the session is no longer handed off. |
 | `approvals` | `id` | |
 | `late_answers` | `fingerprint` | |
 | `needs_you` | `id` | |
@@ -510,7 +511,7 @@ These are fixed by the logic spec.
 ## Cross-cutting
 - **Security.** The gate shim and the extension read the marker before any network call. The token header is reused. Credential paths are floor core. The journal stores raw tool input; per BS-secrets, this is accepted and not redacted.
 - **Observability.** Every gate decision journals `{fingerprint, path trace, reliedOn, sawWorkerExplanation:false}`. That is the SC-11 log entry.
-- **Migration.** There is no existing data. The store is new at version 1.
+- **Migration.** There is no existing data because the avatar store has never been on `main`. `store-migrations.ts` has two steps; a schema change appends a step and never edits one.
 - **Rollback.**
   - Disabling the plugin removes the `tool-gate` provider. Supervised sessions then get `unavailable`, which means deny with retry.
   - Deactivating keeps every marker and every hand-off. A waiting request is refused with a retry reason, and supervised sessions are refused while the avatar is stopped (SC-12). To give sessions their own prompts back, take the worktrees back before disabling the plugin, or enable it again and take them back.
