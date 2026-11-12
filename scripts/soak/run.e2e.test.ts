@@ -1,9 +1,12 @@
 import { expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { main } from '../soak.ts'
 import type { Sample, SoakReport } from './contracts.ts'
+import { PROTOCOL_VERSION } from '@quirky/protocol'
+import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures.ts'
+import { startProbe } from './probe.ts'
 
 function isAlive(pid: number): boolean {
   try {
@@ -51,3 +54,89 @@ test('measures real workers, hooks, processes and probes and cleans up its daemo
     rmSync(out, { recursive: true, force: true })
   }
 }, 180_000)
+
+test('bounds a healthy endpoint that never answers the probe handshake', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'quirky-soak-handshake-'))
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request, server) {
+      if (new URL(request.url).pathname === '/rpc' && server.upgrade(request)) return
+      return Response.json({ pid: process.pid })
+    },
+    websocket: { idleTimeout: 0, message() {} }
+  })
+  writeFileSync(join(home, 'runtime.json'), JSON.stringify({
+    pid: process.pid, port: server.port, token: 'soak-test', hookToken: 'soak-test',
+    daemonVersion: 'test', protocolVersion: PROTOCOL_VERSION, startedAt: Date.now()
+  }))
+  const abort = new AbortController()
+  // a real websocket handshake needs the platform clock, not fake timers
+  const timer = setTimeout(() => abort.abort(), 35_000)
+  const began = performance.now()
+  let failure: unknown
+  try {
+    try {
+      await startProbe({ home, startedAt: began, onDaemonLost() {}, signal: abort.signal })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as Error).message).toContain('30000')
+  } finally {
+    clearTimeout(timer)
+    abort.abort()
+    await server.stop(true)
+    rmSync(home, { recursive: true, force: true })
+  }
+}, 45_000)
+
+test('reports daemon loss between worker startup and probe connection as a failed run', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-soak-probe-loss-'))
+  const out = join(root, 'out')
+  const preload = join(root, 'probe-loss.ts')
+  const repoRoot = resolve(import.meta.dir, '../..')
+  const probePath = join(repoRoot, 'scripts/soak/probe.ts')
+  const nodePath = join(repoRoot, 'packages/protocol/src/node/index.ts')
+  mkdirSync(join(root, 'tmp'))
+  writeFileSync(preload, `
+import { mock } from 'bun:test'
+import { startProbe as originalStartProbe } from ${JSON.stringify(probePath)}
+import { readRuntime, isDaemonAlive } from ${JSON.stringify(nodePath)}
+const startProbe = originalStartProbe
+mock.module(${JSON.stringify(probePath)}, () => ({
+  startProbe: async (options) => {
+    const runtime = readRuntime(options.home)
+    process.kill(runtime.pid, 'SIGTERM')
+    while (await isDaemonAlive(runtime, 100)) await Bun.sleep(10)
+    return startProbe(options)
+  }
+}))
+`)
+  const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--minutes', '0.4', '--out', out], {
+    cwd: repoRoot,
+    env: createIsolatedRuntimeEnvironment(root, { repoRoot }),
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  const output = new Response(child.stdout).text()
+  const errors = new Response(child.stderr).text()
+  const timer = setTimeout(() => child.kill('SIGTERM'), 60_000)
+  try {
+    const code = await child.exited
+    await errors
+    await output
+    expect(code).toBe(1)
+    const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
+    expect(report.verdict).toBe('fail')
+    expect(report.checks.stalls.daemonExited).toBe(true)
+    expect(report.checks.stalls.ok).toBe(false)
+    expect(isAlive(report.daemon.pid)).toBe(false)
+  } finally {
+    clearTimeout(timer)
+    if (child.exitCode === null) child.kill('SIGTERM')
+    await child.exited
+    await Promise.all([output, errors])
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 90_000)

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
+import { ConnectionLost } from '@quirky/protocol'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
 import type { Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
@@ -79,16 +80,30 @@ export async function main(argv: string[]): Promise<number> {
     const startedIso = new Date().toISOString()
     let samplingStopped = false
     let daemonMissing = false
-    probe = await startProbe({
-      home: world.home,
-      startedAt,
-      signal: setupAbort.signal,
-      onDaemonLost: () => {
-        samplingStopped = true
-        runAbort.abort()
-      },
-      onPtyHostPid: (pid) => world!.updatePtyHostPid(pid)
-    })
+    try {
+      probe = await startProbe({
+        home: world.home,
+        startedAt,
+        signal: setupAbort.signal,
+        onDaemonLost: () => {
+          samplingStopped = true
+          runAbort.abort()
+        },
+        onPtyHostPid: (pid) => world!.updatePtyHostPid(pid)
+      })
+    } catch (error) {
+      if (interrupted) throw error
+      let daemonAlive = true
+      try {
+        process.kill(world.daemonPid, 0)
+      } catch (pidError) {
+        if ((pidError as NodeJS.ErrnoException).code !== 'ESRCH') throw pidError
+        daemonAlive = false
+      }
+      if (!(error instanceof ConnectionLost) && !world.control.isClosed && daemonAlive) throw error
+      daemonMissing = true
+      samplingStopped = true
+    }
     const elapsed = () => (performance.now() - startedAt) / 1000
     const samples: Sample[] = []
     const seen = new Set<string>()
@@ -123,7 +138,7 @@ export async function main(argv: string[]): Promise<number> {
       await pause(Math.min(sampleStart + 1000, deadline) - performance.now(), runAbort.signal)
     }
     if (interrupted) return interrupted
-    probe.stop()
+    probe?.stop()
     const durationSeconds = Number(elapsed().toFixed(3))
     if (attemptedSamples > 0 && skippedSamples / attemptedSamples > 0.1) {
       throw new Error(`ps failed for ${skippedSamples} of ${attemptedSamples} samples`)
@@ -133,10 +148,10 @@ export async function main(argv: string[]): Promise<number> {
       durationSeconds,
       windows: 0,
       samples,
-      events: probe.events,
-      probes: probe.probes,
+      events: probe?.events ?? [],
+      probes: probe?.probes ?? [],
       workers: world.workers.map(({ worktree, path }) => heartbeat(worktree, path, now)),
-      daemonExited: daemonMissing || probe.daemonExited()
+      daemonExited: daemonMissing || (probe?.daemonExited() ?? false)
     }
     const judged = judge(evidence, config)
     const rss = samples.flatMap(({ daemonRssKb }) => daemonRssKb === null ? [] : [daemonRssKb])

@@ -34,22 +34,60 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw aborted()
 }
 
-function waitWithAbort<T>(task: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return task
-  if (signal.aborted) return Promise.reject(aborted())
+function waitWithAbort<T>(
+  task: Promise<T>,
+  signal?: AbortSignal,
+  timeoutMs?: number,
+  onLateValue?: (value: T) => void
+): Promise<T> {
+  const closeLateValue = (value: T) => {
+    try {
+      onLateValue?.(value)
+    } catch {
+      return
+    }
+  }
+  if (signal?.aborted) {
+    if (onLateValue) void task.then(closeLateValue, () => undefined)
+    return Promise.reject(aborted())
+  }
+  if (!signal && timeoutMs === undefined) return task
   const { promise, resolve, reject } = Promise.withResolvers<T>()
+  let settled = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const cleanup = () => {
+    signal?.removeEventListener('abort', onAbort)
+    clearTimeout(timer)
+  }
   const onAbort = () => {
-    signal.removeEventListener('abort', onAbort)
+    if (settled) return
+    settled = true
+    cleanup()
     reject(aborted())
   }
-  signal.addEventListener('abort', onAbort, { once: true })
+  signal?.addEventListener('abort', onAbort, { once: true })
+  if (timeoutMs !== undefined) {
+    timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error(`soak setup timed out after ${timeoutMs} ms`))
+    }, timeoutMs)
+  }
   task.then(
     (value) => {
-      signal.removeEventListener('abort', onAbort)
+      if (settled) {
+        closeLateValue(value)
+        return
+      }
+      settled = true
+      cleanup()
       resolve(value)
     },
     (error: unknown) => {
-      signal.removeEventListener('abort', onAbort)
+      if (settled) return
+      settled = true
+      cleanup()
       reject(error)
     }
   )
@@ -155,13 +193,7 @@ export async function startWorld(options: StartWorldOptions): Promise<SoakWorld>
     throwIfAborted(options.signal)
 
     const connecting = connectDaemon({ home, role: 'cli', name: 'soak-control', autostart: false })
-    void connecting.then(
-      (client) => {
-        if (options.signal?.aborted) client.close()
-      },
-      () => undefined
-    )
-    const activeControl = await waitWithAbort(connecting, options.signal)
+    const activeControl = await waitWithAbort(connecting, options.signal, 30_000, closeClient)
     control = activeControl
     throwIfAborted(options.signal)
 
