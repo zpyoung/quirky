@@ -17,6 +17,9 @@ type Parsed = {
   dynamicCommand: boolean
   dynamicBeforeCommand: boolean
   unknownWrapperFlag: boolean
+  foreignWrapper: boolean
+  foreignCommand: boolean
+  pathNamedBuiltin: boolean
   argumentExempt: boolean
   execCwd: DirectorySet
   wrapperReads: WrapperTarget[]
@@ -30,6 +33,8 @@ const SHELL_TOOLS = new Set(['bash', 'shell', 'local_shell', 'exec_command', 'co
 const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'filePath', 'file']
 
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
+const SYSTEM_DIRECTORIES: Record<string, true> = { '/bin': true, '/usr/bin': true, '/sbin': true, '/usr/sbin': true, '/usr/local/bin': true, '/opt/homebrew/bin': true }
+const PATH_NAMED_BUILTINS: Record<string, true> = { cd: true, pushd: true, eval: true, export: true }
 const NO_ARGUMENT_EFFECT_CMDS: Record<string, true> = { echo: true, printf: true, true: true, false: true, test: true, '[': true, basename: true, dirname: true, sleep: true }
 type WrapperSpec = {
   shortFlags?: string
@@ -200,6 +205,24 @@ function writeClasses(rawPath: string, cwd: string, ctx: ClassifyContext, rootPa
   return classes
 }
 
+function systemCommandName(text: string): string | null {
+  const slash = text.lastIndexOf('/')
+  if (slash < 0) return text
+  const name = text.slice(slash + 1)
+  return name !== '' && SYSTEM_DIRECTORIES[text.slice(0, slash)] === true ? name : null
+}
+
+function isWorktreeTool(word: ShellWord, directories: DirectorySet, ctx: ClassifyContext): boolean {
+  const name = basename(word.text)
+  if (!TEST_RUNNERS.has(name) && !BUILD_TOOLS.has(name) && name !== 'prettier') return false
+  const rootPaths = roots(ctx)
+  return (directories ?? UNKNOWN_DIRECTORY).every((directory) => {
+    if (directory === null && !isAbsolute(word.text)) return false
+    const path = resolve(directory ?? '/', word.text)
+    return path.slice(0, path.lastIndexOf('/')).endsWith('/node_modules/.bin') && isInside(path, rootPaths)
+  })
+}
+
 type WrapperTarget = { target: ShellWord; cwd: DirectorySet }
 type UnwrappedWords = {
   commandIndex: number
@@ -207,6 +230,7 @@ type UnwrappedWords = {
   throughXargs: boolean
   dynamicBeforeCommand: boolean
   unknownWrapperFlag: boolean
+  foreignWrapper: boolean
   execCwd: DirectorySet
   wrapperReads: WrapperTarget[]
   wrapperWrites: WrapperTarget[]
@@ -229,6 +253,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
   let throughXargs = false
   let dynamicBeforeCommand = false
   let unknownWrapperFlag = false
+  let foreignWrapper = false
   let execCwd = commandCwd
   const wrapperReads: WrapperTarget[] = []
   const wrapperWrites: WrapperTarget[] = []
@@ -238,6 +263,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
     const wrapper = basename(word.text)
     const spec = Object.hasOwn(WRAPPER_SPECS, wrapper) ? WRAPPER_SPECS[wrapper] : undefined
     if (spec === undefined) break
+    if (systemCommandName(word.text) === null) foreignWrapper = true
     const afterXargs = throughXargs
     const wrapperIndex = commandIndex
     if (wrapper === 'sudo' || wrapper === 'doas') credential = true
@@ -363,7 +389,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
       break
     }
   }
-  return { commandIndex, credential, throughXargs, dynamicBeforeCommand, unknownWrapperFlag, execCwd, wrapperReads, wrapperWrites }
+  return { commandIndex, credential, throughXargs, dynamicBeforeCommand, unknownWrapperFlag, foreignWrapper, execCwd, wrapperReads, wrapperWrites }
 }
 
 function isArgumentExemptCommand(word: ShellWord | undefined): boolean {
@@ -379,7 +405,9 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
   const argWords = commandWord === undefined ? [] : command.words.slice(unwrapped.commandIndex + 1)
   const args: string[] = []
   for (const word of argWords) args.push(word.text)
-  const text = commandWord === undefined ? '' : commandWord.text + (args.length === 0 ? '' : ` ${args.join(' ')}`)
+  const systemName = commandWord === undefined || commandWord.dynamic ? null : systemCommandName(commandWord.text)
+  const pathNamed = commandWord !== undefined && !commandWord.dynamic && commandWord.text.includes('/')
+  const text = commandWord === undefined ? '' : (systemName ?? commandWord.text) + (args.length === 0 ? '' : ` ${args.join(' ')}`)
   return {
     cmd: commandWord === undefined ? '' : basename(commandWord.text),
     args,
@@ -393,6 +421,9 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
     dynamicCommand: commandWord?.dynamic ?? false,
     dynamicBeforeCommand: unwrapped.dynamicBeforeCommand,
     unknownWrapperFlag: unwrapped.unknownWrapperFlag,
+    foreignWrapper: unwrapped.foreignWrapper,
+    foreignCommand: pathNamed && systemName === null && !isWorktreeTool(commandWord, unwrapped.execCwd, ctx),
+    pathNamedBuiltin: pathNamed && PATH_NAMED_BUILTINS[basename(commandWord.text)] === true,
     argumentExempt: isArgumentExemptCommand(commandWord),
     execCwd: unwrapped.execCwd,
     wrapperReads: unwrapped.wrapperReads,
@@ -1116,6 +1147,15 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
         if (!commandAllowed) partClasses.push('other')
       }
     }
+    if (parsed.pathNamedBuiltin) {
+      partClasses.push('other', 'edit-outside')
+      cwd = possible = null
+    }
+    if (parsed.foreignWrapper) partClasses.push('other')
+    if (parsed.foreignCommand) {
+      commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
+      if (!commandAllowed && !matchesCommandList(parsed.text, ctx.deployCommands)) partClasses.push('other')
+    }
     if (keywordChangesDirectory(shellCommand.words)) cwd = possible = null
 
     if (!parsed.dynamicCommand && DOWNLOAD_CMDS.has(cmd)) downloadInPipeline = true
@@ -1225,7 +1265,8 @@ function shellCommandOf(input: unknown): { command: string; cwd: string | null }
   if (typeof raw === 'string') return { command: raw, cwd }
   if (Array.isArray(raw) && raw.every((item) => typeof item === 'string')) {
     const argv = raw as string[]
-    if (argv.length >= 3 && SHELLS.has(basename(argv[0])) && /^-[a-zA-Z]*c$/.test(argv[1])) return { command: argv[2], cwd }
+    const shellName = argv.length === 0 ? null : systemCommandName(argv[0])
+    if (argv.length >= 3 && shellName !== null && SHELLS.has(shellName) && /^-[a-zA-Z]*c$/.test(argv[1])) return { command: argv[2], cwd }
     return { command: argv.map((arg) => (/^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`)).join(' '), cwd }
   }
   return null
@@ -1280,6 +1321,9 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * Unreadable shell text and unknown wrapper options return `other` and `edit-outside`.
  * Computed words that no other rule accounts for add `other`; ordinary `xargs` commands
  * add `other` unless exempt, while write and shell `-c`/`eval` commands add `edit-outside`.
+ * A command or wrapper named by a path outside the system directories adds `other`,
+ * except listed command paths and worktree tools in a handed-off `node_modules/.bin`.
+ * A path-named `cd`, `pushd`, `eval` or `export` returns `other` and `edit-outside`.
  * A relative write target with an unknown cwd returns `edit-outside`.
  * Paths are judged under every possible shell directory; a write is inside only
  * when it is inside under each. A `cd` is certain only through its `&&` list.
@@ -1301,6 +1345,7 @@ export function classifyCall(call: ToolCall, ctx: ClassifyContext): ActionClass[
  * The normalized text of each command a Bash-style call runs, with wrappers like
  * `sudo` and `env` stripped and `bash -c` bodies expanded. Empty for file tools.
  * Segments with unknown wrapper options are omitted rather than inventing a command.
+ * Commands directly in a system directory are listed by their bare name.
  */
 export function commandParts(call: ToolCall, ctx: ClassifyContext): string[] {
   try {
