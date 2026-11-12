@@ -65,10 +65,11 @@ describe('job bounds', () => {
 })
 
 describe('QuirkyEvent', () => {
-  test('accepts plugin events and still narrows built-in ones', () => {
-    const pluginEvent: QuirkyEvent = { type: 'acme.tools/refreshed', data: 1 }
+  test('accepts tagged plugin events and still narrows built-in ones', () => {
+    const pluginEvent: QuirkyEvent = { type: 'acme.tools/refreshed', data: 1, worktreeId: 'wt_1' }
     const title = (event: QuirkyEvent): string | null => (event.type === 'notify' ? event.title : null)
     expect(title(pluginEvent)).toBeNull()
+    expect(pluginEvent.worktreeId).toBe('wt_1')
     expect(title({ type: 'notify', title: 't', body: 'b', desktop: true })).toBe('t')
   })
 })

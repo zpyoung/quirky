@@ -1,6 +1,6 @@
 {
   "id": "quirky.session-info",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "Session Info",
   "version": "0.1.0",
   "description": "A provider-neutral projection of the focused terminal agent, with guarded Claude session telemetry.",
@@ -83,7 +83,8 @@
       {
         "id": "changed",
         "description": "A session projection changed. Consumers refetch by session ID; null invalidates focus or preference state.",
-        "data": { "type": "object", "properties": { "sessionId": { "description": "A Quirky session ID, or null for global invalidation." } }, "required": ["sessionId"] }
+        "data": { "type": "object", "properties": { "sessionId": { "description": "A Quirky session ID, or null for global invalidation." } }, "required": ["sessionId"] },
+        "coalesce": ["sessionId"]
       }
     ],
     "launch-hook": [

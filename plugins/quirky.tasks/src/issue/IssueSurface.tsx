@@ -208,7 +208,7 @@ function initialChoices(): IssueChoices {
   return { available: false, labels: [], assignees: [], message: null }
 }
 
-export function IssueSurface(props: TasksSurfaceProps) {
+export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: TaskItem) => void }) {
   const target = props.state.navigation.detail
   const currentKey = target ? targetKey(target) : null
   const [storedDetail, setStoredDetail] = useState<{ key: string; value: IssueDetail } | null>(null)
@@ -360,6 +360,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
       const updated = mapIssueDetail({ ...previous, item: result?.item, comments: previous.comments, participants: previous.participants, timeline: previous.timeline, partialFailures: previous.partialFailures, truncated: previous.truncated, source: previous.source })
       if (!updated) throw new Error('GitHub did not return a confirmed issue after the edit.')
       setStoredDetail({ key, value: updated })
+      props.onEdited?.(updated.item)
       if (typeof result?.refreshError === 'string') setEditError(`Saved, but could not reload the confirmed issue: ${result.refreshError}`)
       if (changes.body !== undefined) {
         const returnedItem = record(result?.item)
@@ -505,7 +506,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
 
   return <main className="quirky-tasks-issue">
     <header className="quirky-tasks-issue__toolbar">
-      <Button type="button" onClick={() => void navigateBack()}>{projectOrigin ? 'Back to Project' : 'Back to GitHub list'}</Button>
+      <Button type="button" className="quirky-tasks-issue__back" onClick={() => void navigateBack()}>{projectOrigin ? 'Back to Project' : 'Close'}</Button>
       <span className="quirky-tasks-issue__context">{issueContext(target)} · #{target.number}</span>
       <Button type="button" onClick={refreshDetails} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
       <Button type="button" onClick={() => void runLinkCommand('copy-link')} disabled={!initialUrl}>Copy link</Button>
@@ -519,11 +520,13 @@ export function IssueSurface(props: TasksSurfaceProps) {
         <div className="quirky-tasks-issue__title-group">
           <h1 className="quirky-tasks-issue__title">{title}</h1>
           <div className="quirky-tasks-issue__meta">
-            <Badge tone={item?.state === 'closed' ? 'neutral' : 'working'} label={`Issue state: ${stateLabel}`}>{stateLabel}</Badge>
-            <span>{author} opened this issue</span>
-            <span aria-hidden="true">·</span>
-            <span title={item?.updatedAt ?? undefined}>updated {relativeTime(item?.updatedAt ?? null)}</span>
-            <span aria-hidden="true">·</span>
+            {item && <>
+              <Badge tone={item.state === 'closed' ? 'neutral' : 'working'} label={`Issue state: ${stateLabel}`}>{stateLabel}</Badge>
+              <span>{author} opened this issue</span>
+              <span aria-hidden="true">·</span>
+              <span title={item.updatedAt ?? undefined}>updated {relativeTime(item.updatedAt)}</span>
+              <span aria-hidden="true">·</span>
+            </>}
             <span>{detail?.source === 'project' ? 'GitHub Project item' : issueSourceLabel || 'GitHub issue source'}</span>
           </div>
         </div>
@@ -597,7 +600,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
             {detail.item.assignees.map((login) => <label key={login} className="quirky-tasks-issue__assignee">
               <input type="checkbox" checked disabled={busy} onChange={() => void updateIssue({ assignees: detail.item.assignees.filter((entry) => entry !== login) }, { assignees: detail.item.assignees.filter((entry) => entry !== login) })} />{login}
             </label>)}
-            {choices.available && choices.assignees.filter((user) => !detail.item.assignees.includes(user.login)).slice(0, 8).map((user) => <Button key={user.login} type="button" disabled={busy} onClick={() => {
+            {choices.available && choices.assignees.filter((user) => !detail.item.assignees.includes(user.login)).map((user) => <Button key={user.login} type="button" disabled={busy} onClick={() => {
               const assignees = [...detail.item.assignees, user.login]
               void updateIssue({ assignees }, { assignees })
             }}>+ {user.login}</Button>)}

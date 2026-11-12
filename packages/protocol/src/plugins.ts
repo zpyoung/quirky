@@ -63,7 +63,10 @@ export type PluginContext = {
   log(message: string): void
   /** Registers the implementation of a contribution this plugin declares; throws for any other ID. */
   provide(contributionId: string, implementation: unknown): void
-  /** Broadcasts `<pluginId>/<event>` to subscribed clients and plugins; false when it was not delivered. */
+  /**
+   * Broadcasts `<pluginId>/<event>` to subscribed clients and plugins. Returns false when the event is disabled or
+   * overridden; for an event declaring `coalesce`, true means it was sent or is held as the latest for its key.
+   */
   emit(event: string, data?: unknown): boolean
   /** Listens to every daemon event; the returned function unsubscribes. */
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
@@ -453,8 +456,11 @@ export type JobInfo = {
   lastRun: JobRun | null
 }
 
-/** An event a plugin emitted, named `<pluginId>/<event>`. */
-export type PluginEvent = { type: `${string}/${string}`; data: unknown }
+/**
+ * An event a plugin emitted, named `<pluginId>/<event>`. `worktreeId` is present when the event's
+ * declaration names a `worktree` key path and the payload holds a non-empty string there.
+ */
+export type PluginEvent = { type: `${string}/${string}`; data: unknown; worktreeId?: string }
 
 /** Launch env names a hook may not set: these two plus every name starting `QUIRKY_`. */
 export const RESERVED_LAUNCH_ENV = ['PATH', 'ZDOTDIR'] as const

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act, createElement as h, createRef, StrictMode, useState, type ReactNode } from 'react'
+import { act, createElement as h, createRef, StrictMode, useLayoutEffect, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ToolPanelActions } from '@quirky/ui'
 import {
@@ -78,6 +78,12 @@ const click = async (element: Element) => act(async () => {
 const key = async (element: Element, value: string, options: KeyboardEventInit = {}) => act(async () => {
   element.dispatchEvent(new KeyboardEvent('keydown', { ...options, key: value, bubbles: true, cancelable: true }))
 })
+function LayoutProbe({ onCommit }: { onCommit: () => void }) {
+  useLayoutEffect(() => {
+    onCommit()
+  })
+  return null
+}
 
 let fakeNowMs = 0
 let timers: { fn: () => void; id: number; ms: number | undefined; deadline: number }[] = []
@@ -314,6 +320,128 @@ describe('shared graphite components', () => {
     expect(document.activeElement).toBe(outerAction)
     await key(outerAction, 'Escape')
     expect(calls).toEqual(['inner', 'outer'])
+  })
+
+  test('a second dialog owns focus and Escape in the commit that shows it', async () => {
+    const calls: string[] = []
+    let focusAtCommit: Element | null = null
+    const tree = (inner: boolean) => <>
+      <Dialog open title="New workspace" onClose={() => calls.push('outer')}>
+        <input id="workspace-name" autoFocus />
+      </Dialog>
+      {inner && <>
+        <Dialog open title="Trust setup" onClose={() => calls.push('inner')}>
+          <button id="trust-action">Run setup</button>
+        </Dialog>
+        <LayoutProbe onCommit={() => {
+          focusAtCommit = document.activeElement
+          document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+          }))
+        }} />
+      </>}
+    </>
+    await render(tree(false))
+    const lowerDialog = container.querySelectorAll<HTMLElement>('[role="dialog"]')[0]!
+    const lowerField = container.querySelector<HTMLInputElement>('#workspace-name')!
+    lowerField.focus()
+
+    await render(tree(true))
+    const upperDialog = container.querySelectorAll<HTMLElement>('[role="dialog"]')[1]!
+    expect(upperDialog.contains(focusAtCommit)).toBe(true)
+    expect(calls).toEqual(['inner'])
+
+    await render(tree(false))
+    const state = Reflect.get(document, Symbol.for('quirky.ui.dialogState')) as {
+      stack: HTMLElement[]
+      inertStates: Map<HTMLElement, boolean>
+    }
+    expect(document.activeElement).toBe(lowerField)
+    expect(state.stack).toEqual([lowerDialog])
+    expect(lowerDialog.closest('[inert]')).toBeNull()
+    expect(state.inertStates.size).toBe(0)
+  })
+
+  test('a second dialog owns focus and Escape in the commit that shows it under StrictMode', async () => {
+    const calls: string[] = []
+    const focusAtCommit: (Element | null)[] = []
+    const tree = (inner: boolean) => <StrictMode>
+      <>
+        <Dialog open title="New workspace" onClose={() => calls.push('outer')}>
+          <input id="strict-workspace-name" autoFocus />
+        </Dialog>
+        {inner && <>
+          <Dialog open title="Trust setup" onClose={() => calls.push('inner')}>
+            <button id="strict-trust-action">Run setup</button>
+          </Dialog>
+          <LayoutProbe onCommit={() => {
+            focusAtCommit.push(document.activeElement)
+            document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'Escape',
+              bubbles: true,
+              cancelable: true,
+            }))
+          }} />
+        </>}
+      </>
+    </StrictMode>
+    await render(tree(false))
+    const lowerField = container.querySelector<HTMLInputElement>('#strict-workspace-name')!
+    lowerField.focus()
+
+    await render(tree(true))
+    const upperDialog = container.querySelectorAll<HTMLElement>('[role="dialog"]')[1]!
+    expect(focusAtCommit).toHaveLength(2)
+    expect(focusAtCommit.every((focus) => upperDialog.contains(focus))).toBe(true)
+    expect(calls).toEqual(['inner', 'inner'])
+  })
+
+  test('a first dialog takes focus in the commit that shows it and keeps a child autofocus', async () => {
+    const focusAtCommit: (Element | null)[] = []
+    const tree = (open: boolean, autofocus: boolean) => <>
+      <button id="outside-opener">Outside</button>
+      <Dialog open={open} title="First setup" onClose={() => {}}>
+        {autofocus
+          ? <><button id="earlier-action">Earlier action</button><input id="preferred-field" autoFocus /></>
+          : <button id="first-action">First action</button>}
+      </Dialog>
+      {open && <LayoutProbe onCommit={() => focusAtCommit.push(document.activeElement)} />}
+    </>
+    await render(tree(false, false))
+    const opener = container.querySelector<HTMLButtonElement>('#outside-opener')!
+    opener.focus()
+
+    await render(tree(true, false))
+    const firstDialog = container.querySelector<HTMLElement>('[role="dialog"]')!
+    const closeButton = firstDialog.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!
+    expect(focusAtCommit[0]).toBe(closeButton)
+
+    await render(tree(false, false))
+    const state = Reflect.get(document, Symbol.for('quirky.ui.dialogState')) as {
+      stack: HTMLElement[]
+      inertStates: Map<HTMLElement, boolean>
+    }
+    expect(document.activeElement).toBe(opener)
+    expect(state.stack).toEqual([])
+    expect(state.inertStates.size).toBe(0)
+    expect(document.querySelector('[inert]')).toBeNull()
+
+    await render(tree(true, true))
+    const autofocusDialog = container.querySelector<HTMLElement>('[role="dialog"]')!
+    const earlierAction = autofocusDialog.querySelector<HTMLButtonElement>('#earlier-action')!
+    const preferredField = autofocusDialog.querySelector<HTMLInputElement>('#preferred-field')!
+    const autofocusCloseButton = autofocusDialog.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!
+    expect(focusAtCommit[1]).toBe(preferredField)
+    expect(focusAtCommit[1]).not.toBe(earlierAction)
+    expect(focusAtCommit[1]).not.toBe(autofocusCloseButton)
+
+    await render(tree(false, true))
+    expect(document.activeElement).toBe(opener)
+    expect(state.stack).toEqual([])
+    expect(state.inertStates.size).toBe(0)
+    expect(document.querySelector('[inert]')).toBeNull()
   })
 
   test('closing a stacked dialog keeps keyboard focus in a busy parent', async () => {

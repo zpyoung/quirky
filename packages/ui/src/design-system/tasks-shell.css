@@ -47,5 +47,3 @@
 .quirky-tasks th, .quirky-tasks td { padding: var(--ui-space-8); border-bottom: var(--ui-border-width) solid var(--ui-border); vertical-align: top; }
 .quirky-tasks th { font-size: var(--ui-font-label); color: var(--ui-muted); font-weight: 600; background: var(--ui-rail); }
 .tasks-overlay-root { display: contents; pointer-events: auto; }
-.tasks-sidebar { display: flex; align-items: center; gap: var(--ui-space-4); min-width: 0; }
-.tasks-sidebar-open { flex: 1; justify-content: flex-start; }

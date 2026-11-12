@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { DialogProps, ToastProps, UiStatus } from './contracts'
 import { classNames } from './shared'
@@ -93,6 +93,7 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
   const dialogRef = useRef<HTMLElement | null>(null)
   const wasOpenRef = useRef(false)
   const openerRef = useRef<HTMLElement | null>(null)
+  const wasTopRef = useRef(false)
   const titleId = useId()
   const descriptionId = useId()
 
@@ -103,19 +104,33 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
   }
   wasOpenRef.current = open
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return
     const element = dialogRef.current
     if (!element) return
     const ownerDocument = element.ownerDocument
     const state = getDialogState(ownerDocument)
     state.stack.push(element)
-    const opener = openerRef.current
     syncDialogIsolation(ownerDocument, state)
     if (!element.contains(ownerDocument.activeElement)) {
       const firstFocusable = element.querySelector<HTMLElement>(focusableSelector)
       ;(firstFocusable ?? element).focus()
     }
+    return () => {
+      wasTopRef.current = state.stack[state.stack.length - 1] === element
+      const index = state.stack.indexOf(element)
+      if (index >= 0) state.stack.splice(index, 1)
+      syncDialogIsolation(ownerDocument, state)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const element = dialogRef.current
+    if (!element) return
+    const ownerDocument = element.ownerDocument
+    const state = getDialogState(ownerDocument)
+    const opener = openerRef.current
     const keepFocusInside = (event: FocusEvent) => {
       if (state.stack[state.stack.length - 1] !== element) return
       if (!(event.target instanceof Node)) return
@@ -126,13 +141,11 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     ownerDocument.addEventListener('focusin', keepFocusInside)
     return () => {
       ownerDocument.removeEventListener('focusin', keepFocusInside)
-      const wasTop = state.stack[state.stack.length - 1] === element
-      const index = state.stack.indexOf(element)
-      if (index >= 0) state.stack.splice(index, 1)
-      syncDialogIsolation(ownerDocument, state)
+      // restore focus after removal; layout cleanup still sees an unmounting panel connected
       // strict mode replays effects without dismissing the connected dialog
       if (element.isConnected) return
-      if (wasTop && opener?.isConnected) opener.focus()
+      syncDialogIsolation(ownerDocument, state)
+      if (wasTopRef.current && opener?.isConnected) opener.focus()
       const parent = state.stack[state.stack.length - 1]
       if (parent && !parent.contains(ownerDocument.activeElement)) {
         ;(parent.querySelector<HTMLElement>(focusableSelector) ?? parent).focus()
