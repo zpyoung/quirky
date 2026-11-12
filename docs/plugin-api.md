@@ -13,6 +13,7 @@ The freeze covers the public declarations and their referenced contract types, i
 - [`CliContext` and `CliModule`](../packages/protocol/src/cli.ts): module-backed CLI command handlers.
 - [`ApiDescription` and CLI catalog entries](../packages/protocol/src/catalog.ts): published daemon API and command metadata.
 - [`PLUGIN_API_VERSION` and compatibility rules](../packages/protocol/src/plugin-api.ts): the host API release and stable-floor comparison.
+- [`ProcessRunner`, `RunOptions` and `RunResult`](../packages/protocol/src/process.ts): daemon plugin subprocess commands, their options, and the results they resolve with.
 - [Protocol JSON schemas and daemon manifest parsing](../packages/protocol/src/kernel-schemas.ts)
   and [the manifest parser](../packages/daemon/src/plugins/manifest.ts): accepted manifest and contribution data.
 
@@ -47,6 +48,21 @@ another key or event type.
 `worktree` names a key path containing the worktree ID; a non-empty string there is copied to the
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
 when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
+
+### API 1.4: Process runner
+
+API 1.4 adds `context.process` to daemon plugin contexts. `context.process.run(argv, options)`
+resolves with a `RunResult` for any exit code, including nonzero, and when a command is stopped
+by timeout, abort or output overflow, or cannot start (reported in `spawnError`). It rejects for
+bad arguments, a disposed runner, output that never ends after the command exits, or unexpected
+pipe/child-exit failures. For those unexpected failures, it kills the process group and rejects
+with the original error.
+
+`cwd` defaults to the daemon's working directory. `env` is the whole child environment: it
+defaults to `process.env` at call time, and a supplied value is not merged with it. The deadline
+defaults to 30 seconds. The host kills the plugin's remaining children when its activation ends.
+`deactivate` may still call `context.process.run`; the runner is disposed when deactivation
+finishes. The object exposes only `run`; `spawn` is not part of API 1.4.
 
 `quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
 `quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
@@ -152,6 +168,13 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   250 ms window; held emits can arrive after events from other keys, and are dropped when the plugin
   unloads. A declared worktree path with a non-empty string is copied to the event's `worktreeId`.
   A plugin that uses either field declares `apiVersion` 1.3.0.
+- **1.4.0** adds `context.process.run(argv, options)` for daemon plugins. It resolves for any exit
+  code, including nonzero, timeout, abort, output overflow and spawn errors. It rejects bad
+  arguments, a disposed runner, stalled output after exit, and unexpected pipe/child-exit
+  failures. Defaults are the daemon's working directory, `process.env` at call time (a supplied
+  environment replaces it) and a 30-second deadline. Children are killed when activation ends;
+  `deactivate` may still call `run`. Only `run` is exposed; `spawn` is not part of this release.
+  A plugin that uses it declares `apiVersion` 1.4.0.
 
 ## Example
 
