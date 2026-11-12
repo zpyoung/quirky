@@ -18,6 +18,8 @@ export type GateCheckDeps = {
   claudeVersion(): Promise<string | null>
   /** How long an observed call may go without a receipt before the check fails; 10 s unless a test shortens it. */
   graceMs?: number
+  /** Awaited at the start of each run, before any store read. Must not reject. */
+  prepare?: () => Promise<void>
 }
 
 type Observed = { fingerprint: string; at: number }
@@ -85,16 +87,16 @@ export type GateChecker = {
 }
 
 /**
- * Builds the checker. The static step is per agent: the avatar's launch hook recorded patching
- * the Claude session (or its launch args hold the avatar's `--settings` hook) and Claude is new
- * enough to fail closed, Codex's `hooks.json` holds both
+ * Builds the checker. Each run awaits the optional `prepare` hook before reading the store, so
+ * the static step sees the current installed state. The static step is per agent: the avatar's
+ * launch hook recorded patching the Claude session (or its launch args hold the avatar's
+ * `--settings` hook) and Claude is new enough to fail closed, Codex's `hooks.json` holds both
  * entries, and pi and omp have the extension file installed before the session started. The
  * dynamic step fails when any call seen in the session record has no receipt of its own after the
- * grace period, and passes once a receipt has arrived since hand-off and no seen call is unmatched. A failure removes the marker,
- * sets `gate-failed` and queues `restart-to-handoff`; a pass moves `checking` to `briefing`.
- * A check that is cancelled or disposed resolves quietly with a not-ok result and writes nothing:
- * every await point re-checks before it reads or writes the store, so a plugin that deactivates
- * mid-check never sees a closed store touched.
+ * grace period, and passes once a receipt has arrived since hand-off and no seen call is unmatched.
+ * A failure removes the marker, sets `gate-failed` and queues `restart-to-handoff`. A check that is
+ * cancelled or disposed resolves quietly with a not-ok result and writes nothing; it checks its
+ * cancellation state after preparation and before subsequent store reads or writes.
  */
 export function createGateChecker(deps: GateCheckDeps): GateChecker {
   const { app, agentEnv } = deps
@@ -194,6 +196,8 @@ export function createGateChecker(deps: GateCheckDeps): GateChecker {
 
   async function run(worktreeId: string, token: RunToken): Promise<GateCheckResult> {
     const stopped = () => disposed || token.aborted
+    if (stopped()) return STOPPED
+    if (deps.prepare !== undefined) await deps.prepare()
     if (stopped()) return STOPPED
     const row = app.store.handoffs.get(worktreeId)
     if (row === null || !row.active) return { ok: false, reason: 'not handed off' }

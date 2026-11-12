@@ -8,8 +8,9 @@ import { claudeSettings } from '../../quirky.agent-status/src/claude-settings'
 import {
   claudeGateSettings, claudeVersionAtLeast, clearMarkerFiles, codexHooksInstalled, codexHooksPath, createGateLaunchHook, gateCommand,
   hasHookedRecord, hasMarkerFile, hookedDir, installCodexHooks, installPiExtensions, launchHasGateHook, markerDir, parseClaudeVersion, piExtensionPath,
-  readMarkerFile, removeCodexHooks, removeMarkerFile, writeMarkerFile, type AgentEnv
+  readMarkerFile, removeCodexHooks, removeMarkerFile, removePiExtensions, writeMarkerFile, type AgentEnv
 } from '../src/hooks/install'
+import { QUIRKY_GATE_SCRIPT } from '../../../packages/daemon/src/launch'
 import { GATE_EXTENSION_FILE, gateExtensionSource } from '../src/hooks/pi-extension'
 
 const dirs: string[] = []
@@ -23,6 +24,31 @@ afterEach(() => {
 })
 
 const agentEnv = (env: Record<string, string> = {}): AgentEnv => ({ home: scratch(), env })
+const RETRY = "Quirky's avatar gate is unavailable; try again shortly."
+const PR_DENY = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Quirky's avatar gate is unavailable; try again shortly."}}}`
+const GATE_EVENTS = ['PreToolUse', 'PermissionRequest'] as const
+const GATE_AGENTS = ['claude', 'codex'] as const
+const runShell = (command: string, env: Record<string, string>, stdin = '') =>
+  Bun.spawnSync(['/bin/sh', '-c', command], {
+    env: { PATH: process.env.PATH ?? '/usr/bin:/bin', ...env },
+    stdin: new Blob([stdin]),
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+const gateStub = (home: string, body = '#!/bin/sh\nprintf \'%s\\n\' "$1" "$2" "$3" "$QUIRKY_HOME" "$QUIRKY_SESSION_ID"\ncat\n'): string => {
+  const path = join(home, 'bin', 'quirky-gate')
+  mkdirSync(join(home, 'bin'), { recursive: true })
+  writeFileSync(path, body, { mode: 0o755 })
+  return path
+}
+const expectRefusal = (
+  result: { stdout: { toString(): string }; stderr: { toString(): string }; exitCode: number | null },
+  event: string
+) => {
+  expect(result.stdout.toString()).toBe(event === 'PermissionRequest' ? `${PR_DENY}\n` : '')
+  expect(result.exitCode).toBe(event === 'PermissionRequest' ? 0 : 2)
+  expect(result.stderr.toString().endsWith(`${RETRY}\n`)).toBe(true)
+}
 
 describe('supervision markers', () => {
   test('a marker is a 0600 file named for the session holding the worktree and level', () => {
@@ -63,92 +89,202 @@ describe('supervision markers', () => {
 })
 
 describe('gateCommand', () => {
-  const run = (command: string, env: Record<string, string>) =>
-    Bun.spawnSync(['sh', '-c', command], { env: { PATH: process.env.PATH ?? '', ...env }, stdout: 'pipe', stderr: 'pipe' })
+  const sessionEnv = (home: string, sessionId = 's-1') => ({ QUIRKY_HOME: home, QUIRKY_SESSION_ID: sessionId })
 
-  test('answers passthrough outside a Quirky install, so a non-Quirky session is never blocked', () => {
-    const result = run(gateCommand('claude', 60000), {})
+  test('answers passthrough outside a Quirky install', () => {
+    const result = runShell(gateCommand('claude', 'PreToolUse', 60000), {})
     expect(result.exitCode).toBe(0)
     expect(result.stdout.toString()).toBe('{}\n')
   })
 
-  describe('when the shim is missing or not executable', () => {
-    const sessionEnv = (home: string, sessionId = 's-1') => ({ QUIRKY_HOME: home, QUIRKY_SESSION_ID: sessionId })
-
-    test('a supervised session is denied with exit 2 and a retry reason', () => {
-      const home = scratch()
-      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
-      for (const agent of ['claude', 'codex']) {
-        const result = run(gateCommand(agent, 60000), sessionEnv(home))
-        expect(result.exitCode).toBe(2)
-        expect(result.stderr.toString()).toContain('try again')
-        expect(result.stdout.toString()).toBe('')
-      }
-    })
-
-    test('a shim that exists but is not executable still denies a supervised session', () => {
-      const home = scratch()
-      mkdirSync(join(home, 'bin'))
-      writeFileSync(join(home, 'bin', 'quirky-gate'), '#!/bin/sh\nprintf ok\n', { mode: 0o644 })
-      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
-      expect(run(gateCommand('claude', 60000), sessionEnv(home)).exitCode).toBe(2)
-    })
-
-    test('a session with no marker, or another session id, or no session id, is passed through', () => {
-      const home = scratch()
-      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
-      for (const env of [sessionEnv(home, 's-2'), { QUIRKY_HOME: home }, sessionEnv(scratch())]) {
-        const result = run(gateCommand('claude', 60000), env)
-        expect(result.exitCode).toBe(0)
-        expect(result.stdout.toString()).toBe('{}\n')
-      }
-    })
-
-    test('with the shim present a marker does not stop the shim from deciding', () => {
-      const home = scratch()
-      mkdirSync(join(home, 'bin'))
-      writeFileSync(join(home, 'bin', 'quirky-gate'), '#!/bin/sh\nprintf "%s" "$1"\n', { mode: 0o755 })
-      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
-      const result = run(gateCommand('claude', 60000), sessionEnv(home))
-      expect(result.exitCode).toBe(0)
-      expect(result.stdout.toString()).toBe('claude')
-    })
+  test.each([
+    ['unset', undefined],
+    ['empty', ''],
+    ['contains a slash', 'a/b'],
+    ['starts with a dot', '.x']
+  ])('does not run the shim when the session ID is %s', (_name, sessionId) => {
+    const home = scratch()
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    gateStub(home)
+    const env: Record<string, string> = { QUIRKY_HOME: home }
+    if (sessionId !== undefined) env.QUIRKY_SESSION_ID = sessionId
+    const result = runShell(gateCommand('claude', 'PreToolUse', 60000), env)
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe('{}\n')
   })
 
-  test('runs the shim with the agent and the deadline when it is present', () => {
+  test('does not run the shim for an unmarked session', () => {
     const home = scratch()
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    gateStub(home)
+    const result = runShell(gateCommand('claude', 'PreToolUse', 60000), sessionEnv(home, 's-2'))
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe('{}\n')
+  })
+
+  test('passes the event and supervised session data to the shim', () => {
+    const home = scratch()
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    gateStub(home)
+    for (const event of GATE_EVENTS) {
+      const result = runShell(gateCommand('codex', event, 60000), sessionEnv(home), 'PAYLOAD')
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toBe(`codex\n60000\n${event}\n${home}\ns-1\nPAYLOAD`)
+    }
+  })
+
+  test('refuses when the shim is missing for either agent and event', () => {
+    const home = scratch()
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    for (const agent of GATE_AGENTS) {
+      for (const event of GATE_EVENTS) {
+        expectRefusal(runShell(gateCommand(agent, event, 60000), sessionEnv(home)), event)
+      }
+    }
+  })
+
+  test('refuses when the shim is not executable at either event', () => {
+    const home = scratch()
+    const path = join(home, 'bin', 'quirky-gate')
     mkdirSync(join(home, 'bin'))
-    writeFileSync(join(home, 'bin', 'quirky-gate'), '#!/bin/sh\nprintf "%s|%s" "$1" "$2"\n', { mode: 0o755 })
-    const result = run(gateCommand('codex', 60000), { QUIRKY_HOME: home })
-    expect(result.stdout.toString()).toBe('codex|60000')
+    writeFileSync(path, '#!/bin/sh\nprintf ok\n', { mode: 0o644 })
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    for (const event of GATE_EVENTS) {
+      expectRefusal(runShell(gateCommand('claude', event, 60000), sessionEnv(home)), event)
+    }
+  })
+
+  test('passes exit 2 through only for PreToolUse', () => {
+    for (const event of GATE_EVENTS) {
+      const home = scratch()
+      gateStub(home, '#!/bin/sh\nprintf "%s\\n" shimline >&2\nexit 2\n')
+      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+      const result = runShell(gateCommand('claude', event, 60000), sessionEnv(home))
+      if (event === 'PreToolUse') {
+        expect(result.stdout.toString()).toBe('')
+        expect(result.stderr.toString()).toBe('shimline\n')
+        expect(result.exitCode).toBe(2)
+      } else {
+        expectRefusal(result, event)
+      }
+    }
+  })
+
+  test.each([
+    ['exit 1', 'exit 1'],
+    ['exit 126', 'exit 126'],
+    ['signal 9', 'kill -9 $$']
+  ])('refuses when the shim exits with %s at either event', (_name, body) => {
+    for (const event of GATE_EVENTS) {
+      const home = scratch()
+      gateStub(home, `#!/bin/sh\n${body}\n`)
+      writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+      expectRefusal(runShell(gateCommand('codex', event, 60000), sessionEnv(home)), event)
+    }
+  })
+
+  test('runs an identity-form command without Quirky environment variables', () => {
+    const home = scratch()
+    gateStub(home)
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    const result = runShell(gateCommand('claude', 'PreToolUse', 60000, { quirkyHome: home, sessionId: 's-1' }), {})
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe(`claude\n60000\nPreToolUse\n${home}\ns-1\n`)
+  })
+
+  test('uses the embedded identity instead of conflicting environment values', () => {
+    const home = scratch()
+    gateStub(home)
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    const result = runShell(
+      gateCommand('claude', 'PreToolUse', 60000, { quirkyHome: home, sessionId: 's-1' }),
+      { QUIRKY_HOME: '/nowhere', QUIRKY_SESSION_ID: 'other' }
+    )
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe(`claude\n60000\nPreToolUse\n${home}\ns-1\n`)
+  })
+
+  test('quotes spaces, apostrophes, and dollar signs in an embedded identity', () => {
+    const home = join(scratch(), "a b'c $d")
+    gateStub(home)
+    writeMarkerFile(home, "s'1 $x", { worktreeId: 'wt-1', level: 'full' })
+    const result = runShell(gateCommand('claude', 'PreToolUse', 60000, { quirkyHome: home, sessionId: "s'1 $x" }), {})
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe(`claude\n60000\nPreToolUse\n${home}\ns'1 $x\n`)
+  })
+
+  test('passes through for an identity whose session ID is not plain', () => {
+    const home = scratch()
+    const result = runShell(gateCommand('claude', 'PreToolUse', 60000, { quirkyHome: home, sessionId: '../s' }), {})
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe('{}\n')
+  })
+
+  test('matches the real gate shim refusal for each event', () => {
+    const home = scratch()
+    const shim = join(scratch(), 'quirky-gate')
+    writeFileSync(shim, QUIRKY_GATE_SCRIPT, { mode: 0o755 })
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    for (const event of GATE_EVENTS) {
+      const env = sessionEnv(home)
+      const command = runShell(gateCommand('claude', event, 1000), env)
+      const actual = Bun.spawnSync([shim, 'claude', '1000', event], {
+        env: { PATH: process.env.PATH ?? '/usr/bin:/bin', ...env },
+        stdin: new Blob([]),
+        stdout: 'pipe',
+        stderr: 'pipe'
+      })
+      expect(actual.stdout.equals(command.stdout)).toBe(true)
+      expect(actual.exitCode).toBe(command.exitCode)
+    }
+  })
+
+  test('every generated command names the gate shim', () => {
+    for (const agent of GATE_AGENTS) {
+      for (const event of GATE_EVENTS) {
+        expect(gateCommand(agent, event, 60000)).toContain('/bin/quirky-gate')
+      }
+    }
   })
 })
 
 describe('Claude launch hook', () => {
-  const launch = (agent: string, jsonArgs: Record<string, Record<string, unknown>> = {}) =>
-    ({ sessionId: 's', worktreeId: 'w', repoId: 'r', cwd: '/x', agent, env: {}, args: [], jsonArgs }) as never
+  const launch = (agent: string, jsonArgs: Record<string, Record<string, unknown>> = {}, sessionId = 's') =>
+    ({ sessionId, worktreeId: 'w', repoId: 'r', cwd: '/x', agent, env: {}, args: [], jsonArgs }) as never
   const dataDir = mkdtempSync(join(tmpdir(), 'avatar-hooked-'))
   afterEach(() => rmSync(dataDir, { recursive: true, force: true }))
-  const hook = (version: string | null, seconds = 55) =>
-    createGateLaunchHook({ judgmentTimeoutSeconds: () => seconds, claudeVersion: async () => version, dataDir })
+  const hook = (version: string | null, seconds = 55, quirkyHome = scratch()) =>
+    createGateLaunchHook({ judgmentTimeoutSeconds: () => seconds, claudeVersion: async () => version, dataDir, quirkyHome })
 
-  test('adds PreToolUse and PermissionRequest command hooks that fail closed', async () => {
-    const patch = (await hook('2.1.300 (Claude Code)')(launch('claude'))) as { jsonArgs: Record<string, { hooks: Record<string, any[]> }> }
+  test('adds one identity-bound command entry for each event', async () => {
+    const home = scratch()
+    gateStub(home)
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    const patch = (await hook('2.1.300 (Claude Code)', 55, home)(launch('claude', {}, 's-1'))) as { jsonArgs: Record<string, { hooks: Record<string, any[]> }> }
     const settings = patch.jsonArgs['--settings']!
-    for (const event of ['PreToolUse', 'PermissionRequest']) {
+    for (const event of GATE_EVENTS) {
+      expect(settings.hooks[event]).toHaveLength(1)
       const [entry] = settings.hooks[event]!
       expect(entry.matcher).toBe('*')
-      expect(entry.hooks[0]).toMatchObject({ type: 'command', onFailure: 'block', timeout: 70 })
-      expect(entry.hooks[0].command).toMatch(/quirky-gate" claude 60000$/)
+      expect(entry.hooks[0]).toMatchObject({ type: 'command', onFailure: 'block', timeout: 85 })
+      const result = runShell(entry.hooks[0].command, {})
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toBe(`claude\n60000\n${event}\n${home}\ns-1\n`)
     }
   })
 
   test('the deadline and hook timeout follow the judgment timeout', async () => {
-    const patch = (await hook('2.1.300', 30)(launch('claude'))) as { jsonArgs: Record<string, { hooks: Record<string, any[]> }> }
+    const home = scratch()
+    gateStub(home)
+    writeMarkerFile(home, 's', { worktreeId: 'wt-1', level: 'full' })
+    const patch = (await hook('2.1.300', 30, home)(launch('claude'))) as { jsonArgs: Record<string, { hooks: Record<string, any[]> }> }
     const command = patch.jsonArgs['--settings']!.hooks.PreToolUse![0].hooks[0]
-    expect(command.command).toMatch(/quirky-gate" claude 35000$/)
-    expect(command.timeout).toBe(45)
+    expect(command.timeout).toBe(60)
+    const result = runShell(command.command, {})
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe(`claude\n35000\nPreToolUse\n${home}\ns\n`)
   })
+
 
   test.each([['2.1.294'], ['1.9.9'], [null], ['claude: not found']])('a Claude version of %p gets no gate hook', async (version) => {
     expect(await hook(version)(launch('claude'))).toEqual({})
@@ -218,11 +354,36 @@ describe('Claude launch hook', () => {
     expect(launchHasGateHook(added.args)).toBe(true)
   })
 
-  test('rebuilding settings that already hold the avatar entry does not duplicate it', () => {
-    const once = claudeGateSettings({}, 55)
-    const twice = claudeGateSettings(once, 55) as { hooks: Record<string, unknown[]> }
-    expect(twice.hooks.PreToolUse).toHaveLength(1)
-    expect(twice).toEqual(once as never)
+  test('settings without an identity keep using the session environment and remain idempotent', () => {
+    const home = scratch()
+    gateStub(home)
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    const settings = claudeGateSettings({}, 55) as { hooks: Record<string, { hooks: { command: string }[] }[]> }
+    for (const event of GATE_EVENTS) {
+      expect(settings.hooks[event]).toHaveLength(1)
+      const command = settings.hooks[event]![0]!.hooks[0]!.command
+      expect(command).toContain('QUIRKY_HOME')
+      expect(command).toContain('QUIRKY_SESSION_ID')
+      const result = runShell(command, { QUIRKY_HOME: home, QUIRKY_SESSION_ID: 's-1' })
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toBe(`claude\n60000\n${event}\n${home}\ns-1\n`)
+    }
+    expect(claudeGateSettings(settings, 55)).toEqual(settings)
+  })
+
+  test('a replayed launch replaces the old identity without duplicating entries', () => {
+    const home = scratch()
+    gateStub(home)
+    writeMarkerFile(home, 'new', { worktreeId: 'wt-1', level: 'full' })
+    const oldSettings = claudeGateSettings({}, 55, { quirkyHome: home, sessionId: 'old' })
+    const settings = claudeGateSettings(oldSettings, 55, { quirkyHome: home, sessionId: 'new' }) as { hooks: Record<string, { hooks: { command: string }[] }[]> }
+    for (const event of GATE_EVENTS) {
+      expect(settings.hooks[event]).toHaveLength(1)
+      const result = runShell(settings.hooks[event]![0]!.hooks[0]!.command, {})
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toBe(`claude\n60000\n${event}\n${home}\nnew\n`)
+    }
+    expect(claudeGateSettings(settings, 55, { quirkyHome: home, sessionId: 'new' })).toEqual(settings)
   })
 })
 
@@ -259,16 +420,24 @@ describe('Claude version', () => {
 
 describe('Codex hooks.json', () => {
   const read = (env: AgentEnv) => readFileSync(codexHooksPath(env), 'utf8')
-  const gateEntries = (env: AgentEnv, event: string) => (JSON.parse(read(env)).hooks[event] as { hooks: { command: string }[] }[]).filter((entry) => entry.hooks.some((hook) => hook.command.includes('quirky-gate')))
+  const gateEntries = (env: AgentEnv, event: string) => (JSON.parse(read(env)).hooks[event] as { hooks: { command: string; timeout: number }[] }[]).filter((entry) => entry.hooks.some((hook) => hook.command.includes('quirky-gate')))
 
-  test('creates the file with both events, identified by quirky-gate', () => {
+  test('installs one event-specific environment-form entry for each Codex event', () => {
     const env = agentEnv()
+    gateStub(env.home)
+    writeMarkerFile(env.home, 's-1', { worktreeId: 'wt-1', level: 'full' })
     expect(installCodexHooks(env, 55)).toBe(true)
     expect(codexHooksInstalled(env)).toBe(true)
-    for (const event of ['PreToolUse', 'PermissionRequest']) {
+    for (const event of GATE_EVENTS) {
       const [entry] = gateEntries(env, event)
-      expect(entry!.hooks[0]).toMatchObject({ type: 'command', timeout: 70 })
-      expect(entry!.hooks[0]!.command).toMatch(/quirky-gate" codex 60000$/)
+      expect(entry!.hooks[0]).toMatchObject({ type: 'command', timeout: 85 })
+      const command = entry!.hooks[0]!.command
+      expect(command).toContain(`/bin/quirky-gate" codex 60000 ${event}`)
+      expect(command).toContain('QUIRKY_HOME')
+      expect(command).toContain('QUIRKY_SESSION_ID')
+      const result = runShell(command, { QUIRKY_HOME: env.home, QUIRKY_SESSION_ID: 's-1' })
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toBe(`codex\n60000\n${event}\n${env.home}\ns-1\n`)
     }
     expect(codexHooksPath(env)).toBe(join(env.home, '.codex', 'hooks.json'))
   })
@@ -283,12 +452,16 @@ describe('Codex hooks.json', () => {
     expect(statSync(codexHooksPath(env)).mtimeMs).toBe(mtime)
   })
 
-  test('a changed timeout replaces the avatar entry instead of adding another', () => {
+  test('a changed timeout replaces one event-specific avatar entry per event', () => {
     const env = agentEnv()
     installCodexHooks(env, 55)
     expect(installCodexHooks(env, 30)).toBe(true)
-    expect(gateEntries(env, 'PreToolUse')).toHaveLength(1)
-    expect(gateEntries(env, 'PreToolUse')[0]!.hooks[0]!.command).toMatch(/quirky-gate" codex 35000$/)
+    for (const event of GATE_EVENTS) {
+      expect(gateEntries(env, event)).toHaveLength(1)
+      const hook = gateEntries(env, event)[0]!.hooks[0]!
+      expect(hook.timeout).toBe(60)
+      expect(hook.command).toContain(`/bin/quirky-gate" codex 35000 ${event}`)
+    }
   })
 
   test('follows CODEX_HOME when it is absolute', () => {
@@ -360,7 +533,7 @@ describe('Codex hooks.json', () => {
       expect(updated).toContain(`\t\t\t${other.replace('echo   hi', 'a  b')},\n`)
       expect(updated.split('\n\t\t\t').length).toBe(withGate.split('\n\t\t\t').length)
       expect(JSON.parse(updated).hooks.PreToolUse).toHaveLength(2)
-      expect(JSON.parse(updated).hooks.PreToolUse[1].hooks[0].command).toMatch(/codex 35000$/)
+      expect(JSON.parse(updated).hooks.PreToolUse[1].hooks[0].command).toContain('codex 35000 PreToolUse')
       removeCodexHooks(env)
       expect(read(env)).toBe(`{\n\t"hooks": {\n\t\t"PreToolUse": [\n\t\t\t${other.replace('echo   hi', 'a  b')}\n\t\t]\n\t}\n}\n`)
     })
@@ -378,19 +551,31 @@ describe('Codex hooks.json', () => {
       expect(read(empty).endsWith('\n}\n')).toBe(true)
     })
 
-    test('a hooks.json that held only the avatar entries is deleted by remove', () => {
+    test('restores the original empty JSON text after removing the avatar entries', () => {
       const env = seed('{}\n')
       installCodexHooks(env, 55)
       expect(removeCodexHooks(env)).toBe(true)
-      expect(existsSync(codexHooksPath(env))).toBe(false)
+      expect(read(env)).toBe('{}\n')
     })
   })
 
-  test('remove empties out entries it created and deletes a file that held nothing else', () => {
+  test('keeps a zero-byte hooks.json and leaves it as an empty object', () => {
+    const env = agentEnv()
+    mkdirSync(join(env.home, '.codex'))
+    writeFileSync(codexHooksPath(env), '')
+    installCodexHooks(env, 55)
+    expect(removeCodexHooks(env)).toBe(true)
+    expect(existsSync(codexHooksPath(env))).toBe(true)
+    expect(JSON.parse(read(env))).toEqual({})
+  })
+
+
+  test('keeps a newly created hooks.json as an empty object after removal', () => {
     const env = agentEnv()
     installCodexHooks(env, 55)
     expect(removeCodexHooks(env)).toBe(true)
-    expect(existsSync(codexHooksPath(env))).toBe(false)
+    expect(existsSync(codexHooksPath(env))).toBe(true)
+    expect(JSON.parse(read(env))).toEqual({})
     expect(removeCodexHooks(env)).toBe(false)
     expect(codexHooksInstalled(env)).toBe(false)
   })
@@ -457,6 +642,13 @@ describe('pi and omp extension file', () => {
     expect(readFileSync(piExtensionPath('omp', env), 'utf8')).toBe(gateExtensionSource())
   })
 
+  test('installs only the selected pi extension when asked for pi alone', () => {
+    const env = withAgentDirs()
+    expect(installPiExtensions(env, ['pi'])).toEqual([piExtensionPath('pi', env)])
+    expect(existsSync(piExtensionPath('pi', env))).toBe(true)
+    expect(existsSync(piExtensionPath('omp', env))).toBe(false)
+  })
+
   test('skips an agent whose directory does not exist', () => {
     const env = agentEnv()
     mkdirSync(join(env.home, '.pi', 'agent'), { recursive: true })
@@ -489,6 +681,30 @@ describe('pi and omp extension file', () => {
     expect(installPiExtensions(env)).toEqual([pi])
     expect(readFileSync(pi, 'utf8')).toBe(gateExtensionSource())
     expect(readFileSync(omp, 'utf8')).toBe('export default function () {}\n')
+  })
+
+  test('removes only the avatar extension and leaves the user extension untouched', () => {
+    const env = withAgentDirs()
+    const pi = piExtensionPath('pi', env)
+    const omp = piExtensionPath('omp', env)
+    const userContent = 'export default function userExtension() {}\n'
+    mkdirSync(join(env.home, '.pi', 'agent', 'extensions'))
+    mkdirSync(join(env.home, '.omp', 'agent', 'extensions'))
+    writeFileSync(pi, gateExtensionSource())
+    writeFileSync(omp, userContent)
+    expect(removePiExtensions(env)).toEqual([pi])
+    expect(existsSync(pi)).toBe(false)
+    expect(readFileSync(omp, 'utf8')).toBe(userContent)
+    expect(removePiExtensions(env)).toEqual([])
+  })
+
+  test('removes one shared extension path only once', () => {
+    const dir = scratch()
+    const env = agentEnv({ PI_CODING_AGENT_DIR: dir })
+    const path = piExtensionPath('pi', env)
+    mkdirSync(join(dir, 'extensions'), { recursive: true })
+    writeFileSync(path, gateExtensionSource())
+    expect(removePiExtensions(env)).toEqual([path])
   })
 })
 

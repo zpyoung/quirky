@@ -13,6 +13,7 @@ Handing a worktree off gives it a mandate (goal, done-when, guidelines, a level 
 - **Surfaces.** A window-bar pill, a panel, a hand-off sheet, the report view, a sidebar ring on handed-off worktrees, and the `quirky avatar` commands below.
 
 The gate is installed per agent: a Claude launch hook, Codex `hooks.json` entries and a pi/omp extension. Sessions without a marker are never blocked and never depend on the daemon.
+Turn off `agent-hooks` with `quirky setting set setting:quirky.avatar/agent-hooks false` to remove the avatar's Codex entries and pi/omp extension files and stop reinstalling them; take those worktrees back first.
 
 ## CLI
 

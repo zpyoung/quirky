@@ -16,7 +16,14 @@ afterEach(() => {
 
 type Session = { agent: string; createdAt?: number; launch?: { args?: unknown[] | string; env?: Record<string, string> } | null }
 
-function setup(options: { session?: Session; version?: string | null; state?: WorktreeState; graceMs?: number; sessionReady?: Promise<void> } = {}) {
+function setup(options: {
+  session?: Session
+  version?: string | null
+  state?: WorktreeState
+  graceMs?: number
+  sessionReady?: Promise<void>
+  prepare?: (agentEnv: AgentEnv) => Promise<void>
+} = {}) {
   const home = mkdtempSync(join(tmpdir(), 'avatar-gatecheck-'))
   dirs.push(home)
   const agentEnv: AgentEnv = { home, env: {} }
@@ -34,7 +41,13 @@ function setup(options: { session?: Session; version?: string | null; state?: Wo
     writeMarkerFile(t.context.home, id === 'wt-1' ? 's-1' : 's-2', { worktreeId: id, level: 'full' })
   }
   const version = options.version === undefined ? '2.1.300' : options.version
-  const checker = createGateChecker({ app: t.app, agentEnv, claudeVersion: async () => version, graceMs: options.graceMs ?? 40 })
+  const checker = createGateChecker({
+    app: t.app,
+    agentEnv,
+    claudeVersion: async () => version,
+    graceMs: options.graceMs ?? 40,
+    ...(options.prepare === undefined ? {} : { prepare: () => options.prepare!(agentEnv) })
+  })
   const receive = (sessionId = 's-1', fingerprint = 'fp-1', at = Date.now()) => {
     t.app.store.receipts.put({ id: `${sessionId}-${fingerprint}-${at}`, fingerprint, sessionId, toolName: 'Read', at, outcome: 'allow', step: 'fixed-rules' })
     checker.noteReceipt(sessionId)
@@ -291,6 +304,50 @@ describe('Codex', () => {
     const check = s.checker.check('wt-1')
     s.receive()
     expect((await check).ok).toBe(true)
+  })
+})
+
+describe('preparing gate checks', () => {
+  test('installs Codex hooks before fetching the session record', async () => {
+    const order: string[] = []
+    const s = setup({
+      session: { agent: 'codex' },
+      prepare: async (agentEnv) => {
+        order.push('prepare')
+        installCodexHooks(agentEnv, 55)
+      }
+    })
+    s.fakeCalls['quirky.session/get'] = async () => {
+      order.push('quirky.session/get')
+      return s.session
+    }
+    s.receive()
+
+    expect(await s.checker.check('wt-1')).toEqual({ ok: true, reason: '' })
+    expect(order).toEqual(['prepare', 'quirky.session/get'])
+  })
+
+  test.each(['cancel', 'dispose'] as const)('does not fetch the session or mutate the hand-off when %s stops a pending prepare', async (stop) => {
+    const prepareStarted = Promise.withResolvers<void>()
+    const prepareRelease = Promise.withResolvers<void>()
+    const s = setup({
+      prepare: async () => {
+        prepareStarted.resolve()
+        await prepareRelease.promise
+      }
+    })
+    const before = s.app.store.handoffs.get('wt-1')
+    const check = s.checker.check('wt-1')
+    await prepareStarted.promise
+
+    if (stop === 'cancel') s.checker.cancel('wt-1')
+    else s.checker.dispose()
+    prepareRelease.resolve()
+
+    expect(await check).toEqual({ ok: false, reason: 'the gate check was stopped' })
+    expect(s.calls.filter((call) => call.method === 'quirky.session/get')).toHaveLength(0)
+    expect(s.app.store.handoffs.get('wt-1')).toEqual(before)
+    expect(s.states).toEqual([])
   })
 })
 
