@@ -103,17 +103,18 @@ test('callAny forwards timeout options and leaves calls without options unbounde
   const { connection, store } = connect(daemon.url)
   await until(() => store.getState().connection === 'connected')
 
-  jest.useFakeTimers()
+  const timers = jest as typeof jest & { advanceTimersByTime(ms: number): void }
+  timers.useFakeTimers()
   try {
     const timed = connection.callAny('x', {}, { timeoutMs: 20 })
     await daemon.waitForX(1)
-    jest.advanceTimersByTime(20)
+    timers.advanceTimersByTime(20)
     await expect(timed).rejects.toThrow('RPC call timed out after 20 ms')
     const unbounded = connection.callAny('x', {})
     await daemon.waitForX(2)
     let settled = false
     void unbounded.then(() => { settled = true }, () => { settled = true })
-    jest.advanceTimersByTime(40)
+    timers.advanceTimersByTime(40)
     await Promise.resolve()
     expect(settled).toBe(false)
     expect(daemon.methods.filter((method) => method === 'x')).toHaveLength(2)
@@ -121,7 +122,7 @@ test('callAny forwards timeout options and leaves calls without options unbounde
     connection.stop()
     void unbounded.catch(() => undefined)
   } finally {
-    jest.useRealTimers()
+    timers.useRealTimers()
   }
 })
 

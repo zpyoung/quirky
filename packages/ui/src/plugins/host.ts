@@ -9,6 +9,7 @@ import {
   whenMentions,
   type CallOptions,
   type QuirkyEvent,
+  type SettingInfo,
   type ToastKind,
   type ToastOptions,
   type UiCommandEntry,
