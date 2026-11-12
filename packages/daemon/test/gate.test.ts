@@ -292,7 +292,7 @@ describe('/gate route', () => {
     for (const answer of [
       { decision: 'allow', reason: 'ok' },
       { decision: 'passthrough', reason: '' }
-    ]) {
+    ] as const) {
       expect(await s.decide({ body: JSON.stringify(answer) })).toEqual({ ...answer, encoded: '' })
     }
   })
