@@ -146,9 +146,11 @@ function skipKeywords(words: ShellWord[], startIndex: number): number {
     if (!current.dynamic && (current.text === 'function' || current.text === 'repeat')) index += 2
     else if (!current.dynamic && DIRECTORY_KEYWORDS[current.text] === true) index++
     else if (!current.dynamic && current.text === 'time') {
-      index++
-      while (index < words.length && !words[index].dynamic && words[index].text === '-p') index++
-      if (index < words.length && !words[index].dynamic && words[index].text === '--') index++
+      let cursor = index + 1
+      while (cursor < words.length && !words[cursor].dynamic && words[cursor].text === '-p') cursor++
+      if (cursor < words.length && !words[cursor].dynamic && words[cursor].text === '--') cursor++
+      else if (cursor < words.length && !words[cursor].dynamic && words[cursor].text.startsWith('-')) break
+      index = cursor
     } else if (index > 0 && /^[A-Za-z_][A-Za-z0-9_]*\+?=/s.test(current.text)) index++
     else break
   }
@@ -2026,9 +2028,11 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     const keywordIndex = skipKeywords(shellCommand.words, 0)
     let treeCmd = cmd
     let treeArgs = args
+    let treeCwd = parsed.execCwd
     let unknownTreeCommand = parsed.dynamicCommand
-    if (keywordIndex > 0 && keywordIndex < shellCommand.words.length) {
-      const unwrapped = unwrapWords(shellCommand.words, undefined, null, '', keywordIndex)
+    if (keywordIndex > commandIndex && keywordIndex < shellCommand.words.length) {
+      const unwrapped = unwrapWords(shellCommand.words, undefined, commandCwd, ctx.home, keywordIndex)
+      treeCwd = unwrapped.execCwd
       if (unwrapped.unknownWrapperFlag) {
         unknownTreeCommand = true
         const outerCommand = shellCommand.words[keywordIndex]
@@ -2052,23 +2056,23 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       const attached = attachedFlagValues(word)
       if (attached === null) {
         partClasses.push('edit-outside')
-        const fallbackClass = wordTouchesCredential(word, parsed.execCwd, ctx, rootPaths, false)
+        const fallbackClass = wordTouchesCredential(word, treeCwd, ctx, rootPaths, false)
         if (fallbackClass !== null) partClasses.push(fallbackClass)
       }
-      appendEmbeddedCredentialClasses(partClasses, attached, parsed.execCwd, ctx, rootPaths)
+      appendEmbeddedCredentialClasses(partClasses, attached, treeCwd, ctx, rootPaths)
       if (SED_CMDS.has(treeCmd)) {
-        appendEmbeddedCredentialClasses(partClasses, sedReadFileNames(word), parsed.execCwd, ctx, rootPaths)
+        appendEmbeddedCredentialClasses(partClasses, sedReadFileNames(word), treeCwd, ctx, rootPaths)
       }
       if (!readsTrees || isWriteTarget) continue
       for (const operand of treeOperands(word, attached)) {
-        for (const directory of parsed.execCwd ?? UNKNOWN_DIRECTORY) {
+        for (const directory of treeCwd ?? UNKNOWN_DIRECTORY) {
           if (directory === null && !isAbsolute(expandHome(operand, ctx.home))) continue
           if (holdsCredentialPath(resolvePath(operand, directory ?? '/', ctx.home), ctx)) partClasses.push('credential')
         }
       }
     }
     if (readsTrees && isContentWalker) {
-      for (const directory of parsed.execCwd ?? UNKNOWN_DIRECTORY) {
+      for (const directory of treeCwd ?? UNKNOWN_DIRECTORY) {
         if (directory !== null && holdsCredentialPath(resolve(directory), ctx)) partClasses.push('credential')
       }
     }

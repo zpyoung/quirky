@@ -3306,3 +3306,16 @@ describe('g1-46 group 6: native tools', () => {
   test('6.14 allows Glob with a home cwd', () => expectNativeResult('Glob', { pattern: '*' }, READ, 'allow', 'fixed-rules', '/home/u'))
 })
 
+
+describe('keyword and wrapper command context', () => {
+  const rows: ClassifierFixture[] = [
+    { id: 'context.1', command: '"time" -o timings.txt sed \'r /home/u/.ssh/id_rsa\' README.md', classes: ['credential', 'edit-inside', 'read'], outcome: 'held', step: 'floor-core' },
+    { id: 'context.2', command: '"time" -o timings.txt ls /home/u', classes: ['edit-inside', 'read'], outcome: 'allow', step: 'fixed-rules' },
+    { id: 'context.3', command: '{ env -C /home/u sed \'r .ssh/id_rsa\' /work/wt/README.md; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'context.4', command: '{ env -C /home/u rg foo; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'context.5', command: '{ "time" -p -o timings.txt sed \'r /home/u/.ssh/id_rsa\' README.md; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'context.6', command: '{ env -C /work/wt sed \'r .env\' README.md; }', classes: ['other'], outcome: 'judgment', step: null },
+    { id: 'context.7', command: '{ env -C "$D" sed \'r .ssh/id_rsa\' /work/wt/README.md; }', classes: ['other'], outcome: 'judgment', step: null }
+  ]
+  for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
+})
