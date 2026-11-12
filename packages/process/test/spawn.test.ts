@@ -251,3 +251,21 @@ test('33: an invalid stop grace throws without signaling the child', async () =>
   await child.stop({ signal: 'SIGKILL' })
   expect(signals.every(signal => signal === 'SIGKILL')).toBe(true)
 }, 15_000)
+
+test('a stderr-tail allocation failure cannot leave an untracked child', () => {
+  let starts = 0
+  const value = runner({
+    start: () => {
+      starts++
+      return {
+        pid: 900_001,
+        stdout: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+        stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+        exited: Promise.resolve({ exitCode: 0, signal: null }),
+        killGroup() {},
+      }
+    },
+  })
+  expect(() => value.spawn(['/fake/allocation'], { timeoutMs: 1_000, stderrTailBytes: 2 ** 53 })).toThrow(RangeError)
+  expect(starts).toBe(0)
+}, 15_000)

@@ -101,6 +101,7 @@ export function executeSpawn(
     return inactiveProcess({ exitCode: null, signal: null, stopped: 'aborted', durationMs: 0 }, options.killGraceMs ?? 2_000)
   }
 
+  const stderr = new ByteTail(options.stderrTailBytes ?? DEFAULT_STDERR_TAIL_BYTES)
   let child: StartedChild
   try {
     child = start(argv, {
@@ -122,9 +123,9 @@ export function executeSpawn(
   // taking the source reader now prevents Bun from buffering an unread pipe without limit
   const stdoutReader = child.stdout.getReader()
   const stderrReader = child.stderr.getReader()
-  const stderr = new ByteTail(options.stderrTailBytes ?? DEFAULT_STDERR_TAIL_BYTES)
   const { promise: finished, resolve: finish } = Promise.withResolvers<void>()
   const { promise: leaderExit, resolve: resolveLeaderExit } = Promise.withResolvers<ChildExit>()
+  const pendingReadExits = new Set<() => void>()
   let leaderDidExit = false
   let leaderDurationMs: number | undefined
   let leaderExitError: unknown
@@ -226,6 +227,8 @@ export function executeSpawn(
     killGroup('SIGKILL')
     unregister()
     resolveLeaderExit(exit)
+    for (const notify of pendingReadExits) notify()
+    pendingReadExits.clear()
   }
 
   unregister = config.onStart(child, stopForDisposal, finished)
@@ -234,10 +237,23 @@ export function executeSpawn(
     error => onLeaderExit({ exitCode: null, signal: null }, error),
   )
 
+  /** Keeps stall-guard subscriptions bounded to reads that are still pending. */
+  const readOutput = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+    const readExit = Promise.withResolvers<void>()
+    if (leaderDidExit) readExit.resolve()
+    else pendingReadExits.add(readExit.resolve)
+    try {
+      return await readChunk(reader, readExit.promise, stallMs)
+    } finally {
+      pendingReadExits.delete(readExit.resolve)
+      readExit.resolve()
+    }
+  }
+
   const drainStderr = async () => {
     try {
       for (;;) {
-        const { done, value } = await readChunk(stderrReader, leaderExit, stallMs)
+        const { done, value } = await readOutput(stderrReader)
         if (done) return
         stderr.append(value)
       }
@@ -269,7 +285,7 @@ export function executeSpawn(
         return
       }
       try {
-        const { done, value } = await readChunk(stdoutReader, leaderExit, stallMs)
+        const { done, value } = await readOutput(stdoutReader)
         if (outputClosed || outputCancelled || stopping) {
           if (!outputClosed) {
             outputClosed = true
