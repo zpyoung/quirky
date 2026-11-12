@@ -34,7 +34,7 @@
                 "toolPolicy": {
                   "type": "string",
                   "enum": ["default", "deny-all"],
-                  "description": "With deny-all the session runs no tools: every tool or approval request is refused without an ask. Omit for the provider's normal approval flow."
+                  "description": "With deny-all the session runs no tools: every tool or approval request is refused without an ask. A Pi or Oh My Pi session is checked before each prompt and ends if the agent has a tool to offer, which Oh My Pi does whenever an MCP server is configured for it. Omit for the provider's normal approval flow."
                 }
               },
               "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean. `toolPolicy` is handled by this plugin and is not an agent catalog option."
