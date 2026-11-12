@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
 import { PluginHost, type ContextExtension } from '../../src/plugins/host'
@@ -84,7 +84,7 @@ function setup(options: SetupOptions = {}) {
     },
     emit: (event) => events.push(event),
     log: (message) => logs.push(message),
-    activationTimeoutMs: options.timeoutMs ?? 100,
+    activationTimeoutMs: options.timeoutMs,
     now: () => clock,
     ...(options.withExtension === false ? {} : { extension })
   })
@@ -293,6 +293,7 @@ describe('activation backoff', () => {
     await expectBrokenFailure(t)
 
     await t.host.replacePlugin('acme.broken', () => {
+      rmSync(join(t.installedDir, 'acme.broken'), { recursive: true, force: true })
       t.installed(
         { id: 'acme.broken', contributes: { method: [{ id: 'go' }] } },
         { activate: `context.provide(${JSON.stringify(BROKEN_METHOD)}, () => 'replacement')` }

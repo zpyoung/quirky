@@ -561,10 +561,10 @@ export class PluginHost {
     )
   }
 
-  /** The directory to import a plugin's code from: its own for generation 0 and built-ins, else a link made for this generation. */
+  /** Keeps each installed plugin generation's entrypoint and helpers isolated from Bun's module cache. */
   private importRootOf({ discovered }: RegistryPlugin): string {
     const generation = this.generations.get(discovered.id) ?? 0
-    if (generation === 0 || discovered.source !== 'installed') return discovered.dir
+    if (discovered.source !== 'installed') return discovered.dir
     const existing = this.generationLinks.get(discovered.id)
     if (existing !== undefined && existing.endsWith(`-${generation}`)) return existing
     const linkDir = join(this.options.installedDir, '.run')
