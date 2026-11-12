@@ -190,6 +190,21 @@ describe('avatar journal', () => {
     expect(store.mandates.list()).toEqual([])
     expect(store.journalSince(0)).toEqual([])
   })
+  test('journalSince can keep only the listed kinds at or after a time', () => {
+    const store = fresh()
+    store.appendJournal({ at: 50, worktreeId: 'wt-1', kind: 'gate', data: {} })
+    const late = store.appendJournal({ at: 100, worktreeId: 'wt-1', kind: 'gate', data: {} })
+    store.appendJournal({ at: 100, worktreeId: 'wt-1', kind: 'event', data: {} })
+    const sleep = store.appendJournal({ at: 150, worktreeId: 'wt-1', kind: 'sleep', data: {} })
+    const early = store.appendJournal({ at: 99, worktreeId: 'wt-1', kind: 'guess', data: {} })
+
+    expect(store.journalSince(0, { since: 100, kinds: ['gate', 'guess', 'sleep'] })).toEqual([late, sleep])
+    expect(store.journalSince(late.seq, { since: 100, kinds: ['gate', 'guess', 'sleep'] })).toEqual([sleep])
+    expect(store.journalSince(0, { since: 0, kinds: ['guess'] })).toEqual([early])
+    expect(store.journalSince(0, { since: 0, kinds: [] })).toEqual([])
+    expect(store.journalSince(0)).toHaveLength(5)
+  })
+
 })
 
 describe('callFingerprint', () => {

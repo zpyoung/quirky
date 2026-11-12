@@ -84,7 +84,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 
 | Path | Holds |
 |---|---|
-| `quirky-plugin.json` | id `quirky.avatar`, `apiVersion` `1.2.0`, `activation: startup`, `main`, `ui: dist/ui.js`, `cli: cli.ts`. Dependencies are `quirky.worktree`, `quirky.session`, `quirky.agent-status`, `quirky.agents`, `quirky.ask`, `quirky.checks`, `quirky.git`, `quirky.hosting`, `quirky.structured`, `quirky.heimdall` and `quirky.notifications`. Contributions are listed below. |
+| `quirky-plugin.json` | id `quirky.avatar`, `apiVersion` `1.3.0`, `activation: startup`, `main`, `ui: dist/ui.js`, `cli: cli.ts`. Dependencies are `quirky.worktree`, `quirky.session`, `quirky.agent-status`, `quirky.agents`, `quirky.ask`, `quirky.checks`, `quirky.git`, `quirky.hosting`, `quirky.structured`, `quirky.heimdall` and `quirky.notifications`. Contributions are listed below. |
 | `package.json` | `@quirky/plugin-avatar`, same shape as `plugins/quirky.ask/package.json`. |
 | `main.ts` | Thin wiring, like `plugins/quirky.heimdall/main.ts`: provides methods, the `tool-gate`, the launch-hook, jobs and subscriptions. |
 | `store-migrations.ts` | SQLite migrations for the tables in Data models. |
@@ -119,14 +119,14 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/sanitize.ts` | Pure: strip hidden markup from review, PR and CI text (R-24). |
 | `src/keepawake.ts` | Holds or releases `hostPower.keepAwake` from worktree states (R-12). |
 | `src/notify.ts` | Pure "everything waits on you" rule plus a single `context.notify` (R-35). |
-| `src/report.ts` | Pure report model: needs-you, stories, summary (R-45). |
+| `src/report.ts` | Needs-you, stories and summary (R-45). The in-memory summary tally reads journal rows incrementally and rebuilds when the start time or active hand-offs change. Owns `changed` announcements, including changed worktree and project names. |
 | `src/ui.tsx` | UI activation: window-bar pill, panel, view, sheet overlay, settings section, commands. |
-| `src/ui/*.tsx` | `Pill`, `Panel`, `Sheet`, `AvatarView` (Live, Report, Log), `DecisionTrace`, `SettingsSection`. |
+| `src/ui/*.tsx` | `Pill`, `Panel`, `Sheet`, `AvatarView` (Live, Report, Log), `DecisionTrace`, `SettingsSection`. Log loads older pages on request, joins overlapping newest pages and replaces the list when a full newest page no longer overlaps. |
 | `test/` | See the Testing strategy section. |
 
 Manifest contributions:
 - `method`: listed in Contracts.
-- `event`: `changed`.
+- `event`: `changed`, declared with `coalesce: []`: the first change is sent at once, then at most one per 250 ms. Bus events and changed worktree or project names announce it; `type` names only the latest change in the window.
 - `tool-gate`: `gate`.
 - `launch-hook`: `gate-hooks`, for `claude`, `codex`, `pi` and `omp`.
 - `job`: `watchdog`, `records`.
