@@ -413,7 +413,11 @@ describe('pi rpc runner', () => {
     const pids = JSON.parse(readFileSync(pidsPath, 'utf8')) as { parent: number; child: number }
     try {
       const signalsPath = join(home, 'flood-signals')
-      await until(() => existsSync(signalsPath) && readFileSync(signalsPath, 'utf8').includes('child\n'))
+      await until(() => {
+        if (!existsSync(signalsPath)) return false
+        const signals = readFileSync(signalsPath, 'utf8')
+        return signals.includes('child\n') && signals.includes('parent\n')
+      })
       expect(readFileSync(signalsPath, 'utf8').split('\n').filter(Boolean).sort()).toEqual(['child', 'parent'])
       expect(process.kill(pids.parent, 0)).toBe(true)
       expect(process.kill(pids.child, 0)).toBe(true)
