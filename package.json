@@ -20,7 +20,8 @@
     "typecheck:mobile": "bunx tsc --noEmit -p apps/mobile/tsconfig.json",
     "typecheck": "bun install --frozen-lockfile && bun run ui:lint && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop",
     "typecheck:desktop": "bun run --filter './apps/desktop' typecheck",
-    "ui:review": "bun scripts/ui-review.ts"
+    "ui:review": "bun scripts/ui-review.ts",
+    "soak": "bun scripts/soak.ts"
   },
   "devDependencies": {
     "@phosphor-icons/core": "2.1.1",
