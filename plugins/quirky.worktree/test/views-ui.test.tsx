@@ -68,6 +68,11 @@ type World = {
   setViewsCalls: ViewsState[]
   failViews: boolean
   cleanup: Array<{ worktreeId: string; name: string; fingerprint: string; reason: string; ignored: boolean; eligible: boolean; blockers: unknown[] }>
+  handoffContributions: unknown
+  contributionsError: Error | null
+  executeCommandCalls: Array<{ id: string; args: unknown }>
+  executeCommandError: Error | null
+  toasts: Array<{ title: string; body?: string }>
 }
 
 function setup() {
@@ -86,18 +91,25 @@ function setup() {
     setActiveCalls: [],
     setViewsCalls: [],
     failViews: false,
-    cleanup: []
+    cleanup: [],
+    handoffContributions: { commands: [] },
+    contributionsError: null,
+    executeCommandCalls: [],
+    executeCommandError: null,
+    toasts: []
   }
   const calls: Call[] = []
   const reports: unknown[] = []
   const provided = new Map<string, unknown>()
   const listeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
+  const connectionListeners = new Set<(status: string) => void>()
   let layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }
-  const emit = (type: string) => act(async () => {
+  const dispatch = async (type: string) => {
     await Promise.all([...listeners].map((listener) => listener({ type, data: {} } as QuirkyEvent)))
     await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+  }
+  const emit = (type: string) => act(async () => dispatch(type))
   const listed = () => world.worktrees.map((worktree) => ({ ...worktree, tagIds: [...(world.assignments[worktree.id] ?? [])] }))
 
   const context = {
@@ -109,6 +121,9 @@ function setup() {
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       switch (method) {
+        case 'ui.contributions':
+          if (world.contributionsError) throw world.contributionsError
+          return world.handoffContributions
         case 'ui.window.self':
           return { connId: 1 }
         case 'quirky.repo/list':
@@ -157,7 +172,7 @@ function setup() {
             else current.delete(String(params.tagId))
             world.assignments[id] = [...current]
           }
-          void emit('quirky.worktree/tagsChanged')
+          void dispatch('quirky.worktree/tagsChanged')
           return {}
         }
         case 'quirky.worktree/views':
@@ -166,7 +181,7 @@ function setup() {
         case 'quirky.worktree/setViews': {
           world.views = structuredClone(params.state as ViewsState)
           world.setViewsCalls.push(structuredClone(world.views))
-          void emit('quirky.worktree/viewsChanged')
+          void dispatch('quirky.worktree/viewsChanged')
           return structuredClone(world.views)
         }
         case 'quirky.worktree/activeView': {
@@ -199,7 +214,10 @@ function setup() {
       return () => void listeners.delete(listener)
     },
     getSetting: () => undefined,
-    executeCommand: async () => {},
+    executeCommand: async (id: string, args?: unknown) => {
+      world.executeCommandCalls.push({ id, args })
+      if (world.executeCommandError) throw world.executeCommandError
+    },
     openView() {},
     closeView() {},
     togglePanel() {},
@@ -209,11 +227,16 @@ function setup() {
       return () => void layoutListeners.delete(listener)
     },
     onStream: () => () => {},
-    onConnection: () => () => {},
+    onConnection(listener: (status: string) => void) {
+      connectionListeners.add(listener)
+      return () => void connectionListeners.delete(listener)
+    },
     async confirm() {
       return true
     },
-    toast() {},
+    toast(title: string, body?: string) {
+      world.toasts.push({ title, ...(body === undefined ? {} : { body }) })
+    },
     setPanelBadge() {}
   } as unknown as UiPluginContext
 
@@ -224,6 +247,7 @@ function setup() {
     calls,
     reports,
     emit,
+    reconnect: () => connectionListeners.forEach((listener) => listener('connected')),
     async mountInto(element: HTMLElement) {
       const frameRoot = createRoot(element)
       const bodyRef = { current: null as HTMLDivElement | null }
@@ -269,6 +293,12 @@ const click = async (element: Element | null | undefined, init: MouseEventInit =
   })
   await settle()
 }
+const visibleMenuText = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  if (node instanceof Element && node.getAttribute('aria-hidden') === 'true') return ''
+  return [...node.childNodes].map(visibleMenuText).join('')
+}
+const visibleMenuItemText = (item: Element) => visibleMenuText(item).replace(/\s+/g, ' ').trim()
 const typeInto = (input: HTMLInputElement, value: string) => act(async () => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
@@ -674,4 +704,118 @@ test('the cleanup footer line names the count and appears only when candidates e
   await click(noticeAction(line, 'Review'))
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   expect(withCandidate.calls.filter((call) => call.method === 'quirky.worktree/cleanupPreview').length).toBeGreaterThan(1)
+})
+test('row hand-off discovery handles missing, malformed and failed contributions across unload and reconnect', async () => {
+  const h = setup()
+  h.world.handoffContributions = {}
+  await h.mountInto(host)
+
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  expect(menuItems().map(visibleMenuItemText).slice(0, 9)).toEqual(['Rename', 'Tags…', 'Move to section', 'Move to status', 'Sleep', 'Open in', 'Copy', 'More', 'Delete…'])
+  expect(menuItem('Hand off to Avatar…')).toBeUndefined()
+  await pressEscape()
+
+  h.world.handoffContributions = { commands: [{ id: 'command:quirky.avatar/handoff' }] }
+  await h.emit('plugin.changed')
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  expect(menuItem('Hand off to Avatar…')).toBeDefined()
+  await pressEscape()
+
+  h.world.handoffContributions = { commands: 'not-an-array' }
+  await h.emit('plugin.changed')
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  expect(menuItem('Hand off to Avatar…')).toBeUndefined()
+  await pressEscape()
+
+  h.world.contributionsError = new Error('contributions unavailable')
+  await h.emit('plugin.changed')
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  expect(menuItem('Hand off to Avatar…')).toBeUndefined()
+  await pressEscape()
+
+  h.world.contributionsError = null
+  h.world.handoffContributions = { commands: [{ id: 'quirky.avatar/handoff' }] }
+  await act(async () => h.reconnect())
+  await settle()
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  await click(menuItem('Hand off to Avatar…'))
+  expect(h.world.executeCommandCalls).toEqual([{ id: 'quirky.avatar/handoff', args: { worktreeIds: ['w-retry'] } }])
+  expect(menuItems()).toHaveLength(0)
+  expect(h.calls.filter((call) => call.method === 'ui.contributions')).toHaveLength(5)
+})
+
+test('a loaded row hand-off follows Sleep and its descendants, runs once, and closes the menu', async () => {
+  const h = setup()
+  h.world.handoffContributions = { commands: [{ id: 'command:quirky.avatar/handoff' }] }
+  h.world.worktrees.push(wt('w-retry-child', 'r-harbor', 'retry-child', { parentId: 'w-retry' }))
+  await h.mountInto(host)
+
+  await click(buttonNamed(rowOf('retry-queue')!, 'Actions for retry-queue'))
+  const labels = menuItems().map(visibleMenuItemText)
+  const sleepIndex = labels.indexOf('Sleep')
+  const descendantsIndex = labels.indexOf('Sleep with descendants (1)')
+  const handoffIndex = labels.indexOf('Hand off to Avatar…')
+  expect(descendantsIndex).toBe(sleepIndex + 1)
+  expect(handoffIndex).toBe(descendantsIndex + 1)
+  expect(labels.indexOf('Open in')).toBe(handoffIndex + 1)
+  const openIn = menuItems().find((item) => visibleMenuItemText(item) === 'Open in')
+  expect(openIn?.previousElementSibling?.getAttribute('role')).toBe('separator')
+
+  await click(menuItem('Hand off to Avatar…'))
+  expect(h.world.executeCommandCalls).toEqual([{ id: 'command:quirky.avatar/handoff', args: { worktreeIds: ['w-retry'] } }])
+  expect(menuItems()).toHaveLength(0)
+})
+
+test('a rejected row hand-off shows the Avatar error toast', async () => {
+  const h = setup()
+  h.world.handoffContributions = { commands: [{ id: 'command:quirky.avatar/handoff' }] }
+  h.world.executeCommandError = new Error('boom')
+  await h.mountInto(host)
+  await rowMenu('retry-queue', 'Hand off to Avatar…')
+  expect(h.world.executeCommandCalls).toEqual([{ id: 'command:quirky.avatar/handoff', args: { worktreeIds: ['w-retry'] } }])
+  expect(h.world.toasts).toEqual([{ title: 'Could not hand off to Avatar', body: 'boom' }])
+  expect(menuItems()).toHaveLength(0)
+})
+
+test('the bulk bar hands off each selected shown worktree once and keeps selection', async () => {
+  const h = setup()
+  h.world.handoffContributions = { commands: [{ id: 'command:quirky.avatar/handoff' }] }
+  await h.mountInto(host)
+  await click(openButton(rowOf('retry-queue')!), { metaKey: true })
+  await click(openButton(rowOf('sidebar-tags')!), { metaKey: true })
+  await click(openButton(rowOf('docs-refresh')!), { metaKey: true })
+
+  const bar = host.querySelector<HTMLElement>('[aria-label=\"Bulk actions\"]')!
+  expect([...bar.querySelectorAll('button')].map((button) => norm(button.textContent))).toEqual(['Tag', 'Section', 'Status', 'Sleep', 'Hand off…', 'Clear'])
+  await click(buttonNamed(bar, 'Hand off…'))
+  expect(h.world.executeCommandCalls).toHaveLength(1)
+  const call = h.world.executeCommandCalls[0]!
+  expect(call.id).toBe('command:quirky.avatar/handoff')
+  const args = call.args
+  if (!args || typeof args !== 'object' || !('worktreeIds' in args) || !Array.isArray(args.worktreeIds)) throw new Error('handoff command did not receive worktree ids')
+  expect([...args.worktreeIds].sort()).toEqual(['w-docs', 'w-retry', 'w-tags'])
+  expect(host.querySelector('[aria-label=\"Bulk actions\"]')?.textContent).toContain('3 selected')
+  for (const name of ['retry-queue', 'sidebar-tags', 'docs-refresh']) {
+    expect(rowOf(name)!.classList.contains('selected')).toBe(true)
+  }
+})
+
+test('a rejected bulk hand-off keeps selection and shows the Avatar error toast', async () => {
+  const h = setup()
+  h.world.handoffContributions = { commands: [{ id: 'quirky.avatar/handoff' }] }
+  h.world.executeCommandError = new Error('bulk boom')
+  await h.mountInto(host)
+  await click(openButton(rowOf('retry-queue')!), { metaKey: true })
+  await click(openButton(rowOf('sidebar-tags')!), { metaKey: true })
+
+  const bar = host.querySelector<HTMLElement>('[aria-label=\"Bulk actions\"]')!
+  await click(buttonNamed(bar, 'Hand off…'))
+  expect(h.world.executeCommandCalls).toHaveLength(1)
+  const call = h.world.executeCommandCalls[0]!
+  expect(call.id).toBe('quirky.avatar/handoff')
+  const args = call.args
+  if (!args || typeof args !== 'object' || !('worktreeIds' in args) || !Array.isArray(args.worktreeIds)) throw new Error('handoff command did not receive worktree ids')
+  expect([...args.worktreeIds].sort()).toEqual(['w-retry', 'w-tags'])
+  expect(h.world.toasts).toEqual([{ title: 'Could not hand off to Avatar', body: 'bulk boom' }])
+  expect(host.querySelector('[aria-label=\"Bulk actions\"]')?.textContent).toContain('2 selected')
 })

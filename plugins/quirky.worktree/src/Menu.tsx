@@ -17,7 +17,7 @@ export const STATUS_LABELS: Record<WorktreeStatus, string> = {
 export type RowAction =
   | 'rename' | 'tags' | 'move-section' | 'move-status' | 'sleep' | 'wake' | 'open-terminal' | 'open-changes'
   | 'copy-path' | 'copy-name' | 'set-parent' | 'remove-parent' | 'mark-unread' | 'mark-read' | 'pin' | 'unpin'
-  | 'archive' | 'details' | 'delete'
+  | 'archive' | 'details' | 'delete' | 'handoff-avatar'
 
 /** The `move-section` argument that opens the new-section dialog instead of naming a section. */
 export const NEW_SECTION = '@new-section'
@@ -38,7 +38,8 @@ export function workspaceMenu(
   groups: ProjectGroup[],
   repo: Repo | undefined,
   run: RowActionRunner,
-  statuses: readonly Pick<WorktreeStatusDefinition, 'id' | 'label' | 'icon'>[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }))
+  statuses: readonly Pick<WorktreeStatusDefinition, 'id' | 'label' | 'icon'>[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label })),
+  options: { handoffToAvatar?: boolean } = {}
 ): ContextMenuItem[] {
   const sleeping = 'sleeping' in worktree && worktree.sleeping === true
   const archived = 'archivedAt' in worktree && (worktree as Worktree & { archivedAt: number | null }).archivedAt !== null
@@ -84,6 +85,7 @@ export function workspaceMenu(
       }))
     },
     ...sleepItems,
+    ...(options.handoffToAvatar ? [{ label: 'Hand off to Avatar…', onSelect: () => run('handoff-avatar') }] : []),
     {
       label: 'Open in',
       separatorBefore: true,

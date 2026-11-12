@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
 import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
-import type { HeimdallWorktreeStatus } from './useTree'
+import { isAvatarWorktreeStatus, type AvatarWorktreeStatus, type HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, currentWindowId, setWorkspaceSleeping, setWorktree } from './actions'
 import { groupMenu, NEW_SECTION, projectMenu, UNARCHIVE, WITH_DESCENDANTS, workspaceMenu, type RowAction } from './Menu'
@@ -46,6 +46,8 @@ export type TreeProps = {
   onTagsOpen?(ids: string[], anchor: HTMLElement): void
   /** Returning true claims the action, and the tree skips its own handling. */
   onMenuAction?(id: string, action: RowAction, arg?: string | null): boolean | void
+  /** Shares the avatar hand-off command with the row menu. */
+  onHandoffToAvatar?(worktreeIds: string[]): void
   /** Returning true claims the action, and the tree skips its own handling. */
   onGroupAction?(group: ViewGroup, action: GroupAction): boolean | void
   collapsed?: ReadonlySet<string>
@@ -93,6 +95,28 @@ const ACTIVITY_LABELS: Record<string, string> = {
   running: 'Running',
   exited: 'Exited'
 }
+const AVATAR_STATE_LABELS: Record<string, string> = {
+  checking: 'Checking',
+  'gate-failed': 'Gate failed',
+  briefing: 'Briefing',
+  working: 'Working',
+  'waiting-on-you': 'Waiting on you',
+  'checking-done': 'Checking done',
+  'in-review': 'In review',
+  'merge-ready': 'Merge ready',
+  merged: 'Merged',
+  'pr-ready': 'PR ready',
+  committed: 'Committed',
+  parked: 'Parked',
+  done: 'Done'
+}
+const AVATAR_LEVEL_LABELS: Record<AvatarWorktreeStatus['level'], string> = {
+  shadow: 'Shadow',
+  local: 'Local',
+  'own-branch': 'Own branch',
+  full: 'Full'
+}
+
 
 function isHeimdallWorktreeStatus(value: unknown): value is HeimdallWorktreeStatus {
   if (typeof value !== 'object' || value === null) return false
@@ -108,6 +132,19 @@ function heimdallStatusOf(worktree: Worktree): HeimdallWorktreeStatus | null {
   if (!('heimdallStatus' in worktree)) return null
   return isHeimdallWorktreeStatus(worktree.heimdallStatus) ? worktree.heimdallStatus : null
 }
+function avatarStatusOf(worktree: Worktree): AvatarWorktreeStatus | null {
+  if (!('avatarStatus' in worktree)) return null
+  return isAvatarWorktreeStatus(worktree.avatarStatus) ? worktree.avatarStatus : null
+}
+
+function avatarStatusTitle(status: AvatarWorktreeStatus): string {
+  const state = AVATAR_STATE_LABELS[status.state] ?? status.state
+  const needsYou = status.needsYou > 0
+    ? ` · ${status.needsYou} ${status.needsYou === 1 ? 'needs you' : 'need you'}`
+    : ''
+  return `Avatar: ${state}${needsYou} · ${AVATAR_LEVEL_LABELS[status.level]}`
+}
+
 
 function HeimdallGlyph({ status, now }: { status: HeimdallWorktreeStatus; now: number }) {
   let label = status.state
@@ -347,6 +384,7 @@ function WorktreeRowView({
     sleeping && 'sleeping'
   ].filter(Boolean).join(' ')
   const heimdall = heimdallStatusOf(worktree)
+  const avatar = avatarStatusOf(worktree)
   const provenance = worktree.automationProvenance?.kind === 'created-by-automation'
     ? worktree.automationProvenance
     : null
@@ -442,8 +480,13 @@ function WorktreeRowView({
             title={worktree.path}
             onClick={onClick}
           >
-            <ActivityMark state={mark} label={markLabel(mark, pendingAsks)} />
-            <span className="worktree-name ui-name-share ui-text-ellipsis" title={worktree.name}>{worktree.name}</span>
+            <ActivityMark
+              state={mark}
+              label={markLabel(mark, pendingAsks)}
+              ring={avatar === null ? undefined : avatar.needsYou > 0 ? 'needs-you' : 'accent'}
+              title={avatar === null ? undefined : avatarStatusTitle(avatar)}
+            />
+            <span className="worktree-name ui-name-share ui-text-ellipsis" title={worktree.name}>{avatar ? `Avatar · ${worktree.name}` : worktree.name}</span>
             {worktree.unread ? <UnreadDot /> : loop ? <LoopGlyph label={loop.label} /> : null}
             {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
             <TagChips tags={tags} max={2} nameShare={0.4} />
@@ -629,6 +672,7 @@ export function Tree({
   onRename,
   onTagsOpen,
   onMenuAction,
+  onHandoffToAvatar,
   onGroupAction,
   collapsed,
   onToggleCollapsed,
@@ -929,6 +973,9 @@ export function Tree({
       case 'delete':
         requestDelete(worktree, descendantsOf.get(worktree.id)?.length ?? 0)
         break
+      case 'handoff-avatar':
+        onHandoffToAvatar?.([worktree.id])
+        break
     }
   }
 
@@ -967,7 +1014,8 @@ export function Tree({
         groups,
         repoById.get(worktree.repoId),
         (action, arg) => runRowAction(worktree, action, arg),
-        statusDefinitions
+        statusDefinitions,
+        { handoffToAvatar: onHandoffToAvatar !== undefined }
       )
     })
   }
