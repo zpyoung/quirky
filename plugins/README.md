@@ -218,6 +218,10 @@ Plugin stores still refuse a schema newer than their migration list by default. 
 in with `context.openStore(migrations, { newerVersion: 'read-only' })` and inspect `store.readOnly`;
 SQLite enforces read-only access, migrations do not run, and write/transaction methods refuse.
 
+Daemon and plugin SQLite connections wait up to five seconds for a busy database, including
+read-only plugin handles. Writable stores use WAL and `synchronous = NORMAL`; a plugin that needs
+stronger durability can set `PRAGMA synchronous = FULL` after opening its store.
+
 ## Orchestration
 
 `quirky.orchestration` provides durable Runs, dependent Tasks, authoritative Dispatch attempts,

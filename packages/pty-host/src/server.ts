@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
+import { inspect } from 'node:util'
 import {
   base64ToBytes,
   encodePtyData,
@@ -17,8 +18,8 @@ import { SocketWriter } from './writer'
 
 export type PtyServerOptions = Partial<Omit<SessionManagerOptions, 'home'>> & {
   home: string
-  /** Called after a `shutdown` request has been answered and the server has stopped. */
-  onShutdown?: () => void
+  /** Called after a `shutdown` request has been answered and `stop()` has settled; defined on rejection. */
+  onShutdown?: (error?: unknown) => void
 }
 
 export type PtyServer = {
@@ -227,8 +228,14 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
       case 'shutdown':
         return manager.shutdown().then(() => {
           void conn.writer.flushed().then(async () => {
-            await stop()
-            options.onShutdown?.()
+            try {
+              await stop()
+              options.onShutdown?.()
+            } catch (error) {
+              const shutdownError = error ?? new Error('unknown shutdown error')
+              if (options.onShutdown) options.onShutdown(shutdownError)
+              else process.stderr.write(`[quirky-pty] shutdown failed: ${inspect(shutdownError)}\n`)
+            }
           })
           return {}
         })
@@ -266,10 +273,19 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     stopping ??= (async () => {
       stopExitEvents()
       stopFactEvents()
-      await manager.shutdown()
-      listener.stop(true)
-      rmSync(socketPath, { force: true })
-      if (readPid(join(home, 'pty.pid')) === process.pid) rmSync(join(home, 'pty.pid'), { force: true })
+      try {
+        await manager.shutdown()
+      } finally {
+        try {
+          listener.stop(true)
+        } finally {
+          try {
+            if (readPid(join(home, 'pty.pid')) === process.pid) rmSync(join(home, 'pty.pid'), { force: true })
+          } finally {
+            rmSync(socketPath, { force: true })
+          }
+        }
+      }
     })()
     return stopping
   }

@@ -25,6 +25,8 @@ import { fileURLToPath } from 'node:url'
 import { QuirkyClient } from '../client'
 import { RPC_PATH, type ClientRole } from '../rpc'
 
+export { installProcessErrorGuards, type ProcessErrorGuardOptions } from './process-guard'
+
 /** Written by quirkyd at startup (mode 0600) and removed on clean exit. */
 export type RuntimeInfo = {
   pid: number

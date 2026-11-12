@@ -242,6 +242,11 @@ does not load local images.
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
+`quirkyd` and `quirky-pty` log stray uncaught exceptions and unhandled rejections to stderr
+without exiting. Startup failures still exit with status 1; a duplicate instance exits with
+status 0. A failed PTY-host shutdown logs its error, cleans up its listener and PID file, and
+exits with status 1.
+
 A PR's checks run the tests its change affects on GitHub Actions. Add the `full-suite` label to run
 every test, on that push and later ones. Agents push to a draft PR for results and don't run suites
 on this Mac ([AGENTS.md](AGENTS.md)). Use `bun test <file>` for a single file. Run
