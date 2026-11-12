@@ -33,11 +33,7 @@ function restoreFailed(app: AvatarApp, worktreeId: string, error: unknown): void
   journal(app, worktreeId, { type: 'restore-failed', error: message })
 }
 
-function gateCheckFailed(app: AvatarApp, worktreeId: string, error: unknown): void {
-  journal(app, worktreeId, { type: 'gate-check-error', error: errorText(error) })
-}
-
-/** Reconciles supervision markers and restarts gate checks left in progress by a daemon stop. */
+/** Reconciles supervision markers and resumes proof before reconstructing an owed mandate brief. */
 export function restoreHandoffs(app: AvatarApp): RestoreResult {
   const result: RestoreResult = { markersWritten: [], markersRemoved: [], checksResumed: [] }
   let rows
@@ -70,14 +66,13 @@ export function restoreHandoffs(app: AvatarApp): RestoreResult {
       restoreFailed(app, row.worktreeId, error)
     }
 
-    const gateCheck = row.state === 'checking'
+    const gateCheck = row.state === 'checking' || row.state === 'briefing'
     if (gateCheck) {
       result.checksResumed.push(row.worktreeId)
       try {
-        const check = app.services.gate.gateCheck(row.worktreeId)
-        void Promise.resolve(check).catch((error: unknown) => gateCheckFailed(app, row.worktreeId, error))
+        app.services.handoff.resumeBrief(row.worktreeId)
       } catch (error) {
-        gateCheckFailed(app, row.worktreeId, error)
+        restoreFailed(app, row.worktreeId, error)
       }
     }
 
