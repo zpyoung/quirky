@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import type { AvatarApp, BrainAction, BrainService, JournalEntry, JournalKind, Mandate, ToolCall } from '../contracts'
 import { callFingerprint } from '../fingerprint'
 import { parseActions } from './actions'
@@ -9,7 +10,7 @@ type JudgeAction = Extract<BrainAction, { type: 'judge' }>
 type Usage = { contextTokens: number; contextWindow: number | null }
 type Live = { id: string; rowId: string; ready: boolean; usage: Usage | null }
 type Waiter = { sessionId: string; lastAssistant: string | null; resolve(text: string): void; reject(error: Error): void }
-type Pending = { call: ToolCall; resolve(value: Awaited<ReturnType<BrainService['judge']>>): void; timedOut: boolean }
+type Pending = { call: ToolCall; mandate: Mandate; askedAt: number; resolve(value: Awaited<ReturnType<BrainService['judge']>>): void; timedOut: boolean }
 
 const LIFETIME_KEY = 'avatar-brain'
 const CONTEXT_CAP = 300_000
@@ -85,6 +86,8 @@ export function collectRebuildState(app: AvatarApp): RebuildState {
  * judgment goes ahead of queued events), journal entries reach it in sequence order and are marked
  * delivered only after its actions are dispatched, and the session is replaced between turns once
  * its context passes the rotation limit. Returns the disposer.
+ * An answer is delivered or remembered only while its worktree is still handed off under the
+ * mandate it was judged with.
  */
 export function register(app: AvatarApp): () => void {
   const { context } = app
@@ -149,17 +152,28 @@ export function register(app: AvatarApp): () => void {
     if (row !== null && row.endedAt === null) app.store.brainSessions.put({ ...row, endedAt: app.now(), endTokens: live.usage?.contextTokens ?? null })
   }
 
+  function judgmentIsActive(pending: Pending): boolean {
+    return app.services.handoff.active().some(({ worktreeId, mandate }) => worktreeId === pending.call.worktreeId && isDeepStrictEqual(mandate, pending.mandate))
+  }
+
   function settleJudgment(action: JudgeAction): void {
     const pending = judgments.get(action.requestId)
     if (pending === undefined) return
     judgments.delete(action.requestId)
+    if (!judgmentIsActive(pending)) {
+      if (!pending.timedOut) pending.resolve('unavailable')
+      return
+    }
     if (!pending.timedOut) {
       pending.resolve({ decision: action.decision, reliedOn: action.reliedOn, reason: action.reason })
       return
     }
     if (action.decision === 'held') return
     const { agent, worktreeId, toolName, toolInput } = pending.call
-    app.store.lateAnswers.put({ fingerprint: callFingerprint(agent, worktreeId, toolName, toolInput), worktreeId, decision: action.decision, reason: action.reason, createdAt: app.now(), usedAt: null })
+    const fingerprint = callFingerprint(agent, worktreeId, toolName, toolInput)
+    const existing = app.store.lateAnswers.get(fingerprint)
+    if (existing?.usedAt != null && existing.usedAt >= pending.askedAt) return
+    app.store.lateAnswers.put({ fingerprint, worktreeId, decision: action.decision, reason: action.reason, createdAt: app.now(), usedAt: null })
   }
 
   function failPending(): void {
@@ -327,7 +341,7 @@ export function register(app: AvatarApp): () => void {
   async function runJudgment(requestId: string, call: ToolCall, mandate: Mandate): Promise<void> {
     const live = current
     const pending = judgments.get(requestId)
-    if (live === null || !live.ready || pending === undefined) {
+    if (live === null || !live.ready || pending === undefined || !judgmentIsActive(pending)) {
       if (pending !== undefined) {
         judgments.delete(requestId)
         if (!pending.timedOut) pending.resolve('unavailable')
@@ -408,7 +422,7 @@ export function register(app: AvatarApp): () => void {
       }
       const requestId = randomUUID()
       return new Promise((resolve) => {
-        const pending: Pending = { call, timedOut: false, resolve: (value) => (clearTimeout(timer), resolve(value)) }
+        const pending: Pending = { call, mandate, askedAt: app.now(), timedOut: false, resolve: (value) => (clearTimeout(timer), resolve(value)) }
         const timer = setTimeout(() => {
           if (judgments.get(requestId) !== pending) return
           pending.timedOut = true
