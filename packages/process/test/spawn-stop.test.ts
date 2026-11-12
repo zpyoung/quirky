@@ -50,7 +50,6 @@ async function expectGone(pid: number) {
   throw new Error(`pid ${pid} survived`)
 }
 
-// These tests exercise real child-process signal delivery and deadline timing, which fake timers cannot model.
 test('16: stop returns the exact exit object and ends a running child promptly', async () => {
   const child = runner().spawn(['/bin/sh', '-c', 'sleep 30'], { timeoutMs: 10_000 })
   const startedAt = Date.now()

@@ -103,7 +103,7 @@ test('14: a blocked large write resolves false when the child is stopped', async
     settled = true
     return result
   })
-  // The child never reads stdin; allow the real pipe to fill before killing it.
+  // the child never reads stdin; allow the real pipe to fill before killing it
   await Bun.sleep(20)
   expect(settled).toBe(false)
   const result = await child.stop({ signal: 'SIGKILL' })

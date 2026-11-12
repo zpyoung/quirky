@@ -119,7 +119,7 @@ export function executeSpawn(
     }, options.killGraceMs ?? 2_000)
   }
 
-  // Taking the source reader now prevents Bun from buffering an unread pipe without limit.
+  // taking the source reader now prevents Bun from buffering an unread pipe without limit
   const stdoutReader = child.stdout.getReader()
   const stderrReader = child.stderr.getReader()
   const stderr = new ByteTail(options.stderrTailBytes ?? DEFAULT_STDERR_TAIL_BYTES)
@@ -222,7 +222,7 @@ export function executeSpawn(
     leaderExitError = error
     clearTimers()
     removeAbortListener()
-    // A spawned child must not leave descendants alive or holding its output pipes open.
+    // a spawned child must not leave descendants alive or holding its output pipes open
     killGroup('SIGKILL')
     unregister()
     resolveLeaderExit(exit)
@@ -314,7 +314,7 @@ export function executeSpawn(
         await child.stdin!.flush()
         return !stopping && !leaderDidExit
       } catch {
-        // A stopped child can reject a flush with EPIPE while a write is pending.
+        // a stopped child can reject a flush with EPIPE while a write is pending
         return false
       }
     })
