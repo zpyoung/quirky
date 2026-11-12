@@ -14,7 +14,7 @@ import { FAULT_ENV, FAULT_PLUGIN_ID, installFaultPlugin } from './faults.ts'
 
 type Worker = { worktree: string; path: string; session: string }
 
-type StartWorldOptions = { out: string; repoRoot: string; signal?: AbortSignal; fault?: FaultKind }
+type StartWorldOptions = { out: string; repoRoot: string; signal?: AbortSignal; fault?: FaultKind; windows?: number }
 
 export type SoakWorld = {
   home: string
@@ -25,6 +25,8 @@ export type SoakWorld = {
   control: QuirkyClient
   fixtures: RegisteredCaptureFixtures
   workers: Worker[]
+  env: Record<string, string>
+  track(pid: number): void
   stop(): Promise<void>
 }
 
@@ -170,13 +172,34 @@ export async function startWorld(options: StartWorldOptions): Promise<SoakWorld>
     const out = resolve(options.out)
     const repoRoot = resolve(options.repoRoot)
     mkdirSync(out, { recursive: true })
-    const env = createIsolatedRuntimeEnvironment(home, { repoRoot })
+    const uiDir = options.windows ? join(home, 'ui-dist') : undefined
+    const env = createIsolatedRuntimeEnvironment(home, { repoRoot, uiDir })
     const prepared = await prepareCaptureFixtureHome(home, { timeoutMs: 30_000, signal: options.signal, env })
     throwIfAborted(options.signal)
     delete env[FAULT_ENV]
     if (options.fault) {
       installFaultPlugin(home, repoRoot)
       env[FAULT_ENV] = '1'
+    }
+
+    if (uiDir) {
+      const buildFd = openSync(join(out, 'ui-build.log'), 'w')
+      const build = (() => {
+        try {
+          return scope.spawn([process.execPath, 'packages/ui/build.ts'], {
+            cwd: repoRoot,
+            env: { ...env, QUIRKY_UI_OUT: uiDir },
+            stdin: 'ignore',
+            stdout: buildFd,
+            stderr: buildFd
+          })
+        } finally {
+          closeSync(buildFd)
+        }
+      })()
+      const code = await waitWithAbort(build.exited, options.signal, 180_000)
+      if (code !== 0) throw new Error(`UI build exited with code ${code}; see ${join(out, 'ui-build.log')}`)
+      throwIfAborted(options.signal)
     }
 
     const logPath = join(out, 'daemon.log')
@@ -248,6 +271,8 @@ export async function startWorld(options: StartWorldOptions): Promise<SoakWorld>
       control: activeControl,
       fixtures,
       workers,
+      env,
+      track: (pid) => scope.track(pid),
       stop
     }
     return world

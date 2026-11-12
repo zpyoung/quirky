@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
-import type { EventRecord, ProcessRow, Sample, SoakConfig, SoakReport, WorkerBeat } from './contracts'
+import type { EventRecord, ProcessRow, Sample, SoakConfig, SoakReport, WindowBeat, WorkerBeat } from './contracts'
 import type { SoakEvidence } from './verdict'
-import { judge } from './verdict'
+import { judge, windowAlive } from './verdict'
 
 type ConfigOverrides = {
   minutes?: number
@@ -14,6 +14,7 @@ function config(overrides: ConfigOverrides = {}): SoakConfig {
   return {
     minutes: overrides.minutes ?? 30,
     out: overrides.out ?? '/tmp/soak-verdict-test',
+    windows: 3,
     limits: {
       maxChildren: 60,
       maxGrowth: 5,
@@ -24,6 +25,10 @@ function config(overrides: ConfigOverrides = {}): SoakConfig {
     },
     ...(overrides.fault === undefined ? {} : { fault: overrides.fault }),
   }
+}
+
+function windowBeat(worktree: string, overrides: Partial<WindowBeat> = {}): WindowBeat {
+  return { worktree, open: true, shown: true, lastRequestAgeSeconds: 0, ...overrides }
 }
 
 function healthyWorkers(): WorkerBeat[] {
@@ -37,6 +42,7 @@ function evidence(overrides: Partial<SoakEvidence> = {}): SoakEvidence {
   return {
     durationSeconds: 1800,
     windows: 2,
+    windowBeats: [],
     samples: [],
     events: [],
     probes: [],
@@ -301,15 +307,14 @@ test('scenario 28: a worker heartbeat older than thirty seconds is stale', () =>
   expect(result.checks.workers).toEqual({ ok: false, expected: 7, alive: 6, stale: ['worktree-6'] })
 })
 
-test('scenario 29: the verdict passes only when all five checks pass', () => {
+test('window scenario 22: the verdict passes only when all six checks pass', () => {
   const pass = judge(evidence(), config())
   expect(pass.verdict).toBe('pass')
+  expect(Object.keys(pass.checks)).toEqual(['children', 'zombies', 'events', 'stalls', 'workers', 'windows'])
   expect(Object.values(pass.checks).every((check) => check.ok)).toBe(true)
 
-  const workers = healthyWorkers()
-  workers[0] = { worktree: 'worktree-0', lastBeatAgeSeconds: 31 }
-  const fail = judge(evidence({ workers }), config())
-  expect(fail.checks.workers.ok).toBe(false)
+  const fail = judge(evidence({ windowBeats: [windowBeat('lost-window', { open: false })] }), config())
+  expect(fail.checks.windows).toEqual({ ok: false, expected: 1, alive: 0, lost: ['lost-window'] })
   expect(fail.verdict).toBe('fail')
 })
 
@@ -655,4 +660,94 @@ test('loosening maxStallMs passes its check but disqualifies by name', () => {
   expect(result.checks.stalls.ok).toBe(true)
   expect(result.disqualified).toEqual(['limit loosened: maxStallMs 1001 > 1000'])
   expect(result.qualifies).toBe(false)
+})
+
+test('window scenario 17: a window is alive only when open, shown and recently active', () => {
+  expect(windowAlive(windowBeat('active'))).toBe(true)
+  expect(windowAlive(windowBeat('closed', { open: false }))).toBe(false)
+  expect(windowAlive(windowBeat('blank', { shown: false }))).toBe(false)
+  expect(windowAlive(windowBeat('silent', { lastRequestAgeSeconds: 31 }))).toBe(false)
+})
+
+test('window scenario 18: all alive windows pass with the exact ordered check', () => {
+  const result = judge(evidence({
+    windowBeats: ['first', 'second', 'third'].map((id) => windowBeat(id)),
+  }), config())
+
+  expect(result.checks.windows).toEqual({ ok: true, expected: 3, alive: 3, lost: [] })
+})
+
+test('window scenario 19: a closed or crashed page is listed as lost', () => {
+  const result = judge(evidence({
+    windowBeats: [
+      windowBeat('first'),
+      windowBeat('closed-window', { open: false }),
+      windowBeat('third'),
+    ],
+  }), config())
+
+  expect(result.checks.windows).toEqual({
+    ok: false,
+    expected: 3,
+    alive: 2,
+    lost: ['closed-window'],
+  })
+})
+
+test('window scenario 20: an open page without a daemon worktree is lost', () => {
+  const result = judge(evidence({
+    windowBeats: [windowBeat('blank-window', { shown: false })],
+  }), config())
+
+  expect(result.checks.windows).toEqual({
+    ok: false,
+    expected: 1,
+    alive: 0,
+    lost: ['blank-window'],
+  })
+})
+
+test('window scenario 21: age 30 is alive but stale, absent and non-finite ages are lost', () => {
+  const result = judge(evidence({
+    windowBeats: [
+      windowBeat('age-31', { lastRequestAgeSeconds: 31 }),
+      windowBeat('age-30', { lastRequestAgeSeconds: 30 }),
+      windowBeat('never-requested', { lastRequestAgeSeconds: null }),
+      windowBeat('infinite-age', { lastRequestAgeSeconds: Number.POSITIVE_INFINITY }),
+      windowBeat('not-a-number', { lastRequestAgeSeconds: Number.NaN }),
+    ],
+  }), config())
+
+  expect(result.checks.windows).toEqual({
+    ok: false,
+    expected: 5,
+    alive: 1,
+    lost: ['age-31', 'never-requested', 'infinite-age', 'not-a-number'],
+  })
+})
+
+test('empty window evidence passes with zero expected windows', () => {
+  const result = judge(evidence(), config())
+
+  expect(result.checks.windows).toEqual({ ok: true, expected: 0, alive: 0, lost: [] })
+})
+
+test('window scenario 23: qualification keeps using the alive-window evidence count', () => {
+  const beats = [
+    windowBeat('first'),
+    windowBeat('second'),
+    windowBeat('third', { open: false }),
+  ]
+  const twoAlive = judge(evidence({ windows: 2, windowBeats: beats }), config())
+  expect(twoAlive.checks.windows).toEqual({
+    ok: false,
+    expected: 3,
+    alive: 2,
+    lost: ['third'],
+  })
+  expect(twoAlive.verdict).toBe('fail')
+  expect(twoAlive.disqualified).not.toContain('2 windows connected, needs 2')
+
+  const oneAlive = judge(evidence({ windows: 1, windowBeats: beats }), config())
+  expect(oneAlive.disqualified).toContain('1 windows connected, needs 2')
 })

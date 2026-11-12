@@ -1,4 +1,9 @@
-import { DEFAULT_LIMITS, QUALIFYING_MINUTES, QUALIFYING_WINDOWS } from './contracts'
+import {
+  DEFAULT_LIMITS,
+  QUALIFYING_MINUTES,
+  QUALIFYING_WINDOWS,
+  WINDOW_SILENCE_SECONDS,
+} from './contracts'
 import type {
   EventRecord,
   ProbeRecord,
@@ -7,12 +12,14 @@ import type {
   SoakConfig,
   SoakLimits,
   SoakReport,
+  WindowBeat,
   WorkerBeat,
 } from './contracts'
 
 export type SoakEvidence = {
   durationSeconds: number
   windows: number
+  windowBeats: WindowBeat[]
   samples: Sample[]
   events: EventRecord[]
   probes: ProbeRecord[]
@@ -26,6 +33,16 @@ const ZOMBIE_PERSISTENCE_SAMPLES = 3
 const WORKER_FRESHNESS_SECONDS = 30
 const HOST_LAG_LIMIT_MS = 500
 const TOP_COUNT = 10
+
+/** Identifies renderers that still show their worktree and send requests. */
+export function windowAlive(beat: WindowBeat): boolean {
+  const age = beat.lastRequestAgeSeconds
+  return beat.open
+    && beat.shown
+    && age !== null
+    && Number.isFinite(age)
+    && age <= WINDOW_SILENCE_SECONDS
+}
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
@@ -275,6 +292,18 @@ function judgeWorkers(workers: WorkerBeat[]): SoakReport['checks']['workers'] {
   }
 }
 
+function judgeWindows(windowBeats: WindowBeat[]): SoakReport['checks']['windows'] {
+  const lost: string[] = []
+  let alive = 0
+
+  for (const beat of windowBeats) {
+    if (windowAlive(beat)) alive += 1
+    else lost.push(beat.worktree)
+  }
+
+  return { ok: lost.length === 0, expected: windowBeats.length, alive, lost }
+}
+
 function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy: number, probes: number): string[] {
   const reasons: string[] = []
   const runMinutes = Math.min(config.minutes, evidence.durationSeconds / 60)
@@ -315,6 +344,7 @@ export function judge(
     events: judgeEvents(evidence, config),
     stalls: judgeStalls(evidence, config),
     workers: judgeWorkers(evidence.workers),
+    windows: judgeWindows(evidence.windowBeats),
   }
   const disqualified = disqualifications(
     evidence,
