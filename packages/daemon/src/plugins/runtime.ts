@@ -43,6 +43,8 @@ export type PluginRuntimeOptions = {
   launchHookTimeoutMs: number
   /** Longest a job timer sleeps before re-checking the clock. */
   schedulerRecheckMs?: number
+  /** Window for coalesced plugin events; defaults to 250 ms and can be set by tests. */
+  eventCoalesceMs?: number
   /** Login shell that agents run under; reported by `context.launch.shell`. */
   shell: string
   /** PATH of the user's interactive shell for `context.launch.commandArgv`; omitted or undefined keeps the login shell's PATH. */
@@ -83,7 +85,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntime {
   const { home, plugins, core, store, log, launchHookTimeoutMs } = options
 
-  const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
+  const events = new PluginEvents(plugins, (event) => core.broadcast(event), log, { coalesceMs: options.eventCoalesceMs })
   const hostPower = options.hostPower ?? new HostPowerService(log, null)
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
   const distros = new DistroService({

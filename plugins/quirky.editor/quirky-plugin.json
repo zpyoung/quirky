@@ -757,9 +757,9 @@
       {"id":"open-markdown","description":"Open a Markdown document in an exact workspace tab group.","params":{"type":"object","properties":{"worktree":{"type":"string"},"group":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,dialog:'open-markdown'}."}},"required":["result"],"additionalProperties":false}}
     ],
     "event": [
-      { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false } },
+      { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false }, "coalesce": [] },
       { "id": "saved", "description": "A save wrote a file. beforeHash is the previous content hash, or null when the file did not exist or was overwritten without a baseline; afterHash is the sha-256 hex of the bytes written.", "data": { "type": "object", "properties": { "path": { "type": "string" }, "beforeHash": { "description": "String or null; the schema subset has no union type." }, "afterHash": { "type": "string" } }, "required": ["path", "beforeHash", "afterHash"], "additionalProperties": false } },
-      { "id": "explorerChanged", "description": "Filesystem tree changed for a worktree; clients should reload its root, expanded directories and active filename filter.", "data": { "type": "object", "properties": { "worktreeId": { "type": "string" } }, "required": ["worktreeId"], "additionalProperties": false }, "worktree": "worktreeId" }
+      { "id": "explorerChanged", "description": "Filesystem tree changed for a worktree; clients should reload its root, expanded directories and active filename filter.", "data": { "type": "object", "properties": { "worktreeId": { "type": "string" } }, "required": ["worktreeId"], "additionalProperties": false }, "worktree": "worktreeId", "coalesce": [] }
     ],
     "view": [
       { "id": "document", "title": "Editor Document", "description": "A worktree file rendered by the matching editor surface." }

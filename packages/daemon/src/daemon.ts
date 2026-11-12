@@ -47,6 +47,8 @@ export type DaemonOptions = {
   launchHookTimeoutMs?: number
   /** Longest a job timer sleeps before re-checking the clock; defaults to 60 seconds. */
   schedulerRecheckMs?: number
+  /** Window for coalesced plugin events; defaults to 250 ms and can be set by tests. */
+  eventCoalesceMs?: number
   ptyHostEntry?: string
   cliEntry?: string
   /** Login shell that agents run under; defaults to `$SHELL`. */
@@ -207,6 +209,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     hostPower,
     launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
     schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000,
+    eventCoalesceMs: options.eventCoalesceMs,
     shell,
     ...(interactivePath === undefined ? {} : { interactivePath }),
     safeMode: options.safeMode ?? false,
