@@ -732,6 +732,45 @@ describe('round 2 reader mutation guards', () => {
   })
 })
 
+describe('dollar forms the reader took as text', () => {
+  const rows: Array<{ id: string; source: string; expected: [string, boolean] | null; target?: 'heredoc' }> = [
+    { id: '7.1', source: 'cat $"x"', expected: null },
+    { id: '7.2', source: 'cat a$"x"b', expected: null },
+    { id: '7.3', source: 'echo $[1+1]', expected: null },
+    { id: '7.4', source: 'echo "a$[1+1]"', expected: null },
+    { id: '7.5', source: 'cat $~F', expected: ['$~F', true] },
+    { id: '7.6', source: 'cat $=F', expected: ['$=F', true] },
+    { id: '7.7', source: 'cat $^F', expected: ['$^F', true] },
+    { id: '7.8', source: 'cat $+F', expected: ['$+F', true] },
+    { id: '7.9', source: 'cat "a$~F"', expected: ['a$~F', true] },
+    { id: '7.10', source: 'cat <<EOF\na$[1+1]b\nEOF', expected: ['a$[1+1]b\n', true], target: 'heredoc' },
+    { id: '7.11', source: 'cat <<EOF\n$~F\nEOF', expected: ['$~F\n', true], target: 'heredoc' },
+    { id: '7.12', source: 'cat <<EOF\n$"x"\nEOF', expected: ['$"x"\n', false], target: 'heredoc' },
+    { id: '7.13', source: 'echo "a$"', expected: ['a$', false] },
+    { id: '7.14', source: "echo '$[1] $~F'", expected: ['$[1] $~F', false] },
+    { id: '7.15', source: 'echo $', expected: ['$', false] },
+    { id: '7.16', source: 'echo a$/b', expected: ['a$/b', false] },
+    { id: '7.17', source: 'echo $%', expected: ['$%', false] },
+    { id: '7.18', source: 'echo \\$[1]', expected: ['$[1]', false] },
+    { id: '7.19', source: 'echo "\\$~F"', expected: ['$~F', false] }
+  ]
+
+  for (const { id, source, expected, target } of rows) {
+    test(`row ${id}`, () => {
+      const parsed = parse(source)
+      if (expected === null) {
+        expect(parsed).toBeNull()
+        return
+      }
+
+      expect(parsed).not.toBeNull()
+      const finalCommand = parsed?.commands.at(-1)
+      const value = target === 'heredoc' ? finalCommand?.redirects[0]?.target : finalCommand?.words[1]
+      expect(value && [value.text, value.dynamic]).toEqual(expected)
+    })
+  }
+})
+
 describe('brace expansion', () => {
   const expectEchoWords = (source: string, expected: string[]) => {
     expect(parse(`echo ${source}`)).toEqual(script([

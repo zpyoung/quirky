@@ -1241,6 +1241,23 @@ class ShellReader {
       return true
     }
 
+    if (next === '[') {
+      if (mode !== 'heredoc') return null
+      builder.dynamic = true
+      this.appendExpansionRange(builder, start, start + 1, mode, stripTabs)
+      this.index++
+      return true
+    }
+
+    if (next === '~' || next === '=' || next === '^' || next === '+') {
+      builder.dynamic = true
+      this.appendExpansionRange(builder, start, start + 1, mode, stripTabs)
+      this.index++
+      return true
+    }
+
+    if (next === '"' && mode === 'word' && !doubleQuoted) return null
+
     return false
   }
 
