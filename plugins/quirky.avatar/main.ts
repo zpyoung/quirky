@@ -38,6 +38,13 @@ function optionalString(context: PluginContext, params: Params, name: string): s
   return value
 }
 
+function optionalRecord(context: PluginContext, params: Params, name: string): Params | undefined {
+  const value = params[name]
+  if (value === undefined) return undefined
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw invalid(context, `${name} must be an object`)
+  return value as Params
+}
+
 function optionalInteger(context: PluginContext, params: Params, name: string): number | undefined {
   const value = params[name]
   if (value === undefined) return undefined
@@ -132,7 +139,12 @@ function provideMethods(context: PluginContext, app: AvatarApp): void {
   method('resolveNeed', (params) => {
     const action = requireString(context, params, 'action')
     if (!NEED_ACTIONS.includes(action as NeedAction)) throw invalid(context, `action must be one of ${NEED_ACTIONS.join(', ')}`)
-    return app.services.handoff.resolveNeed(requireString(context, params, 'needId'), action as NeedAction, optionalString(context, params, 'text'))
+    return app.services.handoff.resolveNeed(
+      requireString(context, params, 'needId'),
+      action as NeedAction,
+      optionalString(context, params, 'text'),
+      optionalRecord(context, params, 'answers')
+    )
   })
   method('mandate', (params) => app.services.handoff.mandate(requireString(context, params, 'worktreeId')))
   method('settings', () => app.settings())

@@ -691,6 +691,11 @@
             "text": {
               "type": "string",
               "description": "Free text for the answer action."
+            },
+            "answers": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Typed AskAnswer entries by question ID for the answer action."
             }
           },
           "required": [
