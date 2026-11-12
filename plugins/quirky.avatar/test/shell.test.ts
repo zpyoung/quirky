@@ -1253,4 +1253,23 @@ describe('brace expansion', () => {
       })
     }
   })
+
+  test('marks the words an empty () follows as a function name', () => {
+    const defines = (source: string) => parseShell(source, env)!.commands.map((item) => item.defines === true)
+    expect(defines('f() { :; }')).toEqual([true, false, false])
+    expect(defines('f ()\n{ :; }')).toEqual([true, false, false])
+    expect(defines('f ( ) { :; }')).toEqual([true, false, false])
+    expect(defines('function f() { :; }')).toEqual([true, false, false])
+    expect(defines('f g () { :; }')).toEqual([true, false, false])
+    expect(defines('f() ( : )')).toEqual([true, false])
+    expect(defines('f() :')).toEqual([true, false])
+    expect(defines('x; f() { :; }; g() { :; }')).toEqual([false, true, false, false, true, false, false])
+    expect(defines('a=(); :')).toEqual([false, false])
+    expect(defines('f; () { :; }')).toEqual([false, false, false])
+    expect(defines('f\n() { :; }')).toEqual([false, false, false])
+    expect(defines('(a) () { :; }')).toEqual([false, false, false])
+    expect(defines('for i (1 2) :')).toEqual([false, false, false])
+    expect(defines('if (true) { :; }')).toEqual([false, false, false, false])
+    expect(parseShell('f() { :; }', env)!.commands[1]).toEqual(command(words('{', ':')))
+  })
 })
