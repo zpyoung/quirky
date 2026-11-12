@@ -301,6 +301,7 @@ function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy:
       reasons.push(`limit loosened: ${key} ${config.limits[key]} > ${DEFAULT_LIMITS[key]}`)
     }
   }
+  if (config.fault !== undefined) reasons.push(`fault injected: ${config.fault}`)
   return reasons
 }
 

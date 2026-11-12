@@ -2,7 +2,14 @@ import { lstatSync, mkdtempSync, readdirSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { DEFAULT_LIMITS, QUALIFYING_MINUTES, type SoakConfig, type SoakLimits } from './contracts.ts'
+import {
+  DEFAULT_LIMITS,
+  FAULT_KINDS,
+  FAULT_MIN_MINUTES,
+  QUALIFYING_MINUTES,
+  type SoakConfig,
+  type SoakLimits,
+} from './contracts.ts'
 
 /** Identifies invalid CLI input before any daemon is started. */
 export class UsageError extends Error {
@@ -14,7 +21,8 @@ export class UsageError extends Error {
 
 export const USAGE = `Usage: bun scripts/soak.ts [--minutes <n>] [--out <dir>]
                     [--max-children <n>] [--max-growth <n>] [--max-zombies <n>]
-                    [--max-events-per-5s <n>] [--max-stall-ms <n>] [--help]`
+                    [--max-events-per-5s <n>] [--max-stall-ms <n>]
+                    [--fault leak|zombies|storm|block] [--help]`
 
 function parseNumber(value: string | undefined, flag: string, fallback: number, allowZero: boolean): number {
   if (value === undefined) return fallback
@@ -62,12 +70,20 @@ function validateOutDirectory(path: string): string {
 
 /** Validates flags and reserves an empty output directory for the soak. */
 export function parseArguments(argv: string[]): SoakConfig | { help: true } {
+  const faultError = `--fault must be one of ${FAULT_KINDS.join(', ')}`
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--fault' && (argv[index + 1] === undefined || argv[index + 1].startsWith('-'))) {
+      throw new UsageError(faultError)
+    }
+  }
+
   let values
   try {
     ({ values } = parseArgs({
       args: argv,
       options: {
         help: { type: 'boolean' },
+        fault: { type: 'string' },
         minutes: { type: 'string' },
         out: { type: 'string' },
         'max-children': { type: 'string' },
@@ -84,8 +100,17 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
   }
 
   if (values.help) return { help: true }
+  const fault = values.fault === undefined
+    ? undefined
+    : FAULT_KINDS.find((kind) => kind === values.fault)
+  if (values.fault !== undefined && fault === undefined) throw new UsageError(faultError)
+
 
   const minutes = parseNumber(values.minutes, '--minutes', QUALIFYING_MINUTES, false)
+  if (fault !== undefined && minutes < FAULT_MIN_MINUTES) {
+    throw new UsageError(`--fault needs --minutes ${FAULT_MIN_MINUTES} or more`)
+  }
+
   const limits: SoakLimits = {
     maxChildren: parseNumber(values['max-children'], '--max-children', DEFAULT_LIMITS.maxChildren, true),
     maxGrowth: parseNumber(values['max-growth'], '--max-growth', DEFAULT_LIMITS.maxGrowth, true),
@@ -98,5 +123,7 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
     ? mkdtempSync(join(tmpdir(), 'quirky-soak-'))
     : validateOutDirectory(values.out)
 
-  return { minutes, out, limits }
+  return fault === undefined
+    ? { minutes, out, limits }
+    : { minutes, out, limits, fault }
 }

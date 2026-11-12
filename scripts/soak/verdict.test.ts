@@ -7,6 +7,7 @@ type ConfigOverrides = {
   minutes?: number
   out?: string
   limits?: Partial<SoakConfig['limits']>
+  fault?: SoakConfig['fault']
 }
 
 function config(overrides: ConfigOverrides = {}): SoakConfig {
@@ -21,6 +22,7 @@ function config(overrides: ConfigOverrides = {}): SoakConfig {
       maxStallMs: 1000,
       ...overrides.limits,
     },
+    ...(overrides.fault === undefined ? {} : { fault: overrides.fault }),
   }
 }
 
@@ -342,6 +344,22 @@ test('scenario 32: qualification requires no disqualification and is independent
   expect(result.disqualified).toHaveLength(2)
   expect(result.disqualified).toContain('ran 0.4 minutes, needs 30')
   expect(result.disqualified).toContain('0 windows connected, needs 2')
+})
+
+test('a fault disqualifies an otherwise qualifying run', () => {
+  const result = judge(evidence(), config({ fault: 'storm' }))
+
+  expect(result.verdict).toBe('pass')
+  expect(Object.values(result.checks).every((check) => check.ok)).toBe(true)
+  expect(result.disqualified).toEqual(['fault injected: storm'])
+  expect(result.qualifies).toBe(false)
+})
+
+test('a run without a fault has no fault disqualification', () => {
+  const result = judge(evidence(), config())
+
+  expect(result.disqualified).not.toContain('fault injected: storm')
+  expect(result.qualifies).toBe(true)
 })
 function expectOnlyCheckFails(
   result: Pick<SoakReport, 'checks' | 'verdict'>,

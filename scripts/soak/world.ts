@@ -9,10 +9,12 @@ import {
   registerCaptureFixtures,
   type RegisteredCaptureFixtures
 } from '../ui-review/fixtures'
+import type { FaultKind } from './contracts.ts'
+import { FAULT_ENV, FAULT_PLUGIN_ID, installFaultPlugin } from './faults.ts'
 
 type Worker = { worktree: string; path: string; session: string }
 
-type StartWorldOptions = { out: string; repoRoot: string; signal?: AbortSignal }
+type StartWorldOptions = { out: string; repoRoot: string; signal?: AbortSignal; fault?: FaultKind }
 
 export type SoakWorld = {
   home: string
@@ -171,6 +173,11 @@ export async function startWorld(options: StartWorldOptions): Promise<SoakWorld>
     const env = createIsolatedRuntimeEnvironment(home, { repoRoot })
     const prepared = await prepareCaptureFixtureHome(home, { timeoutMs: 30_000, signal: options.signal, env })
     throwIfAborted(options.signal)
+    delete env[FAULT_ENV]
+    if (options.fault) {
+      installFaultPlugin(home, repoRoot)
+      env[FAULT_ENV] = '1'
+    }
 
     const logPath = join(out, 'daemon.log')
     const logFd = openSync(logPath, 'a')
@@ -199,6 +206,13 @@ export async function startWorld(options: StartWorldOptions): Promise<SoakWorld>
 
     const status = asRecord(await waitWithAbort(activeControl.callAny('status.get', {}, { timeoutMs: 30_000 }), options.signal))
     if (status.home !== home) throw new Error('the fixture daemon reports a different home')
+    if (options.fault) {
+      const report = asRecord(await waitWithAbort(activeControl.callAny(`${FAULT_PLUGIN_ID}/report`, {}, { timeoutMs: 30_000 }), options.signal))
+      if (Object.keys(report).length !== 4 || !Array.isArray(report.leaked) || report.leaked.length !== 0
+        || !Array.isArray(report.holders) || report.holders.length !== 0 || report.refreshes !== 0 || report.blockedMs !== null) {
+        throw new Error('soak.faults did not report a clean initial state')
+      }
+    }
     let currentPtyHostPid = pidOf(asRecord(status.ptyHost).pid)
     const fixtures = await registerCaptureFixtures(activeControl, prepared, { timeoutMs: 30_000, signal: options.signal })
     const workerScript = resolve(repoRoot, 'scripts/soak/worker.ts')

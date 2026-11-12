@@ -4,6 +4,7 @@ import { resolve, join } from 'node:path'
 import { ConnectionLost } from '@quirky/protocol'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
 import type { ProbeRecord, Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
+import { startFault, type RunningFault } from './soak/faults.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
 import { startProbe, type Probe } from './soak/probe.ts'
 import { judge } from './soak/verdict.ts'
@@ -69,12 +70,13 @@ export async function main(argv: string[]): Promise<number> {
   process.on('SIGTERM', onTerm)
   let world: SoakWorld | undefined
   let probe: Probe | undefined
+  let fault: RunningFault | undefined
   try {
     mkdirSync(config.out, { recursive: true })
     const repoRoot = resolve(import.meta.dir, '..')
     const revision = await commit(repoRoot)
     if (interrupted) return interrupted
-    world = await startWorld({ out: config.out, repoRoot, signal: setupAbort.signal })
+    world = await startWorld({ out: config.out, repoRoot, signal: setupAbort.signal, fault: config.fault })
     if (interrupted) return interrupted
     const startedAt = performance.now()
     const startedIso = new Date().toISOString()
@@ -123,6 +125,9 @@ export async function main(argv: string[]): Promise<number> {
     } finally {
       clearInterval(connectionTimer)
     }
+    if (config.fault) {
+      fault = startFault({ kind: config.fault, home: world.home, control: world.control, runSeconds: config.minutes * 60, startedAt, signal: runAbort.signal })
+    }
     const elapsed = () => (performance.now() - startedAt) / 1000
     const samples: Sample[] = []
     const seen = new Set<string>()
@@ -162,6 +167,8 @@ export async function main(argv: string[]): Promise<number> {
     if (attemptedSamples > 0 && skippedSamples / attemptedSamples > 0.1) {
       throw new Error(`ps failed for ${skippedSamples} of ${attemptedSamples} samples`)
     }
+    const faultRecord = fault ? await fault.finish() : null
+    if (interrupted) return interrupted
     const now = Date.now()
     const evidence = {
       durationSeconds,
@@ -181,6 +188,7 @@ export async function main(argv: string[]): Promise<number> {
       durationSeconds,
       config: { minutes: config.minutes, windows: 0, worktrees: world.fixtures.worktrees.length, workers: world.workers.length, limits: config.limits },
       ...judged,
+      fault: faultRecord,
       daemon: { pid: world.daemonPid, rssKbFirst: rss[0] ?? null, rssKbMax: rss.length ? Math.max(...rss) : null, rssKbLast: rss.at(-1) ?? null },
       skippedSamples,
       files: { samples: samplesPath, daemonLog: join(config.out, 'daemon.log') }
@@ -188,6 +196,7 @@ export async function main(argv: string[]): Promise<number> {
     writeFileSync(join(config.out, 'soak-report.json'), `${JSON.stringify(report, null, 2)}\n`)
     console.log(config.out)
     for (const [name, check] of Object.entries(report.checks)) console.log(`${name}: ${check.ok ? 'pass' : 'fail'} ${JSON.stringify(check)}`)
+    if (report.fault) console.log(`fault ${report.fault.kind}: injected at ${report.fault.at}s, aimed at ${report.fault.check}`)
     return report.verdict === 'pass' ? 0 : 1
   } catch (error) {
     if (interrupted) return interrupted
@@ -197,6 +206,7 @@ export async function main(argv: string[]): Promise<number> {
     return 2
   } finally {
     probe?.stop()
+    fault?.stop()
     try {
       await world?.stop()
     } catch (error) {
