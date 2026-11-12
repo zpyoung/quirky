@@ -4084,6 +4084,7 @@ describe('directory uncertainty scenarios', () => {
 
   test("deferred 5: wherever the call is", () => {
     const rows: [string, ActionClass[], string, string | null][] = [
+      ["eval 'f() { :; git commit -m x; }'; HUSKY=0; f", ["edit-outside", "other", "skip-hooks"], "held", "floor-core"],
       ["f() { :; touch a; }; (cd /tmp; f)", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["f() { :; touch a; }; (cd /tmp && f)", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["f() { :; touch a; }; echo $(cd /tmp; f)", ["edit-outside", "other", "read"], "held", "floor-core"],
@@ -4108,6 +4109,7 @@ describe('directory uncertainty scenarios', () => {
 
   test("deferred 6: after a function that moves is defined, a command behind && is judged with every directory", () => {
     const rows: [string, ActionClass[], string, string | null][] = [
+      ["eval 'f() { :; cd ..; }'; cd /work/wt && f && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["f() { :; cd /tmp; }; cd /work/wt && f && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["ls() { :; cd /tmp; }; cd /work/wt && ls && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["f() { :; cd /tmp; }; cd /work/wt && eval ':; f' && touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
@@ -4151,6 +4153,7 @@ describe('directory uncertainty scenarios', () => {
 
   test("deferred 8: what the rule costs", () => {
     const rows: [string, ActionClass[], string, string | null][] = [
+      ["cd /tmp; cd /work/wt && f() { :; echo hi; } && touch b; cd /x; f", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["eval 'f() { :; touch a; }; f'", ["edit-outside", "other"], "held", "floor-core"],
       ["f() {\ncd src && touch a\n}\nf", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["build() {\ncd packages/ui && bun run build\n}\nbuild\ncd /work/wt && touch .done", ["build", "edit-outside", "other", "read"], "held", "floor-core"],
@@ -4189,5 +4192,25 @@ describe('directory uncertainty scenarios', () => {
     expect(bash(command)).toContain('credential')
     expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
   })
+
+  for (const command of [
+    "cd /home/u; eval 'f() { :; cat .ssh/id_rsa; }; f'",
+    "cd /home/u && eval 'f() { :; cat .ssh/id_rsa; }; f'",
+    "cd /home/u; eval 'f() { :; cat .ssh/id_rsa; }'; f",
+    "cd /home/u; eval 'function f { cat .ssh/id_rsa; }; f'",
+    "cd /home/u; eval 'f() { :; cat .aws/credentials; }; f'",
+    "cd /home/u; eval 'f() { :; cat .env; }; f'",
+    "eval 'cd /home/u; f() { :; cat .ssh/id_rsa; }; f'",
+    "cd /home/u; eval 'f() { :; cat .ssh/id_rsa; cd src; }; f'",
+    "cd /home/u; (eval 'f() { :; cat .ssh/id_rsa; }; f')",
+    "cd /home/u; x=$(eval 'f() { :; cat .ssh/id_rsa; }; f')",
+    "cd /home/u; bash -c 'eval \"f() { :; cat .ssh/id_rsa; }; f\"'",
+    "cd /home/u; eval 'f() { :; cp .ssh/id_rsa /work/wt/x; }; f'"
+  ]) {
+    test(`keeps credential evidence from eval-defined functions: ${command}`, () => {
+      expect(bash(command)).toContain('credential')
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    })
+  }
 
 })

@@ -1890,7 +1890,7 @@ function blockWords(words: ShellWord[]): { loop: boolean; definition: boolean; e
  * A region ends at the scope's last block-closing word, or at the scope's end when none follows its last opener,
  * because the reader does not say which closing word is quoted.
  */
-function deferredRegions(script: ShellScript, assumeUnknown: boolean): DeferredRegion[] {
+function deferredRegions(script: ShellScript): DeferredRegion[] {
   type Marks = { loopStart?: number; loopLast?: number; functionStart?: number; functionLast?: number; lastEnd?: number }
   const marks = new Map<number, Marks>()
   const first: (number | undefined)[] = new Array(script.parents.length).fill(undefined)
@@ -1941,7 +1941,7 @@ function deferredRegions(script: ShellScript, assumeUnknown: boolean): DeferredR
     if (mark.functionStart !== undefined) {
       const last = mark.functionLast!
       const end = mark.lastEnd !== undefined && mark.lastEnd > last ? mark.lastEnd : final[scope]
-      regions.push({ kind: 'function', scope, start: mark.functionStart, end, dirs: assumeUnknown ? null : undefined, names: new Set(assumeUnknown ? TRACKED_NAMES : []), loose: assumeUnknown })
+      regions.push({ kind: 'function', scope, start: mark.functionStart, end, dirs: undefined, names: new Set(), loose: false })
     }
   }
   return regions.sort((left, right) => left.scope - right.scope)
@@ -1989,7 +1989,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
   for (let scope = scopeDownloads.length - 1; scope > 0; scope--) {
     if (scopeDownloads[scope]) scopeDownloads[script.parents[scope]] = true
   }
-  const regions = replay?.regions ?? deferredRegions(script, definitionsUnknown)
+  const regions = replay?.regions ?? deferredRegions(script)
   const regionStarts = new Map<number, DeferredRegion[]>()
   const loopRegions = new Map<number, DeferredRegion>()
   const functionRegions = new Map<number, DeferredRegion>()
@@ -2381,6 +2381,15 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       grows = true
     }
     if (grows) unsettled = true
+  }
+  if (definitionsUnknown && pass === 1) {
+    for (const region of regions) {
+      if (region.kind !== 'function') continue
+      region.dirs = null
+      for (const name of TRACKED_NAMES) region.names.add(name)
+      region.loose = true
+      unsettled = true
+    }
   }
   if (!unsettled) return { classes, parts, pushDests, directories: directoryFor(0), cwdChanged, env: environmentFor(0), envChanges, nonDirectoryRead, loose: loose.has(0) }
   if (pass >= 2) {
