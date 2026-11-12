@@ -274,39 +274,3 @@ export async function dispatchActions(app: AvatarApp, actions: BrainAction[], op
   return outcomes
 }
 
-export type CheckFailure = {
-  worktreeId: string
-  prNumber: number
-  check: string
-  sha: string
-  passedBefore: boolean
-  failureOutput: string
-  diffFiles: string[]
-}
-
-/**
- * Decides what a failed required check gets: one rerun of the failed jobs when it looks flaky (it
- * passed before on this sha, or its output names no file in the diff), otherwise, or when the rerun
- * already happened, the failure goes back to the worker.
- */
-export async function handleCheckFailure(app: AvatarApp, failure: CheckFailure): Promise<'rerun' | 'sent-back' | 'would-have' | 'refused'> {
-  const mandate = activeMandate(app, failure.worktreeId)
-  if (mandate === null || LEVEL_RANK[mandate.level] < LEVEL_RANK['own-branch']) {
-    if (mandate?.level === 'shadow') {
-      app.journal(failure.worktreeId, 'brain-action', { action: { type: 'checkFailure', check: failure.check, sha: failure.sha }, outcome: 'would-have', wouldHave: true })
-      return 'would-have'
-    }
-    return 'refused'
-  }
-  const key = `${failure.check}@${failure.sha}`
-  const rerunBefore = app.store.journalPage({ worktreeId: failure.worktreeId, limit: 500 }).some((entry) => entry.kind === 'brain-action' && entry.data.rerun === key)
-  const flaky = failure.passedBefore || !failure.diffFiles.some((file) => failure.failureOutput.includes(file))
-  if (flaky && !rerunBefore) {
-    await app.context.call('quirky.hosting/rerunChecks', { worktree: failure.worktreeId, number: failure.prNumber, failedOnly: true })
-    app.journal(failure.worktreeId, 'brain-action', { action: { type: 'rerunChecks', check: failure.check, sha: failure.sha }, outcome: 'done', rerun: key })
-    return 'rerun'
-  }
-  await app.services.supervisor.send(failure.worktreeId, `Required check ${failure.check} failed on ${failure.sha}:\n${failure.failureOutput}`)
-  app.journal(failure.worktreeId, 'brain-action', { action: { type: 'checkFailure', check: failure.check, sha: failure.sha }, outcome: 'done', sent: true })
-  return 'sent-back'
-}

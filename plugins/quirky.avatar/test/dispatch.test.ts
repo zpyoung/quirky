@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { dispatchActions, handleCheckFailure } from '../src/brain/dispatch'
+import { dispatchActions } from '../src/brain/dispatch'
 import type { BrainAction, Finding, Level, Mandate, OutboxRow } from '../src/contracts'
 import { makeTestApp, sampleMandate, type FakeCalls } from './support'
 
@@ -320,26 +320,3 @@ describe('mergeMainIn conflicts', () => {
   })
 })
 
-describe('flaky checks (R-31)', () => {
-  const failure = { worktreeId: 'wt-1', prNumber: 7, check: 'unit', sha: 'abc', passedBefore: true, failureOutput: 'timeout in network.spec.ts', diffFiles: ['src/a.ts'] }
-
-  test('a check that passed before on this sha gets one rerun of failed jobs, then goes back to the worker', async () => {
-    const t = setup([wt('full')], { 'quirky.hosting/rerunChecks': () => ({ started: 1, targetCount: 1, completedSteps: [] }) })
-    expect(await handleCheckFailure(t.app, failure)).toBe('rerun')
-    expect(t.calls.find((c) => c.method === 'quirky.hosting/rerunChecks')?.params).toMatchObject({ number: 7, failedOnly: true })
-    expect(await handleCheckFailure(t.app, failure)).toBe('sent-back')
-    expect(t.calls.filter((c) => c.method === 'quirky.hosting/rerunChecks')).toHaveLength(1)
-    expect(t.recorded.filter((r) => r.name === 'send')).toHaveLength(1)
-  })
-
-  test('a failure that names a changed file goes straight to the worker', async () => {
-    const t = setup([wt('full')])
-    expect(await handleCheckFailure(t.app, { ...failure, passedBefore: false, failureOutput: 'FAIL src/a.ts expected 1' })).toBe('sent-back')
-    expect(t.calls).toEqual([])
-  })
-
-  test('a failure matching no changed file is treated as flaky', async () => {
-    const t = setup([wt('full')], { 'quirky.hosting/rerunChecks': () => ({ started: 1, targetCount: 1, completedSteps: [] }) })
-    expect(await handleCheckFailure(t.app, { ...failure, passedBefore: false })).toBe('rerun')
-  })
-})
