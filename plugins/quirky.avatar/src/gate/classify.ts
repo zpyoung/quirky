@@ -3,13 +3,14 @@ import type { ActionClass, ClassifyContext, ToolCall } from '../contracts'
 import { parseShell, type ShellCommand, type ShellWord } from './shell'
 
 type ShellAssignment = ShellCommand['assignments'][number]
+type WordAssignment = ShellAssignment & { word: ShellWord }
 type Parsed = {
   cmd: string
   args: string[]
   argWords: ShellWord[]
   text: string
   assignments: readonly ShellAssignment[]
-  wrapperAssignments: ShellAssignment[]
+  wrapperAssignments: WordAssignment[]
   credential: boolean
   throughXargs: boolean
   wrapped: boolean
@@ -212,16 +213,17 @@ type UnwrappedWords = {
 }
 
 
-function assignmentFromWord(word: ShellWord): ShellAssignment | null {
+function assignmentFromWord(word: ShellWord): WordAssignment | null {
   const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(word.text)
   if (assignment === null) return null
   return {
     name: assignment[1],
+    word,
     value: { text: assignment[2], dynamic: word.dynamic || /^~[^/]/.test(assignment[2]), subs: word.subs }
   }
 }
 
-function unwrapWords(words: ShellWord[], wrapperAssignments?: ShellAssignment[], commandCwd: DirectorySet = null, home = ''): UnwrappedWords {
+function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], commandCwd: DirectorySet = null, home = ''): UnwrappedWords {
   let commandIndex = 0
   let credential = false
   let throughXargs = false
@@ -371,7 +373,7 @@ function isArgumentExemptCommand(word: ShellWord | undefined): boolean {
 }
 
 function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: ClassifyContext): Parsed {
-  const wrapperAssignments: ShellAssignment[] = []
+  const wrapperAssignments: WordAssignment[] = []
   const unwrapped = unwrapWords(command.words, wrapperAssignments, commandCwd, ctx.home)
   const commandWord = unwrapped.unknownWrapperFlag ? undefined : command.words[unwrapped.commandIndex]
   const argWords = commandWord === undefined ? [] : command.words.slice(unwrapped.commandIndex + 1)
@@ -833,6 +835,32 @@ type Analysis = {
   nonDirectoryRead?: boolean
 }
 
+/** A tracked assignment cannot clear uncertainty introduced by an unfollowed search-path reference. */
+const UNKNOWN_SEARCH_PATH: ShellWord = { text: '', dynamic: true, subs: [] }
+const SEARCH_PATH_NAME = /cdpath/i
+
+function namesSearchPath(command: ShellCommand, cmd: string, commandIndex: number, wrapperAssignments: readonly WordAssignment[]): boolean {
+  for (const assignment of command.assignments) {
+    if (assignment.name === 'CDPATH') continue
+    if (SEARCH_PATH_NAME.test(assignment.name) || SEARCH_PATH_NAME.test(assignment.value.text)) return true
+  }
+  for (let index = 0; index < command.words.length; index++) {
+    const word = command.words[index]
+    if (word.text.startsWith('CDPATH=') &&
+      ((cmd === 'export' && index > commandIndex) || wrapperAssignments.some((assignment) => assignment.word === word))) continue
+    if (SEARCH_PATH_NAME.test(word.text)) return true
+  }
+  for (const redirect of command.redirects) {
+    if ((redirect.kind !== 'heredoc' || redirect.target.dynamic) && SEARCH_PATH_NAME.test(redirect.target.text)) return true
+  }
+  return false
+}
+
+function setTrackedValue(env: Map<string, ShellWord>, name: string, value: ShellWord): void {
+  if (name === 'CDPATH' && env.get(name) === UNKNOWN_SEARCH_PATH) return
+  env.set(name, value)
+}
+
 function unknownGitValue(value: ShellWord): ShellWord {
   return value.dynamic ? value : { text: value.text, dynamic: true, subs: value.subs }
 }
@@ -840,10 +868,10 @@ function unknownGitValue(value: ShellWord): ShellWord {
 function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>): Map<string, ShellWord> {
   const env = new Map(inherited)
   for (const assignment of parsed.assignments) {
-    if (TRACKED_ENV_NAMES[assignment.name] === true) env.set(assignment.name, assignment.value)
+    if (TRACKED_ENV_NAMES[assignment.name] === true) setTrackedValue(env, assignment.name, assignment.value)
   }
   for (const assignment of parsed.wrapperAssignments) {
-    env.set(assignment.name, assignment.value)
+    setTrackedValue(env, assignment.name, assignment.value)
   }
   return env
 }
@@ -910,21 +938,26 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
 
     const parsed = parseSegment(shellCommand, commandCwd, ctx)
     const { cmd, args } = parsed
+    const commandIndex = shellCommand.words.length - parsed.argWords.length - 1
+    if (namesSearchPath(shellCommand, cmd, commandIndex, parsed.wrapperAssignments)) {
+      shellEnv.set('CDPATH', UNKNOWN_SEARCH_PATH)
+      if (shellCommand.scope === 0) envChanges.add('CDPATH')
+    }
     if (cmd === '') {
       for (const assignment of parsed.assignments) {
         if (TRACKED_ENV_NAMES[assignment.name] !== true) continue
-        shellEnv.set(assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
+        setTrackedValue(shellEnv, assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
         if (shellCommand.scope === 0) envChanges.add(assignment.name)
       }
       for (const assignment of parsed.wrapperAssignments) {
-        shellEnv.set(assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
+        setTrackedValue(shellEnv, assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
         if (shellCommand.scope === 0) envChanges.add(assignment.name)
       }
     } else if (cmd === 'export') {
       for (const word of parsed.argWords) {
         const assignment = assignmentFromWord(word)
         if (assignment === null || TRACKED_ENV_NAMES[assignment.name] !== true) continue
-        shellEnv.set(assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
+        setTrackedValue(shellEnv, assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
         if (shellCommand.scope === 0) envChanges.add(assignment.name)
       }
     }
@@ -972,8 +1005,10 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       }
       if (target !== undefined && (target.dynamic || target.text.startsWith('-') || target.text.startsWith('+'))) invalid = true
       let cdpath = shellEnv.get('CDPATH')
-      for (const assignment of parsed.assignments) if (assignment.name === 'CDPATH') cdpath = assignment.value
-      for (const assignment of parsed.wrapperAssignments) if (assignment.name === 'CDPATH') cdpath = assignment.value
+      if (cdpath !== UNKNOWN_SEARCH_PATH) {
+        for (const assignment of parsed.assignments) if (assignment.name === 'CDPATH') cdpath = assignment.value
+        for (const assignment of parsed.wrapperAssignments) if (assignment.name === 'CDPATH') cdpath = assignment.value
+      }
       if (target !== undefined && cdpath !== undefined && (cdpath.dynamic || cdpath.text !== '') &&
         !isAbsolute(expandHome(target.text, ctx.home)) && target.text !== '.' && target.text !== '..' &&
         !target.text.startsWith('./') && !target.text.startsWith('../')) invalid = true
