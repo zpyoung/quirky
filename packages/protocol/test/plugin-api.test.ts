@@ -1,17 +1,36 @@
 import { describe, expect, test } from 'bun:test'
-import { PLUGIN_API_VERSION, pluginApiCompatibilityError } from '../src/plugin-api'
+import {
+  PLUGIN_API_VERSION,
+  pluginApiCompatibilityError,
+  type PluginContext,
+  type ProcessRunner,
+  type ProcessSpawner,
+  type SpawnedProcess,
+} from '@quirky/protocol'
+
+type Assert<T extends true> = T
+type ProcessCapabilityAssertions = [
+  Assert<PluginContext['process'] extends ProcessRunner ? true : false>,
+  Assert<PluginContext['process'] extends ProcessSpawner ? true : false>,
+  Assert<{ run: ProcessRunner['run'] } extends ProcessRunner ? true : false>,
+  Assert<ReturnType<PluginContext['process']['spawn']> extends SpawnedProcess ? true : false>,
+  Assert<Extract<ReturnType<PluginContext['process']['spawn']>, Promise<unknown>> extends never ? true : false>,
+]
 
 describe('stable plugin API floors', () => {
-  test('the host supports the release that introduced scoped UI subscriptions', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.5.0')
+  test('the host supports the release that introduced daemon plugin spawning', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.6.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.3.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.4.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.5.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.5.1')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.6.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.6.1')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('2.0.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
   })
 
   test.each([
