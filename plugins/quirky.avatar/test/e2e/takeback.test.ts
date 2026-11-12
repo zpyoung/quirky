@@ -1,9 +1,11 @@
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { waitFor } from '../../../../packages/daemon/test/helpers'
 import type { JournalEntry, Mandate, ReportModel } from '../../src/contracts'
-import { bash, cleanupAll, startAvatar, writeTo, type Avatar } from './fixtures'
+import { useTempAgentHome } from '../daemon-support'
+import { bash, cleanupAll, startAvatar as startAvatarFixture, writeTo, type Avatar } from './fixtures'
+
+const agent = useTempAgentHome()
+const startAvatar = (options: Parameters<typeof startAvatarFixture>[0] = {}) => startAvatarFixture(options, agent)
 
 afterEach(cleanupAll)
 
@@ -33,7 +35,7 @@ describe('take-back with work in flight (SC-28)', () => {
     ])
     await avatar.settle()
 
-    const held = await avatar.gate('sess-alpha', writeTo(avatar.alpha, join(homedir(), '.ssh', 'config')))
+    const held = await avatar.gate('sess-alpha', writeTo(avatar.alpha, agent.sshConfig))
     expect(held.decision).toBe('deny')
     const [need] = (await avatar.call<ReportModel>('quirky.avatar/report')).needsYou
     expect(need).toMatchObject({ kind: 'held-call', worktreeId: avatar.alpha.id })
@@ -51,7 +53,7 @@ describe('take-back with work in flight (SC-28)', () => {
 
     expect(avatar.hasMarker('sess-alpha')).toBe(false)
     expect(avatar.hasMarker('sess-beta')).toBe(true)
-    expect(await avatar.shim('sess-alpha', writeTo(avatar.alpha, join(homedir(), '.ssh', 'config')))).toMatchObject({ stdout: '{}\n', code: 0 })
+    expect(await avatar.shim('sess-alpha', writeTo(avatar.alpha, agent.sshConfig))).toMatchObject({ stdout: '{}\n', code: 0 })
 
     const mandate = await avatar.call<Mandate | null>('quirky.avatar/mandate', { worktreeId: avatar.alpha.id })
     expect(mandate).toMatchObject({ worktreeId: avatar.alpha.id, goal, level: 'own-branch' })
