@@ -48,9 +48,9 @@ another key or event type.
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
 when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
 
-`quirky.editor/changed` and `quirky.session-info/changed` opt into coalescing.
-`quirky.editor/explorerChanged` carries a worktree tag but is not coalesced, so filesystem
-refresh listeners receive every emit immediately.
+`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
+`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
+emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
 
 ## Manifest declaration
 
