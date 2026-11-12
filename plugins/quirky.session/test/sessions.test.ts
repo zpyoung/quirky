@@ -993,6 +993,79 @@ describe('quirky.session/setStatus', () => {
   })
 })
 
+describe('session event metadata', () => {
+  const sessionDataOf = (event: QuirkyEvent) => {
+    if (!('data' in event) || typeof event.data !== 'object' || event.data === null || !('session' in event.data)) return
+    const sessionData = event.data.session
+    if (typeof sessionData !== 'object' || sessionData === null || !('id' in sessionData) || typeof sessionData.id !== 'string') return
+    return {
+      id: sessionData.id,
+      status: 'status' in sessionData ? sessionData.status : undefined,
+      worktreeId: 'worktreeId' in sessionData ? sessionData.worktreeId : undefined,
+      unread: 'unread' in sessionData ? sessionData.unread : undefined
+    }
+  }
+
+  test('tags changed with the session worktree', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await waitFor(() => changedTo('running'))
+    const before = eventsOf('quirky.session/changed').length
+
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'working' })
+    await waitFor(() => eventsOf('quirky.session/changed').length === before + 1 || undefined)
+
+    const changed = eventsOf('quirky.session/changed').slice(before).find((event) => {
+      const changedSession = sessionDataOf(event)
+      return changedSession?.id === session.id && changedSession.status === 'working'
+    })!
+    const changedSession = sessionDataOf(changed)!
+    const worktreeId = 'worktreeId' in changed ? changed.worktreeId : undefined
+    expect(worktreeId).toBe('wt_main')
+    expect(worktreeId).toBe(changedSession.worktreeId)
+  })
+
+  test('does not tag removed with a worktree', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await call(client, 'quirky.session/close', { session: session.id })
+    await waitFor(() => eventsOf('quirky.session/removed').at(-1))
+
+    const removed = eventsOf('quirky.session/removed').at(-1)!
+    expect(removed).toMatchObject({ data: { sessionId: session.id } })
+    expect('worktreeId' in removed).toBe(false)
+  })
+
+  test('delivers every unread change', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await waitFor(() => changedTo('running'))
+    const before = eventsOf('quirky.session/changed').length
+
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: null })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'bell' })
+    await waitFor(() => eventsOf('quirky.session/changed').length === before + 3 || undefined)
+
+    const unreadValues = eventsOf('quirky.session/changed')
+      .filter((event) => sessionDataOf(event)?.id === session.id)
+      .slice(-3)
+      .map((event) => sessionDataOf(event)?.unread)
+    expect(unreadValues).toEqual(['agent', null, 'bell'])
+  })
+
+  test('describes worktree tagging without coalescing', async () => {
+    const api = await call<{
+      events: { name: string; worktree?: string; coalesce?: string[] }[]
+    }>(client, 'api.describe')
+    const changed = api.events.find((event) => event.name === 'quirky.session/changed')!
+    const removed = api.events.find((event) => event.name === 'quirky.session/removed')!
+
+    expect(changed.worktree).toBe('session.worktreeId')
+    expect('coalesce' in changed).toBe(false)
+    expect('worktree' in removed).toBe(false)
+    expect('coalesce' in removed).toBe(false)
+  })
+})
+
+
 describe('quirky.session/setUnread', () => {
   test('stores the reason, returns the session, and emits changed only when the value changes', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
