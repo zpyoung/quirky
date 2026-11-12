@@ -712,6 +712,110 @@ test('SC-11: a plugin calls the daemon through its context and receives events o
   expect(received).toEqual([{ type: 'acme.notes/changed', data: null }])
 })
 
+describe('worktree-scoped event subscriptions', () => {
+  const A = 'wt_aaaaaaaaaaaa'
+  const B = 'wt_bbbbbbbbbbbb'
+  const events: QuirkyEvent[] = [
+    { type: 'acme.notes/changed', data: null, worktreeId: A },
+    { type: 'acme.notes/changed', data: null, worktreeId: B },
+    { type: 'acme.notes/changed', data: { worktreeId: B } },
+    { type: 'notify', title: 'a', body: 'b', desktop: false, worktreeId: B },
+    { type: 'ui.keybindings.changed' }
+  ]
+
+  async function subscribed(register: (context: UiPluginContext) => void) {
+    const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+    t.useModule(NOTES, {
+      activate(context) {
+        register(context)
+        context.provide(LIST, () => {})
+      }
+    })
+    await t.host.refresh()
+    t.host.mount(LIST, element())
+    await settled(t, LIST)
+    return t
+  }
+
+  test.each([
+    { name: 'omitted', options: undefined },
+    { name: 'empty', options: {} },
+    { name: 'undefined worktree', options: { worktreeId: undefined } },
+    { name: 'one worktree', options: { worktreeId: A } },
+    { name: 'no worktree', options: { worktreeId: null } }
+  ])('$name delivers untagged plugin and all kernel events', async ({ options }) => {
+    const received: QuirkyEvent[] = []
+    let unsubscribe!: () => void
+    const t = await subscribed((context) => {
+      unsubscribe = context.subscribe((event) => { received.push(event) }, options)
+    })
+    for (const event of events) t.emit(event)
+    await tick()
+    await tick()
+    const expected = options?.worktreeId === A
+      ? [events[0], ...events.slice(2)]
+      : options?.worktreeId === null ? events.slice(2) : events
+    expect(received).toEqual(expected)
+    unsubscribe()
+    t.emit(events[0])
+    await tick()
+    await tick()
+    expect(received).toEqual(expected)
+  })
+
+  test('invalid options throw without registering the listener', async () => {
+    const received: QuirkyEvent[] = []
+    const listener = (event: QuirkyEvent) => { received.push(event) }
+    let context!: UiPluginContext
+    const t = await subscribed((value) => { context = value })
+    for (const options of [{ worktreeId: 7 }, { worktreeId: {} }]) {
+      // @ts-expect-error Exercise invalid runtime options from untyped plugins.
+      expect(() => context.subscribe(listener, options)).toThrow('subscribe: worktreeId must be a string or null')
+    }
+    for (const options of [A, null]) {
+      // @ts-expect-error Exercise invalid runtime options from untyped plugins.
+      expect(() => context.subscribe(listener, options)).toThrow('subscribe: options must be an object')
+    }
+    for (const event of events) t.emit(event)
+    await tick()
+    await tick()
+    expect(received).toEqual([])
+  })
+
+  test('the later scope replaces one function registration and either disposer removes it', async () => {
+    const received: QuirkyEvent[] = []
+    const listener = (event: QuirkyEvent) => { received.push(event) }
+    let unsubscribe!: () => void
+    const t = await subscribed((context) => {
+      unsubscribe = context.subscribe(listener)
+      context.subscribe(listener, { worktreeId: B })
+    })
+    for (const event of events) t.emit(event)
+    await tick()
+    await tick()
+    expect(received).toEqual(events.slice(1))
+    unsubscribe()
+    t.emit(events[1])
+    await tick()
+    await tick()
+    expect(received).toEqual(events.slice(1))
+  })
+
+  test('the scope is fixed when subscribed, not read from mutated options', async () => {
+    const received: QuirkyEvent[] = []
+    const options = { worktreeId: A }
+    const t = await subscribed((context) => {
+      context.subscribe((event) => { received.push(event) }, options)
+      options.worktreeId = B
+    })
+    t.emit(events[0])
+    t.emit(events[1])
+    await tick()
+    await tick()
+    expect(received).toEqual([events[0]])
+  })
+})
+
 test('nativeDropPaths passes the dropped file names to the desktop shell and is null without one', async () => {
   const asked: (readonly string[])[] = []
   const desktop = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), {

@@ -48,10 +48,12 @@ another key or event type.
 `worktree` names a key path containing the worktree ID; a non-empty string there is copied to the
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
 when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
+A held event keeps a reference to the emitted payload; a plugin must not mutate it after `emit`.
 
-`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` coalesces with one
-key for the daemon, and `quirky.editor/explorerChanged` coalesces per worktree and still carries
-its worktree tag. Editor clients refresh after their own actions rather than waiting for an event.
+`quirky.session-info/changed`, `quirky.git/changed`, `quirky.git/reviewChanged` and
+`quirky.git/notesChanged` coalesce. `quirky.editor/changed` coalesces with one key for the
+daemon, and `quirky.editor/explorerChanged` coalesces per worktree and still carries its
+worktree tag. Editor clients refresh after their own actions rather than waiting for an event.
 `quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
 every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
 and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
@@ -71,6 +73,14 @@ defaults to `process.env` at call time, and a supplied value is not merged with 
 defaults to 30 seconds. The host kills the plugin's remaining children when its activation ends.
 `deactivate` may still call `context.process.run`; the runner is disposed when deactivation
 finishes. The object exposes only `run`; `spawn` is not part of API 1.4.
+
+### API 1.5: Scoped UI subscriptions
+
+API 1.5 adds `UiPluginContext.subscribe(listener, { worktreeId })`. A string leaves out plugin
+events tagged with another worktree; `null` leaves out every tagged plugin event. Omitting the
+option delivers every event. Untagged plugin events and all kernel events are always delivered,
+even when their payload or a kernel event names another worktree. The scope is fixed at subscribe
+time. A plugin that uses the option declares `"apiVersion": "1.5.0"`.
 
 ## Manifest declaration
 
@@ -179,6 +189,8 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   environment replaces it) and a 30-second deadline. Children are killed when activation ends;
   `deactivate` may still call `run`. Only `run` is exposed; `spawn` is not part of this release.
   A plugin that uses it declares `apiVersion` 1.4.0.
+- **1.5.0** adds optional worktree scoping to `UiPluginContext.subscribe`. Untagged plugin events
+  and kernel events remain unfiltered. A plugin that uses the option declares `apiVersion` 1.5.0.
 
 ## Example
 

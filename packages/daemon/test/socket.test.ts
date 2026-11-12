@@ -100,7 +100,7 @@ describe('unix socket transport', () => {
     const events: QuirkyEvent[] = []
     client.onEvent((event) => events.push(event))
     const other = await h.connect()
-    await other.call('ui.sidebar.set', { visible: false })
+    await other.call('ui.palette.set', {})
     await waitFor(() => events.find((event) => event.type === 'ui.state.changed'))
   })
 

@@ -131,7 +131,7 @@ describe('plugin events', () => {
     expect(event).toEqual({ type: 'acme.x/ping', data: { n: 1 } })
   })
 
-  test('a startup plugin listener sees ui.state.changed after ui.sidebar.set replies', async () => {
+  test('a startup plugin listener sees ui.state.changed after ui.palette.set replies', async () => {
     const s = await boot((marker) => [
       {
         manifest: { id: 'acme.watch', activation: 'startup' },
@@ -143,7 +143,7 @@ describe('plugin events', () => {
         }
       }
     ])
-    await s.client.call('ui.sidebar.set', { visible: false })
+    await s.client.call('ui.palette.set', {})
     await waitFor(() => s.lines().includes('saw ui.state.changed'))
   })
 })
