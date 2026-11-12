@@ -167,13 +167,25 @@ test('reports daemon loss between worker startup and probe connection as a faile
   writeFileSync(preload, `
 import { mock } from 'bun:test'
 import { startProbe as originalStartProbe } from ${JSON.stringify(probePath)}
-import { readRuntime, isDaemonAlive } from ${JSON.stringify(nodePath)}
+import { readRuntime } from ${JSON.stringify(nodePath)}
 const startProbe = originalStartProbe
 mock.module(${JSON.stringify(probePath)}, () => ({
   startProbe: async (options) => {
     const runtime = readRuntime(options.home)
     process.kill(runtime.pid, 'SIGTERM')
-    while (await isDaemonAlive(runtime, 100)) await Bun.sleep(10)
+    const exitDeadline = performance.now() + 5000
+    for (;;) {
+      try {
+        process.kill(runtime.pid, 0)
+      } catch (error) {
+        if (error.code === 'ESRCH') break
+        throw error
+      }
+      if (performance.now() >= exitDeadline) {
+        throw new Error('daemon ' + runtime.pid + ' did not disappear (ESRCH) within 5000 ms after SIGTERM')
+      }
+      await Bun.sleep(10)
+    }
     return startProbe(options)
   }
 }))
