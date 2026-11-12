@@ -34,7 +34,7 @@ type ExtensionMembers = Pick<
   | 'launch'
   | 'createFileResource'
 > &
-  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward'>>
+  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward' | 'process'>>
 
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
 export type ContextExtension = {
@@ -570,10 +570,11 @@ export class PluginHost {
           throw new Error(`${id}: context.${member} is not available`)
         }
       })
-    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients' | 'hostPower' | 'forward'> = {
+    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward' | 'process'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients' | 'hostPower' | 'forward' | 'process'> = {
       dataDir: '',
       clients: unavailableObject<PluginContext['clients']>('clients'),
       hostPower: unavailableObject<PluginContext['hostPower']>('hostPower'),
+      process: unavailableObject<PluginContext['process']>('process'),
       home: '',
       pty: unavailableObject<PluginContext['pty']>('pty'),
       launch: unavailableObject<PluginContext['launch']>('launch'),
@@ -618,6 +619,7 @@ export class PluginHost {
       ...created,
       clients: created?.clients ?? defaults.clients,
       hostPower: created?.hostPower ?? defaults.hostPower,
+      process: created?.process ?? defaults.process,
       log: (message) => {
         for (const line of String(message).split(/\r\n|\r|\n/)) this.options.log(`${id}: ${line}`)
       },
