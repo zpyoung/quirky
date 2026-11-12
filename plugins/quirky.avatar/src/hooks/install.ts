@@ -75,9 +75,10 @@ function writeAtomically(path: string, text: string, mode?: number): void {
   mkdirSync(dirname(path), { recursive: true })
   const target = writePath(path)
   const temp = `${target.path}.${process.pid}.tmp`
+  const targetMode = mode ?? target.mode
   try {
-    writeFileSync(temp, text)
-    const targetMode = mode ?? target.mode
+    rmSync(temp, { force: true })
+    writeFileSync(temp, text, targetMode === undefined ? undefined : { mode: targetMode })
     if (targetMode !== undefined) chmodSync(temp, targetMode)
     renameSync(temp, target.path)
   } finally {

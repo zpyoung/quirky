@@ -786,7 +786,6 @@ describe('Codex hooks.json', () => {
   })
 })
 
-
 describe('agent files behind a link', () => {
   test('install and remove go through a link', () => {
     const dot = scratch()
@@ -862,6 +861,35 @@ describe('agent files behind a link', () => {
     expect(JSON.parse(readFileSync(join(dotfiles, 'hooks.json'), 'utf8')).hooks.PreToolUse).toHaveLength(1)
     expect(readdirSync(codexDir).sort()).toEqual(['hooks.json', 'second.json'])
     expect(readdirSync(dotfiles).sort()).toEqual(['hooks.json'])
+  })
+
+  test('resolves each relative link against its own folder across a chain', () => {
+    const env = agentEnv()
+    const codex = join(env.home, '.codex')
+    const links = join(env.home, 'links')
+    const target = join(links, 'real', 'hooks.json')
+    const decoy = join(codex, 'real', 'hooks.json')
+    const hooks = codexHooksPath(env)
+    const second = join(links, 'second.json')
+    const untouched = '{"owner":"untouched"}\n'
+    mkdirSync(join(codex, 'real'), { recursive: true })
+    mkdirSync(join(links, 'real'), { recursive: true })
+    writeFileSync(target, '{}\n')
+    writeFileSync(decoy, untouched)
+    symlinkSync('../links/second.json', hooks)
+    symlinkSync('real/hooks.json', second)
+
+    expect(installCodexHooks(env, 55)).toBe(true)
+    expect(JSON.parse(readFileSync(target, 'utf8')).hooks.PreToolUse).toHaveLength(1)
+    expect(readFileSync(decoy, 'utf8')).toBe(untouched)
+    expect(lstatSync(hooks).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(hooks)).toBe('../links/second.json')
+    expect(lstatSync(second).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(second)).toBe('real/hooks.json')
+    expect(readdirSync(codex).sort()).toEqual(['hooks.json', 'real'])
+    expect(readdirSync(join(codex, 'real')).sort()).toEqual(['hooks.json'])
+    expect(readdirSync(links).sort()).toEqual(['real', 'second.json'])
+    expect(readdirSync(join(links, 'real')).sort()).toEqual(['hooks.json'])
   })
 
   test('a link to a file that does not exist yet creates the file', () => {
@@ -985,6 +1013,7 @@ describe('file modes and temp files', () => {
     expect(readdirSync(extensions).sort()).toEqual(['quirky-avatar-gate.ts'])
   })
 })
+
 describe('pi and omp extension file', () => {
   const withAgentDirs = (): AgentEnv => {
     const env = agentEnv()
