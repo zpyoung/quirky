@@ -64,12 +64,19 @@ function waitWithAbort<T>(
   }
   signal?.addEventListener('abort', onAbort, { once: true })
   if (timeoutMs !== undefined) {
-    timer = setTimeout(() => {
+    const deadline = performance.now() + timeoutMs
+    const onTimeout = () => {
       if (settled) return
+      const remaining = deadline - performance.now()
+      if (remaining > 0) {
+        timer = setTimeout(onTimeout, remaining)
+        return
+      }
       settled = true
       cleanup()
       reject(new Error(`soak setup timed out after ${timeoutMs} ms`))
-    }, timeoutMs)
+    }
+    timer = setTimeout(onTimeout, timeoutMs)
   }
   task.then(
     (value) => {

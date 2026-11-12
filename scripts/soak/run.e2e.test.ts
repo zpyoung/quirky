@@ -92,14 +92,22 @@ test('bounds a healthy endpoint that never answers the probe handshake', async (
   const abort = new AbortController()
   // a real websocket handshake needs the platform clock, not fake timers
   const timer = setTimeout(() => abort.abort(), 35_000)
+  const originalSetTimeout = globalThis.setTimeout
   const began = performance.now()
   let failure: unknown
   try {
+    globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+      if (args[1] === 30_000) args[1] -= 50
+      return originalSetTimeout(...args)
+    }) as typeof setTimeout
     try {
       await startProbe({ home, startedAt: began, onDaemonLost() {}, signal: abort.signal })
     } catch (error) {
       failure = error
+    } finally {
+      globalThis.setTimeout = originalSetTimeout
     }
+    expect(performance.now() - began).toBeGreaterThanOrEqual(30_000)
     expect(failure).toBeInstanceOf(Error)
     expect((failure as Error).message).toContain('30000')
     closeSockets()
