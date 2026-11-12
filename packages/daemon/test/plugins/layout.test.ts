@@ -1176,6 +1176,63 @@ describe('slot reports', () => {
   })
 })
 
+describe('window-bar-item slots', () => {
+  const BAR = 'acme.bar'
+  const EARLY = `window-bar-item:${BAR}/early`
+  const LATE = `window-bar-item:${BAR}/late`
+
+  async function startWithWindowBarItems() {
+    const env = makeEnv()
+    writePlugin(
+      join(env.home, 'plugins'),
+      {
+        id: BAR,
+        name: BAR,
+        version: '1.0.0',
+        ui: 'ui.js',
+        contributes: {
+          'window-bar-item': [
+            { id: 'late', title: 'Late', order: 20 },
+            { id: 'early', title: 'Early', order: 10 }
+          ]
+        }
+      },
+      { 'ui.js': 'export function activate() {}\n' }
+    )
+    const harness = await env.start()
+    return { harness, caller: await harness.connect('cli') }
+  }
+
+  test('ui.state lists sorted slots and ui.report updates and clears reports', async () => {
+    const { harness, caller } = await startWithWindowBarItems()
+    const before = await caller.call('ui.state', {})
+    expect(before.slots.filter((slot) => slot.kind === 'window-bar-item')).toEqual([
+      { id: EARLY, kind: 'window-bar-item', plugin: BAR, title: 'Early', shown: true },
+      { id: LATE, kind: 'window-bar-item', plugin: BAR, title: 'Late', shown: true }
+    ])
+
+    const window = await openWindow(harness)
+    await window.client.call('ui.report', { slot: EARLY, state: { count: 2 } })
+    expect(slotOf(await caller.call('ui.state', {}), EARLY)).toMatchObject({
+      report: { count: 2 },
+      shown: true
+    })
+
+    await window.client.call('ui.report', { slot: EARLY, state: null })
+    expect(slotOf(await caller.call('ui.state', {}), EARLY)).toMatchObject({ shown: true })
+    expect(slotOf(await caller.call('ui.state', {}), EARLY).report).toBeUndefined()
+
+    expect(await failure(window.client.call('ui.report', { slot: 'not-an-id', state: {} }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'slot must be a contribution ID, got not-an-id'
+    })
+
+    await caller.call('plugin.disable', { id: BAR })
+    expect((await caller.call('ui.state', {})).slots.filter((slot) => slot.kind === 'window-bar-item')).toEqual([])
+  })
+})
+
+
 describe('overlay slots', () => {
   const FLOAT = 'acme.float'
   const SHELF = `overlay:${FLOAT}/shelf`

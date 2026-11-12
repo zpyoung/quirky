@@ -975,9 +975,15 @@ Use `quirky heimdall --help` and `quirky api --json` for the live commands and s
 agent session, briefs and steers the agent, and takes the work to a merge-ready pull request.
 Unsupervised sessions are never blocked. Start with `quirky avatar handoff <worktree> --goal ...
 --done-when ...`, read progress with `quirky avatar status` and `quirky avatar report`, and
-hand a worktree back with `quirky avatar take-back`. The gate needs the `tool-gate` contribution
-kind and the `quirky-gate` shim from the daemon, and the window pill and sidebar ring come from
-`window-bar-item` and `quirky.worktree`. See the plugin's [README](quirky.avatar/README.md) and
+hand a worktree back with `quirky avatar take-back`.
+The gate uses the singleton `tool-gate` contribution (`context.provide('tool-gate:quirky.avatar/gate', ...)`)
+and the `quirky-gate` hook shim from the daemon; the window pill mounts a `window-bar-item`
+(`context.provide('window-bar-item:quirky.avatar/pill', ...)`) while the sidebar ring comes from
+`quirky.worktree`; active hand-offs hold the Mac awake with `context.hostPower.keepAwake`, and
+`context.hostPower.powerState` (`onBattery`, `externalDisplay`) tells a plugin whether the Mac is on
+battery or drives an external display; and the plugin's own `setting` declarations set
+`"hidden": true` so `settings-section:quirky.avatar/avatar` owns their controls instead of the
+generic Settings form. See the plugin's [README](quirky.avatar/README.md) and
 the [logic spec](../docs/quirk/specs/2026-11-04-avatar/logic.md).
 
 ## Project Ledger

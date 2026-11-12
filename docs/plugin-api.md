@@ -19,8 +19,8 @@ The freeze covers the public declarations and their referenced contract types, i
 Contribution IDs keep the form `kind:plugin-id/name`. API 1.0 freezes the existing contribution kinds, declaration schemas, ID rules, override behavior and lifecycle contract. The linked declarations and schema validators remain the detailed reference for each field and transitive type; this guide does not freeze private kernel or renderer DOM structures.
 
 The current UI kind identifiers are `status-bar`, `sidebar-section`, `activity-item`, `panel`,
-`view`, `overlay`, `command`, `keybinding`, `setting`, `settings-section`, `theme` and
-`menu-item`. Daemon method/event declarations and CLI command declarations are part of the same
+`view`, `overlay`, `command`, `keybinding`, `setting`, `settings-section`, `theme`,
+`menu-item` and `window-bar-item`. Daemon method/event declarations and CLI command declarations are part of the same
 frozen contract; their exact schemas remain in the linked protocol declarations.
 
 API 1.1 adds `whenSetting` to `panel`, `sidebar-section` and `activity-item`: the name of one of
@@ -92,6 +92,18 @@ Omitting `palette` is equivalent to `true`. `false` hides the command from the
 command palette only: it remains an effective UI command, can still be invoked
 through UI command routing, and can still be bound to a keybinding.
 Non-boolean values are invalid.
+
+### Window bar items and hidden settings
+
+A `window-bar-item` declaration under `contributes["window-bar-item"]` takes a required `title` and optional `description` and numeric `order`. `window-bar-item` is a code-backed UI kind: the plugin's `ui` module registers its `MountFunction` with `context.provide('window-bar-item:<plugin>/<name>', mount)`. Effective items appear in `ui.contributions` under `windowBarItems` (sorted by `order`, default `100`, then ID), mount in the window bar after the new-tab buttons, and appear in `ui.state.slots` with `shown: true`.
+
+A `setting` declaration may include an optional boolean `hidden`. When `hidden` is `true`, the setting stays in `ui.contributions.settings` and in `setting.list`, `setting.get`, `setting.set` and `setting.reset`, while the host Settings dialog omits it from the generic controls so the plugin can edit it through its own `settings-section` or UI.
+
+### Tool gates and host power
+
+A `tool-gate` declaration under `contributes["tool-gate"]` takes optional `description` and `agents` (a non-empty list of agent names). `tool-gate` is a singleton kind that at most one enabled plugin may declare and that cannot be overridden. The plugin's `main` module registers its `ToolGateProvider` with `context.provide('tool-gate:<plugin>/<name>', provider)`. Each `ToolGateRequest` carries `{ agent, sessionId, event, deadlineMs, payload }`, and the provider resolves a `ToolGateDecision` (`{ decision: 'allow' | 'deny' | 'passthrough' | 'unavailable', reason, encoded, exitCode? }`, where `exitCode` is an integer `0`–`255` and a `deny` with a string `encoded` must contain a non-whitespace character). When `agents` excludes `request.agent`, no provider is active, the provider throws or returns an invalid decision, or `deadlineMs` elapses (aborting the `AbortSignal`), the daemon resolves `{ decision: 'unavailable', reason, encoded: null }` with no `exitCode`.
+
+On the daemon `PluginContext`, `context.hostPower.keepAwake(reason)` prevents idle system sleep (the display may still sleep) until its returned idempotent `() => void` disposer runs; holds are ref-counted across the host, released when the plugin activation is revoked or disposed, and degrade to a no-op where unsupported. `context.hostPower.powerState()` synchronously returns `{ onBattery: boolean, externalDisplay: boolean | null }` (`{ onBattery: false, externalDisplay: null }` where unsupported or on read failure, and `externalDisplay: null` when unknown).
 
 ## Window workspace context
 

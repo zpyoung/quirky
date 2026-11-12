@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
+import type { ToolGateDecision } from '@quirky/protocol'
 import { waitFor } from '../../../../packages/daemon/test/helpers'
 import type { JournalEntry, Level, ReportModel } from '../../src/contracts'
 import { readMarkerFile } from '../../src/hooks/install'
@@ -175,13 +176,58 @@ describe('the brain is not ready (SC-12)', () => {
 
     expect(decision.decision).toBe('deny')
     expect(JSON.parse(decision.encoded!).hookSpecificOutput.permissionDecisionReason).toContain('try the same call again')
-    const [entry] = await log(avatar, avatar.alpha.id)
-    expect(entry).toMatchObject({ kind: 'gate', data: { outcome: 'retry', step: 'judgment' } })
+    const entries = (await log(avatar, avatar.alpha.id)).filter((entry) => entry.kind === 'gate')
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ kind: 'gate', data: { outcome: 'retry', step: 'judgment' } })
     expect(avatar.store().stuck.get(avatar.alpha.id)?.counters.denialsTotal ?? 0).toBe(0)
     expect(openNeeds(avatar)).toEqual([])
 
     const { summary } = await avatar.call<ReportModel>('quirky.avatar/report')
     expect(summary).toMatchObject({ denied: 0, held: 0 })
+  })
+
+  test('finds the retry gate entry even when the gate check finishes after the first gated call', async () => {
+    const avatar = await startAvatar({ brain: 'fail' })
+    const { promise: holdStaticCheck, resolve: releaseStaticCheck } = Promise.withResolvers<void>()
+    const patchedSpawn = Bun.spawn
+    Bun.spawn = ((cmd: unknown, ...rest: unknown[]) => {
+      const proc = (patchedSpawn as (...args: unknown[]) => { kill: () => void; stdout: ReadableStream<Uint8Array> })(
+        cmd,
+        ...rest,
+      )
+      if (avatar.state.inspected.length === 0) return proc
+      const stdout = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const bytes = new Uint8Array(await new Response(proc.stdout).arrayBuffer())
+          await holdStaticCheck
+          controller.enqueue(bytes)
+          controller.close()
+        },
+      })
+      return { kill: () => proc.kill(), stdout }
+    }) as typeof Bun.spawn
+
+    let decision: ToolGateDecision
+    try {
+      await avatar.handoff([
+        { worktree: avatar.alpha, level: 'own-branch', goal: 'Ship alpha' },
+        { worktree: avatar.beta, level: 'local', goal: 'Ship beta' },
+      ])
+      decision = await avatar.gate('sess-alpha', bash(avatar.alpha, 'bun test --update-snapshots'))
+    } finally {
+      releaseStaticCheck()
+    }
+    await waitFor(() => avatar.store().handoffs.get(avatar.alpha.id)?.state === 'briefing')
+
+    expect(decision.decision).toBe('deny')
+    const journal = await log(avatar, avatar.alpha.id)
+    expect(journal[0]).toMatchObject({
+      kind: 'event',
+      data: { type: 'state', from: 'checking', state: 'briefing', note: 'the gate check passed' },
+    })
+    const entries = journal.filter((entry) => entry.kind === 'gate')
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ kind: 'gate', data: { outcome: 'retry', step: 'judgment' } })
   })
 
   test('a held call, by contrast, counts as a denial', async () => {

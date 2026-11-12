@@ -118,17 +118,31 @@ describe('host power keep-awake', () => {
     expect(fake.live.size).toBe(0)
   })
 
-  test('service-level holds are ref-counted with plugin holds and released on revoke', () => {
+  test('holds across multiple activations of a plugin are ref-counted and released on revoke', () => {
     const fake = fakeSource()
     const service = new HostPowerService(() => {}, fake.source)
-    const release = service.keepAwake('acme.a', 'direct')
-    service.forPlugin('acme.b', () => false).keepAwake('plugin')
+    expect('keepAwake' in service).toBe(false)
+    const a1 = service.forPlugin('acme.a', () => false)
+    const a2 = service.forPlugin('acme.a', () => false)
+    const b = service.forPlugin('acme.b', () => false)
+    const releaseA1 = a1.keepAwake('first')
+    a2.keepAwake('second')
+    const releaseB = b.keepAwake('other')
+
+    expect(fake.created).toEqual(['first'])
     expect(fake.live.size).toBe(1)
-    release()
-    release()
+
+    service.revoke('acme.a')
     expect(fake.live.size).toBe(1)
-    service.dispose()
+    releaseA1()
+    expect(fake.live.size).toBe(1)
+    expect(() => a1.keepAwake('late')).toThrow('Host power capability for plugin "acme.a" has been revoked')
+    expect(() => a2.keepAwake('late')).toThrow('Host power capability for plugin "acme.a" has been revoked')
+    expect(() => a1.powerState()).toThrow('Host power capability for plugin "acme.a" has been revoked')
+
+    releaseB()
     expect(fake.live.size).toBe(0)
+    expect(fake.released).toEqual([100])
   })
 
   test('a failed native create degrades to a no-op hold and the next hold retries', () => {
@@ -210,7 +224,6 @@ describe('host power keep-awake', () => {
     const release = power.keepAwake('x')
     expect(created).toEqual([])
     expect(() => release()).not.toThrow()
-    expect(() => service.keepAwake('acme.b', 'y')()).not.toThrow()
     expect(created).toEqual([])
     service.dispose()
   })
