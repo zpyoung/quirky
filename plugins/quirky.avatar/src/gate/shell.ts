@@ -1466,7 +1466,7 @@ class ShellReader {
 
   private isInsideCommandSubstitution(scope: number): boolean {
     for (let current = scope; current > 0; current = this.parents[current]) {
-      if (this.scopeKinds[current] === 'command-substitution' || this.scopeKinds[current] === 'backtick') return true
+      if (this.scopeKinds[current] === 'command-substitution') return true
     }
     return false
   }
