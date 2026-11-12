@@ -688,6 +688,11 @@ export class LayoutService {
     if (expandedView === undefined) return this.openToolSlot(tool)
     const connId = this.toolWindowId()
     if (connId === undefined) {
+      for (const window of this.mainWindows()) {
+        const current = this.windowLayout(window.id)
+        const tab = (current.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
+        if (tab !== undefined) return this.showWindowView(window.id, tab.id, tab.input, true)
+      }
       if (this.openWindows().length > 0) return this.openToolSlot(tool)
       const shared = this.layout()
       const tab = (shared.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
@@ -696,11 +701,10 @@ export class LayoutService {
       this.closeView()
       return this.openToolSlot(tool)
     }
-    if (this.auxiliaryView(connId)) return this.openToolSlot(tool)
     const current = this.windowLayout(connId)
     const tab = (current.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
     if (tab === undefined) return this.openToolSlot(tool)
-    if (current.view?.id !== tab.id) return this.showWindowView(connId, tab.id, tab.input, false)
+    if (current.view?.id !== tab.id) return this.showWindowView(connId, tab.id, tab.input, true)
     this.closeWindowView(connId)
     this.openToolSlot(tool)
     return this.windowLayout(connId)
@@ -1152,13 +1156,23 @@ export class LayoutService {
       const windows = this.openWindows()
       const survivor = windows.length === 1 ? windows[0] : undefined
       if (survivor && !this.auxiliaryView(survivor.id)) {
+        const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView !== undefined)
+        if (hosts.length > 0) this.storedLayoutSettled = true
         const override = this.windowViewFor(survivor.id)
-        this.change((layout) => ({
-          ...layout,
-          view: override.view,
-          viewTabs: override.viewTabs,
-          worktree: override.worktree
-        }))
+        this.change((layout) => {
+          let merged: UiLayout = {
+            ...layout,
+            view: override.view,
+            viewTabs: override.viewTabs,
+            worktree: override.worktree
+          }
+          for (const host of hosts) {
+            if (override.viewTabs.some((tab) => tab.id === host.expandedView)) {
+              merged = this.withExpandedHostsClosed(merged, host.expandedView!)
+            }
+          }
+          return merged
+        })
       }
       this.announceWindows()
     }
@@ -1276,6 +1290,10 @@ export class LayoutService {
   private openWindows(): ClientConn[] {
     return [...this.options.clients()].filter((conn) => conn.role === 'ui' && !conn.closed)
   }
+  private mainWindows(): ClientConn[] {
+    const windows = this.openWindows()
+    return windows.filter((conn) => this.auxiliaryView(conn.id) === undefined)
+  }
   private requireWindowById(connId: number): ClientConn {
     if (!Number.isInteger(connId) || connId < 1) throw invalidParams('connId must be a positive integer')
     const target = [...this.options.clients()].find((conn) => conn.id === connId && !conn.closed)
@@ -1366,14 +1384,14 @@ export class LayoutService {
   }
 
 
-  /** The window whose view tabs decide how a tool opens: the focused one, else the only one. */
+  /** The focused main window, or the only main window, decides how an expanded tool opens. */
   private toolWindowId(): number | undefined {
-    const windows = this.openWindows()
-    return this.focusedConn()?.id ?? (windows.length === 1 ? windows[0]!.id : undefined)
+    const windows = this.mainWindows()
+    return this.focusedConn(windows)?.id ?? (windows.length === 1 ? windows[0]!.id : undefined)
   }
 
-  private focusedConn(): ClientConn | undefined {
-    return this.openWindows().reduce<ClientConn | undefined>(
+  private focusedConn(windows: ClientConn[] = this.openWindows()): ClientConn | undefined {
+    return windows.reduce<ClientConn | undefined>(
       (best, conn) => (conn.focusedAt !== undefined && conn.focusedAt > (best?.focusedAt ?? 0) ? conn : best),
       undefined
     )
@@ -1557,17 +1575,14 @@ export class LayoutService {
   }
 
   /**
-   * Settles a stored layout that has a tool open beside its expanded view, by keeping the view.
-   * Runs once, the first time the effective model has a tool with an expanded view, and not with
-   * several windows connected: their shared view tabs can lag a window's own copy, so repeating it
-   * would close a slot the user just opened.
+   * Settles a stored layout that has a tool open beside its expanded view, once at most one window
+   * is connected: multiple windows can have per-window view state that has not reached shared storage.
    */
   private settleStoredLayout(): void {
     if (this.storedLayoutSettled) return
     const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView !== undefined)
-    if (hosts.length === 0) return
+    if (hosts.length === 0 || this.openWindows().length > 1) return
     this.storedLayoutSettled = true
-    if (this.openWindows().length > 1) return
     const layout = this.layout()
     let settled = layout
     for (const host of hosts) {

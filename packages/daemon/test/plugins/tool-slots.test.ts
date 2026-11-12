@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { RpcErrorCode, UI_TOOL_SLOTS } from '@quirky/protocol'
-import type { UiModel, UiSlotEntry } from '@quirky/protocol'
+import type { QuirkyEvent, UiModel, UiSlotEntry } from '@quirky/protocol'
 import { Store } from '../../src/store'
 import { makeTempDir, removeTempDirs, writePlugin } from './fixtures'
-import { startHarness, type Harness } from '../helpers'
+import { startHarness, waitForAsync, type Harness } from '../helpers'
 import { checkUiKindEntry } from '../../src/plugins/ui-kinds'
 import { projectTools } from '../../src/plugins/tool-layout'
 
@@ -479,10 +479,10 @@ describe('tool layout mutations', () => {
 describe('a tool with an expanded view', () => {
   const SLOT = 'left-bottom'
 
-  function seedWithBothOpen() {
+  function seedWithBothOpen(activeView = TASKS_VIEW, tabIds = [TASKS_VIEW]) {
     return {
-      view: { id: TASKS_VIEW },
-      viewTabs: [{ id: TASKS_VIEW }],
+      view: { id: activeView },
+      viewTabs: tabIds.map((id) => ({ id })),
       panel: null,
       sidebar: true,
       focus: null,
@@ -622,6 +622,52 @@ describe('a tool with an expanded view', () => {
     expect(reopened.view?.id).toBe(TASKS_VIEW)
   })
 
+  test('does not show the Tasks slot beside its tab when several windows have no focus', async () => {
+    const { harness, caller } = await start()
+    const first = await connectWindow(harness)
+    const second = await connectWindow(harness)
+    await first.client.call('ui.window.view.open', { connId: first.connId, id: TASKS_VIEW })
+    expect((await caller.call('ui.state', {})).windows.every(({ focused }) => !focused)).toBe(true)
+
+    await caller.call('ui.tool.open', { id: TASKS })
+
+    const layouts = await Promise.all([first, second].map(async ({ connId }) =>
+      (await caller.call('ui.window.state', { connId })).layout
+    ))
+    expect(layouts.some((layout) =>
+      layout.tools?.open[SLOT] === TASKS && layout.viewTabs?.some(({ id }) => id === TASKS_VIEW)
+    )).toBe(false)
+  })
+
+  test('an auxiliary focus does not hide the main window from Tasks toggling', async () => {
+    const { harness, caller } = await start()
+    const main = await connectWindow(harness)
+    await main.client.call('ui.window.view.open', { connId: main.connId, id: TASKS_VIEW })
+    await main.client.call('desktop.shell.capabilities', {
+      directoryPicker: false,
+      auxiliaryWindows: true,
+      revealItem: false,
+      notifications: { permission: false, click: false, dismiss: false }
+    })
+    const opening = caller.call('desktop.window.open', { view: REVIEW_VIEW })
+    const request = await waitForAsync(() => main.events.find(
+      (event): event is Extract<QuirkyEvent, { type: 'desktop.shell.request' }> =>
+        event.type === 'desktop.shell.request' && event.action.kind === 'window-open'
+    ))
+    await main.client.call('desktop.shell.reply', { requestId: request.requestId, result: { windowId: 'tasks-layout-aux' } })
+    await opening
+
+    const auxiliary = await connectWindow(harness)
+    await auxiliary.client.call('desktop.window.attach', { windowId: 'tasks-layout-aux', ownerShellConnId: main.connId })
+    await auxiliary.client.call('ui.window.focused', { focused: true })
+    await caller.call('ui.tool.open', { id: TASKS })
+
+    const layout = (await caller.call('ui.window.state', { connId: main.connId })).layout
+    expect(layout.view).toBeNull()
+    expect(layout.viewTabs).toEqual([])
+    expect(layout.tools?.open[SLOT]).toBe(TASKS)
+  })
+
   test('a window that closed its own copy does not make the next panel open collapse', async () => {
     const { harness, caller } = await start()
     const first = await connectWindow(harness, true)
@@ -633,6 +679,37 @@ describe('a tool with an expanded view', () => {
     expect((await caller.call('ui.window.state', { connId: first.connId })).layout.tools?.open[SLOT]).toBe(TASKS)
     expect((await caller.call('ui.window.state', { connId: second.connId })).layout.tools?.open[SLOT]).toBe(TASKS)
     expect((await caller.call('ui.state', {})).layout.tools?.open[SLOT]).toBe(TASKS)
+  })
+
+  test('removing a window merges its survivor view without restoring the expanded tool slot', async () => {
+    const { harness, caller } = await start(seedWithBothOpen())
+    const survivor = await harness.connectWithEvents('ui')
+    const departing = await harness.connectWithEvents('ui')
+    await survivor.client.call('ui.window.self', {})
+    await departing.client.call('ui.window.self', {})
+
+    departing.client.close()
+    const state = await waitForAsync(async () => {
+      const current = await caller.call('ui.state', {})
+      return current.windows.length === 1 ? current : undefined
+    })
+
+    expect(state.layout.view).toEqual({ id: TASKS_VIEW })
+    expect(state.layout.tools?.open[SLOT]).toBeNull()
+  })
+
+  test('activating a background Tasks tab clears its slot', async () => {
+    const { harness, caller } = await start(seedWithBothOpen(REVIEW_VIEW, [TASKS_VIEW, REVIEW_VIEW]))
+    const tasksWindow = await harness.connectWithEvents('ui')
+    const otherWindow = await harness.connectWithEvents('ui')
+    await tasksWindow.client.call('ui.window.self', {})
+    await otherWindow.client.call('ui.window.self', {})
+    await tasksWindow.client.call('ui.window.focused', { focused: true })
+
+    const opened = await caller.call('ui.tool.open', { id: TASKS })
+
+    expect(opened.view).toEqual({ id: TASKS_VIEW })
+    expect(opened.tools?.open[SLOT]).toBeNull()
   })
 
   test('a stored layout with both open settles to the tab at load', async () => {
