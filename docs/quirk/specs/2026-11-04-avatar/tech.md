@@ -74,9 +74,10 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 ### Host: H5 structured runners (`plugins/quirky.structured`)
 - `runner.ts:43` (`StructuredRunner`): `StructuredStartOptions` gains `toolPolicy?: 'default' | 'deny-all'`. Runners report usage per turn (see Contracts).
 - `claude-runner.ts:195`: when `deny-all`, `canUseTool` denies every tool and no MCP servers are passed.
-- `codex-runner.ts:7`: when `deny-all`, use approval policy and sandbox values under which every command or patch request is declined by the runner.
-- New `pi-runner.ts`: pi and omp in rpc mode (`pi --mode rpc` / `omp --mode rpc`, JSON lines on stdio). It follows the `StructuredRunner` interface and honors `deny-all` by registering no tools, or by blocking `tool_call` when the CLI can't drop them.
+- `codex-runner.ts`: when `deny-all`, disable shell, unified execution, image, sleep, app, plugin, browser, computer, agent and goal features, and web search. Read configured MCP server names before starting or resuming the thread and disable every server for that thread; fail to start if the configuration cannot be read. Decline approval, elicitation, user-input and tool-call requests without an ask. Interrupt every item outside the eight non-tool message types, retaining its journal output; stop the app-server if interruption fails or a second agent appears.
+- New `pi-runner.ts`: pi and omp in rpc mode (`pi --mode rpc` / `omp --mode rpc`, JSON lines on stdio). It follows `StructuredRunner`; `deny-all` passes `--no-tools` and `--no-extensions` and blocks `tool_call`. Further pi/omp hardening belongs to `g1-18`.
 - `main.ts`, `quirky-plugin.json`: `create.agent` accepts `'pi' | 'omp'`, and `create.options.toolPolicy` is added to the method schema.
+- The session's `launchSettings.options.toolPolicy` keeps `{ value: 'deny-all', source: 'explicit' }` for resume, and its summary ends in ` · No tools`. An absent entry means the default policy; an unreadable entry prevents resume.
 
 ### Plugin `plugins/quirky.avatar` (new)
 
@@ -181,9 +182,10 @@ type PluginHostPower = { /* existing */ keepAwake(reason: string): () => void; p
 `CONTRACT:`
 ```ts
 type StructuredStartOptions = { /* existing */ toolPolicy?: 'default' | 'deny-all' }
-// structured message `data.usage?: { contextTokens: number; contextWindow: number | null }` on every assistant turn end
+// structured result message `data.contextUsage?: { contextTokens: number; contextWindow: number | null }` at turn end
 ```
-- With `deny-all`, no tool runs, and any tool request is answered "denied" without an ask.
+- With `deny-all`, Claude registers no tools. Codex disables the tools it can switch off and every configured MCP server, declines every request without an ask, and interrupts tools that start; interruption failure or a second agent ends the session. Pi and omp pass their no-tools/no-extensions switches and block tool calls; their remaining limitations are handled by `g1-18`.
+- The context footprint is separate from provider data: Claude's `data.usage` remains the SDK object, and no runner replaces it.
 
 ### Avatar methods (`quirky.avatar/<name>`)
 
@@ -344,7 +346,7 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
 - Each wake sends one event prompt. The brain must answer with exactly one fenced JSON block holding `BrainAction[]`. Anything unparseable is journaled and retried once with the parse error; a second failure parks that event as a `brain-error` need.
 - Judgment prompts contain only the mandate, the house rules and the call (`toolName`, `toolInput`, `cwd`). **They never contain worker transcript text** (R-18).
 - Rotation:
-  - Rotation happens after the event in progress is fully dispatched, when `usage.contextTokens >= limit`, where `limit = min(300000, floor(0.8 * contextWindow))`.
+  - Rotation happens after the event in progress is fully dispatched, when `contextUsage.contextTokens >= limit`, where `limit = min(300000, floor(0.8 * contextWindow))`. The brain reads the footprint only from `result` messages.
   - The avatar stops the session, creates a new one from `prompt.rebuild()`, and journals `rotation {fromTokens}`.
   - Undelivered events stay in the journal queue in seq order and go to the new session first (R-38).
 - On session death, judgment requests resolve as `unavailable` until the new session is ready (R-37).

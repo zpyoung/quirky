@@ -323,11 +323,14 @@ class PiRunner implements StructuredRunner {
         return
       }
       case 'agent_end': {
-        const usage =
+        const contextUsage =
           run.lastContextTokens === null ? null : { contextTokens: run.lastContextTokens, contextWindow: run.contextWindow }
         run.lastContextTokens = null
         run.working = false
-        this.append(run, 'result', `${run.agent} turn completed`, { type: 'agent_end', ...(usage ? { usage } : {}) })
+        this.append(run, 'result', `${run.agent} turn completed`, {
+          type: 'agent_end',
+          ...(contextUsage ? { contextUsage } : {})
+        })
         this.context.setStatus(run.session.id, 'done')
         return
       }
