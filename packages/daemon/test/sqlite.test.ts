@@ -88,7 +88,16 @@ describe('openSqlite', () => {
     }
   })
 
-  test.each([[-1], [1.5], [Number.NaN], [Number.POSITIVE_INFINITY]])(
+  test.each([[0], [2147483647]])('accepts supported busy timeout %p', (busyTimeoutMs) => {
+    const db = openSqlite(':memory:', { busyTimeoutMs })
+    try {
+      expect(db.query('PRAGMA busy_timeout').get()).toEqual({ timeout: busyTimeoutMs })
+    } finally {
+      db.close()
+    }
+  })
+
+  test.each([[-1], [1.5], [Number.NaN], [Number.POSITIVE_INFINITY], [2147483648]])(
     'rejects invalid busy timeout %p before creating a database',
     (busyTimeoutMs) => {
       const file = join(makeTempDir(), 'invalid.db')
