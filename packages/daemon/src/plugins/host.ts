@@ -455,6 +455,7 @@ export class PluginHost {
       this.assertEnabled(id)
     } catch (error) {
       disabledMidway = !this.isEnabled(id)
+      if (!disabledMidway && imported.module) await this.callDeactivate(id, imported.module, runtime)
       attempt.revoked = true
       attempt.implementations.clear()
       runtime.attempt = undefined
