@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from 'bun:test'
-import { encodeTerminalOutput } from '@quirky/protocol'
+import { afterEach, expect, jest, test } from 'bun:test'
+import { encodeTerminalOutput, PROTOCOL_VERSION } from '@quirky/protocol'
 import { Connection } from '../src/connection'
 import { Store } from '../src/store'
 import { startMockDaemon } from './mock-daemon'
@@ -24,6 +24,45 @@ function connect(url: string) {
   connection.start()
   stops.push(() => connection.stop())
   return { store, connection, parsed }
+}
+
+function startSilentRpcDaemon() {
+  const token = 'silent-token'
+  const methods: string[] = []
+  const waiters = new Map<number, () => void>()
+  const waitForX = (count: number) => {
+    if (methods.filter((method) => method === 'x').length >= count) return Promise.resolve()
+    const { promise, resolve } = Promise.withResolvers<void>()
+    waiters.set(count, resolve)
+    return promise
+  }
+  const server = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch(request, webSocketServer) {
+      const url = new URL(request.url)
+      if (url.pathname === '/health') return Response.json({ ok: true })
+      if (url.pathname !== '/rpc' || url.searchParams.get('token') !== token) return new Response('unauthorized', { status: 401 })
+      return webSocketServer.upgrade(request) ? undefined : new Response('upgrade failed', { status: 400 })
+    },
+    websocket: {
+      message(socket, message) {
+        const request = JSON.parse(String(message))
+        methods.push(request.method)
+        if (request.method === 'x') waiters.get(methods.filter((method) => method === 'x').length)?.()
+        const result = request.method === 'client.hello'
+          ? { protocolVersion: PROTOCOL_VERSION, daemonVersion: 'silent' }
+          : request.method === 'events.subscribe' ? { ok: true } : undefined
+        if (result !== undefined) socket.send(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }))
+      }
+    }
+  })
+  return {
+    url: `http://127.0.0.1:${server.port}/#token=${token}`,
+    methods,
+    waitForX,
+    stop: () => server.stop(true)
+  }
 }
 
 test('reports an unreachable daemon after repeated failures and reconnects when it returns', async () => {
@@ -56,6 +95,34 @@ test('callAny reaches the daemon and rejects when not connected', async () => {
   await until(() => store.getState().connection === 'connected')
   const state = (await connection.callAny('ui.state', {})) as { layout: { sidebar: boolean } }
   expect(state.layout.sidebar).toBe(true)
+})
+
+test('callAny forwards timeout options and leaves calls without options unbounded', async () => {
+  const daemon = startSilentRpcDaemon()
+  stops.push(daemon.stop)
+  const { connection, store } = connect(daemon.url)
+  await until(() => store.getState().connection === 'connected')
+
+  jest.useFakeTimers()
+  try {
+    const timed = connection.callAny('x', {}, { timeoutMs: 20 })
+    await daemon.waitForX(1)
+    jest.advanceTimersByTime(20)
+    await expect(timed).rejects.toThrow('RPC call timed out after 20 ms')
+    const unbounded = connection.callAny('x', {})
+    await daemon.waitForX(2)
+    let settled = false
+    void unbounded.then(() => { settled = true }, () => { settled = true })
+    jest.advanceTimersByTime(40)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(daemon.methods.filter((method) => method === 'x')).toHaveLength(2)
+
+    connection.stop()
+    void unbounded.catch(() => undefined)
+  } finally {
+    jest.useRealTimers()
+  }
 })
 
 test('onConnected runs after each connect, with the store already saying connected', async () => {

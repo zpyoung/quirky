@@ -117,6 +117,7 @@ function setup(
     windowRoute?: DesktopWindowRoute
     nativeDropPaths?: (fileNames: readonly string[]) => Promise<string[] | null>
     nativeBrowser?: NativeBrowserCapability
+    contributions?: (options?: { timeoutMs?: number }) => Promise<UiModel>
   } = {}
 ) {
   let model = initial
@@ -189,7 +190,7 @@ function setup(
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   let confirmAnswer = true
-  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const calls: { method: string; params: Record<string, unknown>; options?: { timeoutMs?: number } }[] = []
   const imports: string[] = []
   const modules = new Map<string, ModuleFactory>()
   const toasts: [string, string][] = []
@@ -199,11 +200,11 @@ function setup(
   const holds = new Map<string, Promise<void>>()
 
   const host = new WindowPluginHost({
-    call: async (method, params) => {
-      calls.push({ method, params })
+    call: async (method, params, callOptions) => {
+      calls.push({ method, params, ...(callOptions === undefined ? {} : { options: callOptions }) })
       switch (method) {
         case 'ui.contributions':
-          return model
+          return options.contributions ? options.contributions(callOptions) : model
         case 'ui.window.self':
           return { connId: 1 }
         case 'ui.window.state': {
@@ -1936,6 +1937,57 @@ test('refresh rejects when the daemon call fails, and the next refresh still wor
   original(makeModel())
   await t.host.refresh()
   expect(state(t).model).not.toBeNull()
+})
+
+test('refresh reads have a deadline and a timed-out refresh does not block the next one', async () => {
+  let contributionReads = 0
+  const t = setup(makeModel(), {
+    contributions: (callOptions) => {
+      contributionReads += 1
+      if (contributionReads > 1) return Promise.resolve(makeModel())
+      return Promise.reject(new Error(`RPC call timed out after ${callOptions?.timeoutMs ?? 'missing'} ms`))
+    }
+  })
+  const first = t.host.refresh()
+  const second = t.host.refresh()
+  await expect(first).rejects.toThrow('RPC call timed out after 30000 ms')
+  await second
+
+  expect(t.methodCalls('ui.window.self').map((call) => call.options)).toEqual([{ timeoutMs: 30000 }])
+  for (const method of ['ui.window.state', 'ui.contributions', 'setting.list']) {
+    expect(t.methodCalls(method).map((call) => call.options)).toEqual([{ timeoutMs: 30000 }, { timeoutMs: 30000 }])
+  }
+})
+
+test('plugin calls and host writes do not get read deadlines', async () => {
+  const t = setup(makeModel({
+    sidebarSections: [section(NOTES, 'list')],
+    panels: [panel(NOTES, 'side')],
+    views: [view(NOTES, 'page')]
+  }))
+  const reports: ((state: unknown) => void)[] = []
+  const { module, record } = recording([LIST, SIDE], (id) =>
+    id === SIDE
+      ? (_el: unknown, props: { report(state: unknown): void }) => reports.push(props.report)
+      : () => {}
+  )
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+  t.host.mount(SIDE, element())
+  await settled(t, SIDE)
+  await record.contexts[0]!.call('repo.list')
+  reports[0]!({ count: 1 })
+  await t.host.saveSettings({ settings: { 'setting:acme.notes/fontSize': 18 }, theme: 'default' })
+  await t.host.focus('panel')
+  t.host.openView(PAGE)
+  await until(() => t.methodCalls('ui.window.view.open').length === 1)
+
+  for (const method of ['repo.list', 'setting.set', 'theme.set', 'ui.focus', 'ui.report', 'ui.window.view.open']) {
+    expect(t.methodCalls(method).length).toBeGreaterThan(0)
+    expect(t.methodCalls(method).every((call) => call.options === undefined)).toBe(true)
+  }
 })
 
 test('stop cleans up mounts, deactivates plugins and stops listening to events', async () => {
