@@ -1,8 +1,17 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import type { Level, WorktreeState } from '../src/contracts'
 import { register } from '../src/shipping/index'
 import { type MergeInput, looksFlaky, mergeReady, nextFlakyStep, predecessorsOf, stopAt } from '../src/shipping/mergebar'
+import { forBranchFake, handOff, lsRemote, manifestChecked, readyPushTarget } from './shipping-support'
 import { type FakeCalls, makeTestApp, sampleMandate } from './support'
+
+const manifestViolations: string[][] = []
+
+afterEach(() => {
+  const observed = manifestViolations.flat()
+  manifestViolations.length = 0
+  expect(observed).toEqual([])
+})
 
 const ready = (): MergeInput => ({
   level: 'full',
@@ -76,6 +85,11 @@ describe('mergeReady', () => {
     const result = mergeReady({ ...ready(), guessesOpen: 1, threads: [{ id: 't', resolved: false }], reviewedSha: null })
     expect(result.reasons.length).toBeGreaterThanOrEqual(3)
   })
+  test('blocks a merge when no checks have reported', () => {
+    const result = mergeReady({ ...ready(), checks: [] })
+    expect(result.ready).toBe(false)
+    expect(result.reasons).toContain('no checks have reported on the pull request')
+  })
 })
 
 describe('stopAt', () => {
@@ -125,24 +139,31 @@ const greenChecks = () => ({ number: 7, headSha: HEAD, rollup: 'success', checks
 type Options = { level?: Level; prState?: string; prHead?: string; checks?: unknown; comments?: unknown[]; calls?: FakeCalls; reviewed?: string | null; mandate?: Parameters<typeof sampleMandate>[0] }
 
 async function ship(options: Options = {}) {
-  const t = makeTestApp({
-    fakeCalls: {
-      'quirky.git/status': () => ({ head: HEAD, branch: 'feature' }),
-      'quirky.git/compare': () => ({ status: 'ready', base: 'origin/main', entries: [{ path: 'src/a.ts' }] }),
-      'quirky.git/fetch': () => ({ ok: true }),
-      'quirky.git/push': () => ({ remote: 'origin', branch: 'feature', upstream: 'origin/feature' }),
-      'quirky.checks/run': () => ok(''),
-      'quirky.hosting/forBranch': () => ({ kind: 'found', review: { number: 7, state: options.prState ?? 'open', headRefOid: options.prHead ?? HEAD, mergeQueueRequired: false } }),
-      'quirky.hosting/review': () => ({ kind: 'found', review: { number: 7, state: options.prState ?? 'open', headRefOid: options.prHead ?? HEAD } }),
-      'quirky.hosting/checks': () => options.checks ?? greenChecks(),
-      'quirky.hosting/comments': () => ({ number: 7, comments: options.comments ?? [], partial: false, partialFailures: [] }),
-      'quirky.hosting/merge': () => ({ state: 'merged', number: 7, head: HEAD }),
-      'quirky.hosting/updateReview': () => ({ number: 7, updated: true, state: 'open' }),
-      'quirky.hosting/create': () => ({ number: 7, url: 'u', existing: false }),
-      'quirky.hosting/rerunChecks': () => ({ started: 1, targetCount: 1, completedSteps: [] }),
-      ...options.calls
-    }
+  const checked = manifestChecked({
+    'quirky.git/status': () => ({ head: HEAD, branch: 'feature' }),
+    'quirky.git/compare': () => ({ status: 'ready', base: 'origin/main', entries: [{ path: 'src/a.ts' }] }),
+    'quirky.git/fetch': () => ({ ok: true }),
+    'quirky.git/push': () => ({ remote: 'origin', branch: 'feature', upstream: 'origin/feature' }),
+    'quirky.git/pushTarget': () => readyPushTarget({ localHead: HEAD }),
+    'quirky.checks/run': (params) => String(params.command ?? '').includes('ls-remote')
+      ? ok(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: 'b'.repeat(40) }))
+      : ok(''),
+    'quirky.hosting/forBranch': forBranchFake({
+      branch: 'feature',
+      review: { number: 7, state: options.prState ?? 'open', headRefOid: options.prHead ?? HEAD, mergeQueueRequired: false }
+    }),
+    'quirky.hosting/review': () => ({ kind: 'found', review: { number: 7, state: options.prState ?? 'open', headRefOid: options.prHead ?? HEAD } }),
+    'quirky.hosting/checks': () => options.checks ?? greenChecks(),
+    'quirky.hosting/comments': () => ({ number: 7, comments: options.comments ?? [], partial: false, partialFailures: [] }),
+    'quirky.hosting/merge': () => ({ state: 'merged', number: 7, head: HEAD }),
+    'quirky.hosting/updateReview': () => ({ number: 7, updated: true, state: 'open' }),
+    'quirky.hosting/create': () => ({ number: 7, url: 'u', existing: false }),
+    'quirky.hosting/rerunChecks': () => ({ started: 1, targetCount: 1, completedSteps: [] }),
+    ...options.calls
   })
+  manifestViolations.push(checked.violations)
+  const t = makeTestApp({ fakeCalls: checked.fakes })
+  handOff(t.app)
   t.app.store.mandates.put(sampleMandate({ level: options.level ?? 'full', ...options.mandate }))
   if (options.reviewed !== null) t.app.journal('wt-1', 'finding', { reviewed: true, headSha: options.reviewed ?? HEAD })
   const states: WorktreeState[] = []
@@ -163,7 +184,9 @@ describe('shipping merge', () => {
   test('merges the reviewed and checked commit at Full once the bar is met', async () => {
     const t = await ship()
     expect(await t.shipping.merge('wt-1')).toEqual({ ok: true })
-    expect(t.calls.find((call) => call.method === 'quirky.hosting/merge')?.params).toMatchObject({ number: 7, expectedHead: HEAD })
+    expect(t.calls.find((call) => call.method === 'quirky.hosting/merge')?.params).toEqual({
+      worktree: 'wt-1', number: 7, expectedHead: HEAD, method: 'squash', action: 'direct', yes: true
+    })
     expect(t.states).toEqual(['merge-ready', 'merged'])
   })
 
@@ -266,6 +289,56 @@ describe('shipping merge', () => {
     await t.shipping.merge('wt-1')
     expect(t.methods()).toContain('quirky.hosting/rerunChecks')
   })
+  test('does not merge before any checks have reported', async () => {
+    const t = await ship({ checks: { ...greenChecks(), checks: [] } })
+    const result = await t.shipping.merge('wt-1')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain('no checks have reported on the pull request')
+    expect(t.methods()).not.toContain('quirky.hosting/merge')
+  })
+
+  test('a partly read check list blocks the merge', async () => {
+    const t = await ship({ checks: { ...greenChecks(), partial: true, partialFailures: ['checks page'] } })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'the checks on the pull request could not all be read' })
+    expect(t.methods()).not.toContain('quirky.hosting/merge')
+  })
+
+  test('partly read review threads block the merge', async () => {
+    const t = await ship({
+      calls: { 'quirky.hosting/comments': () => ({ number: 7, comments: [], partial: true, partialFailures: ['thread page'] }) }
+    })
+    expect(await t.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'the review threads on the pull request could not all be read' })
+    expect(t.methods()).not.toContain('quirky.hosting/merge')
+  })
+
+  test('threads found for no pull request or another number block the merge', async () => {
+    let missingLookups = 0
+    const missing = await ship({
+      calls: {
+        'quirky.hosting/forBranch': () => {
+          missingLookups++
+          return missingLookups === 1
+            ? { kind: 'no-review', fetchedAt: 0 }
+            : { kind: 'found', fetchedAt: 0, review: { number: 7, state: 'open', headRefOid: HEAD, mergeQueueRequired: false } }
+        }
+      }
+    })
+    expect(await missing.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'the review threads on the pull request could not be read' })
+    expect(missing.methods()).not.toContain('quirky.hosting/checks')
+
+    let lookups = 0
+    const mismatched = await ship({
+      calls: {
+        'quirky.hosting/forBranch': () => {
+          lookups++
+          const number = lookups === 1 ? 8 : 7
+          return { kind: 'found', fetchedAt: 0, review: { number, state: 'open', headRefOid: HEAD, mergeQueueRequired: false } }
+        }
+      }
+    })
+    expect(await mismatched.shipping.merge('wt-1')).toEqual({ ok: false, reason: 'the review threads on the pull request could not be read' })
+    expect(mismatched.methods()).not.toContain('quirky.hosting/checks')
+  })
 })
 
 describe('shipping openPr', () => {
@@ -275,6 +348,31 @@ describe('shipping openPr', () => {
     expect(t.methods()).toContain('quirky.git/push')
     expect(t.calls.find((call) => call.method === 'quirky.hosting/create')?.params).toMatchObject({ draft: true, base: 'main', head: 'feature' })
     expect(t.states).toEqual(['pr-ready'])
+  })
+
+  test('push row uses main when the compare base is origin/main', async () => {
+    const t = await ship({ calls: { 'quirky.hosting/forBranch': () => ({ kind: 'no-review' }) } })
+    expect(await t.shipping.openPr('wt-1')).toEqual({ ok: true })
+    const push = t.app.store.outbox.list({ kind: 'push' })[0]
+    expect(push).toMatchObject({ state: 'done' })
+    expect(push?.payload.base).toBe('main')
+    expect(t.methods()).toContain('quirky.git/push')
+    expect(t.methods()).toContain('quirky.hosting/create')
+  })
+
+  test('push row omits its own base key when the compare base is absent', async () => {
+    const t = await ship({
+      calls: {
+        'quirky.git/compare': () => ({ status: 'invalid-base', base: null, entries: [] }),
+        'quirky.hosting/forBranch': () => ({ kind: 'no-review' })
+      }
+    })
+    expect(await t.shipping.openPr('wt-1')).toEqual({ ok: true })
+    const push = t.app.store.outbox.list({ kind: 'push' })[0]
+    expect(push).toMatchObject({ state: 'done' })
+    expect(Object.prototype.hasOwnProperty.call(push?.payload ?? {}, 'base')).toBe(false)
+    expect(t.methods()).toContain('quirky.git/push')
+    expect(t.methods()).toContain('quirky.hosting/create')
   })
 
   test('Local stops at a commit and Shadow does nothing', async () => {

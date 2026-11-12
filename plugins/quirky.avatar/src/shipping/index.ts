@@ -2,10 +2,11 @@ import type { AvatarApp, ShippingService, WorktreeState } from '../contracts'
 import { quoteAsData, sanitize } from '../sanitize'
 import { createDoneWhen } from './donewhen'
 import { looksFlaky, mergeReady, nextFlakyStep, predecessorsOf, stopAt } from './mergebar'
-import { branchName, createOutbox, readCompare, readHead, runCheck, shellQuote } from './outbox'
+import { branchName, createOutbox, handoffEpoch, readCompare, readHead, runCheck, sendRefusal, shellQuote } from './outbox'
 import { createReview } from './review'
 
 type Pr = { number: number; state: string; headSha: string | null; mergeQueueRequired: boolean }
+type PrLookup = { kind: 'found'; pr: Pr } | { kind: 'no-review' } | { kind: 'unavailable'; reason: string; message: string } | { kind: 'no-branch' }
 
 const GREEN = new Set(['success', 'neutral', 'skipped'])
 const FAILED = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'error'])
@@ -40,17 +41,49 @@ export function register(app: AvatarApp): () => void {
       return work(...args)
     }
 
-  const setState = (worktreeId: string, state: WorktreeState, note: string): void => app.services.handoff.setState(worktreeId, state, note)
+  const afterReconcileWithEpoch =
+    <A extends unknown[], R>(work: (worktreeId: string, epoch: number | null, ...args: A) => Promise<R>) =>
+    async (worktreeId: string, ...args: A): Promise<R> => {
+      const epoch = handoffEpoch(app, worktreeId)
+      await ready
+      return work(worktreeId, epoch, ...args)
+    }
 
-  async function findPr(worktreeId: string): Promise<Pr | null> {
-    const found = (await call('quirky.hosting/forBranch', { worktree: worktreeId, fresh: true })) as Record<string, unknown>
+  const setState = (worktreeId: string, state: WorktreeState, note: string): void => app.services.handoff.setState(worktreeId, state, note)
+  const mergeRefusal = (worktreeId: string, epoch: number | null): string | null => {
+    const refusal = sendRefusal(app, 'merge', worktreeId, epoch)
+    if (refusal === null || !refusal.startsWith('level ')) return refusal
+    const mandate = app.store.mandates.get(worktreeId)
+    return mandate === null ? refusal : `level ${mandate.level} stops at ${stopAt(mandate.level)}`
+  }
+
+  const handoffRefusal = (worktreeId: string, epoch: number | null): string | null => {
+    if (epoch === null || handoffEpoch(app, worktreeId) === null) return 'this worktree is not handed off'
+    if (handoffEpoch(app, worktreeId) !== epoch) return 'this worktree was taken back and handed off again'
+    return null
+  }
+
+  async function findPr(worktreeId: string): Promise<PrLookup> {
+    const { head, branch } = await readHead(app, worktreeId)
+    if (head === null || branch === null) return { kind: 'no-branch' }
+    const found = (await call('quirky.hosting/forBranch', { worktree: worktreeId, branch, headOid: head, fresh: true })) as Record<string, unknown>
+    if (found.kind === 'unavailable') {
+      return {
+        kind: 'unavailable',
+        reason: typeof found.reason === 'string' ? found.reason : 'unavailable',
+        message: typeof found.message === 'string' ? found.message : 'the pull request lookup is unavailable'
+      }
+    }
     const pr = typeof found.review === 'object' && found.review !== null ? (found.review as Record<string, unknown>) : null
-    if (found.kind !== 'found' || pr === null || typeof pr.number !== 'number') return null
+    if (found.kind !== 'found' || pr === null || typeof pr.number !== 'number') return { kind: 'no-review' }
     return {
-      number: pr.number,
-      state: typeof pr.state === 'string' ? pr.state : 'open',
-      headSha: typeof pr.headRefOid === 'string' ? pr.headRefOid : null,
-      mergeQueueRequired: pr.mergeQueueRequired === true
+      kind: 'found',
+      pr: {
+        number: pr.number,
+        state: typeof pr.state === 'string' ? pr.state : 'open',
+        headSha: typeof pr.headRefOid === 'string' ? pr.headRefOid : null,
+        mergeQueueRequired: pr.mergeQueueRequired === true
+      }
     }
   }
 
@@ -84,27 +117,39 @@ export function register(app: AvatarApp): () => void {
   }
 
   /** Handles failed required checks: one rerun of a flaky-looking failure, otherwise back to the worker. Returns the reason merging stopped. */
-  async function handleFailedChecks(worktreeId: string, pr: Pr, checkedSha: string | null, failed: Check[]): Promise<string> {
+  async function handleFailedChecks(worktreeId: string, pr: Pr, checkedSha: string | null, failed: Check[], epoch: number | null): Promise<string> {
     const journal = recentJournal(worktreeId)
     const green = journal.filter((entry) => entry.kind === 'event' && entry.data.checksGreen === true && entry.data.headSha === checkedSha)
     const reruns = journal.filter((entry) => entry.kind === 'event' && entry.data.flakyRerun === true && entry.data.headSha === checkedSha).length
     const { files } = await readCompare(app, worktreeId).catch(() => ({ files: [] as string[] }))
+    let refusal = mergeRefusal(worktreeId, epoch)
+    if (refusal !== null) return refusal
     const outputs = new Map<string, string | null>()
     const steps = []
     for (const check of failed) {
       const output = await failureOutput(worktreeId, pr.number, check)
+      refusal = mergeRefusal(worktreeId, epoch)
+      if (refusal !== null) return refusal
       outputs.set(check.name, output)
       const passedBeforeOnSha = green.some((entry) => Array.isArray(entry.data.names) && entry.data.names.includes(check.name))
       steps.push(nextFlakyStep({ looksFlaky: looksFlaky({ passedBeforeOnSha, failureOutput: output, diffFiles: files }), rerunsOnSha: reruns }))
     }
     const names = failed.map((check) => check.name).join(', ')
     if (steps.every((step) => step === 'rerun')) {
+      refusal = mergeRefusal(worktreeId, epoch)
+      if (refusal !== null) return refusal
       app.journal(worktreeId, 'event', { flakyRerun: true, headSha: checkedSha, checks: names })
+      refusal = mergeRefusal(worktreeId, epoch)
+      if (refusal !== null) return refusal
       await call('quirky.hosting/rerunChecks', { worktree: worktreeId, number: pr.number, failedOnly: true })
       return `required check ${names} looks flaky, rerunning once`
     }
     const detail = failed.map((check) => `${check.name}: ${outputs.get(check.name) ?? 'no output available'}`).join('\n')
+    refusal = mergeRefusal(worktreeId, epoch)
+    if (refusal !== null) return refusal
     setState(worktreeId, 'working', `required check failed: ${names}`)
+    refusal = mergeRefusal(worktreeId, epoch)
+    if (refusal !== null) return refusal
     await app.services.supervisor.send(worktreeId, `Required check ${names} failed on the pull request. Fix it and say when it is done.\n${quoteAsData('check output', detail.slice(-3000))}`)
     return `required check ${names} failed and went back to the worker`
   }
@@ -114,9 +159,12 @@ export function register(app: AvatarApp): () => void {
 
     startReview: afterReconcile((worktreeId: string) => review.startReview(worktreeId)),
 
-    judgeFinding: afterReconcile((worktreeId: string, findingId: string, valid: boolean, reason: string) => review.judgeFinding(worktreeId, findingId, valid, reason)),
+    judgeFinding: afterReconcileWithEpoch((worktreeId, epoch, findingId: string, valid: boolean, reason: string) =>
+      review.judgeFinding(worktreeId, findingId, valid, reason, epoch)),
 
-    openPr: afterReconcile(async (worktreeId: string) => {
+    openPr: afterReconcileWithEpoch(async (worktreeId, epoch) => {
+      const refusal = handoffRefusal(worktreeId, epoch)
+      if (refusal !== null) return fail(refusal)
       const mandate = app.store.mandates.get(worktreeId)
       if (mandate === null) return fail('no mandate for this worktree')
       const stop = stopAt(mandate.level)
@@ -127,23 +175,39 @@ export function register(app: AvatarApp): () => void {
       }
       try {
         const { head, branch } = await readHead(app, worktreeId)
+        let sendError = sendRefusal(app, 'push', worktreeId, epoch)
+        if (sendError !== null) return fail(sendError)
         const { base } = await readCompare(app, worktreeId)
+        sendError = sendRefusal(app, 'push', worktreeId, epoch)
+        if (sendError !== null) return fail(sendError)
         if (head === null || branch === null) return fail('the worktree has no branch with a commit to push')
-        const pushed = await outbox.run(outbox.enqueue('push', worktreeId, { headSha: head, target: branch, branch }).id)
+        const baseName = base === null ? null : branchName(base)
+        const pushRow = outbox.enqueue('push', worktreeId, {
+          headSha: head,
+          target: branch,
+          branch,
+          ...(baseName === null ? {} : { base: baseName })
+        })
+        const pushed = await outbox.run(pushRow.id)
+        sendError = sendRefusal(app, 'pr', worktreeId, epoch)
+        if (sendError !== null) return fail(sendError)
         if (pushed?.state !== 'done') return fail(String(pushed?.result?.error ?? 'the push did not finish'))
         const title = mandate.goal.split('\n')[0]?.trim() || 'Update'
-        const opened = await outbox.run(
-          outbox.enqueue('pr', worktreeId, {
-            headSha: head,
-            target: branch,
-            branch,
-            title: sanitize(title).slice(0, 200),
-            body: sanitize(mandate.goal),
-            draft: true,
-            head: branch,
-            ...(base === null ? {} : { base: branchName(base) })
-          }).id
-        )
+        sendError = sendRefusal(app, 'pr', worktreeId, epoch)
+        if (sendError !== null) return fail(sendError)
+        const prRow = outbox.enqueue('pr', worktreeId, {
+          headSha: head,
+          target: branch,
+          branch,
+          title: sanitize(title).slice(0, 200),
+          body: sanitize(mandate.goal),
+          draft: true,
+          head: branch,
+          ...(baseName === null ? {} : { base: baseName })
+        })
+        const opened = await outbox.run(prRow.id)
+        sendError = sendRefusal(app, 'pr', worktreeId, epoch)
+        if (sendError !== null) return fail(sendError)
         if (opened?.state !== 'done') return fail(String(opened?.result?.error ?? 'the pull request was not opened'))
         if (stop === 'draft-pr') setState(worktreeId, 'pr-ready', 'draft pull request open')
         return { ok: true }
@@ -152,20 +216,34 @@ export function register(app: AvatarApp): () => void {
       }
     }),
 
-    merge: afterReconcile(async (worktreeId: string) => {
+    merge: afterReconcileWithEpoch(async (worktreeId, epoch) => {
+      let refusal = mergeRefusal(worktreeId, epoch)
+      if (refusal !== null) return fail(refusal)
       const mandate = app.store.mandates.get(worktreeId)
       if (mandate === null) return fail('no mandate for this worktree')
-      if (mandate.level !== 'full') return fail(`level ${mandate.level} stops at ${stopAt(mandate.level)}`)
       try {
         const intake = await review.intakeComments(worktreeId)
-        const pr = await findPr(worktreeId)
-        if (pr === null) return fail('there is no pull request for this worktree')
+        refusal = mergeRefusal(worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
+        const lookup = await findPr(worktreeId)
+        refusal = mergeRefusal(worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
+        if (lookup.kind === 'no-branch') return fail('the worktree has no branch')
+        if (lookup.kind === 'unavailable') return fail(`could not look up the pull request (${lookup.reason}): ${lookup.message}`)
+        if (lookup.kind === 'no-review') return fail('there is no pull request for this worktree')
+        const pr = lookup.pr
+        if (intake.number !== pr.number) return fail('the review threads on the pull request could not be read')
+        if (intake.partial) return fail('the review threads on the pull request could not all be read')
+
         const raw = (await call('quirky.hosting/checks', { worktree: worktreeId, number: pr.number, noCache: true })) as Record<string, unknown>
+        refusal = mergeRefusal(worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
+        if (raw.partial === true) return fail('the checks on the pull request could not all be read')
         const checks = readChecks(raw)
         const checkedSha = typeof raw.headSha === 'string' ? raw.headSha : null
 
         const failed = checks.filter((check) => check.conclusion !== null && FAILED.has(check.conclusion))
-        if (failed.length > 0) return fail(await handleFailedChecks(worktreeId, pr, checkedSha, failed))
+        if (failed.length > 0) return fail(await handleFailedChecks(worktreeId, pr, checkedSha, failed, epoch))
         if (checks.length > 0 && checks.every((check) => check.conclusion !== null && GREEN.has(check.conclusion))) {
           const names = checks.map((check) => check.name)
           const known = recentJournal(worktreeId).some((entry) => entry.kind === 'event' && entry.data.checksGreen === true && entry.data.headSha === checkedSha && names.every((name) => Array.isArray(entry.data.names) && entry.data.names.includes(name)))
@@ -188,27 +266,39 @@ export function register(app: AvatarApp): () => void {
           mergedIds: app.store.handoffs.list({ state: 'merged' }).map((row) => row.worktreeId)
         })
         if (!verdict.ready) {
+          refusal = mergeRefusal(worktreeId, epoch)
+          if (refusal !== null) return fail(refusal)
           if (findings.some((finding) => finding.valid === null)) app.services.brain.wake()
           return fail(verdict.reasons.join('; '))
         }
 
+        refusal = mergeRefusal(worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         setState(worktreeId, 'merge-ready', 'the merge bar is met')
         const reviewedSha = pr.headSha as string
         if (pr.state === 'draft') {
-          const opened = await outbox.run(outbox.enqueue('pr-ready', worktreeId, { headSha: reviewedSha, target: String(pr.number), number: pr.number }).id)
+          refusal = mergeRefusal(worktreeId, epoch)
+          if (refusal !== null) return fail(refusal)
+          const readyRow = outbox.enqueue('pr-ready', worktreeId, { headSha: reviewedSha, target: String(pr.number), number: pr.number })
+          const opened = await outbox.run(readyRow.id)
+          refusal = mergeRefusal(worktreeId, epoch)
+          if (refusal !== null) return fail(refusal)
           if (opened?.state !== 'done') return fail(String(opened?.result?.error ?? 'the pull request could not be marked ready'))
         }
-        const merged = await outbox.run(
-          outbox.enqueue('merge', worktreeId, {
-            headSha: reviewedSha,
-            target: String(pr.number),
-            number: pr.number,
-            reviewedSha,
-            checkedSha: reviewedSha,
-            method: 'squash',
-            action: pr.mergeQueueRequired ? 'queue' : 'direct'
-          }).id
-        )
+        refusal = mergeRefusal(worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
+        const mergeRow = outbox.enqueue('merge', worktreeId, {
+          headSha: reviewedSha,
+          target: String(pr.number),
+          number: pr.number,
+          reviewedSha,
+          checkedSha: reviewedSha,
+          method: 'squash',
+          action: pr.mergeQueueRequired ? 'queue' : 'direct'
+        })
+        const merged = await outbox.run(mergeRow.id)
+        refusal = mergeRefusal(worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         if (merged?.state !== 'done') return fail(String(merged?.result?.error ?? 'the merge did not finish'))
         if (merged.result?.state === 'merged') setState(worktreeId, 'merged', 'merged')
         return { ok: true, ...(merged.result?.state === 'merged' ? {} : { reason: String(merged.result?.state ?? 'pending') }) }
@@ -217,30 +307,48 @@ export function register(app: AvatarApp): () => void {
       }
     }),
 
-    mergeMainIn: afterReconcile(async (worktreeId: string) => {
+    mergeMainIn: afterReconcileWithEpoch(async (worktreeId, epoch) => {
+      let refusal = handoffRefusal(worktreeId, epoch)
+      if (refusal !== null) return fail(refusal)
       const mandate = app.store.mandates.get(worktreeId)
       if (mandate === null) return fail('no mandate for this worktree')
       if (stopAt(mandate.level) === 'none') return fail('shadow level does not ship')
       try {
         const { head } = await readHead(app, worktreeId)
+        refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         const { base } = await readCompare(app, worktreeId)
+        refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         if (head === null || base === null) return fail('there is no commit or base branch to merge into')
         const defaultBranch = branchName(base)
+        refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         await call('quirky.git/fetch', { worktree: worktreeId })
+        refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         const tip = await runCheck(app, worktreeId, `git rev-parse ${shellQuote(`origin/${defaultBranch}`)}`)
+        refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         if (!tip.ran || !tip.pass) return fail('could not read the default branch tip')
 
         const recorded = outbox.enqueue('merge-main-in', worktreeId, { headSha: head, target: `${defaultBranch}@${tip.stdout.trim()}`, defaultBranch })
         const row = recorded.state === 'done' ? recorded : await outbox.run(recorded.id)
+        refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         if (row?.state !== 'done') return fail(String(row?.result?.error ?? 'merging the default branch did not finish'))
         if (row.result?.conflict !== true) return { ok: true }
 
         const files = (Array.isArray(row.result.files) ? row.result.files : []).map(String).sort()
         if (recorded.state === 'done') return fail(`conflict in ${files.join(', ')}`)
+        refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+        if (refusal !== null) return fail(refusal)
         const previous = recentJournal(worktreeId).find((entry) => entry.kind === 'outbox' && Array.isArray(entry.data.mergeMainConflict))
         const previousFiles = ((previous?.data.mergeMainConflict as unknown[] | undefined) ?? []).map(String).sort()
         app.journal(worktreeId, 'outbox', { kind: 'merge-main-in', mergeMainConflict: files })
         if (previousFiles.length > 0 && previousFiles.join('\n') === files.join('\n')) {
+          refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+          if (refusal !== null) return fail(refusal)
           app.needs.add({
             worktreeId,
             kind: 'merge-blocked',
@@ -249,6 +357,8 @@ export function register(app: AvatarApp): () => void {
             actions: ['restart', 'take-back']
           })
         } else {
+          refusal = sendRefusal(app, 'merge-main-in', worktreeId, epoch)
+          if (refusal !== null) return fail(refusal)
           await app.services.supervisor.send(
             worktreeId,
             `Merging origin/${defaultBranch} into this branch conflicts. Merge it yourself and resolve these files, without rebasing or force-pushing.\n${quoteAsData('conflicted files', files.join('\n'))}`

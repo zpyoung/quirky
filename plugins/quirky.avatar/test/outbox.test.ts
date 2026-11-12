@@ -1,17 +1,43 @@
 import { createHash } from 'node:crypto'
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import type { OutboxRow } from '../src/contracts'
 import { register } from '../src/shipping/index'
-import { createOutbox, outboxKey } from '../src/shipping/outbox'
-import { type FakeCalls, makeTestApp } from './support'
+import { createOutbox, outboxKey, type Outbox } from '../src/shipping/outbox'
+import { forBranchFake, handOff, lsRemote, manifestChecked, readyPushTarget, takeBack } from './shipping-support'
+import { type FakeCalls, makeTestApp, sampleMandate } from './support'
 
 const SHA = 'a'.repeat(40)
 const OTHER = 'b'.repeat(40)
 
 const check = (stdout: string, pass = true) => ({ ran: true, pass, exitCode: pass ? 0 : 1, timedOut: false, aborted: false, stdoutTail: stdout, stderrTail: '' })
 
+const manifestViolations: string[][] = []
+
+afterEach(() => {
+  const observed = manifestViolations.flat()
+  manifestViolations.length = 0
+  expect(observed).toEqual([])
+})
+
 function setup(fakeCalls: FakeCalls = {}) {
-  const t = makeTestApp({ fakeCalls })
+  const checked = manifestChecked({
+    'quirky.git/pushTarget': () => readyPushTarget(),
+    'quirky.checks/run': (params) => {
+      const command = String(params.command ?? '')
+      if (command.includes('ls-remote')) {
+        return check(command.includes('--symref')
+          ? lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER })
+          : `${OTHER}\trefs/heads/feature\n`)
+      }
+      return check('')
+    },
+    'quirky.hosting/forBranch': forBranchFake({ branch: 'feature', review: { number: 7, state: 'open' } }),
+    ...fakeCalls
+  })
+  manifestViolations.push(checked.violations)
+  const t = makeTestApp({ fakeCalls: checked.fakes })
+  handOff(t.app)
+  t.app.store.mandates.put(sampleMandate({ level: 'full' }))
   return { ...t, outbox: createOutbox(t.app) }
 }
 
@@ -19,6 +45,10 @@ const mergeRow = (t: ReturnType<typeof setup>, extra: Record<string, unknown> = 
   t.outbox.enqueue('merge', 'wt-1', { headSha: SHA, target: '7', number: 7, reviewedSha: SHA, checkedSha: SHA, method: 'squash', action: 'direct', ...extra })
 
 const methods = (calls: { method: string }[]) => calls.map((call) => call.method)
+function deferred() {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  return { promise, resolve }
+}
 
 describe('outbox enqueue', () => {
   test('records the row before any call and keys it by kind, worktree, head and target', () => {
@@ -54,7 +84,7 @@ describe('outbox run', () => {
   test('marks the row running during the call and done with the result after', async () => {
     let seen: OutboxRow['state'] | null = null
     const t = setup({
-      'quirky.checks/run': () => check(''),
+      'quirky.checks/run': () => check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER })),
       'quirky.git/push': () => {
         seen = t.app.store.outbox.list()[0]?.state ?? null
         return { remote: 'origin', branch: 'feature', upstream: 'origin/feature' }
@@ -68,8 +98,11 @@ describe('outbox run', () => {
   })
 
   test('never repeats a row that is done, running or failed', async () => {
-    const t = setup({ 'quirky.git/push': () => ({ remote: 'origin', branch: 'f', upstream: 'origin/f' }), 'quirky.checks/run': () => check('') })
-    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'f', branch: 'f' })
+    const t = setup({
+      'quirky.git/push': () => ({ remote: 'origin', branch: 'feature', upstream: 'origin/feature' }),
+      'quirky.checks/run': () => check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER }))
+    })
+    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature' })
     await t.outbox.run(row.id)
     await t.outbox.run(row.id)
     expect(methods(t.calls).filter((method) => method === 'quirky.git/push')).toHaveLength(1)
@@ -81,7 +114,7 @@ describe('outbox run', () => {
   test('two concurrent runs of one row push once', async () => {
     let pushes = 0
     const t = setup({
-      'quirky.checks/run': () => check(''),
+      'quirky.checks/run': () => check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER })),
       'quirky.git/push': async () => {
         pushes++
         await Promise.resolve()
@@ -96,14 +129,24 @@ describe('outbox run', () => {
   })
 
   test('a throwing call leaves the row failed with the error', async () => {
-    const t = setup({ 'quirky.checks/run': () => check(''), 'quirky.git/push': () => { throw new Error('rejected') } })
-    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'f', branch: 'f' })
+    const t = setup({
+      'quirky.checks/run': () => check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER })),
+      'quirky.git/push': () => { throw new Error('rejected') }
+    })
+    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature' })
     expect(await t.outbox.run(row.id)).toMatchObject({ state: 'failed', result: { error: 'rejected' } })
   })
 
   test('checks the remote before pushing and skips a push that already landed', async () => {
-    const t = setup({ 'quirky.checks/run': () => check(`${SHA}\trefs/heads/f\n`) })
-    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'f', branch: 'f' })
+    const t = setup({
+      'quirky.checks/run': (params) => {
+        const command = String(params.command ?? '')
+        return check(command.includes('--symref')
+          ? lsRemote({ defaultBranch: 'main', branch: 'feature', sha: SHA })
+          : `${SHA}\trefs/heads/feature\n`)
+      }
+    })
+    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature' })
     expect(await t.outbox.run(row.id)).toMatchObject({ state: 'done' })
     expect(methods(t.calls)).not.toContain('quirky.git/push')
   })
@@ -231,6 +274,8 @@ describe('outbox reconcile on activation', () => {
     })
     const push = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'f', branch: 'f' })
     const pr = t.outbox.enqueue('pr', 'wt-1', { headSha: SHA, target: 'f', branch: 'f', title: 'T' })
+    handOff(t.app, 'wt-2')
+    t.app.store.mandates.put(sampleMandate({ worktreeId: 'wt-2', level: 'full' }))
     const stale = t.outbox.enqueue('push', 'wt-2', { headSha: OTHER, target: 'g', branch: 'g' })
     for (const row of [push, pr, stale]) t.app.store.outbox.put({ ...row, state: 'running' })
     await t.outbox.reconcile()
@@ -290,6 +335,8 @@ describe('outbox cancel', () => {
     const recorded = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'a' })
     const running = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'b' })
     const done = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'c' })
+    handOff(t.app, 'wt-2')
+    t.app.store.mandates.put(sampleMandate({ worktreeId: 'wt-2', level: 'full' }))
     const other = t.outbox.enqueue('push', 'wt-2', { headSha: SHA, target: 'a' })
     t.app.store.outbox.put({ ...running, state: 'running' })
     t.app.store.outbox.put({ ...done, state: 'done', result: {} })
@@ -372,5 +419,244 @@ describe('shipping registration (SC-23)', () => {
     const dispose = register(t.app)
     expect(typeof dispose).toBe('function')
     dispose()
+  })
+})
+
+describe('creation push safety', () => {
+  const push = (t: { outbox: Outbox }, payload: Record<string, unknown> = {}) =>
+    t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature', ...payload })
+
+  test('checks the creation target and remote default before pushing under its own name', async () => {
+    const reply = { remote: 'origin', branch: 'feature', upstream: 'origin/feature' }
+    const t = setup({ 'quirky.git/push': () => reply })
+    expect(await t.outbox.run(push(t).id)).toMatchObject({ state: 'done', result: reply })
+    expect(t.calls).toEqual([
+      { method: 'quirky.git/pushTarget', params: { worktree: 'wt-1', purpose: 'creation' } },
+      { method: 'quirky.checks/run', params: { worktree: 'wt-1', command: "git ls-remote --symref 'origin' HEAD 'refs/heads/feature'", timeoutSeconds: 60 } },
+      { method: 'quirky.git/push', params: { worktree: 'wt-1', purpose: 'creation', expectedHead: SHA, expectedBranch: 'feature' } }
+    ])
+  })
+
+  test('fails a stale-target push without treating it as an unknown outcome', async () => {
+    const message = 'The local branch or HEAD changed since push-target validation.'
+    const t = setup({
+      'quirky.git/push': () => { throw Object.assign(new Error(message), { data: { reason: 'stale-target' } }) }
+    })
+    const row = push(t)
+    expect(await t.outbox.run(row.id)).toMatchObject({
+      state: 'failed', result: { error: `push refused (stale-target): ${message}` }
+    })
+    expect(t.app.store.outbox.get(row.id)?.state).toBe('failed')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).find((entry) => entry.kind === 'outbox')?.data.note).toBe('failed')
+  })
+
+  test.each([
+    ['branch_mismatch', 'The configured creation push ref is not the current branch.'],
+    ['unavailable', 'The remote is unavailable.']
+  ])('refuses an unready target (%s)', async (reason, message) => {
+    const t = setup({ 'quirky.git/pushTarget': () => ({ ready: false, reason, message }) })
+    expect(await t.outbox.run(push(t).id)).toMatchObject({ state: 'failed', result: { error: `push refused (${reason}): ${message}` } })
+    expect(methods(t.calls)).toEqual(['quirky.git/pushTarget'])
+  })
+
+  test('refuses the default branch of the selected remote', async () => {
+    const t = setup({ 'quirky.git/pushTarget': () => readyPushTarget({ branch: 'main', localBranch: 'main' }) })
+    expect(await t.outbox.run(push(t, { branch: 'main', target: 'main' }).id)).toMatchObject({
+      state: 'failed', result: { error: 'push refused: main is the default branch of origin' }
+    })
+    expect(methods(t.calls)).toEqual(['quirky.git/pushTarget', 'quirky.checks/run'])
+  })
+
+  test('refuses the compare base without making any call', async () => {
+    const t = setup()
+    expect(await t.outbox.run(push(t, { branch: 'develop', target: 'develop', base: 'develop' }).id)).toMatchObject({
+      state: 'failed', result: { error: 'push refused: develop is the branch this worktree is compared against' }
+    })
+    expect(t.calls).toEqual([])
+  })
+
+  test.each([
+    [{ localHead: OTHER }, `push refused: HEAD is ${OTHER}, not the recorded ${SHA}`],
+    [{ localBranch: 'other' }, 'push refused: the worktree is on other, not feature'],
+    [{ branch: 'main' }, 'push refused: the push would go to origin/main, not origin/feature']
+  ])('refuses a changed target %j', async (overrides, error) => {
+    const t = setup({ 'quirky.git/pushTarget': () => readyPushTarget(overrides) })
+    expect(await t.outbox.run(push(t).id)).toMatchObject({ state: 'failed', result: { error } })
+    expect(methods(t.calls)).toEqual(['quirky.git/pushTarget'])
+  })
+
+  test('keeps the row recorded when the remote default cannot be read', async () => {
+    const t = setup({ 'quirky.checks/run': () => check(lsRemote({ defaultBranch: null, branch: 'feature', sha: OTHER })) })
+    const row = push(t)
+    expect(await t.outbox.run(row.id)).toMatchObject({ state: 'recorded' })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })[0]?.data).toMatchObject({
+      note: 'not run: could not check what happened', error: 'could not read the default branch of origin'
+    })
+    expect(methods(t.calls)).not.toContain('quirky.git/push')
+  })
+
+  test.each(['not-run', 'nonzero', 'target-error'])('does not push after an unknown lookup (%s)', async (failure) => {
+    const t = setup({
+      'quirky.git/pushTarget': () => {
+        if (failure === 'target-error') throw new Error('offline')
+        return readyPushTarget()
+      },
+      'quirky.checks/run': () => ({ ...check('', false), ran: failure !== 'not-run' })
+    })
+    expect(await t.outbox.run(push(t).id)).toMatchObject({ state: 'recorded' })
+    expect(methods(t.calls)).not.toContain('quirky.git/push')
+  })
+
+  test('reads the destination ref rather than the remote HEAD when checking a prior push', async () => {
+    const t = setup({ 'quirky.checks/run': () => check(lsRemote({ branch: 'feature', sha: SHA })) })
+    expect(await t.outbox.run(push(t).id)).toMatchObject({
+      state: 'done', result: { remote: 'origin', branch: 'feature', remoteSha: SHA }
+    })
+    expect(methods(t.calls)).toEqual(['quirky.git/pushTarget', 'quirky.checks/run'])
+  })
+
+  test.each([{ branch: undefined }, { headSha: undefined }])('refuses a push without its recorded identity %j', async (payload) => {
+    const t = setup()
+    expect(await t.outbox.run(push(t, payload).id)).toMatchObject({
+      state: 'failed', result: { error: 'push needs a branch and a commit' }
+    })
+    expect(t.calls).toEqual([])
+  })
+})
+
+describe('outbox send authorization', () => {
+  test('does not re-record a refused action while the worktree is not handed off', async () => {
+    const t = setup()
+    const handoff = t.app.store.handoffs.get('wt-1')!
+    t.app.store.handoffs.put({ ...handoff, active: false })
+    const payload = { headSha: SHA, target: 'feature', branch: 'feature' }
+    const row = t.outbox.enqueue('push', 'wt-1', payload)
+    expect(row).toMatchObject({ state: 'cancelled', result: { error: 'this worktree is not handed off' } })
+    expect(t.outbox.enqueue('push', 'wt-1', payload)).toEqual(row)
+    const failed = { ...row, state: 'failed' as const, result: { error: 'previous failure' } }
+    t.app.store.outbox.put(failed)
+    expect(t.outbox.enqueue('push', 'wt-1', payload)).toEqual(failed)
+    await t.outbox.run(row.id)
+    expect(t.calls).toEqual([])
+  })
+
+  test('a new hand-off records the same cancelled action under its new epoch', async () => {
+    const t = setup({ 'quirky.git/push': () => ({ remote: 'origin', branch: 'feature' }) })
+    const payload = { headSha: SHA, target: 'feature', branch: 'feature' }
+    const row = t.outbox.enqueue('push', 'wt-1', payload)
+    t.outbox.cancel('wt-1')
+    handOff(t.app, 'wt-1', 2)
+    const next = t.outbox.enqueue('push', 'wt-1', payload)
+    expect(next).toMatchObject({ id: row.id, state: 'recorded', payload: { handedOffAt: 2 } })
+    expect(await t.outbox.run(next.id)).toMatchObject({ state: 'done' })
+  })
+
+  test('refuses a recorded push if the mandate is lowered while remote evidence is checking', async () => {
+    const entered = deferred()
+    const release = deferred()
+    const t = setup({
+      'quirky.checks/run': async (params) => {
+        if (String(params.command ?? '').includes('ls-remote')) {
+          entered.resolve()
+          await release.promise
+          return check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER }))
+        }
+        return check('')
+      },
+      'quirky.git/push': () => ({ remote: 'origin', branch: 'feature' })
+    })
+    const handoff = t.app.store.handoffs.get('wt-1')!
+    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature' })
+    const running = t.outbox.run(row.id)
+    await entered.promise
+    expect(t.app.store.outbox.get(row.id)?.state).toBe('running')
+    t.app.store.mandates.put(sampleMandate({ level: 'local' }))
+    expect(t.app.store.handoffs.get('wt-1')).toEqual(handoff)
+    expect(t.app.store.handoffs.get('wt-1')?.active).toBe(true)
+    release.resolve()
+    expect(await running).toMatchObject({
+      state: 'cancelled', result: { error: 'level local does not allow push' }
+    })
+    expect(t.app.store.outbox.get(row.id)).toMatchObject({
+      state: 'cancelled', result: { error: 'level local does not allow push' }
+    })
+    expect(methods(t.calls)).toContain('quirky.checks/run')
+    expect(methods(t.calls)).not.toContain('quirky.git/push')
+  })
+
+  test('does not let an old held push refusal overwrite a same-key row from a new hand-off', async () => {
+    const entered = deferred()
+    const release = deferred()
+    let holdEvidence = true
+    const t = setup({
+      'quirky.checks/run': async (params) => {
+        if (String(params.command ?? '').includes('ls-remote')) {
+          if (holdEvidence) {
+            holdEvidence = false
+            entered.resolve()
+            await release.promise
+          }
+          return check(lsRemote({ defaultBranch: 'main', branch: 'feature', sha: OTHER }))
+        }
+        return check('')
+      },
+      'quirky.git/push': () => ({ remote: 'origin', branch: 'feature' })
+    })
+    const payload = { headSha: SHA, target: 'feature', branch: 'feature' }
+    const old = t.outbox.enqueue('push', 'wt-1', payload)
+    const oldRun = t.outbox.run(old.id)
+    await entered.promise
+    expect(t.app.store.outbox.get(old.id)?.state).toBe('running')
+    t.app.services.shipping.cancelOutbox = (worktreeId) => t.outbox.cancel(worktreeId)
+    expect(takeBack(t.app)).toBe(1)
+    handOff(t.app, 'wt-1', 2)
+    const current = t.outbox.enqueue('push', 'wt-1', payload)
+    expect(current).toMatchObject({
+      id: old.id, state: 'recorded', payload: { ...payload, handedOffAt: 2 }, result: null
+    })
+    release.resolve()
+    expect(await oldRun).toMatchObject({
+      state: 'cancelled', result: { error: 'this worktree was taken back and handed off again' }
+    })
+    expect(t.app.store.outbox.get(current.id)).toEqual(current)
+    expect(methods(t.calls)).not.toContain('quirky.git/push')
+
+    const finished = await t.outbox.run(current.id)
+    expect(finished).toMatchObject({
+      state: 'done', payload: { ...payload, handedOffAt: 2 }, result: { remote: 'origin', branch: 'feature' }
+    })
+    expect(methods(t.calls)).toContain('quirky.git/push')
+  })
+
+  test.each([
+    ['merge', 'own-branch'],
+    ['thread-reply', 'local'],
+    ['push', 'shadow'],
+    ['pr-ready', 'own-branch'],
+    ['merge-main-in', 'shadow']
+  ] as const)('refuses a directly run %s at %s', async (kind, level) => {
+    const t = setup()
+    const payload = kind === 'merge-main-in'
+      ? { headSha: SHA, target: `main@${SHA}`, defaultBranch: 'main' }
+      : { headSha: SHA, target: '7', number: 7 }
+    const row = t.outbox.enqueue(kind, 'wt-1', payload)
+    expect(row.state).toBe('recorded')
+    t.app.store.mandates.put(sampleMandate({ level }))
+    expect(await t.outbox.run(row.id)).toMatchObject({
+      state: 'cancelled', result: { error: `level ${level} does not allow ${kind}` }
+    })
+    expect(t.calls).toEqual([])
+  })
+
+  test.each(['recorded', 'running'] as const)('reconcile cancels an absent %s action from a replaced hand-off', async (state) => {
+    const t = setup()
+    const row = t.outbox.enqueue('push', 'wt-1', { headSha: SHA, target: 'feature', branch: 'feature' })
+    t.app.store.outbox.put({ ...row, state })
+    handOff(t.app, 'wt-1', 2)
+    await t.outbox.reconcile()
+    expect(t.app.store.outbox.get(row.id)).toMatchObject({
+      state: 'cancelled', result: { error: 'this worktree was taken back and handed off again' }
+    })
+    expect(methods(t.calls)).not.toContain('quirky.git/push')
   })
 })
