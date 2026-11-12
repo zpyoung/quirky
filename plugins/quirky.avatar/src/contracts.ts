@@ -46,6 +46,12 @@ export type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Man
 
 /** One handed-off worktree's lifecycle row; `active` is false after take-back while the mandate is kept. */
 export type HandoffRow = { worktreeId: string; state: WorktreeState; sessionId: string | null; active: boolean; handedOffAt: number; takenBackAt: number | null }
+
+/** A tool call seen in a session record with no receipt yet, kept whole so it can still be judged after a restart. */
+export type PendingRecordCall = { agent: string; cwd: string; toolName: string; toolInput: unknown; at: number; fingerprint: string }
+
+/** How far the records job has read one session's record, and the calls from it still waiting for a receipt. */
+export type RecordCursor = { sessionId: string; worktreeId: string; path: string; readOffset: number; pending: PendingRecordCall[]; updatedAt: number }
 /** What the gate decided for one call, kept so the session record can be checked against it. */
 export type Receipt = { id: string; fingerprint: string; sessionId: string; toolName: string; at: number; outcome: GateOutcome; step: StepId | null }
 /** An answer the person gave after the gate had already answered the held call, applied when the same call is retried. */
@@ -69,6 +75,7 @@ export type TableAccess<T> = {
 export type AvatarStore = {
   mandates: TableAccess<Mandate>
   handoffs: TableAccess<HandoffRow>
+  recordCursors: TableAccess<RecordCursor>
   sharedGoals: TableAccess<SharedGoal>
   receipts: TableAccess<Receipt>
   approvals: TableAccess<Approval>

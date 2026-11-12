@@ -1,6 +1,6 @@
 import type { StoreMigration } from '@quirky/protocol'
 
-/** The avatar store's schema, one step; JSON columns hold arrays and objects as text. */
+/** The avatar store's schema, built in ordered steps; JSON columns hold arrays and objects as text. */
 export const avatarMigrations: StoreMigration[] = [
   `
   CREATE TABLE mandates (
@@ -118,6 +118,17 @@ export const avatarMigrations: StoreMigration[] = [
     started_at INTEGER NOT NULL,
     ended_at INTEGER,
     end_tokens INTEGER
+  );
+  `,
+
+  `
+  CREATE TABLE record_cursors (
+    session_id TEXT PRIMARY KEY,
+    worktree_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    read_offset INTEGER NOT NULL,
+    pending TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
   );
   `
 ]

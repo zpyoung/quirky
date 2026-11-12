@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
 import { avatarMigrations } from '../store-migrations'
 import { callFingerprint } from '../src/fingerprint'
 import { createAvatarStore } from '../src/store'
@@ -28,6 +32,24 @@ describe('avatar store tables', () => {
     expect(store.handoffs.list({ takenBackAt: null }).map((row) => row.worktreeId)).toEqual(['a'])
     expect(store.handoffs.delete('a')).toBe(true)
     expect(store.handoffs.delete('a')).toBe(false)
+  })
+
+  test('record cursors round-trip, upsert and delete by session', () => {
+    const store = fresh()
+    const row = {
+      sessionId: 's',
+      worktreeId: 'a',
+      path: '/t.jsonl',
+      readOffset: 42,
+      pending: [{ agent: 'codex', cwd: '/w', toolName: 'shell', toolInput: { command: ['ls', '-la'] }, at: 7, fingerprint: 'f' }],
+      updatedAt: 9
+    }
+    store.recordCursors.put(row)
+    expect(store.recordCursors.get('s')).toEqual(row)
+    store.recordCursors.put({ ...row, readOffset: 50 })
+    expect(store.recordCursors.list()).toEqual([{ ...row, readOffset: 50 }])
+    expect(store.recordCursors.delete('s')).toBe(true)
+    expect(store.recordCursors.delete('s')).toBe(false)
   })
 
   test('every other table round-trips a row', () => {
@@ -87,9 +109,40 @@ describe('avatar store tables', () => {
     const plugin = memoryPluginStore()
     const tables = plugin.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").map((row) => row.name)
     expect(tables.sort()).toEqual(
-      ['approvals', 'brain_sessions', 'findings', 'guesses', 'handoffs', 'journal', 'late_answers', 'mandates', 'needs_you', 'outbox', 'receipts', 'shared_goals', 'stuck'].sort()
+      ['approvals', 'brain_sessions', 'findings', 'guesses', 'handoffs', 'journal', 'late_answers', 'mandates', 'needs_you', 'outbox', 'receipts', 'record_cursors', 'shared_goals', 'stuck'].sort()
     )
     expect(avatarMigrations.length).toBeGreaterThan(0)
+  })
+
+  test('upgrading from the first migration preserves handoffs and journal rows', () => {
+    const home = mkdtempSync(join(tmpdir(), 'quirky-avatar-store-'))
+    try {
+      const { handoff, journalEntry } = (() => {
+        const first = openPluginStore({ home, pluginId: 'quirky.avatar', migrations: avatarMigrations.slice(0, 1), isActive: () => true })
+        try {
+          const store = createAvatarStore(first.store)
+          const handoff = { worktreeId: 'a', state: 'working' as const, sessionId: 's', active: true, handedOffAt: 5, takenBackAt: null }
+          store.handoffs.put(handoff)
+          const journalEntry = store.appendJournal({ at: 7, worktreeId: 'a', kind: 'handoff', data: { goal: 'preserve me' } })
+          return { handoff, journalEntry }
+        } finally {
+          first.close()
+        }
+      })()
+
+      const upgraded = openPluginStore({ home, pluginId: 'quirky.avatar', migrations: avatarMigrations, isActive: () => true })
+      try {
+        const store = createAvatarStore(upgraded.store)
+        expect(upgraded.store.version).toBe(avatarMigrations.length)
+        expect(store.handoffs.get('a')).toEqual(handoff)
+        expect(store.journalSince(0)).toEqual([journalEntry])
+        expect(store.recordCursors.list()).toEqual([])
+      } finally {
+        upgraded.close()
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 })
 
