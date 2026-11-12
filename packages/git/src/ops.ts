@@ -29,7 +29,7 @@ const nonEmpty = (lines: string[]): string[] => lines.filter((l) => l.length > 0
 
 /** Every `git worktree list --porcelain` entry (prunable and missing-folder ones included), main first, bare skipped. */
 export async function listRegistrations(repo: string): Promise<GitRegistration[]> {
-  const out = await git(repo, ['worktree', 'list', '--porcelain'])
+  const out = await git(repo, ['worktree', 'list', '--porcelain'], { readOnly: true })
   const result: GitRegistration[] = []
   let isFirst = true
   for (const block of out.split(/\n\n+/)) {
@@ -60,18 +60,18 @@ export async function listRegistrations(repo: string): Promise<GitRegistration[]
 
 /** Whether HEAD points at a commit (false in a freshly initialised repo). */
 export async function hasCommits(repo: string): Promise<boolean> {
-  return (await runGit(repo, ['rev-parse', '--verify', '--quiet', 'HEAD'])).exitCode === 0
+  return (await runGit(repo, ['rev-parse', '--verify', '--quiet', 'HEAD'], { readOnly: true })).exitCode === 0
 }
 
 /** Whether the fully qualified ref (`refs/heads/x`) exists. */
 export async function refExists(repo: string, fullRef: string): Promise<boolean> {
-  return (await runGit(repo, ['show-ref', '--verify', '--quiet', fullRef])).exitCode === 0
+  return (await runGit(repo, ['show-ref', '--verify', '--quiet', fullRef], { readOnly: true })).exitCode === 0
 }
 
 /** The full sha `rev` resolves to as a commit, or null when it does not. */
 export async function resolveCommit(repo: string, rev: string): Promise<string | null> {
   if (rev.startsWith('-')) return null
-  const r = await runGit(repo, ['rev-parse', '--verify', '--quiet', `${rev}^{commit}`])
+  const r = await runGit(repo, ['rev-parse', '--verify', '--quiet', `${rev}^{commit}`], { readOnly: true })
   if (r.exitCode !== 0) return null
   return text(r.stdout).trim() || null
 }
@@ -91,7 +91,7 @@ export async function detectDefaultBase(repo: string): Promise<string | null> {
       'refs/heads/main',
       'refs/heads/master'
     ],
-    { timeoutMs: 15000 }
+    { timeoutMs: 15000, readOnly: true }
   )
   if (r.exitCode !== 0) return null
   const found = new Set<string>()
@@ -116,14 +116,14 @@ export async function resolveBaseRef(repo: string, name: string): Promise<string
 
 /** Names of the configured remotes. */
 export async function listRemotes(repo: string): Promise<string[]> {
-  return nonEmpty((await git(repo, ['remote'])).split('\n').map((l) => l.trim()))
+  return nonEmpty((await git(repo, ['remote'], { readOnly: true })).split('\n').map((l) => l.trim()))
 }
 
 /** Every distinct fetch/push URL of the configured remotes. */
 export async function remoteUrls(repo: string): Promise<string[]> {
   const urls = new Set<string>()
   for (const remote of await listRemotes(repo)) {
-    const r = await runGit(repo, ['remote', 'get-url', '--all', remote])
+    const r = await runGit(repo, ['remote', 'get-url', '--all', remote], { readOnly: true })
     if (r.exitCode !== 0) continue
     for (const url of nonEmpty(text(r.stdout).split('\n'))) urls.add(url.trim())
   }
@@ -152,7 +152,7 @@ export async function localBranchExists(repo: string, branch: string): Promise<b
 
 /** Whether any `refs/remotes/<remote>/<branch>` exists. */
 export async function remoteBranchExists(repo: string, branch: string): Promise<boolean> {
-  const r = await runGit(repo, ['for-each-ref', '--format=%(refname)', 'refs/remotes'])
+  const r = await runGit(repo, ['for-each-ref', '--format=%(refname)', 'refs/remotes'], { readOnly: true })
   if (r.exitCode !== 0) return false
   const suffix = `/${branch}`
   return nonEmpty(text(r.stdout).split('\n')).some((ref) => {
@@ -164,14 +164,14 @@ export async function remoteBranchExists(repo: string, branch: string): Promise<
 
 /** The sha a local branch points at, or null when it does not exist. */
 export async function branchHead(repo: string, branch: string): Promise<string | null> {
-  const r = await runGit(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`])
+  const r = await runGit(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`], { readOnly: true })
   if (r.exitCode !== 0) return null
   return text(r.stdout).trim() || null
 }
 
 /** A local branch's upstream as a short name (`origin/main`), or null when it has none. */
 export async function upstreamOf(repo: string, branch: string): Promise<string | null> {
-  const r = await runGit(repo, ['for-each-ref', '--format=%(upstream:short)', `refs/heads/${branch}`])
+  const r = await runGit(repo, ['for-each-ref', '--format=%(upstream:short)', `refs/heads/${branch}`], { readOnly: true })
   if (r.exitCode !== 0) return null
   return text(r.stdout).trim() || null
 }
@@ -179,7 +179,7 @@ export async function upstreamOf(repo: string, branch: string): Promise<string |
 /** Whether `name` is a valid branch name; a name starting with `-` is never valid. */
 export async function checkRefFormatBranch(name: string): Promise<boolean> {
   if (name.length === 0 || name.startsWith('-')) return false
-  return (await runGit('/', ['check-ref-format', '--branch', name])).exitCode === 0
+  return (await runGit('/', ['check-ref-format', '--branch', name], { readOnly: true })).exitCode === 0
 }
 
 /** Switches to an existing local branch, or creates a local tracking branch from a remote ref. */
@@ -191,7 +191,7 @@ export async function switchToBranch(cwd: string, branch: string, trackingBranch
     return
   }
   if (!(await checkRefFormatBranch(trackingBranch))) throw new GitError(`invalid tracking branch: ${trackingBranch}`, '', 128)
-  const remoteRef = await runGit(cwd, ['show-ref', '--verify', '--quiet', `refs/remotes/${trackingBranch}`])
+  const remoteRef = await runGit(cwd, ['show-ref', '--verify', '--quiet', `refs/remotes/${trackingBranch}`], { readOnly: true })
   if (remoteRef.exitCode !== 0) throw new GitError(`remote branch does not exist: ${trackingBranch}`, remoteRef.stderr, remoteRef.exitCode)
   if (await localBranchExists(cwd, branch)) throw new GitError(`local branch already exists: ${branch}`, '', 128)
   await git(cwd, ['switch', '--track', '--create', branch, trackingBranch])
@@ -236,7 +236,7 @@ export async function createTrackingBranch(repo: string, branch: string, remoteR
 
 /** The effective value of a git config key, or null when unset. */
 export async function getConfig(repo: string, key: string): Promise<string | null> {
-  const r = await runGit(repo, ['config', '--get', key])
+  const r = await runGit(repo, ['config', '--get', key], { readOnly: true })
   if (r.exitCode !== 0) return null
   return text(r.stdout).replace(/\r?\n$/, '')
 }
@@ -254,7 +254,7 @@ export async function dirtyEntries(worktreePath: string): Promise<string[]> {
     '-z',
     '--untracked-files=all',
     '--ignore-submodules=none'
-  ])
+  ], { readOnly: true })
   const entries = out.split('\0')
   const paths: string[] = []
   for (let i = 0; i < entries.length; i++) {
@@ -269,7 +269,7 @@ export async function dirtyEntries(worktreePath: string): Promise<string[]> {
 /** Whether any submodule of the worktree is checked out; false when it has no `.gitmodules`. */
 export async function hasPopulatedSubmodules(worktreePath: string): Promise<boolean> {
   if (!existsSync(resolve(worktreePath, '.gitmodules'))) return false
-  const out = await git(worktreePath, ['submodule', 'status'])
+  const out = await git(worktreePath, ['submodule', 'status'], { readOnly: true })
   return nonEmpty(out.split('\n')).some((line) => !line.startsWith('-'))
 }
 
@@ -291,8 +291,8 @@ export async function deleteBranchSafe(repo: string, branch: string): Promise<De
 /** Whether merging `branch` into `target` would change nothing (a squash or rebase merge landed it); false on conflicts or errors. */
 export async function mergedByTree(repo: string, branch: string, target: string): Promise<boolean> {
   const [merge, tree] = await Promise.all([
-    runGit(repo, ['merge-tree', '--write-tree', target, branch]),
-    runGit(repo, ['rev-parse', '--verify', '--quiet', `${target}^{tree}`])
+    runGit(repo, ['merge-tree', '--write-tree', target, branch], { readOnly: true }),
+    runGit(repo, ['rev-parse', '--verify', '--quiet', `${target}^{tree}`], { readOnly: true })
   ])
   if (merge.exitCode !== 0 || tree.exitCode !== 0) return false
   const first = text(merge.stdout).split('\n')[0]?.trim()
@@ -312,30 +312,30 @@ export async function showFile(repo: string, ref: string, path: string): Promise
   if (ref.startsWith('-') || path.startsWith('-')) {
     throw new GitError(`refusing ${ref.startsWith('-') ? 'ref' : 'path'} that starts with '-'`, '', -1)
   }
-  const r = await runGit(repo, ['show', `${ref}:${path}`])
+  const r = await runGit(repo, ['show', `${ref}:${path}`], { readOnly: true })
   return r.exitCode === 0 ? text(r.stdout) : null
 }
 
 /** Ignored, untracked files under `cwd` per the standard excludes, with directories expanded to files. */
 export async function ignoredUntracked(cwd: string): Promise<string[]> {
-  const out = await git(cwd, ['ls-files', '--others', '--ignored', '--exclude-standard', '-z'])
+  const out = await git(cwd, ['ls-files', '--others', '--ignored', '--exclude-standard', '-z'], { readOnly: true })
   return nonEmpty(out.split('\0'))
 }
 
 /** Untracked files under `cwd` matching the patterns in `excludeFile`. */
 export async function matchingExcludeFrom(cwd: string, excludeFile: string): Promise<string[]> {
-  const out = await git(cwd, ['ls-files', '--others', '--ignored', '-z', `--exclude-from=${excludeFile}`])
+  const out = await git(cwd, ['ls-files', '--others', '--ignored', '-z', `--exclude-from=${excludeFile}`], { readOnly: true })
   return nonEmpty(out.split('\0'))
 }
 
 /** Whether git ignores `path` (relative to `cwd`). */
 export async function isIgnored(cwd: string, path: string): Promise<boolean> {
-  return (await runGit(cwd, ['check-ignore', '-q', '--', path])).exitCode === 0
+  return (await runGit(cwd, ['check-ignore', '-q', '--', path], { readOnly: true })).exitCode === 0
 }
 
 /** Absolute path of `rel` inside the git dir that serves this worktree (`git rev-parse --git-path`). */
 export async function gitPath(worktreePath: string, rel: string): Promise<string> {
-  const out = (await git(worktreePath, ['rev-parse', '--git-path', rel])).replace(/\r?\n$/, '')
+  const out = (await git(worktreePath, ['rev-parse', '--git-path', rel], { readOnly: true })).replace(/\r?\n$/, '')
   return resolve(worktreePath, out)
 }
 
