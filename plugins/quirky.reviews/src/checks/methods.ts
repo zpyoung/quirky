@@ -1258,7 +1258,7 @@ function updateAgentSurface(env: ReviewsEnv, context: AgentContext, change: (sur
   return applied
 }
 
-function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>): JsonRecord {
+async function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>, caller: PluginCaller): Promise<JsonRecord> {
   const action = params.action
   if (action === 'clear') {
     env.update((state) => { state.agentDialog = null })
@@ -1278,7 +1278,10 @@ function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>): JsonR
   if (action !== 'fix' && action !== 'conflicts' && action !== 'comments') {
     throw env.invalid('invalid_input', 'action must be fix, conflicts, comments, hide, or clear.')
   }
-  const context = agentContext(env, surface, params)
+  const targetParams = surface === 'checks' && params.worktree === undefined
+    ? { ...params, worktree: (await resolveWorktree(env, params, caller)).id }
+    : params
+  const context = agentContext(env, surface, targetParams)
   const previous = env.read().agentDialog
   const reusable = sameAgentTarget(env, previous, context, action)
   const prompt = params.prompt === undefined
@@ -1765,7 +1768,7 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       return { titleDraft: null }
     },
     checksSaveTitle: (params, caller) => saveTitle(env, params, caller),
-    checksSetAgentDialog: (params) => setAgentDialog(env, params),
+    checksSetAgentDialog: (params, caller) => setAgentDialog(env, params, caller),
     checksLaunchAgent: (params, caller) => launchAgent(env, params, caller),
     checksGitAction: (params, caller) => runGitAction(env, params, caller),
     checksOpenReview: (params, caller) => openReview(env, params, caller)

@@ -106,8 +106,15 @@ const click = (button: HTMLButtonElement) => act(async () => { button.click() })
 const dialogCalls = (calls: Call[]) => calls.filter((call) => call.method === 'quirky.reviews/checksSetAgentDialog')
 
 test('Checks panel Fix opens the agent dialog for the Checks worktree', async () => {
-  const { element, calls } = mountPanel(stateWith())
-  await click(buttonByText(element, 'Fix'))
+  const state = stateWith()
+  state.checks.checks = {
+    ...failingChecks,
+    checks: [{ kind: 'check_run', name: 'build', status: 'failure', conclusion: null, url: null, checkRunId: 31, workflowRunId: 41, suiteId: null }]
+  }
+  const { element, calls } = mountPanel(state)
+  const fixButton = buttonByText(element, 'Fix')
+  expect(fixButton).toBeTruthy()
+  await click(fixButton!)
   expect(dialogCalls(calls)).toEqual([{ method: 'quirky.reviews/checksSetAgentDialog', params: { surface: 'checks', worktree: WORKTREE, action: 'fix' } }])
 })
 

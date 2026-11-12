@@ -162,6 +162,8 @@ test('review links use Browser routing, exact worktree context, and safe error b
     await reviews.client.callAny('quirky.reviews/open', { worktree: checksWorktree, number: 12 })
     await reviews.client.call('ui.view.open', { id: 'view:quirky.reviews/review', input: { worktree: reviews.worktree, number: 12, tab: 'conversation' } })
     await reviews.client.callAny('quirky.reviews/showChecks', {})
+    const checksRefresh = await reviews.client.callAny('quirky.reviews/checksRefresh', { worktree: checksWorktree, force: true })
+    expect(checksRefresh).toMatchObject({ ok: true, worktree: checksWorktree, kind: 'folder' })
     const activeReviews = await reviews.client.callAny('quirky.reviews/state', { worktree: reviews.worktree }) as {
       detail: { target: { worktree: string } | null }
     }

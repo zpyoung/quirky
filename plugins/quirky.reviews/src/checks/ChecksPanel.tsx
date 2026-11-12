@@ -767,6 +767,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const previousPending = useRef<boolean | null>(null)
   const pollController = useRef<ChecksPollingController | null>(null)
   const panelEntryWorktree = useRef<string | null>(null)
+  const entryRefreshWorktrees = useRef(new Set<string>())
   const mounted = useRef(true)
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
@@ -818,37 +819,47 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     const enteringWorktree = panelEntryWorktree.current !== activeWorktree
     panelEntryWorktree.current = activeWorktree
     if (!activeWorktree || !enteringWorktree) return
+    if (entryRefreshWorktrees.current.has(activeWorktree)) return
     if (state.checks.worktree === activeWorktree) {
       if (!missingOrigin) return
       setActionError(null)
     }
     const stillActive = () => mounted.current && activeWorktreeRef.current === activeWorktree
+    entryRefreshWorktrees.current.add(activeWorktree)
     context.call('quirky.reviews/checksRefresh', { worktree: activeWorktree, force: true }).then(async (result) => {
       if (!stillActive()) return
       await refreshRef.current()
       if (!stillActive()) return
       if (!isRecord(result) || result.ok !== true) {
+        if (isRecord(result) && result.stale === true) return
         setActionError(presentationError(result) ?? 'The review could not be refreshed.')
       }
     }).catch((error: unknown) => {
       if (stillActive()) setActionError(messageOf(error))
+    }).finally(() => {
+      entryRefreshWorktrees.current.delete(activeWorktree)
     })
   }, [activeWorktree, context, isPanelVisible, missingOrigin])
 
   const runRefresh = useCallback(async (reason: 'manual' | 'active', worktree = activeWorktree): Promise<boolean> => {
     if (!worktree) return false
+    const stillActive = () => mounted.current && activeWorktreeRef.current === worktree
     setActionError(null)
     const current = currentTargetRef.current
     const candidate: JsonRecord = current?.worktree === worktree ? current.candidate : { worktree, active: true }
     try {
       const queued = await context.call('quirky.hosting/refresh', { candidate, reason, priority: 80 })
+      if (!stillActive()) return false
       const queueResult = isRecord(queued) ? queued : null
       const queuedError = queueResult && (queueResult.kind === 'paused' || queueResult.kind === 'unavailable')
         ? typeof queueResult.message === 'string' ? queueResult.message : `GitHub refresh ${String(queueResult.kind)}.`
         : null
       const result = await context.call('quirky.reviews/checksRefresh', { worktree, force: true })
+      if (!stillActive()) return false
       await refresh()
+      if (!stillActive()) return false
       if (queuedError) setActionError(queuedError)
+      if (isRecord(result) && result.stale === true) return queuedError === null
       if (!isRecord(result) || result.ok !== true) {
         const message = presentationError(result) ?? queuedError ?? 'The review could not be refreshed.'
         setActionError(message)
@@ -856,7 +867,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       }
       return queuedError === null
     } catch (error) {
-      setActionError(messageOf(error))
+      if (stillActive()) setActionError(messageOf(error))
       return false
     }
   }, [activeWorktree, context, refresh])
@@ -884,7 +895,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       },
       refresh: () => {
         const target = currentTargetRef.current
-        return target ? runRefresh('active', target.worktree) : Promise.resolve(false)
+        if (!target) return Promise.resolve(false)
+        if (entryRefreshWorktrees.current.has(target.worktree)) return Promise.resolve(true)
+        return runRefresh('active', target.worktree)
       },
       async invalidate(worktree) {
         await context.call('quirky.reviews/checksInvalidate', { worktree })

@@ -8,7 +8,7 @@ import { checksFixtureState, checksGhSource, checksReview } from './checks-fixtu
 import { createChecksPollingPolicy, installChecksPolling, type ChecksPollingRuntime, type ChecksPollingTarget } from '../src/checks/ChecksPanel'
 import type { JsonRecord } from '../src/contracts'
 import { checksMethods } from '../src/checks/methods'
-import { createReviewsEnv } from '../src/env'
+import { createReviewsEnv, newChecksEntry } from '../src/env'
 
 type ReviewsTestHost = {
   client: QuirkyClient
@@ -293,6 +293,20 @@ describe('active-workspace checks', () => {
     expect((await checksFor(host.client, second)).agentDialog).toBeNull()
   }, 60_000)
 
+  test('the agent-dialog CLI resolves an omitted worktree from its caller instead of the latest Checks entry', async () => {
+    const host = await boot()
+    host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')]))
+    await host.call('checksLink', { worktree: host.worktree, number: 12 })
+    const second = await addWorktree(host, 'feature-next')
+    await host.call('checksLink', { worktree: second, number: 13 })
+
+    const result = await host.cli(['--json', 'reviews', 'checks-set-agent-dialog', '--action', 'fix', '--prompt', 'Fix the failed build check.'])
+
+    expect(result).toMatchObject({ code: 0, stderr: '' })
+    expect(JSON.parse(result.stdout)).toMatchObject({ agentDialog: { action: 'fix', target: { worktree: host.worktree, number: 12 } } })
+    expect((await checksFor(host.client, second)).agentDialog).toBeNull()
+  }, 60_000)
+
   test('a state read without a worktree returns the most recently refreshed worktree, and a worktree with no entry reads blank', async () => {
     const host = await boot()
     host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')]))
@@ -499,6 +513,19 @@ function unitEnv() {
 }
 
 describe('Checks state bounds and ordering', () => {
+  test('eviction keeps the oldest loading entry and removes the oldest completed entry', () => {
+    const { env } = unitEnv()
+    env.update((state) => { state.checksByWorktree.loading = { ...newChecksEntry('loading'), loading: true } })
+    for (let index = 0; index < 16; index += 1) {
+      const worktree = `completed-${index}`
+      env.update((state) => { state.checksByWorktree[worktree] = newChecksEntry(worktree) })
+    }
+
+    expect(env.view('loading').checks).toMatchObject({ worktree: 'loading', loading: true, error: null })
+    expect(env.view('completed-0').checks.worktree).toBeNull()
+    expect(Object.keys(env.read().checksByWorktree)).toHaveLength(16)
+  })
+
   test('a __proto__ worktree leaves Object.prototype untouched', async () => {
     const { env, methods } = unitEnv()
     env.resolve = async () => { throw new Error('unknown workspace') }
@@ -575,6 +602,12 @@ describe('Checks state bounds and ordering', () => {
     expect(Object.keys(env.read().checksByWorktree).length).toBe(16)
     const admitted = [...pending.keys()]
     expect(admitted.length).toBe(16)
+    const busy = await Promise.all(tasks.slice(16))
+    for (let index = 0; index < busy.length; index += 1) {
+      expect(busy[index]).toEqual({
+        ok: false, worktree: `wt_${index + 16}`, error: 'Too many workspaces are refreshing. Try again shortly.', stale: false
+      })
+    }
     const newest = admitted[admitted.length - 1]!
     pending.get(newest)!(new Error('status failed'))
     expect(await tasks[Number(newest.slice(3))]).toMatchObject({ ok: false, worktree: newest, stale: false })
