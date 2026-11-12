@@ -60,6 +60,7 @@ export function createStubServices(): AvatarServices {
     },
     shipping: {
       runDoneWhen: async () => ({ pass: false, output: UNAVAILABLE }),
+      startReview: async () => ({ started: false, reason: UNAVAILABLE }),
       judgeFinding: async () => {},
       personVerdict: async () => ({ ok: false, error: 'shipping is not available' }),
       openPr: async () => ({ ok: false, reason: UNAVAILABLE }),

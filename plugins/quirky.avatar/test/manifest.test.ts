@@ -126,7 +126,7 @@ describe('quirky.avatar as a built-in plugin', () => {
   test('accepts both finding actions at the resolveNeed method boundary', async () => {
     const client = await (await startAvatar()).connect('cli')
     for (const action of ['finding-dismiss', 'finding-valid']) {
-      expect(await client.call('quirky.avatar/resolveNeed' as never, { needId: 'missing', action } as never)).toEqual({ ok: false, error: 'unknown need' })
+      expect(await client.call('quirky.avatar/resolveNeed' as never, { needId: 'missing', action } as never) as unknown).toEqual({ ok: false, error: 'unknown need' })
     }
   })
 
