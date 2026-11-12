@@ -259,11 +259,19 @@ export const dropJsdomSyncXhrWorker: Bun.BunPlugin = {
   }
 }
 
-async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: string, entry: string): Promise<string> {
+async function bundleEntry(
+  pluginId: string,
+  pluginDir: string,
+  outPluginDir: string,
+  entry: string,
+  sourceRoot: string | null
+): Promise<string> {
   const target = jsName(entry)
   const result = await Bun.build({
     entrypoints: [join(pluginDir, entry)],
     target: 'bun',
+    // omit source-location comments so the path check only sees paths shipped as data
+    minify: { whitespace: true },
     outdir: dirname(join(outPluginDir, target)),
     naming: parse(target).base,
     plugins: [inlineJsdomStylesheet, dropJsdomSyncXhrWorker],
@@ -272,6 +280,15 @@ async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: st
   if (!result.success) {
     for (const log of result.logs) console.error(log)
     throw new Error(`bundling ${pluginId}: ${entry} failed`)
+  }
+  if (sourceRoot !== null) {
+    for (const output of result.outputs) {
+      const contents = await output.text()
+      const index = contents.indexOf(sourceRoot)
+      if (index === -1) continue
+      const path = contents.slice(index, index + 200).split(/["'\r\n]/, 1)[0]
+      throw new Error(`plugin ${pluginId}: ${entry} bundles a path from the build machine: ${path}`)
+    }
   }
   return target
 }
@@ -367,6 +384,8 @@ function copyLegalNotices(pluginId: string, pluginDir: string, outPluginDir: str
  * bundled plugin IDs.
  */
 export async function bundlePlugins(srcDir: string, outDir: string): Promise<string[]> {
+  const root = realpathSync(dirname(resolve(srcDir)))
+  const sourceRoot = root === parse(root).root ? null : `${root}${sep}`
   rmSync(outDir, { recursive: true, force: true })
   mkdirSync(outDir, { recursive: true })
 
@@ -384,13 +403,13 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
     const outPluginDir = join(outDir, entry.name)
     mkdirSync(outPluginDir, { recursive: true })
 
-    if (manifest.main) manifest.main = await bundleEntry(id, pluginDir, outPluginDir, manifest.main)
-    if (manifest.cli) manifest.cli = await bundleEntry(id, pluginDir, outPluginDir, manifest.cli)
+    if (manifest.main) manifest.main = await bundleEntry(id, pluginDir, outPluginDir, manifest.main, sourceRoot)
+    if (manifest.cli) manifest.cli = await bundleEntry(id, pluginDir, outPluginDir, manifest.cli, sourceRoot)
     const workerOutputs: string[] = []
     if (manifest.workers !== undefined) {
       const bundledWorkers: Record<string, string> = {}
       for (const [name, worker] of workers) {
-        const output = await bundleEntry(id, pluginDir, outPluginDir, worker)
+        const output = await bundleEntry(id, pluginDir, outPluginDir, worker, sourceRoot)
         bundledWorkers[name] = output
         workerOutputs.push(output)
       }
