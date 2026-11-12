@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { join } from 'node:path'
 import { PTY_PROTOCOL_VERSION, PtyFrameDecoder, encodePtyJson, type ExitCause, type PtyFact, type PtyRequest } from '@quirky/protocol'
 import { socketPath } from '@quirky/protocol/node'
+import { liveProcesses, stopAllProcesses } from '@quirky/process'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { createPtyApi } from '../src/plugins/pty-api'
 import { PtyClient } from '../src/pty-client'
@@ -131,6 +132,18 @@ function startSilentHost(
 }
 
 describe('spawning the host', () => {
+  test('the host stays outside runner ownership and survives stopping runner processes', async () => {
+    const client = newClient(home())
+    await client.connect()
+    const pid = client.hostPid!
+    expect(pid).toBeGreaterThan(0)
+    expect(liveProcesses().some(entry => entry.pid === pid)).toBe(false)
+    await stopAllProcesses()
+    // the external host must remain alive beyond shutdown; fake time cannot advance its process
+    await Bun.sleep(300)
+    expect(process.kill(pid, 0)).toBe(true)
+  })
+
   test('starts the host in the home, not the daemon directory', async () => {
     const dir = home()
     const marker = join(dir, 'cwd.txt')
