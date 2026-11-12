@@ -17,6 +17,7 @@ type Parsed = {
   throughXargs: boolean
   wrapped: boolean
   dynamicCommand: boolean
+  patternCommand: boolean
   dynamicBeforeCommand: boolean
   unknownWrapperFlag: boolean
   foreignWrapper: boolean
@@ -141,6 +142,13 @@ function isLoneSubscriptAssignment(words: ShellWord[], index: number): boolean {
   return index === words.length - 1 && /^[A-Za-z_][A-Za-z0-9_]*\[.*\]\+?=/s.test(words[index].text)
 }
 
+/** True when a shell may replace the command word with a file name it matches, which can be `cd`. */
+function holdsCommandPattern(word: ShellWord): boolean {
+  return word.text !== '[' && word.text !== '[[' && !word.text.includes('/') &&
+    (word.text.includes('*') || word.text.includes('?') || word.text.includes('[') ||
+      word.text.includes('^') || word.text.includes('#'))
+}
+
 function keywordChangesDirectory(words: ShellWord[]): boolean {
   const mainIndex = unwrapWords(words).commandIndex
   let index = 0
@@ -168,7 +176,7 @@ function keywordChangesDirectory(words: ShellWord[]): boolean {
     }
     if (resolvedIndex <= mainIndex || word === undefined) return false
     if (startsSubscript(word) && resolvedIndex + 1 < words.length) return true
-    return word.dynamic ? !isLoneSubscriptAssignment(words, resolvedIndex)
+    return word.dynamic || holdsCommandPattern(word) ? !isLoneSubscriptAssignment(words, resolvedIndex)
       : ['cd', 'pushd', 'popd', 'eval'].includes(basename(word.text))
   }
   return false
@@ -1086,6 +1094,7 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
     throughXargs: unwrapped.throughXargs,
     wrapped: unwrapped.commandIndex > 0,
     dynamicCommand: commandWord?.dynamic ?? false,
+    patternCommand: commandWord !== undefined && holdsCommandPattern(commandWord),
     dynamicBeforeCommand: unwrapped.dynamicBeforeCommand,
     unknownWrapperFlag: unwrapped.unknownWrapperFlag,
     foreignWrapper: unwrapped.foreignWrapper,
@@ -2257,7 +2266,8 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands, 'allow', parsed.commandName)
       if (!commandAllowed && !matchesCommandList(parsed.text, ctx.deployCommands, 'deploy')) partClasses.push('other')
     }
-    if (keywordChangesDirectory(shellCommand.words)) cwd = possible = null
+    if (keywordChangesDirectory(shellCommand.words) ||
+      (parsed.patternCommand && !parsed.loneSubscriptAssignment)) cwd = possible = null
 
     if (!parsed.dynamicCommand && DOWNLOAD_CMDS.has(cmd)) downloadInPipeline = true
     pipelineDownloads.set(shellCommand.scope, downloadInPipeline)
@@ -2486,6 +2496,7 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * A path-named `cd`, `pushd`, `eval` or `export` returns `other` and `edit-outside`.
  * A computed command word or an array element assignment before a command leaves
  * the shell directory unknown; the latter also returns `other` and `edit-outside`.
+ * A command word with no slash holding `*`, `?`, `[`, `^` or `#` also leaves the shell directory unknown.
  * A computed argument or redirect word whose non-empty fixed prefix resolves
  * under an active directory to a credential path adds `credential`; brace expansion
  * cut off by the 64-word or 32-depth limit without proving it adds `edit-outside`.
