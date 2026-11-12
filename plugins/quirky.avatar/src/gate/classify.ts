@@ -758,16 +758,16 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
       nestedNonDirectoryRead = inner.nonDirectoryRead ?? false
-      if (!dynamicEval && shellCommand.scope === 0 && inner.cwdChanged) cwdChanged = true
-      if (shellCommand.detached && !dynamicEval) {
+      if (shellCommand.scope === 0 && inner.cwdChanged) cwdChanged = true
+      if (shellCommand.detached) {
         if (inner.cwdChanged) {
           cwd = null
           partClasses.push('other')
         }
-      } else if (!dynamicEval) {
+      } else {
         cwd = inner.cwd === undefined ? null : inner.cwd
       }
-      if (shellCommand.detached && !dynamicEval && inner.cwdChanged && !inner.nonDirectoryRead) {
+      if (shellCommand.detached && inner.cwdChanged && !inner.nonDirectoryRead) {
         for (const actionClass of inner.classes) {
           if (actionClass !== 'read') partClasses.push(actionClass)
         }

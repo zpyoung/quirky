@@ -757,6 +757,7 @@ describe('unseen arguments and directories', () => {
       ['cp "$SRC" out/', ['edit-inside', 'other']],
       ['cp a.txt "$DEST"', ['edit-outside']],
       ['timeout $T ls', ['read', 'other']],
+      ['ls | xargs -n "$N" echo', ['read', 'other']],
       ['nice -n "$P" ls', ['other']],
       ['echo "$(cat "$f")"', ['read', 'other']],
       ['bash -c "ls $X"', ['read', 'other']],
@@ -817,6 +818,7 @@ describe('unseen arguments and directories', () => {
       ['ls | xargs echo', ['read']],
       ['ls | xargs -n1 basename', ['read']],
       ['ls | xargs', ['read']],
+      ['ls | xargs eval echo', ['read', 'edit-outside']],
       ['find /home/u -maxdepth 1 | xargs -I{} sh -c \'rm -rf {}\'', ['read', 'edit-inside', 'edit-outside']],
       ['ls | xargs sh -c \'wc -l "$@"\' _', ['read', 'other', 'edit-outside']],
       ['xargs sh -c \'touch /tmp/x\'', ['edit-outside']],
@@ -913,12 +915,22 @@ describe('unseen arguments and directories', () => {
     const sourceCommands = [
       'source /tmp/change-directory.sh; touch a',
       '. /tmp/change-directory.sh; touch a',
-      'eval "cd $D"; touch a'
     ]
     for (const command of sourceCommands) {
       const classes = bash(command)
       expect(classes).toEqual(expect.arrayContaining(['other', 'edit-inside']))
       expect(classes).not.toContain('edit-outside')
+    }
+    const dynamicEvals: [string, ActionClass, ActionClass][] = [
+      ['eval "cd $D"; touch a', 'edit-outside', 'edit-inside'],
+      ['eval "cd /tmp; $X"; rm -rf x', 'edit-outside', 'edit-inside'],
+      ['eval "cd /tmp" "$X"; rm -rf x', 'edit-outside', 'edit-inside'],
+      ['eval "echo $X"; touch a', 'edit-inside', 'edit-outside']
+    ]
+    for (const [command, edit, excluded] of dynamicEvals) {
+      const classes = bash(command)
+      expect(classes).toEqual(expect.arrayContaining(['other', edit]))
+      expect(classes).not.toContain(excluded)
     }
     expectClassSet('eval \'cd /tmp\' & rm -rf x', ['other', 'edit-outside'])
   })
@@ -927,6 +939,10 @@ describe('unseen arguments and directories', () => {
     const classes = bash('export GIT_DIR=/home/u/r/.git; true | export GIT_DIR=/work/wt/.git; git clean -fd')
     expect(classes).toContain('edit-outside')
     expect(classes).not.toContain('edit-inside')
+
+    const bareAssignment = bash('export GIT_DIR=/home/u/r/.git; true | GIT_DIR=/work/wt/.git; git clean -fd')
+    expect(bareAssignment).toContain('edit-outside')
+    expect(bareAssignment).not.toContain('edit-inside')
 
     const detachedEval = bash('eval \'export GIT_DIR=/home/u/r/.git\' & git clean -fd')
     expect(detachedEval).toContain('edit-outside')
@@ -978,6 +994,7 @@ describe('unseen arguments and directories', () => {
       ['cd; rm -rf Documents', 'held', 'floor-core'],
       ['cd /tmp; pushd /work/wt; popd; rm -rf x', 'held', 'floor-core'],
       ['eval \'cd /tmp\'; rm -rf x', 'held', 'floor-core'],
+      ['eval "cd $D"; rm -rf x', 'held', 'floor-core'],
       ['cat < /home/u/.ssh/id_rsa', 'held', 'floor-core'],
       ['find /home/u -maxdepth 1 | xargs -I{} sh -c \'rm -rf {}\'', 'held', 'floor-core'],
       ['eval eval eval eval eval rm -rf /home/u/x', 'held', 'floor-core'],
