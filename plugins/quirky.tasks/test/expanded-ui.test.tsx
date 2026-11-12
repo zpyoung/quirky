@@ -408,6 +408,85 @@ test('creating an issue on page one refreshes the selected repository list immed
   expect(element.querySelector('.quirky-tasks-new-issue')).toBeNull()
 })
 
+test.each([
+  ['the source has no identity', 'https://github.com/acme/quirky/issues/281', { status: 'ready' }],
+  ['the issue URL ends in a slash', 'https://github.com/acme/quirky/issues/281/', { status: 'ready', origin }],
+  ['the issue is in another repository than the source', 'https://github.com/other/elsewhere/issues/281', { status: 'ready', origin }]
+] as const)('an unfiltered issue close paints its row at once when %s', async (_case, issueUrl, source) => {
+  const listedIssue = issue(281, { title: 'Indexed issue title', url: issueUrl })
+  let providerIssue = listedIssue
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, query: 'is:issue', lastList: { mode: 'issues', query: 'is:issue', page: 1 }, repoIds: ['repo-1'], detail: target(listedIssue) }),
+    handlers: {
+      'quirky.tasks/list': () => listResult([listedIssue], { sources: { 'repo-1': source } }),
+      'quirky.tasks/issue': () => ({ ...issueDetail(281), item: providerIssue }),
+      'quirky.tasks/issueEdit': (params) => {
+        providerIssue = { ...providerIssue, ...params }
+        return { item: providerIssue }
+      }
+    }
+  })
+  const row = element.querySelector('.tasks-list__row')
+  expect(rowTitles(element)).toEqual(['Indexed issue title'])
+  expect(row?.querySelector('.ui-status-dot--done')).toBeNull()
+
+  const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    status.value = 'closed-completed'
+    status.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+
+  const updatedRow = element.querySelector('.tasks-list__row')
+  expect(rowTitles(element)).toEqual(['Indexed issue title'])
+  expect(updatedRow?.querySelector('.ui-status-dot--done')).not.toBeNull()
+  expect(updatedRow?.textContent).not.toContain('Pending refresh')
+})
+
+test.each([
+  ['the source names its repository', 'https://github.com/acme/quirky/issues/281', { status: 'ready', origin }, true],
+  ['the source names its repository in another letter case', 'https://github.com/acme/quirky/issues/281', { status: 'ready', origin: { host: 'GitHub.COM', owner: 'Acme', repo: 'Quirky' } }, true],
+  ['the source reads issues from the repository it names', 'https://github.com/upstream/quirky/issues/281', { status: 'ready', origin, issueSource: 'upstream', issueRepository: upstream }, true],
+  ['the source reads issues from another repository than its origin', 'https://github.com/acme/quirky/issues/281', { status: 'ready', origin, issueSource: 'upstream', issueRepository: upstream }, false],
+  ['the source names another repository', 'https://github.com/other/elsewhere/issues/281', { status: 'ready', origin }, false],
+  ['the source names another host', 'https://github.example.com/acme/quirky/issues/281', { status: 'ready', origin }, false],
+  ['the source names another issue path', 'https://github.com/acme/quirky/issues/281/', { status: 'ready', origin }, false],
+  ['the source has no identity', 'https://github.com/acme/quirky/issues/281', { status: 'ready' }, false],
+  ['neither the URL nor the source can be read', 'https://github.com/acme/quirky/issues/281/', { status: 'ready' }, false]
+] as const)('a closed issue the open search stops returning stays listed only when the source proves it: %s', async (_case, issueUrl, source, staysListed) => {
+  const listedIssue = issue(281, { title: 'Closed in the pane', url: issueUrl })
+  const otherIssue = issue(279)
+  let issueEdited = false
+  let providerIssue = listedIssue
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, repoIds: ['repo-1'], detail: target(listedIssue) }),
+    handlers: {
+      'quirky.tasks/list': () => listResult(issueEdited ? [otherIssue] : [listedIssue, otherIssue], { sources: { 'repo-1': source } }),
+      'quirky.tasks/issue': () => ({ ...issueDetail(281), item: providerIssue }),
+      'quirky.tasks/issueEdit': (params) => {
+        issueEdited = true
+        providerIssue = { ...providerIssue, ...params }
+        return { item: providerIssue }
+      }
+    }
+  })
+  const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    status.value = 'closed-completed'
+    status.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+
+  if (staysListed) {
+    expect(rowTitles(element)).toEqual(['Issue 279', 'Closed in the pane'])
+    const retainedRow = [...element.querySelectorAll('.tasks-list__row')].find((row) => row.querySelector('.ui-list-row__title')?.textContent === 'Closed in the pane')
+    expect(retainedRow?.querySelector('.ui-status-dot--done')).not.toBeNull()
+    expect(retainedRow?.textContent).toContain('Pending refresh')
+  } else {
+    expect(rowTitles(element)).toEqual(['Issue 279'])
+  }
+})
+
 test('a same-state issue edit updates the title on a retained closed row', async () => {
   let providerIssue = issue(281, { title: 'Issue title before edit' })
   const { element, calls } = await mountExpanded({

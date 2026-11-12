@@ -76,6 +76,8 @@ A compact row is the same 34px two-line row as a worktree row: a status dot, the
 
 A merged or closed task only appears when the active filters include it, or until the next refresh if it was merged from this view.
 
+An issue edit in the pane paints its visible row immediately, even if the source has no identity or its repository differs from the issue URL. If an open-only search stops returning a closed issue, the row stays with `Pending refresh` only when its plain issue URL matches the repository the source reads issues from.
+
 ### The expanded tab is a list beside a detail pane
 
 The toolbar runs across the top of the tab: Issues, PRs and Projects tabs, the repository picker, search, filters, presets, Refresh and Collapse. On the Issues tab it also has New issue. A toolbar menu holds Task settings, Open repository in GitHub and the issue source. Below it, a list of about 380px sits beside the detail pane, and the list's rows put checks and age on the right.

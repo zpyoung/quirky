@@ -98,21 +98,27 @@ function clearIssueRetentions(rows: Record<string, OptimisticRow>): Record<strin
   return next ?? rows
 }
 
-function issueRetentionMatches(pending: OptimisticRow, viewKey: string, sources: Record<string, unknown>): boolean {
+function issueRetentionMatches(pending: OptimisticRow, viewKey: string, list: ListData): boolean {
   const retention = pending.retention
   if (retention === undefined) return true
   const itemUrl = canonicalIssueUrl(pending.item.url)
+  const itemKey = rowKey(pending.item)
   return pending.item.kind === 'issue'
     && retention.viewKey === viewKey
-    && itemUrl !== null
-    && itemUrl === canonicalIssueUrl(retention.sourceUrl)
-    && itemUrl === canonicalIssueUrl(issueSourceUrl(pending.item, sources) ?? '')
+    && (
+      list.items.some((item) => rowKey(item) === itemKey)
+      || (
+        itemUrl !== null
+        && itemUrl === canonicalIssueUrl(retention.sourceUrl)
+        && itemUrl === canonicalIssueUrl(issueSourceUrl(pending.item, list.sources) ?? '')
+      )
+    )
 }
 
-function pruneIssueRetentions(rows: Record<string, OptimisticRow>, viewKey: string, sources: Record<string, unknown>): Record<string, OptimisticRow> {
+function pruneIssueRetentions(rows: Record<string, OptimisticRow>, viewKey: string, list: ListData): Record<string, OptimisticRow> {
   let next: Record<string, OptimisticRow> | null = null
   for (const [key, pending] of Object.entries(rows)) {
-    if (pending.item.kind !== 'issue' || pending.retention === undefined || issueRetentionMatches(pending, viewKey, sources)) continue
+    if (pending.item.kind !== 'issue' || pending.retention === undefined || issueRetentionMatches(pending, viewKey, list)) continue
     next ??= { ...rows }
     delete next[key]
   }
@@ -226,11 +232,11 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     if (!visibleResult) return []
     const rows = visibleResult.items.map((item) => {
       const pending = optimistic[rowKey(item)]
-      const patch = pending && issueRetentionMatches(pending, currentKey, visibleResult.sources) ? pending.patch : undefined
+      const patch = pending && issueRetentionMatches(pending, currentKey, visibleResult) ? pending.patch : undefined
       return patch ? { ...item, ...patch } : item
     })
     for (const [key, pending] of Object.entries(optimistic)) {
-      if (pending.keepVisible && issueRetentionMatches(pending, currentKey, visibleResult.sources) && !rows.some((item) => rowKey(item) === key)) {
+      if (pending.keepVisible && issueRetentionMatches(pending, currentKey, visibleResult) && !rows.some((item) => rowKey(item) === key)) {
         rows.push({ ...pending.item, ...pending.patch })
       }
     }
@@ -321,7 +327,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
 
   useEffect(() => {
     if (!visibleResult) return
-    setOptimistic((previous) => pruneIssueRetentions(previous, currentKey, visibleResult.sources))
+    setOptimistic((previous) => pruneIssueRetentions(previous, currentKey, visibleResult))
   }, [visibleResult, currentKey])
 
   useEffect(() => {
