@@ -5,6 +5,7 @@ import { parseShell, MAX_BRACE_WORDS, MAX_SHELL_DEPTH, type ShellCommand, type S
 type ShellAssignment = ShellCommand['assignments'][number]
 type WordAssignment = ShellAssignment & { word: ShellWord }
 type Parsed = {
+  commandIndex: number
   cmd: string
   args: string[]
   argWords: ShellWord[]
@@ -886,6 +887,7 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
   const text = commandWord === undefined ? '' : commandWord.text + (args.length === 0 ? '' : ` ${args.join(' ')}`)
   return {
     cmd: commandWord === undefined ? '' : basename(commandWord.text),
+    commandIndex: commandWord === undefined ? -1 : unwrapped.commandIndex,
     args,
     argWords,
     text,
@@ -1343,7 +1345,7 @@ type Analysis = {
 
 /** A tracked assignment cannot clear uncertainty introduced by an unfollowed search-path reference. */
 const UNKNOWN_SEARCH_PATH: ShellWord = { text: '', dynamic: true, subs: [] }
-const SEARCH_PATH_NAME = /cdpath/i
+const SEARCH_PATH_NAME = /cdpath|\$\{![^}]*=|@P\}/i
 
 function namesSearchPath(command: ShellCommand, cmd: string, commandIndex: number, wrapperAssignments: readonly WordAssignment[]): boolean {
   for (const assignment of command.assignments) {
@@ -1361,6 +1363,108 @@ function namesSearchPath(command: ShellCommand, cmd: string, commandIndex: numbe
   }
   return false
 }
+
+const DECLARATION_SETTERS: Record<string, true> = {
+  declare: true, typeset: true, local: true, readonly: true, export: true, private: true
+}
+const NAME_SETTERS: Record<string, true> = {
+  read: true, readarray: true, mapfile: true, getopts: true, getln: true, vared: true,
+  compgen: true, zstyle: true, zformat: true, zparseopts: true, zregexparse: true
+}
+const DECLARATION_PREFIX_KEYWORDS: Record<string, true> = {
+  '{': true, '!': true, if: true, then: true, else: true, elif: true, while: true,
+  until: true, do: true, time: true
+}
+const PLAIN_WORD = /^[A-Za-z0-9_+:-]*$/
+const NAMED_VALUE = /^[A-Za-z_][A-Za-z0-9_]*(?:\+=|=)/
+const READABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+const DECLARATION_NAME_FLAG = /^[+-][A-Za-z]*n[A-Za-z]*$/
+const OPERAND_START = /^[A-Za-z0-9_%\\\/.,:=#'" ]/
+
+
+function isReadableName(word: ShellWord | undefined): boolean {
+  return word !== undefined && !word.dynamic && READABLE_NAME.test(word.text)
+}
+
+function hasOperandStart(word: ShellWord): boolean {
+  return word.text === '' || OPERAND_START.test(word.text)
+}
+
+function setsUnreadName(command: ShellCommand, commandIndex: number): boolean {
+  const words = command.words
+  const commandWord = words[commandIndex]
+  if (commandWord !== undefined) {
+    if (commandWord.dynamic) return true
+    const text = commandWord.text
+    if (text !== '[' && text !== '[[' && !text.includes('/') &&
+      (text.includes('$') || text.includes('*') || text.includes('?') || text.includes('['))) return true
+  }
+
+  let commandPrefixEnd = 0
+  if (command.assignments.length === 0) {
+    while (commandPrefixEnd < words.length) {
+      const prefix = words[commandPrefixEnd]
+      if (prefix.dynamic || DECLARATION_PREFIX_KEYWORDS[prefix.text] !== true) break
+      commandPrefixEnd++
+    }
+  }
+
+  let hasNonPlainAfter = false
+  let hasInvalidDeclarationAfter = false
+  let hasComputedAfter = false
+  let hasNamerefFlagAfter = false
+  let printfUnknownFromNext = false
+  let printfUnknownFromTwoAhead = false
+  let printUnknownFromNext = false
+  let setUnknownFromNext = false
+
+  for (let index = words.length - 1; index >= 0; index--) {
+    const word = words[index]
+    const text = word.text
+    const plain = !word.dynamic && PLAIN_WORD.test(text)
+    const flag = plain && text.length > 1 && (text[0] === '-' || text[0] === '+')
+    const terminator = !word.dynamic && (text === '--' || text === '-')
+    const nextWord = words[index + 1]
+
+    if (!word.dynamic) {
+      if (DECLARATION_SETTERS[text] === true &&
+        (hasInvalidDeclarationAfter || hasNamerefFlagAfter ||
+          (hasComputedAfter && !(command.assignments.length === 0 && index === commandPrefixEnd)))) return true
+      if (NAME_SETTERS[text] === true && hasNonPlainAfter) return true
+      if (text === 'printf' && printfUnknownFromNext) return true
+      if (text === 'print' && printUnknownFromNext) return true
+      if (text === 'set' && setUnknownFromNext) return true
+      if (text === 'eval' && index !== commandIndex) return true
+      if (text === 'zmodload') return true
+    }
+
+    const currentPrintfUnknown: boolean = terminator ? false :
+      plain && text === '-v'
+        ? nextWord === undefined ? false : isReadableName(nextWord) ? printfUnknownFromTwoAhead : true
+        : plain && text.startsWith('-v') && text.length > 2
+          ? printfUnknownFromNext
+          : !hasOperandStart(word)
+    const currentPrintUnknown: boolean = terminator ? false :
+      printUnknownFromNext || (flag
+        ? text.endsWith('v') && nextWord !== undefined && !isReadableName(nextWord)
+        : !hasOperandStart(word))
+    const currentSetUnknown: boolean = terminator ? false :
+      setUnknownFromNext || (flag
+        ? text.endsWith('A') && nextWord !== undefined && !isReadableName(nextWord)
+        : !hasOperandStart(word))
+
+    printfUnknownFromTwoAhead = printfUnknownFromNext
+    printfUnknownFromNext = currentPrintfUnknown
+    printUnknownFromNext = currentPrintUnknown
+    setUnknownFromNext = currentSetUnknown
+    if (word.dynamic) hasComputedAfter = true
+    if (!plain) hasNonPlainAfter = true
+    if (!plain && !NAMED_VALUE.test(text)) hasInvalidDeclarationAfter = true
+    if (plain && DECLARATION_NAME_FLAG.test(text)) hasNamerefFlagAfter = true
+  }
+  return false
+}
+
 
 function setTrackedValue(env: Map<string, ShellWord>, name: string, value: ShellWord): void {
   if (name === 'CDPATH' && env.get(name) === UNKNOWN_SEARCH_PATH) return
@@ -1444,8 +1548,9 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
 
     const parsed = parseSegment(shellCommand, commandCwd, ctx)
     const { cmd, args } = parsed
-    const commandIndex = shellCommand.words.length - parsed.argWords.length - 1
-    if (namesSearchPath(shellCommand, cmd, commandIndex, parsed.wrapperAssignments)) {
+    const commandIndex = parsed.commandIndex
+    if (namesSearchPath(shellCommand, cmd, commandIndex, parsed.wrapperAssignments) ||
+      setsUnreadName(shellCommand, commandIndex)) {
       shellEnv.set('CDPATH', UNKNOWN_SEARCH_PATH)
       if (shellCommand.scope === 0) envChanges.add('CDPATH')
     }
@@ -1566,6 +1671,8 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       if (dynamicEval) {
         partClasses.push('other')
         cwd = possible = null
+        shellEnv.set('CDPATH', UNKNOWN_SEARCH_PATH)
+        if (shellCommand.scope === 0) envChanges.add('CDPATH')
       } else {
         const changedNames = new Set(inner.envChanges ?? [])
         for (const assignment of parsed.assignments) {
