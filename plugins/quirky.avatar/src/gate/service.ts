@@ -23,6 +23,7 @@ const BRAIN_MARGIN_MS = 5_000
 const WORKTREE_TTL_MS = 5_000
 const DEFAULT_BASE_TTL_MS = 60_000
 const PERMISSION_RECEIPT_WINDOW_MS = 5 * 60_000
+const LATE_ANSWER_TTL_MS = 5 * 60_000
 
 const RETRY_REASON = "The avatar hasn't decided yet; try the same call again shortly."
 const STOPPING_REASON = 'The avatar is stopping; try the same call again shortly.'
@@ -94,9 +95,9 @@ function readPayload(payload: unknown): { toolName: string; toolInput: unknown; 
 /**
  * Installs the real `app.services.gate` and provides the `tool-gate` and `launch-hook`
  * contributions. Each request resolves its supervised worktree from the session, records a
- * receipt, spends an allow-once approval or a remembered late answer if one matches, and otherwise
- * runs `decide()` and, only when nothing decided, the brain's judgment with a deadline. Nothing
- * that fails, times out or is unavailable is ever allowed. At Shadow the gate answers passthrough
+ * receipt, and runs `decide()` before consulting stored answers for undecided calls. An allow-once
+ * approval may answer a held call; only a judgment call can use a late answer or ask the brain.
+ * Nothing that fails, times out or is unavailable is ever allowed. At Shadow the gate answers passthrough
  * and journals what it would have done, without making the worker wait on the brain.
  *
  * Keeps the Codex hook entries and pi/omp extension in sync with installed agents at activation
@@ -235,12 +236,13 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   }
 
   /** Writes the receipt and journal entry together, then acts on the verdict. */
-  function conclude(entry: InFlight, mandate: Mandate, verdict: Verdict): Result {
+  function conclude(entry: InFlight, mandate: Mandate, verdict: Verdict, spend?: () => void): Result {
     const { call, fingerprint } = entry
     const shadow = mandate.level === 'shadow'
     const actual: GateOutcome = shadow ? 'passthrough' : verdict.outcome
     if (!entry.cancelled) {
       app.store.transaction(() => {
+        spend?.()
         app.store.receipts.put({ ...entry.receipt, outcome: actual, step: verdict.step })
         const extra: Record<string, unknown> = {}
         if (shadow) extra.wouldHave = { outcome: verdict.outcome, reason: verdict.reason, reliedOn: verdict.reliedOn }
@@ -295,20 +297,6 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
     const { call, fingerprint } = entry
     const shadow = mandate.level === 'shadow'
 
-    if (!shadow) {
-      const approval = app.store.approvals.list({ worktreeId: call.worktreeId, fingerprint }).find((candidate) => candidate.usedAt === null)
-      if (approval !== undefined) {
-        app.store.approvals.put({ ...approval, usedAt: app.now() })
-        return conclude(entry, mandate, { outcome: 'allow', reason: 'Allowed once by the user.', reliedOn: 'allow-once approval', trace: [], step: null })
-      }
-      const late = app.store.lateAnswers.get(fingerprint)
-      if (late !== null && late.usedAt === null) {
-        app.store.lateAnswers.put({ ...late, usedAt: app.now() })
-        const outcome: GateOutcome = late.decision === 'allow' ? 'allow' : 'deny'
-        return conclude(entry, mandate, { outcome, reason: late.reason, reliedOn: "the brain's earlier answer to this call", trace: [], step: 'judgment' })
-      }
-    }
-
     let rule: RuleDecision
     try {
       const ctx = await classifyContext(call.worktreeId)
@@ -322,10 +310,26 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
       return conclude(entry, mandate, { outcome: 'deny', reason, reliedOn: 'a classification error', trace: [], step: null })
     }
 
+    if (!shadow && (rule.outcome === 'held' || rule.outcome === 'judgment')) {
+      const approval = app.store.approvals.list({ worktreeId: call.worktreeId, fingerprint }).find((candidate) => candidate.usedAt === null)
+      if (approval !== undefined) {
+        return conclude(entry, mandate, { outcome: 'allow', reason: 'Allowed once by the user.', reliedOn: 'allow-once approval', trace: [], step: null },
+          () => app.store.approvals.put({ ...approval, usedAt: app.now() }))
+      }
+    }
+
     if (rule.outcome !== 'judgment') {
       const outcome: GateOutcome = rule.outcome
       const reason = outcome === 'held' ? heldReason(rule.reason) : rule.reason
       return conclude(entry, mandate, { outcome, reason, reliedOn: rule.reliedOn, trace: rule.trace, step: rule.step })
+    }
+
+    if (!shadow) {
+      const late = app.store.lateAnswers.get(fingerprint)
+      if (late !== null && late.usedAt === null && late.createdAt >= mandate.updatedAt && app.now() - late.createdAt <= LATE_ANSWER_TTL_MS) {
+        const verdict = judgmentVerdict({ decision: late.decision, reason: late.reason, reliedOn: "the brain's earlier answer to this call" }, rule.trace)
+        return conclude(entry, mandate, verdict, () => app.store.lateAnswers.put({ ...late, usedAt: app.now() }))
+      }
     }
 
     const budgetMs = Math.max(1_000, deadlineMs - BRAIN_MARGIN_MS)
