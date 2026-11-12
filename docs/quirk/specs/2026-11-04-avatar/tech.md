@@ -116,7 +116,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/shipping/review.ts` | Cross-family reviewer (R-29), finding intake and judgment records (R-30). |
 | `src/shipping/mergebar.ts` | Pure merge bar (R-31, R-32) and shared-goal order (R-33). |
 | `src/shipping/outbox.ts` | Outbox record-then-run, crash recovery against GitHub (R-34). |
-| `src/sanitize.ts` | Pure: strip hidden markup from review, PR and CI text (R-24). |
+| `src/sanitize.ts` | Pure: strip hidden markup from review, PR and CI text, and show a call or a command whole with what can't be seen written as an escape (R-24). |
 | `src/keepawake.ts` | Holds or releases `hostPower.keepAwake` from worktree states (R-12). |
 | `src/notify.ts` | Pure "everything waits on you" rule plus a single `context.notify` (R-35). |
 | `src/report.ts` | Needs-you, stories and summary (R-45). The in-memory summary tally reads journal rows incrementally and rebuilds when the start time or active hand-offs change. Owns `changed` announcements, including changed worktree and project names. |
@@ -448,7 +448,7 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
 ### Brain (`src/brain/*`)
 - The brain is one `quirky.structured` session, created with `toolPolicy: 'deny-all'`, `lifetime: 'plugin'`, and the agent and model from settings.
 - Each wake sends one event prompt. The brain must answer with exactly one fenced JSON block holding `BrainAction[]`. Anything unparseable is journaled and retried once with the parse error; a second failure parks that event as a `brain-error` need.
-- Judgment prompts contain only the mandate, the house rules and the call (`toolName`, `toolInput`, `cwd`). **They never contain worker transcript text** (R-18).
+- Judgment prompts contain only the mandate, the house rules and the call (`toolName`, `toolInput`, `cwd`), shown whole. A shell tool's description or justification field, which is the worker's own account of the call, is left out. **They never contain worker transcript text** (R-18).
 - A judgment is sent, and its answer delivered or remembered, only while the worktree is still handed off under a mandate deep-equal in every field to the one passed to `judge`. If it changed before an in-time answer, resolve `unavailable`. A timed-out judgment still runs when its turn comes if that mandate remains active. Do not store a late reply when the existing answer was used at or after the judgment was asked, including the same millisecond; a later judgment may replace an older used answer.
 - Rotation:
   - Rotation happens after the event in progress is fully dispatched, when `contextUsage.contextTokens >= limit`, where `limit = min(300000, floor(0.8 * contextWindow))`. The brain reads the footprint only from `result` messages.
@@ -601,7 +601,7 @@ These are fixed by the logic spec.
 **Always**
 - Fail closed on every supervised path: no answer, an error or a timeout gives deny with a retry reason, never allow (R-19).
 - Journal before acting. A state change and its journal entry go in one store transaction.
-- Treat repo files, PR, review and CI text, and worker messages as data. Pass them through `sanitize()` and wrap them as quoted data in prompts (R-24).
+- Treat repo files, PR, review and CI text, and worker messages as data. Pass them through `sanitize()` and wrap them as quoted data in prompts. A call, a command or a record of one is not cleaned: it is shown whole through `escapeInvisible()`, because whatever a prompt removed would still run (R-24).
 - Pin merges to the reviewed SHA through `expectedHead`.
 - Mark the avatar's work only in its journal. Add no commit trailers or PR notes (R-48).
 
