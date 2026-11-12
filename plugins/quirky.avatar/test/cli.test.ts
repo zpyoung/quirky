@@ -163,7 +163,10 @@ describe('quirky avatar status and report', () => {
   test('report prints the summary, what needs you and each story', async () => {
     const h = harness({
       'quirky.avatar/report': () => ({
-        needsYou: [{ id: 'n1', worktreeId: 'wt-1', kind: 'held-call', title: 'force-push held', detail: {}, actions: [], createdAt: 1, resolvedAt: null, resolution: null }],
+        needsYou: [
+          { id: 'n1', worktreeId: 'wt-1', kind: 'held-call', title: 'force-push held', detail: {}, actions: ['finding-dismiss', 'finding-valid'], createdAt: 1, resolvedAt: null, resolution: null },
+          { id: 'n2', worktreeId: 'wt-1', kind: 'question', title: 'a need with no actions', detail: {}, actions: [], createdAt: 2, resolvedAt: null, resolution: null }
+        ],
         stories: [{ worktreeId: 'wt-1', name: 'fix', switchesOn: ['deploys'], story: 'Fixed two checks.', handedBackWith: ['1 held force-push'] }],
         summary: { decisions: 5, allowed: 3, denied: 1, held: 1, guesses: 2, sleeps: [{ at: 1, durationMs: 60_000 }], keptAwake: true },
         topSkippedCalls: []
@@ -176,9 +179,55 @@ describe('quirky avatar status and report', () => {
     expect(text).toContain('slept 1 time')
     expect(text).toContain('Needs you')
     expect(text).toContain('force-push held')
+    expect(text).toContain('- force-push held [n1: finding-dismiss, finding-valid]')
+    expect(text).toContain('- a need with no actions [n2]')
     expect(text).toContain('fix (deploys on)')
     expect(text).toContain('Fixed two checks.')
     expect(text).toContain('Handed back with: 1 held force-push')
+  })
+})
+
+describe('quirky avatar resolve-need', () => {
+  test('resolves a need with supplied text and prints the action', async () => {
+    const h = harness({ 'quirky.avatar/resolveNeed': () => ({ ok: true }) })
+    await commands['resolve-need']!(args(['n1', 'finding-dismiss'], { text: 'my reason' }), h.ctx)
+    expect(h.calls).toEqual([
+      { method: 'quirky.avatar/resolveNeed', params: { needId: 'n1', action: 'finding-dismiss', text: 'my reason' } }
+    ])
+    expect(h.lines).toEqual(['Resolved n1 with finding-dismiss.'])
+  })
+
+  test('omits text when none was supplied', async () => {
+    const h = harness({ 'quirky.avatar/resolveNeed': () => ({ ok: true }) })
+    await commands['resolve-need']!(args(['n2', 'finding-valid']), h.ctx)
+    expect(h.calls).toEqual([
+      { method: 'quirky.avatar/resolveNeed', params: { needId: 'n2', action: 'finding-valid' } }
+    ])
+    expect(h.lines).toEqual(['Resolved n2 with finding-valid.'])
+  })
+
+  test('fails with the method error or a default error', async () => {
+    for (const [response, message] of [
+      [{ ok: false, error: 'thread could not be resolved' }, 'thread could not be resolved'],
+      [{ ok: false }, 'the need was not resolved']
+    ] as [{ ok: boolean; error?: string }, string][]) {
+      const h = harness({ 'quirky.avatar/resolveNeed': () => response })
+      await expect(commands['resolve-need']!(args(['n1', 'finding-dismiss']), h.ctx)).rejects.toMatchObject({ exit: 1, message })
+      expect(h.calls).toEqual([
+        { method: 'quirky.avatar/resolveNeed', params: { needId: 'n1', action: 'finding-dismiss' } }
+      ])
+    }
+  })
+
+  test('requires exactly a need id and an action without making a call', async () => {
+    for (const positionals of [[], ['n1'], ['n1', 'finding-dismiss', 'extra']]) {
+      const h = harness({})
+      await expect(commands['resolve-need']!(args(positionals), h.ctx)).rejects.toMatchObject({
+        exit: 2,
+        message: 'a need id and an action are required'
+      })
+      expect(h.calls).toEqual([])
+    }
   })
 })
 
