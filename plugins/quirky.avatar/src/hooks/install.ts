@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { Stats } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import type { LaunchHook } from '@quirky/protocol'
 import type { Level } from '../contracts'
 import { GATE_EXTENSION_FILE, GATE_EXTENSION_MARKER, gateExtensionSource } from './pi-extension'
@@ -66,7 +66,7 @@ function writePath(path: string): { path: string; mode?: number } {
       if (code === 'ELOOP') throw new Error(`${path} is a link that never reaches a file`)
       throw error
     }
-    current = isAbsolute(target) ? target : resolve(dirname(current), target)
+    current = isAbsolute(target) ? target : `${dirname(current)}/${target}`
     links++
   }
 }

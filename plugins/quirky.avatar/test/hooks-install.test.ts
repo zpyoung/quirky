@@ -814,6 +814,34 @@ describe('agent files behind a link', () => {
     expect(readlinkSync(hooks)).toBe(target)
   })
 
+  test('relative targets keep filesystem semantics through a linked parent directory', () => {
+    const env = agentEnv()
+    const dot = join(env.home, 'dot')
+    const codex = join(dot, 'codex')
+    const target = join(dot, 'hooks.json')
+    const unrelated = join(env.home, 'hooks.json')
+    const original = '{"model":"x"}\n'
+    const untouched = '{"owner":"untouched"}\n'
+    mkdirSync(codex, { recursive: true })
+    writeFileSync(target, original)
+    writeFileSync(unrelated, untouched)
+    symlinkSync('dot/codex', join(env.home, '.codex'))
+    symlinkSync('../hooks.json', join(codex, 'hooks.json'))
+
+    expect(installCodexHooks(env, 55)).toBe(true)
+    expect(JSON.parse(readFileSync(target, 'utf8')).hooks.PreToolUse).toHaveLength(1)
+    expect(readFileSync(unrelated, 'utf8')).toBe(untouched)
+    expect(codexHooksInstalled(env)).toBe(true)
+    expect(installCodexHooks(env, 55)).toBe(false)
+    expect(removeCodexHooks(env)).toBe(true)
+    expect(readFileSync(target, 'utf8')).toBe(original)
+    expect(readFileSync(unrelated, 'utf8')).toBe(untouched)
+    expect(readlinkSync(join(env.home, '.codex'))).toBe('dot/codex')
+    expect(readlinkSync(codexHooksPath(env))).toBe('../hooks.json')
+    expect(readdirSync(dot).sort()).toEqual(['codex', 'hooks.json'])
+    expect(readdirSync(codex).sort()).toEqual(['hooks.json'])
+  })
+
   test('follows a chain of relative links to its end', () => {
     const env = agentEnv()
     const codexDir = join(env.home, '.codex')
