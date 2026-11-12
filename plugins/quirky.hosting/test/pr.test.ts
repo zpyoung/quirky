@@ -843,6 +843,28 @@ describe('quirky.hosting PR reads', () => {
     expect(gitOutput(testHost, ['--git-dir', bare, 'for-each-ref', '--format=%(refname)', 'refs/heads/main'])).toBe('')
   }, 20_000)
 
+  test('creation push keeps the target commit when HEAD advances after validation', async () => {
+    const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
+    hosts.push(testHost)
+    testHost.writeState(fixtureState({ authenticated: true }))
+    const bare = join(testHost.root, 'creation-race.git')
+    const pushLog = join(testHost.root, 'pushes.log')
+    writeFileSync(pushLog, '')
+    git(testHost, ['init', '--bare', bare])
+    commitFeature(testHost)
+    installLocalGitTransport(testHost, bare, pushLog, bare)
+    const recordedHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
+    expect(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: testHost.worktree, purpose: 'creation'
+    })).toMatchObject({ ready: true, branch: 'feature', localHead: recordedHead })
+
+    writeFileSync(join(testHost.repoPath, 'late.txt'), 'a commit made while the avatar checks the remote\n')
+    git(testHost, ['add', 'late.txt'])
+    git(testHost, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.invalid', 'commit', '-m', 'late worker commit'])
+    await testHost.client.callAny('quirky.git/push', { worktree: testHost.worktree, purpose: 'creation' })
+    expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/feature'])).toBe(recordedHead)
+  }, 20_000)
+
 
   test('pushRepository resolves a later named remote among multiple remotes', async () => {
     const testHost = await host()
