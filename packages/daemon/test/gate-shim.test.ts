@@ -118,6 +118,18 @@ describe('unsupervised sessions', () => {
     expect(hits).toEqual([])
   })
 
+  test.each(['.', '..', '.hidden', 'a/b', '../supervised/s1'])('session id %j prints {} and never calls the daemon', async (sessionId) => {
+    mark('s1')
+    if (sessionId === '.hidden') mark('.hidden')
+    if (sessionId === 'a/b') {
+      mkdirSync(join(home, 'plugin-data', 'quirky.avatar', 'supervised', 'a'))
+      mark('a/b')
+    }
+    const r = await run({ env: { QUIRKY_SESSION_ID: sessionId } })
+    expect(r).toEqual({ code: 0, stdout: '{}\n', stderr: '' })
+    expect(hits).toEqual([])
+  })
+
   test('without a marker file prints {} and never calls the daemon', async () => {
     const r = await run()
     expect(r).toEqual({ code: 0, stdout: '{}\n', stderr: '' })
@@ -327,6 +339,23 @@ describe('supervised sessions', () => {
     writeFileSync(join(bin, 'cat'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
     const r = await run({ env: { PATH: `${bin}:${process.env.PATH ?? '/usr/bin:/bin'}` } })
     expect(r).toEqual({ code: 2, stdout: '', stderr: UNAVAILABLE })
+    expect(hits).toHaveLength(1)
+    expect(hits[0]!.body).toBe(PAYLOAD)
+  })
+
+  test('refuses at PermissionRequest when printing the encoded answer fails', async () => {
+    mark('s1')
+    reply = () => Response.json({ decision: 'allow', reason: 'ok', encoded: '{}' })
+    const bin = join(root, 'fake-bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'cat'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    const r = await run({
+      args: ['claude', '30000', 'PermissionRequest'],
+      env: { PATH: `${bin}:${process.env.PATH ?? '/usr/bin:/bin'}` }
+    })
+    expect(r).toEqual({ code: 0, stdout: `${PR_DENY}\n`, stderr: UNAVAILABLE })
+    expect(hits).toHaveLength(1)
+    expect(hits[0]!.body).toBe(PAYLOAD)
   })
 })
 
