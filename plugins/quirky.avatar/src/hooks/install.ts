@@ -51,6 +51,18 @@ export type Marker = { worktreeId: string; level: Level }
 export function markerDir(quirkyHome: string): string {
   return join(quirkyHome, 'plugin-data', 'quirky.avatar', 'supervised')
 }
+/** Names of files in the marker directory, sorted; empty when the directory is absent. */
+export function listMarkerFiles(quirkyHome: string): string[] {
+  try {
+    return readdirSync(markerDir(quirkyHome), { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .sort()
+  } catch {
+    return []
+  }
+}
+
 
 const safeSessionId = (sessionId: string): boolean => sessionId !== '' && !/[\\/]/.test(sessionId) && !sessionId.startsWith('.')
 
