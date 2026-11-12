@@ -8,14 +8,14 @@ for (const event of ['uncaughtException', 'unhandledRejection'] as const) {
     const previous = process.listeners(event)
     const dispose = installProcessErrorGuards({ label: 'quirky-pty', write: (line) => { lines.push(line) } })
     try {
-      const listener = process.listeners(event).find((fn) => !previous.includes(fn))! as (reason: unknown) => void
+      const listener = process.listeners(event).find((fn) => !previous.includes(fn))!
       const circular = Object.create(null)
       circular.self = circular
       const error = new Error('boom')
       const withoutStack = new Error('no stack')
       withoutStack.stack = ''
       for (const value of [error, withoutStack, 'plain', undefined, null, 7, 42n, Symbol('fault'), circular]) {
-        listener(value)
+        Reflect.apply(listener, process, [value])
         const detail = value instanceof Error ? value.stack || `${value.name}: ${value.message}` : typeof value === 'string' ? value : inspect(value)
         expect(lines.at(-1)).toBe(`[quirky-pty] ${event}: ${detail}\n`)
       }

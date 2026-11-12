@@ -1,5 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
+import { Worker } from 'node:worker_threads'
+import { performance } from 'node:perf_hooks'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginStore, StoreMigration } from '@quirky/protocol'
@@ -12,6 +14,41 @@ const ID = 'acme.tools'
 
 function open(home: string, migrations: unknown, isActive: () => boolean = () => true, pluginId = ID) {
   return openPluginStore({ home, pluginId, migrations: migrations as StoreMigration[], isActive })
+}
+
+type OpenedPluginStore = { store: PluginStore; close(): void }
+
+const lockWorkerSource = `
+const { parentPort, workerData } = require('node:worker_threads')
+const { Database } = require('bun:sqlite')
+const db = new Database(workerData.file)
+try {
+  db.exec(workerData.begin)
+  parentPort.postMessage('locked')
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, workerData.holdMs)
+  db.exec('ROLLBACK')
+} catch (error) {
+  parentPort.postMessage({ error: error instanceof Error ? error.message : String(error) })
+} finally {
+  db.close()
+}
+`
+
+async function holdLock(file: string, begin: string, holdMs: number): Promise<{ exit: Promise<void> }> {
+  const worker = new Worker(lockWorkerSource, { eval: true, workerData: { file, begin, holdMs } })
+  const exitResolvers = Promise.withResolvers<void>()
+  worker.once('error', (error) => exitResolvers.reject(error))
+  worker.once('exit', (code) => code === 0 ? exitResolvers.resolve() : exitResolvers.reject(new Error(`lock worker exited ${code}`)))
+  void exitResolvers.promise.catch(() => {})
+  const readyResolvers = Promise.withResolvers<void>()
+  worker.once('message', (message) => {
+    if (message === 'locked') readyResolvers.resolve()
+    else readyResolvers.reject(new Error(`lock worker failed: ${JSON.stringify(message)}`))
+  })
+  worker.once('error', (error) => readyResolvers.reject(error))
+  worker.once('exit', (code) => readyResolvers.reject(new Error(`lock worker exited before locking: ${code}`)))
+  await readyResolvers.promise
+  return { exit: exitResolvers.promise }
 }
 
 function inspect(file: string) {
@@ -43,11 +80,18 @@ describe('openPluginStore setup', () => {
     close()
   })
 
-  test('uses WAL journal mode', () => {
+  test('sets default busy_timeout and NORMAL synchronous mode while allowing FULL overrides', () => {
     const home = makeTempDir()
     const { store, close } = open(home, [])
-    expect(store.get<{ journal_mode: string }>('PRAGMA journal_mode')?.journal_mode).toBe('wal')
-    close()
+    try {
+      expect(store.get<{ timeout: number }>('PRAGMA busy_timeout')).toEqual({ timeout: 5000 })
+      expect(store.get<{ journal_mode: string }>('PRAGMA journal_mode')).toEqual({ journal_mode: 'wal' })
+      expect(store.get<{ synchronous: number }>('PRAGMA synchronous')).toEqual({ synchronous: 1 })
+      store.exec('PRAGMA synchronous = FULL')
+      expect(store.get<{ synchronous: number }>('PRAGMA synchronous')).toEqual({ synchronous: 2 })
+    } finally {
+      close()
+    }
   })
 
   test('different plugin ids get separate files', () => {
@@ -204,6 +248,7 @@ describe('migrations', () => {
     })
     try {
       expect(store.readOnly).toBe(true)
+      expect(store.get<{ timeout: number }>('PRAGMA busy_timeout')).toEqual({ timeout: 5000 })
       expect(store.version).toBe(2)
       expect(store.get<{ name: string }>('SELECT name FROM items')).toEqual({ name: 'newer data' })
       expect(() => store.run("DELETE FROM items")).toThrow()
@@ -218,6 +263,59 @@ describe('migrations', () => {
     }
     expect(inspect(file)).toEqual(before.state)
     expect(readFileSync(file).equals(before.bytes)).toBe(true)
+  })
+
+  test('waits for a WAL-store write lock to clear before applying the next migration', async () => {
+    const home = makeTempDir()
+    const pluginId = 'acme.notes'
+    const migrations: StoreMigration[] = [
+      'CREATE TABLE items (id INTEGER PRIMARY KEY)',
+      'ALTER TABLE items ADD COLUMN name TEXT'
+    ]
+    openPluginStore({ home, pluginId, migrations: migrations.slice(0, 1), isActive: () => true }).close()
+    const file = join(pluginDataDir(home, pluginId), 'store.db')
+    const lock = await holdLock(file, 'BEGIN IMMEDIATE', 150)
+    let opened: OpenedPluginStore | undefined
+    try {
+      opened = openPluginStore({ home, pluginId, migrations, isActive: () => true })
+      expect(opened.store.version).toBe(2)
+    } finally {
+      opened?.close()
+      await lock.exit
+    }
+  })
+
+  test('waits for busy_timeout then throws SQLITE_BUSY without changing the plugin schema', async () => {
+    const home = makeTempDir()
+    const pluginId = 'acme.notes'
+    const migrations: StoreMigration[] = [
+      'CREATE TABLE items (id INTEGER PRIMARY KEY)',
+      'ALTER TABLE items ADD COLUMN name TEXT'
+    ]
+    openPluginStore({ home, pluginId, migrations: migrations.slice(0, 1), isActive: () => true }).close()
+    const file = join(pluginDataDir(home, pluginId), 'store.db')
+    const before = inspect(file)
+    const lock = await holdLock(file, 'BEGIN IMMEDIATE', 400)
+    let opened: OpenedPluginStore | undefined
+    let error: unknown
+    let elapsed = 0
+    try {
+      const started = performance.now()
+      try {
+        opened = openPluginStore({ home, pluginId, migrations, isActive: () => true, busyTimeoutMs: 100 })
+      } catch (caught) {
+        error = caught
+      }
+      elapsed = performance.now() - started
+    } finally {
+      opened?.close()
+      await lock.exit
+    }
+    expect(elapsed).toBeGreaterThanOrEqual(90)
+    expect(error).toBeInstanceOf(Error)
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+    expect(code).toBe('SQLITE_BUSY')
+    expect(inspect(file)).toEqual(before)
   })
 
   test.each([[undefined], ['CREATE TABLE a (id INTEGER)'], [{ 0: 'x', length: 1 }], [[1]], [[null]], [['CREATE TABLE a (id INTEGER)', {}]]])(
