@@ -366,6 +366,35 @@ describe('hook-config watch', () => {
     await t.records.check()
     expect(t.watched[0].stopped).toBe(true)
   })
+  test('a config change after disposal runs no gate check', async () => {
+    const t = setup()
+    let checks = 0
+    t.app.services.gate.gateCheck = async () => (checks++, { ok: false, reason: 'no' })
+    t.records.dispose()
+    await t.records.configChanged('wt-1')
+    expect(checks).toBe(0)
+    expect(t.steps).toEqual([])
+    expect(t.current.state).toBe('working')
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+  })
+
+  test('a gate check that fails after disposal changes nothing', async () => {
+    const t = setup()
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<{ ok: boolean; reason: string }>()
+    t.app.services.gate.gateCheck = () => {
+      entered.resolve()
+      return held.promise
+    }
+    const run = t.records.configChanged('wt-1')
+    await entered.promise
+    t.records.dispose()
+    held.resolve({ ok: false, reason: 'no' })
+    await run
+    expect(t.steps).toEqual([])
+    expect(t.current.state).toBe('working')
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+  })
 })
 
 type RecordFixture = {
@@ -425,9 +454,12 @@ describe('durable record positions', () => {
 
   test('a session with no transcript has no cursor row', async () => {
     const t = setup()
+    const logs: string[] = []
+    t.context.log = (line) => void logs.push(line)
     t.fakeCalls['quirky.session/get'] = () => ({ agent: 'claude', cwd: t.worktree })
     await t.records.check()
     expect(t.app.store.recordCursors.list()).toEqual([])
+    expect(logs).toEqual([])
   })
 
   test('a stopped skipped call is not observed or judged twice after restart', async () => {
@@ -499,6 +531,19 @@ describe('durable record positions', () => {
     expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true, top: true } }])
     expect(t.steps).toHaveLength(1)
     expect(t.steps[0].text).toContain(PUSH.command)
+  })
+  test('a quiet first pass after restart leaves the stored row as it was', async () => {
+    const t = setup({ graceMs: 300_000 })
+    appendReceiptedRead(t)
+    t.append(claudeCall('Bash', PUSH, 540_000))
+    await t.records.check()
+    const before = t.app.store.recordCursors.get('s-1')
+    expect(before).toMatchObject({ pending: [waitingCall(t)], updatedAt: T0 + 600_000 })
+    t.restart()
+    t.app.now = () => T0 + 660_000
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')).toEqual(before)
+    expect(t.observed).toHaveLength(2)
   })
 })
 
@@ -588,15 +633,24 @@ describe('durable waiting calls', () => {
       worktreeId: 'wt-2', pending: [{ agent: 'claude', cwd: otherWorktree, toolName: 'Bash', toolInput: input, at: T0 + 540_000, fingerprint: callFingerprint('claude', 'wt-2', 'Bash', input) }]
     })
   })
+  test('a waiting call stamped at the hand-off time is kept on load', async () => {
+    const t = setup()
+    seedCursor(t, { pending: [waitingCall(t, PUSH, T0)] })
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true, fingerprint: t.fingerprint('Bash', PUSH) } }])
+    expect(t.steps).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+  })
 })
 
 describe('cursor lifecycle and failures', () => {
   test('a changed path resets the position but keeps waiting calls', async () => {
     const t = setup()
-    seedCursor(t, { path: join(dir, 'old.jsonl'), readOffset: 999, pending: [waitingCall(t, PUSH, T0 + 1_000)] })
+    seedCursor(t, { path: join(dir, 'old.jsonl'), readOffset: 10, pending: [waitingCall(t, PUSH, T0 + 1_000)] })
     appendReceiptedRead(t)
     await t.records.check()
-    expect(t.observed).toHaveLength(1)
+    expect(statSync(t.transcript).size).toBeGreaterThan(10)
+    expect(t.observed.map((call) => call.fingerprint)).toEqual([t.fingerprint('Read', READ)])
     expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true } }])
     expect(t.app.store.recordCursors.get('s-1')).toMatchObject({ path: t.transcript, readOffset: statSync(t.transcript).size, pending: [] })
   })
@@ -688,6 +742,94 @@ describe('cursor lifecycle and failures', () => {
     expect(logs).toContain('avatar record cursor for s-1 could not be saved: disk')
     expect(t.watched[0].stopped).toBe(true)
   })
+  test('a path that changes between two passes is read from its start', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    const moved = join(dir, 'moved.jsonl')
+    const b = { file_path: 'b.ts' }
+    const c = { file_path: 'c.ts' }
+    writeFileSync(moved, claudeCall('Read', b, 2_000) + claudeCall('Read', c, 3_000))
+    t.receipts.add(t.fingerprint('Read', b))
+    t.receipts.add(t.fingerprint('Read', c))
+    t.fakeCalls['quirky.session/get'] = () => ({ agent: 'claude', cwd: t.worktree, createdAt: T0, providerSession: { transcriptPath: moved } })
+    await t.records.check()
+    expect(t.observed.map((call) => call.fingerprint)).toEqual([
+      t.fingerprint('Read', READ),
+      t.fingerprint('Read', b),
+      t.fingerprint('Read', c)
+    ])
+    expect(t.app.store.recordCursors.get('s-1')).toMatchObject({ path: moved, readOffset: statSync(moved).size })
+  })
+
+  test('a path that changes to an empty record is stored on that pass', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    const moved = join(dir, 'moved.jsonl')
+    writeFileSync(moved, '')
+    t.fakeCalls['quirky.session/get'] = () => ({ agent: 'claude', cwd: t.worktree, createdAt: T0, providerSession: { transcriptPath: moved } })
+    t.app.now = () => T0 + 660_000
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')).toEqual({
+      sessionId: 's-1', worktreeId: 'wt-1', path: moved, readOffset: 0, pending: [], updatedAt: T0 + 660_000
+    })
+  })
+
+  test('a stored row with another path is rewritten even when the new record is empty', async () => {
+    const t = setup()
+    seedCursor(t, { path: join(dir, 'old.jsonl'), readOffset: 10 })
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')).toEqual({
+      sessionId: 's-1', worktreeId: 'wt-1', path: t.transcript, readOffset: 0, pending: [], updatedAt: T0 + 600_000
+    })
+  })
+
+  test('a stored row from another worktree is taken over by the current one', async () => {
+    const t = setup({ graceMs: 300_000 })
+    appendReceiptedRead(t)
+    const size = statSync(t.transcript).size
+    seedCursor(t, { worktreeId: 'wt-old', readOffset: size, pending: [waitingCall(t)] })
+    await t.records.check()
+    expect(t.observed).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')).toEqual({
+      sessionId: 's-1', worktreeId: 'wt-1', path: t.transcript, readOffset: size, pending: [waitingCall(t)], updatedAt: T0 + 600_000
+    })
+    t.app.now = () => T0 + 900_000
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ worktreeId: 'wt-1', data: { wouldHaveStopped: true } }])
+    expect(t.steps.map((step) => step.worktreeId)).toEqual(['wt-1'])
+  })
+
+  test('a failed listing in the prune is logged and the rest of the pass still runs', async () => {
+    const t = setup()
+    const logs: string[] = []
+    t.context.log = (line) => void logs.push(line)
+    t.app.store.recordCursors.list = () => { throw new Error('db closed') }
+    t.append(claudeCall('Bash', PUSH))
+    await t.records.check()
+    expect(logs).toEqual(['avatar record cursor for all sessions could not be read: db closed'])
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.steps).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')).toMatchObject({ readOffset: statSync(t.transcript).size, pending: [] })
+  })
+
+  test('a session handed off again after a take-back gets its row back', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    const active = t.app.services.handoff.active
+    t.app.services.handoff.active = () => []
+    await t.records.check()
+    expect(t.app.store.recordCursors.list()).toEqual([])
+    t.app.store.handoffs.put({ worktreeId: 'wt-1', state: 'working', sessionId: 's-1', active: true, handedOffAt: T0 + 5_000, takenBackAt: null })
+    t.app.services.handoff.active = active
+    await t.records.check()
+    expect(t.observed).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')).toMatchObject({
+      sessionId: 's-1', worktreeId: 'wt-1', path: t.transcript, readOffset: statSync(t.transcript).size, pending: []
+    })
+  })
 })
 
 describe('stopping during a record pass', () => {
@@ -750,6 +892,124 @@ describe('stopping during a record pass', () => {
     t.records.dispose()
     await t.records.check()
     expect(t.observed).toEqual([])
+    expect(t.app.store.recordCursors.list()).toEqual([])
+  })
+  test('a pass started after disposal deletes no row', async () => {
+    const t = setup()
+    seedCursor(t, { sessionId: 's-gone', worktreeId: 'wt-9' })
+    t.app.services.handoff.active = () => []
+    t.records.dispose()
+    await t.records.check()
+    expect(t.app.store.recordCursors.list().map((row) => row.sessionId)).toEqual(['s-gone'])
+  })
+
+  const events = (t: { app: AvatarApp }, type: string) =>
+    t.app.store.journalSince(0)
+      .filter((entry) => entry.kind === 'event' && entry.data.type === type)
+      .map((entry) => entry.data)
+
+  const heldStepIn = (t: { app: AvatarApp; steps: { worktreeId: string; text: string }[] }) => {
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<{ sent: boolean; reason?: string }>()
+    t.app.services.supervisor.stepIn = (worktreeId, text) => {
+      t.steps.push({ worktreeId, text })
+      entered.resolve()
+      return held.promise
+    }
+    return { entered: entered.promise, resolve: held.resolve, reject: held.reject }
+  }
+
+  test('a judgment that fails is journaled once and the call leaves the list', async () => {
+    const t = setup()
+    t.app.services.supervisor.stepIn = async () => { throw new Error('terminal gone') }
+    t.append(claudeCall('Bash', PUSH))
+    await t.records.check()
+    expect(events(t, 'skipped-call-error')).toEqual([
+      { type: 'skipped-call-error', error: 'terminal gone', fingerprint: t.fingerprint('Bash', PUSH) }
+    ])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+    await t.records.check()
+    expect(events(t, 'skipped-call-error')).toHaveLength(1)
+    expect(t.skipped()).toHaveLength(1)
+  })
+
+  test('a judgment that fails after disposal is not journaled and stays pending', async () => {
+    const t = setup()
+    const { entered, reject } = heldStepIn(t)
+    t.append(claudeCall('Bash', PUSH))
+    const pass = t.records.check()
+    await entered
+    t.records.dispose()
+    reject(new Error('terminal gone'))
+    await pass
+    expect(events(t, 'skipped-call-error')).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t, PUSH, T0 + 1_000)])
+  })
+
+  test('a step-in refused after disposal is not journaled and stays pending', async () => {
+    const t = setup()
+    const { entered, resolve } = heldStepIn(t)
+    t.append(claudeCall('Bash', PUSH))
+    const pass = t.records.check()
+    await entered
+    t.records.dispose()
+    resolve({ sent: false, reason: 'user-typing' })
+    await pass
+    expect(events(t, 'step-in-refused')).toEqual([])
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t, PUSH, T0 + 1_000)])
+  })
+
+  test('a stop during the first of two waiting calls starts no judgment of the second', async () => {
+    const t = setup()
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<{ head: string; branch: string }>()
+    let checks = 0
+    t.fakeCalls['quirky.git/status'] = () => {
+      checks++
+      entered.resolve()
+      return held.promise
+    }
+    const other = { command: 'git push origin other' }
+    t.append(claudeCall('Bash', PUSH, 1_000))
+    t.append(claudeCall('Bash', other, 2_000))
+    const pass = t.records.check()
+    await entered.promise
+    t.records.dispose()
+    held.resolve({ head: 'sha', branch: 'avatar/wt-1' })
+    await pass
+    expect(checks).toBe(1)
+    expect(t.skipped()).toEqual([])
+    expect(t.steps).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([
+      waitingCall(t, PUSH, T0 + 1_000),
+      waitingCall(t, other, T0 + 2_000)
+    ])
+  })
+
+  test('a pass disposed while it reads a session reads nothing more', async () => {
+    const t = setup()
+    mkdirSync(join(t.worktree, '.claude'))
+    appendReceiptedRead(t)
+    const first = t.app.services.handoff.active()[0]
+    t.app.services.handoff.active = () => [first, { ...first, worktreeId: 'wt-2', sessionId: 's-2' }]
+    t.app.store.handoffs.put({ worktreeId: 'wt-2', state: 'working', sessionId: 's-2', active: true, handedOffAt: T0, takenBackAt: null })
+    const sessions: unknown[] = []
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<unknown>()
+    t.fakeCalls['quirky.session/get'] = (params) => {
+      sessions.push(params.session)
+      entered.resolve()
+      return held.promise
+    }
+    const pass = t.records.check()
+    await entered.promise
+    t.records.dispose()
+    held.resolve({ agent: 'claude', cwd: t.worktree, createdAt: T0, providerSession: { transcriptPath: t.transcript } })
+    await pass
+    expect(sessions).toEqual(['s-1'])
+    expect(t.observed).toEqual([])
+    expect(t.watched).toEqual([])
     expect(t.app.store.recordCursors.list()).toEqual([])
   })
 })

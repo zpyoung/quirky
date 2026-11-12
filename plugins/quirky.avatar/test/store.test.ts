@@ -120,6 +120,8 @@ describe('avatar store tables', () => {
       const { handoff, journalEntry } = (() => {
         const first = openPluginStore({ home, pluginId: 'quirky.avatar', migrations: avatarMigrations.slice(0, 1), isActive: () => true })
         try {
+          expect(first.store.version).toBe(1)
+          expect(first.store.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'record_cursors'")).toEqual([])
           const store = createAvatarStore(first.store)
           const handoff = { worktreeId: 'a', state: 'working' as const, sessionId: 's', active: true, handedOffAt: 5, takenBackAt: null }
           store.handoffs.put(handoff)
@@ -133,6 +135,7 @@ describe('avatar store tables', () => {
       const upgraded = openPluginStore({ home, pluginId: 'quirky.avatar', migrations: avatarMigrations, isActive: () => true })
       try {
         const store = createAvatarStore(upgraded.store)
+        expect(avatarMigrations.length).toBeGreaterThan(1)
         expect(upgraded.store.version).toBe(avatarMigrations.length)
         expect(store.handoffs.get('a')).toEqual(handoff)
         expect(store.journalSince(0)).toEqual([journalEntry])
