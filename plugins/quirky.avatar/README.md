@@ -27,6 +27,10 @@ Turn off `agent-hooks` with `quirky setting set setting:quirky.avatar/agent-hook
 
 The same operations are plugin methods under `quirky.avatar/`: `eligibility`, `handoff`, `takeBack`, `status`, `sidebarStatus`, `report`, `log`, `resolveNeed`, `mandate`, `settings` and `setSettings`.
 
+The Report tab shows a guess's chosen answer and each proposed mandate field's current and new values. Question needs show every question in the batch with its typed controls and optional markers. Each need's action buttons stay disabled until its own request settles.
+
+For question needs, `resolveNeed` accepts `answers`, keyed by question ID, containing the typed `AskAnswer` values that `quirky.ask/answer` validates. Legacy question needs still accept `text`. Answer validation failures keep the need open to retry; already-finished or missing asks close their stale needs.
+
 ## Settings
 
 Set under Settings > Avatar. Level and switch defaults apply to new hand-offs; the rest tune the gate and the brain.

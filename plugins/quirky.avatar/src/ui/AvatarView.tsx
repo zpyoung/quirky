@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Badge, Button, EmptyState, ListRow, SectionHeader, Tabs, TextField, ToolPanelFrame, type UiStatus } from '@quirky/ui'
-import type { UiPluginContext } from '@quirky/protocol'
-import type { AvatarUiProps, JournalEntry, JournalKind, Level, NeedAction, NeedsYouItem, ReportModel, SwitchId, WorktreeState } from '../contracts'
+import { Badge, Button, Checkbox, EmptyState, ListRow, SectionHeader, SegmentedControl, SelectField, Tabs, TextArea, TextField, ToolPanelFrame, type UiStatus } from '@quirky/ui'
+import type { AskAnswer, AskOption, AskQuestion, UiPluginContext } from '@quirky/protocol'
+import type { AvatarUiProps, JournalEntry, JournalKind, Level, Mandate, NeedAction, NeedsYouItem, ReportModel, SwitchId, WorktreeState } from '../contracts'
 import DecisionTrace, { describeToolInput } from './DecisionTrace'
 
 /** What `quirky.avatar/status` returns. */
@@ -258,30 +258,365 @@ function LiveTab({ context }: { context: UiPluginContext }) {
   )
 }
 
-function NeedRow({ need, worktreeName, busy, onResolve }: { need: NeedsYouItem; worktreeName: string; busy: boolean; onResolve(action: NeedAction, text?: string): void }) {
-  const [answer, setAnswer] = useState('')
-  const detail = ['reason', 'question', 'summary', 'why'].map((key) => need.detail[key]).find((value): value is string => typeof value === 'string' && value !== '')
-  const buttons = need.actions.map((action, index) => (
-    <Button
-      key={action}
-      variant={index === 0 ? 'primary' : 'secondary'}
-      disabled={busy || (action === 'answer' && answer.trim() === '')}
-      onClick={() => onResolve(action, action === 'answer' ? answer.trim() : undefined)}
-    >
-      {ACTION_LABELS[action]}
-    </Button>
-  ))
+type MandateLookup = { status: 'loading' } | { status: 'loaded'; mandate: Mandate } | { status: 'missing' } | { status: 'error' }
+type MandatePatchField = 'goal' | 'doneWhen' | 'guidelines' | 'notes'
+
+const PATCH_FIELD_LABELS: Record<MandatePatchField, string> = {
+  goal: 'Goal',
+  doneWhen: 'Done when',
+  guidelines: 'Guidelines',
+  notes: 'Notes'
+}
+
+const EMPTY_QUESTION_DRAFT: QuestionDraft = { selected: [], freeText: '', text: '', confirm: null }
+const QUESTION_STACK_STYLE: CSSProperties = { display: 'grid', gap: 'var(--ui-space-12)' }
+const QUESTION_FIELD_ROW_STYLE: CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 'var(--ui-space-8)' }
+const QUESTION_FIELD_STYLE: CSSProperties = { flex: 1, minWidth: 0 }
+const QUESTION_LABEL_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-8)', marginBottom: 'var(--ui-space-4)' }
+const FIELD_GROUP_STYLE: CSSProperties = { display: 'grid', gap: 'var(--ui-space-8)' }
+const CONFIRM_GROUP_STYLE: CSSProperties = { display: 'grid', gap: 'var(--ui-space-4)' }
+
+type QuestionDraft = { selected: string[]; freeText: string; text: string; confirm: boolean | null }
+type QuestionAnswerBuild = { ok: true; answers: Record<string, AskAnswer> } | { ok: false }
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function isAskOption(value: unknown): value is AskOption {
+  if (!isPlainRecord(value) || typeof value.value !== 'string' || value.value.trim() === '' || typeof value.label !== 'string' || value.label.trim() === '') return false
+  if (value.description !== undefined && typeof value.description !== 'string') return false
+  if (value.preview !== undefined) {
+    if (!isPlainRecord(value.preview) || (value.preview.format !== 'markdown' && value.preview.format !== 'html') || typeof value.preview.content !== 'string') return false
+  }
+  return true
+}
+
+function readQuestion(raw: unknown): { ok: true; question: AskQuestion } | { ok: false } {
+  if (!isPlainRecord(raw) || typeof raw.id !== 'string' || raw.id.trim() === '' || typeof raw.question !== 'string' || raw.question.trim() === '') return { ok: false }
+  if (raw.header !== undefined && typeof raw.header !== 'string') return { ok: false }
+  if (raw.required !== undefined && typeof raw.required !== 'boolean') return { ok: false }
+  switch (raw.type) {
+    case 'select':
+      if (!Array.isArray(raw.options) || raw.options.length === 0 || !raw.options.every(isAskOption)) return { ok: false }
+      if (raw.default !== undefined && typeof raw.default !== 'string') return { ok: false }
+      break
+    case 'multiselect':
+      if (!Array.isArray(raw.options) || raw.options.length === 0 || !raw.options.every(isAskOption)) return { ok: false }
+      if (raw.default !== undefined && (!Array.isArray(raw.default) || !raw.default.every((value) => typeof value === 'string'))) return { ok: false }
+      break
+    case 'text':
+      if (raw.multiline !== undefined && typeof raw.multiline !== 'boolean') return { ok: false }
+      if (raw.pattern !== undefined && typeof raw.pattern !== 'string') return { ok: false }
+      if (raw.format !== undefined && raw.format !== 'email' && raw.format !== 'url') return { ok: false }
+      if (raw.default !== undefined && typeof raw.default !== 'string') return { ok: false }
+      break
+    case 'number':
+      if (raw.integer !== undefined && typeof raw.integer !== 'boolean') return { ok: false }
+      if (raw.min !== undefined && (typeof raw.min !== 'number' || !Number.isFinite(raw.min))) return { ok: false }
+      if (raw.max !== undefined && (typeof raw.max !== 'number' || !Number.isFinite(raw.max))) return { ok: false }
+      if (raw.default !== undefined && (typeof raw.default !== 'number' || !Number.isFinite(raw.default))) return { ok: false }
+      break
+    case 'date':
+      if (raw.default !== undefined && typeof raw.default !== 'string') return { ok: false }
+      break
+    case 'confirm':
+      if (raw.default !== undefined && typeof raw.default !== 'boolean') return { ok: false }
+      break
+    default:
+      return { ok: false }
+  }
+  return { ok: true, question: raw as unknown as AskQuestion }
+}
+
+function formatMandateValue(value: string | string[]): string {
+  if (Array.isArray(value)) return value.length === 0 ? 'none' : value.join('; ')
+  return value === '' ? 'none' : value
+}
+
+function patchLinesOf(need: NeedsYouItem, lookup: MandateLookup): { field: MandatePatchField; line: string }[] {
+  const patch = need.detail.patch
+  if (!isPlainRecord(patch)) return []
+  return (Object.keys(PATCH_FIELD_LABELS) as MandatePatchField[]).flatMap((field) => {
+    const value = patch[field]
+    if (value === undefined) return []
+    const after = field === 'guidelines'
+      ? (Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? formatMandateValue(value) : null)
+      : (typeof value === 'string' ? formatMandateValue(value) : null)
+    if (after === null) return []
+    const before = lookup.status === 'loading' ? 'loading…'
+      : lookup.status === 'error' ? 'unavailable'
+        : lookup.status === 'missing' ? 'no mandate'
+          : formatMandateValue(lookup.mandate[field])
+    return [{ field, line: `${PATCH_FIELD_LABELS[field]}: ${before} → ${after}` }]
+  })
+}
+
+function questionAnswersOf(questions: AskQuestion[], drafts: Map<string, QuestionDraft>): QuestionAnswerBuild {
+  const entries: [string, AskAnswer][] = []
+  let valid = true
+  for (const question of questions) {
+    const draft = drafts.get(question.id) ?? EMPTY_QUESTION_DRAFT
+    const required = question.required === true
+    switch (question.type) {
+      case 'select': {
+        const note = draft.freeText.trim()
+        const picked = question.options.find((option) => option.value === draft.selected[0])
+        if (picked) entries.push([question.id, { value: picked.value, label: picked.label, ...(note ? { note } : {}), source: 'option' }])
+        else if (note) entries.push([question.id, { value: note, source: 'other' }])
+        else if (required) valid = false
+        break
+      }
+      case 'multiselect': {
+        const other = draft.freeText.trim()
+        const picked = question.options.filter((option) => draft.selected.includes(option.value))
+        if (picked.length === 0 && !other) {
+          if (required) valid = false
+          break
+        }
+        entries.push([question.id, {
+          values: picked.map((option) => option.value),
+          labels: picked.map((option) => option.label),
+          ...(other ? { other } : {}),
+          source: 'options'
+        }])
+        break
+      }
+      case 'text':
+        if (draft.text.trim() === '') {
+          if (required) valid = false
+        } else entries.push([question.id, { value: draft.text, source: 'input' }])
+        break
+      case 'number': {
+        const raw = draft.text.trim()
+        if (raw === '') {
+          if (required) valid = false
+          break
+        }
+        const value = Number(raw)
+        if (!Number.isFinite(value) || (question.integer === true && !Number.isInteger(value)) || (question.min !== undefined && value < question.min) || (question.max !== undefined && value > question.max)) {
+          valid = false
+          break
+        }
+        entries.push([question.id, { value, source: 'input' }])
+        break
+      }
+      case 'date':
+        if (draft.text.trim() === '') {
+          if (required) valid = false
+        } else entries.push([question.id, { value: draft.text.trim(), source: 'input' }])
+        break
+      case 'confirm':
+        if (draft.confirm === null) {
+          if (required) valid = false
+        } else entries.push([question.id, { value: draft.confirm, source: 'input' }])
+        break
+    }
+  }
+  return valid ? { ok: true, answers: Object.fromEntries(entries) } : { ok: false }
+}
+
+function QuestionControl({ question, draft, disabled, onChange }: {
+  question: AskQuestion
+  draft: QuestionDraft
+  disabled: boolean
+  onChange(patch: Partial<QuestionDraft>): void
+}) {
+  const optional = question.required === true ? null : <Badge>(optional)</Badge>
+  switch (question.type) {
+    case 'select':
+      return (
+        <div style={QUESTION_FIELD_ROW_STYLE}>
+          <div style={QUESTION_FIELD_STYLE}>
+            <SelectField label={question.question} value={draft.selected[0] ?? ''} disabled={disabled} onChange={(event) => onChange({ selected: event.target.value === '' ? [] : [event.target.value] })}>
+              <option value="">Choose…</option>
+              {question.options.map((option) => <option key={option.value} value={option.value}>{option.description ? `${option.label} — ${option.description}` : option.label}</option>)}
+            </SelectField>
+          </div>
+          {optional}
+          <TextField label="Add your own answer" value={draft.freeText} disabled={disabled} onChange={(event) => onChange({ freeText: event.target.value })} />
+        </div>
+      )
+    case 'multiselect':
+      return (
+        <div style={FIELD_GROUP_STYLE}>
+          <div style={QUESTION_LABEL_STYLE}>
+            <span>{question.question}</span>
+            {optional}
+          </div>
+          <div style={QUESTION_STACK_STYLE}>
+            {question.options.map((option) => (
+              <Checkbox
+                key={option.value}
+                label={option.label}
+                checked={draft.selected.includes(option.value)}
+                onChange={(checked) => onChange({ selected: checked ? [...draft.selected, option.value] : draft.selected.filter((value) => value !== option.value) })}
+              />
+            ))}
+          </div>
+          <TextField label="Add your own answer" value={draft.freeText} disabled={disabled} onChange={(event) => onChange({ freeText: event.target.value })} />
+        </div>
+      )
+    case 'text': {
+      const help = [
+        question.format ? `Format: ${question.format}` : '',
+        question.pattern ? `Pattern: ${question.pattern}` : ''
+      ].filter(Boolean).join(' · ') || undefined
+      const field = question.multiline === true
+        ? <TextArea label={question.question} help={help} rows={3} value={draft.text} disabled={disabled} onChange={(event) => onChange({ text: event.target.value })} />
+        : <TextField label={question.question} help={help} value={draft.text} disabled={disabled} onChange={(event) => onChange({ text: event.target.value })} />
+      return <div style={QUESTION_FIELD_ROW_STYLE}><div style={QUESTION_FIELD_STYLE}>{field}</div>{optional}</div>
+    }
+    case 'number': {
+      const hints = [
+        question.integer === true ? 'Whole number' : '',
+        question.min !== undefined && question.max !== undefined ? `${question.min} to ${question.max}`
+          : question.min !== undefined ? `At least ${question.min}`
+            : question.max !== undefined ? `At most ${question.max}` : ''
+      ].filter(Boolean)
+      return (
+        <div style={QUESTION_FIELD_ROW_STYLE}>
+          <div style={QUESTION_FIELD_STYLE}>
+            <TextField
+              label={question.question}
+              type="number"
+              step={question.integer === true ? 1 : 'any'}
+              min={question.min}
+              max={question.max}
+              help={hints.join(' · ') || undefined}
+              value={draft.text}
+              disabled={disabled}
+              onChange={(event) => onChange({ text: event.target.value })}
+            />
+          </div>
+          {optional}
+        </div>
+      )
+    }
+    case 'date':
+      return (
+        <div style={QUESTION_FIELD_ROW_STYLE}>
+          <div style={QUESTION_FIELD_STYLE}>
+            <TextField label={question.question} type="date" help="YYYY-MM-DD" value={draft.text} disabled={disabled} onChange={(event) => onChange({ text: event.target.value })} />
+          </div>
+          {optional}
+        </div>
+      )
+    case 'confirm':
+      return (
+        <div style={CONFIRM_GROUP_STYLE}>
+          <div style={QUESTION_LABEL_STYLE}>
+            <span>{question.question}</span>
+            {optional}
+          </div>
+          <SegmentedControl
+            label={question.question}
+            options={[{ value: 'true', label: 'Yes' }, { value: 'false', label: 'No' }]}
+            value={draft.confirm === null ? null : String(draft.confirm)}
+            onChange={(value) => onChange({ confirm: value === 'true' })}
+          />
+        </div>
+      )
+  }
+}
+
+function NeedRow({ need, worktreeName, mandateLookup = { status: 'loading' }, busy, onResolve }: {
+  need: NeedsYouItem
+  worktreeName: string
+  mandateLookup?: MandateLookup
+  busy: boolean
+  onResolve(action: NeedAction, payload?: { text?: string; answers?: Record<string, AskAnswer> }): void
+}) {
+  const [legacyAnswer, setLegacyAnswer] = useState('')
+  const [drafts, setDrafts] = useState<Map<string, QuestionDraft>>(() => new Map())
+  const rawQuestions = need.detail.questions
+  const legacyQuestions = rawQuestions === undefined || (Array.isArray(rawQuestions) && rawQuestions.length === 0)
+  const questionResults = Array.isArray(rawQuestions) ? rawQuestions.map(readQuestion) : []
+  const unreadableQuestions = !legacyQuestions && (!Array.isArray(rawQuestions) || questionResults.some((result) => !result.ok))
+  const questions = unreadableQuestions ? [] : questionResults.flatMap((result) => result.ok ? [result.question] : [])
+  const answerBuild = legacyQuestions || unreadableQuestions ? null : questionAnswersOf(questions, drafts)
+  const patchLines = need.kind === 'mandate-edit' ? patchLinesOf(need, mandateLookup) : []
+  const detailParts = [worktreeName]
+  if (need.kind === 'guess') {
+    const question = typeof need.detail.question === 'string' ? need.detail.question : ''
+    const choice = typeof need.detail.choice === 'string' ? need.detail.choice : ''
+    if (question !== '' && !need.title.includes(question)) detailParts.push(question)
+    if (choice !== '') detailParts.push(`Chose: ${choice}`)
+  } else if (need.kind === 'mandate-edit') {
+    const why = need.detail.why
+    if (typeof why === 'string' && why !== '') detailParts.push(why)
+  } else {
+    const detail = ['reason', 'question', 'summary', 'why'].map((key) => need.detail[key]).find((value): value is string => typeof value === 'string' && value !== '')
+    if (detail) detailParts.push(detail)
+  }
+  const blocks = typeof need.detail.blocks === 'string' && need.detail.blocks !== '' ? `Blocks: ${need.detail.blocks}` : ''
+  const canAnswer = legacyQuestions
+    ? legacyAnswer.trim() !== ''
+    : !unreadableQuestions && answerBuild?.ok === true
+
+  const updateDraft = (questionId: string, patch: Partial<QuestionDraft>) => {
+    setDrafts((previous) => {
+      const next = new Map(previous)
+      const current = next.get(questionId) ?? EMPTY_QUESTION_DRAFT
+      next.set(questionId, { ...current, ...patch })
+      return next
+    })
+  }
+
+  const resolve = (action: NeedAction) => {
+    if (action !== 'answer') {
+      onResolve(action)
+    } else if (legacyQuestions) {
+      onResolve(action, { text: legacyAnswer.trim() })
+    } else if (answerBuild?.ok) {
+      onResolve(action, { answers: answerBuild.answers })
+    }
+  }
+
   return (
     <ListRow
       title={need.title}
       description={
-        <>
-          <span>{[worktreeName, detail].filter(Boolean).join(' · ')}</span>
-          {need.actions.includes('answer') && <TextField label="Your answer" value={answer} onChange={(event) => setAnswer(event.target.value)} />}
-        </>
+        <div style={FIELD_GROUP_STYLE}>
+          <span>{detailParts.filter(Boolean).join(' · ')}</span>
+          {patchLines.map(({ field, line }) => <span key={field}>{line}</span>)}
+          {blocks && <span>{blocks}</span>}
+          {need.actions.includes('answer') && (
+            <div style={QUESTION_STACK_STYLE}>
+              {legacyQuestions ? (
+                <TextField label="Your answer" value={legacyAnswer} disabled={busy} onChange={(event) => setLegacyAnswer(event.target.value)} />
+              ) : unreadableQuestions ? (
+                <Badge tone="failing">Question cannot be read</Badge>
+              ) : questions.map((question) => (
+                <QuestionControl
+                  key={question.id}
+                  question={question}
+                  draft={drafts.get(question.id) ?? EMPTY_QUESTION_DRAFT}
+                  disabled={busy}
+                  onChange={(patch) => updateDraft(question.id, patch)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       }
       status="needs-you"
-      trailing={<>{buttons}</>}
+      trailing={
+        <>
+          {need.actions.map((action, index) => (
+            <Button
+              key={action}
+              variant={index === 0 ? 'primary' : 'secondary'}
+              disabled={busy || (action === 'answer' && !canAnswer)}
+              onClick={() => resolve(action)}
+            >
+              {ACTION_LABELS[action]}
+            </Button>
+          ))}
+        </>
+      }
     />
   )
 }
@@ -298,21 +633,63 @@ function summaryLine(summary: ReportModel['summary']): string {
 
 function ReportTab({ context, onOpenLog }: { context: UiPluginContext; onOpenLog(): void }) {
   const { data, error, refresh } = useAvatarQuery<ReportModel>(context, 'report')
-  const [busyNeed, setBusyNeed] = useState<string | null>(null)
+  const [busyNeeds, setBusyNeeds] = useState<ReadonlySet<string>>(() => new Set())
+  const inFlightNeeds = useRef(new Set<string>())
   const [failure, setFailure] = useState<string | null>(null)
+  const [mandates, setMandates] = useState<Record<string, MandateLookup>>({})
   const names = nameMap(null, data)
+  const mandateWorktrees = [...new Set((data?.needsYou ?? []).filter((need) => need.kind === 'mandate-edit').map((need) => need.worktreeId))]
 
-  const resolve = async (needId: string, action: NeedAction, text?: string) => {
-    setBusyNeed(needId)
+  useEffect(() => {
+    let active = true
+    if (mandateWorktrees.length === 0) setMandates({})
+    else {
+      setMandates((previous) => ({
+        ...previous,
+        ...Object.fromEntries(mandateWorktrees.map((worktreeId) => [worktreeId, Object.hasOwn(previous, worktreeId) ? previous[worktreeId] : { status: 'loading' as const }]))
+      }))
+      for (const worktreeId of mandateWorktrees) {
+        void (async () => {
+          try {
+            const result = await context.call('quirky.avatar/mandate', { worktreeId })
+            if (!active) return
+            const lookup: MandateLookup = result === null
+              ? { status: 'missing' }
+              : { status: 'loaded', mandate: result as Mandate }
+            setMandates((previous) => ({ ...previous, [worktreeId]: lookup }))
+          } catch {
+            if (active) setMandates((previous) => ({ ...previous, [worktreeId]: { status: 'error' } }))
+          }
+        })()
+      }
+    }
+    return () => { active = false }
+  }, [context, data])
+
+  const resolve = async (needId: string, action: NeedAction, payload?: { text?: string; answers?: Record<string, AskAnswer> }) => {
+    if (inFlightNeeds.current.has(needId)) return
+    inFlightNeeds.current.add(needId)
+    setBusyNeeds((previous) => new Set(previous).add(needId))
     setFailure(null)
     try {
-      const result = (await context.call('quirky.avatar/resolveNeed', { needId, action, ...(text === undefined ? {} : { text }) })) as { ok: boolean; error?: string }
+      const result = (await context.call('quirky.avatar/resolveNeed', {
+        needId,
+        action,
+        ...(payload?.text !== undefined ? { text: payload.text } : {}),
+        ...(payload?.answers !== undefined ? { answers: payload.answers } : {})
+      })) as { ok: boolean; error?: string }
       if (!result.ok) setFailure(result.error ?? 'The avatar could not apply that answer.')
     } catch (cause) {
       setFailure(messageOf(cause))
+    } finally {
+      inFlightNeeds.current.delete(needId)
+      setBusyNeeds((previous) => {
+        const next = new Set(previous)
+        next.delete(needId)
+        return next
+      })
+      refresh()
     }
-    setBusyNeed(null)
-    refresh()
   }
 
   if (data === null) return <div role="tabpanel" aria-label="Report"><Failure message={error} /></div>
@@ -334,8 +711,9 @@ function ReportTab({ context, onOpenLog }: { context: UiPluginContext; onOpenLog
           key={need.id}
           need={need}
           worktreeName={names.get(need.worktreeId) ?? need.worktreeId}
-          busy={busyNeed === need.id}
-          onResolve={(action, text) => void resolve(need.id, action, text)}
+          mandateLookup={Object.prototype.hasOwnProperty.call(mandates, need.worktreeId) ? mandates[need.worktreeId] : undefined}
+          busy={busyNeeds.has(need.id)}
+          onResolve={(action, payload) => void resolve(need.id, action, payload)}
         />
       ))}
       <SectionHeader title="While you were away" />
