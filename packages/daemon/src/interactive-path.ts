@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process'
+import type { ProcessSpawner } from '@quirky/process'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writePrivateJson } from '@quirky/protocol/node'
 import { bashRcfilePath, inheritedEnv, shellKind } from './launch'
+import { kernelProcess } from './kernel-process'
 
 /** How long one read of the interactive shell may run before it is stopped. */
 const PROBE_TIMEOUT_MS = 15_000
@@ -28,57 +29,62 @@ export function readInteractivePath(
   home: string,
   shell: string,
   env: Record<string, string | undefined>,
-  options: { timeoutMs?: number; signal?: AbortSignal } = {}
+  options: { timeoutMs?: number; signal?: AbortSignal; spawner?: ProcessSpawner } = {}
 ): Promise<string | undefined> {
   const marker = `__quirky_path_${randomBytes(8).toString('hex')}__`
   const argv = probeArgv(home, shell, `printf '%s%s%s' '${marker}' "$PATH" '${marker}'`)
   if (argv === undefined || options.signal?.aborted) return Promise.resolve(undefined)
-  return new Promise((resolve) => {
-    // detached starts a new session, so an interactive rc cannot take over the daemon's terminal
-    const child = spawn(argv[0]!, argv.slice(1), { env: inheritedEnv(env), stdio: ['ignore', 'pipe', 'ignore'], detached: true })
-    let settled = false
-    let exited = false
-    const release = () => {
-      if (!settled || !exited) return
-      clearTimeout(timer)
-      options.signal?.removeEventListener('abort', stop)
-    }
-    const settle = (path: string | undefined) => {
-      if (settled) return
-      settled = true
-      child.stdout?.destroy()
-      resolve(path === '' ? undefined : path)
-      release()
-    }
-    const stop = () => {
-      if (!exited && child.pid !== undefined) {
-        try {
-          process.kill(-child.pid, 'SIGKILL')
-        } catch {}
+  const { promise, resolve } = Promise.withResolvers<string | undefined>()
+  let settled = false
+  const settle = (path: string | undefined) => {
+    if (settled) return
+    settled = true
+    resolve(path === '' ? undefined : path)
+  }
+  let reader: ReadableStreamDefaultReader<Uint8Array>
+  try {
+    const child = (options.spawner ?? kernelProcess).spawn(argv, {
+      env: inheritedEnv(env),
+      timeoutMs: options.timeoutMs ?? PROBE_TIMEOUT_MS,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'ignore',
+      killGraceMs: 0,
+      signal: options.signal
+    })
+    reader = child.stdout.getReader()
+  } catch {
+    settle(undefined)
+    return promise
+  }
+  const decoder = new TextDecoder()
+  let text = ''
+  void (async () => {
+    try {
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) {
+          settle(undefined)
+          return
+        }
+        if (settled) continue
+        text += decoder.decode(value, { stream: true })
+        const start = text.indexOf(marker)
+        const end = start < 0 ? -1 : text.indexOf(marker, start + marker.length)
+        if (end >= 0) {
+          settle(text.slice(start + marker.length, end))
+          text = ''
+        }
       }
+    } catch {
       settle(undefined)
+    } finally {
+      try {
+        reader.releaseLock()
+      } catch {}
     }
-    const timer = setTimeout(stop, options.timeoutMs ?? PROBE_TIMEOUT_MS)
-    options.signal?.addEventListener('abort', stop)
-    const onExit = () => {
-      exited = true
-      release()
-    }
-    child.on('exit', onExit)
-    child.on('error', () => {
-      onExit()
-      settle(undefined)
-    })
-    let text = ''
-    child.stdout?.setEncoding('utf8')
-    child.stdout?.on('data', (chunk: string) => {
-      text += chunk
-      const start = text.indexOf(marker)
-      const end = start < 0 ? -1 : text.indexOf(marker, start + marker.length)
-      if (end >= 0) settle(text.slice(start + marker.length, end))
-    })
-    child.stdout?.on('end', () => settle(undefined))
-  })
+  })()
+  return promise
 }
 
 type Stored = { shell: string; path: string }
