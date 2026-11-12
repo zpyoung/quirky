@@ -6,6 +6,9 @@ Plugin authors: read the [Plugin API 1.0 reference](../docs/plugin-api.md) for t
 manifest, import, compatibility and lifecycle contract. Its linked protocol declarations are the
 detailed type reference.
 
+If a daemon plugin needs a subprocess, use `context.process.run`. Plugin code must never import
+`@quirky/process` or spawn processes directly. See the [API 1.4 `context.process` section](../docs/plugin-api.md#api-14-process-runner).
+
 ## Removing a project
 
 `quirky repo rm <selector>` forgets the selected project and its settings/group

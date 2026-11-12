@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { createProcessRunner, type OwnedProcessRunner } from '@quirky/process'
 import {
   isReservedLaunchEnv,
   KERNEL_METHOD_SCHEMAS,
@@ -139,6 +140,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   const admittedByPlugin = new Map<string, Set<() => void>>()
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
+  const processRunners = new Map<string, OwnedProcessRunner>()
   const fileResources = new FileResourceRegistry()
 
   const buildEnv = (input: {
@@ -170,8 +172,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       let opened: OpenedStore | undefined
       const ptyApi = createPtyApi(core.pty, id, log, options.sessionAuthority)
       ptyApis.set(id, ptyApi)
+      const processRunner = createProcessRunner({ owner: id })
+      processRunners.set(id, processRunner)
 
       return {
+        process: Object.freeze({ run: processRunner.run }),
         clients: {
           accept: (clientOptions: Parameters<PluginContext['clients']['accept']>[0]) => {
             guard()
@@ -395,20 +400,29 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       }
     },
     async revoke(pluginId) {
-      hostPower.revoke(pluginId)
-      const admitted = admittedByPlugin.get(pluginId)
-      if (admitted !== undefined) {
-        for (const revoke of [...admitted]) revoke()
+      const stopping = processRunners.get(pluginId)?.dispose()
+      processRunners.delete(pluginId)
+      try {
+        hostPower.revoke(pluginId)
+        const admitted = admittedByPlugin.get(pluginId)
+        if (admitted !== undefined) {
+          for (const revoke of [...admitted]) revoke()
+        }
+        await fileResources.revokePlugin(pluginId)
+        events.removeAll(pluginId)
+        options.sessionAuthority.releasePlugin(pluginId)
+        scheduler.revokePlugin(pluginId)
+        ptyApis.get(pluginId)?.revoke()
+        ptyApis.delete(pluginId)
+      } finally {
+        try {
+          await stopping
+        } finally {
+          const opened = openedStores.get(pluginId)
+          openedStores.delete(pluginId)
+          opened?.close()
+        }
       }
-      await fileResources.revokePlugin(pluginId)
-      events.removeAll(pluginId)
-      options.sessionAuthority.releasePlugin(pluginId)
-      scheduler.revokePlugin(pluginId)
-      ptyApis.get(pluginId)?.revoke()
-      ptyApis.delete(pluginId)
-      const opened = openedStores.get(pluginId)
-      openedStores.delete(pluginId)
-      opened?.close()
     }
   }
 
