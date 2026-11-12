@@ -133,8 +133,9 @@ async function runAttempt({
 }: AttemptConfig): Promise<AttemptResult> {
   let child: StartedChild
   try {
+    const cwd = options.cwd ?? process.cwd()
     const input = typeof options.input === 'string' ? new TextEncoder().encode(options.input) : options.input
-    child = config.start(argv, { cwd: options.cwd, env: options.env, input })
+    child = config.start(argv, { cwd, env: options.env, input })
   } catch (error) {
     return { kind: 'result', result: spawnErrorResult(error, startedAt) }
   }
@@ -178,7 +179,7 @@ async function runAttempt({
     if (reason === 'overflow') {
       clearTimeout(graceTimer)
       graceTimer = undefined
-      killGroup('SIGKILL')
+      if (!exit) killGroup('SIGKILL')
     } else if (!exit) {
       killGroup('SIGTERM')
       armGraceTimer(Date.now())
@@ -254,7 +255,7 @@ async function runAttempt({
       stallObserved.then(() => 'stalled' as const),
     ])
     if (stopped !== undefined) {
-      if (!exit) await exited
+      if (!exit) await Promise.race([exited, allDone])
       stdoutReader.cancel().catch(() => {})
       stderrReader.cancel().catch(() => {})
       await allDone
@@ -287,7 +288,7 @@ async function runAttempt({
     const completedExit = exit ?? { exitCode: null, signal: null }
     return { kind: 'result', result: resultFromBytes(stdoutCapture.bytes(), stderrCapture.bytes(), completedExit.exitCode, completedExit.signal, startedAt) }
   } catch (error) {
-    killGroup('SIGKILL')
+    if (!exit) killGroup('SIGKILL')
     void stdoutReader.cancel().catch(() => {})
     void stderrReader.cancel().catch(() => {})
     await Promise.allSettled([exited, stdoutDone, stderrDone])
