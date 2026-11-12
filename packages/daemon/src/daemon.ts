@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PROTOCOL_VERSION } from '@quirky/protocol'
+import { stopAllProcesses } from '@quirky/process'
 import {
   ensureHome,
   readRuntime,
@@ -299,7 +300,11 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       try {
         await plugins.stop()
       } finally {
-        hostPower.dispose()
+        try {
+          await stopAllProcesses()
+        } finally {
+          hostPower.dispose()
+        }
       }
       await pluginRuntime.fileResources.close()
       pty.close()

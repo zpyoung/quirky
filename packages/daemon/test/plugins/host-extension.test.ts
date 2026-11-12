@@ -109,14 +109,16 @@ describe('context extension', () => {
       {
         activate: [
           'let threw = ""',
+          'let processThrew = ""',
           'try { context.emit("x") } catch (error) { threw = (error as Error).message }',
-          "record('emit threw ' + threw + ' dataDir [' + context.dataDir + '] ' + context.error('conflict', 'm').message)"
+          'try { await context.process.run(["/bin/echo", "unused"]) } catch (error) { processThrew = (error as Error).message }',
+          "record('emit threw ' + threw + ' process threw ' + processThrew + ' dataDir [' + context.dataDir + '] ' + context.error('conflict', 'm').message)"
         ].join('\n  ')
       }
     )
     t.host.load()
     await t.host.activate('acme.one')
-    expect(t.lines()).toContain('emit threw acme.one: context.emit is not available dataDir [] m')
+    expect(t.lines()).toContain('emit threw acme.one: context.emit is not available process threw acme.one: context.process is not available dataDir [] m')
     expect(t.created).toEqual([])
   })
 
