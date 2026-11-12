@@ -1,10 +1,10 @@
 import { afterEach, expect, test } from 'bun:test'
-import { startChild, type StartedChild } from '../src/child'
+import { startChild, type StartChild, type StartedChild } from '../src/child'
 
 const children: Array<{ child: StartedChild; exited: boolean }> = []
 
-function start(argv: readonly string[]): StartedChild {
-  const child = startChild(argv, {})
+function start(argv: readonly string[], init: Parameters<StartChild>[1] = {}): StartedChild {
+  const child = startChild(argv, init)
   const started = { child, exited: false }
   children.push(started)
   const deadline = setTimeout(() => child.killGroup('SIGKILL'), 10_000)
@@ -102,4 +102,24 @@ test('throws the spawn error for a missing binary', async () => {
   }
   expect(error).toBeInstanceOf(Error)
   expect((error as NodeJS.ErrnoException).code).toBe('ENOENT')
+}, 15_000)
+
+test('flushes byte-exact piped stdin and ends it after queued bytes', async () => {
+  const child = start(['/bin/cat'], { stdin: 'pipe' })
+  const output = new Response(child.stdout).arrayBuffer()
+  expect(child.stdin).toBeDefined()
+  child.stdin!.write(new Uint8Array([0, 255, 10]))
+  await child.stdin!.flush()
+  await child.stdin!.end()
+  expect(new Uint8Array(await output)).toEqual(new Uint8Array([0, 255, 10]))
+  const exit = await child.exited
+  expect(exit.exitCode).toBe(0)
+}, 15_000)
+
+test('discards stdout without exposing a pipe', async () => {
+  const child = start(['/bin/sh', '-c', 'printf ignored'], { stdout: 'ignore' })
+  const first = await child.stdout.getReader().read()
+  expect(first.done).toBe(true)
+  const exit = await child.exited
+  expect(exit.exitCode).toBe(0)
 }, 15_000)
