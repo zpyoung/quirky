@@ -323,3 +323,61 @@ test('propagates unexpected child exit promise rejections', async () => {
   expect(error).toBe(exitError)
   expect(signals).toContain('SIGKILL')
 }, 15_000)
+
+test('propagates a pipe failure that arrives after an abort starts waiting for exit', async () => {
+  const pipeError = new Error('pipe failed during shutdown')
+  const exited = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+  let output!: ReadableStreamDefaultController<Uint8Array>
+  const abort = new AbortController()
+  const runner = makeRunner({
+    start: () => ({
+      pid: 900_003,
+      stdout: new ReadableStream<Uint8Array>({ start(controller) { output = controller } }),
+      stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+      exited: exited.promise,
+      killGroup() {}
+    })
+  })
+  const pending = runner.run(['fake'], { signal: abort.signal, timeoutMs: 1_000 })
+    .then(() => null, error => error)
+  abort.abort()
+  const turn = Promise.withResolvers<void>()
+  setImmediate(turn.resolve)
+  await turn.promise
+  output.error(pipeError)
+  exited.resolve({ exitCode: null, signal: 'SIGTERM' })
+  expect(await pending).toBe(pipeError)
+}, 15_000)
+
+test('overflow escalates an already-aborted group immediately without replacing the abort reason', async () => {
+  const exited = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+  let output!: ReadableStreamDefaultController<Uint8Array>
+  const signals: string[] = []
+  const abort = new AbortController()
+  const runner = makeRunner({
+    start: () => ({
+      pid: 900_004,
+      stdout: new ReadableStream<Uint8Array>({ start(controller) { output = controller } }),
+      stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+      exited: exited.promise,
+      killGroup(signal) {
+        signals.push(signal)
+        if (signal === 'SIGKILL') exited.resolve({ exitCode: null, signal })
+      }
+    })
+  })
+  const pending = runner.run(['fake'], {
+    signal: abort.signal, timeoutMs: 1_000, killGraceMs: 1_000, maxOutputBytes: 1
+  })
+  abort.abort()
+  output.enqueue(new Uint8Array([1, 2]))
+  const turn = Promise.withResolvers<void>()
+  setImmediate(turn.resolve)
+  await turn.promise
+  expect(signals[0]).toBe('SIGTERM')
+  expect(signals[1]).toBe('SIGKILL')
+  const result = await pending
+  expect(result.stopped).toBe('aborted')
+  expect(result.signal).toBe('SIGKILL')
+  expect(result.stdout.byteLength).toBe(1)
+}, 15_000)

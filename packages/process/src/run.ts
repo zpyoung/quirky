@@ -171,8 +171,8 @@ async function runAttempt({
     graceTimer = setTimeout(() => armGraceTimer(requestedAt), isPositiveTimerDelay(remaining))
   }
   const requestStop = (reason: RunStopped) => {
-    if (attemptFinished || stopped !== undefined) return
-    stopped = reason
+    if (attemptFinished || (stopped !== undefined && reason !== 'overflow')) return
+    stopped ??= reason
     clearTimeout(deadlineTimer)
     deadlineTimer = undefined
     if (reason === 'overflow') {
@@ -259,7 +259,7 @@ async function runAttempt({
       if (!exit) await exited
       stdoutReader.cancel().catch(() => {})
       stderrReader.cancel().catch(() => {})
-      await Promise.allSettled([stdoutDone, stderrDone])
+      await allDone
       attemptFinished = true
       return {
         kind: 'result',
@@ -269,7 +269,7 @@ async function runAttempt({
     if (didStall) {
       stdoutReader.cancel().catch(() => {})
       stderrReader.cancel().catch(() => {})
-      await Promise.allSettled([stdoutDone, stderrDone])
+      await allDone
       if (stopped !== undefined) {
         attemptFinished = true
         return {
