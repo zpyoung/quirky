@@ -399,7 +399,7 @@ class PiRunner implements StructuredRunner {
       case 'message_end': {
         const message = event.message
         if (typeof message !== 'object' || message === null || message.role !== 'assistant') return
-        run.lastContextTokens = contextTokensOf(message) ?? run.lastContextTokens
+        if (run.working) run.lastContextTokens = contextTokensOf(message) ?? run.lastContextTokens
         const text = textOf(message.content)
         if (text) this.append(run, 'assistant', text, message)
         if (message.stopReason === 'error' && typeof message.errorMessage === 'string') {
@@ -441,7 +441,6 @@ class PiRunner implements StructuredRunner {
         if (!run.working) return
         const contextUsage =
           run.lastContextTokens === null ? null : { contextTokens: run.lastContextTokens, contextWindow: run.contextWindow }
-        run.lastContextTokens = null
         this.append(run, 'result', `${run.agent} turn completed`, {
           type: 'agent_end',
           ...(contextUsage ? { contextUsage } : {})

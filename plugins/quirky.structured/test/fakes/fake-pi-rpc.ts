@@ -16,10 +16,11 @@ export type FakePiRpcFixture = {
  * `[end-only]` omits settling; `[twice]` duplicates settlement; `[background]` delays omp settle;
  * `[no-agent]` sends an omp result without starting an agent; `[handled]` handles a pi prompt;
  * `[queued]` responds queued; `[zero-last]` follows usage with a zero-token error; `[big]` sends a
- * 6 MiB agent_end; `[crlf]` ends frames with CRLF; `[flood]` writes 2 MiB without a newline while
- * its process group ignores EOF and SIGTERM; `[unreadable]` writes malformed and non-object JSON.
+ * 6 MiB agent_end; `[crlf]` ends frames with CRLF and adds a blank CRLF line; `[flood]` writes 2 MiB without a newline while
+ * its process group ignores EOF and SIGTERM; `[unreadable]` writes malformed JSON, an empty line and non-object JSON.
  * `[settled-result]` delays omp settlement after an invoked prompt_result with sessionSettled true.
  * SIGUSR1 emits stale settle/result frames for an idle-session check.
+ * SIGUSR2 emits an independent assistant message with usage and the flavor's settle frame.
  * `[grow]` adds a tool when its prompt arrives; `[tool] [missing]` and `[tool] [failed]` report a
  * not-found or failed tool and wait for abort; `[tool] [stuck]` ignores every abort.
  */
@@ -67,6 +68,13 @@ process.on('SIGUSR1', () => {
   send({ type: 'prompt_result', agentInvoked: false, status: 'completed', sessionSettled: true })
   fs.writeFileSync(${JSON.stringify(join(home, 'idle-frames-sent'))}, '')
 })
+process.on('SIGUSR2', () => {
+  send({ type: 'agent_start' })
+  send({ type: 'message_end', message: { ...assistant('woke on its own'), usage: { input: 900, output: 99, cacheRead: 0, cacheWrite: 0, totalTokens: 999 } } })
+  sendAgentEnd(false)
+  sendSettle()
+  fs.writeFileSync(${JSON.stringify(join(home, 'wake-frames-sent'))}, '')
+})
 function sendAgentEnd(willRetry = false) {
   if (flavor === 'pi') send({ type: 'agent_end', messages: [], willRetry })
   else send({ type: 'agent_end', messages: [] })
@@ -103,6 +111,7 @@ function runPrompt(text) {
   } else {
     send({ type: 'response', command: 'prompt', success: true })
   }
+  if (text.includes('[crlf]')) process.stdout.write('\\r\\n')
   if (text.includes('[handled]')) return
   if (text.includes('[no-agent]') && flavor === 'omp') {
     send({ type: 'prompt_result', agentInvoked: false, status: 'completed', sessionSettled: true })
@@ -183,7 +192,7 @@ function runPrompt(text) {
     })
     return
   }
-  if (text.includes('[unreadable]')) process.stdout.write('invalid-json\\n[]\\n')
+  if (text.includes('[unreadable]')) process.stdout.write('invalid-json\\n\\n[]\\n')
   if (text.includes('[split]')) {
     const raw = Buffer.from(JSON.stringify({ type: 'message_end', message: assistant('caf\\u00e9 \\u2615') }) + '\\n')
     const cut = raw.indexOf(Buffer.from('\\u00e9')) + 1
