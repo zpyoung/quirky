@@ -176,7 +176,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       processRunners.set(id, processRunner)
 
       return {
-        process: Object.freeze({ run: processRunner.run }),
+        process: Object.freeze({ run: processRunner.run, spawn: processRunner.spawn }),
         clients: {
           accept: (clientOptions: Parameters<PluginContext['clients']['accept']>[0]) => {
             guard()
