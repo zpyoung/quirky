@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import type { Socket } from 'bun'
 import {
   PTY_PROTOCOL_VERSION,
+  negotiatePtyVersion,
   PtyFrameDecoder,
   base64ToBytes,
   bytesToBase64,
@@ -25,6 +26,7 @@ import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 type ConnState = {
   decoder: PtyFrameDecoder
   authed: boolean
+  protocolVersion: number | null
   outQueue: Uint8Array[]
   closed: boolean
   endWhenDrained: boolean
@@ -54,6 +56,8 @@ export type FakePtyHost = {
   ): void
   /** Sends a fact event for `sessionId` to every connection. */
   fact(sessionId: string, fact: PtyFact): void
+  holdNextHello(): () => void
+  connectionCount(): number
   dropConnections(): void
   setWriteAcceptedHandler(handler: AcceptedWriteHandler | null): void
   setReadResult(result: { lines: string[]; cols: number; rows: number; alt: boolean }): void
@@ -69,12 +73,19 @@ export type FakePtyHostOptions = {
   onShutdown?: () => void
   /** Observes requests after the fixture has recorded them. */
   onRequest?: (request: PtyRequest) => void
-  /** The protocol version the host speaks; a hello for any other version is rejected like the real host does. */
+  /** The highest host protocol version; defaults to the package's current version. */
   version?: number
+  /** The lowest host protocol version; defaults to `version`. */
+  minVersion?: number
+  /** Simulates a host from before version negotiation that accepts only its exact version. */
+  legacyHello?: boolean
+  /** Overrides the version returned in successful hello replies. */
+  replyVersion?: number
 }
 
 export function startFakePtyHost(home: string, options: FakePtyHostOptions = {}): FakePtyHost {
   const version = options.version ?? PTY_PROTOCOL_VERSION
+  const minVersion = options.minVersion ?? version
   mkdirSync(home, { recursive: true })
   const socketPath = resolveSocketPath(home, 'pty.sock')
   const token = crypto.randomUUID()
@@ -87,7 +98,31 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   const connections = new Set<Socket<ConnState>>()
   let readResult = { lines: ['hello from the screen'], cols: 80, rows: 24, alt: false }
   let nextReadGate: ReadGate | null = null
+  let nextHelloGate: { released: boolean; respond: (() => void) | null } | null = null
 
+  function holdNextHello(): () => void {
+    if (nextHelloGate) throw new Error('fake pty: a hello is already held')
+    const gate = { released: false, respond: null as (() => void) | null }
+    nextHelloGate = gate
+    return () => {
+      gate.released = true
+      const respond = gate.respond
+      gate.respond = null
+      respond?.()
+    }
+  }
+
+  function answerHello(socket: Socket<ConnState>, id: number, replyVersion: number) {
+    const respond = () => reply(socket, id, { version: replyVersion, pid: process.pid })
+    const gate = nextHelloGate
+    if (!gate) {
+      respond()
+      return
+    }
+    nextHelloGate = null
+    if (gate.released) respond()
+    else gate.respond = respond
+  }
   function holdNextRead(): HeldRead {
     if (nextReadGate !== null) throw new Error('fake pty: a read is already held')
     const { promise: requested, resolve: notifyRequested } = Promise.withResolvers<void>()
@@ -167,6 +202,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   }
 
   function reply(socket: Socket<ConnState>, id: number, result: unknown) {
+
     write(socket, encodePtyJson({ id, ok: true, result }))
   }
   function fail(socket: Socket<ConnState>, id: number, error: unknown) {
@@ -193,13 +229,22 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
         endConnection(socket)
         return
       }
-      if (request.version !== version) {
+      const negotiated = options.legacyHello
+        ? request.version === version
+          ? version
+          : null
+        : negotiatePtyVersion(
+            { version: request.version, minVersion: request.minVersion },
+            { min: minVersion, max: version }
+          )
+      if (negotiated === null) {
         fail(socket, request.id, `unsupported protocol version ${request.version}, host speaks ${version}`)
         endAfterWrites(socket)
         return
       }
       socket.data.authed = true
-      reply(socket, request.id, { version, pid: process.pid })
+      socket.data.protocolVersion = negotiated
+      answerHello(socket, request.id, options.replyVersion ?? negotiated)
       return
     }
     const injected = failures.get(request.type)
@@ -212,7 +257,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
     }
     switch (request.type) {
       case 'hello':
-        reply(socket, request.id, { version, pid: process.pid })
+        reply(socket, request.id, { version: socket.data.protocolVersion ?? version, pid: process.pid })
         return
       case 'create': {
         const info: PtySessionInfo = {
@@ -364,6 +409,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
         socket.data = {
           decoder: new PtyFrameDecoder(),
           authed: false,
+          protocolVersion: null,
           outQueue: [],
           closed: false,
           endWhenDrained: false
@@ -430,6 +476,10 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
       readResult = result
     },
     holdNextRead,
+    holdNextHello,
+    connectionCount() {
+      return connections.size
+    },
     setSnapshotResult(result) {
       snapshotResult = result
     },
