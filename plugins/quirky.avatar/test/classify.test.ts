@@ -1740,6 +1740,223 @@ describe('dynamic credential path scenarios', () => {
   })
 })
 
+describe('glob credential path scenarios', () => {
+  type GlobDecision = { outcome: 'held' | 'allow' | 'judgment'; step: 'floor-core' | 'fixed-rules' | null; reason: string }
+
+  const credentialHold: GlobDecision = {
+    outcome: 'held',
+    step: 'floor-core',
+    reason: 'touches a credential path or command'
+  }
+  const outsideHold: GlobDecision = {
+    outcome: 'held',
+    step: 'floor-core',
+    reason: 'writes outside every handed-off worktree'
+  }
+  const allow: GlobDecision = {
+    outcome: 'allow',
+    step: 'fixed-rules',
+    reason: 'reads, edits inside the worktree, tests and builds are allowed'
+  }
+  const judgment: GlobDecision = { outcome: 'judgment', step: null, reason: 'no code rule decided' }
+
+  const expectGlobRow = (
+    label: string,
+    command: string,
+    classes: ActionClass[],
+    decision: GlobDecision,
+    cwd = '/work/wt',
+    contextOverride: Partial<ClassifyContext> = {}
+  ) => {
+    const context = { ...ctx, ...contextOverride }
+    const input = call('Bash', { command }, cwd)
+    const actualClasses = classifyCall(input, context)
+    expect(sortedClasses(actualClasses), `row ${label}: classes`).toEqual(sortedClasses(classes))
+    expect(decide({
+      call: input,
+      classes: actualClasses,
+      mandate: sampleMandate({ level: 'local', switches: offSwitches }),
+      switches: offSwitches,
+      level: 'local',
+      ctx: context
+    }), `row ${label}: decision`).toMatchObject(decision)
+  }
+
+  test('glob 1', () => {
+    expectGlobRow('1.1', 'cat /home/u/.s*/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.2', 'cat /home/u/.ss?/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.3', 'cat /home/u/.[s]sh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.4', 'cat /home/u/.[^x]sh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.5', 'cat /home/u/.[!x]sh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.6', 'cat /home/*/.ssh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.7', 'cat /*/*/.ssh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.8', 'cat ~/.s*h/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.9', 'cat /home/u/.ssh*/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.10', 'cat /home/u/.aw*/credentials', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.11', 'head -c 100 /home/u/.gnup*/secring.gpg', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.12', 'cat /home/u/.con*/gh/hosts.yml', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.13', 'cat /home/u/.config/g?/hosts.yml', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.14', 'cat /home/u/.c*/*/hosts.yml', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.15', 'cat /home/u/L*/K*/login.keychain-db', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.16', 'cat /home/u/.s*', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.17', 'cp /home/u/.s*/id_rsa a.txt', ['credential', 'edit-inside'], credentialHold)
+    expectGlobRow('1.18', 'cat "$HOME"/.s*/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.19', 'cat /home/u/{.s*,x}/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.20', 'ls /home/u/?ssh', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.21', 'ls ~/*', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.22', 'find /home/u/.s* -name id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.23', 'cat --file=/home/u/.s*/x', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.24', 'cat ~/.netr?', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.25', 'cat /home/u/.n*', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.26', 'cat /home/u/.netrc*', ['credential', 'read'], credentialHold)
+    expectGlobRow('1.27', 'ls /home/u/Doc*', ['read'], allow)
+    expectGlobRow('1.28', 'ls /home/u/.con*', ['read'], allow)
+    expectGlobRow('1.29', 'cat /home/u/.n*/x', ['read'], allow)
+    expectGlobRow('1.30', 'ls /home/u/Lib*/Pref*/x', ['read'], allow)
+    expectGlobRow('1.31', 'cat /home/u/x/.ssh*/id_rsa', ['read'], allow)
+  })
+
+  test('glob 2', () => {
+    expectGlobRow('2.1', 'cat /home/u/.s^x/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('2.2', 'cat /home/u/^x/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('2.3', 'cat /home/u/.s#sh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('2.4', 'cat /home/u/.sx#sh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('2.5', 'cat /home/u/.ssh~x/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('2.6', 'cat /home/u/.n*~x/y', ['credential', 'read'], credentialHold)
+    expectGlobRow('2.7', 'cat /home/u/.n[a-z]*~x/y', ['credential', 'read'], credentialHold)
+    expectGlobRow('2.8', 'git show HEAD~3', ['read'], allow)
+    expectGlobRow('2.9', 'git show HEAD^', ['read'], allow)
+    expectGlobRow('2.10', 'ls /home/u/a^b/x', ['read'], allow)
+    expectGlobRow('2.11', 'cat notes~', ['read'], allow)
+  })
+
+  test('glob 3', () => {
+    expectGlobRow('3.1', 'cat /home/**/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.2', 'cat /**/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.3', 'cat ~/**/credentials', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.4', 'cat /home/u/***/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.5', 'cat /home/u/**', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.6', 'cat /home/**/../.ssh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.7', 'cat /home/u/x/**/../.ssh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.8', 'cat /tmp/**', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.9', 'cat /home/u/**/.ssh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.10', 'cat /home/u/**/.netrc', ['credential', 'read'], credentialHold)
+    expectGlobRow('3.11', 'wc -l src/**/*.ts', ['read'], allow)
+    expectGlobRow('3.12', 'cat /home/u/**x/id_rsa', ['read'], allow)
+    expectGlobRow('3.13', 'cat /tmp/**/config', ['read'], allow)
+    expectGlobRow('3.14', 'cat src/**', ['read'], allow)
+  })
+
+  test('glob 4', () => {
+    expectGlobRow('4.1', 'cat .*/.ssh/id_rsa', ['credential', 'read'], credentialHold, '/home/u/proj')
+    expectGlobRow('4.2', 'cat .?/.ssh/id_rsa', ['credential', 'read'], credentialHold, '/home/u/proj')
+    expectGlobRow('4.3', 'cat ..*/.ssh/id_rsa', ['credential', 'read'], credentialHold, '/home/u/proj')
+    expectGlobRow('4.4', 'cat /home/.*/u/.ssh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('4.5', 'cat /home/u/x/.*/.ssh/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('4.6', 'cat /work/wt/.*/.env', ['credential', 'read'], credentialHold)
+    expectGlobRow('4.7', 'cat /work/wt/sub/../../.e*', ['credential', 'read'], credentialHold)
+    expectGlobRow('4.8', 'cat .*/.*/x', ['read'], allow)
+    expectGlobRow('4.9', 'cat .?/.?/.?/.?/x', ['read'], allow)
+    expectGlobRow('4.10', 'cat .*/.*/.?/x', ['edit-outside', 'read'], outsideHold)
+    expectGlobRow('4.11', 'cat .*/.*/.*/x', ['edit-outside', 'read'], outsideHold)
+    expectGlobRow('4.12', 'cat .?/.?/.?/.?/.?/x', ['edit-outside', 'read'], outsideHold)
+    expectGlobRow('4.13', 'ls -d .*', ['read'], allow)
+    expectGlobRow('4.14', 'du -sh .*/', ['read'], allow)
+    expectGlobRow('4.15', 'cat .*/x', ['read'], allow)
+    expectGlobRow('4.16', 'cat .??*/.ssh/id_rsa', ['read'], allow, '/home/u/proj')
+    expectGlobRow('4.17', 'cat /home/.?/u/.netrc', ['read'], allow)
+  })
+
+  test('glob 5', () => {
+    expectGlobRow('5.1', 'cat /tmp/.en*', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.2', 'cat /tmp/?env', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.3', 'ls /tmp/proj/.[e]nv', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.4', 'ls /tmp/proj/.e??', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.5', 'ls /tmp/proj/?env.local', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.6', 'ls /tmp/proj/.en*x', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.7', 'cat /tmp/*', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.8', 'cat /tmp/*.log', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.9', 'cat ../.e*', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.10', 'cat /work/wt*/.e*', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.11', 'cat /work/*/.env', ['credential', 'read'], credentialHold)
+    expectGlobRow('5.12', 'cat .e*', ['read'], allow)
+    expectGlobRow('5.13', 'cat /work/wt/.e*', ['read'], allow)
+    expectGlobRow('5.14', 'cat /work/other/.e*', ['read'], allow)
+    expectGlobRow('5.15', 'cat /work/wt/*/.e*', ['read'], allow)
+    expectGlobRow('5.16', 'cat /tmp/foo*', ['read'], allow)
+    expectGlobRow('5.17', 'cat /tmp/out-*.log', ['read'], allow)
+    expectGlobRow('5.18', 'ls /tmp/proj/.e?', ['read'], allow)
+    expectGlobRow('5.19', 'ls /usr/lib/lib*.dylib', ['read'], allow)
+    expectGlobRow('5.20', 'ls ../*/package.json', ['read'], allow)
+    expectGlobRow('5.21', 'ls *.md', ['read'], allow)
+    expectGlobRow('5.22', 'cat src/*.ts', ['read'], allow)
+    expectGlobRow('5.23', 'cat *', ['read'], allow)
+  })
+
+  test('glob 6', () => {
+    expectGlobRow('6.1', 'cat /home/u/.s*/$X', ['credential', 'other', 'read'], credentialHold)
+    expectGlobRow('6.2', 'cat /home/u/.s*$X', ['credential', 'other', 'read'], credentialHold)
+    expectGlobRow('6.3', 'cat ~u/.s*/id_rsa', ['credential', 'other', 'read'], credentialHold)
+    expectGlobRow('6.4', 'cat /home/u/.s*{1..3}', ['credential', 'other', 'read'], credentialHold)
+    expectGlobRow('6.5', 'cat /tmp/*$X', ['credential', 'other', 'read'], credentialHold)
+    expectGlobRow('6.6', 'cat /home/u/.s$X*/id_rsa', ['other', 'read'], judgment)
+    expectGlobRow('6.7', 'cat $X/.s*/id_rsa', ['other', 'read'], judgment)
+    expectGlobRow('6.8', 'cat /tmp/out-*-$N.log', ['other', 'read'], judgment)
+    expectGlobRow('6.9', 'cat < /home/u/.s*/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('6.10', 'cat < /home/u/.s*/$X', ['credential', 'other', 'read'], credentialHold)
+    expectGlobRow('6.11', 'xargs -a /home/u/.s*/x echo', ['credential', 'read'], credentialHold)
+    expectGlobRow('6.12', 'echo x > /home/u/.s*/$X', ['credential', 'edit-outside', 'read'], credentialHold)
+    expectGlobRow('6.13', 'for f in /home/u/*; do rm -rf "$f"; done', ['credential', 'other'], credentialHold)
+    expectGlobRow('6.14', 'echo /home/u/.s*/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('6.15', 'cd "$X" && cat .e*', ['other', 'read'], judgment)
+    expectGlobRow('6.16', 'cd "$X" && cat /home/u/.s*/id_rsa', ['credential', 'other', 'read'], credentialHold)
+    expectGlobRow('6.17', 'cd /tmp || true; cat .e*', ['credential', 'read'], credentialHold)
+    expectGlobRow('6.18', 'cd /home/u && cat .s*/id_rsa', ['credential', 'read'], credentialHold)
+    expectGlobRow('6.19', 'cd /tmp && ls *', ['credential', 'read'], credentialHold)
+    expectGlobRow('6.20', '(cd /home/u; cat .s*/id_rsa)', ['credential', 'read'], credentialHold)
+  })
+
+  test('glob 7', () => {
+    expectGlobRow('7.1', `cat /a/**/${'../'.repeat(15)}x`, ['read'], allow)
+    expectGlobRow('7.2', `cat /a/**/${'../'.repeat(16)}x`, ['edit-outside', 'read'], outsideHold)
+
+    const bracketWorktree: Partial<ClassifyContext> = {
+      worktreePath: '/work/w[t]',
+      handedOffPaths: ['/work/w[t]']
+    }
+    expectGlobRow('7.3', 'cat .e*', ['read'], allow, '/work/w[t]', bracketWorktree)
+    expectGlobRow('7.4', 'cat /work/w[t]/.e*', ['credential', 'read'], credentialHold, '/work/w[t]', bracketWorktree)
+    expectGlobRow('7.5', 'cat /work/w[t]/src/a.ts', ['read'], allow, '/work/w[t]', bracketWorktree)
+
+    const homeWorktree: Partial<ClassifyContext> = {
+      worktreePath: '/home/u',
+      handedOffPaths: ['/home/u']
+    }
+    expectGlobRow('7.6', 'cat .ssh~x/id_rsa', ['credential', 'read'], credentialHold, '/home/u', homeWorktree)
+    expectGlobRow('7.7', 'cat .s*/id_rsa', ['credential', 'read'], credentialHold, '/home/u', homeWorktree)
+    expectGlobRow('7.8', 'cat .e*', ['read'], allow, '/home/u', homeWorktree)
+    expectGlobRow('7.9', 'cat notes~', ['read'], allow, '/home/u', homeWorktree)
+    expectGlobRow('7.10', 'cat .netrc~', ['credential', 'read'], credentialHold, '/home/u', homeWorktree)
+    expectGlobRow('7.11', 'ls *', ['credential', 'read'], credentialHold, '/home/u', homeWorktree)
+    expectGlobRow('7.12', 'ls src/*', ['read'], allow, '/home/u', homeWorktree)
+
+    const stressCommands = [
+      `cat /home/u/${'*?'.repeat(100_000)}`,
+      `cat ${'a/'.repeat(100_000)}*`,
+      `cat /${'**/'.repeat(66_000)}x`,
+      `cat ${'.?/'.repeat(66_000)}x`,
+      `cat /home/u/${'.s*s'.repeat(50_000)}h`
+    ]
+    const started = performance.now()
+    expectGlobRow('7.13.1', stressCommands[0]!, ['credential', 'read'], credentialHold)
+    expectGlobRow('7.13.2', stressCommands[1]!, ['read'], allow)
+    expectGlobRow('7.13.3', stressCommands[2]!, ['credential', 'read'], credentialHold)
+    expectGlobRow('7.13.4', stressCommands[3]!, ['edit-outside', 'read'], outsideHold)
+    expectGlobRow('7.13.5', stressCommands[4]!, ['read'], allow)
+    expect(performance.now() - started, 'row 7.13: five stress inputs').toBeLessThan(2_000)
+  })
+})
+
 describe('brace expansion', () => {
   const classRows: Array<{ scenario: string; command: string; classes: ActionClass[] }> = [
     { scenario: '9 hidden paths', command: 'rm -rf {a,/home/u/Documents}', classes: ['edit-inside', 'edit-outside'] },
