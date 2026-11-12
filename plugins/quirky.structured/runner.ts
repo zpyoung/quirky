@@ -38,7 +38,7 @@ export type StructuredContext = {
 /** `deny-all` runs a session with no tools: every tool or approval request is refused without an ask. */
 export type ToolPolicy = 'default' | 'deny-all'
 
-/** The context footprint a runner records on `data.usage` of the message that ends an assistant turn. */
+/** The context footprint a runner records as `data.contextUsage` on the `result` message that ends a turn. */
 export type TurnUsage = { contextTokens: number; contextWindow: number | null }
 
 /** The per-session launch inputs: agent picks plus the resolved provider environment patch. */

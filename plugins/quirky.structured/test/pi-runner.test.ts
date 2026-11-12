@@ -77,7 +77,8 @@ afterEach(async () => {
 })
 
 const settled = () => statuses.includes('done')
-const usageOfResult = () => (messages.find((m) => m.role === 'result')?.data as any)?.usage
+const contextUsageOfResult = () =>
+  (messages.find((m) => m.role === 'result')?.data as { contextUsage?: unknown } | undefined)?.contextUsage
 
 describe('pi rpc runner', () => {
   test('spawns pi in rpc mode inside the worktree', async () => {
@@ -117,14 +118,14 @@ describe('pi rpc runner', () => {
   test('records context usage on the turn-ending message', async () => {
     await runner.start(session, 'usage')
     await until(settled)
-    expect(usageOfResult()).toEqual({ contextTokens: 180, contextWindow: 200000 })
+    expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: 200000 })
   })
 
   test('context window is null when the process does not report one', async () => {
     build('pi', null)
     await runner.start(session, 'usage')
     await until(settled)
-    expect(usageOfResult()).toEqual({ contextTokens: 180, contextWindow: null })
+    expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: null })
   })
 
   test('journals tool execution when tools are allowed', async () => {
@@ -166,6 +167,7 @@ describe('pi rpc runner', () => {
     expect(fake.commands().some((c) => c.type === 'abort')).toBe(true)
     expect(messages.filter((m) => m.role === 'tool')).toEqual([])
     expect(messages.some((m) => m.role === 'system' && m.text === 'tools are disabled for this session')).toBe(true)
+    expect(messages.find((m) => m.role === 'result')?.data).toEqual({ type: 'agent_end' })
     expect(asks).toEqual([])
   })
 
