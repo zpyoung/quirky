@@ -1,6 +1,6 @@
 import { basename, isAbsolute, resolve, sep } from 'node:path'
 import type { ActionClass, ClassifyContext, ToolCall } from '../contracts'
-import { parseShell, type ShellCommand, type ShellWord } from './shell'
+import { parseShell, MAX_BRACE_WORDS, MAX_SHELL_DEPTH, type ShellCommand, type ShellWord } from './shell'
 
 type ShellAssignment = ShellCommand['assignments'][number]
 type WordAssignment = ShellAssignment & { word: ShellWord }
@@ -183,6 +183,487 @@ function isCredentialPath(path: string, ctx: ClassifyContext, rootPaths: string[
   if (CREDENTIAL_HOME_FILES.some((file) => path === resolve(home, file))) return true
   return basename(path).startsWith('.env') && !isInside(path, rootPaths)
 }
+
+type BraceFrame = { open: number; commas: number[]; children: BraceGroup[]; closed: boolean }
+type BraceAlternative = { start: number; end: number; children: BraceGroup[] }
+type BraceGroup = {
+  open: number
+  close: number
+  commas: number[]
+  children: BraceGroup[]
+  parent: BraceFrame | null
+  count: number
+  alternatives?: BraceAlternative[]
+}
+type BraceRenderRange = {
+  start: number
+  end: number
+  groups: BraceGroup[]
+  cursor: number
+  groupIndex: number
+  closeBrace: boolean
+}
+
+function skipBalancedToken(
+  text: string,
+  openIndex: number,
+  open: '(' | '{',
+  close: ')' | '}'
+): number {
+  type Frame = {
+    open: '(' | '{'
+    close: ')' | '}'
+    quote: '' | "'" | '"'
+    doubleQuoted: boolean
+    comments: boolean
+    wordStart: boolean
+  }
+  const stack: Frame[] = [{
+    open, close, quote: '', doubleQuoted: false,
+    comments: open === '(' && !(text[openIndex - 1] === '$' && text[openIndex + 1] === '('), wordStart: true
+  }]
+  let cursor = openIndex + 1
+
+  while (cursor < text.length) {
+    const frame = stack[stack.length - 1]!
+    const character = text[cursor]!
+    if (frame.quote === "'") {
+      if (character === "'") frame.quote = ''
+      cursor++
+      continue
+    }
+    if (character === '\\') {
+      if (text[cursor + 1] !== '\n') frame.wordStart = false
+      cursor += 2
+      continue
+    }
+    if (frame.quote === '"' && character === '"') {
+      frame.quote = ''
+      cursor++
+      continue
+    }
+    if (frame.quote === '' && frame.comments && frame.wordStart && character === '#') {
+      const newline = text.indexOf('\n', cursor)
+      if (newline < 0) return text.length
+      cursor = newline
+      continue
+    }
+    if (frame.quote === '' && (character === '"' || (character === "'" && !frame.doubleQuoted))) {
+      frame.quote = character
+      frame.wordStart = false
+      cursor++
+      continue
+    }
+    if (character === '`' || (frame.quote === '' && !frame.doubleQuoted && character === '$' && text[cursor + 1] === "'")) {
+      frame.wordStart = false
+      cursor = skipOpaqueToken(text, cursor)!
+      continue
+    }
+    if (character === '$' && text[cursor + 1] === '(') {
+      const arithmetic = text[cursor + 2] === '('
+      const doubleQuoted = arithmetic && (frame.doubleQuoted || frame.quote === '"')
+      frame.wordStart = false
+      stack.push({ open: '(', close: ')', quote: '', doubleQuoted, comments: !arithmetic, wordStart: true })
+      if (arithmetic) stack.push({ open: '(', close: ')', quote: '', doubleQuoted, comments: false, wordStart: true })
+      cursor += arithmetic ? 3 : 2
+      continue
+    }
+    if (character === '$' && text[cursor + 1] === '{') {
+      frame.wordStart = false
+      stack.push({ open: '{', close: '}', quote: '', doubleQuoted: frame.doubleQuoted || frame.quote === '"', comments: false, wordStart: true })
+      cursor += 2
+      continue
+    }
+    if (frame.quote === '"') {
+      cursor++
+      continue
+    }
+    if (!frame.doubleQuoted && (character === '<' || character === '>') && text[cursor + 1] === '(') {
+      frame.wordStart = false
+      stack.push({ open: '(', close: ')', quote: '', doubleQuoted: false, comments: true, wordStart: true })
+      cursor += 2
+      continue
+    }
+    if (character === frame.close) {
+      stack.pop()
+      if (stack.length === 0) return cursor + 1
+    } else if (character === frame.open) {
+      frame.wordStart = true
+      stack.push({ open: frame.open, close: frame.close, quote: '', doubleQuoted: frame.doubleQuoted, comments: frame.comments, wordStart: true })
+    } else {
+      frame.wordStart = character === ' ' || character === '\t' ||
+        character === '\n' || character === ';' || character === '|' || character === '&' ||
+        character === '<' || character === '>'
+    }
+    cursor++
+  }
+
+  return text.length
+}
+
+function skipOpaqueToken(text: string, start: number): number | null {
+  const character = text[start]!
+  if (character === '\\') return Math.min(start + 2, text.length)
+  if (character === "'" || character === '"') {
+    const quote = character
+    let cursor = start + 1
+    while (cursor < text.length) {
+      if (quote === '"' && text[cursor] === '\\') cursor += 2
+      else if (text[cursor] === quote) return cursor + 1
+      else cursor++
+    }
+    return text.length
+  }
+  if (character === '`') {
+    let cursor = start + 1
+    while (cursor < text.length) {
+      if (text[cursor] === '\\') cursor += 2
+      else if (text[cursor] === '`') return cursor + 1
+      else cursor++
+    }
+    return text.length
+  }
+  if (character === '$' && text[start + 1] === "'") {
+    let cursor = start + 2
+    while (cursor < text.length) {
+      if (text[cursor] === '\\') cursor += 2
+      else if (text[cursor] === "'") return cursor + 1
+      else cursor++
+    }
+    return text.length
+  }
+  if (character === '$' && (text[start + 1] === '(' || text[start + 1] === '{')) {
+    return skipBalancedToken(
+      text,
+      start + 1,
+      text[start + 1] as '(' | '{',
+      text[start + 1] === '(' ? ')' : '}'
+    )
+  }
+  if ((character === '<' || character === '>') && text[start + 1] === '(') {
+    return skipBalancedToken(text, start + 1, '(', ')')
+  }
+  return null
+}
+
+function collectBraceCandidates(
+  text: string,
+  candidates: Set<string>,
+  gobble: boolean
+): { sawUnmatchedClose: boolean; cutOff: boolean } {
+  const stack: BraceFrame[] = []
+  const completed: BraceGroup[] = []
+  let sawOpenBrace = false
+  let sawUnmatchedClose = false
+
+  for (let cursor = 0; cursor < text.length;) {
+    const opaqueEnd = skipOpaqueToken(text, cursor)
+    if (opaqueEnd !== null) {
+      cursor = opaqueEnd
+      continue
+    }
+    const character = text[cursor]!
+    if (character === '{') {
+      sawOpenBrace = true
+      if (stack.length >= MAX_SHELL_DEPTH) return { sawUnmatchedClose, cutOff: true }
+      stack.push({ open: cursor, commas: [], children: [], closed: false })
+    } else if (character === ',' && stack.length > 0) {
+      stack[stack.length - 1]!.commas.push(cursor)
+    } else if (character === '}') {
+      const frame = stack[stack.length - 1]
+      if (frame === undefined) {
+        if (sawOpenBrace) sawUnmatchedClose = true
+      } else if (!(gobble && stack.length === 1 && frame.commas.length === 0)) {
+        stack.pop()
+        frame.closed = true
+        const parent = stack[stack.length - 1] ?? null
+        const group: BraceGroup = {
+          open: frame.open,
+          close: cursor,
+          commas: frame.commas,
+          children: frame.children,
+          parent,
+          count: 1
+        }
+        parent?.children.push(group)
+        completed.push(group)
+      }
+    }
+    cursor++
+  }
+
+  const roots: BraceGroup[] = []
+  let hasCommaList = false
+  for (const group of completed) {
+    if (group.commas.length > 0) hasCommaList = true
+    if (group.parent === null || !group.parent.closed) roots.push(group)
+  }
+
+  const countGroup = (group: BraceGroup): number => {
+    for (const child of group.children) countGroup(child)
+    if (group.commas.length === 0) {
+      let count = 1
+      for (const child of group.children) count = Math.min(MAX_BRACE_WORDS + 1, count * child.count)
+      group.count = count
+      return count
+    }
+
+    let childIndex = 0
+    let total = 0
+    let segmentStart = group.open + 1
+    const alternatives: BraceAlternative[] | null =
+      group.commas.length < MAX_BRACE_WORDS ? [] : null
+    for (let alternativeIndex = 0; alternativeIndex <= group.commas.length; alternativeIndex++) {
+      const segmentEnd = group.commas[alternativeIndex] ?? group.close
+      const firstChild = childIndex
+      let alternativeCount = 1
+      while (childIndex < group.children.length && group.children[childIndex]!.open < segmentEnd) {
+        alternativeCount = Math.min(
+          MAX_BRACE_WORDS + 1,
+          alternativeCount * group.children[childIndex]!.count
+        )
+        childIndex++
+      }
+      total = Math.min(MAX_BRACE_WORDS + 1, total + alternativeCount)
+      if (alternatives !== null) {
+        alternatives.push({
+          start: segmentStart,
+          end: segmentEnd,
+          children: group.children.slice(firstChild, childIndex)
+        })
+      }
+      segmentStart = segmentEnd + 1
+    }
+    group.count = total
+    if (total <= MAX_BRACE_WORDS && alternatives !== null) group.alternatives = alternatives
+    return total
+  }
+
+  let total = 1
+  for (const root of roots) {
+    countGroup(root)
+    total = Math.min(MAX_BRACE_WORDS + 1, total * root.count)
+  }
+  if (!hasCommaList) return { sawUnmatchedClose, cutOff: false }
+  if (total > MAX_BRACE_WORDS) return { sawUnmatchedClose, cutOff: true }
+
+  const chunks: string[] = []
+  let ranges: BraceRenderRange[] = [{
+    start: 0,
+    end: text.length,
+    groups: roots,
+    cursor: 0,
+    groupIndex: 0,
+    closeBrace: false
+  }]
+  const choices: {
+    alternatives: BraceAlternative[]
+    nextAlternative: number
+    chunksLength: number
+    ranges: BraceRenderRange[]
+  }[] = []
+  const makeRange = (alternative: BraceAlternative, closeBrace = false): BraceRenderRange => ({
+    start: alternative.start,
+    end: alternative.end,
+    groups: alternative.children,
+    cursor: alternative.start,
+    groupIndex: 0,
+    closeBrace
+  })
+
+  while (true) {
+    const range = ranges[ranges.length - 1]!
+    if (range.groupIndex < range.groups.length) {
+      const group = range.groups[range.groupIndex++]!
+      chunks.push(text.slice(range.cursor, group.open))
+      range.cursor = group.close + 1
+      if (group.commas.length === 0) {
+        chunks.push('{')
+        ranges.push({
+          start: group.open + 1,
+          end: group.close,
+          groups: group.children,
+          cursor: group.open + 1,
+          groupIndex: 0,
+          closeBrace: true
+        })
+      } else {
+        const alternatives = group.alternatives!
+        choices.push({
+          alternatives,
+          nextAlternative: 1,
+          chunksLength: chunks.length,
+          ranges: ranges.map((current) => ({ ...current }))
+        })
+        ranges.push(makeRange(alternatives[0]!))
+      }
+      continue
+    }
+
+    chunks.push(text.slice(range.cursor, range.end))
+    ranges.pop()
+    if (range.closeBrace) chunks.push('}')
+    if (ranges.length !== 0) continue
+
+    candidates.add(chunks.join(''))
+    let advanced = false
+    while (choices.length > 0) {
+      const choice = choices[choices.length - 1]!
+      if (choice.nextAlternative < choice.alternatives.length) {
+        const alternative = choice.alternatives[choice.nextAlternative++]!
+        chunks.length = choice.chunksLength
+        ranges = choice.ranges.map((current) => ({ ...current }))
+        ranges.push(makeRange(alternative))
+        advanced = true
+        break
+      }
+      choices.pop()
+    }
+    if (!advanced) break
+  }
+
+  return { sawUnmatchedClose, cutOff: false }
+}
+
+function fixedCredentialPrefix(candidate: string, home: string, stripFlagPrefix: boolean): string {
+  let text = candidate
+  if (stripFlagPrefix && text.startsWith('-')) {
+    const equals = text.indexOf('=')
+    if (equals < 0) return ''
+    text = text.slice(equals + 1)
+  }
+  if (text === '') return ''
+
+  const pieces: string[] = []
+  let cursor = 0
+  if (text.startsWith('~/')) {
+    pieces.push(home)
+    cursor = 1
+  } else if (text === '~') {
+    return ''
+  } else if (text[0] === '~') {
+    const owner = basename(resolve(home))
+    if (owner !== '' && (text === `~${owner}` || text.startsWith(`~${owner}/`))) {
+      if (text.length === owner.length + 1) return home
+      pieces.push(home)
+      cursor = owner.length + 1
+    } else if (text === '~+') {
+      return '.'
+    } else if (text.startsWith('~+/')) {
+      pieces.push('.')
+      cursor = 2
+    } else {
+      return ''
+    }
+  }
+
+  const dynamicStopAt = (index: number): boolean => {
+    const character = text[index]
+    return character === '$' || character === '`' || character === '{' ||
+      ((character === '<' || character === '>') && text[index + 1] === '(')
+  }
+
+  if (cursor === 0 && text.startsWith('${PWD}')) {
+    if (text.length === 6 || dynamicStopAt(6)) return '.'
+    if (text[6] !== '/') return ''
+    pieces.push('.')
+    cursor = 6
+  } else if (
+    cursor === 0 &&
+    text.startsWith('$PWD') &&
+    !(/[A-Za-z0-9_]/.test(text[4] ?? ''))
+  ) {
+    if (text.length === 4 || dynamicStopAt(4)) return '.'
+    if (text[4] !== '/') return ''
+    pieces.push('.')
+    cursor = 4
+  }
+
+  let segmentStart = cursor
+  while (cursor < text.length) {
+    if (text.startsWith('${HOME}', cursor)) {
+      pieces.push(text.slice(segmentStart, cursor), home)
+      cursor += 7
+      segmentStart = cursor
+      continue
+    }
+    if (text.startsWith('$HOME', cursor) && !(/[A-Za-z0-9_]/.test(text[cursor + 5] ?? ''))) {
+      pieces.push(text.slice(segmentStart, cursor), home)
+      cursor += 5
+      segmentStart = cursor
+      continue
+    }
+    if (text.startsWith("$'", cursor)) {
+      pieces.push(text.slice(segmentStart, cursor))
+      let end = cursor + 2
+      while (end < text.length && text[end] !== '\\') end++
+      pieces.push(text.slice(cursor + 2, end))
+      return pieces.join('')
+    }
+    if (
+      text[cursor] === '$' ||
+      text[cursor] === '`' ||
+      text[cursor] === '{' ||
+      ((text[cursor] === '<' || text[cursor] === '>') && text[cursor + 1] === '(')
+    ) {
+      pieces.push(text.slice(segmentStart, cursor))
+      return pieces.join('')
+    }
+    cursor++
+  }
+  pieces.push(text.slice(segmentStart))
+  return pieces.join('')
+}
+
+function wordTouchesCredential(
+  word: ShellWord,
+  directories: DirectorySet,
+  ctx: ClassifyContext,
+  rootPaths: string[],
+  stripFlagPrefix: boolean
+): 'credential' | 'edit-outside' | null {
+  if (!word.dynamic) {
+    let value = word.text
+    if (stripFlagPrefix && value.startsWith('-')) {
+      const equals = value.indexOf('=')
+      if (equals < 0) return null
+      value = value.slice(equals + 1)
+    }
+    if (value === '') return null
+    const expanded = expandHome(value, ctx.home)
+    for (const directory of directories ?? UNKNOWN_DIRECTORY) {
+      if (directory === null && !isAbsolute(expanded)) continue
+      if (isCredentialPath(resolvePath(value, directory ?? '/', ctx.home), ctx, rootPaths)) {
+        return 'credential'
+      }
+    }
+    return null
+  }
+
+  const candidates = new Set([word.text])
+  let cutOff = false
+  if (word.text.includes('{')) {
+    const standard = collectBraceCandidates(word.text, candidates, false)
+    cutOff ||= standard.cutOff
+    if (standard.sawUnmatchedClose) {
+      const gobbled = collectBraceCandidates(word.text, candidates, true)
+      cutOff ||= gobbled.cutOff
+    }
+  }
+
+  for (const candidate of candidates) {
+    const prefix = fixedCredentialPrefix(candidate, ctx.home, stripFlagPrefix)
+    if (prefix === '') continue
+    const absolute = isAbsolute(prefix)
+    for (const directory of directories ?? UNKNOWN_DIRECTORY) {
+      if (directory === null && !absolute) continue
+      const path = absolute ? resolve(prefix) : resolve(directory ?? '/', prefix)
+      if (isCredentialPath(path, ctx, rootPaths)) return 'credential'
+    }
+  }
+  return cutOff ? 'edit-outside' : null
+}
+
 
 function isAgentConfigPath(path: string): boolean {
   if (/(^|\/)\.claude\/settings[^/]*\.json$/.test(path)) return true
@@ -1162,15 +1643,8 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     pipelineDownloads.set(shellCommand.scope, downloadInPipeline)
 
     for (const word of parsed.argWords) {
-      if (word.dynamic) continue
-      const equals = word.text.indexOf('=')
-      const value = word.text.startsWith('-') ? (equals >= 0 ? word.text.slice(equals + 1) : '') : word.text
-      if (value === '') continue
-      const expanded = expandHome(value, ctx.home)
-      for (const directory of parsed.execCwd ?? UNKNOWN_DIRECTORY) {
-        if (directory === null && !isAbsolute(expanded)) continue
-        if (isCredentialPath(resolvePath(value, directory ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
-      }
+      const credentialClass = wordTouchesCredential(word, parsed.execCwd, ctx, rootPaths, true)
+      if (credentialClass !== null) partClasses.push(credentialClass)
     }
 
     if (!parsed.dynamicCommand && isWriteCommand(cmd, args)) {
@@ -1181,34 +1655,33 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     }
     for (const { target, cwd: wrapperCwd } of parsed.wrapperWrites) {
       if (!target.dynamic && ['/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty'].includes(target.text)) continue
-      if (target.dynamic) partClasses.push('edit-outside')
-      else append(partClasses, directoryClasses(wrapperCwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
+      if (target.dynamic) {
+        partClasses.push('edit-outside')
+        const credentialClass = wordTouchesCredential(target, wrapperCwd, ctx, rootPaths, false)
+        if (credentialClass !== null) partClasses.push(credentialClass)
+      } else append(partClasses, directoryClasses(wrapperCwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
     }
     for (const { target, cwd: wrapperCwd } of parsed.wrapperReads) {
-      if (target.dynamic) continue
-      const expanded = expandHome(target.text, ctx.home)
-      for (const directory of wrapperCwd ?? UNKNOWN_DIRECTORY) {
-        if (directory === null && !isAbsolute(expanded)) continue
-        if (isCredentialPath(resolvePath(target.text, directory ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
-      }
+      const credentialClass = wordTouchesCredential(target, wrapperCwd, ctx, rootPaths, false)
+      if (credentialClass !== null) partClasses.push(credentialClass)
     }
     for (const redirect of shellCommand.redirects) {
       const target = redirect.target
       if (redirect.kind === 'read') {
         if (target.dynamic) partClasses.push('other')
-        else {
-          const expanded = expandHome(target.text, ctx.home)
-          for (const directory of commandCwd ?? UNKNOWN_DIRECTORY) {
-            if (directory === null && !isAbsolute(expanded)) continue
-            if (isCredentialPath(resolvePath(target.text, directory ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
-          }
-        }
+        const credentialClass = wordTouchesCredential(target, commandCwd, ctx, rootPaths, false)
+        if (credentialClass !== null) partClasses.push(credentialClass)
         continue
       }
       if (redirect.kind !== 'write') continue
       if (!target.dynamic && ['/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty'].includes(target.text)) continue
-      if (target.dynamic) partClasses.push('edit-outside')
-      else append(partClasses, directoryClasses(commandCwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
+      if (target.dynamic) {
+        partClasses.push('edit-outside')
+        const credentialClass = wordTouchesCredential(target, commandCwd, ctx, rootPaths, false)
+        if (credentialClass !== null) partClasses.push(credentialClass)
+      } else {
+        append(partClasses, directoryClasses(commandCwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
+      }
     }
 
     if (shellCommand.detached && cmd === 'eval' && cwd === null) possible = null
@@ -1324,6 +1797,9 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * A command or wrapper named by a path outside the system directories adds `other`,
  * except listed command paths and worktree tools in a handed-off `node_modules/.bin`.
  * A path-named `cd`, `pushd`, `eval` or `export` returns `other` and `edit-outside`.
+ * A computed argument or redirect word whose non-empty fixed prefix resolves
+ * under an active directory to a credential path adds `credential`; brace expansion
+ * cut off by the 64-word or 32-depth limit without proving it adds `edit-outside`.
  * A relative write target with an unknown cwd returns `edit-outside`.
  * Paths are judged under every possible shell directory; a write is inside only
  * when it is inside under each. A `cd` is certain only through its `&&` list.
