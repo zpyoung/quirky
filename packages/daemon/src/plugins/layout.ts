@@ -158,7 +158,7 @@ function sameValue(a: unknown, b: unknown): boolean {
   const left = a as Record<string, unknown>
   const right = b as Record<string, unknown>
   const keys = Object.keys(left)
-  return keys.length === Object.keys(right).length && keys.every((key) => key in right && sameValue(left[key], right[key]))
+  return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]))
 }
 
 type OpenView = NonNullable<UiLayout['view']>

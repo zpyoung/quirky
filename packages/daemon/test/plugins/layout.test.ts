@@ -1318,6 +1318,25 @@ describe('writes that change nothing', () => {
     expect(stored()).toEqual(before.stored)
   })
 
+  test('own JSON keys that also name inherited properties are not equal to different keys', () => {
+    const { service, sent, shared, writes, stored } = makeLayoutService([testWindow(1)])
+    service.openView(PAGE, JSON.parse('{"__proto__":{}}'))
+    const before = writes()
+
+    const next = service.openView(PAGE, { note: 'n1' })
+
+    expect(next.view).toEqual({ id: PAGE, input: { note: 'n1' } })
+    expect((stored() as UiLayout).view).toEqual(next.view)
+    expect(Object.hasOwn((stored() as UiLayout).view!.input as object, 'note')).toBe(true)
+    expect(service.state().layout.view).toEqual(next.view)
+    expect(writes()).toBe(before + 1)
+    expect(layoutEvents(sent.get(1)).map((event) => event.layout.view)).toEqual([
+      { id: PAGE, input: JSON.parse('{"__proto__":{}}') },
+      next.view
+    ])
+    expect(shared).toHaveLength(2)
+  })
+
   test('a window gets its first layout even for an unchanged write, but not repeated unchanged writes', () => {
     const { service, sent, shared, writes } = makeLayoutService([testWindow(1)])
     expect(service.setPalette(false).palette).toBeUndefined()
