@@ -127,9 +127,11 @@ const settingInfo = object(
     minimum: { type: 'number' },
     maximum: { type: 'number' },
     values: strings,
+    hidden: boolean('Hidden from the generic Settings form.'),
     menu: { type: 'string', enum: ['view'], description: 'A boolean setting exposed in the native View menu.' },
     whenSetting: string("The plugin's own boolean setting that must be true for this setting's View menu row."),
     value: { description: 'The current value.' },
+    source: { type: 'string', enum: ['user', 'distro', 'default'], description: 'Which layer value comes from.' },
     stored: object({ value: {}, valid: boolean() }, ['value', 'valid'])
   },
   ['id', 'plugin', 'pluginName', 'type', 'title', 'default', 'value']
@@ -227,6 +229,7 @@ const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
     statusBars: listOf({ type: 'object' }),
+    windowBarItems: listOf({ type: 'object' }),
     activityItems: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
