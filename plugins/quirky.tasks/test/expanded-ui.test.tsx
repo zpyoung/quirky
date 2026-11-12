@@ -605,7 +605,7 @@ test('an unfiltered issue status edit is discarded after paging away and refresh
   await click(button(pagination, 'Next page'))
   expect(rowTitles(element)).toEqual([])
   providerHasUpdatedIssue = true
-  await click(button(element.querySelector('nav[aria-label="GitHub task pagination"]'), 'Previous page'))
+  await click(button(element.querySelector('nav[aria-label="GitHub task pagination"]')!, 'Previous page'))
   expect(rowTitles(element)).toEqual(['Fresh provider title'])
   expect(element.querySelector('.tasks-list__row .ui-status-dot--done')).toBeNull()
 

@@ -244,7 +244,7 @@ No stored schema changes. `lastList` isn't durable, because `update` only persis
 - Anything that would change a Decisions Locked entry in `logic.md`.
 
 **Never**
-- Run the full test suite locally or on OVH (`AGENTS.md`). Worker acceptance runs one `bun test <file>` per process; the full suite runs on GitHub.
+- Never run the full test suite on this Mac or on OVH. Worker acceptance runs one `bun test <file>` per process; the full suite runs on GitHub (`AGENTS.md`).
 - Add a Tasks-specific branch to `ToolShell`, `MainArea` or `host.ts`.
 - Have the panel and tab fetch different versions of the same query. Both key their reads on the effective `{ mode, query, page, repoIds }`.
 

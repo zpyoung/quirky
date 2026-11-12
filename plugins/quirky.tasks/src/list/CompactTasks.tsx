@@ -287,6 +287,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
               <IconButton
                 label={`More actions for #${item.number}`}
                 title="More actions"
+                aria-haspopup="menu"
                 onClick={(event) => {
                   const bounds = event.currentTarget.getBoundingClientRect()
                   setMenu({ x: bounds.right, y: bounds.bottom, item, returnFocusTo: event.currentTarget })

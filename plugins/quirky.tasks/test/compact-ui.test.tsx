@@ -246,6 +246,7 @@ test('every row keeps its Start workspace button and menu in the DOM and in tab 
     expect(menu).toBeDefined()
     expect(start.tabIndex).toBeGreaterThanOrEqual(0)
     expect(menu.tabIndex).toBeGreaterThanOrEqual(0)
+    expect(menu.getAttribute('aria-haspopup')).toBe('menu')
     expect(start.hidden).toBe(false)
   }
 })
@@ -516,37 +517,38 @@ test('focus after Collapse reaches the first row without moving saved scroll whe
   }
 })
 
-async function switchToIssuesAfterUnavailableList(firstPrsRead: () => unknown): Promise<Mounted> {
-  let state = prsState
-  place.requestFocus('row')
-  const mounted = await mountCompact({
-    handlers: {
-      'quirky.tasks/prepare': () => state,
-      'quirky.tasks/navigate': () => {
-        state = withNavigation({ mode: 'issues', query: 'is:issue is:open', lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 } })
-        return state
-      },
-      'quirky.tasks/list': (params) => params.mode === 'prs' ? firstPrsRead() : listResult([issue(12)])
-    }
-  })
-  const issuesTab = [...mounted.element.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.includes('Issues'))!
-  await act(async () => issuesTab.click())
-  await settle()
-  return mounted
-}
-
 test('a pending Collapse focus expires when the initial list is empty', async () => {
-  const { element } = await switchToIssuesAfterUnavailableList(() => listResult([]))
-  const issueRow = element.querySelector('.ui-list-row__main')!
-  expect(rowTitles(element)).toEqual(['Issue 12'])
-  expect(document.activeElement === issueRow).toBe(false)
+  await seedSnapshot([])
+  place.requestFocus('row')
+  const pendingList = Promise.withResolvers<unknown>()
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => pendingList.promise } })
+  expect(rowTitles(element)).toEqual([])
+  await act(async () => pendingList.resolve(listResult([pr(274), pr(275)])))
+  await settle()
+  const firstRow = element.querySelector('.ui-list-row__main')!
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(document.activeElement === firstRow).toBe(false)
 })
 
 test('a pending Collapse focus expires when the initial list fails', async () => {
-  const { element } = await switchToIssuesAfterUnavailableList(() => { throw new Error('list unavailable') })
-  const issueRow = element.querySelector('.ui-list-row__main')!
-  expect(rowTitles(element)).toEqual(['Issue 12'])
-  expect(document.activeElement === issueRow).toBe(false)
+  await seedSnapshot([])
+  place.requestFocus('row')
+  let failList = true
+  const { element } = await mountCompact({
+    handlers: {
+      'quirky.tasks/list': () => {
+        if (failList) throw new Error('list unavailable')
+        return listResult([pr(274), pr(275)])
+      }
+    }
+  })
+  expect(element.querySelector('[role="status"].tasks-compact__notice')).not.toBeNull()
+  failList = false
+  await act(async () => button(element, 'Retry')!.click())
+  await settle()
+  const firstRow = element.querySelector('.ui-list-row__main')!
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(document.activeElement === firstRow).toBe(false)
 })
 
 test('a pending Collapse focus expires when the list changes before the first read completes', async () => {

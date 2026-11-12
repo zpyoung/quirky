@@ -698,6 +698,31 @@ describe('a tool with an expanded view', () => {
     expect(state.layout.tools?.open[SLOT]).toBeNull()
   })
 
+  test('the last-window merge keeps the survivor panel open after its own expanded tab was closed', async () => {
+    const { harness, caller } = await start(seedWithBothOpen())
+    const survivor = await harness.connectWithEvents('ui')
+    const departing = await harness.connectWithEvents('ui')
+    const { connId: survivorConnId } = await survivor.client.call('ui.window.self', {})
+    await departing.client.call('ui.window.self', {})
+    await survivor.client.call('ui.window.focused', { focused: true })
+    await caller.call('ui.window.view.close', { connId: survivorConnId })
+    await caller.call('ui.tool.open', { id: TASKS })
+    const before = (await caller.call('ui.window.state', { connId: survivorConnId })).layout
+    expect(before.view).toBeNull()
+    expect(before.viewTabs).toEqual([])
+    expect(before.tools?.open[SLOT]).toBe(TASKS)
+    expect((await caller.call('ui.state', {})).windows).toHaveLength(2)
+
+    departing.client.close()
+    const state = await waitForAsync(async () => {
+      const current = await caller.call('ui.state', {})
+      return current.windows.length === 1 ? current : undefined
+    })
+    expect(state.layout.view).toBeNull()
+    expect(state.layout.viewTabs).toEqual([])
+    expect(state.layout.tools?.open[SLOT]).toBe(TASKS)
+  })
+
   test('activating a background Tasks tab clears its slot', async () => {
     const { harness, caller } = await start(seedWithBothOpen(REVIEW_VIEW, [TASKS_VIEW, REVIEW_VIEW]))
     const tasksWindow = await harness.connectWithEvents('ui')
