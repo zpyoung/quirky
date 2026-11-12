@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { git as fixtureGit, isolateGitConfig, makeRepo } from '../../../plugins/quirky.repo/test/git-fixtures'
@@ -335,4 +335,25 @@ test('write settlement bypasses a status cohort started during the write', async
   expect(existsSync(midRelease)).toBe(false)
   writeFileSync(midRelease, '')
   expect((await mid).entries.some((e) => e.path === 'a.txt' && e.area === 'unstaged')).toBe(true)
+})
+
+test('waiting read cohorts spend their timeout budget before they can spawn', async () => {
+  const repo = makeRepo(scratch())
+  const fake = wrapper(`echo snapshot\ntouch "$ENTERED"\nwhile [ ! -f "$RELEASE" ]; do sleep 0.01; done`)
+  const started = Date.now()
+  try {
+    setSystemTime(started)
+    const first = track(runner.runGit(repo, ['status'], { readOnly: true, timeoutMs: 10000 }))
+    await until(() => existsSync(fake.entered))
+    const waiting = track(runner.runGit(repo, ['status'], { readOnly: true, timeoutMs: 10000 }))
+    setSystemTime(started + 20000)
+    writeFileSync(fake.release, '')
+    const [activeResult, waitingResult] = await Promise.all([first, waiting])
+    expect(activeResult.exitCode).toBe(0)
+    expect(waitingResult).toEqual({ stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true })
+    expect(fake.calls()).toHaveLength(1)
+    expect(runner.gitScheduler.active).toBe(0)
+  } finally {
+    setSystemTime()
+  }
 })

@@ -174,9 +174,18 @@ export async function runGit(cwd: string, args: string[], options: RunGitOptions
       })
     })
   }
+  const share = options.input === undefined && options.share !== false
+  const deadline = share && options.timeoutMs !== undefined ? Date.now() + options.timeoutMs : undefined
   const env = await resolvedGitEnv(cwd, options)
-  const run = () => retryStalled(() => runGitOnce(cwd, args, options, env))
-  if (options.input !== undefined || options.share === false) return run()
+  const run = () => {
+    const remaining = deadline === undefined ? undefined : deadline - Date.now()
+    if (remaining !== undefined && remaining <= 0) {
+      return Promise.resolve<GitResult>({ stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true })
+    }
+    const runOptions = remaining === undefined ? options : { ...options, timeoutMs: remaining }
+    return retryStalled(() => runGitOnce(cwd, args, runOptions, env))
+  }
+  if (!share) return run()
   const entries = Object.entries(env).filter((entry) => entry[1] !== undefined).sort(([a], [b]) => a.localeCompare(b))
   const key = JSON.stringify(['runGit', resolve(cwd), args, entries, options.timeoutMs ?? null, options.stallMs ?? null])
   return shareGitRead(key, run, (result) => ({ ...result, stdout: result.stdout.slice() }))
