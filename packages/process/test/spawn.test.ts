@@ -132,6 +132,28 @@ test('5: stderr is drained into a bounded UTF-8-safe tail', async () => {
   expect(utf8.stderrTail()).toBe('Z')
 }, 15_000)
 
+test.each([
+  { stderrTailBytes: undefined, expected: '\uFFFD\uFFFDoops' },
+  { stderrTailBytes: 6, expected: '\uFFFD\uFFFDoops' },
+  { stderrTailBytes: 5, expected: 'oops' },
+])('stderr preserves leading invalid bytes unless truncated at $stderrTailBytes bytes', async ({ stderrTailBytes, expected }) => {
+  const value = runner()
+  const argv = ['/bin/sh', '-c', "printf '\\200\\277oops' >&2"]
+  const child = value.spawn(argv, { stderrTailBytes, timeoutMs: 5_000 })
+  expect((await child.exited).exitCode).toBe(0)
+  expect(child.stderrTail()).toBe(expected)
+  if (stderrTailBytes !== 5) expect(child.stderrTail()).toBe((await value.run(argv)).stderr)
+}, 15_000)
+
+test('an exact-capacity stderr tail keeps a complete leading multibyte character', async () => {
+  const child = runner().spawn(['/bin/sh', '-c', "printf '\\303\\251Z' >&2"], {
+    stderrTailBytes: 3,
+    timeoutMs: 5_000,
+  })
+  expect((await child.exited).exitCode).toBe(0)
+  expect(child.stderrTail()).toBe('éZ')
+}, 15_000)
+
 test('6: ignored output is discarded', async () => {
   const child = runner().spawn(
     ['/bin/sh', '-c', 'echo hi; echo oops >&2'],

@@ -53,6 +53,7 @@ class ByteTail {
   private readonly buffer: Uint8Array
   private length = 0
   private writeIndex = 0
+  private truncated = false
 
   constructor(capacity: number) {
     this.buffer = new Uint8Array(capacity)
@@ -60,6 +61,7 @@ class ByteTail {
 
   append(chunk: Uint8Array): void {
     const capacity = this.buffer.byteLength
+    if (this.length + chunk.byteLength > capacity) this.truncated = true
     if (chunk.byteLength >= capacity) {
       this.buffer.set(chunk.subarray(chunk.byteLength - capacity), 0)
       this.length = capacity
@@ -83,7 +85,9 @@ class ByteTail {
     bytes.set(this.buffer.subarray(start, start + firstLength), 0)
     if (firstLength < this.length) bytes.set(this.buffer.subarray(0, this.length - firstLength), firstLength)
     let prefix = 0
-    while (prefix < bytes.byteLength && (bytes[prefix]! & 0xc0) === 0x80) prefix++
+    if (this.truncated) {
+      while (prefix < bytes.byteLength && (bytes[prefix]! & 0xc0) === 0x80) prefix++
+    }
     return new TextDecoder().decode(bytes.subarray(prefix))
   }
 }
