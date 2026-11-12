@@ -863,6 +863,8 @@ type UnwrappedWords = {
 }
 
 
+const UNREADABLE_ENV_NAME = /[*?[^~#$]/
+
 function assignmentFromWord(word: ShellWord): WordAssignment | null {
   const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(word.text)
   if (assignment === null) return null
@@ -988,11 +990,20 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
         const option = words[commandIndex]
         const assignment = assignmentFromWord(option)
         if (assignment === null) {
-          if (option.dynamic && option.text.includes('=')) {
+          const equals = option.text.indexOf('=')
+          if (option.dynamic) {
+            if (equals < 0) break
             unknownWrapperFlag = true
             break wrappers
           }
-          break
+          if (wrapper === 'sudo' && option.text.startsWith('/')) break
+          if (equals === 0 || (option.text !== '[' && UNREADABLE_ENV_NAME.test(equals < 0 ? option.text : option.text.slice(0, equals)))) {
+            unknownWrapperFlag = true
+            break wrappers
+          }
+          if (equals < 0) break
+          commandIndex++
+          continue
         }
         if (TRACKED_ENV_NAMES[assignment.name] === true) wrapperAssignments?.push(assignment)
         commandIndex++
@@ -2070,6 +2081,8 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * Maps a tool call onto the action classes the gate decides on.
  *
  * Unreadable shell text and unknown wrapper options return `other` and `edit-outside`.
+ * After `env` or `sudo`, a word with `=` is an assignment the wrapper takes, and
+ * a word whose name has a pattern character or is empty returns `other` and `edit-outside`.
  * Computed words that no other rule accounts for add `other`; ordinary `xargs` commands
  * add `other` unless exempt, while write and shell `-c`/`eval` commands add `edit-outside`.
  * A computed command word or an array element assignment before a command leaves
