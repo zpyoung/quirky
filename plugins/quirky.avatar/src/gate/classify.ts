@@ -70,6 +70,9 @@ const WRAPPER_SPECS: Partial<Record<string, WrapperSpec>> = {
 const READ_CMDS = new Set(['command', 'ls', 'cat', 'head', 'tail', 'wc', 'pwd', 'echo', 'printf', 'which', 'whereis', 'type', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'stat', 'file', 'tree', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink', 'true', 'false', 'test', '[', 'date', 'whoami', 'uname', 'id', 'column', 'fmt', 'nl', 'tac', 'od', 'xxd', 'hexdump', 'md5sum', 'shasum', 'sha256sum', 'du', 'df', 'cd', 'pushd', 'popd', 'sleep', 'ps', 'lsof'])
 const AWK_CMDS = new Set(['awk', 'gawk', 'mawk', 'nawk'])
 const FIND_UNSAFE_PRIMARY = /^-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)$/
+const SED_CMDS = new Set(['sed', 'gsed'])
+const CONTENT_WALKERS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'diff'])
+const CWD_WALKERS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag'])
 const WRITE_ALL_CMDS = new Set(['rm', 'rmdir', 'touch', 'tee', 'mkdir', 'truncate', 'unlink', 'mv', 'shred'])
 const WRITE_SKIP_FIRST_CMDS = new Set(['chmod', 'chown', 'chgrp'])
 const WRITE_DEST_CMDS = new Set(['cp', 'rsync', 'install', 'ln'])
@@ -96,6 +99,8 @@ const TRACKED_ENV_NAMES: Record<string, true> = { GIT_DIR: true, GIT_WORK_TREE: 
 
 /** The most possible directories retained in a scope before its directory becomes unknown. */
 export const MAX_DIRECTORIES = 16
+export const MAX_ATTACHED_FLAG_LETTERS = 64
+export const EMBEDDED_PATH_BUDGET = 1_048_576
 
 type DirectorySet = readonly string[] | null
 type DirectoryState = { possible: DirectorySet; certain: DirectorySet }
@@ -142,6 +147,24 @@ function isLoneSubscriptAssignment(words: ShellWord[], index: number): boolean {
   return index === words.length - 1 && /^[A-Za-z_][A-Za-z0-9_]*\[.*\]\+?=/s.test(words[index].text)
 }
 
+function skipKeywords(words: ShellWord[], startIndex: number): number {
+  let index = startIndex
+  while (index < words.length) {
+    const current = words[index]
+    if (!current.dynamic && (current.text === 'function' || current.text === 'repeat')) index += 2
+    else if (!current.dynamic && DIRECTORY_KEYWORDS[current.text] === true) index++
+    else if (!current.dynamic && current.text === 'time') {
+      let cursor = index + 1
+      while (cursor < words.length && !words[cursor].dynamic && words[cursor].text === '-p') cursor++
+      if (cursor < words.length && !words[cursor].dynamic && words[cursor].text === '--') cursor++
+      else if (cursor < words.length && !words[cursor].dynamic && words[cursor].text.startsWith('-')) break
+      index = cursor
+    } else if (index > 0 && /^[A-Za-z_][A-Za-z0-9_]*\+?=/s.test(current.text)) index++
+    else break
+  }
+  return index
+}
+
 /** True when a shell may replace the command word with a file name it matches, which can be `cd`. */
 function holdsCommandPattern(word: ShellWord): boolean {
   return word.text !== '[' && word.text !== '[[' && !word.text.includes('/') &&
@@ -153,17 +176,7 @@ function keywordChangesDirectory(words: ShellWord[]): boolean {
   const mainIndex = unwrapWords(words).commandIndex
   let index = 0
   while (index < words.length) {
-    while (index < words.length) {
-      const current = words[index]
-      if (!current.dynamic && (current.text === 'function' || current.text === 'repeat')) index += 2
-      else if (!current.dynamic && DIRECTORY_KEYWORDS[current.text] === true) index++
-      else if (!current.dynamic && current.text === 'time') {
-        index++
-        while (index < words.length && !words[index].dynamic && words[index].text === '-p') index++
-        if (index < words.length && !words[index].dynamic && words[index].text === '--') index++
-      } else if (index > 0 && /^[A-Za-z_][A-Za-z0-9_]*\+?=/s.test(current.text)) index++
-      else break
-    }
+    index = skipKeywords(words, index)
     if (index >= words.length) return false
     const unwrapped = unwrapWords(words, undefined, null, '', index)
     if (unwrapped.unknownWrapperFlag) return index > 0
@@ -215,6 +228,18 @@ function isCredentialPath(path: string, ctx: ClassifyContext, rootPaths: string[
   }
   if (CREDENTIAL_HOME_FILES.some((file) => path === resolve(home, file))) return true
   return basename(path).startsWith('.env') && !isInside(path, rootPaths)
+}
+
+function holdsCredentialPath(path: string, ctx: ClassifyContext): boolean {
+  const prefix = path.endsWith(sep) ? path : path + sep
+  const home = resolve(ctx.home)
+  for (const entry of CREDENTIAL_HOME_DIRS) {
+    if (resolve(home, entry).startsWith(prefix)) return true
+  }
+  for (const entry of CREDENTIAL_HOME_FILES) {
+    if (resolve(home, entry).startsWith(prefix)) return true
+  }
+  return false
 }
 
 type BraceFrame = { open: number; commas: number[]; children: BraceGroup[]; closed: boolean }
@@ -843,6 +868,60 @@ function wordTouchesCredential(
   return cutOff ? 'edit-outside' : null
 }
 
+function attachedFlagValues(word: ShellWord): ShellWord[] | null {
+  const text = word.text
+  if (text[0] !== '-') return []
+  let run = 1
+  while (run < text.length && /[A-Za-z0-9]/.test(text[run])) run++
+  const last = Math.min(run, text.length - 1)
+  const count = Math.max(0, last - 1)
+  if (count > MAX_ATTACHED_FLAG_LETTERS || count * text.length > EMBEDDED_PATH_BUDGET) return null
+  const values: ShellWord[] = []
+  for (let start = 2; start <= last; start++) {
+    values.push({ text: text.slice(start), dynamic: word.dynamic, subs: [] })
+  }
+  return values
+}
+
+function sedReadFileNames(word: ShellWord): ShellWord[] | null {
+  const text = word.text
+  const names: ShellWord[] = []
+  let cost = 0
+  let lineStart = 0
+  while (lineStart <= text.length) {
+    const newline = text.indexOf('\n', lineStart)
+    const lineEnd = newline < 0 ? text.length : newline
+    const lineLength = lineEnd - lineStart
+    for (let index = lineStart; index < lineEnd; index++) {
+      if (text[index] !== 'r' && text[index] !== 'R') continue
+      cost += lineLength
+      if (cost > EMBEDDED_PATH_BUDGET) return null
+      const name = text.slice(index + 1, lineEnd).replace(/^[ \t]+/, '')
+      if (name !== '') names.push({ text: name, dynamic: word.dynamic, subs: [] })
+    }
+    if (newline < 0) break
+    lineStart = newline + 1
+  }
+  return names
+}
+
+function appendEmbeddedCredentialClasses(
+  classes: ActionClass[],
+  values: ShellWord[] | null,
+  directories: DirectorySet,
+  ctx: ClassifyContext,
+  rootPaths: string[]
+): void {
+  if (values === null) {
+    classes.push('edit-outside')
+    return
+  }
+  for (const value of values) {
+    const credentialClass = wordTouchesCredential(value, directories, ctx, rootPaths, false)
+    if (credentialClass !== null) classes.push(credentialClass)
+  }
+}
+
 
 function isAgentConfigPath(path: string): boolean {
   if (/(^|\/)\.claude\/settings[^/]*\.json$/.test(path)) return true
@@ -1028,7 +1107,8 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
         if (assignment === null) {
           const equals = option.text.indexOf('=')
           if (option.dynamic) {
-            if (equals < 0) break
+            const hasZshFlag = option.subs.length === 0 && /\$[~=^+]/.test(option.text)
+            if (equals < 0 && !hasZshFlag) break
             unknownWrapperFlag = true
             break wrappers
           }
@@ -1674,6 +1754,31 @@ function readInvocationIsSafe(cmd: string, args: string[]): boolean {
   return READ_INVOCATION_GUARDS[cmd]?.(args) ?? true
 }
 
+function readsNoTree(cmd: string, args: string[]): boolean {
+  if (cmd === 'eval') return true
+  if (cmd === 'find') return !args.some((arg) => FIND_UNSAFE_PRIMARY.test(arg))
+  if (AWK_CMDS.has(cmd)) return awkIsReadOnly(args)
+  if (cmd === 'sed') return !isWriteCommand(cmd, args) && sedIsReadOnly(args)
+  return READ_CMDS.has(cmd) && !CONTENT_WALKERS.has(cmd) && readInvocationIsSafe(cmd, args)
+}
+
+function treeOperands(word: ShellWord, attached: ShellWord[] | null): string[] {
+  if (word.dynamic) return []
+  const values: string[] = []
+  if (word.text.startsWith('-')) {
+    const equals = word.text.indexOf('=')
+    if (equals >= 0) values.push(word.text.slice(equals + 1))
+    for (const value of attached ?? []) values.push(value.text)
+  } else {
+    values.push(word.text)
+  }
+  for (let i = 0; i < values.length; i++) {
+    const glob = values[i].search(/[*?[]/)
+    if (glob >= 0) values[i] = values[i].slice(0, values[i].lastIndexOf('/', glob) + 1)
+  }
+  return values
+}
+
 function writeTargets(parsed: Parsed): ShellWord[] {
   const { cmd, args, argWords } = parsed
   const operands = positionalWords(argWords)
@@ -2272,11 +2377,59 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     if (!parsed.dynamicCommand && DOWNLOAD_CMDS.has(cmd)) downloadInPipeline = true
     pipelineDownloads.set(shellCommand.scope, downloadInPipeline)
 
+    const keywordIndex = skipKeywords(shellCommand.words, 0)
+    let treeCmd = cmd
+    let treeArgs = args
+    let treeCwd = parsed.execCwd
+    let unknownTreeCommand = parsed.dynamicCommand || parsed.foreignCommand || parsed.foreignWrapper
+    if (keywordIndex > commandIndex && keywordIndex < shellCommand.words.length) {
+      const unwrapped = unwrapWords(shellCommand.words, undefined, commandCwd, ctx.home, keywordIndex)
+      treeCwd = unwrapped.execCwd
+      unknownTreeCommand ||= unwrapped.foreignWrapper
+      if (unwrapped.unknownWrapperFlag) {
+        unknownTreeCommand = true
+        const outerCommand = shellCommand.words[keywordIndex]
+        treeCmd = outerCommand?.dynamic ? '' : basename(outerCommand?.text ?? '')
+        treeArgs = shellCommand.words.slice(keywordIndex + 1).map((word) => word.text)
+      } else {
+        const word = shellCommand.words[unwrapped.commandIndex]
+        if (word === undefined || word.dynamic) unknownTreeCommand = true
+        else {
+          treeCmd = basename(word.text)
+          if (systemCommandName(word.text) === null && !isWorktreeTool(word, treeCwd, ctx)) unknownTreeCommand = true
+          treeArgs = shellCommand.words.slice(unwrapped.commandIndex + 1).map((value) => value.text)
+        }
+      }
+    }
+    const readsTrees = unknownTreeCommand || !readsNoTree(treeCmd, treeArgs)
+    const isContentWalker = CWD_WALKERS.has(treeCmd)
     for (const word of parsed.argWords) {
+      const isWriteTarget = writeTargetWords.includes(word)
       const credentialClass = wordTouchesCredential(word, parsed.execCwd, ctx, rootPaths, true)
       if (credentialClass !== null) partClasses.push(credentialClass)
+      const attached = attachedFlagValues(word)
+      if (attached === null) {
+        partClasses.push('edit-outside')
+        const fallbackClass = wordTouchesCredential(word, treeCwd, ctx, rootPaths, false)
+        if (fallbackClass !== null) partClasses.push(fallbackClass)
+      }
+      appendEmbeddedCredentialClasses(partClasses, attached, treeCwd, ctx, rootPaths)
+      if (SED_CMDS.has(treeCmd)) {
+        appendEmbeddedCredentialClasses(partClasses, sedReadFileNames(word), treeCwd, ctx, rootPaths)
+      }
+      if (!readsTrees || isWriteTarget) continue
+      for (const operand of treeOperands(word, attached)) {
+        for (const directory of treeCwd ?? UNKNOWN_DIRECTORY) {
+          if (directory === null && !isAbsolute(expandHome(operand, ctx.home))) continue
+          if (holdsCredentialPath(resolvePath(operand, directory ?? '/', ctx.home), ctx)) partClasses.push('credential')
+        }
+      }
     }
-
+    if (readsTrees && isContentWalker) {
+      for (const directory of treeCwd ?? UNKNOWN_DIRECTORY) {
+        if (directory !== null && holdsCredentialPath(resolve(directory), ctx)) partClasses.push('credential')
+      }
+    }
     if (!parsed.dynamicCommand && isWriteCommand(cmd, args)) {
       for (const target of writeTargetWords) {
         if (target.dynamic) partClasses.push('edit-outside')
@@ -2482,7 +2635,9 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
   }
   if (READ_TOOLS.has(tool)) {
     const path = pathOf(call.toolInput)
-    return { classes: path === null ? ['read'] : readClasses(resolvePath(path, call.cwd, ctx.home), ctx), parts: [], pushDests: [] }
+    const target = resolvePath(path ?? '.', call.cwd, ctx.home)
+    if (tool === 'grep' && holdsCredentialPath(target, ctx)) return { classes: ['credential'], parts: [], pushDests: [] }
+    return { classes: path === null ? ['read'] : readClasses(target, ctx), parts: [], pushDests: [] }
   }
   if (WRITE_TOOLS.has(tool)) {
     const path = pathOf(call.toolInput)
@@ -2496,6 +2651,7 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * Maps a tool call onto the action classes the gate decides on.
  *
  * Unreadable shell text and unknown wrapper options return `other` and `edit-outside`.
+ * Locale quotes and old-style arithmetic in shell words are unreadable; heredoc arithmetic and zsh dollar flags remain computed.
  * After `env` or `sudo`, a word with `=` is an assignment the wrapper takes, and
  * a word whose name has a pattern character or is empty returns `other` and `edit-outside`.
  * Computed words that no other rule accounts for add `other`; ordinary `xargs` commands
@@ -2513,8 +2669,11 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * More than 16 dot-directory readings adds `edit-outside` unless another path text proves `credential`.
  * A relative write target with an unknown cwd returns `edit-outside`.
  * A file a `curl` or `wget` call writes is a write target; an unreadable written path returns `edit-outside`.
- * Paths are judged under every possible shell directory; a write is inside only
- * when it is inside under each. A `cd` is certain only through its `&&` list.
+ * A `sed` or `gsed` word's `r`/`R` names are checked as embedded read paths with bounded work.
+ * Attached short-flag suffixes are checked as paths, up to 64 suffixes and 1,048,576 character-steps per word.
+ * A command that may read a tree holds for credential ancestors in its operands, or for a content walker running above them; names-only listers are exempt.
+ * Native Grep calls hold when their path, or cwd without a path, is above a credential path.
+ * Paths are judged under every possible shell directory; a write is inside only when it is inside under each. A `cd` is certain only through its `&&` list.
  * Never returns an empty list: `['other']` means nothing matched. A compound Bash
  * command yields the union of every part's classes, so one risky part is never
  * hidden by a safe one. File tools classify by their path resolved against
