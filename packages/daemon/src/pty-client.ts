@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { closeSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +16,7 @@ import {
   type PtyWriteErrorCode
 } from '@quirky/protocol'
 import { openPrivateLog, socketPath } from '@quirky/protocol/node'
+import { launchDetached } from '@quirky/process'
 
 type PtyParams<T extends PtyRequest['type']> = Omit<Extract<PtyRequest, { type: T }>, 'id' | 'type'>
 
@@ -502,13 +502,15 @@ export class PtyClient {
     const entry = this.options.hostEntry ?? defaultPtyHostEntry()
     if (!existsSync(entry)) throw new Error(`quirky-pty entry not found: ${entry}`)
     const log = openPrivateLog(join(this.options.home, 'logs', 'pty-host.log'))
-    const child = spawn(process.execPath, [entry], {
-      cwd: this.options.home,
-      detached: true,
-      stdio: ['ignore', log, log],
-      env: { ...process.env, QUIRKY_HOME: this.options.home }
-    })
-    child.unref()
-    closeSync(log)
+    try {
+      launchDetached([process.execPath, entry], {
+        cwd: this.options.home,
+        env: { ...process.env, QUIRKY_HOME: this.options.home },
+        stdout: log,
+        stderr: log
+      })
+    } finally {
+      closeSync(log)
+    }
   }
 }
