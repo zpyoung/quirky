@@ -895,9 +895,17 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     if (worktree.kind === 'folder') {
       return { worktreeId: worktree.id, instanceId: worktree.instanceId, branch: null, headOid: null, review: null, stale: true }
     }
-    let local: LocalIdentity
-    try {
-      local = await localIdentity(worktree)
+    let branch = worktree.branch === null ? null : parseBranch(worktree.branch) ?? null
+    let headOid = /^0+$/u.test(worktree.head) ? undefined : parseOid(worktree.head)
+    if (!headOid) try {
+      const [branchText, headText] = await Promise.all([
+        env.gitWorktree(worktree, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => ''),
+        env.gitWorktree(worktree, ['rev-parse', '--verify', 'HEAD'])
+      ])
+      branch = parseBranch(branchText.trim()) ?? null
+      const parsedHead = parseOid(headText.trim())
+      if (!parsedHead || /^0+$/u.test(parsedHead)) throw env.invalid('git_failed', 'The local Git query failed.')
+      headOid = parsedHead
     } catch {
       return {
         worktreeId: worktree.id,
@@ -912,8 +920,8 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     const ordinaryMiss: CachedWorkspaceReview = {
       worktreeId: worktree.id,
       instanceId: worktree.instanceId,
-      branch: local.branch,
-      headOid: local.headOid,
+      branch,
+      headOid,
       review: null,
       stale: false
     }
@@ -938,17 +946,19 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     const currentScope = { ...snapshot.scope, worktree }
     const configMatches = configuration.issueSourcePreference === snapshot.scope.issueSourcePreference &&
       JSON.stringify(configuration.account) === JSON.stringify(snapshot.scope.binding ?? null)
-    const remotesMatch = snapshot.scope.remotes?.origin === local.remotes.origin &&
-      snapshot.scope.remotes?.upstream === local.remotes.upstream
     const currentScopeKey = env.cacheKey(currentScope, 'cached-workspace-review')
-    const identityMatches = snapshot.entry.instanceId === worktree.instanceId &&
+    let identityMatches = snapshot.entry.instanceId === worktree.instanceId &&
       snapshot.repoId === worktree.repoId &&
       snapshot.path === worktree.path &&
-      snapshot.entry.branch === local.branch &&
-      snapshot.entry.headOid === local.headOid &&
+      snapshot.entry.branch === branch &&
+      snapshot.entry.headOid === headOid &&
       configMatches &&
-      remotesMatch &&
       snapshot.scopeKey === currentScopeKey
+    if (identityMatches) {
+      const remotes = await env.remoteUrls(worktree)
+      identityMatches = snapshot.scope.remotes?.origin === remotes.origin &&
+        snapshot.scope.remotes?.upstream === remotes.upstream
+    }
     if (!identityMatches) {
       reviewCache.delete(worktree.id)
       markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
@@ -965,8 +975,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     }
     const workspaces: CachedWorkspaceReview[] = []
     const seen = new Set<string>()
-    for (const selector of selectors) {
-      const worktree = await env.resolveWorktree(selector, caller)
+    for (const worktree of await env.resolveWorktrees(selectors, caller)) {
       if (seen.has(worktree.id)) continue
       seen.add(worktree.id)
       workspaces.push(await cachedForWorktree(worktree))

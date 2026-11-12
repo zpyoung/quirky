@@ -55,6 +55,7 @@ export type HostingEnv = {
   context: PluginContext
   resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope>
   resolveWorktree(selector: string, caller: PluginCaller): Promise<Worktree>
+  resolveWorktrees(selectors: readonly string[], caller: PluginCaller): Promise<Worktree[]>
   run(scope: Scope, args: string[], options?: RunOptions): Promise<string>
   json(scope: Scope, args: string[], options?: RunOptions): Promise<unknown>
   rest(scope: Scope, path: string, method?: string, fields?: Record<string, unknown>, options?: RunOptions): Promise<unknown>
@@ -167,6 +168,33 @@ export function createEnv(context: PluginContext, options: EnvOptions = {}): Hos
     return rawWorktree
   }
 
+  async function resolveWorktrees(selectors: readonly string[], caller: PluginCaller): Promise<Worktree[]> {
+    if (disposed) throw reasoned('conflict', 'plugin_inactive', 'The GitHub hosting plugin is shutting down.')
+    if (selectors.some((selector) => typeof selector !== 'string' || selector.length === 0 || selector.length > 4096)) {
+      throw invalid('invalid_worktree_selector', 'The worktree selector is invalid.')
+    }
+    const ids = selectors.map((selector) => {
+      const text = selector.trim()
+      if (text.startsWith('id:')) return text.slice(3)
+      return text === 'current' || text === 'active' || /^(name|branch|path):/u.test(text) ? undefined : text
+    })
+    const byId = new Map<string, Worktree>()
+    if (ids.filter((id) => id !== undefined).length > 1) {
+      const worktrees = await context.call('quirky.worktree/list')
+      if (Array.isArray(worktrees)) {
+        for (const worktree of worktrees) {
+          if (isWorktree(worktree)) byId.set(worktree.id, worktree)
+        }
+      }
+    }
+    const resolved: Worktree[] = []
+    for (let index = 0; index < selectors.length; index++) {
+      const id = ids[index]
+      resolved.push((id === undefined ? undefined : byId.get(id)) ?? await resolveWorktree(selectors[index]!, caller))
+    }
+    return resolved
+  }
+
   async function resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope> {
     if (disposed) throw reasoned('conflict', 'plugin_inactive', 'The GitHub hosting plugin is shutting down.')
     const requestedSelector = params.worktree
@@ -227,11 +255,10 @@ export function createEnv(context: PluginContext, options: EnvOptions = {}): Hos
       throw invalid('invalid_git_args', 'The local Git request is invalid.')
     }
     try {
-      const result = await execFileAsync('git', args, {
+      const result = await exec('git', args, {
         cwd: worktree.path,
         timeout: 30_000,
         maxBuffer: 2 * 1024 * 1024,
-        encoding: 'utf8',
         windowsHide: true
       })
       return result.stdout
@@ -387,6 +414,7 @@ export function createEnv(context: PluginContext, options: EnvOptions = {}): Hos
   return {
     context,
     resolveWorktree,
+    resolveWorktrees,
     resolve,
     run: runtime.run,
     json: runtime.json,
