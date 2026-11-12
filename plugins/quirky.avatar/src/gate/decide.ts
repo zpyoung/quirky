@@ -1,5 +1,5 @@
 import type { ActionClass, DecideInput, Level, RuleDecision, StepId, Switches } from '../contracts'
-import { commandParts, pushDestinations } from './classify'
+import { commandParts, matchesCommandList, pushDestinations } from './classify'
 
 type Trace = RuleDecision['trace']
 type StepResult = { result: 'pass' | 'allow' | 'deny' | 'held'; note: string; reliedOn?: string }
@@ -74,7 +74,7 @@ function fixedRules(input: DecideInput): StepResult {
     const reason = DENIED_BY_FIXED_RULES[cls]
     if (reason !== undefined) return { result: 'deny', note: reason, reliedOn: `fixed rule: ${cls}` }
   }
-  const denied = commandParts(call, ctx).find((part) => ctx.denyCommands.some((entry) => entry.trim() !== '' && (part === entry.trim() || part.startsWith(`${entry.trim()} `))))
+  const denied = commandParts(call, ctx).find((part) => matchesCommandList(part, ctx.denyCommands, 'deny'))
   if (denied !== undefined) return { result: 'deny', note: `command is on the always-denied list: ${denied}`, reliedOn: 'settings: always-denied commands' }
   if (classes.length > 0 && classes.every((cls) => ALLOWED_BY_FIXED_RULES.has(cls))) {
     return { result: 'allow', note: 'reads, edits inside the worktree, tests and builds are allowed', reliedOn: 'fixed rule: reads, edits inside the worktree, tests and builds' }

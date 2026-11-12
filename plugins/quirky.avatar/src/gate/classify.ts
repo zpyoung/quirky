@@ -5,10 +5,12 @@ import { parseShell, MAX_BRACE_WORDS, MAX_SHELL_DEPTH, type ShellCommand, type S
 type ShellAssignment = ShellCommand['assignments'][number]
 type WordAssignment = ShellAssignment & { word: ShellWord }
 type Parsed = {
+  commandIndex: number
   cmd: string
   args: string[]
   argWords: ShellWord[]
   text: string
+  commandName: string
   assignments: readonly ShellAssignment[]
   wrapperAssignments: WordAssignment[]
   credential: boolean
@@ -17,6 +19,9 @@ type Parsed = {
   dynamicCommand: boolean
   dynamicBeforeCommand: boolean
   unknownWrapperFlag: boolean
+  foreignWrapper: boolean
+  foreignCommand: boolean
+  pathNamedBuiltin: boolean
   subscriptBeforeCommand: boolean
   loneSubscriptAssignment: boolean
   argumentExempt: boolean
@@ -32,6 +37,8 @@ const SHELL_TOOLS = new Set(['bash', 'shell', 'local_shell', 'exec_command', 'co
 const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'filePath', 'file']
 
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
+const SYSTEM_DIRECTORIES: Record<string, true> = { '/bin': true, '/usr/bin': true, '/sbin': true, '/usr/sbin': true, '/usr/local/bin': true, '/opt/homebrew/bin': true }
+const PATH_NAMED_BUILTINS: Record<string, true> = { cd: true, pushd: true, eval: true, export: true }
 const NO_ARGUMENT_EFFECT_CMDS: Record<string, true> = { echo: true, printf: true, true: true, false: true, test: true, '[': true, basename: true, dirname: true, sleep: true }
 type WrapperSpec = {
   shortFlags?: string
@@ -850,6 +857,24 @@ function writeClasses(rawPath: string, cwd: string, ctx: ClassifyContext, rootPa
   return classes
 }
 
+function systemCommandName(text: string): string | null {
+  const slash = text.lastIndexOf('/')
+  if (slash < 0) return text
+  const name = text.slice(slash + 1)
+  return name !== '' && SYSTEM_DIRECTORIES[text.slice(0, slash)] === true ? name : null
+}
+
+function isWorktreeTool(word: ShellWord, directories: DirectorySet, ctx: ClassifyContext): boolean {
+  const name = basename(word.text)
+  if (!TEST_RUNNERS.has(name) && !BUILD_TOOLS.has(name) && name !== 'prettier') return false
+  const rootPaths = roots(ctx)
+  return (directories ?? UNKNOWN_DIRECTORY).every((directory) => {
+    if (directory === null && !isAbsolute(word.text)) return false
+    const path = resolve(directory ?? '/', word.text)
+    return path.slice(0, path.lastIndexOf('/')).endsWith('/node_modules/.bin') && isInside(path, rootPaths)
+  })
+}
+
 type WrapperTarget = { target: ShellWord; cwd: DirectorySet }
 type UnwrappedWords = {
   commandIndex: number
@@ -857,6 +882,7 @@ type UnwrappedWords = {
   throughXargs: boolean
   dynamicBeforeCommand: boolean
   unknownWrapperFlag: boolean
+  foreignWrapper: boolean
   execCwd: DirectorySet
   wrapperReads: WrapperTarget[]
   wrapperWrites: WrapperTarget[]
@@ -879,6 +905,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
   let throughXargs = false
   let dynamicBeforeCommand = false
   let unknownWrapperFlag = false
+  let foreignWrapper = false
   let execCwd = commandCwd
   const wrapperReads: WrapperTarget[] = []
   const wrapperWrites: WrapperTarget[] = []
@@ -888,6 +915,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
     const wrapper = basename(word.text)
     const spec = Object.hasOwn(WRAPPER_SPECS, wrapper) ? WRAPPER_SPECS[wrapper] : undefined
     if (spec === undefined) break
+    if (systemCommandName(word.text) === null) foreignWrapper = true
     const afterXargs = throughXargs
     const wrapperIndex = commandIndex
     if (wrapper === 'sudo' || wrapper === 'doas') credential = true
@@ -1013,7 +1041,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
       break
     }
   }
-  return { commandIndex, credential, throughXargs, dynamicBeforeCommand, unknownWrapperFlag, execCwd, wrapperReads, wrapperWrites }
+  return { commandIndex, credential, throughXargs, dynamicBeforeCommand, unknownWrapperFlag, foreignWrapper, execCwd, wrapperReads, wrapperWrites }
 }
 
 function isArgumentExemptCommand(word: ShellWord | undefined): boolean {
@@ -1029,12 +1057,18 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
   const argWords = commandWord === undefined ? [] : command.words.slice(unwrapped.commandIndex + 1)
   const args: string[] = []
   for (const word of argWords) args.push(word.text)
-  const text = commandWord === undefined ? '' : commandWord.text + (args.length === 0 ? '' : ` ${args.join(' ')}`)
+  const systemName = commandWord === undefined || commandWord.dynamic ? null : systemCommandName(commandWord.text)
+  const pathNamed = commandWord !== undefined && !commandWord.dynamic && commandWord.text.includes('/')
+  const argumentText = args.length === 0 ? '' : ` ${args.join(' ')}`
+  const commandName = commandWord?.text ?? ''
+  const text = (systemName ?? commandName) + argumentText
   return {
     cmd: commandWord === undefined ? '' : basename(commandWord.text),
+    commandIndex: commandWord === undefined ? -1 : unwrapped.commandIndex,
     args,
     argWords,
     text,
+    commandName,
     assignments: command.assignments,
     wrapperAssignments,
     credential: unwrapped.credential,
@@ -1043,6 +1077,9 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
     dynamicCommand: commandWord?.dynamic ?? false,
     dynamicBeforeCommand: unwrapped.dynamicBeforeCommand,
     unknownWrapperFlag: unwrapped.unknownWrapperFlag,
+    foreignWrapper: unwrapped.foreignWrapper,
+    foreignCommand: pathNamed && systemName === null && !isWorktreeTool(commandWord, unwrapped.execCwd, ctx),
+    pathNamedBuiltin: pathNamed && PATH_NAMED_BUILTINS[basename(commandWord.text)] === true,
     subscriptBeforeCommand: commandWord !== undefined && startsSubscript(commandWord) && argWords.length > 0,
     loneSubscriptAssignment: isLoneSubscriptAssignment(command.words, unwrapped.commandIndex),
     argumentExempt: isArgumentExemptCommand(commandWord),
@@ -1053,11 +1090,33 @@ function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: Clas
 }
 
 
-function matchesCommandList(text: string, list: string[]): boolean {
+function bareCommandText(text: string): string {
+  const space = text.indexOf(' ')
+  const command = space < 0 ? text : text.slice(0, space)
+  const name = systemCommandName(command)
+  return name === null || name === command ? text : name + (space < 0 ? '' : text.slice(space))
+}
+
+/**
+ * Matches owner prefixes without widening path-qualified allow entries.
+ * Deny and deploy entries treat exact system paths as their bare command name;
+ * foreign paths stay literal on every list.
+ * Expects commandParts-form text and the original parsed name for allow matching.
+ */
+export function matchesCommandList(text: string, list: string[], kind: 'allow' | 'deny' | 'deploy', commandName?: string): boolean {
+  if (list.length === 0) return false
   const normalized = text.replace(/\s+/g, ' ').trim()
+  const bareName = kind === 'allow' && commandName !== undefined ? systemCommandName(commandName) ?? commandName : undefined
   return list.some((entry) => {
     const pattern = entry.replace(/\s+/g, ' ').trim()
-    return pattern !== '' && (normalized === pattern || normalized.startsWith(pattern + ' '))
+    if (pattern === '') return false
+    const barePattern = bareCommandText(pattern)
+    if (kind === 'allow') {
+      const space = pattern.indexOf(' ')
+      const name = space < 0 ? pattern : pattern.slice(0, space)
+      if ((name.includes('/') ? commandName : bareName) !== name) return false
+    }
+    return normalized === barePattern || normalized.startsWith(barePattern + ' ')
   })
 }
 
@@ -1634,7 +1693,7 @@ type Analysis = {
 
 /** A tracked assignment cannot clear uncertainty introduced by an unfollowed search-path reference. */
 const UNKNOWN_SEARCH_PATH: ShellWord = { text: '', dynamic: true, subs: [] }
-const SEARCH_PATH_NAME = /cdpath/i
+const SEARCH_PATH_NAME = /cdpath|\$\{![^}]*=|@P\}/i
 
 function namesSearchPath(command: ShellCommand, cmd: string, commandIndex: number, wrapperAssignments: readonly WordAssignment[]): boolean {
   for (const assignment of command.assignments) {
@@ -1658,6 +1717,106 @@ const UNKNOWN_HOOK_SWITCH: ShellWord = { text: '1', dynamic: false, subs: [] }
 const HOOK_SWITCH_NAMES: Record<string, true> = { HUSKY: true, HUSKY_SKIP_HOOKS: true, SKIP_HOOKS: true }
 const TRACKED_NAMES = Object.keys(TRACKED_ENV_NAMES)
 const EMPTY_TRACKED_VALUES: readonly (ShellWord | undefined)[] = []
+const DECLARATION_SETTERS: Record<string, true> = {
+  declare: true, typeset: true, local: true, readonly: true, export: true, private: true
+}
+const NAME_SETTERS: Record<string, true> = {
+  read: true, readarray: true, mapfile: true, getopts: true, getln: true, vared: true,
+  compgen: true, zstyle: true, zformat: true, zparseopts: true, zregexparse: true
+}
+const DECLARATION_PREFIX_KEYWORDS: Record<string, true> = {
+  '{': true, '!': true, if: true, then: true, else: true, elif: true, while: true,
+  until: true, do: true, time: true
+}
+const PLAIN_WORD = /^[A-Za-z0-9_+:-]*$/
+const NAMED_VALUE = /^[A-Za-z_][A-Za-z0-9_]*(?:\+=|=)/
+const READABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+const DECLARATION_NAME_FLAG = /^[+-][A-Za-z]*n[A-Za-z]*$/
+const OPERAND_START = /^[A-Za-z0-9_%\\\/.,:=#'" ]/
+
+
+function isReadableName(word: ShellWord | undefined): boolean {
+  return word !== undefined && !word.dynamic && READABLE_NAME.test(word.text)
+}
+
+function hasOperandStart(word: ShellWord): boolean {
+  return word.text === '' || OPERAND_START.test(word.text)
+}
+
+function setsUnreadName(command: ShellCommand, commandIndex: number): boolean {
+  const words = command.words
+  const commandWord = words[commandIndex]
+  if (commandWord !== undefined) {
+    if (commandWord.dynamic) return true
+    const text = commandWord.text
+    if (text !== '[' && text !== '[[' && !text.includes('/') &&
+      (text.includes('$') || text.includes('*') || text.includes('?') || text.includes('['))) return true
+  }
+
+  let commandPrefixEnd = 0
+  if (command.assignments.length === 0) {
+    while (commandPrefixEnd < words.length) {
+      const prefix = words[commandPrefixEnd]
+      if (prefix.dynamic || DECLARATION_PREFIX_KEYWORDS[prefix.text] !== true) break
+      commandPrefixEnd++
+    }
+  }
+
+  let hasNonPlainAfter = false
+  let hasInvalidDeclarationAfter = false
+  let hasComputedAfter = false
+  let hasNamerefFlagAfter = false
+  let printfUnknownFromNext = false
+  let printfUnknownFromTwoAhead = false
+  let printUnknownFromNext = false
+  let setUnknownFromNext = false
+
+  for (let index = words.length - 1; index >= 0; index--) {
+    const word = words[index]
+    const text = word.text
+    const plain = !word.dynamic && PLAIN_WORD.test(text)
+    const flag = plain && text.length > 1 && (text[0] === '-' || text[0] === '+')
+    const terminator = !word.dynamic && (text === '--' || text === '-')
+    const nextWord = words[index + 1]
+
+    if (!word.dynamic) {
+      if (DECLARATION_SETTERS[text] === true &&
+        (hasInvalidDeclarationAfter || hasNamerefFlagAfter ||
+          (hasComputedAfter && !(command.assignments.length === 0 && index === commandPrefixEnd)))) return true
+      if (NAME_SETTERS[text] === true && hasNonPlainAfter) return true
+      if (text === 'printf' && printfUnknownFromNext) return true
+      if (text === 'print' && printUnknownFromNext) return true
+      if (text === 'set' && setUnknownFromNext) return true
+      if (text === 'eval' && index !== commandIndex) return true
+      if (text === 'zmodload') return true
+    }
+
+    const currentPrintfUnknown: boolean = terminator ? false :
+      plain && text === '-v'
+        ? nextWord === undefined ? false : isReadableName(nextWord) ? printfUnknownFromTwoAhead : true
+        : plain && text.startsWith('-v') && text.length > 2
+          ? printfUnknownFromNext
+          : !hasOperandStart(word)
+    const currentPrintUnknown: boolean = terminator ? false :
+      printUnknownFromNext || (flag
+        ? text.endsWith('v') && nextWord !== undefined && !isReadableName(nextWord)
+        : !hasOperandStart(word))
+    const currentSetUnknown: boolean = terminator ? false :
+      setUnknownFromNext || (flag
+        ? text.endsWith('A') && nextWord !== undefined && !isReadableName(nextWord)
+        : !hasOperandStart(word))
+
+    printfUnknownFromTwoAhead = printfUnknownFromNext
+    printfUnknownFromNext = currentPrintfUnknown
+    printUnknownFromNext = currentPrintUnknown
+    setUnknownFromNext = currentSetUnknown
+    if (word.dynamic) hasComputedAfter = true
+    if (!plain) hasNonPlainAfter = true
+    if (!plain && !NAMED_VALUE.test(text)) hasInvalidDeclarationAfter = true
+    if (plain && DECLARATION_NAME_FLAG.test(text)) hasNamerefFlagAfter = true
+  }
+  return false
+}
 
 function setTrackedValue(env: Map<string, ShellWord>, name: string, value: ShellWord): void {
   const current = env.get(name)
@@ -1894,8 +2053,9 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     if (!parsed.dynamicCommand && DOWNLOAD_CMDS.has(cmd)) {
       for (const target of downloadWrites(cmd, parsed.argWords, parsed.throughXargs)) parsed.wrapperWrites.push({ target, cwd: parsed.execCwd })
     }
-    const commandIndex = shellCommand.words.length - parsed.argWords.length - 1
-    if (namesSearchPath(shellCommand, cmd, commandIndex, parsed.wrapperAssignments)) {
+    const commandIndex = parsed.commandIndex
+    if (namesSearchPath(shellCommand, cmd, commandIndex, parsed.wrapperAssignments) ||
+      setsUnreadName(shellCommand, commandIndex)) {
       shellEnv.set('CDPATH', UNKNOWN_SEARCH_PATH)
       if (shellCommand.scope === 0) envChanges.add('CDPATH')
     }
@@ -2018,6 +2178,8 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       if (dynamicEval) {
         partClasses.push('other')
         cwd = possible = null
+        shellEnv.set('CDPATH', UNKNOWN_SEARCH_PATH)
+        if (shellCommand.scope === 0) envChanges.add('CDPATH')
       } else {
         const changedNames = new Set(inner.envChanges ?? [])
         for (const assignment of parsed.assignments) {
@@ -2059,7 +2221,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
         const isWriteTarget = writeTargetWords[writeTargetIndex] === word
         if (isWriteTarget) writeTargetIndex++
         if (!word.dynamic || i === bodyIndex || isWriteTarget) continue
-        commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
+        commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands, 'allow', parsed.commandName)
         if (!commandAllowed) {
           countedDynamic = true
           break
@@ -2071,9 +2233,18 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       const xargsShellBody = isShell && commandFlag >= 0
       if (isWriteCommand(cmd, args) || xargsShellBody || cmd === 'eval') partClasses.push('edit-outside')
       else if (!parsed.argumentExempt) {
-        commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
+        commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands, 'allow', parsed.commandName)
         if (!commandAllowed) partClasses.push('other')
       }
+    }
+    if (parsed.pathNamedBuiltin) {
+      partClasses.push('other', 'edit-outside')
+      cwd = possible = null
+    }
+    if (parsed.foreignWrapper) partClasses.push('other')
+    if (parsed.foreignCommand) {
+      commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands, 'allow', parsed.commandName)
+      if (!commandAllowed && !matchesCommandList(parsed.text, ctx.deployCommands, 'deploy')) partClasses.push('other')
     }
     if (keywordChangesDirectory(shellCommand.words)) cwd = possible = null
 
@@ -2202,7 +2373,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
 function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[]): ActionClass[] {
   const { cmd, args, text } = parsed
   if (parsed.dynamicCommand) return ['other']
-  const deploy = matchesCommandList(text, ctx.deployCommands) || isBuiltinDeploy(cmd, args)
+  const deploy = matchesCommandList(text, ctx.deployCommands, 'deploy') || isBuiltinDeploy(cmd, args)
   if (deploy) return ['deploy']
   let classes: ActionClass[]
   if (cmd === 'git') classes = classifyGit(parsed.argWords, commandEnvironment(parsed, shellEnv), ctx, cwd, pushDests)
@@ -2221,7 +2392,7 @@ function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string |
   else if (READ_CMDS.has(cmd)) classes = readInvocationIsSafe(cmd, args) ? ['read'] : ['other']
   else if (isWriteCommand(cmd, args)) classes = []
   else classes = classifyTool(cmd, args)
-  if (classes.length === 1 && classes[0] === 'other' && matchesCommandList(text, ctx.allowCommands)) return ['build']
+  if (classes.length === 1 && classes[0] === 'other' && matchesCommandList(text, ctx.allowCommands, 'allow', parsed.commandName)) return ['build']
   return classes
 }
 
@@ -2241,7 +2412,8 @@ function shellCommandOf(input: unknown): { command: string; cwd: string | null }
   if (typeof raw === 'string') return { command: raw, cwd }
   if (Array.isArray(raw) && raw.every((item) => typeof item === 'string')) {
     const argv = raw as string[]
-    if (argv.length >= 3 && SHELLS.has(basename(argv[0])) && /^-[a-zA-Z]*c$/.test(argv[1])) return { command: argv[2], cwd }
+    const shellName = argv.length === 0 ? null : systemCommandName(argv[0])
+    if (argv.length >= 3 && shellName !== null && SHELLS.has(shellName) && /^-[a-zA-Z]*c$/.test(argv[1])) return { command: argv[2], cwd }
     return { command: argv.map((arg) => (/^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`)).join(' '), cwd }
   }
   return null
@@ -2296,6 +2468,9 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * Unreadable shell text and unknown wrapper options return `other` and `edit-outside`.
  * Computed words that no other rule accounts for add `other`; ordinary `xargs` commands
  * add `other` unless exempt, while write and shell `-c`/`eval` commands add `edit-outside`.
+ * A command or wrapper named by a path outside the system directories adds `other`,
+ * except listed command paths and worktree tools in a handed-off `node_modules/.bin`.
+ * A path-named `cd`, `pushd`, `eval` or `export` returns `other` and `edit-outside`.
  * A computed command word or an array element assignment before a command leaves
  * the shell directory unknown; the latter also returns `other` and `edit-outside`.
  * A computed argument or redirect word whose non-empty fixed prefix resolves
@@ -2325,6 +2500,7 @@ export function classifyCall(call: ToolCall, ctx: ClassifyContext): ActionClass[
  * The normalized text of each command a Bash-style call runs, with wrappers like
  * `sudo` and `env` stripped and `bash -c` bodies expanded. Empty for file tools.
  * Segments with unknown wrapper options are omitted rather than inventing a command.
+ * Commands directly in a system directory are listed by their bare name.
  */
 export function commandParts(call: ToolCall, ctx: ClassifyContext): string[] {
   try {
