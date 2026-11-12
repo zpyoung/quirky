@@ -292,3 +292,17 @@ describe('path-qualified owner command lists', () => {
     expect(run(input, 'local')).toMatchObject({ outcome: 'judgment', step: null })
   })
 })
+
+test('quoted foreign paths cannot gain system identity through whitespace normalization', () => {
+  const rows: { command: string; classes: ActionClass[] }[] = [
+    { command: "' /usr/bin/ls'", classes: ['read', 'other'] },
+    { command: "'/usr/bin/ls '", classes: ['other'] },
+    { command: "'\t/usr/bin/ls'", classes: ['read', 'other'] }
+  ]
+  for (const row of rows) {
+    const context = { ...ctx, allowCommands: ['ls', '/usr/bin/ls'] }
+    const input = bashCall(row.command)
+    expect([...classifyCall(input, context)].sort()).toEqual([...row.classes].sort())
+    expect(run(input, 'local', off, context)).toMatchObject({ outcome: 'judgment', step: null })
+  }
+})
