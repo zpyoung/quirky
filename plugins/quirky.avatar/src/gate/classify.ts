@@ -1175,6 +1175,150 @@ function classifyPullRequestCli(cmd: 'gh' | 'glab', args: string[]): ActionClass
   return ['other']
 }
 
+type DownloadOptions = {
+  shortFlags: string
+  shortValues: string
+  longFlags: Record<string, true>
+  longValues: Record<string, true>
+  files: Record<string, true>
+  stdout: Record<string, true>
+  directories: Record<string, true>
+  remote: Record<string, true>
+  opaqueNames: Record<string, true>
+  hidden: Record<string, true>
+  movedFiles: Record<string, true>
+  next: Record<string, true>
+  urls: Record<string, true>
+  formats: Record<string, true>
+}
+
+const DOWNLOAD_OPTIONS: Record<'curl' | 'wget', DownloadOptions> = {
+  curl: {
+    shortFlags: 'aqfGgI0ik46jlLMn:NZ#pJORSs231BvVh',
+    shortValues: 'EKCbcdDFPHmoUQreXYytzTuAwx',
+    longFlags: { 'anyauth': true, 'append': true, 'basic': true, 'ca-native': true, 'cert-status': true, 'compressed': true, 'compressed-ssh': true, 'create-dirs': true, 'crlf': true, 'digest': true, 'disable': true, 'disable-eprt': true, 'disable-epsv': true, 'disallow-username-in-url': true, 'doh-cert-status': true, 'doh-insecure': true, 'fail': true, 'fail-early': true, 'fail-with-body': true, 'false-start': true, 'form-escape': true, 'ftp-create-dirs': true, 'ftp-pasv': true, 'ftp-pret': true, 'ftp-skip-pasv-ip': true, 'ftp-ssl-ccc': true, 'ftp-ssl-control': true, 'get': true, 'globoff': true, 'haproxy-protocol': true, 'head': true, 'help': true, 'http0.9': true, 'http1.0': true, 'http1.1': true, 'http2': true, 'http2-prior-knowledge': true, 'http3': true, 'http3-only': true, 'ignore-content-length': true, 'include': true, 'insecure': true, 'ipv4': true, 'ipv6': true, 'junk-session-cookies': true, 'list-only': true, 'location': true, 'location-trusted': true, 'mail-rcpt-allowfails': true, 'manual': true, 'metalink': true, 'negotiate': true, 'netrc': true, 'netrc-optional': true, 'next': true, 'no-alpn': true, 'no-buffer': true, 'no-clobber': true, 'no-keepalive': true, 'no-npn': true, 'no-progress-meter': true, 'no-sessionid': true, 'ntlm': true, 'ntlm-wb': true, 'parallel': true, 'parallel-immediate': true, 'path-as-is': true, 'post301': true, 'post302': true, 'post303': true, 'progress-bar': true, 'proxy-anyauth': true, 'proxy-basic': true, 'proxy-ca-native': true, 'proxy-digest': true, 'proxy-http2': true, 'proxy-insecure': true, 'proxy-negotiate': true, 'proxy-ntlm': true, 'proxy-ssl-allow-beast': true, 'proxy-ssl-auto-client-cert': true, 'proxy-tlsv1': true, 'proxytunnel': true, 'raw': true, 'remote-header-name': true, 'remote-name': true, 'remote-name-all': true, 'remote-time': true, 'remove-on-error': true, 'retry-all-errors': true, 'retry-connrefused': true, 'sasl-ir': true, 'show-error': true, 'silent': true, 'socks5-basic': true, 'socks5-gssapi': true, 'socks5-gssapi-nec': true, 'ssl': true, 'ssl-allow-beast': true, 'ssl-auto-client-cert': true, 'ssl-no-revoke': true, 'ssl-reqd': true, 'ssl-revoke-best-effort': true, 'sslv2': true, 'sslv3': true, 'styled-output': true, 'suppress-connect-headers': true, 'tcp-fastopen': true, 'tcp-nodelay': true, 'tftp-no-options': true, 'tlsv1': true, 'tlsv1.0': true, 'tlsv1.1': true, 'tlsv1.2': true, 'tlsv1.3': true, 'tr-encoding': true, 'trace-ids': true, 'trace-time': true, 'use-ascii': true, 'verbose': true, 'version': true, 'xattr': true },
+    longValues: { 'abstract-unix-socket': true, 'alt-svc': true, 'aws-sigv4': true, 'cacert': true, 'capath': true, 'cert': true, 'cert-type': true, 'ciphers': true, 'config': true, 'connect-timeout': true, 'connect-to': true, 'continue-at': true, 'cookie': true, 'cookie-jar': true, 'create-file-mode': true, 'crlfile': true, 'curves': true, 'data': true, 'data-ascii': true, 'data-binary': true, 'data-raw': true, 'data-urlencode': true, 'delegation': true, 'dns-interface': true, 'dns-ipv4-addr': true, 'dns-ipv6-addr': true, 'dns-servers': true, 'doh-url': true, 'dump-header': true, 'egd-file': true, 'engine': true, 'etag-compare': true, 'etag-save': true, 'expect100-timeout': true, 'form': true, 'form-string': true, 'ftp-account': true, 'ftp-alternative-to-user': true, 'ftp-method': true, 'ftp-port': true, 'ftp-ssl-ccc-mode': true, 'happy-eyeballs-timeout-ms': true, 'haproxy-clientip': true, 'header': true, 'hostpubmd5': true, 'hostpubsha256': true, 'hsts': true, 'interface': true, 'ipfs-gateway': true, 'json': true, 'keepalive-time': true, 'key': true, 'key-type': true, 'krb': true, 'libcurl': true, 'limit-rate': true, 'local-port': true, 'login-options': true, 'mail-auth': true, 'mail-from': true, 'mail-rcpt': true, 'max-filesize': true, 'max-redirs': true, 'max-time': true, 'netrc-file': true, 'noproxy': true, 'oauth2-bearer': true, 'output': true, 'output-dir': true, 'parallel-max': true, 'pass': true, 'pinnedpubkey': true, 'preproxy': true, 'proto': true, 'proto-default': true, 'proto-redir': true, 'proxy': true, 'proxy-cacert': true, 'proxy-capath': true, 'proxy-cert': true, 'proxy-cert-type': true, 'proxy-ciphers': true, 'proxy-crlfile': true, 'proxy-header': true, 'proxy-key': true, 'proxy-key-type': true, 'proxy-pass': true, 'proxy-pinnedpubkey': true, 'proxy-service-name': true, 'proxy-tls13-ciphers': true, 'proxy-tlsauthtype': true, 'proxy-tlspassword': true, 'proxy-tlsuser': true, 'proxy-user': true, 'proxy1.0': true, 'pubkey': true, 'quote': true, 'random-file': true, 'range': true, 'rate': true, 'referer': true, 'request': true, 'request-target': true, 'resolve': true, 'retry': true, 'retry-delay': true, 'retry-max-time': true, 'sasl-authzid': true, 'service-name': true, 'socks4': true, 'socks4a': true, 'socks5': true, 'socks5-gssapi-service': true, 'socks5-hostname': true, 'speed-limit': true, 'speed-time': true, 'stderr': true, 'telnet-option': true, 'tftp-blksize': true, 'time-cond': true, 'tls-max': true, 'tls13-ciphers': true, 'tlsauthtype': true, 'tlspassword': true, 'tlsuser': true, 'trace': true, 'trace-ascii': true, 'trace-config': true, 'unix-socket': true, 'upload-file': true, 'url': true, 'url-query': true, 'user': true, 'user-agent': true, 'variable': true, 'write-out': true },
+    files: { 'o': true, 'output': true, 'D': true, 'dump-header': true, 'c': true, 'cookie-jar': true, 'trace': true, 'trace-ascii': true, 'stderr': true, 'libcurl': true, 'etag-save': true, 'hsts': true, 'alt-svc': true },
+    stdout: { 'o': true, 'output': true, 'D': true, 'dump-header': true, 'c': true, 'cookie-jar': true, 'trace': true, 'trace-ascii': true, 'stderr': true, 'libcurl': true, 'etag-save': true },
+    directories: { 'output-dir': true },
+    remote: { 'O': true, 'remote-name': true, 'remote-name-all': true },
+    opaqueNames: { 'J': true, 'remote-header-name': true },
+    hidden: { 'K': true, 'config': true },
+    movedFiles: { 'o': true, 'output': true },
+    next: { 'next': true, ':': true },
+    urls: { 'url': true },
+    formats: { 'w': true, 'write-out': true }
+  },
+  wget: {
+    shortFlags: 'qvcNS46drmpx',
+    shortValues: 'OPoatTwUnei',
+    longFlags: { 'quiet': true, 'verbose': true, 'no-verbose': true, 'continue': true, 'timestamping': true, 'no-clobber': true, 'server-response': true, 'spider': true, 'no-check-certificate': true, 'show-progress': true, 'no-hsts': true, 'no-cache': true, 'no-cookies': true, 'https-only': true, 'inet4-only': true, 'inet6-only': true, 'debug': true, 'no-proxy': true, 'retry-connrefused': true, 'no-dns-cache': true, 'keep-session-cookies': true, 'content-on-error': true, 'no-http-keep-alive': true, 'recursive': true, 'mirror': true, 'page-requisites': true, 'force-directories': true, 'content-disposition': true, 'trust-server-names': true },
+    longValues: { 'output-document': true, 'directory-prefix': true, 'output-file': true, 'append-output': true, 'save-cookies': true, 'rejected-log': true, 'hsts-file': true, 'warc-file': true, 'tries': true, 'timeout': true, 'dns-timeout': true, 'connect-timeout': true, 'read-timeout': true, 'wait': true, 'waitretry': true, 'user-agent': true, 'header': true, 'referer': true, 'user': true, 'password': true, 'http-user': true, 'http-password': true, 'limit-rate': true, 'max-redirect': true, 'progress': true, 'load-cookies': true, 'ca-certificate': true, 'certificate': true, 'private-key': true, 'post-data': true, 'post-file': true, 'method': true, 'body-data': true, 'body-file': true, 'secure-protocol': true, 'execute': true, 'input-file': true, 'config': true, 'default-page': true },
+    files: { 'O': true, 'output-document': true, 'o': true, 'output-file': true, 'a': true, 'append-output': true, 'save-cookies': true, 'rejected-log': true, 'hsts-file': true, 'warc-file': true },
+    stdout: { 'O': true, 'output-document': true },
+    directories: { 'P': true, 'directory-prefix': true },
+    remote: {},
+    opaqueNames: { 'r': true, 'recursive': true, 'm': true, 'mirror': true, 'p': true, 'page-requisites': true, 'x': true, 'force-directories': true, 'i': true, 'input-file': true, 'content-disposition': true, 'trust-server-names': true, 'default-page': true },
+    hidden: { 'e': true, 'execute': true, 'config': true },
+    movedFiles: {},
+    next: {},
+    urls: {},
+    formats: {}
+  }
+}
+
+/** The files a curl or wget call writes, as words to judge under each execution directory. A computed word stands for a path the call doesn't show. */
+function downloadWrites(cmd: string, words: ShellWord[], throughXargs: boolean): ShellWord[] {
+  const curl = cmd === 'curl'
+  const table = curl ? DOWNLOAD_OPTIONS.curl : DOWNLOAD_OPTIONS.wget
+  const targets: ShellWord[] = []
+  const moved: ShellWord[] = []
+  const directories: ShellWord[] = []
+  const urls: ShellWord[] = []
+  let remote = !curl
+  let opaqueName = false
+  let next = false
+  let unreadable = false
+  let operands = false
+  const option = (name: string, value?: ShellWord) => {
+    if (table.remote[name] === true) remote = true
+    if (table.opaqueNames[name] === true) opaqueName = true
+    if (table.hidden[name] === true) unreadable = true
+    if (table.next[name] === true) next = true
+    if (value === undefined) return
+    if (!curl && table.stdout[name] === true) remote = false
+    if (table.directories[name] === true) {
+      if (value.dynamic) unreadable = true
+      else directories.push(value)
+    }
+    if (table.urls[name] === true) urls.push(value)
+    if (table.formats[name] === true && !value.dynamic && value.text.includes('%output{')) unreadable = true
+    if (table.files[name] === true) {
+      if (!value.dynamic && value.text === '-' && table.stdout[name] === true) return
+      if (table.movedFiles[name] === true) {
+        if (/#\d/.test(value.text)) unreadable = true
+        moved.push(value)
+      } else targets.push(value)
+    }
+  }
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!
+    const text = word.text
+    if (operands || !text.startsWith('-')) {
+      urls.push(word)
+      continue
+    }
+    if (text === '--') {
+      operands = true
+      continue
+    }
+    if (text === '-') continue
+    if (text.startsWith('--')) {
+      const equals = curl ? -1 : text.indexOf('=')
+      const name = text.slice(2, equals < 0 ? undefined : equals)
+      if (table.longValues[name] === true) {
+        const value = equals < 0 ? words[++i] : { text: text.slice(equals + 1), dynamic: word.dynamic, subs: word.subs }
+        if (value === undefined) unreadable = true
+        else option(name, value)
+      } else if (equals < 0 && (table.longFlags[name] === true || (curl && name.startsWith('no-') && table.longFlags[name.slice(3)] === true))) {
+        option(name)
+      } else unreadable = true
+      continue
+    }
+    for (let j = 1; j < text.length; j++) {
+      const name = text[j]!
+      if (table.shortValues.includes(name)) {
+        const value = j + 1 < text.length ? { text: text.slice(j + 1), dynamic: word.dynamic, subs: word.subs } : words[++i]
+        if (value === undefined) unreadable = true
+        else option(name, value)
+        break
+      }
+      if (!table.shortFlags.includes(name)) {
+        unreadable = true
+        break
+      }
+      option(name)
+    }
+  }
+  if (remote) {
+    if (throughXargs || opaqueName) unreadable = true
+    for (const url of urls) {
+      const path = url.text.split(/[?#]/, 1)[0]!
+      const name = path.slice(path.lastIndexOf('/') + 1)
+      if (url.dynamic || (curl && /[{[]/.test(name))) unreadable = true
+      else moved.push({ text: name, dynamic: false, subs: [] })
+    }
+  }
+  for (const target of moved) {
+    if (target.dynamic || directories.length === 0 || next) targets.push(target)
+    if (!target.dynamic) {
+      for (const directory of directories) targets.push({ text: `${directory.text}/${target.text}`, dynamic: false, subs: [] })
+    }
+  }
+  if (unreadable) targets.push({ text: '', dynamic: true, subs: [] })
+  return targets
+}
+
 function classifyDownload(args: string[]): ActionClass[] {
   const mutating = args.some((arg) => /^(-X|--request|-d|--data.*|-F|--form|-T|--upload-file|--json)$/.test(arg) || /^--(post|method)/.test(arg))
   const messaging = args.some((arg) => /hooks\.slack\.com|slack\.com\/api\/chat\./.test(arg))
@@ -1548,6 +1692,9 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
 
     const parsed = parseSegment(shellCommand, commandCwd, ctx)
     const { cmd, args } = parsed
+    if (!parsed.dynamicCommand && DOWNLOAD_CMDS.has(cmd)) {
+      for (const target of downloadWrites(cmd, parsed.argWords, parsed.throughXargs)) parsed.wrapperWrites.push({ target, cwd: parsed.execCwd })
+    }
     const commandIndex = parsed.commandIndex
     if (namesSearchPath(shellCommand, cmd, commandIndex, parsed.wrapperAssignments) ||
       setsUnreadName(shellCommand, commandIndex)) {
@@ -1892,6 +2039,7 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * under an active directory to a credential path adds `credential`; brace expansion
  * cut off by the 64-word or 32-depth limit without proving it adds `edit-outside`.
  * A relative write target with an unknown cwd returns `edit-outside`.
+ * A file a `curl` or `wget` call writes is a write target; an unreadable written path returns `edit-outside`.
  * Paths are judged under every possible shell directory; a write is inside only
  * when it is inside under each. A `cd` is certain only through its `&&` list.
  * Never returns an empty list: `['other']` means nothing matched. A compound Bash
