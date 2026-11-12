@@ -48,7 +48,8 @@ export type ProcessRunner = {
   /**
    * Runs `argv` to completion. Resolves for any exit code, a timeout, an abort, too much output and
    * a command that could not start. Rejects only for bad arguments, a disposed runner, and output
-   * that never ended after the command exited.
+   * that never ended after the command exited. Unexpected pipe or child-exit failures reject
+   * with their original error after the process group is killed.
    */
   run(argv: readonly string[], options?: RunOptions): Promise<RunResult>
 }
