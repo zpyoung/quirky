@@ -1,6 +1,6 @@
 {
   "id": "quirky.git",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.4.0",
   "name": "Source control",
   "version": "0.1.0",
   "description": "Branch status, diffs, staging, commits, remote operations, history and conflicts for a worktree.",
@@ -3077,6 +3077,8 @@
       {
         "id": "changed",
         "description": "A worktree's git state changed.",
+        "coalesce": [],
+        "worktree": "worktreeId",
         "data": {
           "type": "object",
           "properties": {
@@ -3092,6 +3094,8 @@
       {
         "id": "notesChanged",
         "description": "A worktree's diff notes changed.",
+        "coalesce": [],
+        "worktree": "worktreeId",
         "data": {
           "type": "object",
           "properties": {
@@ -3107,6 +3111,8 @@
       {
         "id": "reviewChanged",
         "description": "A worktree's review marks changed.",
+        "coalesce": [],
+        "worktree": "worktreeId",
         "data": {
           "type": "object",
           "properties": {

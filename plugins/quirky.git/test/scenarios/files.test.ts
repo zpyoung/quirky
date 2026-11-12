@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { git } from '../../../quirky.repo/test/git-fixtures'
+import { waitFor } from '../../../../packages/daemon/test/helpers'
 import { isolateScenarioGit, jsonError, startScenario, type Scenario } from './fixture'
 
 const { scratch } = isolateScenarioGit()
@@ -36,10 +37,10 @@ describe('save', () => {
     s = await startScenario(scratch)
     const before = s.changedEvents()
     expect(await s.api('save', { path: 'math.ts', content: 'x\n' })).toEqual({ hash: sha256('x\n') })
+    await waitFor(() => s!.changedEvents() >= before + 1)
     expect(await s.api('save', { path: 'fresh.txt', content: 'y\n' })).toEqual({ hash: sha256('y\n') })
+    await waitFor(() => s!.changedEvents() >= before + 2)
     expect(read('fresh.txt')).toBe('y\n')
-    await s.flushEvents()
-    expect(s.changedEvents()).toBe(before + 2)
 
     const refused = await s.fails(s.api('save', { path: 'missing.txt', content: 'z\n', expected: sha256('old') }))
     expect(refused).toMatchObject({ code: RpcErrorCode.Conflict, data: { reason: 'changed-on-disk' } })
@@ -117,8 +118,10 @@ describe('huge folders', () => {
     const before = s.changedEvents()
     const added = JSON.parse((await s.cli(['git', 'ignoreFolder', '--folder', 'node_modules', '--json'])).stdout)
     expect(added).toEqual({ ok: true, added: true })
+    await waitFor(() => s!.changedEvents() >= before + 1)
     expect(read('.gitignore')).toBe('dist/\nnode_modules/\n')
     expect((await s.api('ignoreFolder', { folder: 'node_modules' })).added).toBe(false)
+    await waitFor(() => s!.changedEvents() >= before + 2)
     expect(read('.gitignore')).toBe('dist/\nnode_modules/\n')
     expect(await s.api('hugeFolders')).toEqual({ folders: [] })
     await s.flushEvents()
