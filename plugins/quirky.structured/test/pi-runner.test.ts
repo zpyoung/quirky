@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
@@ -7,8 +7,8 @@ import { createPiRunner } from '../pi-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { createFakePiRpc, type FakePiRpcFixture } from './fakes/fake-pi-rpc'
 
-async function until(check: () => boolean) {
-  for (let i = 0; i < 400 && !check(); i++) await Bun.sleep(5)
+async function until(check: () => boolean, attempts = 400) {
+  for (let i = 0; i < attempts && !check(); i++) await Bun.sleep(5)
   expect(check()).toBe(true)
 }
 
@@ -21,8 +21,12 @@ let resolved: string[]
 let runner: StructuredRunner
 let session: Session
 
-function build(agent: 'pi' | 'omp' = 'pi', contextWindow?: number | null) {
-  fake = createFakePiRpc(home, contextWindow === undefined ? {} : { contextWindow })
+function build(
+  agent: 'pi' | 'omp' = 'pi',
+  contextWindow?: number | null,
+  limits?: { maxFrameBytes?: number }
+) {
+  fake = createFakePiRpc(home, { ...(contextWindow === undefined ? {} : { contextWindow }), flavor: agent })
   const context: StructuredContext = {
     appendMessage(msg: NewStructuredMessage) {
       const stored = { ...msg, seq: messages.length + 1, at: msg.at ?? Date.now() } as StructuredMessage
@@ -44,7 +48,7 @@ function build(agent: 'pi' | 'omp' = 'pi', contextWindow?: number | null) {
       return fake.executable
     }
   }
-  runner = createPiRunner(context)
+  runner = createPiRunner(context, limits)
   session = {
     id: 's_pi',
     kind: 'structured',
@@ -95,7 +99,7 @@ describe('pi rpc runner', () => {
     expect(resolved).toEqual(['omp'])
   })
 
-  test('sends the prompt, journals assistant text and settles on agent_end', async () => {
+  test('sends the prompt, journals assistant text and settles on agent_settled', async () => {
     await runner.start(session, 'hello there')
     await until(settled)
     expect(messages.map((m) => [m.role, m.text])).toEqual([
@@ -107,12 +111,175 @@ describe('pi rpc runner', () => {
     expect(fake.commands().find((c) => c.type === 'prompt')).toEqual({ type: 'prompt', message: 'hello there' })
   })
 
+  test('agent_end alone leaves the pi turn working', async () => {
+    await runner.start(session, '[end-only]')
+    await until(() => messages.some((message) => message.role === 'assistant'))
+    // the spawned fixture's timers cannot be advanced by Bun's fake clock
+    await Bun.sleep(100)
+    expect(messages.filter((message) => message.role === 'result')).toEqual([])
+    expect(statuses).toEqual(['working'])
+  })
+
+  test('a pi retry after agent_end settles once after the second run', async () => {
+    await runner.start(session, '[retry]')
+    await until(() => messages.some((message) => message.role === 'system' && message.text === 'pi error: 529 overloaded'))
+    expect(messages.filter((message) => message.role === 'result')).toHaveLength(0)
+    expect(statuses).toEqual(['working'])
+
+    await until(settled)
+    expect(messages.map((message) => [message.role, message.text])).toEqual([
+      ['user', '[retry]'],
+      ['system', 'pi error: 529 overloaded'],
+      ['assistant', 'second try'],
+      ['result', 'pi turn completed']
+    ])
+    expect(statuses).toEqual(['working', 'done'])
+    expect(fake.commands().map((command) => command.type)).toEqual(['get_state', 'prompt'])
+  })
+
+  test('omp settles a normal turn on session_settled', async () => {
+    build('omp')
+    await runner.start(session, 'hello omp')
+    await until(settled)
+    expect(messages.map((message) => [message.role, message.text])).toEqual([
+      ['user', 'hello omp'],
+      ['assistant', 'omp: hello omp'],
+      ['result', 'omp turn completed']
+    ])
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
+  test('omp stays working after prompt_result until background work settles', async () => {
+    build('omp')
+    await runner.start(session, '[background]')
+    await until(() => messages.some((message) => message.role === 'assistant'))
+    await Bun.sleep(100)
+    expect(messages.filter((message) => message.role === 'result')).toEqual([])
+    expect(statuses).toEqual(['working'])
+
+    await until(settled)
+    expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
+  test('omp keeps invoked prompt_result open even when sessionSettled is true', async () => {
+    build('omp')
+    await runner.start(session, '[settled-result]')
+    await until(() => messages.some((message) => message.role === 'assistant'))
+    // the spawned fixture owns the delayed settle frame, not this process's clock
+    await Bun.sleep(100)
+    expect(statuses).toEqual(['working'])
+    expect(messages.filter((message) => message.role === 'result')).toEqual([])
+    await runner.send(session.id, 'still working')
+    await until(() => fake.commands().some((command) => command.type === 'steer'))
+    expect(statuses).toEqual(['working', 'working'])
+    await until(settled)
+    await runner.send(session.id, 'next turn')
+    await until(() => messages.filter((message) => message.role === 'result').length === 2)
+    expect(fake.commands().filter((command) => command.type === 'prompt').map((command) => command.message)).toEqual([
+      '[settled-result]', 'next turn'
+    ])
+    expect(statuses).toEqual(['working', 'working', 'done', 'working', 'done'])
+  })
+
+  test('omp closes a prompt that never reached the agent without a result', async () => {
+    build('omp')
+    await runner.start(session, '[no-agent]')
+    await until(settled)
+    expect(messages.filter((message) => message.role === 'result')).toEqual([])
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
+  test('omp ignores a duplicate no-agent prompt_result after the prompt closes', async () => {
+    build('omp')
+    await runner.start(session, '[no-agent] [twice]')
+    await until(settled)
+    // the duplicate is emitted by a timer in another process
+    await Bun.sleep(100)
+    expect(messages.map((message) => message.role)).toEqual(['user'])
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
+  test('pi closes a handled prompt without a result', async () => {
+    await runner.start(session, '[handled]')
+    await until(settled)
+    expect(messages.filter((message) => message.role === 'result')).toEqual([])
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
+  for (const [agent, marker] of [
+    ['pi', '[queued]'],
+    ['pi', 'started'],
+    ['omp', 'no disposition']
+  ] as const) {
+    test(`${agent} keeps an accepted ${marker} prompt open until settlement`, async () => {
+      build(agent)
+      await runner.start(session, marker + ' [end-only]')
+      await until(() => messages.some((message) => message.role === 'assistant'))
+      await Bun.sleep(100)
+      expect(messages.filter((message) => message.role === 'result')).toEqual([])
+      expect(statuses).toEqual(['working'])
+    })
+  }
+
+  for (const agent of ['pi', 'omp'] as const) {
+    test(`${agent} ignores duplicate settle frames after a turn closes`, async () => {
+      build(agent)
+      await runner.start(session, '[twice]')
+      await until(settled)
+      await Bun.sleep(100)
+      expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
+      expect(statuses).toEqual(['working', 'done'])
+    })
+  }
+
+  for (const agent of ['pi', 'omp'] as const) {
+    test(`${agent} ignores settle and prompt_result frames without an initial prompt`, async () => {
+      build(agent)
+      await runner.start(session)
+      await until(() => fake.commands().some((command) => command.type === 'get_state'))
+      process.kill(await pidOf(), 'SIGUSR1')
+      await until(() => existsSync(join(home, 'idle-frames-sent')))
+      // allow the other process's flushed frames to reach the runner
+      await Bun.sleep(100)
+      expect(messages).toEqual([])
+      expect(statuses).toEqual(['running'])
+    })
+  }
+
   test('starts idle without a prompt and runs a later send', async () => {
     await runner.start(session)
     expect(statuses).toEqual(['running'])
     await runner.send(session.id, 'later')
     await until(settled)
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'result'])
+  })
+
+  test('a send after settlement starts a new prompt turn', async () => {
+    await runner.start(session, 'first turn')
+    const results = () => messages.filter((message) => message.role === 'result')
+    await until(() => results().length === 1)
+
+    await runner.send(session.id, 'second turn')
+    await until(() => results().length === 2)
+    expect(fake.commands().filter((command) => command.type === 'prompt')).toEqual([
+      { type: 'prompt', message: 'first turn' },
+      { type: 'prompt', message: 'second turn' }
+    ])
+    expect(statuses).toEqual(['working', 'done', 'working', 'done'])
+  })
+
+  test('omp ignores protocol frames that do not change the journal or need a reply', async () => {
+    build('omp')
+    await runner.start(session, 'ignore unused frames')
+    await until(settled)
+    expect(messages.map((message) => [message.role, message.text])).toEqual([
+      ['user', 'ignore unused frames'],
+      ['assistant', 'omp: ignore unused frames'],
+      ['result', 'omp turn completed']
+    ])
+    expect(fake.commands().some((command) => command.type === 'extension_ui_response')).toBe(false)
+    expect(fake.commands().map((command) => command.type)).toEqual(['get_state', 'prompt'])
   })
 
   test('records context usage on the turn-ending message', async () => {
@@ -123,6 +290,7 @@ describe('pi rpc runner', () => {
       contextUsage: { contextTokens: 180, contextWindow: 200000 }
     })
   })
+
   test('clears context usage before a turn with no token count', async () => {
     await runner.start(session, 'usage', { toolPolicy: 'deny-all' })
     const results = () => messages.filter((m) => m.role === 'result')
@@ -142,6 +310,15 @@ describe('pi rpc runner', () => {
     await runner.start(session, 'usage')
     await until(settled)
     expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: null })
+  })
+
+  test('a later zero-usage message keeps the previous context footprint', async () => {
+    await runner.start(session, '[zero-last]')
+    await until(settled)
+    expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: 200000 })
+    expect(messages.filter((message) => message.role === 'system').map((message) => message.text)).toEqual([
+      'pi error: boom'
+    ])
   })
 
   test('journals tool execution when tools are allowed', async () => {
@@ -194,10 +371,81 @@ describe('pi rpc runner', () => {
     expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', '--no-tools', '--no-extensions'])
   })
 
+  test('omp deny-all aborts and settles after a tool starts', async () => {
+    build('omp')
+    await runner.start(session, '[tool]', { toolPolicy: 'deny-all' })
+    await until(settled)
+    expect(fake.commands().some((command) => command.type === 'abort')).toBe(true)
+    expect(messages.some((message) => message.role === 'system' && message.text === 'tools are disabled for this session')).toBe(true)
+    expect(messages.find((message) => message.role === 'result')?.data).toEqual({ type: 'agent_end' })
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
   test('assistant text survives a multibyte character split across stdout chunks', async () => {
     await runner.start(session, '[split]')
     await until(settled)
     expect(messages.find((m) => m.role === 'assistant')?.text).toBe('caf\u00e9 \u2615')
+  })
+
+  for (const agent of ['pi', 'omp'] as const) {
+    test(`${agent} settles after reading a frame larger than 4 MiB`, async () => {
+      build(agent)
+      await runner.start(session, '[big]')
+      await until(settled)
+      expect(messages.find((message) => message.role === 'assistant')?.text).toBe('big')
+      expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
+      expect(messages.filter((message) => message.role === 'system')).toEqual([])
+    })
+  }
+
+  test('reads CRLF-terminated frames', async () => {
+    await runner.start(session, '[crlf]')
+    await until(settled)
+    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant', 'result'])
+    expect(statuses).toEqual(['working', 'done'])
+  })
+
+  test('an over-limit unterminated frame exits once and rejects later sends', async () => {
+    build('pi', undefined, { maxFrameBytes: 1024 * 1024 })
+    await runner.start(session, '[flood]')
+    const pidsPath = join(home, 'flood-pids.json')
+    await until(() => existsSync(pidsPath))
+    const pids = JSON.parse(readFileSync(pidsPath, 'utf8')) as { parent: number; child: number }
+    try {
+      const signalsPath = join(home, 'flood-signals')
+      await until(() => {
+        if (!existsSync(signalsPath)) return false
+        const signals = readFileSync(signalsPath, 'utf8')
+        return signals.includes('child\n') && signals.includes('parent\n')
+      })
+      expect(readFileSync(signalsPath, 'utf8').split('\n').filter(Boolean).sort()).toEqual(['child', 'parent'])
+      expect(process.kill(pids.parent, 0)).toBe(true)
+      expect(process.kill(pids.child, 0)).toBe(true)
+      await until(() => statuses.at(-1) === 'exited', 1000)
+      await until(() => {
+        try { process.kill(pids.child, 0); return false } catch { return true }
+      }, 1000)
+      expect(() => process.kill(pids.parent, 0)).toThrow()
+    } finally {
+      try { process.kill(-pids.parent, 'SIGKILL') } catch {}
+    }
+
+    const systemMessages = () => messages.filter((message) => message.role === 'system')
+    expect(systemMessages().map((message) => message.text)).toEqual(['pi sent an rpc frame too large to read'])
+    expect(statuses.at(-1)).toBe('exited')
+    await expect(runner.send(session.id, 'too late')).rejects.toThrow('session is not running')
+    // process-close output is asynchronous and must not append a second diagnostic
+    await Bun.sleep(300)
+    expect(systemMessages()).toHaveLength(1)
+  }, 15_000)
+
+  test('an unreadable JSON line is journaled and a non-object value is ignored', async () => {
+    await runner.start(session, '[unreadable]')
+    await until(settled)
+    expect(messages.filter((message) => message.role === 'system').map((message) => message.text)).toEqual([
+      'unreadable pi output: invalid-json'
+    ])
+    expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
   })
 
   test('refuses an agent other than pi or omp and refuses resume', async () => {
@@ -213,7 +461,8 @@ describe('pi rpc runner', () => {
   })
 
   test('an unexpected process exit is journaled and exits the session', async () => {
-    await runner.start(session)
+    await runner.start(session, '[hold]')
+    await until(() => fake.commands().some((command) => command.type === 'prompt'))
     process.kill(-(await pidOf()), 'SIGKILL')
     await until(() => statuses.at(-1) === 'exited')
     expect(messages.some((m) => m.role === 'system' && m.text.startsWith('pi exited'))).toBe(true)
