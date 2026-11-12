@@ -140,6 +140,17 @@ describe('runningChildOf', () => {
     expect(process.calls).toEqual([{ argv: PS_ARGV, options: { rerunnable: true } }])
   })
 
+  test('a process with no children, or an unknown one, has none', async () => {
+    const process = standIn(async () => runResult(PROCESS_TABLE))
+
+    expect(await runningChildOf(250, () => defaultPs(process.runner))).toBeNull()
+    expect(await runningChildOf(300000, () => defaultPs(process.runner))).toBeNull()
+    expect(process.calls).toEqual([
+      { argv: PS_ARGV, options: { rerunnable: true } },
+      { argv: PS_ARGV, options: { rerunnable: true } }
+    ])
+  })
+
   test('does not count grandchildren', async () => {
     const process = standIn(async () => runResult('1 0 /sbin/launchd\n2 1 /bin/zsh\n3 2 /bin/sleep\n'))
 

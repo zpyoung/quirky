@@ -513,14 +513,23 @@ describe('LoopService background engine', () => {
     }[] = [
       { name: 'nonzero exit', result: runResult('.git/info/exclude\n', { exitCode: 1 }), message: 'git rev-parse failed' },
       { name: 'signal', result: runResult('.git/info/exclude\n', { exitCode: null, signal: 'SIGTERM' }), message: 'git rev-parse failed' },
+      { name: 'signal reported with exit code', result: runResult('.git/info/exclude\n', { signal: 'SIGTERM' }), message: 'git rev-parse failed' },
       {
         name: 'spawn failure',
         result: runResult('.git/info/exclude\n', { exitCode: null, spawnError: { code: 'ENOENT', message: 'not found' } }),
         message: 'git rev-parse failed'
       },
+      {
+        name: 'spawn failure reported with exit code',
+        result: runResult('.git/info/exclude\n', { spawnError: { code: 'ENOENT', message: 'not found' } }),
+        message: 'git rev-parse failed'
+      },
       { name: 'timeout', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'timeout' }), message: 'git rev-parse failed' },
       { name: 'abort', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'aborted' }), message: 'git rev-parse failed' },
       { name: 'overflow', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'overflow' }), message: 'git rev-parse failed' },
+      { name: 'timeout reported with exit code', result: runResult('.git/info/exclude\n', { stopped: 'timeout' }), message: 'git rev-parse failed' },
+      { name: 'abort reported with exit code', result: runResult('.git/info/exclude\n', { stopped: 'aborted' }), message: 'git rev-parse failed' },
+      { name: 'overflow reported with exit code', result: runResult('.git/info/exclude\n', { stopped: 'overflow' }), message: 'git rev-parse failed' },
       { name: 'runner rejection', rejection: new Error('private runner diagnostic'), message: 'git rev-parse failed' },
       { name: 'empty path', result: runResult(' \n\t'), message: 'git did not return a private info/exclude path' }
     ]
