@@ -82,6 +82,8 @@ describe('SC-28: Claude settings carry only the events the installed version kno
     async () => {
       await e2e.cleanup()
       e2e = await startStatusE2E({ fakes: { claude: { version: { stdout: '2.1.300 (Claude Code)' } } } })
+      // avatar commands bind a new session ID on resume; isolate the status reporter's merge contract
+      await e2e.call('plugin.disable', { id: 'launch-hook:quirky.avatar/gate-hooks' })
       const inline = {
         statusLine: { type: 'command', command: 'custom-statusline', padding: 4 },
         theme: 'inline',

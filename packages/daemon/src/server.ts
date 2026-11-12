@@ -54,6 +54,41 @@ function gateDeadline(url: URL): number {
   const ms = raw !== null && /^\d{1,9}$/.test(raw) ? Number(raw) : 0
   return ms > 0 ? Math.min(ms, MAX_GATE_DEADLINE_MS) : DEFAULT_GATE_DEADLINE_MS
 }
+/** The largest `/gate/` request body in bytes; a larger one is answered 413. */
+export const MAX_GATE_BODY_BYTES = 8 * 1024 * 1024
+
+async function readGateBody(request: Request): Promise<string | null> {
+  const declaredLength = request.headers.get('content-length')
+  if (declaredLength !== null && Number(declaredLength) > MAX_GATE_BODY_BYTES) return null
+
+  const reader = request.body?.getReader()
+  if (!reader) return ''
+
+  const chunks: Uint8Array[] = []
+  let byteLength = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value.byteLength > MAX_GATE_BODY_BYTES - byteLength) {
+        void reader.cancel().catch(() => {})
+        return null
+      }
+      byteLength += value.byteLength
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(byteLength)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(bytes)
+}
 
 /** The single loopback HTTP server: health, the RPC WebSocket, agent hooks and the static UI. */
 export function startServer(options: ServerOptions) {
@@ -90,8 +125,9 @@ export function startServer(options: ServerOptions) {
     const agent = url.pathname.slice(GATE_PATH_PREFIX.length)
     const sessionId = url.searchParams.get('session')
     if (!agent || !sessionId) return json({ error: 'agent and session are required' }, 400)
+    const body = await readGateBody(request)
+    if (body === null) return json({ error: 'body too large' }, 413)
     let payload: unknown = null
-    const body = await request.text()
     if (body.trim() !== '') {
       try {
         payload = JSON.parse(body)
@@ -102,10 +138,10 @@ export function startServer(options: ServerOptions) {
     const requestedEvent = url.searchParams.get('event')
     const payloadEvent = (payload as { hook_event_name?: unknown } | null)?.hook_event_name
     const event =
-      requestedEvent !== null && HOOK_EVENT_NAME.test(requestedEvent)
-        ? requestedEvent
-        : typeof payloadEvent === 'string' && HOOK_EVENT_NAME.test(payloadEvent)
-          ? payloadEvent
+      typeof payloadEvent === 'string' && HOOK_EVENT_NAME.test(payloadEvent)
+        ? payloadEvent
+        : requestedEvent !== null && HOOK_EVENT_NAME.test(requestedEvent)
+          ? requestedEvent
           : ''
     return json(await core.requestToolGate({ agent, sessionId, event, deadlineMs: gateDeadline(url), payload }))
   }

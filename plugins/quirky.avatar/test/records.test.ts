@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Level, WorktreeState } from '../src/contracts'
+import type { AvatarApp, Level, RecordCursor, WorktreeState } from '../src/contracts'
 import { callFingerprint } from '../src/fingerprint'
 import { createRecords } from '../src/supervisor/records'
 import { createEvidence } from '../src/supervisor/stuck'
@@ -57,9 +57,9 @@ function setup({ agent = 'claude', level = 'own-branch', state = 'working', grac
   t.fakeCalls['quirky.git/status'] = () => ({ head: 'sha', branch: 'avatar/wt-1' })
   t.fakeCalls['quirky.git/compare'] = () => ({ status: 'ready', base: 'origin/main', entries: [] })
 
-  const evidence = createEvidence()
+  let evidence = createEvidence()
   const watched: { dir: string; fire: (filename: string | null) => void; stopped: boolean }[] = []
-  const records = createRecords(t.app, {
+  const start = () => createRecords(t.app, {
     evidence,
     graceMs,
     debounceMs: 0,
@@ -70,6 +70,7 @@ function setup({ agent = 'claude', level = 'own-branch', state = 'working', grac
       return () => void (entry.stopped = true)
     }
   })
+  let records = start()
   const fingerprint = (name: string, input: unknown) => callFingerprint(agent, 'wt-1', name, input)
   const skipped = () => t.app.store.journalSince(0).filter((entry) => entry.kind === 'skipped-call')
   return {
@@ -79,8 +80,13 @@ function setup({ agent = 'claude', level = 'own-branch', state = 'working', grac
     observed,
     receipts,
     steps,
-    evidence,
-    records,
+    get evidence() { return evidence },
+    get records() { return records },
+    restart() {
+      records.dispose()
+      evidence = createEvidence()
+      records = start()
+    },
     watched,
     fingerprint,
     skipped,
@@ -359,5 +365,391 @@ describe('hook-config watch', () => {
     t.app.services.handoff.active = () => []
     await t.records.check()
     expect(t.watched[0].stopped).toBe(true)
+  })
+})
+
+type RecordFixture = {
+  app: AvatarApp
+  worktree: string
+  transcript: string
+  receipts: Set<string>
+  fingerprint(name: string, input: unknown): string
+  append(text: string): void
+}
+const PUSH = { command: 'git push origin main' }
+const READ = { file_path: 'a.ts' }
+const waitingCall = (t: RecordFixture, input = PUSH, at = T0 + 540_000) => ({
+  agent: 'claude', cwd: t.worktree, toolName: 'Bash', toolInput: input, at, fingerprint: t.fingerprint('Bash', input)
+})
+const seedCursor = (t: RecordFixture, overrides: Partial<RecordCursor> = {}) => t.app.store.recordCursors.put({
+  sessionId: 's-1', worktreeId: 'wt-1', path: t.transcript, readOffset: 0, pending: [], updatedAt: T0, ...overrides
+})
+const appendReceiptedRead = (t: RecordFixture, input = READ, at = 1_000) => {
+  t.receipts.add(t.fingerprint('Read', input))
+  t.append(claudeCall('Read', input, at))
+}
+
+describe('durable record positions', () => {
+  test('the first pass stores the finished byte position', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')).toEqual({
+      sessionId: 's-1', worktreeId: 'wt-1', path: t.transcript, readOffset: statSync(t.transcript).size, pending: [], updatedAt: T0 + 600_000
+    })
+  })
+
+  test('the stored position stops at the last finished line', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    t.append(claudeCall('Read', { file_path: 'b.ts' }, 2_000).slice(0, 40))
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')?.readOffset).toBe(Buffer.byteLength(claudeCall('Read', READ)))
+  })
+
+  test('the stored position counts bytes rather than characters', async () => {
+    const t = setup()
+    appendReceiptedRead(t, { file_path: 'é.ts' })
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')?.readOffset).toBe(215)
+  })
+
+  test('a quiet pass leaves the saved timestamp unchanged', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    t.app.now = () => T0 + 660_000
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')?.updatedAt).toBe(T0 + 600_000)
+  })
+
+  test('a session with no transcript has no cursor row', async () => {
+    const t = setup()
+    t.fakeCalls['quirky.session/get'] = () => ({ agent: 'claude', cwd: t.worktree })
+    await t.records.check()
+    expect(t.app.store.recordCursors.list()).toEqual([])
+  })
+
+  test('a stopped skipped call is not observed or judged twice after restart', async () => {
+    const t = setup()
+    t.append(claudeCall('Bash', PUSH))
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true } }])
+    expect(t.steps).toHaveLength(1)
+    t.restart()
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.steps).toHaveLength(1)
+    expect(t.observed).toHaveLength(1)
+  })
+
+  test('an allowed skipped call is not logged twice after restart', async () => {
+    const t = setup()
+    t.append(claudeCall('Read', READ))
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: false } }])
+    t.restart()
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(1)
+  })
+
+  test('a hosted call is not logged or woken twice after restart', async () => {
+    const t = setup({ agent: 'codex' })
+    t.append(JSON.stringify({ timestamp: iso(1_000), type: 'response_item', payload: { type: 'web_search_call', action: { query: 'bun' } } }) + '\n')
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { hosted: true } }])
+    expect(t.wakes()).toBe(1)
+    t.restart()
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.wakes()).toBe(1)
+  })
+
+  test('new lines after restart are read once', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    t.restart()
+    const input = { file_path: 'b.ts' }
+    appendReceiptedRead(t, input, 2_000)
+    await t.records.check()
+    expect(t.observed.map((call) => call.fingerprint)).toEqual([t.fingerprint('Read', READ), t.fingerprint('Read', input)])
+  })
+
+  test('a partial line completed after restart is read once', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    const next = claudeCall('Read', { file_path: 'b.ts' }, 2_000)
+    t.append(next.slice(0, 40))
+    await t.records.check()
+    t.restart()
+    t.append(next.slice(40))
+    await t.records.check()
+    expect(t.observed).toHaveLength(2)
+  })
+
+  test('lines written while stopped are judged on restart', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    t.records.dispose()
+    t.append(claudeCall('Bash', PUSH, 2_000))
+    t.restart()
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true, top: true } }])
+    expect(t.steps).toHaveLength(1)
+    expect(t.steps[0].text).toContain(PUSH.command)
+  })
+})
+
+describe('durable waiting calls', () => {
+  test('a waiting call is saved with its whole input', async () => {
+    const t = setup({ graceMs: 300_000 })
+    t.append(claudeCall('Bash', PUSH, 540_000))
+    await t.records.check()
+    expect(t.skipped()).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t)])
+  })
+
+  test('a waiting call is judged once its grace expires after restart', async () => {
+    const t = setup({ graceMs: 300_000 })
+    t.append(claudeCall('Bash', PUSH, 540_000))
+    await t.records.check()
+    t.restart()
+    t.app.now = () => T0 + 900_000
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true } }])
+    expect(t.steps).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+  })
+
+  test('a receipt arriving after restart settles the waiting call', async () => {
+    const t = setup({ graceMs: 300_000 })
+    t.append(claudeCall('Bash', PUSH, 540_000))
+    await t.records.check()
+    t.restart()
+    t.receipts.add(t.fingerprint('Bash', PUSH))
+    await t.records.check()
+    expect(t.skipped()).toEqual([])
+    expect(t.steps).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+  })
+
+  test('a waiting call inside its grace keeps waiting after restart', async () => {
+    const t = setup({ graceMs: 300_000 })
+    t.append(claudeCall('Bash', PUSH, 540_000))
+    await t.records.check()
+    t.restart()
+    await t.records.check()
+    expect(t.skipped()).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t)])
+  })
+
+  test('long pending inputs survive restart whole and are bounded only in the journal', async () => {
+    const t = setup({ graceMs: 300_000 })
+    const input = { command: `echo ${'x'.repeat(5000)}; git push origin main` }
+    t.append(claudeCall('Bash', input, 540_000))
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')?.pending[0].toolInput).toEqual(input)
+    t.restart()
+    t.app.now = () => T0 + 900_000
+    await t.records.check()
+    expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true, fingerprint: t.fingerprint('Bash', input), toolInput: { truncated: JSON.stringify(input).slice(0, 4000) } } }])
+    expect(t.skipped()).toHaveLength(1)
+  })
+
+  test('waiting calls older than the hand-off are dropped on load', async () => {
+    const t = setup()
+    seedCursor(t, { pending: [waitingCall(t, PUSH, T0 - 5_000)] })
+    t.app.now = () => T0 + 900_000
+    await t.records.check()
+    expect(t.skipped()).toEqual([])
+    expect(t.steps).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+  })
+
+  test('each supervised session stores its own waiting calls', async () => {
+    const t = setup({ graceMs: 300_000 })
+    const otherTranscript = join(dir, 'other.jsonl')
+    const otherWorktree = join(dir, 'wt-2')
+    const input = { command: 'git push origin other' }
+    writeFileSync(otherTranscript, claudeCall('Bash', input, 540_000))
+    t.append(claudeCall('Bash', PUSH, 540_000))
+    const first = t.app.services.handoff.active()[0]
+    t.app.services.handoff.active = () => [first, { ...first, worktreeId: 'wt-2', sessionId: 's-2' }]
+    t.app.store.handoffs.put({ worktreeId: 'wt-2', state: 'working', sessionId: 's-2', active: true, handedOffAt: T0, takenBackAt: null })
+    t.fakeCalls['quirky.session/get'] = (params) => ({
+      agent: 'claude', cwd: params.session === 's-1' ? t.worktree : otherWorktree, createdAt: T0,
+      providerSession: { transcriptPath: params.session === 's-1' ? t.transcript : otherTranscript }
+    })
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')).toMatchObject({ worktreeId: 'wt-1', pending: [waitingCall(t)] })
+    expect(t.app.store.recordCursors.get('s-2')).toMatchObject({
+      worktreeId: 'wt-2', pending: [{ agent: 'claude', cwd: otherWorktree, toolName: 'Bash', toolInput: input, at: T0 + 540_000, fingerprint: callFingerprint('claude', 'wt-2', 'Bash', input) }]
+    })
+  })
+})
+
+describe('cursor lifecycle and failures', () => {
+  test('a changed path resets the position but keeps waiting calls', async () => {
+    const t = setup()
+    seedCursor(t, { path: join(dir, 'old.jsonl'), readOffset: 999, pending: [waitingCall(t, PUSH, T0 + 1_000)] })
+    appendReceiptedRead(t)
+    await t.records.check()
+    expect(t.observed).toHaveLength(1)
+    expect(t.skipped()).toMatchObject([{ data: { wouldHaveStopped: true } }])
+    expect(t.app.store.recordCursors.get('s-1')).toMatchObject({ path: t.transcript, readOffset: statSync(t.transcript).size, pending: [] })
+  })
+
+  test('a shorter transcript is read from its start', async () => {
+    const t = setup()
+    seedCursor(t, { readOffset: 100_000 })
+    appendReceiptedRead(t)
+    await t.records.check()
+    expect(t.observed).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')?.readOffset).toBe(statSync(t.transcript).size)
+  })
+
+  test('an unreadable cursor is logged and rebuilt from the transcript', async () => {
+    const t = setup()
+    const logs: string[] = []
+    t.context.log = (line) => void logs.push(line)
+    t.app.store.recordCursors.get = () => { throw new Error('bad row') }
+    appendReceiptedRead(t)
+    await t.records.check()
+    expect(t.observed).toHaveLength(1)
+    expect(logs).toContain('avatar record cursor for s-1 could not be read: bad row')
+    expect(t.app.store.recordCursors.list()[0].readOffset).toBe(statSync(t.transcript).size)
+  })
+
+  test('take-back removes the stored row', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    t.app.services.handoff.active = () => []
+    await t.records.check()
+    expect(t.app.store.recordCursors.list()).toEqual([])
+  })
+
+  test('a replaced session loses its row and the new session gets one', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    const first = t.app.services.handoff.active()[0]
+    t.app.services.handoff.active = () => [{ ...first, sessionId: 's-2' }]
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')).toBeNull()
+    expect(t.app.store.recordCursors.get('s-2')).toMatchObject({ sessionId: 's-2' })
+  })
+
+  test('an orphan row is pruned on the first pass', async () => {
+    const t = setup()
+    seedCursor(t, { sessionId: 's-gone', worktreeId: 'wt-9' })
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-gone')).toBeNull()
+    expect(t.app.store.recordCursors.get('s-1')).toMatchObject({ sessionId: 's-1' })
+  })
+
+  test('an unreadable session keeps its saved row', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    await t.records.check()
+    const row = t.app.store.recordCursors.get('s-1')
+    t.fakeCalls['quirky.session/get'] = () => { throw new Error('session gone') }
+    await t.records.check()
+    expect(t.app.store.recordCursors.get('s-1')).toEqual(row)
+  })
+
+  test('failed saves are logged without losing the in-memory position', async () => {
+    const t = setup()
+    const logs: string[] = []
+    t.context.log = (line) => void logs.push(line)
+    t.app.store.recordCursors.put = () => { throw new Error('disk') }
+    t.append(claudeCall('Bash', PUSH))
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.steps).toHaveLength(1)
+    expect(logs).toContain('avatar record cursor for s-1 could not be saved: disk')
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.steps).toHaveLength(1)
+  })
+
+  test('failed deletes are logged and do not prevent watcher cleanup', async () => {
+    const t = setup()
+    mkdirSync(join(t.worktree, '.claude'))
+    appendReceiptedRead(t)
+    await t.records.check()
+    const logs: string[] = []
+    t.context.log = (line) => void logs.push(line)
+    t.app.store.recordCursors.delete = () => { throw new Error('disk') }
+    t.app.services.handoff.active = () => []
+    await t.records.check()
+    expect(logs).toContain('avatar record cursor for s-1 could not be saved: disk')
+    expect(t.watched[0].stopped).toBe(true)
+  })
+})
+
+describe('stopping during a record pass', () => {
+  test('a call not yet journaled remains pending when disposed during classification', async () => {
+    const t = setup()
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<unknown>()
+    t.fakeCalls['quirky.git/status'] = () => {
+      entered.resolve()
+      return held.promise
+    }
+    t.append(claudeCall('Bash', PUSH))
+    const pass = t.records.check()
+    await entered.promise
+    t.records.dispose()
+    held.resolve({ head: 'sha', branch: 'avatar/wt-1' })
+    await pass
+    expect(t.skipped()).toEqual([])
+    expect(t.steps).toEqual([])
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t, PUSH, T0 + 1_000)])
+    t.fakeCalls['quirky.git/status'] = () => ({ head: 'sha', branch: 'avatar/wt-1' })
+    t.restart()
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.steps).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+  })
+
+  test('an in-flight step-in stays pending and is deliberately repeated after restart', async () => {
+    const t = setup()
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<{ sent: boolean }>()
+    t.app.services.supervisor.stepIn = (worktreeId, text) => {
+      t.steps.push({ worktreeId, text })
+      entered.resolve()
+      return held.promise
+    }
+    t.append(claudeCall('Bash', PUSH))
+    const pass = t.records.check()
+    await entered.promise
+    t.records.dispose()
+    held.resolve({ sent: true })
+    await pass
+    expect(t.skipped()).toHaveLength(1)
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([waitingCall(t, PUSH, T0 + 1_000)])
+    t.app.services.supervisor.stepIn = async (worktreeId, text) => {
+      t.steps.push({ worktreeId, text })
+      return { sent: true }
+    }
+    t.restart()
+    await t.records.check()
+    expect(t.skipped()).toHaveLength(2)
+    expect(t.steps).toHaveLength(2)
+    expect(t.app.store.recordCursors.get('s-1')?.pending).toEqual([])
+  })
+
+  test('a pass started after disposal does nothing', async () => {
+    const t = setup()
+    appendReceiptedRead(t)
+    t.records.dispose()
+    await t.records.check()
+    expect(t.observed).toEqual([])
+    expect(t.app.store.recordCursors.list()).toEqual([])
   })
 })

@@ -429,3 +429,113 @@ describe('computeRegistry: distro-disabled IDs', () => {
     expect(entry(compute([plugin('b')]), 'b').disabledReason).toBeUndefined()
   })
 })
+
+describe('computeRegistry: the tool gate', () => {
+  const gate = { 'tool-gate': [{ id: 'gate' }] }
+
+  test('a built-in plugin keeps the gate over an installed plugin', () => {
+    const registry = compute([
+      plugin('zzz.core', { contributes: gate }, 'builtin'),
+      plugin('aaa.user', { contributes: gate }, 'installed'),
+    ])
+
+    expect(entry(registry, 'zzz.core').status).toBe('enabled')
+    expect(entry(registry, 'aaa.user')).toMatchObject({
+      status: 'invalid',
+      diagnostics: [{ level: 'error', message: 'only one plugin may declare tool-gate; zzz.core already does' }],
+    })
+    expect(registry.effective.get('tool-gate:zzz.core/gate')?.plugin).toBe('zzz.core')
+  })
+
+  test('the lowest ID keeps the gate within either source', () => {
+    for (const source of ['installed', 'builtin'] as const) {
+      const registry = compute([
+        plugin('acme.first', { contributes: gate }, source),
+        plugin('acme.second', { contributes: gate }, source),
+      ])
+
+      expect(entry(registry, 'acme.first', source).status).toBe('enabled')
+      expect(entry(registry, 'acme.second', source)).toMatchObject({
+        status: 'invalid',
+        diagnostics: [{
+          level: 'error',
+          message: 'only one plugin may declare tool-gate; acme.first already does',
+        }],
+      })
+    }
+  })
+
+  test('a gate override is refused and does not retain its declaration', () => {
+    const registry = compute([
+      plugin('base', { contributes: gate }),
+      plugin('over', { overrides: [{ id: 'tool-gate:base/gate' }] }),
+    ])
+
+    expect(entry(registry, 'over')).toMatchObject({
+      status: 'invalid',
+      diagnostics: [{ level: 'error', message: "tool-gate can't be overridden: tool-gate:base/gate" }],
+    })
+    expect(entry(registry, 'base').status).toBe('enabled')
+    expect(registry.effective.get('tool-gate:base/gate')?.plugin).toBe('base')
+    expect(registry.declarations.some((declaration) => declaration.plugin === 'over')).toBe(false)
+  })
+
+  test('a gate override is refused when its base is absent or disabled', () => {
+    const absentBase = compute([plugin('over', { overrides: [{ id: 'tool-gate:base/gate' }] })])
+    const disabledBase = compute([
+      plugin('base', { contributes: gate }),
+      plugin('over', { overrides: [{ id: 'tool-gate:base/gate' }] }),
+    ], ['base'])
+
+    expect(entry(absentBase, 'over')).toMatchObject({
+      status: 'invalid',
+      diagnostics: [{ level: 'error', message: "tool-gate can't be overridden: tool-gate:base/gate" }],
+    })
+    expect(absentBase.effective.has('tool-gate:base/gate')).toBe(false)
+    expect(entry(disabledBase, 'over')).toMatchObject({
+      status: 'invalid',
+      diagnostics: [{ level: 'error', message: "tool-gate can't be overridden: tool-gate:base/gate" }],
+    })
+    expect(disabledBase.effective.has('tool-gate:base/gate')).toBe(false)
+  })
+
+  test('a disabled built-in owner frees the gate for an installed plugin', () => {
+    const registry = compute([
+      plugin('zzz.core', { contributes: gate }, 'builtin'),
+      plugin('aaa.user', { contributes: gate }, 'installed'),
+    ], ['zzz.core'])
+
+    expect(entry(registry, 'aaa.user').status).toBe('enabled')
+    expect(registry.effective.get('tool-gate:aaa.user/gate')?.plugin).toBe('aaa.user')
+  })
+
+  test('a dependant of a refused gate declarer is invalid', () => {
+    const registry = compute([
+      plugin('acme.first', { contributes: gate }),
+      plugin('acme.second', { contributes: gate }),
+      plugin('needs', { dependencies: ['acme.second'] }),
+    ])
+
+    expect(entry(registry, 'needs')).toMatchObject({
+      status: 'invalid',
+      diagnostics: [{ level: 'error', message: 'dependency acme.second is invalid' }],
+    })
+  })
+
+  test('statuses and diagnostics do not depend on input order', () => {
+    const plugins = [
+      plugin('zzz.core', { contributes: gate }, 'builtin'),
+      plugin('aaa.user', { contributes: gate }, 'installed'),
+      plugin('base', { contributes: gate }),
+      plugin('over', { overrides: [{ id: 'tool-gate:base/gate' }] }),
+    ]
+    const statusAndDiagnostics = (order: DiscoveredPlugin[]) => compute(order).entries.map((item) => ({
+      id: item.discovered.id,
+      source: item.discovered.source,
+      status: item.status,
+      diagnostics: item.diagnostics,
+    }))
+
+    expect(statusAndDiagnostics([...plugins].reverse())).toEqual(statusAndDiagnostics(plugins))
+  })
+})
