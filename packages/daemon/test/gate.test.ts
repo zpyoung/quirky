@@ -14,13 +14,137 @@ afterEach(async () => {
 
 type PostOptions = { agent?: string; query?: string; body?: string; token?: string | null }
 
-type GatePlugin = { id: string; agents?: string[]; provider: string }
+type GatePlugin = {
+  id: string
+  agents?: string[]
+  provider: string
+  contributes?: boolean
+  overrides?: string[]
+  provideId?: string
+}
 
-function gatePlugin({ id, agents, provider }: GatePlugin): { manifest: { id: string } & Record<string, unknown>; behavior: ModuleBehavior } {
+function gatePlugin({
+  id,
+  agents,
+  provider,
+  contributes = true,
+  overrides = [],
+  provideId = `${id}/gate`
+}: GatePlugin): { manifest: { id: string } & Record<string, unknown>; behavior: ModuleBehavior } {
   return {
-    manifest: { id, contributes: { 'tool-gate': [{ id: 'gate', ...(agents ? { agents } : {}) }] } },
-    behavior: { activate: `context.provide('tool-gate:${id}/gate', ${provider})` }
+    manifest: {
+      id,
+      ...(contributes ? { contributes: { 'tool-gate': [{ id: 'gate', ...(agents ? { agents } : {}) }] } } : {}),
+      ...(overrides.length ? { overrides: overrides.map((override) => ({ id: override })) } : {})
+    },
+    behavior: { activate: `context.provide('tool-gate:${provideId}', ${provider})` }
   }
+}
+
+function paddedGateBody(byteLength: number): string {
+  const prefix = '{"tool_name":"Write","pad":"'
+  const suffix = '"}'
+  return `${prefix}${'x'.repeat(byteLength - Buffer.byteLength(prefix + suffix))}${suffix}`
+}
+
+async function rawGatePost(
+  port: number,
+  { token, chunks, chunked = false }: { token: string | null; chunks: string[]; chunked?: boolean }
+): Promise<{ status: number; body: string }> {
+  let incoming = ''
+  let settled = false
+  const parts: Uint8Array[] = []
+  let partIndex = 0
+  let partOffset = 0
+  const { promise: response, resolve: resolveResponse, reject: rejectResponse } =
+    Promise.withResolvers<{ status: number; body: string }>()
+
+  const parseResponse = (closed: boolean) => {
+    const headerEnd = incoming.indexOf('\r\n\r\n')
+    if (headerEnd < 0) return null
+    const headers = incoming.slice(0, headerEnd)
+    const status = Number(/^HTTP\/\d\.\d\s+(\d+)/.exec(headers)?.[1])
+    const bodyStart = headerEnd + 4
+    const contentLength = /\r\ncontent-length:\s*(\d+)/i.exec(headers)
+    if (contentLength) {
+      const length = Number(contentLength[1])
+      if (incoming.length < bodyStart + length) return null
+      return { status, body: incoming.slice(bodyStart, bodyStart + length) }
+    }
+    return closed ? { status, body: incoming.slice(bodyStart) } : null
+  }
+
+  const pump = (socket: Bun.Socket) => {
+    if (settled) return
+    while (partIndex < parts.length) {
+      const part = parts[partIndex]
+      const written = socket.write(part.subarray(partOffset))
+      if (written <= 0) return
+      partOffset += written
+      if (partOffset < part.byteLength) return
+      partIndex++
+      partOffset = 0
+    }
+  }
+
+  void Bun.connect({
+    hostname: '127.0.0.1',
+    port,
+    socket: {
+      data(socket, chunk) {
+        incoming += Buffer.from(chunk).toString('latin1')
+        const result = parseResponse(false)
+        if (!result || settled) return
+        settled = true
+        socket.end()
+        resolveResponse(result)
+      },
+      drain(socket) {
+        pump(socket)
+      },
+      close() {
+        if (settled) return
+        settled = true
+        const result = parseResponse(true)
+        if (result) resolveResponse(result)
+        else rejectResponse(new Error('gate server closed before completing its response'))
+      },
+      error(_socket, error) {
+        if (settled) return
+        settled = true
+        rejectResponse(error)
+      }
+    }
+  })
+    .then((socket) => {
+      const byteLength = chunks.reduce((length, chunk) => length + Buffer.byteLength(chunk), 0)
+      const headers = [
+        'POST /gate/claude?session=s1 HTTP/1.1',
+        `Host: 127.0.0.1:${port}`,
+        ...(token === null ? [] : [`${HOOK_TOKEN_HEADER}: ${token}`]),
+        ...(chunked ? ['Transfer-Encoding: chunked'] : [`Content-Length: ${byteLength}`]),
+        'Connection: close',
+        '',
+        ''
+      ].join('\r\n')
+      parts.push(Buffer.from(headers))
+      if (chunked) {
+        for (const chunk of chunks) {
+          parts.push(Buffer.from(`${Buffer.byteLength(chunk).toString(16)}\r\n`), Buffer.from(chunk), Buffer.from('\r\n'))
+        }
+        parts.push(Buffer.from('0\r\n\r\n'))
+      } else {
+        for (const chunk of chunks) parts.push(Buffer.from(chunk))
+      }
+      pump(socket)
+    })
+    .catch((error: unknown) => {
+      if (settled) return
+      settled = true
+      rejectResponse(error instanceof Error ? error : new Error(String(error)))
+    })
+
+  return response
 }
 
 async function boot(plugins: GatePlugin[] = []) {
@@ -137,6 +261,210 @@ describe('/gate route', () => {
     const response = await fetch(`http://127.0.0.1:${s.harness.runtime.port}/gate/claude?session=s1`)
     expect(response.status).toBe(405)
   })
+  test('a deny with blank encoded is unavailable', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async (request) => ({ decision: 'deny', reason: 'no', encoded: request.payload.encoded })`
+      }
+    ])
+    for (const encoded of ['', ' \n\t']) {
+      expect(await s.decide({ body: JSON.stringify({ encoded }) })).toEqual({
+        decision: 'unavailable',
+        reason: 'the tool gate returned an invalid decision',
+        encoded: null
+      })
+    }
+  })
+
+  test('a deny with null encoded remains a denial', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: `async () => ({ decision: 'deny', reason: 'no', encoded: null })` }])
+    expect(await s.decide()).toEqual({ decision: 'deny', reason: 'no', encoded: null })
+  })
+
+  test('allow and passthrough accept an empty encoded answer', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async (request) => ({ decision: request.payload.decision, reason: request.payload.reason, encoded: '' })`
+      }
+    ])
+    for (const answer of [
+      { decision: 'allow', reason: 'ok' },
+      { decision: 'passthrough', reason: '' }
+    ]) {
+      expect(await s.decide({ body: JSON.stringify(answer) })).toEqual({ ...answer, encoded: '' })
+    }
+  })
+
+  test('exitCode must be an integer from zero through 255', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async (request) => ({ decision: 'deny', reason: 'no', encoded: '{"d":1}', exitCode: request.payload.exitCode })`
+      }
+    ])
+    for (const exitCode of [-1, 256, 1.5, '2']) {
+      expect(await s.decide({ body: JSON.stringify({ exitCode }) })).toEqual({
+        decision: 'unavailable',
+        reason: 'the tool gate returned an invalid decision',
+        encoded: null
+      })
+    }
+    expect(await s.decide({ body: '{"exitCode":2}' })).toEqual({
+      decision: 'deny',
+      reason: 'no',
+      encoded: '{"d":1}',
+      exitCode: 2
+    })
+  })
+
+  test('unavailable drops encoded and exitCode', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async () => ({ decision: 'unavailable', reason: 'busy', encoded: '{}', exitCode: 0 })`
+      }
+    ])
+    expect(await s.decide()).toEqual({ decision: 'unavailable', reason: 'busy', encoded: null })
+  })
+
+  test('a non-function provider is unavailable with its registration error', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: `({ not: 'a function' })` }])
+    const decision = await s.decide()
+    expect(decision.decision).toBe('unavailable')
+    expect(decision.encoded).toBeNull()
+    expect(decision.reason).toContain('tool-gate:acme.gate/gate must be provided as a function')
+  })
+
+  test('the payload event takes precedence over the query event', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: allow }])
+    const decision = await s.decide({
+      query: 'session=s1&event=PermissionRequest',
+      body: '{"hook_event_name":"PreToolUse"}'
+    })
+    expect(JSON.parse(decision.reason).event).toBe('PreToolUse')
+  })
+
+  test('the query event is the fallback for absent or invalid payload events', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: allow }])
+    const payloads = [
+      { tool_name: 'Bash' },
+      { hook_event_name: 7 },
+      { hook_event_name: 'Pre ToolUse' },
+      { hook_event_name: 'a'.repeat(65) }
+    ]
+    for (const payload of payloads) {
+      const decision = await s.decide({ query: 'session=s1&event=tool_call', body: JSON.stringify(payload) })
+      expect(JSON.parse(decision.reason).event).toBe('tool_call')
+    }
+  })
+
+  test('the event is empty when neither payload nor query names one', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: allow }])
+    const decision = await s.decide({ query: 'session=s1', body: '{"tool_name":"Bash"}' })
+    expect(JSON.parse(decision.reason).event).toBe('')
+  })
+
+  test('only the top-level payload event is used', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: allow }])
+    const topLevel = await s.decide({
+      query: 'session=s1',
+      body: '{"tool_input":{"hook_event_name":"PermissionRequest"},"hook_event_name":"PreToolUse"}'
+    })
+    const nestedOnly = await s.decide({
+      query: 'session=s1',
+      body: '{"tool_input":{"hook_event_name":"PermissionRequest"}}'
+    })
+    expect(JSON.parse(topLevel.reason).event).toBe('PreToolUse')
+    expect(JSON.parse(nestedOnly.reason).event).toBe('')
+  })
+
+  test('deadline defaults and caps invalid or oversized query values', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: allow }])
+    const cases = [
+      ['session=s1', 30000],
+      ['session=s1&deadline=0', 30000],
+      ['session=s1&deadline=abc', 30000],
+      ['session=s1&deadline=-5', 30000],
+      ['session=s1&deadline=1234567890', 30000],
+      ['session=s1&deadline=999999999', 600000],
+      ['session=s1&deadline=600000', 600000],
+      ['session=s1&deadline=7000', 7000]
+    ] as const
+    for (const [query, expected] of cases) {
+      const decision = await s.decide({ query })
+      expect(JSON.parse(decision.reason).deadlineMs).toBe(expected)
+    }
+  })
+
+  test('requires an agent', async () => {
+    const s = await boot([{ id: 'acme.gate', provider: allow }])
+    expect((await s.post({ agent: '', query: 'session=s1' })).status).toBe(400)
+  })
+
+  test('rejects a declared body one byte over 8 MiB before calling the provider', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async () => { record('called'); return { decision: 'allow', reason: 'called', encoded: '{}' } }`
+      }
+    ])
+    const body = paddedGateBody(8 * 1024 * 1024 + 1)
+    expect(Buffer.byteLength(body)).toBe(8 * 1024 * 1024 + 1)
+    const response = await rawGatePost(s.harness.runtime.port, { token: s.harness.runtime.hookToken, chunks: [body] })
+    expect(response.status).toBe(413)
+    expect(JSON.parse(response.body)).toEqual({ error: 'body too large' })
+    expect(readMarker(s.marker)).not.toContain('called')
+  })
+
+  test('accepts a valid JSON body exactly 8 MiB long', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async () => { record('called'); return { decision: 'allow', reason: 'called', encoded: '{}' } }`
+      }
+    ])
+    const body = paddedGateBody(8 * 1024 * 1024)
+    expect(Buffer.byteLength(body)).toBe(8 * 1024 * 1024)
+    const response = await s.post({ body })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ decision: 'allow' })
+    expect(readMarker(s.marker)).toContain('called')
+  })
+
+  test('rejects a chunked stream over 8 MiB without a Content-Length header', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async () => { record('called'); return { decision: 'allow', reason: 'called', encoded: '{}' } }`
+      }
+    ])
+    const chunk = 'x'.repeat(1024 * 1024)
+    const response = await rawGatePost(s.harness.runtime.port, {
+      token: s.harness.runtime.hookToken,
+      chunks: Array(9).fill(chunk),
+      chunked: true
+    })
+    expect(response.status).toBe(413)
+    expect(JSON.parse(response.body)).toEqual({ error: 'body too large' })
+    expect(readMarker(s.marker)).not.toContain('called')
+  })
+
+  test('checks the token before rejecting an oversized declared body', async () => {
+    const s = await boot([
+      {
+        id: 'acme.gate',
+        provider: `async () => { record('called'); return { decision: 'allow', reason: 'called', encoded: '{}' } }`
+      }
+    ])
+    const body = paddedGateBody(8 * 1024 * 1024 + 1)
+    const response = await rawGatePost(s.harness.runtime.port, { token: null, chunks: [body] })
+    expect(response.status).toBe(401)
+    expect(JSON.parse(response.body)).toEqual({ error: 'unauthorized' })
+    expect(readMarker(s.marker)).not.toContain('called')
+  })
+
 })
 
 describe('tool-gate registration', () => {
@@ -153,6 +481,30 @@ describe('tool-gate registration', () => {
     expect(second.state).toBe('invalid')
     expect(second.diagnostics.map((item) => item.message)).toEqual(['only one plugin may declare tool-gate; acme.first already does'])
     expect((await s.decide()).decision).toBe('allow')
+  })
+
+  test('a real daemon rejects a gate override and still uses the declaring provider', async () => {
+    const s = await boot([
+      {
+        id: 'acme.first',
+        provider: `async () => ({ decision: 'allow', reason: 'first', encoded: '{"from":"first"}' })`
+      },
+      {
+        id: 'acme.over',
+        contributes: false,
+        overrides: ['tool-gate:acme.first/gate'],
+        provideId: 'acme.first/gate',
+        provider: `async () => ({ decision: 'allow', reason: 'over', encoded: '{"from":"over"}' })`
+      }
+    ])
+    const client = await s.harness.connect()
+    const listed = (await client.call('plugin.list', {})) as PluginInfo[]
+    const over = listed.find((plugin) => plugin.id === 'acme.over')!
+    expect(over.state).toBe('invalid')
+    expect(over.diagnostics.map((item) => item.message)).toEqual([
+      "tool-gate can't be overridden: tool-gate:acme.first/gate"
+    ])
+    expect((await s.decide()).encoded).toBe('{"from":"first"}')
   })
 
   test('tool-gate rejects unknown fields and a malformed agents list', async () => {
