@@ -1206,6 +1206,8 @@ describe('g1-36 directory uncertainty scenarios', () => {
     }
 
     const evalRows: [string, ActionClass[]][] = [
+      ['eval "cd ." | cat; touch a', ['read', 'edit-inside']],
+      ['eval "cd /work/wt" | cat; touch a', ['read', 'edit-inside']],
       ['cd /tmp; env eval "cd /work/wt"; rm -rf x', ['read', 'edit-outside']],
       ['cd /tmp; command eval "cd /work/wt" && rm -rf x', ['read', 'edit-outside']],
       ['cd /tmp; eval "cd /work/wt" && rm -rf x', ['read', 'edit-inside']],

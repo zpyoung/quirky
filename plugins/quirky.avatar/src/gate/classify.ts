@@ -77,6 +77,11 @@ function joinDirectories(left: DirectorySet, right: DirectorySet): DirectorySet 
   return joined.size === left.length ? left : [...joined]
 }
 
+function directoriesEqual(left: DirectorySet, right: DirectorySet): boolean {
+  return left === right || (left !== null && right !== null && left.length === right.length &&
+    left.every((directory) => right.includes(directory)))
+}
+
 function enteredDirectories(target: string, directories: DirectorySet, home: string): DirectorySet {
   const expanded = expandHome(target, home)
   if (isAbsolute(expanded)) return [resolve(expanded)]
@@ -948,7 +953,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
 
     if (shellCommand.detached && cmd === 'eval' && cwd === null) possible = null
     const certain = shellCommand.sep === '||' ? joinDirectories(previousCertain, cwd) : cwd
-    if (shellCommand.scope === 0 && (certain !== commandCwd || possible !== state.possible)) cwdChanged = true
+    if (shellCommand.scope === 0 && (!directoriesEqual(certain, commandCwd) || !directoriesEqual(possible, state.possible))) cwdChanged = true
     if (nestedNonDirectoryRead || (!isShell && cmd !== 'eval' && cmd !== 'cd' && cmd !== 'pushd' && cmd !== 'popd' && partClasses.includes('read'))) {
       nonDirectoryRead = true
     }
