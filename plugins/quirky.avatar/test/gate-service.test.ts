@@ -690,6 +690,27 @@ describe('activation and deactivation', () => {
   })
 
 
+  test.each(['setting:quirky.avatar/agent-hooks', 'setting:quirky.avatar/judgment-timeout-seconds'])(
+    'after the disposer, a change to %s neither lists agents nor writes agent files',
+    async (id) => {
+      const s = setup({ agent: 'codex', agentList: agentListing('codex') })
+      dirs.push(s.context.home)
+      await waitFor(() => codexHooksInstalled(s.agentEnv))
+      expect(s.calls.filter((call) => call.method === 'quirky.agents/list')).toHaveLength(1)
+
+      disposers.pop()!()
+      rmSync(codexHooksPath(s.agentEnv))
+      await s.deliver({
+        type: 'setting.changed',
+        id,
+        value: id === 'setting:quirky.avatar/agent-hooks' ? true : 30
+      })
+
+      expect(s.calls.filter((call) => call.method === 'quirky.agents/list')).toHaveLength(1)
+      expect(existsSync(codexHooksPath(s.agentEnv))).toBe(false)
+    }
+  )
+
   test('the disposer keeps every supervision marker', () => {
     const s = setup()
     s.app.services.gate.writeMarker('s-2', 'wt-1', 'full')

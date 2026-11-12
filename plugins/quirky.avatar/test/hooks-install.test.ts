@@ -91,6 +91,16 @@ describe('supervision markers', () => {
 describe('gateCommand', () => {
   const sessionEnv = (home: string, sessionId = 's-1') => ({ QUIRKY_HOME: home, QUIRKY_SESSION_ID: sessionId })
 
+  const oddMarkerHome = (): string => {
+    const home = scratch()
+    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
+    mkdirSync(join(markerDir(home), 'a'))
+    writeFileSync(join(markerDir(home), 'a', 'b'), '{}')
+    writeFileSync(join(markerDir(home), '.x'), '{}')
+    gateStub(home)
+    return home
+  }
+
   test('answers passthrough outside a Quirky install', () => {
     const result = runShell(gateCommand('claude', 'PreToolUse', 60000), {})
     expect(result.exitCode).toBe(0)
@@ -101,16 +111,19 @@ describe('gateCommand', () => {
     ['unset', undefined],
     ['empty', ''],
     ['contains a slash', 'a/b'],
-    ['starts with a dot', '.x']
+    ['starts with a dot', '.x'],
+    ['one dot', '.'],
+    ['two dots', '..'],
+    ['a path back to a real marker', 'a/../s-1']
   ])('does not run the shim when the session ID is %s', (_name, sessionId) => {
-    const home = scratch()
-    writeMarkerFile(home, 's-1', { worktreeId: 'wt-1', level: 'full' })
-    gateStub(home)
+    const home = oddMarkerHome()
+    expect(existsSync(join(markerDir(home), sessionId ?? ''))).toBe(true)
     const env: Record<string, string> = { QUIRKY_HOME: home }
     if (sessionId !== undefined) env.QUIRKY_SESSION_ID = sessionId
-    const result = runShell(gateCommand('claude', 'PreToolUse', 60000), env)
+    const result = runShell(gateCommand('claude', 'PreToolUse', 60000), env, 'PAYLOAD')
     expect(result.exitCode).toBe(0)
     expect(result.stdout.toString()).toBe('{}\n')
+    expect(result.stderr.toString()).toBe('')
   })
 
   test('does not run the shim for an unmarked session', () => {
@@ -218,6 +231,14 @@ describe('gateCommand', () => {
     const result = runShell(gateCommand('claude', 'PreToolUse', 60000, { quirkyHome: home, sessionId: '../s' }), {})
     expect(result.exitCode).toBe(0)
     expect(result.stdout.toString()).toBe('{}\n')
+    for (const sessionId of ['a/b', '.x', '.', '..', 'a/../s-1']) {
+      for (const event of GATE_EVENTS) {
+        const home = oddMarkerHome()
+        expect(existsSync(join(markerDir(home), sessionId))).toBe(true)
+        const result = runShell(gateCommand('claude', event, 60000, { quirkyHome: home, sessionId }), {}, 'PAYLOAD')
+        expect([sessionId, event, result.exitCode, result.stdout.toString(), result.stderr.toString()]).toEqual([sessionId, event, 0, '{}\n', ''])
+      }
+    }
   })
 
   test('matches the real gate shim refusal for each event', () => {
@@ -1102,7 +1123,7 @@ describe('the generated pi and omp extension', () => {
 
   afterEach(() => {
     globalThis.fetch = saved.fetch
-    for (const key of ['QUIRKY_SESSION_ID', 'QUIRKY_HOME', 'QUIRKY_HOOK_TOKEN', 'QUIRKY_HOOK_URL']) {
+    for (const key of ['QUIRKY_SESSION_ID', 'QUIRKY_HOME', 'QUIRKY_HOOK_TOKEN', 'QUIRKY_HOOK_URL', '_']) {
       if (saved.env[key] === undefined) delete process.env[key]
       else process.env[key] = saved.env[key]
     }
@@ -1110,13 +1131,15 @@ describe('the generated pi and omp extension', () => {
 
   type Handler = (event: unknown, ctx: unknown) => Promise<unknown>
 
-  async function loadHandler(options: { marker: boolean; fetch?: (url: string, init: RequestInit) => Promise<Response> }): Promise<{ handler: Handler; requests: { url: string; init: RequestInit }[] }> {
+  async function loadHandler(options: { marker: boolean; launcher?: string; fetch?: (url: string, init: RequestInit) => Promise<Response> }): Promise<{ handler: Handler; requests: { url: string; init: RequestInit }[] }> {
     const home = scratch()
     writeFileSync(join(home, 'runtime.json'), JSON.stringify({ port: 4321 }))
     if (options.marker) writeMarkerFile(home, 'sess-1', { worktreeId: 'wt-1', level: 'full' })
     process.env.QUIRKY_SESSION_ID = 'sess-1'
     process.env.QUIRKY_HOME = home
     process.env.QUIRKY_HOOK_TOKEN = 'tok'
+    delete process.env._
+    if (options.launcher !== undefined) process.env._ = options.launcher
     const requests: { url: string; init: RequestInit }[] = []
     globalThis.fetch = (async (url: string, init: RequestInit) => {
       requests.push({ url, init })
@@ -1192,5 +1215,16 @@ describe('the generated pi and omp extension', () => {
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  test('asks the omp gate when the launcher environment names omp', async () => {
+    const { handler, requests } = await loadHandler({
+      marker: true,
+      launcher: '/opt/x/omp',
+      fetch: reply({ decision: 'allow', reason: 'ok', encoded: '' })
+    })
+    expect(await handler(call, { cwd: '/w' })).toBeUndefined()
+    expect(requests).toHaveLength(1)
+    expect(requests[0]!.url).toBe('http://127.0.0.1:4321/gate/omp?session=sess-1&event=tool_call&deadline=25000')
   })
 })

@@ -297,6 +297,34 @@ describe('agent hooks', () => {
     expect(readdirSync(agentEnv.home)).toEqual([])
   })
 
+  test('A sync waiting on the agent listing when the hooks are disposed writes nothing', async () => {
+    const held = Promise.withResolvers<unknown>()
+    const { t, agentEnv, hooks } = setup({ fakeCalls: { 'quirky.agents/list': () => held.promise } })
+    mkdirSync(join(agentEnv.home, '.pi', 'agent'), { recursive: true })
+    mkdirSync(join(agentEnv.home, '.omp', 'agent'), { recursive: true })
+
+    const pending = hooks.sync()
+    for (let turn = 0; turn < 20 && t.calls.filter((call) => call.method === 'quirky.agents/list').length === 0; turn++) {
+      await Promise.resolve()
+    }
+    expect(t.calls.filter((call) => call.method === 'quirky.agents/list')).toHaveLength(1)
+
+    hooks.dispose()
+    held.resolve(listing(
+      { id: 'codex', installed: true, enabled: true },
+      { id: 'pi', installed: true, enabled: true },
+      { id: 'omp', installed: true, enabled: true }
+    ))
+    const result = await pending
+
+    expect(result).toBeUndefined()
+    expect(t.calls.filter((call) => call.method === 'quirky.agents/list')).toHaveLength(1)
+    expect(readdirSync(agentEnv.home).sort()).toEqual(['.omp', '.pi'])
+    expect(readdirSync(join(agentEnv.home, '.pi', 'agent'))).toEqual([])
+    expect(readdirSync(join(agentEnv.home, '.omp', 'agent'))).toEqual([])
+  })
+
+
   test('43 does not touch the real home in tests and honors both safe directory overrides', async () => {
     const codexHome = scratch()
     const piAgentDir = scratch()
