@@ -63,7 +63,7 @@ suite(title, () => {
     const proc = Bun.spawn([binary!, '--version'], { stdout: 'pipe', stderr: 'ignore' })
     const version = parseClaudeVersion(await new Response(proc.stdout).text())
     expect(version).not.toBeNull()
-    const hook = createGateLaunchHook({ judgmentTimeoutSeconds: () => 55, claudeVersion: async () => version })
+    const hook = createGateLaunchHook({ judgmentTimeoutSeconds: () => 55, claudeVersion: async () => version, quirkyHome: tmpdir() })
     const patch = (await hook({ sessionId: 's', worktreeId: 'w', repoId: 'r', cwd: '/x', agent: 'claude', env: {}, args: [], jsonArgs: {} } as never)) as { jsonArgs?: object }
     expect(patch.jsonArgs !== undefined).toBe(claudeVersionAtLeast(version))
   }, 60_000)

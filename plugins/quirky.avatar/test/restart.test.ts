@@ -55,6 +55,11 @@ function pluginsDir(cwd: string): string {
       Object.assign(manifest, { main: 'main.ts', contributes: { method: [{ id: 'list', description: 'Worktrees.', readOnly: true, params: { type: 'object' }, result: { type: 'array' } }] } })
       writeFileSync(join(dir, id, 'main.ts'), `export function activate(context) { context.provide('method:quirky.worktree/list', () => ${JSON.stringify(worktrees)}) }\n`)
     }
+    if (id === 'quirky.agents') {
+      const listing = { defaultAgent: 'claude', agents: [{ id: 'codex', installed: true, enabled: true }] }
+      Object.assign(manifest, { main: 'main.ts', contributes: { method: [{ id: 'list', description: 'Agents.', readOnly: true, params: { type: 'object' }, result: { type: 'object' } }] } })
+      writeFileSync(join(dir, id, 'main.ts'), `export function activate(context) { context.provide('method:quirky.agents/list', () => (${JSON.stringify(listing)})) }\n`)
+    }
     writeFileSync(join(dir, id, 'quirky-plugin.json'), JSON.stringify(manifest))
   }
   return dir
@@ -129,6 +134,7 @@ describe('avatar across a real daemon restart', () => {
     const before = await s.shim(s.read)
     expect(before.code).toBe(0)
     expect(JSON.parse(before.stdout).hookSpecificOutput.permissionDecision).toBe('allow')
+    await waitFor(() => codexHooksInstalled(agentEnv), 5000)
     expect(codexHooksInstalled(agentEnv)).toBe(true)
 
     await s.stop()

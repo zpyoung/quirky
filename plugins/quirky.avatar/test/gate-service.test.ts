@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ToolGateDecision, ToolGateProvider, ToolGateRequest } from '@quirky/protocol'
+import type { LaunchHook, ToolGateDecision, ToolGateProvider, ToolGateRequest } from '@quirky/protocol'
 import type { Level, Mandate } from '../src/contracts'
 import { parseProviderTranscriptLine } from '../../quirky.agent-status/src/transcript'
 import { callFingerprint } from '../src/fingerprint'
 import { register } from '../src/gate/service'
-import { codexHooksInstalled, hasMarkerFile, markerDir, piExtensionPath } from '../src/hooks/install'
+import { codexHooksInstalled, codexHooksPath, hasMarkerFile, markerDir, piExtensionPath, writeMarkerFile } from '../src/hooks/install'
 import { makeTestApp, sampleMandate } from './support'
 
 const dirs: string[] = []
@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 type BrainReply = Awaited<ReturnType<ReturnType<typeof setup>['app']['services']['brain']['judge']>>
-type Options = { level?: Level; switches?: Partial<Mandate['switches']>; brain?: (budgetMs: number) => Promise<BrainReply> | BrainReply; agent?: string }
+type Options = { level?: Level; switches?: Partial<Mandate['switches']>; brain?: (budgetMs: number) => Promise<BrainReply> | BrainReply; agent?: string; agentList?: unknown }
 
 function setup(options: Options = {}) {
   const home = scratch()
@@ -36,7 +36,8 @@ function setup(options: Options = {}) {
       'quirky.worktree/list': () => [
         { id: 'wt-1', path: worktreePath, branch: 'feature', repoId: 'repo', isMain: false },
         { id: 'main', path: mainPath, branch: 'main', repoId: 'repo', isMain: true }
-      ]
+      ],
+      ...(options.agentList === undefined ? {} : { 'quirky.agents/list': () => options.agentList })
     }
   })
   const mandate = sampleMandate({ level: options.level ?? 'own-branch', switches: { messaging: false, historyRewrite: false, deploys: false, ...options.switches } })
@@ -88,6 +89,11 @@ const waitFor = async <T>(check: () => T | undefined | false | null, ms = 2000):
   }
 }
 const STOPPING = 'The avatar is stopping; try the same call again shortly.'
+
+const agentListing = (...ids: string[]) => ({
+  defaultAgent: 'claude',
+  agents: ids.map((id) => ({ id, installed: true, enabled: true }))
+})
 
 describe('disposing the registration', () => {
   test('stops an in-flight gate check quietly without touching the store afterwards', async () => {
@@ -598,16 +604,87 @@ describe('activation and deactivation', () => {
     expect(typeof s.provided.get('launch-hook:quirky.avatar/gate-hooks')).toBe('function')
   })
 
-  test('installs the Codex entries and the pi and omp extension into the agent home', () => {
+  test('activation installs hooks for present agents and leaves them on disposal', async () => {
     const home = scratch()
     mkdirSync(join(home, '.pi', 'agent'), { recursive: true })
-    const t = makeTestApp()
+    const t = makeTestApp({ fakeCalls: { 'quirky.agents/list': () => agentListing('codex', 'pi') } })
+    dirs.push(t.context.home)
+    const agentEnv = { home, env: {} }
+    const dispose = register(t.app, { agentEnv })
+    disposers.push(dispose)
+
+    await waitFor(() => codexHooksInstalled(agentEnv) && existsSync(piExtensionPath('pi', agentEnv)))
+    expect(t.calls.filter((call) => call.method === 'quirky.agents/list')).toHaveLength(1)
+    disposers.pop()!()
+
+    expect(codexHooksInstalled(agentEnv)).toBe(true)
+    expect(existsSync(piExtensionPath('pi', agentEnv))).toBe(true)
+  })
+
+  test('activation leaves the agent home empty when no agents are present', async () => {
+    const home = scratch()
+    const t = makeTestApp({ fakeCalls: { 'quirky.agents/list': () => agentListing() } })
+    dirs.push(t.context.home)
     const dispose = register(t.app, { agentEnv: { home, env: {} } })
-    expect(codexHooksInstalled({ home, env: {} })).toBe(true)
-    expect(existsSync(piExtensionPath('pi', { home, env: {} }))).toBe(true)
-    dispose()
-    expect(codexHooksInstalled({ home, env: {} })).toBe(true)
-    expect(existsSync(piExtensionPath('pi', { home, env: {} }))).toBe(true)
+    disposers.push(dispose)
+
+    await waitFor(() => t.calls.some((call) => call.method === 'quirky.agents/list'))
+    // A real delay is needed to catch writes from fire-and-forget activation sync.
+    await Bun.sleep(50)
+
+    expect(t.calls.filter((call) => call.method === 'quirky.agents/list')).toHaveLength(1)
+    expect(readdirSync(home)).toEqual([])
+  })
+
+  test('passes the launch home and session identity without QUIRKY environment variables', async () => {
+    const s = setup()
+    dirs.push(s.context.home)
+    const launchHook = s.provided.get('launch-hook:quirky.avatar/gate-hooks') as LaunchHook
+    const patch = await launchHook({
+      sessionId: 's-9',
+      worktreeId: 'wt-1',
+      repoId: 'repo',
+      cwd: s.worktreePath,
+      agent: 'claude',
+      env: {},
+      args: [],
+      jsonArgs: {}
+    } as never) as {
+      jsonArgs: { '--settings': { hooks: Record<string, { hooks: { command: string }[] }[]> } }
+    }
+    const command = patch.jsonArgs['--settings'].hooks.PreToolUse![0]!.hooks[0]!.command
+    mkdirSync(join(s.context.home, 'bin'), { recursive: true })
+    writeMarkerFile(s.context.home, 's-9', { worktreeId: 'wt-1', level: 'own-branch' })
+    writeFileSync(join(s.context.home, 'bin', 'quirky-gate'), '#!/bin/sh\nprintf "%s|%s\\n" "$QUIRKY_HOME" "$QUIRKY_SESSION_ID"\n', { mode: 0o755 })
+
+    const result = Bun.spawnSync(['sh', '-c', command], {
+      env: { PATH: process.env.PATH ?? '' },
+      stdout: 'pipe',
+      stderr: 'pipe'
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe(`${s.context.home}|s-9\n`)
+  })
+
+  test('gate checks reinstall Codex hooks during prepare', async () => {
+    const s = setup({ agent: 'codex', agentList: agentListing('codex') })
+    dirs.push(s.context.home)
+    await waitFor(() => codexHooksInstalled(s.agentEnv))
+    rmSync(codexHooksPath(s.agentEnv))
+    s.fakeCalls['quirky.session/get'] = () => ({ agent: 'codex' })
+    s.app.store.receipts.put({
+      id: 'gate-check-prepare',
+      fingerprint: 'fp-1',
+      sessionId: 's-1',
+      toolName: 'Read',
+      at: s.app.now(),
+      outcome: 'allow',
+      step: 'fixed-rules'
+    })
+
+    expect(await s.app.services.gate.gateCheck('wt-1')).toEqual({ ok: true, reason: '' })
+    await waitFor(() => codexHooksInstalled(s.agentEnv))
   })
 
 
@@ -738,10 +815,24 @@ describe('activation and deactivation', () => {
     expect(await pending).toMatchObject({ decision: 'deny', reason: STOPPING })
   })
 
-  test('does not touch the real home while tests run', () => {
-    const t = makeTestApp()
-    const dispose = register(t.app, { agentEnv: { home: homedir(), env: { CODEX_HOME: '/nonexistent-codex-home' } } })
-    dispose()
-    expect(existsSync('/nonexistent-codex-home')).toBe(false)
+  test('does not touch the real home or overridden agent directories while tests run', async () => {
+    const codexHome = scratch()
+    const piHome = scratch()
+    const t = makeTestApp({ fakeCalls: { 'quirky.agents/list': () => agentListing('codex', 'pi') } })
+    dirs.push(t.context.home)
+    const dispose = register(t.app, {
+      agentEnv: {
+        home: homedir(),
+        env: { CODEX_HOME: codexHome, PI_CODING_AGENT_DIR: piHome }
+      }
+    })
+    disposers.push(dispose)
+    const turn = Promise.withResolvers<void>()
+    setImmediate(turn.resolve)
+    await turn.promise
+
+    expect(t.calls.filter((call) => call.method === 'quirky.agents/list')).toHaveLength(0)
+    expect(readdirSync(codexHome)).toEqual([])
+    expect(readdirSync(piHome)).toEqual([])
   })
 })

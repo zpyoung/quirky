@@ -8,8 +8,9 @@ import type {
 import { callFingerprint } from '../fingerprint'
 import { createGateChecker, type GateChecker } from '../gatecheck'
 import { encodeDecision } from '../hooks/encode'
+import { createAgentHooks } from '../hooks/agent-hooks'
 import {
-  cachedClaudeVersion, createGateLaunchHook, hasMarkerFile, installCodexHooks, installPiExtensions, isRealHomeInTest,
+  cachedClaudeVersion, createGateLaunchHook, hasMarkerFile,
   processAgentEnv, readMarkerFile, removeMarkerFile, writeMarkerFile, type AgentEnv
 } from '../hooks/install'
 import { classifyCall } from './classify'
@@ -90,15 +91,18 @@ function readPayload(payload: unknown): { toolName: string; toolInput: unknown; 
  * that fails, times out or is unavailable is ever allowed. At Shadow the gate answers passthrough
  * and journals what it would have done, without making the worker wait on the brain.
  *
- * Also installs the Codex hook entries and the pi/omp extension file at activation. Its disposer
- * stops the checker, refuses in-flight non-Shadow calls with a retry reason and settles waiting
- * Shadow calls as passthrough; markers and installed agent hook files remain in place.
+ * Keeps the Codex hook entries and pi/omp extension in sync with installed agents at activation
+ * and before each gate check. Its disposer stops hook synchronization and the checker, refuses
+ * in-flight non-Shadow calls with a retry reason and settles waiting Shadow calls as passthrough;
+ * installed files remain.
  */
 export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   const agentEnv = deps.agentEnv ?? processAgentEnv()
   const quirkyHome = app.context.home
   const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
-  const checker: GateChecker = createGateChecker({ app, agentEnv, claudeVersion, graceMs: deps.graceMs })
+  const hooks = createAgentHooks({ app, agentEnv })
+  void hooks.sync()
+  const checker: GateChecker = createGateChecker({ app, agentEnv, claudeVersion, graceMs: deps.graceMs, prepare: () => hooks.sync() })
   const inFlight = new Set<InFlight>()
   let worktreeCache: { at: number; list: WorktreeInfo[] } | null = null
 
@@ -438,24 +442,12 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   app.context.provide('tool-gate:quirky.avatar/gate', provider)
   app.context.provide(
     'launch-hook:quirky.avatar/gate-hooks',
-    createGateLaunchHook({ judgmentTimeoutSeconds: () => app.settings().judgmentTimeoutSeconds, claudeVersion, dataDir: app.context.dataDir })
+    createGateLaunchHook({ judgmentTimeoutSeconds: () => app.settings().judgmentTimeoutSeconds, claudeVersion, dataDir: app.context.dataDir, quirkyHome: app.context.home })
   )
-
-  const guarded = !isRealHomeInTest(agentEnv)
-  if (guarded) {
-    const attempt = (what: string, work: () => unknown) => {
-      try {
-        work()
-      } catch (error) {
-        app.context.log(`avatar gate: could not install the ${what}: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
-    attempt("Codex hooks", () => installCodexHooks(agentEnv, app.settings().judgmentTimeoutSeconds))
-    attempt('pi and omp extension', () => installPiExtensions(agentEnv))
-  }
 
   return () => {
     checker.dispose()
+    hooks.dispose()
     for (const entry of [...inFlight]) stopInFlight(entry)
   }
 }

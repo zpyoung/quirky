@@ -92,7 +92,8 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/gate/classify.ts` | Pure: `classifyCall(call, ctx) → ActionClass[]`. |
 | `src/gate/decide.ts` | Pure: `decide(input) → RuleDecision` (floor core → switches → level → fixed rules → `judgment`). |
 | `src/gate/service.ts` | The `tool-gate` provider: supervision lookup, Shadow, approvals, late answers, brain judgment with deadline, receipts, journal. |
-| `src/hooks/install.ts` | Claude: the `launch-hook` returns `LaunchPatch.jsonArgs['--settings']` with `PreToolUse` and `PermissionRequest` entries (matcher `*`, command `quirky-gate claude`, timeout `judgment-timeout-seconds + 15`, `onFailure: "block"`). It merges with agent-status's `--settings` the same way `plugins/quirky.agent-status/main.ts:16` does. Codex: `PreToolUse` and `PermissionRequest` entries in `$CODEX_HOME/hooks.json`, falling back to `~/.codex/hooks.json`, installed on activation. pi/omp: the extension file `quirky-avatar-gate.ts` written into the same `extensions/` dirs `piFamilyInstaller` uses (`plugins/quirky.agent-status/src/install/other-installers.ts:44`). Plus supervision markers. |
+| `src/hooks/install.ts` | Claude: the `launch-hook` returns `LaunchPatch.jsonArgs['--settings']` with one entry per event (`PreToolUse` and `PermissionRequest`), each passing its event to `quirky-gate`, with matcher `*`, timeout `judgment-timeout-seconds + 30` rounded up and `onFailure: "block"`. The command carries the Quirky home and session ID as quoted literals. It merges with agent-status's `--settings`. Codex: one command per event in `$CODEX_HOME/hooks.json`, falling back to `~/.codex/hooks.json`, passing the event and reading the home and session from the environment. pi/omp: `quirky-avatar-gate.ts` in the existing agent `extensions/` directories. Plus supervision markers. |
+| `src/hooks/agent-hooks.ts` | Serializes hook synchronization for agents `quirky.agents/list` reports installed and enabled: Codex entries and pi/omp extension files, at activation, before each gate check and when the judgment timeout changes. Follows `agent-hooks` live; turning it off removes only the avatar's hooks and stops reinstalling them. Disposal leaves installed hooks in place. |
 | `src/hooks/encode.ts` | Pure: `encodeDecision(agent, event, decision) → string` for stdout or the extension return. |
 | `src/hooks/pi-extension.ts` | Generated source of the pi/omp gate extension, like `plugins/quirky.agent-status/src/install/sources/pi.ts`. |
 | `src/gatecheck.ts` | The gate check (R-9, R-41). |
@@ -154,7 +155,7 @@ type ToolGateProvider = (request: ToolGateRequest, signal: AbortSignal) => Promi
   - The body is capped at 8 MiB before JSON parsing, including when no length is declared; a larger body gets HTTP 413 with `{"error":"body too large"}`.
   - `deadline` defaults to 30000 and is capped at 10 minutes.
   - If the `tool-gate` declaration lists `agents` and the request's agent isn't in it, the daemon answers `unavailable` without calling the provider.
-- The shim's deadline comes from `quirky-gate <agent> [deadline-ms] [event]`, then `$QUIRKY_GATE_DEADLINE_MS`, then 30000. It reads decimal digits, drops leading zeros, defaults invalid or zero values to 30000, and caps valid values at 600000. The third argument supplies the query event and selects the printed refusal for `PermissionRequest`; invalid event names are ignored. `QUIRKY_HOOK_EVENT` is not read. The avatar's hook installer passes the deadline as the second argument; passing the third argument is tracked in `g1-15`.
+- The shim's deadline comes from `quirky-gate <agent> [deadline-ms] [event]`, then `$QUIRKY_GATE_DEADLINE_MS`, then 30000. It reads decimal digits, drops leading zeros, defaults invalid or zero values to 30000, and caps valid values at 600000. The third argument supplies the query event and selects the printed refusal for `PermissionRequest`; invalid event names are ignored. `QUIRKY_HOOK_EVENT` is not read. The avatar's hook installer passes the deadline as the second argument and the entry's event as the third. Its command checks supervision before running the shim as a child: status 0 passes through, as does status 2 at `PreToolUse`; every other status refuses with exit 2 at `PreToolUse` or a printed denial and exit 0 at `PermissionRequest`.
 - `Core.requestToolGate` gets its provider through `core.setToolGateProvider(...)`, which is wired in `packages/daemon/src/plugins/runtime.ts`.
 - The daemon passes `payload` through untouched. The provider interprets it.
 - The registry keeps one enabled plugin declaring `tool-gate`: built-in before installed, then the lowest ID within a source. Other declarers are invalid. A `tool-gate` contribution can't be overridden; a plugin attempting it is invalid even when the base is absent or disabled. At runtime, at most one provider is active.
@@ -335,7 +336,7 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
   - Add a need `gate-failed` with the action `restart-to-handoff`. That action calls `supervisor.restartWorker`, which relaunches through the avatar's launch-hook, then re-runs the check.
   - No other worktree is touched.
 - **R-41 re-check.** `records.ts` watches the worktree's `.claude/settings.json` and `.claude/settings.local.json`, plus `$CODEX_HOME/hooks.json`, `.codex/` and `<agent dir>/extensions/` for pi/omp. Any change re-runs both steps. Only a failure stops the worker, through `stepIn`, and moves it to `gate-failed`.
-- **Codex coexistence.** The avatar's `hooks.json` entries are identified by a command containing `quirky-gate`. Install and remove touch only those entries and leave every other entry byte-for-byte unchanged. `plugins/quirky.agent-status`'s `codexInstaller` (`src/install/claude-json.ts:158`) is not modified. A test asserts that its install and remove leave `quirky-gate` entries intact.
+- **Codex coexistence.** The avatar's `hooks.json` entries are identified by a command containing `quirky-gate`. Install and remove touch only those entries and leave every other entry byte-for-byte unchanged. Remove never deletes `hooks.json`, even when it leaves `{}`. `plugins/quirky.agent-status`'s `codexInstaller` is not modified. A test asserts that its install and remove leave `quirky-gate` entries intact.
 - **Claude older than 2.1.295.** The sheet row for that worktree is ineligible, with the reason `"Claude is too old to fail closed; update Claude"`.
 
 ### Brain (`src/brain/*`)
@@ -457,6 +458,7 @@ A `proposeMandateEdit` patch can never include `level` or `switches`, and the ac
 | `brain-agent` | enum `claude\|codex\|pi\|omp` | `claude` |
 | `brain-model` | string | (empty) |
 | `judgment-timeout-seconds` | number | `55` |
+| `agent-hooks` | boolean, hidden | `true` |
 
 Fixed constants that are not settings:
 - Stuck thresholds: 15 minutes, 3, 3 and 20.
@@ -513,6 +515,7 @@ These are fixed by the logic spec.
 - **Rollback.**
   - Disabling the plugin removes the `tool-gate` provider. Supervised sessions then get `unavailable`, which means deny with retry.
   - Deactivating keeps every marker and every hand-off. A waiting request is refused with a retry reason, and supervised sessions are refused while the avatar is stopped (SC-12). To give sessions their own prompts back, take the worktrees back before disabling the plugin, or enable it again and take them back.
+  - Turning off `agent-hooks` removes the avatar's Codex entries and pi/omp extension files and stops reinstalling them. The gate check then fails for those agents; take their worktrees back before turning it off.
 
 ## Testing strategy
 
@@ -529,7 +532,7 @@ Tests run with `bun test <file>` on this Mac. The full suite runs in CI through 
 | classify | `test/classify.test.ts` | Each `ActionClass` from Bash, Edit/Write paths, MCP and pi tool shapes. |
 | gate service | `test/gate-service.test.ts` | Allow-once used exactly once (SC-14); late answer reused (SC-12); timeout gives retry and is not a stuck denial; Shadow gives passthrough plus wouldHave (SC-13); take-back resolves an in-flight request as passthrough. |
 | encodings | `test/encode.test.ts` | Each table cell. |
-| hooks | `test/hooks-install.test.ts` | Claude launch patch contains a PreToolUse `*` matcher with `onFailure: block` when the version allows; Codex hooks.json idempotent install and removal; pi extension source blocks on gate deny and on fetch error. |
+| hooks | `test/hooks-install.test.ts`, `test/agent-hooks.test.ts` | Event-specific fail-closed commands under `sh`, Claude launch identity and version checks, Codex coexistence and removal without deleting the file, pi/omp extension ownership, installed-agent filtering, serialized synchronization and live settings. |
 | conformance | `test/conformance/*.test.ts` | Gated on installed agent binaries; skips with a reason when absent. For each agent, a normal call, a sub-agent call, an MCP call, an auto-approved call and a gate-down call are all blocked or decided (A-claude-hook, A-codex-hook, A-pi-ext). |
 | handoff | `test/handoff.test.ts` | Eligibility reasons (SC-2); bulk with independent failure (SC-1, SC-3); snapshot (SC-4); take-back (SC-28); mandate kept. |
 | brain | `test/brain.test.ts` | Action parsing rejects level and switch patches and unknown types; rotation at the limit and at 80% of a smaller window, between events, nothing lost or doubled (SC-29, SC-31); rebuild prompt has mandates verbatim (SC-30); judgment prompt has no worker text (SC-11). Uses a fake structured plugin. |

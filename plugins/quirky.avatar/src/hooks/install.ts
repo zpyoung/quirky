@@ -12,6 +12,13 @@ export const GATE_SHIM = 'quirky-gate'
 export const MIN_CLAUDE_VERSION = '2.1.295'
 
 const GATE_EVENTS = ['PreToolUse', 'PermissionRequest'] as const
+type GateHookEvent = typeof GATE_EVENTS[number]
+
+/** The session a hook command is written for. Without one the command reads `$QUIRKY_HOME` and `$QUIRKY_SESSION_ID`. */
+export type GateIdentity = { quirkyHome: string; sessionId: string }
+
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
+
 
 type Json = Record<string, unknown>
 
@@ -42,7 +49,6 @@ function writeAtomically(path: string, text: string, mode?: number): void {
   renameSync(temp, path)
 }
 
-// supervision markers
 
 /** A marker names the worktree and level a supervised session is held to. */
 export type Marker = { worktreeId: string; level: Level }
@@ -106,32 +112,34 @@ export function clearMarkerFiles(quirkyHome: string): void {
   for (const name of names) rmSync(join(markerDir(quirkyHome), name), { force: true })
 }
 
-// hook commands
 
 /** The daemon's wait for a judgment, which the shim and the brain's deadline derive from. */
 export function gateDeadlineMs(judgmentTimeoutSeconds: number): number {
   return Math.round((judgmentTimeoutSeconds + 5) * 1000)
 }
 
-/** The agent hook timeout, in seconds, kept above the shim's own curl limit. */
+/** The agent hook timeout, in seconds, kept 30 seconds above the judgment timeout. */
 export function gateHookTimeoutSeconds(judgmentTimeoutSeconds: number): number {
-  return Math.ceil(judgmentTimeoutSeconds + 15)
+  return Math.ceil(judgmentTimeoutSeconds + 30)
 }
 
-const SHIM_UNAVAILABLE_REASON = 'The Quirky avatar gate is unavailable; try again shortly.'
+const SHIM_UNAVAILABLE_REASON = "Quirky's avatar gate is unavailable; try again shortly."
+const PERMISSION_REQUEST_DENIAL = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Quirky's avatar gate is unavailable; try again shortly."}}}`
 
 /**
- * The hook command for `agent`. With the shim in place it runs the shim with the deadline. With the
- * shim missing or not executable it answers passthrough, so an agent outside a Quirky session is
- * never blocked, unless the session has a supervision marker: then it exits 2 with a retry reason,
- * so a supervised session fails closed.
+ * The event-specific hook command. It answers `{}` unless the session has a supervision marker,
+ * then runs the shim as a child and refuses in the event's form if the shim cannot decide.
  */
-export function gateCommand(agent: string, deadlineMs: number): string {
-  const shim = `"\${QUIRKY_HOME-}/bin/${GATE_SHIM}"`
-  const marker = `"$QUIRKY_HOME/plugin-data/quirky.avatar/supervised/$QUIRKY_SESSION_ID"`
-  const supervised = `[ -n "\${QUIRKY_HOME-}" ] && [ -n "\${QUIRKY_SESSION_ID-}" ] && [ -e ${marker} ]`
-  const failClosed = `if ${supervised}; then printf '%s\\n' '${SHIM_UNAVAILABLE_REASON}' >&2; exit 2; fi`
-  return `[ -x ${shim} ] || { ${failClosed}; printf '{}\\n'; exit 0; }; exec "$QUIRKY_HOME/bin/${GATE_SHIM}" ${agent} ${deadlineMs}`
+export function gateCommand(agent: 'claude' | 'codex', event: GateHookEvent, deadlineMs: number, identity?: GateIdentity): string {
+  const identitySetup = identity === undefined
+    ? `QUIRKY_HOME="\${QUIRKY_HOME-}"; QUIRKY_SESSION_ID="\${QUIRKY_SESSION_ID-}";`
+    : `QUIRKY_HOME=${shellQuote(identity.quirkyHome)}; QUIRKY_SESSION_ID=${shellQuote(identity.sessionId)};`
+  const passthrough = `printf '{}\\n'; exit 0`
+  const eventTwoPass = event === 'PreToolUse' ? `if [ "$status" -eq 2 ]; then exit 2; fi;` : ''
+  const refusal = event === 'PreToolUse'
+    ? `printf '%s\\n' ${shellQuote(SHIM_UNAVAILABLE_REASON)} >&2; exit 2;`
+    : `printf '%s\\n' ${shellQuote(PERMISSION_REQUEST_DENIAL)}; printf '%s\\n' ${shellQuote(SHIM_UNAVAILABLE_REASON)} >&2; exit 0;`
+  return `{ ${identitySetup} export QUIRKY_HOME QUIRKY_SESSION_ID; if [ -z "$QUIRKY_HOME" ]; then ${passthrough}; fi; case "$QUIRKY_SESSION_ID" in ''|.*|*/*) ${passthrough} ;; esac; if [ ! -e "$QUIRKY_HOME/plugin-data/quirky.avatar/supervised/$QUIRKY_SESSION_ID" ]; then ${passthrough}; fi; "$QUIRKY_HOME/bin/${GATE_SHIM}" ${agent} ${deadlineMs} ${event}; status=$?; if [ "$status" -eq 0 ]; then exit 0; fi; ${eventTwoPass} ${refusal} }`
 }
 
 const isGateCommand = (command: unknown): boolean => typeof command === 'string' && command.includes(GATE_SHIM)
@@ -143,8 +151,6 @@ function ownsGate(definition: unknown): boolean {
 }
 
 const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
-
-// Claude
 
 /** The first `x.y.z` in `claude --version` output, or null when there is none. */
 export function parseClaudeVersion(output: string | null | undefined): string | null {
@@ -187,30 +193,29 @@ export function cachedClaudeVersion(probe: () => Promise<string | null> = probeC
 }
 
 /**
- * `existing` (the `--settings` object earlier launch hooks built) plus the avatar's PreToolUse and
- * PermissionRequest command hooks. Other hooks under those events are kept, because the runtime
- * replaces arrays rather than concatenating them.
+ * `existing` (the `--settings` object earlier launch hooks built) plus one avatar command hook
+ * under each gate event. Other hooks under those events are kept.
  */
-export function claudeGateSettings(existing: unknown, judgmentTimeoutSeconds: number): Json {
+export function claudeGateSettings(existing: unknown, judgmentTimeoutSeconds: number, identity?: GateIdentity): Json {
   const base = isRecord(existing) ? existing : {}
   const hooks: Json = isRecord(base.hooks) ? { ...base.hooks } : {}
-  const definition = {
-    matcher: '*',
-    hooks: [
-      {
-        type: 'command',
-        command: gateCommand('claude', gateDeadlineMs(judgmentTimeoutSeconds)),
-        timeout: gateHookTimeoutSeconds(judgmentTimeoutSeconds),
-        onFailure: 'block'
-      }
-    ]
-  }
+  const deadlineMs = gateDeadlineMs(judgmentTimeoutSeconds)
+  const timeout = gateHookTimeoutSeconds(judgmentTimeoutSeconds)
   for (const event of GATE_EVENTS) {
     const others = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]).filter((entry) => !ownsGate(entry)) : []
-    hooks[event] = [...others, definition]
+    hooks[event] = [...others, {
+      matcher: '*',
+      hooks: [{
+        type: 'command',
+        command: gateCommand('claude', event, deadlineMs, identity),
+        timeout,
+        onFailure: 'block'
+      }]
+    }]
   }
   return { ...base, hooks }
 }
+
 
 /** True when a launch's args carry a `--settings` object with a PreToolUse hook that runs the gate shim. */
 export function launchHasGateHook(args: readonly unknown[]): boolean {
@@ -256,7 +261,7 @@ export function hasHookedRecord(dataDir: string, sessionId: string): boolean {
   }
 }
 
-type LaunchHookDeps = { judgmentTimeoutSeconds(): number; claudeVersion(): Promise<string | null>; dataDir?: string }
+type LaunchHookDeps = { judgmentTimeoutSeconds(): number; claudeVersion(): Promise<string | null>; quirkyHome: string; dataDir?: string }
 
 /**
  * The launch hook that adds the avatar's `--settings` to a Claude launch and records the session as
@@ -274,21 +279,20 @@ export function createGateLaunchHook(deps: LaunchHookDeps): LaunchHook {
     } catch {
       // an unwritable record leaves the session unprovable, which the gate check reports
     }
-    return { jsonArgs: { '--settings': claudeGateSettings(launch.jsonArgs['--settings'], deps.judgmentTimeoutSeconds()) } }
+    return { jsonArgs: { '--settings': claudeGateSettings(launch.jsonArgs['--settings'], deps.judgmentTimeoutSeconds(), { quirkyHome: deps.quirkyHome, sessionId: launch.sessionId }) } }
   }
 }
 
-// Codex
 
 /** `$CODEX_HOME/hooks.json`, falling back to `~/.codex/hooks.json`. */
 export function codexHooksPath(agentEnv: AgentEnv): string {
   return join(dirOverride(agentEnv.env.CODEX_HOME, join(agentEnv.home, '.codex')), 'hooks.json')
 }
 
-function codexDefinition(judgmentTimeoutSeconds: number): Json {
+function codexDefinition(event: GateHookEvent, judgmentTimeoutSeconds: number): Json {
   return {
     hooks: [
-      { type: 'command', command: gateCommand('codex', gateDeadlineMs(judgmentTimeoutSeconds)), timeout: gateHookTimeoutSeconds(judgmentTimeoutSeconds) }
+      { type: 'command', command: gateCommand('codex', event, gateDeadlineMs(judgmentTimeoutSeconds)), timeout: gateHookTimeoutSeconds(judgmentTimeoutSeconds) }
     ]
   }
 }
@@ -424,16 +428,17 @@ function replaceElement(text: string, element: JsonNode, value: unknown): string
 
 const elementValue = (text: string, element: JsonNode): unknown => JSON.parse(text.slice(element.start, element.end))
 
-function installIntoText(path: string, text: string, definition: Json): string {
+function installIntoText(path: string, text: string, definitions: Record<GateHookEvent, Json>): string {
   let next = text
   const root = parseSpans(next)
   const hooksMember = memberOf(root, 'hooks')
   if (hooksMember === undefined) {
-    const hooks = Object.fromEntries(GATE_EVENTS.map((event) => [event, [definition]]))
+    const hooks = Object.fromEntries(GATE_EVENTS.map((event) => [event, [definitions[event]]]))
     return appendChild(next, root, { key: 'hooks', value: hooks })
   }
   if (hooksMember.value.members === null) throw new Error(`${path} has a hooks value that is not an object`)
   for (const event of GATE_EVENTS) {
+    const definition = definitions[event]
     const hooks = memberOf(parseSpans(next), 'hooks')!.value
     const member = memberOf(hooks, event)
     if (member === undefined) {
@@ -485,34 +490,27 @@ function writeIfChanged(path: string, next: string, current: string | null): boo
 }
 
 /**
- * Adds the avatar's PreToolUse and PermissionRequest entries to Codex's `hooks.json`. The file is
- * edited as text, so every byte outside the avatar's own entries is preserved, and an up-to-date
- * install changes nothing. Returns whether the file changed. Throws when the file is not a JSON
- * object, rather than overwrite it.
+ * Adds the avatar's event-specific entries to Codex's `hooks.json`, preserving all bytes outside
+ * its own entries. An up-to-date install changes nothing; invalid files are not overwritten.
  */
 export function installCodexHooks(agentEnv: AgentEnv, judgmentTimeoutSeconds: number): boolean {
   const path = codexHooksPath(agentEnv)
   const file = readHooksFile(path)
   if (file.doc.hooks !== undefined && !isRecord(file.doc.hooks)) throw new Error(`${path} has a hooks value that is not an object`)
-  const definition = codexDefinition(judgmentTimeoutSeconds)
+  const definitions = Object.fromEntries(GATE_EVENTS.map((event) => [event, codexDefinition(event, judgmentTimeoutSeconds)])) as Record<GateHookEvent, Json>
   if (file.text === null || file.text.trim() === '') {
-    const hooks = Object.fromEntries(GATE_EVENTS.map((event) => [event, [definition]]))
+    const hooks = Object.fromEntries(GATE_EVENTS.map((event) => [event, [definitions[event]]]))
     return writeIfChanged(path, `${JSON.stringify({ hooks }, null, 2)}\n`, file.text)
   }
-  return writeIfChanged(path, installIntoText(path, file.text, definition), file.text)
+  return writeIfChanged(path, installIntoText(path, file.text, definitions), file.text)
 }
 
-/** Removes the avatar's entries from Codex's `hooks.json` and nothing else. Returns whether the file changed. */
+/** Removes the avatar's entries from Codex's `hooks.json` and nothing else; never deletes the file. */
 export function removeCodexHooks(agentEnv: AgentEnv): boolean {
   const path = codexHooksPath(agentEnv)
   const file = readHooksFile(path)
   if (file.text === null || !isRecord(file.doc.hooks)) return false
   const next = removeFromText(file.text)
-  if (next === file.text) return false
-  if (Object.keys(JSON.parse(next) as Json).length === 0) {
-    rmSync(path, { force: true })
-    return true
-  }
   return writeIfChanged(path, next, file.text)
 }
 
@@ -527,7 +525,6 @@ export function codexHooksInstalled(agentEnv: AgentEnv): boolean {
   }
 }
 
-// pi and omp
 
 type PiAgent = 'pi' | 'omp'
 
@@ -541,16 +538,15 @@ export function piExtensionPath(agent: PiAgent, agentEnv: AgentEnv): string {
 }
 
 /**
- * Writes the gate extension into the `extensions/` directory of each of pi and omp whose agent
- * directory exists. A file that is already current keeps its modification time, because the gate
- * check compares it with the session start. A file the avatar did not write is left alone.
- * Returns the paths written.
+ * Writes the gate extension into the `extensions/` directory of each selected agent whose agent
+ * directory exists. Current files keep their modification time; files the avatar did not write
+ * are left alone. Returns the paths written.
  */
-export function installPiExtensions(agentEnv: AgentEnv): string[] {
+export function installPiExtensions(agentEnv: AgentEnv, agents: readonly PiAgent[] = ['pi', 'omp']): string[] {
   const content = gateExtensionSource()
   const written: string[] = []
   const seen = new Set<string>()
-  for (const agent of ['pi', 'omp'] as const) {
+  for (const agent of agents) {
     const path = piExtensionPath(agent, agentEnv)
     if (seen.has(path) || !existsSync(piAgentDir(agent, agentEnv))) continue
     seen.add(path)
@@ -566,6 +562,27 @@ export function installPiExtensions(agentEnv: AgentEnv): string[] {
     written.push(path)
   }
   return written
+}
+
+/** Removes only avatar-owned pi and omp extension files and returns the paths deleted. */
+export function removePiExtensions(agentEnv: AgentEnv): string[] {
+  const removed: string[] = []
+  const seen = new Set<string>()
+  for (const agent of ['pi', 'omp'] as const) {
+    const path = piExtensionPath(agent, agentEnv)
+    if (seen.has(path)) continue
+    seen.add(path)
+    let content: string
+    try {
+      content = readFileSync(path, 'utf8')
+    } catch {
+      continue
+    }
+    if (!content.startsWith(`// ${GATE_EXTENSION_MARKER}`)) continue
+    rmSync(path, { force: true })
+    removed.push(path)
+  }
+  return removed
 }
 
 /** The modification time of the avatar's extension for `agent` in ms, or null when it is absent. */
