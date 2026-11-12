@@ -65,7 +65,7 @@ function useChecks(context: UiPluginContext, worktree: string | null): CheckSumm
     run()
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'quirky.reviews/changed') run()
-    })
+    }, { worktreeId: worktree })
     const offConnection = context.onConnection((status) => {
       if (status === 'connected') run()
     })
@@ -74,7 +74,7 @@ function useChecks(context: UiPluginContext, worktree: string | null): CheckSumm
       unsubscribe()
       offConnection()
     }
-  }, [context, refresh])
+  }, [context, refresh, worktree])
   return checks
 }
 

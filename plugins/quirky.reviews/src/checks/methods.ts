@@ -354,7 +354,7 @@ function updateIfCurrent(env: ReviewsEnv, worktree: string, generation: number, 
   env.update((state) => {
     const entry = state.checksByWorktree[worktree]
     if (entry?.generation === generation) change(entry, state)
-  })
+  }, worktree)
   return ownerIsCurrent(env, worktree, generation)
 }
 
@@ -635,7 +635,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
       entry.generation = generation
       entry.loading = true
       entry.error = null
-    })
+    }, requestedWorktree)
     env.touchChecks(requestedWorktree, true)
   }
 
@@ -651,7 +651,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
           entry.loading = false
           entry.error = message
         }
-      })
+      }, requestedWorktree)
     }
     return { ok: false, worktree: requestedWorktree ?? '', error: message }
   }
@@ -659,7 +659,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
     env.update((state) => {
       const entry = state.checksByWorktree[requestedWorktree]
       if (entry?.generation === generation) entry.loading = false
-    })
+    }, requestedWorktree)
   }
   if (preClaimed && requestedWorktree === worktree.id) {
     if (env.read().checksByWorktree[worktree.id]?.generation !== generation) return staleResult(worktree.id)
@@ -678,7 +678,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
         generation = env.nextGeneration()
         state.checksByWorktree[worktree.id] = { ...newChecksEntry(worktree.id, generation), loading: true }
       }
-    })
+    }, worktree.id)
   }
   env.touchChecks(worktree.id, true)
   if (!ownerIsCurrent(env, worktree.id, generation)) return staleResult(worktree.id)
@@ -1516,7 +1516,7 @@ async function saveTitle(env: ReviewsEnv, params: Record<string, unknown>, calle
     entry.error = null
     entry.titleDraft = title
     started = true
-  })
+  }, worktree.id)
   if (!started) return { updated: false, number, title, stale: true, error: 'The review changed before the title could be saved.' }
   try {
     const response = await env.call('quirky.hosting/updateReview', {
@@ -1721,7 +1721,7 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
           entry.loading = false
           invalidated = true
         }
-      })
+      }, worktree)
       return { invalidated, worktree }
     },
     checksLink: async (params, caller) => {
@@ -1754,7 +1754,7 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       env.update((state) => {
         const entry = state.checksByWorktree[worktree.id]
         if (entry?.review?.number === params.number) entry.titleDraft = title
-      })
+      }, worktree.id)
       return { titleDraft: title }
     },
     checksCancelTitle: async (params, caller) => {
@@ -1764,7 +1764,7 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       env.update((state) => {
         const entry = state.checksByWorktree[worktree.id]
         if (entry?.review?.number === params.number) entry.titleDraft = null
-      })
+      }, worktree.id)
       return { titleDraft: null }
     },
     checksSaveTitle: (params, caller) => saveTitle(env, params, caller),
