@@ -15,6 +15,8 @@ Handing a worktree off gives it a mandate (goal, done-when, guidelines, a level 
 The gate is installed per agent: a Claude launch hook, Codex `hooks.json` entries and a pi/omp extension. Sessions without a marker are never blocked and never depend on the daemon.
 Turn off `agent-hooks` with `quirky setting set setting:quirky.avatar/agent-hooks false` to remove the avatar's Codex entries and pi/omp extension files and stop reinstalling them; take those worktrees back first.
 
+The gate and session-record checks share the same worktree, branch and user-home context. Push protection uses git's detected default branch, cached for 60 seconds per repository, with `main` as the fallback. A recorded call whose worktree cannot be confirmed waits up to five minutes before a `skipped-call-error` is journaled. Hook-folder watches use the user's home and the installer's absolute-path overrides.
+
 ## CLI
 
 | Command | What it does |
