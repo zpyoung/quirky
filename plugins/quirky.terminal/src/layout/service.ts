@@ -1158,15 +1158,16 @@ export class LayoutService {
   private async describeClose(params: Params): Promise<string | null> {
     const targets = this.closeTargets(params)
     const running = new Map((await this.context.pty.list().catch(() => [])).map((info) => [info.sessionId, info]))
-    let table: string | undefined
+    let table: Promise<string> | undefined
     let psFailed = false
-    const ps = () => {
-      try {
-        return (table ??= defaultPs())
-      } catch (error) {
-        psFailed = true
-        throw error
+    const ps = (): Promise<string> => {
+      if (!table) {
+        table = defaultPs(this.context.process).catch((error) => {
+          psFailed = true
+          throw error
+        })
       }
+      return table
     }
     const lines: string[] = []
     for (const { tab, leaf } of targets) {
@@ -1188,7 +1189,7 @@ export class LayoutService {
         lines.push(unknown)
         continue
       }
-      const child = info.alive ? runningChildOf(info.pid, ps) : null
+      const child = info.alive ? await runningChildOf(info.pid, ps) : null
       if (child) lines.push(`Stop ${child.command} in ${displayTitle(tab)}?`)
       else if (psFailed) lines.push(unknown)
     }
