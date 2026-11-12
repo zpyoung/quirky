@@ -163,17 +163,41 @@ function declaresKind(plugin: RegistryPlugin, kind: string): boolean {
   return (plugin.discovered.manifest?.contributes?.[kind]?.length ?? 0) > 0
 }
 
-/** Invalidates every enabled plugin after the first (by ID) that declares a kind only one plugin may hold. */
+/** Invalidates duplicate declarations after the enabled built-in-first, lowest-ID owner. */
 function rejectDuplicateSingletons(plugins: Map<string, RegistryPlugin>): void {
+  const ordered = [...plugins].sort(([, a], [, b]) => {
+    const aSource = a.discovered.source === 'builtin' ? 0 : 1
+    const bSource = b.discovered.source === 'builtin' ? 0 : 1
+    return aSource - bSource || compare(a.discovered.id, b.discovered.id)
+  })
   for (const kind of SINGLETON_KINDS) {
     let owner: string | undefined
-    for (const [id, plugin] of [...plugins].sort(([a], [b]) => compare(a, b))) {
+    for (const [id, plugin] of ordered) {
       if (plugin.status !== 'enabled' || !declaresKind(plugin, kind)) continue
-      if (owner === undefined) owner = id
-      else {
+      if (owner === undefined) {
+        if (
+          kind === 'tool-gate' &&
+          plugin.discovered.manifest?.overrides?.some(
+            ({ id }) => parseContributionId(id)?.kind === 'tool-gate'
+          )
+        ) {
+          continue
+        }
+        owner = id
+      } else {
         plugin.status = 'invalid'
         addError(plugin, `only one plugin may declare ${kind}; ${owner} already does`)
       }
+    }
+  }
+}
+
+function rejectToolGateOverrides(plugins: Map<string, RegistryPlugin>): void {
+  for (const plugin of plugins.values()) {
+    for (const { id } of plugin.discovered.manifest?.overrides ?? []) {
+      if (parseContributionId(id)?.kind !== 'tool-gate') continue
+      plugin.status = 'invalid'
+      addError(plugin, `tool-gate can't be overridden: ${id}`)
     }
   }
 }
@@ -287,6 +311,7 @@ export function computeRegistry(
   markInvalid(plugins)
   markDisabled(plugins, disabled, distroSet)
   rejectDuplicateSingletons(plugins)
+  rejectToolGateOverrides(plugins)
   markInvalid(plugins)
 
   const declarations = collectDeclarations([...plugins.values()].filter((plugin) => plugin.status !== 'invalid'))

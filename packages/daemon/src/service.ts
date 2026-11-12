@@ -102,8 +102,10 @@ export class Core {
 
   /**
    * Asks the active `tool-gate` provider to decide `request`. Resolves `unavailable` when there is
-   * no provider, it throws, or `request.deadlineMs` passes (which also aborts the provider's
-   * signal). Never rejects and never resolves to `allow` on a failure.
+   * no provider, it throws, the request deadline passes, or the provider returns an invalid
+   * decision (including a blank denial or an `exitCode` outside 0 to 255). An unavailable answer
+   * keeps its reason but is normalized to `encoded: null` with no `exitCode`. Never rejects and
+   * never resolves to `allow` on a failure.
    */
   async requestToolGate(request: ToolGateRequest): Promise<ToolGateDecision> {
     const unavailable = (reason: string): ToolGateDecision => ({ decision: 'unavailable', reason, encoded: null })
@@ -120,7 +122,14 @@ export class Core {
         const provider = this.toolGateProvider ? await this.toolGateProvider(request.agent) : null
         if (provider === null) return unavailable('no tool gate provider is active')
         const decision = await provider(request, controller.signal)
-        return isToolGateDecision(decision) ? decision : unavailable('the tool gate returned an invalid decision')
+        if (!isToolGateDecision(decision)) return unavailable('the tool gate returned an invalid decision')
+        if (decision.decision === 'unavailable') {
+          return { decision: 'unavailable', reason: decision.reason, encoded: null }
+        }
+        if (decision.decision === 'deny' && typeof decision.encoded === 'string' && /^[ \t\r\n]*$/.test(decision.encoded)) {
+          return unavailable('the tool gate returned an invalid decision')
+        }
+        return decision
       } catch (error) {
         return unavailable(`the tool gate failed: ${error instanceof Error ? error.message : String(error)}`)
       }
@@ -170,6 +179,7 @@ function isToolGateDecision(value: unknown): value is ToolGateDecision {
     (decision === 'allow' || decision === 'deny' || decision === 'passthrough' || decision === 'unavailable') &&
     typeof reason === 'string' &&
     (encoded === null || typeof encoded === 'string') &&
-    (exitCode === undefined || (typeof exitCode === 'number' && Number.isInteger(exitCode)))
+    (exitCode === undefined ||
+      (typeof exitCode === 'number' && Number.isInteger(exitCode) && exitCode >= 0 && exitCode <= 255))
   )
 }
