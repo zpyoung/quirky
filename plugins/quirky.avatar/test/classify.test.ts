@@ -2958,6 +2958,213 @@ describe('words env takes as assignments', () => {
   })
 })
 
+describe('pattern command words', () => {
+  test("pattern command word 1: a pattern command word leaves the directory unknown", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c* /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["[c]d /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c?; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c*; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["*; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[d]; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp && touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp; rm -rf Documents",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp; echo hi > out.txt",["edit-outside","other","read"],"held","floor-core"],
+      ["c? /tmp; mkdir build && touch build/a",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp\ntouch zz",["edit-outside","other"],"held","floor-core"],
+      ["X=1 c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp | cat; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["cat a.txt | c? /tmp; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["c? /tmp & touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp || touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c? /tmp; git add a",["edit-outside","other"],"held","floor-core"],
+      ["ev?l \"cd /tmp\"; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["p?shd /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c?=1; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["[c]d=1; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c?() { echo hi; }; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 2: behind a wrapper", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["command c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["builtin c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["command -p c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["env c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["env X=1 c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["time c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["nice c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["exec c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["nohup c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["builtin builtin c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 3: behind a keyword or a zsh modifier", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["{ c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ c?; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["if c? /tmp; then :; fi; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["! c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["while c? /tmp; do break; done; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["if true; then c? /tmp; fi; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["for i in 1; do c? /tmp; done; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["time { c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ command c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ X=1 c? /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["noglob c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["builtin noglob c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["- c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["repeat 1 c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ [c]d /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ c[d]; }; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 4: the other pattern characters, quoting, and a bracket bash reads across a separator", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["^zz /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c#d /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c^x /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[)d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[d)] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[;d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[&d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[|d] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c[\nd] /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["{ c[;d] /tmp; }; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c''? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["'c?' /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["\"c?\" /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c\\? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["c{?,x} /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 5: what keeps its directory", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["[ -f x ] && touch zz",["edit-inside","read"],"allow","fixed-rules"],
+      ["[ -f x ]; touch zz",["edit-inside","read"],"allow","fixed-rules"],
+      ["[[ -f x ]] && touch zz",["edit-inside","other"],"judgment",null],
+      ["[[ $x == a* ]] && touch zz",["edit-inside","other"],"judgment",null],
+      ["if [ -f x ]; then touch zz; fi",["other"],"judgment",null],
+      ["{ [ -f x ] && touch zz; }",["edit-inside","other"],"judgment",null],
+      ["! [[ -f x ]] && touch zz",["edit-inside","other"],"judgment",null],
+      ["./c? /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["/bin/c? /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["sub/c* /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["(c? /tmp); touch zz",["edit-inside","other"],"judgment",null],
+      ["echo $(c? /tmp); touch zz",["edit-inside","other","read"],"judgment",null],
+      ["bash -c 'c? /tmp'; touch zz",["edit-inside","other"],"judgment",null],
+      ["a[0]=1; touch zz",["edit-inside","other"],"judgment",null],
+      ["c[d]=1; touch zz",["edit-inside","other"],"judgment",null],
+      ["m[$k]+=v; touch zz",["edit-inside","other"],"judgment",null],
+      ["{ c[d]=1; }; touch zz",["edit-inside","other"],"judgment",null],
+      ["{ a[0]=1; }; touch zz",["edit-inside","other"],"judgment",null],
+      ["ls *.ts; touch zz",["edit-inside","read"],"allow","fixed-rules"],
+      ["rm -f *.log; touch zz",["edit-inside"],"allow","fixed-rules"],
+      ["for f in *; do echo $f; done; touch zz",["edit-inside","other"],"judgment",null],
+      ["case $x in *) echo hi;; esac; touch zz",["edit-inside","other","read"],"judgment",null],
+      ["a=(*.ts); touch zz",["edit-inside","other"],"judgment",null],
+      ["files=(\n  *.ts\n  a.js\n)\ntouch zz",["edit-inside","other"],"judgment",null],
+      ["((i*2)); touch zz",["edit-inside","other"],"judgment",null],
+      ["cd~x /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["c] /tmp; touch zz",["edit-inside","other"],"judgment",null],
+      ["c? /tmp; cd /work/wt && touch zz",["edit-inside","other","read"],"judgment",null],
+      ["c? /tmp; touch /work/wt/zz",["edit-inside","other"],"judgment",null],
+      ["c? /tmp; ls",["other","read"],"judgment",null],
+      ["c? /tmp; bun test",["other","test"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 6: the command itself is classified as before", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["c?",["other"],"judgment",null],
+      ["c? /tmp",["other"],"judgment",null],
+      ["*",["other"],"judgment",null],
+      ["r? -rf /home/u/x",["other"],"judgment",null],
+      ["r? -rf x",["other"],"judgment",null],
+      ["l? -la",["other"],"judgment",null],
+      ["c? /tmp; touch /home/u/zz",["edit-outside","other"],"held","floor-core"],
+      ["g?t push --force origin main",["other"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 7: what it costs: a case pattern on its own line or after a bar reads as a command", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["case \"$1\" in\n  start) echo s;;\n  *) echo usage;;\nesac\ntouch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case \"$1\" in\n  [yY]*) echo yes;;\nesac\necho done > log.txt",["edit-outside","other","read"],"held","floor-core"],
+      ["case $x in a|b*) echo hi;; esac; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case $x in a) echo hi;; *) echo other;; esac; touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case $x in a) echo hi;; *) echo other;; esac; git add a",["edit-outside","other","read"],"held","floor-core"],
+      ["case \"$1\" in\n  start) echo s;;\n  stop) echo t;;\nesac\ntouch zz",["edit-inside","other","read"],"judgment",null],
+      ["case \"$1\" in\n  start) echo s;;\n  *) echo usage;;\nesac",["other","read"],"judgment",null],
+      ["case \"$1\" in\n  *) echo usage;;\nesac\ncd /work/wt && touch zz",["edit-inside","other","read"],"judgment",null],
+      ["case $x in a) echo hi;; *) echo other;; esac; bun test",["other","read","test"],"judgment",null],
+      ["(case $x in a) echo hi;; *) echo other;; esac); touch zz",["edit-outside","other","read"],"held","floor-core"],
+      ["case \"$1\" in\n  \"$y\") echo s;;\nesac\ntouch zz",["edit-outside","other","read"],"held","floor-core"],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test("pattern command word 8: eval reads its text again", () => {
+    const rows: [string, ActionClass[], 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ["eval c? /tmp; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["eval 'c? /tmp'; touch zz",["edit-outside","other"],"held","floor-core"],
+      ["eval \"c? /tmp\" && touch zz",["edit-outside","other"],"held","floor-core"],
+      ["eval '(c? /tmp)'; touch zz",["edit-inside","other"],"judgment",null],
+    ]
+    for (const [command, classes, outcome, step] of rows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+
+  test('pattern command word 9: command lists still match by text', () => {
+    const deployContext = { ...ctx, deployCommands: ['d?ploy now'] }
+    expectClassSet('d?ploy now', ['deploy'], deployContext)
+    expect(decideReviewed('d?ploy now', 'local', offSwitches, deployContext)).toMatchObject({ outcome: 'held', step: 'floor-switch' })
+    const allowContext = { ...ctx, allowCommands: ['t?ol build'] }
+    expectClassSet('t?ol build', ['build'], allowContext)
+    expect(decideReviewed('t?ol build', 'local', offSwitches, allowContext)).toMatchObject({ outcome: 'allow', step: 'fixed-rules' })
+    expectClassSet('t?ol build; touch zz', ['build', 'edit-outside'], allowContext)
+    expect(decideReviewed('t?ol build; touch zz', 'local', offSwitches, allowContext)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    const denyContext = { ...ctx, denyCommands: ['r? -rf'] }
+    expectClassSet('r? -rf x', ['other'], denyContext)
+    expect(decideReviewed('r? -rf x', 'local', offSwitches, denyContext)).toMatchObject({ outcome: 'deny', step: 'fixed-rules' })
+    expect(commandParts(call('Bash', { command: 'c? /tmp; ls' }), ctx)).toEqual(['c? /tmp', 'ls'])
+  })
+})
+
 describe('directory uncertainty scenarios', () => {
   test('scenario 1: keeps the old and entered directories after a followed cd', () => {
     const rows: [string, ActionClass[]][] = [
