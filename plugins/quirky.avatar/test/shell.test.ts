@@ -285,7 +285,7 @@ describe('parseShell redirects', () => {
       ['>&-', 'dup', word('-')],
       ['<&0', 'dup', word('0')],
       ['< a', 'read', word('a')],
-      ['<<< "x y"', 'read', word('x y')]
+      ['<<< "x y"', 'heredoc', word('x y')]
     ]
     for (const [source, kind, target] of cases) {
       expect(parse('echo hi ' + source)).toEqual(script([
@@ -299,6 +299,15 @@ describe('parseShell redirects', () => {
       command(words('echo', 'x'), { scope: 1 }),
       command(words('echo', 'hi'), {
         redirects: [redirect('write', word('$(echo x)', true, [1]))]
+      })
+    ], [-1, 0]))
+  })
+
+  test('treats a here-string as input data while retaining nested commands', () => {
+    expect(parse('cat <<< "$(git push -f origin main)"')).toEqual(script([
+      command(words('git', 'push', '-f', 'origin', 'main'), { scope: 1 }),
+      command(words('cat'), {
+        redirects: [redirect('heredoc', word('$(git push -f origin main)', true, [1]))]
       })
     ], [-1, 0]))
   })
@@ -346,6 +355,100 @@ describe('parseShell heredocs', () => {
     }
   })
 
+  test('uses quoted cat heredocs as known substitution values', () => {
+    const heredocCat = (scope: number, body: string): ShellCommand => command(words('cat'), {
+      scope,
+      redirects: [redirect('heredoc', body)]
+    })
+    const cases: Array<[string, ShellScript]> = [
+      [
+        'git commit -m "$(cat <<\'EOF\'\nfix: a thing\n\nIt\'s (done).\nEOF\n)"',
+        script([
+          heredocCat(1, 'fix: a thing\n\nIt\'s (done).\n'),
+          command([...words('git', 'commit', '-m'), word("fix: a thing\n\nIt's (done).", false, [1])])
+        ], [-1, 0])
+      ],
+      [
+        'echo "a $(cat <<\'EOF\'\nb\n\n\nEOF\n) c"',
+        script([
+          heredocCat(1, 'b\n\n\n'),
+          command([word('echo'), word('a b c', false, [1])])
+        ], [-1, 0])
+      ],
+      [
+        'echo "$(cat <<"EOF"\n$X\nEOF\n)"',
+        script([
+          heredocCat(1, '$X\n'),
+          command([word('echo'), word('$X', false, [1])])
+        ], [-1, 0])
+      ],
+      [
+        'echo "$(cat <<\\EOF\n$X\nEOF\n)"',
+        script([
+          heredocCat(1, '$X\n'),
+          command([word('echo'), word('$X', false, [1])])
+        ], [-1, 0])
+      ],
+      [
+        'echo "$(cat <<-\'EOF\'\n\tx\n\tEOF\n)"',
+        script([
+          heredocCat(1, 'x\n'),
+          command([word('echo'), word('x', false, [1])])
+        ], [-1, 0])
+      ],
+      [
+        'echo "$(cat <<\'EOF\'\na\nEOF\n)$(cat <<\'EOF\'\nb\nEOF\n)"',
+        script([
+          heredocCat(1, 'a\n'),
+          heredocCat(2, 'b\n'),
+          command([word('echo'), word('ab', false, [1, 2])])
+        ], [-1, 0, 0])
+      ],
+      [
+        'A="$(cat <<\'EOF\'\nvalue\nEOF\n)" true',
+        script([
+          heredocCat(1, 'value\n'),
+          command(words('true'), { assignments: [assignment('A', word('value', false, [1]))] })
+        ], [-1, 0])
+      ],
+      [
+        'echo > "$(cat <<\'EOF\'\nvalue\nEOF\n)"',
+        script([
+          heredocCat(1, 'value\n'),
+          command(words('echo'), { redirects: [redirect('write', word('value', false, [1]))] })
+        ], [-1, 0])
+      ]
+    ]
+    for (const [source, expected] of cases) {
+      expect(parse(source)).toEqual(expected)
+    }
+  })
+
+  test('keeps other command-substitution heredoc shapes dynamic', () => {
+    const cases: Array<[string, string]> = [
+      ['unquoted substitution', 'echo $(cat <<\'EOF\'\na --no-verify\nEOF\n)'],
+      ['backtick substitution', 'echo "`cat <<\'EOF\'\na\nEOF\n`"'],
+      ['unquoted delimiter', 'echo "$(cat <<EOF\na\nEOF\n)"'],
+      ['additional cat word', 'echo "$(cat - <<\'EOF\'\na\nEOF\n)"'],
+      ['additional command', 'echo "$(cat <<\'EOF\' | tr a b\na\nEOF\n)"'],
+      ['different command', 'echo "$(tac <<\'EOF\'\na\nEOF\n)"'],
+      ['qualified cat command', 'echo "$(/bin/cat <<\'EOF\'\na\nEOF\n)"'],
+      ['command assignment', 'echo "$(X=1 cat <<\'EOF\'\na\nEOF\n)"'],
+      ['additional redirect', 'echo "$(cat <<\'EOF\' 2>/dev/null\na\nEOF\n)"'],
+      ['here-string', 'echo "$(cat <<< \'a\')"'],
+      ['parameter expansion', 'echo "${X:-$(cat <<\'EOF\'\na\nEOF\n)}"'],
+      ['separate dynamic expansion', 'echo "$X $(cat <<\'EOF\'\na\nEOF\n)"']
+    ]
+    for (const [, source] of cases) {
+      const parsed = parse(source)
+      expect(parsed).not.toBeNull()
+      const outer = parsed?.commands.find((item) => item.scope === 0)
+      const lastWord = outer?.words[outer.words.length - 1]
+      expect(lastWord).toBeDefined()
+      expect(lastWord?.dynamic).toBe(true)
+    }
+  })
+
   test('strips leading tabs with <<- and resumes commands after the delimiter', () => {
     expect(parse('cat <<-EOF\n\ta\n\tEOF\nrm b')).toEqual(script([
       command(words('cat'), { redirects: [redirect('heredoc', 'a\n')] }),
@@ -373,10 +476,7 @@ describe('parseShell heredocs', () => {
         scope: 1,
         redirects: [redirect('heredoc', 'fix: a thing\n\nIt\'s (done) and "quoted".\n')]
       }),
-      command([
-        ...words('git', 'commit', '-m'),
-        word("$(cat <<'EOF'\nfix: a thing\n\nIt's (done) and \"quoted\".\nEOF\n)", true, [1])
-      ])
+      command([...words('git', 'commit', '-m'), word('fix: a thing\n\nIt\'s (done) and "quoted".', false, [1])])
     ], [-1, 0]))
   })
 
@@ -457,6 +557,17 @@ describe('parseShell totality and linear-time families', () => {
       expect(performance.now() - started).toBeLessThan(1000)
     })
   }
+  test('reads a 100,000-line quoted cat heredoc within the 1000 ms bound', () => {
+    const source = 'echo "$(cat <<\'EOF\'\n' + 'a\n'.repeat(100_000) + 'EOF\n)"'
+    const started = performance.now()
+    const parsed = parse(source)
+    expect(performance.now() - started).toBeLessThan(1000)
+    const outer = parsed?.commands.find((item) => item.scope === 0)
+    const lastWord = outer?.words[outer.words.length - 1]
+    expect(lastWord?.text.length).toBe(199_999)
+    expect(lastWord?.dynamic).toBe(false)
+    expect(lastWord?.subs).toEqual([1])
+  })
 })
 
 describe('reviewed shell reader boundaries', () => {

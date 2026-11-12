@@ -2,12 +2,20 @@
 export type ShellWord = {
   /** The word's value when `dynamic` is false; otherwise its text as written, quotes removed. */
   text: string
-  /** True when the shell would compute part of the value and the reader can't know it. */
+  /**
+   * True when the shell would compute part of the value and the reader can't know it.
+   * A double-quoted `$(cat <<'DELIM' … DELIM)` is not dynamic: it contributes the heredoc
+   * body without its trailing newlines.
+   */
   dynamic: boolean
   /** The scopes of the substitutions written directly inside this word. */
   subs: number[]
 }
 
+/**
+ * `read`: the target is a path opened for reading. `heredoc`: the target is text given to the
+ * command on standard input, from a heredoc body or a here-string, and never a path.
+ */
 export type ShellRedirect = { kind: 'write' | 'read' | 'dup' | 'heredoc'; target: ShellWord }
 export type ShellSeparator = '|' | '&&' | '||' | ';' | '&'
 export type ShellCommand = {
@@ -32,7 +40,7 @@ export const MAX_SHELL_CHARS = 1_048_576
 export const MAX_SHELL_DEPTH = 32
 
 type Entry =
-  | { kind: 'command'; command: ShellCommand; before: Entry[] }
+  | { kind: 'command'; command: ShellCommand; before: Entry[]; quotedHeredoc: boolean }
   | { kind: 'scope'; entries: Entry[] }
 
 type WordResult = { word: ShellWord; before: Entry[]; quoted: boolean; consumed: boolean }
@@ -343,7 +351,8 @@ class ShellReader {
           })
         } else {
           let kind: ShellRedirect['kind']
-          if (op === '<' || op === '<<<') kind = 'read'
+          if (op === '<') kind = 'read'
+          else if (op === '<<<') kind = 'heredoc'
           else if (op === '<&') kind = 'dup'
           else if (op === '<>') kind = 'write'
           else if (op === '>&' && !target.word.dynamic && this.isDescriptorTarget(target.word.text)) kind = 'dup'
@@ -380,7 +389,15 @@ class ShellReader {
       return { entry: null, heredocs }
     }
     if (pipelineNext) active.command.detached = true
-    return { entry: { kind: 'command', command: active.command, before: active.before }, heredocs }
+    return {
+      entry: {
+        kind: 'command',
+        command: active.command,
+        before: active.before,
+        quotedHeredoc: heredocs.length === 1 && heredocs[0]?.quoted === true
+      },
+      heredocs
+    }
   }
 
   private findRedirectOperator(limit: number): RedirectOperator | null {
@@ -675,8 +692,13 @@ class ShellReader {
     if (next === '(') {
       const nested = this.openScope(scope, depth, start, 2, ')', limit, 'command-substitution')
       if (nested === null) return null
-      builder.dynamic = true
-      this.appendExpansionRange(builder, start, this.index, mode, stripTabs)
+      const knownValue = doubleQuoted ? this.knownCatHeredocValue(nested) : null
+      if (knownValue === null) {
+        builder.dynamic = true
+        this.appendExpansionRange(builder, start, this.index, mode, stripTabs)
+      } else {
+        builder.append(knownValue)
+      }
       builder.addScope(nested)
       return true
     }
@@ -739,6 +761,34 @@ class ShellReader {
     }
 
     return false
+  }
+
+  private knownCatHeredocValue(scope: ScopeResult): string | null {
+    if (scope.entry.kind !== 'scope' || scope.entry.entries.length !== 1) return null
+    const entry = scope.entry.entries[0]
+    if (entry === undefined || entry.kind !== 'command' || entry.before.length !== 0 || !entry.quotedHeredoc) return null
+
+    const command = entry.command
+    if (command.assignments.length !== 0 || command.words.length !== 1 || command.redirects.length !== 1) {
+      return null
+    }
+    const word = command.words[0]
+    const redirect = command.redirects[0]
+    if (
+      word === undefined ||
+      word.text !== 'cat' ||
+      word.dynamic ||
+      redirect === undefined ||
+      redirect.kind !== 'heredoc' ||
+      redirect.target.dynamic
+    ) {
+      return null
+    }
+
+    const value = redirect.target.text
+    let end = value.length
+    while (end > 0 && value.charCodeAt(end - 1) === 10) end--
+    return end === value.length ? value : value.slice(0, end)
   }
 
   private appendExpansionRange(
