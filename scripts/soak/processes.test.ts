@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { ProcessRow } from './contracts'
 import { ownedProcesses, parseProcessTable } from './processes'
 
@@ -47,6 +50,38 @@ test('parses macOS and Linux ps rows, preserving commands and empty commands', (
   ])
 })
 
+test('reads C-formatted ps rows when the caller uses a non-English locale', async () => {
+  const result = await runProcessTableWithPs(`#!/bin/sh
+if [ "$LC_ALL" = "C" ]; then
+  printf '%s\\n' '4242 1 S 100 Mon Nov  9 10:11:12 2026 /standin/c-format'
+else
+  printf '%s\\n' '4242 1 S 100 lun. nov.  9 10:11:12 2026 /standin/fr-format'
+fi
+`, 'fr_FR.UTF-8')
+
+  expect(result.exitCode, result.stderr).toBe(0)
+  expect(JSON.parse(result.stdout)).toEqual([
+    {
+      pid: 4242,
+      ppid: 1,
+      state: 'S',
+      rssKb: 100,
+      started: 'Mon Nov  9 10:11:12 2026',
+      command: '/standin/c-format'
+    }
+  ])
+})
+
+test('returns null when ps succeeds but produces no parseable process rows', async () => {
+  const result = await runProcessTableWithPs(`#!/bin/sh
+printf '%s\\n' 'ps succeeded but emitted no process rows'
+`, 'C')
+
+  expect(result.exitCode, result.stderr).toBe(0)
+  expect(JSON.parse(result.stdout)).toBeNull()
+})
+
+
 test('finds descendants and grandchildren independent of row order, excluding roots and unrelated processes', () => {
   const rows = [
     processRow(303, 202, 'Wed Nov 11 12:13:15 2026'),
@@ -94,4 +129,30 @@ test('keeps previously owned orphans by pid and start time, but not a reused pid
 
 function processRow(pid: number, ppid: number, started: string): ProcessRow {
   return { pid, ppid, state: 'S', rssKb: 100, started, command: `process ${pid}` }
+}
+async function runProcessTableWithPs(psScript: string, callerLocale: string) {
+  const root = mkdtempSync(join(tmpdir(), 'soak-process-table-'))
+  try {
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const psPath = join(bin, 'ps')
+    writeFileSync(psPath, psScript)
+    chmodSync(psPath, 0o700)
+
+    const moduleUrl = new URL('./processes.ts', import.meta.url).href
+    const source = `import { readProcessTable } from ${JSON.stringify(moduleUrl)}; process.stdout.write(JSON.stringify(await readProcessTable()))`
+    const child = Bun.spawn([process.execPath, '-e', source], {
+      env: { ...process.env, LC_ALL: callerLocale, PATH: bin },
+      stdout: 'pipe',
+      stderr: 'pipe'
+    })
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited
+    ])
+    return { stdout, stderr, exitCode }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 }

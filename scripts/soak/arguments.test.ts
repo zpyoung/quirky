@@ -124,6 +124,11 @@ for (const [flag] of validLimits) {
   }
 }
 
+test('rejects a negative inline --max-children value with its nonnegative constraint', () => {
+  const out = makeTempDir()
+  expectUsageError(['--out', out, '--max-children=-1'], 'a finite nonnegative number')
+})
+
 test('rejects --out when the directory already contains a file', () => {
   const out = makeTempDir()
   writeFileSync(join(out, 'occupied.txt'), 'occupied')

@@ -76,6 +76,7 @@ export function ownedProcesses(rows: ProcessRow[], roots: number[], seen: Set<st
 export async function readProcessTable(): Promise<ProcessRow[] | null> {
   try {
     const child = Bun.spawn(['ps', '-axo', 'pid=,ppid=,stat=,rss=,lstart=,command='], {
+      env: { ...process.env, LC_ALL: 'C' },
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe'
@@ -98,7 +99,8 @@ export async function readProcessTable(): Promise<ProcessRow[] | null> {
         child.exited
       ])
       if (timedOut || stdout.status !== 'fulfilled' || stderr.status !== 'fulfilled' || exitCode.status !== 'fulfilled' || exitCode.value !== 0) return null
-      return parseProcessTable(stdout.value)
+      const rows = parseProcessTable(stdout.value)
+      return rows.length === 0 ? null : rows
     } catch {
       try {
         child.kill('SIGKILL')
