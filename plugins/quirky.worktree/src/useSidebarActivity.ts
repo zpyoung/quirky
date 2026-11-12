@@ -104,8 +104,7 @@ export function useSidebarActivity(
   context: UiPluginContext,
   selectedWorktree: string | null,
   loaded: boolean,
-  override: ActivityPreferences | null = null,
-  selectedInstance?: string
+  override: ActivityPreferences | null = null
 ) {
   const [status, setStatus] = useState<ActivityStatus>('loading')
   const [projection, setProjection] = useState<SidebarProjection | null>(null)
@@ -116,8 +115,7 @@ export function useSidebarActivity(
   const [error, setError] = useState<string | null>(null)
   const statusRef = useRef<ActivityStatus>('loading')
   const selectedRef = useRef(selectedWorktree)
-  const selectedInstanceRef = useRef(selectedInstance)
-  const lastActivated = useRef<{ worktree: string | null; instance: string | undefined } | null>(null)
+  const lastActivated = useRef<string | null | undefined>(undefined)
   const loadedRef = useRef(false)
   const stateLoaded = useRef(false)
   const latest = useRef(0)
@@ -127,7 +125,6 @@ export function useSidebarActivity(
   const runner = useRef<Promise<void> | null>(null)
   const refreshRef = useRef<(options?: RefreshOptions) => Promise<void>>(async () => {})
   selectedRef.current = selectedWorktree
-  selectedInstanceRef.current = selectedInstance
   loadedRef.current = loaded
   overrideRef.current = override
 
@@ -161,9 +158,7 @@ export function useSidebarActivity(
 
     latest.current++
     pending.current = true
-    const last = lastActivated.current
-    pendingActivation.current ||= options.activate === true || last === null ||
-      last.worktree !== selectedRef.current || last.instance !== selectedInstanceRef.current
+    pendingActivation.current ||= options.activate === true || lastActivated.current !== selectedRef.current
     pendingState.current ||= options.reloadState === true
     if (runner.current) return runner.current
 
@@ -186,10 +181,9 @@ export function useSidebarActivity(
             }
           }
           const worktree = selectedRef.current
-          const instance = selectedInstanceRef.current
           if (activate) {
             await context.call('quirky.sidebar-extras/activate', { worktree })
-            lastActivated.current = { worktree, instance }
+            lastActivated.current = worktree
           }
           const preferences = effectiveOverride()
           requestedKey.current = preferences === null ? '' : JSON.stringify(preferences)
@@ -245,10 +239,6 @@ export function useSidebarActivity(
   useEffect(() => {
     const unsubscribe = context.subscribe((event) => {
       if (!isRefreshEvent(event.type)) return
-      if (event.type.startsWith('quirky.session/') &&
-        statusRef.current === 'available' &&
-        stateLoaded.current &&
-        (overrideRef.current?.workspaceActivityWindow ?? storedRef.current?.workspaceActivityWindow) === 'all') return
       if (event.type === 'plugin.changed') {
         stateLoaded.current = false
         setProjection(null)
@@ -257,6 +247,7 @@ export function useSidebarActivity(
         void refresh({ reloadState: true, activate: true })
       } else {
         void refresh({
+          activate: event.type === 'quirky.worktree/changed',
           reloadState: event.type.startsWith('quirky.sidebar-extras/')
         })
       }
@@ -285,7 +276,7 @@ export function useSidebarActivity(
       setStatusValue('loading')
     }
     void refresh({ reloadState: !stateLoaded.current, activate: true })
-  }, [loaded, selectedWorktree, selectedInstance, refresh, setStatusValue])
+  }, [loaded, selectedWorktree, refresh, setStatusValue])
 
   const overrideKey = override === null ? '' : JSON.stringify(override)
   const storedKey = stored === null ? '' : JSON.stringify(stored)
