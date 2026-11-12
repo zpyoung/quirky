@@ -25,7 +25,7 @@ const check = ({ name, status, conclusion }: Check, id: number) => ({
   kind: 'check_run', name, status, conclusion, url: null, checkRunId: id, workflowRunId: null, suiteId: null
 })
 
-/** What `quirky.reviews/checksGet` returns for the active workspace's review. */
+/** What `quirky.reviews/checksGet` returns for one workspace's review. */
 function checksState(checks: Check[] | null, number: number | null = 12) {
   return {
     checks: {
@@ -57,15 +57,17 @@ function fakeContext(initial: unknown) {
     result: initial as unknown,
     failing: false,
     calls: [] as string[],
+    params: [] as unknown[],
     panels: [] as Array<[string, boolean | undefined]>,
     provided: new Map<string, (element: HTMLElement, props: Record<string, never>) => (() => void) | void>(),
     emit: (event: QuirkyEvent) => { for (const listener of [...listeners]) void listener(event) },
     context: {
       provide: (id: string, implementation: unknown) => void fake.provided.set(id, implementation as never),
-      call: async (method: string) => {
+      call: async (method: string, params?: unknown) => {
         fake.calls.push(method)
+        fake.params.push(params)
         if (fake.failing) throw new Error('reviews are unavailable')
-        return fake.result
+        return typeof fake.result === 'function' ? (fake.result as (params: unknown) => unknown)(params) : fake.result
       },
       subscribe: (listener: (event: QuirkyEvent) => void) => {
         listeners.add(listener)
@@ -105,20 +107,49 @@ const popup = () => document.querySelector('.ui-popup')
 const menuRows = () => [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]
 
 describe('quirky.reviews checks status bar item', () => {
-  test('hides when the daemon holds another worktree\'s checks, and follows the selection', async () => {
-    const fake = fakeContext(checksState(SAMPLE))
+  test('asks the daemon for the selected worktree, and follows the selection', async () => {
+    const held: Record<string, unknown> = { wt_1: checksState(SAMPLE) }
+    const fake = fakeContext(({ worktree }: { worktree: string }) => held[worktree] ?? { checks: { worktree: null, review: null, checks: null } })
     const { element, unmount } = await mountItem(fake)
     expect(element.textContent).toContain('Checks 2/4')
+    expect(fake.params).toEqual([{ worktree: 'wt_1' }])
 
     await act(async () => fake.setWorktree('wt_2'))
     await settle()
+    expect(fake.params[fake.params.length - 1]).toEqual({ worktree: 'wt_2' })
     expect(element.textContent).not.toContain('Checks')
 
-    fake.result = { checks: { ...checksState(SAMPLE).checks, worktree: 'wt_2' } }
+    held.wt_2 = { checks: { ...checksState(SAMPLE).checks, worktree: 'wt_2' } }
     await act(async () => fake.emit({ type: 'quirky.reviews/changed' } as unknown as QuirkyEvent))
     await settle()
     expect(element.textContent).toContain('Checks 2/4')
     await unmount()
+  })
+
+  test('it never shows checks the daemon returns for a different worktree', async () => {
+    const fake = fakeContext({ checks: { ...checksState(SAMPLE).checks, worktree: 'wt_other' } })
+    const { element, unmount } = await mountItem(fake)
+    expect(element.textContent).toBe('')
+    await unmount()
+  })
+
+  test('the Checks panel loads state for its layout worktree and reloads when that changes', async () => {
+    const fake = fakeContext('invalid')
+    activate(fake.context as unknown as UiPluginContext)
+    const mount = fake.provided.get(CHECKS_PANEL)
+    if (!mount) throw new Error(`activate did not provide ${CHECKS_PANEL}`)
+    const element = document.createElement('div')
+    document.body.appendChild(element)
+    let cleanup: (() => void) | void
+    await act(async () => { cleanup = mount(element, {}) })
+    await settle()
+    const stateCalls = () => fake.calls.flatMap((method, index) => method === 'quirky.reviews/state' ? [fake.params[index]] : [])
+    expect(stateCalls()).toEqual([{ worktree: 'wt_1' }])
+
+    await act(async () => fake.setWorktree('wt_2'))
+    await settle()
+    expect(stateCalls()[stateCalls().length - 1]).toEqual({ worktree: 'wt_2' })
+    await act(async () => { cleanup?.() })
   })
 
   test('the popup lists every check, however many there are', async () => {
@@ -149,6 +180,7 @@ describe('quirky.reviews checks status bar item', () => {
     expect(button.textContent).toBe('Checks 2/4')
     expect(button.getAttribute('aria-haspopup')).toBe('menu')
     expect(fake.calls).toEqual(['quirky.reviews/checksGet'])
+    expect(fake.params).toEqual([{ worktree: 'wt_1' }])
 
     await act(async () => button.click())
     await settle()

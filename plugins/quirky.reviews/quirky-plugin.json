@@ -2807,10 +2807,15 @@
       {
         "id": "checksGet",
         "readOnly": true,
-        "description": "Read the active-workspace checks state and its current review target.",
+        "description": "Read the checks state and current review target for a workspace; omitted, the most recently refreshed workspace.",
         "params": {
           "type": "object",
-          "properties": {},
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact workspace ID whose checks state to read."
+            }
+          },
           "additionalProperties": false
         },
         "result": {

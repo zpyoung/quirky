@@ -152,8 +152,16 @@ export function ChecksList(props: ChecksListProps) {
   }
 
   const openFixDialog = async () => {
+    if (props.surface === 'checks' && owner === null) {
+      setActionError('No pull request is selected.')
+      return
+    }
     try {
-      await props.context.call('quirky.reviews/checksSetAgentDialog', { surface: props.surface, action: 'fix' })
+      await props.context.call('quirky.reviews/checksSetAgentDialog', {
+        surface: props.surface,
+        ...(props.surface === 'checks' && owner !== null ? { worktree: owner.worktree } : {}),
+        action: 'fix',
+      })
     } catch (error) {
       setActionError(errorText(error))
     }
