@@ -4,35 +4,14 @@ import { activityMark, needsYou, type ChecksState } from './view-model'
 
 const BADGE_PANEL = 'sidebar-section:quirky.worktree/worktrees'
 
-type ReloadDomains = {
-  worktrees: boolean
-  sessions: boolean
-  asks: boolean
-  projection: boolean
-}
-
-const ALL_DOMAINS: ReloadDomains = { worktrees: true, sessions: true, asks: true, projection: true }
-const NO_DOMAINS: ReloadDomains = { worktrees: false, sessions: false, asks: false, projection: false }
-
-function refreshDomainsForEvent(type: string): ReloadDomains | null {
-  if (type === 'plugin.changed' || type.startsWith('quirky.repo/') || type.startsWith('quirky.worktree/')) return ALL_DOMAINS
-  if (type.startsWith('quirky.session/')) return { ...NO_DOMAINS, sessions: true }
-  if (type.startsWith('quirky.ask/')) return { ...NO_DOMAINS, asks: true }
-  if (type.startsWith('quirky.hosting/') || type.startsWith('quirky.sidebar-extras/')) return { ...NO_DOMAINS, projection: true }
-  return null
-}
-
-function unionDomains(left: ReloadDomains, right: ReloadDomains): ReloadDomains {
-  return {
-    worktrees: left.worktrees || right.worktrees,
-    sessions: left.sessions || right.sessions,
-    asks: left.asks || right.asks,
-    projection: left.projection || right.projection
-  }
-}
-
-function hasDomains(domains: ReloadDomains): boolean {
-  return domains.worktrees || domains.sessions || domains.asks || domains.projection
+function isRefreshEvent(type: string): boolean {
+  return type === 'plugin.changed' ||
+    type.startsWith('quirky.repo/') ||
+    type.startsWith('quirky.worktree/') ||
+    type.startsWith('quirky.session/') ||
+    type.startsWith('quirky.ask/') ||
+    type.startsWith('quirky.hosting/') ||
+    type.startsWith('quirky.sidebar-extras/')
 }
 
 async function optional<T>(load: () => Promise<unknown>, valid: (value: unknown) => value is T): Promise<T | null> {
@@ -102,9 +81,8 @@ type Loaded = {
  */
 export function startAttentionBadge(context: UiPluginContext, clock: BadgeClock = systemClock): () => void {
   let active = true
+  let generation = 0
   let loaded: Loaded | null = null
-  let dirty = NO_DOMAINS
-  let runner: Promise<void> | null = null
 
   const evaluate = () => {
     if (!active || loaded === null) return
@@ -120,51 +98,26 @@ export function startAttentionBadge(context: UiPluginContext, clock: BadgeClock 
     context.setPanelBadge(BADGE_PANEL, needing || null, needing > 0 ? title(needing, errored) : undefined, errored > 0 ? 'failing' : 'needs-you')
   }
 
-  const load = async (domains: ReloadDomains) => {
+  const refresh = async () => {
     try {
+      const ticket = ++generation
       const [worktrees, sessions, asks, projection] = await Promise.all([
-        domains.worktrees ? optional(async () => context.call('quirky.worktree/list'), isArray) : Promise.resolve(undefined),
-        domains.sessions ? optional(async () => context.call('quirky.session/list'), isArray) : Promise.resolve(undefined),
-        domains.asks ? optional(async () => context.call('quirky.ask/list', { pendingOnly: true }), isArray) : Promise.resolve(undefined),
-        domains.projection
-          ? optional(async () => context.call('quirky.sidebar-extras/projection'), (value): value is object => typeof value === 'object' && value !== null)
-          : Promise.resolve(undefined)
+        optional(async () => context.call('quirky.worktree/list'), isArray),
+        optional(async () => context.call('quirky.session/list'), isArray),
+        optional(async () => context.call('quirky.ask/list', { pendingOnly: true }), isArray),
+        optional(async () => context.call('quirky.sidebar-extras/projection'), (value): value is object => typeof value === 'object' && value !== null)
       ])
-      if (!active || (domains.worktrees && worktrees === null)) return
-      const previous = loaded
-      if (previous === null && !domains.worktrees) return
+      if (!active || ticket !== generation || worktrees === null) return
       loaded = {
-        worktrees: domains.worktrees ? worktrees as WorktreeControl[] : previous!.worktrees,
-        sessions: domains.sessions ? (sessions ?? []) as Session[] : previous?.sessions ?? [],
-        pending: domains.asks ? pendingByWorktree(asks ?? null) : previous?.pending ?? null,
-        checks: domains.projection ? checksByWorktree(projection ?? null) : previous?.checks ?? new Map()
+        worktrees: worktrees as WorktreeControl[],
+        sessions: (sessions ?? []) as Session[],
+        pending: pendingByWorktree(asks),
+        checks: checksByWorktree(projection)
       }
       evaluate()
     } catch {
       // a revoked context throws from call/setPanelBadge; the badge is already being torn down
     }
-  }
-
-  const drain = async () => {
-    while (active && hasDomains(dirty)) {
-      const domains = dirty
-      dirty = NO_DOMAINS
-      await load(domains)
-    }
-  }
-
-  const refresh = (domains: ReloadDomains) => {
-    if (!active) return
-    dirty = unionDomains(dirty, loaded === null ? ALL_DOMAINS : domains)
-    if (runner !== null) return
-    const task = drain()
-    runner = task
-    const settle = () => {
-      if (runner !== task) return
-      runner = null
-      if (active && hasDomains(dirty)) refresh(NO_DOMAINS)
-    }
-    void task.then(settle, settle)
   }
 
   const tick = () => {
@@ -176,18 +129,17 @@ export function startAttentionBadge(context: UiPluginContext, clock: BadgeClock 
   }
 
   const unsubscribeEvents = context.subscribe((event: QuirkyEvent) => {
-    const domains = refreshDomainsForEvent(event.type)
-    if (domains !== null) refresh(domains)
+    if (isRefreshEvent(event.type)) void refresh()
   })
   const unsubscribeConnection = context.onConnection((status) => {
-    if (status === 'connected') refresh(ALL_DOMAINS)
+    if (status === 'connected') void refresh()
   })
   const timer = clock.setInterval(tick, CLOCK_TICK_MS)
-  refresh(ALL_DOMAINS)
+  void refresh()
 
   return () => {
     active = false
-    dirty = NO_DOMAINS
+    generation += 1
     clock.clearInterval(timer)
     unsubscribeEvents()
     unsubscribeConnection()

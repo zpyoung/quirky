@@ -313,9 +313,9 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
   const viewActivity = drafts.get(activeId)?.filter.activity ?? activeView?.spec.filter.activity ?? null
-  const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId
-  const activity = useSidebarActivity(context, selectedId, loaded, viewActivity, selectedInstance)
+  const activity = useSidebarActivity(context, selectedId, loaded, viewActivity)
   const loopStatus = useLoopStatus(context, worktrees, loaded)
+  const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId
   const activityProjection = activity.projection
   const currentProjection = useMemo(
     () => activity.status === 'available' && activityProjection !== null
