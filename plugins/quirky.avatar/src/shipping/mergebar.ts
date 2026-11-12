@@ -1,6 +1,6 @@
 import type { Level } from '../contracts'
 
-export type MergeCheck = { name: string; required: boolean; conclusion: string | null }
+export type MergeCheck = { name: string; required: boolean; conclusion: string | null; kind?: 'check_run' | 'status' | 'approval' }
 export type MergeFinding = { id: string; valid: boolean | null; fixed: boolean }
 export type MergeThread = { id: string; resolved: boolean }
 
@@ -10,6 +10,7 @@ export type MergeThread = { id: string; resolved: boolean }
  */
 export type MergeInput = {
   level: Level
+  reviewDecision: string | null
   checks: MergeCheck[]
   findings: MergeFinding[]
   threads: MergeThread[]
@@ -34,18 +35,24 @@ export function stopAt(level: Level): StopStep {
 }
 
 /**
- * The merge bar (R-31). Ready only at Full, with required checks green, every finding fixed or
- * dismissed, no unresolved thread, no unconfirmed guess, the head, reviewed and checked commits
- * all the same, and every shared-goal predecessor merged. `reasons` names each unmet condition.
- * Takes no free text, so repo or PR wording cannot change the answer.
+ * The merge bar (R-31). Ready only at Full, with an approved or explicitly unnecessary PR review,
+ * required checks green and no workflow approval waits, every finding fixed or dismissed, no
+ * unresolved thread or unconfirmed guess, matching head, reviewed and checked commits, and every
+ * shared-goal predecessor merged. `reasons` names each unmet condition; repo wording cannot clear it.
  */
 export function mergeReady(input: MergeInput): { ready: boolean; reasons: string[] } {
   const reasons: string[] = []
   if (input.level !== 'full') reasons.push(`level ${input.level} stops at ${stopAt(input.level)}`)
+  if (input.reviewDecision === 'REVIEW_REQUIRED') reasons.push('required pull request approval is missing')
+  else if (input.reviewDecision === 'CHANGES_REQUESTED') reasons.push('pull request review has changes requested')
+  else if (input.reviewDecision !== 'APPROVED' && input.reviewDecision !== 'NONE') reasons.push('pull request review decision is unknown')
   if (input.checks.length === 0) reasons.push('no checks have reported on the pull request')
 
   for (const check of input.checks) {
-    if (check.required && !(check.conclusion !== null && GREEN.has(check.conclusion))) {
+    if (!check.required) continue
+    if (check.kind === 'approval') {
+      reasons.push(`workflow ${check.name} is waiting for maintainer approval`)
+    } else if (!(check.conclusion !== null && GREEN.has(check.conclusion))) {
       reasons.push(`required check ${check.name} is ${check.conclusion ?? 'not finished'}`)
     }
   }

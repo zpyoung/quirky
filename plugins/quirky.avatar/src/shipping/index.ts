@@ -1,11 +1,11 @@
 import type { AvatarApp, ShippingService, WorktreeState } from '../contracts'
 import { quoteAsData, sanitize } from '../sanitize'
 import { createDoneWhen } from './donewhen'
-import { looksFlaky, mergeReady, nextFlakyStep, predecessorsOf, stopAt } from './mergebar'
+import { type MergeCheck, looksFlaky, mergeReady, nextFlakyStep, predecessorsOf, stopAt } from './mergebar'
 import { branchName, createOutbox, handoffEpoch, readCompare, readHead, runCheck, sendRefusal, shellQuote } from './outbox'
 import { createReview } from './review'
 
-type Pr = { number: number; state: string; headSha: string | null; mergeQueueRequired: boolean }
+type Pr = { number: number; state: string; headSha: string | null; mergeQueueRequired: boolean; reviewDecision: string | null }
 type PrLookup = { kind: 'found'; pr: Pr } | { kind: 'no-review' } | { kind: 'unavailable'; reason: string; message: string } | { kind: 'no-branch' }
 
 const GREEN = new Set(['success', 'neutral', 'skipped'])
@@ -82,28 +82,28 @@ export function register(app: AvatarApp): () => void {
         number: pr.number,
         state: typeof pr.state === 'string' ? pr.state : 'open',
         headSha: typeof pr.headRefOid === 'string' ? pr.headRefOid : null,
-        mergeQueueRequired: pr.mergeQueueRequired === true
+        mergeQueueRequired: pr.mergeQueueRequired === true,
+        reviewDecision: typeof pr.reviewDecision === 'string' ? pr.reviewDecision : null
       }
     }
   }
 
   const recentJournal = (worktreeId: string) => app.store.journalPage({ worktreeId, limit: JOURNAL_WINDOW })
 
-  type Check = { name: string; conclusion: string | null; checkRunId: number | null }
+  type Check = Omit<MergeCheck, 'required'> & { checkRunId: number | null }
 
   function readChecks(raw: Record<string, unknown>): Check[] {
     const list = Array.isArray(raw.checks) ? (raw.checks as Record<string, unknown>[]) : []
-    return list
-      .filter((check) => check.kind !== 'approval')
-      .map((check) => {
-        const conclusion = typeof check.conclusion === 'string' ? check.conclusion.toLowerCase() : null
-        const status = typeof check.status === 'string' ? check.status.toLowerCase() : ''
-        return {
-          name: typeof check.name === 'string' ? check.name : 'check',
-          conclusion: conclusion ?? (GREEN.has(status) || FAILED.has(status) ? status : null),
-          checkRunId: typeof check.checkRunId === 'number' ? check.checkRunId : null
-        }
-      })
+    return list.map((check) => {
+      const conclusion = typeof check.conclusion === 'string' ? check.conclusion.toLowerCase() : null
+      const status = typeof check.status === 'string' ? check.status.toLowerCase() : ''
+      return {
+        name: typeof check.name === 'string' ? check.name : 'check',
+        kind: check.kind === 'check_run' || check.kind === 'status' || check.kind === 'approval' ? check.kind : undefined,
+        conclusion: conclusion ?? (GREEN.has(status) || FAILED.has(status) ? status : null),
+        checkRunId: typeof check.checkRunId === 'number' ? check.checkRunId : null
+      }
+    })
   }
 
   async function failureOutput(worktreeId: string, number: number, check: Check): Promise<string | null> {
@@ -242,10 +242,11 @@ export function register(app: AvatarApp): () => void {
         const checks = readChecks(raw)
         const checkedSha = typeof raw.headSha === 'string' ? raw.headSha : null
 
-        const failed = checks.filter((check) => check.conclusion !== null && FAILED.has(check.conclusion))
+        const ordinary = checks.filter((check) => check.kind !== 'approval')
+        const failed = ordinary.filter((check) => check.conclusion !== null && FAILED.has(check.conclusion))
         if (failed.length > 0) return fail(await handleFailedChecks(worktreeId, pr, checkedSha, failed, epoch))
-        if (checks.length > 0 && checks.every((check) => check.conclusion !== null && GREEN.has(check.conclusion))) {
-          const names = checks.map((check) => check.name)
+        if (ordinary.length > 0 && ordinary.every((check) => check.conclusion !== null && GREEN.has(check.conclusion))) {
+          const names = ordinary.map((check) => check.name)
           const known = recentJournal(worktreeId).some((entry) => entry.kind === 'event' && entry.data.checksGreen === true && entry.data.headSha === checkedSha && names.every((name) => Array.isArray(entry.data.names) && entry.data.names.includes(name)))
           if (!known) app.journal(worktreeId, 'event', { checksGreen: true, headSha: checkedSha, names })
         }
@@ -255,7 +256,8 @@ export function register(app: AvatarApp): () => void {
         const findings = app.store.findings.list({ worktreeId })
         const verdict = mergeReady({
           level: mandate.level,
-          checks: checks.map((check) => ({ name: check.name, required: true, conclusion: check.conclusion })),
+          reviewDecision: pr.reviewDecision,
+          checks: checks.map((check) => ({ name: check.name, required: true, conclusion: check.conclusion, kind: check.kind })),
           findings: findings.map((finding) => ({ id: finding.id, valid: finding.valid, fixed: finding.detail.fixed === true })),
           threads: intake.threads.map((thread) => ({ id: thread.id, resolved: thread.resolved })),
           guessesOpen: app.store.guesses.list({ worktreeId }).filter((guess) => guess.confirmedAt === null && guess.redoneAt === null).length,
