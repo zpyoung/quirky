@@ -15,7 +15,36 @@ type RepoInfo = { id: string; name: string; displayName?: string | null; groupId
 type GroupInfo = { id: string; name: string }
 type SessionInfo = { id: string; kind?: string; agent: string; worktreeId: string; status: string; lastActivityAt?: number; agentStatus?: { state?: string } | null }
 type Snapshot = { rows: SheetRow[]; byId: Map<string, SheetRow>; sessions: Map<string, SessionInfo> }
-type Brief = { sessionId: string; text: string }
+type GateCheckResult = { ok: boolean; reason: string }
+type ReasonScope = { proof: Set<string>; brief: Set<string>; errors: Set<string> }
+type Continuation = {
+  generation: number
+  worktreeId: string
+  sessionId: string | null
+  launching: boolean
+  launchSettled: Set<string>
+  agent: string
+  mandate: Mandate
+  updated: boolean
+  shadow: boolean
+  ready: boolean
+  readyFromSettlement: boolean
+  proofAccepted: boolean
+  proofSending: boolean
+  probeNotified: boolean
+  proofSettledDuringSend: boolean
+  checkState: 'pending' | 'passed' | 'failed' | 'error'
+  checkStarted: boolean
+  briefSending: boolean
+  briefSettledDuringSend: boolean
+  briefSent: boolean
+  shadowBriefAttempted: boolean
+  reasons: ReasonScope
+}
+
+const PROOF_PROMPT = 'The Avatar is checking its permission hook. Run only `pwd` once, then stop and wait for your mandate. Do not start work.'
+const PROOF_NEED_PREFIX = 'Gate proof not sent: '
+const CHECK_ERROR_NEED_PREFIX = 'Gate check could not finish: '
 
 /** Test seam: how the installed Claude's version is read. */
 export type HandoffDeps = { claudeVersion?: () => Promise<string | null> }
@@ -86,8 +115,9 @@ function briefText(mandate: Mandate, updated: boolean): string {
  */
 export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
   const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
-  const pendingBriefs = new Map<string, Brief>()
+  const continuations = new Map<string, Continuation>()
   const resolvingNeeds = new Set<string>()
+  let nextGeneration = 0
   let disposed = false
   const call = <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => app.context.call(method, params) as Promise<T>
 
@@ -177,7 +207,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     return { rows, byId: new Map(rows.map((row) => [row.worktreeId, row])), sessions }
   }
 
-  function writeState(worktreeId: string, state: WorktreeState, note: string): void {
+  function writeStateRaw(worktreeId: string, state: WorktreeState, note: string): void {
     const row = activeRow(worktreeId)
     if (row === null) return
     app.store.transaction(() => {
@@ -185,6 +215,16 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
       app.journal(worktreeId, 'event', { type: 'state', from: row.state, state, note })
     })
     app.emit({ type: 'state-changed', worktreeId, state })
+  }
+
+  function writeState(worktreeId: string, state: WorktreeState, note: string): void {
+    const row = activeRow(worktreeId)
+    if (row === null) return
+    if (['checking', 'briefing', 'gate-failed', 'parked'].includes(row.state) && !['checking', 'briefing', 'gate-failed', 'parked'].includes(state)) return
+    const previous = row.state
+    if (state === 'parked') continuations.delete(worktreeId)
+    writeStateRaw(worktreeId, state, note)
+    if (state === 'checking' && previous !== 'checking') resumeBrief(worktreeId)
   }
 
   function upsertSharedGoal(worktreeId: string, shared: NonNullable<HandoffInput['sharedGoal']>): string {
@@ -205,52 +245,324 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     else app.store.sharedGoals.put({ ...goal, worktreeIds, mergeOrder: goal.mergeOrder.filter((id) => id !== worktreeId) })
   }
 
-  async function sendBrief(worktreeId: string, brief: Brief): Promise<void> {
+  function current(runtime: Continuation): boolean {
+    const row = app.store.handoffs.get(runtime.worktreeId)
+    return !disposed &&
+      continuations.get(runtime.worktreeId) === runtime &&
+      row !== null &&
+      row.active &&
+      (runtime.launching || row.sessionId === runtime.sessionId) &&
+      app.store.mandates.get(runtime.worktreeId) !== null
+  }
+
+  function latestHandoffSeq(worktreeId: string): number {
+    let seq = 0
+    for (const entry of app.store.journalSince(0)) {
+      if (entry.worktreeId === worktreeId && entry.kind === 'handoff') seq = entry.seq
+    }
+    return seq
+  }
+
+  function reasonScope(worktreeId: string, afterSeq = latestHandoffSeq(worktreeId)): ReasonScope {
+    const scope: ReasonScope = { proof: new Set(), brief: new Set(), errors: new Set() }
+    for (const entry of app.store.journalSince(afterSeq)) {
+      if (entry.worktreeId !== worktreeId || entry.kind !== 'event') continue
+      const { type, reason, error } = entry.data
+      if (type === 'proof-not-sent' && typeof reason === 'string') scope.proof.add(reason)
+      else if (type === 'brief-not-sent' && typeof reason === 'string') scope.brief.add(reason)
+      else if (type === 'gate-check-error' && typeof error === 'string') scope.errors.add(error)
+    }
+    return scope
+  }
+
+  function continuation(
+    worktreeId: string,
+    sessionId: string | null,
+    mandate: Mandate,
+    updated: boolean,
+    agent: string,
+    options: { session?: SessionInfo; launching?: boolean; handoffSeq?: number } = {}
+  ): Continuation {
+    const busy = options.session?.status === 'working' || options.session?.agentStatus?.state === 'working'
+    const runtime: Continuation = {
+      generation: ++nextGeneration,
+      worktreeId,
+      sessionId,
+      launching: options.launching ?? false,
+      launchSettled: new Set(),
+      agent,
+      mandate,
+      updated,
+      shadow: mandate.level === 'shadow',
+      ready: options.session !== undefined && !busy,
+      readyFromSettlement: false,
+      proofAccepted: false,
+      proofSending: false,
+      probeNotified: false,
+      proofSettledDuringSend: false,
+      checkState: 'pending',
+      checkStarted: false,
+      briefSending: false,
+      briefSettledDuringSend: false,
+      briefSent: false,
+      shadowBriefAttempted: false,
+      reasons: reasonScope(worktreeId, options.handoffSeq)
+    }
+    continuations.set(worktreeId, runtime)
+    return runtime
+  }
+
+  function flowNeeds(runtime: Continuation, prefix: string): NeedsYouItem[] {
+    return app.needs.list({ worktreeId: runtime.worktreeId, open: true }).filter((need) =>
+      need.kind === 'gate-failed' &&
+      need.title.startsWith(prefix) &&
+      need.detail.sessionId === runtime.sessionId
+    )
+  }
+
+  function upsertFlowNeed(
+    runtime: Continuation,
+    prefix: string,
+    title: string,
+    detail: Record<string, unknown>,
+    actions: NeedAction[]
+  ): void {
+    const row = activeRow(runtime.worktreeId)
+    if (row === null || row.state !== 'checking' || row.sessionId !== runtime.sessionId || !current(runtime)) return
+    const [existing, ...duplicates] = flowNeeds(runtime, prefix)
+    for (const duplicate of duplicates) app.needs.close(duplicate.id, 'superseded')
+    if (existing === undefined) {
+      app.needs.add({ worktreeId: runtime.worktreeId, kind: 'gate-failed', title, detail, actions })
+      return
+    }
+    if (existing.title === title && JSON.stringify(existing.detail) === JSON.stringify(detail) && JSON.stringify(existing.actions) === JSON.stringify(actions)) return
+    app.store.needs.put({ ...existing, title, detail, actions })
+    app.emit({ type: 'needs-changed' })
+  }
+
+  function closeFlowNeeds(runtime: Continuation, prefix: string, resolution: string): void {
+    for (const need of flowNeeds(runtime, prefix)) app.needs.close(need.id, resolution)
+  }
+
+  function recordReason(runtime: Continuation, bucket: keyof ReasonScope, reason: string, data: Record<string, unknown>): void {
+    const seen = runtime.reasons[bucket]
+    if (seen.has(reason)) return
+    seen.add(reason)
+    app.journal(runtime.worktreeId, 'event', data)
+  }
+
+  async function refreshReadiness(runtime: Continuation): Promise<boolean> {
+    if (!current(runtime)) return false
+    if (runtime.readyFromSettlement) return true
+    if (runtime.sessionId === null) {
+      runtime.ready = false
+      return false
+    }
+    let session: SessionInfo | null = null
     try {
-      await call('quirky.agent-status/send', { session: brief.sessionId, text: brief.text })
-      pendingBriefs.delete(worktreeId)
-    } catch (error) {
-      const reason = (error as { data?: { reason?: unknown } } | null)?.data?.reason
-      if (reason === 'agent-blocked') {
-        pendingBriefs.set(worktreeId, brief)
-        return
+      session = await call<SessionInfo | null>('quirky.session/get', { session: runtime.sessionId })
+    } catch {
+      session = null
+    }
+    if (!current(runtime)) return false
+    if (runtime.readyFromSettlement) return true
+    if (typeof session?.agent === 'string') runtime.agent = session.agent
+    runtime.ready = session === null || (session.status !== 'working' && session.agentStatus?.state !== 'working')
+    return runtime.ready
+  }
+
+  function signalProbeSettled(runtime: Continuation): void {
+    if (!current(runtime) || runtime.shadow || runtime.sessionId === null || runtime.checkState !== 'pending' || !runtime.proofAccepted || runtime.probeNotified) return
+    runtime.probeNotified = true
+    app.services.gate.noteProbeSettled(runtime.worktreeId, runtime.sessionId)
+  }
+
+  async function attemptProof(runtime: Continuation): Promise<void> {
+    if (!current(runtime) || runtime.shadow || runtime.checkState !== 'pending' || runtime.proofAccepted || runtime.proofSending) return
+    const row = activeRow(runtime.worktreeId)
+    if (row === null || row.state !== 'checking' || row.sessionId !== runtime.sessionId) return
+    if (!runtime.ready && !(await refreshReadiness(runtime))) return
+    if (!current(runtime)) return
+    runtime.proofSending = true
+    runtime.proofSettledDuringSend = false
+    runtime.ready = false
+    runtime.readyFromSettlement = false
+    const result = await app.services.supervisor.send(runtime.worktreeId, PROOF_PROMPT).catch((error) => ({ sent: false, reason: errorText(error) }))
+    if (!current(runtime)) {
+      runtime.proofSending = false
+      return
+    }
+    runtime.proofSending = false
+    const settledDuringSend = runtime.proofSettledDuringSend
+    runtime.proofSettledDuringSend = false
+    if (result.sent) {
+      runtime.proofAccepted = true
+      runtime.probeNotified = false
+      closeFlowNeeds(runtime, PROOF_NEED_PREFIX, 'proof-prompt-sent')
+      if (settledDuringSend) {
+        runtime.ready = true
+        runtime.readyFromSettlement = true
+        signalProbeSettled(runtime)
+      } else {
+        await refreshReadiness(runtime)
       }
-      pendingBriefs.delete(worktreeId)
-      app.journal(worktreeId, 'event', { type: 'brief-not-sent', reason: typeof reason === 'string' ? reason : errorText(error) })
+      if (runtime.checkState === 'passed') await attemptBrief(runtime)
+      return
+    }
+    const reason = result.reason ?? 'not sent'
+    recordReason(runtime, 'proof', reason, { type: 'proof-not-sent', reason })
+    upsertFlowNeed(runtime, PROOF_NEED_PREFIX, `${PROOF_NEED_PREFIX}${reason}`, { reason, agent: runtime.agent, sessionId: runtime.sessionId }, ['restart-to-handoff', 'take-back'])
+    if (runtime.checkState === 'passed') {
+      closeFlowNeeds(runtime, PROOF_NEED_PREFIX, 'gate-proved')
+      await attemptBrief(runtime)
     }
   }
 
-  async function deliverBrief(worktreeId: string, session: SessionInfo, text: string): Promise<void> {
-    const brief = { sessionId: session.id, text }
-    if (session.agentStatus?.state === 'working' || session.status === 'working') {
-      pendingBriefs.set(worktreeId, brief)
+  async function attemptBrief(runtime: Continuation): Promise<void> {
+    if (!current(runtime) || runtime.checkState !== 'passed' || runtime.briefSent || runtime.briefSending || runtime.proofSending) return
+    const row = activeRow(runtime.worktreeId)
+    if (row === null || row.state !== 'briefing' || row.sessionId !== runtime.sessionId) return
+    if (runtime.shadow && runtime.shadowBriefAttempted) return
+    if (!runtime.readyFromSettlement && !(await refreshReadiness(runtime))) return
+    if (!current(runtime)) return
+    const mandate = app.store.mandates.get(runtime.worktreeId)
+    if (mandate === null) return
+    const text = briefText(mandate, runtime.updated)
+    runtime.briefSending = true
+    runtime.briefSettledDuringSend = false
+    runtime.ready = false
+    runtime.readyFromSettlement = false
+    if (runtime.shadow) runtime.shadowBriefAttempted = true
+    const result = await app.services.supervisor.send(runtime.worktreeId, text).catch((error) => ({ sent: false, reason: errorText(error) }))
+    if (!current(runtime)) {
+      runtime.briefSending = false
       return
     }
-    await sendBrief(worktreeId, brief)
+    runtime.briefSending = false
+    const settledDuringSend = runtime.briefSettledDuringSend
+    runtime.briefSettledDuringSend = false
+    if (!result.sent) {
+      const reason = result.reason ?? 'not sent'
+      recordReason(runtime, 'brief', reason, { type: 'brief-not-sent', reason })
+      if (settledDuringSend) {
+        runtime.ready = true
+        runtime.readyFromSettlement = true
+        if (!runtime.shadow) await attemptBrief(runtime)
+      }
+      return
+    }
+    const currentRow = activeRow(runtime.worktreeId)
+    const currentMandate = app.store.mandates.get(runtime.worktreeId)
+    if (currentRow === null || currentRow.sessionId !== runtime.sessionId || currentRow.state !== 'briefing' || currentMandate === null) return
+    if (briefText(currentMandate, runtime.updated) !== text) {
+      if (settledDuringSend) {
+        runtime.ready = true
+        runtime.readyFromSettlement = true
+      }
+      return
+    }
+    runtime.briefSent = true
+    writeStateRaw(runtime.worktreeId, 'working', 'the mandate brief was sent')
+  }
+
+  function failedGateCheck(runtime: Continuation, error: unknown): void {
+    if (!current(runtime)) return
+    const row = app.store.handoffs.get(runtime.worktreeId)
+    if (row === null || row.state !== 'checking' || row.sessionId !== runtime.sessionId) return
+    runtime.checkState = 'error'
+    const reason = errorText(error)
+    try {
+      recordReason(runtime, 'errors', reason, { type: 'gate-check-error', error: reason })
+      upsertFlowNeed(runtime, CHECK_ERROR_NEED_PREFIX, `${CHECK_ERROR_NEED_PREFIX}${reason}`, { reason, agent: runtime.agent, sessionId: runtime.sessionId }, ['restart-to-handoff', 'take-back'])
+    } catch {
+      return
+    }
+  }
+
+  function finishedGateCheck(runtime: Continuation, result: GateCheckResult): void {
+    if (!current(runtime)) return
+    const row = app.store.handoffs.get(runtime.worktreeId)
+    if (row === null || row.sessionId !== runtime.sessionId) return
+    if (!result.ok) {
+      runtime.checkState = 'failed'
+      if (row.state !== 'gate-failed') return
+      const pending = flowNeeds(runtime, PROOF_NEED_PREFIX)[0]
+      if (pending !== undefined) {
+        const title = `The avatar can't confirm it gates ${agentLabel(runtime.agent)}`
+        const detail = { reason: result.reason, agent: runtime.agent, sessionId: runtime.sessionId }
+        if (pending.title !== title || JSON.stringify(pending.detail) !== JSON.stringify(detail) || JSON.stringify(pending.actions) !== JSON.stringify(['restart-to-handoff'])) {
+          app.store.needs.put({ ...pending, title, detail, actions: ['restart-to-handoff'] })
+          app.emit({ type: 'needs-changed' })
+        }
+      }
+      return
+    }
+    if (row.state === 'parked' || row.state === 'gate-failed') return
+    runtime.checkState = 'passed'
+    if (row.state === 'checking') writeStateRaw(runtime.worktreeId, 'briefing', 'the gate check passed')
+    else if (row.state !== 'briefing') return
+    closeFlowNeeds(runtime, PROOF_NEED_PREFIX, 'gate-proved')
+    closeFlowNeeds(runtime, CHECK_ERROR_NEED_PREFIX, 'gate-proved')
+    void attemptBrief(runtime)
+  }
+
+  function startGateCheck(runtime: Continuation): void {
+    if (!current(runtime) || runtime.checkStarted) return
+    runtime.checkStarted = true
+    let check: Promise<GateCheckResult>
+    try {
+      check = app.services.gate.gateCheck(runtime.worktreeId)
+    } catch (error) {
+      failedGateCheck(runtime, error)
+      return
+    }
+    void check.then((result) => finishedGateCheck(runtime, result), (error) => failedGateCheck(runtime, error))
+  }
+
+  function advanceRuntime(runtime: Continuation): void {
+    if (!current(runtime) || runtime.sessionId === null || runtime.shadow) return
+    if (runtime.proofAccepted) {
+      if (!runtime.readyFromSettlement) void refreshReadiness(runtime)
+      return
+    }
+    if (runtime.ready) {
+      void attemptProof(runtime)
+      return
+    }
+    void refreshReadiness(runtime).then((ready) => {
+      if (ready && current(runtime) && runtime.checkState === 'pending' && !runtime.proofAccepted) return attemptProof(runtime)
+    })
+  }
+
+  async function settled(runtime: Continuation, sessionId: string): Promise<void> {
+    if (runtime.launching && runtime.sessionId === null) {
+      runtime.launchSettled.add(sessionId)
+      return
+    }
+    if (!current(runtime) || sessionId !== runtime.sessionId) return
+    runtime.ready = true
+    runtime.readyFromSettlement = true
+    if (runtime.proofSending) {
+      runtime.proofSettledDuringSend = true
+      return
+    }
+    if (runtime.briefSending) {
+      runtime.briefSettledDuringSend = true
+      return
+    }
+    if (runtime.checkState === 'pending' && !runtime.shadow && runtime.proofAccepted) signalProbeSettled(runtime)
+    if (runtime.checkState === 'passed') await attemptBrief(runtime)
+    else if (runtime.checkState === 'pending' && !runtime.shadow && !runtime.proofAccepted) await attemptProof(runtime)
   }
 
   const offSettled = app.context.subscribe((event) => {
     if (event.type !== 'quirky.agent-status/settled') return
-    const data = event.data as { worktreeId?: unknown } | null
-    if (typeof data?.worktreeId !== 'string') return
-    const brief = pendingBriefs.get(data.worktreeId)
-    if (brief === undefined) return
-    const sessionId = (data as { sessionId?: unknown }).sessionId
-    if (sessionId !== brief.sessionId) return
-    pendingBriefs.delete(data.worktreeId)
-    return sendBrief(data.worktreeId, brief)
+    const data = event.data as { worktreeId?: unknown; sessionId?: unknown } | null
+    if (typeof data?.worktreeId !== 'string' || typeof data.sessionId !== 'string') return
+    const runtime = continuations.get(data.worktreeId)
+    if (runtime === undefined) return
+    return settled(runtime, data.sessionId)
   })
-
-  function startGateCheck(worktreeId: string): void {
-    app.services.gate.gateCheck(worktreeId).catch((error) => {
-      if (disposed) return
-      try {
-        app.journal(worktreeId, 'event', { type: 'gate-check-error', error: errorText(error) })
-      } catch {
-        return
-      }
-    })
-  }
 
   /** Clears decisions that no longer belong to this hand-off or mandate. */
   function forgetDecisions(worktreeId: string, approvals: boolean): void {
@@ -260,7 +572,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     }
   }
 
-  type Prepared = { mandate: Mandate; session: SessionInfo | undefined; isNew: boolean }
+  type Prepared = { mandate: Mandate; session: SessionInfo | undefined; isNew: boolean; handoffSeq: number }
 
   async function handoff(items: HandoffInput[]): ReturnType<HandoffService['handoff']> {
     let snap: Snapshot
@@ -271,9 +583,8 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     }
     const outcomes: ({ worktreeId: string; ok: boolean; error?: string } | Prepared)[] = []
     let startAgent: string | null | undefined
-    for (const raw of items) {
-      outcomes.push(await prepare(raw))
-    }
+    for (const raw of items) outcomes.push(await prepare(raw))
+
     async function prepare(raw: HandoffInput): Promise<{ worktreeId: string; ok: boolean; error?: string } | Prepared> {
       const normalized = normalizeHandoffInput(raw, app.settings())
       const fallbackId = String((raw as { worktreeId?: unknown } | null)?.worktreeId ?? '')
@@ -285,13 +596,14 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
       if (!sheet.eligible) return { worktreeId: fields.worktreeId, ok: false, error: `not-eligible: ${sheet.reason}` }
       const previous = activeRow(fields.worktreeId)
       const session = snap.sessions.get(fields.worktreeId)
+      if (fields.level === 'shadow' && session === undefined) return { worktreeId: fields.worktreeId, ok: false, error: 'not-eligible: Shadow needs a running agent' }
       if (session === undefined && fields.agent === null) {
         startAgent ??= await resolveHookedAgent(call)
         if (startAgent === null) return { worktreeId: fields.worktreeId, ok: false, error: `not-eligible: ${NO_HOOKED_AGENT_REASON}` }
         fields.agent = startAgent
       }
       try {
-        const mandate = app.store.transaction(() => {
+        const prepared = app.store.transaction(() => {
           const before = app.store.mandates.get(fields.worktreeId)
           const sharedGoalId = sharedGoal === undefined ? null : upsertSharedGoal(fields.worktreeId, sharedGoal)
           if (before?.sharedGoalId && before.sharedGoalId !== sharedGoalId) leaveSharedGoal(fields.worktreeId, before.sharedGoalId)
@@ -303,10 +615,11 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
               ? { ...previous, state: 'checking', sessionId: session?.id ?? previous.sessionId }
               : { worktreeId: fields.worktreeId, state: 'checking', sessionId: session?.id ?? null, active: true, handedOffAt: app.now(), takenBackAt: null }
           )
-          app.journal(fields.worktreeId, 'handoff', { updated: previous !== null, mandate: stored })
-          return stored
+          const journal = app.journal(fields.worktreeId, 'handoff', { updated: previous !== null, mandate: stored })
+          return { mandate: stored, handoffSeq: journal.seq }
         })
-        return { mandate, session, isNew: previous === null }
+        continuations.delete(fields.worktreeId)
+        return { ...prepared, session, isNew: previous === null }
       } catch (error) {
         return { worktreeId: fields.worktreeId, ok: false, error: `unavailable: ${errorText(error)}` }
       }
@@ -316,31 +629,67 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     return Promise.all(
       outcomes.map(async (outcome) => {
         if (!('mandate' in outcome)) return outcome
-        const { mandate, session, isNew } = outcome
+        const { mandate, session, isNew, handoffSeq } = outcome
         const id = mandate.worktreeId
         app.emit({ type: 'state-changed', worktreeId: id, state: 'checking' })
         if (session !== undefined) {
+          const runtime = continuation(id, session.id, mandate, !isNew, session.agent, { session, handoffSeq })
           app.services.gate.writeMarker(session.id, id, mandate.level)
-          await deliverBrief(id, session, briefText(mandate, !isNew))
-        } else {
-          const started = await app.services.supervisor.startSession(id, briefText(mandate, false)).catch((error) => ({ sessionId: null, error: errorText(error) }))
-          if (started.sessionId === null) {
-            const row = app.store.handoffs.get(id)
-            app.store.transaction(() => {
-              if (row !== null) app.store.handoffs.put({ ...row, active: false, takenBackAt: app.now() })
-              app.journal(id, 'event', { type: 'start-failed', error: started.error ?? 'no session' })
-            })
-            app.emit({ type: 'handoffs-changed' })
-            return { worktreeId: id, ok: false, error: `couldn't start the agent: ${started.error ?? 'no session started'}` }
-          }
-          const row = app.store.handoffs.get(id)
-          if (row !== null) app.store.handoffs.put({ ...row, sessionId: started.sessionId })
-          app.services.gate.writeMarker(started.sessionId, id, mandate.level)
+          resumeBrief(id)
+          return { worktreeId: id, ok: true }
         }
-        startGateCheck(id)
+
+        const runtime = continuation(id, null, mandate, !isNew, mandate.agent ?? '', { launching: true, handoffSeq })
+        const started = await app.services.supervisor.startSession(id, PROOF_PROMPT).catch((error) => ({ sessionId: null, error: errorText(error) }))
+        if (started.sessionId === null) {
+          if (!current(runtime)) return { worktreeId: id, ok: true }
+          continuations.delete(id)
+          const row = app.store.handoffs.get(id)
+          app.store.transaction(() => {
+            if (row !== null) app.store.handoffs.put({ ...row, active: false, takenBackAt: app.now() })
+            app.journal(id, 'event', { type: 'start-failed', error: started.error ?? 'no session' })
+          })
+          app.emit({ type: 'handoffs-changed' })
+          return { worktreeId: id, ok: false, error: `couldn't start the agent: ${started.error ?? 'no session started'}` }
+        }
+        if (!current(runtime)) return { worktreeId: id, ok: true }
+        const row = app.store.handoffs.get(id)
+        if (row === null || !row.active) return { worktreeId: id, ok: true }
+        app.store.handoffs.put({ ...row, sessionId: started.sessionId })
+        runtime.sessionId = started.sessionId
+        runtime.launching = false
+        runtime.proofAccepted = true
+        app.services.gate.writeMarker(started.sessionId, id, mandate.level)
+        const settledDuringLaunch = runtime.launchSettled.delete(started.sessionId)
+        if (settledDuringLaunch) {
+          runtime.ready = true
+          runtime.readyFromSettlement = true
+        }
+        resumeBrief(id)
+        if (settledDuringLaunch) signalProbeSettled(runtime)
         return { worktreeId: id, ok: true }
       })
     )
+  }
+
+  function resumeBrief(worktreeId: string): void {
+    const row = activeRow(worktreeId)
+    const mandate = app.store.mandates.get(worktreeId)
+    if (row === null || mandate === null || (row.state !== 'checking' && row.state !== 'briefing')) return
+    const existing = continuations.get(worktreeId)
+    if (existing !== undefined && current(existing)) {
+      if (existing.checkStarted && (existing.checkState === 'pending' || existing.checkState === 'passed')) return
+      if (!existing.checkStarted && existing.checkState === 'pending') {
+        startGateCheck(existing)
+        advanceRuntime(existing)
+        return
+      }
+    }
+    continuations.delete(worktreeId)
+    if (row.state === 'briefing') writeStateRaw(worktreeId, 'checking', 'rechecking before the mandate brief')
+    const runtime = continuation(worktreeId, row.sessionId, mandate, true, mandate.agent ?? '')
+    startGateCheck(runtime)
+    advanceRuntime(runtime)
   }
 
   async function liveAgentSessionIds(worktreeId: string): Promise<string[]> {
@@ -362,13 +711,13 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
         const open = app.needs.list({ worktreeId, open: true })
         for (const need of open) app.needs.close(need.id, 'handed-back')
         const cancelled = app.services.shipping.cancelOutbox(worktreeId)
+        continuations.delete(worktreeId)
         app.store.handoffs.put({ ...row, active: false, takenBackAt: app.now() })
         forgetDecisions(worktreeId, true)
         const titles = open.map((need) => need.title)
         app.journal(worktreeId, 'take-back', { handedBackWith: titles, cancelledOutbox: cancelled, state: row.state })
         return titles
       })
-      pendingBriefs.delete(worktreeId)
       const sessionIds = new Set(await liveAgentSessionIds(worktreeId))
       if (row.sessionId !== null) sessionIds.add(row.sessionId)
       for (const sessionId of sessionIds) app.services.gate.removeMarker(sessionId)
@@ -486,17 +835,37 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
           return { ok: true }
         }
         case 'restart-to-handoff': {
-          const result = await app.services.supervisor.restartWorker(worktreeId, answer === '' ? 'restarted so the gate can be checked again' : answer)
-          if (result.sessionId === null) return { ok: false, error: result.error ?? 'could not restart the worker' }
-          const row = activeRow(worktreeId)
-          const mandate = app.store.mandates.get(worktreeId)
-          if (row !== null) app.store.handoffs.put({ ...row, sessionId: result.sessionId })
-          if (mandate !== null) app.services.gate.writeMarker(result.sessionId, worktreeId, mandate.level)
-          closeNeed(need, action, 'restarted')
-          writeState(worktreeId, 'checking', 'restarted to re-check the gate')
-          startGateCheck(worktreeId)
-          return { ok: true }
+        const row = activeRow(worktreeId)
+        const mandate = app.store.mandates.get(worktreeId)
+        if (row === null || mandate === null) return { ok: false, error: 'no active hand-off' }
+        if (mandate.level === 'shadow') return { ok: false, error: 'Shadow cannot restart a worker for gate proof' }
+        const runtime = continuation(worktreeId, null, mandate, true, mandate.agent ?? '', { launching: true })
+        const result = await app.services.supervisor.restartWorker(worktreeId, PROOF_PROMPT)
+        if (result.sessionId === null) {
+          if (continuations.get(worktreeId) === runtime) continuations.delete(worktreeId)
+          return { ok: false, error: result.error ?? 'could not restart the worker' }
         }
+        if (!current(runtime)) return { ok: false, error: 'hand-off changed while restarting' }
+        const currentRow = activeRow(worktreeId)
+        const currentMandate = app.store.mandates.get(worktreeId)
+        if (currentRow === null || currentMandate === null) return { ok: false, error: 'hand-off changed while restarting' }
+        app.store.handoffs.put({ ...currentRow, sessionId: result.sessionId })
+        runtime.sessionId = result.sessionId
+        runtime.launching = false
+        runtime.proofAccepted = true
+        runtime.agent = currentMandate.agent ?? runtime.agent
+        app.services.gate.writeMarker(result.sessionId, worktreeId, currentMandate.level)
+        closeNeed(need, action, 'restarted', answer === '' ? {} : { text: answer })
+        if (currentRow.state !== 'checking') writeStateRaw(worktreeId, 'checking', 'restarted to re-check the gate')
+        const settledDuringLaunch = runtime.launchSettled.delete(result.sessionId)
+        if (settledDuringLaunch) {
+          runtime.ready = true
+          runtime.readyFromSettlement = true
+        }
+        resumeBrief(worktreeId)
+        if (settledDuringLaunch) signalProbeSettled(runtime)
+        return { ok: true }
+      }
       }
     } finally {
       resolvingNeeds.delete(needId)
@@ -505,6 +874,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
 
   app.services.handoff = {
     handoff,
+    resumeBrief,
     takeBack,
     eligibility: async () => (await snapshot()).rows,
     mandate: (worktreeId) => app.store.mandates.get(worktreeId),
@@ -521,6 +891,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
   }
   return () => {
     disposed = true
+    continuations.clear()
     offSettled()
   }
 }

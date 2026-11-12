@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Approval, HandoffInput, LateAnswer, Level, NeedKind, NeedAction, WorktreeState } from '../src/contracts'
 import { register } from '../src/handoff'
+import { createStepIn } from '../src/supervisor/stepin'
 import { makeTestApp, type FakeCalls } from './support'
 
 type Wt = Record<string, unknown>
@@ -39,6 +40,7 @@ function setup(options: Options = {}) {
   const worktrees = options.worktrees ?? [wt('wt-1'), wt('wt-2')]
   const sessions = options.sessions ?? []
   const sent: { session: string; text: string }[] = []
+  const order: unknown[][] = []
   const t = makeTestApp({
     settings: options.settings,
     fakeCalls: {
@@ -46,6 +48,7 @@ function setup(options: Options = {}) {
       'quirky.repo/list': () => [{ id: 'repo-1', name: 'quirky', displayName: null, groupId: 'grp-1' }, { id: 'repo-2', name: 'solo', displayName: 'Solo', groupId: null }],
       'quirky.repo/groupList': () => [{ id: 'grp-1', name: 'Work' }],
       'quirky.session/list': () => sessions,
+      'quirky.session/get': (params) => sessions.find((entry) => entry.id === params.session) ?? null,
       'quirky.heimdall/inspect': () => options.heimdall ?? [],
       'quirky.agents/list': () => ({ defaultAgent: 'claude', agents: [{ id: 'claude', installed: true, enabled: true }] }),
       'quirky.agent-status/send': (params) => {
@@ -57,22 +60,32 @@ function setup(options: Options = {}) {
   })
   const frozenNow = 1_700_000_000_000
   t.app.now = () => frozenNow
-  const gate = { markers: [] as unknown[][], removed: [] as string[], checks: [] as string[], approved: [] as string[], passthrough: [] as string[], checkResult: { ok: true, reason: '' } }
-  t.app.services.gate.writeMarker = (...args) => void gate.markers.push(args)
+  const gate = { markers: [] as unknown[][], removed: [] as string[], checks: [] as string[], probes: [] as [string, string][], approved: [] as string[], passthrough: [] as string[], checkResult: { ok: true, reason: '' } }
+  t.app.services.gate.writeMarker = (...args) => {
+    gate.markers.push(args)
+    order.push(['marker', ...args])
+  }
   t.app.services.gate.removeMarker = (id) => void gate.removed.push(id)
   t.app.services.gate.gateCheck = async (id) => {
     gate.checks.push(id)
+    order.push(['check', id])
     return gate.checkResult
+  }
+  ;(t.app.services.gate as typeof t.app.services.gate & { noteProbeSettled: (worktreeId: string, sessionId: string) => void }).noteProbeSettled = (worktreeId, sessionId) => {
+    gate.probes.push([worktreeId, sessionId])
+    order.push(['probe-settled', worktreeId, sessionId])
   }
   t.app.services.gate.approveOnce = (id) => void gate.approved.push(id)
   t.app.services.gate.resolveInFlight = (id) => void gate.passthrough.push(id)
   const sup = { sends: [] as [string, string][], started: [] as [string, string][], restarted: [] as [string, string][], startResult: { sessionId: 'new-session' as string | null, error: undefined as string | undefined }, restartResult: { sessionId: 'restart-session' as string | null, error: undefined as string | undefined } }
   t.app.services.supervisor.send = async (id, text) => {
     sup.sends.push([id, text])
+    order.push(['send', id, text])
     return { sent: true }
   }
   t.app.services.supervisor.startSession = async (id, note) => {
     sup.started.push([id, note])
+    order.push(['start', id, note])
     return sup.startResult
   }
   t.app.services.supervisor.restartWorker = async (id, note) => {
@@ -88,7 +101,7 @@ function setup(options: Options = {}) {
   }
   const version = options.claudeVersion === undefined ? '2.1.300' : options.claudeVersion
   const dispose = register(t.app, { claudeVersion: async () => version })
-  return { ...t, worktrees, sessions, sent, gate, sup, wakes: () => wakes, cancelled, dispose: dispose as () => void, svc: t.app.services.handoff }
+  return { ...t, worktrees, sessions, sent, order, gate, sup, wakes: () => wakes, cancelled, dispose: dispose as () => void, svc: t.app.services.handoff }
 }
 
 type Setup = ReturnType<typeof setup>
@@ -123,6 +136,66 @@ function decisionIds(s: Setup) {
     approvals: s.app.store.approvals.list().map((row) => row.id)
   }
 }
+
+type GateResult = { ok: boolean; reason: string }
+
+function deferredGateCheck(s: Setup) {
+  const check = deferred<GateResult>()
+  s.app.services.gate.gateCheck = (worktreeId) => {
+    s.gate.checks.push(worktreeId)
+    s.order.push(['check', worktreeId])
+    return check.promise
+  }
+  return check
+}
+
+function passGateCheck(s: Setup, check: { resolve(value: GateResult): void }): void {
+  s.app.journal('wt-1', 'event', { type: 'gate-check', ok: true, agent: 'claude' })
+  if (stateOf(s, 'wt-1') === 'checking') s.app.services.handoff.setState('wt-1', 'briefing', 'the gate check passed')
+  check.resolve({ ok: true, reason: '' })
+}
+
+function failGateCheck(s: Setup, check: { resolve(value: GateResult): void }, reason: string): void {
+  const row = s.app.store.handoffs.get('wt-1')
+  const sessionId = row?.sessionId ?? 's1'
+  s.app.services.gate.removeMarker(sessionId)
+  s.app.journal('wt-1', 'event', { type: 'gate-check', ok: false, agent: 'claude', reason })
+  if (stateOf(s, 'wt-1') !== 'gate-failed') s.app.services.handoff.setState('wt-1', 'gate-failed', reason)
+  if (s.app.needs.list({ worktreeId: 'wt-1', open: true }).every((need) => need.kind !== 'gate-failed')) {
+    s.app.needs.add({ worktreeId: 'wt-1', kind: 'gate-failed', title: "The avatar can't confirm it gates Claude", detail: { reason, agent: 'claude', sessionId }, actions: ['restart-to-handoff'] })
+  }
+  check.resolve({ ok: false, reason })
+}
+const PROOF_PROMPT = 'The Avatar is checking its permission hook. Run only `pwd` once, then stop and wait for your mandate. Do not start work.'
+const INITIAL_BRIEF = `The user has handed this worktree to the Avatar. It answers routine permission prompts for you within this mandate, so keep working without waiting on the user.
+
+Goal: Fix the build
+Done when (this command passes): bun test
+Level: own-branch
+
+When the work meets the done-when, say so plainly and stop.`
+
+const UPDATED_BRIEF = INITIAL_BRIEF.replace(
+  'The user has handed this worktree to the Avatar. It answers routine permission prompts for you within this mandate, so keep working without waiting on the user.',
+  'Your mandate from the user was updated. Work to this version from now on.'
+)
+
+function deferred<T>() {
+  return Promise.withResolvers<T>()
+}
+
+async function flushContinuations(): Promise<void> {
+  for (let index = 0; index < 8; index++) await Promise.resolve()
+}
+
+function settle(s: Setup, sessionId = 's1', worktreeId = 'wt-1'): Promise<void> {
+  return s.deliver({ type: 'quirky.agent-status/settled', data: { sessionId, worktreeId, state: 'done' } })
+}
+
+function eventsOf(s: Setup, type: string) {
+  return s.app.store.journalSince(0).filter((entry) => entry.worktreeId === 'wt-1' && entry.data.type === type)
+}
+
 
 describe('stored decisions', () => {
   test('H1: take-back deletes this worktree’s late answers and unused approvals only', async () => {
@@ -245,42 +318,96 @@ describe('eligibility', () => {
 })
 
 describe('handoff', () => {
-  test('stores the mandate with settings defaults, writes the marker, briefs an idle agent and starts the gate check', async () => {
+  test('stores the normalized mandate and sends only the guarded proof prompt while proof is pending', async () => {
     const s = setup({ sessions: [session('s1', 'wt-1')], settings: { 'default-level': 'local' } })
+    const check = deferredGateCheck(s)
     const { level: _level, ...rest } = input('wt-1', { guidelines: [' keep commits small '] })
     const results = await s.svc.handoff([rest as unknown as HandoffInput])
 
     expect(results).toEqual([{ worktreeId: 'wt-1', ok: true }])
     expect(s.svc.mandate('wt-1')).toMatchObject({ worktreeId: 'wt-1', goal: 'Fix the build', level: 'local', guidelines: ['keep commits small'], sharedGoalId: null, updatedAt: s.app.now() })
-    expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ state: 'checking', sessionId: 's1', active: true, takenBackAt: null })
+    expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ state: 'checking', sessionId: 's1', active: true, handedOffAt: 1_700_000_000_000, takenBackAt: null })
     expect(s.gate.markers).toEqual([['s1', 'wt-1', 'local']])
     expect(s.gate.checks).toEqual(['wt-1'])
-    expect(s.sent).toHaveLength(1)
-    expect(s.sent[0]).toMatchObject({ session: 's1' })
-    expect(s.sent[0]!.text).toContain('Fix the build')
-    expect(s.sent[0]!.text).toContain('bun test')
-    expect(s.sent[0]!.text).toContain('keep commits small')
+    expect(s.order).toEqual([['marker', 's1', 'wt-1', 'local'], ['check', 'wt-1'], ['send', 'wt-1', PROOF_PROMPT]])
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(s.sent).toEqual([])
+    expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
     expect(s.sup.started).toEqual([])
-    expect(s.app.store.journalSince(0).filter((entry) => entry.kind === 'handoff')).toHaveLength(1)
+    expect(s.app.store.journalSince(0).filter((entry) => entry.kind === 'handoff')).toMatchObject([{ data: { updated: false, mandate: { goal: 'Fix the build', guidelines: ['keep commits small'] } } }])
+
   })
 
-  test('does not await the gate check', async () => {
+
+  test('does not await an unresolved gate check', async () => {
     const s = setup({ sessions: [session('s1', 'wt-1')] })
-    s.app.services.gate.gateCheck = () => new Promise(() => {})
+    deferredGateCheck(s)
     expect(await handOff(s, input('wt-1'))).toEqual([{ worktreeId: 'wt-1', ok: true }])
   })
 
-  test('with no running agent it starts one with the mandate as its prompt and gates the new session', async () => {
+  test('starts a new session with only P and never sends P again through the supervisor', async () => {
     const s = setup()
+    const check = deferredGateCheck(s)
+    let settlementArrivedDuringStart = false
+    s.app.services.supervisor.startSession = async (id, prompt) => {
+      s.sup.started.push([id, prompt])
+      s.order.push(['start', id, prompt])
+      await settle(s, 'new-session', id)
+      settlementArrivedDuringStart = true
+      return { sessionId: 'new-session' }
+    }
     expect(await handOff(s, input('wt-1', { agent: 'claude' }))).toEqual([{ worktreeId: 'wt-1', ok: true }])
-    expect(s.sup.started).toHaveLength(1)
-    expect(s.sup.started[0]![0]).toBe('wt-1')
-    expect(s.sup.started[0]![1]).toContain('Fix the build')
+    expect(settlementArrivedDuringStart).toBe(true)
+    expect(s.sup.started).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(s.sup.sends.filter(([, text]) => text === PROOF_PROMPT)).toEqual([])
+    expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ sessionId: 'new-session', active: true, state: 'checking' })
+    expect(s.gate.markers).toEqual([['new-session', 'wt-1', 'own-branch']])
+    expect(s.gate.checks).toEqual(['wt-1'])
+    expect(s.gate.probes).toEqual([['wt-1', 'new-session']])
+    passGateCheck(s, check)
+    await flushContinuations()
+    expect(s.sup.sends).toEqual([['wt-1', INITIAL_BRIEF]])
+    expect(stateOf(s, 'wt-1')).toBe('working')
+  })
+
+  test('refuses Shadow without a running session before changing any handoff data', async () => {
+    const s = setup()
+    const before = s.app.store.journalSince(0)
+    expect(await handOff(s, input('wt-1', { level: 'shadow', agent: 'claude' }))).toEqual([
+      { worktreeId: 'wt-1', ok: false, error: 'not-eligible: Shadow needs a running agent' }
+    ])
+    expect(s.svc.mandate('wt-1')).toBeNull()
+    expect(s.app.store.handoffs.get('wt-1')).toBeNull()
+    expect(s.app.store.journalSince(0)).toEqual(before)
+    expect(s.sup.started).toEqual([])
+    expect(s.gate.markers).toEqual([])
+    expect(s.gate.checks).toEqual([])
+  })
+
+  test('refuses restart-to-handoff at Shadow without restarting or resolving its need', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    await handOff(s, input('wt-1', { level: 'shadow' }))
+    const need = addNeed(s, 'wt-1', 'gate-failed', ['restart-to-handoff', 'take-back'])
+    s.sup.restarted.length = 0
+    expect(await s.svc.resolveNeed(need.id, 'restart-to-handoff')).toEqual({ ok: false, error: 'Shadow cannot restart a worker for gate proof' })
+    expect(s.sup.restarted).toEqual([])
+    expect(s.app.store.needs.get(need.id)).toMatchObject({ resolvedAt: null })
+  })
+
+
+  test('with no running agent it launches only P and gates the created session', async () => {
+    const s = setup()
+    deferredGateCheck(s)
+    expect(await handOff(s, input('wt-1', { agent: 'claude' }))).toEqual([{ worktreeId: 'wt-1', ok: true }])
+    expect(s.sup.started).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(s.sup.sends.filter(([, text]) => text === PROOF_PROMPT)).toEqual([])
+    expect(s.sup.sends.some(([, text]) => text.includes('Fix the build'))).toBe(false)
     expect(s.sent).toEqual([])
-    expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ sessionId: 'new-session', active: true })
+    expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ sessionId: 'new-session', active: true, state: 'checking' })
     expect(s.gate.markers).toEqual([['new-session', 'wt-1', 'own-branch']])
     expect(s.gate.checks).toEqual(['wt-1'])
   })
+
 
   test('starts the configured default agent when it is hooked', async () => {
     const s = setup({ calls: { 'quirky.agents/list': () => ({ defaultAgent: 'codex', agents: [{ id: 'codex', installed: true }] }) } })
@@ -333,46 +460,7 @@ describe('handoff', () => {
     expect(s.svc.active()).toEqual([])
   })
 
-  test('never sends a brief mid-turn, and sends it when the agent next settles', async () => {
-    const s = setup({ sessions: [session('s1', 'wt-1', { status: 'working', agentStatus: { state: 'working' } })] })
-    await handOff(s, input('wt-1'))
-    expect(s.sent).toEqual([])
-    expect(s.gate.markers).toHaveLength(1)
 
-    await s.deliver({ type: 'quirky.agent-status/settled', data: { sessionId: 'other', worktreeId: 'wt-2', state: 'done' } })
-    expect(s.sent).toEqual([])
-    await s.deliver({ type: 'quirky.agent-status/settled', data: { sessionId: 's1', worktreeId: 'wt-1', state: 'done' } })
-    expect(s.sent).toHaveLength(1)
-    expect(s.sent[0]!.text).toContain('Fix the build')
-    await s.deliver({ type: 'quirky.agent-status/settled', data: { sessionId: 's1', worktreeId: 'wt-1', state: 'done' } })
-    expect(s.sent).toHaveLength(1)
-  })
-
-  test('keeps the brief pending while the agent is blocked, and a take-back discards it', async () => {
-    let blocked = true
-    const s = setup({
-      sessions: [session('s1', 'wt-1')],
-      calls: {
-        'quirky.agent-status/send': () => {
-          if (blocked) throw Object.assign(new Error('blocked'), { data: { reason: 'agent-blocked' } })
-          return { session: 's1', state: 'working', sentAt: 1, startedAt: 2 }
-        }
-      }
-    })
-    await handOff(s, input('wt-1'))
-    blocked = false
-    const sends: unknown[] = []
-    s.fakeCalls['quirky.agent-status/send'] = (params) => void sends.push(params)
-    await s.deliver({ type: 'quirky.agent-status/settled', data: { sessionId: 's1', worktreeId: 'wt-1', state: 'waiting' } })
-    expect(sends).toHaveLength(1)
-
-    s.dispose()
-    const s2 = setup({ sessions: [session('s1', 'wt-1', { agentStatus: { state: 'working' } })] })
-    await handOff(s2, input('wt-1'))
-    await s2.svc.takeBack({ worktreeIds: ['wt-1'] })
-    await s2.deliver({ type: 'quirky.agent-status/settled', data: { sessionId: 's1', worktreeId: 'wt-1', state: 'done' } })
-    expect(s2.sent).toEqual([])
-  })
   test('the disposer stops its settled listener without resolving in-flight gate requests', async () => {
     const s = setup({ sessions: [session('s1', 'wt-1', { status: 'working', agentStatus: { state: 'working' } })] })
     await handOff(s, input('wt-1'))
@@ -399,20 +487,29 @@ describe('handoff', () => {
     expect(s.svc.active().map((entry) => entry.worktreeId)).toEqual(['wt-1'])
   })
 
-  test('re-handing off updates the mandate, returns to checking, reruns the gate check and re-briefs', async () => {
+  test('re-handing off at the frozen time supersedes the old continuation and sends the current mandate', async () => {
     const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const firstCheck = deferredGateCheck(s)
     await handOff(s, input('wt-1'))
-    s.svc.setState('wt-1', 'working', 'on it')
+    await settle(s)
+    passGateCheck(s, firstCheck)
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('working')
     s.gate.checks.length = 0
-    s.sent.length = 0
+    const secondCheck = deferredGateCheck(s)
 
     expect(await handOff(s, input('wt-1', { goal: 'New goal', level: 'full' }))).toEqual([{ worktreeId: 'wt-1', ok: true }])
-    expect(s.svc.mandate('wt-1')).toMatchObject({ goal: 'New goal', level: 'full' })
+    expect(s.svc.mandate('wt-1')).toMatchObject({ goal: 'New goal', level: 'full', updatedAt: 1_700_000_000_000 })
     expect(stateOf(s, 'wt-1')).toBe('checking')
     expect(s.gate.checks).toEqual(['wt-1'])
     expect(s.gate.markers.at(-1)).toEqual(['s1', 'wt-1', 'full'])
-    expect(s.sent).toHaveLength(1)
-    expect(s.sent[0]!.text).toContain('New goal')
+    expect(s.sup.sends.at(-1)).toEqual(['wt-1', PROOF_PROMPT])
+    await settle(s)
+    passGateCheck(s, secondCheck)
+    await flushContinuations()
+    expect(s.sup.sends.at(-1)?.[1]).toContain('New goal')
+    expect(s.sup.sends.at(-1)?.[1]).not.toContain('Fix the build')
+    expect(stateOf(s, 'wt-1')).toBe('working')
   })
 
   test('re-handing off an ineligible but handed-off worktree still works', async () => {
@@ -442,6 +539,479 @@ describe('handoff', () => {
     const s = setup({ calls: { 'quirky.worktree/list': () => { throw new Error('boom') } } })
     const results = await handOff(s, input('wt-1'))
     expect(results).toEqual([{ worktreeId: 'wt-1', ok: false, error: 'unavailable: boom' }])
+  })
+})
+
+describe('proof-before-brief lifecycle', () => {
+  test('releases the exact mandate once only after a passed check and a settled proof prompt', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+
+    await settle(s)
+    expect(s.gate.probes).toEqual([['wt-1', 's1']])
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    passGateCheck(s, check)
+    await flushContinuations()
+
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT], ['wt-1', INITIAL_BRIEF]])
+    expect(stateOf(s, 'wt-1')).toBe('working')
+    expect(s.app.store.journalSince(0).filter((entry) => entry.data.type === 'gate-check' || entry.data.type === 'state').map((entry) => entry.data)).toEqual([
+      { type: 'gate-check', ok: true, agent: 'claude' },
+      { type: 'state', from: 'checking', state: 'briefing', note: 'the gate check passed' },
+      { type: 'state', from: 'briefing', state: 'working', note: 'the mandate brief was sent' }
+    ])
+    await settle(s)
+    expect(s.gate.probes).toEqual([['wt-1', 's1']])
+    expect(s.sup.sends).toHaveLength(2)
+  })
+
+  test('working activity can start P but B waits for both a passed check and the next ready turn', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1', { status: 'working', agentStatus: { state: 'working' } })] })
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    expect(s.sup.sends).toEqual([])
+
+    await settle(s, 'other', 'wt-1')
+    await settle(s, 's1', 'wt-2')
+    expect(s.sup.sends).toEqual([])
+    expect(s.gate.probes).toEqual([])
+
+    await settle(s)
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(s.gate.probes).toEqual([])
+    passGateCheck(s, check)
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('briefing')
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+
+    await settle(s)
+    expect(s.gate.probes).toEqual([])
+    expect(s.sup.sends.at(-1)).toEqual(['wt-1', INITIAL_BRIEF])
+    expect(stateOf(s, 'wt-1')).toBe('working')
+  })
+
+  for (const state of ['waiting', 'working'] as const) {
+    test(`Shadow ${state} waits passively for natural proof and refuses its one brief attempt`, async () => {
+      const s = setup({ sessions: [session('s1', 'wt-1', { status: state === 'working' ? 'working' : 'running', agentStatus: { state } })] })
+      const check = deferredGateCheck(s)
+      const attempts: [string, string][] = []
+      const stepIn = createStepIn(s.app)
+      s.app.services.supervisor.send = async (worktreeId, text) => {
+        attempts.push([worktreeId, text])
+        return stepIn.send(worktreeId, text)
+      }
+      await handOff(s, input('wt-1', { level: 'shadow' }))
+      expect(s.gate.markers).toEqual([['s1', 'wt-1', 'shadow']])
+      expect(s.sup.started).toEqual([])
+      expect(attempts).toEqual([])
+
+      await settle(s)
+      expect(s.gate.probes).toEqual([])
+      expect(s.gate.checks).toEqual(['wt-1'])
+      expect(attempts).toEqual([])
+      expect(stateOf(s, 'wt-1')).toBe('checking')
+      expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+
+      passGateCheck(s, check)
+      await flushContinuations()
+      expect(stateOf(s, 'wt-1')).toBe('briefing')
+      expect(attempts).toEqual([['wt-1', INITIAL_BRIEF.replace('Level: own-branch', 'Level: shadow')]])
+      expect(eventsOf(s, 'brief-not-sent').map((entry) => entry.data)).toEqual([{ type: 'brief-not-sent', reason: 'shadow' }])
+      expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+      await settle(s)
+      await settle(s)
+      expect(attempts).toHaveLength(1)
+      expect(eventsOf(s, 'brief-not-sent')).toHaveLength(1)
+    })
+  }
+
+  for (const reason of ['user-typing', 'agent-blocked', 'transport-down', 'prompt-stalled']) {
+    test(`a refused proof prompt (${reason}) remains checking and upserts one visible need`, async () => {
+      const s = setup({ sessions: [session('s1', 'wt-1')] })
+      deferredGateCheck(s)
+      let needsChanged = 0
+      s.app.on((event) => {
+        if (event.type === 'needs-changed') needsChanged++
+      })
+      s.app.services.supervisor.send = async (worktreeId, text) => {
+        s.sup.sends.push([worktreeId, text])
+        s.order.push(['send', worktreeId, text])
+        return { sent: false, reason }
+      }
+      await handOff(s, input('wt-1'))
+      const need = s.app.needs.list({ worktreeId: 'wt-1', open: true })[0]
+      expect(need).toMatchObject({
+        kind: 'gate-failed',
+        title: `Gate proof not sent: ${reason}`,
+        detail: { reason, agent: 'claude', sessionId: 's1' },
+        actions: ['restart-to-handoff', 'take-back']
+      })
+      expect(stateOf(s, 'wt-1')).toBe('checking')
+      expect(s.gate.markers).toEqual([['s1', 'wt-1', 'own-branch']])
+      expect(eventsOf(s, 'proof-not-sent').map((entry) => entry.data)).toEqual([{ type: 'proof-not-sent', reason }])
+      expect(s.gate.probes).toEqual([])
+      expect(needsChanged).toBe(1)
+
+      await settle(s, 'other')
+      await settle(s)
+      await settle(s)
+      expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT], ['wt-1', PROOF_PROMPT], ['wt-1', PROOF_PROMPT]])
+      expect(eventsOf(s, 'proof-not-sent')).toHaveLength(1)
+      expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([need])
+      expect(needsChanged).toBe(1)
+    })
+  }
+
+  test('buffers a settlement during guarded P send and signals only when that send was accepted', async () => {
+    for (const accepted of [true, false]) {
+      const s = setup({ sessions: [session('s1', 'wt-1')] })
+      deferredGateCheck(s)
+      const sending = deferred<{ sent: boolean; reason?: string }>()
+      const started = deferred<void>()
+      s.app.services.supervisor.send = async (worktreeId, text) => {
+        s.sup.sends.push([worktreeId, text])
+        if (text === PROOF_PROMPT) {
+          started.resolve()
+          return sending.promise
+        }
+        return { sent: true }
+      }
+      const result = handOff(s, input('wt-1'))
+      await started.promise
+      await settle(s)
+      expect(s.gate.probes).toEqual([])
+      sending.resolve(accepted ? { sent: true } : { sent: false, reason: 'transport-down' })
+      await result
+      await flushContinuations()
+      expect(s.gate.probes).toEqual(accepted ? [['wt-1', 's1']] : [])
+      expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+      expect(stateOf(s, 'wt-1')).toBe('checking')
+      if (accepted) expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+      else expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })[0]?.title).toBe('Gate proof not sent: transport-down')
+    }
+  })
+
+  test('a completed accepted proof turn without a receipt fails visibly and never releases the brief', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    await settle(s, 'wrong')
+    expect(s.gate.probes).toEqual([])
+    await settle(s)
+    expect(s.gate.probes).toEqual([['wt-1', 's1']])
+    const reason = 'the proof turn ended without a gate receipt'
+    failGateCheck(s, check, reason)
+    await flushContinuations()
+
+    expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ state: 'gate-failed', active: true, sessionId: 's1' })
+    expect(s.gate.removed).toEqual(['s1'])
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toMatchObject([
+      { kind: 'gate-failed', title: "The avatar can't confirm it gates Claude", detail: { reason, agent: 'claude', sessionId: 's1' }, actions: ['restart-to-handoff'] }
+    ])
+    expect(s.app.store.journalSince(0).filter((entry) => entry.data.type === 'gate-check' || entry.data.type === 'state').map((entry) => entry.data).slice(-2)).toEqual([
+      { type: 'gate-check', ok: false, agent: 'claude', reason },
+      { type: 'state', from: 'checking', state: 'gate-failed', note: reason }
+    ])
+    await settle(s)
+    expect(s.gate.probes).toHaveLength(1)
+    expect(s.sup.sends).toHaveLength(1)
+  })
+
+  test('an actual gate failure replaces the matching pending-proof need instead of leaving it stale', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const check = deferredGateCheck(s)
+    s.app.services.supervisor.send = async (worktreeId, text) => {
+      s.sup.sends.push([worktreeId, text])
+      return { sent: false, reason: 'transport-down' }
+    }
+    await handOff(s, input('wt-1'))
+    const pending = s.app.needs.list({ worktreeId: 'wt-1', open: true })[0]!
+    failGateCheck(s, check, 'permission hook is missing')
+    await flushContinuations()
+    const open = s.app.needs.list({ worktreeId: 'wt-1', open: true })
+    expect(open).toHaveLength(1)
+    expect(open[0]).toMatchObject({ id: pending.id, title: "The avatar can't confirm it gates Claude", detail: { reason: 'permission hook is missing', agent: 'claude', sessionId: 's1' }, actions: ['restart-to-handoff'] })
+    expect(s.app.store.needs.get(pending.id)?.resolvedAt).toBeNull()
+  })
+
+  test('rejected gate checks create one incomplete-check need and do not deliver a mandate', async () => {
+    const s = setup()
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1', { agent: 'claude' }))
+    check.reject(new Error('proof unavailable'))
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+    expect(s.gate.markers).toEqual([['new-session', 'wt-1', 'own-branch']])
+    expect(s.sup.sends.some(([, text]) => text.includes('Goal: Fix the build'))).toBe(false)
+    expect(eventsOf(s, 'gate-check-error').map((entry) => entry.data)).toEqual([{ type: 'gate-check-error', error: 'proof unavailable' }])
+    expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toMatchObject([
+      { kind: 'gate-failed', title: 'Gate check could not finish: proof unavailable', detail: { reason: 'proof unavailable', agent: 'claude', sessionId: 'new-session' }, actions: ['restart-to-handoff', 'take-back'] }
+    ])
+  })
+
+  test('a disposed continuation is silent when its gate promise rejects', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    const journalLength = s.app.store.journalSince(0).length
+    s.dispose()
+    check.reject(new Error('proof unavailable'))
+    await flushContinuations()
+    expect(s.app.store.journalSince(0)).toHaveLength(journalLength)
+    expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+  })
+  test('accepted P retries close its pending need, while natural proof closes it as gate-proved', async () => {
+    const accepted = setup({ sessions: [session('s1', 'wt-1')] })
+    const acceptedCheck = deferredGateCheck(accepted)
+    let allowProbe = false
+    accepted.app.services.supervisor.send = async (worktreeId, text) => {
+      accepted.sup.sends.push([worktreeId, text])
+      return text === PROOF_PROMPT && !allowProbe ? { sent: false, reason: 'transport-down' } : { sent: true }
+    }
+    await handOff(accepted, input('wt-1'))
+    const pending = accepted.app.needs.list({ worktreeId: 'wt-1', open: true })[0]!
+    allowProbe = true
+    await settle(accepted)
+    expect(accepted.gate.probes).toEqual([])
+    expect(accepted.app.store.needs.get(pending.id)).toMatchObject({ resolution: 'proof-prompt-sent' })
+    await settle(accepted)
+    expect(accepted.gate.probes).toEqual([['wt-1', 's1']])
+    passGateCheck(accepted, acceptedCheck)
+    await flushContinuations()
+    expect(accepted.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+    expect(accepted.sup.sends.at(-1)).toEqual(['wt-1', INITIAL_BRIEF])
+
+    const natural = setup({ sessions: [session('s1', 'wt-1')] })
+    const naturalCheck = deferredGateCheck(natural)
+    natural.app.services.supervisor.send = async (worktreeId, text) => {
+      natural.sup.sends.push([worktreeId, text])
+      return { sent: false, reason: text === PROOF_PROMPT ? 'transport-down' : 'agent-blocked' }
+    }
+    await handOff(natural, input('wt-1'))
+    const naturalNeed = natural.app.needs.list({ worktreeId: 'wt-1', open: true })[0]!
+    passGateCheck(natural, naturalCheck)
+    await flushContinuations()
+    expect(natural.app.store.needs.get(naturalNeed.id)).toMatchObject({ resolution: 'gate-proved' })
+    expect(natural.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+  })
+
+  for (const reason of ['shadow', 'user-typing', 'agent-blocked', 'transport-down']) {
+    test(`a refused brief (${reason}) remains owed and retries only on matching settlement`, async () => {
+      const shadow = reason === 'shadow'
+      const s = setup({ sessions: shadow ? [session('s1', 'wt-1')] : [] })
+      const check = deferredGateCheck(s)
+      const attempts: [string, string][] = []
+      if (reason === 'shadow' || reason === 'user-typing') {
+        const stepIn = createStepIn(s.app)
+        if (!shadow) {
+          s.fakeCalls['quirky.session/get'] = ({ session: id }) => ({ id, agent: 'claude', agentStatus: { stateStartedAt: 10 } })
+          s.pty.userInput.set('new-session', { session: 'new-session', expectedIncarnation: 'inc-1', at: 11 })
+        }
+        s.app.services.supervisor.send = async (worktreeId, text) => {
+          attempts.push([worktreeId, text])
+          return stepIn.send(worktreeId, text)
+        }
+      } else {
+        s.app.services.supervisor.send = async (worktreeId, text) => {
+          attempts.push([worktreeId, text])
+          return { sent: false, reason }
+        }
+      }
+      await handOff(s, input('wt-1', { ...(shadow ? { level: 'shadow' as const } : { agent: 'claude' }) }))
+      if (shadow) {
+        await settle(s)
+        expect(s.gate.probes).toEqual([])
+      } else {
+        await settle(s, 'new-session')
+      }
+      passGateCheck(s, check)
+      await flushContinuations()
+      expect(stateOf(s, 'wt-1')).toBe('briefing')
+      expect(attempts).toEqual([['wt-1', shadow ? INITIAL_BRIEF.replace('Level: own-branch', 'Level: shadow') : INITIAL_BRIEF]])
+      expect(eventsOf(s, 'brief-not-sent').map((entry) => entry.data)).toEqual([{ type: 'brief-not-sent', reason }])
+      expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+      expect(s.pty.writes).toEqual([])
+
+      await settle(s, shadow ? 's1' : 'new-session')
+      await settle(s, shadow ? 's1' : 'new-session')
+      expect(attempts).toHaveLength(shadow ? 1 : 3)
+      expect(eventsOf(s, 'brief-not-sent')).toHaveLength(1)
+      expect(s.gate.checks).toEqual(['wt-1'])
+    })
+  }
+
+  test('three same-reason brief refusals journal once, changed reasons deduplicate by reason, and success clears debt', async () => {
+    const s = setup()
+    const check = deferredGateCheck(s)
+    let reason: string | null = 'user-typing'
+    s.app.services.supervisor.send = async (worktreeId, text) => {
+      s.sup.sends.push([worktreeId, text])
+      return reason === null ? { sent: true } : { sent: false, reason }
+    }
+    await handOff(s, input('wt-1', { agent: 'claude' }))
+    await settle(s, 'new-session')
+    passGateCheck(s, check)
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('briefing')
+    await settle(s, 'new-session')
+    await settle(s, 'new-session')
+    expect(s.sup.sends.filter(([, text]) => text === INITIAL_BRIEF)).toHaveLength(3)
+    expect(eventsOf(s, 'brief-not-sent').map((entry) => entry.data)).toEqual([{ type: 'brief-not-sent', reason: 'user-typing' }])
+
+    reason = 'agent-blocked'
+    await settle(s, 'new-session')
+    reason = 'user-typing'
+    await settle(s, 'new-session')
+    expect(eventsOf(s, 'brief-not-sent').map((entry) => entry.data)).toEqual([
+      { type: 'brief-not-sent', reason: 'user-typing' },
+      { type: 'brief-not-sent', reason: 'agent-blocked' }
+    ])
+
+    reason = null
+    await settle(s, 'new-session')
+    expect(stateOf(s, 'wt-1')).toBe('working')
+    const sendCount = s.sup.sends.length
+    await settle(s, 'new-session')
+    expect(s.sup.sends).toHaveLength(sendCount)
+  })
+  test('ordinary state updates cannot erase checking or briefing debt', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    const statesBefore = s.app.store.journalSince(0).filter((entry) => entry.data.type === 'state')
+    const progress: WorktreeState[] = ['working', 'waiting-on-you', 'checking-done', 'in-review', 'merge-ready', 'merged', 'pr-ready', 'committed', 'done']
+    for (const next of progress) s.svc.setState('wt-1', next, 'unrelated progress')
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+    expect(s.app.store.journalSince(0).filter((entry) => entry.data.type === 'state')).toEqual(statesBefore)
+
+    s.svc.setState('wt-1', 'briefing', 'proof passed')
+    s.svc.setState('wt-1', 'working', 'unrelated progress')
+    expect(stateOf(s, 'wt-1')).toBe('briefing')
+    s.svc.setState('wt-1', 'parked', 'explicitly parked')
+    expect(stateOf(s, 'wt-1')).toBe('parked')
+    s.svc.setState('wt-1', 'checking', 'restarted to re-check')
+    await settle(s)
+    passGateCheck(s, check)
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('working')
+    s.svc.setState('wt-1', 'waiting-on-you', 'ordinary progress after delivery')
+    expect(stateOf(s, 'wt-1')).toBe('waiting-on-you')
+  })
+
+  test('resumeBrief re-proves a restored briefing with the update header and current guarded delivery', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const firstCheck = deferredGateCheck(s)
+    let refuseBrief = true
+    s.app.services.supervisor.send = async (worktreeId, text) => {
+      s.sup.sends.push([worktreeId, text])
+      if (text === INITIAL_BRIEF && refuseBrief) return { sent: false, reason: 'agent-blocked' }
+      return { sent: true }
+    }
+    await handOff(s, input('wt-1'))
+    await settle(s)
+    passGateCheck(s, firstCheck)
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('briefing')
+    expect(eventsOf(s, 'brief-not-sent').map((entry) => entry.data)).toEqual([{ type: 'brief-not-sent', reason: 'agent-blocked' }])
+
+    s.dispose()
+    const restoredCheck = deferredGateCheck(s)
+    s.gate.checks.length = 0
+    s.sup.sends.length = 0
+    let restoredBriefRefusals = 1
+    s.app.services.supervisor.send = async (worktreeId, text) => {
+      s.sup.sends.push([worktreeId, text])
+      if (text === UPDATED_BRIEF && restoredBriefRefusals-- > 0) return { sent: false, reason: 'agent-blocked' }
+      return { sent: true }
+    }
+    const disposeRestored = register(s.app, { claudeVersion: async () => '2.1.300' })
+    const service = s.app.services.handoff as typeof s.app.services.handoff & { resumeBrief?: (worktreeId: string) => void }
+    expect(typeof service.resumeBrief).toBe('function')
+    service.resumeBrief?.('wt-1')
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+    expect(s.gate.checks).toEqual(['wt-1'])
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    await settle(s)
+    passGateCheck(s, restoredCheck)
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('briefing')
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT], ['wt-1', UPDATED_BRIEF]])
+    expect(eventsOf(s, 'brief-not-sent')).toHaveLength(1)
+    await settle(s)
+    expect(s.sup.sends.at(-1)).toEqual(['wt-1', UPDATED_BRIEF])
+    expect(stateOf(s, 'wt-1')).toBe('working')
+    expect(eventsOf(s, 'brief-not-sent')).toHaveLength(1)
+    disposeRestored()
+    refuseBrief = false
+  })
+
+  test('a failed continuation can resume and closes only its own incomplete-check need on proof', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const failedCheck = deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    await settle(s)
+    failedCheck.reject(new Error('proof unavailable'))
+    await flushContinuations()
+    const incomplete = s.app.needs.list({ worktreeId: 'wt-1', open: true })[0]!
+    expect(incomplete.title).toBe('Gate check could not finish: proof unavailable')
+
+    const retryCheck = deferredGateCheck(s)
+    const service = s.app.services.handoff as typeof s.app.services.handoff & { resumeBrief?: (worktreeId: string) => void }
+    expect(typeof service.resumeBrief).toBe('function')
+    service.resumeBrief?.('wt-1')
+    await flushContinuations()
+    expect(s.sup.sends.at(-1)).toEqual(['wt-1', PROOF_PROMPT])
+    await settle(s)
+    passGateCheck(s, retryCheck)
+    await flushContinuations()
+    expect(s.app.store.needs.get(incomplete.id)).toMatchObject({ resolution: 'gate-proved' })
+    expect(s.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+    expect(s.sup.sends.at(-1)).toEqual(['wt-1', UPDATED_BRIEF])
+  })
+
+  test('an old frozen-clock continuation cannot deliver after a replacement handoff', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const oldCheck = deferred<GateResult>()
+    const currentCheck = deferred<GateResult>()
+    let checkCount = 0
+    s.app.services.gate.gateCheck = (worktreeId) => {
+      s.gate.checks.push(worktreeId)
+      return checkCount++ === 0 ? oldCheck.promise : currentCheck.promise
+    }
+    await handOff(s, input('wt-1'))
+    await handOff(s, input('wt-1', { goal: 'Replacement mandate' }))
+    expect(s.sup.sends.filter(([, text]) => text === PROOF_PROMPT)).toHaveLength(2)
+    expect(s.app.store.handoffs.get('wt-1')?.handedOffAt).toBe(1_700_000_000_000)
+
+    oldCheck.resolve({ ok: true, reason: '' })
+    await flushContinuations()
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+    expect(s.sup.sends.some(([, text]) => text.includes('Fix the build'))).toBe(false)
+    await settle(s)
+    passGateCheck(s, currentCheck)
+    await flushContinuations()
+    expect(s.sup.sends.at(-1)?.[1]).toContain('Replacement mandate')
+    expect(s.sup.sends.at(-1)?.[1]).not.toContain('Goal: Fix the build')
+  })
+
+  test('take-back invalidates an in-flight successful proof continuation without stopping the worker', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    const stateEventsBefore = s.app.store.journalSince(0).filter((entry) => entry.data.type === 'state')
+    expect(await s.svc.takeBack({ worktreeIds: ['wt-1'] })).toMatchObject([{ worktreeId: 'wt-1', ok: true }])
+    check.resolve({ ok: true, reason: '' })
+    await flushContinuations()
+    expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ active: false, state: 'checking' })
+    expect(s.app.store.journalSince(0).filter((entry) => entry.data.type === 'state')).toEqual(stateEventsBefore)
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(s.sup.started).toEqual([])
   })
 })
 
@@ -509,6 +1079,7 @@ describe('takeBack', () => {
     await handOff(s, input('wt-1'))
     await s.svc.takeBack({ worktreeIds: ['wt-1'] })
     s.gate.checks.length = 0
+    deferredGateCheck(s)
     await handOff(s, input('wt-1'))
     expect(s.app.store.handoffs.get('wt-1')).toMatchObject({ active: true, state: 'checking', takenBackAt: null })
     expect(s.gate.checks).toEqual(['wt-1'])
@@ -811,6 +1382,7 @@ describe('resolveNeed', () => {
     s.gate.markers.length = 0
     const need = addNeed(s, 'wt-1', 'gate-failed', ['restart-to-handoff', 'take-back'])
 
+    deferredGateCheck(s)
     expect(await s.svc.resolveNeed(need.id, 'restart-to-handoff')).toEqual({ ok: true })
     expect(s.sup.restarted).toHaveLength(1)
     expect(s.gate.markers).toEqual([['restart-session', 'wt-1', 'own-branch']])

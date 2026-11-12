@@ -31,6 +31,7 @@ export function createStubServices(): AvatarServices {
       removeMarker() {},
       gateCheck: async () => ({ ok: false, reason: UNAVAILABLE }),
       approveOnce() {},
+      noteProbeSettled() {},
       resolveInFlight() {},
       noteObservedCall() {},
       hasReceipt: () => false
@@ -43,6 +44,7 @@ export function createStubServices(): AvatarServices {
       mandate: () => null,
       active: () => [],
       setState() {},
+      resumeBrief() {},
       resolveNeed: async () => ({ ok: false, error: UNAVAILABLE })
     },
     brain: {
