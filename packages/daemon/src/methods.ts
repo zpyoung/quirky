@@ -161,7 +161,9 @@ function describeApi(core: Core, plugins: PluginHost): ApiDescription {
       name: shortId(contribution),
       plugin: contribution.plugin,
       ...descriptionOf(contribution.data),
-      data: schemaField(contribution.data, 'data', null)
+      data: schemaField(contribution.data, 'data', null),
+      ...(Array.isArray(contribution.data.coalesce) ? { coalesce: contribution.data.coalesce as string[] } : {}),
+      ...(typeof contribution.data.worktree === 'string' ? { worktree: contribution.data.worktree } : {})
     }))
   ]
   const uiCommands: ApiDescription['uiCommands'] = effective('command').map((contribution) => ({
