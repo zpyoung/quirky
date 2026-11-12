@@ -377,6 +377,10 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     app.services.gate.noteProbeSettled(runtime.worktreeId, runtime.sessionId)
   }
 
+  function gatePassed(runtime: Continuation): boolean {
+    return runtime.checkState === 'passed'
+  }
+
   async function attemptProof(runtime: Continuation): Promise<void> {
     if (!current(runtime) || runtime.shadow || runtime.checkState !== 'pending' || runtime.proofAccepted || runtime.proofSending) return
     const row = activeRow(runtime.worktreeId)
@@ -406,20 +410,20 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
       } else {
         await refreshReadiness(runtime)
       }
-      if (runtime.checkState === 'passed') await attemptBrief(runtime)
+      if (gatePassed(runtime)) await attemptBrief(runtime)
       return
     }
     const reason = result.reason ?? 'not sent'
     recordReason(runtime, 'proof', reason, { type: 'proof-not-sent', reason })
     upsertFlowNeed(runtime, PROOF_NEED_PREFIX, `${PROOF_NEED_PREFIX}${reason}`, { reason, agent: runtime.agent, sessionId: runtime.sessionId }, ['restart-to-handoff', 'take-back'])
-    if (runtime.checkState === 'passed') {
+    if (gatePassed(runtime)) {
       closeFlowNeeds(runtime, PROOF_NEED_PREFIX, 'gate-proved')
       await attemptBrief(runtime)
     }
   }
 
   async function attemptBrief(runtime: Continuation): Promise<void> {
-    if (!current(runtime) || runtime.checkState !== 'passed' || runtime.briefSent || runtime.briefSending || runtime.proofSending) return
+    if (!current(runtime) || !gatePassed(runtime) || runtime.briefSent || runtime.briefSending || runtime.proofSending) return
     const row = activeRow(runtime.worktreeId)
     if (row === null || row.state !== 'briefing' || row.sessionId !== runtime.sessionId) return
     if (runtime.shadow && runtime.shadowBriefAttempted) return
@@ -551,7 +555,7 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
       return
     }
     if (runtime.checkState === 'pending' && !runtime.shadow && runtime.proofAccepted) signalProbeSettled(runtime)
-    if (runtime.checkState === 'passed') await attemptBrief(runtime)
+    if (gatePassed(runtime)) await attemptBrief(runtime)
     else if (runtime.checkState === 'pending' && !runtime.shadow && !runtime.proofAccepted) await attemptProof(runtime)
   }
 
