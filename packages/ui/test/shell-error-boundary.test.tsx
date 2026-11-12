@@ -49,7 +49,7 @@ beforeAll(async () => {
   AppContext = context.AppContext
 })
 async function loadShellErrorBoundary(): Promise<ShellBoundaryComponent> {
-  // Keep this import test-local so the real App missing-provider regression can run before the boundary exists.
+  // panels import ReactDOM, so the boundary must load after the test DOM is registered.
   const boundary = await import('../src/components/ShellErrorBoundary')
   return boundary.ShellErrorBoundary
 }
