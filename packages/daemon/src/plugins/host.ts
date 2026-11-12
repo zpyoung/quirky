@@ -60,6 +60,8 @@ export type PluginHostOptions = {
   log(message: string): void
   /** Bounds each activation and each deactivate; defaults to 10 seconds. */
   activationTimeoutMs?: number
+  /** Wall clock in milliseconds; defaults to `Date.now`. */
+  now?: () => number
   /** True in safe mode: only built-ins load and nothing stored disables or layers anything. */
   safeMode?: boolean
   /** IDs the installed distro turns off. */
@@ -79,6 +81,8 @@ export type PluginHostOptions = {
 const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
 
 const DEFAULT_TIMEOUT_MS = 10_000
+export const ACTIVATION_BACKOFF_BASE_MS = 1_000
+export const ACTIVATION_BACKOFF_MAX_MS = 300_000
 
 type RuntimeState = 'inactive' | 'activating' | 'active' | 'failed'
 
@@ -96,6 +100,8 @@ type Runtime = {
   state: RuntimeState
   error?: string
   warnings: PluginDiagnostic[]
+  failureCount: number
+  failure?: { at: number; delay: number } | { dependency: string }
   attempt?: Attempt
   module?: PluginModule
   inflight?: Promise<void>
@@ -149,9 +155,11 @@ export class PluginHost {
   private queue: Promise<unknown> = Promise.resolve()
   private stopped = false
   private readonly timeoutMs: number
+  private readonly now: () => number
 
   constructor(private readonly options: PluginHostOptions) {
     this.timeoutMs = options.activationTimeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.now = options.now ?? Date.now
   }
 
   /** Discovers plugins and computes the registry. Runs no plugin code and never throws. */
@@ -239,11 +247,11 @@ export class PluginHost {
   }
 
   /**
-   * Activates a plugin and its dependencies and returns its new state. Rejects NotFound for an
-   * unknown ID and Conflict for a disabled, invalid or failing plugin.
+   * Activates a plugin and its dependencies immediately, bypassing any failure delay, and returns
+   * its new state. Rejects NotFound for an unknown ID and Conflict for a disabled, invalid or failing plugin.
    */
   async activate(pluginId: string): Promise<PluginInfo> {
-    await this.activateInternal(pluginId)
+    await this.activateInternal(pluginId, true)
     return this.infoOf(this.registry.plugins.get(pluginId)!)
   }
 
@@ -341,7 +349,7 @@ export class PluginHost {
   private runtimeOf(id: string): Runtime {
     let runtime = this.runtimes.get(id)
     if (!runtime) {
-      runtime = { state: 'inactive', warnings: [] }
+      runtime = { state: 'inactive', warnings: [], failureCount: 0 }
       this.runtimes.set(id, runtime)
     }
     return runtime
@@ -424,7 +432,15 @@ export class PluginHost {
     }
   }
 
-  private async activateInternal(id: string): Promise<void> {
+  private activationHeld(id: string, now: number): boolean {
+    const runtime = this.runtimes.get(id)
+    if (runtime?.state !== 'failed' || !runtime.failure) return false
+    if ('dependency' in runtime.failure) return this.activationHeld(runtime.failure.dependency, now)
+    const elapsed = now - runtime.failure.at
+    return elapsed >= 0 && elapsed < runtime.failure.delay
+  }
+
+  private async activateInternal(id: string, force = false): Promise<void> {
     const entry = this.registry.plugins.get(id)
     if (!entry) throw notFound(`unknown plugin ${id}`)
     if (entry.status === 'disabled') throw conflict(`${id} is disabled`)
@@ -434,25 +450,30 @@ export class PluginHost {
     if (runtime.state === 'activating') return runtime.inflight
     if (this.stopped) throw conflict('the plugin host is stopped')
     if (this.replacing.has(id)) throw conflict(`${id} is being replaced`)
+    if (!force && this.activationHeld(id, this.now())) {
+      throw conflict(`${id} failed to activate: ${runtime.error}`)
+    }
     runtime.error = undefined
     runtime.warnings = []
     this.setState(runtime, 'activating')
-    runtime.inflight = this.run(id, entry, runtime)
+    runtime.inflight = this.run(id, entry, runtime, force)
     return runtime.inflight
   }
 
-  private async run(id: string, entry: RegistryPlugin, runtime: Runtime): Promise<void> {
+  private async run(id: string, entry: RegistryPlugin, runtime: Runtime, force: boolean): Promise<void> {
     const attempt: Attempt = { revoked: false, extensionLive: false, implementations: new Map() }
     runtime.attempt = attempt
     const imported: { module?: PluginModule } = {}
     let disabledMidway = false
+    let blockedOn: string | undefined
     try {
       this.assertEnabled(id)
       for (const dependency of entry.discovered.manifest?.dependencies ?? []) {
         try {
-          await this.activateInternal(dependency)
+          await this.activateInternal(dependency, force)
         } catch (error) {
           this.assertEnabled(id)
+          blockedOn = dependency
           this.options.log(`plugin ${id}: dependency ${dependency} failed: ${messageOf(error)}`)
           throw new Error(`dependency ${dependency} failed to activate`)
         }
@@ -470,17 +491,31 @@ export class PluginHost {
         if (imported.module) await this.callDeactivate(id, imported.module, runtime)
         await this.disposeActivation(id, attempt, runtime)
         await this.revokeExtension(id, attempt)
+        runtime.failure = undefined
+        runtime.failureCount = 0
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
+      if (imported.module) await this.callDeactivate(id, imported.module, runtime)
       await this.disposeActivation(id, attempt, runtime)
       await this.revokeExtension(id, attempt)
       runtime.error = messageOf(error)
+      if (blockedOn !== undefined) {
+        runtime.failure = { dependency: blockedOn }
+      } else {
+        runtime.failureCount += 1
+        runtime.failure = {
+          at: this.now(),
+          delay: Math.min(ACTIVATION_BACKOFF_BASE_MS * 2 ** (runtime.failureCount - 1), ACTIVATION_BACKOFF_MAX_MS)
+        }
+      }
       this.options.log(`plugin ${id} failed to activate: ${runtime.error}`)
       this.setState(runtime, 'failed')
       throw conflict(`${id} failed to activate: ${runtime.error}`)
     }
     runtime.module = imported.module
+    runtime.failure = undefined
+    runtime.failureCount = 0
     this.activationOrder.push(id)
     this.setState(runtime, 'active')
   }
@@ -659,6 +694,8 @@ export class PluginHost {
       if (runtime.state === 'failed') {
         runtime.state = 'inactive'
         runtime.error = undefined
+        runtime.failure = undefined
+        runtime.failureCount = 0
       }
     }
     if (enabled) await Promise.allSettled(this.startupCandidates().map((pluginId) => this.activateQuietly(pluginId)))
