@@ -22,16 +22,19 @@ describe('quirky.git against a real repository', () => {
     })
 
     await call('quirky.git/stage', { worktree: g.main.id, paths: ['a.txt'] })
+    await waitFor(() => g.events.filter((e) => e.type === 'quirky.git/changed').length >= 1)
     expect((await call('quirky.git/status', { worktree: g.main.id })).files[0]).toMatchObject({ index: 'M', worktree: ' ' })
     await call('quirky.git/unstage', { worktree: g.main.id, paths: ['a.txt'] })
+    await waitFor(() => g.events.filter((e) => e.type === 'quirky.git/changed').length >= 2)
     expect((await call('quirky.git/status', { worktree: g.main.id })).files[0]).toMatchObject({ index: ' ', worktree: 'M' })
 
     await call('quirky.git/stage', { worktree: g.main.id, paths: ['a.txt'] })
+    await waitFor(() => g.events.filter((e) => e.type === 'quirky.git/changed').length >= 3)
     const { sha } = await call('quirky.git/commit', { worktree: g.main.id, message: 'edit' })
+    await waitFor(() => g.events.filter((e) => e.type === 'quirky.git/changed').length >= 4)
     expect(sha).toMatch(/^[0-9a-f]{40}$/)
     expect((await call('quirky.git/status', { worktree: g.main.id })).files).toEqual([])
     expect(readFileSync(join(g.main.path, 'a.txt'), 'utf8')).toBe('new\n')
-    await waitFor(() => g.events.filter((e) => e.type === 'quirky.git/changed').length >= 4)
   })
 
   test('a git failure reports git stderr', async () => {

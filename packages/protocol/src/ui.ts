@@ -304,6 +304,16 @@ export type MountFunction = (
 /** Runs a command, with the arguments it was invoked with. */
 export type CommandHandler = (args?: unknown) => unknown
 
+/** Narrows a UI event subscription. Plugin API 1.5.0. */
+export type UiSubscribeOptions = {
+  /**
+   * A worktree ID leaves out plugin events tagged with another worktree; null leaves out all
+   * tagged plugin events. Omitted delivers every event. Untagged plugin events and all kernel
+   * events are always delivered.
+   */
+  worktreeId?: string | null
+}
+
 /** What a plugin's `activate` receives in the window. */
 export type UiPluginContext = {
   readonly nativeBrowser: NativeBrowserCapability
@@ -323,8 +333,11 @@ export type UiPluginContext = {
   provide(contributionId: string, implementation: unknown): void
   /** Invokes a daemon or plugin method. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
-  /** Listens to every daemon event; the returned function unsubscribes. */
-  subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
+  /**
+   * Listens to daemon events; the returned function unsubscribes. `options.worktreeId` leaves out
+   * plugin events tagged with another worktree. The scope is fixed when `subscribe` is called.
+   */
+  subscribe(listener: (event: QuirkyEvent) => void | Promise<void>, options?: UiSubscribeOptions): () => void
   /** Reads a setting by short name in the plugin's own namespace, or by full setting ID. */
   getSetting(name: string): unknown
   executeCommand(id: string, args?: unknown): Promise<void>

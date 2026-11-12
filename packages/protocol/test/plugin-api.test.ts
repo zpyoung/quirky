@@ -2,13 +2,16 @@ import { describe, expect, test } from 'bun:test'
 import { PLUGIN_API_VERSION, pluginApiCompatibilityError } from '../src/plugin-api'
 
 describe('stable plugin API floors', () => {
-  test('the host supports the release that introduced the plugin process runner', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.4.0')
+  test('the host supports the release that introduced scoped UI subscriptions', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.5.0')
+    expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.3.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.4.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.4.1')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.5.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.5.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.5.1')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.6.0')).not.toBeNull()
   })
 
   test.each([

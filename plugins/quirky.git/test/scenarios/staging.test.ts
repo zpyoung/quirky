@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { COALESCE_INTERVAL_MS } from '../../../../packages/daemon/src/plugins/coalesce'
 import type { GitStatus } from '@quirky/protocol'
 import { waitFor } from '../../../../packages/daemon/test/helpers'
 import { diverge, isolateScenarioGit, startScenario, type Scenario } from './fixture'
@@ -17,7 +18,7 @@ const rows = (status: GitStatus) => status.entries.map((entry) => `${entry.area}
 /** Waits for one more `quirky.git/changed` than `before`, then checks no second one follows. */
 async function expectOneChange(scenario: Scenario, before: number): Promise<void> {
   await waitFor(() => scenario.changedEvents() > before)
-  await Bun.sleep(60)
+  await Bun.sleep(COALESCE_INTERVAL_MS + 60)
   expect(scenario.changedEvents()).toBe(before + 1)
 }
 
