@@ -829,8 +829,10 @@ class ShellReader {
     const syntax = builder.syntax
     const unmatchedOpens: ActiveSyntax[] = []
     const groups: BraceGroup[] = []
+    let sawOpening = false
     for (const item of syntax) {
       if (item.character === '{') {
+        sawOpening = true
         unmatchedOpens.push(item)
       } else if (item.character === '}' && unmatchedOpens.length > 0) {
         const opening = unmatchedOpens.pop()!
@@ -851,6 +853,8 @@ class ShellReader {
         opening.group = group
         item.group = group
         groups.push(group)
+      } else if (item.character === '}' && sawOpening) {
+        return null
       }
     }
 
@@ -917,6 +921,7 @@ class ShellReader {
       if (!group.isList) continue
       hasList = true
     }
+    if (hasList && unmatchedOpens.length > 1) return null
     if (hasList) {
       let activeIndex = 0
       for (const home of builder.homes) {

@@ -1106,4 +1106,18 @@ describe('brace expansion', () => {
       expect(decideReviewed(command)).toMatchObject({ outcome, step })
     })
   }
+
+  const unpairedClosingRows: Array<{ command: string; classes: ActionClass[]; outcome: string; step: string | null }> = [
+    { command: 'rm -rf {a},/home/u/Documents}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
+    { command: 'cat {a},/home/u/.ssh/id_rsa}', classes: ['read', 'other'], outcome: 'judgment', step: null },
+    { command: 'cp a.txt {b},/home/u/x}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
+    { command: 'rm -rf x/{},../../..}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
+    { command: 'rm -rf {a}{x,y},/home/u/Documents}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' }
+  ]
+  for (const { command, classes, outcome, step } of unpairedClosingRows) {
+    test(`classifies unpaired closing braces conservatively: ${command}`, () => expectClassSet(command, classes))
+    test(`does not allow unpaired closing braces at fixed rules: ${command}`, () => {
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    })
+  }
 })

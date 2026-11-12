@@ -719,9 +719,7 @@ describe('brace expansion', () => {
       { source: 'a,b}', words: ['a,b}'] },
       { source: '{a,{b}', words: ['{a,{b}'] },
       { source: '{a},{b}', words: ['{a},{b}'] },
-      { source: '{a,b}}', words: ['a}', 'b}'] },
       { source: '{{a,b}', words: ['{a', '{b'] },
-      { source: '{{{a,b}', words: ['{{a', '{{b'] },
       { source: '{a,{b,c}', words: ['{a,b', '{a,c'] },
       { source: '{{a,b},c', words: ['{a,c', '{b,c'] },
       { source: '{a,b}{', words: ['a{', 'b{'] },
@@ -793,6 +791,27 @@ describe('brace expansion', () => {
       expect(parse(`echo ${source}`)).toEqual(script([
         command([word('echo'), word(text, true)])
       ]))
+    }
+
+    const unpairedClosingCases = [
+      '{a},/home/u/Documents}',
+      '{a},/home/u/.ssh/id_rsa}',
+      '{b},/home/u/x}',
+      'x/{},../../..}',
+      '{a}{x,y},/home/u/Documents}',
+      '{a},b}',
+      'x{a},b}',
+      '{a}b,c}',
+      '{{a}},b}',
+      '{a}{},/home/u/x}',
+      '{a,b}}'
+    ]
+    for (const source of unpairedClosingCases) {
+      test(`keeps an unpaired closing brace after an opener dynamic: ${source}`, () => dynamicWord(source))
+    }
+
+    for (const source of ['{{{a,b}', '{x{{a,b}', '{{x{a,b}', 'a{b{c{d,e}', '{{,{,}']) {
+      test(`keeps multiple unmatched opening braces dynamic when expanding: ${source}`, () => dynamicWord(source))
     }
 
     const sequenceCases = [
