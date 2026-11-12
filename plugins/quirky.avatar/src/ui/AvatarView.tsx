@@ -269,10 +269,12 @@ const PATCH_FIELD_LABELS: Record<MandatePatchField, string> = {
 }
 
 const EMPTY_QUESTION_DRAFT: QuestionDraft = { selected: [], freeText: '', text: '', confirm: null }
-const QUESTION_STACK_STYLE: CSSProperties = { display: 'grid', gap: '0.75rem' }
-const QUESTION_FIELD_ROW_STYLE: CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }
+const QUESTION_STACK_STYLE: CSSProperties = { display: 'grid', gap: 'var(--ui-space-12)' }
+const QUESTION_FIELD_ROW_STYLE: CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 'var(--ui-space-8)' }
 const QUESTION_FIELD_STYLE: CSSProperties = { flex: 1, minWidth: 0 }
-const QUESTION_LABEL_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }
+const QUESTION_LABEL_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-8)', marginBottom: 'var(--ui-space-4)' }
+const FIELD_GROUP_STYLE: CSSProperties = { display: 'grid', gap: 'var(--ui-space-8)' }
+const CONFIRM_GROUP_STYLE: CSSProperties = { display: 'grid', gap: 'var(--ui-space-4)' }
 
 type QuestionDraft = { selected: string[]; freeText: string; text: string; confirm: boolean | null }
 type QuestionAnswerBuild = { ok: true; answers: Record<string, AskAnswer> } | { ok: false }
@@ -439,7 +441,7 @@ function QuestionControl({ question, draft, disabled, onChange }: {
       )
     case 'multiselect':
       return (
-        <div style={{ display: 'grid', gap: '0.5rem' }}>
+        <div style={FIELD_GROUP_STYLE}>
           <div style={QUESTION_LABEL_STYLE}>
             <span>{question.question}</span>
             {optional}
@@ -504,7 +506,7 @@ function QuestionControl({ question, draft, disabled, onChange }: {
       )
     case 'confirm':
       return (
-        <div style={{ display: 'grid', gap: '0.25rem' }}>
+        <div style={CONFIRM_GROUP_STYLE}>
           <div style={QUESTION_LABEL_STYLE}>
             <span>{question.question}</span>
             {optional}
@@ -577,7 +579,7 @@ function NeedRow({ need, worktreeName, mandateLookup = { status: 'loading' }, bu
     <ListRow
       title={need.title}
       description={
-        <div style={{ display: 'grid', gap: '0.5rem' }}>
+        <div style={FIELD_GROUP_STYLE}>
           <span>{detailParts.filter(Boolean).join(' · ')}</span>
           {patchLines.map(({ field, line }) => <span key={field}>{line}</span>)}
           {blocks && <span>{blocks}</span>}
@@ -644,7 +646,7 @@ function ReportTab({ context, onOpenLog }: { context: UiPluginContext; onOpenLog
     else {
       setMandates((previous) => ({
         ...previous,
-        ...Object.fromEntries(mandateWorktrees.map((worktreeId) => [worktreeId, { status: 'loading' as const }]))
+        ...Object.fromEntries(mandateWorktrees.map((worktreeId) => [worktreeId, Object.hasOwn(previous, worktreeId) ? previous[worktreeId] : { status: 'loading' as const }]))
       }))
       for (const worktreeId of mandateWorktrees) {
         void (async () => {

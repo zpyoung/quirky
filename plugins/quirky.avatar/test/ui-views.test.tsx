@@ -130,7 +130,206 @@ function fieldForLabel<T extends HTMLElement>(root: ParentNode, label: string, i
   return field as T
 }
 
+function tab(root: ParentNode, label: string): HTMLButtonElement {
+  const match = [...root.querySelectorAll('[role="tab"]')].find((entry) => entry.textContent?.startsWith(label))
+  if (!match) throw new Error(`Tab not found: ${label}`)
+  return match as HTMLButtonElement
+}
 
+const status = (handoffs: { worktreeId: string; name: string; state: string; level: string }[], needsYouCount = 0) => (_params?: Record<string, unknown>) => ({ handoffs, needsYouCount })
+
+const need = (overrides: Partial<ReportNeed> = {}): ReportNeed => ({
+  id: 'need-1',
+  worktreeId: 'wt-1',
+  kind: 'held-call',
+  title: 'Allow a force-push?',
+  detail: { reason: 'Held by floor switch: rewrite history.' },
+  actions: ['allow-once', 'deny'],
+  createdAt: 1,
+  resolvedAt: null,
+  resolution: null,
+  worktreeName: 'provider-host',
+  projectName: 'harbor-api',
+  ...overrides
+})
+
+const entry = (overrides: Partial<JournalEntry> = {}): JournalEntry => ({ seq: 1, at: Date.UTC(2026, 10, 4, 23, 4), worktreeId: 'wt-1', kind: 'gate', data: {}, ...overrides })
+
+const gateEntry = entry({
+  seq: 7,
+  data: {
+    outcome: 'deny',
+    agent: 'Claude',
+    toolName: 'Bash',
+    toolInput: { command: 'bunx playwright test -u' },
+    trace: [
+      { step: 'floor-core', result: 'pass', note: '' },
+      { step: 'level', result: 'pass', note: '' },
+      { step: 'judgment', result: 'deny', note: '' }
+    ],
+    reliedOn: 'Mandate, guideline 1: "Don\'t update snapshots."',
+    sawWorkerExplanation: false
+  }
+})
+
+function report(overrides: Partial<ReportModel> = {}): ReportModel {
+  return {
+    needsYou: [need(), need({ id: 'need-2', kind: 'guess', title: 'Confirm a guess?', detail: {}, actions: ['confirm', 'redo'] })],
+    stories: [
+      { worktreeId: 'wt-1', name: 'provider-host', projectName: 'harbor-api', switchesOn: ['historyRewrite'], story: 'Fix restart. Parked.', handedBackWith: [] },
+      { worktreeId: 'wt-2', name: 'sa-browser', projectName: 'harbor-api', switchesOn: [], story: 'Fix the checks. Handed back to you.', handedBackWith: ['1 held force-push'] }
+    ],
+    summary: { decisions: 186, allowed: 171, denied: 9, held: 3, guesses: 3, sleeps: [], keptAwake: true },
+    topSkippedCalls: [],
+    ...overrides
+  }
+}
+
+beforeAll(async () => {
+  GlobalRegistrator.register()
+  const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  hadActEnvironment = Object.prototype.hasOwnProperty.call(reactGlobal, 'IS_REACT_ACT_ENVIRONMENT')
+  previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
+  reactGlobal.IS_REACT_ACT_ENVIRONMENT = true
+  // React DOM binds its scheduler to the DOM globals available at import.
+  ;({ createRoot } = await import('react-dom/client'))
+  Pill = (await import('../src/ui/Pill')).default
+  Panel = (await import('../src/ui/Panel')).default
+  AvatarView = (await import('../src/ui/AvatarView')).default
+  DecisionTrace = (await import('../src/ui/DecisionTrace')).default
+})
+
+afterEach(async () => {
+  await act(async () => {
+    for (const unmount of unmounts.splice(0)) unmount()
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+  })
+  document.body.innerHTML = ''
+})
+
+afterAll(async () => {
+  const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  if (hadActEnvironment) reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment as boolean
+  else delete reactGlobal.IS_REACT_ACT_ENVIRONMENT
+  await GlobalRegistrator.unregister()
+})
+
+const two = [
+  { worktreeId: 'wt-1', name: 'provider-host', projectName: 'harbor-api', state: 'parked', level: 'full' },
+  { worktreeId: 'wt-2', name: 'sa-browser', state: 'working', level: 'own-branch' }
+]
+
+describe('Pill', () => {
+  test('renders nothing when nothing is handed off and nothing needs you', async () => {
+    const root = await mount(Pill, makeContext({ status: status([]) }))
+    expect(root.textContent).toBe('')
+    expect(root.querySelector('button')).toBeNull()
+  })
+
+  test('counts handed-off worktrees and opens the sheet on click', async () => {
+    const fake = makeContext({ status: status(two) })
+    const root = await mount(Pill, fake)
+
+    expect(root.textContent).toBe('Avatar · 2 handed off')
+    expect(root.querySelector('[data-tone]')?.getAttribute('data-tone')).toBe('handed-off')
+    expect(fake.commands).toEqual([])
+    await click(root, 'Avatar · 2 handed off')
+    expect(fake.commands).toEqual([HANDOFF])
+  })
+
+  test('turns amber with the needs count and opens the report on click', async () => {
+    const fake = makeContext({ status: status(two, 3) })
+    const root = await mount(Pill, fake)
+
+    expect(root.textContent).toBe('Avatar · 3 need you')
+    expect(root.querySelector('[data-tone]')?.getAttribute('data-tone')).toBe('needs-you')
+    expect(fake.commands).toEqual([])
+    await click(root, 'Avatar · 3 need you')
+    expect(fake.commands).toEqual([OPEN_REPORT])
+  })
+
+  test('shows up and updates when the avatar announces a change', async () => {
+    let current = status([])
+    const fake = makeContext({ status: (params) => current(params) })
+    const root = await mount(Pill, fake)
+    expect(root.textContent).toBe('')
+
+    current = status(two, 1)
+    await fake.deliverChanged()
+    expect(root.textContent).toBe('Avatar · 1 need you')
+  })
+})
+
+describe('Panel', () => {
+  test('lists each handed-off worktree with its state and level', async () => {
+    const root = await mount(Panel, makeContext({ status: status(two) }))
+    expect(root.textContent).toContain('provider-host')
+    expect(root.textContent).toContain('Parked · Full')
+    expect(root.textContent).toContain('sa-browser')
+    expect(root.textContent).toContain('Working · Own branch')
+  })
+
+  test('says so when nothing is handed off', async () => {
+    const root = await mount(Panel, makeContext({ status: status([]) }))
+    expect(root.textContent).toContain('Nothing handed off.')
+    expect(button(root, 'Take back all').disabled).toBe(true)
+  })
+
+  test('opens the sheet from Hand off…', async () => {
+    const fake = makeContext({ status: status(two) })
+    const root = await mount(Panel, fake)
+    await click(root, 'Hand off…')
+    expect(fake.commands).toEqual([HANDOFF])
+  })
+
+  test('takes everything back only after the person confirms', async () => {
+    const declined = makeContext({ status: status(two), takeBack: () => ({ results: [] }) }, { confirm: false })
+    const declinedRoot = await mount(Panel, declined)
+    await click(declinedRoot, 'Take back all')
+    expect(declined.confirms).toHaveLength(1)
+    expect(declined.calls.filter((call) => call.method.endsWith('takeBack'))).toEqual([])
+
+    const accepted = makeContext({ status: status(two), takeBack: () => ({ results: [] }) })
+    const acceptedRoot = await mount(Panel, accepted)
+    await click(acceptedRoot, 'Take back all')
+    expect(accepted.calls.filter((call) => call.method.endsWith('takeBack'))).toEqual([{ method: 'quirky.avatar/takeBack', params: { all: true } }])
+  })
+
+  test('takes back one worktree from its row', async () => {
+    const fake = makeContext({ status: status(two), takeBack: () => ({ results: [] }) })
+    const root = await mount(Panel, fake)
+    await click(root, 'Take back sa-browser')
+    expect(fake.calls.filter((call) => call.method.endsWith('takeBack'))).toEqual([{ method: 'quirky.avatar/takeBack', params: { worktreeIds: ['wt-2'] } }])
+  })
+
+  test('offers the report when something needs you', async () => {
+    const fake = makeContext({ status: status(two, 2) })
+    const root = await mount(Panel, fake)
+    await click(root, 'Open report · 2 need you')
+    expect(fake.commands).toEqual([OPEN_REPORT])
+  })
+
+  test('refreshes its rows on a change event', async () => {
+    let current = status(two)
+    const fake = makeContext({ status: (params) => current(params) })
+    const root = await mount(Panel, fake)
+    current = status([two[1]!])
+    await fake.deliverChanged()
+    expect(root.textContent).not.toContain('provider-host')
+    expect(root.textContent).toContain('sa-browser')
+  })
+
+  test('names each worktree with its project and pads the header and buttons', async () => {
+    const root = await mount(Panel, makeContext({ status: status(two, 1) }))
+    expect(root.textContent).toContain('harbor-api / provider-host')
+    const header = root.querySelector('.ui-section-header')!.parentElement as HTMLElement
+    expect(header.getAttribute('style')).toContain('padding-inline: var(--ui-space-8)')
+    expect(header.contains(button(root, 'Hand off…'))).toBe(true)
+    expect(header.contains(button(root, 'Open report · 1 need you'))).toBe(true)
+  })
+})
+
+describe('AvatarView', () => {
   test('shows a guess choice and mandate-edit before/after across loading, loaded, null and failed mandate fetches', async () => {
     const pendingMandate = Promise.withResolvers<unknown>()
     const guess = need({
@@ -440,206 +639,6 @@ function fieldForLabel<T extends HTMLElement>(root: ParentNode, label: string, i
     expect(button(root, 'Deny').disabled).toBe(false)
   })
 
-function tab(root: ParentNode, label: string): HTMLButtonElement {
-  const match = [...root.querySelectorAll('[role="tab"]')].find((entry) => entry.textContent?.startsWith(label))
-  if (!match) throw new Error(`Tab not found: ${label}`)
-  return match as HTMLButtonElement
-}
-
-const status = (handoffs: { worktreeId: string; name: string; state: string; level: string }[], needsYouCount = 0) => (_params?: Record<string, unknown>) => ({ handoffs, needsYouCount })
-
-const need = (overrides: Partial<ReportNeed> = {}): ReportNeed => ({
-  id: 'need-1',
-  worktreeId: 'wt-1',
-  kind: 'held-call',
-  title: 'Allow a force-push?',
-  detail: { reason: 'Held by floor switch: rewrite history.' },
-  actions: ['allow-once', 'deny'],
-  createdAt: 1,
-  resolvedAt: null,
-  resolution: null,
-  worktreeName: 'provider-host',
-  projectName: 'harbor-api',
-  ...overrides
-})
-
-const entry = (overrides: Partial<JournalEntry> = {}): JournalEntry => ({ seq: 1, at: Date.UTC(2026, 10, 4, 23, 4), worktreeId: 'wt-1', kind: 'gate', data: {}, ...overrides })
-
-const gateEntry = entry({
-  seq: 7,
-  data: {
-    outcome: 'deny',
-    agent: 'Claude',
-    toolName: 'Bash',
-    toolInput: { command: 'bunx playwright test -u' },
-    trace: [
-      { step: 'floor-core', result: 'pass', note: '' },
-      { step: 'level', result: 'pass', note: '' },
-      { step: 'judgment', result: 'deny', note: '' }
-    ],
-    reliedOn: 'Mandate, guideline 1: "Don\'t update snapshots."',
-    sawWorkerExplanation: false
-  }
-})
-
-function report(overrides: Partial<ReportModel> = {}): ReportModel {
-  return {
-    needsYou: [need(), need({ id: 'need-2', kind: 'guess', title: 'Confirm a guess?', detail: {}, actions: ['confirm', 'redo'] })],
-    stories: [
-      { worktreeId: 'wt-1', name: 'provider-host', projectName: 'harbor-api', switchesOn: ['historyRewrite'], story: 'Fix restart. Parked.', handedBackWith: [] },
-      { worktreeId: 'wt-2', name: 'sa-browser', projectName: 'harbor-api', switchesOn: [], story: 'Fix the checks. Handed back to you.', handedBackWith: ['1 held force-push'] }
-    ],
-    summary: { decisions: 186, allowed: 171, denied: 9, held: 3, guesses: 3, sleeps: [], keptAwake: true },
-    topSkippedCalls: [],
-    ...overrides
-  }
-}
-
-beforeAll(async () => {
-  GlobalRegistrator.register()
-  const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-  hadActEnvironment = Object.prototype.hasOwnProperty.call(reactGlobal, 'IS_REACT_ACT_ENVIRONMENT')
-  previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
-  reactGlobal.IS_REACT_ACT_ENVIRONMENT = true
-  // React DOM binds its scheduler to the DOM globals available at import.
-  ;({ createRoot } = await import('react-dom/client'))
-  Pill = (await import('../src/ui/Pill')).default
-  Panel = (await import('../src/ui/Panel')).default
-  AvatarView = (await import('../src/ui/AvatarView')).default
-  DecisionTrace = (await import('../src/ui/DecisionTrace')).default
-})
-
-afterEach(async () => {
-  await act(async () => {
-    for (const unmount of unmounts.splice(0)) unmount()
-    await new Promise<void>((resolve) => queueMicrotask(resolve))
-  })
-  document.body.innerHTML = ''
-})
-
-afterAll(async () => {
-  const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-  if (hadActEnvironment) reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment as boolean
-  else delete reactGlobal.IS_REACT_ACT_ENVIRONMENT
-  await GlobalRegistrator.unregister()
-})
-
-const two = [
-  { worktreeId: 'wt-1', name: 'provider-host', projectName: 'harbor-api', state: 'parked', level: 'full' },
-  { worktreeId: 'wt-2', name: 'sa-browser', state: 'working', level: 'own-branch' }
-]
-
-describe('Pill', () => {
-  test('renders nothing when nothing is handed off and nothing needs you', async () => {
-    const root = await mount(Pill, makeContext({ status: status([]) }))
-    expect(root.textContent).toBe('')
-    expect(root.querySelector('button')).toBeNull()
-  })
-
-  test('counts handed-off worktrees and opens the sheet on click', async () => {
-    const fake = makeContext({ status: status(two) })
-    const root = await mount(Pill, fake)
-
-    expect(root.textContent).toBe('Avatar · 2 handed off')
-    expect(root.querySelector('[data-tone]')?.getAttribute('data-tone')).toBe('handed-off')
-    expect(fake.commands).toEqual([])
-    await click(root, 'Avatar · 2 handed off')
-    expect(fake.commands).toEqual([HANDOFF])
-  })
-
-  test('turns amber with the needs count and opens the report on click', async () => {
-    const fake = makeContext({ status: status(two, 3) })
-    const root = await mount(Pill, fake)
-
-    expect(root.textContent).toBe('Avatar · 3 need you')
-    expect(root.querySelector('[data-tone]')?.getAttribute('data-tone')).toBe('needs-you')
-    expect(fake.commands).toEqual([])
-    await click(root, 'Avatar · 3 need you')
-    expect(fake.commands).toEqual([OPEN_REPORT])
-  })
-
-  test('shows up and updates when the avatar announces a change', async () => {
-    let current = status([])
-    const fake = makeContext({ status: (params) => current(params) })
-    const root = await mount(Pill, fake)
-    expect(root.textContent).toBe('')
-
-    current = status(two, 1)
-    await fake.deliverChanged()
-    expect(root.textContent).toBe('Avatar · 1 need you')
-  })
-})
-
-describe('Panel', () => {
-  test('lists each handed-off worktree with its state and level', async () => {
-    const root = await mount(Panel, makeContext({ status: status(two) }))
-    expect(root.textContent).toContain('provider-host')
-    expect(root.textContent).toContain('Parked · Full')
-    expect(root.textContent).toContain('sa-browser')
-    expect(root.textContent).toContain('Working · Own branch')
-  })
-
-  test('says so when nothing is handed off', async () => {
-    const root = await mount(Panel, makeContext({ status: status([]) }))
-    expect(root.textContent).toContain('Nothing handed off.')
-    expect(button(root, 'Take back all').disabled).toBe(true)
-  })
-
-  test('opens the sheet from Hand off…', async () => {
-    const fake = makeContext({ status: status(two) })
-    const root = await mount(Panel, fake)
-    await click(root, 'Hand off…')
-    expect(fake.commands).toEqual([HANDOFF])
-  })
-
-  test('takes everything back only after the person confirms', async () => {
-    const declined = makeContext({ status: status(two), takeBack: () => ({ results: [] }) }, { confirm: false })
-    const declinedRoot = await mount(Panel, declined)
-    await click(declinedRoot, 'Take back all')
-    expect(declined.confirms).toHaveLength(1)
-    expect(declined.calls.filter((call) => call.method.endsWith('takeBack'))).toEqual([])
-
-    const accepted = makeContext({ status: status(two), takeBack: () => ({ results: [] }) })
-    const acceptedRoot = await mount(Panel, accepted)
-    await click(acceptedRoot, 'Take back all')
-    expect(accepted.calls.filter((call) => call.method.endsWith('takeBack'))).toEqual([{ method: 'quirky.avatar/takeBack', params: { all: true } }])
-  })
-
-  test('takes back one worktree from its row', async () => {
-    const fake = makeContext({ status: status(two), takeBack: () => ({ results: [] }) })
-    const root = await mount(Panel, fake)
-    await click(root, 'Take back sa-browser')
-    expect(fake.calls.filter((call) => call.method.endsWith('takeBack'))).toEqual([{ method: 'quirky.avatar/takeBack', params: { worktreeIds: ['wt-2'] } }])
-  })
-
-  test('offers the report when something needs you', async () => {
-    const fake = makeContext({ status: status(two, 2) })
-    const root = await mount(Panel, fake)
-    await click(root, 'Open report · 2 need you')
-    expect(fake.commands).toEqual([OPEN_REPORT])
-  })
-
-  test('refreshes its rows on a change event', async () => {
-    let current = status(two)
-    const fake = makeContext({ status: (params) => current(params) })
-    const root = await mount(Panel, fake)
-    current = status([two[1]!])
-    await fake.deliverChanged()
-    expect(root.textContent).not.toContain('provider-host')
-    expect(root.textContent).toContain('sa-browser')
-  })
-
-  test('names each worktree with its project and pads the header and buttons', async () => {
-    const root = await mount(Panel, makeContext({ status: status(two, 1) }))
-    expect(root.textContent).toContain('harbor-api / provider-host')
-    const header = root.querySelector('.ui-section-header')!.parentElement as HTMLElement
-    expect(header.getAttribute('style')).toContain('padding-inline: var(--ui-space-8)')
-    expect(header.contains(button(root, 'Hand off…'))).toBe(true)
-    expect(header.contains(button(root, 'Open report · 1 need you'))).toBe(true)
-  })
-})
-
-describe('AvatarView', () => {
   test('opens on Live and shows each worktree with its latest decision', async () => {
     const fake = makeContext({ status: status(two), log: () => [gateEntry], report: () => report(), takeBack: () => ({ results: [] }) })
     const root = await mount(AvatarView, fake)
@@ -674,6 +673,55 @@ describe('AvatarView', () => {
     expect(summary).toBeGreaterThan(handedBack)
     expect(text).toContain('History rewrites on')
     expect(text).toContain('Mac kept awake.')
+  })
+
+  test('keeps the current mandate visible while a report refresh loads its replacement', async () => {
+    const edit = need({
+      id: 'need-edit',
+      kind: 'mandate-edit',
+      title: 'Update the mandate?',
+      detail: { patch: { goal: 'Ship v2 badges' }, why: 'Layout changed' },
+      actions: ['review-accept', 'review-reject']
+    })
+    const currentMandate = {
+      worktreeId: 'wt-1', goal: 'Ship v1 badges', doneWhen: 'CI green', doneWhenKind: 'prose',
+      guidelines: [], level: 'full', switches: { messaging: false, historyRewrite: false, deploys: false },
+      agent: null, sharedGoalId: null, notes: '', allowSplit: false, updatedAt: 1
+    }
+    const fake = makeContext({
+      status: status(two, 1),
+      report: () => report({ needsYou: [edit] }),
+      mandate: () => currentMandate
+    })
+    const root = await mount(AvatarView, fake, { tab: 'report' })
+    expect(root.textContent).toContain('Goal: Ship v1 badges → Ship v2 badges')
+
+    const replacement = Promise.withResolvers<unknown>()
+    fake.replies.mandate = () => replacement.promise
+    await fake.deliverChanged()
+    expect(root.textContent).toContain('Goal: Ship v1 badges → Ship v2 badges')
+    expect(root.textContent).not.toContain('loading…')
+    await act(async () => replacement.resolve({ ...currentMandate, goal: 'Ship v1.1 badges' }))
+    await settle()
+    expect(root.textContent).toContain('Goal: Ship v1.1 badges → Ship v2 badges')
+
+    const removed = Promise.withResolvers<unknown>()
+    fake.replies.mandate = () => removed.promise
+    await fake.deliverChanged()
+    expect(root.textContent).toContain('Goal: Ship v1.1 badges → Ship v2 badges')
+    expect(root.textContent).not.toContain('loading…')
+    await act(async () => removed.resolve(null))
+    await settle()
+    expect(root.textContent).toContain('Goal: no mandate → Ship v2 badges')
+
+    const failed = Promise.withResolvers<unknown>()
+    fake.replies.mandate = () => failed.promise
+    await fake.deliverChanged()
+    expect(root.textContent).toContain('Goal: no mandate → Ship v2 badges')
+    expect(root.textContent).not.toContain('loading…')
+    await act(async () => failed.reject(new Error('offline')))
+    await settle()
+    expect(root.textContent).toContain('Goal: unavailable → Ship v2 badges')
   })
 
   test('names worktrees with their project and keeps the story and handed-back sentences apart', async () => {
