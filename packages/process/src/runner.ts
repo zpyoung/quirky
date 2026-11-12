@@ -1,4 +1,4 @@
-import type { ProcessRunner, ProcessSpawner, RunOptions, RunResult, SpawnOptions } from '@quirky/protocol'
+import type { ProcessRunner, ProcessSpawner, RunOptions, RunResult } from '@quirky/protocol'
 import { startChild, type StartChild } from './child'
 import { ProcessRunnerDisposedError } from './errors'
 import { executeRun, DEFAULT_TIMEOUT_MS, DEFAULT_KILL_GRACE_MS, DEFAULT_MAX_OUTPUT_BYTES } from './run'
@@ -70,7 +70,7 @@ export function createProcessRunner({ owner, start = startChild, stallMs }: Proc
 
       const cwd = options.cwd ?? process.cwd()
       const env = { ...(options.env ?? process.env) }
-      const normalized: SpawnOptions = {
+      const normalized = {
         ...options,
         timeoutMs,
         killGraceMs,
