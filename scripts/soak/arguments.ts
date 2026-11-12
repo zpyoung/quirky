@@ -4,8 +4,10 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
   DEFAULT_LIMITS,
+  DEFAULT_WINDOWS,
   FAULT_KINDS,
   FAULT_MIN_MINUTES,
+  MAX_WINDOWS,
   QUALIFYING_MINUTES,
   type SoakConfig,
   type SoakLimits,
@@ -19,7 +21,7 @@ export class UsageError extends Error {
   }
 }
 
-export const USAGE = `Usage: bun scripts/soak.ts [--minutes <n>] [--out <dir>]
+export const USAGE = `Usage: bun scripts/soak.ts [--minutes <n>] [--out <dir>] [--windows <0-7>]
                     [--max-children <n>] [--max-growth <n>] [--max-zombies <n>]
                     [--max-events-per-5s <n>] [--max-stall-ms <n>]
                     [--fault leak|zombies|storm|block] [--help]`
@@ -34,6 +36,17 @@ function parseNumber(value: string | undefined, flag: string, fallback: number, 
     throw new UsageError(`${flag} must be ${requirement}`)
   }
   return number
+}
+
+function parseWindows(value: string | undefined): number {
+  if (value === undefined) return DEFAULT_WINDOWS
+
+  const text = value.trim()
+  const windows = text === '' ? NaN : Number(text)
+  if (!Number.isInteger(windows) || windows < 0 || windows > MAX_WINDOWS) {
+    throw new UsageError('--windows must be a whole number from 0 to 7')
+  }
+  return windows
 }
 
 function validateOutDirectory(path: string): string {
@@ -71,9 +84,13 @@ function validateOutDirectory(path: string): string {
 /** Validates flags and reserves an empty output directory for the soak. */
 export function parseArguments(argv: string[]): SoakConfig | { help: true } {
   const faultError = `--fault must be one of ${FAULT_KINDS.join(', ')}`
+  const windowsError = '--windows must be a whole number from 0 to 7'
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--fault' && (argv[index + 1] === undefined || argv[index + 1].startsWith('-'))) {
       throw new UsageError(faultError)
+    }
+    if (argv[index] === '--windows' && (argv[index + 1] === undefined || argv[index + 1].startsWith('-'))) {
+      throw new UsageError(windowsError)
     }
   }
 
@@ -86,6 +103,7 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
         fault: { type: 'string' },
         minutes: { type: 'string' },
         out: { type: 'string' },
+        windows: { type: 'string' },
         'max-children': { type: 'string' },
         'max-growth': { type: 'string' },
         'max-zombies': { type: 'string' },
@@ -100,6 +118,7 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
   }
 
   if (values.help) return { help: true }
+  const windows = parseWindows(values.windows)
   const fault = values.fault === undefined
     ? undefined
     : FAULT_KINDS.find((kind) => kind === values.fault)
@@ -124,6 +143,6 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
     : validateOutDirectory(values.out)
 
   return fault === undefined
-    ? { minutes, out, limits }
-    : { minutes, out, limits, fault }
+    ? { minutes, out, limits, windows }
+    : { minutes, out, limits, windows, fault }
 }

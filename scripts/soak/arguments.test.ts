@@ -59,6 +59,7 @@ test('uses the documented defaults and gives each default output a fresh temp pa
   trackNewDefaultOut(second.out, existing)
 
   expect(first.minutes).toBe(30)
+  expect(first.windows).toBe(3)
   expect(first.limits).toEqual(defaultLimits)
   expect(isAbsolute(first.out)).toBe(true)
   expect(dirname(first.out)).toBe(tmpdir())
@@ -66,11 +67,53 @@ test('uses the documented defaults and gives each default output a fresh temp pa
   expect(second.out).not.toBe(first.out)
 })
 
+test('parses a chosen --windows count and accepts both range endpoints', () => {
+  const out = makeTempDir()
+
+  expect(parseConfig(['--out', out, '--windows', '5']).windows).toBe(5)
+  expect(parseConfig(['--out', out, '--windows', '0']).windows).toBe(0)
+  expect(parseConfig(['--out', out, '--windows', '7']).windows).toBe(7)
+})
+
+for (const value of ['8', '-1', '1.5', 'abc']) {
+  test(`rejects --windows ${value} with the exact range error`, () => {
+    const out = makeTempDir()
+    let caught: unknown
+    try {
+      parseArguments(['--out', out, '--windows', value])
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(UsageError)
+    if (caught instanceof UsageError) {
+      expect(caught.message).toBe('--windows must be a whole number from 0 to 7')
+    }
+  })
+}
+
+test('rejects --windows without a value with the exact range error', () => {
+  const out = makeTempDir()
+  let caught: unknown
+  try {
+    parseArguments(['--out', out, '--windows'])
+  } catch (error) {
+    caught = error
+  }
+
+  expect(caught).toBeInstanceOf(UsageError)
+  if (caught instanceof UsageError) {
+    expect(caught.message).toBe('--windows must be a whole number from 0 to 7')
+  }
+})
+
+
+
 test('parses --minutes as a fractional number', () => {
   const out = makeTempDir()
   const config = parseConfig(['--minutes', '0.4', '--out', out])
 
-  expect(config).toEqual({ minutes: 0.4, out, limits: defaultLimits })
+  expect(config).toEqual({ minutes: 0.4, out, limits: defaultLimits, windows: 3 })
 })
 
 test('parses --out', () => {
@@ -162,7 +205,7 @@ test('rejects an unknown flag as a usage error', () => {
   expectUsageError(['--out', out, '--not-a-soak-option'], '--not-a-soak-option')
 })
 
-for (const flag of ['--minutes', '--out', ...validLimits.map(([name]) => name)]) {
+for (const flag of ['--minutes', '--out', '--windows', ...validLimits.map(([name]) => name)]) {
   test(`rejects ${flag} when its value is missing`, () => {
     const argv = flag === '--out' ? [flag] : ['--out', makeTempDir(), flag]
     expectUsageError(argv, flag)
