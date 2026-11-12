@@ -45,7 +45,7 @@ function launchFixtureParent(mode: 'exit' | 'wait', log: string, beats: number) 
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'ignore'
-  } as unknown as Bun.SpawnOptions.OptionsObject<'pipe' | 'ignore', 'pipe' | 'ignore', 'pipe' | 'ignore'>)
+  } as unknown as Bun.SpawnOptions.OptionsObject<'ignore', 'pipe', 'ignore'>)
   groups.push(parent.pid)
   parents.push(parent)
   const childPid = readPid(parent.stdout).then(pid => {

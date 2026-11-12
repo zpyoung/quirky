@@ -1,7 +1,4 @@
 {
-  "packages/daemon/src/interactive-path.ts": 1,
-  "packages/daemon/src/notify.ts": 1,
-  "packages/daemon/src/pty-client.ts": 1,
   "packages/git/src/compare.ts": 1,
   "packages/git/src/diffs.ts": 3,
   "packages/git/src/ops.ts": 1,
