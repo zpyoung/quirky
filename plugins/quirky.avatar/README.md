@@ -15,6 +15,8 @@ Handing a worktree off gives it a mandate (goal, done-when, guidelines, a level 
 The gate is installed per agent: a Claude launch hook, Codex `hooks.json` entries and a pi/omp extension. Sessions without a marker are never blocked and never depend on the daemon.
 Turn off `agent-hooks` with `quirky setting set setting:quirky.avatar/agent-hooks false` to remove the avatar's Codex entries and pi/omp extension files and stop reinstalling them; take those worktrees back first.
 
+The gate and session-record checks share the same worktree, branch and user-home context. Push protection uses git's detected default branch, cached for 60 seconds per repository, with `main` as the fallback. A recorded call whose worktree cannot be confirmed waits up to five minutes before a `skipped-call-error` is journaled. Hook-folder watches use the user's home and the installer's absolute-path overrides.
+
 ## CLI
 
 | Command | What it does |
@@ -26,6 +28,10 @@ Turn off `agent-hooks` with `quirky setting set setting:quirky.avatar/agent-hook
 | `quirky avatar take-back <worktree>` or `--all` | Takes a worktree, or every worktree, back. |
 
 The same operations are plugin methods under `quirky.avatar/`: `eligibility`, `handoff`, `takeBack`, `status`, `sidebarStatus`, `report`, `log`, `resolveNeed`, `mandate`, `settings` and `setSettings`.
+
+The Report tab shows a guess's chosen answer and each proposed mandate field's current and new values. Question needs show every question in the batch with its typed controls and optional markers. Each need's action buttons stay disabled until its own request settles.
+
+For question needs, `resolveNeed` accepts `answers`, keyed by question ID, containing the typed `AskAnswer` values that `quirky.ask/answer` validates. Legacy question needs still accept `text`. Answer validation failures keep the need open to retry; already-finished or missing asks close their stale needs.
 
 ## Settings
 

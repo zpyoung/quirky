@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,7 +24,7 @@ afterEach(() => {
 })
 
 type BrainReply = Awaited<ReturnType<ReturnType<typeof setup>['app']['services']['brain']['judge']>>
-type Options = { level?: Level; switches?: Partial<Mandate['switches']>; brain?: (budgetMs: number) => Promise<BrainReply> | BrainReply; agent?: string; agentList?: unknown }
+type Options = { level?: Level; switches?: Partial<Mandate['switches']>; brain?: (budgetMs: number) => Promise<BrainReply> | BrainReply; agent?: string; agentList?: unknown; primaryBranch?: string; defaultBase?: (repoPath: string) => Promise<string | null> }
 
 function setup(options: Options = {}) {
   const home = scratch()
@@ -35,7 +36,7 @@ function setup(options: Options = {}) {
     fakeCalls: {
       'quirky.worktree/list': () => [
         { id: 'wt-1', path: worktreePath, branch: 'feature', repoId: 'repo', isMain: false },
-        { id: 'main', path: mainPath, branch: 'main', repoId: 'repo', isMain: true }
+        { id: 'main', path: mainPath, branch: options.primaryBranch ?? 'main', repoId: 'repo', isMain: true }
       ],
       ...(options.agentList === undefined ? {} : { 'quirky.agents/list': () => options.agentList })
     }
@@ -57,7 +58,7 @@ function setup(options: Options = {}) {
   t.app.services.supervisor.recordDenial = (worktreeId, counts) => void denials.push([worktreeId, counts])
 
   const agentEnv = { home, env: {} as Record<string, string> }
-  const dispose = register(t.app, { agentEnv, claudeVersion: async () => '2.1.300', graceMs: 50 })
+  const dispose = register(t.app, { agentEnv, claudeVersion: async () => '2.1.300', graceMs: 50, defaultBase: options.defaultBase ?? (async () => 'origin/main') })
   disposers.push(dispose)
   t.app.services.gate.writeMarker('s-1', 'wt-1', mandate.level)
   const provider = t.provided.get('tool-gate:quirky.avatar/gate') as ToolGateProvider
@@ -596,6 +597,292 @@ describe('markers and the gate service surface', () => {
     const call = { agent: 'claude' as const, sessionId: 's-1', worktreeId: 'wt-1', cwd: s.worktreePath, toolName: 'Read', toolInput: { file_path: join(s.worktreePath, 'a') }, event: 'PreToolUse' as const }
     expect((await s.app.services.gate.decideCall(call, 60_000, new AbortController().signal)).outcome).toBe('allow')
     expect((await s.app.services.gate.decideCall({ ...call, worktreeId: 'nope' }, 60_000, new AbortController().signal)).outcome).toBe('passthrough')
+  })
+})
+
+describe('classification context', () => {
+  test('protects the git default instead of the primary checkout branch', async () => {
+    const readPaths: string[] = []
+    const s = setup({
+      level: 'full',
+      primaryBranch: 'feature-x',
+      defaultBase: async (repoPath) => {
+        readPaths.push(repoPath)
+        return 'origin/trunk'
+      }
+    })
+
+    const trunk = await s.bash('git push origin HEAD:trunk')
+    expect(trunk.decision).toBe('deny')
+    expect(s.gateEntries().at(-1)?.data).toMatchObject({
+      outcome: 'deny',
+      step: 'level',
+      reason: 'pushing to the default branch is not allowed at level full; it goes through merge'
+    })
+    expect(s.brainCalls).toEqual([])
+
+    const featureX = await s.bash('git push origin HEAD:feature-x')
+    expect(featureX.decision).toBe('deny')
+    expect(s.gateEntries().at(-1)?.data).toMatchObject({ outcome: 'deny', step: 'judgment' })
+    expect(s.brainCalls).toHaveLength(1)
+
+    const main = await s.bash('git push origin HEAD:main')
+    expect(main.decision).toBe('deny')
+    expect(s.gateEntries().at(-1)?.data).toMatchObject({ outcome: 'deny', step: 'judgment' })
+    expect(s.brainCalls).toHaveLength(2)
+    expect(readPaths).toEqual([s.worktreePath])
+  })
+
+  test('uses a bare main default name as given', async () => {
+    const s = setup({ level: 'full', defaultBase: async () => 'main' })
+
+    const decision = await s.bash('git push origin HEAD:main')
+
+    expect(decision.decision).toBe('deny')
+    expect(s.gateEntries().at(-1)?.data).toMatchObject({ step: 'level' })
+    expect(s.brainCalls).toEqual([])
+  })
+
+  test('strips origin from origin/master', async () => {
+    const s = setup({ level: 'full', defaultBase: async () => 'origin/master' })
+
+    const decision = await s.bash('git push origin HEAD:master')
+
+    expect(decision.decision).toBe('deny')
+    expect(s.gateEntries().at(-1)?.data).toMatchObject({ step: 'level' })
+    expect(s.brainCalls).toEqual([])
+  })
+
+  for (const failure of ['null', 'throw'] as const) {
+    test(`falls back to main when the default reader returns ${failure}`, async () => {
+      let reads = 0
+      const s = setup({
+        level: 'full',
+        defaultBase: async () => {
+          reads++
+          if (failure === 'throw') throw new Error('git failed')
+          return null
+        }
+      })
+
+      const main = await s.bash('git push origin HEAD:main')
+      expect(main.decision).toBe('deny')
+      expect(s.gateEntries().at(-1)?.data).toMatchObject({ step: 'level' })
+      expect(s.brainCalls).toEqual([])
+
+      const featureX = await s.bash('git push origin HEAD:feature-x')
+      expect(featureX.decision).toBe('deny')
+      expect(s.gateEntries().at(-1)?.data).toMatchObject({ step: 'judgment' })
+      expect(s.brainCalls).toHaveLength(1)
+      expect(reads).toBe(1)
+    })
+  }
+
+  test('caches the repository default for 60 seconds', async () => {
+    const readPaths: string[] = []
+    const s = setup({
+      defaultBase: async (repoPath) => {
+        readPaths.push(repoPath)
+        return 'origin/trunk'
+      }
+    })
+    let now = 1_000
+    s.app.now = () => now
+
+    await s.app.services.gate.classifyContext('wt-1')
+    await s.app.services.gate.classifyContext('wt-1')
+    await s.app.services.gate.classifyContext('wt-1')
+    expect(readPaths).toEqual([s.worktreePath])
+
+    now += 60_000
+    await s.app.services.gate.classifyContext('wt-1')
+    expect(readPaths).toEqual([s.worktreePath, s.worktreePath])
+  })
+
+  test('shares a pending default lookup that lasts past its 60-second TTL', async () => {
+    const { promise: pending, resolve: release } = Promise.withResolvers<string | null>()
+    const readPaths: string[] = []
+    const { promise: readerStarted, resolve: signalReaderStarted } = Promise.withResolvers<void>()
+    const s = setup({
+      defaultBase: (repoPath) => {
+        readPaths.push(repoPath)
+        signalReaderStarted()
+        return pending
+      }
+    })
+    let now = 1_000
+    s.app.now = () => now
+    let listCalls = 0
+    const { promise: secondListCalled, resolve: signalSecondListCalled } = Promise.withResolvers<void>()
+    s.fakeCalls['quirky.worktree/list'] = () => {
+      listCalls++
+      if (listCalls === 2) signalSecondListCalled()
+      return [
+        { id: 'wt-1', path: s.worktreePath, branch: 'feature', repoId: 'repo', isMain: false }
+      ]
+    }
+
+    const first = s.app.services.gate.classifyContext('wt-1')
+    await readerStarted
+    now += 60_000
+    const second = s.app.services.gate.classifyContext('wt-1')
+    await secondListCalled
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(readPaths).toEqual([s.worktreePath])
+
+    release('origin/trunk')
+    const contexts = await Promise.all([first, second])
+    expect(contexts.map((context) => context?.defaultBranch)).toEqual(['trunk', 'trunk'])
+    expect(readPaths).toEqual([s.worktreePath])
+  })
+
+  test('shares a cached default across worktrees in one repo, but not across repos', async () => {
+    const wt9Path = join(scratch(), 'wt-9')
+    const wtOtherPath = join(scratch(), 'wt-other')
+    const wtOther2Path = join(scratch(), 'wt-other-2')
+    mkdirSync(wt9Path)
+    mkdirSync(wtOtherPath)
+    mkdirSync(wtOther2Path)
+    const readPaths: string[] = []
+    const s = setup({
+      defaultBase: async (repoPath) => {
+        readPaths.push(repoPath)
+        return 'origin/trunk'
+      }
+    })
+    s.fakeCalls['quirky.worktree/list'] = () => [
+      { id: 'wt-1', path: s.worktreePath, branch: 'feature', repoId: 'repo', isMain: false },
+      { id: 'wt-9', path: wt9Path, branch: 'fix', repoId: 'repo', isMain: false },
+      { id: 'wt-other', path: wtOtherPath, branch: 'other', repoId: 'other', isMain: false },
+      { id: 'wt-other-2', path: wtOther2Path, branch: 'other-2', repoId: 'other', isMain: false }
+    ]
+
+    await s.app.services.gate.classifyContext('wt-1')
+    await s.app.services.gate.classifyContext('wt-9')
+    await s.app.services.gate.classifyContext('wt-other')
+    await s.app.services.gate.classifyContext('wt-other-2')
+
+    expect(readPaths).toEqual([s.worktreePath, wtOtherPath])
+  })
+
+  test('uses the listed path as the cache key when repoId is empty', async () => {
+    const otherPath = join(scratch(), 'wt-other')
+    mkdirSync(otherPath)
+    const readPaths: string[] = []
+    const s = setup({
+      defaultBase: async (repoPath) => {
+        readPaths.push(repoPath)
+        return 'origin/trunk'
+      }
+    })
+    s.fakeCalls['quirky.worktree/list'] = () => [
+      { id: 'wt-1', path: s.worktreePath, branch: 'feature', repoId: '', isMain: false },
+      { id: 'wt-same-path', path: s.worktreePath, branch: 'alias', repoId: '', isMain: false },
+      { id: 'wt-other-path', path: otherPath, branch: 'other', repoId: '', isMain: false }
+    ]
+
+    await s.app.services.gate.classifyContext('wt-1')
+    await s.app.services.gate.classifyContext('wt-same-path')
+    await s.app.services.gate.classifyContext('wt-other-path')
+
+    expect(readPaths).toEqual([s.worktreePath, otherPath])
+  })
+
+  for (const failure of ['null', 'throw'] as const) {
+    test(`caches a ${failure} default result for 60 seconds`, async () => {
+      let reads = 0
+      let now = 1_000
+      const s = setup({
+        defaultBase: async () => {
+          reads++
+          if (failure === 'throw') throw new Error('git failed')
+          return null
+        }
+      })
+      s.app.now = () => now
+
+      await s.app.services.gate.classifyContext('wt-1')
+      now += 59_999
+      await s.app.services.gate.classifyContext('wt-1')
+      expect(reads).toBe(1)
+
+      now += 1
+      await s.app.services.gate.classifyContext('wt-1')
+      expect(reads).toBe(2)
+    })
+  }
+
+  test('does not read a default branch when the worktree is unknown', async () => {
+    let reads = 0
+    const s = setup({ defaultBase: async () => { reads++; return 'origin/trunk' } })
+
+    expect(await s.app.services.gate.classifyContext('no-such-worktree')).toBeNull()
+    expect(reads).toBe(0)
+  })
+
+  test('does not cache a worktree-list failure', async () => {
+    let listCalls = 0
+    let readerCalls = 0
+    let fail = true
+    const s = setup({ defaultBase: async () => { readerCalls++; return 'origin/trunk' } })
+    s.fakeCalls['quirky.worktree/list'] = () => {
+      listCalls++
+      if (fail) throw new Error('worktree list failed')
+      return [{ id: 'wt-1', path: s.worktreePath, branch: 'feature', repoId: 'repo', isMain: false }]
+    }
+
+    expect(await s.app.services.gate.classifyContext('wt-1')).toBeNull()
+    expect(readerCalls).toBe(0)
+    fail = false
+    expect(await s.app.services.gate.classifyContext('wt-1')).not.toBeNull()
+    expect(listCalls).toBe(2)
+    expect(readerCalls).toBe(1)
+  })
+
+  test('builds the full context from the listed worktree and current settings', async () => {
+    const s = setup({ defaultBase: async () => 'origin/trunk' })
+    const settings = s.app.settings()
+
+    expect(await s.app.services.gate.classifyContext('wt-1')).toEqual({
+      worktreePath: s.worktreePath,
+      handedOffPaths: [s.worktreePath],
+      defaultBranch: 'trunk',
+      ownBranch: 'feature',
+      home: s.agentEnv.home,
+      allowCommands: settings.allowCommands,
+      denyCommands: settings.denyCommands,
+      deployCommands: settings.deployCommands
+    })
+  })
+
+  test('the stub and a disposed gate return null', async () => {
+    const t = makeTestApp()
+    dirs.push(t.context.home)
+    expect(await t.app.services.gate.classifyContext('wt-1')).toBeNull()
+
+    const s = setup()
+    const gate = s.app.services.gate
+    disposers.pop()!()
+    expect(await gate.classifyContext('wt-1')).toBeNull()
+  })
+
+  test('reads the default branch from git when no reader is injected', async () => {
+    const repoPath = scratch()
+    execFileSync('git', ['init', '-b', 'work'], { cwd: repoPath, stdio: 'ignore' })
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.t', 'commit', '--allow-empty', '-m', 'initial'], { cwd: repoPath, stdio: 'ignore' })
+    execFileSync('git', ['update-ref', 'refs/remotes/origin/trunk', 'HEAD'], { cwd: repoPath, stdio: 'ignore' })
+    execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/trunk'], { cwd: repoPath, stdio: 'ignore' })
+    const t = makeTestApp({
+      fakeCalls: {
+        'quirky.worktree/list': () => [{ id: 'wt-1', path: repoPath, branch: 'work', repoId: 'repo', isMain: false }]
+      }
+    })
+    dirs.push(t.context.home)
+    const dispose = register(t.app, { agentEnv: { home: scratch(), env: {} }, claudeVersion: async () => null, graceMs: 50 })
+    disposers.push(dispose)
+
+    expect((await t.app.services.gate.classifyContext('wt-1'))?.defaultBranch).toBe('trunk')
   })
 })
 

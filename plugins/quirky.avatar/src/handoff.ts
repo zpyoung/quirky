@@ -87,6 +87,7 @@ function briefText(mandate: Mandate, updated: boolean): string {
 export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
   const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
   const pendingBriefs = new Map<string, Brief>()
+  const resolvingNeeds = new Set<string>()
   let disposed = false
   const call = <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => app.context.call(method, params) as Promise<T>
 
@@ -386,84 +387,108 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     return app.store.guesses.list({ worktreeId: need.worktreeId }).filter((guess) => guess.confirmedAt === null && guess.redoneAt === null).at(-1) ?? null
   }
 
-  async function resolveNeed(needId: string, action: NeedAction, text?: string): ReturnType<HandoffService['resolveNeed']> {
+  async function resolveNeed(needId: string, action: NeedAction, text?: string, answers?: Record<string, unknown>): ReturnType<HandoffService['resolveNeed']> {
     const need = app.store.needs.get(needId)
     if (need === null) return { ok: false, error: 'unknown need' }
-    if (need.resolvedAt !== null) return { ok: false, error: 'need already resolved' }
+    if (need.resolvedAt !== null || resolvingNeeds.has(needId)) return { ok: false, error: 'need already resolved' }
     if (!need.actions.includes(action)) return { ok: false, error: `action not allowed for this need: ${action}` }
     const worktreeId = need.worktreeId
     const answer = text?.trim() ?? ''
-
-    switch (action) {
-      case 'allow-once': {
-        app.services.gate.approveOnce(need.id)
-        closeNeed(need, action, 'allowed-once')
-        await sendToWorker(worktreeId, 'Your held call is approved once; retry it now.')
-        return { ok: true }
+    resolvingNeeds.add(needId)
+    try {
+      switch (action) {
+        case 'allow-once': {
+          app.services.gate.approveOnce(need.id)
+          closeNeed(need, action, 'allowed-once')
+          await sendToWorker(worktreeId, 'Your held call is approved once; retry it now.')
+          return { ok: true }
+        }
+        case 'deny': {
+          closeNeed(need, action, 'denied')
+          await sendToWorker(worktreeId, 'Held call denied; find another way.')
+          return { ok: true }
+        }
+        case 'confirm':
+        case 'redo': {
+          const guess = guessFor(need)
+          if (guess === null) return { ok: false, error: 'unknown guess' }
+          app.store.transaction(() => {
+            app.store.guesses.put(action === 'confirm' ? { ...guess, confirmedAt: app.now() } : { ...guess, redoneAt: app.now() })
+            closeNeed(need, action, action === 'confirm' ? 'confirmed' : 'redone', { guessId: guess.id, ...(answer === '' ? {} : { text: answer }) }, 'guess')
+          })
+          app.services.brain.wake()
+          return { ok: true }
+        }
+        case 'review-accept': {
+          const mandate = app.store.mandates.get(worktreeId)
+          if (mandate === null) return { ok: false, error: 'no mandate' }
+          const patch = need.detail.patch
+          if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) return { ok: false, error: 'invalid: patch' }
+          const { goal, doneWhen, guidelines, notes } = patch as MandatePatch
+          const applied = applyMandatePatch(mandate, { goal, doneWhen, guidelines, notes }, app.now())
+          if (!applied.ok) return { ok: false, error: applied.error }
+          app.store.transaction(() => {
+            app.store.mandates.put(applied.value)
+            closeNeed(need, action, 'accepted', { patch: { goal, doneWhen, guidelines, notes } }, 'mandate-proposal')
+          })
+          app.services.brain.wake()
+          return { ok: true }
+        }
+        case 'review-reject':
+          closeNeed(need, action, 'rejected', {}, 'mandate-proposal')
+          return { ok: true }
+        case 'answer': {
+          const hasAnswers = answers !== undefined && Object.keys(answers).length > 0
+          if (!hasAnswers && answer === '') return { ok: false, error: 'an answer needs text' }
+          const askId = typeof need.detail.askId === 'string' && need.detail.askId.trim() !== '' ? need.detail.askId.trim() : null
+          if (askId !== null) {
+            const firstQuestion = Array.isArray(need.detail.questions) ? need.detail.questions[0] as { id?: unknown } | undefined : undefined
+            const firstQuestionId = typeof firstQuestion?.id === 'string' && firstQuestion.id.trim() !== '' ? firstQuestion.id : 'q1'
+            const payloadAnswers: Record<string, unknown> = hasAnswers
+              ? answers!
+              : { [firstQuestionId]: { value: answer, source: 'input' } }
+            try {
+              const envelope = (await app.context.call('quirky.ask/answer', { askId, answers: payloadAnswers })) as { status?: unknown } | undefined
+              app.needs.close(need.id, typeof envelope?.status === 'string' ? envelope.status : 'answered')
+              return { ok: true }
+            } catch (cause) {
+              const message = errorText(cause)
+              const already = /^ask .+ is already (answered|partial|declined|timed_out|unavailable)$/.exec(message)
+              if (already !== null) app.needs.close(need.id, already[1]!)
+              else if (/^no such ask:/i.test(message)) app.needs.close(need.id, 'unavailable')
+              return { ok: false, error: message }
+            }
+          }
+          closeNeed(need, action, 'answered', { text: answer, ...(hasAnswers ? { answers } : {}) }, 'ask')
+          app.services.brain.wake()
+          return { ok: true }
+        }
+        case 'restart': {
+          const result = await app.services.supervisor.restartWorker(worktreeId, answer === '' ? 'restarted by you' : answer)
+          if (result.sessionId === null) return { ok: false, error: result.error ?? 'could not restart the worker' }
+          closeNeed(need, action, 'restarted')
+          return { ok: true }
+        }
+        case 'take-back': {
+          await takeBack({ worktreeIds: [worktreeId] })
+          if (app.store.needs.get(need.id)?.resolvedAt === null) closeNeed(need, action, 'handed-back')
+          return { ok: true }
+        }
+        case 'restart-to-handoff': {
+          const result = await app.services.supervisor.restartWorker(worktreeId, answer === '' ? 'restarted so the gate can be checked again' : answer)
+          if (result.sessionId === null) return { ok: false, error: result.error ?? 'could not restart the worker' }
+          const row = activeRow(worktreeId)
+          const mandate = app.store.mandates.get(worktreeId)
+          if (row !== null) app.store.handoffs.put({ ...row, sessionId: result.sessionId })
+          if (mandate !== null) app.services.gate.writeMarker(result.sessionId, worktreeId, mandate.level)
+          closeNeed(need, action, 'restarted')
+          writeState(worktreeId, 'checking', 'restarted to re-check the gate')
+          startGateCheck(worktreeId)
+          return { ok: true }
+        }
       }
-      case 'deny': {
-        closeNeed(need, action, 'denied')
-        await sendToWorker(worktreeId, 'Held call denied; find another way.')
-        return { ok: true }
-      }
-      case 'confirm':
-      case 'redo': {
-        const guess = guessFor(need)
-        if (guess === null) return { ok: false, error: 'unknown guess' }
-        app.store.transaction(() => {
-          app.store.guesses.put(action === 'confirm' ? { ...guess, confirmedAt: app.now() } : { ...guess, redoneAt: app.now() })
-          closeNeed(need, action, action === 'confirm' ? 'confirmed' : 'redone', { guessId: guess.id, ...(answer === '' ? {} : { text: answer }) }, 'guess')
-        })
-        app.services.brain.wake()
-        return { ok: true }
-      }
-      case 'review-accept': {
-        const mandate = app.store.mandates.get(worktreeId)
-        if (mandate === null) return { ok: false, error: 'no mandate' }
-        const patch = need.detail.patch
-        if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) return { ok: false, error: 'invalid: patch' }
-        const { goal, doneWhen, guidelines, notes } = patch as MandatePatch
-        const applied = applyMandatePatch(mandate, { goal, doneWhen, guidelines, notes }, app.now())
-        if (!applied.ok) return { ok: false, error: applied.error }
-        app.store.transaction(() => {
-          app.store.mandates.put(applied.value)
-          closeNeed(need, action, 'accepted', { patch: { goal, doneWhen, guidelines, notes } }, 'mandate-proposal')
-        })
-        app.services.brain.wake()
-        return { ok: true }
-      }
-      case 'review-reject':
-        closeNeed(need, action, 'rejected', {}, 'mandate-proposal')
-        return { ok: true }
-      case 'answer': {
-        if (answer === '') return { ok: false, error: 'an answer needs text' }
-        closeNeed(need, action, 'answered', { text: answer }, 'ask')
-        app.services.brain.wake()
-        return { ok: true }
-      }
-      case 'restart': {
-        const result = await app.services.supervisor.restartWorker(worktreeId, answer === '' ? 'restarted by you' : answer)
-        if (result.sessionId === null) return { ok: false, error: result.error ?? 'could not restart the worker' }
-        closeNeed(need, action, 'restarted')
-        return { ok: true }
-      }
-      case 'take-back': {
-        await takeBack({ worktreeIds: [worktreeId] })
-        if (app.store.needs.get(need.id)?.resolvedAt === null) closeNeed(need, action, 'handed-back')
-        return { ok: true }
-      }
-      case 'restart-to-handoff': {
-        const result = await app.services.supervisor.restartWorker(worktreeId, answer === '' ? 'restarted so the gate can be checked again' : answer)
-        if (result.sessionId === null) return { ok: false, error: result.error ?? 'could not restart the worker' }
-        const row = activeRow(worktreeId)
-        const mandate = app.store.mandates.get(worktreeId)
-        if (row !== null) app.store.handoffs.put({ ...row, sessionId: result.sessionId })
-        if (mandate !== null) app.services.gate.writeMarker(result.sessionId, worktreeId, mandate.level)
-        closeNeed(need, action, 'restarted')
-        writeState(worktreeId, 'checking', 'restarted to re-check the gate')
-        startGateCheck(worktreeId)
-        return { ok: true }
-      }
+    } finally {
+      resolvingNeeds.delete(needId)
     }
   }
 
