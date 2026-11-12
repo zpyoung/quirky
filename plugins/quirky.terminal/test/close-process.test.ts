@@ -59,7 +59,7 @@ function makeFixture(specs: TabSpec[], ptyRows: unknown[], run: (call: number) =
     process
   }
   const service = new LayoutService(context as never, store as never, new InputTracker())
-  const describe = () => service.methods.describeClose!({ tab: tabs[0]!.id, which: 'others' }, {} as never)
+  const describe = async () => service.methods.describeClose!({ tab: tabs[0]!.id, which: 'others' }, {} as never)
   return { calls, describe, tabs }
 }
 
