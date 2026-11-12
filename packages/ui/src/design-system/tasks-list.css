@@ -71,6 +71,14 @@
   min-width: var(--compat-px-180);
 }
 
+.quirky-tasks .tasks-list__toolbar .ui-button,
+.quirky-tasks .tasks-list__toolbar .ui-menu__trigger,
+.quirky-tasks .tasks-list__toolbar .ui-text-field__input.tasks-list__search-input {
+  height: var(--ui-row-single);
+  line-height: 1.25;
+  padding-block: var(--ui-space-4);
+}
+
 .quirky-tasks .tasks-list__toolbar .ui-text-field__label {
   border: 0;
   clip-path: inset(50%);
