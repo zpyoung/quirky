@@ -1396,6 +1396,17 @@ describe('directory uncertainty scenarios', () => {
     expectClassSet('cd build; echo "$(true)" && rm -rf ../x', ['read', 'edit-outside'])
     expectClassSet('cd build && echo "$(true)" && rm -rf ../x', ['read', 'edit-inside'])
     expect(sortedClasses(bash('cd /work/wt && (true) && rm -rf x', {}, '/home/u'))).toEqual(['edit-outside', 'read'])
+    const nestedScopeRows: [string, ActionClass[], 'held' | 'allow', 'floor-core' | 'fixed-rules'][] = [
+      ['(cd nosuch; (true) && rm -rf ../x)', ['read', 'edit-outside'], 'held', 'floor-core'],
+      ['echo "$(cd nosuch; (true) && rm -rf ../x)"', ['read', 'edit-outside'], 'held', 'floor-core'],
+      ['cd /tmp; (cd /work/wt/nosuch; (true) && rm -rf x)', ['read', 'edit-outside'], 'held', 'floor-core'],
+      ['(cd src && (true) && rm -rf dist)', ['read', 'edit-inside'], 'allow', 'fixed-rules'],
+      ['echo "$(cd src && (true) && touch a)"', ['read', 'edit-inside'], 'allow', 'fixed-rules']
+    ]
+    for (const [command, classes, outcome, step] of nestedScopeRows) {
+      expectClassSet(command, classes)
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
   })
 
   test('scenario 10: applies the reviewed decision outcomes for each directory rule', () => {
