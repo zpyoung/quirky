@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button, ContextMenu, Dialog, EmptyState } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, ReviewFile, UiPluginContext } from '@quirky/protocol'
@@ -32,7 +32,7 @@ import type { Expansion, RowButton, RowHandlers, RowItem } from './Rows'
 import { openHostedDiff } from '../view/hosted-tabs'
 import { isRecord } from '../daemon/validation'
 import type { PushTargetResult } from '../daemon/push-target'
-import { ShipBar, ShipErrorLine, type ShipErrorView } from './ShipBar'
+import { CARET_LABEL, ShipBar, ShipErrorLine, shipMenuEntries, type ShipErrorView } from './ShipBar'
 import { isBaseBranch, nextStep, shipMenu, type ShipMenuId, type ShipState } from './ship'
 import { actionPaths, uncommittedBadge, type ActionContext } from './sections'
 import { advanceAfterMark, keyIntent } from './selection'
@@ -244,6 +244,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const baseDialogWasOpen = useRef(false)
   const [launch, setLaunch] = useState<FixAction | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; item: RowItem } | null>(null)
+  const [shipMenuAt, setShipMenuAt] = useState<{ x: number; y: number } | null>(null)
   const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
   const createIntent = useRef(0)
   const activeCreateIntent = useRef<number | null>(null)
@@ -402,6 +403,15 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   }
   const step = model === null ? null : nextStep(shipState)
   const shipItems = shipMenu(shipState)
+  const shipBarPossible = status !== null && operation === 'none'
+  const closeShipMenu = useCallback(() => setShipMenuAt(null), [])
+  const [shipCaretShown, setShipCaretShown] = useState<HTMLButtonElement | null>(null)
+  useLayoutEffect(() => {
+    setShipCaretShown(shipMenuAt === null ? null : root.current?.querySelector<HTMLButtonElement>(`[aria-label="${CARET_LABEL}"]`) ?? null)
+  })
+  useEffect(() => {
+    if (!shipBarPossible) setShipMenuAt(null)
+  }, [shipBarPossible])
   const fixFor = (action: FixButtonProps['action']): FixButtonProps | undefined =>
     aiEnabled ? { action, busy: aiFix.busy, onFix: () => void aiFix.start(action), onCustomize: () => setLaunch(action) } : undefined
 
@@ -1270,10 +1280,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             context={context}
             worktree={worktree}
             step={step}
-            items={shipItems}
             busy={busyLabel !== null}
             onStep={runStep}
-            onChoose={(id) => void runMenu(id)}
+            menuOpen={shipMenuAt !== null}
+            onOpenMenu={setShipMenuAt}
             showMessage={uncommittedPaths.length > 0}
             message={message}
             onMessage={(text) => {
@@ -1327,6 +1337,20 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         )}
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} label={`Actions for ${splitPath(menu.item.path).name}`} items={menuEntries(menu.item)} onClose={() => setMenu(null)} />}
+      {shipMenuAt && shipBarPossible && (
+        <ContextMenu
+          x={shipMenuAt.x}
+          y={shipMenuAt.y}
+          align="end"
+          label={CARET_LABEL}
+          items={shipMenuEntries(shipItems, (id) => {
+            shipCaretShown?.focus()
+            void runMenu(id)
+          })}
+          returnFocusTo={shipCaretShown ?? undefined}
+          onClose={closeShipMenu}
+        />
+      )}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}

@@ -1779,6 +1779,60 @@ test('each window projects its own selection when another window activated a dif
   expect(card('main')).toBeDefined()
 })
 
+test('worktree changes refresh the selected projection without overriding another window activation', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
+  await h.mount()
+  const activations = () => h.calls.filter((call) => call.method === 'quirky.sidebar-extras/activate' && !call.fromBadge)
+  const before = activations().length
+  h.world.active = { worktreeId: 'w-other', instanceId: 'instance-w-other' }
+
+  const projectionsBefore = sectionProjections(h).length
+  await act(async () => h.emit('quirky.worktree/changed'))
+  await h.flush()
+
+  expect(activations()).toHaveLength(before)
+  expect(h.world.active).toEqual({ worktreeId: 'w-other', instanceId: 'instance-w-other' })
+  expect(sectionProjections(h)).toHaveLength(projectionsBefore + 1)
+  expect(sectionProjections(h).at(-1)?.params.worktree).toBe('w-main')
+})
+
+test('a replacement instance at the selected worktree reactivates exactly once', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
+  await h.mount()
+  const activations = () => h.calls.filter((call) => call.method === 'quirky.sidebar-extras/activate' && !call.fromBadge)
+  const before = activations().length
+  const replacement = 'instance-w-main-replaced'
+  h.world.worktrees.find((item) => item.id === 'w-main')!.instanceId = replacement
+
+  await act(async () => h.emit('quirky.worktree/tagsChanged'))
+  await h.flush()
+
+  expect(activations()).toHaveLength(before + 1)
+  expect(activations().at(-1)?.params.worktree).toBe('w-main')
+  expect(h.world.active).toEqual({ worktreeId: 'w-main', instanceId: replacement })
+})
+
+test('session changes skip the all-window projection but refresh an override for the selected worktree', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
+  await h.mount()
+  const initialProjections = sectionProjections(h).length
+  await act(async () => h.emit('quirky.session/changed'))
+  await h.flush()
+  expect(sectionProjections(h)).toHaveLength(initialProjections)
+
+  await selectWindow(h, 'Live only')
+  const beforeOverrideRefresh = sectionProjections(h).length
+  await act(async () => h.emit('quirky.session/changed'))
+  await h.flush()
+
+  expect(sectionProjections(h)).toHaveLength(beforeOverrideRefresh + 1)
+  expect(sectionProjections(h).at(-1)?.params).toMatchObject({
+    worktree: 'w-main',
+    preferences: { workspaceActivityWindow: 'live-only' }
+  })
+})
+
+
 test('disabled extras falls back to the ordinary tree, while ordinary failures report unavailability', async () => {
   const disabled = setup({ view: null, panel: null, sidebar: true, focus: null }, { disabled: true })
   await disabled.mount()
