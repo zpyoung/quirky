@@ -3305,8 +3305,10 @@ describe('directory uncertainty scenarios', () => {
       ["a=CD; b=PATH; printf -v x -v $a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
       ["a=CD; b=PATH; printf -vx -v $a$b /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
       ["printf -v $'CD\\x50ATH' /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
-      ["printf -v C$\"D\"PATH /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
-      ["printf $\"-v\" $\"CD\"$\"PATH\" /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf -v C$\"D\"PATH /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["printf -v C'$D'PATH /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["printf $\"-v\" $\"CD\"$\"PATH\" /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
+      ["printf '$-v' '$CD$PATH' /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
       ["printf -v CDPAT[H] /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
       ["printf -v CDPAT? /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
       ["printf [-C][vD]* /tmp; cd src; touch a",["edit-outside","other","read"],"held","floor-core"],
@@ -3334,7 +3336,8 @@ describe('directory uncertainty scenarios', () => {
       ["read CDPAT? <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
       ["read [C]DPATH <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
       ["read C* <<< /tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
-      ["a=CD; b=PATH; getopts / $a$b -/; cd tmp; touch a",["edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; getopts / $a$b -/; cd tmp; touch a",["credential","edit-outside","other"],"held","floor-core"],
+      ["a=CD; b=PATH; getopts x $a$b -x; cd tmp; touch a",["edit-outside","other"],"held","floor-core"],
       ["a=CD; b=PATH; mapfile -t $a$b < f; cd src; touch a",["edit-outside","other"],"held","floor-core"],
       ["a=CD; b=PATH; readarray -t $a$b < f; cd src; touch a",["edit-outside","other"],"held","floor-core"],
       ["a=CD; b=PATH; pushln /tmp; getln $a$b; cd src; touch a",["edit-outside","other"],"held","floor-core"],
@@ -3460,7 +3463,8 @@ describe('directory uncertainty scenarios', () => {
       ["a=CD; b=PATH; eval \"$a$b=/tmp\" && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
       ["a=CD; b=PATH; eval $a$b=/tmp && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
       ["eval $'CD\\x50ATH=/tmp' && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
-      ["eval $\"CD\"$\"PATH\"=/tmp && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
+      ["eval $\"CD\"$\"PATH\"=/tmp && cd /work/wt && cd src && touch a",["edit-outside","other"],"held","floor-core"],
+      ["eval '$CD$PATH'=/tmp && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
       ["eval $\"CD\"$\"PATH\"=/tmp; cd src; touch a",["edit-outside","other"],"held","floor-core"],
       ["a=CD; b=PATH; builtin eval \"$a$b=/tmp\" && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
       ["a=CD; b=PATH; { eval \"$a$b=/tmp\"; } && cd /work/wt && cd src && touch a",["edit-outside","other","read"],"held","floor-core"],
@@ -4079,6 +4083,17 @@ describe('foreign command and wrapper credential ancestors', () => {
     { id: 'foreign.5', command: '{ ./env ls /home/u; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
     { id: 'foreign.6', command: '{ ./sed \'r /home/u/.ssh/id_rsa\' README.md; }', classes: ['credential', 'other'], outcome: 'held', step: 'floor-core' },
     { id: 'foreign.7', command: '{ /bin/ls /home/u; }', classes: ['other'], outcome: 'judgment', step: null }
+  ]
+  for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
+})
+
+describe('env rejection of computed zsh flag words', () => {
+  const rows: ClassifierFixture[] = [
+    { id: 'env-zsh.1', command: 'env $^x ls', classes: ['edit-outside', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'env-zsh.2', command: 'env $+x ls', classes: ['edit-outside', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'env-zsh.3', command: 'env prefix$~x ls', classes: ['edit-outside', 'other'], outcome: 'held', step: 'floor-core' },
+    { id: 'env-zsh.4', command: 'env "$x" ls', classes: ['other'], outcome: 'judgment', step: null },
+    { id: 'env-zsh.5', command: 'env "$(printf \'$~x\')" ls', classes: ['other', 'read'], outcome: 'judgment', step: null }
   ]
   for (const row of rows) test(`${row.id}: ${row.command}`, () => expectClassifierFixture(row))
 })

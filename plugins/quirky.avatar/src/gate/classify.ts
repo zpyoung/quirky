@@ -1099,7 +1099,8 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: WordAssignment[], 
         if (assignment === null) {
           const equals = option.text.indexOf('=')
           if (option.dynamic) {
-            if (equals < 0) break
+            const hasZshFlag = option.subs.length === 0 && /\$[~=^+]/.test(option.text)
+            if (equals < 0 && !hasZshFlag) break
             unknownWrapperFlag = true
             break wrappers
           }
