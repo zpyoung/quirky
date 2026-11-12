@@ -198,6 +198,27 @@ export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] 
   )
 }
 
+/** The workspace from its recorded owner, or null when a miss, ambiguity or failure needs the full search; never throws. */
+export async function findOwned(env: ListEnv, repos: Repo[], id: string): Promise<WorktreeControl | null> {
+  try {
+    const row = rowOf(env.store, id)
+    if (!row) return null
+    if (row.group_id) {
+      const group = (await env.groups()).find((candidate) => candidate.id === row.group_id)
+      return group ? listGroup(env, group).find((worktree) => worktree.id === id) ?? null : null
+    }
+    const repo = repos.find((candidate) => candidate.id === row.repo_id)
+    if (!repo) return null
+    const worktrees = await listProject(env, repo)
+    if (repos.some((other) => other.id !== repo.id && worktrees.some((worktree) => worktree.id === worktreeIdForPath(other.path)))) {
+      return null
+    }
+    return worktrees.find((worktree) => worktree.id === id) ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Every project's workspaces, then every group's; a project git can't list is logged and left out. */
 export async function listEverything(env: ListEnv, repos: Repo[]): Promise<WorktreeControl[]> {
   const lists = await Promise.all(
