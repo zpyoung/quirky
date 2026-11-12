@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolGateProvider, ToolGateRequest } from '@quirky/protocol'
@@ -426,6 +426,29 @@ test('continues restoring after a marker write failure', () => {
     entry.kind === 'event' && entry.data.type === 'restore-failed' && entry.data.error === 'disk'
   )).toBe(true)
 })
+
+for (const [description, original] of [
+  ['unreadable', 'not json'],
+  ['wrong-worktree', JSON.stringify({ worktreeId: 'wt-old', level: 'local' })]
+] as const) {
+  test(`keeps an owned ${description} marker when repair fails`, () => {
+    const t = appSetup()
+    gateSetup(t)
+    addHandoff(t)
+    writeRawMarker(t.context.home, 's-1', original)
+    writeMarkerFile(t.context.home, 's-orphan', { worktreeId: 'wt-gone', level: 'own-branch' })
+    t.app.services.gate.writeMarker = () => { throw new Error('disk') }
+
+    const result = restoreHandoffs(t.app)
+
+    expect(result).toEqual({ markersWritten: [], markersRemoved: ['s-orphan'], checksResumed: [] })
+    expect(existsSync(join(markerDir(t.context.home), 's-1'))).toBe(true)
+    expect(readFileSync(join(markerDir(t.context.home), 's-1'), 'utf8')).toBe(original)
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).some((entry) =>
+      entry.kind === 'event' && entry.data.type === 'restore-failed' && entry.data.error === 'disk'
+    )).toBe(true)
+  })
+}
 
 test('returns empty results without journaling when there is nothing to restore', () => {
   const t = appSetup()

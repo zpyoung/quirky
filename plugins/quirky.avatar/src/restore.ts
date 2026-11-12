@@ -49,12 +49,14 @@ export function restoreHandoffs(app: AvatarApp): RestoreResult {
   }
 
   const heldWorktrees = new Set<string>()
+  const heldSessions = new Set<string>()
   for (const row of rows) {
     let marker: MarkerState = 'none'
     try {
       const mandate = app.store.mandates.get(row.worktreeId)
       if (row.active && mandate !== null && row.sessionId !== null && row.state !== 'parked' && row.state !== 'gate-failed') {
         heldWorktrees.add(row.worktreeId)
+        heldSessions.add(row.sessionId)
         const existing = readMarkerFile(app.context.home, row.sessionId)
         if (existing?.worktreeId === row.worktreeId && existing.level === mandate.level) {
           marker = 'kept'
@@ -91,6 +93,7 @@ export function restoreHandoffs(app: AvatarApp): RestoreResult {
 
   const removed: string[] = []
   for (const sessionId of listMarkerFiles(app.context.home)) {
+    if (heldSessions.has(sessionId)) continue
     const marker = readMarkerFile(app.context.home, sessionId)
     if (marker !== null && heldWorktrees.has(marker.worktreeId)) continue
     try {

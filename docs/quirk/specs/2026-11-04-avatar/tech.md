@@ -465,7 +465,7 @@ These are fixed by the logic spec.
 `CONFIG:` the supervision marker is the file `<home>/plugin-data/quirky.avatar/supervised/<sessionId>`, mode 0600, containing `{worktreeId, level}`.
 - It is written at hand-off once the gate check passes, and on every supervised session the avatar starts.
 - It is removed at take-back, at park (the session becomes passthrough), and in Shadow. Shadow keeps the marker with `level: "shadow"`, so the gate still logs.
-- On activation, the avatar writes the marker of every active hand-off that should have one, removes markers no hand-off accounts for, and starts the gate check again for a hand-off still in `checking`.
+- On activation, the avatar writes the marker of every active hand-off that should have one, removes markers no hand-off accounts for, and starts the gate check again for a hand-off still in `checking`. If repairing a marker fails, its existing file stays while the hand-off still requires supervision.
 
 `SCHEMA:` the per-agent encodings, owned by `src/hooks/encode.ts` and confirmed by the conformance tests:
 
