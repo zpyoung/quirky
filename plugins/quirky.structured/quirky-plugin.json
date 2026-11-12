@@ -3,7 +3,7 @@
   "apiVersion": "1.0.0",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background native Claude, Codex, Pi and Oh My Pi sessions without terminals: journaled messages and permission prompts as asks.",
+  "description": "Background native Claude, Codex, Pi and Oh My Pi sessions without terminals: journaled messages, with Claude and Codex permission prompts as asks. Pi and Oh My Pi run their tools without asking.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -20,7 +20,7 @@
               "type": "boolean",
               "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
             },
-            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"], "description": "The structured provider to run." },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"], "description": "The structured provider to run. `pi` and `omp` have no permission prompts: under the default tool policy they run their tools without an ask." },
             "prompt": { "type": "string" },
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },
@@ -34,7 +34,7 @@
                 "toolPolicy": {
                   "type": "string",
                   "enum": ["default", "deny-all"],
-                  "description": "With deny-all the session runs no tools: every tool or approval request is refused without an ask. Omit for the provider's normal approval flow."
+                  "description": "With deny-all the session runs no tools: every tool or approval request is refused without an ask. A Pi or Oh My Pi session is checked before each prompt and ends if the agent has a tool to offer, which Oh My Pi does whenever an MCP server is configured for it. Omit for the provider's normal approval flow."
                 }
               },
               "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean. `toolPolicy` is handled by this plugin and is not an agent catalog option."
