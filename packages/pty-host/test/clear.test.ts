@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { base64ToBytes } from '@quirky/protocol'
 import { readCheckpoint } from '../src/history/checkpoint'
-import { readSegments } from '../src/history/log'
+import { LogReader, readSegments } from '../src/history/log'
 import { MODE_RESET } from '../src/history/restore'
 import { type CreateParams, SessionManager, type SessionManagerOptions } from '../src/session'
 import { concat, onCleanup, runCleanups, scopeForHome, tempHome, text, trackSessionProcesses, waitFor } from './helpers'
@@ -236,6 +236,29 @@ describe('clear', () => {
     expect(second.list()[0]).toMatchObject({ sessionId: 'c9', state: 'exited' })
     expect((await second.read('c9', 1000)).lines.some((row) => row.includes('gone-'))).toBe(false)
     expect((await second.history('c9', { lines: 50 })).lines).toEqual([])
+  })
+
+  test('an exited session attaches from its reopened index after clear', async () => {
+    const { manager } = newManager()
+    const exited = Promise.withResolvers<void>()
+    manager.onExit((event) => { if (event.sessionId === 'indexed-clear') exited.resolve() })
+    await manager.create(params('indexed-clear', sh(`seq -f 'gone-%g' 1 200; exit 0`)))
+    await exited.promise
+    await manager.clear('indexed-clear')
+    const open = LogReader.open
+    let calls = 0
+    LogReader.open = (dir) => {
+      calls++
+      return open.call(LogReader, dir)
+    }
+    try {
+      const sub = await manager.subscribe('indexed-clear', () => {}, { mode: 'screen' })
+      const pane = await paint(base64ToBytes(sub.replay))
+      expect(rowsOf(pane).some((row) => row.includes('gone-1'))).toBe(false)
+      expect(calls).toBe(0)
+    } finally {
+      LogReader.open = open
+    }
   })
 
   test('an unknown session is the usual not-found error', async () => {

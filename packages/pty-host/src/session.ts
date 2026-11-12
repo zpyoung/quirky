@@ -355,7 +355,7 @@ export class SessionManager {
     if (live) {
       const grab = await this.atRest(live, () => {
         const visible = live.screen.lines()
-        return { visible, above: textRowsAbove(live.dir, lines, visible.length), alt: live.screen.isAlternate }
+        return { visible, above: textRowsAbove(live.log, lines, visible.length), alt: live.screen.isAlternate }
       })
       return readResult(await grab.above, grab.visible, live.cols, grab.visible.length, grab.alt, unwrap)
     }
@@ -397,8 +397,8 @@ export class SessionManager {
     const format = options.format ?? 'text'
     if (format !== 'text' && format !== 'ansi') throw new Error(`invalid history format: ${format}`)
     const before = options.before === undefined ? undefined : parseCursor(options.before)
-    const source = live ? { dir: live.dir, rows: live.rows } : { dir: stored.dir, rows: stored.meta.rows }
-    return pageBefore(source.dir, { before, lines, format, screenRows: source.rows })
+    const source = live ? { log: live.log, rows: live.rows } : { log: stored.dir, rows: stored.meta.rows }
+    return pageBefore(source.log, { before, lines, format, screenRows: source.rows })
   }
 
   /**
@@ -487,6 +487,7 @@ export class SessionManager {
       return
     }
     const log = HistoryLog.openForAppend(session.dir, { cols: session.cols, rows: session.rows, maxSegmentBytes: this.maxSegmentBytes })
+    session.log = log
     try {
       write(log)
     } finally {
@@ -819,7 +820,7 @@ export class SessionManager {
       session.subscribers.add(sink)
       const live = session.screen.snapshot()
       // composeReplay reads the log window before it first awaits, so the window ends at `offset`
-      return { offset, live, composed: composeReplay(session.dir, { historyLines, live }) }
+      return { offset, live, composed: composeReplay(session.log, { historyLines, live }) }
     }).finally(() => session.pendingSubs.delete(pending))
     try {
       const { replay, historyCursor } = await taken.composed
