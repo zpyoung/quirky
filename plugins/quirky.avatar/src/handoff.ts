@@ -386,7 +386,9 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     const row = activeRow(runtime.worktreeId)
     if (row === null || row.state !== 'checking' || row.sessionId !== runtime.sessionId) return
     if (!runtime.ready && !(await refreshReadiness(runtime))) return
-    if (!current(runtime)) return
+    if (!current(runtime) || runtime.shadow || runtime.checkState !== 'pending' || runtime.proofAccepted || runtime.proofSending) return
+    const readyRow = activeRow(runtime.worktreeId)
+    if (readyRow === null || readyRow.state !== 'checking' || readyRow.sessionId !== runtime.sessionId) return
     runtime.proofSending = true
     runtime.proofSettledDuringSend = false
     runtime.ready = false
@@ -428,7 +430,10 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
     if (row === null || row.state !== 'briefing' || row.sessionId !== runtime.sessionId) return
     if (runtime.shadow && runtime.shadowBriefAttempted) return
     if (!runtime.readyFromSettlement && !(await refreshReadiness(runtime))) return
-    if (!current(runtime)) return
+    if (!current(runtime) || !gatePassed(runtime) || runtime.briefSent || runtime.briefSending || runtime.proofSending) return
+    const readyRow = activeRow(runtime.worktreeId)
+    if (readyRow === null || readyRow.state !== 'briefing' || readyRow.sessionId !== runtime.sessionId) return
+    if (runtime.shadow && runtime.shadowBriefAttempted) return
     const mandate = app.store.mandates.get(runtime.worktreeId)
     if (mandate === null) return
     const text = briefText(mandate, runtime.updated)

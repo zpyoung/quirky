@@ -542,6 +542,77 @@ describe('handoff', () => {
   })
 })
 
+describe('readiness races', () => {
+  test('settlement delivers a brief once while an older readiness read is pending', async () => {
+    const s = setup()
+    const check = deferredGateCheck(s)
+    await handOff(s, input('wt-1', { agent: 'claude' }))
+    await flushContinuations()
+    const readiness = deferred<unknown>()
+    const reading = deferred<void>()
+    s.fakeCalls['quirky.session/get'] = () => {
+      reading.resolve()
+      return readiness.promise
+    }
+    passGateCheck(s, check)
+    await reading.promise
+    await settle(s, 'new-session')
+    expect(s.sup.sends).toEqual([['wt-1', INITIAL_BRIEF]])
+    expect(stateOf(s, 'wt-1')).toBe('working')
+    readiness.resolve({ id: 'new-session', agent: 'claude', status: 'running', agentStatus: { state: 'idle' } })
+    await flushContinuations()
+    expect(s.sup.sends).toEqual([['wt-1', INITIAL_BRIEF]])
+    expect(eventsOf(s, 'state').filter((entry) => entry.data.state === 'working')).toHaveLength(1)
+  })
+
+  for (const phase of ['proof', 'brief'] as const) {
+    test(`a gate failure while ${phase} readiness is pending prevents delivery`, async () => {
+      const readiness = deferred<unknown>()
+      const reading = deferred<void>()
+      const s = setup({
+        sessions: phase === 'proof' ? [session('s1', 'wt-1', { agentStatus: { state: 'working' } })] : []
+      })
+      const check = deferredGateCheck(s)
+      if (phase === 'brief') {
+        await handOff(s, input('wt-1', { agent: 'claude' }))
+        await flushContinuations()
+      }
+      s.fakeCalls['quirky.session/get'] = () => {
+        reading.resolve()
+        return readiness.promise
+      }
+      if (phase === 'proof') await handOff(s, input('wt-1'))
+      else passGateCheck(s, check)
+      await reading.promise
+      s.svc.setState('wt-1', 'gate-failed', 'configuration changed and proof failed')
+      readiness.resolve({ id: phase === 'proof' ? 's1' : 'new-session', agent: 'claude', status: 'running', agentStatus: { state: 'idle' } })
+      await flushContinuations()
+      expect(s.sup.sends).toEqual([])
+      expect(stateOf(s, 'wt-1')).toBe('gate-failed')
+    })
+  }
+
+  test('settlement starts only one proof while an older readiness read is pending', async () => {
+    const readiness = deferred<unknown>()
+    const reading = deferred<void>()
+    const s = setup({
+      sessions: [session('s1', 'wt-1', { agentStatus: { state: 'working' } })],
+      calls: { 'quirky.session/get': () => { reading.resolve(); return readiness.promise } }
+    })
+    deferredGateCheck(s)
+    await handOff(s, input('wt-1'))
+    await reading.promise
+    const settled = settle(s)
+    await flushContinuations()
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    readiness.resolve({ id: 's1', agent: 'claude', status: 'running', agentStatus: { state: 'idle' } })
+    await settled
+    await flushContinuations()
+    expect(s.sup.sends).toEqual([['wt-1', PROOF_PROMPT]])
+    expect(stateOf(s, 'wt-1')).toBe('checking')
+  })
+})
+
 describe('proof-before-brief lifecycle', () => {
   test('releases the exact mandate once only after a passed check and a settled proof prompt', async () => {
     const s = setup({ sessions: [session('s1', 'wt-1')] })
