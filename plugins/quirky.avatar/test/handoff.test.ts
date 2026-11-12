@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { HandoffInput, Level, NeedKind, NeedAction, WorktreeState } from '../src/contracts'
+import type { Approval, HandoffInput, LateAnswer, Level, NeedKind, NeedAction, WorktreeState } from '../src/contracts'
 import { register } from '../src/handoff'
 import { makeTestApp, type FakeCalls } from './support'
 
@@ -102,6 +102,79 @@ function addNeed(s: Setup, worktreeId: string, kind: NeedKind, actions: NeedActi
 }
 
 const stateOf = (s: Setup, id: string): WorktreeState | undefined => s.app.store.handoffs.get(id)?.state
+
+function seedDecisionRows(s: Setup): void {
+  const lateAnswers: LateAnswer[] = [
+    { fingerprint: 'f-late-1', worktreeId: 'wt-1', decision: 'allow', reason: 'answer 1', createdAt: 1, usedAt: null },
+    { fingerprint: 'f-late-2', worktreeId: 'wt-2', decision: 'allow', reason: 'answer 2', createdAt: 1, usedAt: null }
+  ]
+  const approvals: Approval[] = [
+    { id: 'a-unused', worktreeId: 'wt-1', fingerprint: 'f-approval-1', usedAt: null },
+    { id: 'a-used', worktreeId: 'wt-1', fingerprint: 'f-approval-2', usedAt: 7 },
+    { id: 'a-other', worktreeId: 'wt-2', fingerprint: 'f-approval-3', usedAt: null }
+  ]
+  for (const answer of lateAnswers) s.app.store.lateAnswers.put(answer)
+  for (const approval of approvals) s.app.store.approvals.put(approval)
+}
+
+function decisionIds(s: Setup) {
+  return {
+    lateAnswers: s.app.store.lateAnswers.list().map((row) => row.fingerprint),
+    approvals: s.app.store.approvals.list().map((row) => row.id)
+  }
+}
+
+describe('stored decisions', () => {
+  test('H1: take-back deletes this worktree’s late answers and unused approvals only', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1'), session('s2', 'wt-2')] })
+    await handOff(s, input('wt-1'), input('wt-2'))
+    seedDecisionRows(s)
+
+    await s.svc.takeBack({ worktreeIds: ['wt-1'] })
+
+    expect(decisionIds(s)).toEqual({ lateAnswers: ['f-late-2'], approvals: ['a-used', 'a-other'] })
+  })
+
+  test('H2: handing off again deletes this worktree’s late answers but keeps approvals', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1'), session('s2', 'wt-2')] })
+    await handOff(s, input('wt-1'), input('wt-2'))
+    seedDecisionRows(s)
+
+    await handOff(s, input('wt-1', { level: 'local' }))
+
+    expect(decisionIds(s)).toEqual({ lateAnswers: ['f-late-2'], approvals: ['a-unused', 'a-used', 'a-other'] })
+  })
+
+  test('H3: a first hand-off clears decision rows left behind beforehand', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    seedDecisionRows(s)
+
+    await handOff(s, input('wt-1'))
+
+    expect(decisionIds(s)).toEqual({ lateAnswers: ['f-late-2'], approvals: ['a-used', 'a-other'] })
+  })
+
+  test('H4: accepting a mandate edit deletes this worktree’s late answers but keeps approvals', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1'), session('s2', 'wt-2')] })
+    await handOff(s, input('wt-1'), input('wt-2'))
+    seedDecisionRows(s)
+    const need = addNeed(s, 'wt-1', 'mandate-edit', ['review-accept'], { patch: { goal: 'Better goal' } })
+
+    expect(await s.svc.resolveNeed(need.id, 'review-accept')).toEqual({ ok: true })
+    expect(decisionIds(s)).toEqual({ lateAnswers: ['f-late-2'], approvals: ['a-unused', 'a-used', 'a-other'] })
+  })
+
+  test('H5: a refused hand-off and rejected mandate edit delete nothing', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1')] })
+    await handOff(s, input('wt-1'))
+    seedDecisionRows(s)
+    const need = addNeed(s, 'wt-1', 'mandate-edit', ['review-reject'], { patch: { goal: 'Better goal' } })
+
+    expect(await handOff(s, input('wt-1', { goal: ' ' }))).toMatchObject([{ worktreeId: 'wt-1', ok: false }])
+    expect(await s.svc.resolveNeed(need.id, 'review-reject')).toEqual({ ok: true })
+    expect(decisionIds(s)).toEqual({ lateAnswers: ['f-late-1', 'f-late-2'], approvals: ['a-unused', 'a-used', 'a-other'] })
+  })
+})
 
 describe('eligibility', () => {
   test('lists every worktree with its project, group and running agent', async () => {
