@@ -1,9 +1,11 @@
 import { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import childProcess from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, test } from 'bun:test'
-import { RpcErrorCode, type PluginContext, type PluginStore, type QuirkyEvent, type Session, type StructuredMessage, type Worktree } from '@quirky/protocol'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { RpcErrorCode, type PluginContext, type PluginStore, type QuirkyEvent, type RunOptions, type RunResult, type Session, type StructuredMessage, type Worktree } from '@quirky/protocol'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import type { LoopCreateInput } from '../src/types'
 import { normalizeLoopConfig } from '../src/config'
 import { loopMigrations } from '../src/store'
@@ -13,16 +15,49 @@ import { HostPowerService } from '../../../packages/daemon/src/host-power'
 const roots: string[] = []
 const runtimes: Runtime[] = []
 const activeServices: LoopService[] = []
+const processRunners: OwnedProcessRunner[] = []
+const syncProcessMocks: { mockRestore(): void }[] = []
 afterEach(async () => {
+  for (const mock of syncProcessMocks.splice(0)) mock.mockRestore()
   for (const runtime of runtimes) runtime.releasePendingOperations()
   await Promise.all(activeServices.splice(0).map((service) => service.shutdown()))
+  await Promise.all(processRunners.splice(0).map((runner) => runner.dispose()))
   for (const runtime of runtimes.splice(0)) runtime.close()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
 type ScriptedTurn = 'settle' | 'exit' | 'hold'
+type ProcessHandler = (argv: readonly string[], options?: RunOptions) => Promise<RunResult>
+type ProcessCall = { argv: string[]; options?: RunOptions }
+
+function runResult(stdoutText = '', overrides: Partial<RunResult> = {}): RunResult {
+  return {
+    stdout: new TextEncoder().encode(stdoutText),
+    stdoutText,
+    stderr: '',
+    exitCode: 0,
+    signal: null,
+    durationMs: 0,
+    ...overrides
+  }
+}
+
+function forbidSynchronousExecFileSync(): void {
+  const mock = spyOn(childProcess, 'execFileSync').mockImplementation(() => {
+    throw new Error('synchronous process execution is forbidden')
+  })
+  syncProcessMocks.push(mock)
+}
+
+function nextTurn(): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  setImmediate(resolve)
+  return promise
+}
 
 class Runtime {
+  readonly processCalls: ProcessCall[] = []
+  processHandler: ProcessHandler | null = null
   readonly calls: { method: string; params: Record<string, unknown> }[] = []
   readonly events: QuirkyEvent[] = []
   readonly sends: { session: string; text: string; expectedAfterSeq: number }[] = []
@@ -105,7 +140,14 @@ class Runtime {
       },
       getSetting: () => undefined, storedSettingValue: () => undefined,
       error(kind, message) { return Object.assign(new Error(message), { code: kind }) },
-      process: { run: async () => { throw new Error('Loop engine tests must not run subprocesses') } },
+      process: {
+        run: async (argv, options) => {
+          runtime.processCalls.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
+          const handler = runtime.processHandler
+          if (handler === null) throw new Error('Loop engine tests must not run subprocesses')
+          return await handler(argv, options)
+        }
+      },
       pty: {} as PluginContext['pty'], notify: () => undefined, launch: {} as PluginContext['launch']
     } as PluginContext
   }
@@ -382,8 +424,140 @@ describe('LoopService background engine', () => {
     expect(runtime.events.filter((event) => event.type === 'quirky.loops/notification')).toHaveLength(1)
   })
 
-  test('installs private git exclusion before running and never writes .gitignore', async () => {
+  test('waits for private exclusion before persisting, publishing or starting a git loop', async () => {
+    forbidSynchronousExecFileSync()
     const runtime = rig('git')
+    runtime.turns.push('hold')
+    const loops = service(runtime)
+    await loops.start()
+    const pending = Promise.withResolvers<RunResult>()
+    runtime.processHandler = async () => pending.promise
+    let settled = false
+    const creation = loops.create(input())
+    void creation.then(() => {
+      settled = true
+    }, () => {
+      settled = true
+    })
+
+    await nextTurn()
+    expect(runtime.processCalls).toEqual([{
+      argv: ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+      options: { rerunnable: true, maxOutputBytes: 1048576 }
+    }])
+    expect(settled).toBe(false)
+    expect(await loops.list()).toEqual([])
+    expect(runtime.events.filter((event) => event.type === 'quirky.loops/changed')).toEqual([])
+    expect(runtime.created).toEqual([])
+
+    pending.resolve(runResult('.git/info/exclude\n'))
+    const created = await creation
+    expect(readFileSync(join(runtime.worktree.path, '.git', 'info', 'exclude'), 'utf8')).toBe('/.quirky/loops/\n')
+    expect(existsSync(created.notesPath)).toBe(true)
+  })
+
+  test('resolves relative exclusions, adds a newline and avoids duplicate entries', async () => {
+    forbidSynchronousExecFileSync()
+    const runtime = rig('git')
+    runtime.turns.push('hold', 'hold')
+    const excludePath = join(runtime.worktree.path, '.git', 'info', 'exclude')
+    mkdirSync(join(runtime.worktree.path, '.git', 'info'), { recursive: true })
+    writeFileSync(excludePath, 'existing rule')
+    runtime.processHandler = async () => runResult('.git/info/exclude\n')
+    const loops = service(runtime)
+    await loops.start()
+
+    const first = await loops.create(input())
+    const second = await loops.create(input())
+
+    expect(readFileSync(excludePath, 'utf8')).toBe('existing rule\n/.quirky/loops/\n')
+    expect(readFileSync(excludePath, 'utf8').split('/.quirky/loops/')).toHaveLength(2)
+    for (const created of [first, second]) {
+      expect(readFileSync(created.notesPath, 'utf8')).toContain('Edit freely')
+      expect(existsSync(join(created.notesPath, '..', 'log.md'))).toBe(true)
+    }
+    expect(existsSync(join(runtime.worktree.path, '.gitignore'))).toBe(false)
+    expect(runtime.processCalls).toHaveLength(2)
+    expect(runtime.processCalls.every(({ argv, options }) =>
+      argv[0] === 'git' && argv[1] === '-C' && argv[2] === runtime.worktree.path &&
+      options?.rerunnable === true && options.maxOutputBytes === 1048576
+    )).toBe(true)
+  })
+
+  test('uses an absolute private exclusion path as returned', async () => {
+    forbidSynchronousExecFileSync()
+    const runtime = rig('git')
+    runtime.turns.push('hold')
+    const excludePath = join(runtime.worktree.path, 'git-metadata', 'info', 'exclude')
+    runtime.processHandler = async () => runResult(`${excludePath}\n`)
+    const loops = service(runtime)
+    await loops.start()
+
+    await loops.create(input())
+
+    expect(readFileSync(excludePath, 'utf8')).toBe('/.quirky/loops/\n')
+    expect(existsSync(join(runtime.worktree.path, '.git', 'info', 'exclude'))).toBe(false)
+    expect(runtime.processCalls).toEqual([{
+      argv: ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+      options: { rerunnable: true, maxOutputBytes: 1048576 }
+    }])
+  })
+
+  test('rejects incomplete exclusion reads before persisting or starting a loop', async () => {
+    forbidSynchronousExecFileSync()
+    const failures: {
+      name: string
+      result?: RunResult
+      rejection?: Error
+      message: string
+    }[] = [
+      { name: 'nonzero exit', result: runResult('.git/info/exclude\n', { exitCode: 1 }), message: 'git rev-parse failed' },
+      { name: 'signal', result: runResult('.git/info/exclude\n', { exitCode: null, signal: 'SIGTERM' }), message: 'git rev-parse failed' },
+      {
+        name: 'spawn failure',
+        result: runResult('.git/info/exclude\n', { exitCode: null, spawnError: { code: 'ENOENT', message: 'not found' } }),
+        message: 'git rev-parse failed'
+      },
+      { name: 'timeout', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'timeout' }), message: 'git rev-parse failed' },
+      { name: 'abort', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'aborted' }), message: 'git rev-parse failed' },
+      { name: 'overflow', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'overflow' }), message: 'git rev-parse failed' },
+      { name: 'runner rejection', rejection: new Error('private runner diagnostic'), message: 'git rev-parse failed' },
+      { name: 'empty path', result: runResult(' \n\t'), message: 'git did not return a private info/exclude path' }
+    ]
+
+    for (const failure of failures) {
+      const runtime = rig('git')
+      const excludePath = join(runtime.worktree.path, '.git', 'info', 'exclude')
+      mkdirSync(join(runtime.worktree.path, '.git', 'info'), { recursive: true })
+      writeFileSync(excludePath, 'original contents\n')
+      runtime.processHandler = async () => {
+        if (failure.rejection) throw failure.rejection
+        return failure.result!
+      }
+      const loops = service(runtime)
+      await loops.start()
+
+      const error = await loops.create(input()).then(() => null, (caught: unknown) => caught)
+      expect(error, failure.name).toMatchObject({
+        code: 'conflict',
+        message: `could not prepare loop notes and private git exclusion: ${failure.message}`
+      })
+      expect(runtime.processCalls, failure.name).toHaveLength(1)
+      expect(runtime.processCalls[0], failure.name).toEqual({
+        argv: ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+        options: { rerunnable: true, maxOutputBytes: 1048576 }
+      })
+      expect(await loops.list(), failure.name).toEqual([])
+      expect(runtime.created, failure.name).toEqual([])
+      expect(runtime.events.filter((event) => event.type === 'quirky.loops/changed'), failure.name).toEqual([])
+      expect(readFileSync(excludePath, 'utf8'), failure.name).toBe('original contents\n')
+    }
+  })
+
+  test('installs private git exclusion before running and never writes .gitignore', async () => {
+    forbidSynchronousExecFileSync()
+    const runtime = rig('git')
+    runtime.turns.push('hold')
     const env = {
       ...process.env,
       HOME: join(runtime.root, 'home'),
@@ -392,15 +566,25 @@ describe('LoopService background engine', () => {
       CODEX_HOME: join(runtime.root, 'provider-home', 'codex'),
       GIT_CONFIG_NOSYSTEM: '1'
     }
-    expect(Bun.spawnSync(['git', 'init', '-q', runtime.worktree.path], { env }).exitCode).toBe(0)
+    const processRunner = createProcessRunner({ owner: 'loop-engine-git-test' })
+    processRunners.push(processRunner)
+    const initialized = await processRunner.run(['git', 'init', '-q', runtime.worktree.path], { env })
+    expect(initialized.exitCode).toBe(0)
+    runtime.processHandler = (argv, options) => processRunner.run(argv, options)
     const loops = service(runtime)
     await loops.start()
     await loops.create(input())
-    const exclude = Bun.spawnSync(['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'], { env }).stdout.toString().trim()
+    const excluded = await processRunner.run(
+      ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+      { env }
+    )
+    expect(excluded.exitCode).toBe(0)
+    const exclude = excluded.stdoutText.trim()
     const excludePath = exclude.startsWith('/') ? exclude : join(runtime.worktree.path, exclude)
     expect(readFileSync(excludePath, 'utf8')).toContain('/.quirky/loops/')
     expect(existsSync(join(runtime.worktree.path, '.gitignore'))).toBe(false)
   })
+
 
   test('delivers queued steer and edited prompt on the next resumed send', async () => {
     const runtime = rig()
