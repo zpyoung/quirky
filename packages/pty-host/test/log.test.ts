@@ -562,3 +562,403 @@ describe('HistoryLog failure handling', () => {
     expect(() => log.appendOutput(enc('x'))).not.toThrow()
   })
 })
+describe('HistoryLog indexed reader', () => {
+  function summaryFromReader(reader: LogReader) {
+    return {
+      unreadable: reader.unreadable,
+      segments: reader.segments.map((segment) => ({
+        path: segment.path,
+        startOffset: segment.startOffset,
+        endOffset: segment.endOffset,
+        output: Buffer.concat(
+          segment.records
+            .filter((record) => record.kind === 'output')
+            .map((record) => Buffer.from(reader.readOutput(segment, record, 0, record.length)))
+        ),
+        events: segment.records
+          .filter((record) => record.kind !== 'output')
+          .map((record) => ({
+            kind: record.kind,
+            offset: record.offset,
+            ...(record.kind === 'resize' ? { cols: record.cols, rows: record.rows } : {})
+          }))
+      }))
+    }
+  }
+
+  function summaryFromDisk(dir: string) {
+    const { segments, unreadable } = readSegments(dir)
+    return {
+      unreadable,
+      segments: segments.map((segment) => ({
+        path: segment.path,
+        startOffset: segment.startOffset,
+        endOffset: segment.endOffset,
+        output: Buffer.concat(
+          segment.records
+            .filter((record) => record.kind === 'output')
+            .map((record) => Buffer.from(record.bytes!))
+        ),
+        events: segment.records
+          .filter((record) => record.kind !== 'output')
+          .map((record) => ({
+            kind: record.kind,
+            offset: record.offset,
+            ...(record.kind === 'resize' ? { cols: record.cols, rows: record.rows } : {})
+          }))
+      }))
+    }
+  }
+
+  function countDiskOpens<T>(run: (count: () => number) => T): T {
+    const original = LogReader.open
+    let total = 0
+    LogReader.open = (dir) => {
+      total++
+      return original(dir)
+    }
+    try {
+      return run(() => total)
+    } finally {
+      LogReader.open = original
+    }
+  }
+
+  test('keeps a small grouped index for a large open log without reading the file', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    const line = enc('x'.repeat(100))
+    for (let i = 0; i < 40_000; i++) log.appendOutput(line)
+
+    const real = { ...fs }
+    let total = 0
+    mock.module('node:fs', () => ({
+      ...real,
+      readSync: (...args: Parameters<typeof fs.readSync>) => {
+        const n = real.readSync(...args)
+        total += n
+        return n
+      }
+    }))
+    try {
+      const reader = log.reader()
+      try {
+        expect(reader.segments[0]!.records.length).toBeLessThan(200)
+        expect(reader.segments[0]!.startOffset).toBe(0)
+        expect(reader.segments[0]!.endOffset).toBe(4_000_000)
+        expect(total).toBe(0)
+      } finally {
+        reader.close()
+      }
+    } finally {
+      mock.module('node:fs', () => real)
+      log.close()
+    }
+  })
+
+  test('groups small outputs and keeps large outputs and non-output records as boundaries', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    for (let i = 0; i < 10; i++) log.appendOutput(enc('a'.repeat(100)))
+    log.appendOutput(enc('b'.repeat(4096)))
+    for (let i = 0; i < 3; i++) log.appendOutput(enc('c'.repeat(100)))
+    log.appendResize(90, 30)
+    for (let i = 0; i < 2; i++) log.appendOutput(enc('d'.repeat(100)))
+
+    const reader = log.reader()
+    try {
+      expect(reader.segments[0]!.records.slice(1).map((record) =>
+        record.kind === 'output' ? [record.kind, record.length, record.joined] : [record.kind]
+      )).toEqual([
+        ['output', 1000, true],
+        ['output', 4096, undefined],
+        ['output', 300, true],
+        ['resize'],
+        ['output', 200, true]
+      ])
+    } finally {
+      reader.close()
+      log.close()
+    }
+  })
+
+  test('bounds joined entries by their file bytes', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    const line = enc('x'.repeat(100))
+    for (let i = 0; i < 1000; i++) log.appendOutput(line)
+
+    const reader = log.reader()
+    try {
+      const outputs = reader.segments[0]!.records.filter((record) => record.kind === 'output')
+      const fileSize = statSync(join(dir, 'output.log')).size
+      const spans = outputs.map((record, i) => {
+        const next = outputs[i + 1]
+        return (next ? next.at - 5 : fileSize) - (record.at - 5)
+      })
+      expect(Math.max(...spans)).toBeLessThanOrEqual(65_536 + 4095 + 5)
+    } finally {
+      reader.close()
+      log.close()
+    }
+  })
+
+  test('reads ranges from joined outputs in one file read', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(enc('aaaa'))
+    log.appendOutput(enc('bbbb'))
+    log.appendOutput(enc('cccc'))
+
+    const real = { ...fs }
+    let total = 0
+    mock.module('node:fs', () => ({
+      ...real,
+      readSync: (...args: Parameters<typeof fs.readSync>) => {
+        const n = real.readSync(...args)
+        total++
+        return n
+      }
+    }))
+    try {
+      const reader = log.reader()
+      try {
+        const segment = reader.segments[0]!
+        const entry = segment.records.find((record) => record.kind === 'output')!
+        expect(entry.joined).toBe(true)
+        expect(dec(reader.readOutput(segment, entry, 2, 10))).toBe('aabbbbcc')
+        expect(total).toBe(1)
+
+        total = 0
+        expect(dec(reader.readOutput(segment, entry, 0, 99))).toBe('aaaabbbbcccc')
+        expect(total).toBe(1)
+      } finally {
+        reader.close()
+      }
+    } finally {
+      mock.module('node:fs', () => real)
+      log.close()
+    }
+  })
+
+  test('uses the writer index across rotation without reading record heads', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 9000 })
+    for (let i = 0; i < 2000; i++) {
+      log.appendOutput(enc(`line ${i}\n`))
+      if (i % 300 === 0) log.appendResize(60 + (i % 7), 20)
+      if (i % 700 === 0) log.appendRestore()
+    }
+
+    const real = { ...fs }
+    let total = 0
+    mock.module('node:fs', () => ({
+      ...real,
+      readSync: (...args: Parameters<typeof fs.readSync>) => {
+        const n = real.readSync(...args)
+        total += n
+        return n
+      }
+    }))
+    try {
+      const reader = log.reader()
+      try {
+        expect(reader.segments).toHaveLength(2)
+        expect(total).toBe(0)
+        expect(summaryFromReader(reader)).toEqual(summaryFromDisk(dir))
+      } finally {
+        reader.close()
+      }
+    } finally {
+      mock.module('node:fs', () => real)
+      log.close()
+    }
+  })
+
+  test('indexes a restored log’s older segment once', () => {
+    const dir = freshDir()
+    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
+    first.appendOutput(enc('0123456789AB'))
+    first.appendOutput(enc('tail!'))
+    first.close()
+
+    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
+    const firstReader = log.reader()
+    try {
+      expect(summaryFromReader(firstReader)).toEqual(summaryFromDisk(dir))
+    } finally {
+      firstReader.close()
+    }
+
+    const real = { ...fs }
+    let total = 0
+    mock.module('node:fs', () => ({
+      ...real,
+      readSync: (...args: Parameters<typeof fs.readSync>) => {
+        const n = real.readSync(...args)
+        total += n
+        return n
+      }
+    }))
+    try {
+      const secondReader = log.reader()
+      try {
+        expect(total).toBe(0)
+        expect(summaryFromReader(secondReader)).toEqual(summaryFromDisk(dir))
+      } finally {
+        secondReader.close()
+      }
+    } finally {
+      mock.module('node:fs', () => real)
+      log.close()
+    }
+  })
+
+  test('reports an unreadable older segment after append restore', () => {
+    const dir = freshDir()
+    const first = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
+    first.appendOutput(enc('0123456789AB'))
+    first.appendOutput(enc('tail!'))
+    first.close()
+    writeFileSync(join(dir, 'output.1.log'), 'garbage')
+
+    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 10 })
+    const expected = summaryFromDisk(dir)
+    for (let i = 0; i < 2; i++) {
+      const reader = log.reader()
+      try {
+        expect(summaryFromReader(reader)).toEqual(expected)
+      } finally {
+        reader.close()
+      }
+    }
+    log.close()
+  })
+
+  test('keeps an open reader independent of later appends', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(enc('first'))
+
+    const snapshot = log.reader()
+    try {
+      const segment = snapshot.segments[0]!
+      const entry = segment.records.find((record) => record.kind === 'output')!
+      log.appendOutput(enc('second'))
+      expect(entry.length).toBe(5)
+      expect(dec(snapshot.readOutput(segment, entry, 0, entry.length))).toBe('first')
+
+      const current = log.reader()
+      try {
+        const currentSegment = current.segments[0]!
+        const currentEntry = currentSegment.records.find((record) => record.kind === 'output')!
+        expect(dec(current.readOutput(currentSegment, currentEntry, 0, currentEntry.length))).toBe('firstsecond')
+      } finally {
+        current.close()
+      }
+    } finally {
+      snapshot.close()
+      log.close()
+    }
+  })
+
+  test('keeps an open reader independent of rotation', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: OPENING_BYTES + 9 })
+    log.appendOutput(enc('first'))
+
+    const snapshot = log.reader()
+    try {
+      log.appendOutput(enc('next!'))
+      expect(summaryFromReader(snapshot).segments.map((segment) => dec(segment.output)).join('')).toBe('first')
+
+      const current = log.reader()
+      try {
+        expect(summaryFromReader(current).segments.map((segment) => dec(segment.output)).join('')).toBe('next!')
+      } finally {
+        current.close()
+      }
+    } finally {
+      snapshot.close()
+      log.close()
+    }
+  })
+
+  test('uses the in-memory index after a healthy log is closed', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(enc('closed'))
+    log.close()
+
+    countDiskOpens((count) => {
+      const reader = log.reader()
+      try {
+        expect(summaryFromReader(reader)).toEqual(summaryFromDisk(dir))
+        expect(count()).toBe(0)
+      } finally {
+        reader.close()
+      }
+    })
+  })
+
+  test('falls back to the disk reader when an indexed segment is truncated', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    for (let i = 0; i < 200; i++) log.appendOutput(enc(`line ${i}\n`))
+    const path = join(dir, 'output.log')
+    const bytes = readFileSync(path)
+    writeFileSync(path, bytes.subarray(0, bytes.length - 3))
+    const expected = summaryFromDisk(dir)
+
+    countDiskOpens((count) => {
+      const reader = log.reader()
+      try {
+        expect(summaryFromReader(reader)).toEqual(expected)
+        expect(count()).toBe(1)
+      } finally {
+        reader.close()
+      }
+    })
+    log.close()
+  })
+
+  test('falls back to the disk reader when an indexed segment is missing', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(enc('missing'))
+    rmSync(join(dir, 'output.log'))
+    const expected = summaryFromDisk(dir)
+
+    countDiskOpens((count) => {
+      const reader = log.reader()
+      try {
+        expect(summaryFromReader(reader)).toEqual(expected)
+        expect(count()).toBe(1)
+      } finally {
+        reader.close()
+      }
+    })
+    log.close()
+  })
+
+  test('falls back to the disk reader when the writer is disabled', () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(enc('before'))
+    closeSync((log as unknown as { fd: number }).fd)
+    log.appendOutput(enc('after'))
+    expect(log.disabled).toBe(true)
+    const expected = summaryFromDisk(dir)
+
+    countDiskOpens((count) => {
+      const reader = log.reader()
+      try {
+        expect(summaryFromReader(reader)).toEqual(expected)
+        expect(count()).toBe(1)
+      } finally {
+        reader.close()
+      }
+    })
+    log.close()
+  })
+})
