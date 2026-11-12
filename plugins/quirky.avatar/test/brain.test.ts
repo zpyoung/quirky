@@ -5,7 +5,7 @@ import { register, rotationLimit } from '../src/brain/session'
 import { makeTestApp, sampleMandate, type TestApp } from './support'
 
 type Usage = { contextTokens: number; contextWindow: number | null }
-type Reply = { text: string; usage?: Usage; delayMs?: number; before?: { role: string; text: string }[] }
+type Reply = { text: string; contextUsage?: unknown; delayMs?: number; before?: { role: string; text: string; data?: unknown }[] }
 type Sent = { session: string; text: string }
 
 const json = (actions: unknown[]) => `\`\`\`json\n${JSON.stringify(actions)}\n\`\`\``
@@ -64,9 +64,10 @@ function harness(respond: (prompt: Sent, sentBefore: Sent[]) => Reply, options: 
     void (async () => {
       await new Promise((resolve) => setTimeout(resolve, reply.delayMs ?? 0))
       for (const extra of reply.before ?? []) {
-        await t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: prompt.session, seq: ++seq, role: extra.role, text: extra.text, at: 1 } } } as never)
+        await t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: prompt.session, seq: ++seq, role: extra.role, text: extra.text, ...(extra.data === undefined ? {} : { data: extra.data }), at: 1 } } } as never)
       }
-      await t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: prompt.session, seq: ++seq, role: 'assistant', text: reply.text, data: reply.usage === undefined ? undefined : { usage: reply.usage }, at: 1 } } } as never)
+      await t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: prompt.session, seq: ++seq, role: 'assistant', text: reply.text, at: 1 } } } as never)
+      await t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: prompt.session, seq: ++seq, role: 'result', data: reply.contextUsage === undefined ? undefined : { contextUsage: reply.contextUsage }, at: 1 } } } as never)
       await t.deliver({ type: 'quirky.structured/settled', data: { sessionId: prompt.session, worktreeId: 'wt-1', agent: 'claude', state: 'done', at: 1 } } as never)
     })()
     return { ok: true }
@@ -77,9 +78,9 @@ function harness(respond: (prompt: Sent, sentBefore: Sent[]) => Reply, options: 
 
 const call = (over: Partial<ToolCall> = {}): ToolCall => ({ agent: 'claude', sessionId: 'worker-1', worktreeId: 'wt-1', cwd: '/work/wt-1', toolName: 'Bash', toolInput: { command: 'bun test --update-snapshots' }, event: 'PreToolUse', ...over })
 const isRebuild = (prompt: Sent) => prompt.text.includes('You are taking over supervision')
-const judgeReply = (prompt: Sent, decision: 'allow' | 'deny', usage?: Usage): Reply => {
+const judgeReply = (prompt: Sent, decision: 'allow' | 'deny', contextUsage?: Usage): Reply => {
   const requestId = /requestId "([^"]+)"/.exec(prompt.text)?.[1] ?? ''
-  return { text: json([{ type: 'judge', requestId, decision, reliedOn: 'guideline 1', reason: 'because' }]), usage }
+  return { text: json([{ type: 'judge', requestId, decision, reliedOn: 'guideline 1', reason: 'because' }]), contextUsage }
 }
 
 describe('rotationLimit', () => {
@@ -179,9 +180,9 @@ describe('rotation', () => {
     let question: { seq: number } | null = null
     const h = harness(
       (prompt) => {
-        if (isRebuild(prompt)) return { text: NOOP, usage: { contextTokens: 38_000, contextWindow: 1_000_000 } }
-        if (prompt.text.includes('permission request from fix-desktop')) return { text: json([{ type: 'send', worktreeId: 'wt-1', text: 'allowed' }]), usage: { contextTokens: 301_000, contextWindow: 1_000_000 } }
-        return { text: NOOP, usage: { contextTokens: 40_000, contextWindow: 1_000_000 } }
+        if (isRebuild(prompt)) return { text: NOOP, contextUsage: { contextTokens: 38_000, contextWindow: 1_000_000 } }
+        if (prompt.text.includes('permission request from fix-desktop')) return { text: json([{ type: 'send', worktreeId: 'wt-1', text: 'allowed' }]), contextUsage: { contextTokens: 301_000, contextWindow: 1_000_000 } }
+        return { text: NOOP, contextUsage: { contextTokens: 40_000, contextWindow: 1_000_000 } }
       },
       {
         createDelayMs: 20,
@@ -217,7 +218,53 @@ describe('rotation', () => {
   })
 
   test('does not rotate below the limit', async () => {
-    const h = harness((prompt) => ({ text: NOOP, usage: { contextTokens: 299_999, contextWindow: 1_000_000 } }))
+    const h = harness((prompt) => ({ text: NOOP, contextUsage: { contextTokens: 299_999, contextWindow: 1_000_000 } }))
+    h.app.journal('wt-1', 'event', { text: 'e' })
+    await until(() => h.sent.length === 2)
+    await settle()
+    expect(h.created).toHaveLength(1)
+    expect(h.stopped).toEqual([])
+  })
+  test('does not rotate on assistant usage without result contextUsage', async () => {
+    const h = harness((prompt) => ({
+      text: NOOP,
+      ...(isRebuild(prompt) ? {} : { before: [{ role: 'assistant', text: '', data: { usage: { contextTokens: 301_000, contextWindow: 1_000_000 } } }] })
+    }))
+    h.app.journal('wt-1', 'event', { text: 'e' })
+    await until(() => h.sent.length === 2)
+    await settle()
+    expect(h.created).toHaveLength(1)
+    expect(h.stopped).toEqual([])
+  })
+
+  test('ignores malformed result footprints and preserves last-known usage', async () => {
+    const malformed: unknown[] = [
+      null,
+      'not an object',
+      { contextTokens: Number.NaN, contextWindow: 1_000_000 },
+      { contextTokens: Number.POSITIVE_INFINITY, contextWindow: 1_000_000 },
+      { contextTokens: '301000', contextWindow: 1_000_000 },
+      Object.assign([], { contextTokens: 0, contextWindow: 1_000_000 }),
+    ]
+    for (const contextUsage of malformed) {
+      const h = harness((prompt) => ({
+        text: NOOP,
+        contextUsage: isRebuild(prompt) ? { contextTokens: 301_000, contextWindow: 1_000_000 } : contextUsage
+      }))
+      h.app.journal('wt-1', 'event', { text: 'e' })
+      await until(() => h.created.length === 2)
+      await settle()
+      const rotation = h.app.store.journalSince(0).find((entry) => entry.kind === 'rotation')
+      expect(rotation?.data).toMatchObject({ fromTokens: 301_000, toSession: 's2' })
+      expect(h.app.store.brainSessions.list()[0]).toMatchObject({ endTokens: 301_000 })
+    }
+  })
+
+  test('treats a non-number context window as unknown', async () => {
+    const h = harness((prompt) => ({
+      text: NOOP,
+      ...(isRebuild(prompt) ? {} : { contextUsage: { contextTokens: 200_000, contextWindow: '200000' } })
+    }))
     h.app.journal('wt-1', 'event', { text: 'e' })
     await until(() => h.sent.length === 2)
     await settle()
@@ -227,7 +274,7 @@ describe('rotation', () => {
 
   test('SC-31: a 200k window rotates at 160k and not at 159,999', async () => {
     const at = async (tokens: number) => {
-      const h = harness(() => ({ text: NOOP, usage: { contextTokens: tokens, contextWindow: 200_000 } }))
+      const h = harness(() => ({ text: NOOP, contextUsage: { contextTokens: tokens, contextWindow: 200_000 } }))
       h.app.journal('wt-1', 'event', { text: 'e' })
       await until(() => h.sent.length >= 2)
       await settle()
@@ -333,6 +380,25 @@ describe('session death', () => {
     expect(h.app.store.brainSessions.list()[0]!.endedAt).not.toBeNull()
     expect(h.app.store.journalSince(0).some((e) => e.kind === 'brain-error' && e.data.reason === 'session-died')).toBe(true)
     expect(await h.app.services.brain.judge(call(), sampleMandate(), 1000)).toMatchObject({ decision: 'allow' })
+  })
+
+  test('ends the current brain session and starts a replacement when a result reports an error', async () => {
+    const h = harness(() => ({ text: NOOP }))
+    h.app.journal('wt-1', 'event', { text: 'warm up' })
+    await until(() => h.app.services.brain.ready() && h.sent.some((prompt) => prompt.session === 's1' && !isRebuild(prompt)))
+    await settle()
+
+    await h.t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: 's1', seq: 99, role: 'result', text: 'provider error', data: { is_error: true }, at: 1 } } } as never)
+
+    expect(h.app.services.brain.ready()).toBe(false)
+    expect(await h.app.services.brain.judge(call(), sampleMandate(), 1000)).toBe('unavailable')
+    await until(() => h.created.length === 2 && h.app.services.brain.ready())
+
+    const rows = h.app.store.brainSessions.list()
+    expect(rows.map((row) => row.sessionId)).toEqual(['s1', 's2'])
+    expect(rows[0]!.endedAt).not.toBeNull()
+    expect(rows[1]).toMatchObject({ endedAt: null })
+    expect(h.app.store.journalSince(0).some((entry) => entry.kind === 'brain-error' && entry.data.reason === 'session-died' && entry.data.session === 's1')).toBe(true)
   })
 
   test('events not yet delivered when the session dies go to the new session', async () => {
