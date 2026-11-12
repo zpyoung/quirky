@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from '
 import { resolve, join } from 'node:path'
 import { ConnectionLost } from '@quirky/protocol'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
-import type { Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
+import type { ProbeRecord, Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
 import { startProbe, type Probe } from './soak/probe.ts'
 import { judge } from './soak/verdict.ts'
@@ -80,6 +80,14 @@ export async function main(argv: string[]): Promise<number> {
     const startedIso = new Date().toISOString()
     let samplingStopped = false
     let daemonMissing = false
+    const failedConnectionProbes: ProbeRecord[] = []
+    let connectionLagMs = 0
+    let nextConnectionTick = performance.now() + 50
+    const connectionTimer = setInterval(() => {
+      const now = performance.now()
+      connectionLagMs = Math.max(connectionLagMs, now - nextConnectionTick)
+      nextConnectionTick = now + 50
+    }, 50)
     try {
       probe = await startProbe({
         home: world.home,
@@ -100,9 +108,20 @@ export async function main(argv: string[]): Promise<number> {
         if ((pidError as NodeJS.ErrnoException).code !== 'ESRCH') throw pidError
         daemonAlive = false
       }
-      if (!(error instanceof ConnectionLost) && !world.control.isClosed && daemonAlive) throw error
-      daemonMissing = true
+      if (error instanceof ConnectionLost || world.control.isClosed || !daemonAlive) {
+        daemonMissing = true
+      } else {
+        const now = performance.now()
+        failedConnectionProbes.push({
+          at: 0,
+          ms: Number(Math.min(30_000, now - startedAt).toFixed(3)),
+          ownLagMs: Number(Math.max(connectionLagMs, now - nextConnectionTick, 0).toFixed(3)),
+          timedOut: true
+        })
+      }
       samplingStopped = true
+    } finally {
+      clearInterval(connectionTimer)
     }
     const elapsed = () => (performance.now() - startedAt) / 1000
     const samples: Sample[] = []
@@ -149,7 +168,7 @@ export async function main(argv: string[]): Promise<number> {
       windows: 0,
       samples,
       events: probe?.events ?? [],
-      probes: probe?.probes ?? [],
+      probes: probe?.probes ?? failedConnectionProbes,
       workers: world.workers.map(({ worktree, path }) => heartbeat(worktree, path, now)),
       daemonExited: daemonMissing || (probe?.daemonExited() ?? false)
     }

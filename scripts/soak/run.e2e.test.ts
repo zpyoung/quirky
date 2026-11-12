@@ -21,8 +21,8 @@ test('measures real workers, hooks, processes and probes and cleans up its daemo
   const out = mkdtempSync(join(tmpdir(), 'quirky-soak-e2e-'))
   try {
     const code = await main(['--minutes', '0.4', '--out', out, '--max-children', '1'])
-    const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
     expect(code).toBe(1)
+    const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
     expect(report.verdict).toBe('fail')
     expect(report.durationSeconds).toBeGreaterThanOrEqual(24)
     expect(report.durationSeconds).toBeLessThanOrEqual(40)
@@ -57,14 +57,33 @@ test('measures real workers, hooks, processes and probes and cleans up its daemo
 
 test('bounds a healthy endpoint that never answers the probe handshake', async () => {
   const home = mkdtempSync(join(tmpdir(), 'quirky-soak-handshake-'))
+  let stallHealth = false
+  const healthReply = Promise.withResolvers<Response>()
+  const sockets = new Set<{ close(): void }>()
+  const closeSockets = () => {
+    for (const socket of sockets) socket.close()
+  }
+  const capture = (stream: ReadableStream<Uint8Array>) => new Response(stream.pipeThrough(new TransformStream({
+    transform(chunk, controller) {
+      // the external stand-in releases its sockets once the child has judged the run
+      closeSockets()
+      controller.enqueue(chunk)
+    }
+  }))).text()
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
     fetch(request, server) {
       if (new URL(request.url).pathname === '/rpc' && server.upgrade(request)) return
+      if (stallHealth) return healthReply.promise
       return Response.json({ pid: process.pid })
     },
-    websocket: { idleTimeout: 0, message() {} }
+    websocket: {
+      idleTimeout: 0,
+      open(socket) { sockets.add(socket) },
+      close(socket) { sockets.delete(socket) },
+      message() {}
+    }
   })
   writeFileSync(join(home, 'runtime.json'), JSON.stringify({
     pid: process.pid, port: server.port, token: 'soak-test', hookToken: 'soak-test',
@@ -83,13 +102,59 @@ test('bounds a healthy endpoint that never answers the probe handshake', async (
     }
     expect(failure).toBeInstanceOf(Error)
     expect((failure as Error).message).toContain('30000')
+    closeSockets()
+    const repoRoot = resolve(import.meta.dir, '../..')
+    const probePath = join(repoRoot, 'scripts/soak/probe.ts')
+    const preload = join(home, 'probe-stall.ts')
+    mkdirSync(join(home, 'tmp'))
+    writeFileSync(preload, `
+import { mock } from 'bun:test'
+import { startProbe as originalStartProbe } from ${JSON.stringify(probePath)}
+const startProbe = originalStartProbe
+mock.module(${JSON.stringify(probePath)}, () => ({
+  startProbe: (options) => startProbe({ ...options, home: ${JSON.stringify(home)} })
+}))
+`)
+    for (const mode of ['handshake', 'health']) {
+      stallHealth = mode === 'health'
+      const out = join(home, mode)
+      const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--minutes', '0.4', '--out', out], {
+        cwd: repoRoot,
+        env: createIsolatedRuntimeEnvironment(home, { repoRoot }),
+        stdout: 'pipe',
+        stderr: 'pipe'
+      })
+      const output = capture(child.stdout)
+      const errors = capture(child.stderr)
+      const watchdog = setTimeout(() => child.kill('SIGTERM'), 185_000)
+      try {
+        const code = await child.exited
+        const stderr = await errors
+        await output
+        if (code !== 1) console.error(`soak ${mode} child exited ${code}\n${stderr}`)
+        expect(code).toBe(1)
+        const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
+        expect(report.verdict).toBe('fail')
+        expect(report.checks.stalls).toMatchObject({ ok: false, probes: 1, stalls: 1, daemonExited: false })
+        if (mode === 'handshake') expect(report.checks.stalls.maxMs).toBe(30_000)
+        else expect(report.checks.stalls.maxMs).toBeGreaterThanOrEqual(1000)
+        expect(isAlive(report.daemon.pid)).toBe(false)
+      } finally {
+        clearTimeout(watchdog)
+        if (child.exitCode === null) child.kill('SIGTERM')
+        await child.exited
+        await Promise.all([output, errors])
+      }
+    }
   } finally {
     clearTimeout(timer)
     abort.abort()
+    healthReply.resolve(Response.json({ pid: process.pid }))
+    closeSockets()
     await server.stop(true)
     rmSync(home, { recursive: true, force: true })
   }
-}, 45_000)
+}, 225_000)
 
 test('reports daemon loss between worker startup and probe connection as a failed run', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quirky-soak-probe-loss-'))
@@ -121,11 +186,12 @@ mock.module(${JSON.stringify(probePath)}, () => ({
   })
   const output = new Response(child.stdout).text()
   const errors = new Response(child.stderr).text()
-  const timer = setTimeout(() => child.kill('SIGTERM'), 60_000)
+  const timer = setTimeout(() => child.kill('SIGTERM'), 150_000)
   try {
     const code = await child.exited
-    await errors
+    const stderr = await errors
     await output
+    if (code !== 1) console.error(`soak daemon-loss child exited ${code}\n${stderr}`)
     expect(code).toBe(1)
     const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
     expect(report.verdict).toBe('fail')
@@ -139,4 +205,4 @@ mock.module(${JSON.stringify(probePath)}, () => ({
     await Promise.all([output, errors])
     rmSync(root, { recursive: true, force: true })
   }
-}, 90_000)
+}, 180_000)
