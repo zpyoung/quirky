@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { waitFor } from '../../../../packages/daemon/test/helpers'
 import type { JournalEntry, Level, ReportModel } from '../../src/contracts'
 import { readMarkerFile } from '../../src/hooks/install'
-import { bash, cleanupAll, read, startAvatar, writeTo, type Avatar } from './fixtures'
+import { useTempAgentHome } from '../daemon-support'
+import { bash, cleanupAll, read, startAvatar as startAvatarFixture, writeTo, type Avatar } from './fixtures'
+
+const agent = useTempAgentHome()
+const startAvatar = (options: Parameters<typeof startAvatarFixture>[0] = {}) => startAvatarFixture(options, agent)
 
 afterEach(cleanupAll)
 
@@ -83,7 +86,7 @@ describe('the decision table through the route (SC-10)', () => {
     expect((await ask(writeTo(alpha, join(alpha.path, 'src', 'b.ts')))).decision).toBe('allow')
     expect((await ask(bash(alpha, 'bun test'))).decision).toBe('allow')
 
-    const ssh = await ask(writeTo(alpha, join(homedir(), '.ssh', 'config')))
+    const ssh = await ask(writeTo(alpha, agent.sshConfig))
     expect(ssh.decision).toBe('deny')
     expect(ssh.reason).toContain(heldText)
     const outside = await ask(writeTo(alpha, join(avatar.outside, 'x.txt')))
@@ -119,8 +122,8 @@ describe('the decision table through the route (SC-10)', () => {
 
   test('a session with no marker is passthrough at the route and at the shim', async () => {
     const avatar = await handedOff()
-    expect(await avatar.gate('sess-gamma', writeTo(avatar.alpha, join(homedir(), '.ssh', 'config')))).toMatchObject({ decision: 'passthrough', encoded: '{}' })
-    const shim = await avatar.shim('sess-gamma', writeTo(avatar.alpha, join(homedir(), '.ssh', 'config')))
+    expect(await avatar.gate('sess-gamma', writeTo(avatar.alpha, agent.sshConfig))).toMatchObject({ decision: 'passthrough', encoded: '{}' })
+    const shim = await avatar.shim('sess-gamma', writeTo(avatar.alpha, agent.sshConfig))
     expect(shim).toMatchObject({ stdout: '{}\n', code: 0 })
   })
 })
@@ -183,7 +186,7 @@ describe('the brain is not ready (SC-12)', () => {
 
   test('a held call, by contrast, counts as a denial', async () => {
     const avatar = await handedOff({ brain: 'fail' })
-    await avatar.gate('sess-alpha', writeTo(avatar.alpha, join(homedir(), '.ssh', 'config')))
+    await avatar.gate('sess-alpha', writeTo(avatar.alpha, agent.sshConfig))
     expect(avatar.store().stuck.get(avatar.alpha.id)?.counters.denialsTotal).toBe(1)
   })
 })
@@ -193,7 +196,7 @@ describe('Shadow (SC-13)', () => {
     const avatar = await startAvatar()
     await avatar.handoff([{ worktree: avatar.alpha, level: 'shadow' }])
 
-    const decision = await avatar.gate('sess-alpha', writeTo(avatar.alpha, join(homedir(), '.ssh', 'config')))
+    const decision = await avatar.gate('sess-alpha', writeTo(avatar.alpha, agent.sshConfig))
     expect(decision).toMatchObject({ decision: 'passthrough', encoded: '{}' })
     expect((await avatar.gate('sess-alpha', bash(avatar.alpha, 'git push --force origin feature'))).decision).toBe('passthrough')
 

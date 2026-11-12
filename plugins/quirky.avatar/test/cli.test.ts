@@ -1,8 +1,16 @@
 import { describe, expect, test } from 'bun:test'
-import type { CliArgs, CliContext } from '@quirky/protocol'
+import { validateValue, type CliArgs, type CliContext, type Schema } from '@quirky/protocol'
+import avatarManifest from '../quirky-plugin.json'
+import worktreeManifest from '../../quirky.worktree/quirky-plugin.json'
 import { commands } from '../cli'
 
 type Calls = { method: string; params: Record<string, unknown> }[]
+
+const methods = new Map<string, Schema>(
+  [avatarManifest, worktreeManifest].flatMap((manifest) =>
+    manifest.contributes.method.map((method) => [`${manifest.id}/${method.id}`, ('params' in method ? method.params : { type: 'object' }) as Schema] as const)
+  )
+)
 
 function harness(handlers: Record<string, (params: Record<string, unknown>) => unknown>, json = false) {
   const calls: Calls = []
@@ -11,6 +19,10 @@ function harness(handlers: Record<string, (params: Record<string, unknown>) => u
     requestBase: 'req',
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
+      const schema = methods.get(method)
+      if (schema === undefined) throw new Error(`no manifest method ${method}`)
+      const failure = validateValue(schema, params)
+      if (failure) throw new Error(`${method}: ${failure}`)
       const handler = handlers[method]
       if (handler === undefined) throw new Error(`no handler for ${method}`)
       return handler(params)
@@ -40,6 +52,16 @@ const resolveBy = (table: Record<string, string>) => (params: Record<string, unk
   if (id === undefined) throw new Error(`no worktree ${String(params.selector)}`)
   return { id, name: String(params.selector) }
 }
+
+describe('CLI manifest validation', () => {
+  test('rejects invalid params before the handler runs', async () => {
+    let handled = false
+    const h = harness({ 'quirky.avatar/handoff': () => { handled = true } })
+    await expect(h.ctx.call('quirky.avatar/handoff', { items: [{ worktreeId: 'wt-1', doneWhen: 'd' }] })).rejects.toThrow('quirky.avatar/handoff: params.items[0].goal is required')
+    expect(handled).toBe(false)
+    await expect(h.ctx.call('quirky.avatar/teleport', {})).rejects.toThrow('no manifest method quirky.avatar/teleport')
+  })
+})
 
 describe('quirky avatar handoff', () => {
   test('resolves the worktree and sends one item with every field', async () => {

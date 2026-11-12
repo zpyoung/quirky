@@ -1,11 +1,16 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { waitFor } from '../../../packages/daemon/test/helpers'
 import { activate, announceChanges, deactivate } from '../main'
 import * as appModule from '../src/app'
 import type { AvatarApp, AvatarBusEvent } from '../src/contracts'
+import { codexHooksInstalled } from '../src/hooks/install'
 import { createAvatarStore } from '../src/store'
 import { makeTestApp, sampleMandate, type TestApp } from './support'
+import { useTempAgentHome } from './daemon-support'
+
+const agent = useTempAgentHome()
 
 describe('avatar app stubs', () => {
   test('every stub method resolves to an unavailable or empty result and never throws', async () => {
@@ -191,6 +196,13 @@ describe('avatar main wiring', () => {
     const provided = [...test.provided.keys()].filter((id) => id.startsWith('method:')).sort()
     expect(provided).toEqual(manifest.contributes.method.map((entry) => `method:quirky.avatar/${entry.id}`).sort())
     await deactivate()
+  })
+
+  test('installs Codex hooks for a listed agent and leaves them after deactivate', async () => {
+    await activateWithApp({ fakeCalls: { 'quirky.agents/list': () => ({ defaultAgent: 'claude', agents: [{ id: 'codex', installed: true, enabled: true }] }) } })
+    expect(await waitFor(() => codexHooksInstalled(agent.agentEnv), 2000)).toBe(true)
+    await deactivate()
+    expect(codexHooksInstalled(agent.agentEnv)).toBe(true)
   })
 
   test('methods delegate to the services and return what they return', async () => {
