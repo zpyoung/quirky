@@ -1145,6 +1145,171 @@ describe('brace expansion', () => {
   }
 })
 
+describe('time before keywords and zsh repeat directory uncertainty', () => {
+  test('scenario 1', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['time { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time { cd /home/u; rm -rf Documents; }', ['other', 'edit-outside']],
+      ['time { cd src; }; touch a', ['other', 'edit-outside']],
+      ['time ! cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['time if cd /tmp; then :; fi; rm -rf x', ['other', 'edit-outside']],
+      ['time while cd ..; do break; done; rm -rf x', ['other', 'edit-outside']],
+      ['time until cd /tmp; do break; done; rm -rf x', ['other', 'edit-outside']],
+      ['time function f { cd /home/u; }; f; rm -rf Documents', ['other', 'edit-outside']],
+      ['time noglob cd /home/u; rm -rf Documents', ['other', 'edit-outside']],
+      ['time nocorrect cd /home/u; rm -rf Documents', ['other', 'edit-outside']],
+      ['time - cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['- cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['{ - cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time -p { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time -p ! cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['time -- { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time -p -- { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['! time { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['{ time { cd /tmp; }; }; rm -rf x', ['other', 'edit-outside']],
+      ['if time { cd /tmp; }; then :; fi; rm -rf x', ['other', 'edit-outside']],
+      ['time { pushd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time { popd; }; rm -rf x', ['other', 'edit-outside']],
+      ['time { eval "cd /tmp"; }; rm -rf x', ['other', 'edit-outside']],
+      ['time { command cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time { cd /tmp; } && rm -rf x', ['other', 'edit-outside']],
+      ['time ! cd /tmp && rm -rf x', ['other', 'edit-outside']],
+      ['cd src && time { cd /tmp; } || true; touch a', ['read', 'other', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) {
+      expectClassSet(command, expected)
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    }
+  })
+
+  test('scenario 2', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['repeat 1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 cd /tmp && rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 cd src; touch a', ['other', 'edit-outside']],
+      ['repeat 2 cd ..; rm -rf x', ['other', 'edit-outside']],
+      ['cd /tmp; repeat 0 do cd /work/wt; done && rm -rf x', ['read', 'other', 'edit-outside']],
+      ['repeat 1 do cd /tmp; done; rm -rf x', ['other', 'edit-outside']],
+      ['repeat $N cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat $((1 + 1)) cd ..; rm -rf x', ['other', 'edit-outside']],
+      ['repeat "$(echo 1)" cd /tmp; rm -rf x', ['other', 'read', 'edit-outside']],
+      ['repeat 1 { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 ! cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 - cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 command cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 builtin cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 time cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 time { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time repeat 1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['time -p repeat 1 { cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 repeat 1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['! repeat 1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['{ repeat 1 cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 pushd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 popd; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 eval "cd /tmp"; rm -rf x', ['other', 'edit-outside']],
+      ['repeat cd cd /tmp; rm -rf x', ['other', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) {
+      expectClassSet(command, expected)
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    }
+  })
+
+  test('scenario 3', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['{ X=1 cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['{ X+=1 cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['time { X=1 cd /tmp; }; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 X=1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 X+=1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['repeat 1 CDPATH=/home cd u; rm -rf Documents', ['other', 'edit-outside']],
+      ['! X=$Y cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['if X=1 cd /tmp; then :; fi; rm -rf x', ['other', 'edit-outside']],
+      ['time X=1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['time X+=1 cd /tmp; rm -rf x', ['other', 'edit-outside']],
+      ['time CDPATH=/home cd u; rm -rf Documents', ['other', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) {
+      expectClassSet(command, expected)
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    }
+  })
+
+  test('scenario 4', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['(time { cd /tmp; }); touch a', ['other', 'edit-inside']],
+      ['(repeat 1 cd /tmp); touch a', ['other', 'edit-inside']],
+      ['echo "$(repeat 1 cd /tmp)"; touch a', ['other', 'read', 'edit-inside']],
+      ['eval "time { cd /tmp; }"; rm -rf x', ['other', 'edit-outside']],
+      ['eval "repeat 1 cd /tmp"; rm -rf x', ['other', 'edit-outside']],
+      ['time { cd src; }; touch /work/wt/a', ['other', 'edit-inside']],
+      ['repeat 1 cd src; touch /work/wt/a', ['other', 'edit-inside']],
+      ['time { cd /tmp; }; cd /work/wt && touch a', ['other', 'read', 'edit-inside']],
+      ['repeat 1 cd /tmp; cd /work/wt && touch a', ['other', 'read', 'edit-inside']],
+      ['time { cd /tmp; }; cd /work/wt; touch a', ['other', 'read', 'edit-outside']],
+      ['repeat 1 cd /tmp; cd /work/wt; touch a', ['other', 'read', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('scenario 5', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['time cd src && touch a', ['read', 'edit-inside']],
+      ['time -p cd src && touch a', ['read', 'edit-inside']],
+      ['time command cd src && touch a', ['read', 'edit-inside']],
+      ['time cd /tmp && touch a', ['read', 'edit-outside']],
+      ['cd /tmp; time cd /work/wt && rm -rf x', ['read', 'edit-outside']],
+      ['time { ls; }; touch a', ['other', 'edit-inside']],
+      ['time { echo cd; }; touch a', ['other', 'edit-inside']],
+      ['/usr/bin/time { cd /tmp; }; touch a', ['other', 'edit-inside']],
+      ['command time { cd /tmp; }; touch a', ['other', 'edit-inside']],
+      ['repeat 1 ls; touch a', ['other', 'edit-inside']],
+      ['repeat 1 echo cd; touch a', ['other', 'edit-inside']],
+      ['repeat cd echo hi; touch a', ['other', 'edit-inside']],
+      ['- echo hi; touch a', ['other', 'edit-inside']],
+      ['echo time { cd /tmp; touch a', ['read', 'edit-inside']],
+      ['echo repeat 1 cd /tmp; touch a', ['read', 'edit-inside']],
+      ['"X=1" cd /tmp; touch a', ['other', 'edit-inside']],
+      ['"X+=1" cd /tmp; touch a', ['other', 'edit-inside']],
+      ['{ "$K=1" cd /tmp; }; touch a', ['other', 'edit-inside']],
+      ['repeat; touch a', ['other', 'edit-inside']],
+      ['repeat 1; touch a', ['other', 'edit-inside']],
+      ['time; touch a', ['edit-inside']],
+      ['time -p; touch a', ['edit-inside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    const longCommands = [
+      `${'time { '.repeat(25_000)}cd /tmp; }; touch a`,
+      `${'repeat 1 '.repeat(25_000)}cd /tmp; touch a`
+    ]
+    const started = performance.now()
+    for (const command of longCommands) expectClassSet(command, ['other', 'edit-outside'])
+    expect(performance.now() - started).toBeLessThan(2_000)
+
+    const decisions: [string, 'held' | 'allow' | 'judgment', 'floor-core' | 'fixed-rules' | null][] = [
+      ['time { cd /tmp; }; rm -rf x', 'held', 'floor-core'],
+      ['time ! cd /tmp; rm -rf x', 'held', 'floor-core'],
+      ['time if cd /tmp; then :; fi; rm -rf x', 'held', 'floor-core'],
+      ['time -p { cd /tmp; }; rm -rf x', 'held', 'floor-core'],
+      ['! time { cd /tmp; }; rm -rf x', 'held', 'floor-core'],
+      ['- cd /tmp; rm -rf x', 'held', 'floor-core'],
+      ['repeat 1 cd /tmp; rm -rf x', 'held', 'floor-core'],
+      ['repeat $N cd /tmp; rm -rf x', 'held', 'floor-core'],
+      ['repeat 1 { cd /tmp; }; rm -rf x', 'held', 'floor-core'],
+      ['time X=1 cd /tmp; rm -rf x', 'held', 'floor-core'],
+      ['repeat 1 X=1 cd /tmp; rm -rf x', 'held', 'floor-core'],
+      ['time cd src && rm -rf dist', 'allow', 'fixed-rules'],
+      ['time { ls; }; touch a', 'judgment', null],
+      ['repeat 1 ls; touch a', 'judgment', null]
+    ]
+    for (const [command, outcome, step] of decisions) {
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
+})
+
 describe('directory uncertainty scenarios', () => {
   test('scenario 1: keeps the old and entered directories after a followed cd', () => {
     const rows: [string, ActionClass[]][] = [

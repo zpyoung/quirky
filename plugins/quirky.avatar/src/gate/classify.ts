@@ -64,7 +64,7 @@ export const MAX_DIRECTORIES = 16
 type DirectorySet = readonly string[] | null
 type DirectoryState = { possible: DirectorySet; certain: DirectorySet }
 const UNKNOWN_DIRECTORY = [null] as const
-const DIRECTORY_KEYWORDS: Record<string, true> = { '{': true, '!': true, if: true, then: true, else: true, elif: true, while: true, until: true, do: true, noglob: true, nocorrect: true }
+const DIRECTORY_KEYWORDS: Record<string, true> = { '{': true, '!': true, '-': true, if: true, then: true, else: true, elif: true, while: true, until: true, do: true, noglob: true, nocorrect: true }
 
 function joinDirectories(left: DirectorySet, right: DirectorySet): DirectorySet {
   if (left === null || right === null) return null
@@ -98,14 +98,22 @@ function directoryClasses(directories: DirectorySet, classify: (directory: strin
 
 function keywordChangesDirectory(words: ShellWord[]): boolean {
   let index = 0
-  while (index < words.length && !words[index].dynamic) {
-    if (words[index].text === 'function') index += 2
-    else if (DIRECTORY_KEYWORDS[words[index].text] === true) index++
+  while (index < words.length) {
+    const current = words[index]
+    if (!current.dynamic && (current.text === 'function' || current.text === 'repeat')) index += 2
+    else if (!current.dynamic && DIRECTORY_KEYWORDS[current.text] === true) index++
+    else if (!current.dynamic && current.text === 'time') {
+      index++
+      while (index < words.length && !words[index].dynamic && words[index].text === '-p') index++
+      if (index < words.length && !words[index].dynamic && words[index].text === '--') index++
+    } else if (index > 0 && /^[A-Za-z_][A-Za-z0-9_]*\+?=/s.test(current.text)) index++
     else break
   }
   if (index === 0 || index >= words.length) return false
-  const remaining = words.slice(index)
-  const word = remaining[unwrapWords(remaining).commandIndex]
+  const unwrapped = unwrapWords(words.slice(index))
+  const resolvedIndex = index + unwrapped.commandIndex
+  if (resolvedIndex <= unwrapWords(words).commandIndex) return false
+  const word = words[resolvedIndex]
   return word !== undefined && !word.dynamic && ['cd', 'pushd', 'popd', 'eval'].includes(basename(word.text))
 }
 
