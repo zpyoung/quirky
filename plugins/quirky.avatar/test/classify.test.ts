@@ -1145,7 +1145,7 @@ describe('brace expansion', () => {
   }
 })
 
-describe('g1-36 directory uncertainty scenarios', () => {
+describe('directory uncertainty scenarios', () => {
   test('scenario 1: keeps the old and entered directories after a followed cd', () => {
     const rows: [string, ActionClass[]][] = [
       ['cd /home/u; cd /work/wt/no-such-dir; rm -rf Documents', ['read', 'edit-outside']],
@@ -1362,6 +1362,40 @@ describe('g1-36 directory uncertainty scenarios', () => {
       ['cd /home/u; cd /work/wt/src && echo hi > "$(cat .netrc)"', ['read', 'edit-outside']]
     ]
     for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    const outsideRows = [
+      'cd /home/u; cd /work/wt/nosuch; (true) && rm -rf Documents',
+      'cd build; (true) && rm -rf ../x',
+      'cd build\n(true) && rm -rf ../x',
+      'cd build || (true) && rm -rf ../x',
+      'cd build; (true) && (true) && rm -rf ../x',
+      'cd nosuch; (true) && cd .. && rm -rf x',
+      'cd nosuch; (true) && cd ..; rm -rf x',
+      'cd /tmp; cd /work/wt; (true) && git clean -fd',
+      'cd /tmp; cd /work/wt; (true) && echo hi > x',
+      "cd /tmp; cd /work/wt; (true) && bash -c 'rm -rf x'",
+      "cd /tmp; cd /work/wt; (true) && eval 'rm -rf x'",
+      'cd /tmp; cd /work/wt; (true) && echo "$(rm -rf x)"',
+      'cd /tmp; cd /work/wt/nosuch; (true) || cd /work/wt && rm -rf x',
+      'cd nosuch; ((1)) && cd ..; touch a'
+    ]
+    for (const command of outsideRows) {
+      const classes = bash(command)
+      expect(classes).toContain('edit-outside')
+      expect(classes).not.toContain('edit-inside')
+    }
+    expectClassSet('cd /home/u; cd /work/wt; (true) && cat .ssh/id_rsa', ['read', 'credential'])
+    for (const command of [
+      'cd /home/u; cd /work/wt/nosuch; (true) && rm -rf Documents',
+      'cd build; (true) && rm -rf ../x'
+    ]) {
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    }
+    expectClassSet('cd src && (true) && rm -rf dist', ['read', 'edit-inside'])
+    expect(decideReviewed('cd src && (true) && rm -rf dist')).toMatchObject({ outcome: 'allow', step: 'fixed-rules' })
+    expectClassSet('cd build; echo "$(true)" && rm -rf ../x', ['read', 'edit-outside'])
+    expectClassSet('cd build && echo "$(true)" && rm -rf ../x', ['read', 'edit-inside'])
+    expect(sortedClasses(bash('cd /work/wt && (true) && rm -rf x', {}, '/home/u'))).toEqual(['edit-outside', 'read'])
   })
 
   test('scenario 10: applies the reviewed decision outcomes for each directory rule', () => {

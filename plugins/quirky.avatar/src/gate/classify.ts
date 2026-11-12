@@ -724,6 +724,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     if (existing !== undefined) return existing
     const parent = directoryFor(script.parents[scope])
     const owner = scopeCommands.get(scope)
+    if (owner === undefined) parent.certain = parent.possible
     const start = owner?.sep === '&&' ? parent.certain : parent.possible
     const state = { possible: start, certain: start }
     directories.set(scope, state)
