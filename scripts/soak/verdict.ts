@@ -34,6 +34,7 @@ const WORKER_FRESHNESS_SECONDS = 30
 const HOST_LAG_LIMIT_MS = 500
 const TOP_COUNT = 10
 
+/** Identifies renderers that still show their worktree and send requests. */
 export function windowAlive(beat: WindowBeat): boolean {
   const age = beat.lastRequestAgeSeconds
   return beat.open

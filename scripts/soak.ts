@@ -7,7 +7,8 @@ import type { ProbeRecord, Sample, SoakReport, WorkerBeat } from './soak/contrac
 import { startFault, type RunningFault } from './soak/faults.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
 import { startProbe, type Probe } from './soak/probe.ts'
-import { judge } from './soak/verdict.ts'
+import { judge, windowAlive } from './soak/verdict.ts'
+import { chromiumPath, openWindows, type SoakWindows } from './soak/windows.ts'
 import { startWorld, type SoakWorld } from './soak/world.ts'
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
@@ -54,6 +55,11 @@ export async function main(argv: string[]): Promise<number> {
     console.log(USAGE)
     return 0
   }
+  const executable = config.windows > 0 ? chromiumPath() : null
+  if (config.windows > 0 && executable === null) {
+    console.error('Chromium is not installed. Run "bunx playwright install chromium", or pass --windows 0.')
+    return 2
+  }
 
   const setupAbort = new AbortController()
   const runAbort = new AbortController()
@@ -71,12 +77,16 @@ export async function main(argv: string[]): Promise<number> {
   let world: SoakWorld | undefined
   let probe: Probe | undefined
   let fault: RunningFault | undefined
+  let windows: SoakWindows | undefined
   try {
     mkdirSync(config.out, { recursive: true })
     const repoRoot = resolve(import.meta.dir, '..')
     const revision = await commit(repoRoot)
     if (interrupted) return interrupted
-    world = await startWorld({ out: config.out, repoRoot, signal: setupAbort.signal, fault: config.fault })
+    world = await startWorld({ out: config.out, repoRoot, signal: setupAbort.signal, fault: config.fault, windows: config.windows })
+    if (config.windows > 0) {
+      windows = await openWindows({ world, count: config.windows, executable: executable!, out: config.out, signal: setupAbort.signal })
+    }
     if (interrupted) return interrupted
     const startedAt = performance.now()
     const startedIso = new Date().toISOString()
@@ -168,11 +178,13 @@ export async function main(argv: string[]): Promise<number> {
       throw new Error(`ps failed for ${skippedSamples} of ${attemptedSamples} samples`)
     }
     const faultRecord = fault ? await fault.finish() : null
+    const windowEvidence = windows ? await windows.finish() : { records: [], requests: [] }
     if (interrupted) return interrupted
     const now = Date.now()
     const evidence = {
       durationSeconds,
-      windows: 0,
+      windows: windowEvidence.records.filter(windowAlive).length,
+      windowBeats: windowEvidence.records,
       samples,
       events: probe?.events ?? [],
       probes: probe?.probes ?? failedConnectionProbes,
@@ -186,9 +198,11 @@ export async function main(argv: string[]): Promise<number> {
       commit: revision,
       startedAt: startedIso,
       durationSeconds,
-      config: { minutes: config.minutes, windows: 0, worktrees: world.fixtures.worktrees.length, workers: world.workers.length, limits: config.limits },
+      config: { minutes: config.minutes, windows: config.windows, worktrees: world.fixtures.worktrees.length, workers: world.workers.length, limits: config.limits },
       ...judged,
       fault: faultRecord,
+      windows: windowEvidence.records,
+      windowRequests: windowEvidence.requests,
       daemon: { pid: world.daemonPid, rssKbFirst: rss[0] ?? null, rssKbMax: rss.length ? Math.max(...rss) : null, rssKbLast: rss.at(-1) ?? null },
       skippedSamples,
       files: { samples: samplesPath, daemonLog: join(config.out, 'daemon.log') }
@@ -208,7 +222,11 @@ export async function main(argv: string[]): Promise<number> {
     probe?.stop()
     fault?.stop()
     try {
-      await world?.stop()
+      try {
+        await windows?.stop()
+      } finally {
+        await world?.stop()
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error(world ? message.replaceAll(world.home, '<soak-home>') : message)

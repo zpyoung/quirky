@@ -29,7 +29,7 @@ function lastSample(path: string): Sample {
 async function runFault(kind: FaultKind): Promise<void> {
   const out = mkdtempSync(join(tmpdir(), `quirky-soak-fault-${kind}-`))
   try {
-    const code = await main(['--minutes', '0.4', '--out', out, '--fault', kind])
+    const code = await main(['--windows', '0', '--minutes', '0.4', '--out', out, '--fault', kind])
     const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
     expect(code).toBe(1)
     expect(report.verdict).toBe('fail')

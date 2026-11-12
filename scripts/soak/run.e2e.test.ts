@@ -20,7 +20,7 @@ function isAlive(pid: number): boolean {
 test('measures real workers, hooks, processes and probes and cleans up its daemon', async () => {
   const out = mkdtempSync(join(tmpdir(), 'quirky-soak-e2e-'))
   try {
-    const code = await main(['--minutes', '0.4', '--out', out, '--max-children', '1'])
+    const code = await main(['--windows', '0', '--minutes', '0.4', '--out', out, '--max-children', '1'])
     expect(code).toBe(1)
     const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
     expect(report.verdict).toBe('fail')
@@ -126,7 +126,7 @@ mock.module(${JSON.stringify(probePath)}, () => ({
     for (const mode of ['handshake', 'health']) {
       stallHealth = mode === 'health'
       const out = join(home, mode)
-      const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--minutes', '0.4', '--out', out], {
+      const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--windows', '0', '--minutes', '0.4', '--out', out], {
         cwd: repoRoot,
         env: createIsolatedRuntimeEnvironment(home, { repoRoot }),
         stdout: 'pipe',
@@ -198,7 +198,7 @@ mock.module(${JSON.stringify(probePath)}, () => ({
   }
 }))
 `)
-  const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--minutes', '0.4', '--out', out], {
+  const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--windows', '0', '--minutes', '0.4', '--out', out], {
     cwd: repoRoot,
     env: createIsolatedRuntimeEnvironment(root, { repoRoot }),
     stdout: 'pipe',
