@@ -338,7 +338,7 @@ describe('avatar main wiring', () => {
       ['sidebarStatus'],
       ['report'],
       ['mandate', 'w'],
-      ['resolveNeed', 'n', 'answer', 'yes'],
+      ['resolveNeed', 'n', 'answer', 'yes', undefined],
       ['takeBack', { all: true }],
       ['takeBack', { worktreeIds: ['a', 'b'] }],
       ['handoff', [{ worktreeId: 'w' }]]
@@ -379,6 +379,9 @@ describe('avatar main wiring', () => {
     expect(await rejection(() => method(test, 'takeBack')({ worktreeIds: 'w' }))).toBe('invalid-params')
     expect(await rejection(() => method(test, 'mandate')({}))).toBe('invalid-params')
     expect(await rejection(() => method(test, 'resolveNeed')({ needId: 'n', action: 'explode' }))).toBe('invalid-params')
+    for (const answers of [null, [], 'yes', 1, true]) {
+      expect(await rejection(() => method(test, 'resolveNeed')({ needId: 'n', action: 'answer', answers }))).toBe('invalid-params')
+    }
     expect(await rejection(() => method(test, 'log')({ limit: -1 }))).toBe('invalid-params')
     expect(await rejection(() => method(test, 'setSettings')({ defaultLevel: 'reckless' }))).toBe('invalid-params')
     expect(await rejection(() => method(test, 'setSettings')({ surprise: true }))).toBe('invalid-params')
