@@ -616,13 +616,13 @@ function unknownGitValue(value: ShellWord): ShellWord {
   return value.dynamic ? value : { text: value.text, dynamic: true, subs: value.subs }
 }
 
-function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>, detached = false): Map<string, ShellWord> {
+function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>): Map<string, ShellWord> {
   const env = new Map(inherited)
   for (const assignment of parsed.assignments) {
-    if (GIT_ENV_NAMES.has(assignment.name)) env.set(assignment.name, detached ? unknownGitValue(assignment.value) : assignment.value)
+    if (GIT_ENV_NAMES.has(assignment.name)) env.set(assignment.name, assignment.value)
   }
   for (const assignment of parsed.wrapperAssignments) {
-    env.set(assignment.name, detached ? unknownGitValue(assignment.value) : assignment.value)
+    env.set(assignment.name, assignment.value)
   }
   return env
 }
@@ -745,7 +745,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       }
     } else if (isShell && commandFlag >= 0 && args[commandFlag + 1] !== undefined) {
       const body = parsed.argWords[commandFlag + 1]
-      const inner = analyzeCommand(body.text, cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv, shellCommand.detached))
+      const inner = analyzeCommand(body.text, cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
       nestedNonDirectoryRead = inner.nonDirectoryRead ?? false
       append(partClasses, inner.classes)
@@ -755,7 +755,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       if (!downloadInPipeline) partClasses.push('other')
     } else if (cmd === 'eval' && args.length > 0) {
       const dynamicEval = parsed.argWords.some((word) => word.dynamic)
-      const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv, shellCommand.detached))
+      const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
       nestedNonDirectoryRead = inner.nonDirectoryRead ?? false
       if (!dynamicEval && shellCommand.scope === 0 && inner.cwdChanged) cwdChanged = true
@@ -798,7 +798,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       }
     } else if (cmd !== '') {
       parts.push(parsed.text)
-      append(partClasses, classifyMainCommand(parsed, ctx, cwd, shellEnv, pushDests, shellCommand.detached))
+      append(partClasses, classifyMainCommand(parsed, ctx, cwd, shellEnv, pushDests))
     }
     let countedDynamic = parsed.dynamicBeforeCommand
     if (!countedDynamic && !parsed.dynamicCommand && cmd !== 'eval' && cmd !== 'cd' && cmd !== 'pushd' && cmd !== 'popd' &&
@@ -819,7 +819,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     }
     if (countedDynamic) partClasses.push('other')
     if (parsed.throughXargs && cmd !== '') {
-      const xargsShellBody = isShell && commandFlag >= 0 && args[commandFlag + 1] !== undefined
+      const xargsShellBody = isShell && commandFlag >= 0
       if (isWriteCommand(cmd, args) || xargsShellBody || cmd === 'eval') partClasses.push('edit-outside')
       else if (NO_ARGUMENT_EFFECT_CMDS[cmd] !== true) {
         commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
@@ -874,13 +874,13 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
   return { classes, parts, pushDests, cwd: directoryFor(0), cwdChanged, env: environmentFor(0), envChanges, nonDirectoryRead }
 }
 
-function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[], detached: boolean): ActionClass[] {
+function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[]): ActionClass[] {
   const { cmd, args, text } = parsed
   if (parsed.dynamicCommand) return ['other']
   const deploy = matchesCommandList(text, ctx.deployCommands) || isBuiltinDeploy(cmd, args)
   if (deploy) return ['deploy']
   let classes: ActionClass[]
-  if (cmd === 'git') classes = classifyGit(parsed.argWords, commandEnvironment(parsed, shellEnv, detached), ctx, cwd, pushDests)
+  if (cmd === 'git') classes = classifyGit(parsed.argWords, commandEnvironment(parsed, shellEnv), ctx, cwd, pushDests)
   else if (cmd === 'gh' || cmd === 'glab') classes = classifyPullRequestCli(cmd, args)
   else if (DOWNLOAD_CMDS.has(cmd)) classes = classifyDownload(args)
   else if (cmd === 'security') classes = ['credential']

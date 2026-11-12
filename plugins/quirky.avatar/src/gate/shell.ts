@@ -4,8 +4,8 @@ export type ShellWord = {
   text: string
   /**
    * True when the shell would compute part of the value and the reader can't know it.
-   * A double-quoted `$(cat <<'DELIM' … DELIM)` is not dynamic: it contributes the heredoc
-   * body without its trailing newlines.
+   * A double-quoted `$(cat <<'DELIM' … DELIM)` on stdin is not dynamic: it contributes
+   * the heredoc body without its trailing newlines.
    */
   dynamic: boolean
   /** The scopes of the substitutions written directly inside this word. */
@@ -50,6 +50,7 @@ type PendingHeredoc = {
   delimiter: string
   stripTabs: boolean
   quoted: boolean
+  stdin: boolean
   before: Entry[]
   ownerScope: number
   ownerDepth: number
@@ -338,6 +339,7 @@ class ShellReader {
         const op = redirect.op
         if (op === '<<' || op === '<<-') {
           if (target.word.dynamic) return null
+          const descriptor = this.source.slice(redirect.start, redirect.end - op.length)
           const item: ShellRedirect = { kind: 'heredoc', target: target.word }
           command.command.redirects.push(item)
           heredocs.push({
@@ -345,6 +347,7 @@ class ShellReader {
             delimiter: target.word.text,
             stripTabs: op === '<<-',
             quoted: target.quoted,
+            stdin: descriptor === '' || /^0+$/.test(descriptor),
             before: command.before,
             ownerScope: scope,
             ownerDepth: depth
@@ -394,7 +397,7 @@ class ShellReader {
         kind: 'command',
         command: active.command,
         before: active.before,
-        quotedHeredoc: heredocs.length === 1 && heredocs[0]?.quoted === true
+        quotedHeredoc: heredocs.length === 1 && heredocs[0]?.quoted === true && heredocs[0]?.stdin === true
       },
       heredocs
     }

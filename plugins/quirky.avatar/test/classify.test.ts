@@ -939,6 +939,21 @@ describe('unseen arguments and directories', () => {
     expect(classes).not.toContain('edit-inside')
   })
 
+  test('preserves explicit hook-skipping values on detached commands', () => {
+    for (const command of ['HUSKY=0 git commit -m x | cat', 'env HUSKY=0 git commit -m x &']) {
+      expect(bash(command)).toContain('skip-hooks')
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'deny', step: 'fixed-rules' })
+    }
+  })
+
+  test('holds a shell body supplied only by xargs input', () => {
+    expectClassSet('echo "\'touch /home/u/x\'" | xargs sh -c', ['read', 'other', 'edit-outside'])
+  })
+
+  test('does not use a non-stdin heredoc as the value returned by cat', () => {
+    expectClassSet(`printf '/home/u/Documents\\n' | rm -rf "$(cat 3<<'EOF'\n/work/wt/safe\nEOF\n)"`, ['read', 'edit-outside'])
+  })
+
   test('15: holds text beyond four nested eval or shell bodies and omits unreadable parts', () => {
     const rows: [string, ActionClass[]][] = [
       ['eval eval eval eval rm -rf /home/u/x', ['edit-outside']],

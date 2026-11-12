@@ -435,6 +435,7 @@ describe('parseShell heredocs', () => {
       ['qualified cat command', 'echo "$(/bin/cat <<\'EOF\'\na\nEOF\n)"'],
       ['command assignment', 'echo "$(X=1 cat <<\'EOF\'\na\nEOF\n)"'],
       ['additional redirect', 'echo "$(cat <<\'EOF\' 2>/dev/null\na\nEOF\n)"'],
+      ['non-stdin heredoc', 'echo "$(cat 3<<\'EOF\'\na\nEOF\n)"'],
       ['here-string', 'echo "$(cat <<< \'a\')"'],
       ['parameter expansion', 'echo "${X:-$(cat <<\'EOF\'\na\nEOF\n)}"'],
       ['separate dynamic expansion', 'echo "$X $(cat <<\'EOF\'\na\nEOF\n)"']
