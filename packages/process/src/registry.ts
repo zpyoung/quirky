@@ -12,7 +12,7 @@ type Entry = {
 const entries = new Set<Entry>()
 const retainedEntries = new Set<Entry>()
 
-/** Tracks a leader until exit and can retain its operation until it settles. */
+/** Tracks a leader until exit and retains its operation until it settles. */
 export function registerProcess(
   runner: symbol,
   owner: string,
@@ -20,17 +20,14 @@ export function registerProcess(
   child: StartedChild,
   stop: () => void,
   finished: Promise<void>,
-  retainUntilFinished = false,
 ): () => void {
   const entry: Entry = { runner, info: { pid: child.pid, owner, command, startedAt: Date.now() }, stop, finished }
   entries.add(entry)
-  if (retainUntilFinished) {
-    retainedEntries.add(entry)
-    void finished.then(
-      () => retainedEntries.delete(entry),
-      () => retainedEntries.delete(entry),
-    )
-  }
+  retainedEntries.add(entry)
+  void finished.then(
+    () => retainedEntries.delete(entry),
+    () => retainedEntries.delete(entry),
+  )
   return () => { entries.delete(entry) }
 }
 

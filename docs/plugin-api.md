@@ -13,6 +13,7 @@ The freeze covers the public declarations and their referenced contract types, i
 - [`CliContext` and `CliModule`](../packages/protocol/src/cli.ts): module-backed CLI command handlers.
 - [`ApiDescription` and CLI catalog entries](../packages/protocol/src/catalog.ts): published daemon API and command metadata.
 - [`PLUGIN_API_VERSION` and compatibility rules](../packages/protocol/src/plugin-api.ts): the host API release and stable-floor comparison.
+- [`ProcessRunner`, `RunOptions` and `RunResult`](../packages/protocol/src/process.ts): daemon plugin subprocess commands, their options, and the results they resolve with.
 - [Protocol JSON schemas and daemon manifest parsing](../packages/protocol/src/kernel-schemas.ts)
   and [the manifest parser](../packages/daemon/src/plugins/manifest.ts): accepted manifest and contribution data.
 
@@ -50,14 +51,36 @@ when their plugin unloads. A plugin that uses either field declares `"apiVersion
 A held event keeps a reference to the emitted payload; a plugin must not mutate it after `emit`.
 
 `quirky.session-info/changed`, `quirky.git/changed`, `quirky.git/reviewChanged` and
-`quirky.git/notesChanged` coalesce. `quirky.editor/changed` and `quirky.editor/explorerChanged`
-are not coalesced; `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.git/notesChanged` coalesce. `quirky.editor/changed` and
+`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
+emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
+every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
+and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
+listeners act on the states in between.
 
-API 1.4 adds `UiPluginContext.subscribe(listener, { worktreeId })`. A string leaves out plugin
+### API 1.4: Process runner
+
+API 1.4 adds `context.process` to daemon plugin contexts. `context.process.run(argv, options)`
+resolves with a `RunResult` for any exit code, including nonzero, and when a command is stopped
+by timeout, abort or output overflow, or cannot start (reported in `spawnError`). It rejects for
+bad arguments, a disposed runner, output that never ends after the command exits, or unexpected
+pipe/child-exit failures. For those unexpected failures, it kills the process group and rejects
+with the original error.
+
+`cwd` defaults to the daemon's working directory. `env` is the whole child environment: it
+defaults to `process.env` at call time, and a supplied value is not merged with it. The deadline
+defaults to 30 seconds. The host kills the plugin's remaining children when its activation ends.
+`deactivate` may still call `context.process.run`; the runner is disposed when deactivation
+finishes. The object exposes only `run`; `spawn` is not part of API 1.4.
+
+### API 1.5: Scoped UI subscriptions
+
+API 1.5 adds `UiPluginContext.subscribe(listener, { worktreeId })`. A string leaves out plugin
 events tagged with another worktree; `null` leaves out every tagged plugin event. Omitting the
 option delivers every event. Untagged plugin events and all kernel events are always delivered,
 even when their payload or a kernel event names another worktree. The scope is fixed at subscribe
-time. A plugin that uses the option declares `"apiVersion": "1.4.0"`.
+time. A plugin that uses the option declares `"apiVersion": "1.5.0"`.
 
 ## Manifest declaration
 
@@ -159,8 +182,15 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   250 ms window; held emits can arrive after events from other keys, and are dropped when the plugin
   unloads. A declared worktree path with a non-empty string is copied to the event's `worktreeId`.
   A plugin that uses either field declares `apiVersion` 1.3.0.
-- **1.4.0** adds optional worktree scoping to `UiPluginContext.subscribe`. Untagged plugin events
-  and kernel events remain unfiltered. A plugin that uses the option declares `apiVersion` 1.4.0.
+- **1.4.0** adds `context.process.run(argv, options)` for daemon plugins. It resolves for any exit
+  code, including nonzero, timeout, abort, output overflow and spawn errors. It rejects bad
+  arguments, a disposed runner, stalled output after exit, and unexpected pipe/child-exit
+  failures. Defaults are the daemon's working directory, `process.env` at call time (a supplied
+  environment replaces it) and a 30-second deadline. Children are killed when activation ends;
+  `deactivate` may still call `run`. Only `run` is exposed; `spawn` is not part of this release.
+  A plugin that uses it declares `apiVersion` 1.4.0.
+- **1.5.0** adds optional worktree scoping to `UiPluginContext.subscribe`. Untagged plugin events
+  and kernel events remain unfiltered. A plugin that uses the option declares `apiVersion` 1.5.0.
 
 ## Example
 

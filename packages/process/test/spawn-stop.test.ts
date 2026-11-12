@@ -1,11 +1,12 @@
 import { afterEach, expect, test } from 'bun:test'
-import { createProcessRunner, type OwnedProcessRunner } from '../src/api'
-import type { StartChild } from '../src/child'
+import { createProcessRunner, type OwnedProcessRunner, type SpawnOptions } from '../src/api'
+import type { ChildExit, StartChild, StartedChild } from '../src/child'
+import { executeSpawn } from '../src/spawn'
 
 const runners: OwnedProcessRunner[] = []
 
-function runner() {
-  const value = createProcessRunner({ owner: 'test' })
+function runner(extra: { start?: StartChild } = {}) {
+  const value = createProcessRunner({ owner: 'test', ...extra })
   runners.push(value)
   return value
 }
@@ -48,6 +49,51 @@ async function expectGone(pid: number) {
     await Bun.sleep(20)
   } while (Date.now() < until)
   throw new Error(`pid ${pid} survived`)
+}
+
+function closedStream() {
+  return new ReadableStream<Uint8Array>({ start(controller) { controller.close() } })
+}
+
+function childIgnoringTerm(signals: Array<'SIGTERM' | 'SIGKILL'>, pid: number): StartedChild {
+  const { promise: exited, resolve } = Promise.withResolvers<ChildExit>()
+  return {
+    pid,
+    stdout: closedStream(),
+    stderr: closedStream(),
+    exited,
+    killGroup(signal) {
+      signals.push(signal)
+      if (signal === 'SIGKILL') resolve({ exitCode: null, signal: 'SIGKILL' })
+    },
+  }
+}
+
+async function waitBounded<T>(promise: Promise<T>): Promise<T> {
+  const { promise: timeout, reject } = Promise.withResolvers<never>()
+  const timer = setTimeout(() => reject(new Error('process did not exit within 3 seconds')), 3_000)
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function directSpawnWithoutKillGraceMs(start: StartChild, options: Omit<SpawnOptions, 'killGraceMs'>) {
+  return executeSpawn(start, ['/fake/direct-spawn'], options as SpawnOptions & { killGraceMs: number }, 1_000, {
+    onStart: () => () => {},
+  })
+}
+
+function expectMissingGraceError(call: () => unknown) {
+  let error: unknown
+  try {
+    call()
+  } catch (caught) {
+    error = caught
+  }
+  expect(error).toBeInstanceOf(RangeError)
+  expect((error as Error | undefined)?.message).toBe('graceMs must be zero or a positive finite number')
 }
 
 test('16: stop returns the exact exit object and ends a running child promptly', async () => {
@@ -214,4 +260,68 @@ test('29: a leftover holding stdout is killed instead of stalling the stream', a
   expect(Date.now() - startedAt).toBeLessThan(1_000)
   expect(Number(output.trim())).toBeGreaterThan(0)
   expect((await child.exited).exitCode).toBe(0)
+}, 15_000)
+
+test('30: the runner kill grace escalates stop, timeout, and abort', async () => {
+  const stopSignals: Array<'SIGTERM' | 'SIGKILL'> = []
+  const stopRunner = runner({ start: (() => childIgnoringTerm(stopSignals, 900_030)) as StartChild })
+  const stoppedChild = stopRunner.spawn(['/fake/stop'], { timeoutMs: 5_000, killGraceMs: 50 })
+  const stopped = await waitBounded(stoppedChild.stop())
+  expect(stopSignals).toEqual(['SIGTERM', 'SIGKILL', 'SIGKILL'])
+  expect(stopped.signal).toBe('SIGKILL')
+  expect(stopped.stopped).toBe('stop')
+
+  const timeoutSignals: Array<'SIGTERM' | 'SIGKILL'> = []
+  const timeoutRunner = runner({ start: (() => childIgnoringTerm(timeoutSignals, 900_031)) as StartChild })
+  const timedChild = timeoutRunner.spawn(['/fake/timeout'], { timeoutMs: 50, killGraceMs: 50 })
+  const timedOut = await waitBounded(timedChild.exited)
+  expect(timeoutSignals).toEqual(['SIGTERM', 'SIGKILL', 'SIGKILL'])
+  expect(timedOut.signal).toBe('SIGKILL')
+  expect(timedOut.stopped).toBe('timeout')
+
+  const abortSignals: Array<'SIGTERM' | 'SIGKILL'> = []
+  const abortRunner = runner({ start: (() => childIgnoringTerm(abortSignals, 900_032)) as StartChild })
+  const controller = new AbortController()
+  const abortedChild = abortRunner.spawn(['/fake/abort'], {
+    timeoutMs: 5_000,
+    killGraceMs: 50,
+    signal: controller.signal,
+  })
+  controller.abort()
+  const aborted = await waitBounded(abortedChild.exited)
+  expect(abortSignals).toEqual(['SIGTERM', 'SIGKILL', 'SIGKILL'])
+  expect(aborted.signal).toBe('SIGKILL')
+  expect(aborted.stopped).toBe('aborted')
+}, 15_000)
+
+test('31: executeSpawn requires killGraceMs for an already-aborted spawn', () => {
+  let starts = 0
+  const controller = new AbortController()
+  controller.abort()
+  const handle = directSpawnWithoutKillGraceMs(() => {
+    starts++
+    throw new Error('an already-aborted spawn must not start')
+  }, { timeoutMs: null, signal: controller.signal })
+  expectMissingGraceError(() => handle.stop())
+  expect(starts).toBe(0)
+}, 15_000)
+
+test('32: executeSpawn requires killGraceMs after a start failure', () => {
+  const handle = directSpawnWithoutKillGraceMs(() => {
+    throw new Error('start failed')
+  }, { timeoutMs: null })
+  expectMissingGraceError(() => handle.stop())
+}, 15_000)
+
+test('33: executeSpawn requires killGraceMs for an active child', async () => {
+  const signals: Array<'SIGTERM' | 'SIGKILL'> = []
+  const handle = directSpawnWithoutKillGraceMs(
+    (() => childIgnoringTerm(signals, 900_033)) as StartChild,
+    { timeoutMs: null },
+  )
+  try {
+    expectMissingGraceError(() => handle.stop())
+  } finally {
+    await waitBounded(handle.stop({ signal: 'SIGKILL', graceMs: 0 }))
+  }
 }, 15_000)

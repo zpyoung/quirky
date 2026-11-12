@@ -117,7 +117,7 @@ function makeStoppedResult(stdout: Uint8Array, stderr: Uint8Array, exit: ChildEx
 }
 
 
-function isPositiveTimerDelay(remaining: number): number {
+function clampTimerDelay(remaining: number): number {
   return Math.min(Math.max(remaining, 0), MAX_TIMER_DELAY_MS)
 }
 
@@ -133,8 +133,9 @@ async function runAttempt({
 }: AttemptConfig): Promise<AttemptResult> {
   let child: StartedChild
   try {
+    const cwd = options.cwd ?? process.cwd()
     const input = typeof options.input === 'string' ? new TextEncoder().encode(options.input) : options.input
-    child = config.start(argv, { cwd: options.cwd, env: options.env, input })
+    child = config.start(argv, { cwd, env: options.env, input })
   } catch (error) {
     return { kind: 'result', result: spawnErrorResult(error, startedAt) }
   }
@@ -168,7 +169,7 @@ async function runAttempt({
       if (!exit) killGroup('SIGKILL')
       return
     }
-    graceTimer = setTimeout(() => armGraceTimer(requestedAt), isPositiveTimerDelay(remaining))
+    graceTimer = setTimeout(() => armGraceTimer(requestedAt), clampTimerDelay(remaining))
   }
   const requestStop = (reason: RunStopped) => {
     if (attemptFinished || (stopped !== undefined && reason !== 'overflow')) return
@@ -178,7 +179,7 @@ async function runAttempt({
     if (reason === 'overflow') {
       clearTimeout(graceTimer)
       graceTimer = undefined
-      killGroup('SIGKILL')
+      if (!exit) killGroup('SIGKILL')
     } else if (!exit) {
       killGroup('SIGTERM')
       armGraceTimer(Date.now())
@@ -188,13 +189,13 @@ async function runAttempt({
   const armDeadline = () => {
     const remaining = deadlineMs - Date.now()
     if (remaining <= 0) requestStop('timeout')
-    else deadlineTimer = setTimeout(armDeadline, isPositiveTimerDelay(remaining))
+    else deadlineTimer = setTimeout(armDeadline, clampTimerDelay(remaining))
   }
   const stopForDisposal = () => {
     if (attemptFinished) return
     stopped = 'aborted'
     clearStopTimers()
-    killGroup('SIGKILL')
+    if (!exit) killGroup('SIGKILL')
     resolveStopRequested()
   }
 
@@ -203,8 +204,7 @@ async function runAttempt({
   const exited = child.exited.then(
     (childExit) => {
       exit = childExit
-      clearTimeout(graceTimer)
-      graceTimer = undefined
+      clearStopTimers()
       // a one-shot command must not leave descendants alive or holding its output pipes open
       killGroup('SIGKILL')
       unregister()
@@ -247,7 +247,6 @@ async function runAttempt({
     if (abortSignal.aborted) requestStop('aborted')
   }
   if (stopped === undefined) armDeadline()
-  if (config.isDisposed()) stopForDisposal()
 
   try {
     await Promise.race([
@@ -256,7 +255,7 @@ async function runAttempt({
       stallObserved.then(() => 'stalled' as const),
     ])
     if (stopped !== undefined) {
-      if (!exit) await exited
+      if (!exit) await Promise.race([exited, allDone])
       stdoutReader.cancel().catch(() => {})
       stderrReader.cancel().catch(() => {})
       await allDone
@@ -289,7 +288,7 @@ async function runAttempt({
     const completedExit = exit ?? { exitCode: null, signal: null }
     return { kind: 'result', result: resultFromBytes(stdoutCapture.bytes(), stderrCapture.bytes(), completedExit.exitCode, completedExit.signal, startedAt) }
   } catch (error) {
-    killGroup('SIGKILL')
+    if (!exit) killGroup('SIGKILL')
     void stdoutReader.cancel().catch(() => {})
     void stderrReader.cancel().catch(() => {})
     await Promise.allSettled([exited, stdoutDone, stderrDone])
@@ -324,15 +323,21 @@ export async function executeRun(
   const stallMs = config.stallMs ?? (options.rerunnable ? DEFAULT_RERUNNABLE_STALL_MS : DEFAULT_STALL_MS)
   let attempts = 0
   let lastStall: Extract<AttemptResult, { kind: 'stalled' }> | undefined
+  let stoppedByRunner = false
+  const attemptConfig = {
+    ...config,
+    onStart(child: StartedChild, stop: () => void) {
+      return config.onStart(child, () => {
+        stoppedByRunner = true
+        stop()
+      })
+    },
+  }
 
   for (;;) {
-    if (config.isDisposed() || options.signal?.aborted) {
+    if (config.isDisposed() || stoppedByRunner || options.signal?.aborted) {
       if (lastStall) return makeStoppedResult(lastStall.stdout, lastStall.stderr, lastStall.exit, startedAt, 'aborted')
       return emptyResult('aborted', Date.now() - startedAt)
-    }
-    if (Date.now() >= deadlineMs) {
-      if (lastStall) return makeStoppedResult(lastStall.stdout, lastStall.stderr, lastStall.exit, startedAt, 'timeout')
-      return emptyResult('timeout', Date.now() - startedAt)
     }
 
     attempts++
@@ -344,16 +349,15 @@ export async function executeRun(
       killGraceMs,
       maxOutputBytes,
       stallMs,
-      config,
+      config: attemptConfig,
     })
     if (outcome.kind === 'result') return outcome.result
     lastStall = outcome
-    if (config.isDisposed() || options.signal?.aborted) {
+    if (config.isDisposed() || stoppedByRunner || options.signal?.aborted) {
       return makeStoppedResult(outcome.stdout, outcome.stderr, outcome.exit, startedAt, 'aborted')
     }
-    if (Date.now() >= deadlineMs) {
-      return makeStoppedResult(outcome.stdout, outcome.stderr, outcome.exit, startedAt, 'timeout')
+    if (!options.rerunnable || attempts >= MAX_STALL_ATTEMPTS || Date.now() >= deadlineMs) {
+      throw new ProcessStalledError(argv[0] ?? '', attempts)
     }
-    if (!options.rerunnable || attempts >= MAX_STALL_ATTEMPTS) throw new ProcessStalledError(argv[0] ?? '', attempts)
   }
 }

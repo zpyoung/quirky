@@ -428,6 +428,7 @@ function makeContext(
     getSetting: () => undefined,
     storedSettingValue: () => undefined,
     error: (_kind, message) => new Error(message),
+    process: { run: async () => { throw new Error('unexpected process run in the orchestration fixture') } },
     pty: null as never,
     notify: () => {},
     launch: null as never

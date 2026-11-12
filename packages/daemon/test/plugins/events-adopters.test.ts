@@ -26,7 +26,7 @@ test('SC-29: adopted event metadata is cataloged and API floors stay compatible'
   expect(adopters.get('quirky.editor')?.state).not.toBe('invalid')
   expect(adopters.get('quirky.session-info')?.state).not.toBe('invalid')
   for (const floor of [gitFloor, editorFloor]) {
-    expect(floor).toBe('1.4.0')
+    expect(floor).toBe('1.5.0')
     expect(pluginApiCompatibilityError(floor, '1.2.0')).not.toBeNull()
     expect(pluginApiCompatibilityError(floor)).toBeNull()
   }

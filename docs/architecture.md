@@ -134,6 +134,12 @@ more from the log on request. The renderer never holds more than its window, and
 visible is unmounted: its xterm.js instance is disposed and reattaches from the PTY host when shown.
 The mobile app and the CLI use the same snapshot and history calls.
 
+Each `pty.sock` connection holds at most 256 MiB of encoded output across its socket queue and
+pending subscribe output. Exceeding that cap disconnects the peer, removes its subscriptions and
+clears queued bytes immediately. Unsubscribe and session removal or termination reclaim unstarted
+frames for that session; a partially written frame finishes so other sessions and RPC replies
+remain decodable. Custom non-terminating signals do not reclaim output.
+
 The screen emulator is where the stacks differ. On Bun it is `@xterm/headless` with `scrollback: 0`.
 In Go, terminal emulation libraries are young (tuios.dev/vt, vt-go), so the fallback is to record
 redraw points instead of emulating: offsets where the screen was fully redrawn (clear screen,

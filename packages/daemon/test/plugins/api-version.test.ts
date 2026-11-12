@@ -5,6 +5,9 @@ import { PLUGIN_API_VERSION, RpcErrorCode, type ApiDescription, type PluginInfo,
 import { makeTempHome, startHarness, type Harness } from '../helpers'
 import { makeTempDir, readMarker, removeTempDirs, writePlugin } from './fixtures'
 
+const apiVersionParts = PLUGIN_API_VERSION.split('.').map(Number) as [number, number, number]
+const NEXT_API_MINOR_VERSION = `${apiVersionParts[0]}.${apiVersionParts[1] + 1}.0`
+
 type TestPluginManifest = { id: string } & Record<string, unknown>
 
 const SETTINGS_ID = 'setting:quirky.terminal/scrollback'
@@ -94,7 +97,7 @@ describe('daemon plugin API version freeze', () => {
       id: 'acme.future-discovered',
       name: 'Future plugin',
       version: '1.0.0',
-      apiVersion: '1.5.0',
+      apiVersion: NEXT_API_MINOR_VERSION,
       main: 'main.ts',
       contributes: { method: [{ id: 'hidden' }] }
     }
@@ -146,7 +149,7 @@ describe('daemon plugin API version freeze', () => {
     const discovered = listed.find((plugin) => plugin.id === 'acme.future-discovered')!
     expect(discovered.state).toBe('invalid')
     expect(discovered.apiVersion).toBeUndefined()
-    expect(discovered.diagnostics.map((item) => item.message).join('\n')).toContain('1.5.0')
+    expect(discovered.diagnostics.map((item) => item.message).join('\n')).toContain(NEXT_API_MINOR_VERSION)
     expect(discovered.diagnostics.map((item) => item.message).join('\n')).toContain(PLUGIN_API_VERSION)
     expect((await errorOf(client.call('plugin.activate', { pluginId: 'acme.future-discovered' }))).code).toBe(RpcErrorCode.Conflict)
     const missing = listed.find((plugin) => plugin.id === 'acme.missing-api')!
@@ -164,7 +167,7 @@ describe('daemon plugin API version freeze', () => {
     for (const refusal of [inspection, install]) {
       expect(refusal.code).toBe(RpcErrorCode.InvalidParams)
       expect(refusal.message).toContain('apiVersion')
-      expect(refusal.message).toContain('1.5.0')
+      expect(refusal.message).toContain(NEXT_API_MINOR_VERSION)
       expect(refusal.message).toContain(PLUGIN_API_VERSION)
     }
     expect(existsSync(join(home, 'plugins', 'acme.future-source'))).toBe(false)
@@ -214,7 +217,7 @@ describe('daemon plugin API version freeze', () => {
       id: 'acme.stable',
       name: 'Future plugin',
       version: '1.0.0',
-      apiVersion: '1.5.0',
+      apiVersion: NEXT_API_MINOR_VERSION,
       main: 'main.ts',
       contributes: { method: [{ id: 'never' }] }
     }, 9000, ['acme.stable'])
@@ -238,7 +241,7 @@ describe('daemon plugin API version freeze', () => {
     for (const refusal of [inspected, installed]) {
       expect(refusal.code).toBe(RpcErrorCode.InvalidParams)
       expect(refusal.message).toContain('acme.stable')
-      expect(refusal.message).toContain('1.5.0')
+      expect(refusal.message).toContain(NEXT_API_MINOR_VERSION)
       expect(refusal.message).toContain(PLUGIN_API_VERSION)
     }
     expect({

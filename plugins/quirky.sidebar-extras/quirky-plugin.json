@@ -275,6 +275,7 @@
           "type": "object",
           "properties": {
             "worktreeId": { "description": "Canonical worktree ID, or null when there is no active selection." },
+            "instanceId": { "description": "The workspace's instance ID, or null when there is no workspace or it could not be resolved." },
             "count": { "type": "integer", "minimum": 0 },
             "capped": { "type": "boolean" },
             "title": { "type": "string" },
@@ -282,7 +283,7 @@
             "available": { "type": "boolean" },
             "error": { "type": "string", "description": "Reason status could not be read, when unavailable." }
           },
-          "required": ["worktreeId", "count", "capped", "title", "dirty", "available"],
+          "required": ["worktreeId", "instanceId", "count", "capped", "title", "dirty", "available"],
           "additionalProperties": false
         }
       }

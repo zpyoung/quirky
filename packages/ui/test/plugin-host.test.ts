@@ -8,6 +8,9 @@ import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin, writePlugin
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
 import { settingsGroups } from '../src/plugins/settingsGroups'
 
+const apiVersionParts = PLUGIN_API_VERSION.split('.').map(Number) as [number, number, number]
+const NEXT_API_MINOR_VERSION = `${apiVersionParts[0]}.${apiVersionParts[1] + 1}.0`
+
 type El = Record<string, unknown>
 type Imported = { url: string; mod: { ctx?: UiPluginContext } }
 type Writer = (installed: string, marker: string) => void
@@ -827,7 +830,7 @@ describe('window plugin host against a real daemon', () => {
 
   test('newer UI hosts reject skewed module floors before actual module import', async () => {
     const apiVersions: [string, unknown][] = [
-      ['acme.future', '1.5.0'],
+      ['acme.future', NEXT_API_MINOR_VERSION],
       ['acme.missing', undefined],
       ['acme.malformed', '^1.0.0'],
       ['acme.nonstring', 1]

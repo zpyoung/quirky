@@ -304,7 +304,7 @@ export type MountFunction = (
 /** Runs a command, with the arguments it was invoked with. */
 export type CommandHandler = (args?: unknown) => unknown
 
-/** Narrows a UI event subscription. Plugin API 1.4.0. */
+/** Narrows a UI event subscription. Plugin API 1.5.0. */
 export type UiSubscribeOptions = {
   /**
    * A worktree ID leaves out plugin events tagged with another worktree; null leaves out all

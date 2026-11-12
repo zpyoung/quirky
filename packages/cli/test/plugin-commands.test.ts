@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { QuirkyClient, type ApiCatalog, type Schema } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, QuirkyClient, type ApiCatalog, type Schema } from '@quirky/protocol'
 import { createDaemonLink } from '../src/link'
 import { cliContextFor } from '../src/plugin-commands'
 import { Printer } from '../src/output'
 import type { Context } from '../src/commands/types'
 import { FakeDaemon, runCli } from './fixtures/fake-daemon'
+
+const apiVersionParts = PLUGIN_API_VERSION.split('.').map(Number) as [number, number, number]
+const NEXT_API_MINOR_VERSION = `${apiVersionParts[0]}.${apiVersionParts[1] + 1}.0`
 
 const NOTE_PARAMS: Schema = {
   type: 'object',
@@ -194,7 +197,7 @@ describe('a declared command with a CLI module', () => {
     expect(gone.stderr).toContain('could not load the CLI module of acme.notes')
   })
   test('incompatible, missing, and malformed API floors fail before importing the module', async () => {
-    for (const apiVersion of ['1.5.0', undefined, '^1.0.0', 1]) {
+    for (const apiVersion of [NEXT_API_MINOR_VERSION, undefined, '^1.0.0', 1]) {
       setCommandApiVersion('cli-command:acme.notes/greet', apiVersion)
       const result = await run(['acme.notes', 'greet'])
       expect(result.code).toBe(1)

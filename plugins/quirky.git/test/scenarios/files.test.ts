@@ -40,6 +40,7 @@ describe('save', () => {
     await waitFor(() => s!.changedEvents() >= before + 1)
     expect(await s.api('save', { path: 'fresh.txt', content: 'y\n' })).toEqual({ hash: sha256('y\n') })
     await waitFor(() => s!.changedEvents() >= before + 2)
+    expect(s.changedEvents()).toBe(before + 2)
     expect(read('fresh.txt')).toBe('y\n')
 
     const refused = await s.fails(s.api('save', { path: 'missing.txt', content: 'z\n', expected: sha256('old') }))

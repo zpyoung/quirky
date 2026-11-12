@@ -239,6 +239,7 @@ does not load local images.
   all use.
 - **`packages/ui`:** the React UI, served by the daemon.
 - **`packages/cli`:** the `quirky` command.
+- **`packages/git`:** git operations and worktree/status helpers.
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
@@ -246,6 +247,12 @@ does not load local images.
 without exiting. Startup failures still exit with status 1; a duplicate instance exits with
 status 0. A failed PTY-host shutdown logs its error, cleans up its listener and PID file, and
 exits with status 1.
+
+The git runner and status/compare streams share eight child-process slots, with queued writes
+ahead of reads. Identical read-only calls share a run only if it starts after every caller arrived;
+later callers wait for the next run. Completed results are not cached, and shared results are
+isolated from caller mutation. Package writes invalidate read cohorts on entry and settlement.
+Direct blob/patch streams and `gh` execution do not use this gate.
 
 A PR's checks run the tests its change affects on GitHub Actions. Add the `full-suite` label to run
 every test, on that push and later ones. Agents push to a draft PR for results and don't run suites

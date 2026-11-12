@@ -105,6 +105,7 @@ class Runtime {
       },
       getSetting: () => undefined, storedSettingValue: () => undefined,
       error(kind, message) { return Object.assign(new Error(message), { code: kind }) },
+      process: { run: async () => { throw new Error('Loop engine tests must not run subprocesses') } },
       pty: {} as PluginContext['pty'], notify: () => undefined, launch: {} as PluginContext['launch']
     } as PluginContext
   }
