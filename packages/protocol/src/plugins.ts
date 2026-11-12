@@ -421,7 +421,10 @@ export type ToolGateRequest = {
 
 /**
  * The provider's answer. `encoded` is the exact stdout text the agent must see, or null when there
- * is none; `exitCode` defaults to 0. `unavailable` is never an approval.
+ * is none; `exitCode` defaults to 0 and, when present, must be an integer from 0 to 255. A `deny`
+ * accepts `encoded: null` or text containing a character other than ASCII space, tab, carriage
+ * return or newline; `allow` and `passthrough` may use an empty string. The daemon normalizes an
+ * `unavailable` answer to `encoded: null` with no `exitCode`.
  */
 export type ToolGateDecision = {
   decision: 'allow' | 'deny' | 'passthrough' | 'unavailable'

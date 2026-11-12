@@ -8,9 +8,10 @@ import type {
 import { callFingerprint } from '../fingerprint'
 import { createGateChecker, type GateChecker } from '../gatecheck'
 import { encodeDecision } from '../hooks/encode'
+import { createAgentHooks } from '../hooks/agent-hooks'
 import {
-  cachedClaudeVersion, clearMarkerFiles, createGateLaunchHook, hasMarkerFile, installCodexHooks, installPiExtensions, isRealHomeInTest,
-  processAgentEnv, readMarkerFile, removeCodexHooks, removeMarkerFile, writeMarkerFile, type AgentEnv
+  cachedClaudeVersion, createGateLaunchHook, hasMarkerFile,
+  processAgentEnv, readMarkerFile, removeMarkerFile, writeMarkerFile, type AgentEnv
 } from '../hooks/install'
 import { classifyCall } from './classify'
 import { decide } from './decide'
@@ -22,6 +23,7 @@ const WORKTREE_TTL_MS = 5_000
 const PERMISSION_RECEIPT_WINDOW_MS = 5 * 60_000
 
 const RETRY_REASON = "The avatar hasn't decided yet; try the same call again shortly."
+const STOPPING_REASON = 'The avatar is stopping; try the same call again shortly.'
 const SHADOW_REASON = 'Shadow: the avatar only logs what it would have decided.'
 const UNCONFIRMED_WORKTREE_REASON = "Quirky's avatar gate couldn't confirm the worktree; try again shortly."
 const UNREADABLE_REASON = "The avatar couldn't read this tool call, so it was refused."
@@ -33,7 +35,7 @@ type Verdict = { outcome: GateOutcome; reason: string; reliedOn: string; trace: 
 type Active = { worktreeId: string; sessionId: string | null; mandate: Mandate }
 type BrainAnswer = { decision: 'allow' | 'deny' | 'held'; reliedOn: string; reason: string }
 type WorktreeInfo = { id: string; path: string; branch: string | null; repoId: string; isMain: boolean }
-type InFlight = { call: ToolCall; fingerprint: string; receipt: Receipt; cancelled: boolean; settle(result: Result): void }
+type InFlight = { call: ToolCall; fingerprint: string; receipt: Receipt; cancelled: boolean; shadow: boolean; settle(result: Result): void }
 
 /** Test seams: where agent config lives, how Claude's version is read, and how long a gate check waits on an unseen call. */
 export type GateDeps = { agentEnv?: AgentEnv; claudeVersion?: () => Promise<string | null>; graceMs?: number }
@@ -89,16 +91,18 @@ function readPayload(payload: unknown): { toolName: string; toolInput: unknown; 
  * that fails, times out or is unavailable is ever allowed. At Shadow the gate answers passthrough
  * and journals what it would have done, without making the worker wait on the brain.
  *
- * Also installs the Codex hook entries and the pi/omp extension file at activation. The returned
- * disposer removes every supervision marker, passes in-flight requests through and removes the
- * Codex entries; the extension stays, because it does nothing without a marker and its file time
- * is what the gate check compares with a session's start.
+ * Keeps the Codex hook entries and pi/omp extension in sync with installed agents at activation
+ * and before each gate check. Its disposer stops hook synchronization and the checker, refuses
+ * in-flight non-Shadow calls with a retry reason and settles waiting Shadow calls as passthrough;
+ * installed files remain.
  */
 export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   const agentEnv = deps.agentEnv ?? processAgentEnv()
   const quirkyHome = app.context.home
   const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
-  const checker: GateChecker = createGateChecker({ app, agentEnv, claudeVersion, graceMs: deps.graceMs })
+  const hooks = createAgentHooks({ app, agentEnv })
+  void hooks.sync()
+  const checker: GateChecker = createGateChecker({ app, agentEnv, claudeVersion, graceMs: deps.graceMs, prepare: () => hooks.sync() })
   const inFlight = new Set<InFlight>()
   let worktreeCache: { at: number; list: WorktreeInfo[] } | null = null
 
@@ -284,6 +288,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
 
     const budgetMs = Math.max(1_000, deadlineMs - BRAIN_MARGIN_MS)
     if (shadow) {
+      if (entry.cancelled) return finish(call, 'passthrough', SHADOW_REASON)
       app.store.receipts.put({ ...entry.receipt, outcome: 'passthrough', step: 'judgment' })
       checker.noteReceipt(call.sessionId)
       void judge(call, mandate, budgetMs, signal).then((answer) => {
@@ -322,7 +327,7 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
     const handedBack = new Promise<Result>((done) => {
       settle = done
     })
-    const entry: InFlight = { call, fingerprint, receipt, cancelled: false, settle }
+    const entry: InFlight = { call, fingerprint, receipt, cancelled: false, shadow: active.mandate.level === 'shadow', settle }
     inFlight.add(entry)
     try {
       return await Promise.race([run(entry, active.mandate, deadlineMs, signal), handedBack])
@@ -344,6 +349,34 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
       )
     })
     entry.settle(finish(entry.call, 'passthrough', reason))
+  }
+
+  function stopInFlight(entry: InFlight): void {
+    if (entry.cancelled) return
+    entry.cancelled = true
+    if (entry.shadow) {
+      entry.settle(finish(entry.call, 'passthrough', SHADOW_REASON))
+      try {
+        app.store.receipts.put({ ...entry.receipt, outcome: 'passthrough', step: null })
+      } catch {
+        return
+      }
+      return
+    }
+    const reason = STOPPING_REASON
+    entry.settle(finish(entry.call, 'deny', reason))
+    try {
+      app.store.transaction(() => {
+        app.store.receipts.put({ ...entry.receipt, outcome: 'retry', step: null })
+        app.journal(
+          entry.call.worktreeId,
+          'gate',
+          gateData(entry.call, entry.fingerprint, { outcome: 'retry', reason, reliedOn: 'the avatar stopping', trace: [], step: null }, 'retry')
+        )
+      })
+    } catch {
+      return
+    }
   }
 
   const service: GateService = {
@@ -409,32 +442,12 @@ export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   app.context.provide('tool-gate:quirky.avatar/gate', provider)
   app.context.provide(
     'launch-hook:quirky.avatar/gate-hooks',
-    createGateLaunchHook({ judgmentTimeoutSeconds: () => app.settings().judgmentTimeoutSeconds, claudeVersion, dataDir: app.context.dataDir })
+    createGateLaunchHook({ judgmentTimeoutSeconds: () => app.settings().judgmentTimeoutSeconds, claudeVersion, dataDir: app.context.dataDir, quirkyHome: app.context.home })
   )
-
-  const guarded = !isRealHomeInTest(agentEnv)
-  if (guarded) {
-    const attempt = (what: string, work: () => unknown) => {
-      try {
-        work()
-      } catch (error) {
-        app.context.log(`avatar gate: could not install the ${what}: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
-    attempt("Codex hooks", () => installCodexHooks(agentEnv, app.settings().judgmentTimeoutSeconds))
-    attempt('pi and omp extension', () => installPiExtensions(agentEnv))
-  }
 
   return () => {
     checker.dispose()
-    for (const entry of [...inFlight]) passInFlight(entry)
-    clearMarkerFiles(quirkyHome)
-    if (guarded) {
-      try {
-        removeCodexHooks(agentEnv)
-      } catch (error) {
-        app.context.log(`avatar gate: could not remove the Codex hooks: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
+    hooks.dispose()
+    for (const entry of [...inFlight]) stopInFlight(entry)
   }
 }

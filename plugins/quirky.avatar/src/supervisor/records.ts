@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, watch as fsWatch } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
-import type { AgentKind, AvatarApp, ClassifyContext, Mandate, ToolCall } from '../contracts'
+import type { AgentKind, AvatarApp, ClassifyContext, Mandate, PendingRecordCall, RecordCursor, ToolCall } from '../contracts'
 import { callFingerprint } from '../fingerprint'
 import { classifyCall } from '../gate/classify'
 import { decide } from '../gate/decide'
@@ -37,8 +37,8 @@ export type Records = {
 }
 
 type Observed = { toolName: string; toolInput: unknown; at: number | null; hosted: boolean }
-type Cursor = { path: string; offset: number }
-type Pending = { worktreeId: string; sessionId: string; agent: string; cwd: string; call: Observed & { at: number }; fingerprint: string }
+type Cursor = { path: string; offset: number; worktreeId: string; dirty: boolean }
+type Pending = PendingRecordCall & { worktreeId: string; sessionId: string }
 type SessionRead = { sessionId: string; agent: string; cwd: string; createdAt: number | null; transcriptPath: string | null }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -208,10 +208,59 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
   const syncedWorktrees = new Set<string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const checking = new Map<string, Promise<void>>()
+  let stopped = false
   const watch = deps.watch ?? defaultWatch
   const env = deps.env ?? process.env
   const call = <T>(method: string, params: Record<string, unknown>): Promise<T> => app.context.call(method, params) as Promise<T>
   const graceMs = (): number => deps.graceMs ?? (app.settings().judgmentTimeoutSeconds + 15) * 1000
+
+  function saveCursor(sessionId: string, cursor: Cursor): void {
+    if (stopped || !cursor.dirty) return
+    try {
+      app.store.recordCursors.put({
+        sessionId, worktreeId: cursor.worktreeId, path: cursor.path, readOffset: cursor.offset,
+        pending: pending.filter((item) => item.sessionId === sessionId).map(({ worktreeId, sessionId, ...call }) => call),
+        updatedAt: app.now()
+      })
+      cursor.dirty = false
+    } catch (error) {
+      app.context.log(`avatar record cursor for ${sessionId} could not be saved: ${message(error)}`)
+    }
+  }
+
+  function restoreCursor(worktreeId: string, session: SessionRead, handedOffAt: number): Cursor {
+    let row: RecordCursor | null = null
+    try {
+      row = app.store.recordCursors.get(session.sessionId)
+    } catch (error) {
+      app.context.log(`avatar record cursor for ${session.sessionId} could not be read: ${message(error)}`)
+    }
+    const waiting = row?.pending.filter((item) => item.at >= handedOffAt) ?? []
+    for (const item of waiting) pending.push({ ...item, worktreeId, sessionId: session.sessionId })
+    return {
+      worktreeId, path: session.transcriptPath as string,
+      offset: row?.path === session.transcriptPath ? row.readOffset : 0,
+      dirty: row === null || row.path !== session.transcriptPath || row.worktreeId !== worktreeId || waiting.length !== row.pending.length
+    }
+  }
+
+  function pruneCursors(liveSessions: Set<string | null>): void {
+    let rows: RecordCursor[]
+    try {
+      rows = app.store.recordCursors.list()
+    } catch (error) {
+      app.context.log(`avatar record cursor for all sessions could not be read: ${message(error)}`)
+      return
+    }
+    for (const row of rows) {
+      if (liveSessions.has(row.sessionId)) continue
+      try {
+        app.store.recordCursors.delete(row.sessionId)
+      } catch (error) {
+        app.context.log(`avatar record cursor for ${row.sessionId} could not be saved: ${message(error)}`)
+      }
+    }
+  }
 
   async function readSession(sessionId: string): Promise<SessionRead | null> {
     try {
@@ -256,13 +305,15 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
       noteEdits(worktreeId, session.cwd, seen)
       app.services.gate.noteObservedCall(session.sessionId, fingerprint, at)
       if (!app.services.gate.hasReceipt(session.sessionId, fingerprint, at, RECEIPT_WINDOW_MS)) {
-        pending.push({ worktreeId, sessionId: session.sessionId, agent: session.agent, cwd: session.cwd, call: seen, fingerprint })
+        pending.push({ worktreeId, sessionId: session.sessionId, agent: session.agent, cwd: session.cwd, toolName: seen.toolName, toolInput: seen.toolInput, at, fingerprint })
+        cursor.dirty = true
       }
     }
   }
 
-  async function classifyContext(worktreeId: string, cwd: string, mandate: Mandate, handedOffPaths: string[]): Promise<ClassifyContext> {
+  async function classifyContext(worktreeId: string, cwd: string, mandate: Mandate, handedOffPaths: string[]): Promise<ClassifyContext | null> {
     const [head, compare] = await Promise.all([readHead(app, worktreeId).catch(() => null), readCompare(app, worktreeId).catch(() => null)])
+    if (stopped) return null
     const settings = app.settings()
     return {
       worktreePath: cwd,
@@ -284,19 +335,20 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
       sessionId: item.sessionId,
       worktreeId: item.worktreeId,
       cwd: item.cwd,
-      toolName: item.call.toolName,
-      toolInput: item.call.toolInput,
+      toolName: item.toolName,
+      toolInput: item.toolInput,
       event: 'PreToolUse'
     }
     const ctx = await classifyContext(item.worktreeId, item.cwd, mandate, handedOffPaths)
+    if (stopped || ctx === null) return
     const classes = classifyCall(toolCall, ctx)
     const decision = decide({ call: toolCall, classes, mandate, switches: mandate.switches, level: mandate.level, ctx })
     const base = {
       agent: item.agent,
       sessionId: item.sessionId,
       fingerprint: item.fingerprint,
-      toolName: item.call.toolName,
-      toolInput: bounded(item.call.toolInput),
+      toolName: item.toolName,
+      toolInput: bounded(item.toolInput),
       classes,
       outcome: decision.outcome,
       reason: decision.reason,
@@ -310,24 +362,35 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
     app.journal(item.worktreeId, 'skipped-call', { ...base, wouldHaveStopped: true, top: true })
     const stepped = await app.services.supervisor.stepIn(
       item.worktreeId,
-      `The avatar stopped you: ${summary(item.call.toolName, item.call.toolInput)} ran without passing the gate, and it would not have been allowed (${decision.reason}). Do not repeat it. Say what you were trying to do and find another way.`
+      `The avatar stopped you: ${summary(item.toolName, item.toolInput)} ran without passing the gate, and it would not have been allowed (${decision.reason}). Do not repeat it. Say what you were trying to do and find another way.`
     )
+    if (stopped) return
     if (!stepped.sent) app.journal(item.worktreeId, 'event', { type: 'step-in-refused', reason: stepped.reason ?? 'not sent', fingerprint: item.fingerprint })
   }
 
   async function settlePending(handedOffPaths: string[]): Promise<void> {
-    const waiting = pending.splice(0)
-    for (const item of waiting) {
-      const matched = app.services.gate.hasReceipt(item.sessionId, item.fingerprint, item.call.at, RECEIPT_WINDOW_MS)
-      if (matched) continue
-      if (app.now() - item.call.at < graceMs()) {
-        pending.push(item)
+    for (let index = 0; index < pending.length;) {
+      if (stopped) return
+      const item = pending[index]
+      const matched = app.services.gate.hasReceipt(item.sessionId, item.fingerprint, item.at, RECEIPT_WINDOW_MS)
+      if (!matched && app.now() - item.at < graceMs()) {
+        index++
         continue
       }
-      try {
-        await triage(item, handedOffPaths)
-      } catch (error) {
-        app.journal(item.worktreeId, 'event', { type: 'skipped-call-error', error: message(error), fingerprint: item.fingerprint })
+      if (!matched) {
+        try {
+          await triage(item, handedOffPaths)
+        } catch (error) {
+          if (stopped) return
+          app.journal(item.worktreeId, 'event', { type: 'skipped-call-error', error: message(error), fingerprint: item.fingerprint })
+        }
+        if (stopped) return
+      }
+      pending.splice(index, 1)
+      const cursor = cursors.get(item.sessionId)
+      if (cursor !== undefined) {
+        cursor.dirty = true
+        saveCursor(item.sessionId, cursor)
       }
     }
   }
@@ -383,42 +446,56 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
 
   async function checkSession(worktreeId: string, sessionId: string, handedOffAt: number): Promise<SessionRead | null> {
     const session = await readSession(sessionId)
-    if (session === null) return null
+    if (stopped || session === null) return null
     syncWatchers(worktreeId, session.agent, session.cwd)
     if (session.transcriptPath === null) return session
     let cursor = cursors.get(sessionId)
-    if (cursor === undefined || cursor.path !== session.transcriptPath) {
-      cursor = { path: session.transcriptPath, offset: 0 }
+    if (cursor === undefined) {
+      cursor = restoreCursor(worktreeId, session, handedOffAt)
       cursors.set(sessionId, cursor)
+    } else if (cursor.path !== session.transcriptPath) {
+      cursor.path = session.transcriptPath
+      cursor.offset = 0
+      cursor.dirty = true
     }
+    const previousOffset = cursor.offset
     for (const line of readNewLines(cursor)) observe(worktreeId, session, handedOffAt, line, cursor)
+    if (cursor.offset !== previousOffset) cursor.dirty = true
+    saveCursor(sessionId, cursor)
     return session
   }
 
   const records: Records = {
     async check() {
+      if (stopped) return
       const active = app.services.handoff.active().filter((entry) => entry.sessionId !== null)
       const paths: string[] = []
       for (const entry of active) {
+        if (stopped) return
         const handedOffAt = app.store.handoffs.get(entry.worktreeId)?.handedOffAt ?? 0
         try {
           const session = await checkSession(entry.worktreeId, entry.sessionId as string, handedOffAt)
+          if (stopped) return
           if (session !== null && session.cwd !== '') paths.push(session.cwd)
         } catch (error) {
           app.context.log(`avatar records check failed for ${entry.worktreeId}: ${message(error)}`)
         }
       }
+      if (stopped) return
       const liveSessions = new Set(active.map((entry) => entry.sessionId))
       for (const sessionId of [...cursors.keys()]) if (!liveSessions.has(sessionId)) cursors.delete(sessionId)
+      pruneCursors(liveSessions)
       dropWatchers(new Set(active.map((entry) => entry.worktreeId)))
       await settlePending(paths)
     },
 
     configChanged(worktreeId) {
+      if (stopped) return Promise.resolve()
       const running = checking.get(worktreeId)
       if (running !== undefined) return running
       const run = (async () => {
         const result = await app.services.gate.gateCheck(worktreeId)
+        if (stopped) return
         if (result.ok) return
         const entry = app.services.handoff.active().find((candidate) => candidate.worktreeId === worktreeId)
         if (entry !== undefined && entry.state !== 'gate-failed') app.services.handoff.setState(worktreeId, 'gate-failed', result.reason)
@@ -432,6 +509,7 @@ export function createRecords(app: AvatarApp, deps: RecordsDeps): Records {
     },
 
     dispose() {
+      stopped = true
       for (const stop of watchers.values()) stop()
       watchers.clear()
       for (const timer of timers.values()) clearTimeout(timer)

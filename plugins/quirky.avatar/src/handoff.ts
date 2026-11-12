@@ -80,9 +80,9 @@ function briefText(mandate: Mandate, updated: boolean): string {
 
 /**
  * Installs `app.services.handoff`: which worktrees can be handed off, hand-off and take-back with
- * their briefing, and the one-click answers to the needs-you queue. Returns a disposer that stops
- * the settled listener and ends every gate check still running for a handed-off worktree; after it
- * runs, a gate check's failure is dropped instead of journaled, because the store may be closed.
+ * their briefing, and the one-click answers to the needs-you queue. Its disposer stops the settled
+ * listener and prevents gate-check failures from being journaled after shutdown; it does not take
+ * worktrees back or resolve in-flight gate requests.
  */
 export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
   const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
@@ -486,10 +486,5 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
   return () => {
     disposed = true
     offSettled()
-    try {
-      for (const row of app.store.handoffs.list({ active: true })) app.services.gate.resolveInFlight(row.worktreeId, 'passthrough')
-    } catch {
-      return
-    }
   }
 }

@@ -272,9 +272,9 @@ exit 0
 `
 
 /**
- * Reads the decision JSON the daemon answers a gate request with and writes `encoded` (decoded,
- * byte for byte) to the file named by `-v out=`. Prints `<hasEncoded> <exitCode>` on stdout.
- * Scans top-level keys only, so the field order of the answer does not matter.
+ * Scans the response's top-level decision fields, writes decoded `encoded` bytes to the file named
+ * by `-v out=`, and reports whether that value is nonblank, the decision, and a valid exit code.
+ * Unescaped text is emitted in contiguous source slices so awk does not re-encode UTF-8 bytes.
  */
 const GATE_DECISION_AWK = String.raw`
 function hexval(ch) { return index("0123456789abcdef", tolower(ch)) - 1 }
@@ -285,41 +285,72 @@ function utf8(cp) {
   if (cp < 65536) return sprintf("%c%c%c", 224 + int(cp / 4096), 128 + int(cp / 64) % 64, 128 + cp % 64)
   return sprintf("%c%c%c%c", 240 + int(cp / 262144), 128 + int(cp / 4096) % 64, 128 + int(cp / 64) % 64, 128 + cp % 64)
 }
-BEGIN { RS = "\001"; depth = 0; expect = ""; key = ""; has = 0; code = 0 }
+function emit(text) { printf "%s", text > out }
+function validExit(raw,   value) {
+  if (raw !~ /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$/) return 0
+  value = raw + 0
+  return value >= 0 && value <= 255 && value == int(value)
+}
+BEGIN { RS = "\001"; depth = 0; expect = ""; key = ""; has = 0; visible = 0; decision = ""; decisionValid = 0; exitValid = 1; code = 0; outOpen = 0 }
 {
   s = $0; n = length(s); i = 1
   while (i <= n) {
     c = substr(s, i, 1)
     if (c == "\"") {
       i++; val = ""
+      encodedString = (depth == 1 && expect == "value" && key == "encoded")
+      if (encodedString) { has = 0; visible = 0; printf "%s", "" > out; outOpen = 1 }
+      rawStart = i
       while (i <= n) {
         c = substr(s, i, 1)
-        if (c == "\"") break
+        if (c == "\"") {
+          if (encodedString && i > rawStart) emit(substr(s, rawStart, i - rawStart))
+          break
+        }
         if (c == "\\") {
-          i++; e = substr(s, i, 1)
-          if (e == "n") val = val "\n"
-          else if (e == "t") val = val "\t"
-          else if (e == "r") val = val "\r"
-          else if (e == "b") val = val "\b"
-          else if (e == "f") val = val "\f"
+          if (encodedString && i > rawStart) emit(substr(s, rawStart, i - rawStart))
+          i++; e = substr(s, i, 1); decoded = ""; cp = -1
+          if (e == "n") decoded = "\n"
+          else if (e == "t") decoded = "\t"
+          else if (e == "r") decoded = "\r"
+          else if (e == "b") decoded = "\b"
+          else if (e == "f") decoded = "\f"
           else if (e == "u") {
             cp = hex4(substr(s, i + 1, 4)); i += 4
             if (cp >= 55296 && cp < 56320 && substr(s, i + 1, 2) == "\\u") {
               lo = hex4(substr(s, i + 3, 4))
               if (lo >= 56320 && lo < 57344) { cp = 65536 + (cp - 55296) * 1024 + (lo - 56320); i += 6 }
             }
-            val = val utf8(cp)
-          } else val = val e
-        } else val = val c
-        i++
+            decoded = utf8(cp)
+          } else decoded = e
+          if (encodedString) {
+            emit(decoded)
+            if (e == "u") {
+              if (cp != 32 && cp != 9 && cp != 13 && cp != 10) visible = 1
+            } else if (e != "n" && e != "r" && e != "t") visible = 1
+          } else val = val decoded
+          i++; rawStart = i
+        } else {
+          if (encodedString) {
+            if (c !~ /^[ \t\r\n]$/) visible = 1
+          } else val = val c
+          i++
+        }
       }
       i++
       if (depth == 1 && expect == "key") { key = val; expect = "colon" }
       else if (depth == 1 && expect == "value") {
-        if (key == "encoded") { printf "%s", val > out; has = 1 }
+        if (key == "encoded") { has = 1; encodedVisible = visible }
+        else if (key == "decision") { decision = val; decisionValid = (val == "allow" || val == "deny" || val == "passthrough") }
+        else if (key == "exitCode") exitValid = 0
         expect = "comma"
       }
     } else if (c == "{" || c == "[") {
+      if (depth == 1 && expect == "value") {
+        if (key == "encoded") has = 0
+        else if (key == "decision") decisionValid = 0
+        else if (key == "exitCode") exitValid = 0
+      }
       depth++; i++
       if (depth == 1) expect = "key"
       else if (depth == 2 && expect == "value") expect = "comma"
@@ -331,37 +362,73 @@ BEGIN { RS = "\001"; depth = 0; expect = ""; key = ""; has = 0; code = 0 }
       lit = ""
       while (i <= n && substr(s, i, 1) !~ /[ \t\r\n,}\]]/) { lit = lit substr(s, i, 1); i++ }
       if (depth == 1 && expect == "value") {
-        if (key == "exitCode" && lit ~ /^[0-9]+$/) code = lit + 0
+        if (key == "encoded") has = 0
+        else if (key == "decision") decisionValid = 0
+        else if (key == "exitCode") {
+          exitValid = validExit(lit)
+          if (exitValid) code = lit + 0
+        }
         expect = "comma"
       }
     }
   }
 }
-END { close(out); printf "%d %d\n", has, code }
+END {
+  failed = 0
+  if (outOpen && close(out) != 0) failed = 1
+  decisionCode = 0
+  if (decisionValid) {
+    if (decision == "allow") decisionCode = 1
+    else if (decision == "deny") decisionCode = 2
+    else if (decision == "passthrough") decisionCode = 3
+  }
+  printf "%d %d %d %d %d %d\n", has, encodedVisible, decisionCode, decisionValid, exitValid, code
+  if (failed) exit 1
+}
 `
 
 /**
- * The tool-gate shim agents call as `quirky-gate <agent> [deadline-ms]`. It answers `{}` and exits
- * 0 at once, with no network call, unless the session has a supervision marker. With one it posts
- * the hook payload to the daemon's `/gate/<agent>` route, prints the `encoded` text of the
- * decision verbatim and exits with its `exitCode`. When the daemon cannot be reached, answers
- * with anything but a decision or has no encoded answer, it exits 2 with a retry message on
- * stderr, the exit both Claude and Codex treat as blocking. It never builds decision JSON.
+ * `quirky-gate <agent> [deadline-ms] [event]` sends supervised stdin unchanged. The deadline is
+ * decimal-normalized from argument two, then the environment, else 30000, and capped at 600000.
+ * Only a valid third-argument event (`[A-Za-z0-9_.-]{1,64}`) is sent; payload and environment
+ * never set it. The shim prints only a nonblank top-level `encoded` from `allow`, `deny` or
+ * `passthrough` with an absent or integer `exitCode` from 0 to 255, and only if printing succeeds.
+ * Otherwise it refuses with the retry line on stderr and exit 2, except for third argument
+ * `PermissionRequest`, which gets a denial on stdout, the retry line on stderr and exit 0. Without
+ * a supervision marker it prints `{}` and exits 0 without a request.
  */
 export const QUIRKY_GATE_SCRIPT = String.raw`#!/bin/sh
 agent="$1"
 deadline="$2"
 [ -n "$deadline" ] || deadline="$QUIRKY_GATE_DEADLINE_MS"
-case "$deadline" in ''|*[!0-9]*) deadline=30000 ;; esac
-[ "$deadline" -gt 0 ] || deadline=30000
-payload="$({ command -p cat || cat; })"
-event="$QUIRKY_HOOK_EVENT"
-if [ -z "$event" ]; then
-  event="$(printf '%s' "$payload" | tr '\n\r' '  ' | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9_.-]*\)".*/\1/p' | head -n 1)"
-fi
+case "$deadline" in
+  ''|*[!0-9]*) deadline=30000 ;;
+  *)
+    while [ "${'$'}{deadline#0}" != "$deadline" ]; do deadline="${'$'}{deadline#0}"; done
+    case "$deadline" in
+      '') deadline=30000 ;;
+      *)
+        [ "${'$'}{#deadline}" -le 9 ] || deadline=30000
+        [ "$deadline" -gt 0 ] || deadline=30000
+        [ "$deadline" -le 600000 ] || deadline=600000
+        ;;
+    esac
+    ;;
+esac
+event_arg="$3"
+event="$event_arg"
+case "$event" in
+  ''|*[!A-Za-z0-9_.-]*) event="" ;;
+  *) [ "${'$'}{#event}" -le 64 ] || event="" ;;
+esac
 case "$QUIRKY_SESSION_ID" in ''|*/*|.*) printf '{}\n'; exit 0 ;; esac
 [ -n "$QUIRKY_HOME" ] && [ -e "$QUIRKY_HOME/plugin-data/quirky.avatar/supervised/$QUIRKY_SESSION_ID" ] || { printf '{}\n'; exit 0; }
 unavailable() {
+  if [ "$event_arg" = PermissionRequest ]; then
+    printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Quirky'\''s avatar gate is unavailable; try again shortly."}}}'
+    printf '%s\n' "Quirky's avatar gate is unavailable; try again shortly." >&2
+    exit 0
+  fi
   printf '%s\n' "Quirky's avatar gate is unavailable; try again shortly." >&2
   exit 2
 }
@@ -379,22 +446,27 @@ query="session=$QUIRKY_SESSION_ID&deadline=$deadline"
 case "$event" in ''|*[!A-Za-z0-9_.-]*) ;; *) query="$query&event=$event" ;; esac
 tmp="$(mktemp -d 2>/dev/null)" || unavailable
 trap 'rm -rf "$tmp"' EXIT
+(command -p cat) > "$tmp/payload" || unavailable
 timeout=$(( (deadline + 999) / 1000 + 5 ))
-status="$(printf '%s' "$payload" | curl -s -m "$timeout" --connect-timeout 2 --noproxy '*' -o "$tmp/body" -w '%{http_code}' -X POST \
+status="$(curl -s -m "$timeout" --connect-timeout 2 --noproxy '*' -o "$tmp/body" -w '%{http_code}' -X POST \
   -H "x-quirky-hook-token: $QUIRKY_HOOK_TOKEN" \
   -H 'content-type: application/json' \
-  --data-binary @- \
+  --data-binary "@$tmp/payload" \
   "$url/$agent?$query")" || unavailable
 [ "$status" = 200 ] || unavailable
 parsed="$(LC_ALL=C awk -v out="$tmp/encoded" '${GATE_DECISION_AWK}' "$tmp/body")" || unavailable
 set -- $parsed
 has="$1"
-code="$2"
-[ "$has" = 1 ] || unavailable
-cat "$tmp/encoded"
+visible="$2"
+decision_code="$3"
+decision_valid="$4"
+exit_valid="$5"
+code="$6"
+[ "$has" = 1 ] && [ "$visible" = 1 ] && [ "$decision_valid" = 1 ] && [ "$exit_valid" = 1 ] || unavailable
+case "$decision_code" in 1|2|3) ;; *) unavailable ;; esac
+cat "$tmp/encoded" || unavailable
 exit "$code"
 `
-
 export function quirkyShimScript(cliEntry: string): string {
   return `#!/bin/sh\nexec ${doubleQuote(process.execPath)} ${doubleQuote(cliEntry)} "$@"\n`
 }
