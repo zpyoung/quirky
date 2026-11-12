@@ -15,6 +15,11 @@ type Parsed = {
   wrapped: boolean
   dynamicCommand: boolean
   dynamicBeforeCommand: boolean
+  unknownWrapperFlag: boolean
+  argumentExempt: boolean
+  execCwd: DirectorySet
+  wrapperReads: WrapperTarget[]
+  wrapperWrites: WrapperTarget[]
 }
 
 const READ_TOOLS = new Set(['read', 'notebookread', 'view', 'glob', 'grep', 'ls', 'find', 'todowrite', 'taskcreate', 'taskget', 'taskupdate', 'tasklist', 'taskoutput', 'enterplanmode', 'exitplanmode'])
@@ -24,14 +29,34 @@ const SHELL_TOOLS = new Set(['bash', 'shell', 'local_shell', 'exec_command', 'co
 const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'filePath', 'file']
 
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
-const WRAPPERS = new Set(['sudo', 'doas', 'nohup', 'time', 'command', 'exec', 'builtin', 'nice', 'ionice', 'stdbuf', 'xargs', 'env', 'timeout'])
 const NO_ARGUMENT_EFFECT_CMDS: Record<string, true> = { echo: true, printf: true, true: true, false: true, test: true, '[': true, basename: true, dirname: true, sleep: true }
-const WRAPPER_VALUE_FLAGS: Partial<Record<string, Readonly<Record<string, true>>>> = {
-  sudo: { '-u': true, '-g': true, '-h': true, '-p': true, '-C': true, '-T': true, '-R': true, '-D': true, '-r': true, '-t': true, '--user': true, '--group': true, '--host': true, '--prompt': true, '--close-from': true, '--command-timeout': true, '--chroot': true, '--chdir': true, '--role': true, '--type': true },
-  doas: { '-u': true, '-C': true },
-  xargs: { '-I': true, '-L': true, '-P': true, '-n': true, '-s': true, '-E': true }
+type WrapperSpec = {
+  shortFlags?: string
+  shortValues?: string
+  longFlags?: readonly string[]
+  longOptionalValues?: readonly string[]
+  longAttachedValues?: readonly string[]
+  longValues?: readonly string[]
+  numericIncrement?: boolean
+  durationOperand?: boolean
+  chdir?: string
 }
-const READ_CMDS = new Set(['ls', 'cat', 'head', 'tail', 'wc', 'pwd', 'echo', 'printf', 'which', 'whereis', 'type', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'stat', 'file', 'tree', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink', 'true', 'false', 'test', '[', 'date', 'whoami', 'uname', 'id', 'column', 'fmt', 'nl', 'tac', 'od', 'xxd', 'hexdump', 'md5sum', 'shasum', 'sha256sum', 'du', 'df', 'cd', 'pushd', 'popd', 'sleep', 'ps', 'lsof'])
+const WRAPPER_SPECS: Partial<Record<string, WrapperSpec>> = {
+  env: { shortFlags: 'i0v', shortValues: 'uPC', longFlags: ['ignore-environment', 'null', 'debug', 'list-signal-handling'], longOptionalValues: ['block-signal', 'default-signal', 'ignore-signal'], longAttachedValues: ['unset'], longValues: ['chdir'], chdir: 'C' },
+  exec: { shortFlags: 'cl', shortValues: 'a' },
+  command: { shortFlags: 'pvV' },
+  builtin: {},
+  nohup: {},
+  time: { shortFlags: 'ahlpqv', shortValues: 'fo', longFlags: ['append', 'portability', 'quiet', 'verbose'], longValues: ['format', 'output'] },
+  xargs: { shortFlags: '0oprtx', shortValues: 'EIJLnPRSsad', longFlags: ['null', 'open-tty', 'interactive', 'no-run-if-empty', 'verbose', 'exit'], longOptionalValues: ['eof', 'replace', 'max-lines'], longValues: ['arg-file', 'delimiter', 'max-args', 'max-procs', 'max-chars', 'process-slot-var'] },
+  nice: { shortValues: 'n', longValues: ['adjustment'], numericIncrement: true },
+  ionice: { shortFlags: 't', shortValues: 'cn', longFlags: ['ignore'], longValues: ['class', 'classdata'] },
+  stdbuf: { shortValues: 'ioe', longValues: ['input', 'output', 'error'] },
+  timeout: { shortFlags: 'v', shortValues: 'ks', longFlags: ['preserve-status', 'foreground', 'verbose'], longValues: ['kill-after', 'signal'], durationOperand: true },
+  sudo: { shortFlags: 'ABbEeHiKklNnPSsVv', shortValues: 'CDghpRrTtUu', longFlags: ['askpass', 'bell', 'background', 'edit', 'set-home', 'login', 'remove-timestamp', 'reset-timestamp', 'list', 'no-update', 'non-interactive', 'preserve-groups', 'stdin', 'shell', 'version', 'validate'], longOptionalValues: ['preserve-env'], longValues: ['close-from', 'chdir', 'group', 'host', 'prompt', 'chroot', 'role', 'command-timeout', 'type', 'other-user', 'user'], chdir: 'D' },
+  doas: { shortFlags: 'Lns', shortValues: 'aCu' }
+}
+const READ_CMDS = new Set(['command', 'ls', 'cat', 'head', 'tail', 'wc', 'pwd', 'echo', 'printf', 'which', 'whereis', 'type', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'stat', 'file', 'tree', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink', 'true', 'false', 'test', '[', 'date', 'whoami', 'uname', 'id', 'column', 'fmt', 'nl', 'tac', 'od', 'xxd', 'hexdump', 'md5sum', 'shasum', 'sha256sum', 'du', 'df', 'cd', 'pushd', 'popd', 'sleep', 'ps', 'lsof'])
 const AWK_CMDS = new Set(['awk', 'gawk', 'mawk', 'nawk'])
 const FIND_UNSAFE_PRIMARY = /^-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)$/
 const WRITE_ALL_CMDS = new Set(['rm', 'rmdir', 'touch', 'tee', 'mkdir', 'truncate', 'unlink', 'mv', 'shred'])
@@ -111,6 +136,7 @@ function keywordChangesDirectory(words: ShellWord[]): boolean {
   }
   if (index === 0 || index >= words.length) return false
   const unwrapped = unwrapWords(words.slice(index))
+  if (unwrapped.unknownWrapperFlag) return true
   const resolvedIndex = index + unwrapped.commandIndex
   if (resolvedIndex <= unwrapWords(words).commandIndex) return false
   const word = words[resolvedIndex]
@@ -173,7 +199,17 @@ function writeClasses(rawPath: string, cwd: string, ctx: ClassifyContext, rootPa
   return classes
 }
 
-type UnwrappedWords = { commandIndex: number; credential: boolean; throughXargs: boolean; dynamicBeforeCommand: boolean }
+type WrapperTarget = { target: ShellWord; cwd: DirectorySet }
+type UnwrappedWords = {
+  commandIndex: number
+  credential: boolean
+  throughXargs: boolean
+  dynamicBeforeCommand: boolean
+  unknownWrapperFlag: boolean
+  execCwd: DirectorySet
+  wrapperReads: WrapperTarget[]
+  wrapperWrites: WrapperTarget[]
+}
 
 
 function assignmentFromWord(word: ShellWord): ShellAssignment | null {
@@ -185,40 +221,159 @@ function assignmentFromWord(word: ShellWord): ShellAssignment | null {
   }
 }
 
-function unwrapWords(words: ShellWord[], wrapperAssignments?: ShellAssignment[]): UnwrappedWords {
+function unwrapWords(words: ShellWord[], wrapperAssignments?: ShellAssignment[], commandCwd: DirectorySet = null, home = ''): UnwrappedWords {
   let commandIndex = 0
   let credential = false
   let throughXargs = false
   let dynamicBeforeCommand = false
-  while (commandIndex < words.length) {
+  let unknownWrapperFlag = false
+  let execCwd = commandCwd
+  const wrapperReads: WrapperTarget[] = []
+  const wrapperWrites: WrapperTarget[] = []
+  wrappers: while (commandIndex < words.length) {
     const word = words[commandIndex]
     if (word.dynamic) break
     const wrapper = basename(word.text)
-    if (!WRAPPERS.has(wrapper)) break
+    const spec = Object.hasOwn(WRAPPER_SPECS, wrapper) ? WRAPPER_SPECS[wrapper] : undefined
+    if (spec === undefined) break
+    const afterXargs = throughXargs
+    const wrapperIndex = commandIndex
     if (wrapper === 'sudo' || wrapper === 'doas') credential = true
     if (wrapper === 'xargs') throughXargs = true
+    let lookup = false
+    let lastChdir: ShellWord | undefined
     commandIndex++
     while (commandIndex < words.length) {
       const option = words[commandIndex]
-      const assignment = wrapper === 'env' ? assignmentFromWord(option) : null
-      if (assignment === null && (option.dynamic || !isFlag(option.text))) break
-      if (assignment !== null && TRACKED_ENV_NAMES[assignment.name] === true) wrapperAssignments?.push(assignment)
-      const takesValue = WRAPPER_VALUE_FLAGS[wrapper]?.[option.text] === true
-      if (takesValue && words[commandIndex + 1]?.dynamic) dynamicBeforeCommand = true
-      commandIndex += takesValue ? 2 : 1
+      if (!option.text.startsWith('-')) break
+      if (option.text === '--' || option.text === '-') {
+        if (option.dynamic || (option.text === '-' && wrapper !== 'env') ||
+          (wrapper === 'env' && (option.text === '--' ? words[commandIndex + 1]?.text === '-' : words[commandIndex + 1]?.text.startsWith('-')))) {
+          unknownWrapperFlag = true
+          break wrappers
+        }
+        commandIndex++
+        break
+      }
+      if (!option.dynamic && spec.numericIncrement && /^-[+-]?\d+$/.test(option.text)) {
+        commandIndex++
+        continue
+      }
+      let flag = ''
+      let value: ShellWord | undefined
+      if (option.text.startsWith('--')) {
+        const equals = option.text.indexOf('=')
+        flag = option.text.slice(2, equals < 0 ? undefined : equals)
+        const raw = equals < 0 ? '' : option.text.slice(equals + 1)
+        if (spec.longFlags?.includes(flag)) {
+          if (equals >= 0 || option.dynamic) {
+            unknownWrapperFlag = true
+            break wrappers
+          }
+          commandIndex++
+        } else if (spec.longOptionalValues?.includes(flag) || spec.longAttachedValues?.includes(flag)) {
+          if ((equals < 0 && option.dynamic) || (equals < 0 && spec.longAttachedValues?.includes(flag))) {
+            unknownWrapperFlag = true
+            break wrappers
+          }
+          if (equals >= 0 && (option.dynamic || /^~[^/]/.test(raw))) dynamicBeforeCommand = true
+          commandIndex++
+        } else if (spec.longValues?.includes(flag)) {
+          if (equals >= 0) {
+            value = { text: raw, dynamic: option.dynamic || /^~[^/]/.test(raw), subs: option.subs }
+            commandIndex++
+          } else {
+            if (option.dynamic || words[commandIndex + 1] === undefined) {
+              unknownWrapperFlag = true
+              break wrappers
+            }
+            value = words[commandIndex + 1]
+            commandIndex += 2
+          }
+        } else {
+          unknownWrapperFlag = true
+          break wrappers
+        }
+      } else {
+        if (option.dynamic) {
+          unknownWrapperFlag = true
+          break wrappers
+        }
+        commandIndex++
+        for (let j = 1; j < option.text.length; j++) {
+          flag = option.text[j]
+          if (spec.shortFlags?.includes(flag)) {
+            if (wrapper === 'command' && (flag === 'v' || flag === 'V')) lookup = true
+            continue
+          }
+          if (!spec.shortValues?.includes(flag)) {
+            unknownWrapperFlag = true
+            break wrappers
+          }
+          const rest = option.text.slice(j + 1)
+          if (rest !== '') value = { text: rest, dynamic: /^~[^/]/.test(rest), subs: option.subs }
+          else value = words[commandIndex++]
+          if (value === undefined) {
+            unknownWrapperFlag = true
+            break wrappers
+          }
+          break
+        }
+      }
+      if (value !== undefined) {
+        if (value.dynamic) dynamicBeforeCommand = true
+        if (flag === spec.chdir || (spec.chdir !== undefined && flag === 'chdir')) lastChdir = value
+        if (wrapper === 'time' && (flag === 'o' || flag === 'output')) wrapperWrites.push({ target: value, cwd: execCwd })
+        if (wrapper === 'xargs' && (flag === 'a' || flag === 'arg-file')) wrapperReads.push({ target: value, cwd: execCwd })
+      }
     }
-    if (wrapper === 'timeout' && commandIndex < words.length) {
+    if (lookup) {
+      commandIndex = wrapperIndex
+      break
+    }
+    if (wrapper === 'env' || wrapper === 'sudo') {
+      while (commandIndex < words.length) {
+        const option = words[commandIndex]
+        const assignment = assignmentFromWord(option)
+        if (assignment === null) {
+          if (option.dynamic && option.text.includes('=')) {
+            unknownWrapperFlag = true
+            break wrappers
+          }
+          break
+        }
+        if (TRACKED_ENV_NAMES[assignment.name] === true) wrapperAssignments?.push(assignment)
+        commandIndex++
+      }
+    }
+    if (lastChdir !== undefined) {
+      const target = lastChdir.text
+      execCwd = lastChdir.dynamic || target === '' ? null
+        : target === '~' || target.startsWith('~/') ? execCwd === null ? null : execCwd.map((directory) => resolve(directory, target))
+        : enteredDirectories(target, execCwd, home)
+    }
+    if (spec.durationOperand && commandIndex < words.length) {
       if (words[commandIndex].dynamic) dynamicBeforeCommand = true
       commandIndex++
     }
+    if (afterXargs && commandIndex >= words.length) {
+      unknownWrapperFlag = true
+      break
+    }
   }
-  return { commandIndex, credential, throughXargs, dynamicBeforeCommand }
+  return { commandIndex, credential, throughXargs, dynamicBeforeCommand, unknownWrapperFlag, execCwd, wrapperReads, wrapperWrites }
 }
 
-function parseSegment(command: ShellCommand): Parsed {
+function isArgumentExemptCommand(word: ShellWord | undefined): boolean {
+  if (word === undefined || word.dynamic) return false
+  const name = word.text.startsWith('/usr/bin/') ? word.text.slice(9) : word.text.startsWith('/bin/') ? word.text.slice(5) : word.text
+  return NO_ARGUMENT_EFFECT_CMDS[name] === true
+}
+
+function parseSegment(command: ShellCommand, commandCwd: DirectorySet, ctx: ClassifyContext): Parsed {
   const wrapperAssignments: ShellAssignment[] = []
-  const unwrapped = unwrapWords(command.words, wrapperAssignments)
-  const commandWord = command.words[unwrapped.commandIndex]
+  const unwrapped = unwrapWords(command.words, wrapperAssignments, commandCwd, ctx.home)
+  const commandWord = unwrapped.unknownWrapperFlag ? undefined : command.words[unwrapped.commandIndex]
   const argWords = commandWord === undefined ? [] : command.words.slice(unwrapped.commandIndex + 1)
   const args: string[] = []
   for (const word of argWords) args.push(word.text)
@@ -234,7 +389,12 @@ function parseSegment(command: ShellCommand): Parsed {
     throughXargs: unwrapped.throughXargs,
     wrapped: unwrapped.commandIndex > 0,
     dynamicCommand: commandWord?.dynamic ?? false,
-    dynamicBeforeCommand: unwrapped.dynamicBeforeCommand
+    dynamicBeforeCommand: unwrapped.dynamicBeforeCommand,
+    unknownWrapperFlag: unwrapped.unknownWrapperFlag,
+    argumentExempt: isArgumentExemptCommand(commandWord),
+    execCwd: unwrapped.execCwd,
+    wrapperReads: unwrapped.wrapperReads,
+    wrapperWrites: unwrapped.wrapperWrites
   }
 }
 
@@ -700,8 +860,8 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     for (const scope of word.subs) scopeCommands.set(scope, owner)
   }
   for (const shellCommand of script.commands) {
-    const commandIndex = unwrapWords(shellCommand.words).commandIndex
-    const word = shellCommand.words[commandIndex]
+    const unwrapped = unwrapWords(shellCommand.words)
+    const word = unwrapped.unknownWrapperFlag ? undefined : shellCommand.words[unwrapped.commandIndex]
     if (word !== undefined && !word.dynamic && DOWNLOAD_CMDS.has(basename(word.text))) scopeDownloads[shellCommand.scope] = true
     for (const word of shellCommand.words) recordScopes(word, shellCommand)
     for (const assignment of shellCommand.assignments) recordScopes(assignment.value, shellCommand)
@@ -748,7 +908,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     let downloadInPipeline = pipelineDownloads.get(shellCommand.scope) ?? false
     if (shellCommand.sep !== '|') downloadInPipeline = false
 
-    const parsed = parseSegment(shellCommand)
+    const parsed = parseSegment(shellCommand, commandCwd, ctx)
     const { cmd, args } = parsed
     if (cmd === '') {
       for (const assignment of parsed.assignments) {
@@ -789,7 +949,10 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     const writeTargetWords = !parsed.dynamicCommand && isWriteCommand(cmd, args) ? writeTargets(parsed) : []
     let commandAllowed: boolean | undefined
     if (parsed.credential) partClasses.push('credential')
-    if (parsed.dynamicCommand) {
+    if (parsed.unknownWrapperFlag) {
+      partClasses.push('other', 'edit-outside')
+      cwd = possible = null
+    } else if (parsed.dynamicCommand) {
       partClasses.push('other')
     } else if (cmd === 'cd' || cmd === 'pushd' || cmd === 'popd') {
       let target: ShellWord | undefined
@@ -818,14 +981,14 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
         cwd = possible = null
         partClasses.push('other')
       } else {
-        const entered = enteredDirectories(target?.text ?? ctx.home, commandCwd, ctx.home)
+        const entered = enteredDirectories(target?.text ?? ctx.home, parsed.execCwd, ctx.home)
         cwd = parsed.wrapped ? joinDirectories(commandCwd, entered) : entered
         possible = joinDirectories(possible, cwd)
         partClasses.push('read')
       }
     } else if (isShell && commandFlag >= 0 && args[commandFlag + 1] !== undefined) {
       const body = parsed.argWords[commandFlag + 1]
-      const inner = analyzeCommand(body.text, cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
+      const inner = analyzeCommand(body.text, parsed.execCwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
       nestedNonDirectoryRead = inner.nonDirectoryRead ?? false
       append(partClasses, inner.classes)
@@ -835,7 +998,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       if (!downloadInPipeline) partClasses.push('other')
     } else if (cmd === 'eval' && args.length > 0) {
       const dynamicEval = parsed.argWords.some((word) => word.dynamic)
-      const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
+      const inner = analyzeCommand(args.join(' '), parsed.execCwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
       nestedNonDirectoryRead = inner.nonDirectoryRead ?? false
       if (shellCommand.scope === 0 && inner.cwdChanged) cwdChanged = true
@@ -883,7 +1046,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       parts.push(parsed.text)
       if (cmd === 'git') {
         let first = true
-        append(partClasses, directoryClasses(cwd, (directory) => {
+        append(partClasses, directoryClasses(parsed.execCwd, (directory) => {
           const result = classifyMainCommand(parsed, ctx, directory, shellEnv, first ? pushDests : [])
           first = false
           return result
@@ -894,7 +1057,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     }
     let countedDynamic = parsed.dynamicBeforeCommand
     if (!countedDynamic && !parsed.dynamicCommand && cmd !== 'eval' && cmd !== 'cd' && cmd !== 'pushd' && cmd !== 'popd' &&
-      NO_ARGUMENT_EFFECT_CMDS[cmd] !== true) {
+      !parsed.argumentExempt) {
       const bodyIndex = isShell && commandFlag >= 0 ? commandFlag + 1 : -1
       let writeTargetIndex = 0
       for (let i = 0; i < parsed.argWords.length; i++) {
@@ -913,7 +1076,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     if (parsed.throughXargs && cmd !== '') {
       const xargsShellBody = isShell && commandFlag >= 0
       if (isWriteCommand(cmd, args) || xargsShellBody || cmd === 'eval') partClasses.push('edit-outside')
-      else if (NO_ARGUMENT_EFFECT_CMDS[cmd] !== true) {
+      else if (!parsed.argumentExempt) {
         commandAllowed ??= matchesCommandList(parsed.text, ctx.allowCommands)
         if (!commandAllowed) partClasses.push('other')
       }
@@ -929,7 +1092,7 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
       const value = word.text.startsWith('-') ? (equals >= 0 ? word.text.slice(equals + 1) : '') : word.text
       if (value === '') continue
       const expanded = expandHome(value, ctx.home)
-      for (const directory of cwd ?? UNKNOWN_DIRECTORY) {
+      for (const directory of parsed.execCwd ?? UNKNOWN_DIRECTORY) {
         if (directory === null && !isAbsolute(expanded)) continue
         if (isCredentialPath(resolvePath(value, directory ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
       }
@@ -938,7 +1101,20 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
     if (!parsed.dynamicCommand && isWriteCommand(cmd, args)) {
       for (const target of writeTargetWords) {
         if (target.dynamic) partClasses.push('edit-outside')
-        else append(partClasses, directoryClasses(cwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
+        else append(partClasses, directoryClasses(parsed.execCwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
+      }
+    }
+    for (const { target, cwd: wrapperCwd } of parsed.wrapperWrites) {
+      if (!target.dynamic && ['/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty'].includes(target.text)) continue
+      if (target.dynamic) partClasses.push('edit-outside')
+      else append(partClasses, directoryClasses(wrapperCwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
+    }
+    for (const { target, cwd: wrapperCwd } of parsed.wrapperReads) {
+      if (target.dynamic) continue
+      const expanded = expandHome(target.text, ctx.home)
+      for (const directory of wrapperCwd ?? UNKNOWN_DIRECTORY) {
+        if (directory === null && !isAbsolute(expanded)) continue
+        if (isCredentialPath(resolvePath(target.text, directory ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
       }
     }
     for (const redirect of shellCommand.redirects) {
@@ -1066,9 +1242,9 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
 /**
  * Maps a tool call onto the action classes the gate decides on.
  *
- * Unreadable shell text returns `other` and `edit-outside`. Computed words that no
- * other rule accounts for add `other`; ordinary `xargs` commands add `other`
- * unless exempt, while write and shell `-c`/`eval` commands add `edit-outside`.
+ * Unreadable shell text and unknown wrapper options return `other` and `edit-outside`.
+ * Computed words that no other rule accounts for add `other`; ordinary `xargs` commands
+ * add `other` unless exempt, while write and shell `-c`/`eval` commands add `edit-outside`.
  * A relative write target with an unknown cwd returns `edit-outside`.
  * Paths are judged under every possible shell directory; a write is inside only
  * when it is inside under each. A `cd` is certain only through its `&&` list.
@@ -1089,6 +1265,7 @@ export function classifyCall(call: ToolCall, ctx: ClassifyContext): ActionClass[
 /**
  * The normalized text of each command a Bash-style call runs, with wrappers like
  * `sudo` and `env` stripped and `bash -c` bodies expanded. Empty for file tools.
+ * Segments with unknown wrapper options are omitted rather than inventing a command.
  */
 export function commandParts(call: ToolCall, ctx: ClassifyContext): string[] {
   try {
