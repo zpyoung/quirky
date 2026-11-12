@@ -82,6 +82,15 @@ const judgeReply = (prompt: Sent, decision: 'allow' | 'deny', contextUsage?: Usa
   const requestId = /requestId "([^"]+)"/.exec(prompt.text)?.[1] ?? ''
   return { text: json([{ type: 'judge', requestId, decision, reliedOn: 'guideline 1', reason: 'because' }]), contextUsage }
 }
+const judgmentFingerprint = callFingerprint('claude', 'wt-1', 'Bash', { command: 'bun test --update-snapshots' })
+const wakeBrain = async (h: Harness) => {
+  h.app.services.brain.wake()
+  h.app.journal('wt-1', 'event', { text: 'warm up' })
+  await until(() => h.app.services.brain.ready())
+  await settle()
+}
+// These tests exercise the fake provider's real 60 ms reply timer after the 15 ms judgment deadline.
+const waitForLateReply = () => Bun.sleep(120)
 
 describe('rotationLimit', () => {
   test('is 300k, or 80% of a smaller window', () => {
@@ -289,7 +298,7 @@ describe('rotation', () => {
 })
 
 describe('judgment', () => {
-  const mandate = sampleMandate({ guidelines: ["Don't update snapshots to make failing tests pass"] })
+  const mandate = sampleMandate({ worktreeId: 'wt-1', level: 'full', guidelines: ["Don't update snapshots to make failing tests pass"] })
 
   test('is unavailable until the session is ready, and the first call starts it', async () => {
     const h = harness((prompt) => (isRebuild(prompt) ? { text: NOOP } : judgeReply(prompt, 'deny')))
@@ -359,6 +368,171 @@ describe('judgment', () => {
     expect(await h.app.services.brain.judge(call(), mandate, 1000)).toBe('unavailable')
     expect(h.sent.filter((p) => p.text.includes('holds no judge action'))).toHaveLength(1)
   })
+  test('B1: drops a late answer after the worktree is taken back', async () => {
+    const h = harness((prompt) =>
+      isRebuild(prompt) || !prompt.text.includes('proposed call')
+        ? { text: NOOP }
+        : { ...judgeReply(prompt, 'allow'), delayMs: 60 }
+    )
+    await wakeBrain(h)
+
+    expect(await h.app.services.brain.judge(call(), h.mandate, 15)).toBe('timeout')
+    h.app.services.handoff.active = () => []
+    await waitForLateReply()
+
+    expect(h.sent.filter((prompt) => prompt.text.includes('proposed call'))).toHaveLength(1)
+    expect(h.app.store.lateAnswers.get(judgmentFingerprint)).toBeNull()
+  })
+
+  test('B2: drops a late answer after the mandate changes', async () => {
+    const h = harness((prompt) =>
+      isRebuild(prompt) || !prompt.text.includes('proposed call')
+        ? { text: NOOP }
+        : { ...judgeReply(prompt, 'allow'), delayMs: 60 }
+    )
+    await wakeBrain(h)
+
+    expect(await h.app.services.brain.judge(call(), h.mandate, 15)).toBe('timeout')
+    h.app.services.handoff.active = () => [{
+      worktreeId: 'wt-1',
+      sessionId: null,
+      state: 'working',
+      mandate: { ...h.mandate, level: 'local' }
+    }]
+    await waitForLateReply()
+
+    expect(h.app.store.lateAnswers.get(judgmentFingerprint)).toBeNull()
+  })
+
+  test('B3: returns unavailable when the mandate changes during an in-time judgment', async () => {
+    const h = harness((prompt) =>
+      isRebuild(prompt) || !prompt.text.includes('proposed call')
+        ? { text: NOOP }
+        : { ...judgeReply(prompt, 'allow'), delayMs: 40 }
+    )
+    await wakeBrain(h)
+
+    const judgment = h.app.services.brain.judge(call(), h.mandate, 2000)
+    await until(() => h.sent.some((prompt) => prompt.text.includes('proposed call')))
+    h.app.services.handoff.active = () => [{
+      worktreeId: 'wt-1',
+      sessionId: null,
+      state: 'working',
+      mandate: { ...h.mandate, updatedAt: h.mandate.updatedAt + 1 }
+    }]
+
+    expect(await judgment).toBe('unavailable')
+    expect(h.app.store.lateAnswers.get(judgmentFingerprint)).toBeNull()
+  })
+
+  test('B4: skips a judgment whose hand-off ends while it waits its turn', async () => {
+    const h = harness((prompt) => {
+      if (isRebuild(prompt)) return { text: NOOP }
+      return prompt.text.includes('busy event') ? { text: NOOP, delayMs: 80 } : { text: NOOP }
+    })
+    await wakeBrain(h)
+    h.app.journal('wt-1', 'event', { text: 'busy event' })
+    await until(() => h.sent.some((prompt) => prompt.text.includes('busy event')))
+
+    const judgment = h.app.services.brain.judge(call(), h.mandate, 2000)
+    h.app.services.handoff.active = () => []
+
+    expect(await judgment).toBe('unavailable')
+    await Bun.sleep(60)
+    expect(h.sent.filter((prompt) => prompt.text.includes('proposed call'))).toHaveLength(0)
+  })
+
+  test('B5: does not re-arm an answer used after the judgment was asked', async () => {
+    const h = harness((prompt) =>
+      isRebuild(prompt) || !prompt.text.includes('proposed call')
+        ? { text: NOOP }
+        : { ...judgeReply(prompt, 'deny'), delayMs: 60 }
+    )
+    await wakeBrain(h)
+
+    expect(await h.app.services.brain.judge(call(), h.mandate, 15)).toBe('timeout')
+    const used = {
+      fingerprint: judgmentFingerprint,
+      worktreeId: 'wt-1',
+      decision: 'allow' as const,
+      reason: 'earlier answer',
+      createdAt: h.app.now(),
+      usedAt: h.app.now()
+    }
+    h.app.store.lateAnswers.put(used)
+    await waitForLateReply()
+
+    expect(h.app.store.lateAnswers.get(judgmentFingerprint)).toEqual(used)
+  })
+
+  test('B6: replaces an answer used before the judgment was asked', async () => {
+    const h = harness((prompt) =>
+      isRebuild(prompt) || !prompt.text.includes('proposed call')
+        ? { text: NOOP }
+        : { ...judgeReply(prompt, 'deny'), delayMs: 60 }
+    )
+    await wakeBrain(h)
+    const usedAt = h.app.now() - 10
+    h.app.store.lateAnswers.put({
+      fingerprint: judgmentFingerprint,
+      worktreeId: 'wt-1',
+      decision: 'allow',
+      reason: 'earlier answer',
+      createdAt: usedAt,
+      usedAt
+    })
+
+    expect(await h.app.services.brain.judge(call(), h.mandate, 15)).toBe('timeout')
+    await until(() => h.app.store.lateAnswers.get(judgmentFingerprint)?.reason === 'because')
+
+    expect(h.app.store.lateAnswers.get(judgmentFingerprint)).toMatchObject({ decision: 'deny', reason: 'because', usedAt: null })
+  })
+
+  test('B7: replaces an unused answer with a newer late reply', async () => {
+    const h = harness((prompt) =>
+      isRebuild(prompt) || !prompt.text.includes('proposed call')
+        ? { text: NOOP }
+        : { ...judgeReply(prompt, 'deny'), delayMs: 60 }
+    )
+    await wakeBrain(h)
+
+    expect(await h.app.services.brain.judge(call(), h.mandate, 15)).toBe('timeout')
+    h.app.store.lateAnswers.put({
+      fingerprint: judgmentFingerprint,
+      worktreeId: 'wt-1',
+      decision: 'allow',
+      reason: 'earlier answer',
+      createdAt: h.app.now(),
+      usedAt: null
+    })
+    await until(() => h.app.store.lateAnswers.get(judgmentFingerprint)?.reason === 'because')
+
+    expect(h.app.store.lateAnswers.get(judgmentFingerprint)).toMatchObject({ decision: 'deny', reason: 'because', usedAt: null })
+  })
+
+  test('B8: does not re-arm an answer used in the same millisecond it was asked', async () => {
+    const h = harness((prompt) =>
+      isRebuild(prompt) || !prompt.text.includes('proposed call')
+        ? { text: NOOP }
+        : { ...judgeReply(prompt, 'deny'), delayMs: 60 }
+    )
+    h.app.now = () => 5000
+    await wakeBrain(h)
+
+    expect(await h.app.services.brain.judge(call(), h.mandate, 15)).toBe('timeout')
+    h.app.store.lateAnswers.put({
+      fingerprint: judgmentFingerprint,
+      worktreeId: 'wt-1',
+      decision: 'allow',
+      reason: 'earlier answer',
+      createdAt: 5000,
+      usedAt: 5000
+    })
+    await waitForLateReply()
+
+    expect(h.app.store.lateAnswers.get(judgmentFingerprint)?.usedAt).toBe(5000)
+  })
+
 })
 
 describe('session death', () => {
@@ -370,7 +544,7 @@ describe('session death', () => {
 
     await h.t.deliver({ type: 'quirky.session/changed', data: { session: { id: 's1', status: 'exited' } } } as never)
     expect(h.app.services.brain.ready()).toBe(false)
-    expect(await h.app.services.brain.judge(call(), sampleMandate(), 1000)).toBe('unavailable')
+    expect(await h.app.services.brain.judge(call(), h.mandate, 1000)).toBe('unavailable')
     await until(() => h.app.services.brain.ready())
 
     expect(h.created).toHaveLength(2)
@@ -379,7 +553,7 @@ describe('session death', () => {
     expect(rebuilt.text).toContain("Don't update snapshots to make failing tests pass")
     expect(h.app.store.brainSessions.list()[0]!.endedAt).not.toBeNull()
     expect(h.app.store.journalSince(0).some((e) => e.kind === 'brain-error' && e.data.reason === 'session-died')).toBe(true)
-    expect(await h.app.services.brain.judge(call(), sampleMandate(), 1000)).toMatchObject({ decision: 'allow' })
+    expect(await h.app.services.brain.judge(call(), h.mandate, 1000)).toMatchObject({ decision: 'allow' })
   })
 
   test('ends the current brain session and starts a replacement when a result reports an error', async () => {
@@ -391,7 +565,7 @@ describe('session death', () => {
     await h.t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: 's1', seq: 99, role: 'result', text: 'provider error', data: { is_error: true }, at: 1 } } } as never)
 
     expect(h.app.services.brain.ready()).toBe(false)
-    expect(await h.app.services.brain.judge(call(), sampleMandate(), 1000)).toBe('unavailable')
+    expect(await h.app.services.brain.judge(call(), h.mandate, 1000)).toBe('unavailable')
     await until(() => h.created.length === 2 && h.app.services.brain.ready())
 
     const rows = h.app.store.brainSessions.list()

@@ -303,14 +303,17 @@ type AvatarSettings = { defaultLevel: Level; switches: Switches; houseRules: str
 Each request runs these steps in order:
 1. Resolve the supervised worktree from `sessionId`. Unsupervised gives passthrough.
 2. Record a receipt keyed by `callFingerprint = sha256(agent, worktreeId, toolName, canonicalJSON(toolInput))`.
-3. An unused allow-once approval for the same fingerprint gives allow, and marks the approval used (R-21).
-4. A remembered late brain answer for the same fingerprint gives that answer (R-19).
-5. Run `decide()`.
-6. If the outcome is `judgment`, ask the brain with a deadline of `deadlineMs - 5000`. On timeout, record `{fingerprint, pending:true}` and answer deny with reason `retry` and `countsAsDenial:false`.
+3. Run `decide()`. Its `allow` and `deny` outcomes are final.
+4. Outside Shadow, an unused allow-once approval for the same worktree and fingerprint gives allow only when the rules return `held` or `judgment` (R-21). Check it before a late answer.
+5. Outside Shadow, a remembered late brain answer for the same fingerprint gives that answer only when the rules return `judgment`, the row is unused, `createdAt >= mandate.updatedAt`, and its age is at most 300,000 ms (R-19). Keep the rules' trace followed by one judgment entry with the stored decision and reason.
+6. Otherwise, if the outcome is `judgment`, ask the brain with a deadline of `deadlineMs - 5000`. On timeout, record `{fingerprint, pending:true}` and answer deny with reason `retry` and `countsAsDenial:false`.
 7. In Shadow, whatever the path, return passthrough and journal `wouldHave` (R-20).
 8. A `held` outcome creates a needs-you item with `allow-once` and `deny`.
 
+Mark an approval or late answer used in the same transaction as the receipt and gate journal entry. A cancelled request or a failed transaction spends neither.
+
 On a take-back while a request is in flight, the provider resolves it with passthrough. When the avatar stops, an in-flight request is refused with a retry reason.
+A take-back or a new hand-off clears the worktree's late answers and unused approvals, keeping used approvals. Replacing an active hand-off's mandate or accepting a mandate edit clears only its late answers.
 
 `CONTRACT:` pure inputs (`src/contracts.ts`):
 ```ts
@@ -368,6 +371,7 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
 - The brain is one `quirky.structured` session, created with `toolPolicy: 'deny-all'`, `lifetime: 'plugin'`, and the agent and model from settings.
 - Each wake sends one event prompt. The brain must answer with exactly one fenced JSON block holding `BrainAction[]`. Anything unparseable is journaled and retried once with the parse error; a second failure parks that event as a `brain-error` need.
 - Judgment prompts contain only the mandate, the house rules and the call (`toolName`, `toolInput`, `cwd`), shown whole. A shell tool's description or justification field, which is the worker's own account of the call, is left out. **They never contain worker transcript text** (R-18).
+- A judgment is sent, and its answer delivered or remembered, only while the worktree is still handed off under a mandate deep-equal in every field to the one passed to `judge`. If it changed before an in-time answer, resolve `unavailable`. A timed-out judgment still runs when its turn comes if that mandate remains active. Do not store a late reply when the existing answer was used at or after the judgment was asked, including the same millisecond; a later judgment may replace an older used answer.
 - Rotation:
   - Rotation happens after the event in progress is fully dispatched, when `contextUsage.contextTokens >= limit`, where `limit = min(300000, floor(0.8 * contextWindow))`. The brain reads the footprint only from `result` messages.
   - The avatar stops the session, creates a new one from `prompt.rebuild()`, and journals `rotation {fromTokens}`.
@@ -558,7 +562,7 @@ Tests run with `bun test <file>` on this Mac. The full suite runs in CI through 
 | decide | `plugins/quirky.avatar/test/decide.test.ts` | Every row of the SC-10 decision table; order precedence; level denies and never holds; guideline text can't change the outcome. |
 | classify | `test/classify.test.ts` | Each `ActionClass` from Bash, Edit/Write paths, MCP and pi tool shapes. |
 | shell | `test/shell.test.ts` | Quoting, continuations, comments, redirects, heredocs, nested substitutions, unreadable input and linear-time bounds. |
-| gate service | `test/gate-service.test.ts` | Allow-once used exactly once (SC-14); late answer reused (SC-12); timeout gives retry and is not a stuck denial; Shadow gives passthrough plus wouldHave (SC-13); take-back resolves an in-flight request as passthrough. |
+| gate service | `test/gate-service.test.ts` | Allow-once used exactly once (SC-14); code decides before a stored answer; a late answer's age, mandate and single use (SC-12); timeout gives retry and is not a stuck denial; Shadow gives passthrough plus wouldHave (SC-13); take-back resolves an in-flight request as passthrough. |
 | encodings | `test/encode.test.ts` | Each table cell. |
 | hooks | `test/hooks-install.test.ts`, `test/agent-hooks.test.ts` | Event-specific fail-closed commands under `sh`, Claude launch identity and version checks, Codex coexistence and removal without deleting the file, pi/omp extension ownership, installed-agent filtering, serialized synchronization and live settings. |
 | conformance | `test/conformance/*.test.ts` | Gated on installed agent binaries; skips with a reason when absent. Starts each installed agent with `--version` under a temp home. Shim and extension scenarios use a stand-in daemon, not running agent sessions. |
