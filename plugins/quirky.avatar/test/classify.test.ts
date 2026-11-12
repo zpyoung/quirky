@@ -854,8 +854,8 @@ describe('unseen arguments and directories', () => {
       ['(cd /tmp && rm -rf x); touch a', ['read', 'edit-outside', 'edit-inside']],
       ['(cd /tmp); (touch a)', ['read', 'edit-inside']],
       ['cd /tmp; (touch a)', ['read', 'edit-outside']],
-      ['cd src && (cd .. && touch a)', ['read', 'edit-inside']],
-      ['cd /tmp; echo "$(cd /work/wt; touch a)"; touch b', ['read', 'edit-inside', 'edit-outside']],
+      ['cd src && (cd .. && touch a)', ['read', 'edit-outside']],
+      ['cd /tmp; echo "$(cd /work/wt; touch a)"; touch b', ['read', 'edit-outside']],
       ['(cd src && bun test)', ['read', 'test']],
       ['(export GIT_DIR=/home/u/r/.git); git clean -fd', ['other', 'edit-inside']],
       ['cd /tmp; echo `cd /work/wt`; rm -rf x', ['read', 'edit-outside']],
@@ -925,7 +925,7 @@ describe('unseen arguments and directories', () => {
       ['eval "cd $D"; touch a', 'edit-outside', 'edit-inside'],
       ['eval "cd /tmp; $X"; rm -rf x', 'edit-outside', 'edit-inside'],
       ['eval "cd /tmp" "$X"; rm -rf x', 'edit-outside', 'edit-inside'],
-      ['eval "echo $X"; touch a', 'edit-inside', 'edit-outside']
+      ['eval "echo $X"; touch a', 'edit-outside', 'edit-inside']
     ]
     for (const [command, edit, excluded] of dynamicEvals) {
       const classes = bash(command)
@@ -1143,4 +1143,283 @@ describe('brace expansion', () => {
       expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
     })
   }
+})
+
+describe('directory uncertainty scenarios', () => {
+  test('scenario 1: keeps the old and entered directories after a followed cd', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cd /home/u; cd /work/wt/no-such-dir; rm -rf Documents', ['read', 'edit-outside']],
+      ['cd /home/u; cd /work/wt; rm -rf Documents', ['read', 'edit-outside']],
+      ['cd /tmp; cd /work/wt 2>/dev/null; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; pushd /work/wt; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; (cd /work/wt; rm -rf x)', ['read', 'edit-outside']],
+      ['cd src; cd ..; touch a', ['read', 'edit-outside']],
+      ['cd src; touch a', ['read', 'edit-inside']],
+      ['cd src; cd lib; touch a', ['read', 'edit-inside']],
+      ['cd /work/wt/src; rm -rf dist', ['read', 'edit-inside']],
+      ['cd /work/other; touch a', ['read', 'edit-inside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('scenario 2: tracks certainty through && and resets it across list boundaries', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cd /tmp && cd /work/wt && rm -rf x', ['read', 'edit-inside']],
+      ['cd /home/u; cd /work/wt && rm -rf Documents', ['read', 'edit-inside']],
+      ['cd src && cd .. && touch a', ['read', 'edit-inside']],
+      ['cd /home/u; ls | cat && cd /work/wt && rm -rf Documents', ['read', 'edit-inside']],
+      ['cd /tmp; (cd /work/wt && rm -rf x)', ['read', 'edit-inside']],
+      ['cd /home/u; false && cd /work/wt; rm -rf Documents', ['read', 'edit-outside']],
+      ['cd /home/u; true || cd /work/wt; rm -rf Documents', ['read', 'edit-outside']],
+      ['cd /home/u; true || cd /work/wt && rm -rf Documents', ['read', 'edit-outside']],
+      ['cd /tmp || cd /work/wt; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp && cd /work/wt || true; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; cd /work/wt && true; rm -rf x', ['read', 'edit-outside']],
+      ['cd $D && cd work/wt && rm -rf x', ['other', 'read', 'edit-outside']],
+      ['cd $D && cd /work/wt && rm -rf x', ['other', 'read', 'edit-inside']],
+      ['cd $D; cd /work/wt; rm -rf x', ['other', 'read', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    const cwdRows: [string, ActionClass[]][] = [
+      ['cd /work/wt && rm -rf x', ['read', 'edit-inside']],
+      ['cd /work/wt; rm -rf x', ['read', 'edit-outside']],
+      ['cd /work/wt && true; rm -rf x', ['read', 'edit-outside']]
+    ]
+    for (const [command, expected] of cwdRows) {
+      expect(sortedClasses(bash(command, {}, '/home/u'))).toEqual(sortedClasses(expected))
+    }
+  })
+
+  test('scenario 3: treats wrapped directory changes and evals as uncertain', () => {
+    const wrappers = ['env', 'nohup', 'nice', 'timeout 5', 'stdbuf -o0', 'command', 'builtin', 'time', 'exec']
+    const wrapperRows: [string, ActionClass[]][] = [
+      ['cd /tmp; W cd /work/wt; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; W cd /work/wt && rm -rf x', ['read', 'edit-outside']],
+      ['W cd src && touch a', ['read', 'edit-inside']],
+      ['W cd /tmp && touch a', ['read', 'edit-outside']]
+    ]
+    for (const wrapper of wrappers) {
+      for (const [pattern, expected] of wrapperRows) {
+        expectClassSet(pattern.replaceAll('W', wrapper), expected)
+      }
+    }
+
+    const evalRows: [string, ActionClass[]][] = [
+      ['eval "cd ." | cat; touch a', ['read', 'edit-inside']],
+      ['eval "cd /work/wt" | cat; touch a', ['read', 'edit-inside']],
+      ['cd /tmp; env eval "cd /work/wt"; rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; command eval "cd /work/wt" && rm -rf x', ['read', 'edit-outside']],
+      ['cd /tmp; eval "cd /work/wt" && rm -rf x', ['read', 'edit-inside']],
+      ['cd /tmp; eval "cd /work/wt"; rm -rf x', ['read', 'edit-outside']]
+    ]
+    for (const [command, expected] of evalRows) expectClassSet(command, expected)
+  })
+
+  test('scenario 4: respects CDPATH only for eligible relative directory changes', () => {
+    const uncertainRows = [
+      'CDPATH=/home cd u; rm -rf Documents',
+      'CDPATH=/home cd u && rm -rf Documents',
+      'export CDPATH=/home; cd u && rm -rf Documents',
+      'CDPATH=/home; cd u && rm -rf Documents',
+      'CDPATH=$X cd src && touch a',
+      'CDPATH=/home pushd u && rm -rf Documents',
+      "CDPATH=/home bash -c 'cd u && rm -rf Documents'",
+      'eval "CDPATH=/home"; cd u && rm -rf Documents',
+      'env CDPATH=/home cd u && rm -rf Documents',
+      'export CDPATH=$X; cd u && touch a',
+      'export CDPATH=/home; (cd u && touch a)'
+    ]
+    for (const command of uncertainRows) {
+      expect(bash(command)).toEqual(expect.arrayContaining(['other', 'edit-outside']))
+    }
+
+    const unaffectedRows: [string, ActionClass[]][] = [
+      ['CDPATH= cd src && touch a', ['read', 'edit-inside']],
+      ['CDPATH=/home cd ./src && touch a', ['read', 'edit-inside']],
+      ['CDPATH=/home cd ../wt/src && touch a', ['read', 'edit-inside']],
+      ['CDPATH=/home cd /work/wt/src && touch a', ['read', 'edit-inside']],
+      ['CDPATH=/home cd . && touch a', ['read', 'edit-inside']],
+      ['CDPATH=/home cd .. && touch a', ['read', 'edit-outside']],
+      ['CDPATH=/home cd && touch a', ['read', 'edit-outside']],
+      ['CDPATH=/home cd ~ && touch a', ['read', 'edit-outside']],
+      ['(CDPATH=/home); cd src && touch a', ['read', 'edit-inside']]
+    ]
+    for (const [command, expected] of unaffectedRows) expectClassSet(command, expected)
+  })
+
+  test('scenario 5: makes directory changes behind shell keywords unknown', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['{ cd /home/u; rm -rf Documents; }', ['other', 'edit-outside']],
+      ['{ cd src; }; touch a', ['other', 'edit-outside']],
+      ['! cd /home/u; rm -rf Documents', ['other', 'edit-outside']],
+      ['if cd /home/u; then :; fi; rm -rf Documents', ['other', 'edit-outside']],
+      ['while cd ..; do :; done; rm -rf x', ['other', 'edit-outside']],
+      ['until cd src; do :; done; touch a', ['other', 'edit-outside']],
+      ['if true; then cd src; fi; touch a', ['other', 'edit-outside']],
+      ['if false; then :; else cd src; fi; touch a', ['other', 'edit-outside']],
+      ['if false; then :; elif cd src; then :; fi; touch a', ['other', 'edit-outside']],
+      ['for d in a b; do cd ..; done; touch a', ['other', 'edit-outside']],
+      ['function f { cd /home/u; }; f; rm -rf Documents', ['other', 'edit-outside']],
+      ['f() { cd /home/u; }; f; rm -rf Documents', ['other', 'edit-outside']],
+      ['noglob cd /home/u; rm -rf Documents', ['other', 'edit-outside']],
+      ['nocorrect cd /home/u; rm -rf Documents', ['other', 'edit-outside']],
+      ['{ eval "cd src"; }; touch a', ['other', 'edit-outside']],
+      ['{ pushd src; }; touch a', ['other', 'edit-outside']],
+      ['{ popd; }; touch a', ['other', 'edit-outside']],
+      ['{ command cd src; }; touch a', ['other', 'edit-outside']],
+      ['if ! cd src; then :; fi; touch a', ['other', 'edit-outside']],
+      ['{ cd src; }; touch /work/wt/a', ['other', 'edit-inside']],
+      ['{ cd src; }; cd /work/wt && touch a', ['other', 'read', 'edit-inside']],
+      ['{ echo cd; }; touch a', ['other', 'edit-inside']],
+      ['{ ls; }; touch a', ['other', 'edit-inside']],
+      ['echo { cd src; touch a', ['read', 'edit-inside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('scenario 6: makes the directory unknown after an eval with a computed word', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['eval "$(echo cd /home/u)"; rm -rf x', ['other', 'read', 'edit-outside']],
+      ['eval "$X"; touch a', ['other', 'edit-outside']],
+      ['eval "echo $X"; touch a', ['other', 'read', 'edit-outside']],
+      ['eval "cd src; $X" && touch a', ['other', 'read', 'edit-outside']],
+      ['eval "$X"; touch /work/wt/a', ['other', 'edit-inside']],
+      ['eval "$X"; cd /work/wt && touch a', ['other', 'read', 'edit-inside']],
+      ['(eval "$X"); touch a', ['other', 'edit-inside']],
+      ["eval 'cd src'; touch a", ['read', 'edit-inside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+  })
+
+  test('scenario 7: checks every possible directory for paths and records each push destination once', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cd /tmp; touch a', ['read', 'edit-outside']],
+      ['cd src; touch a; touch ../../x', ['read', 'edit-inside', 'edit-outside']],
+      ['cd /tmp; git clean -fd', ['read', 'edit-outside']],
+      ['cd src; git clean -fd', ['read', 'edit-inside']],
+      ['cd /tmp; cd /work/wt; git clean -fd', ['read', 'edit-outside']],
+      ['cd /tmp; cd /work/wt && git clean -fd', ['read', 'edit-inside']],
+      ['cd /home/u; cd /work/wt; cat .ssh/id_rsa', ['read', 'credential']],
+      ['cd /home/u; cd /work/wt && cat .ssh/id_rsa', ['read']],
+      ['cd /home/u; cd /work/wt; cat < .netrc', ['read', 'credential']],
+      ['cd /home/u; cd /work/wt && cat < .netrc', ['read']],
+      ['cd /home/u; cd /work/wt; echo hi > .zshrc', ['read', 'edit-outside']],
+      ['cd /home/u; cd /work/wt && echo hi > .zshrc', ['read', 'edit-inside']],
+      ["cd /home/u; cd /work/wt; bash -c 'rm -rf Documents'", ['read', 'edit-outside']],
+      ["cd /home/u; cd /work/wt && bash -c 'rm -rf Documents'", ['read', 'edit-inside']],
+      ["cd /home/u; cd /work/wt; eval 'rm -rf Documents'", ['read', 'edit-outside']],
+      ['cd /home/u; cd /work/wt; touch .claude/settings.json', ['read', 'agent-config', 'edit-outside']],
+      ['cd /home/u; cd /work/other; touch f', ['read', 'edit-outside']],
+      ['cd /home/u; cd /work/other; echo hi > f', ['read', 'edit-outside']],
+      ['cd /home/u; cd /work/other; git clean -fd', ['read', 'edit-outside']],
+      ["cd /home/u; cd /work/other; bash -c 'touch f'", ['read', 'edit-outside']],
+      ["cd /home/u; cd /work/other; eval 'touch f'", ['read', 'edit-outside']],
+      ['cd /home/u; cd /tmp; cat .ssh/id_rsa', ['read', 'credential']],
+      ['cd /home/u; cd /tmp; cat < .netrc', ['read', 'credential']],
+      ['cd /work/other; cd /work/wt/src; touch f', ['read', 'edit-inside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    expect(pushDestinations(call('Bash', { command: 'cd src; git push origin feat/x' }), ctx)).toEqual(['feat/x'])
+    expect(pushDestinations(call('Bash', { command: 'cd /tmp; cd src; git push origin feat/x' }), ctx)).toEqual(['feat/x'])
+  })
+
+  test('scenario 8: turns directory sets unknown only after the sixteen-directory limit', () => {
+    const far = (count: number) => Array.from({ length: count }, (_, index) => `cd /work/wt/d${index + 1}`).join('; ')
+    const rows: [string, ActionClass[]][] = [
+      [`${far(15)}; touch a`, ['read', 'edit-inside']],
+      [`${far(16)}; touch a`, ['read', 'edit-outside']],
+      [`${far(16)}; touch /work/wt/a`, ['read', 'edit-inside']],
+      [`${far(16)}; cd /work/wt && touch a`, ['read', 'edit-inside']],
+      [`${far(40)}; cd /work/wt; touch a`, ['read', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    const longCommands: [string, ActionClass[]][] = [
+      ['cd a;'.repeat(60_000) + 'touch b', ['read', 'edit-outside']],
+      ['cd /work/wt/a && '.repeat(40_000) + 'touch b', ['read', 'edit-inside']],
+      ['cd a || '.repeat(40_000) + 'touch b', ['read', 'edit-outside']]
+    ]
+    const started = performance.now()
+    for (const [command, expected] of longCommands) expectClassSet(command, expected)
+    expect(performance.now() - started).toBeLessThan(2_000)
+  })
+
+  test('scenario 9: starts nested scopes from their command view or the parent possible set', () => {
+    const rows: [string, ActionClass[]][] = [
+      ['cd src && echo "$(cd .. && touch a)"', ['read', 'edit-inside']],
+      ['cd src && X=$(cd .. && touch a)', ['read', 'edit-inside']],
+      ['cd src && cat <<EOF\n$(cd .. && touch a)\nEOF', ['read', 'edit-inside']],
+      ['cd src && echo hi > "$(cd .. && touch a)"', ['read', 'edit-inside', 'edit-outside']],
+      ['cd src; echo "$(cd .. && touch a)"', ['read', 'edit-outside']],
+      ['cd src || echo "$(cd .. && touch a)"', ['read', 'edit-outside']],
+      ['cd src && echo x | cat "$(cd .. && touch a)"', ['read', 'other', 'edit-outside']],
+      ['cd src && (cd .. && touch a)', ['read', 'edit-outside']],
+      ['cd src && (touch a)', ['read', 'edit-inside']],
+      ['(cd /tmp); touch a', ['read', 'edit-inside']],
+      ['echo "$(cd /tmp)"; touch a', ['read', 'edit-inside']],
+      ['cd /home/u; cd /work/wt/src && echo hi > "$(cat .netrc)"', ['read', 'edit-outside']]
+    ]
+    for (const [command, expected] of rows) expectClassSet(command, expected)
+
+    const outsideRows = [
+      'cd /home/u; cd /work/wt/nosuch; (true) && rm -rf Documents',
+      'cd build; (true) && rm -rf ../x',
+      'cd build\n(true) && rm -rf ../x',
+      'cd build || (true) && rm -rf ../x',
+      'cd build; (true) && (true) && rm -rf ../x',
+      'cd nosuch; (true) && cd .. && rm -rf x',
+      'cd nosuch; (true) && cd ..; rm -rf x',
+      'cd /tmp; cd /work/wt; (true) && git clean -fd',
+      'cd /tmp; cd /work/wt; (true) && echo hi > x',
+      "cd /tmp; cd /work/wt; (true) && bash -c 'rm -rf x'",
+      "cd /tmp; cd /work/wt; (true) && eval 'rm -rf x'",
+      'cd /tmp; cd /work/wt; (true) && echo "$(rm -rf x)"',
+      'cd /tmp; cd /work/wt/nosuch; (true) || cd /work/wt && rm -rf x',
+      'cd nosuch; ((1)) && cd ..; touch a'
+    ]
+    for (const command of outsideRows) {
+      const classes = bash(command)
+      expect(classes).toContain('edit-outside')
+      expect(classes).not.toContain('edit-inside')
+    }
+    expectClassSet('cd /home/u; cd /work/wt; (true) && cat .ssh/id_rsa', ['read', 'credential'])
+    for (const command of [
+      'cd /home/u; cd /work/wt/nosuch; (true) && rm -rf Documents',
+      'cd build; (true) && rm -rf ../x'
+    ]) {
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    }
+    expectClassSet('cd src && (true) && rm -rf dist', ['read', 'edit-inside'])
+    expect(decideReviewed('cd src && (true) && rm -rf dist')).toMatchObject({ outcome: 'allow', step: 'fixed-rules' })
+    expectClassSet('cd build; echo "$(true)" && rm -rf ../x', ['read', 'edit-outside'])
+    expectClassSet('cd build && echo "$(true)" && rm -rf ../x', ['read', 'edit-inside'])
+    expect(sortedClasses(bash('cd /work/wt && (true) && rm -rf x', {}, '/home/u'))).toEqual(['edit-outside', 'read'])
+  })
+
+  test('scenario 10: applies the reviewed decision outcomes for each directory rule', () => {
+    const rows: { command: string; outcome: string; step: string | null }[] = [
+      { command: 'cd /home/u; cd /work/wt/no-such-dir; rm -rf Documents', outcome: 'held', step: 'floor-core' },
+      { command: 'cd /home/u; false && cd /work/wt; rm -rf Documents', outcome: 'held', step: 'floor-core' },
+      { command: 'cd /home/u; true || cd /work/wt; rm -rf Documents', outcome: 'held', step: 'floor-core' },
+      { command: 'cd /tmp || cd /work/wt; rm -rf x', outcome: 'held', step: 'floor-core' },
+      { command: 'cd /tmp; env cd /work/wt; rm -rf x', outcome: 'held', step: 'floor-core' },
+      { command: 'cd /tmp; command cd /work/wt; rm -rf x', outcome: 'held', step: 'floor-core' },
+      { command: 'CDPATH=/home cd u; rm -rf Documents', outcome: 'held', step: 'floor-core' },
+      { command: '{ cd /home/u; rm -rf Documents; }', outcome: 'held', step: 'floor-core' },
+      { command: 'eval "$(echo cd /home/u)"; rm -rf x', outcome: 'held', step: 'floor-core' },
+      { command: 'cd src; rm -rf dist', outcome: 'allow', step: 'fixed-rules' },
+      { command: 'cd src && rm -rf dist', outcome: 'allow', step: 'fixed-rules' },
+      { command: 'cd /work/wt/src; rm -rf dist', outcome: 'allow', step: 'fixed-rules' },
+      { command: '(cd src && rm -rf dist)', outcome: 'allow', step: 'fixed-rules' },
+      { command: 'command cd src && rm -rf dist', outcome: 'allow', step: 'fixed-rules' },
+      { command: 'cd src && bun test && cd .. && rm -rf dist', outcome: 'allow', step: 'fixed-rules' },
+      { command: 'cd /tmp && cd /work/wt && rm -rf x', outcome: 'allow', step: 'fixed-rules' },
+      { command: 'eval "$X"; touch /work/wt/a', outcome: 'judgment', step: null }
+    ]
+    for (const { command, outcome, step } of rows) {
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    }
+  })
 })
