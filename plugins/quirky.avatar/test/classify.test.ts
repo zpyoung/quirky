@@ -580,3 +580,26 @@ describe('the reviewed inputs are no longer allowed', () => {
     }
   })
 })
+
+describe('shell evaluation boundaries', () => {
+  const rows: [string, string, ActionClass[]][] = [
+    ['here-string substitutions', 'cat <<< "$(git push -f origin main)"', ['push-force', 'push-default']],
+    ['substitutions activated by a nested shell', 'bash -c "echo \\$(git push origin main) $(echo x)"', ['push-default']],
+    ['continued heredoc delimiters', 'cat <<EOF\nEO\\\nF\nrm -rf /tmp/x\nEOF', ['edit-outside']],
+    ['ANSI-C quoted heredoc delimiters', "cat <<$'EOF'\nEOF\nrm -rf /tmp/x\n$EOF", ['edit-outside']],
+    ['apostrophes in double-quoted parameter defaults', 'echo "${X:-\'$(git push -f origin main)\'}"', ['push-force', 'push-default']],
+    ['appended git directory assignments', 'GIT_DIR=/tmp GIT_DIR+=.git git clean -fd', ['edit-outside']],
+    ['substitution-local git assignments', "GIT_DIR=/tmp/repo/.git bash -c 'echo $(GIT_DIR=.git); git clean -fd'", ['edit-outside']],
+    ['process substitutions in parameter defaults', 'X=; echo ${X:-<(git push -f origin main)}', ['push-force', 'push-default']]
+  ]
+  for (const [name, command, risky] of rows) {
+    test(name, () => {
+      expect(bash(command)).toEqual(expect.arrayContaining(risky))
+    })
+  }
+
+  test('retains newly activated nested commands for the denied list', () => {
+    const command = 'bash -c "echo \\$(git push origin main) $(echo x)"'
+    expect(commandParts(call('Bash', { command }), ctx)).toContain('git push origin main')
+  })
+})

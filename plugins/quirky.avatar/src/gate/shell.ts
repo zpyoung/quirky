@@ -47,8 +47,8 @@ type PendingHeredoc = {
 type RedirectOperator = { start: number; end: number; op: string }
 type HomeMarker = { start: number; end: number }
 type ExpansionFrame =
-  | { kind: 'parameter'; braces: number; quote: string }
-  | { kind: 'arithmetic'; parentheses: number; quote: string }
+  | { kind: 'parameter'; braces: number; quote: string; doubleQuoted: boolean }
+  | { kind: 'arithmetic'; parentheses: number; quote: string; doubleQuoted: boolean }
 type ScopeResult = { id: number; entry: Entry }
 
 class WordBuilder {
@@ -297,7 +297,7 @@ class ShellReader {
         this.index = redirect.end
         const targetStart = this.skipRedirectSpace(limit)
         if (targetStart === null) return null
-        const target = this.readWord(scope, depth, close, limit, redirect.op.startsWith('<<') ? 'delimiter' : 'word')
+        const target = this.readWord(scope, depth, close, limit, redirect.op === '<<' || redirect.op === '<<-' ? 'delimiter' : 'word')
         if (target === null || !target.consumed) return null
         const command = active
         this.appendEntries(command.before, target.before)
@@ -331,6 +331,7 @@ class ShellReader {
           this.index = assignment.valueStart
           const value = this.readWord(scope, depth, close, limit, 'word', false)
           if (value === null) return null
+          if (assignment.append) value.word.dynamic = true
           const command = active
           this.appendEntries(command.before, value.before)
           command.command.assignments.push({ name: assignment.name, value: value.word })
@@ -397,15 +398,17 @@ class ShellReader {
     return this.index
   }
 
-  private findAssignmentPrefix(limit: number): { name: string; valueStart: number } | null {
+  private findAssignmentPrefix(limit: number): { name: string; valueStart: number; append: boolean } | null {
     const start = this.index
     if (start >= limit || !this.isNameStart(this.source.charCodeAt(start))) return null
     let cursor = start + 1
     while (cursor < limit && this.isNameContinue(this.source.charCodeAt(cursor))) cursor++
     const nameEnd = cursor
-    if (cursor < limit && this.source[cursor] === '=') return { name: this.source.slice(start, nameEnd), valueStart: cursor + 1 }
+    if (cursor < limit && this.source[cursor] === '=') {
+      return { name: this.source.slice(start, nameEnd), valueStart: cursor + 1, append: false }
+    }
     if (cursor + 1 < limit && this.source[cursor] === '+' && this.source[cursor + 1] === '=') {
-      return { name: this.source.slice(start, nameEnd), valueStart: cursor + 2 }
+      return { name: this.source.slice(start, nameEnd), valueStart: cursor + 2, append: true }
     }
     return null
   }
@@ -470,7 +473,7 @@ class ShellReader {
         if (character === '$' && mode !== 'delimiter') {
           builder.appendRange(segmentStart, cursor)
           this.index = cursor
-          const handled = this.readDollar(builder, scope, depth, limit, mode)
+          const handled = this.readDollar(builder, scope, depth, limit, mode, false, true)
           if (handled === null) return null
           if (handled) {
             cursor = this.index
@@ -542,10 +545,12 @@ class ShellReader {
 
       if (character === '$') {
         builder.appendRange(segmentStart, cursor)
+        const delimiterAnsiQuote = mode === 'delimiter' && cursor + 1 < limit && this.source[cursor + 1] === "'"
         this.index = cursor
         const handled = this.readDollar(builder, scope, depth, limit, mode)
         if (handled === null) return null
         if (handled) {
+          if (delimiterAnsiQuote) quoted = true
           cursor = this.index
           segmentStart = cursor
           consumed = true
@@ -621,7 +626,8 @@ class ShellReader {
     depth: number,
     limit: number,
     mode: 'word' | 'delimiter' | 'heredoc',
-    stripTabs = false
+    stripTabs = false,
+    doubleQuoted = false
   ): boolean | null {
     const start = this.index
     if (start + 1 >= limit) return false
@@ -629,7 +635,7 @@ class ShellReader {
 
     if (next === '(' && start + 2 < limit && this.source[start + 2] === '(') {
       builder.dynamic = true
-      if (!this.scanExtended(builder, scope, depth, limit, 'arithmetic')) return null
+      if (!this.scanExtended(builder, scope, depth, limit, 'arithmetic', doubleQuoted)) return null
       this.appendExpansionRange(builder, start, this.index, mode, stripTabs)
       return true
     }
@@ -651,12 +657,12 @@ class ShellReader {
         return true
       }
       builder.dynamic = true
-      if (!this.scanExtended(builder, scope, depth, limit, 'parameter')) return null
+      if (!this.scanExtended(builder, scope, depth, limit, 'parameter', doubleQuoted)) return null
       this.appendExpansionRange(builder, start, this.index, mode, stripTabs)
       return true
     }
 
-    if (next === "'" && mode !== 'delimiter' && mode !== 'heredoc') {
+    if (next === "'" && mode !== 'heredoc' && !doubleQuoted) {
       let cursor = start + 2
       let escaped = false
       while (cursor < limit) {
@@ -719,16 +725,17 @@ class ShellReader {
     scope: number,
     depth: number,
     limit: number,
-    initial: 'parameter' | 'arithmetic'
+    initial: 'parameter' | 'arithmetic',
+    doubleQuoted: boolean
   ): boolean {
     if (depth >= MAX_SHELL_DEPTH) return false
     const frames: ExpansionFrame[] = []
     if (initial === 'parameter') {
       this.index += 2
-      frames.push({ kind: 'parameter', braces: 1, quote: '' })
+      frames.push({ kind: 'parameter', braces: 1, quote: '', doubleQuoted })
     } else {
       this.index += 3
-      frames.push({ kind: 'arithmetic', parentheses: 0, quote: '' })
+      frames.push({ kind: 'arithmetic', parentheses: 0, quote: '', doubleQuoted })
     }
 
     while (frames.length > 0) {
@@ -751,7 +758,7 @@ class ShellReader {
           this.index++
           continue
         }
-      } else if (character === "'" || character === '"') {
+      } else if (character === '"' || (character === "'" && !frame.doubleQuoted)) {
         frame.quote = character
         this.index++
         continue
@@ -761,7 +768,12 @@ class ShellReader {
         if (character === '$' && this.index + 2 < limit && this.source[this.index + 1] === '(' && this.source[this.index + 2] === '(') {
           if (depth + frames.length >= MAX_SHELL_DEPTH) return false
           this.index += 3
-          frames.push({ kind: 'arithmetic', parentheses: 0, quote: '' })
+          frames.push({
+            kind: 'arithmetic',
+            parentheses: 0,
+            quote: '',
+            doubleQuoted: frame.doubleQuoted || frame.quote === '"'
+          })
           continue
         }
         if (character === '$' && this.index + 1 < limit && this.source[this.index + 1] === '(') {
@@ -773,11 +785,29 @@ class ShellReader {
         if (character === '$' && this.index + 1 < limit && this.source[this.index + 1] === '{') {
           if (depth + frames.length >= MAX_SHELL_DEPTH) return false
           this.index += 2
-          frames.push({ kind: 'parameter', braces: 1, quote: '' })
+          frames.push({
+            kind: 'parameter',
+            braces: 1,
+            quote: '',
+            doubleQuoted: frame.doubleQuoted || frame.quote === '"'
+          })
           continue
         }
         if (character === '`') {
           const nested = this.openScope(scope, depth + frames.length, this.index, 1, '`', limit)
+          if (nested === null) return false
+          builder.addScope(nested)
+          continue
+        }
+        if (
+          frame.kind === 'parameter' &&
+          frame.quote === '' &&
+          !frame.doubleQuoted &&
+          (character === '<' || character === '>') &&
+          this.index + 1 < limit &&
+          this.source[this.index + 1] === '('
+        ) {
+          const nested = this.openScope(scope, depth + frames.length, this.index, 2, ')', limit)
           if (nested === null) return false
           builder.addScope(nested)
           continue
@@ -836,7 +866,7 @@ class ShellReader {
 
   private consumeHeredocs(items: PendingHeredoc[], scope: number, depth: number, limit: number): boolean {
     for (const item of items) {
-      const body = this.findHeredocBody(item.delimiter, item.stripTabs, limit)
+      const body = this.findHeredocBody(item.delimiter, item.stripTabs, item.quoted, limit)
       if (body === null) return false
       if (item.quoted) {
         const builder = new WordBuilder(this.source, this.home)
@@ -853,20 +883,50 @@ class ShellReader {
     return true
   }
 
-  private findHeredocBody(delimiter: string, stripTabs: boolean, limit: number): { start: number; end: number; after: number } | null {
+  private findHeredocBody(
+    delimiter: string,
+    stripTabs: boolean,
+    quoted: boolean,
+    limit: number
+  ): { start: number; end: number; after: number } | null {
     const start = this.index
     let cursor = start
     while (cursor <= limit) {
-      const lineStart = cursor
-      let lineEnd = cursor
-      while (lineEnd < limit && this.source[lineEnd] !== '\n') lineEnd++
-      let compareStart = lineStart
-      if (stripTabs) while (compareStart < lineEnd && this.source.charCodeAt(compareStart) === 9) compareStart++
-      if (lineEnd - compareStart === delimiter.length && this.rangeEquals(compareStart, lineEnd, delimiter)) {
-        return { start, end: lineStart, after: lineEnd < limit ? lineEnd + 1 : lineEnd }
+      const logicalStart = cursor
+      let logicalLength = 0
+      let matches = true
+      while (true) {
+        const lineStart = cursor
+        let lineEnd = cursor
+        while (lineEnd < limit && this.source[lineEnd] !== '\n') lineEnd++
+
+        let compareStart = lineStart
+        if (stripTabs) while (compareStart < lineEnd && this.source.charCodeAt(compareStart) === 9) compareStart++
+
+        let continuation = false
+        if (!quoted && lineEnd < limit) {
+          let slashStart = lineEnd
+          while (slashStart > lineStart && this.source[slashStart - 1] === '\\') slashStart--
+          continuation = ((lineEnd - slashStart) & 1) === 1
+        }
+        const compareEnd = continuation ? lineEnd - 1 : lineEnd
+        for (let index = compareStart; index < compareEnd; index++) {
+          if (matches && (logicalLength >= delimiter.length || this.source[index] !== delimiter[logicalLength])) {
+            matches = false
+          }
+          logicalLength++
+        }
+
+        if (!continuation) {
+          if (matches && logicalLength === delimiter.length) {
+            return { start, end: logicalStart, after: lineEnd < limit ? lineEnd + 1 : lineEnd }
+          }
+          if (lineEnd >= limit) return null
+          cursor = lineEnd + 1
+          break
+        }
+        cursor = lineEnd + 1
       }
-      if (lineEnd >= limit) break
-      cursor = lineEnd + 1
     }
     return null
   }
@@ -952,11 +1012,6 @@ class ShellReader {
     return { word: builder.finish(), before: builder.before, quoted: false, consumed: end > start }
   }
 
-  private rangeEquals(start: number, end: number, value: string): boolean {
-    if (end - start !== value.length) return false
-    for (let i = 0; i < value.length; i++) if (this.source[start + i] !== value[i]) return false
-    return true
-  }
 
   private appendEntries(target: Entry[], source: Entry[]): void {
     for (const entry of source) target.push(entry)

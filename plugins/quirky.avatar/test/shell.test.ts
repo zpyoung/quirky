@@ -225,7 +225,7 @@ describe('parseShell scopes and assignments', () => {
       })
     ]))
     expect(parse('env A=1')).toEqual(script([command(words('env', 'A=1'))]))
-    expect(parse('A+=x env')).toEqual(script([command(words('env'), { assignments: [assignment('A', 'x')] })]))
+    expect(parse('A+=x env')).toEqual(script([command(words('env'), { assignments: [assignment('A', word('x', true))] })]))
     expect(parse('1A=x env')).toEqual(script([command(words('1A=x', 'env'))]))
     expect(parse("'A=1' env")).toEqual(script([command(words('A=1', 'env'))]))
   })

@@ -597,7 +597,7 @@ function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>): 
   return env
 }
 
-function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyContext, depth = 0, inheritedEnv: Map<string, ShellWord> = new Map(), skipNestedScopes = false): Analysis {
+function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyContext, depth = 0, inheritedEnv: Map<string, ShellWord> = new Map()): Analysis {
   if (depth > 4) return { classes: ['other'], parts: [], pushDests: [] }
   const script = parseShell(command, { home: ctx.home })
   if (script === null) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
@@ -616,11 +616,18 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
   const classes: ActionClass[] = []
   const parts: string[] = []
   const pushDests: string[] = []
-  const shellEnv = new Map(inheritedEnv)
+  const environments = new Map<number, Map<string, ShellWord>>([[0, new Map(inheritedEnv)]])
+  const environmentFor = (scope: number): Map<string, ShellWord> => {
+    const existing = environments.get(scope)
+    if (existing !== undefined) return existing
+    const env = new Map(environmentFor(script.parents[scope]))
+    environments.set(scope, env)
+    return env
+  }
   const pipelineDownloads = new Map<number, boolean>()
   let cwd = startCwd
   for (const shellCommand of script.commands) {
-    if (skipNestedScopes && shellCommand.scope !== 0) continue
+    const shellEnv = environmentFor(shellCommand.scope)
     let downloadInPipeline = pipelineDownloads.get(shellCommand.scope) ?? false
     if (shellCommand.sep !== '|') downloadInPipeline = false
 
@@ -670,7 +677,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       }
     } else if (isShell && commandFlag >= 0 && args[commandFlag + 1] !== undefined) {
       const body = parsed.argWords[commandFlag + 1]
-      const inner = analyzeCommand(body.text, cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv), body.subs.length > 0)
+      const inner = analyzeCommand(body.text, cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
       append(partClasses, inner.classes)
       append(parts, inner.parts)
@@ -678,7 +685,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     } else if (isShell) {
       if (!downloadInPipeline) partClasses.push('other')
     } else if (cmd === 'eval' && args.length > 0) {
-      const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv), parsed.argWords.some((word) => word.subs.length > 0))
+      const inner = analyzeCommand(args.join(' '), cwd, ctx, depth + 1, commandEnvironment(parsed, shellEnv))
       if (inner.unreadable) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
       append(partClasses, inner.classes)
       append(parts, inner.parts)
