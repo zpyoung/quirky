@@ -48,9 +48,9 @@ another key or event type.
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
 when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
 
-`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
-`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
-emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` coalesces with one
+key for the daemon, and `quirky.editor/explorerChanged` coalesces per worktree and still carries
+its worktree tag. Editor clients refresh after their own actions rather than waiting for an event.
 `quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
 every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
 and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon

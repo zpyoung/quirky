@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync, 
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { RpcErrorCode, type MethodHandler, type PluginCaller, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
+import type { DaemonOptions } from '../../../packages/daemon/src/daemon'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { registerIsolatedEditorFixtures } from './isolated-environment'
 
@@ -49,7 +50,7 @@ async function registerWorktree(client: QuirkyClient, root: string): Promise<{ r
   return { repoId: repo.id, worktree }
 }
 
-async function fixture(files: Record<string, string>): Promise<Fixture> {
+async function fixture(files: Record<string, string>, options: Partial<DaemonOptions> = {}): Promise<Fixture> {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-')))
   const home = makeHomeWithoutAutoHooks('q-editor-explorer-')
   let harness: Harness | undefined
@@ -65,7 +66,7 @@ async function fixture(files: Record<string, string>): Promise<Fixture> {
       git(root, home, ['-c', 'user.email=editor@test', '-c', 'user.name=Editor Test', 'add', '.'])
       git(root, home, ['-c', 'user.email=editor@test', '-c', 'user.name=Editor Test', 'commit', '-q', '-m', 'initial'])
     }
-    harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
+    harness = await startHarness({ ...options, home, builtinPluginsDir: builtinsDir() })
     const client = await harness.connect('cli')
     const { repoId, worktree } = await registerWorktree(client, root)
     const subscribed = await harness.connectWithEvents('ui')
@@ -91,6 +92,17 @@ function interaction(result: ExplorerResult): Interaction {
   if (result.interaction === undefined) throw new Error('Explorer interaction response was missing authoritative interaction state')
   return result.interaction
 }
+
+test('Explorer changes respect the daemon coalescing window', async () => {
+  const world = await fixture({ 'a.txt': 'a\n', 'b.txt': 'b\n', 'c.txt': 'c\n' }, { eventCoalesceMs: 60_000 })
+  for (const name of ['a.txt', 'b.txt', 'c.txt']) {
+    await explorer(world, world.worktree.id, { action: 'select', path: join(world.root, name) })
+  }
+  // the real daemon clock must pass its default window without releasing the 60-second hold.
+  await Bun.sleep(500)
+  const changes = world.events.filter((event) => event.type === 'quirky.editor/changed')
+  expect(changes.map((event) => event.data)).toEqual([{ revision: 1 }])
+})
 
 test('Explorer navigation clamps, pages, contracts anchored ranges and toggles membership independently of focus', async () => {
   const files: Record<string, string> = {
