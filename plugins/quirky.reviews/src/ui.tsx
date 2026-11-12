@@ -30,6 +30,10 @@ function stateValue(raw: unknown): ReviewsState {
 
 const CHECKS_STATUS_BAR = 'status-bar:quirky.reviews/checks'
 
+function worktreeOf(layout: { worktree?: unknown }): string | null {
+  return typeof layout.worktree === 'string' && layout.worktree.trim() !== '' ? layout.worktree : null
+}
+
 type SurfaceKind = 'detail' | 'checks' | 'create' | 'settings'
 
 function itemCount(value: JsonRecord | null, key: string): number | null {
@@ -63,15 +67,24 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
   const [state, setState] = useState<ReviewsState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const request = useRef(0)
+  const [layoutWorktree, setLayoutWorktree] = useState<string | null>(() => kind === 'checks' ? worktreeOf(context.getLayout()) : null)
+  const layoutWorktreeRef = useRef(layoutWorktree)
+  layoutWorktreeRef.current = layoutWorktree
+  useEffect(() => {
+    if (kind !== 'checks') return
+    setLayoutWorktree(worktreeOf(context.getLayout()))
+    return context.onLayout((layout) => setLayoutWorktree(worktreeOf(layout)))
+  }, [context, kind])
   const refresh = useCallback(async () => {
     const epoch = ++request.current
     try {
-      const next = stateValue(await context.call('quirky.reviews/state'))
+      const worktree = layoutWorktreeRef.current
+      const next = stateValue(await context.call('quirky.reviews/state', kind === 'checks' && worktree !== null ? { worktree } : undefined))
       if (epoch !== request.current) return
       setState((old) => !old || next.revision >= old.revision ? next : old)
       setError(null)
     } catch (failure) { if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.') }
-  }, [context])
+  }, [context, kind])
   useEffect(() => {
     void refresh()
     const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() })
@@ -79,7 +92,7 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
       if (status === 'connected') { request.current++; setState(null); void refresh() }
     })
     return () => { request.current++; offEvent(); offConnection() }
-  }, [context, refresh])
+  }, [context, refresh, layoutWorktree])
   useEffect(() => { if (state && report) report(surfaceSummary(kind, state, error !== null)) }, [state, kind, report, error])
   const fail = (failure: unknown) => context.toast('Reviews', failure instanceof Error ? failure.message : 'The action failed.', { kind: 'error' })
   return <section className="ui-stack" data-review-surface={kind} style={{ height: '100%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}>

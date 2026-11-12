@@ -148,7 +148,7 @@ test('SC-44: groups hold their projects in the group order; ungrouped projects f
   expect(report.projects[0]!.worktrees[0]).toMatchObject({ workspaceStatus: 'in-review', unread: true, pinned: false })
 })
 
-test('SC-44: a group reports its own folder workspaces in tree order, as the sidebar shows them', () => {
+test('SC-44: a group reports its own folder workspaces once, and a pinned one only under pinned', () => {
   const report = buildReport(
     input({
       groups: [group('g1', 'apps', [])],
@@ -165,8 +165,7 @@ test('SC-44: a group reports its own folder workspaces in tree order, as the sid
       name: 'apps',
       collapsed: false,
       worktrees: [
-        expect.objectContaining({ id: 'w1', name: 'apps-root', kind: 'folder', branch: null, depth: 0, selected: false }),
-        expect.objectContaining({ id: 'w2', name: 'scratch', parentId: 'w1', depth: 1, pinned: true, selected: true })
+        expect.objectContaining({ id: 'w1', name: 'apps-root', kind: 'folder', branch: null, depth: 0, selected: false })
       ],
       projects: []
     }

@@ -2102,6 +2102,65 @@
         "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" }, "icon": { "type": "string" } }, "required": ["id", "label", "color"] } }
       },
       {
+        "id": "tags",
+        "description": "List every tag and the tag IDs assigned to each worktree.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{},"additionalProperties":false},
+        "result": {"type":"object","properties":{"tags":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"color":{"description":"One of blue, violet, teal, coral, magenta, mint, sand, rose, or null for grey."}},"required":["id","name","color"],"additionalProperties":false}},"assignments":{"type":"object","additionalProperties":true,"description":"Worktree ID to the array of tag IDs on it."}},"required":["tags","assignments"],"additionalProperties":false}
+      },
+      {
+        "id": "tagCreate",
+        "description": "Create a tag, or return the existing tag with the same name in any case.",
+        "params": {"type":"object","properties":{"name":{"type":"string"},"color":{"description":"One of blue, violet, teal, coral, magenta, mint, sand, rose, or null for grey."}},"required":["name"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"tag":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"color":{"description":"One of blue, violet, teal, coral, magenta, mint, sand, rose, or null for grey."}},"required":["id","name","color"],"additionalProperties":false}},"required":["tag"],"additionalProperties":false}
+      },
+      {
+        "id": "tagUpdate",
+        "description": "Rename or recolor a tag; a name used by another tag is refused.",
+        "params": {"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"color":{"description":"One of blue, violet, teal, coral, magenta, mint, sand, rose, or null for grey."}},"required":["id"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"tag":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"color":{"description":"One of blue, violet, teal, coral, magenta, mint, sand, rose, or null for grey."}},"required":["id","name","color"],"additionalProperties":false}},"required":["tag"],"additionalProperties":false}
+      },
+      {
+        "id": "tagDelete",
+        "description": "Delete a tag and remove it from every worktree.",
+        "params": {"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false},
+        "result": {"type":"object","properties":{},"additionalProperties":false}
+      },
+      {
+        "id": "tagAssign",
+        "description": "Add or remove one tag on several worktrees; worktrees that no longer exist are skipped.",
+        "params": {"type":"object","properties":{"worktreeIds":{"type":"array","items":{"type":"string"}},"tagId":{"type":"string"},"assigned":{"type":"boolean"}},"required":["worktreeIds","tagId","assigned"],"additionalProperties":false},
+        "result": {"type":"object","properties":{},"additionalProperties":false}
+      },
+      {
+        "id": "views",
+        "description": "Read the saved sidebar views, whether Needs you is hidden, and the right-side fact shown on rows.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{},"additionalProperties":false},
+        "result": {"type":"object","properties":{"views":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"starred":{"type":"boolean"},"spec":{"type":"object","properties":{"filter":{"type":"object","properties":{"tagIds":{"type":"array","items":{"type":"string"}},"sectionIds":{"type":"array","items":{"type":"string"}},"repoIds":{"type":"array","items":{"type":"string"}},"statuses":{"type":"array","items":{"type":"string","enum":["todo","in-progress","in-review","done"]}},"hideCliCreated":{"type":"boolean"},"hideOtherDesktopClients":{"type":"boolean"},"hideDefaultBranch":{"type":"boolean"},"hideDetachedHead":{"type":"boolean"},"hideArchived":{"type":"boolean"},"activity":{"type":"object","properties":{"workspaceActivityWindow":{"type":"string","enum":["all","live-only","today","week","month","custom"]},"workspaceActivityCustomDays":{"type":"integer","minimum":1},"alwaysShowDefaultBranchWorkspace":{"type":"boolean"},"workspaceActivityWindowBeforeLiveOnly":{"type":"string","enum":["all","today","week","month","custom"]},"hideCompletedReviewWorkspaces":{"type":"boolean"},"hidePassingCheckWorkspaces":{"type":"boolean"},"hideAutomationCreated":{"type":"boolean"}},"required":["workspaceActivityWindow","workspaceActivityCustomDays","alwaysShowDefaultBranchWorkspace","workspaceActivityWindowBeforeLiveOnly","hideCompletedReviewWorkspaces","hidePassingCheckWorkspaces","hideAutomationCreated"],"additionalProperties":false}},"required":["tagIds","sectionIds","repoIds","statuses","hideCliCreated","hideOtherDesktopClients","hideDefaultBranch","hideDetachedHead","hideArchived","activity"],"additionalProperties":false},"display":{"type":"object","properties":{"groupBy":{"type":"string","enum":["section-project","project","status","tag","pull-request","none"]},"sortBy":{"type":"string","enum":["recent","agent-activity","name","project","manual"]},"projectOrder":{"type":"string","enum":["manual","recent"]},"showAsleep":{"type":"boolean"},"showNested":{"type":"boolean"}},"required":["groupBy","sortBy","projectOrder","showAsleep","showNested"],"additionalProperties":false}},"required":["filter","display"],"additionalProperties":false}},"required":["id","name","starred","spec"],"additionalProperties":false}},"needsYouHidden":{"type":"boolean"},"rowFact":{"type":"string","enum":["pr","last-activity","branch","status"]}},"required":["views","needsYouHidden","rowFact"],"additionalProperties":false}
+      },
+      {
+        "id": "setViews",
+        "description": "Replace the saved sidebar views; the state is validated, unknown keys are dropped and the normalised state is returned.",
+        "params": {"type":"object","properties":{"state":{"type":"object","properties":{"views":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"starred":{"type":"boolean"},"spec":{"type":"object","properties":{"filter":{"type":"object","properties":{"tagIds":{"type":"array","items":{"type":"string"}},"sectionIds":{"type":"array","items":{"type":"string"}},"repoIds":{"type":"array","items":{"type":"string"}},"statuses":{"type":"array","items":{"type":"string","enum":["todo","in-progress","in-review","done"]}},"hideCliCreated":{"type":"boolean"},"hideOtherDesktopClients":{"type":"boolean"},"hideDefaultBranch":{"type":"boolean"},"hideDetachedHead":{"type":"boolean"},"hideArchived":{"type":"boolean"},"activity":{"type":"object","properties":{"workspaceActivityWindow":{"type":"string","enum":["all","live-only","today","week","month","custom"]},"workspaceActivityCustomDays":{"type":"integer","minimum":1},"alwaysShowDefaultBranchWorkspace":{"type":"boolean"},"workspaceActivityWindowBeforeLiveOnly":{"type":"string","enum":["all","today","week","month","custom"]},"hideCompletedReviewWorkspaces":{"type":"boolean"},"hidePassingCheckWorkspaces":{"type":"boolean"},"hideAutomationCreated":{"type":"boolean"}},"required":["workspaceActivityWindow","workspaceActivityCustomDays","alwaysShowDefaultBranchWorkspace","workspaceActivityWindowBeforeLiveOnly","hideCompletedReviewWorkspaces","hidePassingCheckWorkspaces","hideAutomationCreated"],"additionalProperties":true}},"required":["tagIds","sectionIds","repoIds","statuses","hideCliCreated","hideOtherDesktopClients","hideDefaultBranch","hideDetachedHead","hideArchived","activity"],"additionalProperties":true},"display":{"type":"object","properties":{"groupBy":{"type":"string","enum":["section-project","project","status","tag","pull-request","none"]},"sortBy":{"type":"string","enum":["recent","agent-activity","name","project","manual"]},"projectOrder":{"type":"string","enum":["manual","recent"]},"showAsleep":{"type":"boolean"},"showNested":{"type":"boolean"}},"required":["groupBy","sortBy","projectOrder","showAsleep","showNested"],"additionalProperties":true}},"required":["filter","display"],"additionalProperties":true}},"required":["id","name","starred","spec"],"additionalProperties":true}},"needsYouHidden":{"type":"boolean"},"rowFact":{"type":"string","enum":["pr","last-activity","branch","status"]}},"required":["views","needsYouHidden","rowFact"],"additionalProperties":true}},"required":["state"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"views":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"starred":{"type":"boolean"},"spec":{"type":"object","properties":{"filter":{"type":"object","properties":{"tagIds":{"type":"array","items":{"type":"string"}},"sectionIds":{"type":"array","items":{"type":"string"}},"repoIds":{"type":"array","items":{"type":"string"}},"statuses":{"type":"array","items":{"type":"string","enum":["todo","in-progress","in-review","done"]}},"hideCliCreated":{"type":"boolean"},"hideOtherDesktopClients":{"type":"boolean"},"hideDefaultBranch":{"type":"boolean"},"hideDetachedHead":{"type":"boolean"},"hideArchived":{"type":"boolean"},"activity":{"type":"object","properties":{"workspaceActivityWindow":{"type":"string","enum":["all","live-only","today","week","month","custom"]},"workspaceActivityCustomDays":{"type":"integer","minimum":1},"alwaysShowDefaultBranchWorkspace":{"type":"boolean"},"workspaceActivityWindowBeforeLiveOnly":{"type":"string","enum":["all","today","week","month","custom"]},"hideCompletedReviewWorkspaces":{"type":"boolean"},"hidePassingCheckWorkspaces":{"type":"boolean"},"hideAutomationCreated":{"type":"boolean"}},"required":["workspaceActivityWindow","workspaceActivityCustomDays","alwaysShowDefaultBranchWorkspace","workspaceActivityWindowBeforeLiveOnly","hideCompletedReviewWorkspaces","hidePassingCheckWorkspaces","hideAutomationCreated"],"additionalProperties":false}},"required":["tagIds","sectionIds","repoIds","statuses","hideCliCreated","hideOtherDesktopClients","hideDefaultBranch","hideDetachedHead","hideArchived","activity"],"additionalProperties":false},"display":{"type":"object","properties":{"groupBy":{"type":"string","enum":["section-project","project","status","tag","pull-request","none"]},"sortBy":{"type":"string","enum":["recent","agent-activity","name","project","manual"]},"projectOrder":{"type":"string","enum":["manual","recent"]},"showAsleep":{"type":"boolean"},"showNested":{"type":"boolean"}},"required":["groupBy","sortBy","projectOrder","showAsleep","showNested"],"additionalProperties":false}},"required":["filter","display"],"additionalProperties":false}},"required":["id","name","starred","spec"],"additionalProperties":false}},"needsYouHidden":{"type":"boolean"},"rowFact":{"type":"string","enum":["pr","last-activity","branch","status"]}},"required":["views","needsYouHidden","rowFact"],"additionalProperties":false}
+      },
+      {
+        "id": "activeView",
+        "description": "Read the view a window shows: its own choice this session, else the last view used; All when that view no longer exists.",
+        "readOnly": true,
+        "connection": true,
+        "params": {"type":"object","properties":{"window":{"type":"integer","minimum":1}},"required":["window"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"viewId":{"type":"string"}},"required":["viewId"],"additionalProperties":false}
+      },
+      {
+        "id": "setActiveView",
+        "description": "Choose the view a window shows; the choice lasts as long as the calling connection.",
+        "connection": true,
+        "params": {"type":"object","properties":{"window":{"type":"integer","minimum":1},"viewId":{"type":"string"}},"required":["window","viewId"],"additionalProperties":false},
+        "result": {"type":"object","properties":{},"additionalProperties":false}
+      },
+      {
         "id": "archive",
         "description": "Archive a non-primary Git worktree or clear its archived timestamp.",
         "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "archivedAt": { "description": "Past timestamp to archive at, or null to unarchive; omitted archives now." } }, "required": ["worktree"], "additionalProperties": false },
@@ -3197,6 +3256,16 @@
         "id": "statusDefinitionsChanged",
         "description": "Workspace status definitions changed.",
         "data": { "type": "object", "properties": { "statuses": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" }, "icon": { "type": "string" } } } } }, "required": ["statuses"] }
+      },
+      {
+        "id": "tagsChanged",
+        "description": "A tag was created, renamed, recolored, deleted or assigned. Refetch the tags and the worktree list.",
+        "data": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
+        "id": "viewsChanged",
+        "description": "The saved sidebar views changed.",
+        "data": { "type": "object", "properties": {}, "additionalProperties": false }
       },
       {
         "id": "projectMetadataChanged",

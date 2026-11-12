@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { createRequests } from './actions'
+import { startAttentionBadge } from './attention-badge'
 import { WorktreesSection } from './WorktreesSection'
 import { RemoteWorkspace } from './RemoteWorkspace'
 import { RemoteWorkspacesSection } from './RemoteWorkspacesSection'
@@ -8,12 +9,22 @@ import { VmEnvironments } from './VmEnvironments'
 
 const WORKTREES_TOOL = 'sidebar-section:quirky.worktree/worktrees'
 
+let stopAttentionBadge: (() => void) | undefined
+
+/** Stops the rail badge's timer and listeners before the host revokes the plugin context. */
+export function deactivate(): void {
+  stopAttentionBadge?.()
+  stopAttentionBadge = undefined
+}
+
 /**
  * Provides the workspace tree for the `worktrees` sidebar section and the `new-worktree` command,
  * which opens the create dialog on the project it names, the open worktree's, or the first, and the
  * `add-project` command, which shows the Worktrees tool and opens its Add project dialog.
  */
 export function activate(context: UiPluginContext): void {
+  stopAttentionBadge?.()
+  stopAttentionBadge = startAttentionBadge(context)
   const requests = createRequests()
   const addProjectRequests = createRequests()
 

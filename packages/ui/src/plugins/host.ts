@@ -80,6 +80,8 @@ export type HostState = {
   badges: Record<string, number>
   /** Panel ID to the tooltip its plugin gave the badge; absent means the default. */
   badgeTitles: Record<string, string>
+  /** Panel ID to the tone its plugin gave the badge. */
+  badgeTones: Record<string, 'needs-you' | 'failing'>
   /** `--<token>` to color for every theme token of the active theme. */
   themeVariables: Record<string, string>
 }
@@ -210,6 +212,7 @@ export class WindowPluginHost {
     openPanel: null,
     badges: {},
     badgeTitles: {},
+    badgeTones: {},
     themeVariables: {}
   }
   private readonly listeners = new Set<() => void>()
@@ -520,10 +523,14 @@ export class WindowPluginHost {
   }
 
   private async reconcile(model: UiModel): Promise<void> {
-    const onPanel = ([id]: [string, unknown]) => model.panels.some((panel) => panel.id === id)
+    const onPanel = ([id]: [string, unknown]) => model.panels.some((panel) => panel.id === id) || model.sidebarSections.some((section) => section.id === id)
     const badges = Object.entries(this.state.badges).filter(onPanel)
     if (badges.length !== Object.keys(this.state.badges).length) {
-      this.commit({ badges: Object.fromEntries(badges), badgeTitles: Object.fromEntries(Object.entries(this.state.badgeTitles).filter(onPanel)) })
+      this.commit({
+        badges: Object.fromEntries(badges),
+        badgeTitles: Object.fromEntries(Object.entries(this.state.badgeTitles).filter(onPanel)),
+        badgeTones: Object.fromEntries(Object.entries(this.state.badgeTones).filter(onPanel))
+      })
     }
     for (const handle of [...this.embedded]) {
       const entry = model.views.find((view) => view.id === handle.id)
@@ -1079,11 +1086,12 @@ export class WindowPluginHost {
         void this.runEmbedded(handle, entry, element, input)
         return track(() => this.releaseEmbedded(handle))
       }),
-      setPanelBadge: live((panelId: string, count: number | null, title?: string) => {
-        if (this.state.model?.panels.find((panel) => panel.id === panelId)?.plugin !== pluginId) {
+      setPanelBadge: live((panelId: string, count: number | null, title?: string, tone?: 'needs-you' | 'failing') => {
+        const owner = [...(this.state.model?.panels ?? []), ...(this.state.model?.sidebarSections ?? [])].find((entry) => entry.id === panelId)?.plugin
+        if (owner !== pluginId) {
           throw new Error(`${panelId} is not a panel of ${pluginId}`)
         }
-        this.setBadge(panelId, count, title)
+        this.setBadge(panelId, count, title, tone)
         if (count !== null && !badged.has(panelId)) {
           badged.add(panelId)
           track(() => this.setBadge(panelId, null))
@@ -1221,14 +1229,17 @@ export class WindowPluginHost {
     })
   }
 
-  private setBadge(panelId: string, count: number | null, title?: string): void {
+  private setBadge(panelId: string, count: number | null, title?: string, tone: 'needs-you' | 'failing' = 'needs-you'): void {
     const { [panelId]: previous, ...rest } = this.state.badges
     const { [panelId]: previousTitle, ...restTitles } = this.state.badgeTitles
+    const { [panelId]: previousTone, ...restTones } = this.state.badgeTones
     const nextTitle = count === null ? undefined : title
-    if (previous === (count ?? undefined) && previousTitle === nextTitle) return
+    const nextTone = count === null ? undefined : tone
+    if (previous === (count ?? undefined) && previousTitle === nextTitle && previousTone === nextTone) return
     this.commit({
       badges: count === null ? rest : { ...rest, [panelId]: count },
-      badgeTitles: nextTitle === undefined ? restTitles : { ...restTitles, [panelId]: nextTitle }
+      badgeTitles: nextTitle === undefined ? restTitles : { ...restTitles, [panelId]: nextTitle },
+      badgeTones: nextTone === undefined ? restTones : { ...restTones, [panelId]: nextTone }
     })
   }
 

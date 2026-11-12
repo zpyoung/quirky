@@ -9,6 +9,12 @@ import { commitFiles, failure, git, isolateGitConfig, makeRepo } from '../../qui
 import { githubUser, useGlobalGitConfig } from './fixtures/repos'
 import { button, click, dialogNamed, field, listRowName, menuItem, sectionHeadingMatches, setSelect, setText, toastContaining, toastMessages } from './window/dom'
 
+/** The Worktrees panel's own header `…` button; other chrome has a More button too. */
+const worktreesMore = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="More"]')].find((candidate) =>
+    candidate.closest('header')?.querySelector('h2')?.textContent?.trim() === 'Worktrees'
+  )
+
 const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SLOW = 40_000
@@ -123,7 +129,8 @@ async function openGroupMenu(win: HeadlessWindow, name: string): Promise<void> {
 
 /** Opens Add project and submits `path` from its field. */
 async function submitPath(w: World, path: string): Promise<HTMLElement> {
-  await click(await w.win.waitFor(() => button(document, 'Add project')))
+  await click(await w.win.waitFor(() => worktreesMore()))
+  await click(await w.win.waitFor(() => menuItem(document, 'Add project')))
   const dialog = await w.win.waitFor(() => dialogNamed('Add project'))
   await reportedDialog(w, 'add-project')
   await setText(field(dialog, 'Path')!, path)
@@ -281,12 +288,12 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   const web = await addApi(w, 'web')
 
   await openProjectMenu(w.win, 'api')
-  await choose(w.win, 'New Group from Project…')
-  const naming = await w.win.waitFor(() => dialogNamed('New Group'))
+  await choose(w.win, 'New section from project…')
+  const naming = await w.win.waitFor(() => dialogNamed('New section'))
   expect(await reportedDialog(w, 'group')).toMatchObject({ kind: 'group', action: 'new', repoId: api.repo.id })
-  await setText(field(naming, 'Group name')!, 'backend')
+  await setText(field(naming, 'Section name')!, 'backend')
   await click(button(naming, 'Create')!)
-  await closed(w, 'New Group')
+  await closed(w, 'New section')
   await w.win.waitFor(() => {
     const project = groupSection('backend')?.querySelector('section.repo')
     return project && sectionHeadingMatches(project, 'api')
@@ -295,8 +302,8 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   expect(listed.map((g) => [g.name, g.repoIds])).toEqual([['backend', [api.repo.id]]])
 
   await openProjectMenu(w.win, 'web')
-  await choose(w.win, 'Move to Group')
-  expect(item('No group')).toBeUndefined()
+  await choose(w.win, 'Move to section')
+  expect(item('No section')).toBeUndefined()
   await choose(w.win, 'backend')
   await w.win.waitFor(() => groupSection('backend')?.querySelectorAll('section.repo').length === 2)
   // the window pushes its report after it renders, so the report can trail the DOM
@@ -308,12 +315,12 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
 
   await openGroupMenu(w.win, 'backend')
   await choose(w.win, 'Rename…')
-  const renaming = await w.win.waitFor(() => dialogNamed('Rename Group'))
+  const renaming = await w.win.waitFor(() => dialogNamed('Rename section'))
   expect(await reportedDialog(w, 'group')).toMatchObject({ kind: 'group', action: 'rename', groupId: listed[0]!.id })
-  expect(field(renaming, 'Group name')!.value).toBe('backend')
-  await setText(field(renaming, 'Group name')!, 'services')
+  expect(field(renaming, 'Section name')!.value).toBe('backend')
+  await setText(field(renaming, 'Section name')!, 'services')
   await click(button(renaming, 'Rename')!)
-  await closed(w, 'Rename Group')
+  await closed(w, 'Rename section')
   await w.win.waitFor(() => groupSection('services'))
   expect((await groups(w.agent)).map((g) => g.name)).toEqual(['services'])
 
@@ -324,8 +331,8 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   await w.win.waitFor(() => groupSection('services')?.querySelectorAll('section.repo').length === 2)
 
   await openProjectMenu(w.win, 'web')
-  await choose(w.win, 'Move to Group')
-  await choose(w.win, 'No group')
+  await choose(w.win, 'Move to section')
+  await choose(w.win, 'No section')
   await w.win.waitFor(() => groupSection('services')?.querySelectorAll('section.repo').length === 1)
   expect((await groups(w.agent))[0]!.repoIds).toEqual([api.repo.id])
   expect((await repos(w.agent)).find((r) => r.name === 'web')!.groupId).toBeNull()
@@ -338,11 +345,11 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   })
 
   await openGroupMenu(w.win, 'services')
-  await choose(w.win, 'Delete Group…')
+  await choose(w.win, 'Delete section…')
   const deleting = await waitForDeleteDialog()
   expect(deleting.reported).toMatchObject({ kind: 'group', action: 'delete', groupId: listed[0]!.id })
   expect(button(deleting.dialog, 'Cancel')).toBeDefined()
-  expect(button(deleting.dialog, 'Delete Group')).toBeDefined()
+  expect(button(deleting.dialog, 'Delete section')).toBeDefined()
   await click(button(deleting.dialog, 'Cancel')!)
   await w.win.waitFor(() => !document.querySelector('[role="dialog"]'))
   await reportedDialog(w, null)
@@ -350,11 +357,11 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   expect((await repos(w.agent)).find((r) => r.name === 'api')!.groupId).toBe(listed[0]!.id)
 
   await openGroupMenu(w.win, 'services')
-  await choose(w.win, 'Delete Group…')
+  await choose(w.win, 'Delete section…')
   const confirming = await waitForDeleteDialog()
   expect(confirming.reported).toMatchObject({ kind: 'group', action: 'delete', groupId: listed[0]!.id })
   await click(await w.win.waitFor(() => {
-    const action = button(confirming.dialog, 'Delete Group')
+    const action = button(confirming.dialog, 'Delete section')
     return action && !action.disabled ? action : undefined
   }))
   await w.win.waitFor(() => !document.querySelector('[role="dialog"]'))
@@ -377,9 +384,9 @@ test('SC-10: moving a project to a different group takes it out of the first', a
   await w.agent.callAny('quirky.repo/groupAdd', { group: one.id, repo: api.repo.id })
   await w.win.waitFor(() => groupSection('one')?.querySelector('section.repo'))
   await openProjectMenu(w.win, 'api')
-  await choose(w.win, 'Move to Group')
+  await choose(w.win, 'Move to section')
   expect(item('one')).toBeUndefined()
-  expect(item('No group')).toBeDefined()
+  expect(item('No section')).toBeDefined()
   await choose(w.win, 'two')
   await w.win.waitFor(() => groupSection('two')?.querySelector('section.repo'))
   const listed = await groups(w.agent)
@@ -475,14 +482,14 @@ test('SC-57: the confirmation disables future prompts and a locked workspace is 
   const { dirty, locked } = await dirtyAndLocked(w)
 
   await openCardMenu(w.win, 'dirty')
-  await choose(w.win, 'Delete')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  await choose(w.win, 'Delete…')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   expect(button(dialog, 'Cancel')).toBeDefined()
   expect(await reportedDialog(w, 'delete')).toMatchObject({ kind: 'delete', worktreeId: dirty.id })
 
   await click(field(dialog, "Don't ask again")!)
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === dirty.id))
   expect(existsSync(dirty.path)).toBe(false)
   expect(toastMessages().some((message) => message.includes("We'll skip this confirmation next time."))).toBe(true)
@@ -490,9 +497,9 @@ test('SC-57: the confirmation disables future prompts and a locked workspace is 
 
   const refusal = await failure(w.agent.callAny('quirky.worktree/remove', { worktree: locked.id, yes: true, force: true }))
   await openCardMenu(w.win, 'locked')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   await w.win.waitFor(() => toastContaining('Failed to delete workspace locked'))
-  expect(dialogNamed('Delete Workspace')).toBeUndefined()
+  expect(dialogNamed('Delete worktree')).toBeUndefined()
   const toast = toastContaining('Failed to delete workspace locked')!
   expect(toast.textContent).toContain(refusal.message)
   expect(refusal.message).toContain('ci holds it')
@@ -504,10 +511,10 @@ test('SC-57: canceling a dirty workspace deletion leaves it present', async () =
   const { dirty } = await dirtyAndLocked(w)
   writeFileSync(join(dirty.path, 'second.txt'), 'y\n')
   await openCardMenu(w.win, 'dirty')
-  await choose(w.win, 'Delete')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  await choose(w.win, 'Delete…')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   await click(button(dialog, 'Cancel')!)
-  await closed(w, 'Delete Workspace')
+  await closed(w, 'Delete worktree')
   expect((await worktrees(w.agent)).some((x) => x.id === dirty.id)).toBe(true)
   expect(existsSync(dirty.path)).toBe(true)
   expect(existsSync(join(dirty.path, 'scratch.txt'))).toBe(true)
@@ -532,15 +539,15 @@ test('SC-57: deleting a selected workspace clears its view and selection', async
   })
 
   await openCardMenu(w.win, 'selected')
-  await choose(w.win, 'Delete')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  await choose(w.win, 'Delete…')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   const worktreeChanges: unknown[] = []
   w.agent.onEvent((event) => {
     if (event.type === 'quirky.worktree/changed' && 'data' in event) worktreeChanges.push(event.data)
   })
   await w.agent.callAny('events.subscribe', {})
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((worktree) => worktree.id === selected.id))
   await w.win.waitFor(() => !card('selected'))
   await w.win.waitFor(() => worktreeChanges.some((data) =>
@@ -571,14 +578,14 @@ test('SC-57: a folder workspace can be deleted', async () => {
   const extra = await created(w.agent, { repo: docs.id, name: 'extra' })
   await w.win.waitFor(() => card('extra'))
   await openCardMenu(w.win, 'extra')
-  await choose(w.win, 'Delete')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  await choose(w.win, 'Delete…')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   await Bun.sleep(200)
-  await click(button(dialog, 'Delete Workspace')!)
+  await click(button(dialog, 'Delete worktree')!)
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === extra.id))
 }, SLOW)
 
-test('SC-53: Delete with Descendants warns about the children and removes them with the parent', async () => {
+test('SC-53: Delete with descendants warns about the children and removes them with the parent', async () => {
   const w = await boot()
   const { repo } = await addApi(w)
   const a = await created(w.agent, { repo: repo.id, name: 'a' })
@@ -587,15 +594,15 @@ test('SC-53: Delete with Descendants warns about the children and removes them w
   await w.win.waitFor(() => card('c'))
 
   await openCardMenu(w.win, 'a')
-  expect(item('Delete')).toBeUndefined()
-  await choose(w.win, 'Delete with Descendants (2)…')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  expect(item('Delete…')).toBeUndefined()
+  await choose(w.win, 'Delete with descendants (2)…')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
   const listed = [...dialog.querySelectorAll('ul li')].map((li) => li.textContent)
   expect(listed.sort()).toEqual(['b', 'c'])
   expect(await reportedDialog(w, 'delete')).toMatchObject({ kind: 'delete', worktreeId: a.id })
 
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => [a.id, b.id, c.id].includes(x.id)))
   expect([a, b, c].map((x) => existsSync(x.path))).toEqual([false, false, false])
 }, SLOW)
@@ -608,9 +615,9 @@ test('SC-53: with the setting off, Delete goes straight through', async () => {
   await w.win.waitFor(() => card('fix-login'))
   await Bun.sleep(100)
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   await w.win.waitFor(async () => !(await worktrees(w.agent)).some((x) => x.id === fix.id))
-  expect(dialogNamed('Delete Workspace')).toBeUndefined()
+  expect(dialogNamed('Delete worktree')).toBeUndefined()
 }, SLOW)
 
 test('SC-58: an unmerged branch is kept, the section offers Delete branch, and using it deletes the branch', async () => {
@@ -622,10 +629,10 @@ test('SC-58: an unmerged branch is kept, the section offers Delete branch, and u
   await w.win.waitFor(() => card('fix-login'))
 
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
-  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
-  await click(button(dialog, 'Delete Workspace')!)
-  await closed(w, 'Delete Workspace')
+  await choose(w.win, 'Delete…')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete worktree'))
+  await click(button(dialog, 'Delete worktree')!)
+  await closed(w, 'Delete worktree')
 
   const notice = await w.win.waitFor(() => branchNotice())
   expect(button(notice, 'Dismiss')).toBeDefined()
@@ -651,7 +658,7 @@ test('SC-58: Dismiss removes the notice and keeps the branch', async () => {
   await w.win.waitFor(() => card('fix-login'))
   await Bun.sleep(100)
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const notice = await w.win.waitFor(() => branchNotice())
   await click(button(notice, 'Dismiss')!)
   await w.win.waitFor(() => !branchNotice())
@@ -667,7 +674,7 @@ test('SC-58: a branch that moved on is not deleted, and the failure toasts', asy
   await w.win.waitFor(() => card('fix-login'))
   await Bun.sleep(100)
   await openCardMenu(w.win, 'fix-login')
-  await choose(w.win, 'Delete')
+  await choose(w.win, 'Delete…')
   const notice = await w.win.waitFor(() => branchNotice())
   git(dir, 'update-ref', 'refs/heads/zoe/fix-login', git(dir, 'rev-parse', 'main'))
   await click(button(notice, 'Delete branch')!)

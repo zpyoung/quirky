@@ -767,9 +767,15 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const previousPending = useRef<boolean | null>(null)
   const pollController = useRef<ChecksPollingController | null>(null)
   const panelEntryWorktree = useRef<string | null>(null)
+  const entryRefreshWorktrees = useRef(new Set<string>())
+  const mounted = useRef(true)
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
   const pollPolicy = useRef<ChecksPollingPolicy>(createChecksPollingPolicy())
   const dragCleanup = useRef<(() => void) | null>(null)
   const activeWorktree = useMemo(() => layoutWorktree(layout), [layout])
+  const activeWorktreeRef = useRef(activeWorktree)
+  activeWorktreeRef.current = activeWorktree
   const active = state.checks.worktree === activeWorktree ? state.checks : null
   const currentReview = active?.review ?? null
   useEffect(() => {
@@ -791,6 +797,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const isPanelVisible = Object.values(layout.tools?.open ?? {}).includes(CHECKS_PANEL) && windowVisible
   useEffect(() => setAuthDiagnostics(null), [activeWorktree])
 
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
   useEffect(() => context.onLayout(setLayout), [context])
 
   useEffect(() => {
@@ -807,35 +818,48 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     }
     const enteringWorktree = panelEntryWorktree.current !== activeWorktree
     panelEntryWorktree.current = activeWorktree
-    if (!activeWorktree) return
+    if (!activeWorktree || !enteringWorktree) return
+    if (entryRefreshWorktrees.current.has(activeWorktree)) return
     if (state.checks.worktree === activeWorktree) {
-      if (!enteringWorktree || !missingOrigin) return
+      if (!missingOrigin) return
       setActionError(null)
     }
-    let alive = true
-    context.call('quirky.reviews/checksRefresh', { worktree: activeWorktree, force: true }).then(() => {
-      if (alive) return refresh()
-      return undefined
+    const stillActive = () => mounted.current && activeWorktreeRef.current === activeWorktree
+    entryRefreshWorktrees.current.add(activeWorktree)
+    context.call('quirky.reviews/checksRefresh', { worktree: activeWorktree, force: true }).then(async (result) => {
+      if (!stillActive()) return
+      await refreshRef.current()
+      if (!stillActive()) return
+      if (!isRecord(result) || result.ok !== true) {
+        if (isRecord(result) && result.stale === true) return
+        setActionError(presentationError(result) ?? 'The review could not be refreshed.')
+      }
     }).catch((error: unknown) => {
-      if (alive) setActionError(messageOf(error))
+      if (stillActive()) setActionError(messageOf(error))
+    }).finally(() => {
+      entryRefreshWorktrees.current.delete(activeWorktree)
     })
-    return () => { alive = false }
-  }, [activeWorktree, context, isPanelVisible, missingOrigin, refresh, state.checks.worktree])
+  }, [activeWorktree, context, isPanelVisible, missingOrigin])
 
   const runRefresh = useCallback(async (reason: 'manual' | 'active', worktree = activeWorktree): Promise<boolean> => {
     if (!worktree) return false
+    const stillActive = () => mounted.current && activeWorktreeRef.current === worktree
     setActionError(null)
     const current = currentTargetRef.current
     const candidate: JsonRecord = current?.worktree === worktree ? current.candidate : { worktree, active: true }
     try {
       const queued = await context.call('quirky.hosting/refresh', { candidate, reason, priority: 80 })
+      if (!stillActive()) return false
       const queueResult = isRecord(queued) ? queued : null
       const queuedError = queueResult && (queueResult.kind === 'paused' || queueResult.kind === 'unavailable')
         ? typeof queueResult.message === 'string' ? queueResult.message : `GitHub refresh ${String(queueResult.kind)}.`
         : null
       const result = await context.call('quirky.reviews/checksRefresh', { worktree, force: true })
+      if (!stillActive()) return false
       await refresh()
+      if (!stillActive()) return false
       if (queuedError) setActionError(queuedError)
+      if (isRecord(result) && result.stale === true) return queuedError === null
       if (!isRecord(result) || result.ok !== true) {
         const message = presentationError(result) ?? queuedError ?? 'The review could not be refreshed.'
         setActionError(message)
@@ -843,7 +867,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       }
       return queuedError === null
     } catch (error) {
-      setActionError(messageOf(error))
+      if (stillActive()) setActionError(messageOf(error))
       return false
     }
   }, [activeWorktree, context, refresh])
@@ -871,7 +895,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       },
       refresh: () => {
         const target = currentTargetRef.current
-        return target ? runRefresh('active', target.worktree) : Promise.resolve(false)
+        if (!target) return Promise.resolve(false)
+        if (entryRefreshWorktrees.current.has(target.worktree)) return Promise.resolve(true)
+        return runRefresh('active', target.worktree)
       },
       async invalidate(worktree) {
         await context.call('quirky.reviews/checksInvalidate', { worktree })
@@ -920,6 +946,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       return null
     }
   }, [context, refresh])
+
+  const openAgentDialog = useCallback(async (action: 'fix' | 'conflicts' | 'comments') => {
+    if (!activeWorktree) return
+    await runReviewMethod('checksSetAgentDialog', { surface: 'checks', worktree: activeWorktree, action })
+  }, [activeWorktree, runReviewMethod])
 
   const openLink = useCallback(async (url: string, event?: MouseEvent<HTMLButtonElement>) => {
     if (!activeWorktree) return
@@ -1229,11 +1260,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       {(hostConflict || broken || pending || queuedCount > 0) && <section className="ui-cluster" aria-label="Review triage" style={{ justifyContent: 'space-between' }}>
         <Badge tone={hostConflict ? 'failing' : broken ? 'failing' : pending ? 'needs-you' : 'needs-you'}>{hostConflict ? 'Conflicts block this PR' : broken ? 'Failing checks' : pending ? 'Checks pending' : `${queuedCount} queued comments`}</Badge>
         {hostConflict || localConflict ? (
-          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'conflicts' })}>Resolve</Button>
+          <Button variant="primary" onClick={() => void openAgentDialog('conflicts')}>Resolve</Button>
         ) : broken ? (
-          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'fix' })}>Fix</Button>
+          <Button variant="primary" onClick={() => void openAgentDialog('fix')}>Fix</Button>
         ) : queuedCount > 0 ? (
-          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'comments' })}>Resolve {queuedCount} Comments With AI</Button>
+          <Button variant="primary" onClick={() => void openAgentDialog('comments')}>Resolve {queuedCount} Comments With AI</Button>
         ) : <span className="ui-text-muted">Orca will refresh checks while this panel stays open.</span>}
       </section>}
 

@@ -1,15 +1,17 @@
 import type { PluginCaller, Schema, Worktree } from '@quirky/protocol'
 import { isRecord } from './data'
+import { newChecksEntry } from '../env'
 import {
   REVIEW_VIEW,
-  type ChecksState,
+  type AgentDialog,
+  type ChecksEntry,
   type DetailState,
   type JsonRecord,
   type MethodSpec,
   type ReviewData,
   type ReviewMethodTable,
   type ReviewsEnv,
-  type ReviewsState
+  type ReviewsStore
 } from '../contracts'
 
 const MIN_HEIGHT = 160
@@ -339,17 +341,19 @@ function selector(env: ReviewsEnv, params: Record<string, unknown>): string | un
 }
 
 function ownerIsCurrent(env: ReviewsEnv, worktree: string, generation: number): boolean {
-  const checks = env.read().checks
-  return checks.worktree === worktree && checks.generation === generation
-}
-function shouldClearChecksDialog(dialog: unknown): boolean {
-  return !isRecord(dialog) || dialog.surface !== 'detail'
+  return env.read().checksByWorktree[worktree]?.generation === generation
 }
 
-function updateIfCurrent(env: ReviewsEnv, worktree: string, generation: number, change: (checks: ChecksState) => void): boolean {
+function clearChecksDialog(state: ReviewsStore, worktree: string): void {
+  const dialog = state.agentDialog
+  if (dialog && dialog.surface !== 'detail' && dialog.target?.worktree === worktree) state.agentDialog = null
+}
+
+function updateIfCurrent(env: ReviewsEnv, worktree: string, generation: number, change: (checks: ChecksEntry, state: ReviewsStore) => void): boolean {
   if (!ownerIsCurrent(env, worktree, generation)) return false
   env.update((state) => {
-    if (state.checks.worktree === worktree && state.checks.generation === generation) change(state.checks)
+    const entry = state.checksByWorktree[worktree]
+    if (entry?.generation === generation) change(entry, state)
   })
   return ownerIsCurrent(env, worktree, generation)
 }
@@ -361,7 +365,7 @@ function errorReason(error: unknown): string | null {
 
 function unsupportedMissingOrigin(env: ReviewsEnv, worktree: string, generation: number): JsonRecord {
   const message = 'Add a GitHub origin remote to this worktree to load its pull request checks.'
-  if (!updateIfCurrent(env, worktree, generation, (checks) => {
+  if (!updateIfCurrent(env, worktree, generation, (checks, state) => {
     checks.lookup = { kind: 'unsupported', reason: 'missing_origin', message }
     checks.eligibility = null
     checks.review = null
@@ -374,7 +378,7 @@ function unsupportedMissingOrigin(env: ReviewsEnv, worktree: string, generation:
     checks.queuedComments = []
     checks.commentDraft = ''
     checks.titleDraft = null
-    if (shouldClearChecksDialog(checks.agentDialog)) checks.agentDialog = null
+    clearChecksDialog(state, worktree)
     checks.fetchedAt = Date.now()
   })) return staleResult(worktree)
   return { ok: true, worktree, kind: 'unsupported', reason: 'missing_origin' }
@@ -585,7 +589,7 @@ function staleResult(worktree: string): JsonRecord {
 }
 
 function replaceReviewData(env: ReviewsEnv, worktree: string, generation: number, lookup: JsonRecord, review: ReviewData | null, status: GitStatus): boolean {
-  return updateIfCurrent(env, worktree, generation, (checks) => {
+  return updateIfCurrent(env, worktree, generation, (checks, state) => {
     const previousHead = checks.review?.headRefOid
     const nextHead = review?.headRefOid
     checks.lookup = lookup
@@ -600,7 +604,7 @@ function replaceReviewData(env: ReviewsEnv, worktree: string, generation: number
       checks.queuedComments = []
       checks.commentDraft = ''
       checks.titleDraft = null
-      if (shouldClearChecksDialog(checks.agentDialog)) checks.agentDialog = null
+      clearChecksDialog(state, worktree)
       checks.fetchedAt = 0
     }
   })
@@ -612,67 +616,71 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
     throw env.invalid('invalid_input', 'force must be a boolean.')
   }
   const requestedWorktree = selector(env, params)
-  const generation = env.read().checks.generation + 1
-  env.update((state) => {
-    const previous = state.checks
-    state.checks = {
-      ...previous,
-      generation,
-      loading: true,
-      error: null
-    }
-    if (requestedWorktree && previous.worktree !== requestedWorktree) {
-      state.checks.worktree = requestedWorktree
-      state.checks.lookup = null
-      state.checks.eligibility = null
-      state.checks.review = null
-      state.checks.checks = null
-      state.checks.comments = null
-      state.checks.conflicts = null
-      state.checks.expandedChecks = []
-      state.checks.queuedComments = []
-      state.checks.commentDraft = ''
-      state.checks.titleDraft = null
-      if (shouldClearChecksDialog(state.checks.agentDialog)) state.checks.agentDialog = null
-      state.checks.fetchedAt = 0
-    }
-  })
+  const ticket = env.nextRefreshTicket()
+  try {
+    return await runRefresh(env, params, caller, force, requestedWorktree, ticket)
+  } finally {
+    env.releaseRefresh(ticket)
+  }
+}
+
+async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, caller: PluginCaller, force: boolean, requestedWorktree: string | undefined, ticket: number): Promise<JsonRecord> {
+  let generation = 0
+  const preClaimed = requestedWorktree !== undefined && env.read().checksByWorktree[requestedWorktree] !== undefined
+  if (preClaimed) {
+    env.claimRefresh(requestedWorktree, ticket)
+    env.update((state) => {
+      const entry = state.checksByWorktree[requestedWorktree]!
+      generation = env.nextGeneration()
+      entry.generation = generation
+      entry.loading = true
+      entry.error = null
+    })
+    env.touchChecks(requestedWorktree, true)
+  }
 
   let worktree: Worktree
   try {
     worktree = await resolveWorktree(env, params, caller)
   } catch (error) {
     const message = errorMessage(error, 'Could not resolve the active workspace.')
+    if (preClaimed) {
+      env.update((state) => {
+        const entry = state.checksByWorktree[requestedWorktree]
+        if (entry?.generation === generation) {
+          entry.loading = false
+          entry.error = message
+        }
+      })
+    }
+    return { ok: false, worktree: requestedWorktree ?? '', error: message }
+  }
+  if (preClaimed && requestedWorktree !== worktree.id) {
     env.update((state) => {
-      if (state.checks.generation === generation) {
-        state.checks.loading = false
-        state.checks.error = message
+      const entry = state.checksByWorktree[requestedWorktree]
+      if (entry?.generation === generation) entry.loading = false
+    })
+  }
+  if (preClaimed && requestedWorktree === worktree.id) {
+    if (env.read().checksByWorktree[worktree.id]?.generation !== generation) return staleResult(worktree.id)
+  } else {
+    const claim = env.claimRefresh(worktree.id, ticket)
+    if (claim === 'stale') return staleResult(worktree.id)
+    if (claim === 'busy') return { ok: false, worktree: worktree.id, error: 'Too many workspaces are refreshing. Try again shortly.', stale: false }
+    env.update((state) => {
+      const entry = state.checksByWorktree[worktree.id]
+      if (entry) {
+        generation = env.nextGeneration()
+        entry.generation = generation
+        entry.loading = true
+        entry.error = null
+      } else {
+        generation = env.nextGeneration()
+        state.checksByWorktree[worktree.id] = { ...newChecksEntry(worktree.id, generation), loading: true }
       }
     })
-    return { ok: false, worktree: env.read().checks.worktree ?? '', error: message }
   }
-  if (env.read().checks.generation !== generation) return staleResult(worktree.id)
-
-  const previous = env.read().checks
-  const sameWorktree = previous.worktree === worktree.id
-  env.update((state) => {
-    if (state.checks.generation !== generation) return
-    state.checks.worktree = worktree.id
-    if (!sameWorktree) {
-      state.checks.lookup = null
-      state.checks.eligibility = null
-      state.checks.review = null
-      state.checks.checks = null
-      state.checks.comments = null
-      state.checks.conflicts = null
-      state.checks.expandedChecks = []
-      state.checks.queuedComments = []
-      state.checks.commentDraft = ''
-      state.checks.titleDraft = null
-      if (shouldClearChecksDialog(state.checks.agentDialog)) state.checks.agentDialog = null
-      state.checks.fetchedAt = 0
-    }
-  })
+  env.touchChecks(worktree.id, true)
   if (!ownerIsCurrent(env, worktree.id, generation)) return staleResult(worktree.id)
 
   if (worktree.kind !== 'git') {
@@ -690,11 +698,12 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
   }
 
   const state = env.read()
+  const known = state.checksByWorktree[worktree.id]
   const suppressed = state.suppressed[worktree.id]
   if (suppressed) {
     const target = attachedReview(env, suppressed)
     if (!target) return failure(env, worktree.id, generation, env.invalid('invalid_saved_link', 'The saved suppressed review identity is invalid.'), 'The saved review link is invalid.')
-    updateIfCurrent(env, worktree.id, generation, (checks) => {
+    updateIfCurrent(env, worktree.id, generation, (checks, state) => {
       checks.lookup = { kind: 'suppressed', number: target.number, url: target.url, prRepo: target.prRepo }
       checks.eligibility = null
       checks.review = null
@@ -707,7 +716,7 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
       checks.queuedComments = []
       checks.commentDraft = ''
       checks.titleDraft = null
-      if (shouldClearChecksDialog(checks.agentDialog)) checks.agentDialog = null
+      clearChecksDialog(state, worktree.id)
       checks.fetchedAt = Date.now()
     })
     return { ok: true, worktree: worktree.id, kind: 'suppressed', number: target.number }
@@ -768,8 +777,8 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
       })
     } else if (status.branch === null || status.detached) {
       lookup = { kind: 'no-review', record: { kind: 'blocked', reason: status.detached ? 'detached_head' : 'no_current_branch' } }
-    } else if (force && state.checks.worktree === worktree.id && state.checks.review?.headRefName === status.branch) {
-      const previous = attachedReview(env, state.checks.review)
+    } else if (force && known?.review && known.review.headRefName === status.branch) {
+      const previous = attachedReview(env, known.review)
       if (!previous) throw env.invalid('invalid_saved_link', 'The current review identity is invalid.')
       explicitRepo = previous.prRepo
       lookup = await callLookup(env, 'review', { worktree: worktree.id, number: previous.number, prRepo: previous.prRepo })
@@ -895,7 +904,7 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
       if (!replaceReviewData(env, worktree.id, generation, existingLookup, existing, status)) return staleResult(worktree.id)
       return loadReviewDetails(env, worktree, generation, existing, force, status)
     }
-    updateIfCurrent(env, worktree.id, generation, (checks) => {
+    updateIfCurrent(env, worktree.id, generation, (checks, state) => {
       checks.lookup = lookupRecord
       checks.eligibility = eligibilityRecord
       checks.review = null
@@ -909,7 +918,7 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
       checks.queuedComments = []
       checks.commentDraft = ''
       checks.titleDraft = null
-      if (shouldClearChecksDialog(checks.agentDialog)) checks.agentDialog = null
+      clearChecksDialog(state, worktree.id)
     })
     return { ok: true, worktree: worktree.id, kind: 'no-review', eligible: eligibilityRecord.eligible === true }
   }
@@ -1041,9 +1050,9 @@ async function loadReviewDetails(
   }
 }
 
-function currentReview(env: ReviewsEnv, worktree: string, number?: number): { checks: ChecksState; review: ReviewData; prRepo: RepoIdentity } {
-  const checks = env.read().checks
-  if (checks.worktree !== worktree || checks.review === null || (number !== undefined && checks.review.number !== number)) {
+function currentReview(env: ReviewsEnv, worktree: string, number?: number): { checks: ChecksEntry; review: ReviewData; prRepo: RepoIdentity } {
+  const checks = env.read().checksByWorktree[worktree]
+  if (checks === undefined || checks.review === null || (number !== undefined && checks.review.number !== number)) {
     throw env.invalid('stale_review_target', 'The active checks state no longer belongs to this review. Refresh the panel before acting.')
   }
   return { checks, review: checks.review, prRepo: repoIdentity(env, checks.review.prRepo) }
@@ -1073,27 +1082,29 @@ async function linkReview(env: ReviewsEnv, worktree: Worktree, number: number, s
 async function unlinkReview(env: ReviewsEnv, worktree: Worktree): Promise<JsonRecord> {
   const state = env.read()
   const explicit = state.links[worktree.id]
-  const active = state.checks.worktree === worktree.id ? attachedReview(env, state.checks.review) : null
+  const entry = state.checksByWorktree[worktree.id]
+  const active = entry ? attachedReview(env, entry.review) : null
   const target = explicit ? attachedReview(env, explicit) : active
   if (!target) throw env.invalid('no_linked_review', 'There is no review linked to this workspace to unlink.')
   env.update((next) => {
     next.suppressed[worktree.id] = { number: target.number, url: target.url }
     delete next.links[worktree.id]
-    if (next.checks.worktree === worktree.id) {
-      next.checks.generation += 1
-      next.checks.lookup = { kind: 'suppressed', number: target.number, url: target.url, prRepo: target.prRepo }
-      next.checks.eligibility = null
-      next.checks.review = null
-      next.checks.checks = null
-      next.checks.comments = null
-      next.checks.conflicts = null
-      next.checks.loading = false
-      next.checks.error = null
-      next.checks.expandedChecks = []
-      next.checks.queuedComments = []
-      next.checks.commentDraft = ''
-      next.checks.titleDraft = null
-      if (shouldClearChecksDialog(next.checks.agentDialog)) next.checks.agentDialog = null
+    const checks = next.checksByWorktree[worktree.id]
+    if (checks) {
+      checks.generation = env.nextGeneration()
+      checks.lookup = { kind: 'suppressed', number: target.number, url: target.url, prRepo: target.prRepo }
+      checks.eligibility = null
+      checks.review = null
+      checks.checks = null
+      checks.comments = null
+      checks.conflicts = null
+      checks.loading = false
+      checks.error = null
+      checks.expandedChecks = []
+      checks.queuedComments = []
+      checks.commentDraft = ''
+      checks.titleDraft = null
+      clearChecksDialog(next, worktree.id)
     }
   })
   return { unlinked: true, worktree: worktree.id, number: target.number }
@@ -1121,15 +1132,17 @@ function agentContext(env: ReviewsEnv, surface: 'checks' | 'detail', params: Rec
   let conflicts: JsonRecord | null
   let targetRepo: unknown
   if (surface === 'checks') {
-    worktree = state.checks.worktree
-    if (!worktree || !state.checks.review) throw env.invalid('stale_review_target', 'The Checks panel has no active hosted review.')
-    number = state.checks.review.number
-    reviewValue = state.checks.review
-    comments = state.checks.comments
-    queuedComments = state.checks.queuedComments
-    checksDataValue = state.checks.checks
-    conflicts = state.checks.conflicts
-    targetRepo = state.checks.review.prRepo
+    if (typeof params.worktree !== 'string' || params.worktree === '') throw env.invalid('invalid_input', 'worktree is required for the Checks surface.')
+    const entry = state.checksByWorktree[params.worktree]
+    if (!entry || !entry.review) throw env.invalid('stale_review_target', 'The Checks panel has no active hosted review.')
+    worktree = entry.worktree ?? params.worktree
+    number = entry.review.number
+    reviewValue = entry.review
+    comments = entry.comments
+    queuedComments = entry.queuedComments
+    checksDataValue = entry.checks
+    conflicts = entry.conflicts
+    targetRepo = entry.review.prRepo
   } else {
     const target = state.detail.target
     if (!target || !state.detail.review) throw env.invalid('stale_review_target', 'The review page has no active hosted review.')
@@ -1224,11 +1237,10 @@ function sameAgentTarget(env: ReviewsEnv, value: unknown, context: AgentContext,
     return false
   }
 }
-function agentSurfaceIsCurrent(state: ReviewsState, context: AgentContext): boolean {
+function agentSurfaceIsCurrent(state: ReviewsStore, context: AgentContext): boolean {
   if (context.surface === 'checks') {
-    const checks = state.checks
-    return checks.worktree === context.worktree && checks.review?.number === context.number &&
-      checks.review.headRefOid === context.headOid && checks.review.url === context.review.url
+    const review = state.checksByWorktree[context.worktree]?.review
+    return review?.number === context.number && review.headRefOid === context.headOid && review.url === context.review.url
   }
   const detail = state.detail
   return detail.target?.worktree === context.worktree && detail.target.number === context.number &&
@@ -1236,38 +1248,41 @@ function agentSurfaceIsCurrent(state: ReviewsState, context: AgentContext): bool
     detail.review.url === context.review.url
 }
 
-function updateAgentSurface(env: ReviewsEnv, context: AgentContext, change: (surface: ChecksState | DetailState) => void): boolean {
+function updateAgentSurface(env: ReviewsEnv, context: AgentContext, change: (surface: ChecksEntry | DetailState) => void): boolean {
   let applied = false
   env.update((state) => {
     if (!agentSurfaceIsCurrent(state, context)) return
-    change(context.surface === 'checks' ? state.checks : state.detail)
+    change(context.surface === 'checks' ? state.checksByWorktree[context.worktree]! : state.detail)
     applied = true
   })
   return applied
 }
 
-function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>): JsonRecord {
+async function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>, caller: PluginCaller): Promise<JsonRecord> {
   const action = params.action
   if (action === 'clear') {
-    env.update((state) => { state.checks.agentDialog = null })
+    env.update((state) => { state.agentDialog = null })
     return { agentDialog: null }
   }
   const surface = params.surface === undefined ? 'checks' : params.surface
   if (surface !== 'checks' && surface !== 'detail') throw env.invalid('invalid_input', 'surface must be checks or detail.')
   if (action === 'hide') {
     env.update((state) => {
-      const current = state.checks.agentDialog
+      const current = state.agentDialog
       if (!current || !isRecord(current)) return
       const currentSurface = current.surface === 'detail' ? 'detail' : 'checks'
-      if (currentSurface === surface) state.checks.agentDialog = { ...current, visible: false }
+      if (currentSurface === surface) state.agentDialog = { ...current, visible: false }
     })
-    return { agentDialog: env.read().checks.agentDialog }
+    return { agentDialog: env.read().agentDialog }
   }
   if (action !== 'fix' && action !== 'conflicts' && action !== 'comments') {
     throw env.invalid('invalid_input', 'action must be fix, conflicts, comments, hide, or clear.')
   }
-  const context = agentContext(env, surface, params)
-  const previous = env.read().checks.agentDialog
+  const targetParams = surface === 'checks' && params.worktree === undefined
+    ? { ...params, worktree: (await resolveWorktree(env, params, caller)).id }
+    : params
+  const context = agentContext(env, surface, targetParams)
+  const previous = env.read().agentDialog
   const reusable = sameAgentTarget(env, previous, context, action)
   const prompt = params.prompt === undefined
     ? reusable && typeof previous.prompt === 'string' ? previous.prompt : defaultAgentPrompt(env, context, action)
@@ -1282,7 +1297,7 @@ function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>): JsonR
   }
   const agent = typeof requestedAgent === 'string' ? requestedAgent : reusable && typeof previous.agent === 'string' ? previous.agent : undefined
   const args = typeof requestedArgs === 'string' ? requestedArgs : reusable && typeof previous.args === 'string' ? previous.args : undefined
-  const dialog: NonNullable<ChecksState['agentDialog']> = {
+  const dialog: AgentDialog = {
     action,
     prompt,
     surface,
@@ -1292,13 +1307,13 @@ function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>): JsonR
     ...(agent !== undefined && agent !== '' ? { agent } : {}),
     ...(args !== undefined ? { args } : {})
   }
-  env.update((state) => { state.checks.agentDialog = dialog })
+  env.update((state) => { state.agentDialog = dialog })
   return { agentDialog: dialog }
 }
 
 async function launchAgent(env: ReviewsEnv, params: Record<string, unknown>, caller: PluginCaller): Promise<JsonRecord> {
   const worktree = await resolveWorktree(env, params, caller)
-  const rawDialog = env.read().checks.agentDialog
+  const rawDialog = env.read().agentDialog
   if (!isRecord(rawDialog) || (rawDialog.action !== 'fix' && rawDialog.action !== 'conflicts' && rawDialog.action !== 'comments')) {
     throw env.invalid('no_agent_dialog', 'Open a review-agent dialog before starting an agent.')
   }
@@ -1459,9 +1474,9 @@ async function launchAgent(env: ReviewsEnv, params: Record<string, unknown>, cal
       : null
     env.update((state) => {
       if (!agentSurfaceIsCurrent(state, context)) return
-      const currentDialog = state.checks.agentDialog
-      if (sameAgentTarget(env, currentDialog, context, rawDialog.action)) state.checks.agentDialog = null
-      if (context.surface === 'checks') state.checks.error = partialMessage
+      const currentDialog = state.agentDialog
+      if (sameAgentTarget(env, currentDialog, context, rawDialog.action)) state.agentDialog = null
+      if (context.surface === 'checks') state.checksByWorktree[context.worktree]!.error = partialMessage
       else state.detail.error = partialMessage
     })
     return {
@@ -1491,15 +1506,15 @@ async function saveTitle(env: ReviewsEnv, params: Record<string, unknown>, calle
   const { checks, review, prRepo } = currentReview(env, worktree.id, number)
   if (review.headRefOid !== expectedHead) throw env.invalid('head_changed', 'The pull request head changed. Refresh before saving the title.')
   const priorGeneration = checks.generation
-  const generation = priorGeneration + 1
+  const generation = env.nextGeneration()
   let started = false
   env.update((state) => {
-    if (state.checks.worktree !== worktree.id || state.checks.generation !== priorGeneration ||
-        state.checks.review?.number !== number || state.checks.review.headRefOid !== expectedHead) return
-    state.checks.generation = generation
-    state.checks.loading = true
-    state.checks.error = null
-    state.checks.titleDraft = title
+    const entry = state.checksByWorktree[worktree.id]
+    if (!entry || entry.generation !== priorGeneration || entry.review?.number !== number || entry.review.headRefOid !== expectedHead) return
+    entry.generation = generation
+    entry.loading = true
+    entry.error = null
+    entry.titleDraft = title
     started = true
   })
   if (!started) return { updated: false, number, title, stale: true, error: 'The review changed before the title could be saved.' }
@@ -1539,8 +1554,7 @@ async function runGitAction(env: ReviewsEnv, params: Record<string, unknown>, ca
   const action = params.action
   if (action !== 'publish' && action !== 'push' && action !== 'sync') throw env.invalid('invalid_input', 'action must be publish, push, or sync.')
   const worktree = await resolveWorktree(env, params, caller)
-  const current = env.read().checks
-  const generation = current.worktree === worktree.id ? current.generation : null
+  const generation = env.read().checksByWorktree[worktree.id]?.generation ?? null
   try {
     const method = action === 'sync' ? 'quirky.git/sync' : 'quirky.git/push'
     const result = await env.call(method, { worktree: worktree.id })
@@ -1564,8 +1578,8 @@ async function openReview(env: ReviewsEnv, params: Record<string, unknown>, call
   const tab = params.tab ?? 'conversation'
   if (tab !== 'conversation' && tab !== 'checks' && tab !== 'files') throw env.invalid('invalid_input', 'tab must be conversation, checks, or files.')
   let review: ReviewData
-  const current = env.read().checks
-  if (current.worktree === worktree.id && current.review?.number === number) {
+  const current = env.read().checksByWorktree[worktree.id]
+  if (current?.review && current.review.number === number) {
     review = current.review
   } else {
     const link = env.read().links[worktree.id]
@@ -1597,8 +1611,8 @@ export const checksSpecs: MethodSpec[] = [
   {
     id: 'checksGet',
     readOnly: true,
-    description: 'Read the active-workspace checks state and its current review target.',
-    params: objectSchema({}),
+    description: 'Read the checks state and current review target for a workspace; omitted, the most recently refreshed workspace.',
+    params: objectSchema({ worktree: { ...worktreeProperty, description: 'Exact workspace ID whose checks state to read.' } }),
     result: objectSchema({ checks: { type: 'object', additionalProperties: true } }, ['checks'])
   },
   {
@@ -1692,18 +1706,19 @@ export const checksSpecs: MethodSpec[] = [
 
 export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
   return {
-    checksGet: () => ({ checks: env.read().checks }),
+    checksGet: (params) => ({ checks: env.view(selector(env, params)).checks }),
     checksRefresh: (params, caller) => refreshChecks(env, params, caller),
     checksInvalidate: (params) => {
       const worktree = selector(env, params)
       if (!worktree) throw env.invalid('invalid_input', 'worktree is required to invalidate a hidden Checks refresh.')
-      const checks = env.read().checks
-      if (checks.worktree !== worktree || !checks.loading || checks.titleDraft !== null) return { invalidated: false, worktree }
+      const checks = env.read().checksByWorktree[worktree]
+      if (!checks || !checks.loading || checks.titleDraft !== null) return { invalidated: false, worktree }
       let invalidated = false
       env.update((state) => {
-        if (state.checks.worktree === worktree && state.checks.loading && state.checks.titleDraft === null) {
-          state.checks.generation += 1
-          state.checks.loading = false
+        const entry = state.checksByWorktree[worktree]
+        if (entry && entry.loading && entry.titleDraft === null) {
+          entry.generation = env.nextGeneration()
+          entry.loading = false
           invalidated = true
         }
       })
@@ -1728,7 +1743,7 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       const height = params.height
       if (typeof height !== 'number' || !Number.isFinite(height)) throw env.invalid('invalid_input', 'height must be a finite number.')
       const bounded = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(height)))
-      env.update((state) => { state.checks.height = bounded })
+      env.update((state) => { state.checksHeight = bounded })
       return { height: bounded }
     },
     checksSetTitleDraft: async (params, caller) => {
@@ -1737,7 +1752,8 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       const title = textField(env, params, 'title', MAX_TITLE_LENGTH)
       currentReview(env, worktree.id, params.number)
       env.update((state) => {
-        if (state.checks.worktree === worktree.id && state.checks.review?.number === params.number) state.checks.titleDraft = title
+        const entry = state.checksByWorktree[worktree.id]
+        if (entry?.review?.number === params.number) entry.titleDraft = title
       })
       return { titleDraft: title }
     },
@@ -1746,12 +1762,13 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       if (!positiveInteger(params.number)) throw env.invalid('invalid_input', 'number must be a positive pull request number.')
       currentReview(env, worktree.id, params.number)
       env.update((state) => {
-        if (state.checks.worktree === worktree.id && state.checks.review?.number === params.number) state.checks.titleDraft = null
+        const entry = state.checksByWorktree[worktree.id]
+        if (entry?.review?.number === params.number) entry.titleDraft = null
       })
       return { titleDraft: null }
     },
     checksSaveTitle: (params, caller) => saveTitle(env, params, caller),
-    checksSetAgentDialog: (params) => setAgentDialog(env, params),
+    checksSetAgentDialog: (params, caller) => setAgentDialog(env, params, caller),
     checksLaunchAgent: (params, caller) => launchAgent(env, params, caller),
     checksGitAction: (params, caller) => runGitAction(env, params, caller),
     checksOpenReview: (params, caller) => openReview(env, params, caller)

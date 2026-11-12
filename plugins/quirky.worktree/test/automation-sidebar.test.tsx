@@ -25,7 +25,7 @@ const DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branch' | 'hea
   groupId: null, projectGroupId: null, lastActivityAt: 0,
   manualOrder: 0, sleeping: false, sleepChangedAt: null, references: [], archivedAt: null,
   cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
-  externalVisible: true, externalVisibility: 'show', externalInboxSuppressed: false
+  externalVisible: true, externalVisibility: 'show', externalInboxSuppressed: false, tagIds: []
 }
 
 type RunPage = { runs: { id: string; automationId: string }[]; nextCursor: string | null }
@@ -256,8 +256,9 @@ test('lazy details preserve provenance and open the exact recorded automation an
   await h.mount()
   const attributed = rowFor('wt-auto')!
   const ordinary = rowFor('wt-api')!
-  expect(attributed.textContent).toContain('Created by automation')
-  expect(ordinary.textContent).not.toContain('Created by automation')
+  expect(attributed.querySelector('button[aria-label="Automation details for wt-auto"]')?.getAttribute('title')).toBe('Created by automation')
+  expect(ordinary.querySelector('.worktree-automation')).toBeNull()
+  expect(attributed.querySelectorAll('.worktree-row')).toHaveLength(1)
   expect(reportFor(h, 'wt-auto')?.automation).toMatchObject({
     provenance,
     expanded: false,

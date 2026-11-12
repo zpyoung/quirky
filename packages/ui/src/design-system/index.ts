@@ -13,17 +13,28 @@ export { PopupMenu } from './popup-menu'
 export { StatusBarItem } from './status-bar-item'
 export { AgentIcon, ControlIcon, FileIcon, ProjectTile, ToolIcon } from './tool-icons'
 export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, InlineAgentCard } from './panels'
+export { ActivityMark, BulkBar, Checkbox, HoverCard, NoticeLine, SwatchGroup, TagChip, TagChips } from './worktree-primitives'
 export { uiTokens, type UiTokenName } from './tokens'
 export type {
   AffixInputProps,
+  ActivityMarkProps,
   AgentIconProps,
+  BulkBarProps,
   CheckboxProps,
   ChoiceOption,
   DisclosureButtonProps,
+  HoverCardProps,
   LinkButtonProps,
+  NoticeLineProps,
   ReachMeterProps,
   SegmentedControlProps,
+  SwatchGroupProps,
   TagButtonProps,
+  TagChipProps,
+  TagChipsProps,
+  UiActivityMarkState,
+  UiTag,
+  UiTagColor,
   BadgeProps,
   ControlIconProps,
   FileIconProps,

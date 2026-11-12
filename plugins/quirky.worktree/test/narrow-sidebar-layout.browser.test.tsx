@@ -44,51 +44,51 @@ function browserEntry(): string {
   const treeModule = join(ROOT, 'plugins/quirky.worktree/src/Tree.tsx')
   const controlTypesModule = join(ROOT, 'plugins/quirky.worktree/src/control-types.ts')
   const worktreeBoardModule = join(ROOT, 'plugins/quirky.worktree/src/WorktreeBoard.tsx')
-  const activityFiltersModule = join(ROOT, 'plugins/quirky.worktree/src/ActivityFilters.tsx')
-  const activityTypesModule = join(ROOT, 'plugins/quirky.worktree/src/useSidebarActivity.ts')
+  const filterMenuModule = join(ROOT, 'plugins/quirky.worktree/src/FilterMenu.tsx')
+  const viewTypesModule = join(ROOT, 'plugins/quirky.worktree/src/view-types.ts')
   return `
     import { createElement as h, useRef, useState } from 'react'
     import { createRoot } from 'react-dom/client'
     import { Tree } from ${JSON.stringify(treeModule)}
     import { WorktreeBoard } from ${JSON.stringify(worktreeBoardModule)}
     import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
-    import { ActivityFilters } from ${JSON.stringify(activityFiltersModule)}
-    import type { ActivityPreferencePatch, ActivityPreferences, SidebarProjection } from ${JSON.stringify(activityTypesModule)}
-    import { Badge, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+    import { FilterMenu } from ${JSON.stringify(filterMenuModule)}
+    import { DEFAULT_ACTIVITY_PREFERENCES } from ${JSON.stringify(viewTypesModule)}
+    import { Badge, Button, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
-    function ActivityFiltersRegressionFixture() {
+    function FilterMenuRegressionFixture() {
       const [open, setOpen] = useState(false)
-      const [preferences, setPreferenceState] = useState<ActivityPreferences>({
-        workspaceActivityWindow: 'week',
-        workspaceActivityCustomDays: 14,
-        alwaysShowDefaultBranchWorkspace: false,
-        workspaceActivityWindowBeforeLiveOnly: 'week',
-        hideCompletedReviewWorkspaces: false,
-        hidePassingCheckWorkspaces: false,
-        hideAutomationCreated: false
+      const [filter, setFilter] = useState({
+        tagIds: [],
+        sectionIds: [],
+        repoIds: [],
+        statuses: [],
+        hideCliCreated: false,
+        hideOtherDesktopClients: false,
+        hideDefaultBranch: false,
+        hideDetachedHead: false,
+        hideArchived: true,
+        activity: { ...DEFAULT_ACTIVITY_PREFERENCES, workspaceActivityWindow: 'week', workspaceActivityCustomDays: 14, workspaceActivityWindowBeforeLiveOnly: 'week' }
       })
       const anchor = useRef<HTMLButtonElement | null>(null)
-      const projection = {
-        preferences,
-        filterCount: 0,
-        hiddenCount: 0,
-        automationHiddenCount: 0
-      } as SidebarProjection
-      const setPreferences = async (patch: ActivityPreferencePatch): Promise<boolean> => {
-        setPreferenceState((current) => ({ ...current, ...patch }))
-        return true
-      }
       return h('div', null,
-        h(IconButton, {
+        h(Button, {
           ref: anchor,
-          label: 'Worktrees options',
           'aria-expanded': open,
           'aria-haspopup': 'dialog',
           onClick: () => setOpen((value) => !value)
-        }, '⋯'),
-        h(Popover, { open, label: 'Worktrees options', anchor, onClose: () => setOpen(false) },
-          h(ActivityFilters, { projection, error: null, setPreferences })
-        )
+        }, 'Filter'),
+        open ? h(FilterMenu, {
+          anchor,
+          filter,
+          tags: [{ id: 't1', name: 'urgent', color: null }, { id: 't2', name: 'release-2.4', color: 'blue' }],
+          sections: [{ id: 'g1', name: 'Release 2.4' }],
+          repos: [{ id: 'r1', name: 'harbor-api', displayName: null }],
+          statuses: [{ id: 'todo', label: 'Todo' }, { id: 'in-progress', label: 'In progress' }],
+          onChange: setFilter,
+          onClear: () => setFilter((current) => ({ ...current, tagIds: [] })),
+          onClose: () => setOpen(false)
+        }) : null
       )
     }
 
@@ -108,26 +108,83 @@ function browserEntry(): string {
       subscribe: () => () => {},
       onConnection: () => () => {}
     }
+    const worktreeRows = [
+      { id: 'primary', name: 'main', primary: true },
+      { id: 'ordinary', name: 'feature-qa-new-features-3', primary: false, needsYou: true },
+      { id: 'primary-needs-you', name: 'main-needs-you', primary: true, needsYou: true },
+      { id: 'compact-primary', name: 'compact-main', primary: true },
+      ...(boardRegressionEnabled ? Array.from({ length: 20 }, (_, index) => ({
+        id: 'tree-worktree-' + index,
+        name: 'tree-workspace-' + index,
+        primary: false
+      })) : [])
+    ]
+    const repo = {
+      id: 'r1',
+      name: projectName,
+      path: '/repo/' + projectName,
+      addedAt: 1,
+      kind: 'git',
+      displayName: null,
+      groupId: null
+    }
+    const worktreeOf = (item) => ({
+      id: item.id,
+      repoId: 'r1',
+      path: '/workspace/' + item.name,
+      branch: item.name,
+      head: 'abc',
+      isMain: item.primary,
+      name: item.name,
+      instanceId: item.id,
+      kind: 'git',
+      displayName: null,
+      comment: '',
+      status: 'in-progress',
+      pinned: false,
+      unread: false,
+      parentId: null,
+      createdAt: 1,
+      createdBy: 'api',
+      baseRef: null,
+      keepBranch: false,
+      removing: false,
+      groupId: null,
+      projectGroupId: null,
+      lastActivityAt: 1,
+      manualOrder: 0,
+      sleeping: false,
+      sleepChangedAt: null,
+      references: [],
+      archivedAt: null,
+      cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
+      externalVisible: true,
+      externalVisibility: 'show',
+      externalInboxSuppressed: false,
+      tagIds: []
+    })
+    const viewRows = worktreeRows.map((item) => ({
+      worktree: worktreeOf(item),
+      depth: 0,
+      mark: item.needsYou ? 'waiting' : 'idle',
+      childCount: 0,
+      childAttention: 'none'
+    }))
+    const attentionCount = viewRows.filter((row) => row.mark === 'waiting').length
+    const groupBy = document.documentElement.dataset.groupBy ?? 'project'
+    const viewGroup = groupBy === 'project'
+      ? { key: 'project:r1', kind: 'project', title: projectName, attention: 'waiting', attentionCount, rows: viewRows }
+      : groupBy === 'none'
+        ? { key: 'flat', kind: 'flat', title: 'Worktrees', attention: 'waiting', attentionCount, rows: viewRows }
+        : { key: 'status:in-progress', kind: 'status', title: 'In progress', attention: 'waiting', attentionCount, rows: viewRows }
     const tree = h(Tree, {
       context: treeContext,
-      model: {
-        pinned: [],
-        groups: [],
-        projects: [{
-          repo: {
-            id: 'r1',
-            name: projectName,
-            path: '/repo/' + projectName,
-            addedAt: 1,
-            kind: 'git',
-            displayName: null,
-            groupId: null
-          },
-          rows: [],
-          pending: []
-        }]
-      },
+      model: { groups: [viewGroup], hidden: { count: 0, reasons: [] }, needsYouCount: attentionCount, erroredCount: 0 },
+      tagsById: new Map(),
+      rowFact: 'last-activity',
+      repos: [repo],
       groups: [],
+      groupBy: groupBy === 'project' ? 'section-project' : groupBy,
       sessions: [],
       selectedId: null,
       automationExpandedId: null,
@@ -135,7 +192,7 @@ function browserEntry(): string {
       onToggleAutomationDetails() {},
       now: 1,
       separatorEnabled: false,
-      options: { ...DEFAULT_STOCK_OPTIONS, groupBy: document.documentElement.dataset.groupBy ?? DEFAULT_STOCK_OPTIONS.groupBy },
+      options: { ...DEFAULT_STOCK_OPTIONS, groupBy: groupBy === 'project' ? 'project' : groupBy },
       canShowSleeping: (worktree) => DEFAULT_STOCK_OPTIONS.showSleeping || worktree.isMain,
       statusDefinitions: [],
       projectIdentities: document.documentElement.dataset.trackerProject === 'true'
@@ -149,46 +206,6 @@ function browserEntry(): string {
       onDropPreviewChange() {},
       onSeparatorStateChange() {}
     })
-    const worktreeDescription = 'Primary worktree located in the local project folder with a deliberately long description that must truncate instead of wrapping onto another line.'
-    const makeWorktreeRow = (worktree) => h('li', {
-      className: 'worktree',
-      'data-worktree-id': worktree.id
-    }, h(ListRow, {
-      title: h('span', { className: 'ui-cluster' },
-        h('span', { className: 'worktree-name ui-text-ellipsis', title: worktree.name }, worktree.name)
-      ),
-      description: h('span', { className: 'ui-text-ellipsis', title: worktreeDescription }, worktreeDescription),
-      status: 'working',
-      statusLabel: 'Status: Active',
-      compact: worktree.compact,
-      mainTitle: '/workspace/' + worktree.name,
-      mainLabel: 'Open ' + worktree.name,
-      onClick() {},
-      trailing: h('span', { className: 'ui-cluster' },
-        worktree.needsYou ? h(Badge, { tone: 'needs-you', label: 'Needs attention' }, '2') : null,
-        h('span', { className: 'ui-cluster worktree-reveal' },
-          worktree.primary ? h(Badge, null, 'Primary') : null,
-          h(IconButton, {
-            className: 'worktree-menu',
-            label: 'Actions for ' + worktree.name,
-            'aria-haspopup': 'menu'
-          }, '⋯')
-        )
-      )
-    }))
-    const worktreeRows = [
-      { id: 'primary', name: 'main', primary: true, compact: false },
-      { id: 'ordinary', name: 'feature-qa-new-features-3', primary: false, compact: false, needsYou: true },
-      { id: 'primary-needs-you', name: 'main-needs-you', primary: true, compact: false, needsYou: true },
-      { id: 'compact-primary', name: 'compact-main', primary: true, compact: true },
-      ...(boardRegressionEnabled ? Array.from({ length: 20 }, (_, index) => ({
-        id: 'tree-worktree-' + index,
-        name: 'tree-workspace-' + index,
-        primary: false,
-        compact: false
-      })) : [])
-    ]
-    const worktreeList = h('ul', { className: 'worktree-list ui-tree' }, worktreeRows.map(makeWorktreeRow))
     const boardStatuses = [
       { id: 'todo', label: 'To do' },
       { id: 'in-progress', label: 'In progress' },
@@ -232,10 +249,7 @@ function browserEntry(): string {
     },
       boardRegressionEnabled ? h(BoardRegressionFixture) : null,
       h('div', { className: 'ui-scroll ui-grow', 'data-tree-scroll': '' },
-        h('div', { className: 'worktree-tree ui-stack' },
-          tree,
-          worktreeList
-        )
+        tree
       )
     )
     const panelSlot = boardRegressionEnabled
@@ -268,8 +282,8 @@ function browserEntry(): string {
     )
 
     createRoot(document.getElementById('root')).render(
-      document.documentElement.dataset.activityFiltersRegression === 'true'
-        ? h(ActivityFiltersRegressionFixture)
+      document.documentElement.dataset.filterMenuRegression === 'true'
+        ? h(FilterMenuRegressionFixture)
         : layout
     )
   `
@@ -456,7 +470,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       const toolActions = frame.querySelector('.ui-tool-panel-frame__actions')!
       const tab = frame.querySelector('[role="tab"]')!
       const projectHeader = frame.querySelector('.project-header')!
-      const firstWorktreeRow = frame.querySelector('[data-worktree-id="primary"] .ui-list-row')!
+      const firstWorktreeRow = frame.querySelector('[data-worktree-id="primary"] .worktree-row')!
       const firstWorktreeName = firstWorktreeRow.querySelector('.worktree-name')!
       const changesFrame = document.querySelector('#changes-panel .ui-tool-panel-frame')!
       const changesTitle = changesFrame.querySelector('.ui-tool-panel-frame__title')!
@@ -469,11 +483,10 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       const changesLeading = changesLeadingRange.getBoundingClientRect()
       const changesWord = changesWordRange.getBoundingClientRect()
       const projectTitle = projectHeader.querySelector('.ui-section-header__title')!
-      const projectTile = projectTitle.querySelector('.ui-project-tile')!
+      const projectFold = projectTitle.querySelector('.worktree-fold')!
       const projectName = projectTitle.querySelector<HTMLElement>('.project-name')!
       const projectActions = projectHeader.querySelector('.ui-section-header__actions')!
-      const projectReveal = projectActions.querySelector('.project-reveal')!
-      const projectCount = projectTitle.querySelector('.project-count')!
+      const projectCount = projectTitle.querySelector('.worktree-attention')!
       const projectNameRange = document.createRange()
       projectNameRange.selectNodeContents(projectName)
       projectNameRange.setEnd(projectName.firstChild!, 1)
@@ -499,12 +512,12 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         tab: box(tab),
         projectHeader: box(projectHeader),
         projectTitle: box(projectTitle),
-        projectTile: box(projectTile),
+        projectFold: box(projectFold),
         projectLeading: { left: projectLeading.left, right: projectLeading.right, width: projectLeading.width },
         projectName: box(projectName),
         projectNameOverflow: projectName.scrollWidth > projectName.clientWidth,
         projectNameTextOverflow: getComputedStyle(projectName).textOverflow,
-        projectRevealOpacity: getComputedStyle(projectReveal).opacity,
+        projectActionsOpacity: getComputedStyle(projectActions).opacity,
         projectActions: box(projectActions),
         projectButtons: [...projectActions.querySelectorAll('button')].map(box),
         firstWorktreeRow: box(firstWorktreeRow),
@@ -572,10 +585,10 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       expectContained(layout.projectHeader, layout.frame)
       expectContained(layout.projectTitle, layout.projectHeader)
       expectContained(layout.projectName, layout.projectTitle)
-      expectContained(layout.projectTile, layout.projectTitle)
-      expect(layout.projectTitle.right - layout.projectTile.right).toBeGreaterThan(1)
+      expectContained(layout.projectFold, layout.projectTitle)
+      expect(layout.projectTitle.right - layout.projectFold.right).toBeGreaterThan(1)
       expect(layout.projectLeading.width).toBeGreaterThan(0)
-      expect(layout.projectLeading.left).toBeGreaterThanOrEqual(layout.projectTile.right - 0.5)
+      expect(layout.projectLeading.left).toBeGreaterThanOrEqual(layout.projectFold.right - 0.5)
       expect(layout.projectLeading.right).toBeLessThanOrEqual(layout.projectTitle.right + 0.5)
       expect(layout.projectNameTextOverflow).toBe('ellipsis')
       expectContained(layout.projectActions, layout.projectHeader)
@@ -590,6 +603,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       if (sidebarWidth <= 160) expect(layout.expandingLabelDisplay).toBe('none')
       else expect(layout.expandingLabelDisplay).not.toBe('none')
 
+      expect(layout.projectActionsOpacity).toBe('1')
       if (sidebarWidth <= 220) {
         expect(layout.toolActions.top).toBeGreaterThan(layout.toolTitle.bottom)
         expect(layout.projectTitle.top).toBeLessThan(layout.projectActions.bottom)
@@ -605,10 +619,8 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       }
 
       if (sidebarWidth === 116 || sidebarWidth === 160) {
-        expect(layout.projectRevealOpacity).toBe('0')
         const projectHeader = page.locator('.project-header')
         await projectHeader.hover()
-        await page.waitForFunction(() => getComputedStyle(document.querySelector('.project-header .project-reveal')!).opacity === '1')
         const hoveredLayout = await metrics()
         expectSameBounds(hoveredLayout.projectHeader, layout.projectHeader)
         expectSameBounds(hoveredLayout.firstWorktreeRow, layout.firstWorktreeRow)
@@ -624,7 +636,6 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         const projectAction = page.getByRole('button', { name: 'New worktree in QuirkyWorktreeProject', exact: true })
         await projectAction.focus()
         expect(await projectAction.evaluate((element) => document.activeElement === element)).toBe(true)
-        await page.waitForFunction(() => getComputedStyle(document.querySelector('.project-header:focus-within .project-reveal')!).opacity === '1')
         const focusedLayout = await metrics()
         expectSameBounds(focusedLayout.projectHeader, layout.projectHeader)
         expectSameBounds(focusedLayout.firstWorktreeRow, layout.firstWorktreeRow)
@@ -701,7 +712,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
   }
 }, 60_000)
 
-test.skipIf(!existsSync(chromium.executablePath()))('keeps tracker project badges readable on a separate row in a narrow sidebar', async () => {
+test.skipIf(!existsSync(chromium.executablePath()))('keeps tracker project badges readable inside the project header in a narrow sidebar', async () => {
   const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
   const page = await context.newPage()
   try {
@@ -753,14 +764,13 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tracker project badge
     expect(trackerBadge.text).toBe('QA-16')
     expect(trackerBadge.textWidth).toBeGreaterThan(0)
     expect(trackerBadge.textClipped).toBe(false)
-    expect(trackerBadge.badge.top).toBeGreaterThanOrEqual(trackerBadge.title.bottom - 0.5)
     expectContained(trackerBadge.badge, trackerBadge.header)
   } finally {
     await context.close()
   }
 }, 60_000)
 
-test.skipIf(!existsSync(chromium.executablePath()))('keeps Tree project headers hidden outside project grouping in a 160px sidebar', async () => {
+test.skipIf(!existsSync(chromium.executablePath()))('draws no project headers outside project grouping in a 160px sidebar', async () => {
   const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
   try {
     for (const groupBy of ['status', 'pr', 'none'] as const) {
@@ -782,9 +792,8 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps Tree project headers 
 
       const panel = page.locator('#worktrees-panel')
       expect(await panel.evaluate((element) => element.getBoundingClientRect().width)).toBe(160)
-      const projectHeader = panel.locator('.project-header')
-      expect(await projectHeader.count()).toBe(1)
-      expect(await projectHeader.isVisible()).toBe(false)
+      expect(await panel.locator('.project-header').count()).toBe(0)
+      expect(await panel.locator('[data-worktree-id="primary"]').count()).toBe(1)
     }
   } finally {
     await context.close()
@@ -816,8 +825,8 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact
         viewportWidth: window.innerWidth,
         panelWidth: panel.getBoundingClientRect().width,
         rows: [...panel.querySelectorAll<HTMLElement>('.worktree-tree .worktree')].map((item) => {
-          const row = item.querySelector<HTMLElement>('.ui-list-row')!
-          const main = row.querySelector<HTMLElement>('.ui-list-row__main')!
+          const row = item.querySelector<HTMLElement>('.worktree-row')!
+          const main = row.querySelector<HTMLElement>('.worktree-row__main')!
           const title = row.querySelector<HTMLElement>('.worktree-name')!
           const firstCharacter = document.createRange()
           firstCharacter.setStart(title.firstChild!, 0)
@@ -827,19 +836,14 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact
             firstCharacterRect.left + firstCharacterRect.width / 2,
             firstCharacterRect.top + firstCharacterRect.height / 2
           )
-          const description = row.querySelector<HTMLElement>('.ui-list-row__description .ui-text-ellipsis')!
-          const descriptionText = document.createRange()
-          descriptionText.selectNodeContents(description)
           const menu = row.querySelector<HTMLButtonElement>('.worktree-menu')!
-          const attention = row.querySelector<HTMLElement>('.ui-badge--needs-you')
+          const mark = row.querySelector<HTMLElement>('.ui-activity-mark--waiting')
           return {
             id: item.dataset.worktreeId,
             itemHeight: item.getBoundingClientRect().height,
             row: bounds(row),
             titleVisible: firstCharacterRect.width > 0 && titleTarget !== null && main.contains(titleTarget),
-            descriptionLines: new Set(Array.from(descriptionText.getClientRects(), (rect) => Math.round(rect.top))).size,
-            descriptionTruncated: description.scrollWidth > description.clientWidth,
-            attention: attention ? bounds(attention) : null,
+            attention: mark ? bounds(mark) : null,
             menu: bounds(menu)
           }
         })
@@ -871,8 +875,6 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact
     for (const { id } of rowsToTest) {
       const row = rowFor(wide.rows, id)
       expect(row.titleVisible).toBe(true)
-      expect(row.descriptionLines).toBe(1)
-      expect(row.descriptionTruncated).toBe(true)
       expect(row.itemHeight).toBeCloseTo(row.row.height, 0)
       if (id === 'ordinary' || id === 'primary-needs-you') {
         expect(row.attention?.height).toBeGreaterThan(0)
@@ -897,8 +899,6 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact
         expect(row.row.height).toBeCloseTo(wideRow.row.height, 0)
         expect(row.itemHeight).toBeCloseTo(row.row.height, 0)
         expect(row.titleVisible).toBe(true)
-        expect(row.descriptionLines).toBe(1)
-        expect(row.descriptionTruncated).toBe(true)
         if (id === 'ordinary' || id === 'primary-needs-you') {
           expect(row.attention?.height).toBeGreaterThan(0)
           expectContained(row.attention!, row.row)
@@ -1510,21 +1510,21 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the workspace board i
   }
 }, 60_000)
 
-test.skipIf(!existsSync(chromium.executablePath()))('keeps all Worktrees activity window tabs visible without horizontal scrolling', async () => {
+test.skipIf(!existsSync(chromium.executablePath()))('keeps the Filter menu inside the viewport and its activity window choices reachable', async () => {
   const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
   const page = await context.newPage()
   try {
     await page.setContent(pageMarkup())
     await page.evaluate(() => {
-      document.documentElement.dataset.activityFiltersRegression = 'true'
+      document.documentElement.dataset.filterMenuRegression = 'true'
     })
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
     await page.addScriptTag({ content: browserBundle })
-    const optionsButton = page.getByRole('button', { name: 'Worktrees options', exact: true })
-    await optionsButton.waitFor()
-    const expectedTabs = ['All', 'Live only', 'Past 24 hours', 'Past 7 days', 'Past 30 days', 'Custom']
+    const filterButton = page.getByRole('button', { name: 'Filter', exact: true })
+    await filterButton.waitFor()
+    const expectedWindows = ['All', 'Live only', 'Past 24 hours', 'Past 7 days', 'Past 30 days', 'Custom']
 
     const expectContained = (
       inner: { left: number; top: number; right: number; bottom: number },
@@ -1538,74 +1538,41 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps all Worktrees activit
 
     for (const width of [1280, 360]) {
       await page.setViewportSize({ width, height: 720 })
-      await optionsButton.click()
-      const popover = page.getByRole('dialog', { name: 'Worktrees options' })
+      await filterButton.click()
+      const popover = page.getByRole('dialog', { name: 'Filter' })
       await popover.waitFor({ state: 'visible' })
-      await popover.getByRole('button', { name: /^Activity filters/ }).click()
-      const tablist = popover.getByRole('tablist', { name: 'Workspace activity window' })
-      await tablist.waitFor({ state: 'visible' })
+      const select = popover.getByRole('combobox', { name: 'Activity window' })
+      await select.waitFor({ state: 'visible' })
 
       const geometry = await page.evaluate(() => {
-        const tablist = document.querySelector<HTMLElement>('#workspace-activity-filter-options [role="tablist"]')!
         const popover = document.querySelector<HTMLElement>('.ui-popover')!
-        const clientBounds = (element: HTMLElement) => {
-          const rect = element.getBoundingClientRect()
-          return {
-            left: rect.left + element.clientLeft,
-            top: rect.top + element.clientTop,
-            right: rect.left + element.clientLeft + element.clientWidth,
-            bottom: rect.top + element.clientTop + element.clientHeight
-          }
-        }
+        const select = popover.querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')!
         const rectBounds = (element: HTMLElement) => {
           const rect = element.getBoundingClientRect()
           return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
         }
-        const popoverBounds = clientBounds(popover)
         return {
           viewportWidth: window.innerWidth,
           viewportHeight: window.innerHeight,
           popover: rectBounds(popover),
-          visiblePopover: {
-            left: Math.max(0, popoverBounds.left),
-            top: Math.max(0, popoverBounds.top),
-            right: Math.min(window.innerWidth, popoverBounds.right),
-            bottom: Math.min(window.innerHeight, popoverBounds.bottom)
-          },
-          tablist: {
-            ...clientBounds(tablist),
-            clientWidth: tablist.clientWidth,
-            scrollWidth: tablist.scrollWidth
-          },
-          tabs: [...tablist.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => ({
-            name: tab.textContent?.trim() ?? '',
-            ...rectBounds(tab)
-          }))
+          select: rectBounds(select),
+          options: [...select.options].map((option) => option.textContent?.trim() ?? '')
         }
       })
 
       expect(geometry.viewportWidth).toBe(width)
       expect(geometry.viewportHeight).toBe(720)
-      expectContained(geometry.popover, {
-        left: 0,
-        top: 0,
-        right: geometry.viewportWidth,
-        bottom: geometry.viewportHeight
-      })
-      expect(geometry.tabs.map(({ name }) => name)).toEqual(expectedTabs)
-      expect(geometry.tablist.scrollWidth).toBeLessThanOrEqual(geometry.tablist.clientWidth)
-      for (const tab of geometry.tabs) {
-        expectContained(tab, geometry.tablist)
-        expectContained(tab, geometry.visiblePopover)
-      }
+      expectContained(geometry.popover, { left: 0, top: 0, right: geometry.viewportWidth, bottom: geometry.viewportHeight })
+      expect(geometry.options).toEqual(expectedWindows)
+      expect(geometry.select.right).toBeLessThanOrEqual(geometry.popover.right + 0.5)
 
       if (width === 360) {
-        await tablist.getByRole('tab', { name: 'Custom', exact: true }).click()
+        await select.selectOption('custom')
         const customDays = popover.getByRole('textbox', { name: 'Custom days' })
         await customDays.waitFor({ state: 'visible' })
         expect(await customDays.inputValue()).toBe('14')
       } else {
-        await optionsButton.click()
+        await filterButton.click()
       }
     }
   } finally {

@@ -154,4 +154,5 @@ test('hideAutomationCreated persists per client and filters provenance without m
   expect(restoredPhone.preferences.hideAutomationCreated).toBe(true)
   expect(restoredPhoneProjection.filterCount).toBe(1)
   expect(restoredPhoneProjection.automationHiddenIds).toEqual([attributed.id])
-})
+  // projection reads cachedReviews, which activates the hosting plugin on each daemon start
+}, 20_000)

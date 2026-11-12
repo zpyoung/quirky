@@ -108,3 +108,15 @@ export type InlineErrorProps = {
   onDismiss(): void
 }
 export type ScopeChipProps = { label: string; onRemove(): void; removeLabel?: string }
+
+export type UiTagColor = 'blue' | 'violet' | 'teal' | 'coral' | 'magenta' | 'mint' | 'sand' | 'rose'
+export type UiActivityMarkState = 'running' | 'waiting' | 'error' | 'idle' | 'asleep'
+export type UiTag = { id: string; name: string; color: UiTagColor | null }
+export type ActivityMarkProps = { state: UiActivityMarkState; label: string }
+export type TagChipProps = { name: string; color: UiTagColor | null }
+export type TagChipsProps = { tags: UiTag[]; max?: number }
+export type CheckboxProps = { checked: boolean; indeterminate?: boolean; label: string; onChange: (checked: boolean) => void; hideLabel?: boolean }
+export type SwatchGroupProps = { value: UiTagColor | null; onChange: (color: UiTagColor | null) => void; label: string }
+export type NoticeLineProps = { children: ReactNode; actions?: UiAction[] }
+export type HoverCardProps = { anchor: HTMLElement | null; open: boolean; children: ReactNode }
+export type BulkBarProps = { count: number; actions: UiAction[]; onClear: () => void }

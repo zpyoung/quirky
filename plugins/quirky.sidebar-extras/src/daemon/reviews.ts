@@ -26,6 +26,7 @@ type CachedWorkspaceReview = {
 
 export type ReviewDecision = {
   hidden: boolean
+  checks?: ChecksStatus
   reason?: ReviewReason
   error?: string
 }
@@ -83,15 +84,14 @@ function unknownFor(worktrees: Worktree[], error?: string): Map<string, ReviewDe
   return results
 }
 
-/** Reads only hosting's normalized review cache; filtering never triggers a provider lookup. */
+/** Reads only hosting's normalized review cache; filtering never triggers a provider lookup. Always reads, so checks fill even when no hide filter is on. */
 export async function readReviewDecisions(
   context: PluginContext,
   worktrees: Worktree[],
   preferences: Preferences
-): Promise<Map<string, ReviewDecision> | undefined> {
+): Promise<Map<string, ReviewDecision>> {
   const hideCompleted = preferences.hideCompletedReviewWorkspaces
   const hidePassing = preferences.hidePassingCheckWorkspaces
-  if (!hideCompleted && !hidePassing) return undefined
 
   const decisions = unknownFor(worktrees)
   const gitWorktrees = worktrees.filter((worktree) => worktree.kind === 'git')
@@ -165,12 +165,13 @@ export async function readReviewDecisions(
       cached.headOid.length === 0
     ) continue
 
+    const checks = cached.review.checksStatus
     if (hideCompleted && (cached.review.state === 'merged' || cached.review.state === 'closed')) {
-      decisions.set(worktree.id, { hidden: true, reason: 'completed' })
-    } else if (hidePassing && cached.review.checksStatus === 'success') {
-      decisions.set(worktree.id, { hidden: true, reason: 'passing' })
+      decisions.set(worktree.id, { hidden: true, reason: 'completed', checks })
+    } else if (hidePassing && checks === 'success') {
+      decisions.set(worktree.id, { hidden: true, reason: 'passing', checks })
     } else {
-      decisions.set(worktree.id, { hidden: false })
+      decisions.set(worktree.id, { hidden: false, checks })
     }
   }
 
