@@ -41,6 +41,18 @@ test('a plain open shows the panel and leaves the center alone', async () => {
   expect(toolOpen(await layoutOf(run))).toBe(true)
 }, 20_000)
 
+test('a non-expanding open parameter shows the panel and preserves the current center tab', async () => {
+  const run = await bootWithCenter()
+  await run.client.callAny('ui.view.open', CENTER)
+  await run.call('open', { mode: 'prs' })
+  const state = await run.call('state') as TasksState
+  const layout = await layoutOf(run)
+  expect(state.navigation.mode).toBe('prs')
+  expect(toolOpen(layout)).toBe(true)
+  expect(layout.view).toEqual(CENTER)
+  expect(layout.viewTabs).toEqual([CENTER])
+}, 20_000)
+
 test('opening with a row, a project, a new issue or the Projects mode expands and closes the panel', async () => {
   const run = await boot()
   const project = { id: 'p1', owner: 'o', ownerType: 'organization', number: 1, url: 'https://github.com/orgs/o/projects/1' }
@@ -131,6 +143,15 @@ test('the first open sets lastList from the default preset, including when it op
   expect(state.navigation.lastList).toEqual({ mode: 'prs', query: 'review-requested:@me is:pr is:open', page: 1 })
 }, 20_000)
 
+test('the first open uses an explicit repository selection instead of the default selection', async () => {
+  const run = await boot()
+  await run.call('preferences', { defaultRepoSelection: [run.repoId] })
+  await run.call('open', { repoIds: [] })
+  const state = await run.call('state') as TasksState
+  expect(state.navigation.repoIds).toEqual([])
+  expect(toolOpen(await layoutOf(run))).toBe(true)
+}, 20_000)
+
 test('prepare applies the first-open defaults once and changes no layout', async () => {
   const run = await boot()
   await run.call('preferences', { defaultTaskViewPreset: 'needs-review', defaultRepoSelection: [run.repoId] })
@@ -190,6 +211,28 @@ test('close shuts the slot, the active tab or a background tab, and does nothing
   expect(afterBackground.viewTabs?.map(({ id }) => id)).toEqual([REVIEW_VIEW, TASKS_SETTINGS_VIEW])
   expect(toolOpen(afterBackground)).toBe(false)
 }, 30_000)
+
+test('closing a background Tasks tab preserves the tab that was already active', async () => {
+  const run = await bootWithCenter()
+  await run.call('open', { detail: target(run) })
+  await run.client.callAny('ui.view.open', CENTER)
+  await run.client.callAny('ui.view.open', { id: TASKS_SETTINGS_VIEW })
+  await run.client.callAny('ui.view.open', CENTER)
+
+  const before = await layoutOf(run)
+  expect(before.view).toEqual(CENTER)
+  expect(before.viewTabs?.map(({ id }) => id)).toContain(TASKS_VIEW)
+  expect(before.viewTabs?.map(({ id }) => id)).toContain(REVIEW_VIEW)
+  expect(before.viewTabs?.map(({ id }) => id)).toContain(TASKS_SETTINGS_VIEW)
+
+  await run.call('close')
+  const after = await layoutOf(run)
+  expect(after.view).toEqual(CENTER)
+  expect(after.viewTabs?.map(({ id }) => id)).not.toContain(TASKS_VIEW)
+  expect(after.viewTabs?.map(({ id }) => id)).toContain(REVIEW_VIEW)
+  expect(after.viewTabs?.map(({ id }) => id)).toContain(TASKS_SETTINGS_VIEW)
+  expect(toolOpen(after)).toBe(false)
+}, 20_000)
 
 test('Tasks navigation and close stay in the open tool without changing the center view', async () => {
   const run = await boot()

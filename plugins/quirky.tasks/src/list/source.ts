@@ -73,7 +73,7 @@ export function targetUrl(target: ItemTarget): string {
   return `https://${source.host}/${source.owner}/${source.repo}/${target.kind === 'issue' ? 'issues' : 'pull'}/${target.number}`
 }
 
-export async function resolveRepoSource(env: TasksEnv, repo: TaskRepo): Promise<ResolvedRepoSource> {
+export async function resolveRepoSource(env: TasksEnv, repo: TaskRepo, forceAuth = true): Promise<ResolvedRepoSource> {
   const response = object(await env.context.call('quirky.hosting/repository', { worktree: repo.worktree }))
   const origin = identity(response?.origin)
   const repository = identity(response?.repository)
@@ -86,7 +86,7 @@ export async function resolveRepoSource(env: TasksEnv, repo: TaskRepo): Promise<
   const sourceName = canonicalIdentity(issueRepository) === canonicalIdentity(origin) ? 'origin' : 'upstream'
   let availability: SourceAvailability = { status: 'available' }
   try {
-    const diagnosis = object(await env.context.call('quirky.hosting/diagnoseAuth', { worktree: repo.worktree }))
+    const diagnosis = object(await env.context.call('quirky.hosting/diagnoseAuth', { worktree: repo.worktree, force: forceAuth }))
     if (diagnosis?.ghAvailable === false) {
       availability = { status: 'unavailable', reason: 'gh_unavailable', message: 'GitHub CLI is unavailable.' }
     } else if (diagnosis?.requiredHostAuthenticated === false) {

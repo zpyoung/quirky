@@ -179,7 +179,7 @@ type ResolvedEntry = { repo: TaskRepo; source: ResolvedRepoSource }
 type RepoSourceResult = ResolvedEntry | { repo: TaskRepo; error: unknown }
 
 /** The repositories a read covers, each with its resolved source or the reason it has none. */
-async function resolveSelection(env: TasksEnv, selectedValue: unknown, explicit: boolean): Promise<{ repos: TaskRepo[]; repoSources: RepoSourceResult[]; resolved: ResolvedEntry[] }> {
+async function resolveSelection(env: TasksEnv, selectedValue: unknown, explicit: boolean, forceAuth = true): Promise<{ repos: TaskRepo[]; repoSources: RepoSourceResult[]; resolved: ResolvedEntry[] }> {
   const repos = eligibleRepositories(await env.repositories())
   const selectedIds = selectedValue === null || selectedValue === undefined ? null : new Set(selectedValue as string[])
   if (explicit && selectedIds !== null) {
@@ -190,7 +190,7 @@ async function resolveSelection(env: TasksEnv, selectedValue: unknown, explicit:
   const requestedRepos = selectedIds === null ? repos : repos.filter((repo) => selectedIds.has(repo.id))
   const repoSources = await Promise.all(requestedRepos.map(async (repo): Promise<RepoSourceResult> => {
     try {
-      const source = await resolveRepoSource(env, repo)
+      const source = await resolveRepoSource(env, repo, forceAuth)
       return { repo, source }
     } catch (error) {
       return { repo, error }
@@ -225,9 +225,10 @@ async function repositoryTotal(env: TasksEnv, entry: ResolvedEntry, kind: ItemKi
 }
 
 /**
- * Counts issues and pull requests separately across the repositories `list` would cover. The
- * given `mode` uses the given `query` and the other mode its default open query. A count is null
- * when any covered repository could not be read, so a caller never shows a partial total.
+ * Counts issues and pull requests separately across repositories with a GitHub source, ignoring
+ * repositories without an origin. The given `mode` uses the given `query` and the other mode its
+ * default open query. A count is null when a covered repository could not be read or returned no
+ * usable total, so a caller never shows a partial total.
  */
 async function countWork(env: TasksEnv, params: Record<string, unknown>): Promise<{ issues: number | null; prs: number | null }> {
   const mode = params.mode === undefined ? undefined : listMode(env, params.mode, 'issues')
@@ -246,8 +247,10 @@ async function countWork(env: TasksEnv, params: Record<string, unknown>): Promis
       invalid(env, messageOf(error))
     }
   }
-  const { repoSources, resolved } = await resolveSelection(env, selectedValue, params.repoIds !== undefined)
-  if (repoSources.some((entry) => 'error' in entry)) return { issues: null, prs: null }
+  const { repoSources, resolved } = await resolveSelection(env, selectedValue, params.repoIds !== undefined, false)
+  if (repoSources.some((entry) => 'error' in entry && errorReason(entry.error) !== 'missing_origin')) {
+    return { issues: null, prs: null }
+  }
   const totals = {} as Record<ListMode, number | null>
   await Promise.all((['issues', 'prs'] as const).map(async (listed) => {
     const kind: ItemKind = listed === 'issues' ? 'issue' : 'pullRequest'

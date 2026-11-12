@@ -122,7 +122,7 @@ export type TasksEnv = {
   update(change: (state: TasksState) => void): TasksState
   /** Validates and applies a navigation patch without touching layout. */
   apply(patch: Partial<TaskNavigation>): TasksState
-  /** Applies a patch, then republishes the view input only while the Tasks tab is the active view. */
+  /** Applies a navigation patch and returns the resulting state without touching layout. */
   navigate(patch: Partial<TaskNavigation>): Promise<TasksState>
   repositories(): Promise<TaskRepo[]>
   previousView: UiLayout['view']

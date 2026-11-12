@@ -305,8 +305,12 @@ export function coreMethods(env: TasksEnv) {
       } else if (place.layout?.view?.id === TASKS_VIEW) {
         await context.call('ui.view.close', {})
       } else if (place.tab !== undefined) {
+        const activeView = place.layout?.view ?? null
         await context.call('ui.view.open', { id: TASKS_VIEW, ...(place.tab.input !== undefined ? { input: place.tab.input } : {}) })
         await context.call('ui.view.close', {})
+        if (activeView && activeView.id !== TASKS_VIEW) {
+          await context.call('ui.view.open', { id: activeView.id, ...(activeView.input !== undefined ? { input: activeView.input } : {}) })
+        }
       }
       return { closed: true }
     },
