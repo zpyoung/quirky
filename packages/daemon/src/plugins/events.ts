@@ -1,4 +1,5 @@
-import type { QuirkyEvent } from '@quirky/protocol'
+import type { PluginEvent, QuirkyEvent } from '@quirky/protocol'
+import { COALESCE_INTERVAL_MS, PluginEventCoalescer, readKeyPath } from './coalesce'
 import type { PluginHost } from './host'
 
 type Listener = (event: QuirkyEvent) => unknown
@@ -12,18 +13,26 @@ const EVENT_PREFIX = 'event:'
  */
 export class PluginEvents {
   private registrations: Registration[] = []
+  private readonly coalescer: PluginEventCoalescer
 
   constructor(
     private readonly plugins: PluginHost,
     private readonly broadcast: (event: QuirkyEvent) => void,
-    private readonly log: (message: string) => void
-  ) {}
+    private readonly log: (message: string) => void,
+    options?: { coalesceMs?: number; now?: () => number }
+  ) {
+    this.coalescer = new PluginEventCoalescer(
+      (event) => this.broadcast(event),
+      this.log,
+      options?.coalesceMs ?? COALESCE_INTERVAL_MS,
+      options?.now ?? Date.now
+    )
+  }
 
   /**
-   * Broadcasts `event` for `pluginId` and returns true. Returns false when the event is disabled
-   * or another plugin's override replaced it. Throws when the plugin neither declares nor
-   * overrides the event, or when `broadcast` throws (for example on non-serializable `data`).
-   * Reads the registry only; never activates a plugin.
+   * Emits a declared event and returns true; when its manifest declares `coalesce`, true means it
+   * was sent or held as the latest event for its key. Returns false when disabled or overridden.
+   * Throws when undeclared or when an immediate broadcast fails. Reads the registry only.
    */
   emit(pluginId: string, event: string, data: unknown): boolean {
     const id = event.includes(':') ? event : `${EVENT_PREFIX}${pluginId}/${event}`
@@ -37,7 +46,16 @@ export class PluginEvents {
     const effective = this.plugins.contributions({ kind: 'event' }).find((contribution) => contribution.id === id)
     if (effective?.plugin !== pluginId) return false
 
-    this.broadcast({ type: id.slice(EVENT_PREFIX.length) as `${string}/${string}`, data: data ?? null })
+    const emitted: PluginEvent = { type: id.slice(EVENT_PREFIX.length) as `${string}/${string}`, data: data ?? null }
+    const worktreePath = effective.data.worktree
+    if (typeof worktreePath === 'string') {
+      const worktreeId = readKeyPath(data, worktreePath)
+      if (typeof worktreeId === 'string' && worktreeId.length > 0) emitted.worktreeId = worktreeId
+    }
+
+    const coalesce = effective.data.coalesce
+    if (Array.isArray(coalesce)) this.coalescer.emit(pluginId, emitted, coalesce)
+    else this.broadcast(emitted)
     return true
   }
 
@@ -48,8 +66,9 @@ export class PluginEvents {
     return () => this.remove((candidate) => candidate === registration)
   }
 
-  /** Drops every listener `pluginId` registered. */
+  /** Drops every listener and pending event `pluginId` owns. */
   removeAll(pluginId: string): void {
+    this.coalescer.removeAll(pluginId)
     this.remove((candidate) => candidate.pluginId === pluginId)
   }
 

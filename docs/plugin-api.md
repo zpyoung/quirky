@@ -36,6 +36,18 @@ the named setting is `true`. `repository` is an `https://github.com/<owner>/<rep
 those two path segments; the manifest loader rejects any other shape, and `plugin.list` returns it.
 A plugin that uses either declares `"apiVersion": "1.2.0"`.
 
+API 1.3 adds optional `coalesce` and `worktree` fields to event declarations and event overrides.
+`coalesce` lists up to four distinct key paths into event data. Each path has one to four
+dot-separated identifier segments (`[A-Za-z_][A-Za-z0-9_]*`). The coalescing key includes the event
+type, any valid worktree tag, and the values at those paths; an empty list still separates emits by
+event type and worktree tag. The kernel sends the first emit for a key immediately, then sends only
+the latest held emit when the 250 ms window ends. A held emit can arrive after later events from
+another key or event type.
+`emit` returns `true` when the event is sent or held, and `false` when disabled or overridden.
+`worktree` names a key path containing the worktree ID; a non-empty string there is copied to the
+event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
+when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -131,6 +143,11 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.2.0** adds an optional `hue` to `panel`, `sidebar-section` and `activity-item`: one of the
   names in [`UI_TOOL_HUES`](../packages/protocol/src/tool-hues.ts), used to color the tool's icon. A
   plugin that sets it declares `apiVersion` 1.2.0.
+- **1.3.0** adds optional `coalesce` and `worktree` fields to event declarations and overrides. The
+  kernel sends the first emit immediately and only the latest held emit per key at the end of a
+  250 ms window; held emits can arrive after events from other keys, and are dropped when the plugin
+  unloads. A declared worktree path with a non-empty string is copied to the event's `worktreeId`.
+  A plugin that uses either field declares `apiVersion` 1.3.0.
 
 ## Example
 

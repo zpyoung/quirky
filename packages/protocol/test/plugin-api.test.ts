@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { PLUGIN_API_VERSION, pluginApiCompatibilityError } from '../src/plugin-api'
+import { pluginApiCompatibilityError } from '../src/plugin-api'
 
 describe('stable plugin API floors', () => {
-  test('the host release is 1.2.0 and refuses newer floors', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.2.0')
+  test('the host supports the release that introduced optional event metadata', () => {
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.2.1')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.3.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.4.0')).not.toBeNull()
   })
 
   test.each([
