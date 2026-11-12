@@ -300,6 +300,18 @@ describe('handoff', () => {
     await s2.deliver({ type: 'quirky.agent-status/settled', data: { sessionId: 's1', worktreeId: 'wt-1', state: 'done' } })
     expect(s2.sent).toEqual([])
   })
+  test('the disposer stops its settled listener without resolving in-flight gate requests', async () => {
+    const s = setup({ sessions: [session('s1', 'wt-1', { status: 'working', agentStatus: { state: 'working' } })] })
+    await handOff(s, input('wt-1'))
+    expect(s.sent).toEqual([])
+
+    s.dispose()
+    await s.deliver({ type: 'quirky.agent-status/settled', data: { sessionId: 's1', worktreeId: 'wt-1', state: 'done' } })
+
+    expect(s.gate.passthrough).toEqual([])
+    expect(s.sent).toEqual([])
+  })
+
 
   test('each item succeeds or fails on its own', async () => {
     const s = setup({ worktrees: [wt('wt-1'), wt('wt-2', { kind: 'folder' }), wt('wt-3')], sessions: [session('s1', 'wt-1'), session('s3', 'wt-3')] })

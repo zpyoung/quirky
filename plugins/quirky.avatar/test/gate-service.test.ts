@@ -87,6 +87,7 @@ const waitFor = async <T>(check: () => T | undefined | false | null, ms = 2000):
     await Bun.sleep(5)
   }
 }
+const STOPPING = 'The avatar is stopping; try the same call again shortly.'
 
 describe('disposing the registration', () => {
   test('stops an in-flight gate check quietly without touching the store afterwards', async () => {
@@ -605,20 +606,136 @@ describe('activation and deactivation', () => {
     expect(codexHooksInstalled({ home, env: {} })).toBe(true)
     expect(existsSync(piExtensionPath('pi', { home, env: {} }))).toBe(true)
     dispose()
-    expect(codexHooksInstalled({ home, env: {} })).toBe(false)
+    expect(codexHooksInstalled({ home, env: {} })).toBe(true)
     expect(existsSync(piExtensionPath('pi', { home, env: {} }))).toBe(true)
   })
 
-  test('the disposer clears every marker and passes in-flight requests through', async () => {
-    const s = setup({ brain: () => new Promise(() => {}) })
+
+  test('the disposer keeps every supervision marker', () => {
+    const s = setup()
     s.app.services.gate.writeMarker('s-2', 'wt-1', 'full')
+    const paths = ['s-1', 's-2'].map((sessionId) => join(markerDir(s.context.home), sessionId))
+    const before = paths.map((path) => readFileSync(path, 'utf8'))
+    expect(before.map((text) => JSON.parse(text))).toEqual([
+      { worktreeId: 'wt-1', level: 'own-branch' },
+      { worktreeId: 'wt-1', level: 'full' }
+    ])
+
+    disposers.pop()!()
+
+    expect(paths.every(existsSync)).toBe(true)
+    expect(paths.map((path) => readFileSync(path, 'utf8'))).toEqual(before)
+  })
+
+  test('the disposer refuses a waiting request with a retry reason', async () => {
+    const s = setup({ brain: () => Promise.withResolvers<BrainReply>().promise })
+
     const pending = s.bash('bun test --update-snapshots')
     await waitFor(() => s.brainCalls.length > 0)
+
     disposers.pop()!()
+
+    const decision = await pending
+    expect(decision).toMatchObject({ decision: 'deny', reason: STOPPING })
+    expect(decision.encoded).toBe(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: STOPPING
+      }
+    }))
+    expect(s.app.store.receipts.list({ sessionId: 's-1' }).at(-1)).toMatchObject({ outcome: 'retry', step: null })
+    expect(s.gateEntries().at(-1)!.data).toMatchObject({
+      outcome: 'retry',
+      reason: STOPPING,
+      reliedOn: 'the avatar stopping',
+      trace: [],
+      step: null
+    })
+    expect(s.denials).toEqual([])
+    expect(s.app.needs.list({ open: true })).toEqual([])
+  })
+
+  test('a late brain answer after stopping writes nothing', async () => {
+    const brain = Promise.withResolvers<BrainReply>()
+    const s = setup({ brain: () => brain.promise })
+    const pending = s.bash('bun test --update-snapshots')
+    await waitFor(() => s.brainCalls.length > 0)
+
+    disposers.pop()!()
+
+    expect(await pending).toMatchObject({ decision: 'deny', reason: STOPPING })
+    const entries = s.gateEntries()
+    brain.resolve({ decision: 'allow', reliedOn: 'guideline 1', reason: 'late answer' })
+    const turn = Promise.withResolvers<void>()
+    setImmediate(turn.resolve)
+    await turn.promise
+
+    expect(s.gateEntries()).toEqual(entries)
+    expect(s.app.store.receipts.list({ sessionId: 's-1' }).at(-1)).toMatchObject({ outcome: 'retry' })
+  })
+
+  test('a Shadow provider call stays passthrough when its held worktree lookup returns after stopping', async () => {
+    const s = setup({ level: 'shadow' })
+    const worktreeList = Promise.withResolvers<unknown>()
+    s.fakeCalls['quirky.worktree/list'] = () => worktreeList.promise
+    const pending = s.bash('bun test --update-snapshots')
+    await waitFor(() => s.calls.some((call) => call.method === 'quirky.worktree/list'))
+
+    disposers.pop()!()
+    worktreeList.resolve([{ id: 'wt-1', path: s.worktreePath, branch: 'feature', repoId: 'repo', isMain: false }])
+
     expect((await pending).decision).toBe('passthrough')
-    expect(existsSync(markerDir(s.context.home))).toBe(true)
-    expect(hasMarkerFile(s.context.home, 's-1')).toBe(false)
-    expect(hasMarkerFile(s.context.home, 's-2')).toBe(false)
+  })
+
+  test('a Shadow service call blocked during classification settles passthrough on stop', async () => {
+    const s = setup({ level: 'shadow' })
+    const worktreeList = Promise.withResolvers<unknown>()
+    const lookupStarted = Promise.withResolvers<void>()
+    s.fakeCalls['quirky.worktree/list'] = () => {
+      lookupStarted.resolve()
+      return worktreeList.promise
+    }
+    const pending = s.app.services.gate.decideCall({
+      agent: 'claude',
+      sessionId: 's-1',
+      worktreeId: 'wt-1',
+      cwd: s.worktreePath,
+      toolName: 'Bash',
+      toolInput: { command: 'bun test --update-snapshots' },
+      event: 'PreToolUse'
+    }, 60_000, new AbortController().signal)
+    await lookupStarted.promise
+    let settled = false
+    void pending.then(() => { settled = true })
+
+    disposers.pop()!()
+    const turn = Promise.withResolvers<void>()
+    setImmediate(turn.resolve)
+    await turn.promise
+    const settledOnStop = settled
+    worktreeList.resolve([{ id: 'wt-1', path: s.worktreePath, branch: 'feature', repoId: 'repo', isMain: false }])
+
+    const result = await pending
+    const afterLookup = Promise.withResolvers<void>()
+    setImmediate(afterLookup.resolve)
+    await afterLookup.promise
+
+    expect(settledOnStop).toBe(true)
+    expect(result.outcome).toBe('passthrough')
+    expect(s.gateEntries()).toEqual([])
+    expect(s.app.store.receipts.list({ sessionId: 's-1' }).at(-1)).toMatchObject({ outcome: 'passthrough', step: null })
+  })
+
+  test('a journal failure does not stop the disposer refusing a waiting request', async () => {
+    const s = setup({ brain: () => Promise.withResolvers<BrainReply>().promise })
+    const pending = s.bash('bun test --update-snapshots')
+    await waitFor(() => s.brainCalls.length > 0)
+    s.app.journal = () => { throw new Error('journal write failed') }
+
+    const dispose = disposers.pop()!
+    expect(dispose).not.toThrow()
+    expect(await pending).toMatchObject({ decision: 'deny', reason: STOPPING })
   })
 
   test('does not touch the real home while tests run', () => {
