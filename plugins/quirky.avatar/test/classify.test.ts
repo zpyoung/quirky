@@ -3088,7 +3088,11 @@ describe('directory uncertainty scenarios', () => {
       ["x=${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
       ["x=${CDPATH:=/tmp} cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
       ["[[ ${CDPATH:=/tmp} ]]; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
-      ["v=CDPATH; printf -v $v /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+      ["v=CDPATH; printf -v $v /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["CDPATH= x=${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["CDPATH= x=${CDPATH:=/tmp} cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["export CDPATH= CDPATH+=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["env CDPATH= true ${CDPATH:=/tmp}; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
     ]
     for (const [command, classes, outcome, step] of rows) {
       expectClassSet(command, classes)
@@ -3109,7 +3113,10 @@ describe('directory uncertainty scenarios', () => {
       ["printf -v cdpath /tmp; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["set -A cdpath /tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
       ["typeset -a cdpath=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
-      [": ${CDPATH::=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"]
+      [": ${CDPATH::=/tmp}; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["CDPATH= cdpath=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["export CDPATH= cdpath=/tmp; cd src; touch a", ["edit-outside", "other"], "held", "floor-core"],
+      ["export CDPATH= cdpath=(/tmp); cd src; touch a", ["edit-outside", "other"], "held", "floor-core"]
     ]
     for (const [command, classes, outcome, step] of rows) {
       expectClassSet(command, classes)
@@ -3126,7 +3133,8 @@ describe('directory uncertainty scenarios', () => {
       ["printf -v CDPATH /tmp; CDPATH=; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["printf -v CDPATH /tmp; unset CDPATH; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["printf -v CDPATH /tmp; CDPATH= bash -c 'cd src; touch a'", ["edit-outside", "other", "read"], "held", "floor-core"],
-      ["printf -v CDPATH /tmp; eval 'CDPATH=; cd src'; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+      ["printf -v CDPATH /tmp; eval 'CDPATH=; cd src'; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["printf -v CDPATH /tmp; env CDPATH=; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
     ]
     for (const [command, classes, outcome, step] of rows) {
       expectClassSet(command, classes)
@@ -3178,7 +3186,8 @@ describe('directory uncertainty scenarios', () => {
       ["eval 'printf -v CDPATH /tmp'; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["eval 'read CDPATH <<< /tmp; cd src; touch a'", ["edit-outside", "other"], "held", "floor-core"],
       ["printf -v CDPATH /tmp; eval 'cd src'; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
-      ["eval \"$(cat <<'EOF'\nprintf -v CDPATH /tmp\nEOF\n)\"; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+      ["eval \"$(cat <<'EOF'\nprintf -v CDPATH /tmp\nEOF\n)\"; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["true | eval 'printf -v CD\"\"PATH /tmp'; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
     ]
     for (const [command, classes, outcome, step] of rows) {
       expectClassSet(command, classes)
@@ -3196,7 +3205,8 @@ describe('directory uncertainty scenarios', () => {
       ["env -u CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["env -u CDPATH= CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
       ["/usr/bin/time -f CDPATH= true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
-      ["x=$(CDPATH= cd src && pwd); cd lib; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
+      ["x=$(CDPATH= cd src && pwd); cd lib; touch a", ["edit-outside", "other", "read"], "held", "floor-core"],
+      ["env CDPATH= cdpath=/tmp true; cd src; touch a", ["edit-outside", "other", "read"], "held", "floor-core"]
     ]
     for (const [command, classes, outcome, step] of rows) {
       expectClassSet(command, classes)
