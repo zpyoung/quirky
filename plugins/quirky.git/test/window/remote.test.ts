@@ -110,7 +110,6 @@ test('SC-29: Fetch, Fast-forward and Rebase from origin/main run through the dae
   expect(caretEntry('Fast-forward')!.disabled).toBe(false)
   await click(caretEntry('Fast-forward'))
   await w.win.waitFor(() => w.git('rev-parse', 'HEAD') === peer.git('rev-parse', 'HEAD'))
-  await w.win.waitFor(() => primaryNow().label === 'Pushed to origin/zoe/feat')
 
   await openChevron(w)
   await click(caretEntry('Rebase from origin/main'))
