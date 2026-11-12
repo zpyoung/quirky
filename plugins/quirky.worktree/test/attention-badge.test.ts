@@ -241,13 +241,13 @@ test('five refresh events during a deferred load coalesce into one trailing unio
   let badgesBefore = 0
   let deferNextSession = false
   let queuedEvents = false
-  let trailingStartedAfterFirstBadge: boolean | null = null
+  const trailing: { startedAfterFirstBadge: boolean | null } = { startedAfterFirstBadge: null }
   const originalCall = h.context.call.bind(h.context)
   const context = {
     ...h.context,
-    async call(method: string, params?: unknown) {
-      if (queuedEvents && trailingStartedAfterFirstBadge === null) {
-        trailingStartedAfterFirstBadge = h.badges.length === badgesBefore + 1
+    async call(method: string, params?: Record<string, unknown>) {
+      if (queuedEvents && trailing.startedAfterFirstBadge === null) {
+        trailing.startedAfterFirstBadge = h.badges.length === badgesBefore + 1
       }
       const result = await originalCall(method, params)
       if (method === 'quirky.session/list' && deferNextSession) {
@@ -286,7 +286,7 @@ test('five refresh events during a deferred load coalesce into one trailing unio
       'quirky.sidebar-extras/projection',
       'quirky.worktree/list'
     ].sort())
-    expect(trailingStartedAfterFirstBadge).toBe(true)
+    expect(trailing.startedAfterFirstBadge).toBe(true)
     expect(h.badges).toHaveLength(badgesBefore + 2)
   } finally {
     releaseGate()
