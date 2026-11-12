@@ -12,6 +12,7 @@ type Parsed = {
   wrapperAssignments: ShellAssignment[]
   credential: boolean
   throughXargs: boolean
+  wrapped: boolean
   dynamicCommand: boolean
   dynamicBeforeCommand: boolean
 }
@@ -55,7 +56,53 @@ const CREDENTIAL_HOME_FILES = ['.netrc']
 
 const unique = (classes: ActionClass[]): ActionClass[] => Array.from(new Set(classes))
 const isFlag = (token: string) => token.startsWith('-') && token.length > 1
-const GIT_ENV_NAMES = new Set(['GIT_DIR', 'GIT_WORK_TREE', 'HUSKY', 'HUSKY_SKIP_HOOKS', 'SKIP_HOOKS'])
+const TRACKED_ENV_NAMES: Record<string, true> = { GIT_DIR: true, GIT_WORK_TREE: true, HUSKY: true, HUSKY_SKIP_HOOKS: true, SKIP_HOOKS: true, CDPATH: true }
+
+/** The most possible directories retained in a scope before its directory becomes unknown. */
+export const MAX_DIRECTORIES = 16
+
+type DirectorySet = readonly string[] | null
+type DirectoryState = { possible: DirectorySet; certain: DirectorySet }
+const UNKNOWN_DIRECTORY = [null] as const
+const DIRECTORY_KEYWORDS: Record<string, true> = { '{': true, '!': true, if: true, then: true, else: true, elif: true, while: true, until: true, do: true, noglob: true, nocorrect: true }
+
+function joinDirectories(left: DirectorySet, right: DirectorySet): DirectorySet {
+  if (left === null || right === null) return null
+  if (left === right) return left
+  const joined = new Set(left)
+  for (const directory of right) {
+    joined.add(directory)
+    if (joined.size > MAX_DIRECTORIES) return null
+  }
+  return joined.size === left.length ? left : [...joined]
+}
+
+function enteredDirectories(target: string, directories: DirectorySet, home: string): DirectorySet {
+  const expanded = expandHome(target, home)
+  if (isAbsolute(expanded)) return [resolve(expanded)]
+  if (directories === null) return null
+  return [...new Set(directories.map((directory) => resolvePath(target, directory, home)))]
+}
+
+/** Combines one path's classifications without calling a possibly outside write inside. */
+function directoryClasses(directories: DirectorySet, classify: (directory: string | null) => ActionClass[]): ActionClass[] {
+  const classes: ActionClass[] = []
+  for (const directory of directories ?? UNKNOWN_DIRECTORY) append(classes, classify(directory))
+  return classes.includes('edit-outside') ? classes.filter((value) => value !== 'edit-inside') : classes
+}
+
+function keywordChangesDirectory(words: ShellWord[]): boolean {
+  let index = 0
+  while (index < words.length && !words[index].dynamic) {
+    if (words[index].text === 'function') index += 2
+    else if (DIRECTORY_KEYWORDS[words[index].text] === true) index++
+    else break
+  }
+  if (index === 0 || index >= words.length) return false
+  const remaining = words.slice(index)
+  const word = remaining[unwrapWords(remaining).commandIndex]
+  return word !== undefined && !word.dynamic && ['cd', 'pushd', 'popd', 'eval'].includes(basename(word.text))
+}
 
 function append<T>(target: T[], source: readonly T[]): void {
   for (const value of source) target.push(value)
@@ -142,7 +189,7 @@ function unwrapWords(words: ShellWord[], wrapperAssignments?: ShellAssignment[])
       const option = words[commandIndex]
       const assignment = wrapper === 'env' ? assignmentFromWord(option) : null
       if (assignment === null && (option.dynamic || !isFlag(option.text))) break
-      if (assignment !== null && GIT_ENV_NAMES.has(assignment.name)) wrapperAssignments?.push(assignment)
+      if (assignment !== null && TRACKED_ENV_NAMES[assignment.name] === true) wrapperAssignments?.push(assignment)
       const takesValue = WRAPPER_VALUE_FLAGS[wrapper]?.[option.text] === true
       if (takesValue && words[commandIndex + 1]?.dynamic) dynamicBeforeCommand = true
       commandIndex += takesValue ? 2 : 1
@@ -172,6 +219,7 @@ function parseSegment(command: ShellCommand): Parsed {
     wrapperAssignments,
     credential: unwrapped.credential,
     throughXargs: unwrapped.throughXargs,
+    wrapped: unwrapped.commandIndex > 0,
     dynamicCommand: commandWord?.dynamic ?? false,
     dynamicBeforeCommand: unwrapped.dynamicBeforeCommand
   }
@@ -605,7 +653,7 @@ type Analysis = {
   parts: string[]
   pushDests: string[]
   unreadable?: boolean
-  cwd?: string | null
+  directories?: DirectoryState
   cwdChanged?: boolean
   env?: Map<string, ShellWord>
   envChanges?: Set<string>
@@ -619,7 +667,7 @@ function unknownGitValue(value: ShellWord): ShellWord {
 function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>): Map<string, ShellWord> {
   const env = new Map(inherited)
   for (const assignment of parsed.assignments) {
-    if (GIT_ENV_NAMES.has(assignment.name)) env.set(assignment.name, assignment.value)
+    if (TRACKED_ENV_NAMES[assignment.name] === true) env.set(assignment.name, assignment.value)
   }
   for (const assignment of parsed.wrapperAssignments) {
     env.set(assignment.name, assignment.value)
@@ -627,17 +675,24 @@ function commandEnvironment(parsed: Parsed, inherited: Map<string, ShellWord>): 
   return env
 }
 
-function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyContext, depth = 0, inheritedEnv: Map<string, ShellWord> = new Map()): Analysis {
+function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: ClassifyContext, depth = 0, inheritedEnv: Map<string, ShellWord> = new Map()): Analysis {
   if (depth > 4) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
   const script = parseShell(command, { home: ctx.home })
   if (script === null) return { classes: ['other', 'edit-outside'], parts: [], pushDests: [], unreadable: true }
   const rootPaths = roots(ctx)
 
   const scopeDownloads = new Array(script.parents.length).fill(false) as boolean[]
+  const scopeCommands = new Map<number, ShellCommand>()
+  const recordScopes = (word: ShellWord, owner: ShellCommand) => {
+    for (const scope of word.subs) scopeCommands.set(scope, owner)
+  }
   for (const shellCommand of script.commands) {
     const commandIndex = unwrapWords(shellCommand.words).commandIndex
     const word = shellCommand.words[commandIndex]
     if (word !== undefined && !word.dynamic && DOWNLOAD_CMDS.has(basename(word.text))) scopeDownloads[shellCommand.scope] = true
+    for (const word of shellCommand.words) recordScopes(word, shellCommand)
+    for (const assignment of shellCommand.assignments) recordScopes(assignment.value, shellCommand)
+    for (const redirect of shellCommand.redirects) recordScopes(redirect.target, shellCommand)
   }
   for (let scope = scopeDownloads.length - 1; scope > 0; scope--) {
     if (scopeDownloads[scope]) scopeDownloads[script.parents[scope]] = true
@@ -658,17 +713,24 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     return env
   }
   const pipelineDownloads = new Map<number, boolean>()
-  const directories = new Map<number, string | null>([[0, startCwd]])
-  const directoryFor = (scope: number): string | null => {
-    if (directories.has(scope)) return directories.get(scope)!
-    const directory = directoryFor(script.parents[scope])
-    directories.set(scope, directory)
-    return directory
+  const directories = new Map<number, DirectoryState>([[0, { possible: startDirectories, certain: startDirectories }]])
+  const directoryFor = (scope: number): DirectoryState => {
+    const existing = directories.get(scope)
+    if (existing !== undefined) return existing
+    const parent = directoryFor(script.parents[scope])
+    const owner = scopeCommands.get(scope)
+    const start = owner?.sep === '&&' ? parent.certain : parent.possible
+    const state = { possible: start, certain: start }
+    directories.set(scope, state)
+    return state
   }
   for (const shellCommand of script.commands) {
     const shellEnv = environmentFor(shellCommand.scope)
-    const commandCwd = directoryFor(shellCommand.scope)
+    const state = directoryFor(shellCommand.scope)
+    const commandCwd = shellCommand.sep === '&&' ? state.certain : state.possible
+    const previousCertain = state.certain
     let cwd = commandCwd
+    let possible = state.possible
     let downloadInPipeline = pipelineDownloads.get(shellCommand.scope) ?? false
     if (shellCommand.sep !== '|') downloadInPipeline = false
 
@@ -676,7 +738,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     const { cmd, args } = parsed
     if (cmd === '') {
       for (const assignment of parsed.assignments) {
-        if (!GIT_ENV_NAMES.has(assignment.name)) continue
+        if (TRACKED_ENV_NAMES[assignment.name] !== true) continue
         shellEnv.set(assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
         if (shellCommand.scope === 0) envChanges.add(assignment.name)
       }
@@ -687,7 +749,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
     } else if (cmd === 'export') {
       for (const word of parsed.argWords) {
         const assignment = assignmentFromWord(word)
-        if (assignment === null || !GIT_ENV_NAMES.has(assignment.name)) continue
+        if (assignment === null || TRACKED_ENV_NAMES[assignment.name] !== true) continue
         shellEnv.set(assignment.name, shellCommand.detached ? unknownGitValue(assignment.value) : assignment.value)
         if (shellCommand.scope === 0) envChanges.add(assignment.name)
       }
@@ -732,15 +794,19 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
         if (targetCount !== 1) invalid = true
       }
       if (target !== undefined && (target.dynamic || target.text.startsWith('-') || target.text.startsWith('+'))) invalid = true
+      let cdpath = shellEnv.get('CDPATH')
+      for (const assignment of parsed.assignments) if (assignment.name === 'CDPATH') cdpath = assignment.value
+      for (const assignment of parsed.wrapperAssignments) if (assignment.name === 'CDPATH') cdpath = assignment.value
+      if (target !== undefined && cdpath !== undefined && (cdpath.dynamic || cdpath.text !== '') &&
+        !isAbsolute(expandHome(target.text, ctx.home)) && target.text !== '.' && target.text !== '..' &&
+        !target.text.startsWith('./') && !target.text.startsWith('../')) invalid = true
       if (invalid) {
-        cwd = null
+        cwd = possible = null
         partClasses.push('other')
-      } else if (cmd === 'cd' && target === undefined) {
-        cwd = resolve(ctx.home)
-        partClasses.push('read')
       } else {
-        const expanded = expandHome(target!.text, ctx.home)
-        if (cwd !== null || isAbsolute(expanded)) cwd = resolvePath(target!.text, cwd ?? '/', ctx.home)
+        const entered = enteredDirectories(target?.text ?? ctx.home, commandCwd, ctx.home)
+        cwd = parsed.wrapped ? joinDirectories(commandCwd, entered) : entered
+        possible = joinDirectories(possible, cwd)
         partClasses.push('read')
       }
     } else if (isShell && commandFlag >= 0 && args[commandFlag + 1] !== undefined) {
@@ -765,7 +831,9 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
           partClasses.push('other')
         }
       } else {
-        cwd = inner.cwd === undefined ? null : inner.cwd
+        const final = inner.directories ?? { possible: null, certain: null }
+        cwd = parsed.wrapped ? joinDirectories(commandCwd, final.possible) : final.certain
+        possible = joinDirectories(possible, final.possible)
       }
       if (shellCommand.detached && inner.cwdChanged && !inner.nonDirectoryRead) {
         for (const actionClass of inner.classes) {
@@ -778,10 +846,11 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       append(pushDests, inner.pushDests)
       if (dynamicEval) {
         partClasses.push('other')
+        cwd = possible = null
       } else {
         const changedNames = new Set(inner.envChanges ?? [])
         for (const assignment of parsed.assignments) {
-          if (GIT_ENV_NAMES.has(assignment.name)) changedNames.add(assignment.name)
+          if (TRACKED_ENV_NAMES[assignment.name] === true) changedNames.add(assignment.name)
         }
         for (const assignment of parsed.wrapperAssignments) changedNames.add(assignment.name)
         if (shellCommand.detached) {
@@ -798,7 +867,16 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       }
     } else if (cmd !== '') {
       parts.push(parsed.text)
-      append(partClasses, classifyMainCommand(parsed, ctx, cwd, shellEnv, pushDests))
+      if (cmd === 'git') {
+        let first = true
+        append(partClasses, directoryClasses(cwd, (directory) => {
+          const result = classifyMainCommand(parsed, ctx, directory, shellEnv, first ? pushDests : [])
+          first = false
+          return result
+        }))
+      } else {
+        append(partClasses, classifyMainCommand(parsed, ctx, null, shellEnv, pushDests))
+      }
     }
     let countedDynamic = parsed.dynamicBeforeCommand
     if (!countedDynamic && !parsed.dynamicCommand && cmd !== 'eval' && cmd !== 'cd' && cmd !== 'pushd' && cmd !== 'popd' &&
@@ -826,6 +904,7 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
         if (!commandAllowed) partClasses.push('other')
       }
     }
+    if (keywordChangesDirectory(shellCommand.words)) cwd = possible = null
 
     if (!parsed.dynamicCommand && DOWNLOAD_CMDS.has(cmd)) downloadInPipeline = true
     pipelineDownloads.set(shellCommand.scope, downloadInPipeline)
@@ -836,14 +915,16 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
       const value = word.text.startsWith('-') ? (equals >= 0 ? word.text.slice(equals + 1) : '') : word.text
       if (value === '') continue
       const expanded = expandHome(value, ctx.home)
-      if (cwd === null && !isAbsolute(expanded)) continue
-      if (isCredentialPath(resolvePath(value, cwd ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
+      for (const directory of cwd ?? UNKNOWN_DIRECTORY) {
+        if (directory === null && !isAbsolute(expanded)) continue
+        if (isCredentialPath(resolvePath(value, directory ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
+      }
     }
 
     if (!parsed.dynamicCommand && isWriteCommand(cmd, args)) {
       for (const target of writeTargetWords) {
         if (target.dynamic) partClasses.push('edit-outside')
-        else append(partClasses, cwd === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, cwd ?? '/', ctx, rootPaths))
+        else append(partClasses, directoryClasses(cwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
       }
     }
     for (const redirect of shellCommand.redirects) {
@@ -852,26 +933,29 @@ function analyzeCommand(command: string, startCwd: string | null, ctx: ClassifyC
         if (target.dynamic) partClasses.push('other')
         else {
           const expanded = expandHome(target.text, ctx.home)
-          if (commandCwd !== null || isAbsolute(expanded)) {
-            if (isCredentialPath(resolvePath(target.text, commandCwd ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
+          for (const directory of commandCwd ?? UNKNOWN_DIRECTORY) {
+            if (directory === null && !isAbsolute(expanded)) continue
+            if (isCredentialPath(resolvePath(target.text, directory ?? '/', ctx.home), ctx, rootPaths)) partClasses.push('credential')
           }
         }
         continue
       }
       if (redirect.kind !== 'write') continue
       if (!target.dynamic && ['/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty'].includes(target.text)) continue
-      if (target.dynamic || (commandCwd === null && !isAbsolute(expandHome(target.text, ctx.home)))) partClasses.push('edit-outside')
-      else append(partClasses, writeClasses(target.text, commandCwd ?? '/', ctx, rootPaths))
+      if (target.dynamic) partClasses.push('edit-outside')
+      else append(partClasses, directoryClasses(commandCwd, (directory) => directory === null && !isAbsolute(expandHome(target.text, ctx.home)) ? ['edit-outside'] : writeClasses(target.text, directory ?? '/', ctx, rootPaths)))
     }
 
-    if (shellCommand.scope === 0 && cwd !== commandCwd) cwdChanged = true
+    if (shellCommand.detached && cmd === 'eval' && cwd === null) possible = null
+    const certain = shellCommand.sep === '||' ? joinDirectories(previousCertain, cwd) : cwd
+    if (shellCommand.scope === 0 && (certain !== commandCwd || possible !== state.possible)) cwdChanged = true
     if (nestedNonDirectoryRead || (!isShell && cmd !== 'eval' && cmd !== 'cd' && cmd !== 'pushd' && cmd !== 'popd' && partClasses.includes('read'))) {
       nonDirectoryRead = true
     }
     append(classes, partClasses)
-    directories.set(shellCommand.scope, cwd)
+    directories.set(shellCommand.scope, { possible, certain })
   }
-  return { classes, parts, pushDests, cwd: directoryFor(0), cwdChanged, env: environmentFor(0), envChanges, nonDirectoryRead }
+  return { classes, parts, pushDests, directories: directoryFor(0), cwdChanged, env: environmentFor(0), envChanges, nonDirectoryRead }
 }
 
 function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[]): ActionClass[] {
@@ -946,7 +1030,7 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
   if (SHELL_TOOLS.has(tool)) {
     const shell = shellCommandOf(call.toolInput)
     if (shell === null || shell.command.trim() === '') return { classes: ['other'], parts: [], pushDests: [] }
-    return analyzeCommand(shell.command, shell.cwd ?? call.cwd, ctx)
+    return analyzeCommand(shell.command, [shell.cwd ?? call.cwd], ctx)
   }
   if (tool === 'apply_patch') {
     const paths = patchPaths(call.toolInput)
@@ -972,6 +1056,8 @@ function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
  * other rule accounts for add `other`; ordinary `xargs` commands add `other`
  * unless exempt, while write and shell `-c`/`eval` commands add `edit-outside`.
  * A relative write target with an unknown cwd returns `edit-outside`.
+ * Paths are judged under every possible shell directory; a write is inside only
+ * when it is inside under each. A `cd` is certain only through its `&&` list.
  * Never returns an empty list: `['other']` means nothing matched. A compound Bash
  * command yields the union of every part's classes, so one risky part is never
  * hidden by a safe one. File tools classify by their path resolved against
