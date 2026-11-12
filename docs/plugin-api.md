@@ -47,10 +47,17 @@ another key or event type.
 `worktree` names a key path containing the worktree ID; a non-empty string there is copied to the
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
 when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
+A held event keeps a reference to the emitted payload; a plugin must not mutate it after `emit`.
 
-`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
-`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
-emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.session-info/changed`, `quirky.git/changed`, `quirky.git/reviewChanged` and
+`quirky.git/notesChanged` coalesce. `quirky.editor/changed` and `quirky.editor/explorerChanged`
+are not coalesced; `quirky.editor/explorerChanged` still carries its worktree tag.
+
+API 1.4 adds `UiPluginContext.subscribe(listener, { worktreeId })`. A string leaves out plugin
+events tagged with another worktree; `null` leaves out every tagged plugin event. Omitting the
+option delivers every event. Untagged plugin events and all kernel events are always delivered,
+even when their payload or a kernel event names another worktree. The scope is fixed at subscribe
+time. A plugin that uses the option declares `"apiVersion": "1.4.0"`.
 
 ## Manifest declaration
 
@@ -152,6 +159,8 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   250 ms window; held emits can arrive after events from other keys, and are dropped when the plugin
   unloads. A declared worktree path with a non-empty string is copied to the event's `worktreeId`.
   A plugin that uses either field declares `apiVersion` 1.3.0.
+- **1.4.0** adds optional worktree scoping to `UiPluginContext.subscribe`. Untagged plugin events
+  and kernel events remain unfiltered. A plugin that uses the option declares `apiVersion` 1.4.0.
 
 ## Example
 
