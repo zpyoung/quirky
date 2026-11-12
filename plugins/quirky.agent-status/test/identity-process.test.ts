@@ -372,6 +372,53 @@ describe('identity decisions and service liveness', () => {
     expect(fixture.commits.map(({ session }) => session.id)).toEqual(['s2'])
   })
 
+  test('get waits for queued Stop processing before reading its row', async () => {
+    const pendingLiveness = deferred<boolean>()
+    let livenessStarted = false
+    const oldRow = { ...agentRow(), sessionBoundary: true }
+    const fixture = serviceFixture({
+      runner: fakeRunner().runner,
+      rows: [oldRow, agentRow('s2')],
+      sessions: [terminalSession('s1'), terminalSession('s2')],
+      isAlive: () => {
+        livenessStarted = true
+        return pendingLiveness.promise
+      }
+    })
+    const ingestion = fixture.service.ingest({
+      source: 'claude',
+      sessionId: 's1',
+      event: 'Stop',
+      payload: { session_id: 'abc', last_assistant_message: 'finished' }
+    })
+    await nextTurn()
+    expect(livenessStarted).toBe(true)
+    expect(fixture.stored.get('s1')?.sessionBoundary).toBe(true)
+
+    let readSettled = false
+    const read = fixture.service.get('s1').then((row) => {
+      readSettled = true
+      return row
+    })
+    await nextTurn()
+    expect(readSettled).toBe(false)
+
+    let otherReadSettled = false
+    const otherRead = fixture.service.get('s2').then((row) => {
+      otherReadSettled = true
+      return row
+    })
+    await nextTurn()
+    expect(otherReadSettled).toBe(true)
+    expect((await otherRead)?.sessionId).toBe('s2')
+
+    pendingLiveness.resolve(true)
+    await ingestion
+    const postStopRow = await read
+    expect(postStopRow?.state).toBe('done')
+    expect(postStopRow?.sessionBoundary).toBeUndefined()
+  })
+
   for (const answer of [true, false]) {
     test(`presence sweep awaits liveness=${answer} before changing rows`, async () => {
       const pending = deferred<boolean>()

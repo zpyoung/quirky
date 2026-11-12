@@ -376,6 +376,7 @@ export class AgentStatusService {
    * `detail` is the displayed one, so a decayed row says how long it has been quiet.
    */
   async get(sessionId: string, at?: number): Promise<(AgentRow & { display: string; label: string }) | null> {
+    await this.queues.get(sessionId)
     const row = this.rows.get(sessionId)
     if (!row) return null
     const session = await this.findSession(sessionId)
