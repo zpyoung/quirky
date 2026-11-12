@@ -23,7 +23,7 @@ export type StartedChild = {
   killGroup(signal: 'SIGTERM' | 'SIGKILL'): void
 }
 
-/** Starts a group leader with closed stdin or byte-exact input and independent output pipes. */
+/** Starts a group leader with closed, byte-exact or writable stdin and selectable output pipes. */
 export type StartChild = (argv: readonly string[], init: {
   cwd?: string
   env?: Record<string, string | undefined>
