@@ -2468,6 +2468,21 @@ function patchPaths(input: unknown): string[] {
   return Array.from(text.matchAll(/^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/gm), (match) => match[1].trim())
 }
 
+/** Matches one command against the owner's always-allowed list using the classifier's spelling. */
+export function onAllowList(words: string[], ctx: ClassifyContext): boolean {
+  const [name, ...args] = words
+  if (name === undefined) return false
+  const text = [systemCommandName(name) ?? name, ...args].join(' ')
+  return matchesCommandList(text, ctx.allowCommands, 'allow', name)
+}
+
+/** Extracts the shell text and starting directory the classifier reads. */
+export function shellCommandOfCall(call: ToolCall): { command: string; cwd: string } | null | undefined {
+  if (!SHELL_TOOLS.has(call.toolName.toLowerCase())) return undefined
+  const shell = shellCommandOf(call.toolInput)
+  return shell === null ? null : { command: shell.command, cwd: shell.cwd ?? call.cwd }
+}
+
 function analyzeCall(call: ToolCall, ctx: ClassifyContext): Analysis {
   const tool = call.toolName.toLowerCase()
   if (SHELL_TOOLS.has(tool)) {

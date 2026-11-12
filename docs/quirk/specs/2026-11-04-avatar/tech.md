@@ -93,6 +93,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `src/store.ts` | Typed access over the store; the journal is append-only. |
 | `src/gate/classify.ts` | Pure: `classifyCall(call, ctx) → ActionClass[]`. |
 | `src/gate/shell.ts` | Pure: `parseShell(source, env) → ShellScript \| null`, the one reader of shell text. |
+| `src/gate/strict.ts` | Pure `plainCommand` fixed-rules allow guard: P1–P8 and the short command list. |
 | `src/gate/decide.ts` | Pure: `decide(input) → RuleDecision` (floor core → switches → level → fixed rules → `judgment`). |
 | `src/gate/service.ts` | The `tool-gate` provider: supervision lookup, Shadow, approvals, late answers, brain judgment with deadline, receipts, journal. |
 | `src/hooks/install.ts` | Claude: the `launch-hook` returns `LaunchPatch.jsonArgs['--settings']` with one entry per event (`PreToolUse` and `PermissionRequest`), each passing its event to `quirky-gate`, with matcher `*`, timeout `judgment-timeout-seconds + 30` rounded up and `onFailure: "block"`. The command carries the Quirky home and session ID as quoted literals. It merges with agent-status's `--settings`. Codex: one command per event in `$CODEX_HOME/hooks.json`, falling back to `~/.codex/hooks.json`, passing the event and reading the home and session from the environment. pi/omp: `quirky-avatar-gate.ts` in the existing agent `extensions/` directories. Plus supervision markers. |
@@ -273,6 +274,8 @@ type AvatarSettings = { defaultLevel: Level; switches: Switches; houseRules: str
   | `level` | `deny`, never `held` (SC-10) |
   | `fixed-rules` | `allow` or `deny` |
 
+- The fixed-rules allow is a monotonic guard: a shell call is allowed only when every class the classifier finds is allowed and the command is plain. A non-plain command passes with note `not a plain command from the short list: <why>` and reaches judgment. Floors still act only on the classes the classifier finds; this guard can turn an allow into judgment, never a hold, deny or judgment into allow.
+
 - The trace lists every step evaluated, with its result (SC-11 log entry).
 - Floor core holds any write, delete or move whose path resolves outside every handed-off worktree. It also holds any read or write of a credential path or credential command (`~/.ssh`, `~/.aws`, `~/.config/gh`, keychain `security`, `.env*` outside the worktree, `gh auth`).
 - Switches:
@@ -295,6 +298,81 @@ type AvatarSettings = { defaultLevel: Level; switches: Switches; houseRules: str
   - Allow: reads, edits inside the worktree, and tests and builds. The default command patterns come from the house-rule settings, extendable.
   - Deny: download piped into a shell (`curl|wget … | (ba|z)?sh`), skipping git hooks (`--no-verify`, `core.hooksPath`), and edits to agent hook or permission files (`.claude/settings*.json`, `.codex/**`, `~/.pi/**/extensions/**`, `~/.omp/**/extensions/**`, `hooks.json`).
 - Guidelines can't change any of this. Only `Mandate.level` and `Mandate.switches` from the sheet or CLI feed `decide()` (R-24).
+
+### Plain commands (`src/gate/strict.ts`)
+
+`plainCommand(command, cwd, ctx, allowed, read = parseShell)` returns `{ plain: true }` or `{ plain: false, why }`. It is pure and total, performs no file access, and reads at most 2,000 characters; `read` is injectable for the reader-agreement test only.
+
+**P1–P8 rule:**
+- **P1. Length and characters:** At most 2,000 printable ASCII characters (space through `~`), with no tab, newline, carriage return or non-ASCII character.
+- **P2. Tokens:** Runs of spaces separate tokens; quotes span to the next matching quote without escapes, single quotes allow printable ASCII and double quotes exclude `$`, backtick, `\` and `!`; outside quotes only letters, digits and `_ . / : = , @ -` are allowed; a token is quoted if it has a quote span, and its value omits quote delimiters; only exact `&&`, `|`, `2>&1`, `2>/dev/null` and `>/dev/null` tokens are connectors or redirects (other words cannot start with `=`).
+- **P3. Shape:** `&&` and `|` split commands; each has a word, redirects follow its last word, and no command is empty or starts/ends with a connector.
+- **P4. Starting directory:** `cwd`, resolved, must be inside a resolved root (`ctx.worktreePath` or an entry of `ctx.handedOffPaths`) and pass P7's path check; containment is exact and case-sensitive.
+- **P5. `cd`:** An unquoted first word `cd` must have no `|` directly before or after it, exactly two words, no redirect, and a second word not starting with `-`; resolve its target from the current directory and require the P7 path check, then use it for later commands; `cd` is exempt from P6 and P7's ordinary argument scan, and the allow list cannot bypass its path check.
+- **P6. Command list:** Every other command has an unquoted first word and either has no `=` in it and matches `onAllowList(words, ctx)` (bypassing P7), or names a table entry whose form its remaining words satisfy.
+- **P7. Paths:** For table commands, inspect every later word's longest `[A-Za-z0-9_./@-]+` pieces; a piece starting with `-` is trimmed to its first `/` or dropped if it has none, then each piece is resolved from the current directory and must stay inside a root and avoid `.claude`, `.codex`, `.pi`, `.omp` and `hooks.json` below the deepest containing root (case-insensitive); for `rm`/`mv`, no non-option word may resolve to a root itself.
+- **P8. Reader agreement:** `parseShell(command, { home: ctx.home })` must match the token reader's command count and each command's `scope: 0`, connector-before-it `sep` (`null` for the first), no assignments, word/redirect counts, and words that are non-dynamic, have no `subs`, and have `text` equal to the token value; mismatch is not plain with `why` starting `the two readers disagree`.
+
+**Short list and option forms:** A command not in this table is not listed; this excludes `env`, `command`, `exec`, `eval`, `xargs`, `time`, `sudo`, every shell, `source`, `export`, `alias`, `awk`, `perl`, `node`, `curl`, `wget`, `ln`, `chmod`, `tar`, `printf`, and path-named commands such as `/bin/ls` and `./run.sh`.
+
+For forms with option lists, read words after the command name (after the subcommand for `git`, and after the two-word form for `gh`) in order by value, whether quoted or not:
+1. `--` ends options; every later word is an operand.
+2. A word not starting with `-`, or exactly `-`, is an operand.
+3. `--name=value` requires a long option that takes a value.
+4. `--name` accepts a long flag; a long value option consumes the next existing word; anything else is not listed.
+5. `-` followed only by digits is accepted where the form says "a count".
+6. Any other word starting with `-` is a cluster of short letters; flags are accepted, a value-taking letter ends the cluster and consumes its suffix or the next existing word, and any other letter is rejected.
+7. A form marked "no operands" accepts none.
+
+| Name | Form |
+| --- | --- |
+| `ls`, `cat`, `head`, `tail`, `wc`, `pwd`, `echo` | any words |
+| `grep` | flags `E F H I L R c h i l n o q r s v w x`; value letters `A B C e m`; long flags `ignore-case line-number recursive files-with-matches files-without-match count invert-match word-regexp extended-regexp fixed-strings only-matching quiet no-messages with-filename no-filename color`; long with value `include exclude exclude-dir max-count after-context before-context context color regexp` |
+| `rg` | flags `F H I L N P S U c h i l n o q s u v w x`; value letters `A B C e g m t T`; long flags `files hidden ignore-case smart-case case-sensitive line-number no-line-number files-with-matches files-without-match count invert-match word-regexp fixed-strings only-matching quiet no-ignore heading no-heading with-filename no-filename multiline json stats column trim`; long with value `glob iglob type type-not max-count after-context before-context context max-depth color sort regexp` |
+| `mkdir` | flags `p v` |
+| `touch` | no options |
+| `rm` | flags `f R r d v` |
+| `mv` | flags `f n v` |
+| `cp` | flags `R r p a f n v` |
+| `tee` | flag `a` |
+| `find` | A word starting with `-` must be `-print -print0 -empty -not -o -a -prune -depth`, or one of `-name -iname -path -ipath -type -maxdepth -mindepth -newer -mtime -mmin -size -regex -iregex` followed by a value word; other words are free. |
+| `sed` | exactly `sed -n <script> <files…>`, where the script value is digits then `p` or digits, comma, digits then `p` (`1p`, `10,20p`), and no later word starts with `-` |
+| `git` | second word is an unquoted subcommand in this table; no option may precede it |
+| `git status` | flags `s b u`; long flags `short branch porcelain ignored`; long with value `porcelain untracked-files` |
+| `git diff` | flag `w`; value letter `U`; long flags `stat cached staged name-only name-status shortstat numstat summary check no-color no-ext-diff ignore-all-space`; long with value `unified diff-filter color` |
+| `git log` | flag `p`; value letter `n`; a count; long flags `oneline stat graph decorate all name-only name-status patch no-merges reverse follow shortstat first-parent no-color`; long with value `max-count since until author grep format pretty date skip color` |
+| `git show` | flag `s`; long flags `stat name-only name-status oneline no-patch patch no-color`; long with value `format pretty color` |
+| `git branch` | flags `a r v`; long flags `show-current all remotes list verbose`; no operands |
+| `git rev-parse` | long flags `abbrev-ref short show-toplevel git-dir verify is-inside-work-tree show-prefix absolute-git-dir git-common-dir`; long with value `short` |
+| `git ls-files` | flags `m o d s`; long flags `others modified deleted stage cached exclude-standard` |
+| `git blame` | flag `w`; value letter `L` |
+| `git add` | flags `A u`; long flags `all update` |
+| `git commit` | flag `a`; value letter `m`; long flag `all`; long with value `message`; no operands |
+| `git remote` | flag `v`; no operands |
+| `gh` | second and third words are unquoted and form one of the pairs below |
+| `gh pr view` | long flag `comments`; long with value `json jq` |
+| `gh pr list` | value letter `L`; long with value `json jq limit state head base author` |
+| `gh pr checks` | long with value `json jq` |
+| `gh pr diff` | long flag `name-only` |
+| `gh pr status` | long with value `json jq` |
+| `gh run list` | value letter `L`; long with value `json jq limit branch workflow status` |
+| `gh run view` | long flags `log log-failed`; long with value `json jq job` |
+| `bun`, `npm`, `pnpm`, `yarn` | second word is `test` or `run`; rest is free |
+| `bunx`, `npx` | a second word exists and doesn't start with `-`; rest is free |
+| `make` | no word starts with `-` |
+| `playwright` | second word is `test`; rest is free |
+| `cargo`, `go`, `pytest`, `python`, `python3`, `vitest`, `jest`, `mocha`, `ava`, `karma`, `tsc`, `eslint`, `oxlint`, `biome`, `ruff`, `mypy`, `pyright`, `knip` | any words |
+
+Being listed is not an allow: the classifier still decides the classes; `python3 a.py`, `go run x.go`, `npx some-package` and bare `make` are plain but go to judgment because their class is `other`, while `npm run deploy` is plain and remains held at `floor-switch`.
+
+**Limitations:**
+1. The brain can allow a call a floor would have held if the classifier missed the floor's class; floors act only on classes the classifier finds.
+2. Tests and builds run worktree code the agent can edit; this is the mandate's allowed-class choice and why their options are not enumerated.
+3. The rule reads command text, not shell state: `PATH`, aliases and functions from startup files, shell options, `CDPATH`, and git config/hooks affect execution; a call changing any of these in its text is not plain.
+4. A relative path through a symlink pointing outside is read as inside; `ln` is absent from the list, so creating that link requires judgment.
+5. `rm -rf sub`, `mv sub x` and `cp -r sub x` are plain even when `sub` contains a `.claude` folder the command does not name.
+6. A relative `cd` target is trusted as resolving below the current directory (`cd src`).
+7. Other tools (`Read`, `Edit`, `Write`, `Grep`, `Glob`) remain decided as before; follow-up item 1 covers `Grep` and `Glob`.
 
 ### Gate service (`src/gate/service.ts`)
 
