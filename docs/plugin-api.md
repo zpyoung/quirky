@@ -49,6 +49,14 @@ another key or event type.
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
 when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
 
+`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
+`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
+emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
+every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
+and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
+listeners act on the states in between.
+
 ### API 1.4: Process runner
 
 API 1.4 adds `context.process` to daemon plugin contexts. `context.process.run(argv, options)`
@@ -63,14 +71,6 @@ defaults to `process.env` at call time, and a supplied value is not merged with 
 defaults to 30 seconds. The host kills the plugin's remaining children when its activation ends.
 `deactivate` may still call `context.process.run`; the runner is disposed when deactivation
 finishes. The object exposes only `run`; `spawn` is not part of API 1.4.
-
-`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
-`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
-emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
-`quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
-every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
-and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
-listeners act on the states in between.
 
 ## Manifest declaration
 

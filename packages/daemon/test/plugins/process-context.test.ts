@@ -264,13 +264,13 @@ describe('PluginContext.process lifecycle', () => {
 
   test('a failed activation kills its held child and removes its owner entry', async () => {
     const { client: testClient } = await boot({ id: 'acme.fails', activationFails: true })
-    const activation = testClient.callAny('plugin.activate', { pluginId: 'acme.fails' })
+    const activation = expect(testClient.callAny('plugin.activate', { pluginId: 'acme.fails' })).rejects.toThrow(/failed to activate/i)
     const paths = childFiles.get('acme.fails')!
     await waitFor(() => existsSync(paths.leader) && existsSync(paths.grandchild))
     const leader = pidFromFile(paths.leader)
     const grandchild = pidFromFile(paths.grandchild)
 
-    await expect(activation).rejects.toThrow(/failed to activate/i)
+    await activation
     expect(pidIsGone(leader)).toBe(true)
     await waitFor(() => pidIsGone(grandchild), 2_000)
     expect(liveProcesses().filter((entry) => entry.owner === 'acme.fails')).toEqual([])
