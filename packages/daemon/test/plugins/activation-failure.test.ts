@@ -54,6 +54,55 @@ describe('failed plugin activation cleanup', () => {
     expect(logs.some((line) => line.includes('deactivate failed'))).toBe(false)
   })
 
+  test('waits for an async deactivate before revoking the failed activation context', async () => {
+    const { harness, logs } = await boot({
+      imports: ['let savedContext: { subscribe: (listener: () => void) => unknown; log: (message: string) => void }'],
+      activate: "savedContext = context; throw new Error('boom')",
+      deactivate: "await Bun.sleep(50); savedContext.subscribe(() => {}); savedContext.log('still live after waiting')"
+    })
+
+    await expect(harness.daemon.plugins.activate(pluginId)).rejects.toThrow('acme.fail failed to activate: boom')
+
+    expect(logs).toContain('acme.fail: still live after waiting')
+    expect(logs.some((line) => line.includes('deactivate failed'))).toBe(false)
+  })
+
+  test('waits for an async deactivate when the plugin is disabled while it activates', async () => {
+    const gate = join(makeTempDir('qd-activation-failure-gate-'), 'release')
+    const { harness, marker } = await boot({
+      activate: waitForFile(gate),
+      deactivate: "await Bun.sleep(50); record('deactivate finished')"
+    })
+    let outcome: Promise<unknown> | undefined
+    let disabling: Promise<unknown> | undefined
+
+    try {
+      outcome = harness.daemon.plugins.activate(pluginId).then(() => null, (error) => error)
+      await waitFor(() => readMarker(marker).includes('activate acme.fail'))
+      disabling = harness.daemon.plugins.setEnabled(pluginId, false)
+      writeFileSync(gate, '')
+
+      const expectedLines = [
+        'import acme.fail',
+        'activate acme.fail',
+        'deactivate acme.fail',
+        'deactivate finished'
+      ]
+      expect(await outcome).toMatchObject({ message: 'acme.fail was disabled during activation' })
+      expect(readMarker(marker)).toEqual(expectedLines)
+
+      await disabling
+      expect(readMarker(marker)).toEqual(expectedLines)
+    } finally {
+      writeFileSync(gate, '')
+      if (outcome) await outcome
+      if (disabling) await disabling
+      if (readMarker(marker).includes('deactivate acme.fail')) {
+        await waitFor(() => readMarker(marker).includes('deactivate finished'))
+      }
+    }
+  })
+
   test('keeps the activation failure when deactivate also throws', async () => {
     const { harness, logs } = await boot({
       activate: "throw new Error('boom')",

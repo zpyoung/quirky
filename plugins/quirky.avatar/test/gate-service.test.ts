@@ -89,6 +89,8 @@ const waitFor = async <T>(check: () => T | undefined | false | null, ms = 2000):
   }
 }
 const STOPPING = 'The avatar is stopping; try the same call again shortly.'
+const SHADOW = 'Shadow: the avatar only logs what it would have decided.'
+const HANDED_BACK = 'Handed back to the user, so the call is not gated.'
 
 const agentListing = (...ids: string[]) => ({
   defaultAgent: 'claude',
@@ -755,14 +757,28 @@ describe('activation and deactivation', () => {
   test('a Shadow provider call stays passthrough when its held worktree lookup returns after stopping', async () => {
     const s = setup({ level: 'shadow' })
     const worktreeList = Promise.withResolvers<unknown>()
-    s.fakeCalls['quirky.worktree/list'] = () => worktreeList.promise
+    let lookups = 0
+    s.fakeCalls['quirky.worktree/list'] = () => {
+      lookups += 1
+      if (lookups === 1) throw new Error('lookup failed')
+      return worktreeList.promise
+    }
     const pending = s.bash('bun test --update-snapshots')
-    await waitFor(() => s.calls.some((call) => call.method === 'quirky.worktree/list'))
+    await waitFor(() => lookups === 2)
+    let settled = false
+    void pending.then(() => { settled = true })
 
     disposers.pop()!()
+    const turn = Promise.withResolvers<void>()
+    setImmediate(turn.resolve)
+    await turn.promise
+    const settledOnStop = settled
     worktreeList.resolve([{ id: 'wt-1', path: s.worktreePath, branch: 'feature', repoId: 'repo', isMain: false }])
 
-    expect((await pending).decision).toBe('passthrough')
+    const decision = await pending
+    expect(settledOnStop).toBe(true)
+    expect(decision).toMatchObject({ decision: 'passthrough', reason: SHADOW, encoded: '{}' })
+    expect(lookups).toBe(2)
   })
 
   test('a Shadow service call blocked during classification settles passthrough on stop', async () => {
@@ -800,8 +816,35 @@ describe('activation and deactivation', () => {
 
     expect(settledOnStop).toBe(true)
     expect(result.outcome).toBe('passthrough')
+    expect(result.reason).toBe(SHADOW)
     expect(s.gateEntries()).toEqual([])
     expect(s.app.store.receipts.list({ sessionId: 's-1' }).at(-1)).toMatchObject({ outcome: 'passthrough', step: null })
+  })
+
+  test('a request taken back in the same tick as the stop stays passed through', async () => {
+    const s = setup({ brain: () => Promise.withResolvers<BrainReply>().promise })
+    const pending = s.bash('bun test --update-snapshots')
+    await waitFor(() => s.brainCalls.length > 0)
+
+    s.app.services.gate.resolveInFlight('wt-1', 'passthrough')
+    disposers.pop()!()
+
+    expect(await pending).toMatchObject({ decision: 'passthrough', reason: HANDED_BACK })
+    expect(s.app.store.receipts.list({ sessionId: 's-1' }).at(-1)).toMatchObject({ outcome: 'passthrough', step: null })
+    expect(s.gateEntries().map((entry) => [entry.data.outcome, entry.data.reliedOn])).toEqual([['passthrough', 'take-back']])
+  })
+
+  test('a take-back in the same tick after the stop leaves the refusal as it was', async () => {
+    const s = setup({ brain: () => Promise.withResolvers<BrainReply>().promise })
+    const pending = s.bash('bun test --update-snapshots')
+    await waitFor(() => s.brainCalls.length > 0)
+
+    disposers.pop()!()
+    s.app.services.gate.resolveInFlight('wt-1', 'passthrough')
+
+    expect(await pending).toMatchObject({ decision: 'deny', reason: STOPPING })
+    expect(s.app.store.receipts.list({ sessionId: 's-1' }).at(-1)).toMatchObject({ outcome: 'retry', step: null })
+    expect(s.gateEntries().map((entry) => [entry.data.outcome, entry.data.reliedOn])).toEqual([['retry', 'the avatar stopping']])
   })
 
   test('a journal failure does not stop the disposer refusing a waiting request', async () => {
