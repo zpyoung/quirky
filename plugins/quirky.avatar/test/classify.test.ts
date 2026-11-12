@@ -3218,4 +3218,10 @@ describe('directory uncertainty scenarios', () => {
     expect(decideReviewed(moving(199_998))).toMatchObject({ outcome: 'held', step: 'floor-core' })
   }, 30_000)
 
+  test('keeps confirmed credential access when deferred directories widen to unknown', () => {
+    const command = 'cd /home/u; for i in 1 2; do :; cat .ssh/id_rsa; cd src; done'
+    expect(bash(command)).toContain('credential')
+    expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+  })
+
 })

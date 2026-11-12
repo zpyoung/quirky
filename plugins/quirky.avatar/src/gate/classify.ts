@@ -2194,7 +2194,9 @@ function analyzeCommand(command: string, startDirectories: DirectorySet, ctx: Cl
   if (pass >= 2) {
     for (const region of regions) region.dirs = null
   }
-  return analyzeCommand(command, startDirectories, ctx, depth, inheritedEnv, inheritedLoose, definitionsUnknown, budget, rereading, { script, regions, pass: pass + 1 })
+  const result = analyzeCommand(command, startDirectories, ctx, depth, inheritedEnv, inheritedLoose, definitionsUnknown, budget, rereading, { script, regions, pass: pass + 1 })
+  if (!result.unreadable && classes.includes('credential') && !result.classes.includes('credential')) result.classes.push('credential')
+  return result
 }
 
 function classifyMainCommand(parsed: Parsed, ctx: ClassifyContext, cwd: string | null, shellEnv: Map<string, ShellWord>, pushDests: string[]): ActionClass[] {
