@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Badge, Button, FormRow } from '@quirky/ui'
 import { Markdown } from '../issue/Markdown'
 import { nonnegativeInteger, object, optionalLogins, relativeTime, reviewAuthors, reviewState, type ListItem, type MergeMetadata } from './model'
+import type { PrDescription } from './usePrDescription'
 
 export type ReviewerOptions = { recentlyActive: string[]; suggestions: string[] }
 
@@ -9,6 +10,7 @@ export type PrDetailProps = {
   item: ListItem
   /** False when the row isn't on the loaded page; the description is omitted then, since only the merge metadata is known. */
   onPage: boolean
+  description: PrDescription
   metadata: MergeMetadata | undefined
   metadataLoading: boolean
   metadataError: string | undefined
@@ -76,7 +78,7 @@ function changesLabel(additions: number | undefined, deletions: number | undefin
  * mutation and passes them in, so the merge and reviewer safety rules stay in one place.
  * Escape closes the open merge menu or reviewers dialog and returns focus to its control.
  */
-export function PrDetail({ item, onPage, metadata, metadataLoading, metadataError, check, busy, linkedName, merge, reviewers, onReview, onLoadChecks, onRetryMetadata, onWorkspace, onOpenLink, onCopyLink }: PrDetailProps) {
+export function PrDetail({ item, onPage, description, metadata, metadataLoading, metadataError, check, busy, linkedName, merge, reviewers, onReview, onLoadChecks, onRetryMetadata, onWorkspace, onOpenLink, onCopyLink }: PrDetailProps) {
   const mergeAnchor = useRef<HTMLDivElement>(null)
   const reviewersAnchor = useRef<HTMLDivElement>(null)
   const mergeOpen = merge.open
@@ -172,7 +174,17 @@ export function PrDetail({ item, onPage, metadata, metadataLoading, metadataErro
 
       <div className="tasks-pr__layout">
         <div className="tasks-pr__main">
-          {onPage ? <div className="tasks-pr__description"><Markdown source={item.body} /></div> : null}
+          {onPage ? (
+            <div className="tasks-pr__description">
+              {description.body !== ''
+                ? <Markdown source={description.body} />
+                : description.loading
+                  ? <span role="status">Loading pull-request description…</span>
+                  : description.error
+                    ? <span role="status">Could not load pull-request description: {description.error} <Button type="button" onClick={description.retry}>Retry</Button></span>
+                    : null}
+            </div>
+          ) : null}
           {timeline.length > 0 ? (
             <section className="tasks-pr__timeline" aria-label="Timeline">
               <h3 className="tasks-pr__section-title">Timeline</h3>

@@ -7,6 +7,7 @@ import { place } from './place'
 import { rowStatus } from './row-status'
 import { queryForKind } from './search'
 import { useAgentActivity } from './useAgentActivity'
+import { usePrDescription } from './usePrDescription'
 import {
   checkResult, checkSummary, countFilters, currentPreset, errorMessage, filterPills, filtersFromQuery, mergeMeta,
   listViewKey, normalizedPreset, object, optionalLogins, parseListResult, parseSource, presetQuery, relativeTime, replaceFilters, reviewAuthors,
@@ -18,7 +19,13 @@ import { useReviewNavigation } from './useReviewNavigation'
 export { WorkspaceComposer } from './WorkspaceComposer'
 export { useReviewNavigation } from './useReviewNavigation'
 
-type OptimisticRow = { item: ListItem; patch: Partial<ListItem>; generation: number; keepVisible: boolean }
+type OptimisticRow = {
+  item: ListItem
+  patch: Partial<ListItem>
+  generation: number
+  keepVisible: boolean
+  retention?: { viewKey: string; sourceUrl: string }
+}
 
 function pageNumbers(page: number, total: number): Array<number | 'ellipsis'> {
   if (total <= 9) return Array.from({ length: total }, (_, index) => index + 1)
@@ -68,6 +75,43 @@ function absolutePatch(item: unknown): Partial<ListItem> {
   return patch
 }
 
+function issueSourceUrl(item: ListItem, sources: Record<string, unknown>): string | null {
+  const source = parseSource(sources[item.repoId])
+  const identity = source.issueRepository ?? source.origin
+  if (!identity?.owner || !identity.repo) return null
+  return `https://${identity.host ?? 'github.com'}/${identity.owner}/${identity.repo}/issues/${item.number}`
+}
+
+function clearIssueRetentions(rows: Record<string, OptimisticRow>): Record<string, OptimisticRow> {
+  let next: Record<string, OptimisticRow> | null = null
+  for (const [key, pending] of Object.entries(rows)) {
+    if (pending.item.kind !== 'issue' || pending.retention === undefined) continue
+    next ??= { ...rows }
+    delete next[key]
+  }
+  return next ?? rows
+}
+
+function issueRetentionMatches(pending: OptimisticRow, viewKey: string, sources: Record<string, unknown>): boolean {
+  const retention = pending.retention
+  return retention === undefined || (
+    pending.item.kind === 'issue'
+    && retention.viewKey === viewKey
+    && pending.item.url === retention.sourceUrl
+    && issueSourceUrl(pending.item, sources) === retention.sourceUrl
+  )
+}
+
+function pruneIssueRetentions(rows: Record<string, OptimisticRow>, viewKey: string, sources: Record<string, unknown>): Record<string, OptimisticRow> {
+  let next: Record<string, OptimisticRow> | null = null
+  for (const [key, pending] of Object.entries(rows)) {
+    if (pending.item.kind !== 'issue' || pending.retention === undefined || issueRetentionMatches(pending, viewKey, sources)) continue
+    next ??= { ...rows }
+    delete next[key]
+  }
+  return next ?? rows
+}
+
 const quietAdoptionDelays = [500, 1000, 2000, 4000, 8000]
 
 /** Matches the row the detail column shows; the worktree, kind and number identify it across pages. */
@@ -90,7 +134,7 @@ function linkedWorktree(item: ListItem): string | undefined {
  * `initialFocus` says whether the mount that created this view asked for focus on a row; left undefined,
  * the list asks the place memory itself.
  */
-export function TasksList({ context, state, refresh, initialFocus, onDataChanged }: TasksSurfaceProps & { initialFocus?: boolean; onDataChanged?: () => void }) {
+export function TasksList({ context, state, refresh, initialFocus, onDataChanged, listRefreshToken }: TasksSurfaceProps & { initialFocus?: boolean; onDataChanged?: () => void; listRefreshToken?: number }) {
   const navigation = state.navigation
   const mode = navigation.mode === 'prs' ? 'prs' : 'issues'
   const currentKey = listViewKey({ source: navigation.source, mode, repoIds: navigation.repoIds, query: navigation.query, page: navigation.page })
@@ -104,6 +148,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   const [resultKey, setResultKey] = useState<string | null>(seed ? currentKey : null)
   const resultKeyRef = useRef(resultKey)
   resultKeyRef.current = resultKey
+  const listRefreshTokenRef = useRef(listRefreshToken)
   const [loading, setLoading] = useState(seed === null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -173,14 +218,17 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   const listItems = useMemo(() => {
     if (!visibleResult) return []
     const rows = visibleResult.items.map((item) => {
-      const patch = optimistic[rowKey(item)]
-      return patch ? { ...item, ...patch.patch } : item
+      const pending = optimistic[rowKey(item)]
+      const patch = pending && issueRetentionMatches(pending, currentKey, visibleResult.sources) ? pending.patch : undefined
+      return patch ? { ...item, ...patch } : item
     })
     for (const [key, pending] of Object.entries(optimistic)) {
-      if (pending.keepVisible && !rows.some((item) => rowKey(item) === key)) rows.push({ ...pending.item, ...pending.patch })
+      if (pending.keepVisible && issueRetentionMatches(pending, currentKey, visibleResult.sources) && !rows.some((item) => rowKey(item) === key)) {
+        rows.push({ ...pending.item, ...pending.patch })
+      }
     }
     return rows
-  }, [visibleResult, optimistic])
+  }, [visibleResult, optimistic, currentKey])
 
   const fetchList = useCallback(async (noCache: boolean): Promise<ListData> => {
     const value = await context.call('quirky.tasks/list', {
@@ -232,9 +280,18 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   }, [loadList])
 
   useEffect(() => {
+    if (listRefreshTokenRef.current === listRefreshToken) return
+    listRefreshTokenRef.current = listRefreshToken
+    if (listRefreshToken !== undefined) void loadList(true)
+  }, [listRefreshToken, loadList])
+
+  useEffect(() => {
     if (!filtersOpen && !repoOpen) return
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
+      const active = document.activeElement
+      const focusedPRPopover = document.querySelector('.tasks-pr [role="menu"], .tasks-pr [role="dialog"]')
+      if (focusedPRPopover && active instanceof HTMLElement && active.closest('.tasks-pr__anchor')) return
       event.preventDefault()
       event.stopPropagation()
       if (filtersOpen) setFiltersOpen(false)
@@ -244,6 +301,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     return () => document.removeEventListener('keydown', closeOnEscape, true)
   }, [filtersOpen, repoOpen])
   useEffect(() => {
+    setOptimistic(clearIssueRetentions)
     checkTriggered.current.clear()
     setChecksLoading({})
     setMergeLoading({})
@@ -251,6 +309,11 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     checksOwner.current = currentKey
     setChecks({})
   }, [currentKey])
+
+  useEffect(() => {
+    if (!visibleResult) return
+    setOptimistic((previous) => pruneIssueRetentions(previous, currentKey, visibleResult.sources))
+  }, [visibleResult, currentKey])
 
   useEffect(() => {
     clearTimeout(searchTimer.current)
@@ -849,6 +912,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     try {
       await context.call('quirky.tasks/row', { target, action: 'issueSource', preference })
       invalidateViewGeneration()
+      setOptimistic(clearIssueRetentions)
       await loadList(true)
     } catch (cause) {
       invalidateViewGeneration()
@@ -870,9 +934,12 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   const detail = navigation.detail
   const hasDetail = detail !== null
   const rows = listItems.filter((item) => item.kind === kind)
+  const onPagePr = detail?.kind === 'pullRequest'
+    ? listItems.find((item) => isOpenRow(item, detail) && (detail.url === undefined || item.url === detail.url)) ?? null
+    : null
   const offPageRepo = detail ? result?.repositories.find((repo) => repo.worktree === detail.worktree) : undefined
   const selectedPr: ListItem | null = detail?.kind === 'pullRequest'
-    ? listItems.find((item) => isOpenRow(item, detail)) ?? {
+    ? onPagePr ?? {
         kind: 'pullRequest',
         number: detail.number,
         title: '',
@@ -891,6 +958,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
       }
     : null
   const selectedPrKey = selectedPr ? rowKey(selectedPr) : null
+  const prDescription = usePrDescription(context, onPagePr)
   const selectedPrRef = useRef(selectedPr)
   selectedPrRef.current = selectedPr
 
@@ -1074,15 +1142,23 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   }
 
   const onIssueEdited = (updated: TaskItem) => {
-    if (detail?.kind !== 'issue' || updated.kind !== 'issue' || updated.state !== 'closed' || filters.status !== 'open') return
-    const item = rows.find((candidate) => candidate.number === updated.number && isOpenRow(candidate, detail))
-    if (!item || item.state === 'closed') return
+    if (detail?.kind !== 'issue' || updated.kind !== 'issue') return
+    if (latestKey.current !== currentKey || viewGeneration.current !== currentViewGeneration) return
+    const item = rows.find((candidate) =>
+      candidate.number === updated.number
+      && candidate.url === updated.url
+      && isOpenRow(candidate, detail))
+    if (!item) return
+    const patch = absolutePatch(updated)
     const key = rowKey(item)
+    const prior = optimistic[key]
+    if (patch.state === undefined || (patch.state === item.state && prior?.keepVisible !== true)) return
     const generation = (mutationGenerations.current.get(key) ?? 0) + 1
     mutationGenerations.current.set(key, generation)
-    const prior = optimistic[key]
-    const patch = absolutePatch(updated)
     const cumulativePatch = { ...(prior?.patch ?? {}), ...patch }
+    const keepVisible = prior?.keepVisible === true
+      || (patch.state === 'closed' && filters.status === 'open')
+      || (patch.state === 'open' && filters.status === 'closed')
     setOptimistic((previous) => {
       const current = previous[key]
       return {
@@ -1091,7 +1167,8 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
           item: current?.item ?? prior?.item ?? item,
           patch: { ...(current?.patch ?? prior?.patch ?? {}), ...patch },
           generation,
-          keepVisible: current?.keepVisible === true || prior?.keepVisible === true || filters.status === 'open'
+          keepVisible,
+          ...(keepVisible ? { retention: { viewKey: currentKey, sourceUrl: item.url } } : {})
         }
       }
     })
@@ -1105,7 +1182,8 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
       : selectedPr && prKey ? (
         <PrDetail
           item={selectedPr}
-          onPage={listItems.some((item) => rowKey(item) === prKey)}
+          onPage={onPagePr !== null}
+          description={prDescription}
           metadata={mergeMetadata[prKey]}
           metadataLoading={mergeLoading[prKey] === true}
           metadataError={mergeErrors[prKey]}
@@ -1214,7 +1292,7 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
               {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
             </>
           ) : null}
-          <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => { void loadList(true, true); onDataChanged?.() }}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
+          <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => { void loadList(true, true).then(prDescription.retry); onDataChanged?.() }}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
           <Menu label="Tasks options" trigger={<ControlIcon name="dots-three" />} items={toolbarItems} />
         </div>
 

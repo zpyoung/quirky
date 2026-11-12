@@ -106,6 +106,13 @@ function setTextareaValue(element: HTMLTextAreaElement, value: string) {
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+function setInputValue(element: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  if (!setter) throw new Error('Input value setter is unavailable')
+  setter.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 function pr(number: number, patch: Record<string, unknown> = {}) {
   return {
     kind: 'pullRequest', number, title: `Pull request ${number}`, body: `Description of ${number}`, state: 'open', url: `https://github.com/acme/quirky/pull/${number}`,
@@ -367,6 +374,236 @@ test('New issue is reachable from the expanded Issues tab', async () => {
   expect(calls.some((call) => call.method === 'quirky.tasks/issueChoices' && call.params.kind === 'repositories')).toBe(true)
 })
 
+test('creating an issue on page one refreshes the selected repository list immediately', async () => {
+  let items: unknown[] = [issue(281), issue(279)]
+  const created = issue(282, { title: 'Created through the expanded form' })
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, repoIds: ['repo-1'] }),
+    handlers: {
+      'quirky.tasks/list': () => listResult(items),
+      'quirky.tasks/issueChoices': (params) => {
+        if (params.kind === 'repositories') return { repositories: [repository], defaultRepoId: repository.id }
+        if (params.kind === 'source') return { source: 'origin', sources: [{ id: 'origin', label: 'Origin' }] }
+        if (params.kind === 'labels') return { available: true, labels: [] }
+        return { available: true, assignees: [] }
+      },
+      'quirky.tasks/draft': () => ({}),
+      'quirky.tasks/createIssue': () => {
+        items = [created, ...items]
+        return { item: created }
+      }
+    }
+  })
+  await click(button(element, 'New GitHub issue'))
+  await settle()
+  const title = element.querySelector<HTMLInputElement>('#new-issue-title')!
+  await act(async () => setInputValue(title, 'Created through the expanded form'))
+  await settle()
+  const submit = button(element, 'Create issue')!
+  expect(submit.disabled).toBe(false)
+  await click(submit)
+  expect(element.querySelector('.quirky-tasks-new-issue [role="alert"]')).toBeNull()
+  await click(button(element, 'Cancel'))
+  expect(rowTitles(element)).toEqual(['Created through the expanded form', 'Issue 281', 'Issue 279'])
+  expect(element.querySelector('.quirky-tasks-new-issue')).toBeNull()
+})
+
+test('a same-state issue edit updates the title on a retained closed row', async () => {
+  let providerIssue = issue(281, { title: 'Issue title before edit' })
+  const { element, calls } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, repoIds: ['repo-1'], detail: target(providerIssue) }),
+    handlers: {
+      'quirky.tasks/list': () => listResult([issue(281, { title: 'Stale indexed title' })]),
+      'quirky.tasks/issue': () => ({ ...issueDetail(281), item: providerIssue }),
+      'quirky.tasks/issueEdit': (params) => {
+        providerIssue = {
+          ...providerIssue,
+          ...params,
+          ...(params.body !== undefined ? { title: 'UPDATEDTITLE' } : {})
+        }
+        return { item: providerIssue }
+      }
+    }
+  })
+  const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    status.value = 'closed-completed'
+    status.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+  expect(element.querySelector('.tasks-list__row .ui-status-dot--done') !== null).toBe(true)
+  expect(element.querySelector('.tasks-list__row')?.textContent).toContain('Pending refresh')
+
+  const pane = detailColumn(element)
+  await click(button(pane, 'Edit description'))
+  const description = pane.querySelector<HTMLTextAreaElement>('textarea[aria-label="Issue description"]')!
+  await act(async () => setTextareaValue(description, 'Confirmed description edit'))
+  await click(button(pane, 'Save description'))
+  expect(calls.some((call) => call.method === 'quirky.tasks/issueEdit' && call.params.body === 'Confirmed description edit')).toBe(true)
+  expect(rowTitles(element)).toContain('UPDATEDTITLE')
+  expect(element.querySelector('.tasks-list__row .ui-status-dot--done') !== null).toBe(true)
+  expect(element.querySelector('.tasks-list__row')?.textContent).toContain('Pending refresh')
+})
+
+test('creating another issue preserves a closed row retained while search results lag', async () => {
+  let providerIssue = issue(281, { title: 'Closed issue 281' })
+  let issueCreated = false
+  const created = issue(282, { title: 'New issue after close' })
+  const staleOpenIssue = issue(281, { title: 'Closed issue 281' })
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, repoIds: ['repo-1'], detail: target(providerIssue) }),
+    handlers: {
+      'quirky.tasks/list': () => listResult(issueCreated ? [staleOpenIssue, created] : [staleOpenIssue]),
+      'quirky.tasks/issue': () => ({ ...issueDetail(281), item: providerIssue }),
+      'quirky.tasks/issueEdit': (params) => {
+        providerIssue = { ...providerIssue, ...params }
+        return { item: providerIssue }
+      },
+      'quirky.tasks/issueChoices': (params) => {
+        if (params.kind === 'repositories') return { repositories: [repository], defaultRepoId: repository.id }
+        if (params.kind === 'source') return { source: 'origin', sources: [{ id: 'origin', label: 'Origin' }] }
+        if (params.kind === 'labels') return { available: true, labels: [] }
+        return { available: true, assignees: [] }
+      },
+      'quirky.tasks/draft': () => ({}),
+      'quirky.tasks/createIssue': () => {
+        issueCreated = true
+        return { item: created }
+      }
+    }
+  })
+  const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    status.value = 'closed-completed'
+    status.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+  expect(element.querySelector('.tasks-list__row .ui-status-dot--done') !== null).toBe(true)
+  expect(element.querySelector('.tasks-list__row')?.textContent).toContain('Pending refresh')
+
+  await click(button(element, 'New GitHub issue'))
+  await settle()
+  const title = element.querySelector<HTMLInputElement>('#new-issue-title')!
+  await act(async () => setInputValue(title, 'New issue after close'))
+  await settle()
+  await click(button(element, 'Create issue'))
+  const cancel = button(element, 'Cancel')
+  if (cancel) await click(cancel)
+
+  expect(rowTitles(element)).toContain('New issue after close')
+  expect(rowTitles(element)).toContain('Closed issue 281')
+  const closedRow = [...element.querySelectorAll('.tasks-list__row')].find((row) => row.querySelector('.ui-list-row__title')?.textContent === 'Closed issue 281')
+  expect(closedRow?.querySelector('.ui-status-dot--done') !== null).toBe(true)
+  expect(closedRow?.textContent?.includes('Pending refresh')).toBe(true)
+})
+
+test.each(['query', 'repository', 'page'] as const)('a pending closed issue is not carried into a different %s list', async (listChange) => {
+  const otherRepository = { ...repository, id: 'repo-2', name: 'other', path: '/work/other', worktree: 'wt-other' }
+  const sources = {
+    'repo-1': { status: 'ready', origin },
+    'repo-2': { status: 'ready', origin: { ...origin, repo: 'other' } }
+  }
+  const listForView = (params: Record<string, unknown>) => {
+    const repoIds = Array.isArray(params.repoIds) ? params.repoIds.filter((id): id is string => typeof id === 'string') : ['repo-1', 'repo-2']
+    const page = typeof params.page === 'number' ? params.page : 1
+    const query = typeof params.query === 'string' ? params.query : ''
+    const items = repoIds.includes('repo-1') && page === 1 && !query.includes('is:closed') ? [issue(281), issue(279)] : []
+    return listResult(items, { repositories: [repository, otherRepository], page, totalPages: 2, sources })
+  }
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, repoIds: ['repo-1'], detail: target(issue(281)) }),
+    handlers: {
+      'quirky.tasks/list': listForView,
+      'quirky.tasks/preferences': () => ({}),
+      'quirky.tasks/issueEdit': (params) => ({ item: { ...issue(281), ...params } })
+    }
+  })
+  const issueStatus = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    issueStatus.value = 'closed-completed'
+    issueStatus.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+  expect(element.querySelector('.tasks-list__row .ui-status-dot--done') !== null).toBe(true)
+
+  if (listChange === 'query') {
+    await click(element.querySelector('.tasks-list__toolbar button[aria-haspopup="dialog"]'))
+    const filterStatus = element.querySelector<HTMLSelectElement>('#tasks-list-status-filter')!
+    await act(async () => {
+      filterStatus.value = 'closed'
+      filterStatus.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  } else if (listChange === 'repository') {
+    await click(element.querySelector('.tasks-list__repo-picker button'))
+    const picker = element.querySelector('[role="group"][aria-label="Select repositories"]')!
+    const originChoice = [...picker.querySelectorAll('label')].find((label) => label.textContent?.trim() === 'quirky')!
+    const otherChoice = [...picker.querySelectorAll('label')].find((label) => label.textContent?.trim() === 'other')!
+    await click(originChoice.querySelector('input[type="checkbox"]'))
+    await click(otherChoice.querySelector('input[type="checkbox"]'))
+  } else {
+    const pagination = element.querySelector('nav[aria-label="GitHub task pagination"]')!
+    await click(button(pagination, 'Next page'))
+  }
+  await settle()
+  expect(rowTitles(element)).toEqual([])
+})
+
+test('retaining a closed origin issue does not contaminate the upstream issue with the same number', async () => {
+  const originListIssue = issue(7, { title: 'Origin issue 7' })
+  const upstreamListIssue = issue(7, {
+    title: 'Upstream issue 7',
+    url: 'https://github.com/upstream/quirky/issues/7'
+  })
+  let originDetail = { ...originListIssue }
+  let selectedSource: 'origin' | 'upstream' = 'origin'
+  const sources = () => ({
+    'repo-1': {
+      status: 'ready',
+      origin,
+      issueSource: selectedSource,
+      issueRepository: selectedSource === 'upstream' ? upstream : origin,
+      candidates: [origin, upstream]
+    }
+  })
+  const { element } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, repoIds: ['repo-1'], detail: target(originDetail) }),
+    handlers: {
+      'quirky.tasks/list': () => listResult([selectedSource === 'upstream' ? upstreamListIssue : originListIssue], { sources: sources() }),
+      'quirky.tasks/row': (params) => {
+        if (params.action === 'issueSource') selectedSource = params.preference as 'origin' | 'upstream'
+        return {}
+      },
+      'quirky.tasks/issue': () => ({ ...issueDetail(7), item: originDetail }),
+      'quirky.tasks/issueEdit': (params) => {
+        originDetail = { ...originDetail, ...params }
+        return { item: originDetail }
+      }
+    }
+  })
+  const selectStatus = async (value: 'open' | 'closed-completed') => {
+    const status = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+    await act(async () => {
+      status.value = value
+      status.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+  }
+
+  await selectStatus('closed-completed')
+  expect(rowTitles(element)).toEqual(['Origin issue 7'])
+  expect(element.querySelector('.tasks-list__row')?.textContent).toContain('Pending refresh')
+  await click(button(element, 'Tasks options'))
+  await click(menuItems(element).find((item) => item.textContent?.replace('✓', '').trim() === 'Upstream'))
+  expect(detailColumn(element).textContent).toContain('Origin issue 7')
+  expect(rowTitles(element)).toEqual(['Upstream issue 7'])
+
+  await selectStatus('open')
+  await selectStatus('closed-completed')
+  expect(rowTitles(element)).toEqual(['Upstream issue 7'])
+  const upstreamRow = element.querySelector('.tasks-list__row')
+  expect(upstreamRow?.querySelector('.ui-status-dot--done') === null).toBe(true)
+  expect(upstreamRow?.textContent?.includes('Pending refresh')).toBe(false)
+})
 test('a pull request row shows the PR detail with title, state, description, checks, reviewers, assignees, labels, worktree and changes', async () => {
   const { element } = await mountExpanded({ state: prDetailState() })
   const pane = detailColumn(element)
@@ -782,6 +1019,42 @@ test('Escape closes the repository picker before clearing the selected row or co
   expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
 })
 
+
+
+test.each([
+  ['reviewers dialog', 'Filters'],
+  ['merge menu', 'Filters'],
+  ['reviewers dialog', 'repository picker'],
+  ['merge menu', 'repository picker']
+] as const)('Escape closes the focused %s before the %s list popover', async (detailOverlay, listPopover) => {
+  const { element, calls, current } = await mountExpanded({ state: prDetailState() })
+  const listPopoverSelector = listPopover === 'Filters'
+    ? '[role="dialog"][aria-label="GitHub task filters"]'
+    : '[role="group"][aria-label="Select repositories"]'
+  if (listPopover === 'Filters') {
+    await click(element.querySelector('.tasks-list__toolbar button[aria-haspopup="dialog"]'))
+  } else {
+    await click(element.querySelector('.tasks-list__repo-picker button'))
+  }
+  expect(element.querySelector(listPopoverSelector) !== null).toBe(true)
+
+  if (detailOverlay === 'reviewers dialog') {
+    await click(detailColumn(element).querySelector('button[aria-haspopup="dialog"]'))
+    detailColumn(element).querySelector<HTMLTextAreaElement>('textarea[aria-label="Type or choose a reviewer"]')!.focus()
+  } else {
+    const trigger = button(detailColumn(element), 'Merge actions for PR #274')!
+    await click(trigger)
+    trigger.focus()
+  }
+  await press('Escape')
+
+  const detailPopoverSelector = detailOverlay === 'reviewers dialog' ? '[role="dialog"]' : '[role="menu"]'
+  expect(detailColumn(element).querySelector(detailPopoverSelector) === null).toBe(true)
+  expect(element.querySelector(listPopoverSelector) !== null).toBe(true)
+  expect(current().navigation.detail).toEqual(target(pr(274)))
+  expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
+  expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
+})
 test('Escape does nothing to the row or the tab while a menu is open', async () => {
   const { element, calls } = await mountExpanded({ state: prDetailState() })
   await click(button(element, 'Tasks options'))

@@ -808,7 +808,8 @@ async function waitForTasksCapture(runtime: CaptureRuntime, target: CaptureTarge
       : '.tasks-list__loading, .tasks-list__skeleton-row, [aria-busy="true"], [role="progressbar"]',
     detail: expanded
       ? `.tasks-list__detail .tasks-pr[aria-label="Pull request #${pullRequest.number}"] .tasks-pr__title`
-      : null
+      : null,
+    description: expanded ? pullRequest.body : null
   }
   const ready = runtime.page.waitForFunction(async (expected) => {
     const root = document.querySelector(expected.root)
@@ -835,15 +836,20 @@ async function waitForTasksCapture(runtime: CaptureRuntime, target: CaptureTarge
       : [...root.querySelectorAll(expected.detail)].find((element) =>
         (element.textContent ?? '').trim() === expected.title && visible(element)
       ) ?? null
+    const hasDescription = () => {
+      if (expected.description === null) return true
+      const description = root.querySelector('.tasks-pr__description')
+      return visible(description) && (description?.textContent ?? '').includes(expected.description)
+    }
 
     const row = findRow()
     const detail = findDetail()
-    if (!row || hasLoading() || (expected.detail !== null && !detail)) return false
+    if (!row || hasLoading() || !hasDescription() || (expected.detail !== null && !detail)) return false
     const { promise: nextFrame, resolve: nextFrameReady } = Promise.withResolvers<void>()
     requestAnimationFrame(() => nextFrameReady())
     await nextFrame
     if (!root.isConnected || !row.isConnected || findRow() !== row || hasLoading()) return false
-    return expected.detail === null || (detail !== null && detail.isConnected && findDetail() === detail)
+    return hasDescription() && (expected.detail === null || (detail !== null && detail.isConnected && findDetail() === detail))
   }, selectors, { timeout: runtime.options.timeoutMs })
   await bounded(ready, runtime.options.timeoutMs, runtime.options.signal, 'Tasks fixture rows and detail')
 }

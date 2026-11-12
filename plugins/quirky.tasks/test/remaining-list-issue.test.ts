@@ -546,6 +546,122 @@ test('a delayed issue list cannot repaint the PR view after a mode switch', asyn
   expect(mounted.container.textContent).not.toContain('Issue 7')
 }, 30_000)
 
+test('on-page pull-request descriptions come from Hosting while list results keep an empty body', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
+  pull.body = 'Description returned by the pull-request provider.'
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }))
+  await host.call('navigate', {
+    mode: 'prs',
+    repoIds: [host.repoId],
+    query: 'is:pr is:open',
+    detail: { worktree: host.worktree, kind: 'pullRequest', number: pull.number, url: pull.url }
+  })
+
+  const driver = uiContext(host)
+  const state = taskState(await host.call('state'))
+  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
+      && mounted.container.querySelector('.tasks-pr__description')?.textContent?.includes(pull.body) === true,
+    'provider pull-request description'
+  )
+
+  const listCall = driver.receipts.find((receipt) => receipt.method === 'quirky.tasks/list' && receipt.completed)
+  if (!listCall) throw new Error('the pull-request list request did not complete')
+  const listedPull = values(record(listCall.value).items).map(record).find((item) => item.number === pull.number)
+  expect(listedPull?.body).toBe('')
+  expect(mounted.container.querySelector('.tasks-pr__description')?.textContent).toContain(pull.body)
+}, 30_000)
+
+test('a late pull-request description cannot replace the newly selected PR description', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const firstPull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
+  firstPull.body = 'Description for the first pull request.'
+  const secondPull = fixturePullRequest('test-owner', 'test-repo', 13, '2026-10-02T00:00:00Z')
+  secondPull.body = 'Description for the second pull request.'
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [firstPull, secondPull] }))
+  await host.call('navigate', {
+    mode: 'prs',
+    repoIds: [host.repoId],
+    query: 'is:pr is:open',
+    detail: { worktree: host.worktree, kind: 'pullRequest', number: firstPull.number, url: firstPull.url }
+  })
+
+  const driver = uiContext(host)
+  const firstDescription = driver.hold('quirky.hosting/workItem', (params) => params.number === firstPull.number)
+  const state = taskState(await host.call('state'))
+  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  await waitForUi(
+    () => firstDescription.wasReached() && mounted.container.querySelectorAll('.tasks-list__row').length === 2,
+    'the first description request and both PR rows'
+  )
+
+  const selection = driver.wait('quirky.tasks/navigate')
+  await React.act(async () => {
+    const row = mounted.container.querySelector<HTMLButtonElement>(`.tasks-list__row .ui-list-row__main[title=${JSON.stringify(secondPull.title)}]`)
+    if (!row) throw new Error('The second pull-request row is not available.')
+    row.click()
+    await selection
+  })
+  const nextState = taskState(await host.call('state'))
+  await React.act(async () => {
+    mounted.root.render(React.createElement(TasksList, { context: driver.context, state: nextState, refresh: async () => undefined }))
+  })
+  await waitForUi(
+    () => mounted.container.querySelector('.tasks-pr__description')?.textContent?.includes(secondPull.body) === true,
+    'the newly selected pull-request description'
+  )
+  expect(mounted.container.querySelector('.tasks-pr__description')?.textContent).not.toContain(firstPull.body)
+
+  firstDescription.release()
+  await waitForUi(
+    () => firstDescription.wasFinished()
+      && completedCall(driver.receipts, 'quirky.hosting/workItem', (receipt) => receipt.params.number === firstPull.number),
+    'the delayed first description response'
+  )
+  expect(mounted.container.querySelector('.tasks-pr__description')?.textContent).toContain(secondPull.body)
+  expect(mounted.container.querySelector('.tasks-pr__description')?.textContent).not.toContain(firstPull.body)
+}, 30_000)
+
+test('manual refresh adopts an updated pull-request description from Hosting', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
+  pull.body = 'Description before refresh.'
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }))
+  await host.call('navigate', {
+    mode: 'prs',
+    repoIds: [host.repoId],
+    query: 'is:pr is:open',
+    detail: { worktree: host.worktree, kind: 'pullRequest', number: pull.number, url: pull.url }
+  })
+
+  const driver = uiContext(host)
+  const state = taskState(await host.call('state'))
+  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  await waitForUi(
+    () => mounted.container.querySelector('.tasks-pr__description')?.textContent?.includes(pull.body) === true,
+    'initial pull-request description'
+  )
+
+  pull.body = 'Updated description after refresh.'
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }))
+  const refreshedList = driver.wait('quirky.tasks/list')
+  await React.act(async () => {
+    button(mounted.container, 'Refresh').click()
+    await refreshedList
+  })
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.noCache === true)
+      && mounted.container.querySelector('.tasks-pr__description')?.textContent?.includes(pull.body) === true,
+    'updated pull-request description after list refresh'
+  )
+  expect(mounted.container.querySelector('.tasks-pr__description')?.textContent).toContain(pull.body)
+}, 30_000)
+
 test('a failed assignee edit preserves an earlier successful status change in the open issue pane', async () => {
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
@@ -635,9 +751,27 @@ test('closing an issue in its pane keeps the closed row under is:open while sear
   expect(staleOpenRead).toBeDefined()
   expect(fixtureItem(host, 7).state).toBe('closed')
   const row = mounted.container.querySelector('.tasks-list__row')
-  expect(row).not.toBeNull()
-  expect(row?.querySelector('.ui-status-dot--done')).not.toBeNull()
+  expect(row !== null).toBe(true)
+  expect(row?.querySelector('.ui-status-dot--done') !== null).toBe(true)
   expect(row?.textContent).toContain('Pending refresh')
+
+  const beforeReopen = driver.receipts.length
+  await chooseIssueStatus(mounted.container, 'open')
+  await waitForUi(() => {
+    const afterReopen = driver.receipts.slice(beforeReopen)
+    return fixtureItem(host, 7).state === 'open'
+      && afterReopen.some((receipt) => receipt.method === 'quirky.tasks/issueEdit' && receipt.completed && receipt.params.state === 'open')
+      && afterReopen.some((receipt) =>
+        receipt.method === 'quirky.tasks/list'
+        && receipt.completed
+        && receipt.params.noCache === true
+        && receipt.params.query === 'is:issue is:open'
+        && listItemState(receipt.value, 7) === 'open')
+  }, 'confirmed issue reopen')
+  const reopenedRow = mounted.container.querySelector('.tasks-list__row')
+  expect(reopenedRow !== null).toBe(true)
+  expect(reopenedRow?.querySelector('.ui-status-dot--done') === null).toBe(true)
+  expect(reopenedRow?.textContent?.includes('Pending refresh')).toBe(false)
 }, 30_000)
 
 test('quiet adoption retains a confirmed merge while search indexing lags, then adopts the indexed row', async () => {

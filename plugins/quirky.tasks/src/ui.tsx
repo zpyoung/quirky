@@ -141,6 +141,11 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
     await refresh()
     reloadCounts()
   }, [refresh, reloadCounts])
+  const [listRefreshToken, setListRefreshToken] = useState(0)
+  const refreshAfterIssueCreate = useCallback(async () => {
+    await refreshAndCount()
+    setListRefreshToken((value) => value + 1)
+  }, [refreshAndCount])
   const focusRow = useRef<boolean | null>(null)
   const initialFocus = focusRow.current ?? (focusRow.current = place.takeFocus() === 'row')
   if (state) focusRow.current = false
@@ -187,8 +192,8 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
     <ToolPanelFrame title="Tasks" tabs={state && <Tabs label="Task mode" items={tabs} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />} actions={<IconButton label="Collapse Tasks" title="Collapse Tasks" onClick={collapse}><ControlIcon name="arrows-in" /></IconButton>}>
       {error && <EmptyState message={error} action={{ label: 'Retry', onAction: () => void refresh() }} />}
       {!state ? <p role="status">Loading Tasks…</p> : <>
-        <main className="tasks-body">{state.navigation.mode === 'projects' ? state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refreshAndCount} initialFocus={initialFocus} onDataChanged={reloadCounts} />}</main>
-        {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refreshAndCount} />}
+        <main className="tasks-body">{state.navigation.mode === 'projects' ? state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refreshAndCount} initialFocus={initialFocus} onDataChanged={reloadCounts} listRefreshToken={listRefreshToken} />}</main>
+        {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refreshAfterIssueCreate} />}
       </>}
     </ToolPanelFrame>
   </div>
