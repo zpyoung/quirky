@@ -52,6 +52,12 @@ const VERSION_REJECTION = /^unsupported protocol version (\d+), host speaks (\d+
 const RETIRE_WAIT_MS = 5000
 const RESTART_WAIT_MS = 15000
 const WRITE_ACCEPTED_TIMEOUT_MS = 30_000
+const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
+const HELLO_TIMEOUT_MS = 5_000
+
+function helloTimeoutMs(connectTimeoutMs?: number): number {
+  return Math.min(HELLO_TIMEOUT_MS, connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS)
+}
 
 type PtyWriteError = Error & { code: PtyWriteErrorCode; acceptedBytes: number | null }
 
@@ -293,7 +299,7 @@ export class PtyClient {
   }
 
   private async establish(): Promise<void> {
-    const timeoutMs = this.options.connectTimeoutMs ?? 15000
+    const timeoutMs = this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS
     const deadline = Date.now() + timeoutMs
     const retiredHostIdentities = new Set<string>()
     let spawned = false
@@ -338,7 +344,11 @@ export class PtyClient {
     const token = readFileSync(join(this.options.home, 'pty.token'), 'utf8').trim()
     const socket = await this.openSocket()
     try {
-      const hello = await this.rawRequest('hello', { token, version: PTY_PROTOCOL_VERSION })
+      const hello = await this.rawRequest(
+        'hello',
+        { token, version: PTY_PROTOCOL_VERSION },
+        { timeoutMs: helloTimeoutMs(this.options.connectTimeoutMs) }
+      )
       this.hostPid = (hello as PtyResults['hello']).pid
       this.ready = socket
     } catch (error) {
@@ -362,7 +372,11 @@ export class PtyClient {
     try {
       const socket = await this.openSocket()
       try {
-        const hello = (await this.rawRequest('hello', { token, version })) as PtyResults['hello']
+        const hello = (await this.rawRequest(
+          'hello',
+          { token, version },
+          { timeoutMs: helloTimeoutMs(this.options.connectTimeoutMs) }
+        )) as PtyResults['hello']
         const identity = JSON.stringify([token, hello.version, hello.pid])
         if (retiredHostIdentities.has(identity)) return
         retiredHostIdentities.add(identity)

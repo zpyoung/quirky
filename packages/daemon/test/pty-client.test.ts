@@ -60,7 +60,12 @@ function startStoppableHost(home: string, version?: number): FakePtyHost {
 
 function newClient(
   home: string,
-  extra: { hostEntry?: string; connectTimeoutMs?: number; shutdownWaitMs?: number } = {}
+  extra: {
+    hostEntry?: string
+    connectTimeoutMs?: number
+    shutdownWaitMs?: number
+    log?: (message: string) => void
+  } = {}
 ): PtyClient {
   const scope = scopeFor(home)
   const client = new PtyClient({ home, hostEntry: FAKE_HOST_MAIN, log: () => {}, ...extra })
@@ -86,6 +91,12 @@ function home(): string {
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   scopeFor(dir)
   return dir
+}
+
+function exitingHostEntry(dir: string): string {
+  const entry = join(dir, 'exit-pty-host.ts')
+  writeFileSync(entry, 'process.exit(0)\n')
+  return entry
 }
 
 /** A host that answers hello at `version`, then accepts shutdown without ever replying or closing. */
@@ -169,6 +180,42 @@ describe('protocol version handling', () => {
     expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
     expect(newer.requests.some((r) => r.type === 'shutdown')).toBe(false)
   })
+
+  test('bounds the hello request when a host stays silent', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir, { silentHello: true })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, { hostEntry: exitingHostEntry(dir), connectTimeoutMs: 300 })
+    const started = Date.now()
+
+    await expect(client.connect()).rejects.toThrow(
+      /^quirky-pty did not answer within 300ms: pty request timed out: hello; see .*pty-host\.log$/
+    )
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  test('times out when retiring a host that goes silent after rejecting the current version', async () => {
+    const dir = home()
+    const oldVersion = 1
+    const host = startFakePtyHost(dir, { version: oldVersion, rejectThenSilent: true })
+    cleanups.push(() => host.stop())
+    const logs: string[] = []
+    const client = newClient(dir, {
+      hostEntry: exitingHostEntry(dir),
+      connectTimeoutMs: 300,
+      log: (message) => logs.push(message)
+    })
+    const started = Date.now()
+
+    await expect(client.connect()).rejects.toThrow()
+    expect(Date.now() - started).toBeLessThan(3000)
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(host.requests[1]).toMatchObject({ type: 'hello', version: oldVersion })
+    expect(logs).toContain(
+      `could not retire quirky-pty speaking protocol ${oldVersion}: pty request timed out: hello`
+    )
+  })
+
 })
 
 describe('restartHost', () => {

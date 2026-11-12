@@ -71,6 +71,8 @@ export type FakePtyHostOptions = {
   onRequest?: (request: PtyRequest) => void
   /** The protocol version the host speaks; a hello for any other version is rejected like the real host does. */
   version?: number
+  silentHello?: boolean
+  rejectThenSilent?: boolean
 }
 
 export function startFakePtyHost(home: string, options: FakePtyHostOptions = {}): FakePtyHost {
@@ -129,6 +131,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   let nextPid = 4000
   let writeAcceptedHandler: AcceptedWriteHandler | undefined
   const failures = new Map<PtyRequest['type'], string>()
+  let rejectedVersion = false
 
   function flush(socket: Socket<ConnState>) {
     const state = socket.data
@@ -188,12 +191,15 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   function handle(socket: Socket<ConnState>, request: PtyRequest) {
     requests.push(request)
     options.onRequest?.(request)
+    if (request.type === 'hello' && options.silentHello) return
+    if (options.rejectThenSilent && rejectedVersion) return
     if (!socket.data.authed) {
       if (request.type !== 'hello' || request.token !== token) {
         endConnection(socket)
         return
       }
       if (request.version !== version) {
+        rejectedVersion = options.rejectThenSilent ?? false
         fail(socket, request.id, `unsupported protocol version ${request.version}, host speaks ${version}`)
         endAfterWrites(socket)
         return
