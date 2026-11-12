@@ -785,6 +785,65 @@ describe('quirky.hosting PR reads', () => {
     expect(gitOutput(testHost, ['--git-dir', forkBare, 'rev-parse', 'refs/heads/feature'])).toBe(localHead)
   }, 20_000)
 
+  test('creation push publishes the current branch under its own name', async () => {
+    const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
+    hosts.push(testHost)
+    testHost.writeState(fixtureState({ authenticated: true }))
+    const bare = join(testHost.root, 'creation.git')
+    const pushLog = join(testHost.root, 'pushes.log')
+    writeFileSync(pushLog, '')
+    git(testHost, ['init', '--bare', bare])
+    git(testHost, ['push', bare, 'refs/heads/main:refs/heads/main'])
+    commitFeature(testHost)
+    installLocalGitTransport(testHost, bare, pushLog, bare)
+
+    const localHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
+    const target = recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: testHost.worktree,
+      purpose: 'creation'
+    }))
+    expect(target).toMatchObject({
+      ready: true,
+      remote: 'origin',
+      branch: 'feature',
+      localBranch: 'feature',
+      localHead
+    })
+
+    await testHost.client.callAny('quirky.git/push', { worktree: testHost.worktree, purpose: 'creation' })
+
+    expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/feature'])).toBe(localHead)
+    const pushes = readFileSync(pushLog, 'utf8').trim().split('\n')
+    expect(pushes).toHaveLength(1)
+    expect(pushes[0]?.endsWith(':refs/heads/feature')).toBe(true)
+  }, 20_000)
+
+  test('creation push refuses a branch whose upstream is another branch', async () => {
+    const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
+    hosts.push(testHost)
+    testHost.writeState(fixtureState({ authenticated: true }))
+    const bare = join(testHost.root, 'creation.git')
+    const pushLog = join(testHost.root, 'pushes.log')
+    writeFileSync(pushLog, '')
+    git(testHost, ['init', '--bare', bare])
+    commitFeature(testHost)
+    git(testHost, ['config', 'branch.feature.remote', 'origin'])
+    git(testHost, ['config', 'branch.feature.merge', 'refs/heads/main'])
+    installLocalGitTransport(testHost, bare, pushLog, bare)
+
+    expect(recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: testHost.worktree,
+      purpose: 'creation'
+    }))).toMatchObject({ ready: false, reason: 'branch_mismatch' })
+    expect(reasonOf(await rejection(testHost.client.callAny('quirky.git/push', {
+      worktree: testHost.worktree,
+      purpose: 'creation'
+    })))).toBe('branch_mismatch')
+    expect(readFileSync(pushLog, 'utf8')).toBe('')
+    expect(gitOutput(testHost, ['--git-dir', bare, 'for-each-ref', '--format=%(refname)', 'refs/heads/main'])).toBe('')
+  }, 20_000)
+
+
   test('pushRepository resolves a later named remote among multiple remotes', async () => {
     const testHost = await host()
     git(testHost, ['remote', 'add', 'fork', 'https://github.com/test-owner/fork-repo.git'])
