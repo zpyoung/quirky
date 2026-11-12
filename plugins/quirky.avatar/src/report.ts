@@ -1,11 +1,23 @@
 import type {
-  AvatarApp, AvatarBusEvent, AvatarWorktreeStatus, JournalEntry, NeedsYouItem, ReportModel, ReportNeed, ReportService, SwitchId, WorktreeState
+  AvatarApp, AvatarWorktreeStatus, JournalEntry, NeedsYouItem, ReportModel, ReportNeed, ReportService, SwitchId, WorktreeState
 } from './contracts'
 
-const CHANGE_DEBOUNCE_MS = 250
+const NAME_REFRESH_DEBOUNCE_MS = 250
+
 const RECENT_HANDBACK_MS = 24 * 60 * 60 * 1000
 const TOP_SKIPPED_CALLS = 10
 const SWITCH_ORDER: readonly SwitchId[] = ['messaging', 'historyRewrite', 'deploys']
+
+type ReportTally = {
+  key: string
+  seq: number
+  allowed: number
+  denied: number
+  held: number
+  guesses: number
+  sleeps: ReportModel['summary']['sleeps']
+  skipped: JournalEntry[]
+}
 
 const ACTIVE_WORK_STATES: ReadonlySet<WorktreeState> = new Set(['checking', 'briefing', 'working', 'checking-done', 'in-review'])
 
@@ -41,24 +53,35 @@ function wouldHaveBeenStopped(entry: JournalEntry): boolean {
 }
 
 /**
- * Installs `ReportService` as `app.services.report`: the needs-you-first report, the pill and
- * panel status, and the sidebar status. It also emits `changed` after every bus event, coalesced
- * to one emit per 250 ms, so open views refresh without polling. Returns its disposer.
+ * Installs `ReportService` and emits `changed` immediately for every bus event and any worktree
+ * name or project-name change. The daemon sends the first event at once, then at most one per
+ * 250 ms. Returns its disposer.
  */
 export function register(app: AvatarApp): () => void {
   const names = new Map<string, { name: string; projectName: string }>()
   let timer: ReturnType<typeof setTimeout> | null = null
-  let lastEvent: AvatarBusEvent | null = null
   let disposed = false
+  let tally: ReportTally | null = null
 
+  const announce = (type: string): void => {
+    if (!disposed) app.context.emit('changed', { type })
+  }
   const nameOf = (worktreeId: string): string => names.get(worktreeId)?.name ?? worktreeId
   const projectOf = (worktreeId: string): string => names.get(worktreeId)?.projectName ?? ''
 
-  async function refreshNames(): Promise<void> {
+  async function refreshNames(): Promise<boolean> {
     try {
-      for (const row of await app.services.handoff.eligibility()) names.set(row.worktreeId, { name: row.name, projectName: row.projectName ?? '' })
+      let changed = false
+      for (const row of await app.services.handoff.eligibility()) {
+        const projectName = row.projectName ?? ''
+        if (nameOf(row.worktreeId) !== row.name || projectOf(row.worktreeId) !== projectName) changed = true
+        names.set(row.worktreeId, { name: row.name, projectName })
+      }
+      if (changed) announce('names-changed')
+      return changed
     } catch (error) {
       app.context.log(`avatar report could not refresh worktree names: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     }
   }
 
@@ -139,37 +162,57 @@ export function register(app: AvatarApp): () => void {
     }
 
     const since = Math.min(...active.map((handoff) => app.store.handoffs.get(handoff.worktreeId)?.handedOffAt ?? now), ...handedBack.map((row) => row.handedOffAt), now)
-    const journal = stories.length === 0 ? [] : app.store.journalSince(0).filter((entry) => entry.at >= since)
+    if (stories.length === 0) {
+      tally = null
+    } else {
+      const key = JSON.stringify([since, [...activeIds].sort()])
+      let journal: JournalEntry[]
+      if (tally === null || tally.key !== key) {
+        const newest = app.store.journalPage({ limit: 1 })[0]
+        tally = {
+          key,
+          seq: newest?.seq ?? 0,
+          allowed: 0,
+          denied: 0,
+          held: 0,
+          guesses: 0,
+          sleeps: [],
+          skipped: []
+        }
+        journal = app.store.journalSince(0, { since, kinds: ['gate', 'guess', 'sleep', 'skipped-call'] })
+      } else {
+        journal = app.store.journalSince(tally.seq)
+      }
 
-    let allowed = 0
-    let denied = 0
-    let held = 0
-    let guesses = 0
-    const sleeps: ReportModel['summary']['sleeps'] = []
-    const skipped: JournalEntry[] = []
-    for (const entry of journal) {
-      if (entry.kind === 'gate') {
-        if (entry.data.outcome === 'allow') allowed += 1
-        else if (entry.data.outcome === 'deny') denied += 1
-        else if (entry.data.outcome === 'held') held += 1
-      } else if (entry.kind === 'guess') guesses += 1
-      else if (entry.kind === 'sleep') sleeps.push({ at: entry.at, durationMs: typeof entry.data.durationMs === 'number' ? entry.data.durationMs : 0 })
-      else if (entry.kind === 'skipped-call' && entry.worktreeId !== null && activeIds.has(entry.worktreeId) && wouldHaveBeenStopped(entry)) skipped.push(entry)
+      for (const entry of journal) {
+        if (entry.at < since) continue
+        if (entry.kind === 'gate') {
+          if (entry.data.outcome === 'allow') tally.allowed += 1
+          else if (entry.data.outcome === 'deny') tally.denied += 1
+          else if (entry.data.outcome === 'held') tally.held += 1
+        } else if (entry.kind === 'guess') tally.guesses += 1
+        else if (entry.kind === 'sleep') tally.sleeps.push({ at: entry.at, durationMs: typeof entry.data.durationMs === 'number' ? entry.data.durationMs : 0 })
+        else if (entry.kind === 'skipped-call' && entry.worktreeId !== null && activeIds.has(entry.worktreeId) && wouldHaveBeenStopped(entry)) {
+          tally.skipped.push(entry)
+          if (tally.skipped.length > TOP_SKIPPED_CALLS) tally.skipped.shift()
+        }
+      }
+      if (journal.length > 0) tally.seq = Math.max(tally.seq, journal[journal.length - 1].seq)
     }
 
     return {
       needsYou: open.map((need): ReportNeed => ({ ...need, worktreeName: nameOf(need.worktreeId), projectName: projectOf(need.worktreeId) })),
       stories,
       summary: {
-        decisions: allowed + denied + held + guesses,
-        allowed,
-        denied,
-        held,
-        guesses,
-        sleeps,
+        decisions: (tally?.allowed ?? 0) + (tally?.denied ?? 0) + (tally?.held ?? 0) + (tally?.guesses ?? 0),
+        allowed: tally?.allowed ?? 0,
+        denied: tally?.denied ?? 0,
+        held: tally?.held ?? 0,
+        guesses: tally?.guesses ?? 0,
+        sleeps: tally?.sleeps.map((sleep) => ({ ...sleep })) ?? [],
         keptAwake: active.some((handoff) => isActiveWork(handoff.state))
       },
-      topSkippedCalls: skipped.sort((a, b) => b.seq - a.seq).slice(0, TOP_SKIPPED_CALLS)
+      topSkippedCalls: tally?.skipped.slice().reverse() ?? []
     }
   }
 
@@ -177,16 +220,13 @@ export function register(app: AvatarApp): () => void {
   void refreshNames()
 
   const unsubscribe = app.on((event) => {
+    announce(event.type)
     if (event.type === 'handoffs-changed' || event.type === 'state-changed') void refreshNames()
-    lastEvent = event
     if (timer !== null) return
     timer = setTimeout(() => {
       timer = null
-      void refreshNames().then(() => {
-        if (disposed || lastEvent === null) return
-        app.context.emit('changed', { type: lastEvent.type })
-      })
-    }, CHANGE_DEBOUNCE_MS)
+      void refreshNames()
+    }, NAME_REFRESH_DEBOUNCE_MS)
   })
 
   return () => {

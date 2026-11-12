@@ -119,6 +119,7 @@ describe('sanitize', () => {
 
     const input = {
       level: 'full' as const,
+      reviewDecision: 'NONE',
       checks: [{ name: 'ci', required: true, conclusion: 'failure' as string | null }],
       findings: [{ id: 'f1', valid: null as boolean | null, fixed: false }],
       threads: [{ id: 't1', resolved: false }],

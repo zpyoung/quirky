@@ -760,11 +760,96 @@ function LogEntryRow({ entry, worktreeName }: { entry: JournalEntry; worktreeNam
   )
 }
 
+type AvatarLogState = { entries: JournalEntry[]; reachedStart: boolean; error: string | null }
+
+function joinNewestLogPage(previous: AvatarLogState, page: JournalEntry[]): AvatarLogState {
+  const newestShown = previous.entries[0]
+  if (!newestShown || !page.some((entry) => entry.seq === newestShown.seq)) {
+    return { entries: page, reachedStart: page.length < LOG_LIMIT, error: null }
+  }
+
+  const oldestPageSeq = page[page.length - 1]!.seq
+  return {
+    entries: [...page, ...previous.entries.filter((entry) => entry.seq < oldestPageSeq)],
+    reachedStart: previous.reachedStart,
+    error: null
+  }
+}
+
+function useAvatarLog(context: UiPluginContext) {
+  const [state, setState] = useState<AvatarLogState>({ entries: [], reachedStart: false, error: null })
+  const latestState = useRef(state)
+  const lifecycle = useRef(0)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+
+  const update = useCallback((change: (previous: AvatarLogState) => AvatarLogState) => {
+    const next = change(latestState.current)
+    latestState.current = next
+    setState(next)
+  }, [])
+
+  useEffect(() => {
+    const scope = ++lifecycle.current
+    let generation = 0
+    const refresh = () => {
+      const mine = ++generation
+      context.call('quirky.avatar/log', { limit: LOG_LIMIT }).then(
+        (data) => {
+          if (lifecycle.current !== scope || mine !== generation) return
+          update((previous) => joinNewestLogPage(previous, data as JournalEntry[]))
+        },
+        (cause: unknown) => {
+          if (lifecycle.current !== scope || mine !== generation) return
+          update((previous) => ({ ...previous, error: messageOf(cause) }))
+        }
+      )
+    }
+
+    refresh()
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type === CHANGED_EVENT) refresh()
+    })
+    return () => {
+      generation++
+      lifecycle.current++
+      unsubscribe()
+    }
+  }, [context, update])
+
+  const loadOlder = useCallback(async () => {
+    if (loadingOlder) return
+    const previous = latestState.current
+    const before = previous.entries[previous.entries.length - 1]?.seq
+    if (before === undefined || previous.reachedStart) return
+    const scope = lifecycle.current
+    setLoadingOlder(true)
+    try {
+      const page = await context.call('quirky.avatar/log', { limit: LOG_LIMIT, before }) as JournalEntry[]
+      if (lifecycle.current !== scope) return
+      update((current) => {
+        if (current.entries[current.entries.length - 1]?.seq !== before) return current
+        return {
+          entries: [...current.entries, ...page],
+          reachedStart: page.length < LOG_LIMIT,
+          error: null
+        }
+      })
+    } catch (cause) {
+      if (lifecycle.current !== scope) return
+      update((current) => ({ ...current, error: messageOf(cause) }))
+    } finally {
+      if (lifecycle.current === scope) setLoadingOlder(false)
+    }
+  }, [context, loadingOlder, update])
+
+  return { ...state, loadingOlder, loadOlder }
+}
+
 function LogTab({ context }: { context: UiPluginContext }) {
-  const log = useAvatarQuery<JournalEntry[]>(context, 'log', { limit: LOG_LIMIT })
+  const log = useAvatarLog(context)
   const status = useAvatarQuery<StatusResult>(context, 'status')
   const names = nameMap(status.data, null)
-  const entries = log.data ?? []
+  const entries = log.entries
   return (
     <div role="tabpanel" aria-label="Log">
       <Failure message={log.error} />
@@ -776,6 +861,11 @@ function LogTab({ context }: { context: UiPluginContext }) {
             <LogEntryRow key={entry.seq} entry={entry} worktreeName={entry.worktreeId === null ? 'all' : (names.get(entry.worktreeId) ?? entry.worktreeId)} />
           ))}
         </ul>
+      )}
+      {entries.length > 0 && !log.reachedStart && (
+        <Button disabled={log.loadingOlder} onClick={log.loadOlder}>
+          {log.loadingOlder ? 'Loading…' : 'Load older entries'}
+        </Button>
       )}
     </div>
   )

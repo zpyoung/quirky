@@ -1,6 +1,6 @@
 {
   "id": "quirky.avatar",
-  "apiVersion": "1.2.0",
+  "apiVersion": "1.3.0",
   "name": "Avatar",
   "version": "0.1.0",
   "description": "Supervises worktrees you hand off: gates their tool calls, briefs and steers the agents, and carries the work to a merge-ready pull request.",
@@ -996,7 +996,8 @@
     "event": [
       {
         "id": "changed",
-        "description": "The avatar journal, needs queue, a worktree state or the set of handed-off worktrees changed.",
+        "description": "The avatar journal, needs queue, worktree state or name, project name, or set of handed-off worktrees changed. The first event is sent at once, then at most one per 250 ms; type names only the latest change in the window.",
+        "coalesce": [],
         "data": {
           "type": "object",
           "properties": {

@@ -28,6 +28,7 @@ function setup(options: SetupOptions = {}) {
     number: 7,
     state: 'open',
     headRefOid: HEAD,
+    reviewDecision: 'NONE',
     mergeQueueRequired: false
   }
   const fake = checked({
