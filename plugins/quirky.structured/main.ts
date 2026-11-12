@@ -543,7 +543,7 @@ export function activate(context: PluginContext): void {
 
   const resolveStructuredLaunch = async (
     params: Record<string, unknown>
-  ): Promise<{ structured: StructuredLaunchOptions; launchSettings: unknown } | null> => {
+  ): Promise<{ structured: StructuredLaunchOptions; launchSettings: Session['launchSettings'] } | null> => {
     if (params.model === undefined && params.options === undefined) return null
     const raw = await context.call('quirky.agents/resolveLaunch', {
       agent: params.agent,
@@ -572,10 +572,10 @@ export function activate(context: PluginContext): void {
       if (key === 'model') structured.model = value
       else structured.effort = value
     }
-    return { structured, launchSettings: resolution.launchSettings ?? null }
+    return { structured, launchSettings: (resolution.launchSettings as Session['launchSettings']) ?? null }
   }
 
-  const launchOptionsFromSnapshot = (session: Session): StructuredLaunchOptions => {
+  const launchOptionsFromSnapshot = (session: Session): StructuredStartOptions => {
     const snapshot = session.launchSettings
     if (snapshot === null || snapshot === undefined) return {}
     if (snapshot.agent !== session.agent) {
@@ -589,11 +589,18 @@ export function activate(context: PluginContext): void {
       throw context.error('conflict', `session ${session.id} has malformed structured launch settings`)
     }
     const values = rawOptions as Record<string, unknown>
-    const unsupported = Object.keys(values).find((key) => key !== 'model' && key !== 'effort')
+    const unsupported = Object.keys(values).find((key) => key !== 'model' && key !== 'effort' && key !== 'toolPolicy')
     if (unsupported !== undefined) {
       throw context.error('conflict', `session ${session.id} has unsupported structured launch option "${unsupported}"`)
     }
-    const options: StructuredLaunchOptions = {}
+    const options: StructuredStartOptions = {}
+    if (Object.hasOwn(values, 'toolPolicy')) {
+      const policy = values.toolPolicy
+      if (typeof policy !== 'object' || policy === null || Array.isArray(policy) || Reflect.get(policy, 'value') !== 'deny-all') {
+        throw context.error('conflict', `session ${session.id} has an unreadable tool policy`)
+      }
+      options.toolPolicy = 'deny-all'
+    }
     for (const key of ['model', 'effort'] as const) {
       const selected = values[key]
       if (selected === undefined) continue
@@ -729,6 +736,15 @@ export function activate(context: PluginContext): void {
     const worktree = await resolveWorktree(params.worktree, caller)
     ensureActive()
     const resolution = await resolveStructuredLaunch(launchParams)
+    let launchSettings = resolution?.launchSettings
+    if (toolPolicy === 'deny-all') {
+      launchSettings = {
+        ...(launchSettings ?? {}),
+        agent,
+        options: { ...(launchSettings?.options ?? {}), toolPolicy: { value: 'deny-all', source: 'explicit' } },
+        summary: `${launchSettings?.summary ?? AGENT_TITLES[agent]} · No tools`
+      }
+    }
     ensureActive()
     const title = typeof params.title === 'string' ? params.title : await nextTitle(worktree.id, agent)
     ensureActive()
@@ -751,7 +767,7 @@ export function activate(context: PluginContext): void {
       kind: 'structured',
       title,
       ...(background === undefined ? {} : { background }),
-      ...(resolution?.launchSettings ? { launchSettings: resolution.launchSettings } : {})
+      ...(launchSettings ? { launchSettings } : {})
     })) as Session
     if (!active) return registered
     const token: OwnerToken = { key: '', sessionId: registered.id }
@@ -769,7 +785,6 @@ export function activate(context: PluginContext): void {
     live.set(registered.id, entry)
     if (lifetimeOwner) pluginLifetimes.set(registered.id, lifetimeOwner)
     ownersBySession.set(registered.id, token)
-    if (toolPolicy === 'deny-all') journal.setToolPolicy(registered.id, toolPolicy)
     let prepared: AccountPreparation | null = null
     if (accountPrepare) {
       try {
@@ -854,10 +869,11 @@ export function activate(context: PluginContext): void {
     }
     if (!originalIsDirectory) throw context.error('conflict', `the session's folder ${old.cwd} no longer exists`)
 
-    let options: StructuredLaunchOptions
+    let options: StructuredStartOptions
     try {
       options = launchOptionsFromSnapshot(old)
     } catch (error) {
+      if (error instanceof Error && error.message === `session ${old.id} has an unreadable tool policy`) throw error
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
     const key = `${agent}:${providerSession.id}`
@@ -966,17 +982,15 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
-      const launchOptions: StructuredLaunchOptions = {
+      const launchOptions: StructuredStartOptions = {
         ...options,
         env: environmentForLease(lease.env, environment)
       }
-      const toolPolicy = journal.toolPolicy(old.id)
-      if (toolPolicy === 'deny-all') journal.setToolPolicy(registered.id, toolPolicy)
       startRunner(
         registered,
         agent,
         params.prompt as string | undefined,
-        { ...launchOptions, ...(toolPolicy === 'deny-all' ? { toolPolicy } : {}), providerSession: preparedProviderSession },
+        { ...launchOptions, providerSession: preparedProviderSession },
         token
       )
     } catch (error) {
