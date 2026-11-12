@@ -1,5 +1,6 @@
 import type { ActionClass, DecideInput, Level, RuleDecision, StepId, Switches } from '../contracts'
-import { commandParts, matchesCommandList, pushDestinations } from './classify'
+import { commandParts, matchesCommandList, onAllowList, pushDestinations, shellCommandOfCall } from './classify'
+import { plainCommand } from './strict'
 
 type Trace = RuleDecision['trace']
 type StepResult = { result: 'pass' | 'allow' | 'deny' | 'held'; note: string; reliedOn?: string }
@@ -77,6 +78,13 @@ function fixedRules(input: DecideInput): StepResult {
   const denied = commandParts(call, ctx).find((part) => matchesCommandList(part, ctx.denyCommands, 'deny'))
   if (denied !== undefined) return { result: 'deny', note: `command is on the always-denied list: ${denied}`, reliedOn: 'settings: always-denied commands' }
   if (classes.length > 0 && classes.every((cls) => ALLOWED_BY_FIXED_RULES.has(cls))) {
+    const shell = shellCommandOfCall(call)
+    if (shell !== undefined) {
+      const verdict = shell === null
+        ? { plain: false as const, why: 'the command could not be read' }
+        : plainCommand(shell.command, shell.cwd, ctx, (words) => onAllowList(words, ctx))
+      if (!verdict.plain) return { result: 'pass', note: `not a plain command from the short list: ${verdict.why}` }
+    }
     return { result: 'allow', note: 'reads, edits inside the worktree, tests and builds are allowed', reliedOn: 'fixed rule: reads, edits inside the worktree, tests and builds' }
   }
   return { result: 'pass', note: 'no fixed rule matches' }
