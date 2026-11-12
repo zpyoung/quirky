@@ -35,19 +35,6 @@ async function until(check: () => boolean) {
   expect(check()).toBe(true)
 }
 
-async function withFastTimers<T>(work: () => Promise<T>): Promise<T> {
-  const original = globalThis.setTimeout
-  const accelerated = (...args: Parameters<typeof globalThis.setTimeout>) => {
-    const [callback, delay, ...extra] = args
-    return original(callback, Math.min(Number(delay ?? 0), 500), ...extra)
-  }
-  globalThis.setTimeout = accelerated as typeof globalThis.setTimeout
-  try {
-    return await work()
-  } finally {
-    globalThis.setTimeout = original
-  }
-}
 
 function processIsAlive(pid: number): boolean {
   try {
@@ -335,20 +322,17 @@ describe('Codex runner', () => {
       test(`a ${failure.name} while reading MCP config aborts ${mode}`, async () => {
         configureDenyAll({ configRead: failure.configRead })
         const providerSession = mode === 'resume' ? { id: 'existing-thread', transcriptPath: null } : undefined
-        const start = () => runner.start(session, 'hello', {
+        await expect(runner.start(session, 'hello', {
           toolPolicy: 'deny-all',
           ...(providerSession === undefined ? {} : { providerSession })
-        })
-        const assertFailure = async () => expect(start()).rejects.toThrow(
+        })).rejects.toThrow(
           "could not read Codex's MCP servers, so a session without tools can't start"
         )
-        if ('timeout' in failure && failure.timeout) await withFastTimers(assertFailure)
-        else await assertFailure()
         const requests = fixture.requests()
         expect(requests.some((request) => request.method === 'config/read')).toBe(true)
         expect(requests.some((request) => request.method === 'thread/start' || request.method === 'thread/resume')).toBe(false)
         await expectFixtureStopped(fixture)
-      })
+      }, failure.name === 'timeout' ? 45_000 : undefined)
     }
   }
 
@@ -419,17 +403,40 @@ describe('Codex runner', () => {
     })
   }
 
-  for (const [method, type] of [
-    ['item/started', 'commandExecution'],
-    ['item/completed', 'commandExecution']
-  ] as const) {
-    test(`deny-all refuses a ${method} tool item once and interrupts its turn`, async () => {
-      const item = { id: 'exec-1', type, status: 'inProgress', command: 'cat secrets' }
+  for (const type of [
+    'commandExecution',
+    'fileChange',
+    'mcpToolCall',
+    'dynamicToolCall',
+    'webSearch',
+    'imageView',
+    'sleep',
+    'imageGeneration'
+  ]) {
+    for (const method of ['item/started', 'item/completed']) {
+      test(`deny-all refuses ${type} seen only on ${method}`, async () => {
+        const item = { id: 'tool-1', type, status: 'inProgress', command: 'cat secrets' }
+        await startDeniedTurn([{ method, params: { threadId: 'scripted-thread', turnId: 'turn-1', item } }])
+        await until(() => rec.statuses.includes('done') || rec.statuses.includes('exited'))
+        expect(fixture.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(1)
+        const refusal = rec.messages.find((message) => message.role === 'system' && message.text === DENY)
+        expect(refusal?.data).toEqual(item)
+        expect(rec.statuses).toContain('done')
+        expect(rec.statuses).not.toContain('exited')
+        expect(rec.asks).toEqual([])
+      })
+    }
+  }
+
+  for (const method of ['item/started', 'item/completed']) {
+    test(`deny-all refuses a missing type seen only on ${method}`, async () => {
+      const item = { id: 'missing-type' }
       await startDeniedTurn([{ method, params: { threadId: 'scripted-thread', turnId: 'turn-1', item } }])
       await until(() => rec.statuses.includes('done') || rec.statuses.includes('exited'))
+      const denials = rec.messages.filter((message) => message.role === 'system' && message.text === DENY)
+      expect(denials).toHaveLength(1)
+      expect(denials[0]?.data).toEqual(item)
       expect(fixture.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(1)
-      const refusal = rec.messages.find((message) => message.role === 'system' && message.text === DENY)
-      expect(refusal?.data).toEqual(item)
       expect(rec.statuses).toContain('done')
       expect(rec.statuses).not.toContain('exited')
       expect(rec.asks).toEqual([])
@@ -503,21 +510,37 @@ describe('Codex runner', () => {
     expect(fixture.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(1)
   })
 
+  test('deny-all journals output deltas when a completed command has no aggregated output', async () => {
+    const item = { id: 'streamed-command', type: 'commandExecution', command: 'cat streamed.txt', status: 'completed' }
+    await startDeniedTurn([
+      {
+        method: 'item/started',
+        params: { threadId: 'scripted-thread', turnId: 'turn-1', item: { ...item, status: 'inProgress' } }
+      },
+      {
+        method: 'item/commandExecution/outputDelta',
+        params: { threadId: 'scripted-thread', turnId: 'turn-1', itemId: item.id, delta: 'streamed-only\n' }
+      },
+      { method: 'item/completed', params: { threadId: 'scripted-thread', turnId: 'turn-1', item } }
+    ])
+    await until(() => rec.statuses.includes('done'))
+    const tool = rec.messages.find((message) => message.role === 'tool')
+    expect(tool).toMatchObject({ text: 'cat streamed.txt\nstreamed-only\n', data: item })
+    expect(rec.messages.filter((message) => message.role === 'system' && message.text === DENY)).toHaveLength(1)
+    expect(fixture.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(1)
+  })
+
   for (const interrupt of ['error', 'timeout'] as const) {
     test(`an interrupt ${interrupt} ends the deny-all run and stops Codex`, async () => {
       const item = { id: 'exec-1', type: 'commandExecution', command: 'cat secrets' }
-      const run = async () => {
-        await startDeniedTurn([
-          { method: 'item/started', params: { threadId: 'scripted-thread', turnId: 'turn-1', item } }
-        ], interrupt)
-        await until(() => rec.statuses.includes('exited'))
-      }
-      if (interrupt === 'timeout') await withFastTimers(run)
-      else await run()
+      await startDeniedTurn([
+        { method: 'item/started', params: { threadId: 'scripted-thread', turnId: 'turn-1', item } }
+      ], interrupt)
+      await until(() => rec.statuses.includes('exited'))
       expect(rec.messages.some((message) => message.role === 'system' && message.text.includes('could not stop a tool in a session without tools'))).toBe(true)
       expect(rec.statuses).toContain('exited')
       await expectFixtureStopped(fixture)
-    })
+    }, interrupt === 'timeout' ? 45_000 : undefined)
   }
 
   test('a tool notification with no turn fails without sending an interrupt', async () => {
@@ -653,6 +676,8 @@ describe('Codex runner', () => {
   test('without a policy, command and file approvals still ask', async () => {
     await runner.start(session, '[approve twice]')
     await until(() => rec.asks.length === 2)
+    const threadStart = fixture.requests().find((request) => request.method === 'thread/start')
+    expect(threadStart?.params).toMatchObject({ approvalPolicy: 'on-request', sandbox: 'workspace-write' })
     expect(fixture.serverRequests().filter((request) =>
       request.method === 'item/commandExecution/requestApproval' || request.method === 'item/fileChange/requestApproval'
     )).toHaveLength(2)
@@ -756,6 +781,29 @@ describe('create and resume', () => {
     expect(runner.started[0]?.options).toMatchObject({ toolPolicy: 'deny-all' })
   })
 
+  test('pi deny-all reaches the runner without launch resolution and records its policy', async () => {
+    const session = await create({ agent: 'pi', options: { toolPolicy: 'deny-all' } })
+    expect(session).toMatchObject({ kind: 'structured', agent: 'pi' })
+    await until(() => runner.started.length === 1)
+    expect(runner.started[0]?.options).toMatchObject({ toolPolicy: 'deny-all' })
+    expect(world.resolveLaunchCalls).toEqual([])
+    expect(session.launchSettings).toEqual({
+      agent: 'pi',
+      options: { toolPolicy: entry },
+      summary: 'Pi · No tools'
+    })
+  })
+
+  test('omp effort still resolves without forwarding the tool policy', async () => {
+    await create({ agent: 'omp', options: { effort: 'high', toolPolicy: 'deny-all' } })
+    await until(() => runner.started.length === 1)
+    expect(world.resolveLaunchCalls).toEqual([
+      { agent: 'omp', model: undefined, options: { effort: 'high' }, structured: true }
+    ])
+    expect(runner.started[0]?.options).toMatchObject({ effort: 'high', toolPolicy: 'deny-all' })
+    expect(runner.started[0]?.session.agent).toBe('omp')
+  })
+
   test('other launch picks are resolved without the policy and preserve their snapshot fields', async () => {
     const launchSettings = {
       agent: 'claude',
@@ -800,6 +848,12 @@ describe('create and resume', () => {
 
   test('unknown policy is refused before any session is registered', async () => {
     const error = await create({ agent: 'claude', options: { toolPolicy: 'allow-all' } }).catch((value: RpcError) => value)
+    expect(error).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(world.registerCalls).toEqual([])
+  })
+
+  test('an agent other than claude, codex, pi or omp is refused', async () => {
+    const error = await create({ agent: 'gemini' }).catch((value: RpcError) => value)
     expect(error).toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(world.registerCalls).toEqual([])
   })

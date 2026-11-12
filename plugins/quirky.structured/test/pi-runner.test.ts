@@ -118,7 +118,23 @@ describe('pi rpc runner', () => {
   test('records context usage on the turn-ending message', async () => {
     await runner.start(session, 'usage')
     await until(settled)
-    expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: 200000 })
+    expect(messages.find((m) => m.role === 'result')?.data).toEqual({
+      type: 'agent_end',
+      contextUsage: { contextTokens: 180, contextWindow: 200000 }
+    })
+  })
+  test('clears context usage before a turn with no token count', async () => {
+    await runner.start(session, 'usage', { toolPolicy: 'deny-all' })
+    const results = () => messages.filter((m) => m.role === 'result')
+    await until(() => results().length === 1)
+    expect(results()[0]?.data).toEqual({
+      type: 'agent_end',
+      contextUsage: { contextTokens: 180, contextWindow: 200000 }
+    })
+
+    await runner.send(session.id, '[tool]')
+    await until(() => results().length === 2)
+    expect(results()[1]?.data).toEqual({ type: 'agent_end' })
   })
 
   test('context window is null when the process does not report one', async () => {

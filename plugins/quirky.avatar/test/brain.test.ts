@@ -243,7 +243,8 @@ describe('rotation', () => {
       'not an object',
       { contextTokens: Number.NaN, contextWindow: 1_000_000 },
       { contextTokens: Number.POSITIVE_INFINITY, contextWindow: 1_000_000 },
-      { contextTokens: '301000', contextWindow: 1_000_000 }
+      { contextTokens: '301000', contextWindow: 1_000_000 },
+      Object.assign([], { contextTokens: 0, contextWindow: 1_000_000 }),
     ]
     for (const contextUsage of malformed) {
       const h = harness((prompt) => ({
@@ -379,6 +380,25 @@ describe('session death', () => {
     expect(h.app.store.brainSessions.list()[0]!.endedAt).not.toBeNull()
     expect(h.app.store.journalSince(0).some((e) => e.kind === 'brain-error' && e.data.reason === 'session-died')).toBe(true)
     expect(await h.app.services.brain.judge(call(), sampleMandate(), 1000)).toMatchObject({ decision: 'allow' })
+  })
+
+  test('ends the current brain session and starts a replacement when a result reports an error', async () => {
+    const h = harness(() => ({ text: NOOP }))
+    h.app.journal('wt-1', 'event', { text: 'warm up' })
+    await until(() => h.app.services.brain.ready() && h.sent.some((prompt) => prompt.session === 's1' && !isRebuild(prompt)))
+    await settle()
+
+    await h.t.deliver({ type: 'quirky.structured/message', data: { message: { sessionId: 's1', seq: 99, role: 'result', text: 'provider error', data: { is_error: true }, at: 1 } } } as never)
+
+    expect(h.app.services.brain.ready()).toBe(false)
+    expect(await h.app.services.brain.judge(call(), sampleMandate(), 1000)).toBe('unavailable')
+    await until(() => h.created.length === 2 && h.app.services.brain.ready())
+
+    const rows = h.app.store.brainSessions.list()
+    expect(rows.map((row) => row.sessionId)).toEqual(['s1', 's2'])
+    expect(rows[0]!.endedAt).not.toBeNull()
+    expect(rows[1]).toMatchObject({ endedAt: null })
+    expect(h.app.store.journalSince(0).some((entry) => entry.kind === 'brain-error' && entry.data.reason === 'session-died' && entry.data.session === 's1')).toBe(true)
   })
 
   test('events not yet delivered when the session dies go to the new session', async () => {
