@@ -369,14 +369,20 @@ export function register(app: AvatarApp): () => void {
     const data = (incoming as { data?: unknown }).data as Record<string, unknown> | undefined
     if (data === undefined) return
     if (incoming.type === 'quirky.structured/message') {
-      const message = data.message as { sessionId?: string; role?: string; text?: string; data?: { usage?: Usage; is_error?: boolean } } | undefined
+      const message = data.message as { sessionId?: string; role?: string; text?: string; data?: unknown } | undefined
       if (message === undefined || current === null || message.sessionId !== current.id) return
       if (message.role === 'assistant') {
         if (typeof message.text === 'string' && waiter?.sessionId === current.id) waiter.lastAssistant = message.text
-        const usage = message.data?.usage
-        if (usage !== undefined && typeof usage.contextTokens === 'number') current.usage = { contextTokens: usage.contextTokens, contextWindow: typeof usage.contextWindow === 'number' ? usage.contextWindow : null }
-      } else if (message.role === 'result' && message.data?.is_error === true) {
-        died(current, String(message.text ?? 'the session reported an error'))
+      } else if (message.role === 'result') {
+        const resultData = message.data as { contextUsage?: unknown; is_error?: boolean } | null | undefined
+        const footprint = resultData?.contextUsage
+        if (footprint !== null && typeof footprint === 'object' && !Array.isArray(footprint)) {
+          const contextUsage = footprint as { contextTokens?: unknown; contextWindow?: unknown }
+          if (typeof contextUsage.contextTokens === 'number' && Number.isFinite(contextUsage.contextTokens)) {
+            current.usage = { contextTokens: contextUsage.contextTokens, contextWindow: typeof contextUsage.contextWindow === 'number' ? contextUsage.contextWindow : null }
+          }
+        }
+        if (resultData?.is_error === true) died(current, String(message.text ?? 'the session reported an error'))
       }
     } else if (incoming.type === 'quirky.structured/settled') {
       if (waiter === null || data.sessionId !== waiter.sessionId) return

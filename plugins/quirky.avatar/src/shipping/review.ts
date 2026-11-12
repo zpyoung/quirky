@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { QuirkyEvent } from '@quirky/protocol'
 import type { AvatarApp, Finding, Mandate } from '../contracts'
 import { quoteAsData, sanitize } from '../sanitize'
-import { type Outbox, readCompare, readHead } from './outbox'
+import { handoffEpoch, sendRefusal, type Outbox, readCompare, readHead } from './outbox'
 
 type ReviewerAgent = 'claude' | 'codex'
 type Pending = { worktreeId: string; headSha: string; agent: ReviewerAgent; partial: ReviewDiff | null; startedAt: number }
@@ -12,8 +12,8 @@ type Thread = { id: string; resolved: boolean; human: boolean }
 export type Review = {
   startReview(worktreeId: string): Promise<{ started: boolean; reason?: string }>
   onEvent(event: QuirkyEvent): Promise<void>
-  intakeComments(worktreeId: string): Promise<{ added: number; number: number | null; threads: Thread[] }>
-  judgeFinding(worktreeId: string, findingId: string, valid: boolean, reason: string): Promise<void>
+  intakeComments(worktreeId: string): Promise<{ added: number; number: number | null; threads: Thread[]; partial: boolean }>
+  judgeFinding(worktreeId: string, findingId: string, valid: boolean, reason: string, epoch?: number | null): Promise<void>
   recordSkillFinding(worktreeId: string, summary: string, detail?: Record<string, unknown>): Finding
   reviewedSha(worktreeId: string): string | null
 }
@@ -228,6 +228,8 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
   const pending = new Map<string, Pending>()
   const call = (method: string, params: Record<string, unknown>): Promise<unknown> => app.context.call(method, params)
 
+  const stillCurrent = (worktreeId: string, epoch: number | null): boolean => epoch !== null && handoffEpoch(app, worktreeId) === epoch
+
   const reviewedSha = (worktreeId: string): string | null => {
     let before: number | undefined
     for (;;) {
@@ -382,11 +384,21 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
     },
 
     async intakeComments(worktreeId) {
-      const found = (await call('quirky.hosting/forBranch', { worktree: worktreeId, fresh: true })) as Record<string, unknown>
+      const empty = { added: 0, number: null, threads: [], partial: false }
+      const epoch = handoffEpoch(app, worktreeId)
+      if (epoch === null) return empty
+      const { head, branch } = await readHead(app, worktreeId)
+      if (!stillCurrent(worktreeId, epoch) || head === null || branch === null) return empty
+      const found = (await call('quirky.hosting/forBranch', { worktree: worktreeId, branch, headOid: head, fresh: true })) as Record<string, unknown>
+      if (!stillCurrent(worktreeId, epoch)) return empty
+      if (found.kind === 'unavailable') return { ...empty, partial: true }
       const pr = typeof found.review === 'object' && found.review !== null ? (found.review as Record<string, unknown>) : null
       const number = found.kind === 'found' && typeof pr?.number === 'number' ? pr.number : null
-      if (number === null) return { added: 0, number: null, threads: [] }
+      if (number === null) return empty
       const listed = (await call('quirky.hosting/comments', { worktree: worktreeId, number, noCache: true })) as Record<string, unknown>
+      if (!stillCurrent(worktreeId, epoch)) return { added: 0, number, threads: [], partial: true }
+      const partial = listed.partial === true
+      if (typeof listed.number === 'number' && listed.number !== number) return { added: 0, number, threads: [], partial: true }
       const comments = Array.isArray(listed.comments) ? (listed.comments as Record<string, unknown>[]) : []
 
       const threads = new Map<string, { root: Record<string, unknown>; resolved: boolean }>()
@@ -398,7 +410,6 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
         else if (entry.isResolved === true) thread.resolved = true
       }
 
-      const head = await readHead(app, worktreeId).then((state) => state.head, () => null)
       let added = 0
       const summary: Thread[] = []
       for (const [threadId, thread] of threads) {
@@ -424,12 +435,14 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
         added++
       }
       if (added > 0) app.services.brain.wake()
-      return { added, number, threads: summary }
+      return { added, number, threads: summary, partial }
     },
 
-    async judgeFinding(worktreeId, findingId, valid, reason) {
+    async judgeFinding(worktreeId, findingId, valid, reason, capturedEpoch) {
+      const epoch = capturedEpoch === undefined ? handoffEpoch(app, worktreeId) : capturedEpoch
       const row = app.store.findings.get(findingId)
       if (row === null || row.worktreeId !== worktreeId) return
+      if (!stillCurrent(worktreeId, epoch)) return
       const cleanReason = sanitize(reason)
 
       if (valid) {
@@ -443,6 +456,7 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
           worktreeId,
           `A review finding was judged valid. Fix it and say when it is done.\n${quoteAsData(`review finding (${row.source})`, `${where === '' ? '' : `${where}\n`}${row.summary}`)}`
         )
+        if (!stillCurrent(worktreeId, epoch)) return
         if (sends >= REPEAT_LIMIT) app.services.supervisor.recordDenial(worktreeId, true)
         return
       }
@@ -473,6 +487,7 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
       })
       const number = typeof row.detail.number === 'number' ? row.detail.number : null
       if (row.threadId === null || number === null) return
+      if (sendRefusal(app, 'thread-reply', worktreeId, epoch) !== null) return
       const reply = outbox.enqueue('thread-reply', worktreeId, {
         headSha: row.commitSha,
         target: row.threadId,
@@ -483,7 +498,9 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = sp
       })
       const sent = await outbox.run(reply.id)
       if (sent?.state !== 'done') return
+      if (sendRefusal(app, 'thread-reply', worktreeId, epoch) !== null) return
       await call('quirky.hosting/resolveThread', { worktree: worktreeId, number, threadId: row.threadId, action: 'resolve' }).catch((error: unknown) => {
+        if (!stillCurrent(worktreeId, epoch)) return
         app.journal(worktreeId, 'finding', { resolveFailed: true, findingId, error: error instanceof Error ? error.message : String(error) })
       })
     },
