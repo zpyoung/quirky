@@ -1016,3 +1016,131 @@ describe('unseen arguments and directories', () => {
     }
   })
 })
+
+describe('brace expansion', () => {
+  const classRows: Array<{ scenario: string; command: string; classes: ActionClass[] }> = [
+    { scenario: '9 hidden paths', command: 'rm -rf {a,/home/u/Documents}', classes: ['edit-inside', 'edit-outside'] },
+    { scenario: '9 hidden paths', command: 'rm -rf x/.{,a}./../..', classes: ['edit-inside', 'edit-outside'] },
+    { scenario: '9 hidden paths', command: 'cat {a,/home/u/.ssh/id_rsa}', classes: ['read', 'credential'] },
+    { scenario: '9 hidden paths', command: 'cat ~/.{zshrc,netrc}', classes: ['read', 'credential'] },
+    { scenario: '9 hidden paths', command: 'cp a.txt {b.txt,/home/u/x}', classes: ['edit-outside'] },
+    { scenario: '9 hidden paths', command: 'tee {a,/home/u/x}', classes: ['edit-inside', 'edit-outside'] },
+    { scenario: '9 hidden paths', command: 'echo hi > {a,/home/u/x}', classes: ['read', 'edit-inside', 'edit-outside'] },
+    { scenario: '9 hidden paths', command: 'cat < {a,/home/u/.ssh/id_rsa}', classes: ['read', 'credential'] },
+    { scenario: '9 expanded command name', command: '{rm,-rf,/home/u/Documents}', classes: ['edit-outside'] },
+    { scenario: '9 expanded command name', command: 'X=1 {rm,-rf,/home/u/Documents}', classes: ['edit-outside'] },
+    { scenario: '9 expanded command name', command: 'timeout 5 {rm,-rf,/home/u/Documents}', classes: ['edit-outside'] },
+    { scenario: '9 expanded command name', command: 'env {A=1,rm} -rf /home/u/x', classes: ['edit-outside'] },
+    { scenario: '9 expanded command name', command: 'eval {rm,-rf,/home/u/Documents}', classes: ['edit-outside'] },
+    { scenario: '9 expanded command name', command: "bash -c {'rm -rf /home/u/x',a}", classes: ['edit-outside'] },
+    { scenario: '9 nested shell words', command: "bash -c 'rm -rf {a,/home/u/x}'", classes: ['edit-inside', 'edit-outside'] },
+    { scenario: '9 nested shell words', command: '(rm -rf {a,/home/u/x})', classes: ['edit-inside', 'edit-outside'] },
+    { scenario: '9 nested shell words', command: 'echo "$(rm -rf {a,/home/u/x})"', classes: ['read', 'edit-inside', 'edit-outside'] },
+    { scenario: '9 expanded push destinations', command: 'git push origin {main,feat/x}', classes: ['push-default', 'push-own'] },
+    { scenario: '9 expanded push destinations', command: 'git push {-f,origin,feat/x}', classes: ['push-force', 'push-own'] },
+    { scenario: '9 expanded environment assignments', command: 'export GIT_DIR={x,/home/u/r/.git}; git clean -fd', classes: ['other', 'edit-outside'] },
+
+    { scenario: '10 unseen dynamic words', command: 'rm -rf f{1..3}', classes: ['edit-outside'] },
+    { scenario: '10 unseen dynamic words', command: 'touch f{1..3}', classes: ['edit-outside'] },
+    { scenario: '10 unseen dynamic words', command: 'rm -rf {a,}', classes: ['edit-outside'] },
+    { scenario: '10 unseen dynamic words', command: 'rm -rf {~root,x}', classes: ['edit-outside'] },
+    { scenario: '10 unseen dynamic words', command: 'rm -rf ~{a,b}', classes: ['edit-outside'] },
+    { scenario: '10 unseen dynamic words', command: 'rm -rf $HOME{a,b}', classes: ['edit-outside'] },
+    { scenario: '10 unseen dynamic words', command: 'rm -rf {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}', classes: ['edit-outside'] },
+    { scenario: '10 unseen redirect targets', command: 'echo hi > o{3..3}', classes: ['read', 'edit-outside'] },
+    { scenario: '10 unseen redirect targets', command: 'echo hi >> {a,}', classes: ['read', 'edit-outside'] },
+    { scenario: '10 empty command word', command: '{,rm} -rf /home/u/x', classes: ['other'] },
+    { scenario: '10 ambiguous sequence option', command: 'sort -{o..o} /home/u/x a', classes: ['read', 'other'] },
+    { scenario: '10 read-only unseen words', command: 'echo {a..c}', classes: ['read'] },
+    { scenario: '10 read-only unseen words', command: 'echo {~root,x}', classes: ['read'] },
+
+    { scenario: '11 honest path lists', command: 'mkdir -p src/{a,b}', classes: ['edit-inside'] },
+    { scenario: '11 honest path lists', command: 'mkdir -p src/{components,hooks}/{__tests__,fixtures}', classes: ['edit-inside'] },
+    { scenario: '11 honest path lists', command: 'cp a.txt{,.bak}', classes: ['edit-inside'] },
+    { scenario: '11 honest path lists', command: 'mv src/{old,new}.ts', classes: ['edit-inside'] },
+    { scenario: '11 honest path lists', command: 'git add src/{a,b}.ts', classes: ['edit-inside'] },
+    { scenario: '11 honest path lists', command: 'touch /work/wt/{a,b} /work/other/{c,d}', classes: ['edit-inside'] },
+    { scenario: '11 honest path lists', command: 'touch $HOME/{a,b}', classes: ['edit-outside'] },
+    { scenario: '11 honest reads and tests', command: 'cat src/{a,b}.ts', classes: ['read'] },
+    { scenario: '11 honest reads and tests', command: 'ls {src,test}/*.ts', classes: ['read'] },
+    { scenario: '11 honest reads and tests', command: 'echo {a,b}', classes: ['read'] },
+    { scenario: '11 honest reads and tests', command: 'echo hi > {a,b}.txt', classes: ['read', 'edit-inside'] },
+    { scenario: '11 honest reads and tests', command: 'bun test test/{a,b}.test.ts', classes: ['test'] },
+    { scenario: '11 literal revision and patterns', command: 'git diff HEAD@{1} -- src/{a,b}.ts', classes: ['read'] },
+    { scenario: '11 literal revision and patterns', command: "find . -name '*.{js,ts}'", classes: ['read'] },
+    { scenario: '11 literal revision and patterns', command: "git log --format='%H{a,b}'", classes: ['read'] },
+    { scenario: '11 literal brace text', command: 'git stash show stash@{0}', classes: ['edit-inside'] },
+    { scenario: '11 literal brace text', command: "git commit -m 'a {b,c}'", classes: ['edit-inside'] },
+    { scenario: '11 quoted brace path', command: 'rm -rf "{a,/home/u/Documents}"', classes: ['edit-inside'] },
+    { scenario: '11 unchanged pipe semantics', command: 'ls | xargs -I{} cp {} out/', classes: ['read', 'edit-outside', 'edit-inside'] }
+  ]
+
+  for (const { scenario, command, classes } of classRows) {
+    test(`scenario ${scenario}: ${command}`, () => expectClassSet(command, classes))
+  }
+
+  const decisionRows: Array<{ command: string; outcome: string; step: string | null }> = [
+    { command: 'rm -rf {a,/home/u/Documents}', outcome: 'held', step: 'floor-core' },
+    { command: 'rm -rf x/.{,a}./../..', outcome: 'held', step: 'floor-core' },
+    { command: 'cat {a,/home/u/.ssh/id_rsa}', outcome: 'held', step: 'floor-core' },
+    { command: 'echo hi > {a,/home/u/x}', outcome: 'held', step: 'floor-core' },
+    { command: 'cat < {a,/home/u/.ssh/id_rsa}', outcome: 'held', step: 'floor-core' },
+    { command: '{rm,-rf,/home/u/Documents}', outcome: 'held', step: 'floor-core' },
+    { command: "bash -c 'rm -rf {a,/home/u/x}'", outcome: 'held', step: 'floor-core' },
+    { command: 'rm -rf f{1..3}', outcome: 'held', step: 'floor-core' },
+    { command: 'rm -rf {a,}', outcome: 'held', step: 'floor-core' },
+    { command: 'git push {-f,origin,feat/x}', outcome: 'held', step: 'floor-switch' },
+    { command: '{,rm} -rf /home/u/x', outcome: 'judgment', step: null },
+    { command: 'sort -{o..o} /home/u/x a', outcome: 'judgment', step: null },
+    { command: 'mkdir -p src/{a,b}', outcome: 'allow', step: 'fixed-rules' },
+    { command: 'cp a.txt{,.bak}', outcome: 'allow', step: 'fixed-rules' },
+    { command: 'cat src/{a,b}.ts', outcome: 'allow', step: 'fixed-rules' },
+    { command: 'echo hi > {a,b}.txt', outcome: 'allow', step: 'fixed-rules' },
+    { command: 'bun test test/{a,b}.test.ts', outcome: 'allow', step: 'fixed-rules' },
+    { command: 'git diff HEAD@{1} -- src/{a,b}.ts', outcome: 'allow', step: 'fixed-rules' },
+    { command: "find . -name '*.{js,ts}'", outcome: 'allow', step: 'fixed-rules' }
+  ]
+
+  for (const { command, outcome, step } of decisionRows) {
+    test(`scenario 12: ${command} -> ${outcome}@${step}`, () => {
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    })
+  }
+
+  const unpairedClosingRows: Array<{ command: string; classes: ActionClass[]; outcome: string; step: string | null }> = [
+    { command: 'rm -rf {a},/home/u/Documents}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
+    { command: 'cat {a},/home/u/.ssh/id_rsa}', classes: ['read', 'other'], outcome: 'judgment', step: null },
+    { command: 'cp a.txt {b},/home/u/x}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
+    { command: 'rm -rf x/{},../../..}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' },
+    { command: 'rm -rf {a}{x,y},/home/u/Documents}', classes: ['edit-outside'], outcome: 'held', step: 'floor-core' }
+  ]
+  for (const { command, classes, outcome, step } of unpairedClosingRows) {
+    test(`classifies unpaired closing braces conservatively: ${command}`, () => expectClassSet(command, classes))
+    test(`does not allow unpaired closing braces at fixed rules: ${command}`, () => {
+      expect(decideReviewed(command)).toMatchObject({ outcome, step })
+    })
+  }
+
+  const ambiguousDollarRows: Array<{ command: string; classes: ActionClass[] }> = [
+    { command: 'cat {a,$}b', classes: ['read', 'other'] },
+    { command: 'head {a,$}b', classes: ['read', 'other'] },
+    { command: 'cat < {a,$}b', classes: ['read', 'other'] },
+    { command: 'cp {a,$}b a.txt', classes: ['edit-inside', 'other'] },
+    { command: 'git checkout {a,$}b', classes: ['edit-inside', 'other'] },
+    { command: 'git reset --hard {a,$}b', classes: ['edit-inside', 'other'] },
+    { command: 'git branch -D {a,$}b', classes: ['edit-inside', 'other'] }
+  ]
+  for (const { command, classes } of ambiguousDollarRows) {
+    test(`classifies a dollar joined by brace expansion as unseen: ${command}`, () => expectClassSet(command, classes))
+    test(`sends a dollar joined by brace expansion to judgment: ${command}`, () => {
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'judgment', step: null })
+    })
+  }
+
+  for (const command of ['rm -rf {,$}HOME/Documents', 'cp a.txt {b,$}HOME/x']) {
+    test(`keeps a dollar joined to HOME by brace expansion held: ${command}`, () => {
+      expectClassSet(command, ['edit-outside'])
+      expect(decideReviewed(command)).toMatchObject({ outcome: 'held', step: 'floor-core' })
+    })
+  }
+})
