@@ -91,6 +91,7 @@ let document: FakeDocument
 let clock: {
   now: number
   frames: Array<{ id: number; callback: (time: number) => void }>
+  cancelledFrames: Set<number>
   tasks: Array<() => void>
   mutations: Array<() => void>
   nextFrameId: number
@@ -104,7 +105,7 @@ function replaceGlobal(name: string, value: unknown): void {
 
 function environment(): void {
   document = new FakeDocument()
-  clock = { now: 10, frames: [], tasks: [], mutations: [], nextFrameId: 1 }
+  clock = { now: 10, frames: [], cancelledFrames: new Set(), tasks: [], mutations: [], nextFrameId: 1 }
   replaceGlobal('document', document)
   replaceGlobal('performance', { now: () => clock.now })
   replaceGlobal('requestAnimationFrame', function (this: unknown, callback: (time: number) => void) {
@@ -115,6 +116,7 @@ function environment(): void {
   })
   replaceGlobal('cancelAnimationFrame', function (this: unknown, id: number) {
     if (this !== globalThis) throw new TypeError('Illegal invocation')
+    clock.cancelledFrames.add(id)
     clock.frames = clock.frames.filter((frame) => frame.id !== id)
   })
   replaceGlobal('MessageChannel', ControlledMessageChannel)
@@ -165,7 +167,10 @@ function mutate(): void { for (const observer of [...clock.mutations]) observer(
 function runFrameCallbacks(): void {
   clock.now += 16
   const frames = clock.frames.splice(0)
-  for (const frame of frames) frame.callback(clock.now)
+  for (const frame of frames) {
+    if (!clock.cancelledFrames.has(frame.id)) frame.callback(clock.now)
+    clock.cancelledFrames.delete(frame.id)
+  }
 }
 function runPostFrameTask(): void { clock.tasks.shift()?.() }
 function paint(): void {
@@ -250,6 +255,24 @@ test('echo written in a frame callback stops after that frame and splits event-t
   expect(eventToDomMs).toBeGreaterThanOrEqual(0)
   expect(domToPaintMs).toBeGreaterThanOrEqual(0)
   expect(Math.abs(eventToDomMs + domToPaintMs - observation.durationMs)).toBeLessThanOrEqual(0.001)
+  expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
+})
+
+test('an already queued renderer callback cannot cancel observation of its current frame', async () => {
+  environment()
+  const { rows, input } = pane('session-a')
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+  originalRequestAnimationFrame.call(globalThis, () => {
+    rows.textContent = 'SPEED_ECHO worker-a session-a 5 b'
+    globalThis.requestAnimationFrame(() => undefined)
+  })
+  const id = 'echo-pending-renderer'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-a', sequence: 5, key: 'b' })
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'b')
+  runFrameCallbacks()
+  runPostFrameTask()
+  await expect(result).resolves.toMatchObject({ startedAt: 10, endedAt: 26, durationMs: 16 })
   expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
 })
 

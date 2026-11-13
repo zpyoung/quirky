@@ -212,8 +212,9 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     channel: MessageChannel
     frameId: number | null
     frameSequence: number
-    inFrameCallbacks: boolean
+    frameTime: number | null
     active: boolean
+    afterCallback(time: number): void
     ensureFrame(): void
   }
   const root = globalThis as typeof globalThis & {
@@ -254,38 +255,40 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       channel,
       frameId: null,
       frameSequence: 0,
-      inFrameCallbacks: false,
+      frameTime: null,
       active: true,
-      ensureFrame: () => undefined
+      afterCallback(time) {
+        if (!created.active) return
+        const firstCallback = created.frameTime !== time
+        if (firstCallback) {
+          created.frameTime = time
+          created.frameSequence++
+        }
+        for (const observer of created.observers) observer.afterFrame(created.frameSequence)
+        if (firstCallback && created.active) created.channel.port2.postMessage(created.frameSequence)
+      },
+      ensureFrame() {
+        if (!created.active || created.frameId !== null) return
+        created.frameId = created.originalRequestAnimationFrame.call(root, (time) => {
+          created.frameId = null
+          created.afterCallback(time)
+          created.ensureFrame()
+        })
+      }
     }
     hook = created
-    created.ensureFrame = () => {
-      if (!created.active || created.frameId !== null) return
-      created.frameId = created.originalRequestAnimationFrame.call(root, () => {
-        created.frameId = null
-        created.inFrameCallbacks = false
-        const frame = ++created.frameSequence
-        for (const observer of [...created.observers]) observer.afterFrame(frame)
-        if (!created.active) return
-        created.channel.port2.postMessage(frame)
-        created.ensureFrame()
-      })
-    }
     channel.port1.onmessage = (event) => {
       if (!created.active || typeof event.data !== 'number') return
-      for (const observer of [...created.observers]) observer.afterTask(event.data)
+      for (const observer of created.observers) observer.afterTask(event.data)
     }
     created.wrappedRequestAnimationFrame = (callback: FrameRequestCallback) => {
-      const id = created.originalRequestAnimationFrame.call(root, (time) => {
-        created.inFrameCallbacks = true
-        callback(time)
+      return created.originalRequestAnimationFrame.call(root, (time) => {
+        try {
+          callback(time)
+        } finally {
+          created.afterCallback(time)
+        }
       })
-      if (!created.inFrameCallbacks && created.frameId !== null) {
-        created.originalCancelAnimationFrame.call(root, created.frameId)
-        created.frameId = null
-      }
-      created.ensureFrame()
-      return id
     }
     root.__quirkySpeedFrameHook = created
     root.requestAnimationFrame = created.wrappedRequestAnimationFrame

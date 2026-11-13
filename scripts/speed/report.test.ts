@@ -159,7 +159,7 @@ describe('report validation', () => {
 
   test('accepts software workload version 2 while rejecting mixed profile shapes', () => {
     const v1 = report()
-    const v2 = {
+    const v2: SpeedReport = {
       ...v1,
       profile: { ...v1.profile, workloadVersion: 2, compositor: 'software' },
     }
