@@ -875,7 +875,7 @@ describe('terminal pane', () => {
   test('stops after three transient resync retries and reports the error', async () => {
     start([shell1], {
       'quirky.terminal/resync': () => {
-        throw new RpcError(RpcErrorCode.InternalError, 'host busy')
+        throw new RpcError(RpcErrorCode.Internal, 'host busy')
       }
     })
     await open({ worktree: WORKTREE.id })
@@ -969,7 +969,7 @@ describe('terminal pane', () => {
       await mounted!.unmount()
       mounted = null
       await act(async () => {
-        reject(new RpcError(RpcErrorCode.InternalError, 'host busy'))
+        reject(new RpcError(RpcErrorCode.Internal, 'host busy'))
         await Promise.resolve()
         await Promise.resolve()
         await Promise.resolve()
