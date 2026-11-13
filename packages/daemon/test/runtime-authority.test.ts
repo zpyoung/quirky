@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import { renameSync, writeFileSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
 import { join } from 'node:path'
 import { PROTOCOL_VERSION, QuirkyClient } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { startDaemon, type DaemonHandle } from '../src/daemon'
+import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { makeTempHome, startHarness, waitForAsync, type Harness } from './helpers'
 import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
 
@@ -99,6 +101,17 @@ async function clientFor(sessionId?: string, sessionToken?: string, runtime = ha
   if (runtime === harness!.runtime) harness!.clients.push(client)
   else extraClients.push(client)
   return client
+}
+
+async function withScopeToken<T>(scope: ProcessScope, action: () => Promise<T>): Promise<T> {
+  const previous = process.env.QUIRKY_TEST_SCOPE
+  process.env.QUIRKY_TEST_SCOPE = scope.env.QUIRKY_TEST_SCOPE
+  try {
+    return await action()
+  } finally {
+    if (previous === undefined) delete process.env.QUIRKY_TEST_SCOPE
+    else process.env.QUIRKY_TEST_SCOPE = previous
+  }
 }
 
 describe('kernel runtime session authority', () => {
@@ -266,4 +279,78 @@ describe('kernel runtime session authority', () => {
     expect(await restored.callAny(`${pluginId}/caller`, {})).not.toHaveProperty('sessionAuthority')
     expect(await restored.callAny(`${pluginId}/identity`, { sessionId })).toBeNull()
   })
+
+  test('restores a live terminal identity after the PTY host becomes available late', async () => {
+    const { harness: running, client } = await boot()
+    const sessionId = 's_late'
+    const launched = (await client.callAny(`${pluginId}/launch`, { sessionId })) as {
+      identity: { processIncarnation: string }
+    }
+    const sessionToken = childEnv(sessionId).QUIRKY_SESSION_TOKEN
+    await running.daemon.stop()
+
+    const tokenPath = join(running.home, 'pty.token')
+    const hiddenTokenPath = join(running.home, 'pty.token.hidden')
+    renameSync(tokenPath, hiddenTokenPath)
+    const hostEntry = join(running.home, 'exit-pty-host.ts')
+    writeFileSync(hostEntry, '')
+    const scope = createProcessScope(running.home)
+
+    await withScopeToken(scope, async () => {
+      try {
+        restarted = await startDaemon({
+          home: running.home,
+          port: 0,
+          shell: '/bin/zsh',
+          notifier: () => {},
+          cliEntry: '/opt/quirky/cli/main.ts',
+          uiDir: join(running.home, 'no-ui'),
+          builtinPluginsDir: null,
+          ptyConnectTimeoutMs: 300,
+          ptyHostEntry: hostEntry,
+          log: (message) => logs.push(message)
+        })
+
+        const observer = await clientFor(undefined, undefined, restarted.runtime)
+        const status = await observer.callAny('status.get', {}) as { ptyHost: { alive: boolean } }
+        expect(status.ptyHost.alive).toBe(false)
+        expect(await observer.callAny(`${pluginId}/identity`, { sessionId })).toBeNull()
+        const restoredClient = await clientFor(sessionId, sessionToken, restarted.runtime)
+        renameSync(hiddenTokenPath, tokenPath)
+
+        const identity = await waitForAsync(async () => {
+          const current = await observer.callAny(`${pluginId}/identity`, { sessionId }) as {
+            sessionId: string
+            processIncarnation: string
+            source: string
+            live: boolean
+          } | null
+          return current?.source === 'restored_authority' ? current : undefined
+        }, 5000)
+
+        expect(identity).toMatchObject({
+          sessionId,
+          source: 'restored_authority',
+          processIncarnation: launched.identity.processIncarnation,
+          live: true
+        })
+        expect(await restoredClient.callAny(`${pluginId}/caller`, {})).toMatchObject({
+          sessionAuthority: {
+            sessionId,
+            source: 'restored_authority',
+            processIncarnation: launched.identity.processIncarnation,
+            live: true
+          }
+        })
+      } finally {
+        try {
+          await restarted?.stop()
+        } finally {
+          restarted = null
+          await scope.cleanup()
+        }
+      }
+    })
+  }, 15000)
+
 })
