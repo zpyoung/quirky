@@ -47,7 +47,7 @@ function reportText(report: ReportModel): string {
     `${summary.guesses} ${summary.guesses === 1 ? 'guess' : 'guesses'}`,
     summary.sleeps.length === 0 ? 'the machine never slept' : `the machine slept ${summary.sleeps.length} ${summary.sleeps.length === 1 ? 'time' : 'times'}${summary.keptAwake ? '' : ' (not kept awake)'}`
   ]
-  if (report.needsYou.length > 0) lines.push('', 'Needs you', ...report.needsYou.map((need: NeedsYouItem) => `- ${need.title}`))
+  if (report.needsYou.length > 0) lines.push('', 'Needs you', ...report.needsYou.map((need: NeedsYouItem) => `- ${need.title} [${need.id}${need.actions.length > 0 ? `: ${need.actions.join(', ')}` : ''}]`))
   for (const story of report.stories) {
     lines.push('', story.switchesOn.length === 0 ? story.name : `${story.name} (${story.switchesOn.join(', ')} on)`, story.story)
     if (story.handedBackWith.length > 0) lines.push(`Handed back with: ${story.handedBackWith.join(', ')}`)
@@ -100,6 +100,18 @@ export const commands: CliModule['commands'] = {
   async report(_args, ctx) {
     const report = (await ctx.call('quirky.avatar/report', {})) as ReportModel
     ctx.out.result(report, () => reportText(report))
+  },
+
+  /** Resolves one needs-you item with an action, optionally giving it a reason. */
+  async 'resolve-need'(args, ctx) {
+    if (args.positionals.length !== 2) throw ctx.usage('a need id and an action are required')
+    const needId = args.positionals[0]!
+    const action = args.positionals[1]!
+    const params: Record<string, unknown> = { needId, action }
+    if (typeof args.flags.text === 'string') params.text = args.flags.text
+    const result = (await ctx.call('quirky.avatar/resolveNeed', params)) as { ok: boolean; error?: string }
+    if (!result.ok) throw ctx.fail(result.error ?? 'the need was not resolved')
+    ctx.out.result(result, () => `Resolved ${needId} with ${action}.`)
   },
 
   /** Prints the journal newest first, optionally for one worktree. */

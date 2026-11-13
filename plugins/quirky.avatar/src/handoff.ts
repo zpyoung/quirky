@@ -448,6 +448,19 @@ export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
         case 'review-reject':
           closeNeed(need, action, 'rejected', {}, 'mandate-proposal')
           return { ok: true }
+        case 'finding-dismiss':
+        case 'finding-valid': {
+          const findingId = need.detail.findingId
+          if (typeof findingId !== 'string' || findingId.trim() === '') return { ok: false, error: 'invalid: finding' }
+          const valid = action === 'finding-valid'
+          const heldReason = typeof need.detail.reason === 'string' ? need.detail.reason.trim() : ''
+          const reason = answer || (valid ? 'judged valid by you' : heldReason || 'dismissed by you')
+          const result = await app.services.shipping.personVerdict(worktreeId, findingId, valid, reason)
+          if (!result.ok) return result
+          closeNeed(need, action, valid ? 'sent-to-worker' : 'dismissed', { findingId })
+          app.services.brain.wake()
+          return { ok: true }
+        }
         case 'answer': {
           const hasAnswers = answers !== undefined && Object.keys(answers).length > 0
           if (!hasAnswers && answer === '') return { ok: false, error: 'an answer needs text' }
