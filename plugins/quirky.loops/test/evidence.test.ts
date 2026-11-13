@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, watch, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import type { PluginContext, ProcessRunner, RunOptions, RunResult, StructuredMessage } from '@quirky/protocol'
+import { dirname, join } from 'node:path'
+import type { PluginContext, ProcessRunner, ProcessSpawner, RunOptions, RunResult, SpawnExit, SpawnOptions, SpawnedProcess, StructuredMessage } from '@quirky/protocol'
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import type { GatherInput, LoopConfig, LoopSnapshot } from '../src/types'
 import { EvidenceEngine, sessionCumulativeCostUsd } from '../src/evidence'
 import { checkpointChangedPaths, diffTrees, snapshotWorkingTree } from '../src/diff'
 import { parseMarkers } from '../src/markers'
 import { findProtectedPaths } from '../src/progress'
+import { evaluateCondition } from '../src/evaluator'
 
 const roots: string[] = []
 const engines: EvidenceEngine[] = []
@@ -100,7 +101,7 @@ const input = (currentLoop: LoopSnapshot, patch: Partial<GatherInput> = {}): Gat
   loop: currentLoop, n: 1, attempt: 1, treeBefore: null, messages: [], ...patch
 })
 
-function makeContext(root: string, handlers: Record<string, (params: Record<string, unknown>) => unknown | Promise<unknown>> = {}): PluginContext {
+function makeContext(root: string, handlers: Record<string, (params: Record<string, unknown>) => unknown | Promise<unknown>> = {}, processApi: PluginContext['process'] = realProcessRunner()): PluginContext {
   const home = join(root, 'home')
   const quirkyHome = join(root, 'quirky-home')
   const providerHome = join(root, 'provider-home')
@@ -121,7 +122,7 @@ function makeContext(root: string, handlers: Record<string, (params: Record<stri
       }),
       async hooks() { return { env: {}, args: [] } }
     },
-    process: realProcessRunner(),
+    process: processApi,
     async call(method: string, params: Record<string, unknown> = {}) {
       const handler = handlers[method]
       if (handler) return await handler(params)
@@ -148,6 +149,158 @@ function fakeRunner(handler: ProcessHandler = () => runResult()): { runner: Proc
     }
   }
   return { runner, calls }
+}
+type ProcessSpawnCall = { argv: string[]; options: SpawnOptions }
+
+type ControlledStream = {
+  stream: ReadableStream<Uint8Array>
+  fail(error: unknown): void
+  cancellations(): number
+}
+
+function controlledStream(chunks: Uint8Array[] = [], open = false): ControlledStream {
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  let settled = false
+  let cancellationCount = 0
+  const stream = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value
+      for (const chunk of chunks) value.enqueue(chunk)
+      if (!open) {
+        settled = true
+        value.close()
+      }
+    },
+    cancel() {
+      cancellationCount++
+      settled = true
+    }
+  })
+  return {
+    stream,
+    fail(error) {
+      if (settled) return
+      settled = true
+      controller.error(error)
+    },
+    cancellations: () => cancellationCount
+  }
+}
+
+type ScriptedSpawnerOptions = {
+  stdoutChunks?: Uint8Array[]
+  stderrChunks?: Uint8Array[]
+  holdStdout?: boolean
+  holdStderr?: boolean
+  exit?: SpawnExit
+  pendingExit?: boolean
+  spawnError?: Error
+  onSpawn?: (argv: readonly string[], options: SpawnOptions) => void
+}
+
+function makeScriptedSpawner(options: ScriptedSpawnerOptions = {}) {
+  const calls: ProcessSpawnCall[] = []
+  const stopCalls: (Parameters<SpawnedProcess['stop']>[0])[] = []
+  const writeCalls: (string | Uint8Array)[] = []
+  let closeInputCalls = 0
+  const exit = options.exit ?? { exitCode: 0, signal: null, durationMs: 0 }
+  const exitDeferred = Promise.withResolvers<SpawnExit>()
+  let exitSettled = false
+  const exited = exitDeferred.promise
+  const finishExit = (value: SpawnExit) => {
+    if (exitSettled) return
+    exitSettled = true
+    exitDeferred.resolve(value)
+  }
+  if (!options.pendingExit) finishExit(exit)
+  const stdout = controlledStream(options.stdoutChunks, options.holdStdout)
+  const stderr = controlledStream(options.stderrChunks, options.holdStderr)
+  const child: SpawnedProcess = {
+    pid: null,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    stderrTail: () => '',
+    write(data) {
+      writeCalls.push(data)
+      return Promise.resolve(true)
+    },
+    closeInput() {
+      closeInputCalls++
+      return Promise.resolve()
+    },
+    exited,
+    stop(stopOptions) {
+      stopCalls.push(stopOptions)
+      if (options.pendingExit) finishExit({ ...exit, stopped: 'stop' })
+      return exited
+    }
+  }
+  const spawner: ProcessSpawner = {
+    spawn(argv, spawnOptions) {
+      calls.push({ argv: [...argv], options: spawnOptions })
+      options.onSpawn?.(argv, spawnOptions)
+      if (options.spawnError) throw options.spawnError
+      return child
+    }
+  }
+  return { spawner, calls, stdout, stderr, stopCalls, writeCalls, closeInputCalls: () => closeInputCalls }
+}
+
+type EvaluatorTestInput = Parameters<typeof evaluateCondition>[0]
+
+function evaluatorInput(context: PluginContext, root: string, patch: Partial<EvaluatorTestInput> = {}): EvaluatorTestInput {
+  return { context, loop: loop(root), condition: 'done', check: null, messages: [], outputTail: '', ...patch }
+}
+
+function makeEvaluatorContext(root: string, spawner: ProcessSpawner, launch: Partial<PluginContext['launch']> = {}): PluginContext {
+  const base = makeContext(root, {}, spawner as unknown as PluginContext['process'])
+  return { ...base, launch: { ...base.launch, ...launch } } as PluginContext
+}
+
+function evaluatorTempDirs(): Set<string> {
+  return new Set(readdirSync(tmpdir()).filter((name) => name.startsWith('quirky-loop-evaluator-')).map((name) => join(tmpdir(), name)))
+}
+
+async function waitForFile(path: string, timeoutMs = 5_000): Promise<void> {
+  if (existsSync(path)) return
+  const { promise, resolve, reject } = Promise.withResolvers<void>()
+  const watcher = watch(dirname(path), () => {
+    if (existsSync(path)) resolve()
+  })
+  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${path}`)), timeoutMs)
+  try {
+    if (existsSync(path)) resolve()
+    await promise
+  } finally {
+    clearTimeout(timeout)
+    watcher.close()
+  }
+}
+
+async function withEvaluatorDeadline(action: (fire: () => void) => Promise<void>): Promise<void> {
+  const originalSetTimeout = globalThis.setTimeout
+  const originalClearTimeout = globalThis.clearTimeout
+  const fakeTimer = {} as NodeJS.Timeout
+  let fireDeadline: (() => void) | undefined
+  globalThis.setTimeout = ((callback: Parameters<typeof setTimeout>[0], delay?: number) => {
+    if (delay === 120_000) {
+      fireDeadline = callback as () => void
+      return fakeTimer
+    }
+    return originalSetTimeout(callback as () => void, delay)
+  }) as typeof setTimeout
+  globalThis.clearTimeout = ((timer?: NodeJS.Timeout) => {
+    if (timer !== fakeTimer) originalClearTimeout(timer)
+  }) as typeof clearTimeout
+  try {
+    await action(() => {
+      if (!fireDeadline) throw new Error('Evaluator deadline was not armed')
+      fireDeadline()
+    })
+  } finally {
+    globalThis.setTimeout = originalSetTimeout
+    globalThis.clearTimeout = originalClearTimeout
+  }
 }
 
 function expectGitOptions(call: ProcessCall, cwd: string): RunOptions {
@@ -363,6 +516,339 @@ wait
       expect(alive).toBe(false)
     } finally {
       watcher.close()
+    }
+  })
+
+  test('uses context.process.spawn with exact evaluator argv, options, and temporary cwd cleanup', async () => {
+    const root = tempRoot()
+    const argv = ['/fixture/claude', '--read-only']
+    const env = { HOME: '/fixture/home', PATH: '/fixture/bin' }
+    const signal = new AbortController().signal
+    let command = ''
+    let cwdExistedAtSpawn = false
+    const scripted = makeScriptedSpawner({
+      stdoutChunks: [Buffer.from('VERDICT: met\nREASON: all good\n')],
+      onSpawn(_argv, options) {
+        cwdExistedAtSpawn = Boolean(options.cwd && existsSync(options.cwd))
+      }
+    })
+    const context = makeEvaluatorContext(root, scripted.spawner, {
+      commandArgv(value) {
+        command = value
+        return argv
+      },
+      env: () => env
+    })
+
+    const result = await evaluateCondition(evaluatorInput(context, root, { signal }))
+    const call = scripted.calls[0]!
+    const tempCwd = call.options.cwd!
+
+    expect(result).toEqual({ verdict: 'met', reason: 'all good' })
+    expect(command).toBe('claude -p --model haiku --output-format text --permission-mode plan --tools "" --strict-mcp-config --disable-slash-commands')
+    expect(call.argv).toEqual(argv)
+    expect(call.options).toEqual({
+      cwd: tempCwd,
+      env,
+      stdin: 'pipe',
+      stderr: 'pipe',
+      timeoutMs: 120_000,
+      killGraceMs: 2_000,
+      groupGrace: true,
+      signal
+    })
+    expect(tempCwd).toMatch(/quirky-loop-evaluator-/)
+    expect(cwdExistedAtSpawn).toBe(true)
+    expect(existsSync(tempCwd)).toBe(false)
+    expect(scripted.writeCalls).toHaveLength(1)
+    expect(scripted.closeInputCalls()).toBe(1)
+    expect(scripted.stopCalls).toEqual([])
+  })
+
+  test('does not create a temporary cwd or launch an already-aborted evaluator', async () => {
+    const root = tempRoot()
+    const before = [...evaluatorTempDirs()].sort()
+    const controller = new AbortController()
+    controller.abort()
+    let launchCalls = 0
+    const scripted = makeScriptedSpawner()
+    const context = makeEvaluatorContext(root, scripted.spawner, {
+      commandArgv: () => { launchCalls++; return ['/fixture/claude'] },
+      env: () => { launchCalls++; return {} }
+    })
+
+    expect(await evaluateCondition(evaluatorInput(context, root, { signal: controller.signal }))).toEqual({
+      verdict: 'not-met',
+      reason: 'evaluator-aborted'
+    })
+    expect(scripted.calls).toEqual([])
+    expect(launchCalls).toBe(0)
+    expect([...evaluatorTempDirs()].sort()).toEqual(before)
+  })
+
+  test('cleans its temporary cwd when launch resolution or process spawn fails', async () => {
+    const cases = ['argv throws', 'argv empty', 'env throws', 'spawn throws'] as const
+    for (const scenario of cases) {
+      const root = tempRoot()
+      const before = evaluatorTempDirs()
+      const tempCwdsAtLaunch: string[] = []
+      let cwdExistedAtSpawn = false
+      const scripted = makeScriptedSpawner({
+        spawnError: scenario === 'spawn throws' ? new Error('runner disposed') : undefined,
+        onSpawn(_argv, options) {
+          cwdExistedAtSpawn = Boolean(options.cwd && existsSync(options.cwd))
+        }
+      })
+      const newTempCwds = () => [...evaluatorTempDirs()].filter((path) => !before.has(path))
+      const context = makeEvaluatorContext(root, scripted.spawner, {
+        commandArgv() {
+          tempCwdsAtLaunch.push(...newTempCwds())
+          if (scenario === 'argv throws') throw new Error('argv failed')
+          return scenario === 'argv empty' ? [] : ['/fixture/claude']
+        },
+        env: () => {
+          if (scenario === 'env throws') throw new Error('env failed')
+          return {}
+        }
+      })
+
+      expect(await evaluateCondition(evaluatorInput(context, root))).toEqual({
+        verdict: 'not-met',
+        reason: 'evaluator-failed'
+      })
+      expect(tempCwdsAtLaunch).toHaveLength(1)
+      expect(tempCwdsAtLaunch[0]).toMatch(/quirky-loop-evaluator-/)
+      expect(existsSync(tempCwdsAtLaunch[0]!)).toBe(false)
+      expect(newTempCwds()).toEqual([])
+      expect(scripted.calls).toHaveLength(scenario === 'spawn throws' ? 1 : 0)
+      if (scenario === 'spawn throws') expect(cwdExistedAtSpawn).toBe(true)
+    }
+  })
+
+  test('counts raw combined output bytes at N-1 and N, including BOM and invalid UTF-8', async () => {
+    const limit = 256 * 1024
+    const output = Buffer.from('VERDICT: met\nREASON: all good\n')
+    const cases = [
+      { bytes: limit - 1, prefix: Buffer.alloc(0) },
+      { bytes: limit, prefix: Buffer.from([0xef, 0xbb, 0xbf]) },
+      { bytes: limit, prefix: Buffer.from([0xff]) }
+    ]
+    for (const boundary of cases) {
+      const root = tempRoot()
+      const stderr = Buffer.alloc(boundary.bytes - output.byteLength, 0x61)
+      boundary.prefix.copy(stderr)
+      const scripted = makeScriptedSpawner({
+        stdoutChunks: [output.subarray(0, 9), output.subarray(9)],
+        stderrChunks: [stderr.subarray(0, 1), stderr.subarray(1, 3), stderr.subarray(3)]
+      })
+      const context = makeEvaluatorContext(root, scripted.spawner)
+
+      expect(await evaluateCondition(evaluatorInput(context, root))).toEqual({ verdict: 'met', reason: 'all good' })
+      expect(scripted.stopCalls).toEqual([])
+    }
+  })
+
+  test('fails closed on N+1 raw combined bytes after leader exit', async () => {
+    const root = tempRoot()
+    const limit = 256 * 1024
+    const output = Buffer.from('VERDICT: met\nREASON: all good\n')
+    const stdout = Buffer.concat([output, Buffer.alloc(limit / 2, 0x61)])
+    const stderr = Buffer.alloc(limit + 1 - stdout.byteLength, 0x62)
+    expect(stdout.byteLength).toBeLessThan(limit)
+    expect(stdout.byteLength + stderr.byteLength).toBe(limit + 1)
+    Buffer.from([0xef, 0xbb, 0xbf, 0xff]).copy(stderr)
+    const scripted = makeScriptedSpawner({
+      stdoutChunks: [stdout.subarray(0, output.byteLength), stdout.subarray(output.byteLength)],
+      stderrChunks: [stderr.subarray(0, 1), stderr.subarray(1, 3), stderr.subarray(3)],
+      holdStdout: true,
+      holdStderr: true
+    })
+    const context = makeEvaluatorContext(root, scripted.spawner)
+
+    expect(await evaluateCondition(evaluatorInput(context, root))).toEqual({ verdict: 'not-met', reason: 'evaluator-failed' })
+    expect(scripted.stopCalls).toEqual([{ graceMs: 2_000 }])
+    expect(scripted.stdout.cancellations()).toBe(1)
+    expect(scripted.stderr.cancellations()).toBe(1)
+  })
+
+  test('aborts after leader exit while evaluator streams remain open', async () => {
+    const root = tempRoot()
+    const scripted = makeScriptedSpawner({
+      stdoutChunks: [Buffer.from('VERDICT: met\nREASON: ok\n')],
+      holdStdout: true,
+      holdStderr: true
+    })
+    const context = makeEvaluatorContext(root, scripted.spawner)
+    const controller = new AbortController()
+    const evaluation = evaluateCondition(evaluatorInput(context, root, { signal: controller.signal }))
+    await Promise.resolve()
+    controller.abort()
+
+    expect(await evaluation).toEqual({ verdict: 'not-met', reason: 'evaluator-aborted' })
+    expect(scripted.stopCalls).toEqual([{ graceMs: 2_000 }])
+    expect(scripted.stdout.cancellations()).toBe(1)
+    expect(scripted.stderr.cancellations()).toBe(1)
+  })
+
+  test('applies the call deadline after leader exit while evaluator streams remain open', async () => {
+    const root = tempRoot()
+    const scripted = makeScriptedSpawner({
+      stdoutChunks: [Buffer.from('VERDICT: met\nREASON: ok\n')],
+      holdStdout: true,
+      holdStderr: true
+    })
+    const context = makeEvaluatorContext(root, scripted.spawner)
+
+    await withEvaluatorDeadline(async (fireDeadline) => {
+      const evaluation = evaluateCondition(evaluatorInput(context, root))
+      await Promise.resolve()
+      fireDeadline()
+      expect(await evaluation).toEqual({ verdict: 'not-met', reason: 'evaluator-failed' })
+    })
+    expect(scripted.stopCalls).toEqual([{ graceMs: 2_000 }])
+    expect(scripted.stdout.cancellations()).toBe(1)
+    expect(scripted.stderr.cancellations()).toBe(1)
+  })
+
+  test('fails closed on stream errors before or after leader exit', async () => {
+    const root = tempRoot()
+    const before = makeScriptedSpawner({ pendingExit: true, holdStdout: true, holdStderr: true })
+    const beforeContext = makeEvaluatorContext(root, before.spawner)
+    const beforeEvaluation = evaluateCondition(evaluatorInput(beforeContext, root))
+    before.stdout.fail(new Error('pipe broke before exit'))
+
+    expect(await beforeEvaluation).toEqual({ verdict: 'not-met', reason: 'evaluator-failed' })
+    expect(before.stopCalls).toEqual([{ graceMs: 2_000 }])
+    expect(before.stderr.cancellations()).toBe(1)
+
+    const after = makeScriptedSpawner({
+      stdoutChunks: [Buffer.from('VERDICT: met\nREASON: ok\n')],
+      holdStdout: true,
+      holdStderr: true
+    })
+    const afterContext = makeEvaluatorContext(root, after.spawner)
+    const afterEvaluation = evaluateCondition(evaluatorInput(afterContext, root))
+    await Promise.resolve()
+    after.stderr.fail(new Error('pipe broke after exit'))
+
+    expect(await afterEvaluation).toEqual({ verdict: 'not-met', reason: 'evaluator-failed' })
+    expect(after.stopCalls).toEqual([{ graceMs: 2_000 }])
+    expect(after.stdout.cancellations()).toBe(1)
+  })
+
+  test('fails closed for a surviving process group and maps missing verdict lines', async () => {
+    const root = tempRoot()
+    const surviving = makeScriptedSpawner({
+      stdoutChunks: [Buffer.from('VERDICT: met\nREASON: ok\n')],
+      exit: { exitCode: 0, signal: null, durationMs: 0, groupSurvived: true }
+    })
+    const survivingContext = makeEvaluatorContext(root, surviving.spawner)
+    expect(await evaluateCondition(evaluatorInput(survivingContext, root))).toEqual({
+      verdict: 'not-met',
+      reason: 'evaluator-failed'
+    })
+
+    const missingVerdict = makeScriptedSpawner({ stdoutChunks: [Buffer.from('REASON: no verdict\n')] })
+    const missingVerdictContext = makeEvaluatorContext(root, missingVerdict.spawner)
+    expect(await evaluateCondition(evaluatorInput(missingVerdictContext, root))).toEqual({
+      verdict: 'not-met',
+      reason: 'evaluator-unparseable'
+    })
+    expect(surviving.stopCalls).toEqual([])
+    expect(missingVerdict.stopCalls).toEqual([])
+  })
+
+  test('keeps evaluator cwd through the 2 s grace while killing a SIGTERM-ignoring descendant', async () => {
+    const root = tempRoot()
+    const cli = join(root, 'bin', 'claude')
+    const cwdCapture = join(root, 'evaluator-cwd.txt')
+    const descendantReady = join(root, 'descendant-ready')
+    const monitorReady = join(root, 'grace-monitor-ready')
+    const graceStarted = join(root, 'grace-started')
+    writeFileSync(cli, `#!/bin/sh
+pwd > "$EVALUATOR_CWD_CAPTURE"
+(
+  trap '' TERM
+  : > "$EVALUATOR_DESCENDANT_READY"
+  while :; do /bin/sleep 10; done
+) &
+(
+  trap ': > "$EVALUATOR_GRACE_STARTED"' TERM
+  : > "$EVALUATOR_MONITOR_READY"
+  while :; do /bin/sleep 10; done
+) &
+while [ ! -e "$EVALUATOR_DESCENDANT_READY" ] || [ ! -e "$EVALUATOR_MONITOR_READY" ]; do /bin/sleep 0.01; done
+printf 'VERDICT: met\\nREASON: ok\\n'
+exit 0
+`, { mode: 0o755 })
+    const base = makeContext(root)
+    const context = {
+      ...base,
+      launch: {
+        ...base.launch,
+        env: (params: Parameters<PluginContext['launch']['env']>[0]) => ({
+          ...base.launch.env(params),
+          EVALUATOR_CWD_CAPTURE: cwdCapture,
+          EVALUATOR_DESCENDANT_READY: descendantReady,
+          EVALUATOR_MONITOR_READY: monitorReady,
+          EVALUATOR_GRACE_STARTED: graceStarted
+        })
+      }
+    } as PluginContext
+    const controller = new AbortController()
+    const startedAt = Date.now()
+    const watchdog = setTimeout(() => controller.abort(), 4_000)
+    const evaluation = evaluateCondition(evaluatorInput(context, root, { signal: controller.signal }))
+    try {
+      await waitForFile(graceStarted)
+      const tempCwd = readFileSync(cwdCapture, 'utf8').trim()
+      expect(existsSync(tempCwd)).toBe(true)
+      expect(await evaluation).toEqual({ verdict: 'met', reason: 'ok' })
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(1_900)
+      expect(Date.now() - startedAt).toBeLessThan(3_500)
+      expect(existsSync(tempCwd)).toBe(false)
+    } finally {
+      clearTimeout(watchdog)
+      if (!controller.signal.aborted) controller.abort()
+      await evaluation.catch(() => {})
+    }
+  })
+
+  test('aborts a child that never reads a multi-megabyte evaluator prompt', async () => {
+    const root = tempRoot()
+    const cli = join(root, 'bin', 'claude')
+    const startedFile = join(root, 'evaluator-started')
+    writeFileSync(cli, `#!/bin/sh
+: > "$EVALUATOR_STARTED"
+exec /bin/sleep 30
+`, { mode: 0o755 })
+    const base = makeContext(root)
+    const context = {
+      ...base,
+      launch: {
+        ...base.launch,
+        env: (params: Parameters<PluginContext['launch']['env']>[0]) => ({
+          ...base.launch.env(params),
+          EVALUATOR_STARTED: startedFile
+        })
+      }
+    } as PluginContext
+    const controller = new AbortController()
+    const watchdog = setTimeout(() => controller.abort(), 5_000)
+    const startedAt = Date.now()
+    const evaluation = evaluateCondition(evaluatorInput(context, root, {
+      condition: 'x'.repeat(4 * 1024 * 1024),
+      signal: controller.signal
+    }))
+    try {
+      await waitForFile(startedFile)
+      controller.abort()
+      expect(await evaluation).toEqual({ verdict: 'not-met', reason: 'evaluator-aborted' })
+      expect(Date.now() - startedAt).toBeLessThan(3_500)
+    } finally {
+      clearTimeout(watchdog)
+      if (!controller.signal.aborted) controller.abort()
+      await evaluation.catch(() => {})
     }
   })
 
