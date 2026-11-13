@@ -23,8 +23,7 @@ export type MetricResult = {
   budgetMiss: boolean | null
 }
 
-export type SpeedProfile = {
-  workloadVersion: 1
+type SpeedProfileBase = {
   worktrees: 10
   terminals: 20
   diffAddedLines: 5000
@@ -42,6 +41,10 @@ export type SpeedProfile = {
   chromium: string
   imageVersion: string
 }
+
+export type SpeedProfileV1 = SpeedProfileBase & { workloadVersion: 1 }
+export type SpeedProfileV2 = SpeedProfileBase & { workloadVersion: 2; compositor: 'software' }
+export type SpeedProfile = SpeedProfileV1 | SpeedProfileV2
 
 export type SpeedReport = {
   version: 1

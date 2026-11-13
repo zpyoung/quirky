@@ -1,6 +1,6 @@
 {
   "id": "quirky.heimdall",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.12.0",
   "name": "Heimdall",
   "version": "0.1.0",
   "description": "Durable, per-workspace watcher supervision.",
@@ -68,6 +68,7 @@
       },
       {
         "id": "enroll",
+        "timeout": "24h",
         "description": "Authorizes and durably enrolls a watcher, then schedules its first reconciliation immediately.",
         "params": {
           "type": "object",
@@ -106,6 +107,7 @@
       },
       {
         "id": "reconcile",
+        "timeout": "24h",
         "description": "Runs one serialized reconciliation pulse for a watcher.",
         "params": {
           "type": "object",
@@ -137,6 +139,7 @@
       },
       {
         "id": "ownerReady",
+        "timeout": "24h",
         "description": "Accepts the current privately issued owner report; effects still wait for both capability gates and write-ahead execution.",
         "params": {
           "type": "object",
@@ -1256,6 +1259,7 @@
             },
       {
               "id": "command",
+              "timeout": "24h",
               "description": "Run one owner-fenced local or paired Heimdall watcher control.",
               "destructive": true,
               "confirm": "Delete watcher {watcherId} and its saved history? Worker terminals will continue running.",
@@ -3755,6 +3759,7 @@
             },
       {
               "id": "remoteCommand",
+              "timeout": "24h",
               "description": "Run one local owner-fenced Heimdall command for an authenticated paired coordinator.",
               "params": {
                 "type": "object",

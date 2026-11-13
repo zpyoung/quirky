@@ -27,7 +27,7 @@ const HELP = `Usage:
   bun run ui:scoreboard -- --help
 
 Full mode builds and captures every surface in both themes and reviews every image at 85.
-Static-only never starts runtime and cannot certify screenshots. State/action audits are not implemented.
+Static-only never starts runtime and cannot certify screenshots. State/action checks are a syntactic source audit read from each plugin's ui-scoreboard.json.
 --check-ratchet checks enrolled static results without artifacts or runtime.
 Output paths must not exist. No prerequisites are installed automatically.
 Exit: 0 complete passing full run (or valid passing ratchet); 1 measured failures; 2 operational/inventory/argument error; 130/143 after signal cleanup.

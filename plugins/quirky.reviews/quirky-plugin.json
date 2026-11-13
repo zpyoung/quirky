@@ -1,6 +1,6 @@
 {
   "id": "quirky.reviews",
-  "apiVersion": "1.5.0",
+  "apiVersion": "1.12.0",
   "name": "Hosting reviews",
   "version": "0.1.0",
   "description": "Pull-request review, workspace Checks, creation and hosting settings over public hosting APIs.",
@@ -1884,6 +1884,7 @@
       },
       {
         "id": "detailMerge",
+        "timeout": "1h",
         "description": "Merge or queue a pull request after confirmation and an exact-head guard.",
         "destructive": true,
         "confirm": "Confirm {action} for pull request #{number} using {method}?",
@@ -2519,6 +2520,7 @@
       },
       {
         "id": "detailRerunChecks",
+        "timeout": "1h",
         "description": "Rerun actionable checks or failed checks.",
         "params": {
           "type": "object",
@@ -3418,6 +3420,7 @@
       },
       {
         "id": "checksGitAction",
+        "timeout": "1h",
         "description": "Publish, push or sync the exact workspace through quirky.git and then refresh its hosting eligibility.",
         "params": {
           "type": "object",
@@ -3845,6 +3848,7 @@
       },
       {
         "id": "createSubmit",
+        "timeout": "30m",
         "description": "recheck eligibility, push if required, create once, and link confirmed results",
         "params": {
           "type": "object",
