@@ -169,7 +169,7 @@ test('inventory validation rejects a covered check absent from the executable re
 test('inventory validation requires a follow-up for mapped-only rows', () => {
   const inventory = loadCliInventory()
   const rows = loadCliTable()
-  const row = rows.find((candidate) => candidate.id === 'account-add')!
+  const row = rows.find((candidate) => candidate.id === 'orchestration-dispatch')!
   row.followUp = undefined
   expect(codeOf(() => validateRows(inventory, rows))).toBe('missing-follow-up')
 })
@@ -188,7 +188,7 @@ test('catalog validation checks each compiled target and returns refs in table o
   const rows = loadCliTable()
   const checked = validateCatalog(syntheticCatalog(), rows)
   expect(checked.map((entry) => entry.rowId)).toEqual(rows.map((row) => row.id))
-  expect(checked.find((entry) => entry.rowId === 'account-add')?.refs.length).toBeGreaterThan(0)
+  expect(checked.find((entry) => entry.rowId === 'orchestration-dispatch')?.refs.length).toBeGreaterThan(0)
   expect(checked.find((entry) => entry.rowId === 'serve')?.refs).toEqual([])
 })
 
