@@ -12,7 +12,6 @@
   "plugins/quirky.browser/src/runtime/defaults.ts": 1,
   "plugins/quirky.browser/src/runtime/driver.ts": 1,
   "plugins/quirky.checks/executor.ts": 2,
-  "plugins/quirky.editor/src/daemon/explorer.ts": 1,
   "plugins/quirky.editor/src/markdown/pdf.ts": 1,
   "plugins/quirky.editor/src/notebook/python.ts": 1,
   "plugins/quirky.editor/src/notebook/service.ts": 1,
