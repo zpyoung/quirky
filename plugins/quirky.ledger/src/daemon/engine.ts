@@ -545,7 +545,13 @@ export class LedgerEngine {
     const now = isoNow()
     const newLedgerId = randomUUID()
     const ledgerId = this.store!.transaction(() => {
-      let ledger = this.store!.get<LedgerRow>('SELECT * FROM ledgers WHERE tier = ? AND owner_id = ?', resolved.owner!.owner.tier, resolved.owner!.owner.id)
+      let ledger = request.target?.ledgerId !== undefined
+        ? this.store!.get<LedgerRow>('SELECT * FROM ledgers WHERE ledger_id = ?', request.target.ledgerId)
+        : this.store!.get<LedgerRow>('SELECT * FROM ledgers WHERE tier = ? AND owner_id = ?', resolved.owner!.owner.tier, resolved.owner!.owner.id)
+      if (request.target?.ledgerId !== undefined) {
+        if (!ledger) this.fail('not-found', `ledger ${request.target.ledgerId} not found`)
+        if (ledger.tier !== resolved.owner!.owner.tier || ledger.owner_id !== resolved.owner!.owner.id) this.fail('owner-missing', 'filing requires the resolved live project or group owner')
+      }
       if (!ledger) {
         const identity = resolved.owner!.owner.tier === 'project'
           ? this.store!.get<{ identity_key: string }>('SELECT identity_key FROM repo_identities WHERE repo_id = ?', resolved.owner!.owner.id)?.identity_key ?? null
