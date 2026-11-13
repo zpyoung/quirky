@@ -62,11 +62,12 @@ export async function deactivate(): Promise<void> {
   unsubscribe = undefined
   const current = editor
   editor = undefined
+  const currentMarkdown = markdown
+  markdown = undefined
+  currentMarkdown?.dispose()
   await current?.dispose()
-  await markdown?.dispose()
   await notebook?.dispose()
   await viewers?.dispose()
-  markdown = undefined
   notebook = undefined
   viewers = undefined
 }
