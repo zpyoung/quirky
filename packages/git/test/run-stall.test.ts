@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test'
+import { describe, expect, setSystemTime, spyOn, test } from 'bun:test'
 import { GitError } from '../src/index'
 import { git, gitScheduler, runGit } from '../src/run'
 
@@ -9,13 +9,15 @@ type TrackedStream = {
 
 type StubChild = {
   process: {
+    pid: number
     stdout: ReadableStream<Uint8Array>
     stderr: ReadableStream<Uint8Array>
     exited: Promise<number>
     readonly exitCode: number | null
-    kill(): void
+    readonly signalCode: string | null
   }
   kills: number
+  groupKill(signal: 'SIGTERM' | 'SIGKILL'): void
   stdoutCancellations(): number
   stderrCancellations(): number
 }
@@ -34,6 +36,7 @@ function trackedOutputStream(bytes: Uint8Array, stalled: boolean, neverCancel = 
   })
   return { stream, get cancellations() { return stats.cancellations } }
 }
+let nextFakePid = 100_000
 
 function makeChild(
   exitCode: number | null,
@@ -41,27 +44,32 @@ function makeChild(
   stderr: TrackedStream
 ): StubChild {
   let currentExitCode = exitCode
+  let currentSignalCode: string | null = null
   let settled = false
   const { promise: exited, resolve: finish } = Promise.withResolvers<number>()
-  const resolveExit = (code: number) => {
+  const resolveExit = (code: number | null, signal: string | null = null) => {
     if (settled) return
     settled = true
     currentExitCode = code
-    finish(code)
+    currentSignalCode = signal
+    finish(code ?? 0)
   }
   if (exitCode !== null) resolveExit(exitCode)
   const child: StubChild = {
     process: {
+      pid: nextFakePid++,
       stdout: stdout.stream,
       stderr: stderr.stream,
       exited,
       get exitCode() { return currentExitCode },
-      kill() {
-        child.kills++
-        if (currentExitCode === null) resolveExit(143)
-      }
+      get signalCode() { return currentSignalCode }
     },
     kills: 0,
+    groupKill(signal) {
+      if (settled) return
+      child.kills++
+      resolveExit(null, signal)
+    },
     stdoutCancellations: () => stdout.cancellations,
     stderrCancellations: () => stderr.cancellations,
   }
@@ -74,6 +82,16 @@ async function withSpawnStub<T>(
 ): Promise<T> {
   const children: StubChild[] = []
   let calls = 0
+  const originalKill = process.kill.bind(process)
+  const processKill = spyOn(process, 'kill')
+  processKill.mockImplementation(((pid: number, signal?: NodeJS.Signals | number) => {
+    const child = children.find((entry) => pid === -entry.process.pid)
+    if (child && (signal === 'SIGTERM' || signal === 'SIGKILL')) {
+      child.groupKill(signal)
+      return true
+    }
+    return originalKill(pid, signal)
+  }) as typeof process.kill)
   const spawn = spyOn(Bun, 'spawn')
   spawn.mockImplementation(() => {
     const index = calls++
@@ -85,6 +103,7 @@ async function withSpawnStub<T>(
     return await run({ children, calls: () => calls })
   } finally {
     spawn.mockRestore()
+    processKill.mockRestore()
   }
 }
 
@@ -98,6 +117,7 @@ type ControlledTimer = {
 
 async function withControlledTimers<T>(run: (timers: ControlledTimer[]) => Promise<T>): Promise<T> {
   const timers: ControlledTimer[] = []
+  setSystemTime(Date.now())
   const setTimeoutMock = spyOn(globalThis, 'setTimeout')
   const clearTimeoutMock = spyOn(globalThis, 'clearTimeout')
   // the timer stub does not need Node's promisify metadata.
@@ -132,6 +152,7 @@ async function withControlledTimers<T>(run: (timers: ControlledTimer[]) => Promi
   } finally {
     clearTimeoutMock.mockRestore()
     setTimeoutMock.mockRestore()
+    setSystemTime()
   }
 }
 
@@ -278,7 +299,8 @@ describe('runGit output stalls', () => {
         () => undefined,
         (error: unknown) => error
       )
-      expect(failure).toBe(streamError)
+      expect(failure).toBeInstanceOf(GitError)
+      expect(failure).toMatchObject({ exitCode: -1, message: 'failed to run git: stream failed' })
       expect(calls()).toBe(1)
       expect(gitScheduler.active).toBe(0)
     })
@@ -288,14 +310,16 @@ describe('runGit output stalls', () => {
 describe('runGit process deadlines and output stalls', () => {
   test('does not kill or time out a child that exited before its deadline', async () => {
     await withControlledTimers(async (timers) => {
+      const startedAt = Date.now()
       const child = standardChild(0, 'stdout')
       await withSpawnStub(() => child, async ({ calls }) => {
         const resultPromise = runGit(process.cwd(), ['tag', 'probe'], { timeoutMs: 5, stallMs: 20 })
         await flushMicrotasks()
         expect(calls()).toBe(1)
-        const deadline = timers.find((timer) => timer.delay === 5)
+        const deadline = timers.find((timer) => timer.delay > 0 && timer.delay <= 5)
         expect(deadline).toBeDefined()
         expect(deadline!.cleared).toBe(true)
+        setSystemTime(startedAt + 1)
         deadline!.fireQueued()
         expect(child.kills).toBe(0)
         const outputGuards = timers.filter((timer) => timer.delay === 20 && !timer.cleared)
@@ -315,6 +339,7 @@ describe('runGit process deadlines and output stalls', () => {
 
   test('kills a live child at its deadline and preserves timed-out exit through a pipe stall', async () => {
     await withControlledTimers(async (timers) => {
+      const startedAt = Date.now()
       const stdout = trackedOutputStream(stdoutBytes, true, true)
       const stderr = trackedOutputStream(stderrBytes, false)
       const child = makeChild(null, stdout, stderr)
@@ -322,13 +347,11 @@ describe('runGit process deadlines and output stalls', () => {
         const resultPromise = runGit(process.cwd(), ['tag', 'probe'], { timeoutMs: 5, stallMs: 20 })
         await flushMicrotasks()
         expect(calls()).toBe(1)
-        const deadline = timers.find((timer) => timer.delay === 5)
+        const deadline = timers.find((timer) => timer.delay > 0 && timer.delay <= 5)
         expect(deadline).toBeDefined()
+        setSystemTime(startedAt + 5)
         deadline!.fire()
         await flushMicrotasks()
-        const outputGuards = timers.filter((timer) => timer.delay === 20 && !timer.cleared)
-        expect(outputGuards.length).toBeGreaterThan(0)
-        for (const guard of outputGuards) guard.fire()
         const result = await resultPromise
         expect(result).toMatchObject({ exitCode: 143, stderr: 'diagnostic\n', timedOut: true })
         expect(Array.from(result.stdout)).toEqual(Array.from(stdoutBytes))

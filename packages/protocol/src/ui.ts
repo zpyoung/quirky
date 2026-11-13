@@ -1,3 +1,4 @@
+import type { TerminalStreamOptions } from './client'
 import type { NativeBrowserCapability } from './native-browser'
 import type { QuirkyEvent } from './rpc'
 import type { UiToolEntry, UiToolLayout, UiToolSlot } from './tool-slots'
@@ -293,13 +294,21 @@ export type UiToastState = {
 export type UiState = { windows: UiWindowInfo[]; layout: UiLayout; slots: UiSlotState[]; toasts: UiToastState[] }
 
 /**
+ * A mounted view may accept new input in place; false or no updater asks the host to remount.
+ * Cleanup remains callable for every slot kind. Plugin API 1.7.0.
+ */
+export type MountCleanup = (() => void) & {
+  updateInput?(input: unknown): boolean
+}
+
+/**
  * Renders a slot into `element`; the returned function cleans up. `report` sends a JSON summary
  * of what the slot shows. A view embedded with `mountView` gets `input` and no `report`.
  */
 export type MountFunction = (
   element: HTMLElement,
   props: { input?: unknown; report?(state: unknown): void }
-) => (() => void) | void
+) => MountCleanup | void
 
 /** Runs a command, with the arguments it was invoked with. */
 export type CommandHandler = (args?: unknown) => unknown
@@ -359,7 +368,11 @@ export type UiPluginContext = {
   /** Listens to layout changes; the returned function unsubscribes. */
   onLayout(listener: (layout: UiLayout) => void): () => void
   /** Listens to binary stream frames tagged `streamId`; the returned function unsubscribes. */
-  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void
+  onStream(
+    streamId: number,
+    listener: (bytes: Uint8Array) => void,
+    options?: TerminalStreamOptions
+  ): () => void
   /** Listens to connection status changes; the returned function unsubscribes. */
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** Shows a confirm dialog; resolves true when the person confirms. */

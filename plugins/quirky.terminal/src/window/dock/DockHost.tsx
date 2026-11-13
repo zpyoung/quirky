@@ -3,6 +3,7 @@ import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { TerminalPaneView, type TerminalPaneHandle, type TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { WorkspaceController } from '../workspace/controller'
 import { DEFAULT_GUTTER_ROWS, dockHeight, gutterRowsAfterDrag, shouldMountDock } from './geometry'
+import { DockLoader } from './loader'
 import { isDockState, type DockHostReport, type DockState, type DockTransport } from './types'
 import { useBoxSize } from '../workspace/useBoxSize'
 
@@ -48,7 +49,6 @@ export function DockHost(props: Props) {
   onHandleRef.current = onHandle
   const onPaneFocusRef = useRef(terminalProps.onFocus)
   onPaneFocusRef.current = terminalProps.onFocus
-  const requestSequence = useRef(0)
   const reportSequence = useRef(0)
   const reportSignature = useRef<string | null>(null)
   const focusWanted = useRef(false)
@@ -80,51 +80,50 @@ export function DockHost(props: Props) {
     [paneId, sessionId]
   )
 
-  const loadDock = useCallback(async () => {
-    const sequence = ++requestSequence.current
-    try {
-      const result = await context.call('quirky.terminal-dock/get', { pane: paneId, session: sessionId })
-      if (sequence !== requestSequence.current) return
-      if (!isDockState(result) || result.pane !== paneId || result.session !== sessionId) throw new Error('The dock state response was invalid.')
-      acceptDock(result)
-      setTransport('connected')
-    } catch (error) {
-      if (sequence !== requestSequence.current) return
-      const previous = dockRef.current
-      const showError = Boolean(previous?.enabled && previous.supported && previous.docked)
-      dockRef.current = null
-      setDock(null)
-      setHostError(showError ? messageOf(error) : null)
-      setTransport('offline')
-    }
-  }, [acceptDock, context, paneId, sessionId])
-
   useEffect(() => {
+    const loader = new DockLoader({
+      call: (method, params) => context.call(method, params),
+      pane: paneId,
+      session: sessionId,
+      onState: (next) => {
+        acceptDock(next)
+        setTransport('connected')
+      },
+      onFailure: (error) => {
+        const previous = dockRef.current
+        const showError = Boolean(previous?.enabled && previous.supported && previous.docked)
+        dockRef.current = null
+        setDock(null)
+        setHostError(showError ? messageOf(error) : null)
+        setTransport('offline')
+      }
+    })
     const onEvent = (event: QuirkyEvent) => {
       if (event.type !== 'quirky.terminal-dock/changed' || !('data' in event)) return
       const data = event.data
       if (typeof data !== 'object' || data === null || Array.isArray(data)) return
       if (!('pane' in data) || data.pane !== paneId || !('state' in data) || !isDockState(data.state)) return
-      requestSequence.current += 1
+      loader.settle()
       acceptDock(data.state)
       setTransport('connected')
     }
     const unsubscribe = context.subscribe(onEvent)
     const unsubscribeConnection = context.onConnection((status) => {
       if (status === 'reconnecting') {
+        loader.settle()
         setTransport('reconnecting')
         return
       }
       setTransport('connected')
-      void loadDock()
+      void loader.load()
     })
-    void loadDock()
+    void loader.load()
     return () => {
-      requestSequence.current += 1
       unsubscribe()
       unsubscribeConnection()
+      loader.dispose()
     }
-  }, [acceptDock, context, loadDock, paneId])
+  }, [acceptDock, context, paneId, sessionId])
 
   const requested = Boolean(dock?.enabled && dock.supported && dock.docked)
   const shownRows = resize?.previewRows ?? rows
@@ -377,6 +376,7 @@ export function DockHost(props: Props) {
           context={context}
           sessionId={sessionId}
           active={active}
+          autoFocus={!controller.suppressLayoutAutoFocus}
           dragging={workspaceDragging || resize !== null}
           suppressAutoFocus={suppressTerminalFocus}
           onState={terminalProps.onState}

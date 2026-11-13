@@ -1,8 +1,22 @@
+import { constants as osConstants } from 'node:os'
 import { resolve } from 'node:path'
+import {
+  createProcessRunner,
+  DEFAULT_MAX_OUTPUT_BYTES,
+  ProcessStalledError
+} from '@quirky/process'
+import type { OwnedProcessRunner, SpawnExit, SpawnedProcess } from '@quirky/process'
 import { GitError } from './index'
 import { createGitScheduler } from './scheduler'
 
 export { createGitScheduler, DEFAULT_GIT_CONCURRENCY, type GitScheduler, type GitSchedulerOptions, type GitSlotResult } from './scheduler'
+
+/** Default wall-clock deadline for read-only git commands when `timeoutMs` is omitted. */
+export const DEFAULT_GIT_READ_TIMEOUT_MS = 30_000
+/** Default wall-clock deadline for mutating git commands when `timeoutMs` is omitted. */
+export const DEFAULT_GIT_WRITE_TIMEOUT_MS = 120_000
+/** Default per-stream output byte cap inherited from `@quirky/process`. */
+export const DEFAULT_GIT_MAX_OUTPUT_BYTES = DEFAULT_MAX_OUTPUT_BYTES
 
 /** Bounds git children and coalesces post-arrival reads across the package. */
 export const gitScheduler = createGitScheduler()
@@ -24,7 +38,13 @@ export function withGitWrite<T>(work: () => Promise<T>): Promise<T> {
   return gitScheduler.withWrite(work)
 }
 
-export type GitResult = { stdout: Uint8Array; stderr: string; exitCode: number; timedOut?: boolean }
+export type GitResult = {
+  stdout: Uint8Array
+  stderr: string
+  exitCode: number
+  timedOut?: boolean
+  overflow?: boolean
+}
 
 export type RunGitOptions = {
   timeoutMs?: number
@@ -36,15 +56,26 @@ export type RunGitOptions = {
   network?: boolean
   /** Extra environment variables, applied last. */
   env?: Record<string, string>
-  /** How long git's output may stay unfinished after git exited before the run counts as stalled; default `PIPE_STALL_MS` (ten times that for a command that may write). */
+  /** How long git's output may stay unfinished after git exited before the run counts as stalled. */
   stallMs?: number
   /** Joins a post-arrival cohort for identical reads without stdin; defaults to true. */
   share?: boolean
+  /** Per-stream output byte limit; defaults to `DEFAULT_GIT_MAX_OUTPUT_BYTES` and is part of the read cohort key. */
+  maxOutputBytes?: number
+}
+
+export type StreamNullRecordsOptions = {
+  timeoutMs?: number
+  stallMs?: number
 }
 
 /** Quiet time after git exited, or after its last chunk, past which a read of its output counts as stalled. */
 export const PIPE_STALL_MS = 1000
 const PIPE_STALL_ATTEMPTS = 3
+
+/** Shared runners retain one-shot process ownership while the git scheduler remains the sole queue. */
+export const readRunner: OwnedProcessRunner = createProcessRunner({ owner: 'git', stallMs: PIPE_STALL_MS })
+export const writeRunner: OwnedProcessRunner = createProcessRunner({ owner: 'git', stallMs: PIPE_STALL_MS * 10 })
 
 /**
  * Git exited but a pipe of its output never delivered its end. Bun 1.4.0 on Linux can lose the
@@ -89,8 +120,8 @@ export async function readChunk(reader: ReadableStreamDefaultReader<Uint8Array>,
   }
 }
 
-/** All pipe bytes; only mutation collection may keep partial bytes after the post-exit stall guard. */
-async function drain(stream: ReadableStream<Uint8Array>, exited: Promise<unknown>, stallMs: number, allowPartial = false): Promise<Uint8Array> {
+/** All the bytes of a git pipe, rejecting an unfinished stream after the leader exits. */
+async function drain(stream: ReadableStream<Uint8Array>, exited: Promise<unknown>, stallMs: number): Promise<Uint8Array> {
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -101,8 +132,6 @@ async function drain(stream: ReadableStream<Uint8Array>, exited: Promise<unknown
       chunks.push(value)
       total += value.byteLength
     }
-  } catch (error) {
-    if (!allowPartial || !(error instanceof PipeStalledError)) throw error
   } finally {
     reader.releaseLock()
   }
@@ -123,22 +152,48 @@ export function drainText(proc: { stderr: unknown; exited: Promise<unknown> }, s
 }
 
 /**
- * Runs `attempt` again, up to three times in all, when git's output stalls after git exited; only
- * for work that reads and keeps no state between attempts. Fails with `GitError` when every
- * attempt stalls.
+ * Normalizes a non-stopped process exit into a numeric status. The caller must inspect spawn errors
+ * and stopped results before calling this function.
  */
-export async function retryStalled<T>(attempt: () => Promise<T>): Promise<T> {
-  for (let tried = 1; ; tried++) {
+export function normalizeExitCode(exitCode: number | null, signal: string | null): number {
+  if (exitCode !== null) return exitCode
+  if (signal !== null) return 128 + ((osConstants.signals as Record<string, number>)[signal] ?? 15)
+  throw new GitError('failed to run git: process exited without status or signal', '', -1)
+}
+
+/**
+ * Runs `attempt` at most three times inside one wall-clock budget. Only pipe stalls are retried;
+ * launch failures, aborts and every other failure propagate without another attempt.
+ */
+export function retryStalled<T>(attempt: (remainingTimeoutMs: number) => Promise<T>, timeoutMs = DEFAULT_GIT_READ_TIMEOUT_MS): Promise<T> {
+  return retryStalledUntil(attempt, Date.now() + timeoutMs)
+}
+
+async function retryStalledUntil<T>(attempt: (remainingTimeoutMs: number) => Promise<T>, deadline: number): Promise<T> {
+  let attempts = 0
+  let lastStall: PipeStalledError | undefined
+  for (;;) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new GitError(`${lastStall?.message ?? 'git output did not finish'} after ${attempts} attempts`, '', -1)
+    attempts++
     try {
-      return await attempt()
-    } catch (err) {
-      if (!(err instanceof PipeStalledError)) throw err
-      if (tried >= PIPE_STALL_ATTEMPTS) throw new GitError(`${err.message} after ${tried} attempts`, '', -1)
+      return await attempt(remaining)
+    } catch (error) {
+      if (!(error instanceof PipeStalledError)) throw error
+      lastStall = error
+      if (attempts >= PIPE_STALL_ATTEMPTS || Date.now() >= deadline) {
+        throw new GitError(`${error.message} after ${attempts} attempts`, '', -1)
+      }
     }
   }
 }
 
 const BASE_ENV = { GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' }
+const GIT_CONFIG_OVERRIDES = [
+  ['core.fsmonitor', 'false'],
+  ['gc.autoDetach', 'false'],
+  ['maintenance.autoDetach', 'false']
+] as const
 
 /**
  * The ssh command a network call should use: the caller's `GIT_SSH_COMMAND` untouched when set,
@@ -152,8 +207,8 @@ async function batchSshCommand(cwd: string): Promise<string | null> {
   return `${base || 'ssh'} -o BatchMode=yes`
 }
 
-/** The environment every git child gets for `options`. */
-export async function gitEnv(cwd: string, options: RunGitOptions = {}): Promise<Record<string, string | undefined>> {
+/** The environment every git child gets, with daemon settings appended after caller configuration. */
+export async function gitEnv(cwd: string, options: RunGitOptions = {}): Promise<Record<string, string>> {
   const env: Record<string, string | undefined> = { ...process.env, ...BASE_ENV }
   if (options.readOnly) env.GIT_OPTIONAL_LOCKS = '0'
   if (options.network) {
@@ -162,44 +217,78 @@ export async function gitEnv(cwd: string, options: RunGitOptions = {}): Promise<
     env.GIT_ASKPASS = ''
     env.SSH_ASKPASS = ''
   }
-  return { ...env, ...options.env }
+  Object.assign(env, options.env)
+
+  const configuredCount = Number(env.GIT_CONFIG_COUNT ?? 0)
+  const count = Number.isSafeInteger(configuredCount) && configuredCount >= 0 ? configuredCount : 0
+  env.GIT_CONFIG_COUNT = String(count + GIT_CONFIG_OVERRIDES.length)
+  for (let i = 0; i < GIT_CONFIG_OVERRIDES.length; i++) {
+    const [key, value] = GIT_CONFIG_OVERRIDES[i]!
+    env[`GIT_CONFIG_KEY_${count + i}`] = key
+    env[`GIT_CONFIG_VALUE_${count + i}`] = value
+  }
+  return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined))
 }
 
+function failedToRunGit(error: unknown): GitError {
+  return new GitError(`failed to run git: ${error instanceof Error ? error.message : String(error)}`, '', -1)
+}
+
+function timedOutResult(): GitResult {
+  return { stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true }
+}
+
+
 /**
- * Runs `git` with an args array in `cwd`; never throws on a non-zero exit. With `timeoutMs` a live
- * process is killed once it elapses and the result has `timedOut: true`. Read-only runs retry
+ * Runs `git` through the shared process runner; never throws on a non-zero exit. Each attempt and
+ * scheduler wait shares the deadline measured from this call's entry. Read-only runs retry
  * post-exit output stalls, failing with `GitError` after three attempts. Mutations never retry:
  * they preserve the child's exit status and bytes already drained if its output stalls.
  */
 export async function runGit(cwd: string, args: string[], options: RunGitOptions = {}): Promise<GitResult> {
+  const timeoutMs = options.timeoutMs ?? (options.readOnly ? DEFAULT_GIT_READ_TIMEOUT_MS : DEFAULT_GIT_WRITE_TIMEOUT_MS)
+  const deadline = Date.now() + timeoutMs
+  const runOptions: RunGitOptions = { ...options, timeoutMs }
+
   if (!options.readOnly) {
     return withGitWrite(async () => {
-      const env = await resolvedGitEnv(cwd, options)
-      return runGitOnce(cwd, args, options, env)
+      const env = await resolvedGitEnv(cwd, runOptions)
+      return runGitOnce(cwd, args, runOptions, env, deadline).catch((error) => {
+        throw error instanceof PipeStalledError ? new GitError(`git ${args[0]}: ${error.message}`, '', -1) : error
+      })
     })
   }
+
+  const env = await resolvedGitEnv(cwd, runOptions)
+  if (Date.now() >= deadline) return timedOutResult()
   const share = options.input === undefined && options.share !== false
-  const deadline = share && options.timeoutMs !== undefined ? Date.now() + options.timeoutMs : undefined
-  const env = await resolvedGitEnv(cwd, options)
   const run = () => {
-    const remaining = deadline === undefined ? undefined : deadline - Date.now()
-    if (remaining !== undefined && remaining <= 0) {
-      return Promise.resolve<GitResult>({ stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true })
-    }
-    const runOptions = remaining === undefined ? options : { ...options, timeoutMs: remaining }
-    return retryStalled(() => runGitOnce(cwd, args, runOptions, env))
+    if (Date.now() >= deadline) return Promise.resolve(timedOutResult())
+    return retryStalledUntil(
+      (remainingTimeoutMs) => runGitOnce(cwd, args, { ...runOptions, timeoutMs: remainingTimeoutMs }, env, deadline),
+      deadline
+    )
   }
   if (!share) return run()
-  const entries = Object.entries(env).filter((entry) => entry[1] !== undefined).sort(([a], [b]) => a.localeCompare(b))
-  const key = JSON.stringify(['runGit', resolve(cwd), args, entries, options.timeoutMs ?? null, options.stallMs ?? null])
+
+  const entries = Object.entries(env).sort(([a], [b]) => a.localeCompare(b))
+  const key = JSON.stringify([
+    'runGit',
+    resolve(cwd),
+    args,
+    entries,
+    timeoutMs,
+    options.stallMs ?? null,
+    options.maxOutputBytes ?? null
+  ])
   return shareGitRead(key, run, (result) => ({ ...result, stdout: result.stdout.slice() }))
 }
 
-async function resolvedGitEnv(cwd: string, options: RunGitOptions): Promise<Record<string, string | undefined>> {
+async function resolvedGitEnv(cwd: string, options: RunGitOptions): Promise<Record<string, string>> {
   try {
     return await gitEnv(cwd, options)
-  } catch (err) {
-    throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
+  } catch (error) {
+    throw failedToRunGit(error)
   }
 }
 
@@ -207,49 +296,164 @@ async function runGitOnce(
   cwd: string,
   args: string[],
   options: RunGitOptions,
-  env: Record<string, string | undefined>
+  env: Record<string, string>,
+  deadline: number
 ): Promise<GitResult> {
   const input = typeof options.input === 'string' ? new TextEncoder().encode(options.input) : options.input
-  const slot = await gitScheduler.withSlot(options.readOnly ? 'read' : 'write', options.timeoutMs, async (remainingTimeoutMs) => {
-    let proc: ReturnType<typeof Bun.spawn>
-    try {
-      proc = Bun.spawn(['git', ...args], { cwd, env, stdin: input ?? 'ignore', stdout: 'pipe', stderr: 'pipe' })
-    } catch (err) {
-      throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
-    }
-    let timedOut = false
-    let didExit = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const exited = proc.exited.then((code) => {
-      didExit = true
-      clearTimeout(timer)
-      return code
+  const scopedRunner = options.stallMs === undefined ? undefined : createProcessRunner({ owner: 'git', stallMs: options.stallMs })
+  const runner = scopedRunner ?? (options.readOnly ? readRunner : writeRunner)
+  try {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return timedOutResult()
+    const slot = await gitScheduler.withSlot(options.readOnly ? 'read' : 'write', remaining, async (slotRemainingMs) => {
+      try {
+        const timeout = Math.min(deadline - Date.now(), slotRemainingMs ?? remaining)
+        if (timeout <= 0) return timedOutResult()
+        let result
+        try {
+          result = await runner.run(['git', ...args], {
+            cwd,
+            env,
+            input,
+            timeoutMs: timeout,
+            maxOutputBytes: options.maxOutputBytes ?? DEFAULT_GIT_MAX_OUTPUT_BYTES,
+            rerunnable: false
+          })
+        } catch (error) {
+          if (error instanceof ProcessStalledError) {
+            if (options.readOnly || !error.partialResult) throw new PipeStalledError(true)
+            result = error.partialResult
+          } else {
+            throw failedToRunGit(error)
+          }
+        }
+
+        if (result.spawnError !== undefined) throw failedToRunGit(result.spawnError.message)
+        if (result.stopped === 'aborted') throw new GitError(`git ${args[0]} aborted`, result.stderr, -1)
+        if (result.stopped === 'timeout') {
+          return { stdout: result.stdout, stderr: result.stderr, exitCode: 143, timedOut: true }
+        }
+        if (result.stopped === 'overflow') {
+          return { stdout: result.stdout, stderr: result.stderr, exitCode: 137, overflow: true }
+        }
+        return {
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: normalizeExitCode(result.exitCode, result.signal)
+        }
+      } finally {
+        if (scopedRunner) await scopedRunner.dispose()
+      }
     })
-    if (remainingTimeoutMs !== undefined) timer = setTimeout(() => {
-      if (didExit || proc.exitCode !== null) return
-      timedOut = true
-      proc.kill()
-    }, remainingTimeoutMs)
-    try {
-      const stallMs = options.stallMs ?? (options.readOnly ? PIPE_STALL_MS : PIPE_STALL_MS * 10)
-      const [stdout, stderr, exitCode] = await Promise.all([
-        drain(proc.stdout as ReadableStream<Uint8Array>, exited, stallMs, !options.readOnly),
-        drain(proc.stderr as ReadableStream<Uint8Array>, exited, stallMs, !options.readOnly),
-        exited
-      ])
-      return { stdout, stderr: new TextDecoder().decode(stderr), exitCode, ...(timedOut ? { timedOut } : {}) }
-    } finally {
-      clearTimeout(timer)
-      if (!didExit && proc.exitCode === null) proc.kill()
-      await exited
-    }
-  })
-  return slot.timedOut ? { stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true } : slot.value
+    return slot.timedOut ? timedOutResult() : slot.value
+  } finally {
+    if (scopedRunner) await scopedRunner.dispose()
+  }
+}
+
+/**
+ * Runs one read-only git command and consumes its stdout as NUL-separated records. The process is
+ * stopped in `finally` when the consumer stops early or throws; retry ownership stays with callers.
+ */
+export async function streamNullRecords(
+  cwd: string,
+  args: string[],
+  onRecord: (record: string) => boolean | Promise<boolean>,
+  options: StreamNullRecordsOptions = {}
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_GIT_READ_TIMEOUT_MS
+  const deadline = Date.now() + timeoutMs
+  const env = await resolvedGitEnv(cwd, { readOnly: true })
+  const scopedRunner = options.stallMs === undefined ? undefined : createProcessRunner({ owner: 'git', stallMs: options.stallMs })
+  const runner = scopedRunner ?? readRunner
+  const subcommand = args[0] ?? ''
+
+  try {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new GitError(`git ${subcommand} timed out after ${timeoutMs}ms`, '', 143)
+    const slot = await gitScheduler.withSlot('read', remaining, async (slotRemainingMs) => {
+      let child: SpawnedProcess
+      try {
+        child = runner.spawn(['git', ...args], {
+          cwd,
+          env,
+          timeoutMs: Math.min(deadline - Date.now(), slotRemainingMs ?? remaining),
+          stdout: 'pipe',
+          stderr: 'tail'
+        })
+      } catch (error) {
+        if (error instanceof ProcessStalledError) throw new PipeStalledError(true)
+        throw failedToRunGit(error)
+      }
+
+      let stoppedEarly = false
+      let callbackFailed = false
+      let stopInFinally = false
+      let exit: SpawnExit | undefined
+      let buffered = ''
+      const decoder = new TextDecoder()
+      const reader = child.stdout.getReader()
+      const consume = async (record: string): Promise<void> => {
+        try {
+          if (await onRecord(record)) stoppedEarly = true
+        } catch (error) {
+          callbackFailed = true
+          throw error
+        }
+      }
+
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffered += decoder.decode(value, { stream: true })
+          for (;;) {
+            const end = buffered.indexOf('\0')
+            if (end < 0) break
+            const record = buffered.slice(0, end)
+            buffered = buffered.slice(end + 1)
+            await consume(record)
+            if (stoppedEarly) break
+          }
+          if (stoppedEarly) break
+        }
+        buffered += decoder.decode()
+        if (!stoppedEarly && buffered.length > 0) await consume(buffered)
+        if (stoppedEarly) stopInFinally = true
+      } catch (error) {
+        stopInFinally = true
+        if (error instanceof ProcessStalledError && !callbackFailed) throw new PipeStalledError(true)
+        throw error
+      } finally {
+        if (stopInFinally) exit = await child.stop({ signal: 'SIGKILL', graceMs: 0 })
+        reader.releaseLock()
+      }
+
+      exit ??= await child.exited
+      if (stoppedEarly) return
+      const stderr = child.stderrTail()
+      if (exit.spawnError !== undefined) throw failedToRunGit(exit.spawnError.message)
+      if (exit.stopped === 'aborted') throw new GitError(`git ${subcommand} aborted`, stderr, -1)
+      if (exit.stopped === 'timeout') throw new GitError(`git ${subcommand} timed out after ${timeoutMs}ms`, stderr, 143)
+      const exitCode = normalizeExitCode(exit.exitCode, exit.signal)
+      if (exitCode !== 0) {
+        const detail = stderr.trim()
+        throw new GitError(`git ${subcommand} failed (exit ${exitCode})${detail ? `: ${detail}` : ''}`, stderr, exitCode)
+      }
+    })
+    if (slot.timedOut) throw new GitError(`git ${subcommand} timed out after ${timeoutMs}ms`, '', 143)
+  } finally {
+    if (scopedRunner) await scopedRunner.dispose()
+  }
 }
 
 /** Like `runGit`, including partial output on mutation pipe stalls; throws `GitError` on nonzero exit, otherwise returns stdout text. */
 export async function git(cwd: string, args: string[], options: RunGitOptions = {}): Promise<string> {
   const r = await runGit(cwd, args, options)
+  const timeoutMs = options.timeoutMs ?? (options.readOnly ? DEFAULT_GIT_READ_TIMEOUT_MS : DEFAULT_GIT_WRITE_TIMEOUT_MS)
+  const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_GIT_MAX_OUTPUT_BYTES
+  if (r.timedOut) throw new GitError(`git ${args[0]} timed out after ${timeoutMs}ms`, r.stderr, 143)
+  if (r.overflow) throw new GitError(`git ${args[0]} output exceeded ${maxOutputBytes} bytes`, r.stderr, 137)
   if (r.exitCode !== 0) {
     const detail = r.stderr.trim()
     throw new GitError(`git ${args[0]} failed (exit ${r.exitCode})${detail ? `: ${detail}` : ''}`, r.stderr, r.exitCode)

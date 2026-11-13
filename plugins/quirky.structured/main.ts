@@ -485,14 +485,15 @@ export function activate(context: PluginContext): void {
   }
 
   const structuredContext: StructuredContext = {
+    process: context.process,
     appendMessage,
     setStatus,
     createAsk,
     async setProviderSession(sessionId, providerSession) {
       await persistProviderSession(sessionId, providerSession)
     },
-    resolveClaudePath: () => resolveClaudeThroughLoginShell(context.launch.shell),
-    resolveCodexPath: () => resolveCodexThroughLoginShell(context.launch.shell)
+    resolveClaudePath: () => resolveClaudeThroughLoginShell(context.process, context.launch.shell),
+    resolveCodexPath: () => resolveCodexThroughLoginShell(context.process, context.launch.shell)
   }
 
   const injectedRunner = testRunnerFactory()?.(structuredContext)
