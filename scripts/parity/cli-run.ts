@@ -81,6 +81,35 @@ export function parseCliOutput(stdout: string, format: 'json' | 'jsonl', exitCod
   return result
 }
 
+type CliRefusal = { code: string; message: string; data?: unknown }
+
+function parseCliRefusal(stdout: string, exitCode: number): CliRefusal {
+  if (exitCode === 0) throw new CliRunFailure('unexpected-success', 'CLI refusal command unexpectedly succeeded')
+  if (exitCode !== 1) throw new CliRunFailure('cli-exit', `CLI refusal command exited ${exitCode}`)
+  if (Buffer.byteLength(stdout) > 16 * 1024 * 1024) throw new CliRunFailure('stdout-overflow', 'CLI stdout exceeded 16 MiB')
+  let value: unknown
+  try {
+    value = JSON.parse(stdout)
+  } catch {
+    throw new CliRunFailure('malformed-output', 'CLI did not emit a single JSON error envelope')
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).length !== 1 || !Object.hasOwn(value, 'error')) {
+    throw new CliRunFailure('malformed-output', 'CLI did not emit a single JSON error envelope')
+  }
+  const error = Reflect.get(value, 'error')
+  if (!error || typeof error !== 'object' || Array.isArray(error) ||
+      Object.keys(error).some(key => !['code', 'message', 'data'].includes(key))) {
+    throw new CliRunFailure('malformed-output', 'CLI did not emit a single JSON error envelope')
+  }
+  const code = Reflect.get(error, 'code')
+  const message = Reflect.get(error, 'message')
+  if (typeof code !== 'string' || code.length === 0 || typeof message !== 'string' || message.length === 0) {
+    throw new CliRunFailure('malformed-output', 'CLI did not emit a single JSON error envelope')
+  }
+  return { code, message, ...(Object.hasOwn(error, 'data') ? { data: Reflect.get(error, 'data') } : {}) }
+}
+
 export function reduceCliRows(
   rows: CliTableRow[], receipts: CliReceipt[], proven: ReadonlySet<string>,
   catalogRefs: ReadonlyMap<string, string[]>, failure?: CliCheckFailure
@@ -150,8 +179,9 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
   const forwardAbort = () => controller.abort(options.signal?.reason)
   options.signal?.addEventListener('abort', forwardAbort, { once: true })
   if (options.signal?.aborted) forwardAbort()
-  const timer = setTimeout(() => controller.abort(new CliRunFailure('deadline', 'CLI rehearsal work deadline exceeded')), 220_000)
+  const timer = setTimeout(() => controller.abort(new CliRunFailure('deadline', 'CLI rehearsal work deadline exceeded')), 340_000)
   const receipts: CliReceipt[] = []
+  const refusalReceipts = new Set<string>()
   const proven = new Set<string>()
   const catalogRefs = new Map<string, string[]>()
   const tokens: string[] = []
@@ -176,10 +206,12 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
     const stderr = error && typeof error === 'object' && 'stderrTail' in error && typeof error.stderrTail === 'string' ? error.stderrTail : undefined
     return { checkId, kind, message: diagnostic(error instanceof Error ? error.message : String(error)), ...(stderr ? { stderrTail: diagnostic(stderr) } : {}) }
   }
-  const adopt = (id: string, argv: string[], raw: { stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number }, format: 'json' | 'jsonl') => {
+  const recordReceipt = (id: string, argv: string[], raw: { stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number }, format: 'json' | 'jsonl') => {
     if (receipts.some(receipt => receipt.id === id)) throw new CliRunFailure('duplicate-receipt', `Duplicate receipt ${id}`)
-    const receipt: CliReceipt = { id, command: argv.slice(0, 2).join(' '), argv, exitCode: raw.exitCode, format, stdoutBytes: raw.stdoutBytes, elapsedMs: raw.elapsedMs, evidence: {} }
-    receipts.push(receipt)
+    receipts.push({ id, command: argv.slice(0, 2).join(' '), argv, exitCode: raw.exitCode, format, stdoutBytes: raw.stdoutBytes, elapsedMs: raw.elapsedMs, evidence: {} })
+  }
+  const adopt = (id: string, argv: string[], raw: { stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number }, format: 'json' | 'jsonl') => {
+    recordReceipt(id, argv, raw, format)
     try { return parseCliOutput(raw.stdout, format, raw.exitCode) }
     catch (error) {
       throw new CliRunFailure(error instanceof CliRunFailure ? error.kind : 'malformed-output', error instanceof Error ? error.message : String(error), diagnostic(raw.stderr))
@@ -189,7 +221,7 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
     rows = table.loadCliTable()
     table.validateInventory(table.loadCliInventory(), rows, checks.checkIds)
     currentCheck = 'startup'
-    world = await (options.createWorld ?? createCliWorld)({ signal: controller.signal, deadline: started + 220_000, hooks: options.hooks })
+    world = await (options.createWorld ?? createCliWorld)({ signal: controller.signal, deadline: started + 340_000, hooks: options.hooks })
     const runtime = readRuntime(world.home)
     if (runtime) tokens.push(runtime.token, runtime.hookToken)
     const liveWorld = world
@@ -200,28 +232,61 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
         const signal = cleanupMode ? cleanupController.signal : controller.signal
         signal.throwIfAborted()
       },
-      async call(id, argv, format = 'json') {
+      async call(id, argv, format = 'json', executeOptions: { cwd?: string } = {}) {
         const signal = cleanupMode ? cleanupController.signal : controller.signal
         signal.throwIfAborted()
-        const remaining = (cleanupMode ? cleanupDeadline : started + 220_000) - Date.now()
+        const remaining = (cleanupMode ? cleanupDeadline : started + 340_000) - Date.now()
         if (remaining <= 0) throw new CliRunFailure('deadline', 'No command time remains')
         const args = [...argv, '--runtime', 'local', '--json']
         try {
-          const raw = await liveWorld.execute([process.execPath, liveWorld.paths.cliEntry, ...args], { signal, timeoutMs: Math.min(15_000, remaining) })
+          const raw = await liveWorld.execute([process.execPath, liveWorld.paths.cliEntry, ...args], {
+            signal, timeoutMs: Math.min(15_000, remaining), cwd: executeOptions.cwd
+          })
           return adopt(id, args, raw, format)
         } catch (error) {
           if (!receipts.some(receipt => receipt.id === id) && error && typeof error === 'object' &&
               'stdoutBytes' in error && typeof error.stdoutBytes === 'number' &&
               'elapsedMs' in error && typeof error.elapsedMs === 'number' &&
               'exitCode' in error && typeof error.exitCode === 'number') {
-            receipts.push({ id, command: argv.slice(0, 2).join(' '), argv: args, exitCode: error.exitCode, format, stdoutBytes: error.stdoutBytes, elapsedMs: error.elapsedMs, evidence: {} })
+            recordReceipt(id, args, {
+              stdout: '', stderr: '', exitCode: error.exitCode, stdoutBytes: error.stdoutBytes, elapsedMs: error.elapsedMs
+            }, format)
+          }
+          throw error
+        }
+      },
+      async refuse(id, argv, executeOptions: { cwd?: string } = {}) {
+        const signal = cleanupMode ? cleanupController.signal : controller.signal
+        signal.throwIfAborted()
+        const remaining = (cleanupMode ? cleanupDeadline : started + 340_000) - Date.now()
+        if (remaining <= 0) throw new CliRunFailure('deadline', 'No command time remains')
+        if (receipts.some(receipt => receipt.id === id)) throw new CliRunFailure('duplicate-receipt', `Duplicate receipt ${id}`)
+        const args = [...argv, '--runtime', 'local', '--json']
+        refusalReceipts.add(id)
+        try {
+          const raw = await liveWorld.execute([process.execPath, liveWorld.paths.cliEntry, ...args], {
+            signal, timeoutMs: Math.min(15_000, remaining), cwd: executeOptions.cwd
+          })
+          recordReceipt(id, args, raw, 'json')
+          return parseCliRefusal(raw.stdout, raw.exitCode)
+        } catch (error) {
+          if (!receipts.some(receipt => receipt.id === id) && error && typeof error === 'object' &&
+              'stdoutBytes' in error && typeof error.stdoutBytes === 'number' &&
+              'elapsedMs' in error && typeof error.elapsedMs === 'number' &&
+              'exitCode' in error && typeof error.exitCode === 'number') {
+            recordReceipt(id, args, {
+              stdout: '', stderr: '', exitCode: error.exitCode, stdoutBytes: error.stdoutBytes, elapsedMs: error.elapsedMs
+            }, 'json')
           }
           throw error
         }
       },
       prove(id, evidence) {
-        if (!receipts.some(receipt => receipt.id === id && receipt.exitCode === 0 && receipt.stdoutBytes > 0)) throw new CliRunFailure('missing-receipt', `No successful invocation for ${id}`)
-        receipts.find(receipt => receipt.id === id)!.evidence = evidence
+        const receipt = receipts.find(receipt => receipt.id === id && receipt.exitCode === 0 && receipt.stdoutBytes > 0)
+        if (!receipt || refusalReceipts.has(id)) {
+          throw new CliRunFailure('missing-receipt', `No successful invocation for ${id}`)
+        }
+        receipt.evidence = evidence
         proven.add(id)
       },
       importActor(value) {
@@ -263,7 +328,7 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', forwardAbort)
     cleanupMode = true
-    cleanupDeadline = Math.min(started + 240_000, Date.now() + 20_000)
+    cleanupDeadline = Math.min(started + 360_000, Date.now() + 20_000)
     const cleanupTimer = setTimeout(() => {
       cleanupController.abort(new CliRunFailure('cleanup-deadline', 'CLI cleanup deadline exceeded'))
       world?.scope.killNow()

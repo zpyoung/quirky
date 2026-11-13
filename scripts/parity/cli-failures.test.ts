@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createCliEnvironment } from './cli-world'
-import { installCliFixtureTools } from './cli-fixtures'
+import { createCliEnvironment, createCliWorld } from './cli-world'
+import { createCliFixtures, installCliFixtureTools } from './cli-fixtures'
 import { parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
 import * as runner from './cli-run'
 import type { CliTableRow } from './cli-table'
@@ -26,6 +26,15 @@ function withHome(run: (home: string) => void): void {
   }
 }
 
+async function withHomeAsync(run: (home: string) => Promise<void>): Promise<void> {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-cli-world-')))
+  try {
+    await run(home)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+}
+
 test('owned CLI environment ignores poisoned parent identity, provider, proxy and Git settings', () => {
   withHome((home) => {
     const tools = installCliFixtureTools(home)
@@ -40,6 +49,7 @@ test('owned CLI environment ignores poisoned parent identity, provider, proxy an
       QUIRKY_SESSION_ID: 'poison-session',
       QUIRKY_SESSION_TOKEN: 'poison-token',
       QUIRKY_WORKTREE_ID: 'poison-worktree',
+      BUN_OPTIONS: '--smol',
       HTTP_PROXY: 'http://proxy.invalid:8118',
       HTTPS_PROXY: 'http://proxy.invalid:8118',
       ALL_PROXY: 'socks5://proxy.invalid:1080',
@@ -50,40 +60,131 @@ test('owned CLI environment ignores poisoned parent identity, provider, proxy an
       PATH: '/poison/bin',
       NODE_OPTIONS: '--require=/poison/preload.cjs'
     }
-    const previous = new Map(Object.keys(poisoned).map((key) => [key, process.env[key]]))
-    try {
-      Object.assign(process.env, poisoned)
-      const env = createCliEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
-      expect(env.HOME).toBe(home)
-      expect(env.QUIRKY_HOME).toBe(home)
-      expect(env.XDG_CONFIG_HOME).toBe(join(home, 'config'))
-      expect(env.CODEX_HOME).toBe(join(home, 'codex'))
-      expect(env.SHELL).toBe(tools.shell)
-      expect(env.QUIRKY_AGENT_SEARCH_DIRS).toBe('')
-      expect(env.QUIRKY_CLI_ENTRY).toBe(join(repoRoot, 'packages/cli/src/main.ts'))
-      expect(env.PATH?.split(delimiter)).toEqual([
-        tools.fixtureBin,
-        '/usr/bin', '/bin', '/usr/sbin', '/sbin'
-      ])
-      expect(env.NODE_OPTIONS).toContain(tools.fetchPreload)
-      for (const key of [
-        'QUIRKY_RUNTIME', 'QUIRKY_PAIRING', 'QUIRKY_SESSION_ID', 'QUIRKY_SESSION_TOKEN',
-        'QUIRKY_WORKTREE_ID', 'CLAUDE_CONFIG_DIR', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY',
-        'GIT_DIR', 'GIT_WORK_TREE'
-      ]) expect(env[key]).toBeUndefined()
-      expect(env.GIT_CONFIG_GLOBAL).toBe('/dev/null')
-      expect(env.GIT_CONFIG_PARAMETERS).toBe('')
-      expect(env).not.toHaveProperty('ANTHROPIC_API_KEY')
-      expect(env).not.toHaveProperty('OPENAI_API_KEY')
-      expect(env).not.toHaveProperty('CODEX_API_KEY')
-    } finally {
-      for (const [key, value] of previous) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    }
+    const child = spawnSync(process.execPath, [
+      '-e',
+      `import { createCliEnvironment } from ${JSON.stringify(new URL('./cli-world.ts', import.meta.url).href)}; process.stdout.write(JSON.stringify(createCliEnvironment(${JSON.stringify(home)}, ${JSON.stringify(repoRoot)}, ${JSON.stringify(tools.fixtureBin)}, ${JSON.stringify(tools.fetchPreload)})))`
+    ], { env: { ...createIsolatedRuntimeEnvironment(home, { repoRoot }), ...poisoned }, cwd: repoRoot, encoding: 'utf8', timeout: 5_000 })
+    expect(child.error).toBeUndefined()
+    expect(child.status, child.stderr).toBe(0)
+    const env: Record<string, string> = JSON.parse(child.stdout)
+    expect(env.HOME).toBe(home)
+    expect(env.QUIRKY_HOME).toBe(home)
+    expect(env.XDG_CONFIG_HOME).toBe(join(home, 'config'))
+    expect(env.CODEX_HOME).toBe(join(home, 'codex'))
+    expect(env.SHELL).toBe(tools.shell)
+    expect(env.QUIRKY_AGENT_SEARCH_DIRS).toBe('')
+    expect(env.QUIRKY_CLI_ENTRY).toBe(join(repoRoot, 'packages/cli/src/main.ts'))
+    expect(env.PATH?.split(delimiter)).toEqual([
+      tools.fixtureBin,
+      '/usr/bin', '/bin', '/usr/sbin', '/sbin'
+    ])
+    expect(env.BUN_OPTIONS).toBe(`--preload=${tools.fetchPreload}`)
+    expect(env.NODE_OPTIONS).toBeUndefined()
+    for (const key of [
+      'QUIRKY_RUNTIME', 'QUIRKY_PAIRING', 'QUIRKY_SESSION_ID', 'QUIRKY_SESSION_TOKEN',
+      'QUIRKY_WORKTREE_ID', 'CLAUDE_CONFIG_DIR', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY',
+      'GIT_DIR', 'GIT_WORK_TREE'
+    ]) expect(env[key]).toBeUndefined()
+    expect(env.GIT_CONFIG_GLOBAL).toBe('/dev/null')
+    expect(env.GIT_CONFIG_PARAMETERS).toBe('')
+    expect(env).not.toHaveProperty('ANTHROPIC_API_KEY')
+    expect(env).not.toHaveProperty('OPENAI_API_KEY')
+    expect(env).not.toHaveProperty('CODEX_API_KEY')
   })
 })
+
+test('fixture repository refs and the user-owned Codex hook are exact', async () => {
+  await withHomeAsync(async (home) => {
+    const tools = installCliFixtureTools(home)
+    const env = createCliEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
+    const run = async (argv: string[], cwd: string) => {
+      const result = spawnSync(argv[0]!, argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 5_000 })
+      if (result.error) throw result.error
+      return { stdout: result.stdout ?? '', stderr: result.stderr ?? '', exitCode: result.status ?? -1 }
+    }
+    const paths = await createCliFixtures({ home, repoRoot, tools, run })
+
+    const hook = { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo user-owned-hook' }] }] } }
+    expect(paths.codexHooksFile).toBe(join(home, 'codex', 'hooks.json'))
+    expect(paths.userHookDocument).toBe(JSON.stringify(hook))
+    expect(readFileSync(paths.codexHooksFile, 'utf8')).toBe(paths.userHookDocument)
+
+    const branches = await run(['git', 'branch', '--list', 'cli-parity-*'], paths.repository)
+    expect(branches.exitCode).toBe(0)
+    expect(branches.stdout.trim().split('\n').map((branch) => branch.trim())).toEqual(['cli-parity-both', 'cli-parity-topic'])
+    const tags = await run(['git', 'tag', '--list', 'cli-parity-*'], paths.repository)
+    expect(tags.exitCode).toBe(0)
+    expect(tags.stdout.trim().split('\n')).toEqual(['cli-parity-both', 'cli-parity-v1'])
+  })
+}, 30_000)
+
+test('provider stand-ins enforce exact login argv and write token-free private credentials', () => {
+  withHome((home) => {
+    const tools = installCliFixtureTools(home)
+    expect(tools.claudeWrapper).toBe(join(tools.fixtureBin, 'claude'))
+    expect(tools.claudeLoginLog).toBe(join(home, 'fixtures', 'logs', 'claude-login.log'))
+    expect(tools.codexLoginLog).toBe(join(home, 'fixtures', 'logs', 'codex-login.log'))
+    const env = createCliEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
+    const run = (executable: string, args: string[], childEnv = env) =>
+      spawnSync(executable, args, { env: childEnv, encoding: 'utf8', timeout: 3_000, input: '' })
+
+    const claudeVersion = run(tools.claudeWrapper, ['--version'])
+    expect(claudeVersion.status).toBe(0)
+    expect(claudeVersion.stdout).toBe('2.1.80 (Claude Code)\n')
+    const claudeDenied = run(tools.claudeWrapper, ['auth', 'login'])
+    expect(claudeDenied.status).toBe(64)
+    expect(claudeDenied.stderr).toBe('claude fixture refuses unsupported arguments\n')
+    const claudeExtra = run(tools.claudeWrapper, ['auth', 'login', '--claudeai', 'extra'])
+    expect(claudeExtra.status).toBe(64)
+    expect(existsSync(tools.claudeLoginLog)).toBe(true)
+    expect(readFileSync(tools.claudeLoginLog, 'utf8')).toBe('')
+
+    const claudeConfig = join(home, 'claude')
+    mkdirSync(claudeConfig)
+    const claudeLogin = run(tools.claudeWrapper, ['auth', 'login', '--claudeai'], { ...env, CLAUDE_CONFIG_DIR: claudeConfig })
+    expect(claudeLogin.status).toBe(0)
+    expect(readFileSync(tools.claudeLoginLog, 'utf8')).toBe('login\n')
+    const claudeProfile = join(claudeConfig, '.claude.json')
+    const claudeCredentials = join(claudeConfig, '.credentials.json')
+    expect(JSON.parse(readFileSync(claudeProfile, 'utf8'))).toEqual({
+      oauthAccount: { emailAddress: 'claude-parity@example.invalid', organizationName: 'CLI parity fixture' }
+    })
+    expect(readFileSync(claudeProfile, 'utf8')).not.toMatch(/accessToken|access_token/)
+    expect(JSON.parse(readFileSync(claudeCredentials, 'utf8'))).toEqual({
+      claudeAiOauth: { refreshToken: 'cli-parity-fixture-refresh' }
+    })
+    expect(statSync(claudeCredentials).mode & 0o777).toBe(0o600)
+    expect(readFileSync(claudeCredentials, 'utf8')).not.toMatch(/accessToken|access_token/)
+
+    const codexVersion = run(tools.codexWrapper, ['--version'])
+    expect(codexVersion.status).toBe(0)
+    expect(codexVersion.stdout).toBe('codex-cli 0.120.0\n')
+    const codexAppServer = run(tools.codexWrapper, ['app-server'])
+    expect(codexAppServer.status).toBe(0)
+    const codexDenied = run(tools.codexWrapper, ['login'])
+    expect(codexDenied.status).toBe(8)
+    expect(existsSync(join(home, 'codex', 'auth.json'))).toBe(false)
+    expect(readFileSync(tools.codexLoginLog, 'utf8')).toBe('')
+    const codexUnsupported = run(tools.codexWrapper, ['login', '--device-auth'])
+    expect(codexUnsupported.status).toBe(64)
+    expect(codexUnsupported.stderr).toBe('codex fixture refuses unsupported arguments\n')
+
+    writeFileSync(join(home, 'codex', 'config.toml'), 'cli_auth_credentials_store = "file"\n')
+    const codexLogin = run(tools.codexWrapper, ['login'])
+    expect(codexLogin.status).toBe(0)
+    expect(readFileSync(tools.codexLoginLog, 'utf8')).toBe('login\n')
+    const codexAuth = join(home, 'codex', 'auth.json')
+    expect(JSON.parse(readFileSync(codexAuth, 'utf8'))).toEqual({
+      auth_mode: 'chatgpt',
+      tokens: {
+        id_token: 'header.eyJlbWFpbCI6ImNvZGV4LXBhcml0eUBleGFtcGxlLmludmFsaWQifQ.signature',
+        account_id: 'cli-parity-codex-workspace'
+      }
+    })
+    expect(statSync(codexAuth).mode & 0o777).toBe(0o600)
+    expect(readFileSync(codexAuth, 'utf8')).not.toMatch(/accessToken|access_token/)
+  })
+}, 20_000)
 
 test('owned wrappers deny real providers and login profiles while preserving fixture behavior', () => {
   withHome((home) => {
@@ -117,14 +218,110 @@ test('owned wrappers deny real providers and login profiles while preserving fix
     expect(readFileSync(tools.securityLog, 'utf8')).toContain('find-generic-password')
 
     const egress = spawnSync(process.execPath, [
-      '--preload', tools.fetchPreload, '-e',
+      '-e',
       'fetch("https://example.invalid/credential-probe").then(() => process.exit(3), (error) => { if (!error.message.includes("non-loopback")) process.exit(4) })'
     ], { env, encoding: 'utf8', timeout: 5_000 })
     expect(egress.error).toBeUndefined()
     expect(egress.status).toBe(0)
-    expect(readFileSync(tools.egressLog, 'utf8')).toContain('https://example.invalid/credential-probe')
+    expect(readFileSync(tools.egressLog, 'utf8')).toBe('https://example.invalid/credential-probe\n')
   })
 })
+
+test('refuse records exact failures and a refusal receipt cannot prove success', async () => {
+  const outcomes = [
+    { exitCode: 0, stdout: '{"ok":true}' },
+    { exitCode: 2, stdout: '{"error":{"code":"not-found","message":"missing"}}' },
+    { exitCode: 1, stdout: '{"error":{"code":"not-found"}}' },
+    { exitCode: 1, stdout: '{"error":{"code":"not-found","message":"missing"}}\n{"error":{"code":"not-found","message":"missing"}}' },
+    { exitCode: 1, stdout: '{"error":{"code":"not-found","message":"missing","data":{"reason":"missing"}}}' },
+    { exitCode: 1, stdout: '{"error":{"code":"conflict","message":"already exists"}}' }
+  ]
+  const ids = ['refuse-zero', 'refuse-non-one', 'refuse-malformed', 'refuse-multiple', 'refuse-expected', 'refuse-wrong-code']
+  const observed: string[] = []
+  const report = await runner.runCliParity({
+    createWorld: async (options) => {
+      const world = await createCliWorld(options)
+      const execute = world.execute.bind(world)
+      let outcomeIndex = 0
+      return {
+        ...world,
+        execute: async (argv: string[], executeOptions?: Parameters<typeof world.execute>[1]) => {
+          if (argv[2] === 'api') return execute(argv, executeOptions)
+          const outcome = outcomes[outcomeIndex++]
+          if (!outcome) throw new Error('unexpected fixture command')
+          return {
+            ...outcome,
+            stderr: '',
+            stdoutBytes: Buffer.byteLength(outcome.stdout),
+            elapsedMs: 1
+          }
+        }
+      }
+    },
+    runChecks: async (context) => {
+      for (let index = 0; index < ids.length; index++) {
+        const id = ids[index]!
+        try {
+          if (index === 5) context.check('refuse-code-check')
+          const refusal = await context.refuse(id, ['repo', 'show', 'id:missing'])
+          if (index === 4) {
+            observed.push(`${refusal.code}:${refusal.message}:${JSON.stringify(refusal.data)}`)
+            try {
+              context.prove(id, {})
+            } catch (error) {
+              observed.push(error instanceof runner.CliRunFailure ? error.kind : String(error))
+              continue
+            }
+            observed.push('proved')
+            continue
+          }
+          if (index === 5 && refusal.code !== 'not-found') {
+            throw new Error(`expected not-found, received ${refusal.code}`)
+          }
+          observed.push('returned')
+        } catch (error) {
+          if (index === 5) throw error
+          observed.push(error instanceof runner.CliRunFailure ? error.kind : String(error))
+          if (index === 0) {
+            try {
+              context.prove(id, {})
+            } catch (proofError) {
+              observed.push(proofError instanceof runner.CliRunFailure ? proofError.kind : String(proofError))
+              continue
+            }
+            observed.push('proved')
+          }
+        }
+      }
+    },
+    cleanupChecks: async () => {}
+  })
+
+  expect(observed).toEqual([
+    'unexpected-success', 'missing-receipt', 'cli-exit', 'malformed-output', 'malformed-output',
+    'not-found:missing:{"reason":"missing"}', 'missing-receipt'
+  ])
+  expect(report.error).toMatchObject({ kind: 'assertion', stage: 'refuse-code-check' })
+  expect(report.receipts.filter((receipt) => ids.includes(receipt.id)).map((receipt) => receipt.exitCode)).toEqual([0, 2, 1, 1, 1, 1])
+}, 90_000)
+
+test('world cwd is restricted to its real checkout root or owned home', async () => {
+  const world = await createCliWorld()
+  try {
+    expect(readFileSync(world.paths.egressLog, 'utf8')).toBe('https://cli-parity-guard.invalid/self-test\n')
+    const argv = [process.execPath, world.paths.cliEntry, 'api', '--runtime', 'local', '--json']
+    expect((await world.execute(argv, { cwd: world.paths.repoRoot })).exitCode).toBe(0)
+    expect((await world.execute(argv, { cwd: join(world.home, 'codex') })).exitCode).toBe(0)
+
+    const outsideLink = join(world.home, 'outside-link')
+    symlinkSync(join(world.home, '..'), outsideLink, 'dir')
+    for (const cwd of ['relative-directory', join(world.home, '..'), outsideLink]) {
+      await expect(world.execute(argv, { cwd })).rejects.toMatchObject({ kind: 'invalid-cli-arguments' })
+    }
+  } finally {
+    await world.cleanup()
+  }
+}, 90_000)
 
 test('POSIX literal quoting keeps dangerous path bytes inert inside the owned root', () => {
   withHome((home) => {
@@ -255,7 +452,7 @@ for (const fault of ['startup', 'daemon-death', 'sigterm'] as const) {
       if (fault !== 'startup') {
         const observed: { phase: string; home: string; pids: number[] } = JSON.parse(readFileSync(marker, 'utf8'))
         expect(observed.pids.length).toBeGreaterThan(0)
-        expect(observed.phase).toBe(fault === 'sigterm' ? 'actor-live' : 'ready')
+        expect(observed.phase, JSON.stringify(report.error)).toBe(fault === 'sigterm' ? 'actor-live' : 'ready')
         if (fault === 'sigterm') expect(report.error?.kind).toBe('interrupted')
         expect(existsSync(observed.home)).toBe(false)
         for (const pid of observed.pids) expect(() => process.kill(pid, 0)).toThrow()
