@@ -11,6 +11,7 @@ import {
   type ToastKind,
   type ToastOptions,
   type MountCleanup,
+  type UiCommandEntry,
   type UiKeybinding,
   type UiLayout,
   type UiModel,

@@ -3180,7 +3180,7 @@ test('owner, contribution module, module URL, and API changes invalidate old vie
   }[] = [
     {
       name: 'owner',
-      nextModel: () => makeModel({ views: [view('acme.other', 'page', { id: PAGE })] })
+      nextModel: () => makeModel({ views: [{ ...view('acme.other', 'page'), id: PAGE }] })
     },
     {
       name: 'contribution module',
