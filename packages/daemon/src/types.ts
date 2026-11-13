@@ -34,5 +34,4 @@ export type ClientConn = {
   sendBinary(bytes: Uint8Array): boolean | void
   /** streamId -> closes that stream; run on disconnect. */
   streamClosers: Map<number, () => void>
-  sendBinary(bytes: Uint8Array): void
 }

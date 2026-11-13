@@ -217,21 +217,28 @@ describe('openStream', () => {
 
 describe('hook.received delivery', () => {
   const hook: QuirkyEvent = { type: 'hook.received', agent: 'claude', sessionId: 's_1', payload: { a: 1 } }
-  test('delivers a hook event to listeners', () => {
-    const events: QuirkyEvent[] = []
-    const core = makeCore((event) => events.push(event))
+
+  test('deliverToPlugins reaches plugin listeners and no subscribed client', () => {
+    const seen: QuirkyEvent[] = []
+    const core = makeCore((event) => seen.push(event))
+    const conn = fakeConn()
+    core.addClient(conn)
+
     core.deliverToPlugins(hook)
-    expect(events).toEqual([hook])
+
+    expect(seen).toEqual([hook])
+    expect(conn.text).toEqual([])
   })
+
   test('broadcasting hook.received still never reaches a client', () => {
-    const events: QuirkyEvent[] = []
-    const core = makeCore((event) => events.push(event))
+    const seen: QuirkyEvent[] = []
+    const core = makeCore((event) => seen.push(event))
     const conn = fakeConn()
     core.addClient(conn)
 
     core.broadcast(hook)
 
-    expect(events).toEqual([hook])
+    expect(seen).toEqual([hook])
     expect(conn.text).toEqual([])
   })
 })

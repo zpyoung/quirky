@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { decodeTerminalFrame, encodePtyData, encodePtyJson, type PluginCaller, type PluginContext, type PtySessionInfo, type PtySnapshot } from '@quirky/protocol'
+import { PTY_PROTOCOL_VERSION, decodeTerminalFrame, encodePtyData, encodePtyJson, type PluginCaller, type PluginContext, type PtySessionInfo, type PtySnapshot } from '@quirky/protocol'
 import { RuntimeSessionAuthority } from '../src/session-authority'
 import { Store } from '../src/store'
 import { createPtyApi } from '../src/plugins/pty-api'
@@ -14,6 +14,7 @@ import { WebSocketOutput } from '../src/websocket-output'
 import { TerminalService } from '../../../plugins/quirky.terminal/src/terminal'
 import { DeliveryRunner } from '../../../plugins/quirky.agents/src/delivery'
 import { validateEntry } from '../../../plugins/quirky.agents/src/core/entry'
+import { startFakePtyHost } from './fixtures/fake-pty-host'
 
 function stubClient(options: { failUnsubscribe?: boolean } = {}) {
   const requests: Array<{ type: string; sessionId: string }> = []
@@ -208,6 +209,41 @@ describe('PTY subscription holds', () => {
     await Promise.resolve()
     expect(requests).not.toContain('unsubscribe')
   })
+})
+
+test.each([false, true])('daemon advertises session shedding through negotiated and legacy hello (legacy=%s)', async (legacy) => {
+  const home = mkdtempSync(join(tmpdir(), 'pty-capability-'))
+  const version = legacy ? PTY_PROTOCOL_VERSION - 1 : PTY_PROTOCOL_VERSION
+  const host = startFakePtyHost(home, { version, legacyHello: legacy })
+  const client = new PtyClient({
+    home,
+    hostEntry: join(home, 'must-not-launch.ts'),
+    connectTimeoutMs: 2_000,
+    protocol: { min: version, max: PTY_PROTOCOL_VERSION }
+  })
+  try {
+    await client.connect()
+    expect(client.connected).toBe(true)
+    expect(client.protocolVersion).toBe(version)
+    const hellos = host.requests.filter((request) => request.type === 'hello')
+    expect(hellos).toHaveLength(legacy ? 2 : 1)
+    expect(hellos[0]).toMatchObject({
+      version: PTY_PROTOCOL_VERSION,
+      minVersion: version,
+      token: host.token,
+      sessionLagged: true
+    })
+    if (legacy) {
+      expect(hellos[1]).toMatchObject({ version, token: host.token, sessionLagged: true })
+      expect(hellos[1]).not.toHaveProperty('minVersion')
+    }
+    expect(await client.request('list', {})).toEqual([])
+    expect(host.requests.some((request) => request.type === 'shutdown')).toBe(false)
+  } finally {
+    client.close()
+    host.stop()
+    rmSync(home, { recursive: true, force: true })
+  }
 })
 
 function lagClient(handle?: (type: string, sessionId: string) => unknown) {
