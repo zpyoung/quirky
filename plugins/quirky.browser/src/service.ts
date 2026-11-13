@@ -389,7 +389,7 @@ export class BrowserService {
       if (typeof indexParam !== 'number' || !Number.isInteger(indexParam) || indexParam < 0) throw fault('invalid_argument', 'tab index must be a non-negative integer')
       const worktreeId = await this.resolveWorktreeTarget(optionalString(params, 'worktree'), optionalString(params, 'cwd'), caller, false)
       const candidates = this.store.listPages().filter((item) => item.worktreeId === worktreeId)
-      page = candidates[indexParam] ?? (() => { throw fault('browser_tab_not_found', `tab index ${indexParam} does not exist`) })()
+      page = candidates.find((item) => item.index === indexParam) ?? (() => { throw fault('browser_tab_not_found', `tab index ${indexParam} does not exist`) })()
     }
     await this.runtime.withPage(page, 'tabSwitch', async () => {
       this.store.switchPage(page.browserPageId)
@@ -408,7 +408,7 @@ export class BrowserService {
       const candidates = this.store.listPages().filter((item) => item.worktreeId === worktreeId)
       if (typeof index === 'number') {
         if (!Number.isInteger(index) || index < 0) throw fault('invalid_argument', 'tab index must be a non-negative integer')
-        page = candidates[index] ?? (() => { throw fault('browser_tab_not_found', `tab index ${index} does not exist`) })()
+        page = candidates.find((item) => item.index === index) ?? (() => { throw fault('browser_tab_not_found', `tab index ${index} does not exist`) })()
       } else page = this.activePage(candidates)
     }
     await this.design.cancelPage(page.browserPageId)
