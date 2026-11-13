@@ -323,6 +323,11 @@ export type UiSubscribeOptions = {
   worktreeId?: string | null
 }
 
+export type UiExecuteCommandOptions = {
+  /** In a popped-out window, false runs the command in the owner window without raising it. Default true. Ignored in a main window. Plugin API 1.15.0. */
+  activateOwner?: boolean
+}
+
 /** What a plugin's `activate` receives in the window. */
 export type UiPluginContext = {
   readonly nativeBrowser: NativeBrowserCapability
@@ -349,7 +354,11 @@ export type UiPluginContext = {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>, options?: UiSubscribeOptions): () => void
   /** Reads a setting by short name in the plugin's own namespace, or by full setting ID. */
   getSetting(name: string): unknown
-  executeCommand(id: string, args?: unknown): Promise<void>
+  /**
+   * Runs a command locally in a main window, or in the owner of a popped-out window.
+   * Pop-outs activate the owner on success unless options.activateOwner is false.
+   */
+  executeCommand(id: string, args?: unknown, options?: UiExecuteCommandOptions): Promise<void>
   /**
    * Mints a one-use, same-window drag capability. Put only its opaque token in DataTransfer;
    * external bytes cannot create a capability.
