@@ -33,6 +33,18 @@ function expression(content: string, text: string, path = file): { source: ts.So
   return { source: parsed, expression: found }
 }
 
+function routeArgument(content: string, path = file): { source: ts.SourceFile; expression: ts.Expression } {
+  const parsed = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  let found: ts.Expression | undefined
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && node.arguments[0]) found = node.arguments[0]
+    ts.forEachChild(node, visit)
+  }
+  visit(parsed)
+  if (!found) throw new Error('Missing route argument')
+  return { source: parsed, expression: found }
+}
+
 const coverage = {
   schemaVersion: 1,
   surfaces: { 'view:acme.app/main': {
@@ -73,6 +85,24 @@ describe('coverage file parsing', () => {
     const emptyQuote = { ...coverage, states: [{ ...coverage.states[0], site: { file, quote: '' } }] }
     expect(() => parseCoverage(JSON.stringify(emptyQuote))).toThrow()
   })
+
+  test('rejects empty anchors for every entry kind', () => {
+    const state = { ...coverage.states[0], anchor: '' }
+    const notState = { ...coverage.notState[0], anchor: '' }
+    const actionKinds = [
+      { site: { file, quote: 'onClick' }, anchor: '', route: { invoke: { file, quote: 'context.call(API)' }, target: 'acme.app/save' } },
+      { site: { file, quote: 'onClick' }, anchor: '', transient: 'caret', reason: 'Moves the caret' },
+      { site: { file, quote: 'onClick' }, anchor: '', notAction: 'forwarded', reason: 'Passes the callback through' }
+    ]
+    const invalidEntries = [
+      { ...coverage, states: [state] },
+      { ...coverage, notState: [notState] },
+      ...actionKinds.map((action) => ({ ...coverage, actions: [action] }))
+    ]
+
+    for (const invalid of invalidEntries) expect(() => parseCoverage(JSON.stringify(invalid))).toThrow()
+  })
+
 })
 
 describe('source quote resolution', () => {
@@ -139,13 +169,26 @@ describe('candidate anchor selection', () => {
     expect(selectCandidate(resolved, candidates, 'state', 'busy')).toMatchObject({ code: 'site-anchor-ambiguous' })
   })
 
-  test('uses a unique anchor prefix at the candidate start to disambiguate', () => {
+  test('requires exact anchor text while selecting same-start anchors independently', () => {
     const resolved = resolveRef(inventory, [file], ref('if (busy) return <EmptyState />;\nif (empty)'))
     expect(evidence(resolved)).toBe(false)
     if (!evidence(resolved)) {
       expect(selectCandidate(resolved, candidates, 'state')).toMatchObject({ code: 'site-anchor-ambiguous', basis: 'source-audit' })
-      expect(selectCandidate(resolved, candidates, 'state', 'if (e')).toBe(candidates[2])
+      expect(selectCandidate(resolved, candidates, 'state', 'if (empty)')).toBe(candidates[2])
+      expect(selectCandidate(resolved, candidates, 'state', 'if (e')).toMatchObject({ code: 'site-anchor-ambiguous' })
       expect(selectCandidate(resolved, candidates, 'state', 'busy')).toMatchObject({ code: 'site-anchor-ambiguous' })
+    }
+
+    const overlappingQuote = resolveRef(inventory, [file], ref('if (empty) return <EmptyState />'))
+    expect(evidence(overlappingQuote)).toBe(false)
+    if (!evidence(overlappingQuote)) {
+      const start = content.indexOf('if (empty)')
+      const overlappingCandidates: Candidate[] = [
+        { ...candidates[2]!, anchorEnd: start + 'if (empty)'.length, anchorText: 'if (empty)' },
+        { ...candidates[2]!, anchorEnd: start + 'if (empty) return'.length, anchorText: 'if (empty) return' }
+      ]
+      expect(selectCandidate(overlappingQuote, overlappingCandidates, 'state', 'if (empty)')).toBe(overlappingCandidates[0])
+      expect(selectCandidate(overlappingQuote, overlappingCandidates, 'state', 'if (empty) return')).toBe(overlappingCandidates[1])
     }
   })
 })
@@ -218,4 +261,37 @@ describe('one-hop route target resolution', () => {
       expect(resolveTarget(plugin([source(file, content)]), [file], parsed.source, parsed.expression)).toBeUndefined()
     }
   })
+
+  test('does not resolve local or imported constants shadowed at the expression use', () => {
+    const cases = [
+      "const API = 'acme.app/save'; function Component(API: string) { return <button onClick={() => context.call(API)} /> }",
+      "const API = 'acme.app/save'; function use(API: string) { context.call(API) }",
+      "const API = 'acme.app/save'; const use = (API: string) => context.call(API)",
+      "const API = 'acme.app/save'; function use({ API }: { API: string }) { context.call(API) }",
+      "const API = 'acme.app/save'; { context.call(API); let API: string }",
+      "const API = 'acme.app/save'; { context.call(API); const API = 'other/save' }",
+      "const API = 'acme.app/save'; try {} catch (API) { context.call(API) }",
+      "const API = 'acme.app/save'; function use() { context.call(API); if (false) { var API = 'other/save' } }",
+      "const API = 'acme.app/'; function use(API: string) { context.call(`${API}save`) }"
+    ]
+    for (const content of cases) {
+      const parsed = routeArgument(content)
+      expect(resolveTarget(plugin([source(file, content)]), [file], parsed.source, parsed.expression)).toBeUndefined()
+    }
+  })
+
+  test('does not resolve an imported constant shadowed by a local parameter', () => {
+    const ui = 'plugins/acme.app/src/ui.tsx'
+    const ids = 'plugins/acme.app/src/ids.ts'
+    const content = "import { API } from './ids'; function use(API: string) { context.call(API) }"
+    const parsed = routeArgument(content, ui)
+
+    expect(resolveTarget(
+      plugin([source(ui, content), source(ids, "export const API = 'acme.app/save'")]),
+      [ui, ids],
+      parsed.source,
+      parsed.expression
+    )).toBeUndefined()
+  })
 })
+

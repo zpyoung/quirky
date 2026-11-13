@@ -110,7 +110,7 @@ function parseState(value: unknown, label: string): CoverageFile['states'][numbe
     surface: stringValue(state.surface, `${label}.surface`),
     state: stateKind,
     site: parseRef(state.site, `${label}.site`),
-    ...(Object.hasOwn(state, 'anchor') ? { anchor: stringValue(state.anchor, `${label}.anchor`, false) } : {}),
+    ...(Object.hasOwn(state, 'anchor') ? { anchor: stringValue(state.anchor, `${label}.anchor`) } : {}),
     render: parseRender(state.render, `${label}.render`)
   }
 }
@@ -120,7 +120,7 @@ function parseNotState(value: unknown, label: string): CoverageFile['notState'][
   exactKeys(entry, label, ['site', 'reason'], ['anchor'])
   return {
     site: parseRef(entry.site, `${label}.site`),
-    ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`, false) } : {}),
+    ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`) } : {}),
     reason: stringValue(entry.reason, `${label}.reason`)
   }
 }
@@ -148,7 +148,7 @@ function parseAction(value: unknown, label: string): CoverageFile['actions'][num
     exactKeys(entry, label, ['site', 'route'], ['anchor'])
     return {
       site: parseRef(entry.site, `${label}.site`),
-      ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`, false) } : {}),
+      ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`) } : {}),
       route: parseRoute(entry.route, `${label}.route`)
     }
   }
@@ -158,7 +158,7 @@ function parseAction(value: unknown, label: string): CoverageFile['actions'][num
     if (transient !== 'caret' && transient !== 'hover' && transient !== 'draft') invalidCoverage(`${label}.transient is unsupported`)
     return {
       site: parseRef(entry.site, `${label}.site`),
-      ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`, false) } : {}),
+      ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`) } : {}),
       transient,
       reason: stringValue(entry.reason, `${label}.reason`)
     }
@@ -168,7 +168,7 @@ function parseAction(value: unknown, label: string): CoverageFile['actions'][num
   if (notAction !== 'lifecycle' && notAction !== 'subscription' && notAction !== 'forwarded') invalidCoverage(`${label}.notAction is unsupported`)
   return {
     site: parseRef(entry.site, `${label}.site`),
-    ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`, false) } : {}),
+    ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`) } : {}),
     notAction,
     reason: stringValue(entry.reason, `${label}.reason`)
   }
@@ -300,7 +300,7 @@ export function selectCandidate(ref: ResolvedRef, candidates: readonly Candidate
     return evidence('site-anchor-ambiguous', `Anchor is not unique inside the quote from ${ref.file}: ${JSON.stringify(anchor)}`, ref.file, ref.source, ref.start)
   }
   const anchorStart = ref.start + first
-  const selected = matches.filter((candidate) => candidate.anchorStart === anchorStart && candidate.anchorText.startsWith(anchor))
+  const selected = matches.filter((candidate) => candidate.anchorStart === anchorStart && candidate.anchorText === anchor)
   if (selected.length !== 1) {
     return evidence('site-anchor-ambiguous', `Anchor does not exactly identify one ${category} candidate in ${ref.file}: ${JSON.stringify(anchor)}`, ref.file, ref.source, anchorStart)
   }
@@ -439,7 +439,65 @@ function namedImportSource(plugin: PluginInventory, files: readonly string[], so
   return undefined
 }
 
-function constantLiteral(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, name: string): string | undefined {
+function bindingContainsName(binding: ts.BindingName | undefined, name: string): boolean {
+  if (binding === undefined) return false
+  if (ts.isIdentifier(binding)) return binding.text === name
+  return binding.elements.some((element) => !ts.isOmittedExpression(element) && bindingContainsName(element.name, name))
+}
+
+function declarationsBindName(statements: readonly ts.Statement[], name: string): boolean {
+  for (const statement of statements) {
+    if (ts.isVariableStatement(statement) && (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0 &&
+      statement.declarationList.declarations.some((declaration) => bindingContainsName(declaration.name, name))) return true
+    if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name?.text === name) return true
+  }
+  return false
+}
+
+function functionHasVarBinding(scope: FunctionNode, name: string): boolean {
+  if (scope.body === undefined) return false
+  let found = false
+  const visit = (node: ts.Node): void => {
+    if (found || (node !== scope.body && (isFunctionNode(node) || ts.isClassLike(node)))) return
+    if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.BlockScoped) === 0 &&
+      node.declarations.some((declaration) => bindingContainsName(declaration.name, name))) {
+      found = true
+      return
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(scope.body)
+  return found
+}
+
+function iterationBindsName(scope: ts.Node, name: string): boolean {
+  if (!ts.isForStatement(scope) && !ts.isForInStatement(scope) && !ts.isForOfStatement(scope)) return false
+  const initializer = scope.initializer
+  return ts.isVariableDeclarationList(initializer) && (initializer.flags & ts.NodeFlags.BlockScoped) !== 0 &&
+    initializer.declarations.some((declaration) => bindingContainsName(declaration.name, name))
+}
+
+function hasEnclosingBinding(use: ts.Identifier, name: string): boolean {
+  for (let scope: ts.Node | undefined = use.parent; scope !== undefined; scope = scope.parent) {
+    if (ts.isBlock(scope) && declarationsBindName(scope.statements, name)) return true
+    if (ts.isCaseBlock(scope) && scope.clauses.some((clause) => declarationsBindName(clause.statements, name))) return true
+    if (ts.isCatchClause(scope) && bindingContainsName(scope.variableDeclaration?.name, name)) return true
+    if (iterationBindsName(scope, name)) return true
+    if (isFunctionNode(scope)) {
+      if (scope.parameters.some((parameter) => bindingContainsName(parameter.name, name))) return true
+      if (ts.isFunctionExpression(scope) && scope.name?.text === name) return true
+      if (scope.body !== undefined && (use === scope.body || isDescendantOf(use, scope.body)) && functionHasVarBinding(scope, name)) return true
+    }
+    if (ts.isClassExpression(scope) && scope.name?.text === name) return true
+    if (ts.isSourceFile(scope)) break
+  }
+  return false
+}
+
+function constantLiteral(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, use: ts.Identifier): string | undefined {
+  const name = use.text
+  if (hasEnclosingBinding(use, name)) return undefined
+
   const local = topLevelConst(source, name)
   if (local.length === 1) {
     const initializer = local[0]!.initializer
@@ -457,14 +515,14 @@ function constantLiteral(plugin: PluginInventory, files: readonly string[], sour
 function templateSubstitution(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, expression: ts.Expression): string | undefined {
   const literal = literalString(expression)
   if (literal !== undefined) return literal
-  if (ts.isIdentifier(expression)) return constantLiteral(plugin, files, source, expression.text)
+  if (ts.isIdentifier(expression)) return constantLiteral(plugin, files, source, expression)
   return undefined
 }
 
 function resolveExpressionTarget(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, expression: ts.Expression): string | undefined {
   const literal = literalString(expression)
   if (literal !== undefined) return literal
-  if (ts.isIdentifier(expression)) return constantLiteral(plugin, files, source, expression.text)
+  if (ts.isIdentifier(expression)) return constantLiteral(plugin, files, source, expression)
   if (!ts.isTemplateExpression(expression)) return undefined
 
   let result = expression.head.text
@@ -480,3 +538,4 @@ function resolveExpressionTarget(plugin: PluginInventory, files: readonly string
 export function resolveTarget(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, expression: ts.Expression): string | undefined {
   return resolveExpressionTarget(plugin, files, source, expression)
 }
+
