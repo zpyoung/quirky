@@ -189,9 +189,50 @@ const TEST_ARTIFACT: BaselineArtifact<Baseline> = {
   validate: parseBaseline,
 }
 
+export function parseArtifactJson(text: string): unknown {
+  const parsed = JSON.parse(text) as unknown
+  type Frame = { kind: 'array' } | { kind: 'object'; keys: Set<string>; expectingKey: boolean }
+  const stack: Frame[] = []
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]
+    if (char === '"') {
+      let end = index + 1
+      while (end < text.length) {
+        if (text[end] === '\\') {
+          end += 2
+        } else if (text[end] === '"') {
+          break
+        } else {
+          end++
+        }
+      }
+      const frame = stack[stack.length - 1]
+      if (frame?.kind === 'object' && frame.expectingKey) {
+        const key = JSON.parse(text.slice(index, end + 1)) as string
+        if (frame.keys.has(key)) throw new SyntaxError(`duplicate JSON object key ${JSON.stringify(key)}`)
+        frame.keys.add(key)
+        frame.expectingKey = false
+      }
+      index = end
+    } else if (char === '{') {
+      stack.push({ kind: 'object', keys: new Set(), expectingKey: true })
+    } else if (char === '[') {
+      stack.push({ kind: 'array' })
+    } else if (char === '}' || char === ']') {
+      stack.pop()
+    } else if (char === ',') {
+      const frame = stack[stack.length - 1]
+      if (frame?.kind === 'object') frame.expectingKey = true
+    }
+  }
+  return parsed
+}
+
 function validateArtifact<T extends { commit: string }>(text: string, artifact: BaselineArtifact<T>): T | null {
   try {
-    return artifact.validate(JSON.parse(text))
+    const value = artifact === TEST_ARTIFACT ? JSON.parse(text) : parseArtifactJson(text)
+    return artifact.validate(value)
   } catch {
     return null
   }
@@ -260,8 +301,8 @@ async function readZipEntry(zip: string, entry: string, maxBytes?: number): Prom
 }
 
 /**
- * Loads a listed baseline from its descriptor-specific cache or artifact entry. Both paths validate the value and its
- * commit; bounded descriptors stream the decompressed archive entry and never extract archive paths to disk.
+ * Loads a listed baseline from its cache or artifact entry. Non-default descriptors key caches by commit and selected
+ * artifact ID; the default unit cache remains keyed by commit. Both paths validate the value and its commit.
  */
 export function fetchBaseline<T extends { commit: string }>(
   found: Found,
@@ -276,7 +317,8 @@ export async function fetchBaseline<T extends { commit: string }>(
   const common = git(opts.cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
   if (!common) throw new BaselineUnavailable(`${opts.cwd} is not in a git repository`)
   const cacheDir = join(common, artifact.cacheNamespace)
-  const cached = join(cacheDir, `${found.commit}.json`)
+  const cacheName = `${found.commit}${opts.artifact ? `-${found.artifactId}` : ''}.json`
+  const cached = join(cacheDir, cacheName)
   if (existsSync(cached)) {
     const hit = readCached(cached, found.commit, artifact)
     if (hit) return hit

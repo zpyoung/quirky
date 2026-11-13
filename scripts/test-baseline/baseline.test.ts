@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { BaselineUnavailable, buildBaseline, fetchBaseline, findBaseline, findBaselines } from './baseline'
+import { BaselineUnavailable, buildBaseline, fetchBaseline, findBaseline, findBaselines, parseArtifactJson } from './baseline'
 import type { BaselineArtifact } from './baseline'
 import type { Attempt, Baseline, FileResult, GhRunner } from './types'
 
@@ -82,6 +82,22 @@ function speedArtifact(maxJsonBytes?: number): BaselineArtifact<SpeedEvidence> {
     source: { event: 'push', workflowPath: TESTS_WORKFLOW },
   }
 }
+
+describe('parseArtifactJson', () => {
+  test('rejects duplicate keys, including escaped-equivalent keys', () => {
+    expect(() => parseArtifactJson('{"echo":1,"echo":2}')).toThrow()
+    expect(() => parseArtifactJson('{"echo":1,"e\\u0063ho":2}')).toThrow()
+  })
+
+  test('allows same-named keys in separate objects and ignores string contents', () => {
+    const text = JSON.stringify({
+      first: { shared: 'one' },
+      second: { shared: 'two' },
+      content: 'colon: braces { } brackets [ ] and escaped quote "',
+    })
+    expect(parseArtifactJson(text)).toEqual(JSON.parse(text))
+  })
+})
 
 const root = mkdtempSync(join(tmpdir(), 'baseline-test-'))
 afterAll(() => rmSync(root, { recursive: true, force: true }))
@@ -355,6 +371,31 @@ describe('fetchBaseline with artifact descriptors', () => {
     }
   }
 
+  test('keys descriptor caches by the selected artifact ID for the same commit', async () => {
+    const commit = sha(32)
+    const foundA = { commit, artifactId: 92 }
+    const foundB = { commit, artifactId: 93 }
+    const artifactA = { commit, marker: 'artifact-a' }
+    const artifactB = { commit, marker: 'artifact-b' }
+    const callsA: string[] = []
+    const callsB: string[] = []
+
+    expect(await fetchBaseline(foundA, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(zipOf(scratch, JSON.stringify(artifactA), 'report.json'), callsA),
+    })).toEqual(artifactA)
+    expect(await fetchBaseline(foundB, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(zipOf(scratch, JSON.stringify(artifactB), 'report.json'), callsB),
+    })).toEqual(artifactB)
+    expect(callsA).toHaveLength(1)
+    expect(callsB).toHaveLength(1)
+  })
+
   test('reads the descriptor entry and keeps speed and unit caches separate', async () => {
     const found = { commit: sha(23), artifactId: 87 }
     const speed = { commit: found.commit, marker: 'speed' }
@@ -372,7 +413,7 @@ describe('fetchBaseline with artifact descriptors', () => {
     expect(await fetchBaseline(found, { cwd: dir, repo: REPO, download: downloader(unitZip) })).toEqual(unit)
 
     const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-    expect(JSON.parse(readFileSync(join(common, 'speed-baseline', `${found.commit}.json`), 'utf8'))).toEqual(speed)
+    expect(JSON.parse(readFileSync(join(common, 'speed-baseline', `${found.commit}-${found.artifactId}.json`), 'utf8'))).toEqual(speed)
     expect(JSON.parse(readFileSync(join(common, 'test-baseline', `${found.commit}.json`), 'utf8'))).toEqual(unit)
     await expect(fetchBaseline(found, {
       cwd: dir,
@@ -387,7 +428,7 @@ describe('fetchBaseline with artifact descriptors', () => {
     const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
     const cacheDir = join(common, 'speed-baseline')
     mkdirSync(cacheDir, { recursive: true })
-    writeFileSync(join(cacheDir, `${found.commit}.json`), JSON.stringify({ commit: found.commit, marker: 12 }))
+    writeFileSync(join(cacheDir, `${found.commit}-${found.artifactId}.json`), JSON.stringify({ commit: found.commit, marker: 12 }))
     const speed = { commit: found.commit, marker: 'refetched' }
     const downloads: string[] = []
     expect(await fetchBaseline(found, {
@@ -399,7 +440,7 @@ describe('fetchBaseline with artifact descriptors', () => {
     expect(downloads).toHaveLength(1)
 
     const foundWithWrongCachedSha = { commit: sha(30), artifactId: 91 }
-    writeFileSync(join(cacheDir, `${foundWithWrongCachedSha.commit}.json`), JSON.stringify({ commit: sha(31), marker: 'stale' }))
+    writeFileSync(join(cacheDir, `${foundWithWrongCachedSha.commit}-${foundWithWrongCachedSha.artifactId}.json`), JSON.stringify({ commit: sha(31), marker: 'stale' }))
     const refetched = { commit: foundWithWrongCachedSha.commit, marker: 'sha-agreed' }
     expect(await fetchBaseline(foundWithWrongCachedSha, {
       cwd: dir,
@@ -417,6 +458,34 @@ describe('fetchBaseline with artifact descriptors', () => {
     })).rejects.toBeInstanceOf(BaselineUnavailable)
   })
 
+  test('rejects duplicate keys in descriptor caches and downloaded entries', async () => {
+    const found = { commit: sha(33), artifactId: 96 }
+    const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    const cacheDir = join(common, 'speed-baseline')
+    mkdirSync(cacheDir, { recursive: true })
+    const cachePath = join(cacheDir, `${found.commit}-${found.artifactId}.json`)
+    writeFileSync(cachePath, `{"commit":"${found.commit}","marker":"old","marker":"cached"}`)
+
+    const valid = { commit: found.commit, marker: 'downloaded' }
+    const downloads: string[] = []
+    expect(await fetchBaseline(found, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(zipOf(scratch, JSON.stringify(valid), 'report.json'), downloads),
+    })).toEqual(valid)
+    expect(downloads).toHaveLength(1)
+
+    const malformed = { commit: sha(34), artifactId: 97 }
+    const duplicateJson = `{"commit":"${malformed.commit}","marker":"first","marker":"second"}`
+    await expect(fetchBaseline(malformed, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(zipOf(scratch, duplicateJson, 'report.json')),
+    })).rejects.toBeInstanceOf(BaselineUnavailable)
+  })
+
   test('stops reading descriptor JSON as soon as the decompressed size limit is exceeded', async () => {
     const found = { commit: sha(27), artifactId: 90 }
     const zip = zipOf(scratch, JSON.stringify({ commit: found.commit, marker: 'x'.repeat(2048) }), 'report.json')
@@ -427,7 +496,7 @@ describe('fetchBaseline with artifact descriptors', () => {
       download: downloader(zip),
     })).rejects.toBeInstanceOf(BaselineUnavailable)
     const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-    expect(existsSync(join(common, 'speed-baseline', `${found.commit}.json`))).toBe(false)
+    expect(existsSync(join(common, 'speed-baseline', `${found.commit}-${found.artifactId}.json`))).toBe(false)
   })
 })
 
@@ -457,6 +526,17 @@ describe('fetchBaseline', () => {
     const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
     const cached = join(common, 'test-baseline', `${found.commit}.json`)
     expect(JSON.parse(readFileSync(cached, 'utf8'))).toEqual(baseline)
+  })
+
+  test('keeps default unit baselines on JSON.parse duplicate-key semantics', async () => {
+    const found = { commit: sha(35), artifactId: 98 }
+    const baseline = sampleBaseline(found.commit)
+    const duplicateJson = JSON.stringify(baseline).replace('"runId":"42"', '"runId":"prior","runId":"42"')
+    expect(await fetchBaseline(found, {
+      cwd: dir,
+      repo: REPO,
+      download: downloader(zipOf(scratch, duplicateJson)),
+    })).toEqual(baseline)
   })
 
   test('reads from the cache without downloading', async () => {

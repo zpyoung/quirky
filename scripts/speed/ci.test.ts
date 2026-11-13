@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BUDGETS, METRICS, type SpeedReport } from './contracts'
@@ -96,6 +96,15 @@ test('forged comparison cannot replace recomputed sample arithmetic', () => {
   writeFileSync(join(out, 'baseline.json'), JSON.stringify(report(sha(1))))
   writeFileSync(join(out, 'comparison.json'), JSON.stringify({ status: 'compared', head: sha(2), baseline: sha(1), metrics: {} }))
   expect(readSpeedEvidence(out, sha(2))).toContain('not measured:')
+})
+
+test('duplicate metric keys cannot become a qualifying imported measurement', () => {
+  const value = report()
+  const out = stage(value)
+  const echo = `"echo":${JSON.stringify(value.metrics.echo)}`
+  writeFileSync(join(out, 'report.json'), JSON.stringify(value).replace(echo, `${echo},${echo}`))
+  writeFileSync(join(out, 'comparison.json'), JSON.stringify({ status: 'unavailable', head: { commit: value.commit }, baseline: null, reason: 'no baseline' }))
+  expect(readSpeedEvidence(out, value.commit)).toContain('not measured:')
 })
 
 test('an incompatible nearest main profile falls back to the older compatible ancestor', async () => {

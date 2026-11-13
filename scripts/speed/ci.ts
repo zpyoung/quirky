@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { defaultGh, fetchBaseline, findBaselines, type BaselineArtifact } from '../test-baseline/baseline'
+import { defaultGh, fetchBaseline, findBaselines, parseArtifactJson, type BaselineArtifact } from '../test-baseline/baseline'
 import type { GhRunner } from '../test-baseline/types'
 import { METRICS, type Comparison, type SpeedReport } from './contracts'
 import { compareReports, compatibleProfiles, renderSpeed, validateReport } from './report'
@@ -23,7 +23,7 @@ export const SPEED_ARTIFACT: BaselineArtifact<SpeedReport> = {
 
 function readJson(path: string): unknown {
   if (statSync(path).size > MAX_JSON_BYTES) throw new Error('evidence exceeds 5 MiB')
-  return JSON.parse(readFileSync(path, 'utf8'))
+  return parseArtifactJson(readFileSync(path, 'utf8'))
 }
 
 function state(status: 'unavailable' | 'error', current: SpeedReport | null, reason: string): EvidenceComparison {
