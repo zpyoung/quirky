@@ -48,14 +48,12 @@ test('switching a streaming Watch pane from Default to a new profile attaches to
 
 test('a failed profile switch reports plain words and leaves the pane on its profile with its Watch running', async () => {
   let blockedProfile: string | undefined
-  let harness: BrowserTestHarness | undefined
   const h = await startBrowserHarness({
-    spawn(command, options) {
+    spawn(command, options, defaultSpawn) {
       const target = blockedProfile && command.some((part) => part.startsWith('--user-data-dir=') && part.includes(blockedProfile!))
-      return harness!.scope.spawn(target ? ['/usr/bin/false'] : command, options)
+      return defaultSpawn(target ? ['/usr/bin/false'] : command, options)
     }
   })
-  harness = h
   const events: QuirkyEvent[] = []
   try {
     const worktree = await h.addFolderWorktree('pane-profile-switch-failure')

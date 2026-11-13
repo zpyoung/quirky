@@ -476,6 +476,66 @@
         }
       },
       {
+        "id": "searchRefs",
+        "description": "Searches branch, tag and remote-branch short names by case-insensitive substring.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "description": "A repo selector: id:, name: or path:, or a bare ID or name."
+            },
+            "query": {
+              "type": "string",
+              "description": "Case-insensitive substring of the ref's short name; 1 to 200 characters."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "description": "Most refs to return; default 50."
+            }
+          },
+          "required": ["repo", "query"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "refs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Short name: the branch or tag name, or remote/branch."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["branch", "tag", "remote-branch"]
+                  },
+                  "ref": {
+                    "type": "string",
+                    "description": "Full ref name, such as refs/tags/v1."
+                  },
+                  "target": {
+                    "type": "string",
+                    "description": "The object ID the ref resolves to; for an annotated tag, the tagged object."
+                  }
+                },
+                "required": ["name", "kind", "ref", "target"]
+              }
+            },
+            "truncated": {
+              "type": "boolean",
+              "description": "True when more refs matched than were returned."
+            }
+          },
+          "required": ["refs", "truncated"]
+        }
+      },
+      {
         "id": "show",
         "description": "A project with its settings and effective hooks (the shared file at HEAD merged with local setup, archive and issue-command scripts).",
         "readOnly": true,
@@ -1687,6 +1747,31 @@
         },
         "methods": [
           "quirky.repo/create"
+        ]
+      },
+      {
+        "id": "search-refs",
+        "summary": "search a repository's branches and tags",
+        "positionals": [
+          {
+            "name": "repo",
+            "description": "the repository",
+            "required": true
+          }
+        ],
+        "flags": {
+          "query": {
+            "type": "string",
+            "required": true,
+            "description": "case-insensitive substring of branch, tag or remote-branch names"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "maximum refs to return (1-200, default 50)"
+          }
+        },
+        "methods": [
+          "quirky.repo/searchRefs"
         ]
       },
       {

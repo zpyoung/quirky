@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { git, isolateGitConfig, makeRepo } from '../../../plugins/quirky.repo/test/git-fixtures'
 import { GitError } from '../src/index'
-import { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT, commitFiles, history, listBranches } from '../src/history'
+import { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT, commitFiles, history, listBranches, searchRefs } from '../src/history'
 
 const fixture = isolateGitConfig()
 
@@ -231,5 +231,57 @@ describe('listBranches', () => {
     expect(current).toBeNull()
     expect(refs).toHaveLength(200)
     expect(refs[0]!.name).toBe('b000')
+  })
+})
+
+describe('searchRefs', () => {
+  function refRepo(): { dir: string; head: string } {
+    const dir = makeRepo(fixture.scratch())
+    const head = git(dir, 'rev-parse', 'HEAD')
+    for (const branch of ['match', 'Match-extra', 'a-match', 'z-match']) git(dir, 'branch', branch)
+    git(dir, 'tag', 'match')
+    git(dir, 'tag', '-a', 'annotated-match', '-m', 'annotated target', 'HEAD')
+    git(dir, 'update-ref', 'refs/remotes/origin/main', head)
+    git(dir, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    git(dir, 'update-ref', 'refs/remotes/origin/match', head)
+    return { dir, head }
+  }
+
+  test('matches case-insensitively with exact names first and branch/tag/remote ordering', async () => {
+    const { dir, head } = refRepo()
+
+    const result = await searchRefs(dir, 'match', 50)
+
+    expect(result).toEqual({
+      refs: [
+        { name: 'match', kind: 'branch', ref: 'refs/heads/match', target: head },
+        { name: 'match', kind: 'tag', ref: 'refs/tags/match', target: head },
+        { name: 'Match-extra', kind: 'branch', ref: 'refs/heads/Match-extra', target: head },
+        { name: 'a-match', kind: 'branch', ref: 'refs/heads/a-match', target: head },
+        { name: 'z-match', kind: 'branch', ref: 'refs/heads/z-match', target: head },
+        { name: 'annotated-match', kind: 'tag', ref: 'refs/tags/annotated-match', target: head },
+        { name: 'origin/match', kind: 'remote-branch', ref: 'refs/remotes/origin/match', target: head }
+      ],
+      truncated: false
+    })
+    expect(result.refs.find((ref) => ref.ref === 'refs/remotes/origin/HEAD')).toBeUndefined()
+    expect(result.refs.find((ref) => ref.ref === 'refs/tags/annotated-match')?.target).toBe(head)
+    expect(await searchRefs(dir, 'HEAD', 50)).toEqual({ refs: [], truncated: false })
+  })
+
+  test('limits matched refs and reports whether results were truncated', async () => {
+    const { dir } = refRepo()
+
+    const result = await searchRefs(dir, 'match', 4)
+
+    expect(result.refs).toHaveLength(4)
+    expect(result.refs.map((ref) => ref.name)).toEqual(['match', 'match', 'Match-extra', 'a-match'])
+    expect(result.truncated).toBe(true)
+  })
+
+  test('returns an empty non-truncated result when no ref matches', async () => {
+    const { dir } = refRepo()
+
+    expect(await searchRefs(dir, 'missing', 50)).toEqual({ refs: [], truncated: false })
   })
 })

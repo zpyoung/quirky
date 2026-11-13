@@ -17,6 +17,10 @@ function releaseFixture() {
   const invalidated: string[] = []
   const runtime = new BrowserRuntime(store, {
     runtimeRoot: root,
+    process: {
+      run: async () => { throw new Error('a refused continuation must not run a command') },
+      spawn: () => { throw new Error('a refused continuation must not start another browser') }
+    },
     spawn: () => { throw new Error('a refused continuation must not start another browser') }
   }, (id) => { invalidated.push(id) })
   const commands: Command[] = []

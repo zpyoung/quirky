@@ -682,6 +682,14 @@ describe('startOneShot', () => {
     expect(stopCalls).toContainEqual({ signal: 'SIGTERM', graceMs: 2_000 })
   })
 
+  test('discards partial stdout after a non-stall read error', async () => {
+    const stdout = streamOf([Buffer.from('partial stdout')], new Error('stdout pipe broken'))
+
+    const outcome = await startOneShot(recordingSpawner(makeHandle({ stdout })).spawner, ONE_SHOT_INPUT).done
+
+    expect(outcome).toEqual({ kind: 'exited', code: 1, stdout: '', stderr: '' })
+  })
+
   test('keeps stderr collected before a non-stall stderr read error', async () => {
     const stderr = streamOf([Buffer.from('partial stderr')], new Error('stderr pipe broken'))
 

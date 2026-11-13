@@ -461,6 +461,7 @@ const pluginReferences: Array<{ rowId: string; plugin: string; commandId: string
   { rowId: 'repo-set', plugin: 'quirky.repo', commandId: 'set' },
   { rowId: 'repo-set-base-ref', plugin: 'quirky.repo', commandId: 'set' },
   { rowId: 'repo-show', plugin: 'quirky.repo', commandId: 'show' },
+  { rowId: 'repo-search-refs', plugin: 'quirky.repo', commandId: 'search-refs' },
   { rowId: 'serve-restore-resume', plugin: 'quirky.session', commandId: 'restore' },
   { rowId: 'serve-restore-resume', plugin: 'quirky.session', commandId: 'wake' },
   { rowId: 'terminal-close', plugin: 'quirky.terminal', commandId: 'tab-close' },
@@ -472,6 +473,7 @@ const pluginReferences: Array<{ rowId: string; plugin: string; commandId: string
   { rowId: 'terminal-send', plugin: 'quirky.terminal', commandId: 'send' },
   { rowId: 'terminal-set-pane-title', plugin: 'quirky.terminal', commandId: 'pane-title' },
   { rowId: 'terminal-show', plugin: 'quirky.terminal', commandId: 'pane-get' },
+  { rowId: 'terminal-show', plugin: 'quirky.terminal', commandId: 'read' },
   { rowId: 'terminal-split', plugin: 'quirky.terminal', commandId: 'pane-split' },
   { rowId: 'terminal-switch', plugin: 'quirky.terminal', commandId: 'tab-activate' },
   { rowId: 'terminal-wait', plugin: 'quirky.agent-status', commandId: 'wait' },
@@ -643,9 +645,6 @@ function kernelMapping(
 
 const KERNEL_MAPPINGS: CliCatalogMapping[] = [
   kernelMapping('agent-context', 'api', ['api.describe']),
-  kernelMapping('repo-search-refs', 'api call', ['api.describe'], [], [
-    positionalBinding('method', 'the method to call, e.g. git.status or acme.notes/add', true)
-  ], { kind: 'api-call', methodTarget: 'quirky.git/branches' }),
   kernelMapping('file-diff', 'ui run', ['ui.command.run'], [
     flagBinding('args', 'json', 'the command arguments, as JSON')
   ], [positionalBinding('command', 'the command contribution ID', true)], {
