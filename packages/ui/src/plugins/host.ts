@@ -10,7 +10,7 @@ import {
   type SettingInfo,
   type ToastKind,
   type ToastOptions,
-  type UiCommandEntry,
+  type MountCleanup,
   type UiKeybinding,
   type UiLayout,
   type UiModel,
@@ -127,7 +127,10 @@ type MountHandle = {
   readonly id: string
   readonly plugin: string
   readonly module: UiSlotEntry['module']
-  cleanup?: () => void
+  readonly kind: UiSlotEntry['kind'] | undefined
+  input: unknown
+  state: 'pending' | 'mounting' | 'mounted' | 'failed'
+  cleanup?: MountCleanup
   afterCleanup?: () => void
   finishRelease?: () => void
   released: boolean
@@ -302,33 +305,30 @@ export class WindowPluginHost {
     element: HTMLElement,
     props?: { input?: unknown },
     options?: { deferCleanup?: boolean; afterCleanup?: () => void }
-  ): () => void {
+  ): MountCleanup {
     const entry = this.state.model ? findSlot(this.state.model, id) : undefined
-    if (!entry) {
-      this.setSlot(id, { status: 'error', message: `no contribution ${id}` })
-      let released = false
-      return () => {
-        if (released) return
-        released = true
-        const finish = () => {
-          options?.afterCleanup?.()
-          this.setSlot(id, null)
-        }
-        if (options?.deferCleanup) queueMicrotask(finish)
-        else finish()
-      }
-    }
     const handle: MountHandle = {
       id,
-      plugin: entry.plugin,
-      module: entry.module,
+      plugin: entry?.plugin ?? '',
+      module: entry?.module ?? '',
+      kind: entry?.kind,
+      input: props?.input,
+      state: entry ? 'pending' : 'failed',
       afterCleanup: options?.afterCleanup,
       released: false
     }
+    if (!entry) {
+      this.setSlot(id, { status: 'error', message: `no contribution ${id}` })
+      const unmount: MountCleanup = () => this.release(handle, options?.deferCleanup ?? false)
+      unmount.updateInput = (input) => this.updateMountInput(handle, input)
+      return unmount
+    }
     this.mounts.add(handle)
     this.setSlot(id, { status: 'loading' })
-    void this.runMount(handle, entry, element, props)
-    return () => this.release(handle, options?.deferCleanup ?? false)
+    void this.runMount(handle, entry, element)
+    const unmount: MountCleanup = () => this.release(handle, options?.deferCleanup ?? false)
+    unmount.updateInput = (input) => this.updateMountInput(handle, input)
+    return unmount
   }
 
   /**
@@ -596,16 +596,15 @@ export class WindowPluginHost {
     }
   }
 
-  private async runMount(
-    handle: MountHandle,
-    entry: UiSlotEntry,
-    element: HTMLElement,
-    props?: { input?: unknown }
-  ): Promise<void> {
+  private async runMount(handle: MountHandle, entry: UiSlotEntry, element: HTMLElement): Promise<void> {
+    handle.state = 'mounting'
     try {
       await this.ensureLoaded(entry.plugin)
     } catch (error) {
-      if (!handle.released) this.setSlot(handle.id, { status: 'error', message: messageOf(error) })
+      if (!handle.released) {
+        handle.state = 'failed'
+        this.setSlot(handle.id, { status: 'error', message: messageOf(error) })
+      }
       return
     }
     if (handle.released) return
@@ -622,12 +621,12 @@ export class WindowPluginHost {
       this.sendReport(handle, state)
     }
     try {
-      cleanup = implementation(element, entry.kind === 'view' ? { input: props?.input, report } : { report })
+      cleanup = implementation(element, entry.kind === 'view' ? { input: handle.input, report } : { report })
     } catch (error) {
       if (!handle.released) this.failSlot(handle, `${entry.plugin}: ${messageOf(error)}`)
       return
     }
-    const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
+    const cleanupFn = typeof cleanup === 'function' ? (cleanup as MountCleanup) : undefined
     // A breach or concurrent disposal may release the handle during the mount callback.
     if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
       if (handle.released && handle.finishRelease) handle.cleanup = cleanupFn
@@ -635,6 +634,7 @@ export class WindowPluginHost {
       return
     }
     handle.cleanup = cleanupFn
+    handle.state = 'mounted'
     this.setSlot(handle.id, { status: 'mounted' })
     // the daemon learns an overlay is mounted from a report, so one that stays silent still sends this
     if (entry.kind === 'overlay' && handle.report === undefined) report({})
@@ -676,7 +676,27 @@ export class WindowPluginHost {
     this.runCleanup(handle.plugin, cleanup)
   }
 
+  private updateMountInput(handle: MountHandle, input: unknown): boolean {
+    if (handle.released || handle.state === 'failed' || handle.kind !== 'view') return false
+    if (handle.state === 'pending' || handle.state === 'mounting') {
+      handle.input = input
+      return true
+    }
+    if (handle.state !== 'mounted') return false
+    try {
+      const updateInput = handle.cleanup?.updateInput
+      if (typeof updateInput !== 'function' || updateInput.call(handle.cleanup, input) !== true) return false
+      if (handle.released || handle.state !== 'mounted') return false
+      handle.input = input
+      return true
+    } catch (error) {
+      this.deps.log(`${handle.plugin}: updateInput failed: ${messageOf(error)}`)
+      return false
+    }
+  }
+
   private failSlot(handle: MountHandle, message: string): void {
+    handle.state = 'failed'
     this.setSlot(handle.id, { status: 'error', message })
     this.deps.log(message.startsWith(handle.plugin) ? message : `${handle.plugin}: ${message}`)
   }
@@ -695,6 +715,7 @@ export class WindowPluginHost {
       return
     }
     handle.released = true
+    handle.state = 'failed'
     const finish = () => {
       if (handle.finishRelease !== finish) return
       handle.finishRelease = undefined
@@ -935,13 +956,13 @@ export class WindowPluginHost {
       }
       this.mounts.delete(handle)
       handle.released = true
+      handle.state = 'failed'
       const cleanup = handle.cleanup
       handle.cleanup = undefined
-      try {
-        cleanup?.()
-      } catch (error) {
-        this.deps.log(`${handle.plugin}: cleanup failed: ${messageOf(error)}`)
-      }
+      this.runCleanup(handle.plugin, cleanup)
+      const afterCleanup = handle.afterCleanup
+      handle.afterCleanup = undefined
+      this.runCleanup(handle.plugin, afterCleanup)
       this.setSlot(handle.id, { status: 'error', message })
       if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
     }
