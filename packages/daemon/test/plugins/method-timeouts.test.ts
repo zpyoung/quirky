@@ -126,7 +126,7 @@ function timeoutMsFor(qualifiedId: string): number {
 function effectiveDeadlineMs(qualifiedId: string): number {
   const timeout = methodForQualifiedId(qualifiedId).timeout
   if (timeout === undefined) {
-    return typeof defaultMutatingTimeoutMs === 'number' ? defaultMutatingTimeoutMs : 600_000
+    return DEFAULT_MUTATING_METHOD_TIMEOUT_MS
   }
   if (typeof timeout !== 'string') throw new Error(`Invalid timeout for ${qualifiedId}`)
   const timeoutMs = parseDuration(timeout)

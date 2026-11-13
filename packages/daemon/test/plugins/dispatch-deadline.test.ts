@@ -231,8 +231,10 @@ describe('Dispatcher method deadlines', () => {
     const t = setup()
     t.plugin([method('read')], `context.provide('${CONTRIBUTION}', async () => Promise.withResolvers().promise)`)
     const schedule = globalThis.setTimeout
-    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((callback, delay, ...args) =>
-      schedule(callback, delay === DEFAULT_MUTATING_METHOD_TIMEOUT_MS ? 25 : delay, ...args)) as typeof setTimeout)
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((...args: Parameters<typeof setTimeout>) => {
+      const [callback, delay, ...callbackArgs] = args
+      return schedule(callback, delay === DEFAULT_MUTATING_METHOD_TIMEOUT_MS ? 25 : delay, ...callbackArgs)
+    }) as typeof setTimeout)
     try {
       timeout(await t.reject(t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })), METHOD, DEFAULT_MUTATING_METHOD_TIMEOUT_MS)
       expect(t.unanswered.count(CONTRIBUTION)).toBe(1)
