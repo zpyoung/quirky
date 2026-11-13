@@ -23,6 +23,21 @@ export type StoredWorktree = ReferenceSearchMatch['worktree'] & {
   linkedIssue: GitHubWorktreeLink | null
 }
 
+type ReferenceSearchWorktree = Pick<
+  StoredWorktree,
+  'id' | 'repoId' | 'name' | 'path' | 'kind' | 'archivedAt' | 'lastActivityAt' |
+  'references' | 'linkedPR' | 'linkedIssue'
+>
+type StoredWorktreeMetadata = ReferenceSearchWorktree & { row: WorktreeRow }
+type SearchReferencesInput<T extends ReferenceSearchWorktree> = {
+  query: ReferenceSearchQuery
+  worktrees: T[]
+  includeArchived: boolean
+  limit: number
+  sessions: { rows: unknown[] } | { error: string }
+  processes: { rows: PtySessionInfo[] } | { error: string }
+}
+
 const KEY_EXAMPLE = 'query must be an owner/repo#123 or owner/repo!123 key'
 const URL_EXAMPLE = 'query must be an absolute HTTP or HTTPS URL'
 const MAX_QUERY_LENGTH = 2_048
@@ -151,7 +166,7 @@ function plainUrlKey(value: string): string | null {
   }
 }
 
-function referenceLinks(worktree: StoredWorktree): ReferenceSearchLink[] {
+function referenceLinks(worktree: ReferenceSearchWorktree): ReferenceSearchLink[] {
   const links: ReferenceSearchLink[] = worktree.references.map((reference) => ({
     source: 'reference',
     referenceId: reference.id,
@@ -197,20 +212,12 @@ function compareSessions(left: ReferenceSearchSession, right: ReferenceSearchSes
     compareText(left.id, right.id)
 }
 
-/**
- * Searches only the supplied stored links. URL comparison ignores scheme, credentials, fragment and trailing slashes;
- * sessions always have linked:false because no stored session-to-reference association exists.
- */
-export function searchReferences(input: {
-  query: ReferenceSearchQuery
-  worktrees: StoredWorktree[]
-  includeArchived: boolean
-  limit: number
-  sessions: { rows: unknown[] } | { error: string }
-  processes: { rows: PtySessionInfo[] } | { error: string }
-}): ReferenceSearchResult {
+function searchReferencesWithProjection<T extends ReferenceSearchWorktree>(
+  input: SearchReferencesInput<T>,
+  projectWorktree: (worktree: T) => ReferenceSearchMatch['worktree']
+): ReferenceSearchResult {
   const items = new Map<string, ReferenceItem>()
-  const candidates: { worktree: StoredWorktree; links: ReferenceSearchLink[] }[] = []
+  const candidates: { worktree: T; links: ReferenceSearchLink[] }[] = []
   for (const worktree of input.worktrees) {
     const links = referenceLinks(worktree).filter((link) => linkMatches(input.query, link))
     if (links.length === 0) continue
@@ -257,17 +264,7 @@ export function searchReferences(input: {
       ? null
       : (byWorktree.get(worktree.id) ?? []).sort(compareSessions)
     return {
-      worktree: {
-        id: worktree.id,
-        repoId: worktree.repoId,
-        name: worktree.name,
-        path: worktree.path,
-        kind: worktree.kind,
-        archivedAt: worktree.archivedAt,
-        lastActivityAt: worktree.lastActivityAt,
-        state: worktree.state,
-        staleReason: worktree.staleReason
-      },
+      worktree: projectWorktree(worktree),
       links: links.slice(0, LINK_LIMIT),
       linkTotal: links.length,
       sessions: sessions === null ? null : sessions.slice(0, SESSION_LIMIT),
@@ -294,6 +291,24 @@ export function searchReferences(input: {
     }
   }
 }
+
+/**
+ * Searches only the supplied stored links. URL comparison ignores scheme, credentials, fragment and trailing slashes;
+ * sessions always have linked:false because no stored session-to-reference association exists.
+ */
+export function searchReferences(input: SearchReferencesInput<StoredWorktree>): ReferenceSearchResult {
+  return searchReferencesWithProjection(input, (worktree) => ({
+    id: worktree.id,
+    repoId: worktree.repoId,
+    name: worktree.name,
+    path: worktree.path,
+    kind: worktree.kind,
+    archivedAt: worktree.archivedAt,
+    lastActivityAt: worktree.lastActivityAt,
+    state: worktree.state,
+    staleReason: worktree.staleReason
+  }))
+}
 export type ReferenceSearchEnv = {
   store: Pick<PluginStore, 'all' | 'get'>
   identitySource: DirectoryIdentitySource
@@ -304,22 +319,12 @@ export type ReferenceSearchEnv = {
   fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
 }
 
-/** Reads every stored worktree and marks stale folders or projects without writing to the store. */
-export function readStoredWorktrees(
-  env: Pick<ReferenceSearchEnv, 'store' | 'identitySource'>,
-  liveRepoIds: ReadonlySet<string>
-): StoredWorktree[] {
-  return env.store.all<WorktreeRow>('SELECT * FROM worktrees ORDER BY id').map((row): StoredWorktree => {
+/** Reads stored link metadata without classifying filesystem state. */
+export function readStoredWorktrees(env: Pick<ReferenceSearchEnv, 'store'>): StoredWorktreeMetadata[] {
+  return env.store.all<WorktreeRow>('SELECT * FROM worktrees ORDER BY id').map((row): StoredWorktreeMetadata => {
     const metadata = metadataOf(row)
-    let staleReason: StoredWorktree['staleReason'] = null
-    if (!liveRepoIds.has(row.repo_id) && !row.repo_id.startsWith('group:')) {
-      staleReason = 'project-unregistered'
-    } else {
-      const folderState = folderStateOf(row, row.path, env.identitySource)
-      if (folderState === 'missing') staleReason = 'folder-missing'
-      else if (folderState === 'replaced') staleReason = 'folder-replaced'
-    }
     return {
+      row,
       id: row.id,
       repoId: row.repo_id,
       name: row.display_name || row.name || (row.path === null ? row.id : basename(row.path)),
@@ -327,8 +332,6 @@ export function readStoredWorktrees(
       kind: row.kind,
       archivedAt: metadata.archivedAt,
       lastActivityAt: row.last_activity_at,
-      state: staleReason === null ? 'present' : 'stale',
-      staleReason,
       references: metadata.references,
       linkedPR: metadata.linkedPR ?? null,
       linkedIssue: metadata.linkedIssue ?? null
@@ -379,12 +382,12 @@ export async function findReferences(
   const repoSelector = params.repo as string | undefined
   const repo = repoSelector === undefined ? undefined : await env.resolveRepo(repoSelector)
   const liveRepoIds = new Set(await env.repoIds())
-  let worktrees = readStoredWorktrees(env, liveRepoIds)
+  let worktrees = readStoredWorktrees(env)
 
   if (repo !== undefined) {
     worktrees = worktrees.filter((worktree) => worktree.repoId === repo.id)
   } else if (worktreeSelector !== undefined) {
-    const selectable = worktrees.map((stored): SelectableWorktree & { stored: StoredWorktree } => ({
+    const selectable = worktrees.map((stored): SelectableWorktree & { stored: StoredWorktreeMetadata } => ({
       id: stored.id,
       name: stored.name,
       path: stored.path,
@@ -399,7 +402,7 @@ export async function findReferences(
       throw error
     }
     if (matches.length === 0) {
-      throw env.fail('not-found', `no worktree matches ${worktreeSelector}; use id:, name:, branch:, path: or current`)
+      throw env.fail('not-found', `no worktree matches ${worktreeSelector}; use id:, name:, path: or current`)
     }
     if (matches.length > 1) {
       const ids = matches.map(({ id }) => `id:${id}`)
@@ -425,5 +428,29 @@ export async function findReferences(
     }
   })()
   const [sessions, processes] = await Promise.all([sessionResult, processResult])
-  return searchReferences({ query, worktrees, includeArchived, limit, sessions, processes })
+  return searchReferencesWithProjection(
+    { query, worktrees, includeArchived, limit, sessions, processes },
+    (stored) => {
+      const { row } = stored
+      let staleReason: StoredWorktree['staleReason'] = null
+      if (!liveRepoIds.has(row.repo_id) && !row.repo_id.startsWith('group:')) {
+        staleReason = 'project-unregistered'
+      } else {
+        const folderState = folderStateOf(row, row.path, env.identitySource)
+        if (folderState === 'missing') staleReason = 'folder-missing'
+        else if (folderState === 'replaced') staleReason = 'folder-replaced'
+      }
+      return {
+        id: stored.id,
+        repoId: stored.repoId,
+        name: stored.name,
+        path: stored.path,
+        kind: stored.kind,
+        archivedAt: stored.archivedAt,
+        lastActivityAt: stored.lastActivityAt,
+        state: staleReason === null ? 'present' : 'stale',
+        staleReason
+      }
+    }
+  )
 }

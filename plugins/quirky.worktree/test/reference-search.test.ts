@@ -242,6 +242,14 @@ describe('pure reference matching', () => {
       'github.com/acme/api#5123', 'gitlab.com/acme/api#5123'
     ])
   })
+  test('returns items in canonical order when GitLab is encountered first', () => {
+    const result = search('acme/api#5123', [world[1]!, world[0]!])
+    expect(result.items.map(({ id }) => id)).toEqual([
+      'github.com/acme/api#5123',
+      'gitlab.com/acme/api#5123'
+    ])
+  })
+
 
   test('case-insensitive project keys return the same canonical query and matches', () => {
     const result = search('Acme/API#5123')
@@ -295,33 +303,76 @@ describe('pure reference matching', () => {
     expect(search('acme/api#5123', archivedOnly, { includeArchived: true }).matches.map(({ worktree }) => worktree.id)).toEqual(['wt-c'])
   })
 
-  test('truncates worktrees after activity ordering while computing items over every match', () => {
-    const result = search('acme/api#5123', world, { includeArchived: true, limit: 2 })
-    expect(result.matches.map(({ worktree }) => worktree.id)).toEqual(['wt-a', 'wt-b'])
-    expect(result).toMatchObject({
-      total: 3,
-      truncated: true,
-      items: [
-        { id: 'github.com/acme/api#5123' },
-        { id: 'gitlab.com/acme/api#5123' }
-      ],
-      ambiguous: true
-    })
+  test('orders shuffled worktree candidates by activity then ID before capping, including stale rows', () => {
+    const worktrees = [
+      storedWorktree('wt-z', {
+        lastActivityAt: 100,
+        references: [ref('z', 'https://github.com/acme/api/issues/5123')]
+      }),
+      storedWorktree('wt-c', {
+        lastActivityAt: 200,
+        state: 'stale',
+        staleReason: 'folder-missing',
+        references: [ref('c', 'https://github.com/acme/api/issues/5123')]
+      }),
+      storedWorktree('wt-a', {
+        lastActivityAt: 100,
+        references: [ref('a', 'https://github.com/acme/api/issues/5123')]
+      }),
+      storedWorktree('wt-b', {
+        lastActivityAt: 200,
+        references: [ref('b', 'https://github.com/acme/api/issues/5123')]
+      })
+    ]
+    const result = search('acme/api#5123', worktrees, { limit: 3 })
+    expect(result.matches.map(({ worktree }) => worktree.id)).toEqual(['wt-b', 'wt-c', 'wt-a'])
+    expect(result).toMatchObject({ total: 4, truncated: true, stale: 1 })
   })
 
-  test('caps links and sessions at twenty while preserving their stored and sorted order', () => {
+  test('caps links and returns the top twenty of scrambled sessions by liveness, activity, then ID', () => {
     const manyLinks = Array.from({ length: 25 }, (_, index) => ref(`ref-${index}`, `https://github.com/acme/api/issues/5#${index}`))
-    const manySessions = Array.from({ length: 23 }, (_, index) => session(`s${index}`, 'many', 'running', {
-      kind: 'structured', lastActivityAt: 100 - index
-    }))
+    const rankedSession = (id: string, status: string, lastActivityAt: number, kind = 'terminal') =>
+      session(id, 'many', status, { kind, lastActivityAt })
+    const manySessions = [
+      rankedSession('exit-oldest', 'exited', 10),
+      rankedSession('unknown-tie-z', 'running', 500),
+      rankedSession('live-oldest', 'working', 100, 'structured'),
+      rankedSession('exit-tie-z', 'exited', 900),
+      rankedSession('unknown-oldest', 'running', 100),
+      rankedSession('live-tie-z', 'working', 400, 'structured'),
+      rankedSession('exit-500', 'exited', 500),
+      rankedSession('unknown-tie-a', 'running', 500),
+      rankedSession('live-newest', 'working', 800, 'structured'),
+      rankedSession('exit-newest', 'exited', 1_000),
+      rankedSession('unknown-700', 'running', 700),
+      rankedSession('live-tie-a', 'working', 400, 'structured'),
+      rankedSession('exit-tie-a', 'exited', 900),
+      rankedSession('unknown-200', 'running', 200),
+      rankedSession('exit-800', 'exited', 800),
+      rankedSession('unknown-300', 'running', 300),
+      rankedSession('exit-400', 'exited', 400),
+      rankedSession('unknown-400', 'running', 400),
+      rankedSession('exit-600', 'exited', 600),
+      rankedSession('exit-300', 'exited', 300),
+      rankedSession('exit-200', 'exited', 200),
+      rankedSession('exit-100', 'exited', 100),
+      rankedSession('unknown-lower', 'running', 50)
+    ]
     const result = search('acme/api#5', [storedWorktree('many', { references: manyLinks })], {
       sessions: { rows: manySessions },
       processes: { rows: [] }
     })
     expect(result.matches[0]?.links.map(({ referenceId }) => referenceId)).toEqual(manyLinks.slice(0, 20).map(({ id }) => id))
     expect(result.matches[0]).toMatchObject({ linkTotal: 25, sessionTotal: 23 })
-    expect(result.matches[0]?.sessions?.map(({ id }) => id)).toEqual(Array.from({ length: 20 }, (_, index) => `s${index}`))
+    expect(result.matches[0]?.sessions?.map(({ id }) => id)).toEqual([
+      'live-newest', 'live-tie-a', 'live-tie-z', 'live-oldest',
+      'unknown-700', 'unknown-tie-a', 'unknown-tie-z', 'unknown-400',
+      'unknown-300', 'unknown-200', 'unknown-oldest', 'unknown-lower',
+      'exit-newest', 'exit-tie-a', 'exit-tie-z', 'exit-800',
+      'exit-600', 'exit-500', 'exit-400', 'exit-300'
+    ])
   })
+
 
   test('returns sessions sorted by liveness, with listed evidence and no inferred reference ownership', () => {
     const result = search('https://github.com/acme/api/pull/5123', world, {
@@ -640,6 +691,30 @@ function runPluginSql(home: string, plugin: string, sql: string, ...params: (str
   }
 }
 
+function addPathlessMatchingRows(home: string, sourceId: string, count: number): void {
+  const db = new Database(worktreeStoreFile(home))
+  try {
+    const columns = (db.query('PRAGMA table_info(worktrees)').all() as { name: string }[]).map(({ name }) => name)
+    const quotedColumns = columns.map((name) => `"${name}"`).join(', ')
+    const selectedColumns = columns.map((name) =>
+      name === 'id' ? '?' : name === 'path' ? 'NULL' : `"${name}"`
+    ).join(', ')
+    const insert = db.query(`INSERT INTO worktrees (${quotedColumns}) SELECT ${selectedColumns} FROM worktrees WHERE id = ?`)
+    db.exec('BEGIN')
+    try {
+      for (let index = 0; index < count; index++) {
+        insert.run(`limit-row-${String(index).padStart(3, '0')}`, sourceId)
+      }
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  } finally {
+    db.close()
+  }
+}
+
 function storeForRows(rows: WorktreeRow[]): Pick<PluginStore, 'all' | 'get'> {
   return {
     all<T>(sql: string): T[] {
@@ -695,6 +770,7 @@ describe('stored reference search', () => {
       query: 'acme/api#5123', worktree: 'name:missing'
     }))
     expect(missing.code).toBe(RpcErrorCode.NotFound)
+    expect(missing.message).toBe('no worktree matches name:missing; use id:, name:, path: or current')
 
     const branch = await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
       query: 'acme/api#5123', worktree: 'branch:main'
@@ -722,8 +798,46 @@ describe('stored reference search', () => {
     expect(searchFailure.message).toBe(resolveFailure.message)
   })
 
+  test('enforces daemon and module limits over more than fifty matches', async () => {
+    const { t, alphaRepo, worktreeA } = await searchWorld()
+    addPathlessMatchingRows(t.h.home, worktreeA.id, 201)
+    const query = 'https://github.com/acme/api/pull/5123'
+    const defaultDaemon = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query, repo: alphaRepo.id
+    }) as ReferenceSearchResult
+    expect(defaultDaemon).toMatchObject({ total: 202, truncated: true })
+    expect(defaultDaemon.matches).toHaveLength(50)
+
+    const maximumDaemon = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query, repo: alphaRepo.id, limit: 200
+    }) as ReferenceSearchResult
+    expect(maximumDaemon).toMatchObject({ total: 202, truncated: true })
+    expect(maximumDaemon.matches).toHaveLength(200)
+
+    const rejectedDaemon = await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query, repo: alphaRepo.id, limit: 201
+    }))
+    expect(rejectedDaemon.code).toBe(RpcErrorCode.InvalidParams)
+
+    const env = searchEnv(worktreeRows(t.h.home), { resolveRepo: async () => alphaRepo })
+    const directDefault = await findReferences(env, { query, repo: alphaRepo.id }, {})
+    expect(directDefault).toMatchObject({ total: 202, truncated: true })
+    expect(directDefault.matches).toHaveLength(50)
+
+    const directMaximum = await findReferences(env, { query, repo: alphaRepo.id, limit: 200 }, {})
+    expect(directMaximum).toMatchObject({ total: 202, truncated: true })
+    expect(directMaximum.matches).toHaveLength(200)
+
+    await expect(findReferences(env, { query, repo: alphaRepo.id, limit: 201 }, {})).rejects.toMatchObject({
+      kind: 'invalid-params',
+      message: 'limit must be an integer from 1 to 200'
+    })
+  })
+
   test('narrows by worktree or resolved repository', async () => {
     const { t, alphaRepo, betaRepo, worktreeA, worktreeB, betaWorktree } = await searchWorld()
+    runPluginSql(t.h.home, 'quirky.worktree', 'UPDATE worktrees SET last_activity_at = ? WHERE id = ?', 100, worktreeA.id)
+    runPluginSql(t.h.home, 'quirky.worktree', 'UPDATE worktrees SET last_activity_at = ? WHERE id = ?', 200, worktreeB.id)
     const worktreeResult = await daemonCall(t.client, 'quirky.worktree/findReferences', {
       query: 'acme/api#5123', worktree: `id:${worktreeB.id}`
     }) as ReferenceSearchResult
@@ -736,7 +850,7 @@ describe('stored reference search', () => {
     const betaResult = await daemonCall(t.client, 'quirky.worktree/findReferences', {
       query: 'acme/api#5123', repo: betaRepo.id
     }) as ReferenceSearchResult
-    expect(alphaResult.matches.map(({ worktree }) => worktree.id).sort()).toEqual([worktreeA.id, worktreeB.id].sort())
+    expect(alphaResult.matches.map(({ worktree }) => worktree.id)).toEqual([worktreeB.id, worktreeA.id])
     expect(betaResult.matches.map(({ worktree }) => worktree.id)).toEqual([betaWorktree.id])
   })
 
@@ -815,7 +929,7 @@ describe('stored reference search', () => {
     })
     const env = searchEnv(rows, { store, repoIds: async () => [alphaRepo.id] })
     const readOnlyResult = await findReferences(env, { query: 'https://github.com/acme/api/pull/5123' }, {})
-    const stored = readStoredWorktrees({ store, identitySource: filesystemIdentitySource }, new Set([alphaRepo.id]))
+    const stored = readStoredWorktrees({ store })
     expect(readOnlyResult.matches.length).toBeGreaterThan(0)
     expect(stored.length).toBe(rows.length)
     expect(allCalls).toBe(2)
@@ -864,6 +978,60 @@ describe('stored reference search', () => {
     }, {})).rejects.toBe(failure)
   })
 
+  test('classifies filesystem identity only for returned narrowed matches', async () => {
+    const { t, alphaRepo, betaRepo } = await searchWorld()
+    const sourceRows = worktreeRows(t.h.home)
+    const alphaSource = sourceRows.find(({ repo_id }) => repo_id === alphaRepo.id)!
+    const betaSource = sourceRows.find(({ repo_id }) => repo_id === betaRepo.id)!
+    const virtualRow = (source: WorktreeRow, id: string, lastActivityAt: number, archivedAt: number | null = null): WorktreeRow & { path: string } => ({
+      ...source,
+      id,
+      name: id,
+      display_name: id,
+      path: `/virtual/${id}`,
+      last_activity_at: lastActivityAt,
+      archived_at: archivedAt,
+      birthtime: 100,
+      instance_id: `fs:expected:${id}:100`,
+      references_json: JSON.stringify([ref(`match-${id}`, 'https://github.com/acme/api/pull/5123', 'match')])
+    })
+    const winner = virtualRow(alphaSource, 'winner', 300)
+    const archived = virtualRow(alphaSource, 'archived', 1_000, 123)
+    const capped = virtualRow(alphaSource, 'capped', 200)
+    const outsideRepo = virtualRow(betaSource, 'outside-repo', 900)
+    const nonmatching = {
+      ...virtualRow(alphaSource, 'nonmatching', 2_000),
+      references_json: JSON.stringify([ref('other', 'https://elsewhere.example/issues/9')])
+    }
+    const rows = [nonmatching, outsideRepo, archived, capped, winner]
+    const statted: string[] = []
+    const identitySource = {
+      open() {
+        throw new Error('search should not open filesystem identities')
+      },
+      stat(path: string) {
+        statted.push(path)
+        return { device: 'actual', inode: 'changed', birthtimeMs: 100 }
+      }
+    }
+    const env = searchEnv(rows, {
+      identitySource,
+      repoIds: async () => [alphaRepo.id, betaRepo.id],
+      resolveRepo: async () => alphaRepo
+    })
+    const query = 'https://github.com/acme/api/pull/5123'
+    const narrowed = await findReferences(env, { query, repo: alphaRepo.id, limit: 1 }, {})
+    expect(narrowed).toMatchObject({ total: 2, archivedOmitted: 1, truncated: true, stale: 1 })
+    expect(narrowed.matches.map(({ worktree }) => worktree.id)).toEqual(['winner'])
+    expect(statted).toEqual([winner.path])
+
+    statted.length = 0
+    const selected = await findReferences(env, { query, worktree: 'id:winner' }, {})
+    expect(selected.matches.map(({ worktree }) => worktree.id)).toEqual(['winner'])
+    expect(selected.stale).toBe(1)
+    expect(statted).toEqual([winner.path])
+  })
+
   test('does not depend on git listings and leaves deleted-group membership untouched', async () => {
     const { t, alphaRepo, worktreeA, worktreeB } = await searchWorld()
     let listCalled = false
@@ -872,13 +1040,15 @@ describe('stored reference search', () => {
       throw new Error('git unavailable')
     }
     const beforeGit = t.git!.calls.length
+    runPluginSql(t.h.home, 'quirky.worktree', 'UPDATE worktrees SET last_activity_at = ? WHERE id = ?', 100, worktreeA.id)
+    runPluginSql(t.h.home, 'quirky.worktree', 'UPDATE worktrees SET last_activity_at = ? WHERE id = ?', 200, worktreeB.id)
     const result = await daemonCall(t.client, 'quirky.worktree/findReferences', {
       query: 'acme/api#5123', repo: alphaRepo.id
     }) as ReferenceSearchResult
-    expect(result.matches.map(({ worktree }) => worktree.id).sort()).toEqual([worktreeA.id, worktreeB.id].sort())
-    expect(result.items.map(({ id }) => id).sort()).toEqual([
+    expect(result.matches.map(({ worktree }) => worktree.id)).toEqual([worktreeB.id, worktreeA.id])
+    expect(result.items.map(({ id }) => id)).toEqual([
       'github.com/acme/api#5123', 'gitlab.com/acme/api#5123'
-    ].sort())
+    ])
     expect(result.matches.some(({ worktree }) => worktree.state === 'present')).toBe(true)
     expect(listCalled).toBe(false)
     expect(t.git!.calls.length).toBe(beforeGit)
