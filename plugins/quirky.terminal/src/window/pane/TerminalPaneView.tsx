@@ -78,6 +78,8 @@ export type TerminalPaneProps = {
   active: boolean
   /** The terminal must not reclaim focus while the embedded dock owns keyboard input. */
   suppressAutoFocus?: boolean
+  /** False when the workspace coordinates selection focus explicitly; imperative focus remains available. */
+  autoFocus?: boolean
   /** False once the process has exited, so keystrokes are not sent to a dead session. */
   interactive: boolean
   /** True while a divider or panel drag is resizing the pane; the shell is told the final size once the drag ends. */
@@ -153,7 +155,7 @@ let focusOwner: object | null = null
  * addon for OSC 52. The workspace keys it by pane ID so a layout change never remounts it.
  */
 export function TerminalPaneView(props: TerminalPaneProps) {
-  const { context, sessionId, settings, active, dragging, suppressAutoFocus, themeSource, ref } = props
+  const { context, sessionId, settings, active, dragging, suppressAutoFocus, autoFocus = true, themeSource, ref } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const screenRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -846,7 +848,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (event.type === 'theme.changed') applyTheme()
     })
 
-    if (latest.current.active && !latest.current.suppressAutoFocus) term.focus()
+    if (latest.current.active && latest.current.autoFocus !== false && !latest.current.suppressAutoFocus) term.focus()
 
     return () => {
       disposed = true
@@ -940,8 +942,8 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   }, [settings['allow-osc52']])
 
   useEffect(() => {
-    if (active && !suppressAutoFocus) runtime.current?.term.focus()
-  }, [active, suppressAutoFocus])
+    if (active && autoFocus && !suppressAutoFocus) runtime.current?.term.focus()
+  }, [active, autoFocus, suppressAutoFocus])
 
   const wasDragging = useRef(dragging)
   useEffect(() => {
