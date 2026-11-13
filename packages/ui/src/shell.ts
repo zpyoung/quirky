@@ -142,7 +142,7 @@ export function createShell(options: ShellOptions): AppContextValue {
   const desktopBridge = options.desktopBridge === undefined ? desktopBridgeForWindow() : options.desktopBridge
 
   const plugins = new WindowPluginHost({
-    call: (method, params) => connection.callAny(method, params),
+    call: (method, params, callOptions) => connection.callAny(method, params, callOptions),
     onEvent: (listener) => connection.onEvent(listener),
     onStream: (streamId, listener) => connection.onStream(streamId, listener),
     onConnection: (listener) => connection.onStatus(listener),

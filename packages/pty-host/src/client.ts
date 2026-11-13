@@ -1,6 +1,8 @@
 import {
   encodePtyData,
   encodePtyJson,
+  parsePtyVersionRejection,
+  PTY_PROTOCOL_MIN_VERSION,
   PTY_PROTOCOL_VERSION,
   PtyFrameDecoder,
   type PtyRequest,
@@ -53,7 +55,11 @@ export class PtyClient {
   }
 
   hello(token: string): Promise<PtyResults['hello']> {
-    return this.request('hello', { token, version: PTY_PROTOCOL_VERSION })
+    return this.request('hello', {
+      token,
+      version: PTY_PROTOCOL_VERSION,
+      minVersion: PTY_PROTOCOL_MIN_VERSION
+    })
   }
 
   request<K extends PtyRequest['type']>(type: K, params: RequestParams<K>): Promise<PtyResults[K]> {
@@ -110,22 +116,56 @@ export class PtyClient {
   }
 }
 
-/** True when a host already serving `home` accepts the token in `pty.token`. */
-export async function probeHost(home: string, timeoutMs = 2000): Promise<boolean> {
+/**
+ * `answers` means hello succeeds or is rejected for its version. `silent` means a connection is
+ * accepted or pending without either answer, including a rejected token. `absent` means no socket
+ * file or a refused connection.
+ */
+export async function probeHost(home: string, timeoutMs = 2000): Promise<'answers' | 'silent' | 'absent'> {
   const socketPath = resolveSocketPath(home, 'pty.sock')
-  const tokenPath = join(home, 'pty.token')
-  if (!existsSync(socketPath) || !existsSync(tokenPath)) return false
-  let client: PtyClient | undefined
+  if (!existsSync(socketPath)) return 'absent'
+
+  let token = ''
   try {
-    const attempt = (async () => {
+    token = readFileSync(join(home, 'pty.token'), 'utf8')
+  } catch {}
+
+  let client: PtyClient | undefined
+  let finished = false
+  const attempt = (async (): Promise<'answers' | 'silent' | 'absent'> => {
+    try {
       client = await PtyClient.connect(socketPath)
-      await client.hello(readFileSync(tokenPath, 'utf8'))
-      return true
-    })()
-    return await Promise.race([attempt, Bun.sleep(timeoutMs).then(() => false)])
-  } catch {
-    return false
+    } catch (error) {
+      return isConnectionRefused(error) ? 'absent' : 'silent'
+    }
+
+    if (finished) {
+      client.close()
+      return 'silent'
+    }
+
+    try {
+      await client.hello(token)
+      return 'answers'
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return parsePtyVersionRejection(message) ? 'answers' : 'silent'
+    }
+  })()
+
+  const { promise: timeout, resolve: timedOut } = Promise.withResolvers<'silent'>()
+  const timer = setTimeout(() => timedOut('silent'), timeoutMs)
+  try {
+    return await Promise.race([attempt, timeout])
   } finally {
+    clearTimeout(timer)
+    finished = true
     client?.close()
   }
+}
+
+function isConnectionRefused(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false
+  const code = error.code
+  return code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK'
 }

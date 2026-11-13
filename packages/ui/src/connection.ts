@@ -1,10 +1,12 @@
-import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
+import { QuirkyClient, type CallOptions, type QuirkyEvent } from '@quirky/protocol'
 import { INITIAL_DELAY_MS, nextDelay } from './lib/backoff'
 import { daemonAnswers } from './lib/probe'
 import { loadDesktopClientId } from './lib/desktop-client-id'
 import { parseHashToken, rpcUrl } from './lib/token'
 import type { ConnectionStatus } from './lib/state'
 import type { Store } from './store'
+
+export const UI_READ_TIMEOUT_MS = 30_000
 
 /** Consecutive socket failures after which the page checks whether the daemon is up at all. */
 export const FAILURES_BEFORE_PROBE = 3
@@ -49,9 +51,9 @@ export class Connection {
   }
 
   /** Calls any daemon or plugin method; the result is untyped. */
-  callAny(method: string, params: Record<string, unknown>): Promise<unknown> {
+  callAny(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown> {
     if (!this.client || this.client.isClosed) return Promise.reject(new Error('Not connected'))
-    return this.client.callAny(method, params)
+    return this.client.callAny(method, params, options)
   }
 
   /** Receives every daemon event, in addition to the store dispatch; the returned function unsubscribes. */

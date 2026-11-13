@@ -59,6 +59,22 @@ describe('bundlePlugins', () => {
     expect((await import(join(out, 'quirky.demo', 'cli.js'))).cli).toBe('hello cli')
   })
 
+  test.each([
+    ['main.ts', { main: 'main.ts' }],
+    ['cli.ts', { cli: 'cli.ts' }],
+    ['src/worker.ts', { workers: { background: 'src/worker.ts' } }]
+  ] as const)('rejects a build-machine path in %s', async (entry, manifest) => {
+    const source = entry.startsWith('src/') ? '../lib/where.cjs' : './lib/where.cjs'
+    writePlugin('acme.leak', manifest, {
+      [entry]: `import location from '${source}'\nexport const where = location\n`,
+      'lib/where.cjs': 'module.exports = __dirname\n'
+    })
+    const entryPattern = entry.replaceAll('.', '\\.')
+    await expect(bundlePlugins(src, out)).rejects.toThrow(
+      new RegExp(`^plugin acme\\.leak: ${entryPattern} bundles a path from the build machine: .*acme\\.leak/lib`)
+    )
+  })
+
   test('copies nothing but the manifest, bundles and ui, skipping test/ and node_modules/', async () => {
     const dir = writePlugin(
       'quirky.demo',

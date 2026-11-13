@@ -24,19 +24,25 @@ import {
 const OUTSIDE_CLOSED_DETAILS = ':not(details:not([open]) *)'
 export const NATIVE_BROWSER_DEFAULT_MASKS = ['[data-quirky-native-mask]', '[role="dialog"]', '[role="menu"]', '[role="listbox"]']
   .map((selector) => `${selector}${OUTSIDE_CLOSED_DETAILS}`)
-const MASK_WATCH_INTERVAL_MS = 100
-
-function maskSignature(selectors: readonly string[]): string {
-  return selectors.flatMap((selector) => {
+function maskElements(selectors: readonly string[]): Set<Element> {
+  const elements = new Set<Element>()
+  for (const selector of selectors) {
     try {
-      return [...document.querySelectorAll(selector)].map((element) => {
-        const { x, y, width, height } = element.getBoundingClientRect()
-        return `${x},${y},${width},${height}`
-      })
+      for (const element of document.querySelectorAll(selector)) elements.add(element)
     } catch {
-      return []
+      // an invalid plugin selector must not suppress the standard overlay masks
     }
-  }).join(';')
+  }
+  return elements
+}
+
+function maskSignature(elements: ReadonlySet<Element>): string {
+  let signature = ''
+  for (const element of elements) {
+    const { x, y, width, height } = element.getBoundingClientRect()
+    signature += `${x},${y},${width},${height};`
+  }
+  return signature
 }
 
 const NATIVE_BROWSER_EVALUATION_SCRIPT_MAX_BYTES = 64 * 1024
@@ -915,15 +921,81 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
 
   /** Keeps the native view's holes in step with the overlays that need them for as long as it's mounted. */
   private watchMasks(child: WebviewTag, masks: readonly string[]): void {
-    // the SDK only sends masks when the view's own frame changes, so an overlay opening over a still view stays hidden
-    let last = maskSignature(masks)
-    const timer = setInterval(() => {
-      const next = maskSignature(masks)
-      if (next === last) return
-      last = next
-      child.syncDimensions(true)
-    }, MASK_WATCH_INTERVAL_MS)
-    this.disposeCleanups.add(() => clearInterval(timer))
+    let stopped = false
+    let frame: number | null = null
+    let observed = new Set<Element>()
+    const resizeObserver = new ResizeObserver(schedule)
+    const updateObserved = (elements: ReadonlySet<Element>) => {
+      const next = new Set<Element>()
+      for (const element of elements) {
+        for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) next.add(ancestor)
+      }
+      for (const element of observed) {
+        if (!next.has(element)) resizeObserver.unobserve(element)
+      }
+      for (const element of next) {
+        if (!observed.has(element)) resizeObserver.observe(element)
+      }
+      observed = next
+    }
+    const moving = () => {
+      for (const element of observed) {
+        for (const animation of element.getAnimations?.() ?? []) {
+          if (animation.playState === 'running' || animation.pending) return true
+        }
+      }
+      return false
+    }
+    const initial = maskElements(masks)
+    let last = maskSignature(initial)
+    updateObserved(initial)
+
+    function schedule() {
+      if (stopped || frame !== null) return
+      frame = requestAnimationFrame(sample)
+    }
+    function sample() {
+      frame = null
+      if (stopped) return
+      const elements = maskElements(masks)
+      updateObserved(elements)
+      const next = maskSignature(elements)
+      if (next !== last) {
+        last = next
+        child.syncDimensions(true)
+      }
+      if (!stopped && moving()) schedule()
+    }
+
+    const mutationObserver = new MutationObserver(schedule)
+    mutationObserver.observe(document, { subtree: true, childList: true, attributes: true, characterData: true })
+    const listeners: Array<{ target: EventTarget; type: string; listener: EventListener }> = []
+    const listen = (target: EventTarget, type: string, listener: EventListener = schedule) => {
+      target.addEventListener(type, listener, true)
+      listeners.push({ target, type, listener })
+    }
+    for (const type of [
+      'scroll', 'load', 'input', 'change', 'toggle', 'focus', 'blur', 'focusin', 'focusout',
+      'pointerover', 'pointerout', 'pointerdown', 'pointerup', 'pointercancel', 'click'
+    ]) listen(document, type)
+    listen(window, 'resize')
+    const motionChanged: EventListener = (event) => {
+      if (event.target instanceof Element && observed.has(event.target)) schedule()
+    }
+    for (const type of [
+      'transitionrun', 'transitionstart', 'transitionend', 'transitioncancel',
+      'animationstart', 'animationiteration', 'animationend', 'animationcancel'
+    ]) listen(document, type, motionChanged)
+    if (moving()) schedule()
+    this.disposeCleanups.add(() => {
+      stopped = true
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = null
+      mutationObserver.disconnect()
+      resizeObserver.disconnect()
+      for (const { target, type, listener } of listeners) target.removeEventListener(type, listener, true)
+      observed.clear()
+    })
   }
 
   private async navigateTo(raw: string): Promise<NativeBrowserState> {
