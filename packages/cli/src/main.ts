@@ -151,7 +151,8 @@ const RPC_ERROR_CODES: Record<number, string> = {
   [RpcErrorCode.MethodNotFound]: 'method-not-found',
   [RpcErrorCode.Unauthorized]: 'unauthorized',
   [RpcErrorCode.ConfirmationRequired]: 'confirmation-required',
-  [RpcErrorCode.Timeout]: 'timeout'
+  [RpcErrorCode.Timeout]: 'timeout',
+  [RpcErrorCode.Busy]: 'busy'
 }
 
 function errorCode(error: unknown): string {

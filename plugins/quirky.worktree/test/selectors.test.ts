@@ -5,6 +5,7 @@ import { RpcError, RpcErrorCode, type ProjectGroup, type QuirkyClient, type Repo
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
+import { matchWorktrees } from '../selector'
 
 let t: PluginHarness | undefined
 afterEach(async () => {
@@ -336,5 +337,32 @@ describe('g2-34: resolve lists the owner of a known worktree ID', () => {
       expect(result.data).toMatchObject({ matches: [duplicate, duplicate] })
       expect(listed(from)).toContain(webDir)
     }
+  })
+})
+
+describe('stored selectors with pathless rows', () => {
+  const pathless = { id: 'wt-n', name: 'legacy', path: null, branch: null }
+  const parent = { id: 'wt-parent', name: 'parent', path: '/fixture/project', branch: 'main' }
+  const child = { id: 'wt-child', name: 'child', path: '/fixture/project/nested', branch: null }
+  const rows = [pathless, parent, child]
+
+  test('selects pathless rows by exact ID, name, or caller identity', () => {
+    for (const selector of ['id:wt-n', 'wt-n', 'name:legacy', 'legacy']) {
+      expect(matchWorktrees(rows, selector)).toEqual([pathless])
+    }
+    expect(matchWorktrees(rows, 'current', { worktreeId: 'wt-n', cwd: '/fixture/project/nested' })).toEqual([pathless])
+  })
+
+  test('skips missing paths for folder-name fallbacks and unmatched names', () => {
+    for (const selector of ['name:nothing', 'nothing']) expect(matchWorktrees(rows, selector)).toEqual([])
+    expect(matchWorktrees(rows, 'name:nested')).toEqual([child])
+    expect(matchWorktrees(rows, 'nested')).toEqual([child])
+  })
+
+  test('uses only real paths for path selectors and current by cwd', () => {
+    expect(matchWorktrees(rows, 'path:/fixture/project/nested/src')).toEqual([child])
+    expect(matchWorktrees(rows, 'current', { cwd: '/fixture/project/nested/src' })).toEqual([child])
+    expect(matchWorktrees([pathless], 'path:/')).toEqual([])
+    expect(matchWorktrees([pathless], 'current', { cwd: '/' })).toEqual([])
   })
 })

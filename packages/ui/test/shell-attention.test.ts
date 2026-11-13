@@ -442,6 +442,7 @@ function fakeScopeStore(options: {
   sessions?: Session[]
   asks?: Ask[]
   sessionList?: () => Promise<Session[]>
+  worktreeList?: () => Promise<Partial<Worktree>[]>
   failMethod?: string
 }) {
   const calls: Call[] = []
@@ -454,7 +455,7 @@ function fakeScopeStore(options: {
         case 'quirky.repo/list':
           return [{ id: 'r1' }, { id: 'r2' }, { id: 'empty' }]
         case 'quirky.worktree/list':
-          return options.worktrees
+          return options.worktreeList ? await options.worktreeList() : options.worktrees
         case 'quirky.session/list':
           return options.sessionList ? await options.sessionList() : options.sessions ?? []
         case 'quirky.ask/list':
@@ -634,7 +635,7 @@ test('an event after a failed session load refreshes the list again', async () =
   fake.stop()
 })
 
-test('an event during a session list call starts a newer read and discards the earlier result', async () => {
+test('an event during a session read publishes its result and reads again afterwards', async () => {
   const pending: Deferred<Session[]>[] = []
   const fake = fakeScopeStore({
     filterRepoIds: [],
@@ -648,10 +649,14 @@ test('an event during a session list call starts a newer read and discards the e
   })
   expect(pending).toHaveLength(1)
   fake.emit({ type: 'quirky.session/changed', data: { session: session('from-event') } } as unknown as QuirkyEvent)
-  expect(pending).toHaveLength(2)
+  expect(pending).toHaveLength(1)
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(1)
+
   pending[0]!.resolve([session('stale')])
   await flushMicrotasks()
-  expect(fake.store.getSnapshot().sessions).toBeNull()
+  expect(fake.store.getSnapshot().sessions).toEqual([session('stale')])
+  expect(pending).toHaveLength(2)
+
   pending[1]!.resolve([session('newer')])
   await flushMicrotasks()
   expect(fake.store.getSnapshot().sessions).toEqual([session('newer')])
@@ -660,6 +665,155 @@ test('an event during a session list call starts a newer read and discards the e
 })
 
 const row = (id: string, repoId: string, lastActivityAt: number): Partial<Worktree> => ({ id, repoId, lastActivityAt, createdAt: 0, name: id, removing: false })
+
+test('a worktree burst shares one in-flight inventory refresh and one trailing refresh', async () => {
+  const pending: Deferred<Partial<Worktree>[]>[] = []
+  let deferWorktreeList = false
+  const initialWorktrees = [row('initial', 'r1', 1)]
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: initialWorktrees,
+    worktreeList: () => {
+      if (!deferWorktreeList) return Promise.resolve(initialWorktrees)
+      const result = deferred<Partial<Worktree>[]>()
+      pending.push(result)
+      return result.promise
+    }
+  })
+  await flushMicrotasks()
+  deferWorktreeList = true
+  const repoCalls = fake.calls.filter((call) => call.method === 'quirky.repo/list').length
+  const worktreeCalls = fake.calls.filter((call) => call.method === 'quirky.worktree/list').length
+
+  for (let index = 0; index < 30; index += 1) {
+    fake.emit({ type: 'quirky.worktree/changed', data: { worktreeId: `w${index}` } } as unknown as QuirkyEvent)
+  }
+  expect(fake.calls.filter((call) => call.method === 'quirky.repo/list')).toHaveLength(repoCalls + 1)
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/list')).toHaveLength(worktreeCalls + 1)
+  expect(pending).toHaveLength(1)
+
+  pending[0]!.resolve([row('a', 'r1', 1)])
+  await flushMicrotasks()
+  expect(fake.calls.filter((call) => call.method === 'quirky.repo/list')).toHaveLength(repoCalls + 2)
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/list')).toHaveLength(worktreeCalls + 2)
+  expect(fake.store.getSnapshot().worktrees?.map((worktree) => worktree.id)).toEqual(['a'])
+  expect(pending).toHaveLength(2)
+
+  pending[1]!.resolve([row('a', 'r1', 1), row('b', 'r1', 2)])
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().worktrees?.map((worktree) => worktree.id)).toEqual(['a', 'b'])
+  expect(fake.calls.filter((call) => call.method === 'quirky.repo/list')).toHaveLength(repoCalls + 2)
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/list')).toHaveLength(worktreeCalls + 2)
+  fake.stop()
+})
+
+test('a mixed inventory burst requests one trailing worktree refresh', async () => {
+  const pending: Deferred<Partial<Worktree>[]>[] = []
+  let deferWorktreeList = false
+  const initialWorktrees = [row('initial', 'r1', 1)]
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: initialWorktrees,
+    worktreeList: () => {
+      if (!deferWorktreeList) return Promise.resolve(initialWorktrees)
+      const result = deferred<Partial<Worktree>[]>()
+      pending.push(result)
+      return result.promise
+    }
+  })
+  await flushMicrotasks()
+  deferWorktreeList = true
+  const worktreeCalls = fake.calls.filter((call) => call.method === 'quirky.worktree/list').length
+
+  for (let index = 0; index < 10; index += 1) {
+    fake.emit({ type: 'quirky.repo/changed' } as unknown as QuirkyEvent)
+    fake.emit({ type: 'quirky.worktree/changed', data: { worktreeId: `w${index}` } } as unknown as QuirkyEvent)
+    fake.emit({ type: 'quirky.worktree/projectMetadataChanged' } as unknown as QuirkyEvent)
+  }
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/list')).toHaveLength(worktreeCalls + 1)
+  expect(pending).toHaveLength(1)
+
+  pending[0]!.resolve([row('a', 'r1', 1)])
+  await flushMicrotasks()
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/list')).toHaveLength(worktreeCalls + 2)
+  expect(pending).toHaveLength(2)
+
+  pending[1]!.resolve([row('b', 'r2', 2), row('c', 'r2', 3)])
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().worktrees?.map((worktree) => worktree.id)).toEqual(['b', 'c'])
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/list')).toHaveLength(worktreeCalls + 2)
+  fake.stop()
+})
+
+test('a session burst during the initial list shares one trailing session read', async () => {
+  const pending: Deferred<Session[]>[] = []
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: [],
+    sessionList: () => {
+      const result = deferred<Session[]>()
+      pending.push(result)
+      return result.promise
+    }
+  })
+  expect(pending).toHaveLength(1)
+  for (let index = 0; index < 30; index += 1) {
+    fake.emit({ type: 'quirky.session/changed', data: { session: session(`s${index}`) } } as unknown as QuirkyEvent)
+  }
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(1)
+  expect(pending).toHaveLength(1)
+
+  pending[0]!.resolve([session('stale')])
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().sessions).toEqual([session('stale')])
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(2)
+  expect(pending).toHaveLength(2)
+
+  pending[1]!.resolve([session('s1'), session('s2')])
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().sessions).toEqual([session('s1'), session('s2')])
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(2)
+  fake.stop()
+})
+
+test('a stopped store drops pending inventory and session refreshes', async () => {
+  const worktreePending: Deferred<Partial<Worktree>[]>[] = []
+  const sessionPending: Deferred<Session[]>[] = []
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: [],
+    worktreeList: () => {
+      const result = deferred<Partial<Worktree>[]>()
+      worktreePending.push(result)
+      return result.promise
+    },
+    sessionList: () => {
+      const result = deferred<Session[]>()
+      sessionPending.push(result)
+      return result.promise
+    }
+  })
+  await flushMicrotasks()
+  expect(worktreePending).toHaveLength(1)
+  expect(sessionPending).toHaveLength(1)
+  fake.emit({ type: 'quirky.worktree/changed', data: { worktreeId: 'w1' } } as unknown as QuirkyEvent)
+  fake.emit({ type: 'quirky.session/changed', data: { session: session('event') } } as unknown as QuirkyEvent)
+  expect(worktreePending).toHaveLength(1)
+  expect(sessionPending).toHaveLength(1)
+  const snapshotBeforeStop = fake.store.getSnapshot()
+  fake.stop()
+
+  worktreePending[0]!.resolve([row('late-worktree', 'r1', 1)])
+  sessionPending[0]!.resolve([session('late-session')])
+  await flushMicrotasks()
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/list')).toHaveLength(1)
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(1)
+  expect(fake.store.getSnapshot()).toEqual(snapshotBeforeStop)
+})
 
 test('the scope follows the options and writes through setOptions, opening the most recently active worktree of the project', async () => {
   const fake = fakeScopeStore({
