@@ -201,6 +201,11 @@ describe('report validation', () => {
     const smoke = report({ qualified: false, samples: Object.fromEntries(METRIC_LIST.map((metric) => [metric, [5]])) })
     expect(validateReport(partial)).toEqual(partial)
     expect(validateReport(smoke)).toEqual(smoke)
+    for (const current of [partial, smoke]) {
+      expect(comparePair(current, pair())).toMatchObject({
+        status: 'error', reason: 'current report is incomplete or unqualified',
+      })
+    }
   })
 
   test('rejects invalid durations, tampered medians, and inconsistent budget flags', () => {

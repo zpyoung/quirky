@@ -239,6 +239,9 @@ describe('speed evidence', () => {
   test('compares a prepared base on the same runner after the solo benchmark', () => {
     expect(jobs.speed).toMatchObject({ 'runs-on': 'macos-15', 'timeout-minutes': 60 })
     expect(jobs.speed!.if).toBeUndefined()
+    const headInstall = steps('speed').find(step => step.run === 'bun install --frozen-lockfile')
+    expect(headInstall).toBeDefined()
+    expect(steps('speed').indexOf(headInstall!)).toBeLessThan(steps('speed').findIndex(step => step.name === 'Check real-daemon smoke'))
     const prepare = steps('speed').find(step => step.name === 'Prepare speed base')!
     expect((prepare as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBe(true)
     expect(prepare.env).toEqual({

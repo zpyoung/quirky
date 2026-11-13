@@ -13,7 +13,6 @@ export const REGRESSION_RATIO = 1.25
 export const CONFIDENCE_Z = 1.96
 export const PAIR_COUNTS = { startup: 20, echo: 60, switch: 60, diff: 20, floodEcho: 60 } as const satisfies Readonly<Record<Metric, number>>
 
-
 export type Failure = {
   kind: string
   metric?: Metric

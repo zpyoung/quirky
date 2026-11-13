@@ -256,6 +256,9 @@ export function comparePair(current: SpeedReport, pair: SpeedPair | null): Compa
     const reason = 'current report is malformed'
     return { status: 'error', head: null, baseline: null, reason, reasons: [reason], metrics: metricNulls() }
   }
+  if (current.status !== 'complete' || !current.qualified) {
+    return comparisonStatus(current, 'error', 'current report is incomplete or unqualified')
+  }
   if (pair === null) return comparisonStatus(current, 'unavailable', 'no paired base measurement')
   const validPair = validatePair(pair)
   if (!validPair) return comparisonStatus(current, 'error', 'pair report is malformed')
@@ -325,7 +328,6 @@ function escaped(value: string, maxLength = MAX_CELL_CHARS): string {
 function displayNumber(value: number | null): string {
   return value === null || !Number.isFinite(value) ? 'not available' : String(value)
 }
-
 
 function currentRows(report: SpeedReport): string[] {
   const lines = [
