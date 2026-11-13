@@ -1,3 +1,4 @@
 {
-  "host": ["compatibility-tokens"]
+  "host": ["compatibility-tokens"],
+  "quirky.session": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }
