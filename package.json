@@ -19,8 +19,10 @@
     "ui:lint": "bun scripts/ui-lint.ts",
     "spawn:lint": "bun scripts/spawn-lint.ts",
     "typecheck:mobile": "bunx tsc --noEmit -p apps/mobile/tsconfig.json",
-    "typecheck": "bun install --frozen-lockfile && bun run ui:lint && bun run spawn:lint && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop",
+    "typecheck": "bun install --frozen-lockfile && bun run ui:lint && bun run ui:scoreboard:check && bun run spawn:lint && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop",
     "typecheck:desktop": "bun run --filter './apps/desktop' typecheck",
+    "ui:scoreboard": "bun scripts/ui-scoreboard.ts",
+    "ui:scoreboard:check": "bun scripts/ui-scoreboard.ts --check-ratchet",
     "ui:review": "bun scripts/ui-review.ts",
     "soak": "bun scripts/soak.ts"
   },
