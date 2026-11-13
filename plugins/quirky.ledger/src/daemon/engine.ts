@@ -462,7 +462,9 @@ export class LedgerEngine {
     if (target.ledgerId !== undefined) {
       const ledger = this.store!.get<LedgerRow>('SELECT * FROM ledgers WHERE ledger_id = ?', target.ledgerId)
       if (!ledger) this.fail('not-found', `ledger ${target.ledgerId} not found`)
-      return { catalog, ledger }
+      const ledgerOwner = asOwner(ledger)
+      const owner = ledgerOwner ? ownerFor(catalog, ledgerOwner) ?? undefined : undefined
+      return { catalog, ledger, owner }
     }
     if (target.owner) {
       const owner = ownerFor(catalog, target.owner)
