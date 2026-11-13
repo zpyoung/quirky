@@ -74,6 +74,8 @@ type AnnouncedRow = {
   agent: AgentRow['agent']
   leadProviderSession: AgentRow['lead']['providerSession']
   turnStartedAt: AgentRow['turnStartedAt']
+  question: AgentRow['question']
+  heldPermission: AgentRow['heldPermission']
   worktreeId: string
 }
 
@@ -117,6 +119,14 @@ type SettledState = 'done' | 'waiting' | 'blocked'
 const validProviderId = (id: string) => id.length >= 1 && id.length <= MAX_PROVIDER_ID && !id.startsWith('-') && !CONTROL_CHARACTERS.test(id)
 
 const sameSummary = (a: AgentStatusSummary | null | undefined, b: AgentStatusSummary | null) => JSON.stringify(a ?? null) === JSON.stringify(b)
+const sameHeldPermission = (a: AgentRow['heldPermission'], b: AgentRow['heldPermission']): boolean =>
+  a === b || (
+    a !== undefined && b !== undefined &&
+    a.toolUseId === b.toolUseId &&
+    a.toolName === b.toolName &&
+    a.input === b.input &&
+    a.childId === b.childId
+  )
 const CLAUDE_SCREEN_RULE_PREFIX = 'Claude screen rule '
 
 const isClaudeScreenInference = (row: AgentRow | null | undefined): row is AgentRow =>
@@ -909,8 +919,11 @@ export class AgentStatusService {
       return
     }
 
+    const heldPermissionChanged = !sameHeldPermission(previous?.heldPermission, row.heldPermission)
     const immediate = previous === undefined ||
       previous.state !== row.state ||
+      previous.question !== row.question ||
+      heldPermissionChanged ||
       previous.agent !== row.agent ||
       previous.leadProviderSession !== row.lead.providerSession ||
       previous.turnStartedAt !== row.turnStartedAt
@@ -926,6 +939,10 @@ export class AgentStatusService {
       agent: row.agent,
       leadProviderSession: row.lead.providerSession,
       turnStartedAt: row.turnStartedAt,
+      question: row.question,
+      heldPermission: heldPermissionChanged
+        ? row.heldPermission && { ...row.heldPermission }
+        : previous?.heldPermission,
       worktreeId: announcedWorktreeId
     })
   }

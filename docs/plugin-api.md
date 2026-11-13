@@ -58,9 +58,11 @@ worktree tag. Editor clients refresh after their own actions rather than waiting
 every title reads `context.pty.onFact`. `quirky.session/changed` coalesces per `session.id` and
 `quirky.agent-status/changed` per `sessionId`; both carry a worktree tag. Session changes to
 `status`, `providerSession.id` or `providerSession.transcriptPath` arrive at once and in order.
-Agent-status changes to `row.state`, `row.agent`, `row.lead.providerSession` or `row.turnStartedAt`,
-and every `row: null`, also arrive at once and in order. Other changes may merge into the latest
-event, up to 250 ms late. `quirky.session/removed` cannot be followed by an older held session
+Agent-status changes to `row.state`, `row.agent`, `row.lead.providerSession`, `row.turnStartedAt`,
+`row.question` or `row.heldPermission`, and every `row: null`, also arrive at once and in order.
+Held permissions compare `toolUseId`, `toolName`, `input` and `childId`; undefined counts as a
+value for both questions and held permissions. Other changes may merge into the latest event,
+up to 250 ms late. `quirky.session/removed` cannot be followed by an older held session
 change. Agent-status removals retain the worktree tag of their last announced row, even when
 the session is no longer available; removals with no announced row remain untagged.
 `quirky.agent-status/settled` carries a worktree tag and is not coalesced.

@@ -746,6 +746,95 @@ describe('SC-11 to SC-16: event delivery and catalog', () => {
     expect(activityChanged).not.toHaveProperty('worktree')
     expect(activityChanged).not.toHaveProperty('coalesce')
   })
+
+  test('a question change arrives before the coalescing window expires while waiting', async () => {
+    rig = await Rig.start({ eventCoalesceMs: 60_000 })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/settled' })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/activityChanged' })
+    const nextQuestion = {
+      questions: [{ question: 'Which commit?', options: [{ label: 'current' }, { label: 'previous' }] }]
+    }
+
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await rig.hook('claude', claude('PreToolUse', { tool_name: 'AskUserQuestion', tool_input: ask, tool_use_id: 'q1' }))
+    await rig.hook('claude', claude('PreToolUse', { tool_name: 'AskUserQuestion', tool_input: nextQuestion, tool_use_id: 'q1' }))
+    await rig.hook('claude', claude('PreToolUse', { tool_name: 'AskUserQuestion', tool_input: nextQuestion, tool_use_id: 'q1' }))
+
+    expect(stream()).toEqual(['working(go)', 'waiting(go)', 'waiting(go)'])
+    const changes = rig.events.filter((event) => event.type === 'quirky.agent-status/changed')
+    expect(changes).toHaveLength(3)
+    const rows = changes.map((event) => {
+      if (!('data' in event) || !event.data || typeof event.data !== 'object' ||
+        !('row' in event.data) || !event.data.row || typeof event.data.row !== 'object') {
+        throw new Error('expected a changed event with a row')
+      }
+      return event.data.row as Record<string, unknown>
+    })
+    const waitingRows = rows.slice(1)
+    expect(waitingRows.map((row) => ({ agent: row.agent, state: row.state }))).toEqual([
+      { agent: 'claude', state: 'waiting' },
+      { agent: 'claude', state: 'waiting' }
+    ])
+    expect(waitingRows[0]!.lead).toBeDefined()
+    expect(waitingRows[0]!.turnStartedAt).toBeDefined()
+    expect(waitingRows[1]!.lead).toEqual(waitingRows[0]!.lead)
+    expect(waitingRows[1]!.turnStartedAt).toBe(waitingRows[0]!.turnStartedAt)
+    expect(rows.map((row) => row.question)).toEqual([undefined, JSON.stringify(ask), JSON.stringify(nextQuestion)])
+    expect(rows.map((row) => row.heldPermission)).toEqual([undefined, undefined, undefined])
+    expect(rig.settles()).toEqual([])
+    expect(rig.events.filter((event) => event.type === 'quirky.agent-status/activityChanged')).toHaveLength(0)
+  })
+
+  test('a held permission change arrives before the coalescing window expires while waiting', async () => {
+    rig = await Rig.start({ eventCoalesceMs: 60_000 })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/settled' })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/activityChanged' })
+
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await rig.hook('claude', claude('PermissionRequest', bash('npm test', { tool_use_id: 'p1' })))
+    await rig.hook('claude', claude('PermissionRequest', bash('npm test', { tool_use_id: 'p2' })))
+    await rig.hook('claude', claude('PermissionRequest', bash('npm test', { tool_use_id: 'p2' })))
+
+    expect(stream()).toEqual(['working(go)', 'waiting(go)', 'waiting(go)'])
+    const changes = rig.events.filter((event) => event.type === 'quirky.agent-status/changed')
+    expect(changes).toHaveLength(3)
+    const rows = changes.map((event) => {
+      if (!('data' in event) || !event.data || typeof event.data !== 'object' ||
+        !('row' in event.data) || !event.data.row || typeof event.data.row !== 'object') {
+        throw new Error('expected a changed event with a row')
+      }
+      return event.data.row as Record<string, unknown>
+    })
+    const waitingRows = rows.slice(1)
+    expect(waitingRows.map((row) => ({ agent: row.agent, state: row.state }))).toEqual([
+      { agent: 'claude', state: 'waiting' },
+      { agent: 'claude', state: 'waiting' }
+    ])
+    expect(waitingRows[0]!.lead).toBeDefined()
+    expect(waitingRows[0]!.turnStartedAt).toBeDefined()
+    expect(waitingRows[1]!.lead).toEqual(waitingRows[0]!.lead)
+    expect(waitingRows[1]!.turnStartedAt).toBe(waitingRows[0]!.turnStartedAt)
+    expect(rows.map((row) => row.question)).toEqual([undefined, undefined, undefined])
+    const permissions = rows.map((row) => {
+      const held = row.heldPermission
+      if (!held || typeof held !== 'object') return undefined
+      const permission = held as Record<string, unknown>
+      return {
+        toolUseId: permission.toolUseId,
+        toolName: permission.toolName,
+        input: permission.input,
+        childId: permission.childId
+      }
+    })
+    expect(permissions).toStrictEqual([
+      undefined,
+      { toolUseId: 'p1', toolName: 'Bash', input: 'npm test', childId: null },
+      { toolUseId: 'p2', toolName: 'Bash', input: 'npm test', childId: null }
+    ])
+    expect(rig.settles()).toEqual([])
+    expect(rig.events.filter((event) => event.type === 'quirky.agent-status/activityChanged')).toHaveLength(0)
+  })
+
   test('an agent change arrives before the coalescing window expires with identities intact', async () => {
     rig = await Rig.start({ eventCoalesceMs: 60_000 })
     await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/settled' })
