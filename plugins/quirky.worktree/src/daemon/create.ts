@@ -433,16 +433,18 @@ function decideDefaultTabs(
 }
 
 async function preflightAgentSelection(env: CreateEnv, params: CreateParams): Promise<void> {
-  if (params.model === undefined && params.options === undefined) return
+  if (params.agent === undefined || params.agent === 'shell' || params.host !== undefined) return
+  const hasLaunchSelection = params.model !== undefined || params.options !== undefined
   try {
     await env.call('quirky.agents/resolveLaunch', {
-      agent: params.agent!,
+      agent: params.agent,
       structured: false,
       ...(params.model === undefined ? {} : { model: params.model }),
       ...(params.options === undefined ? {} : { options: params.options })
     })
   } catch (error) {
     if (codeOf(error) === RpcErrorCode.MethodNotFound) {
+      if (!hasLaunchSelection) return
       throw reasoned(
         env,
         'conflict',
