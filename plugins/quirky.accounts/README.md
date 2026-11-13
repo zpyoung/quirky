@@ -12,6 +12,16 @@ The returned `env` is an environment patch, not credentials. String values are a
 quirky accounts prepare-provider-env --agent codex --cwd "$PWD" --home-overrides '{"claude":{"value":null,"source":"absent"},"codex":{"value":null,"source":"absent"}}'
 ```
 
+## Process ownership
+
+Accounts requires plugin API `1.11.0`. Keychain reads and managed-credential deletion await the host's shared process runner, with a three-second deadline. Failed deletion keeps the profile and account record available for retry.
+
+Usage probes and interactive sign-in use the host's streaming process handles. Usage output is capped at 512 KiB across raw stdout and stderr bytes unless a caller requests a smaller cap. Shutdown stops owned usage processes and awaits their completion. A failed sign-in output stream cannot complete a login unless its Codex credential commit was already latched.
+
+Codex usage drains buffered stdout before treating a normal process exit as a missing quota response.
+
+Managed preparation rechecks account selection and the owned home after asynchronous reads. Removing the account during preparation returns a conflict rather than a deleted home.
+
 ## Paired-owner Accounts
 
 When a window shows a registered remote workspace, Accounts and Usage read that workspace's full-owner host. The window keeps its last actual workspace owner when Accounts settings replaces the workspace view; settings itself is not a local workspace. An offline or replaced owner is unavailable, never a source of local fallback data.
@@ -76,6 +86,6 @@ The lint gate checks tracked source and nonignored new source; ignored generated
 
 ## Isolated account regressions
 
-Run `bun scripts/suite.ts plugins/quirky.accounts` for the account lifecycle and UI regressions. They use fresh private homes and synthetic provider/security boundaries; they do not establish native Keychain, real provider authentication, or packaged desktop acceptance.
+Run individual files locally with `bun test plugins/quirky.accounts/test/profiles.test.ts` (or another specific test path); the full suite runs on GitHub Actions. These regressions use fresh private homes and synthetic provider/security boundaries; they do not establish native Keychain, real provider authentication, or packaged desktop acceptance.
 
 The model-discovery fixture configures the absolute owned provider executable through `quirky.agents/configure` and uses the running Bun executable as its interpreter. Prepending a fixture directory to `PATH`, or adding it to `QUIRKY_AGENT_SEARCH_DIRS`, is insufficient: a login-shell executable can take precedence. The regression checks selected-account model/effort resolution and preservation of the last usable catalog after failed discovery. Removal and continuation regressions check credential/history bytes and surviving account selection rather than private markup, command inventories, or copied process arguments.

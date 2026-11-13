@@ -348,3 +348,34 @@ describe('addWarning', () => {
     expect(t.host.list()[0]!.diagnostics).toEqual([])
   })
 })
+describe('removeWarning', () => {
+  const changes = (t: Setup) => t.events.filter((event) => event.type === 'plugin.changed').length
+
+  test('removes every warning with the message and emits once', async () => {
+    const t = setup()
+    t.installed({ id: 'acme.one' })
+    t.host.load()
+    await t.host.activate('acme.one')
+    t.host.addWarning('acme.one', 'same warning')
+    t.host.addWarning('acme.one', 'same warning')
+    const before = changes(t)
+
+    t.host.removeWarning('acme.one', 'same warning')
+
+    expect(changes(t)).toBe(before + 1)
+    expect(t.host.list()[0]!.diagnostics).not.toContainEqual({ level: 'warning', message: 'same warning' })
+  })
+
+  test('does not emit for an unknown plugin or message', async () => {
+    const t = setup()
+    t.installed({ id: 'acme.one' })
+    t.host.load()
+    await t.host.activate('acme.one')
+    const before = changes(t)
+
+    t.host.removeWarning('acme.ghost', 'unknown')
+    t.host.removeWarning('acme.one', 'unknown')
+
+    expect(changes(t)).toBe(before)
+  })
+})

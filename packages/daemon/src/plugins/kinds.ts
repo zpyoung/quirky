@@ -15,7 +15,7 @@ import { checkUiKindEntry, isUiKind } from './ui-kinds'
 type Entry = Record<string, unknown>
 
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
-  method: ['description', 'params', 'result', 'readOnly', 'destructive', 'confirm', 'describe', 'connection'],
+  method: ['description', 'params', 'result', 'readOnly', 'destructive', 'confirm', 'describe', 'connection', 'timeout'],
   event: ['description', 'data', 'coalesce', 'worktree'],
   job: ['description', 'interval', 'initialDelay', 'timeout'],
   'launch-hook': ['description', 'agents'],
@@ -233,6 +233,9 @@ export function checkKindEntry(kind: string, label: string, entry: Entry, errors
     if (entry.params !== undefined && problems.length === 0) checkFlagCollisions(label, entry.params, errors)
     checkSchemaField(label, entry, 'result', {}, errors)
     checkMethodFlags(label, entry, errors)
+    if (entry.timeout !== undefined) {
+      checkDuration(label, entry, 'timeout', { min: MIN_JOB_INTERVAL_MS, message: 'must be between 1s and 24h' }, errors)
+    }
   }
   if (kind === 'event') {
     checkSchemaField(label, entry, 'data', {}, errors)
