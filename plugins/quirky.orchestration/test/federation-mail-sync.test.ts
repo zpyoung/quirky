@@ -509,3 +509,22 @@ test('8: a home acknowledgement includes each imported result', async () => {
     expect(committed).toBe(1)
   })
 })
+
+test('an acknowledgement tolerates a concurrently acknowledged prefix of its pulled page', async () => {
+  await withHarness({}, async (harness) => {
+    await harness.settleStartup()
+    const first = harness.store.enqueue(harness.binding.id, 'to_home', 'first-item', 'message', {})
+    const second = harness.store.enqueue(harness.binding.id, 'to_home', 'second-item', 'message', {})
+    harness.store.complete(harness.binding.id, 'to_home', first.id, ACCEPTED)
+    harness.store.acknowledge(harness.binding.id, 'to_home', first.sequence)
+
+    expect(await harness.mail.inbound(ACK_METHOD, {
+      bindingId: harness.binding.id,
+      direction: 'to_home',
+      through: second.sequence,
+      results: [first, second].map(({ sequence, id }) => ({ sequence, id, result: ACCEPTED })),
+    }, harness.principal)).toEqual({ through: second.sequence })
+    expect(harness.store.result(harness.binding.id, 'to_home', second.id)).toEqual(ACCEPTED)
+    expect(harness.store.outboxCursor(harness.binding.id, 'to_home')).toBe(second.sequence)
+  })
+})

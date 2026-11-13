@@ -766,7 +766,7 @@ export function createFederationMail(
         const count = acknowledged - cursor
         const rawResults = params.results
         const missingResult = (): never => { throw new Error('Federation acknowledgement is missing an import result') }
-        if (count > PAGE_SIZE || !Array.isArray(rawResults) || rawResults.length !== count) missingResult()
+        if (count > PAGE_SIZE || !Array.isArray(rawResults) || rawResults.length < count || rawResults.length > PAGE_SIZE) missingResult()
         const results = new Map<number, Record<string, unknown>>()
         for (const value of rawResults as unknown[]) {
           const result = objectRecord(value)
