@@ -1,6 +1,8 @@
 import { afterEach, expect, test, vi } from 'bun:test'
 import { parseExitWithParent, watchParent } from '../src/node/parent-watch'
 
+const clock = vi as typeof vi & { advanceTimersByTime(milliseconds: number): void }
+
 const cleanups: (() => void)[] = []
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup()
@@ -33,7 +35,7 @@ test('watchParent reports a changed parent exactly once and stops reading', () =
     readPpid: () => { reads++; return values.shift() ?? 1 },
     onLost: () => { losses++ }
   }))
-  vi.advanceTimersByTime(40)
+  clock.advanceTimersByTime(40)
   expect(losses).toBe(1)
   expect(reads).toBe(3)
 })
@@ -45,7 +47,7 @@ test('watchParent detects an already lost parent on its first tick', () => {
     parentPid: 10, intervalMs: 5,
     readPpid: () => { reads++; return 1 }, onLost: () => { losses++ }
   }))
-  vi.advanceTimersByTime(5)
+  clock.advanceTimersByTime(5)
   expect(reads).toBe(1)
   expect(losses).toBe(1)
 })
@@ -59,7 +61,7 @@ test('the returned disposer prevents further parent reads', () => {
   })
   cleanups.push(stop)
   stop()
-  vi.advanceTimersByTime(25)
+  clock.advanceTimersByTime(25)
   expect(reads).toBe(0)
   expect(lost).toBe(false)
 })
