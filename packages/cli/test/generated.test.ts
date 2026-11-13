@@ -480,6 +480,7 @@ describe('SC-19 JSON errors', () => {
     [RpcErrorCode.MethodNotFound, 'method-not-found'],
     [RpcErrorCode.Unauthorized, 'unauthorized'],
     [RpcErrorCode.Timeout, 'timeout'],
+    [RpcErrorCode.Busy, 'busy'],
     [RpcErrorCode.Internal, 'internal']
   ])('a daemon error %i maps to %s', async (rpcCode, name) => {
     daemon.addMethod('acme.notes/bad', {}, { error: { code: rpcCode, message: 'nope' } })
@@ -492,6 +493,24 @@ describe('SC-19 JSON errors', () => {
     expect(await failure(['acme.notes', 'bad'])).toEqual({
       code: 1,
       body: { error: { code: 'timeout', message: 'did not answer', reason, data } }
+    })
+  })
+
+  test('a busy refusal preserves its reason and RPC data', async () => {
+    const data = { reason: 'busy', method: 'acme.notes/bad', running: 1, limit: 1 }
+    daemon.addMethod('acme.notes/bad', {}, {
+      error: { code: RpcErrorCode.Busy, message: 'acme.notes/bad is busy: 1 calls are already running', data }
+    })
+    expect(await failure(['acme.notes', 'bad'])).toEqual({
+      code: 1,
+      body: {
+        error: {
+          code: 'busy',
+          message: 'acme.notes/bad is busy: 1 calls are already running',
+          reason: 'busy',
+          data
+        }
+      }
     })
   })
 
