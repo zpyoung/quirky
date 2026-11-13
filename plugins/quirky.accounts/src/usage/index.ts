@@ -129,7 +129,7 @@ function clone<T>(value: T): T {
 }
 
 export class UsageService {
-  private readonly processes = new ProviderProcessOwner()
+  private readonly processes: ProviderProcessOwner
   private readonly controllers = new Set<AbortController>()
   private readonly inFlight = new Map<string, RefreshFlight>()
   private readonly lastGood: Map<string, ProviderSnapshot>
@@ -148,6 +148,7 @@ export class UsageService {
     private readonly context: PluginContext,
     private readonly targets: () => Promise<UsageTarget[]>
   ) {
+    this.processes = new ProviderProcessOwner(context.process)
     this.lastGood = readUsageSnapshots(context.dataDir)
     this.ledger = readResetLedger(context.dataDir)
     for (const provider of USAGE_PROVIDERS) this.current.set(provider, idleSnapshot(provider))
@@ -281,13 +282,14 @@ export class UsageService {
     return result
   }
 
-  shutdown(): void {
-    if (this.closed) return
-    this.closed = true
-    for (const controller of this.controllers) controller.abort()
-    this.controllers.clear()
-    void this.processes.shutdown()
-    this.inFlight.clear()
+  async shutdown(): Promise<void> {
+    if (!this.closed) {
+      this.closed = true
+      for (const controller of this.controllers) controller.abort()
+      this.controllers.clear()
+      this.inFlight.clear()
+    }
+    await this.processes.shutdown()
   }
 
   private synchronizeActiveTargets(targets: UsageTarget[]): void {

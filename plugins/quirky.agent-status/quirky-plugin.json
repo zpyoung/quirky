@@ -1,6 +1,6 @@
 {
   "id": "quirky.agent-status",
-  "apiVersion": "1.10.0",
+  "apiVersion": "1.12.0",
   "name": "Agent status",
   "version": "0.1.0",
   "description": "Turns agent hooks into live status rows and durable per-session Activity threads.",
@@ -581,6 +581,7 @@
         "id": "wait",
         "description": "Waits until a session's script state is one of the wanted states, for up to timeoutMs (at most 60000). Returns status matched with the state at once if it already is, else pending with the last state. Fails with conflict and data.reason session-exited when the session has exited and exited is not wanted. Callers that wait longer repeat the call.",
         "readOnly": true,
+        "timeout": "75s",
         "params": {
           "type": "object",
           "properties": {
@@ -674,6 +675,7 @@
         "id": "waitOutput",
         "description": "Waits until a line of a session's recent text matches a regular expression, for up to timeoutMs (at most 60000). Lines the terminal wrapped are read as one line. Returns status matched with the newest matching line at once if one does, else pending. An exited session's final text is matched before the exit counts. Fails with invalid-params for a pattern that does not compile, is unsafe or runs too long, and with conflict and data.reason session-exited when the session exited without a match.",
         "readOnly": true,
+        "timeout": "75s",
         "params": {
           "type": "object",
           "properties": {
