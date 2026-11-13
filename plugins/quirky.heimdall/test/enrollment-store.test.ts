@@ -89,7 +89,7 @@ function removeSidecars(path: string): void {
   rmSync(`${path}-shm`, { force: true })
 }
 
-function damage(path: string, mode: 'pages' | 'truncate'): Buffer {
+function damage(path: string, mode: 'pages' | 'truncate') {
   const bytes = readFileSync(path)
   if (mode === 'pages') {
     const encodedPageSize = bytes.readUInt16BE(16)

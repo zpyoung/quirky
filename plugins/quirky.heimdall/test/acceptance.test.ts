@@ -432,7 +432,7 @@ function checkpointAndRemoveSidecars(path: string): void {
   rmSync(`${path}-shm`, { force: true })
 }
 
-function damageStore(path: string, mode: 'pages' | 'truncate'): Buffer {
+function damageStore(path: string, mode: 'pages' | 'truncate') {
   const bytes = readFileSync(path)
   if (mode === 'pages') {
     const encodedPageSize = bytes.readUInt16BE(16)
