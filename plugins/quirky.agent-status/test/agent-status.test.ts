@@ -552,6 +552,33 @@ describe('settled events', () => {
 })
 
 describe('SC-11 to SC-16: event delivery and catalog', () => {
+  test('SC-11: changed carries its session worktree on the event envelope and data', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+
+    const changed = rig.events.filter((event) => event.type === 'quirky.agent-status/changed').at(-1)
+    expect(changed).toMatchObject({
+      worktreeId: 'wt1',
+      data: { sessionId: 's1', worktreeId: 'wt1', row: { state: 'working' } }
+    })
+  })
+
+  test('SC-12: removing a row on exit keeps the session worktree', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+    await rig.exit()
+
+    const removed = await waitFor(() => rig.events.find((event) => {
+      if (event.type !== 'quirky.agent-status/changed') return false
+      if (!('data' in event) || !event.data || typeof event.data !== 'object') return false
+      return 'sessionId' in event.data && event.data.sessionId === 's1' && 'row' in event.data && event.data.row === null
+    }))
+    expect(removed).toEqual(expect.objectContaining({
+      data: { sessionId: 's1', worktreeId: 'wt1', row: null }
+    }))
+    expect(removed).toMatchObject({ worktreeId: 'wt1' })
+  })
+
   const post = async (name: string, payload: Record<string, unknown> = {}) => {
     await rig.post('claude', claude(name, payload))
     await rig.settle()
@@ -579,7 +606,7 @@ describe('SC-11 to SC-16: event delivery and catalog', () => {
     return [`${value}${typeof worktreeId === 'string' ? '' : ':untagged'}`]
   })
 
-  test('SC-11: a burst inside a turn merges into the next step', async () => {
+  test('coalescing: a burst inside a turn merges into the next step', async () => {
     rig = await Rig.start({ eventCoalesceMs: 60_000 })
     await post('UserPromptSubmit', { prompt: 'p1' })
     for (let n = 0; n < 5; n++) await tool(n)
@@ -589,7 +616,7 @@ describe('SC-11 to SC-16: event delivery and catalog', () => {
     expect(stream()).toEqual(['working(p1)', 'done(p1)'])
   })
 
-  test('SC-12: every turn arrives, however many fit in one window', async () => {
+  test('coalescing: every turn arrives, however many fit in one window', async () => {
     rig = await Rig.start({ eventCoalesceMs: 60_000 })
     for (const prompt of ['p1', 'p2', 'p3']) {
       await post('UserPromptSubmit', { prompt })
@@ -615,7 +642,7 @@ describe('SC-11 to SC-16: event delivery and catalog', () => {
     ])
   })
 
-  test("SC-12: a row's removal always arrives, and so does the row after it", async () => {
+  test('coalescing: row removal and its next row are never merged', async () => {
     rig = await Rig.start({ eventCoalesceMs: 60_000 })
     for (const prompt of ['p1', 'p2', 'p3']) {
       await post('UserPromptSubmit', { prompt })
@@ -648,7 +675,7 @@ describe('SC-11 to SC-16: event delivery and catalog', () => {
     expect(removed.data).toEqual({ sessionId: 's1', worktreeId: 'wt1', row: null })
   })
 
-  test('SC-13: removing a session that never had a row announced is untagged', async () => {
+  test('coalescing: a session with no announced row is removed without a tag', async () => {
     rig = await Rig.start({ eventCoalesceMs: 60_000 })
     await rig.client.callAny('quirky.session/remove', { session: 's1' })
     await rig.settle()
@@ -662,7 +689,7 @@ describe('SC-11 to SC-16: event delivery and catalog', () => {
     expect(removed).not.toHaveProperty('worktreeId')
   })
 
-  test('SC-14: row steps arrive with settled disabled', async () => {
+  test('coalescing: row steps arrive with settled disabled', async () => {
     rig = await Rig.start({ eventCoalesceMs: 60_000 })
     await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/settled' })
     for (const prompt of ['p1', 'p2', 'p3']) {
@@ -719,6 +746,126 @@ describe('SC-11 to SC-16: event delivery and catalog', () => {
     expect(activityChanged).not.toHaveProperty('worktree')
     expect(activityChanged).not.toHaveProperty('coalesce')
   })
+  test('an agent change arrives before the coalescing window expires with identities intact', async () => {
+    rig = await Rig.start({ eventCoalesceMs: 60_000 })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/settled' })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/activityChanged' })
+    await rig.hook('claude', claude('Stop'))
+    expect(await rig.row()).toMatchObject({
+      agent: 'claude',
+      state: 'done',
+      turnStartedAt: null,
+      lead: { providerSession: null }
+    })
+
+    await rig.hook('gemini', { hook_event_name: 'AfterAgent' })
+    expect(await rig.row()).toMatchObject({
+      agent: 'gemini',
+      state: 'done',
+      turnStartedAt: null,
+      lead: { providerSession: null }
+    })
+
+    const changes = rig.events.filter((event) => event.type === 'quirky.agent-status/changed')
+    expect(changes).toHaveLength(2)
+    expect(rig.settles()).toEqual([])
+    expect(rig.events.filter((event) => event.type === 'quirky.agent-status/activityChanged')).toHaveLength(0)
+    expect(changes).toMatchObject([
+      {
+        worktreeId: 'wt1',
+        data: {
+          sessionId: 's1',
+          worktreeId: 'wt1',
+          row: { agent: 'claude', state: 'done', turnStartedAt: null, lead: { providerSession: null } }
+        }
+      },
+      {
+        worktreeId: 'wt1',
+        data: {
+          sessionId: 's1',
+          worktreeId: 'wt1',
+          row: { agent: 'gemini', state: 'done', turnStartedAt: null, lead: { providerSession: null } }
+        }
+      }
+    ])
+  })
+
+  test('a lead provider-session change arrives before the coalescing window expires with identities intact', async () => {
+    rig = await Rig.start({ eventCoalesceMs: 60_000 })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/settled' })
+    await rig.client.callAny('plugin.disable', { id: 'event:quirky.agent-status/activityChanged' })
+    await rig.hook('claude', claude('Stop', { session_id: 'provider-a' }))
+    expect(await rig.row()).toMatchObject({
+      agent: 'claude',
+      state: 'done',
+      turnStartedAt: null,
+      lead: { providerSession: 'provider-a' }
+    })
+
+    await rig.hook('claude', claude('Stop', { session_id: 'provider-b' }))
+    expect(await rig.row()).toMatchObject({
+      agent: 'claude',
+      state: 'done',
+      turnStartedAt: null,
+      lead: { providerSession: 'provider-b' }
+    })
+
+    const changes = rig.events.filter((event) => event.type === 'quirky.agent-status/changed')
+    expect(changes).toHaveLength(2)
+    expect(rig.settles()).toEqual([])
+    expect(rig.events.filter((event) => event.type === 'quirky.agent-status/activityChanged')).toHaveLength(0)
+    expect(changes).toMatchObject([
+      {
+        worktreeId: 'wt1',
+        data: {
+          sessionId: 's1',
+          worktreeId: 'wt1',
+          row: { agent: 'claude', state: 'done', turnStartedAt: null, lead: { providerSession: 'provider-a' } }
+        }
+      },
+      {
+        worktreeId: 'wt1',
+        data: {
+          sessionId: 's1',
+          worktreeId: 'wt1',
+          row: { agent: 'claude', state: 'done', turnStartedAt: null, lead: { providerSession: 'provider-b' } }
+        }
+      }
+    ])
+  })
+
+  test('a removal forgets its announcement before a later unannounced removal', async () => {
+    rig = await Rig.start({ eventCoalesceMs: 60_000 })
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'go' }))
+
+    await rig.exit()
+    await waitFor(() => {
+      const changedCount = rig.events.filter((event) => event.type === 'quirky.agent-status/changed').length
+      return changedCount === 2 ? true : undefined
+    })
+    await rig.client.callAny('quirky.session/remove', { session: 's1' })
+    await waitFor(() => {
+      const changedCount = rig.events.filter((event) => event.type === 'quirky.agent-status/changed').length
+      return changedCount === 3 ? true : undefined
+    })
+
+    const changes = rig.events.filter((event) => event.type === 'quirky.agent-status/changed')
+    expect(changes).toHaveLength(3)
+    expect(changes[0]).toMatchObject({
+      worktreeId: 'wt1',
+      data: { sessionId: 's1', worktreeId: 'wt1', row: { state: 'working' } }
+    })
+    expect(changes[1]).toMatchObject({
+      worktreeId: 'wt1',
+      data: { sessionId: 's1', worktreeId: 'wt1', row: null }
+    })
+    const unannouncedRemoval = changes[2]
+    if (!unannouncedRemoval || !('data' in unannouncedRemoval)) throw new Error('expected a changed event with data')
+    expect(unannouncedRemoval.type).toBe('quirky.agent-status/changed')
+    expect(unannouncedRemoval.data).toEqual({ sessionId: 's1', row: null })
+    expect(unannouncedRemoval).not.toHaveProperty('worktreeId')
+  })
+
 })
 
 describe('rows and sessions', () => {
