@@ -108,8 +108,11 @@ const prompt = promptIndex >= 0 ? (argv[promptIndex + 1] || '') : [...argv].reve
 fs.appendFileSync(argvLog, JSON.stringify({ sessionId, argv, prompt }) + '\\n')
 process.stdout.write('PROMPT:' + prompt + ':' + sessionId + '\\n')
 let input = ''
-function accept(line) {
-  fs.appendFileSync(inputLog, JSON.stringify({ sessionId, line }) + '\\n')
+function accept(rawLine) {
+  const pasteStart = '\\x1b[200~'
+  const pasteEnd = '\\x1b[201~'
+  const line = rawLine.startsWith(pasteStart) && rawLine.endsWith(pasteEnd) ? rawLine.slice(pasteStart.length, -pasteEnd.length) : rawLine
+  fs.appendFileSync(inputLog, JSON.stringify({ sessionId, line, rawLine }) + '\\n')
   process.stdout.write('ACK:' + line + '\\n')
 }
 function receive() {

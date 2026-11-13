@@ -80,7 +80,7 @@ test('owned provider and OMP fixtures enforce their exact contracts', async () =
       { sessionId: 'fixture-session-a', argv: ['--prompt', 'fixture-initial-a'], prompt: 'fixture-initial-a' }
     ])
     expect((await world.readLog('omp-input')).trim().split('\n').map((line) => JSON.parse(line))).toEqual([
-      { sessionId: 'fixture-session-a', line: 'fixture-nudge-a' }
+      { sessionId: 'fixture-session-a', line: 'fixture-nudge-a', rawLine: 'fixture-nudge-a' }
     ])
 
     const codexVersion = await run([world.paths.codex, '--version'])
@@ -91,6 +91,28 @@ test('owned provider and OMP fixtures enforce their exact contracts', async () =
     const deniedSecurity = await run([world.paths.security, 'find-generic-password'])
     expect(deniedSecurity.exitCode).toBe(44)
     expect(await world.readLog('security')).toContain('find-generic-password')
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('OMP fixture decodes bracketed paste while retaining the received bytes', async () => {
+  const world = await createGoalLoopWorld()
+  try {
+    const rawLine = '\u001b[200~pasted input\u001b[201~'
+    const child = world.scope.spawn([world.paths.omp, '--prompt', 'paste-check'], {
+      cwd: world.root,
+      env: { ...world.env, QUIRKY_SESSION_ID: 'paste-session' },
+      stdin: 'pipe', stdout: 'pipe', stderr: 'pipe'
+    })
+    child.stdin.write(`${rawLine}\n`)
+    child.stdin.end()
+    const result = await captureCliChild(child as unknown as CliBoundedChild, { timeoutMs: 3_000 })
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe('PROMPT:paste-check:paste-session\nACK:pasted input\n')
+    expect(JSON.parse((await world.readLog('omp-input')).trim())).toEqual({
+      sessionId: 'paste-session', line: 'pasted input', rawLine
+    })
   } finally {
     await world.cleanup()
   }
