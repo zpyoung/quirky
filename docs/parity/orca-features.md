@@ -49,6 +49,8 @@ Every check below is a literal single-file test command. An optional `title` is 
 
 ## Workflow translation notes
 
+Run `bun scripts/parity/goal-loop.ts --json` for the isolated real-CLI rehearsal. It prints one report after product and owned-process cleanup, using only local provider stand-ins. It accepts no caller-selected home, runtime, repository, command, or executable.
+
 The Goal-12 rehearsal composes public Quirky operations instead of reproducing Orca spellings:
 
 - Worktree creation uses `--base`, not `--base-branch`.
@@ -58,6 +60,7 @@ The Goal-12 rehearsal composes public Quirky operations instead of reproducing O
 - A Quirky removal receipt may retain an unmerged branch. If it does, cleanup must use the receipt's exact branch and head with `worktree delete-branch`, not raw `git branch -D`.
 - Repeated loop turns use the native Codex fixture rather than a real Claude process. This does not attest a live Claude/model/account configuration. No harness file is migrated by this PR.
 - Compound terminal commands use `/bin/sh -c <quoted script>` so the exec-based launcher runs the entire script, including its input read and final shell.
+- Ask confirmation answers use `{"continue":{"value":true,"source":"input"}}`; the rehearsal checks that same typed object from the live shell's `ask wait`, without flattening the returned envelope.
 
 ## Export shape and validation
 
