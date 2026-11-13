@@ -247,6 +247,10 @@ export class QuirkyClient {
     return () => this.closeHandlers.delete(handler)
   }
 
+  /**
+   * Receives a terminal stream's bytes, including any that arrived before this call.
+   * A gap discards buffered output and reports onLagged once; pre-registration gaps notify asynchronously.
+   */
   onTerminalOutput(
     streamId: number,
     handler: (bytes: Uint8Array) => void,

@@ -25,6 +25,7 @@ const RESYNC_COOLDOWN_MS = 2_000
 
 type Attachment = { connectionId: number; stream: ClientStream; sessionId: string; mobile: boolean; resyncing?: boolean }
 type SessionTitleLookup = (sessionIds: readonly string[]) => Promise<ReadonlyMap<string, string>>
+/** Output that arrived while a subscribe request was in flight, kept until its response says where the replay ends. */
 type Tap = { chunks: Uint8Array[]; buffered: number; total: number; overflow: boolean }
 type ResyncWaiter = {
   connectionId: number

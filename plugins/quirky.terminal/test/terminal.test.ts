@@ -1154,6 +1154,78 @@ describe('TerminalService output recovery', () => {
     expect(rig.unsubscribed).toEqual([])
     rig.service.shutdown()
   })
+  test('counts output received after a subscribe tap overflows toward the true PTY offset', async () => {
+    const rig = createTerminalServiceRig()
+    const subscribeGate = Promise.withResolvers<PtySubscription>()
+    const phoneCaller = rig.caller('mobile', 11)
+    const caller = rig.caller('ui', 12)
+    let phoneAttached: { streamId: number } | undefined
+    let attaching: Promise<{ streamId: number }> | undefined
+
+    try {
+      rig.setSubscribe(async () => testSubscription({ offset: 100 }))
+      phoneAttached = await rig.service.attach({ session: 's1', cols: 80, rows: 24 }, phoneCaller)
+      rig.setSubscribe(() => subscribeGate.promise)
+      attaching = rig.service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
+      await waitUntil(() => rig.subscribeCalls.length === 2)
+
+      rig.service.onData('s1', new Uint8Array(MAX_TAP_BYTES + 1))
+      const tap = terminalState(rig.service).taps.get('s1')!
+      expect(tap.overflow).toBe(true)
+      rig.service.onData('s1', testBytes('tail'))
+      expect(tap.total).toBe(MAX_TAP_BYTES + 1 + testBytes('tail').length)
+
+      subscribeGate.resolve(testSubscription({ offset: 100 }))
+      const attached = await attaching
+      expect(terminalState(rig.service).received.get('s1'))
+        .toBe(100 + MAX_TAP_BYTES + 1 + testBytes('tail').length)
+    } finally {
+      subscribeGate.resolve(testSubscription({ offset: 100 }))
+      if (attaching) {
+        const attached = await attaching.catch(() => undefined)
+        if (attached) rig.service.detach({ streamId: attached.streamId }, caller)
+      }
+      if (phoneAttached) rig.service.detach({ streamId: phoneAttached.streamId }, phoneCaller)
+      rig.service.shutdown()
+    }
+  })
+
+  test('recovers a newly attaching mobile stream when its subscribe tap overflows', async () => {
+    const rig = createTerminalServiceRig()
+    const subscribeGate = Promise.withResolvers<PtySubscription>()
+    const snapshotGate = Promise.withResolvers<PtySnapshot>()
+    const caller = rig.caller('mobile', 13)
+    rig.setSubscribe(() => subscribeGate.promise)
+    rig.setSnapshot(() => snapshotGate.promise)
+    let attaching: Promise<{ streamId: number }> | undefined
+
+    try {
+      attaching = rig.service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
+      await waitUntil(() => rig.subscribeCalls.length === 1)
+      rig.service.onData('s1', new Uint8Array(MAX_TAP_BYTES + 1))
+
+      subscribeGate.resolve(testSubscription({ offset: 0 }))
+      const attached = await attaching
+      await waitUntil(() => rig.snapshotCalls.length === 1)
+      snapshotGate.resolve(testSnapshot({ ansi: 'RECOVERED', offset: MAX_TAP_BYTES + 1 }))
+      const stream = rig.stream(attached.streamId)
+      await waitUntil(() => stream.sent.length === 1)
+
+      expect(stream.sent.map(text)).toEqual(['\x18\x1b\\\x1bc\x1b[3JRECOVERED'])
+      expect(stream.lagCount).toBe(0)
+      expect(stream.lagged).toBe(false)
+    } finally {
+      subscribeGate.resolve(testSubscription({ offset: 0 }))
+      snapshotGate.resolve(testSnapshot({ ansi: 'RECOVERED', offset: MAX_TAP_BYTES + 1 }))
+      if (attaching) {
+        const attached = await attaching.catch(() => undefined)
+        await flushMicrotasks(50)
+        if (attached) rig.service.detach({ streamId: attached.streamId }, caller)
+      }
+      rig.service.shutdown()
+    }
+  })
+
 
   test('lags a sole desktop when reconnect replay starts before its received offset', async () => {
     const rig = createTerminalServiceRig()

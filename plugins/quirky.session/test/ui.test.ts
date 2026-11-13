@@ -804,6 +804,43 @@ describe('terminal pane', () => {
     expect(terminal.options.theme).toEqual(themeBeforeUnmount)
   })
 
+  test('suppresses generated input during a successful resync replay and resumes input afterward', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('ok')) })
+    })
+    await open({ worktree: WORKTREE.id })
+    const terminal = terminals[0]!
+    const write = terminal.write.bind(terminal)
+    let completeReplay: (() => void) | undefined
+    let daemonWritesAfterGeneratedInput: number | undefined
+    terminal.write = (data, callback) => {
+      if (decode(data).startsWith('\x18\x1b\\\x1bc')) {
+        terminal.input('generated reply')
+        daemonWritesAfterGeneratedInput = fake.callsTo('quirky.terminal/write').length
+        completeReplay = callback
+        write(data)
+        return
+      }
+      write(data, callback)
+    }
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jok')
+      expect(daemonWritesAfterGeneratedInput).toBe(0)
+      expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+      expect(completeReplay).toBeDefined()
+      completeReplay!()
+      await act(async () => terminal.input('user input'))
+      expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+        { session: 's1', data: 'user input' }
+      ])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
   test('unsubscribes immediately on lag and replays a reset-prefixed resync after 250ms', async () => {
     start([shell1], {
       'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('ok')) })
