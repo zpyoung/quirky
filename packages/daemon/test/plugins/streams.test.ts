@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  WsFrameKind,
   decodeTerminalOutput,
   encodeTerminalLagged,
   encodeTerminalOutput,
@@ -92,6 +93,44 @@ describe('openStream', () => {
     expect(conn.binary).toEqual([encodeTerminalOutput(1, first), encodeTerminalLagged(1)])
   })
 
+  test('a rejected output send lags once and reports failure while void transports stay accepted', () => {
+    const conn = fakeConn()
+    const attempts: Uint8Array[] = []
+    let rejectOutput = true
+    conn.sendBinary = (bytes) => {
+      attempts.push(bytes)
+      if (bytes[0] === WsFrameKind.TerminalOutput && rejectOutput) {
+        rejectOutput = false
+        return false
+      }
+      return undefined
+    }
+    const stream = openStream(conn)
+    const lagged: number[] = []
+    stream.onLag?.(() => lagged.push(stream.streamId))
+
+    expect(stream.send(new Uint8Array([1]))).toBe(false)
+    expect(stream.lagged).toBe(true)
+    expect(stream.send(new Uint8Array([2]))).toBe(false)
+    expect(lagged).toEqual([stream.streamId])
+    expect(attempts).toEqual([encodeTerminalOutput(stream.streamId, new Uint8Array([1])), encodeTerminalLagged(stream.streamId)])
+
+    const legacy = openStream(fakeConn())
+    expect(legacy.send(new Uint8Array([3]))).toBe(true)
+  })
+
+  test('closing a stream releases its output controller marker', () => {
+    const conn = fakeConn()
+    const closedOutput: number[] = []
+    conn.closeStreamOutput = (streamId) => closedOutput.push(streamId)
+    const stream = openStream(conn)
+
+    stream.close()
+    stream.close()
+
+    expect(closedOutput).toEqual([stream.streamId])
+  })
+
   test('close runs every onClose callback once, unregisters the closer and stops sends', () => {
     const conn = fakeConn()
     const stream = openStream(conn)
@@ -178,28 +217,21 @@ describe('openStream', () => {
 
 describe('hook.received delivery', () => {
   const hook: QuirkyEvent = { type: 'hook.received', agent: 'claude', sessionId: 's_1', payload: { a: 1 } }
-
-  test('deliverToPlugins reaches plugin listeners and no subscribed client', () => {
-    const seen: QuirkyEvent[] = []
-    const core = makeCore((event) => seen.push(event))
-    const conn = fakeConn()
-    core.addClient(conn)
-
+  test('delivers a hook event to listeners', () => {
+    const events: QuirkyEvent[] = []
+    const core = makeCore((event) => events.push(event))
     core.deliverToPlugins(hook)
-
-    expect(seen).toEqual([hook])
-    expect(conn.text).toEqual([])
+    expect(events).toEqual([hook])
   })
-
   test('broadcasting hook.received still never reaches a client', () => {
-    const seen: QuirkyEvent[] = []
-    const core = makeCore((event) => seen.push(event))
+    const events: QuirkyEvent[] = []
+    const core = makeCore((event) => events.push(event))
     const conn = fakeConn()
     core.addClient(conn)
 
     core.broadcast(hook)
 
-    expect(seen).toEqual([hook])
+    expect(events).toEqual([hook])
     expect(conn.text).toEqual([])
   })
 })

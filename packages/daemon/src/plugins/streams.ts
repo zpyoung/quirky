@@ -53,10 +53,21 @@ export function openStream(conn: ClientConn): ClientStream {
     if (closed) return
     closed = true
     conn.streamClosers.delete(streamId)
+    try {
+      conn.closeStreamOutput?.(streamId)
+    } catch {}
     lagCallbacks.length = 0
     for (const callback of callbacks.splice(0)) runCallback(callback)
   }
   if (!closed) conn.streamClosers.set(streamId, close)
+
+  const lag = () => {
+    if (closed || conn.closed || lagged) return
+    lagged = true
+    const listeners = lagCallbacks.splice(0)
+    conn.sendBinary(encodeTerminalLagged(streamId))
+    for (const callback of listeners) runCallback(callback)
+  }
 
   return {
     streamId,
@@ -65,15 +76,13 @@ export function openStream(conn: ClientConn): ClientStream {
     },
     send(bytes) {
       if (closed || conn.closed || lagged) return false
-      conn.sendBinary(encodeTerminalOutput(streamId, bytes))
+      if (conn.sendBinary(encodeTerminalOutput(streamId, bytes)) === false) {
+        lag()
+        return false
+      }
       return true
     },
-    lag() {
-      if (closed || conn.closed || lagged) return
-      lagged = true
-      conn.sendBinary(encodeTerminalLagged(streamId))
-      for (const callback of lagCallbacks.splice(0)) runCallback(callback)
-    },
+    lag,
     onLag(callback) {
       if (closed) return
       if (lagged) {
@@ -89,3 +98,4 @@ export function openStream(conn: ClientConn): ClientStream {
     close
   }
 }
+
