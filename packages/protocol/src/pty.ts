@@ -98,7 +98,7 @@ export type PtyHistoryPage = {
 export type PtyWriteErrorCode = 'PTY_WRITE_REJECTED' | 'PTY_WRITE_UNCERTAIN'
 
 export type PtyRequest =
-  | { id: number; type: 'hello'; token: string; version: number; minVersion?: number }
+  | { id: number; type: 'hello'; token: string; version: number; minVersion?: number; sessionLagged?: boolean }
   | {
       id: number
       type: 'create'
@@ -184,6 +184,7 @@ export type PtyResponse =
 export type PtyEvent =
   | { type: 'exit'; sessionId: string; exitCode: number | null; exitSignal: string | null; exitCause: ExitCause }
   | { type: 'fact'; sessionId: string; fact: PtyFact }
+  | { type: 'lagged'; sessionId: string }
 
 export function negotiatePtyVersion(
   client: { version: number; minVersion?: number },
