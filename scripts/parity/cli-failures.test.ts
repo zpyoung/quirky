@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { SUPPRESSION_PROMPT } from '../../plugins/quirky.ask/src/core/claude-flags'
 import { createCliEnvironment, createCliWorld } from './cli-world'
 import { createCliFixtures, installCliFixtureTools } from './cli-fixtures'
 import { createActorReceiptStore, parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
@@ -196,18 +197,25 @@ test('Claude worker mode accepts only the session-attested default launch argv',
     })
     const json = '{"hooks":{}}'
     const yolo = '--dangerously-skip-permissions'
+    const disallowed = '--disallowedTools'
+    const appendPrompt = '--append-system-prompt'
     const settings = '--settings'
+    const valid = [yolo, disallowed, 'AskUserQuestion', appendPrompt, SUPPRESSION_PROMPT, settings, json]
+    const expectedLog = `7 ${yolo} ${disallowed} ${appendPrompt} ${settings}\n`
     const log = tools.claudeWorkerLog
     const refused = [
       [],
       [yolo],
-      [yolo, settings, json, 'extra'],
-      [yolo, '--', settings, json],
-      [settings, json, yolo],
-      [yolo, settings, 'not-json']
+      [yolo, settings, json],
+      [...valid, 'extra'],
+      ...Array.from({ length: valid.length + 1 }, (_, index) => [...valid.slice(0, index), '--', ...valid.slice(index)]),
+      [yolo, appendPrompt, SUPPRESSION_PROMPT, disallowed, 'AskUserQuestion', settings, json],
+      [yolo, disallowed, 'Bash', appendPrompt, SUPPRESSION_PROMPT, settings, json],
+      [yolo, disallowed, 'AskUserQuestion', appendPrompt, `${SUPPRESSION_PROMPT}.`, settings, json],
+      [...valid.slice(0, -1), 'not-json']
     ]
 
-    const noToken = run([yolo, settings, json])
+    const noToken = run(valid)
     expect(noToken.status).toBe(64)
     expect(noToken.stderr).toBe('claude fixture refuses unsupported arguments\n')
     expect(readFileSync(log, 'utf8')).toBe('')
@@ -225,7 +233,7 @@ test('Claude worker mode accepts only the session-attested default launch argv',
       expect(readFileSync(log, 'utf8')).toBe('')
     }
 
-    const worker = run([yolo, settings, json], workerEnv)
+    const worker = run(valid, workerEnv)
     expect(worker.error).toBeUndefined()
     expect(worker.status).toBe(1)
     expect(worker.stderr).toBe('fixture worker requires a terminal\n')
@@ -233,13 +241,13 @@ test('Claude worker mode accepts only the session-attested default launch argv',
       '\x1b[?2004h' +
       '\x1b]0;✳ Claude Code\x07\r\n● Ready.\r\n╭─────────────────────────────────────────────╮\r\n│ >                                           │\r\n╰─────────────────────────────────────────────╯\r\n  ? for shortcuts\r\n'
     )
-    expect(readFileSync(log, 'utf8')).toBe(`3 ${yolo} ${settings}\n`)
+    expect(readFileSync(log, 'utf8')).toBe(expectedLog)
     expect(readFileSync(tools.egressLog, 'utf8')).toBe('')
 
     const version = run(['--version'])
     expect(version.status).toBe(0)
     expect(version.stdout).toBe('2.1.80 (Claude Code)\n')
-    expect(readFileSync(log, 'utf8')).toBe(`3 ${yolo} ${settings}\n`)
+    expect(readFileSync(log, 'utf8')).toBe(expectedLog)
   })
 }, 20_000)
 

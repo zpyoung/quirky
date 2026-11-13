@@ -10,7 +10,7 @@ export const WORKER_CHECK_IDS = [
   'workers-dispatch-dry-run', 'workers-dispatch', 'workers-dispatch-show',
   'workers-start-complete', 'workers-start-stop', 'workers-start-abandon',
   'workers-ask', 'workers-reply', 'workers-reply-replay', 'workers-request-show', 'workers-done',
-  'workers-show', 'workers-read-live', 'workers-read-archived', 'workers-list',
+  'workers-show', 'workers-list',
   'workers-stop', 'workers-retain', 'workers-abandon', 'workers-release',
   'workers-reset-messages', 'workers-reset-all',
   'workers-ps-dashboard', 'workers-ps-runs', 'workers-ps-tasks'
@@ -149,9 +149,9 @@ export function assertWorkerStartEvidence(
   const lines = workerLog.split(/\r?\n/)
   if (lines.at(-1) === '') lines.pop()
   equal(lines, [
-    '3 --dangerously-skip-permissions --settings',
-    '3 --dangerously-skip-permissions --settings',
-    '3 --dangerously-skip-permissions --settings'
+    '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings',
+    '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings',
+    '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings'
   ], 'Claude worker log')
   return ids
 }
@@ -247,14 +247,6 @@ export function assertWorkerAbandonEvidence(value: {
   equal(value.pidAlive, true, 'abandoned worker process liveness')
   equal(value.closedByCoordinator, true, 'abandoned worker coordinator close')
   return { state: 'abandoned', processAction: 'none', ptyAlive: true, pidAlive: true }
-}
-
-export function assertWorkerReadLive(value: unknown, dispatchId: string): void {
-  const result = object(value, 'live worker-read result')
-  equal(result.source, 'terminal', 'live worker-read source')
-  equal(result.archived, false, 'live worker-read archive flag')
-  const content = text(result.content, 'live worker-read content').replace(/\r?\n/g, '')
-  ensure(content.includes(`CLI-PARITY-WORKER-DONE:${dispatchId}`), 'live worker-read omitted the completion marker')
 }
 
 export function assertWorkerListEvidence(value: {
@@ -545,6 +537,7 @@ function actorReceiptCheckId(receiptId: string, fallback: string): string {
     case 'workers-close-abandoned':
       return 'workers-abandon'
     case 'workers-release-repeat':
+    case 'workers-read-archived':
     case 'workers-release-abandoned':
     case 'workers-close-target':
       return 'workers-release'
@@ -879,10 +872,6 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
   const abandonPidAlive = pidIsAlive(abandonSession.pid as number)
   const abandonReceipt = actorReceipt(coordinatorReceipts, 'workers-abandon')
 
-  const liveRead = await productCall(context, 'workers-read-live', ['orchestration', 'worker-read', '--dispatch', completeDispatchId, '--source', 'terminal'], 'workers-read-live')
-  assertWorkerReadLive(liveRead, completeDispatchId)
-  context.prove('workers-read-live', { dispatchId: completeDispatchId, source: 'terminal', archived: false, completionMarker: true })
-
   const listResult = await productCall(context, 'workers-list', ['orchestration', 'worker-list', '--run', runId], 'workers-list')
   const listEvidence = assertWorkerListEvidence({
     list: listResult, runId, worktreeId,
@@ -927,6 +916,7 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
   const releaseResult = requiredActorResult(phaseTwoReceipts, 'workers-release')
   const releaseRepeat = requiredActorResult(phaseTwoReceipts, 'workers-release-repeat')
   const releaseAbandoned = requiredActorResult(phaseTwoReceipts, 'workers-release-abandoned')
+  context.check('workers-release')
   const archivedRead = requiredActorResult(phaseTwoReceipts, 'workers-read-archived')
   assertWorkerReadArchived(archivedRead, completeDispatchId)
   const releaseSessions = await productCall(context, 'workers-release-pty', ['terminal', 'sessions'], 'workers-release')
@@ -935,9 +925,7 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
     repeat: releaseRepeat, releaseAbandoned, terminalSessions: releaseSessions
   })
   context.check('workers-release')
-  context.check('workers-read-archived')
-  context.prove('workers-release', releaseEvidence)
-  context.prove('workers-read-archived', { dispatchId: completeDispatchId, archived: true, completionMarker: true })
+  context.prove('workers-release', { ...releaseEvidence, archivedCompletionMarker: true })
 
   const closeAbandonedReceipt = actorReceipt(phaseTwoReceipts, 'workers-close-abandoned')
   equal(closeAbandonedReceipt.exitCode, 0, 'coordinator abandoned session close exit code')

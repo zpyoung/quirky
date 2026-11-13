@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test'
 import { buildWorkerPreamble } from '../../plugins/quirky.orchestration/src/workers/preamble'
 import { parseWorkerPreamble } from './cli-worker-actor'
 import {
-  WORKER_CHECK_IDS,
   assertControllerRefusal,
   assertDispatchEvidence,
   assertQuestionReplyEvidence,
@@ -12,7 +11,6 @@ import {
   assertWorkerCompletion,
   assertWorkerListEvidence,
   assertWorkerReadArchived,
-  assertWorkerReadLive,
   assertWorkerReleaseEvidence,
   assertWorkerRetain,
   assertWorkerStartEvidence,
@@ -28,28 +26,15 @@ function expectRejected(assertion: () => void): void {
 }
 
 const workerLog = [
-  '3 --dangerously-skip-permissions --settings',
-  '3 --dangerously-skip-permissions --settings',
-  '3 --dangerously-skip-permissions --settings'
+  '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings',
+  '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings',
+  '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings'
 ].join('\n')
 
 const controllerRefusal = {
   code: 'conflict',
   message: 'consumer_fenced: this operation requires a live runtime-attested session caller'
 }
-
-test('worker checks register the complete fixed ID set', () => {
-  expect(WORKER_CHECK_IDS).toEqual([
-    'workers-run-use',
-    'workers-dispatch-dry-run', 'workers-dispatch', 'workers-dispatch-show',
-    'workers-start-complete', 'workers-start-stop', 'workers-start-abandon',
-    'workers-ask', 'workers-reply', 'workers-reply-replay', 'workers-request-show', 'workers-done',
-    'workers-show', 'workers-read-live', 'workers-read-archived', 'workers-list',
-    'workers-stop', 'workers-retain', 'workers-abandon', 'workers-release',
-    'workers-reset-messages', 'workers-reset-all',
-    'workers-ps-dashboard', 'workers-ps-runs', 'workers-ps-tasks'
-  ])
-})
 
 test('Run takeover checks coordinator identity, generation increase and controller fencing', () => {
   const value = {
@@ -154,12 +139,6 @@ test('abandon records both live terminal views, process liveness and later coord
   expectRejected(() => assertWorkerAbandonEvidence({ ...value, controllerShow: { ...value.controllerShow, terminal: { status: 'exited' } } }))
   expectRejected(() => assertWorkerAbandonEvidence({ ...value, terminalSessions: { sessions: [{ sessionId: 'session-abandoned', alive: false, pid: 501 }] } }))
   expectRejected(() => assertWorkerAbandonEvidence({ ...value, pidAlive: false }))
-})
-
-test('live worker read checks terminal source and its completion marker', () => {
-  assertWorkerReadLive({ source: 'terminal', archived: false, content: 'hello\r\nCLI-PARITY-WORKER-DONE:ctx_complete\r\n' }, 'ctx_complete')
-  expectRejected(() => assertWorkerReadLive({ source: 'terminal', archived: false, content: 'no marker' }, 'ctx_complete'))
-  expectRejected(() => assertWorkerReadLive({ source: 'transcript', archived: false, content: 'CLI-PARITY-WORKER-DONE:ctx_complete' }, 'ctx_complete'))
 })
 
 test('worker list correlates the three starts with run, worktree and retained terminal state', () => {

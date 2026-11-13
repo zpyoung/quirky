@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
+import { SUPPRESSION_PROMPT } from '../../plugins/quirky.ask/src/core/claude-flags'
 import { quotePosixShellLiteral } from './cli-actor'
 
 export type CliFixtureTools = {
@@ -114,11 +115,13 @@ if [ "$#" -eq 3 ] && [ "$1" = 'auth' ] && [ "$2" = 'login' ] && [ "$3" = '--clau
   printf 'login\\n' >> "$QUIRKY_HOME/fixtures/logs/claude-login.log"
   exit 0
 fi
-if [ "$#" -eq 3 ] && [ -n "\${QUIRKY_SESSION_TOKEN:-}" ] &&
-   [ "$1" = '--dangerously-skip-permissions' ] && [ "$2" = '--settings' ]; then
-  case "$3" in
+if [ "$#" -eq 7 ] && [ -n "\${QUIRKY_SESSION_TOKEN:-}" ] &&
+   [ "$1" = '--dangerously-skip-permissions' ] && [ "$2" = '--disallowedTools' ] &&
+   [ "$3" = 'AskUserQuestion' ] && [ "$4" = '--append-system-prompt' ] &&
+   [ "$5" = ${quotePosixShellLiteral(SUPPRESSION_PROMPT)} ] && [ "$6" = '--settings' ]; then
+  case "$7" in
     \\{*\\})
-      printf '%s %s %s\\n' "$#" "$1" "$2" >> ${quotePosixShellLiteral(claudeWorkerLog)}
+      printf '%s %s %s %s %s\\n' "$#" "$1" "$2" "$4" "$6" >> ${quotePosixShellLiteral(claudeWorkerLog)}
       exec ${quotePosixShellLiteral(process.execPath)} ${quotePosixShellLiteral(workerActorEntry)} worker
       ;;
   esac
