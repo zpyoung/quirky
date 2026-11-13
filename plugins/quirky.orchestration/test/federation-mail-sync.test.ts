@@ -27,15 +27,15 @@ const HOME_RUN_ID = 'home-run-a'
 const HOME_TASK_ID = 'home-task-a'
 const HOME_DISPATCH_ID = 'home-dispatch-a'
 const HOST_RUN_ID = 'host-run-a'
-const HOST_TASK_ID = 'host-task-a'
-const HOST_DISPATCH_ID = 'host-dispatch-a'
+const HOST_TASK_ID = 'task_host_a'
+const HOST_DISPATCH_ID = 'ctx_host_a'
 const SESSION_ID = 'worker-session-a'
 const RUNTIME_EPOCH = 'runtime-epoch-a'
 const PROCESS_INCARNATION = 'process-incarnation-a'
 const PEER_ID = 'peer-a'
 const PEER_FINGERPRINT = 'fingerprint-a'
 const PEER_INCARNATION = 'peer-incarnation-a'
-const ACCEPTED = { kind: 'accepted' }
+const ACCEPTED = { kind: 'accepted' } as const
 const HEARTBEAT_ACCEPTED = { status: 'accepted', lastHeartbeatAt: '2026-01-01T00:00:00.000Z' }
 const PULL_METHOD = 'quirky.orchestration/federationPull'
 const ACK_METHOD = 'quirky.orchestration/federationAck'
@@ -232,7 +232,7 @@ async function withHarness(options: HarnessOptions, run: (harness: Harness) => P
       },
     }
     mail = createFederationMail(
-      { log() {} } as PluginContext,
+      { log() {} } as unknown as PluginContext,
       core as unknown as OrchestrationCore,
       messages as unknown as OrchestrationMessages,
       engine as unknown as FederationEngine,
