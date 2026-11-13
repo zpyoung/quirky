@@ -123,7 +123,6 @@ function singleQuote(word: string): string {
   return `'${word.replaceAll("'", "'\\''")}'`
 }
 
-
 /**
  * The default probe: runs the command under the daemon's login shell with the session's launch
  * environment. Each word of the configured command is quoted, so shell syntax in it is never
