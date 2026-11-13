@@ -90,7 +90,13 @@ let browser
 export function activate(context) {
   const overrides = takeBrowserTestOverrides(context.home)
   if (!overrides) throw new Error('missing browser test dependencies')
-  browser = createBrowserPlugin(context, { ...browserDependencies(overrides.runtimeRoot), ...overrides })
+  const defaults = browserDependencies(overrides.runtimeRoot, context.process, (message) => context.log(message))
+  const { spawn: overrideSpawn, ...rest } = overrides
+  browser = createBrowserPlugin(context, {
+    ...defaults,
+    ...rest,
+    spawn: overrideSpawn ? (command, options) => overrideSpawn(command, options, defaults.spawn) : defaults.spawn
+  })
 }
 export async function deactivate() { await browser?.deactivate() }
 `)
@@ -104,15 +110,20 @@ export async function startBrowserHarness(
   const home = scope.home
   const fixture = startFixtureServer()
   const launched: string[][] = []
+  const { spawn: extraSpawn, ...restExtra } = extra
   const overrides: BrowserTestOverrides = {
     runtimeRoot: BROWSER,
-    spawn(command, options) {
-      launched.push([...command])
-      return scope.spawn(command, options)
-    },
     chromePath: null,
     downloadDirectory: join(home, 'Downloads'),
-    ...extra
+    ...restExtra,
+    spawn(command, options, defaultSpawn) {
+      launched.push([...command])
+      const child = extraSpawn
+        ? extraSpawn(command, options, defaultSpawn)
+        : defaultSpawn(command, options)
+      if (typeof child.pid === 'number') scope.track(child.pid)
+      return child
+    }
   }
   setBrowserTestOverrides(home, overrides)
 
