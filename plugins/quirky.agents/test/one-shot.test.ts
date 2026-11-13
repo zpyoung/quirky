@@ -1,10 +1,18 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { validateEntry } from '../src/core/entry'
 import { buildOneShotCommand, extractEnvAssignments, OneShotError, planCustomCommand, shouldRetryWithoutStrictMcp } from '../src/core/one-shot'
 import { decodeOutput, excerptFailureOutput, failureMessage, parseOpenCodeOutput, sanitizeFailureDetail, stripAnsi } from '../src/core/one-shot-output'
 import type { AgentEntry } from '../src/core/types'
+import { createProcessRunner, ProcessStalledError, type OwnedProcessRunner, type ProcessSpawner, type SpawnExit, type SpawnOptions, type SpawnedProcess } from '../../../packages/process/src/api'
+import { MAX_OUTPUT_BYTES, startOneShot, type OneShotRunInput } from '../src/one-shot-run'
+
+const ownedRunners: OwnedProcessRunner[] = []
+
+afterEach(async () => {
+  await Promise.all(ownedRunners.splice(0).map((runner) => runner.dispose()))
+})
 
 const manifest = JSON.parse(readFileSync(join(import.meta.dir, '../quirky-plugin.json'), 'utf8')) as {
   contributes: { agent: ({ id: string } & Record<string, unknown>)[] }
@@ -449,5 +457,254 @@ describe('failure text', () => {
     expect(sanitizeFailureDetail('x'.repeat(300))).toBe(`${'x'.repeat(240)}...`)
     expect(sanitizeFailureDetail('   ')).toBeNull()
     expect(sanitizeFailureDetail(null)).toBeNull()
+  })
+})
+
+const STDERR_END_BYTES = 16_384
+const ONE_SHOT_INPUT: OneShotRunInput = {
+  argv: ['/bin/sh', '-c', 'echo hi'],
+  cwd: '/tmp/work',
+  env: { HOME: '/tmp/u' },
+  stdin: 'prompt',
+  timeoutMs: 30_000
+}
+
+const NATURAL_EXIT: SpawnExit = { exitCode: 0, signal: null, durationMs: 5 }
+
+function streamOf(chunks: readonly Uint8Array[] = [], failure?: Error): ReadableStream<Uint8Array> {
+  let index = 0
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < chunks.length) controller.enqueue(chunks[index++]!)
+      else if (failure) controller.error(failure)
+      else controller.close()
+    }
+  })
+}
+
+function neverStream(): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({ start() {} })
+}
+
+function makeHandle(overrides: Partial<SpawnedProcess> = {}): SpawnedProcess {
+  return {
+    pid: 123,
+    stdout: streamOf(),
+    stderr: streamOf(),
+    stderrTail: () => '',
+    write: async () => true,
+    closeInput: async () => {},
+    exited: Promise.resolve(NATURAL_EXIT),
+    stop: async () => NATURAL_EXIT,
+    ...overrides
+  }
+}
+
+function recordingSpawner(handle: SpawnedProcess): { spawner: ProcessSpawner; calls: { argv: readonly string[]; options: SpawnOptions }[] } {
+  const calls: { argv: readonly string[]; options: SpawnOptions }[] = []
+  return {
+    calls,
+    spawner: {
+      spawn(argv, options) {
+        calls.push({ argv: [...argv], options })
+        return handle
+      }
+    }
+  }
+}
+
+function fixture(prefix: 'H' | 'T'): Buffer {
+  return Buffer.from(Array.from({ length: STDERR_END_BYTES / 8 }, (_, index) => `${prefix}${String(index + 1).padStart(7, '0')}`).join(''))
+}
+
+describe('startOneShot', () => {
+  test('spawns through the supplied process spawner with piped streams and group grace', async () => {
+    const { spawner, calls } = recordingSpawner(makeHandle())
+    const run = startOneShot(spawner, ONE_SHOT_INPUT)
+
+    await expect(run.done).resolves.toEqual({ kind: 'exited', code: 0, stdout: '', stderr: '' })
+    expect(calls).toEqual([{
+      argv: ONE_SHOT_INPUT.argv,
+      options: {
+        cwd: ONE_SHOT_INPUT.cwd,
+        env: ONE_SHOT_INPUT.env,
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        timeoutMs: ONE_SHOT_INPUT.timeoutMs,
+        killGraceMs: 2_000,
+        groupGrace: true
+      }
+    }])
+  })
+
+  test('keeps the original stderr head and tail in owned 16 KiB buffers', async () => {
+    const head = fixture('H')
+    const middle = Buffer.alloc(1_048_576, 'M')
+    const tail = fixture('T')
+    const retained: Buffer[] = []
+    const originalFrom = Buffer.from
+    const instrumentedBuffer = Buffer as unknown as { from: (...args: unknown[]) => Buffer }
+    instrumentedBuffer.from = (...args) => {
+      const result = Reflect.apply(originalFrom, Buffer, args) as Buffer
+      if (args[0] instanceof Uint8Array && args[0].byteLength === STDERR_END_BYTES) retained.push(result)
+      return result
+    }
+
+    try {
+      const { spawner } = recordingSpawner(makeHandle({ stderr: streamOf([head, middle, tail]) }))
+      const outcome = await startOneShot(spawner, ONE_SHOT_INPUT).done
+
+      expect(outcome).toEqual({
+        kind: 'exited',
+        code: 0,
+        stdout: '',
+        stderr: `${head.toString('utf8')}\n${tail.toString('utf8')}`
+      })
+      expect(outcome.kind === 'exited' ? outcome.stderr.length : 0).toBe(STDERR_END_BYTES * 2 + 1)
+      expect(retained.map((buffer) => [buffer.byteLength, buffer.buffer.byteLength, buffer.toString('utf8')])).toEqual([
+        [STDERR_END_BYTES, STDERR_END_BYTES, head.toString('utf8')],
+        [STDERR_END_BYTES, STDERR_END_BYTES, middle.subarray(-STDERR_END_BYTES).toString('utf8')],
+        [STDERR_END_BYTES, STDERR_END_BYTES, tail.toString('utf8')]
+      ])
+    } finally {
+      instrumentedBuffer.from = originalFrom as unknown as (...args: unknown[]) => Buffer
+    }
+  })
+
+  test('detects stdout overflow from buffered output after leader exit', async () => {
+    const stopCalls: { signal?: 'SIGTERM' | 'SIGKILL'; graceMs?: number }[] = []
+    const chunk = new Uint8Array(65_536)
+    const stdout = streamOf([...Array.from({ length: MAX_OUTPUT_BYTES / chunk.byteLength }, () => chunk), new Uint8Array(1)])
+    const handle = makeHandle({
+      stdout,
+      stop: async (options) => {
+        stopCalls.push(options ?? {})
+        return NATURAL_EXIT
+      }
+    })
+    const { spawner } = recordingSpawner(handle)
+
+    const outcome = await startOneShot(spawner, ONE_SHOT_INPUT).done
+
+    expect(outcome).toEqual({ kind: 'too-much-output' })
+    expect(stopCalls).toContainEqual({ signal: 'SIGTERM', graceMs: 2_000 })
+  })
+
+  test('maps runner timeout, disposal, and external stop outcomes', async () => {
+    const timeoutHandle = makeHandle({
+      exited: Promise.resolve({ exitCode: null, signal: 'SIGTERM', stopped: 'timeout', durationMs: 3_000 })
+    })
+    const abortedHandle = makeHandle({
+      exited: Promise.resolve({ exitCode: null, signal: 'SIGKILL', stopped: 'aborted', durationMs: 50 })
+    })
+    const stoppedHandle = makeHandle({
+      exited: Promise.resolve({ exitCode: null, signal: 'SIGTERM', stopped: 'stop', durationMs: 50 })
+    })
+
+    expect(await startOneShot(recordingSpawner(timeoutHandle).spawner, ONE_SHOT_INPUT).done).toEqual({ kind: 'timeout' })
+    expect(await startOneShot(recordingSpawner(abortedHandle).spawner, ONE_SHOT_INPUT).done).toEqual({ kind: 'cancelled' })
+    expect(await startOneShot(recordingSpawner(stoppedHandle).spawner, ONE_SHOT_INPUT).done).toEqual({ kind: 'cancelled' })
+  })
+
+  test('reports spawn failures as not started', async () => {
+    const throwingSpawner: ProcessSpawner = {
+      spawn() {
+        throw new Error('runner unavailable')
+      }
+    }
+    const failedHandle = makeHandle({
+      pid: null,
+      exited: Promise.resolve({
+        exitCode: null,
+        signal: null,
+        spawnError: { code: 'ENOENT', message: 'command not found' },
+        durationMs: 0
+      })
+    })
+
+    expect(await startOneShot(throwingSpawner, ONE_SHOT_INPUT).done).toEqual({ kind: 'not-started', error: 'runner unavailable' })
+    expect(await startOneShot(recordingSpawner(failedHandle).spawner, ONE_SHOT_INPUT).done).toEqual({ kind: 'not-started', error: 'command not found' })
+  })
+
+  test('does not wait for a pending closeInput when stopped', async () => {
+    const { promise: exited, resolve: resolveExit } = Promise.withResolvers<SpawnExit>()
+    const handle = makeHandle({
+      exited,
+      closeInput: () => new Promise<void>(() => {}),
+      stop: async () => {
+        const exit: SpawnExit = { exitCode: null, signal: 'SIGTERM', stopped: 'stop', durationMs: 1 }
+        resolveExit(exit)
+        return exit
+      }
+    })
+    const run = startOneShot(recordingSpawner(handle).spawner, { ...ONE_SHOT_INPUT, stdin: null })
+
+    run.stop('cancelled')
+    await expect(run.done).resolves.toEqual({ kind: 'cancelled' })
+  }, 100)
+
+  test('does not wait for a pending write after natural exit', async () => {
+    const handle = makeHandle({
+      write: () => new Promise<boolean>(() => {}),
+      closeInput: () => new Promise<void>(() => {})
+    })
+
+    await expect(startOneShot(recordingSpawner(handle).spawner, ONE_SHOT_INPUT).done).resolves.toEqual({
+      kind: 'exited',
+      code: 0,
+      stdout: '',
+      stderr: ''
+    })
+  }, 100)
+
+  test('retains collected stdout when its reader stalls after natural exit', async () => {
+    const stdout = streamOf([Buffer.from('hello\n')], new ProcessStalledError('/bin/agent', 1))
+
+    const outcome = await startOneShot(recordingSpawner(makeHandle({ stdout })).spawner, ONE_SHOT_INPUT).done
+
+    expect(outcome).toEqual({ kind: 'exited', code: 0, stdout: 'hello\n', stderr: '' })
+  })
+
+  test('does not report a clean exit when stdout has a non-stall read error', async () => {
+    const stopCalls: { signal?: 'SIGTERM' | 'SIGKILL'; graceMs?: number }[] = []
+    const handle = makeHandle({
+      stdout: streamOf([], new Error('stdout pipe broken')),
+      stop: async (options) => {
+        stopCalls.push(options ?? {})
+        return NATURAL_EXIT
+      }
+    })
+
+    const outcome = await startOneShot(recordingSpawner(handle).spawner, ONE_SHOT_INPUT).done
+
+    expect(outcome).toEqual({ kind: 'exited', code: 1, stdout: '', stderr: '' })
+    expect(stopCalls).toContainEqual({ signal: 'SIGTERM', graceMs: 2_000 })
+  })
+
+  test('keeps stderr collected before a non-stall stderr read error', async () => {
+    const stderr = streamOf([Buffer.from('partial stderr')], new Error('stderr pipe broken'))
+
+    const outcome = await startOneShot(recordingSpawner(makeHandle({ stderr })).spawner, ONE_SHOT_INPUT).done
+
+    expect(outcome).toEqual({ kind: 'exited', code: 0, stdout: '', stderr: 'partial stderr' })
+  })
+
+  test('registers a running one-shot in the owned process table until it finishes', async () => {
+    const runner = createProcessRunner({ owner: 'quirky.agents' })
+    ownedRunners.push(runner)
+
+    const run = startOneShot(runner, {
+      argv: ['/bin/sleep', '0.05'],
+      cwd: process.cwd(),
+      env: {},
+      stdin: null,
+      timeoutMs: 5_000
+    })
+
+    expect(runner.live()).toHaveLength(1)
+    expect(runner.live()[0]?.owner).toBe('quirky.agents')
+    await expect(run.done).resolves.toMatchObject({ kind: 'exited', code: 0 })
+    expect(runner.live()).toEqual([])
   })
 })
