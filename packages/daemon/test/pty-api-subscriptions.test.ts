@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PtySessionInfo } from '@quirky/protocol'
+import { encodePtyJson, type PtySessionInfo } from '@quirky/protocol'
 import { RuntimeSessionAuthority } from '../src/session-authority'
 import { Store } from '../src/store'
 import { createPtyApi } from '../src/plugins/pty-api'
-import type { PtyClient } from '../src/pty-client'
+import { PtyClient } from '../src/pty-client'
 import type { ClientConn } from '../src/types'
 
 function stubClient(options: { failUnsubscribe?: boolean } = {}) {
@@ -21,6 +21,7 @@ function stubClient(options: { failUnsubscribe?: boolean } = {}) {
     onExit() {},
     onFact() {},
     onReconnect() {},
+    onLagged() {},
     async request(type: string, params: { sessionId: string }) {
       requests.push({ type, sessionId: params.sessionId })
       if (type === 'unsubscribe' && options.failUnsubscribe) throw new Error('host down')
@@ -44,6 +45,7 @@ function rejectingAuthorityClient() {
     onExit() {},
     onFact() {},
     onReconnect() {},
+    onLagged() {},
     async request(type: string, params: Record<string, unknown>) {
       const sessionId = typeof params.sessionId === 'string' ? params.sessionId : ''
       if (type === 'create') {
@@ -161,6 +163,7 @@ describe('PTY subscription holds', () => {
       onExit() {},
       onFact() {},
       onReconnect() {},
+      onLagged() {},
       request(type: string) {
         requests.push(type)
         if (type !== 'subscribe') return Promise.resolve({})
@@ -187,6 +190,7 @@ describe('PTY subscription holds', () => {
       onExit() {},
       onFact() {},
       onReconnect() {},
+      onLagged() {},
       request(type: string) {
         requests.push(type)
         return type === 'subscribe' ? Promise.reject(new Error('nope')) : Promise.resolve({})
@@ -197,6 +201,143 @@ describe('PTY subscription holds', () => {
     a.revoke()
     await Promise.resolve()
     expect(requests).not.toContain('unsubscribe')
+  })
+})
+
+function lagClient() {
+  const client = new PtyClient({ home: '/isolated' })
+  const requests: Array<{ type: string; sessionId: string; id: number }> = []
+  const internal = client as unknown as {
+    pending: Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: undefined }>
+    request(type: string, params: { sessionId: string }): Promise<unknown>
+    handleChunk(socket: { end(): void }, bytes: Uint8Array): void
+  }
+  let nextId = 1
+  const request = (type: string, params: { sessionId: string }): Promise<unknown> => {
+    const id = nextId++
+    requests.push({ type, sessionId: params.sessionId, id })
+    if (type !== 'subscribe') return Promise.resolve({})
+    const pending = Promise.withResolvers<unknown>()
+    internal.pending.set(id, { resolve: pending.resolve, reject: pending.reject, timer: undefined })
+    return pending.promise
+  }
+  internal.request = request
+  const input = (...messages: unknown[]) => {
+    const bytes = Buffer.concat(messages.map((message) => encodePtyJson(message)))
+    internal.handleChunk({ end() { throw new Error('invalid fixture frame') } }, bytes)
+  }
+  const response = (index: number, ok = true) => ({
+    id: requests[index]!.id,
+    ok,
+    ...(ok ? { result: { replay: '', offset: 0 } } : { error: 'old subscribe failed' })
+  })
+  const count = (type: string, sessionId?: string) =>
+    requests.filter((entry) => entry.type === type && (sessionId === undefined || entry.sessionId === sessionId)).length
+  return { client, input, response, count, requests }
+}
+
+describe('PTY output lag invalidation', () => {
+  test('raw lag invalidates all A holds before callbacks while preserving B', async () => {
+    const host = lagClient()
+    const terminal = createPtyApi(host.client, 'terminal')
+    const agent = createPtyApi(host.client, 'agent')
+    const other = createPtyApi(host.client, 'other')
+    const initial = [terminal.api.subscribe('A'), agent.api.subscribe('A'), other.api.subscribe('B')]
+    host.input(host.response(0), host.response(1), host.response(2))
+    await Promise.all(initial)
+    let recovered: Promise<unknown> | undefined
+    const heard: string[] = []
+    terminal.api.onLagged((id) => {
+      heard.push(`terminal:${id}`)
+      recovered = agent.api.subscribe(id)
+      void terminal.api.unsubscribe(id)
+    })
+    agent.api.onLagged((id) => heard.push(`agent:${id}`))
+    host.input({ type: 'lagged', sessionId: 'A' })
+    expect(heard).toEqual(['terminal:A', 'agent:A'])
+    expect(host.count('unsubscribe')).toBe(0)
+    host.input(host.response(3))
+    await recovered
+    terminal.revoke()
+    expect(host.count('unsubscribe')).toBe(0)
+    agent.revoke()
+    other.revoke()
+    expect(host.count('unsubscribe', 'A')).toBe(1)
+    expect(host.count('unsubscribe', 'B')).toBe(1)
+  })
+
+  test.each([true, false])('a pre-gap %s completion cannot release a reacquired hold', async (ok) => {
+    const host = lagClient()
+    const terminal = createPtyApi(host.client, 'terminal')
+    const agent = createPtyApi(host.client, 'agent')
+    const old = terminal.api.subscribe('A').catch(() => {})
+    let current: Promise<unknown> | undefined
+    terminal.api.onLagged((id) => {
+      current = terminal.api.subscribe(id)
+    })
+    host.input({ type: 'lagged', sessionId: 'A' })
+    host.input(host.response(0, ok), host.response(1))
+    await Promise.all([old, current])
+    const shared = agent.api.subscribe('A')
+    host.input(host.response(2))
+    await shared
+    terminal.revoke()
+    expect(host.count('unsubscribe')).toBe(0)
+    agent.revoke()
+    expect(host.count('unsubscribe', 'A')).toBe(1)
+  })
+
+  test('a same-chunk reply and lag cannot mark the next subscribe attempt successful', async () => {
+    const host = lagClient()
+    const api = createPtyApi(host.client, 'terminal')
+    const old = api.api.subscribe('A')
+    let current: Promise<unknown> | undefined
+    api.api.onLagged((id) => { current = api.api.subscribe(id).catch(() => {}) })
+    host.input(host.response(0), { type: 'lagged', sessionId: 'A' })
+    await old
+    host.input(host.response(1, false))
+    await current
+    api.revoke()
+    expect(host.count('unsubscribe')).toBe(0)
+  })
+
+  test('a new failed attempt does not inherit success from before the gap', async () => {
+    const host = lagClient()
+    const api = createPtyApi(host.client, 'terminal')
+    const old = api.api.subscribe('A')
+    host.input(host.response(0))
+    await old
+    let current: Promise<unknown> | undefined
+    api.api.onLagged((id) => { current = api.api.subscribe(id).catch(() => {}) })
+    host.input({ type: 'lagged', sessionId: 'A' })
+    host.input(host.response(1, false))
+    await current
+    api.revoke()
+    expect(host.count('unsubscribe')).toBe(0)
+  })
+
+  test('lag listeners isolate failures, and removed or revoked listeners stay silent', async () => {
+    const host = lagClient()
+    const logs: string[] = []
+    const a = createPtyApi(host.client, 'a', (line) => logs.push(line))
+    const b = createPtyApi(host.client, 'b')
+    const heard: string[] = []
+    a.api.onLagged(() => { throw new Error('sync lag failure') })
+    a.api.onLagged(async () => { throw new Error('async lag failure') })
+    const remove = a.api.onLagged(() => heard.push('removed'))
+    remove()
+    b.api.onLagged((id) => heard.push(id))
+    host.input({ type: 'lagged', sessionId: 'A' })
+    await Promise.resolve()
+    expect(heard).toEqual(['A'])
+    expect(logs.some((line) => line.includes('sync lag failure'))).toBe(true)
+    expect(logs.some((line) => line.includes('async lag failure'))).toBe(true)
+    b.revoke()
+    host.input({ type: 'lagged', sessionId: 'B' })
+    await Promise.resolve()
+    expect(heard).toEqual(['A'])
+    expect(() => b.api.onLagged(() => {})).toThrow('no longer active')
+    a.revoke()
   })
 })
 

@@ -239,6 +239,29 @@ and always send the plugin's held events first. A plugin that passes the option 
 - No order is promised between coalesced events with different keys when neither is immediate,
   between plugins' events, or between plugin and kernel events.
 
+### API 1.11: Host output-gap recovery
+
+`context.pty.onLagged(listener)` reports a session whose host output subscription was shed.
+Before calling any listener, the daemon invalidates that session's shared subscription holds
+and pending subscribe attempts. Other sessions are unchanged. Listeners can immediately
+`subscribe` again; an older promise cannot restore its hold or release a replacement.
+The registration returns a remover and is removed on plugin revocation. Listener failures
+are logged without stopping other plugins. Plugins using it declare `"apiVersion": "1.11.0"`.
+
+The host bounds each subscription at 4 MiB and each connection at 32 MiB, counting encoded
+queued and subscribe-held output, including the remainder of a started frame. Shedding drops
+unstarted output, not the process or durable history. Desktop terminal attachments report
+stream lag and recover through `quirky.terminal/resync`. Phone attachments keep their stream
+ids, reacquire the host subscription, and receive a reset/snapshot before live output resumes.
+Agent readiness resets its scanner and reacquires output within the original delivery deadline;
+a gap never retries a paste already committed.
+
+Daemon WebSocket output is limited to 4 MiB per stream and 8 MiB of binary output per
+connection, counting outstanding wire bytes. JSON and lag markers share a bounded 16 MiB
+FIFO when the native socket cannot accept them. Terminal output is not queued again:
+`send` returns `false` and lags the stream. Accepted bytes remain accounted until native
+drainage, even after their stream closes. Unrecoverable control backpressure closes with 1013.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -345,6 +368,12 @@ Plugin API **1.1.0** adds Native page requests to `UiPluginContext.nativeBrowser
 
 Use SemVer for future Plugin API releases: increment the **major** for incompatible author-contract changes, **minor** for backward-compatible author-facing additions, and **patch** for backward-compatible corrections. Set a plugin's `apiVersion` to the earliest stable release that supplies every API feature it uses. Hosts compare that minimum against their own `PLUGIN_API_VERSION`; they do not infer a floor from the package, application, daemon, wire or catalog version.
 
+The PTY wire protocol remains v4 for the opt-in `hello.sessionLagged === true` extension.
+Only clients advertising that exact boolean receive `{ type: 'lagged', sessionId }`.
+Older v4 clients still close and reconnect on subscription overflow; older hosts may ignore
+the capability. This explicit negotiation is the exception to bumping the PTY version for
+a new event, and does not change authentication or version refusal.
+
 ## Releases since 1.0.0
 
 - **1.1.0** adds `UiPluginContext.nativeDropPaths(files)`: the original absolute paths of an OS file
@@ -381,6 +410,8 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.10.0** adds [`context.emit` immediate delivery](#api-110-immediate-emits) and sends a plugin's
   held events before its next uncoalesced event. A plugin that passes the option declares
   `apiVersion` 1.10.0 or later.
+- **1.11.0** adds [`PluginPty.onLagged`](#api-111-host-output-gap-recovery), invalidating
+  session subscriptions before notifying plugins and bounding host and daemon output queues.
 
 ## Example
 

@@ -209,6 +209,8 @@ export type PluginPty = {
   restartHost(): Promise<{ pid: number }>
   unsubscribe(sessionId: string): Promise<void>
   onData(listener: (sessionId: string, bytes: Uint8Array) => void): () => void
+  /** Invalidates this session's host subscription before listeners run; resubscribe to recover output. */
+  onLagged(listener: (sessionId: string) => void): () => void
   onExit(
     listener: (
       sessionId: string,
