@@ -21,6 +21,7 @@ export type BrowserPage = {
   loadError: null | { code: string; description: string; validatedUrl: string }
 }
 export type BrowserState = { profiles: BrowserProfile[]; pages: BrowserPage[] }
+export const NO_NATIVE_PANE_MARKER = '.no-native-pane'
 
 const PROFILE_SCHEMA: Schema = {
   type: 'object',
@@ -268,8 +269,38 @@ export class BrowserStore {
     const profile: BrowserProfile = { id: `profile_${randomUUID().replaceAll('-', '')}`, label: name.trim(), scope: 'isolated' }
     this.state.profiles.push(profile)
     this.persist()
-    this.profilePath(profile.id)
+    this.markNoNativeUse(profile.id)
     return profile
+  }
+
+  markNoNativeUse(profileId: string): void {
+    if (profileId === 'default') return
+    const marker = join(this.profilePath(profileId), NO_NATIVE_PANE_MARKER)
+    const info = lstatIfPresent(marker)
+    if (info) {
+      if (info.isSymbolicLink() || !info.isFile()) throw fault('invalid_argument', 'profile native marker is not a safe file')
+      return
+    }
+    writeFileSync(marker, '', { flag: 'wx', mode: 0o600 })
+    chmodSync(marker, 0o600)
+  }
+
+  clearNoNativeUse(profileId: string): void {
+    if (profileId === 'default' || !isValidProfileId(profileId) || !this.state.profiles.some((profile) => profile.id === profileId)) return
+    const dir = this.profileDirectory(profileId, false)
+    if (dir) rmSync(join(dir, NO_NATIVE_PANE_MARKER), { force: true })
+  }
+
+  hasNoNativeUse(profileId: string): boolean {
+    if (profileId === 'default') return false
+    try {
+      const dir = this.profileDirectory(profileId, false)
+      if (!dir) return false
+      const info = lstatIfPresent(join(dir, NO_NATIVE_PANE_MARKER))
+      return Boolean(info && info.isFile() && !info.isSymbolicLink())
+    } catch {
+      return false
+    }
   }
 
   listPages(): BrowserPage[] {

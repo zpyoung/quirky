@@ -15,6 +15,7 @@ import type {
 } from './contracts'
 import { OrchestrationCore } from './core'
 import { fail } from './errors'
+import { CREATED_NEWEST_FIRST, CREATED_OLDEST_FIRST } from './store'
 
 const newGateId = (): GateId => `gate_${randomBytes(6).toString('hex')}`
 const now = (): UtcTimestamp => new Date().toISOString()
@@ -78,7 +79,7 @@ export class OrchestrationGates {
       at
     )
     const active = this.core.store.all<{ id: string; status: DispatchStatus }>(
-      `SELECT * FROM dispatches WHERE task_id = ? AND status IN ('pending', 'dispatched') ORDER BY created_at DESC, id DESC`,
+      `SELECT * FROM dispatches WHERE task_id = ? AND status IN ('pending', 'dispatched') ORDER BY ${CREATED_NEWEST_FIRST}`,
       task.id
     )
     for (const dispatch of active) {
@@ -142,7 +143,7 @@ export class OrchestrationGates {
       values.push(input.status)
     }
     const rows = this.core.store.all<GateRecord>(
-      `SELECT * FROM gates WHERE ${clauses.join(' AND ')} ORDER BY created_at, id`,
+      `SELECT * FROM gates WHERE ${clauses.join(' AND ')} ORDER BY ${CREATED_OLDEST_FIRST}`,
       ...values
     )
     const gates = rows.map(gateRow)

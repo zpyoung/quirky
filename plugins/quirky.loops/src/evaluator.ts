@@ -1,9 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto'
-import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PluginContext, StructuredMessage } from '@quirky/protocol'
+import type { PluginContext, SpawnedProcess, StructuredMessage } from '@quirky/protocol'
 import type { CheckResult, EvaluatorResult, LoopAgent, LoopSnapshot } from './types'
 
 const MAX_OUTPUT_BYTES = 256 * 1024
@@ -86,134 +85,136 @@ function parseEvaluatorOutput(stdout: string): EvaluatorResult | null {
   return verdict !== undefined && reason !== undefined ? { verdict, reason } : null
 }
 
-function terminate(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (child.pid === undefined) return
-  try {
-    if (process.platform !== 'win32') process.kill(-child.pid, signal)
-    else child.kill(signal)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return
-    try { child.kill(signal) } catch { /* the process may already have exited */ }
-  }
-}
-
 type ProcessOutcome = { stdout: string; exitCode: number | null; timedOut: boolean; aborted: boolean; overflow: boolean; error: boolean }
 
-function runEvaluatorProcess(context: PluginContext, loop: LoopSnapshot, prompt: string, signal?: AbortSignal): Promise<ProcessOutcome> {
-  if (signal?.aborted) return Promise.resolve({ stdout: '', exitCode: null, timedOut: false, aborted: true, overflow: false, error: false })
-  const tempCwd = mkdtempSync(join(tmpdir(), 'quirky-loop-evaluator-'))
-  const command = evaluatorCommand(loop.agent)
-  let argv: string[]
+async function runEvaluatorProcess(context: PluginContext, loop: LoopSnapshot, prompt: string, signal?: AbortSignal): Promise<ProcessOutcome> {
+  if (signal?.aborted) return { stdout: '', exitCode: null, timedOut: false, aborted: true, overflow: false, error: false }
+
+  let tempCwd: string
   try {
-    argv = context.launch.commandArgv(command)
+    tempCwd = mkdtempSync(join(tmpdir(), 'quirky-loop-evaluator-'))
   } catch {
-    rmSync(tempCwd, { recursive: true, force: true })
-    return Promise.resolve({ stdout: '', exitCode: null, timedOut: false, aborted: false, overflow: false, error: true })
-  }
-  if (argv.length === 0) {
-    rmSync(tempCwd, { recursive: true, force: true })
-    return Promise.resolve({ stdout: '', exitCode: null, timedOut: false, aborted: false, overflow: false, error: true })
+    return { stdout: '', exitCode: null, timedOut: false, aborted: false, overflow: false, error: true }
   }
 
-  let env: Record<string, string>
+  let child: SpawnedProcess
   try {
-    env = context.launch.env({ sessionId: randomUUID(), worktreeId: loop.worktreeId, agent: loop.agent })
+    const argv = context.launch.commandArgv(evaluatorCommand(loop.agent))
+    if (argv.length === 0) throw new Error('Evaluator command is empty')
+    const env = context.launch.env({ sessionId: randomUUID(), worktreeId: loop.worktreeId, agent: loop.agent })
+    child = context.process.spawn(argv, {
+      cwd: tempCwd,
+      env,
+      stdin: 'pipe',
+      stderr: 'pipe',
+      timeoutMs: EVALUATOR_TIMEOUT_MS,
+      killGraceMs: TERMINATION_GRACE_MS,
+      groupGrace: true,
+      ...(signal ? { signal } : {})
+    })
   } catch {
     rmSync(tempCwd, { recursive: true, force: true })
-    return Promise.resolve({ stdout: '', exitCode: null, timedOut: false, aborted: false, overflow: false, error: true })
-  }
-  const { promise, resolve } = Promise.withResolvers<ProcessOutcome>()
-  let child: ChildProcess
-  try {
-    child = spawn(argv[0]!, argv.slice(1), { cwd: tempCwd, env, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] })
-  } catch {
-    rmSync(tempCwd, { recursive: true, force: true })
-    return Promise.resolve({ stdout: '', exitCode: null, timedOut: false, aborted: false, overflow: false, error: true })
+    return { stdout: '', exitCode: null, timedOut: false, aborted: false, overflow: false, error: true }
   }
 
-  const stdout: Buffer[] = []
+  void child.write(prompt).catch(() => {})
+  void child.closeInput().catch(() => {})
+
+  const stdoutReader = child.stdout.getReader()
+  const stderrReader = child.stderr.getReader()
+  const stdoutChunks: Uint8Array[] = []
   let stdoutBytes = 0
   let stderrBytes = 0
   let overflow = false
-  let timedOut = false
-  let aborted = false
+  let localTimedOut = false
+  let callerAborted = false
   let processError = false
-  let terminating = false
-  let childClosed = false
-  let killGraceComplete = false
-  let finished = false
-  let exitCode: number | null = null
+  let stopRequested = false
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined
-  let killTimer: ReturnType<typeof setTimeout> | undefined
-  const cleanup = () => {
+
+  const cancelReaders = () => {
+    void stdoutReader.cancel().catch(() => {})
+    void stderrReader.cancel().catch(() => {})
+  }
+  const stopChild = () => {
+    if (stopRequested) return
+    stopRequested = true
+    void child.stop({ graceMs: TERMINATION_GRACE_MS }).catch(() => {})
+  }
+  const drain = async (reader: ReadableStreamDefaultReader<Uint8Array>, stream: 'stdout' | 'stderr') => {
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done || overflow || localTimedOut || callerAborted) return
+        if (stdoutBytes + stderrBytes + value.byteLength > MAX_OUTPUT_BYTES) {
+          overflow = true
+          cancelReaders()
+          stopChild()
+          return
+        }
+        if (stream === 'stdout') {
+          stdoutChunks.push(value)
+          stdoutBytes += value.byteLength
+        } else {
+          stderrBytes += value.byteLength
+        }
+      }
+    } catch {
+      if (!overflow && !localTimedOut && !callerAborted) {
+        processError = true
+        cancelReaders()
+        stopChild()
+      }
+    }
+  }
+
+  const stdoutDone = drain(stdoutReader, 'stdout')
+  const stderrDone = drain(stderrReader, 'stderr')
+  const exitPromise = child.exited.then((exit) => {
+    if (exit.stopped === 'timeout' || exit.stopped === 'aborted') {
+      localTimedOut ||= exit.stopped === 'timeout'
+      callerAborted ||= exit.stopped === 'aborted'
+      cancelReaders()
+      stopChild()
+    }
+    return exit
+  }).catch(() => {
+    processError = true
+    return null
+  })
+  const onAbort = () => {
+    callerAborted = true
+    cancelReaders()
+    stopChild()
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
+  timeoutTimer = setTimeout(() => {
+    if (callerAborted || overflow) return
+    localTimedOut = true
+    cancelReaders()
+    stopChild()
+  }, EVALUATOR_TIMEOUT_MS)
+  if (signal?.aborted) onAbort()
+
+  try {
+    const [exit] = await Promise.all([exitPromise, stdoutDone, stderrDone])
+    const aborted = callerAborted || exit?.stopped === 'aborted' || Boolean(signal?.aborted)
+    const timedOut = !aborted && (localTimedOut || exit?.stopped === 'timeout')
+    return {
+      stdout: Buffer.concat(stdoutChunks, stdoutBytes).toString('utf8'),
+      exitCode: exit?.exitCode ?? null,
+      timedOut,
+      aborted,
+      overflow,
+      error: Boolean(exit?.spawnError) || processError || exit?.groupSurvived === true
+    }
+  } finally {
     clearTimeout(timeoutTimer)
-    clearTimeout(killTimer)
     signal?.removeEventListener('abort', onAbort)
     rmSync(tempCwd, { recursive: true, force: true })
   }
-  const finish = () => {
-    if (finished || !childClosed || (terminating && !killGraceComplete)) return
-    finished = true
-    cleanup()
-    resolve({ stdout: Buffer.concat(stdout).toString('utf8'), exitCode, timedOut, aborted, overflow, error: processError })
-  }
-  const stop = () => {
-    if (terminating || childClosed) return
-    terminating = true
-    terminate(child, 'SIGTERM')
-    killTimer = setTimeout(() => {
-      terminate(child, 'SIGKILL')
-      child.stdout?.destroy()
-      child.stderr?.destroy()
-      killGraceComplete = true
-      finish()
-    }, TERMINATION_GRACE_MS)
-  }
-  const onAbort = () => {
-    aborted = true
-    stop()
-  }
-  child.stdout?.on('data', (chunk: Buffer | string) => {
-    if (overflow) return
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    const available = MAX_OUTPUT_BYTES - stdoutBytes - stderrBytes
-    if (bytes.length > available) {
-      if (available > 0) stdout.push(bytes.subarray(0, available))
-      stdoutBytes += Math.max(available, 0)
-      overflow = true
-      stop()
-      return
-    }
-    stdout.push(bytes)
-    stdoutBytes += bytes.length
-  })
-  child.stderr?.on('data', (chunk: Buffer | string) => {
-    if (overflow) return
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    if (bytes.length + stdoutBytes + stderrBytes > MAX_OUTPUT_BYTES) {
-      overflow = true
-      stop()
-    } else stderrBytes += bytes.length
-  })
-  child.stdin?.on('error', () => {})
-  child.once('error', () => {
-    processError = true
-  })
-  child.once('close', (code) => {
-    childClosed = true
-    exitCode = code
-    if (!terminating) killGraceComplete = true
-    finish()
-  })
-  signal?.addEventListener('abort', onAbort, { once: true })
-  timeoutTimer = setTimeout(() => {
-    timedOut = true
-    stop()
-  }, EVALUATOR_TIMEOUT_MS)
-  if (signal?.aborted) onAbort()
-  child.stdin?.end(prompt)
-  return promise
 }
+
 
 /** Runs a tool-disabled, read-only native CLI in an OS temporary directory. */
 export async function evaluateCondition(input: EvaluationInput): Promise<EvaluatorResult> {
