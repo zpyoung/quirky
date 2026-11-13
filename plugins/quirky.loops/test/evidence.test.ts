@@ -817,10 +817,12 @@ wait "$child"
     const childPidPath = join(root, 'filter-child.pid')
     writeFileSync(filterPath, `#!/bin/sh
 cat >/dev/null
+trap 'if [ -n "$child" ]; then wait "$child"; fi; exit 0' TERM
 sleep 30 &
-printf '%s\\n' "$!" > '${childPidPath}'
+child=$!
+printf '%s\\n' "$child" > '${childPidPath}'
 printf ready > '${readyPath}'
-wait
+wait "$child"
 `, { mode: 0o755 })
     chmodSync(filterPath, 0o755)
     git(cwd, 'config', 'filter.loop-hang.clean', filterPath)
@@ -836,8 +838,17 @@ wait
       const childPid = Number(readFileSync(childPidPath, 'utf8'))
       ownedPids.add(childPid)
       expect(await snapshot).toBeNull()
+      const childExitDeadline = Date.now() + 3000
       let alive = true
-      try { process.kill(childPid, 0) } catch { alive = false }
+      while (alive && Date.now() < childExitDeadline) {
+        try {
+          process.kill(childPid, 0)
+        } catch {
+          alive = false
+          break
+        }
+        await Bun.sleep(10)
+      }
       expect(alive).toBe(false)
     } finally {
       watcher.close()
