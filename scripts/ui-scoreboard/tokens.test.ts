@@ -1,7 +1,4 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { CHECK_IDS, type Inventory, type PluginInventory, type SourceFile } from './contracts'
 import { checkHostTokens, checkPlugin, scanTokens, sharedTokenEvidence } from './tokens'
 
@@ -419,36 +416,20 @@ describe('scoreboard token checks', () => {
     expect(tokenCheck.evidence.some((item) => item.sharedEvidence === 'compatibility-tokens')).toBe(false)
   })
 
-  test('reports not-implemented states and commands despite coverage and twenty declarations', () => {
-    const root = mkdtempSync(join(tmpdir(), 'ui-scoreboard-token-tests-'))
-    const directory = join(root, 'plugins/acme.app')
-    mkdirSync(directory, { recursive: true })
-    writeFileSync(join(directory, 'quirky-plugin.json'), JSON.stringify({
-      id: 'acme.app',
-      ui: 'dist/ui.js',
-      commands: Array.from({ length: 20 }, (_, index) => ({ id: `command-${index}` }))
-    }))
-    writeFileSync(join(directory, 'ui-scoreboard.json'), JSON.stringify({
-      loading: { status: 'pass' },
-      empty: { status: 'pass' },
-      error: { status: 'pass' },
-      commands: { status: 'pass' }
-    }))
-
-    try {
-      const uiPlugin = plugin({ directory, hasUi: true, targets: [] })
-      const checks = checkPlugin(inventory([uiPlugin]), uiPlugin.id)
-
-      for (const id of ['loading', 'empty', 'error', 'commands']) {
-        const check = checkById(checks, id)
-        expect(check).toMatchObject({ status: 'fail', applicable: true })
-        expect(check.reason).toBe('not-implemented')
-        expect(check.evidence).toContainEqual(expect.objectContaining({ code: 'not-implemented' }))
-        expect(check.evidence.some((item) => /source-audit follow-up/i.test(item.message))).toBe(true)
-      }
-    } finally {
-      rmSync(root, { recursive: true, force: true })
+  test('rejects fake pass flags despite twenty declarations', () => {
+    const uiPlugin = plugin({
+      sources: [source('plugins/acme.app/src/ui.tsx', '<button onClick={() => save()}>Save</button>')],
+      coverage: { file: 'plugins/acme.app/ui-scoreboard.json', content: JSON.stringify({
+        loading: { status: 'pass' }, empty: { status: 'pass' }, error: { status: 'pass' }, commands: { status: 'pass' }
+      }) },
+      contributions: { methods: Array.from({ length: 20 }, (_, index) => `acme.app/method-${index}`), commands: [], cliCommands: [] }
+    })
+    const checks = checkPlugin(inventory([uiPlugin]), uiPlugin.id)
+    for (const id of ['loading', 'empty', 'error', 'commands']) {
+      expect(checkById(checks, id)).toMatchObject({ status: 'fail', applicable: true, reason: 'coverage-file-invalid' })
+      expect(checkById(checks, id).evidence).toContainEqual(expect.objectContaining({ code: 'coverage-file-invalid' }))
     }
+    expect(checkById(checks, 'commands').evidence).toContainEqual(expect.objectContaining({ code: 'coverage-missing' }))
   })
 
   test('marks no-surface state and action checks not applicable', () => {
