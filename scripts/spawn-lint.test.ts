@@ -51,6 +51,63 @@ const bunAccesses = [
 test.each(bunAccesses)('detects one Bun capability acquisition: %s', source => {
   expect(scanSourceContent(file, source).map(d => d.rule)).toEqual(['process/no-direct-spawn'])
 })
+const spawnGapCases = [
+  ['generic instantiation', 'const f = Bun.spawn<any>', 11],
+  ['assignment destructuring', 'let f; ({ spawn: f } = Bun)', 11],
+  ['untyped parameter default', 'function f({ spawn } = Bun) {}', 14],
+  ['typed parameter default', 'function f({ spawn }: typeof Bun = Bun) {}', 14],
+  ['named Bun re-export', 'export { spawn } from "bun"', 10],
+  ['default-as-named Bun receiver', 'import { default as B } from "bun"; B.spawn([])', 37],
+] as const
+test.each(spawnGapCases)('detects %s at its exact source column', (_name, source, column) => {
+  expect(scanSourceContent(file, source)).toEqual([{
+    file, line: 1, column, rule: 'process/no-direct-spawn', message: 'Use the shared process runner.',
+  }])
+})
+test.each(spawnGapCases)('preserves the %s hit and column after large padding', (_name, source, column) => {
+  const padding = 1_048_577
+  expect(scanSourceContent(file, ' '.repeat(padding) + source)).toEqual([{
+    file, line: 1, column: padding + column, rule: 'process/no-direct-spawn', message: 'Use the shared process runner.',
+  }])
+})
+const genericInstantiationCases = (['spawn', 'spawnSync', '$'] as const).map(member =>
+  [`generic ${member} instantiation`, `const f = Bun.${member}<unknown>`, 1] as const)
+const extractionCases = [
+  ['assignment rename with a default target', 'let launch; ({ spawn: launch = fallback } = (Bun as unknown)); launch([])', 1],
+  ['computed assignment from a satisfies receiver', 'let launch; ({ ["spawnSync"]: launch = fallback } = (Bun satisfies unknown)); launch([])', 1],
+  ['computed assignment from globalThis.Bun', 'let launch; ({ ["$"]: launch = fallback } = globalThis.Bun); launch`true`', 1],
+  ['assignment shorthand with a default target', 'let spawnSync; ({ spawnSync = fallback } = globalThis.Bun); spawnSync([])', 1],
+  ['renamed untyped parameter default', 'function f({ spawn: launch = fallback } = (Bun as unknown)) { launch([]) }', 1],
+  ['renamed typed parameter default', 'function f({ spawnSync: launch = fallback }: typeof Bun = (Bun satisfies unknown)) { launch([]) }', 1],
+  ['arrow parameter default', 'const f = ({ ["$"]: shell = fallback } = (globalThis.Bun satisfies unknown)) => shell`true`', 1],
+  ['two-member assignment destructuring', 'let a, b; ({ spawn: a = fallback, ["spawnSync"]: b } = Bun); a([]); b([])', 2],
+  ['two aliased named re-exports', 'export { spawn as launch, spawnSync as sync } from "bun"', 2],
+  ['three aliased named re-exports', 'export { spawn as launch, spawnSync as sync, $ as shell } from "bun"', 3],
+  ['default-as-named receiver accesses and destructuring', 'import { default as B } from "bun"; B.spawn([]); B["spawnSync"]([]); B.$`true`; const { "$": shell = fallback } = B; shell`true`', 4],
+] as const
+test.each([...genericInstantiationCases, ...extractionCases])('detects each forbidden member once for %s', (_name, source, count) => {
+  const diagnostics = scanSourceContent(file, source)
+  expect(diagnostics).toHaveLength(count)
+  expect(diagnostics.every(diagnostic => diagnostic.rule === 'process/no-direct-spawn')).toBe(true)
+})
+test('reports aliased re-exports at their original Bun member names', () => {
+  expect(scanSourceContent(file, 'export { spawn as launch, spawnSync as sync } from "bun"').map(diagnostic => diagnostic.column))
+    .toEqual([10, 27])
+})
+test('type arguments and type-only Bun references do not add runtime hits', () => {
+  expect(scanSourceContent(file, 'const f = Bun.spawn<typeof Bun.spawn>')).toEqual([{
+    file, line: 1, column: 11, rule: 'process/no-direct-spawn', message: 'Use the shared process runner.',
+  }])
+  for (const source of [
+    'type R = typeof Bun.spawn',
+    'interface C extends Bun.spawn {}',
+    'export type { spawn } from "bun"',
+    'export { type spawn } from "bun"',
+    'export * from "bun"',
+    'import type { default as B } from "bun"; B.spawn([])',
+    'const other = { spawn: () => 0 }; other.spawn()',
+  ]) expect(scanSourceContent(file, source)).toEqual([])
+})
 test('counts members, not calls through extracted functions', () => {
   expect(scanSourceContent(file, 'const { spawn, spawnSync: sync, file } = Bun; spawn([]); sync([])')).toHaveLength(2)
   expect(scanSourceContent(file, 'import { spawn, spawnSync, $, YAML } from "bun"; spawn([])')).toHaveLength(3)
