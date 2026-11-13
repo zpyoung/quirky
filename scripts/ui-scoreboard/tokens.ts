@@ -239,7 +239,7 @@ function catalogAccess(node: ts.Expression): CatalogAccess | null {
     const argument = stripParentheses(expression.argumentExpression)
     const key = ts.isStringLiteralLike(argument) || ts.isNumericLiteral(argument) ? argument.text : null
     const access = key === null ? null : catalogAccess(expression.expression)
-    return access ? { root: access.root, keys: [...access.keys, key] } : null
+    return access && key !== null ? { root: access.root, keys: [...access.keys, key] } : null
   }
   return null
 }

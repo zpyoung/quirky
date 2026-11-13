@@ -95,10 +95,11 @@ function imageEvidence(value: unknown): value is ImageEvidence {
 function validAssessment(value: unknown): value is VisualAssessment {
   if (!isRecord(value) || typeof value.targetVisible !== 'boolean' || typeof value.imagesRead !== 'boolean' ||
       !isRecord(value.scores) || !Array.isArray(value.reasons) || value.reasons.some((reason) => typeof reason !== 'string')) return false
-  const dimensions = Object.keys(value.scores)
+  const scores = value.scores
+  const dimensions = Object.keys(scores)
   if (dimensions.length !== SCORE_DIMENSIONS.length || dimensions.some((dimension) => !SCORE_DIMENSIONS.includes(dimension as typeof SCORE_DIMENSIONS[number]))) return false
   return SCORE_DIMENSIONS.every((dimension) => {
-    const score = value.scores[dimension]
+    const score = scores[dimension]
     return typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100
   })
 }

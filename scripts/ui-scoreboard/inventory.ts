@@ -189,9 +189,11 @@ function collectDirty(repoRoot: string, failures: Evidence[]): boolean {
 }
 
 function makeUiModel(): { model: UiModel; slots: Record<UiSlotEntry['kind'], UiSlotEntry[]> } {
-  const model = {
-    sidebarSections: [], statusBars: [], activityItems: [], panels: [], settingsSections: [], views: [], overlays: []
-  } as UiModel
+  const model: UiModel = {
+    sidebarSections: [], statusBars: [], activityItems: [], panels: [], settingsSections: [], views: [], overlays: [],
+    commands: [], keybindings: [], settings: [], menuItems: [], themes: [],
+    theme: { chosen: 'default', active: 'default' }, modules: {}
+  }
   return {
     model,
     slots: {
