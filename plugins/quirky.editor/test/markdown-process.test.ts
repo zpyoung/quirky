@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -474,6 +474,40 @@ describe('Markdown PDF publication gate', () => {
     assertDestinationPreserved(fixture.outputPath)
     expect(fixture.runs[0]!.stops).toContainEqual({ signal: 'SIGKILL', graceMs: 0 })
     expectCleaned(fixture)
+  })
+
+  test('deadline overrides a pending owned completion stop without publishing', async () => {
+    const completionStop = Promise.withResolvers<void>()
+    const realSetTimeout = globalThis.setTimeout
+    let fireDeadline: (() => void) | undefined
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((callback: () => void, ms: number) => {
+      if (ms !== 20) return realSetTimeout(callback, ms)
+      fireDeadline = callback
+      return realSetTimeout(() => {}, 60_000)
+    }) as typeof setTimeout)
+    try {
+      const fixture = exportFixture((renderedPdf) => {
+        writeFileSync(renderedPdf, pdfBytes())
+        return {
+          stdout: textStream(),
+          onStop(options, resolveExit) {
+            if (options.graceMs === 2000) completionStop.resolve()
+            else resolveExit({ exitCode: 0, signal: 'SIGKILL', stopped: 'stop', durationMs: 20 })
+          }
+        }
+      }, { timeoutMs: 20, pollIntervalMs: 10_000 })
+      await completionStop.promise
+      const stopsBeforeDeadline = [...fixture.runs[0]!.stops]
+      fireDeadline!()
+      await expect(fixture.promise).rejects.toThrow('Process timed out after 20 ms.')
+      expect(stopsBeforeDeadline).toEqual([{ graceMs: 2000 }])
+      expect(fixture.calls).toHaveLength(1)
+      expect(fixture.runs[0]!.stops).toEqual([{ graceMs: 2000 }, { signal: 'SIGKILL', graceMs: 0 }])
+      assertDestinationPreserved(fixture.outputPath)
+      expectCleaned(fixture)
+    } finally {
+      timer.mockRestore()
+    }
   })
 
   test('rejects a partial artifact on timeout', async () => {
