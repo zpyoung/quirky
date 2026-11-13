@@ -63,8 +63,6 @@ const agentSession = async (vault: VaultRig, agent: string): Promise<HostedSessi
   return session
 }
 
-
-
 function largeTranscript(sessionId: string, cwd: string): Record<string, unknown>[] {
   const base = Date.UTC(2026, 9, 1, 10, 0, 0)
   return Array.from({ length: 16_000 }, (_, index) => {

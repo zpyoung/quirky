@@ -25,8 +25,6 @@ async function start(options: { isolateVaultPlugin?: boolean; includeEveryAgentF
   return rig
 }
 
-
-
 function recordOf(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
@@ -46,8 +44,6 @@ function results(response: SearchResponse): SearchResults {
   if (response.kind !== 'results') throw new Error(`expected search results, got ${response.kind}`)
   return response
 }
-
-
 
 function userRecord(sessionId: string, cwd: string, content: unknown, at: number): JsonRecord {
   return {
@@ -198,7 +194,6 @@ describe('vault public acceptance flows', () => {
     expect(capped.hasMore).toBe(true)
     expect(new Set(cappedIds).size).toBe(23)
   }, 30_000)
-
 
   test('kernel consent starts indexing, publishes status without a status read, and clear follows the retained disabled index', async () => {
     const vault = await start()
@@ -613,8 +608,6 @@ describe('vault public acceptance flows', () => {
     expect(webEnabled.status.enabled).toBe(true)
     const disabledAgain = await webClient.callAny('quirky.vault/setSearchEnabled', { enabled: false, host: 'local' }) as PublicStatus
     expect(disabledAgain.status.enabled).toBe(false)
-
-
 
     await remote.client.callAny('plugin.disable', { id: 'quirky.vault' })
     await local.call('setSearchEnabled', { enabled: true, host: 'local' })

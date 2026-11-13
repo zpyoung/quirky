@@ -428,7 +428,6 @@ export class NotificationsService {
     if (result !== 'dropped' && this.askHeads.get(head.key) === head) head.escalated = true
   }
 
-
   /** A call to another plugin that gives up after the lookup timeout, so one silent handler cannot hold the queue. */
   private async bounded(method: string, params: Record<string, unknown>): Promise<unknown> {
     const { promise: timeout, reject } = Promise.withResolvers<never>()
@@ -516,7 +515,6 @@ export class NotificationsService {
       }
     })
   }
-
 
   // viewing and status
 
@@ -661,8 +659,6 @@ export class NotificationsService {
       banner: async () => ({ title, body })
     })
   }
-
-
 
   private async heimdallNotification(data: unknown): Promise<void> {
     if (!isRecord(data) || typeof data.watcherId !== 'string' || data.watcherId.length === 0) return

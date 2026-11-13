@@ -18,7 +18,6 @@ const WAIT_INTERVAL_MS = 10
 const WAIT_TIMEOUT_MS = 30_000
 const CLEANUP_TIMEOUT_MS = 2_000
 
-
 function isMissing(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
 }

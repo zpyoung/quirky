@@ -118,13 +118,11 @@ function worktreeSetEvent(params: unknown): WorktreeChangedData {
   return data
 }
 
-
 const ownWorktreeChanges = (events: PluginEvent[]) =>
   events.filter((event) => event.type === 'quirky.worktree/changed').filter((event) => {
     const data = event.data as WorktreeChangedData
     return data.unreadSource === 'notifications'
   })
-
 
 const EXTERNAL_MARK_READ = {
   repoId: 'repo_1',
@@ -158,7 +156,6 @@ const externalMarkRead = {
   type: 'quirky.worktree/changed',
   data: EXTERNAL_MARK_READ
 } as QuirkyEvent
-
 
 async function drainProductionWorktreeWindow(): Promise<void> {
   // PluginEvents holds the latest event until its production 250 ms COALESCE_INTERVAL_MS window drains.
