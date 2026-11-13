@@ -49,6 +49,47 @@ describe('plugin events', () => {
     expect(event).toEqual({ type: 'acme.tools/refreshed', data: { count: 2 } })
   })
 
+  test('API 1.10.0: immediate emits reach subscribed clients through the runtime context', async () => {
+    const s = await boot([
+      {
+        manifest: {
+          id: 'acme.tools',
+          apiVersion: '1.10.0',
+          contributes: { method: [{ id: 'emit' }], event: [{ id: 'tick', coalesce: [] }] }
+        },
+        behavior: {
+          activate: `
+            context.provide('method:acme.tools/emit', () => {
+              context.emit('tick', { n: 1 })
+              context.emit('tick', { n: 2 })
+              context.emit('tick', { n: 3 }, { immediate: true })
+              context.emit('tick', { n: 4 })
+              return true
+            })`
+        }
+      }
+    ])
+    const { events } = await s.harness.connectWithEvents()
+
+    const isTickThree = (event: QuirkyEvent) => {
+      if (event.type !== 'acme.tools/tick' || event.data === null || typeof event.data !== 'object') return false
+      return 'n' in event.data && event.data.n === 3
+    }
+    expect(await call(s.client, 'acme.tools/emit')).toBe(true)
+    await waitFor(() => events.some(isTickThree))
+    expect(events.filter((event) => event.type === 'acme.tools/tick')).toEqual([
+      { type: 'acme.tools/tick', data: { n: 1 } },
+      { type: 'acme.tools/tick', data: { n: 3 } }
+    ])
+    await Bun.sleep(700)
+
+    expect(events.filter((event) => event.type === 'acme.tools/tick')).toEqual([
+      { type: 'acme.tools/tick', data: { n: 1 } },
+      { type: 'acme.tools/tick', data: { n: 3 } },
+      { type: 'acme.tools/tick', data: { n: 4 } }
+    ])
+  })
+
   test("SC-9: only a plugin's own events in effect are emitted", async () => {
     const s = await boot([
       {

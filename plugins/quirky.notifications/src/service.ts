@@ -83,7 +83,6 @@ export const BELL_HOLD_MS = 250
 export const ASK_UNATTENDED_DELAY_MS = 3 * 60 * 1000
 export const LOOKUP_TIMEOUT_MS = 2000
 const PROGRAM_TEXT_MAX = 256
-const OWN_WRITE_TTL_MS = 60_000
 const SETTING_PREFIX = 'setting:quirky.notifications/'
 
 type Marker = UnreadReason
@@ -139,7 +138,6 @@ export class NotificationsService {
   private tail: Promise<void> = Promise.resolve()
   private syncQueued = false
   private lastStatus: string | null = null
-  private readonly ownWrites = new Map<string, number[]>()
   private readonly holds = new Set<BellHold>()
   private readonly timers = new Set<unknown>()
   private readonly askHeads = new Map<string, AskEscalation>()
@@ -233,7 +231,7 @@ export class NotificationsService {
         if (event.id.startsWith(SETTING_PREFIX)) this.requestSync()
         return
       case 'quirky.worktree/changed':
-        this.worktreeChanged(event.data as { worktreeId?: string; unread?: boolean })
+        this.worktreeChanged(event.data as { worktreeId?: string; unread?: boolean; unreadSource?: string })
         return
       default:
         return
@@ -308,7 +306,7 @@ export class NotificationsService {
     })
     if (!choice.sound || typeof choice.sound.file !== 'string') return { played: false, reason: choice.problem ?? 'no sound to play' }
     this.context.emit('sound', { file: choice.sound.file, volume })
-    if (!(await this.hasDesktopClient())) playSound(choice.sound.file, volume, (message) => this.context.log(message))
+    if (!(await this.hasDesktopClient())) playSound(this.context.process, choice.sound.file, volume, (message) => this.context.log(message))
     return { played: true }
   }
 
@@ -430,7 +428,6 @@ export class NotificationsService {
     if (result !== 'dropped' && this.askHeads.get(head.key) === head) head.escalated = true
   }
 
-
   /** A call to another plugin that gives up after the lookup timeout, so one silent handler cannot hold the queue. */
   private async bounded(method: string, params: Record<string, unknown>): Promise<unknown> {
     const { promise: timeout, reject } = Promise.withResolvers<never>()
@@ -493,48 +490,24 @@ export class NotificationsService {
     }
   }
 
-  private ownKey(worktreeId: string, unread: boolean): string {
-    return `${worktreeId}:${unread}`
-  }
-
-  /**
-   * Records the write before sending it. A write that timed out may still land, so its entry stays
-   * until its event arrives or the entry expires; only a write that failed outright is withdrawn.
-   */
+  /** Marks notification-owned unread writes in the event so delivery timing cannot change their meaning. */
   private async setWorktreeUnread(worktreeId: string, unread: boolean): Promise<void> {
-    const key = this.ownKey(worktreeId, unread)
-    const expiresAt = this.now() + OWN_WRITE_TTL_MS
-    this.ownWrites.set(key, [...(this.ownWrites.get(key) ?? []), expiresAt])
     try {
-      await this.bounded('quirky.worktree/set', { worktree: `id:${worktreeId}`, unread })
+      await this.bounded('quirky.worktree/set', {
+        worktree: `id:${worktreeId}`,
+        unread,
+        unreadSource: 'notifications'
+      })
     } catch (error) {
-      if (!(error instanceof LookupTimeout)) this.withdrawOwn(key, expiresAt)
       if (!isMissing(error)) this.context.log(`could not mark worktree ${worktreeId}: ${errorText(error)}`)
     }
   }
 
-  private withdrawOwn(key: string, expiresAt: number): void {
-    const entries = this.ownWrites.get(key) ?? []
-    const index = entries.indexOf(expiresAt)
-    if (index !== -1) entries.splice(index, 1)
-    if (entries.length === 0) this.ownWrites.delete(key)
-  }
-
-  private consumeOwn(worktreeId: string, unread: boolean): boolean {
-    const key = this.ownKey(worktreeId, unread)
-    const now = this.now()
-    const live = (this.ownWrites.get(key) ?? []).filter((expiresAt) => expiresAt > now)
-    const consumed = live.shift() !== undefined
-    if (live.length === 0) this.ownWrites.delete(key)
-    else this.ownWrites.set(key, live)
-    return consumed
-  }
-
-  /** A `set` that asked for unread=false and was not ours is Mark Read: it clears the worktree's sessions too. */
-  private worktreeChanged(data: { worktreeId?: string; unread?: boolean }): void {
+  /** A set that asked for unread=false is Mark Read unless it came from this notifications service. */
+  private worktreeChanged(data: { worktreeId?: string; unread?: boolean; unreadSource?: string }): void {
     this.requestSync()
     if (typeof data.worktreeId !== 'string' || typeof data.unread !== 'boolean') return
-    if (this.consumeOwn(data.worktreeId, data.unread) || data.unread) return
+    if (data.unreadSource === 'notifications' || data.unread) return
     const worktreeId = data.worktreeId
     this.fire(async () => {
       for (const session of await this.listSessions()) {
@@ -687,8 +660,6 @@ export class NotificationsService {
     })
   }
 
-
-
   private async heimdallNotification(data: unknown): Promise<void> {
     if (!isRecord(data) || typeof data.watcherId !== 'string' || data.watcherId.length === 0) return
     if (data.kind !== 'approval-requested' && data.kind !== 'terminal') return
@@ -832,7 +803,7 @@ export class NotificationsService {
       ...(sound !== undefined ? { sound } : {}),
       ...(pending.source === 'test' ? { toast: false } : {})
     })
-    if (playHere) playSound(sound!.file!, sound!.volume, (message) => this.context.log(message))
+    if (playHere) playSound(this.context.process, sound!.file!, sound!.volume, (message) => this.context.log(message))
     return this.decide(pending, 'delivered')
   }
 

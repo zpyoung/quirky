@@ -35,8 +35,9 @@ export class PluginEvents {
    * overrides the event, or when `broadcast` throws (for example on non-serializable `data`).
    * Reads the registry only; never activates a plugin.
    * For an event declaring `coalesce`, true means it was sent or is held as the latest for its key.
+   * Plain and immediate emits send this plugin's earlier held events first; immediate replaces its own held key.
    */
-  emit(pluginId: string, event: string, data: unknown): boolean {
+  emit(pluginId: string, event: string, data: unknown, options?: { immediate?: boolean }): boolean {
     const id = event.includes(':') ? event : `${EVENT_PREFIX}${pluginId}/${event}`
     if (!id.startsWith(EVENT_PREFIX)) throw new Error(`${id} is not an event`)
 
@@ -56,8 +57,11 @@ export class PluginEvents {
     }
 
     const coalesce = effective.data.coalesce
-    if (Array.isArray(coalesce)) this.coalescer.emit(pluginId, emitted, coalesce)
-    else this.broadcast(emitted)
+    if (Array.isArray(coalesce)) this.coalescer.emit(pluginId, emitted, coalesce, options?.immediate === true)
+    else {
+      this.coalescer.sendHeld(pluginId)
+      this.broadcast(emitted)
+    }
     return true
   }
 

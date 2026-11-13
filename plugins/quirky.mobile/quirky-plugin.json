@@ -1,6 +1,6 @@
 {
   "id": "quirky.mobile",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.4.0",
   "name": "Mobile",
   "version": "0.1.0",
   "description": "Pair phones with Quirky over a direct encrypted connection.",
@@ -654,6 +654,7 @@
       {
         "id": "changed",
         "description": "Mobile pairing or safe settings changed; reload state to see current values.",
+        "coalesce": [],
         "data": { "type": "object", "properties": {}, "additionalProperties": false }
       }
     ],

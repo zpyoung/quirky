@@ -417,6 +417,8 @@ describe('SC-10: groups', () => {
     const { client, home, events } = await start()
     expect((await failure(call(client, 'quirky.repo/groupCreate', { name: '  ' }))).code).toBe(RpcErrorCode.InvalidParams)
     const api = await add(client, makeRepo(join(home, 'api')))
+    // Drain the production 250 ms COALESCE_INTERVAL_MS window opened by repo/add before resetting the baseline.
+    await Bun.sleep(300)
     events.length = 0
     const group = (await call(client, 'quirky.repo/groupCreate', { name: 'g' })) as ProjectGroup
     await call(client, 'quirky.repo/groupAdd', { group: group.id, repo: api.id })

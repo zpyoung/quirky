@@ -42,8 +42,8 @@ API 1.3 adds optional `coalesce` and `worktree` fields to event declarations and
 dot-separated identifier segments (`[A-Za-z_][A-Za-z0-9_]*`). The coalescing key includes the event
 type, any valid worktree tag, and the values at those paths; an empty list still separates emits by
 event type and worktree tag. The kernel sends the first emit for a key immediately, then sends only
-the latest held emit when the 250 ms window ends. A held emit can arrive after later events from
-another key or event type.
+the latest held emit when the 250 ms window ends. A plugin's held emits go out before its next
+uncoalesced event.
 `emit` returns `true` when the event is sent or held, and `false` when disabled or overridden.
 `worktree` names a key path containing the worktree ID; a non-empty string there is copied to the
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
@@ -55,9 +55,19 @@ A held event keeps a reference to the emitted payload; a plugin must not mutate 
 daemon, and `quirky.editor/explorerChanged` coalesces per worktree and still carries its
 worktree tag. Editor clients refresh after their own actions rather than waiting for an event.
 `quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
-every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
-and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
-listeners act on the states in between.
+every title reads `context.pty.onFact`. `quirky.session/changed` coalesces per `session.id` and
+`quirky.agent-status/changed` per `sessionId`; both carry a worktree tag. Session changes to
+`status`, `providerSession.id` or `providerSession.transcriptPath` arrive at once and in order.
+Agent-status changes to `row.state`, `row.agent`, `row.lead.providerSession`, `row.turnStartedAt`,
+`row.question` or `row.heldPermission`, and every `row: null`, also arrive at once and in order.
+Held permissions compare `toolUseId`, `toolName`, `input` and `childId`; undefined counts as a
+value for both questions and held permissions. Other changes may merge into the latest event,
+up to 250 ms late. `quirky.session/removed` cannot be followed by an older held session
+change. Agent-status removals retain the worktree tag of their last announced row, even when
+the session is no longer available; removals with no announced row remain untagged.
+`quirky.agent-status/settled` carries a worktree tag and is not coalesced.
+
+"quirky.tasks/changed" coalesces with one key for the daemon, and Tasks clients apply the result of their own actions rather than waiting for an event.
 
 `quirky.reviews/changed` carries a worktree tag for updates confined to one Checks entry and its
 Checks dialog; shared updates and evictions remain untagged. It coalesces per tag. Review draft
@@ -208,6 +218,27 @@ Captured partial results on post-exit stall errors retain the same truncation fl
 Use the [process declarations](../packages/protocol/src/process.ts) for the complete option and
 result types.
 
+### API 1.10: Immediate emits
+
+API 1.10 adds an option to daemon plugins' `context.emit`:
+
+```ts
+emit(event: string, data?: unknown, options?: { immediate?: boolean }): boolean
+```
+
+With `{ immediate: true }`, a coalesced event replaces what its key holds, sends the plugin's
+other held events first, then goes out inside the call. Its fixed window stays armed; an idle
+key starts a window. Only `true` requests immediate delivery. Plain events ignore the option
+and always send the plugin's held events first. A plugin that passes the option declares
+`"apiVersion": "1.10.0"` or later.
+
+- Everything a plugin emitted before a plain event or immediate emit reaches clients and plugin
+  listeners before that event, oldest emit first, unless a later emit replaced the same key.
+- An immediate emit of an enabled event the plugin owns is delivered regardless of which
+  other events are disabled or overridden. A disabled or overridden emit releases nothing.
+- No order is promised between coalesced events with different keys when neither is immediate,
+  between plugins' events, or between plugin and kernel events.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -325,8 +356,8 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   plugin that sets it declares `apiVersion` 1.2.0.
 - **1.3.0** adds optional `coalesce` and `worktree` fields to event declarations and overrides. The
   kernel sends the first emit immediately and only the latest held emit per key at the end of a
-  250 ms window; held emits can arrive after events from other keys, and are dropped when the plugin
-  unloads. A declared worktree path with a non-empty string is copied to the event's `worktreeId`.
+  250 ms window; held emits go out before the plugin's next uncoalesced event, and are dropped
+  when the plugin unloads. A declared worktree path with a non-empty string is copied to the event's `worktreeId`.
   A plugin that uses either field declares `apiVersion` 1.3.0.
 - **1.4.0** adds `context.process.run(argv, options)` for daemon plugins. It resolves for any exit
   code, including nonzero, timeout, abort, output overflow and spawn errors. It rejects bad
@@ -347,6 +378,9 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.9.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
   Separate capture and stop-on-overflow remain the defaults. A plugin using either option declares
   `apiVersion` 1.9.0.
+- **1.10.0** adds [`context.emit` immediate delivery](#api-110-immediate-emits) and sends a plugin's
+  held events before its next uncoalesced event. A plugin that passes the option declares
+  `apiVersion` 1.10.0 or later.
 
 ## Example
 
