@@ -264,7 +264,12 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
     id: CONTROL,
     args: { action: 'filters', target: { owner: groupOwner(group) }, filters: { search: 'Group policy' } }
   })
-  await world.win.waitFor(() => ledgerPage()?.textContent?.includes('Group policy'))
+  await world.win.waitFor(async () => {
+    const report = (await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report
+    return typeof report === 'object' && report !== null && 'filters' in report
+      && typeof report.filters === 'object' && report.filters !== null
+      && 'search' in report.filters && report.filters.search === 'Group policy'
+  })
   expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report).toMatchObject({
     target: { owner: groupOwner(group) },
     filters: { search: 'Group policy' }
@@ -477,7 +482,11 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
 
   await projectMenu(world)
   await chooseMenu(world, 'Remove Project…')
-  const retry = await world.win.waitFor(() => dialogNamed('Remove Project'))
+  const retry = await world.win.waitFor(() => {
+    const dialog = dialogNamed('Remove Project')
+    const action = dialog && button(dialog, 'Remove')
+    return action && !action.disabled ? dialog : undefined
+  })
   await click(button(retry, 'Remove')!)
   await world.win.waitFor(async () => !(await world.agent.callAny('quirky.repo/list', {}) as Repo[]).some((repo) => repo.id === world.repo.id))
   const catalog = await request(world, { operation: 'catalog' })
