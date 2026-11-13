@@ -182,5 +182,5 @@ test('the vault catalog coalesces searchStatus and scanProgress and requires API
   }
 
   const plugins = await rig.client.callAny('plugin.list', {}) as PluginInfo[]
-  expect(plugins.find(plugin => plugin.id === 'quirky.vault')?.apiVersion).toBe('1.9.0')
+  expect(plugins.find(plugin => plugin.id === 'quirky.vault')?.apiVersion).toBe('1.12.0')
 }, 30_000)

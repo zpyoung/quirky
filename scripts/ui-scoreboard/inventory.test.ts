@@ -7,8 +7,9 @@ import { collectInventory } from './inventory'
 
 type PluginOptions = {
   ui?: string
-  contributes?: Record<string, Array<{ id: string; title: string }>>
+  contributes?: Record<string, Array<Record<string, unknown>>>
   sources?: Record<string, string>
+  coverage?: string
 }
 
 const roots: string[] = []
@@ -47,6 +48,7 @@ function addPlugin(root: string, directory: string, id = directory, options: Plu
   const manifest = { id, name: id, ...(options.ui ? { ui: options.ui } : {}), ...(options.contributes ? { contributes: options.contributes } : {}) }
   putFile(root, `plugins/${directory}/quirky-plugin.json`, `${JSON.stringify(manifest, null, 2)}\n`)
   for (const [path, content] of Object.entries(options.sources ?? {})) putFile(root, `plugins/${directory}/${path}`, content)
+  if (options.coverage !== undefined) putFile(root, `plugins/${directory}/ui-scoreboard.json`, options.coverage)
 }
 
 function createRepository(options: { plugins?: boolean } = {}): string {
@@ -123,6 +125,99 @@ describe('collectInventory', () => {
     expect(inventory.plugins.map(({ id }) => id)).not.toContain('acme.fake')
     expect(inventory.targets.filter(({ kind }) => kind === 'host').map(({ id }) => id).sort()).toEqual(hostTargetIds.slice().sort())
     expect(new Set(inventory.targets.map(({ kind }) => kind))).toEqual(new Set(['host', ...slotKinds]))
+  })
+
+  test('records full contribution IDs and CLI command methods', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'acme.app', 'acme.app', {
+      contributes: {
+        method: [{ id: 'save' }, { id: 'load' }],
+        command: [{ id: 'refresh' }],
+        'cli-command': [
+          { id: 'save', words: 'save', method: 'save' },
+          { id: 'combined', methods: ['acme.app/load', 'other.plugin/refresh'] }
+        ]
+      }
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'contribution fixture')
+    const plugin = collect(root).plugins.find(({ id }) => id === 'acme.app')
+
+    expect(plugin?.contributions).toEqual({
+      methods: ['acme.app/save', 'acme.app/load'],
+      commands: ['command:acme.app/refresh'],
+      cliCommands: [
+        { id: 'save', words: 'save', methods: ['acme.app/save'] },
+        { id: 'combined', methods: ['acme.app/load', 'other.plugin/refresh'] }
+      ]
+    })
+  })
+
+  test('loads an optional coverage file separately from production sources', () => {
+    const root = createRepository({ plugins: false })
+    const content = '{"schemaVersion":1}\n'
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverage: content
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'coverage fixture')
+    const plugin = collect(root).plugins.find(({ id }) => id === 'acme.app')
+
+    expect(plugin?.coverage).toEqual({ file: 'plugins/acme.app/ui-scoreboard.json', content })
+    expect(plugin?.sources.map(({ file }) => file)).not.toContain('plugins/acme.app/ui-scoreboard.json')
+  })
+
+  test('leaves coverage undefined when the optional file is absent', () => {
+    const plugin = collect(createRepository()).plugins.find(({ id }) => id === 'acme.service')
+
+    expect(plugin?.coverage).toBeUndefined()
+  })
+
+  test('rejects a symlinked coverage file without reading its target', () => {
+    const root = createRepository()
+    const target = join(root, 'outside/ui-scoreboard.json')
+    putFile(root, 'outside/ui-scoreboard.json', '{"schemaVersion":1}\n')
+    symlinkSync(target, join(root, 'plugins/acme.visible/ui-scoreboard.json'))
+    const inventory = collect(root)
+    const plugin = inventory.plugins.find(({ id }) => id === 'acme.visible')
+
+    expect(plugin?.coverage).toBeUndefined()
+    expect(inventory.failures).toContainEqual(expect.objectContaining({
+      code: 'source-symlink',
+      message: expect.stringContaining('plugins/acme.visible/ui-scoreboard.json')
+    }))
+  })
+
+  test('reports a coverage file on a plugin without a UI or targets', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'acme.daemon', 'acme.daemon', { coverage: '{"schemaVersion":1}\n' })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'unexpected coverage fixture')
+    const inventory = collect(root)
+
+    expect(inventory.failures).toContainEqual(expect.objectContaining({
+      code: 'unexpected-coverage-file',
+      message: expect.stringContaining('plugins/acme.daemon/ui-scoreboard.json')
+    }))
+  })
+
+  test('digests and marks the inventory dirty when only coverage changes', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverage: '{"schemaVersion":1}\n'
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'coverage digest fixture')
+    const before = collect(root)
+    putFile(root, 'plugins/acme.app/ui-scoreboard.json', '{"schemaVersion":1,"changed":true}\n')
+    const after = collect(root)
+
+    expect(after.sourceDigest).not.toBe(before.sourceDigest)
+    expect(after.dirty).toBe(true)
   })
 
   test('records the exact avatar exclusion only when its manifest is absent', () => {

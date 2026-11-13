@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { FixtureWorktree } from '../ui-review/fixtures'
-import { assignWorktrees } from './windows.ts'
+import { assignWorktrees, chromiumArgs } from './windows.ts'
 
 function fixtureWorktrees(): FixtureWorktree[] {
   return [
@@ -17,6 +17,14 @@ function fixtureWorktrees(): FixtureWorktree[] {
     { id: 'export', path: '/export', repoId: 'repo-ledger', name: 'export-csv', isMain: false, status: 'done' }
   ]
 }
+
+test('keeps platform isolation arguments before caller browser arguments', () => {
+  const isolation = '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'
+  expect(chromiumArgs('darwin', ['--disable-gpu'])).toEqual([isolation, '--disable-gpu'])
+  expect(chromiumArgs('linux', [])).toEqual([isolation, '--no-sandbox'])
+  expect(chromiumArgs('linux', ['--disable-gpu'])).toEqual([isolation, '--no-sandbox', '--disable-gpu'])
+  expect(chromiumArgs('darwin', [])).toEqual([isolation])
+})
 
 test('assigns one non-main worktree from each project first', () => {
   const assigned = assignWorktrees(fixtureWorktrees(), 3)

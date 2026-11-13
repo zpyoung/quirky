@@ -1,5 +1,6 @@
 import {
   CONNECTION_METHODS,
+  DEFAULT_MUTATING_METHOD_TIMEOUT_MS,
   DEFAULT_READ_METHOD_TIMEOUT_MS,
   KERNEL_METHOD_SCHEMAS,
   parseContributionId,
@@ -54,6 +55,8 @@ export type DispatcherOptions = {
   unanswered?: UnansweredHandlers
   /** Deadline for read-only plugin methods without a declared timeout; defaults to 300 seconds. */
   readTimeoutMs?: number
+  /** Deadline for mutating plugin methods without a declared timeout; defaults to 600 seconds. */
+  mutatingTimeoutMs?: number
   /** Shared count of running plugin handlers; private and silent when absent. */
   running?: RunningHandlers
   /** Maximum running handlers per plugin method; defaults to 1,024. */
@@ -78,9 +81,13 @@ type Target = {
 
 type HandlerOutcome = { ok: true; value: unknown } | { ok: false; error: unknown }
 
-export function methodTimeoutMs(data: { readOnly?: unknown; timeout?: unknown }, readTimeoutMs: number): number | null {
+export function methodTimeoutMs(
+  data: { readOnly?: unknown; timeout?: unknown },
+  readTimeoutMs: number,
+  mutatingTimeoutMs: number
+): number {
   const declared = typeof data.timeout === 'string' ? parseDuration(data.timeout) : null
-  return declared ?? (data.readOnly === true ? readTimeoutMs : null)
+  return declared ?? (data.readOnly === true ? readTimeoutMs : mutatingTimeoutMs)
 }
 
 function detachedConn(): ClientConn {
@@ -111,6 +118,7 @@ export class Dispatcher {
   private readonly forwardedCallers = new WeakMap<PluginCaller, ForwardingBinding>()
   private readonly unanswered: UnansweredHandlers
   private readonly readTimeoutMs: number
+  private readonly mutatingTimeoutMs: number
   private readonly running: RunningHandlers
   private readonly maxRunning: number
 
@@ -125,6 +133,7 @@ export class Dispatcher {
     this.resolveSessionAuthority = options.resolveSessionAuthority
     this.unanswered = options.unanswered ?? new UnansweredHandlers()
     this.readTimeoutMs = options.readTimeoutMs ?? DEFAULT_READ_METHOD_TIMEOUT_MS
+    this.mutatingTimeoutMs = options.mutatingTimeoutMs ?? DEFAULT_MUTATING_METHOD_TIMEOUT_MS
     this.running = options.running ?? new RunningHandlers()
     this.maxRunning = options.maxRunning ?? DEFAULT_MAX_RUNNING_HANDLERS
     this.requests = new RequestLog(store, { now: options.now, log })
@@ -273,8 +282,7 @@ export class Dispatcher {
         this.forwardedCallers.delete(caller)
       }
       try {
-        const timeoutMs = methodTimeoutMs(target, this.readTimeoutMs)
-        if (timeoutMs === null) return await implementation(params, caller)
+        const timeoutMs = methodTimeoutMs(target, this.readTimeoutMs, this.mutatingTimeoutMs)
         const deadlineAt = Date.now() + timeoutMs
         binding.deadlineAt = deadlineAt
         deadlineOwnsSlot = true

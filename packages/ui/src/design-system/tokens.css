@@ -68,6 +68,10 @@
   --ui-window-inactive-opacity: 0.6;
   --ui-dialog-wide-width: 52rem;
   --ui-form-column-width: 16rem;
+  --ui-length-unit: 1px;
+  --ui-tool-rail-width: 42px;
+  --ui-tool-center-min-width: 320px;
+  --ui-tool-center-min-height: 72px;
 }
 
 [data-theme='light'] {

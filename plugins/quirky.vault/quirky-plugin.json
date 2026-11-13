@@ -1,6 +1,6 @@
 {
   "id": "quirky.vault",
-  "apiVersion": "1.9.0",
+  "apiVersion": "1.12.0",
   "name": "Agent Session History",
   "version": "0.1.0",
   "description": "Browse agent-owned sessions and opt in to local transcript search.",
@@ -927,6 +927,7 @@
       },
       {
         "id": "deleteSession",
+        "timeout": "24h",
         "description": "Moves validated local agent source files to macOS Trash after confirmation; never deletes originals directly.",
         "destructive": true,
         "confirm": "Move this agent session transcript to Trash? Original session data may be shared with the agent.",

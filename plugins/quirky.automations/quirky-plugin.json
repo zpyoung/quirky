@@ -1,6 +1,6 @@
 {
   "id": "quirky.automations",
-  "apiVersion": "1.11.0",
+  "apiVersion": "1.12.0",
   "name": "Automations",
   "version": "0.1.0",
   "description": "Durable scheduled and manual structured agent runs.",
@@ -148,6 +148,7 @@
       },
       {
         "id": "run",
+        "timeout": "24h",
         "description": "Persists a manual run even when paused, then dispatches in the background and returns its current truthful state.",
         "params": { "type": "object", "properties": { "id": { "type": "string" }, "expectedOwner": {} }, "required": ["id"], "additionalProperties": false },
         "result": {
@@ -193,6 +194,7 @@
       },
       {
         "id": "dispatch",
+        "timeout": "24h",
         "description": "Dispatches a pending run once and returns the current durable run state.",
         "params": { "type": "object", "properties": { "runId": { "type": "string" } }, "required": ["runId"], "additionalProperties": false },
         "result": {
@@ -311,6 +313,7 @@
       },
       {
         "id": "tick",
+        "timeout": "24h",
         "description": "Evaluates due schedules using the daemon's current time.",
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
         "result": { "type": "object", "properties": { "now": { "type": "integer" }, "evaluated": { "type": "integer" } }, "required": ["now", "evaluated"], "additionalProperties": false }

@@ -68,6 +68,6 @@ test('catalogs Tasks changed as a daemon-wide coalesced event', async () => {
 
   const plugins = await currentHost.client.callAny('plugin.list', {}) as PluginInfo[]
   const tasks = plugins.find((plugin) => plugin.id === 'quirky.tasks')
-  expect(tasks?.apiVersion).toBe('1.3.0')
+  expect(tasks?.apiVersion).toBe('1.12.0')
   expect(tasks?.state).not.toBe('invalid')
 }, 30_000)

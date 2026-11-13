@@ -280,8 +280,9 @@ stall still fails with `ProcessStalledError`, with its wait starting after group
 
 Plugin methods may declare `timeout`, a duration string from `1s` through `24h`, including in
 method overrides. A plugin using this field declares `"apiVersion": "1.12.0"` or later.
-Read-only plugin methods without a declared timeout have a 300-second deadline, including
-plugins targeting older API releases. Mutating methods without a timeout keep waiting.
+Read-only plugin methods without a declared timeout have a 300-second deadline; mutating methods
+without one have a 600-second deadline. Both defaults apply to plugins targeting older API releases.
+A method that works longer by design must declare `timeout`.
 The clock starts when the handler is called, after activation and authorization. Kernel methods
 are unchanged. The deadline applies to client, plugin and kernel-sourced calls to plugin methods.
 

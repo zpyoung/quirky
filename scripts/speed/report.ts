@@ -2,12 +2,13 @@ import { BUDGETS, METRICS, type Comparison, type Failure, type Metric, type Metr
 
 const REPORT_KEYS = ['version', 'commit', 'runId', 'createdAt', 'status', 'qualified', 'profile', 'metrics', 'failures', 'cleanup', 'evidence']
 const PROFILE_KEYS = ['workloadVersion', 'worktrees', 'terminals', 'diffAddedLines', 'renderer', 'viewport', 'startup', 'floodChunkBytes', 'floodIntervalMs', 'runner', 'os', 'arch', 'cpuModel', 'cpuCount', 'bun', 'chromium', 'imageVersion']
+const PROFILE_V2_KEYS = [...PROFILE_KEYS, 'compositor']
 const METRIC_RESULT_KEYS = ['samplesMs', 'medianMs', 'budgetMs', 'budgetMiss']
 const EVIDENCE_KEYS = ['samples', 'diagnostics', 'misses']
-const PROFILE_FIELDS: readonly (keyof SpeedProfile)[] = [
+const PROFILE_FIELDS: readonly (keyof SpeedProfile | 'compositor')[] = [
   'workloadVersion', 'worktrees', 'terminals', 'diffAddedLines', 'renderer', 'startup',
   'floodChunkBytes', 'floodIntervalMs', 'runner', 'os', 'arch', 'cpuModel', 'cpuCount',
-  'bun', 'chromium',
+  'bun', 'chromium', 'compositor',
 ]
 const MAX_FAILURES = 100
 const MAX_EVIDENCE_PATHS = 100
@@ -53,10 +54,13 @@ function isSafeEvidencePath(value: unknown): value is string {
 }
 
 function validProfile(value: unknown): value is SpeedProfile {
-  if (!isRecord(value) || !hasExactKeys(value, PROFILE_KEYS)) return false
+  if (!isRecord(value)) return false
+  const keys = value.workloadVersion === 1
+    ? PROFILE_KEYS
+    : value.workloadVersion === 2 ? PROFILE_V2_KEYS : null
+  if (!keys || !hasExactKeys(value, keys)) return false
   const viewport = value.viewport
-  return value.workloadVersion === 1
-    && value.worktrees === 10
+  const validBase = value.worktrees === 10
     && value.terminals === 20
     && value.diffAddedLines === 5000
     && value.renderer === 'dom'
@@ -76,6 +80,7 @@ function validProfile(value: unknown): value is SpeedProfile {
     && isBoundedText(value.bun)
     && isBoundedText(value.chromium)
     && isBoundedText(value.imageVersion)
+  return validBase && (value.workloadVersion === 1 || value.compositor === 'software')
 }
 
 function validFailure(value: unknown): value is Failure {
@@ -99,7 +104,7 @@ function validMetricResult(value: unknown, metric: Metric): boolean {
   return value.budgetMiss === (expectedMedian > BUDGETS[metric])
 }
 
-/** Validates the version-1 report shape and all aggregates without discarding partial or smoke evidence. */
+/** Validates the report shape and all aggregates without discarding partial or smoke evidence. */
 export function validateReport(value: unknown): SpeedReport | null {
   if (!isRecord(value) || !hasExactKeys(value, REPORT_KEYS)) return null
   if (value.version !== 1 || typeof value.commit !== 'string' || !/^[0-9a-f]{40}$/i.test(value.commit)) return null
@@ -137,7 +142,9 @@ function metricNulls(): Record<Metric, null> {
 }
 
 function profileDifferences(left: SpeedProfile, right: SpeedProfile): string[] {
-  const changed = PROFILE_FIELDS.filter((field) => left[field] !== right[field])
+  const leftFields: SpeedProfile & { compositor?: 'software' } = left
+  const rightFields: SpeedProfile & { compositor?: 'software' } = right
+  const changed = PROFILE_FIELDS.filter((field) => leftFields[field] !== rightFields[field])
   if (left.viewport.width !== right.viewport.width || left.viewport.height !== right.viewport.height) changed.push('viewport')
   return changed.map((field) => String(field))
 }
