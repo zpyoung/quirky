@@ -49,7 +49,7 @@ import type { FederationReportAuthority } from './federation/contracts'
 import type { SessionIdentity } from './runtime-contracts'
 import type { DurableMutationOptions, OrchestrationWorkerCore, WorkerLifecyclePort } from './worker-integration'
 import { fail } from './errors'
-import { readNestedWorkerMaxDepth } from './store'
+import { CREATED_NEWEST_FIRST, CREATED_OLDEST_FIRST, readNestedWorkerMaxDepth } from './store'
 
 const MAX_TASK_SPEC_BYTES = 1_214_464
 
@@ -316,8 +316,8 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
   listDispatches(runId?: RunId): DispatchRow[] {
     const rows = runId === undefined
-      ? this.store.all<DispatchRecord>('SELECT * FROM dispatches ORDER BY created_at DESC, id DESC')
-      : this.store.all<DispatchRecord>('SELECT * FROM dispatches WHERE run_id = ? ORDER BY created_at DESC, id DESC', runId)
+      ? this.store.all<DispatchRecord>(`SELECT * FROM dispatches ORDER BY ${CREATED_NEWEST_FIRST}`)
+      : this.store.all<DispatchRecord>(`SELECT * FROM dispatches WHERE run_id = ? ORDER BY ${CREATED_NEWEST_FIRST}`, runId)
     return rows.map(dispatchRow)
   }
 
@@ -596,13 +596,13 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     if (input.ready === true && input.status !== undefined) fail(this.context, 'invalid_argument', 'ready and status filters cannot be used together')
     const status = input.ready === true ? 'ready' : input.status
     const rows = this.store.all<TaskRecord>(
-      `SELECT * FROM tasks WHERE run_id = ? ${status === undefined ? '' : 'AND status = ?'} ORDER BY created_at, id`,
+      `SELECT * FROM tasks WHERE run_id = ? ${status === undefined ? '' : 'AND status = ?'} ORDER BY ${CREATED_OLDEST_FIRST}`,
       ...(status === undefined ? [run.id] : [run.id, status])
     )
     const tasks = rows.map((row): TaskListRow => {
       const task = taskRow(row)
       const active = this.store.get<{ id: string; assignee_session_id: string | null }>(
-        `SELECT id, assignee_session_id FROM dispatches WHERE task_id = ? AND status IN ('pending', 'dispatched') ORDER BY created_at DESC, id DESC LIMIT 1`,
+        `SELECT id, assignee_session_id FROM dispatches WHERE task_id = ? AND status IN ('pending', 'dispatched') ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
         row.id
       )
       const specCharacters = input.brief ? Array.from(collapse(row.spec)) : undefined
@@ -633,7 +633,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       fail(this.context, 'task_not_startable', `Task ${input.taskId} still has a live supervised worker`, { taskId: input.taskId, status: current.status })
     }
     const active = this.store.all<DispatchRecord>(
-      `SELECT * FROM dispatches WHERE task_id = ? AND status IN ('pending', 'dispatched') ORDER BY created_at DESC, id DESC`,
+      `SELECT * FROM dispatches WHERE task_id = ? AND status IN ('pending', 'dispatched') ORDER BY ${CREATED_NEWEST_FIRST}`,
       input.taskId
     )
     if (input.nextState === 'dispatched' && active.length === 0) {
@@ -978,7 +978,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
     }
     const latest = this.store.get<{ id: string }>(
-      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
       dispatch.task_id,
     )
     if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
@@ -993,7 +993,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     const current = this.store.get<{ id: string }>(
       `SELECT id FROM dispatches
        WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched')
-       ORDER BY depth DESC, created_at DESC, id DESC LIMIT 1`,
+       ORDER BY depth DESC, ${CREATED_NEWEST_FIRST} LIMIT 1`,
       dispatch.assignee_session_id,
     )
     if (current?.id !== dispatch.id) return { status: 'rejected', reason: 'sender_not_assignee', audited: true }
@@ -1024,7 +1024,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
     if (task.id !== dispatch.task_id) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
     const latest = this.store.get<{ id: string }>(
-      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
       dispatch.task_id,
     )
     if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
@@ -1091,7 +1091,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       }
     }
     const latest = this.store.get<{ id: string }>(
-      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
       dispatch.task_id
     )
     if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
@@ -1203,7 +1203,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', lastHeartbeatAt: null }
       if (dispatch.task_id !== input.taskId) return { status: 'rejected', reason: 'task_dispatch_mismatch', lastHeartbeatAt: null }
       const latest = this.store.get<{ id: string }>(
-        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
         dispatch.task_id,
       )
       if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', lastHeartbeatAt: null }
@@ -1253,7 +1253,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
       if (task.id !== dispatch.task_id) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
       const latest = this.store.get<{ id: string }>(
-        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
         dispatch.task_id,
       )
       if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
@@ -1646,7 +1646,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     const dependencies = jsonOf<TaskId[]>(task.dependency_task_ids_json, [])
     const unmet = dependencies.filter((dependencyId) => this.store.get<{ status: TaskStatus }>('SELECT status FROM tasks WHERE id = ?', dependencyId)?.status !== 'completed')
     const pendingGate = this.store.get<{ id: string }>(`SELECT id FROM gates WHERE task_id = ? AND status = 'pending' LIMIT 1`, task.id)
-    const latest = this.store.get<DispatchRecord>(`SELECT * FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, task.id)
+    const latest = this.store.get<DispatchRecord>(`SELECT * FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`, task.id)
     let failureCount = 0
     let retryOf: string | null = null
     if (input.retryOfDispatchId !== undefined) {
@@ -1813,7 +1813,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   }
 
   private promoteReadyTasks(runId: string): void {
-    const rows = this.store.all<TaskRecord>(`SELECT * FROM tasks WHERE run_id = ? AND status = 'pending' ORDER BY created_at, id`, runId)
+    const rows = this.store.all<TaskRecord>(`SELECT * FROM tasks WHERE run_id = ? AND status = 'pending' ORDER BY ${CREATED_OLDEST_FIRST}`, runId)
     for (const row of rows) {
       const dependencies = jsonOf<TaskId[]>(row.dependency_task_ids_json, [])
       if (!dependencies.every((id) => this.store.get<{ status: TaskStatus }>('SELECT status FROM tasks WHERE id = ?', id)?.status === 'completed')) continue
@@ -1832,7 +1832,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
   private creatorDispatchId(sessionId: string): DispatchId | null {
     const row = this.store.get<{ id: string }>(
-      `SELECT id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY depth DESC, created_at DESC, id DESC LIMIT 1`,
+      `SELECT id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY depth DESC, ${CREATED_NEWEST_FIRST} LIMIT 1`,
       sessionId
     )
     return row?.id as DispatchId | undefined ?? null
