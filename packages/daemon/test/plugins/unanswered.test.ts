@@ -9,6 +9,7 @@ function setup() {
   const removed: Warning[] = []
   const handlers = new UnansweredHandlers({
     warn(pluginId, message) {
+      if (activeWarnings.get(pluginId)?.has(message)) return
       added.push({ pluginId, message })
       const messages = activeWarnings.get(pluginId) ?? new Set<string>()
       messages.add(message)
@@ -119,5 +120,19 @@ describe('UnansweredHandlers', () => {
     releaseSecond()
     expect(removed).toEqual([{ pluginId: 'acme.hang', message: warning }])
     expect(activeWarnings.get('acme.hang')?.has(warning)).toBe(false)
+  })
+
+  test('restores a per-entry warning cleared by plugin activation', () => {
+    const { handlers, activeWarnings } = setup()
+    const plugin = 'acme.hang'
+    const warning = 'a handler is still running'
+    const first = handlers.add('job:acme.hang/tick', plugin, warning)
+    activeWarnings.get(plugin)?.clear()
+    const second = handlers.add('job:acme.hang/tick', plugin, warning)
+    expect(activeWarnings.get(plugin)?.has(warning)).toBe(true)
+    first()
+    expect(activeWarnings.get(plugin)?.has(warning)).toBe(true)
+    second()
+    expect(activeWarnings.get(plugin)?.has(warning)).toBe(false)
   })
 })

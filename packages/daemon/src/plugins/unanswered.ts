@@ -1,6 +1,7 @@
 export const MAX_UNANSWERED_HANDLERS = 4
 
 export type UnansweredOptions = {
+  /** Ensures the warning is present without duplicating it. */
   warn(pluginId: string, message: string): void
   unwarn(pluginId: string, message: string): void
 }
@@ -69,7 +70,7 @@ export class UnansweredHandlers {
         this.warningReferences.set(pluginId, messages)
       }
       messages.set(message, references + 1)
-      if (references === 0) actions.push({ kind: 'warn', pluginId, message })
+      actions.push({ kind: 'warn', pluginId, message })
       return
     }
 
