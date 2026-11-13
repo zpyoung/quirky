@@ -27,7 +27,7 @@ test('bounds changed events while navigating through Tasks pages', async () => {
   watcher = { client, events }
   client.onEvent((event) => events.push(event))
   await client.call('events.subscribe', {})
-  // Real waits exercise the daemon's 250 ms coalescing window and event delivery.
+  // real waits exercise the daemon's 250 ms coalescing window and event delivery.
 
   await Bun.sleep(600)
   const mark = events.filter((event) => event.type === 'quirky.tasks/changed').length

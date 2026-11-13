@@ -628,6 +628,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   async function togglePin(target: ProjectTarget) {
     try {
       await context.call('quirky.tasks/projectSelect', { action: state.projects.pinned.some((candidate) => projectIdentity(candidate) === projectIdentity(target)) ? 'unpin' : 'pin', project: target })
+      await refresh()
     } catch (error) {
       context.toast('Could not update project pins', errorMessage(error))
     }
@@ -877,6 +878,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
         return
       }
       await context.call('quirky.tasks/navigate', { mode: 'projects', detail: target, project: targetProject })
+      await refresh()
     } catch (error) {
       if (projectGeneration.current === projectRequest && currentProjectKey.current === targetProjectKey) {
         setActionHelp({ item, text: `Could not open project item: ${errorMessage(error)}`, externalUrl: projectItemUrl(item, targetProject) })
