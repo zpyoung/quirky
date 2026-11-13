@@ -57,20 +57,34 @@ describe('pane attach and image addon ordering', () => {
       }
     }))
     const detachedFake = fakeContext(paneHandlers({}, {
-      'quirky.terminal/attach': () => ({ streamId: 7, replay: bytesToBase64(new TextEncoder().encode('unmounted-replay')) })
+      'quirky.terminal/attach': () => ({ streamId: 7, replay: bytesToBase64(new TextEncoder().encode('unmounted-replay')) }),
+      'quirky.terminal/detach': (params) => client.callAny('quirky.terminal/detach', params)
     }))
     const rejectedFake = fakeContext(paneHandlers({}, {
       'quirky.terminal/attach': () => Promise.reject(new Error('gone'))
     }))
     // constructor and buffer access mirror the protocol's frame fixtures without opening a socket
+    let detachReplyId = 0
+    let subscriptions = 0
     const client = new (QuirkyClient as unknown as new (
       transport: { send(text: string): void; close(): void }
-    ) => QuirkyClient)({ send() {}, close() {} })
+    ) => QuirkyClient)({
+      send(text) {
+        const message: unknown = JSON.parse(text)
+        if (!message || typeof message !== 'object' || !('id' in message) || typeof message.id !== 'number') throw new Error('invalid fixture request')
+        detachReplyId = message.id
+      },
+      close() {}
+    })
     const bufferedClient = client as unknown as {
       handleMessage(data: unknown): void
       streamBuffers: Map<number, Uint8Array[]>
+      streamHandlers: Map<number, unknown>
     }
-    detachedFake.context.onStream = (id, handler, options) => client.onTerminalOutput(id, handler, options)
+    detachedFake.context.onStream = (id, handler, options) => {
+      subscriptions++
+      return client.onTerminalOutput(id, handler, options)
+    }
 
     try {
       const attachedPane = await mountPane(attachedFake, { settings: settings({ 'inline-images': true, scrollback: 4000 }) })
@@ -100,6 +114,11 @@ describe('pane attach and image addon ordering', () => {
       const detachedIndex = mountedPanes.indexOf(detachedPane)
       if (detachedIndex >= 0) mountedPanes.splice(detachedIndex, 1)
       await detachedPane.unmount()
+      detachedFake.context.onStream = () => {
+        subscriptions++
+        throw new Error('quirky.terminal is not active')
+      }
+      bufferedClient.handleMessage(JSON.stringify({ jsonrpc: '2.0', id: detachReplyId, result: { ok: true } }))
 
       const rejectedTextBeforeAddon = terminalText(rejectedPane.term())
       expect(rejectedTextBeforeAddon).toContain('Could not attach: gone')
@@ -115,7 +134,8 @@ describe('pane attach and image addon ordering', () => {
       expect(terminalText(attachedTerminal)).toContain('hello')
 
       expect(detachedFake.callsTo('quirky.terminal/detach').map((call) => call.params)).toEqual([{ streamId: 7 }])
-      expect(detachedFake.streams.has(7)).toBe(false)
+      expect(subscriptions).toBe(0)
+      expect(bufferedClient.streamHandlers.has(7)).toBe(false)
       expect(bufferedClient.streamBuffers.has(7)).toBe(false)
       expect(terminalText(detachedTerminal)).not.toContain('unmounted-replay')
       expect(terminalText(rejectedPane.term())).toBe(rejectedTextBeforeAddon)
