@@ -74,6 +74,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const streams = new Map<number, (bytes: Uint8Array) => void>()
   const streamLagHandlers = new Map<number, () => void>()
   const opened: { id: string; input: unknown }[] = []
+  const executed: { id: string; args?: unknown }[] = []
   const toasts: { title: string; body: string }[] = []
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   const state = { confirmAnswer: true }
@@ -102,7 +103,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
       if (!(name in settings)) throw new Error(`no setting ${name}`)
       return settings[name]
     },
-    async executeCommand() {},
+    async executeCommand(id, args) {
+      executed.push({ id, args })
+    },
     createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
     consumeCommandDrag() { return null },
     cancelCommandDrag() {},
@@ -146,6 +149,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     calls,
     provided,
     opened,
+    executed,
     toasts,
     confirms,
     streams,
