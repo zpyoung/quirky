@@ -534,6 +534,7 @@ export class BrowserRuntime {
     if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
     if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
     const expectedGeneration = this.generation(page.browserPageId)
+    const expectedBinding = options?.spansNavigation ? profile.epoch?.pages.get(page.browserPageId) : undefined
     const controller = new AbortController()
     const controllers = profile.controllers.get(page.browserPageId) ?? new Set<AbortController>()
     controllers.add(controller)
@@ -546,6 +547,9 @@ export class BrowserRuntime {
         try { current = this.store.getPage(page.browserPageId) } catch { throw fault('browser_tab_closed', 'the managed page was closed before the operation ran') }
         if (current.profileId !== page.profileId) throw fault('browser_tab_changed', 'the managed page changed browser profiles before the operation ran')
         if (!options?.spansNavigation && this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        if (expectedBinding && (profile.epoch?.invalid || profile.epoch?.pages.get(page.browserPageId) !== expectedBinding)) {
+          throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        }
         const epoch = await this.ensureEpoch(profile, page.profileId)
         const binding = await this.ensureBinding(epoch, current, this.generation(page.browserPageId))
         if (epoch.activeTabId !== binding.tabId) {

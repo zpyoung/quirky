@@ -282,6 +282,8 @@ test('wait refusals retain timeout, close, profile, lost-browser, and snapshot g
 
     const lostPage = (await newPage(h, baseUrl)).browserPageId
     const { outcome: waitOnLostBrowser } = await startPendingWait(h, lostPage, startedWaits)
+    const queuedOnLostBrowser = settle(call(h, 'wait', { page: lostPage, timeout: 1_500 }))
+    await call(h, 'tabShow', { page: lostPage })
     expect(crashHelper).toBeDefined()
     if (!crashHelper) throw new Error('browser test control was not provided')
     await crashHelper('default')
@@ -291,6 +293,7 @@ test('wait refusals retain timeout, close, profile, lost-browser, and snapshot g
       const message = lostOutcome.reason instanceof Error ? lostOutcome.reason.message : String(lostOutcome.reason)
       expect(message).not.toBe('browser_timeout: wait timed out')
     }
+    expect(rejectionMessage(await queuedOnLostBrowser)).toMatch(/^browser_tab_changed:/)
 
     const stalePage = (await newPage(h, baseUrl)).browserPageId
     const staleSnapshot = await call(h, 'snapshot', { page: stalePage }) as { refs: Array<{ ref: string }> }
