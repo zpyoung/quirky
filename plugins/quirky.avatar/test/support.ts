@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PluginContext, PluginNotification, PluginStore, QuirkyEvent, StoreMigration } from '@quirky/protocol'
+import type { PluginContext, PluginNotification, PluginStore, ProcessRunner, QuirkyEvent, RunOptions, RunResult, StoreMigration } from '@quirky/protocol'
 import { avatarMigrations } from '../store-migrations'
 import { createApp } from '../src/app'
 import type { AvatarApp, Mandate } from '../src/contracts'
@@ -43,7 +43,7 @@ export type TestApp = {
   settings: Record<string, unknown>
   /** Stores `context.openStore` handed out, oldest first. */
   openedStores: PluginStore[]
-  /** What `context.provide` received, by contribution id. */
+  processRuns: { argv: string[]; options?: RunOptions }[]
   provided: Map<string, unknown>
   /** Pushes an event to every `context.subscribe` listener. */
   deliver(event: QuirkyEvent): Promise<void>
@@ -121,11 +121,30 @@ function fakeHostPower(): FakeHostPower {
  * An `AvatarApp` over an in-memory store and a fake plugin context. The context records what the
  * plugin provides, emits, notifies and calls, and answers calls from `fakeCalls`.
  */
-export function makeTestApp(overrides: { fakeCalls?: FakeCalls; settings?: Record<string, unknown> } = {}): TestApp {
+export function makeTestApp(overrides: {
+  fakeCalls?: FakeCalls
+  settings?: Record<string, unknown>
+  runProcess?: (argv: readonly string[], options?: RunOptions) => Promise<RunResult> | RunResult
+} = {}): TestApp {
   const fakeCalls: FakeCalls = { ...overrides.fakeCalls }
   const settings: Record<string, unknown> = { ...overrides.settings }
   const calls: TestApp['calls'] = []
   const emitted: TestApp['emitted'] = []
+  const processRuns: TestApp['processRuns'] = []
+  const process: ProcessRunner = {
+    run: (argv, options) => {
+      processRuns.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
+      const result = overrides.runProcess?.(argv, options) ?? {
+        stdout: new Uint8Array(),
+        stdoutText: '',
+        stderr: '',
+        exitCode: 0,
+        signal: null,
+        durationMs: 0
+      }
+      return Promise.resolve(result)
+    }
+  }
   const notifications: PluginNotification[] = []
   const provided = new Map<string, unknown>()
   const openedStores: PluginStore[] = []
@@ -141,6 +160,7 @@ export function makeTestApp(overrides: { fakeCalls?: FakeCalls; settings?: Recor
     home,
     pty,
     hostPower,
+    process,
     log() {},
     provide: (id: string, implementation: unknown) => void provided.set(id, implementation),
     emit(event: string, data?: unknown) {
@@ -178,6 +198,7 @@ export function makeTestApp(overrides: { fakeCalls?: FakeCalls; settings?: Recor
     settings,
     openedStores,
     provided,
+    processRuns,
     deliver: async (event) => {
       for (const listener of [...listeners]) await listener(event)
     },

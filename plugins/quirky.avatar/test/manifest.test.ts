@@ -26,7 +26,7 @@ describe('quirky.avatar as a built-in plugin', () => {
     const client = await (await startAvatar()).connect('cli')
     const plugins = (await client.call('plugin.list', {})) as PluginInfo[]
     const info = plugins.find((plugin) => plugin.id === 'quirky.avatar')!
-    expect(info).toMatchObject({ source: 'builtin', activation: 'startup', apiVersion: '1.3.0', dependencies: DEPENDENCIES })
+    expect(info).toMatchObject({ source: 'builtin', activation: 'startup', apiVersion: '1.4.0', dependencies: DEPENDENCIES })
     expect(info.diagnostics.filter((diagnostic) => diagnostic.level === 'error')).toEqual([])
     expect(info.state).toBe('active')
   })
