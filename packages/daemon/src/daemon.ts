@@ -25,6 +25,7 @@ import { createRpcHandler } from './rpc-handler'
 import { startServer } from './server'
 import { startSocketServer } from './socket-server'
 import { Core } from './service'
+import { describeSqliteRecovery } from './sqlite'
 import { Store } from './store'
 import { migrateV1Settings } from './v1-settings'
 import { HostPowerService } from './host-power'
@@ -156,7 +157,9 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   const hookToken = identity.hookToken ?? randomBytes(24).toString('hex')
   const listenSocketPath = options.socketPath ?? socketPath(home, 'quirkyd.sock')
 
-  const store = new Store(join(home, 'quirky.db'))
+  const store = new Store(join(home, 'quirky.db'), {
+    onRecover: (recovery) => log(describeSqliteRecovery(recovery))
+  })
   migrateV1Settings(store, log)
   const pty = new PtyClient({
     home,
