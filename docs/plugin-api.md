@@ -59,6 +59,8 @@ every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-
 and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
 listeners act on the states in between.
 
+"quirky.tasks/changed" coalesces with one key for the daemon, and Tasks clients apply the result of their own actions rather than waiting for an event.
+
 `quirky.reviews/changed` carries a worktree tag for updates confined to one Checks entry and its
 Checks dialog. Shared updates and evictions remain untagged. It is not coalesced because draft
 fields consume daemon echoes.
