@@ -50,6 +50,26 @@ pays for that split and has learned its protocol (`src/main/daemon/`, protocol v
 the split and drops Orca's other copies of terminal state (see [Terminal history](#terminal-history)).
 The PTY host's protocol is small and versioned so a new `quirkyd` can adopt an old PTY host.
 
+Every PTY `hello` has a 5 s deadline, shortened when the connection budget is smaller. If the
+host is unavailable, the daemon logs the failure and still starts its API. Shutdown gives plugins
+5 s together before continuing cleanup; an 8 s process watchdog kills registered children and
+exits if shutdown is still stuck. Repeated stop signals do not interrupt that cleanup.
+
+Daemon replacement waits for the old pid to disappear, not just for `/health` to go quiet. It
+sends SIGKILL after 10 s and allows another 2 s for exit. `quirky daemon restart` also bounds its
+connection, handshake and stop request together at 5 s, closes its link before signalling, and
+reports whether the old process stopped cleanly, was terminated, was killed, or was not running.
+
+The daemon sends its supported protocol range in `hello`; the host chooses the highest version
+both speak. A host built before negotiation is adopted with an exact-version hello when its
+version is in range. A host below the daemon's minimum is shut down and replaced; an incompatible
+newer host is refused without starting another one.
+
+Each daemon and PTY host holds its own kernel lock on the home until it exits. A slow or paused
+holder keeps ownership. During an upgrade from a build without these locks, an accepting PTY
+socket or a live pid in the old pid file also keeps the home. The only live-pid exception is a
+matching last-holder record from the now-free kernel lock, which proves that pid has been reused.
+
 Orca by comparison runs Electron main (runtime, RPC, a second headless emulator per PTY), the
 terminal daemon, several renderers, one Chromium process per browser tab, and forked helpers for
 plugins, vault scanning, file watching and computer use
@@ -79,6 +99,12 @@ Calls are JSON-RPC 2.0. Subscriptions are calls that return a stream id, and eve
 as notifications. Terminal output travels in binary frames (`[kind u8][stream u32][len u32][bytes]`,
 the same shape as Orca's `binary-v1` in `src/main/daemon/daemon-stream-binary-framing.ts`), so bytes
 are never JSON-encoded. `quirkyd` relays PTY frames without parsing them.
+
+The window host's refresh reads and the shell's attention reads have a 30 s deadline. A failed
+refresh releases the queue so the next refresh can run; it does not reconnect or cancel daemon
+work. Mutations and plugin UI calls keep their own timing contracts. The attention projection
+applies valid session change/removal events directly after its first successful load; malformed
+events or events during a session-list read trigger a fresh list read instead.
 
 ### Method groups
 

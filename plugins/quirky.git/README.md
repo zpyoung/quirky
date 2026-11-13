@@ -10,6 +10,8 @@ Read-only git calls default to a 30-second deadline; writes, including hooks, de
 
 Every git child disables fsmonitor and detached automatic maintenance through environment overrides, preserving caller-supplied `GIT_CONFIG_*` entries. Child process groups are stopped on exit, timeout, abort, or an early end to a streamed listing.
 
+Mutations are never retried after a post-exit pipe stall: their exit status and already-drained stdout and stderr are retained. Read-only commands retry at most three times within the same deadline.
+
 ## Commit messages
 
 With staged changes and an empty commit message, the sparkle button's tooltip and accessible name both read “Generate commit message with AI” when an agent is available. Other states explain why generation is unavailable or direct you to the AI settings.

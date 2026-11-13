@@ -3,7 +3,6 @@ import { resolve } from 'node:path'
 import {
   createProcessRunner,
   DEFAULT_MAX_OUTPUT_BYTES,
-  ProcessRunnerDisposedError,
   ProcessStalledError
 } from '@quirky/process'
 import type { OwnedProcessRunner, SpawnExit, SpawnedProcess } from '@quirky/process'
@@ -121,16 +120,20 @@ export async function readChunk(reader: ReadableStreamDefaultReader<Uint8Array>,
   }
 }
 
-/** All the bytes of a git pipe. */
+/** All the bytes of a git pipe, rejecting an unfinished stream after the leader exits. */
 async function drain(stream: ReadableStream<Uint8Array>, exited: Promise<unknown>, stallMs: number): Promise<Uint8Array> {
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
-  for (;;) {
-    const { done, value } = await readChunk(reader, exited, stallMs)
-    if (done) break
-    chunks.push(value)
-    total += value.byteLength
+  try {
+    for (;;) {
+      const { done, value } = await readChunk(reader, exited, stallMs)
+      if (done) break
+      chunks.push(value)
+      total += value.byteLength
+    }
+  } finally {
+    reader.releaseLock()
   }
   const bytes = new Uint8Array(total)
   let at = 0
@@ -237,8 +240,10 @@ function timedOutResult(): GitResult {
 
 
 /**
- * Runs `git` through the shared process runner. Read-only commands may be retried after a stalled
- * pipe; each attempt and scheduler wait shares the deadline measured from this call's entry.
+ * Runs `git` through the shared process runner; never throws on a non-zero exit. Each attempt and
+ * scheduler wait shares the deadline measured from this call's entry. Read-only runs retry
+ * post-exit output stalls, failing with `GitError` after three attempts. Mutations never retry:
+ * they preserve the child's exit status and bytes already drained if its output stalls.
  */
 export async function runGit(cwd: string, args: string[], options: RunGitOptions = {}): Promise<GitResult> {
   const timeoutMs = options.timeoutMs ?? (options.readOnly ? DEFAULT_GIT_READ_TIMEOUT_MS : DEFAULT_GIT_WRITE_TIMEOUT_MS)
@@ -315,9 +320,12 @@ async function runGitOnce(
             rerunnable: false
           })
         } catch (error) {
-          if (error instanceof ProcessStalledError) throw new PipeStalledError(true)
-          if (error instanceof ProcessRunnerDisposedError) throw failedToRunGit(error)
-          throw failedToRunGit(error)
+          if (error instanceof ProcessStalledError) {
+            if (options.readOnly || !error.partialResult) throw new PipeStalledError(true)
+            result = error.partialResult
+          } else {
+            throw failedToRunGit(error)
+          }
         }
 
         if (result.spawnError !== undefined) throw failedToRunGit(result.spawnError.message)
@@ -439,7 +447,7 @@ export async function streamNullRecords(
   }
 }
 
-/** Like `runGit` but throws `GitError` on a non-zero exit; returns stdout as text. */
+/** Like `runGit`, including partial output on mutation pipe stalls; throws `GitError` on nonzero exit, otherwise returns stdout text. */
 export async function git(cwd: string, args: string[], options: RunGitOptions = {}): Promise<string> {
   const r = await runGit(cwd, args, options)
   const timeoutMs = options.timeoutMs ?? (options.readOnly ? DEFAULT_GIT_READ_TIMEOUT_MS : DEFAULT_GIT_WRITE_TIMEOUT_MS)

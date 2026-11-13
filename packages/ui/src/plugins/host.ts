@@ -1,4 +1,5 @@
 import { nativeBrowserCapabilityForWindow } from '../native-browser'
+import { UI_READ_TIMEOUT_MS } from '../connection'
 import {
   pluginApiCompatibilityError,
   DEFAULT_THEME,
@@ -6,6 +7,7 @@ import {
   chordFromKeyEvent,
   evaluateWhen,
   whenMentions,
+  type CallOptions,
   type QuirkyEvent,
   type SettingInfo,
   type ToastKind,
@@ -30,7 +32,7 @@ import type { DesktopWindowRoute } from '../desktop-bridge'
 
 /** What the host needs from its surroundings; the React shell wires these to `Connection` and the browser. */
 export type HostDeps = {
-  call(method: string, params: Record<string, unknown>): Promise<unknown>
+  call(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown>
   onEvent(listener: (event: QuirkyEvent) => void): () => void
   importModule(url: string): Promise<unknown>
   /** Binary terminal frames for stream `streamId`; the returned function unsubscribes. */
@@ -502,12 +504,12 @@ export class WindowPluginHost {
       // A layout snapshot and its reports are for this exact live UI connection.
       const connId = this.windowConnId ?? await this.resolveWindowConnId()
       const layoutVersion = this.layoutEventVersion
-      const layout = (this.deps.call('ui.window.state', { connId }) as Promise<UiState>).then((state) => {
+      const layout = (this.deps.call('ui.window.state', { connId }, { timeoutMs: UI_READ_TIMEOUT_MS }) as Promise<UiState>).then((state) => {
         if (!this.stopped && layoutVersion === this.layoutEventVersion) this.setLayout(state.layout)
       })
       const [fetchedModel, fetchedSettings] = await Promise.all([
-        this.deps.call('ui.contributions', {}) as Promise<UiModel>,
-        this.deps.call('setting.list', {}) as Promise<SettingInfo[]>,
+        this.deps.call('ui.contributions', {}, { timeoutMs: UI_READ_TIMEOUT_MS }) as Promise<UiModel>,
+        this.deps.call('setting.list', {}, { timeoutMs: UI_READ_TIMEOUT_MS }) as Promise<SettingInfo[]>,
         layout
       ])
       model = fetchedModel
@@ -1156,7 +1158,7 @@ export class WindowPluginHost {
     this.deps.call(method, params).catch((error) => this.deps.log(`${method} failed: ${messageOf(error)}`))
   }
   private async resolveWindowConnId(): Promise<number> {
-    const route = await this.deps.call('ui.window.self', {}) as WindowRoute
+    const route = await this.deps.call('ui.window.self', {}, { timeoutMs: UI_READ_TIMEOUT_MS }) as WindowRoute
     if (!Number.isSafeInteger(route.connId) || route.connId < 1) {
       throw new Error('the daemon did not identify this UI connection')
     }

@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { daemonEntryHash, isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { startDaemon } from '../src/daemon'
+import { startFakePtyHost } from './fixtures/fake-pty-host'
 import { makeTempHome, waitFor } from './helpers'
 import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
 
@@ -111,6 +112,39 @@ describe('pty host startup', () => {
     expect((await client.call('status.get', {})).ptyHost.alive).toBe(false)
     client.close()
   })
+
+  test('still starts when the host accepts but never answers hello', async () => {
+    const { home, scope } = scopedHome()
+    const host = startFakePtyHost(home, { silentHello: true })
+    cleanups.push(() => host.stop())
+    const hostEntry = join(home, 'exit-pty-host.ts')
+    writeFileSync(hostEntry, 'process.exit(0)\n')
+    const logs: string[] = []
+    const started = Date.now()
+    const daemon = await withScopeToken(scope, () =>
+      startDaemon({
+        home,
+        port: 0,
+        builtinPluginsDir: null,
+        notifier: () => {},
+        uiDir: '/none',
+        ptyHostEntry: hostEntry,
+        ptyConnectTimeoutMs: 300,
+        log: (message) => logs.push(message)
+      })
+    )
+    cleanups.push(() => daemon.stop())
+
+    expect(Date.now() - started).toBeLessThan(5000)
+    const response = await fetch(`http://127.0.0.1:${daemon.port}/health`)
+    expect(response.status).toBe(200)
+    expect(
+      logs.some((message) =>
+        message.startsWith('pty host unavailable at startup: quirky-pty did not answer within 300ms')
+      )
+    ).toBe(true)
+  })
+
 })
 
 describe('single instance per home', () => {
