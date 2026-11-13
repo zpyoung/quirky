@@ -459,7 +459,8 @@ export class KernelSession {
     if (this.#deliveryInvalidated || this.#status === 'stopping' || this.#status === 'stopped' || this.#status === 'missing-ipykernel') return
     const stdoutLoop = this.#stdoutLoop ?? Promise.resolve()
     await Promise.race([stdoutLoop, delay(this.#exitDrainMs)])
-    if (this.#deliveryInvalidated || this.#status === 'stopping' || this.#status === 'stopped' || this.#status === 'missing-ipykernel') return
+    const status = this.status
+    if (this.#deliveryInvalidated || status === 'stopping' || status === 'stopped' || status === 'missing-ipykernel') return
     this.#markDead(`kernel bridge exited${exit.exitCode === null ? '' : ` with code ${exit.exitCode}`}${exit.signal ? ` (${exit.signal})` : ''}`)
   }
 }
