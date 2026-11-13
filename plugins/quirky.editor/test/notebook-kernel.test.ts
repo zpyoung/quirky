@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import { setImmediate as nextTurn } from 'node:timers/promises'
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -275,6 +276,37 @@ async function startHand(handle: HandMade, timing?: { shutdownGraceMs?: number; 
   expect((await started).status).toBe('ready')
   return session
 }
+
+test('21: bridge exit waits for a held frame callback and its buffered done frame', async () => {
+  const callback = deferred<void>()
+  const called = deferred<void>()
+  const hand = handMade({
+    write: async () => {
+      hand.push('{"type":"stream","content":{"text":"held"}}\n{"type":"done","status":"ok","execution_count":7}\n')
+      return true
+    }
+  })
+  const session = await startHand(hand, { exitDrainMs: 1000 })
+  try {
+    let settled = false
+    const result = session.execute('held', () => {
+      called.resolve()
+      return callback.promise
+    }).then((value) => {
+      settled = true
+      return value
+    })
+    await called.promise
+    hand.exit({ exitCode: 0 })
+    await nextTurn()
+    expect(settled).toBe(false)
+    callback.resolve()
+    expect(await result).toMatchObject({ status: 'ok', executionCount: 7 })
+  } finally {
+    callback.resolve()
+    await session.shutdown()
+  }
+})
 
 for (const callbackOutcome of ['resolve', 'reject'] as const) {
   test(`23a: shutdown drops buffered frames after a late callback ${callbackOutcome}`, async () => {
