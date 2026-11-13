@@ -135,4 +135,18 @@ describe('UnansweredHandlers', () => {
     second()
     expect(activeWarnings.get(plugin)?.has(warning)).toBe(false)
   })
+
+  test('clears bound warnings from every provider after an override changes ownership', () => {
+    const { handlers, activeWarnings, added, removed } = setup()
+    const id = 'method:acme.tools/read'
+    const releases = Array.from({ length: 4 }, () => handlers.add(id, 'acme.tools'))
+    expect(handlers.blocked(id, 'acme.override')).toBe(true)
+    expect(handlers.blocked(id, 'acme.override')).toBe(true)
+    expect(activeWarnings.get('acme.override')?.size).toBe(1)
+    releases[0]!()
+    expect(handlers.count(id)).toBe(3)
+    expect(activeWarnings.get('acme.tools')?.size).toBe(0)
+    expect(activeWarnings.get('acme.override')?.size).toBe(0)
+    expect(removed).toEqual(added)
+  })
 })

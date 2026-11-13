@@ -15,6 +15,7 @@ function boundWarning(contributionId: string): string {
 export class UnansweredHandlers {
   private readonly counts = new Map<string, number>()
   private readonly warningReferences = new Map<string, Map<string, number>>()
+  private readonly boundRecipients = new Map<string, Set<string>>()
 
   constructor(private readonly options?: UnansweredOptions) {}
 
@@ -25,7 +26,9 @@ export class UnansweredHandlers {
   /** True at the bound, and then makes sure the plugin carries the bound warning. */
   blocked(contributionId: string, pluginId: string): boolean {
     if (this.count(contributionId) < MAX_UNANSWERED_HANDLERS) return false
-    this.options?.warn(pluginId, boundWarning(contributionId))
+    const actions: WarningAction[] = []
+    this.ensureBoundWarning(contributionId, pluginId, actions)
+    this.applyWarningActions(actions)
     return true
   }
 
@@ -37,8 +40,8 @@ export class UnansweredHandlers {
 
     const actions: WarningAction[] = []
     if (warning !== undefined) this.adjustWarning(pluginId, warning, 1, actions)
-    if (previous < MAX_UNANSWERED_HANDLERS && current >= MAX_UNANSWERED_HANDLERS) {
-      this.adjustWarning(pluginId, boundWarning(contributionId), 1, actions)
+    if (current >= MAX_UNANSWERED_HANDLERS) {
+      this.ensureBoundWarning(contributionId, pluginId, actions)
     }
     this.applyWarningActions(actions)
 
@@ -55,9 +58,27 @@ export class UnansweredHandlers {
       const releaseActions: WarningAction[] = []
       if (warning !== undefined) this.adjustWarning(pluginId, warning, -1, releaseActions)
       if (previousCount >= MAX_UNANSWERED_HANDLERS && currentCount < MAX_UNANSWERED_HANDLERS) {
-        this.adjustWarning(pluginId, boundWarning(contributionId), -1, releaseActions)
+        const recipients = this.boundRecipients.get(contributionId)
+        this.boundRecipients.delete(contributionId)
+        for (const recipient of recipients ?? []) {
+          this.adjustWarning(recipient, boundWarning(contributionId), -1, releaseActions)
+        }
       }
       this.applyWarningActions(releaseActions)
+    }
+  }
+
+  private ensureBoundWarning(contributionId: string, pluginId: string, actions: WarningAction[]): void {
+    let recipients = this.boundRecipients.get(contributionId)
+    if (!recipients) {
+      recipients = new Set()
+      this.boundRecipients.set(contributionId, recipients)
+    }
+    if (recipients.has(pluginId)) {
+      actions.push({ kind: 'warn', pluginId, message: boundWarning(contributionId) })
+    } else {
+      recipients.add(pluginId)
+      this.adjustWarning(pluginId, boundWarning(contributionId), 1, actions)
     }
   }
 
