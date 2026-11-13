@@ -831,6 +831,11 @@
             "unread": {
               "type": "boolean"
             },
+            "unreadSource": {
+              "type": "string",
+              "enum": ["notifications"],
+              "description": "Transient attribution for notification-generated unread writes; requires unread."
+            },
             "parent": {
               "type": "string",
               "description": "A worktree selector for the workspace to nest under."
@@ -3215,6 +3220,11 @@
             "unread": {
               "type": "boolean",
               "description": "Present only when the change was a set that asked for unread; the value it asked for, even when the stored value did not change."
+            },
+            "unreadSource": {
+              "type": "string",
+              "enum": ["notifications"],
+              "description": "Present only when a notification-generated set supplied unreadSource."
             }
           },
           "required": [

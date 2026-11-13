@@ -123,23 +123,82 @@ describe('SC-40: display name, note, status, pin and unread are set and listed',
   })
 })
 
-describe('the changed event carries unread only for a set that asked for it', () => {
-  test('set with unread emits it even when the value is unchanged; every other emitter omits it', async () => {
+describe('worktree unread event attribution', () => {
+  test('source is event-only, requires a boolean unread operation, and is validated before metadata changes', async () => {
     const { client, repoDir, repo, t } = await start()
     addWorktrees(repoDir, 'fix-login')
+    const worktree = (await listWorktrees(client, { repo: repo.id })).find((item) => item.name === 'fix-login')!
+    // Drain the production 250 ms COALESCE_INTERVAL_MS window before event-count baselines.
+    await Bun.sleep(300)
     const watcher = await t.h.connectWithEvents('cli')
-    const changes = () => watcher.events.filter((e) => e.type === 'quirky.worktree/changed').map((e) => (e as unknown as { data: { repoId: string; unread?: boolean } }).data)
-    const next = async (action: () => Promise<unknown>) => {
+    type ChangedData = { repoId: string; worktreeId: string; unread?: boolean; unreadSource?: string }
+    const changes = () => watcher.events
+      .filter((event) => event.type === 'quirky.worktree/changed')
+      .map((event) => event.data as ChangedData)
+    const next = async <T>(action: () => Promise<T>) => {
       const before = changes().length
-      await action()
-      return (await waitFor(() => (changes().length > before ? changes().slice(before) : undefined)))[0]!
+      const result = await action()
+      const events = await waitFor(() => {
+        const current = changes()
+        return current.length > before ? current.slice(before) : undefined
+      })
+      return { event: events[0]!, result }
     }
+    const set = (params: Record<string, unknown>) =>
+      call(client, 'quirky.worktree/set', { worktree: worktree.id, ...params }) as Promise<Worktree>
 
-    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', pinned: true }))).not.toHaveProperty('unread')
-    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', unread: true }))).toMatchObject({ repoId: repo.id, unread: true })
-    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', unread: true }))).toMatchObject({ unread: true })
-    expect(await next(() => call(client, 'quirky.worktree/set', { worktree: 'fix-login', unread: false }))).toMatchObject({ unread: false })
-    expect(await next(() => createWt(client, { repo: repo.id, name: 'second' }))).not.toHaveProperty('unread')
+    const { event: firstEvent, result: first } = await next(() =>
+      set({ unread: false, unreadSource: 'notifications' })
+    )
+    expect(first.unread).toBe(false)
+    expect(first).not.toHaveProperty('unreadSource')
+    expect(firstEvent).toEqual({
+      repoId: repo.id,
+      worktreeId: worktree.id,
+      unread: false,
+      unreadSource: 'notifications'
+    })
+
+    const { event: repeatedEvent, result: repeated } = await next(() =>
+      set({ unread: false, unreadSource: 'notifications' })
+    )
+    expect(repeated).not.toHaveProperty('unreadSource')
+    expect(repeatedEvent).toEqual({
+      repoId: repo.id,
+      worktreeId: worktree.id,
+      unread: false,
+      unreadSource: 'notifications'
+    })
+
+    const { event: normalEvent, result: normal } = await next(() => set({ unread: true }))
+    expect(normal).not.toHaveProperty('unreadSource')
+    expect(normalEvent).toEqual({
+      repoId: repo.id,
+      worktreeId: worktree.id,
+      unread: true
+    })
+
+    const { event: metadataEvent, result: metadataOnly } = await next(() => set({ comment: 'kept' }))
+    expect(metadataOnly.unread).toBe(true)
+    expect(metadataOnly).not.toHaveProperty('unreadSource')
+    expect(metadataEvent).toEqual({
+      repoId: repo.id,
+      worktreeId: worktree.id
+    })
+
+    for (const unreadSource of ['user', '', null, 7]) {
+      expect(await failure(set({
+        displayName: 'must not persist',
+        unread: false,
+        unreadSource
+      }))).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    }
+    expect(await failure(set({
+      displayName: 'must not persist',
+      unreadSource: 'notifications'
+    }))).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    const listed = (await listWorktrees(client, { repo: repo.id })).find((item) => item.id === worktree.id)
+    expect(listed).toMatchObject({ displayName: null, comment: 'kept', unread: true })
   })
 })
 
