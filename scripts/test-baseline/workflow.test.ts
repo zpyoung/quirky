@@ -241,6 +241,7 @@ describe('speed evidence', () => {
     expect(jobs.speed!.if).toBeUndefined()
     const commands = runs('speed').join('\n')
     expect(commands).toContain('bun install --frozen-lockfile')
+    expect(commands).toContain('QUIRKY_SPEED_IMAGE_VERSION=')
     expect(commands).toContain('bun node_modules/playwright/cli.js install chromium')
     expect(commands).toContain('bun test scripts/speed/run.e2e.test.ts')
     expect(commands).toContain('bun scripts/speed.ts --out speed --samples 20')

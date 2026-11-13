@@ -177,7 +177,9 @@ jobs:
       - run: bun node_modules/playwright/cli.js install chromium
 
       - name: Isolate speed checks
-        run: echo "QUIRKY_HOME=$(mktemp -d)" >> "$GITHUB_ENV"
+        run: |
+          echo "QUIRKY_HOME=$(mktemp -d)" >> "$GITHUB_ENV"
+          echo "QUIRKY_SPEED_IMAGE_VERSION=${ImageVersion:?runner image version missing}" >> "$GITHUB_ENV"
 
       - name: Check real-daemon smoke
         run: bun test scripts/speed/run.e2e.test.ts
