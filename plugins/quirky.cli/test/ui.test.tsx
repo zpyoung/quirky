@@ -320,3 +320,201 @@ test('pending launcher completion after unmount does not trigger another refresh
   expect(view.calls.filter(({ method }) => method === 'quirky.cli/commandStatus')).toHaveLength(statusReadsBeforeInstall)
   expect(host.childElementCount).toBe(0)
 })
+
+test('shows only the loading notice while the first status read is pending', async () => {
+  const pendingStatus = Promise.withResolvers<Status>()
+  const view = setup({
+    handlers: {
+      'quirky.cli/commandStatus': () => pendingStatus.promise
+    }
+  })
+  const dispose = await view.mount()
+
+  expect([...host.querySelectorAll('.ui-notice-line')].map((notice) => notice.textContent?.trim())).toEqual([
+    'Loading CLI and runtime profile status…'
+  ])
+  expect(host.querySelector('pre')).toBeNull()
+  expect(host.querySelector('[role="alert"]')).toBeNull()
+  expect(host.textContent).not.toContain('No profile launchers are installed.')
+  expect(host.textContent).not.toContain('No paired runtimes are saved.')
+  expect(host.textContent).not.toContain('Refreshing CLI and runtime status…')
+
+  await dispose()
+})
+
+test('shows a retryable inline error for a failed first read', async () => {
+  let attempts = 0
+  const view = setup({
+    handlers: {
+      'quirky.cli/commandStatus': () => {
+        attempts++
+        if (attempts === 1) throw new Error('daemon connection unavailable')
+        return { state: 'missing', path: '/tmp/quirky-cli/quirky', target: null, profileHome: '/tmp/quirky-profile' }
+      }
+    }
+  })
+  const dispose = await view.mount()
+
+  const alert = host.querySelector('[role="alert"]')
+  expect(alert?.className).toBe('ui-inline-error')
+  expect(alert?.textContent).toContain('Could not load CLI status: daemon connection unavailable')
+  expect([...alert!.querySelectorAll('button')].map((candidate) => candidate.textContent?.trim())).toEqual(['Retry status'])
+  expect(host.querySelector('pre')).toBeNull()
+  expect(host.querySelector('.ui-notice-line')).toBeNull()
+  expect(host.textContent).not.toContain('No profile launchers are installed.')
+  expect(host.textContent).not.toContain('No paired runtimes are saved.')
+
+  await click('Retry status')
+  expect(host.querySelector('[role="alert"]')).toBeNull()
+  expect(host.querySelector('pre')?.textContent).toContain('Status: missing')
+  expect(host.textContent).toContain('No profile launchers are installed.')
+  expect(view.calls.filter(({ method }) => method === 'quirky.cli/commandStatus')).toHaveLength(2)
+  await dispose()
+})
+
+test('keeps the loaded status visible when a refresh fails', async () => {
+  const status: Status = { state: 'managed', path: '/tmp/q', target: '/app/cli.mjs', profileHome: '/tmp/p' }
+  let reads = 0
+  const view = setup({
+    status,
+    target: { available: true, executablePath: '/app/quirky', entrypointPath: '/app/cli.mjs' },
+    handlers: {
+      'quirky.cli/commandStatus': () => {
+        reads++
+        if (reads > 1) throw new Error('boom')
+        return status
+      }
+    }
+  })
+  const dispose = await view.mount()
+
+  await click('Reveal command')
+
+  const alert = host.querySelector('[role="alert"]')
+  expect(host.querySelector('pre')?.textContent).toContain('Status: managed')
+  expect(host.textContent).toContain('No profile launchers are installed.')
+  expect(alert?.className).toBe('ui-inline-error')
+  expect(alert?.textContent).toContain('Could not load CLI status: boom')
+  expect([...alert!.querySelectorAll('button')].map((candidate) => candidate.textContent?.trim())).toEqual(['Retry status'])
+  await dispose()
+})
+
+test('shows action errors inline without buttons and clears them on the next action', async () => {
+  let attempts = 0
+  const view = setup({
+    handlers: {
+      'quirky.cli/runtimeAdd': () => {
+        attempts++
+        if (attempts === 1) throw new Error('offer was rejected')
+        return {}
+      }
+    }
+  })
+  const dispose = await view.mount()
+
+  await type(input('Runtime name'), 'Build')
+  await type(input('Pairing offer'), 'owner-cli://x')
+  await click('Save paired runtime')
+
+  const alert = host.querySelector('[role="alert"]')
+  expect(alert?.className).toBe('ui-inline-error')
+  expect(alert?.textContent).toBe('offer was rejected')
+  expect(alert?.querySelectorAll('button')).toHaveLength(0)
+
+  await click('Save paired runtime')
+  expect(host.querySelector('[role="alert"]')).toBeNull()
+  await dispose()
+})
+
+test('shows a live refreshing notice while a post-load status read is pending', async () => {
+  const status: Status = { state: 'managed', path: '/tmp/q', target: '/app/cli.mjs', profileHome: '/tmp/p' }
+  const pendingRefresh = Promise.withResolvers<Status>()
+  let reads = 0
+  const view = setup({
+    status,
+    target: { available: true, executablePath: '/app/quirky', entrypointPath: '/app/cli.mjs' },
+    handlers: {
+      'quirky.cli/commandStatus': () => {
+        reads++
+        return reads === 1 ? status : pendingRefresh.promise
+      }
+    }
+  })
+  const dispose = await view.mount()
+
+  await click('Reveal command')
+
+  expect(host.querySelector('[aria-live="polite"] .ui-notice-line')?.textContent?.trim()).toBe(
+    'Refreshing CLI and runtime status…'
+  )
+  expect(host.querySelector('pre')?.textContent).toContain('Status: managed')
+  expect(button('Reveal command').disabled).toBe(true)
+
+  await act(async () => {
+    pendingRefresh.resolve(status)
+    await pendingRefresh.promise
+    await waitForNextTask()
+  })
+  expect(host.querySelectorAll('.ui-notice-line')).toHaveLength(0)
+  await dispose()
+})
+
+test('submits both settings forms with the expected fields and button types', async () => {
+  const view = setup({
+    target: { available: true, executablePath: '/app/quirky', entrypointPath: '/app/cli.mjs' }
+  })
+  const dispose = await view.mount()
+
+  expect(button('Create profile launcher').type).toBe('submit')
+  expect(button('Save paired runtime').type).toBe('submit')
+  expect(button('Choose profile folder').type).toBe('button')
+
+  await type(input('Profile launcher name'), 'work')
+  const profileForm = input('Profile launcher name').closest('form')
+  if (!profileForm) throw new Error('profile launcher form is missing')
+  await act(async () => {
+    profileForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await waitForNextTask()
+  })
+  expect(view.calls.filter(({ method }) => method === 'quirky.cli/profileLauncherInstall').map(({ params }) => params)).toEqual([
+    {
+      name: 'work',
+      profileHome: '/tmp/quirky-profile',
+      executablePath: '/app/quirky',
+      entrypointPath: '/app/cli.mjs'
+    }
+  ])
+  expect(input('Profile launcher name').value).toBe('')
+
+  await type(input('Runtime name'), 'Build')
+  await type(input('Pairing offer'), 'owner-cli://x')
+  const runtimeForm = input('Runtime name').closest('form')
+  if (!runtimeForm) throw new Error('runtime form is missing')
+  await act(async () => {
+    runtimeForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await waitForNextTask()
+  })
+  expect(view.calls.filter(({ method }) => method === 'quirky.cli/runtimeAdd').map(({ params }) => params)).toEqual([
+    { name: 'Build', pairingCode: 'owner-cli://x' }
+  ])
+  await dispose()
+})
+
+test('choosing a profile folder uses the draft and does not reload status', async () => {
+  const view = setup({
+    handlers: {
+      'desktop.folder.pick': () => ({ cancelled: false, paths: ['/tmp/chosen'] })
+    }
+  })
+  const dispose = await view.mount()
+  const readsBeforePick = view.calls.filter(({ method }) => method === 'quirky.cli/commandStatus').length
+
+  await click('Choose profile folder')
+
+  expect(view.calls.filter(({ method }) => method === 'desktop.folder.pick').map(({ params }) => params)).toEqual([
+    { title: 'Choose profile QUIRKY_HOME', startingFolder: '/tmp/quirky-profile', multiple: false }
+  ])
+  expect(input('Profile QUIRKY_HOME').value).toBe('/tmp/chosen')
+  expect(view.calls.filter(({ method }) => method === 'quirky.cli/commandStatus')).toHaveLength(readsBeforePick)
+  await dispose()
+})
