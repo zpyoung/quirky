@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test'
-import { chromium, type Browser } from 'playwright'
-import { readFileSync, rmSync, mkdtempSync } from 'node:fs'
+import { measureSpeed } from './measure.ts'
+import { existsSync, readFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { main } from '../speed.ts'
 import { chromiumPath } from '../soak/windows.ts'
+import { METRICS, type SpeedPair } from './contracts.ts'
 
 const executable = chromiumPath()
 if (executable === null) console.warn('Skipping speed smoke proof: Playwright Chromium is unavailable')
@@ -18,10 +19,12 @@ function isAlive(pid: number): boolean {
   }
 }
 
-test.skipIf(executable === null)('runs the unqualified real-daemon smoke with ten worktrees and twenty cleaned-up sessions', async () => {
+test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only seeded slowdown and cleans up both worlds', async () => {
   const out = mkdtempSync(join(tmpdir(), 'quirky-speed-smoke-'))
   try {
-    const exitCode = await main(['--out', out, '--smoke'])
+    const repoRoot = resolve(import.meta.dir, '../..')
+    const commit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.toString().trim()
+    const exitCode = await main(['--out', out, '--smoke', '--base-root', repoRoot, '--base-basis', 'parent', '--seed-echo-delay-ms', '1500'])
     expect(exitCode).toBe(0)
     const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as {
       status: string
@@ -50,6 +53,22 @@ test.skipIf(executable === null)('runs the unqualified real-daemon smoke with te
       expect(interval).toBeGreaterThan(0)
     }
     expect(Object.values(report.metrics).map((metric) => metric.samplesMs.length)).toEqual([1, 1, 1, 1, 1])
+    const pair = JSON.parse(readFileSync(join(out, 'pair.json'), 'utf8')) as SpeedPair
+    expect(pair).toMatchObject({ status: 'complete', qualified: false, head: { commit }, base: { commit, basis: 'parent' }, failures: [] })
+    for (const metric of METRICS) {
+      expect(pair.metrics[metric].headSamplesMs).toHaveLength(1)
+      expect(pair.metrics[metric].baseSamplesMs).toHaveLength(1)
+    }
+    for (const metric of ['echo', 'floodEcho'] as const) {
+      expect(pair.metrics[metric].headSamplesMs[0]! - pair.metrics[metric].baseSamplesMs[0]!).toBeGreaterThanOrEqual(500)
+    }
+    const pairedAttempts = readFileSync(join(out, 'pair-samples.jsonl'), 'utf8').trim().split('\n')
+      .filter(Boolean).map(line => JSON.parse(line) as { metric: string; side: string; phase: string; ownedPids?: number[] })
+    for (const metric of METRICS) {
+      for (const side of ['head', 'base']) expect(pairedAttempts.some(row => row.metric === metric && row.side === side)).toBe(true)
+    }
+    expect(pairedAttempts.filter(row => row.metric === 'startup' && row.phase === 'sample')).toHaveLength(2)
+    expect(pairedAttempts.filter(row => row.metric === 'startup' && row.phase === 'warmup')).toHaveLength(0)
 
     const attempts = readFileSync(join(out, 'samples.jsonl'), 'utf8').trim().split('\n')
       .filter(Boolean).map((line) => JSON.parse(line) as { metric?: string; phase?: string; phases?: Record<string, number>; fixture?: { worktrees?: number; sessions?: string[] }; ownedPids?: number[] })
@@ -68,33 +87,22 @@ test.skipIf(executable === null)('runs the unqualified real-daemon smoke with te
     expect(startup).toHaveLength(1)
     expect(startup[0]!.fixture).toMatchObject({ worktrees: 10 })
     expect(new Set(startup[0]!.fixture?.sessions).size).toBe(20)
-    const ownedPids = [...new Set(attempts.flatMap((attempt) => attempt.ownedPids ?? []))]
+    const ownedPids = [...new Set([...attempts, ...pairedAttempts].flatMap((attempt) => attempt.ownedPids ?? []))]
     expect(ownedPids.length).toBeGreaterThan(0)
     expect(ownedPids.every((pid) => Number.isSafeInteger(pid) && pid > 1 && !isAlive(pid))).toBe(true)
   } finally {
     rmSync(out, { recursive: true, force: true })
   }
-}, 300_000)
+}, 450_000)
 
-test.skipIf(executable === null)('keeps the real-daemon smoke complete when every animation frame has the same timestamp', async () => {
+test.skipIf(executable === null)('scenario 10: keeps the solo smoke complete on failed base setup and zero frame intervals', async () => {
   const out = mkdtempSync(join(tmpdir(), 'quirky-speed-zero-frame-pacing-'))
-  const originalConnect = chromium.connect
-  chromium.connect = async (...args) => {
-    const browser: Browser = await Reflect.apply(originalConnect, chromium, args)
-    const originalNewContext = browser.newContext.bind(browser)
-    browser.newContext = async (...contextArgs) => {
-      const context = await originalNewContext(...contextArgs)
-      await context.addInitScript(() => {
-        const requestAnimationFrame = window.requestAnimationFrame
-        window.requestAnimationFrame = (callback) => requestAnimationFrame.call(window, () => callback(1))
-      })
-      return context
-    }
-    return browser
-  }
 
   try {
-    const exitCode = await main(['--out', out, '--smoke'])
+    const exitCode = await main(
+      ['--out', out, '--smoke', '--base-root', import.meta.dir, '--base-basis', 'parent'],
+      options => measureSpeed({ ...options, frameTimestamp: 1 }),
+    )
     expect(exitCode).toBe(0)
     const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as {
       status: string
@@ -106,6 +114,9 @@ test.skipIf(executable === null)('keeps the real-daemon smoke complete when ever
     }
     expect(report).toMatchObject({ status: 'complete', qualified: false, cleanup: 'complete' })
     expect(report.failures).toEqual([])
+    const pair = JSON.parse(readFileSync(join(out, 'pair.json'), 'utf8')) as SpeedPair
+    expect(pair).toMatchObject({ status: 'incomplete', qualified: false })
+    expect(pair.failures[0]?.kind).toBe('pair-setup-failed')
     expect(report.evidence.diagnostics).toContain('diagnostics/frame-pacing.json')
     expect(Object.values(report.metrics).map((metric) => metric.samplesMs.length)).toEqual([1, 1, 1, 1, 1])
 
@@ -144,7 +155,33 @@ test.skipIf(executable === null)('keeps the real-daemon smoke complete when ever
     expect(ownedPids.length).toBeGreaterThan(0)
     expect(ownedPids.every((pid) => Number.isSafeInteger(pid) && pid > 1 && !isAlive(pid))).toBe(true)
   } finally {
-    chromium.connect = originalConnect
     rmSync(out, { recursive: true, force: true })
   }
 }, 300_000)
+
+test('scenario 9: invalid paired options refuse before creating evidence or starting a daemon', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-speed-invalid-'))
+  const write = process.stderr.write
+  let error = ''
+  process.stderr.write = ((chunk: string | Uint8Array) => { error += String(chunk); return true }) as typeof write
+  try {
+    const out = join(root, 'out')
+    const cases = [
+      { args: ['--base-root', root, '--base-basis', 'parent', '--seed-echo-delay-ms', '1500'], reason: '--seed-echo-delay-ms requires --smoke and --base-root' },
+      { args: ['--smoke', '--seed-echo-delay-ms', '1500'], reason: '--seed-echo-delay-ms requires --smoke and --base-root' },
+      { args: ['--smoke', '--base-root', root], reason: '--base-root and --base-basis go together; basis is merge-base or parent' },
+      { args: ['--smoke', '--base-basis', 'parent'], reason: '--base-root and --base-basis go together; basis is merge-base or parent' },
+      { args: ['--smoke', '--base-root', root, '--base-basis', 'tip'], reason: '--base-root and --base-basis go together; basis is merge-base or parent' },
+      { args: ['--smoke', '--base-root', root, '--base-basis', 'parent', '--seed-echo-delay-ms', '2001'], reason: '--seed-echo-delay-ms must be an integer from 1 to 2000' },
+    ]
+    for (const { args, reason } of cases) {
+      error = ''
+      expect(await main(['--out', out, ...args])).toBe(2)
+      expect(error).toContain(reason)
+      expect(existsSync(out)).toBe(false)
+    }
+  } finally {
+    process.stderr.write = write
+    rmSync(root, { recursive: true, force: true })
+  }
+})

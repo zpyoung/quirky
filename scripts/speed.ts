@@ -7,12 +7,13 @@ import { chromiumPath, openWindows, type SoakWindows } from './soak/windows.ts'
 import { startWorld, type SoakWorld } from './soak/world.ts'
 import { prepareSpeedFixture, type SpeedFixture } from './speed/fixtures.ts'
 import { measureSpeed, sanitizeSpeedArtifacts, type SpeedMeasurementResult } from './speed/measure.ts'
-import { BUDGETS, METRICS, type SpeedReport } from './speed/contracts.ts'
-import { createMisses, median, renderSpeed, validateReport } from './speed/report.ts'
+import { BUDGETS, METRICS, PAIR_COUNTS, type PairBasis, type SpeedPair, type SpeedReport } from './speed/contracts.ts'
+import { createMisses, median, renderSpeed, validatePair, validateReport } from './speed/report.ts'
 
-const HELP = 'usage: bun scripts/speed.ts --out <directory> [--samples <integer >= 20> | --smoke]\n       bun scripts/speed.ts --help\n'
+const HELP = 'usage: bun scripts/speed.ts --out <directory> [--samples <integer >= 20> | --smoke] [--base-root <directory> --base-basis merge-base|parent] [--seed-echo-delay-ms <1..2000>]\n       bun scripts/speed.ts --help\n'
 const SETUP_MS = 5 * 60_000
 const RUN_MS = 20 * 60_000
+const PAIRED_RUN_MS = 50 * 60_000
 
 function scrubArtifacts(out: string, redactions: string[]): void {
   sanitizeSpeedArtifacts(out, redactions)
@@ -32,13 +33,19 @@ function scrubArtifacts(out: string, redactions: string[]): void {
 }
 
 /** Measures only disposable local state, and publishes evidence only after owned cleanup settles. */
-export async function main(args: string[]): Promise<number> {
+export async function main(args: string[], measure: typeof measureSpeed = measureSpeed): Promise<number> {
   let out: string
   let count: number
   let smoke: boolean
   let executable: string
+  let baseRoot: string | undefined
+  let baseBasis: PairBasis | undefined
+  let echoDelayMs: number | undefined
   try {
-    const values = parseArgs({ args, strict: true, allowPositionals: false, options: { out: { type: 'string' }, samples: { type: 'string' }, smoke: { type: 'boolean' }, help: { type: 'boolean' } } }).values
+    const values = parseArgs({ args, strict: true, allowPositionals: false, options: {
+      out: { type: 'string' }, samples: { type: 'string' }, smoke: { type: 'boolean' }, help: { type: 'boolean' },
+      'base-root': { type: 'string' }, 'base-basis': { type: 'string' }, 'seed-echo-delay-ms': { type: 'string' },
+    } }).values
     if (values.help) { process.stdout.write(HELP); return 0 }
     if (!values.out?.trim()) throw new Error('--out is required')
     smoke = values.smoke === true
@@ -46,6 +53,19 @@ export async function main(args: string[]): Promise<number> {
     if (values.samples !== undefined && !/^[0-9]+$/.test(values.samples)) throw new Error('--samples must be an integer >= 20')
     count = smoke ? 1 : Number(values.samples ?? '20')
     if (!Number.isSafeInteger(count) || (!smoke && count < 20)) throw new Error('--samples must be an integer >= 20')
+    if ((values['base-root'] !== undefined || values['base-basis'] !== undefined)
+      && (!values['base-root']?.trim() || !['merge-base', 'parent'].includes(values['base-basis'] ?? ''))) {
+      throw new Error('--base-root and --base-basis go together; basis is merge-base or parent')
+    }
+    baseRoot = values['base-root'] ? resolve(values['base-root']) : undefined
+    baseBasis = values['base-basis'] as PairBasis | undefined
+    if (values['seed-echo-delay-ms'] !== undefined) {
+      if (!smoke || !baseRoot) throw new Error('--seed-echo-delay-ms requires --smoke and --base-root')
+      echoDelayMs = Number(values['seed-echo-delay-ms'])
+      if (!/^\d+$/.test(values['seed-echo-delay-ms']) || !Number.isSafeInteger(echoDelayMs) || echoDelayMs < 1 || echoDelayMs > 2000) {
+        throw new Error('--seed-echo-delay-ms must be an integer from 1 to 2000')
+      }
+    }
     const found = chromiumPath()
     if (found === null) throw new Error('Chromium is unavailable; no daemon was started')
     executable = found
@@ -59,6 +79,12 @@ export async function main(args: string[]): Promise<number> {
   const git = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: repoRoot })
   const commit = git.stdout.toString().trim()
   if (git.exitCode !== 0 || !/^[0-9a-f]{40}$/.test(commit)) { process.stderr.write('cannot resolve benchmark commit\n'); return 2 }
+  let baseCommit: string | undefined
+  if (baseRoot) {
+    const baseGit = Bun.spawnSync(['git', '-C', baseRoot, 'rev-parse', 'HEAD'])
+    baseCommit = baseGit.stdout.toString().trim()
+    if (baseGit.exitCode !== 0 || !/^[0-9a-f]{40}$/.test(baseCommit)) { process.stderr.write('cannot resolve base benchmark commit\n'); return 2 }
+  }
   const cpu = cpus()
   if (cpu.length === 0 || !cpu[0]?.model) { process.stderr.write('CPU profile is unavailable\n'); return 2 }
   mkdirSync(out, { recursive: true })
@@ -72,6 +98,9 @@ export async function main(args: string[]): Promise<number> {
   let world: SoakWorld | undefined
   let fixture: SpeedFixture | undefined
   let windows: SoakWindows | undefined
+  let baseWorld: SoakWorld | undefined
+  let baseFixture: SpeedFixture | undefined
+  let baseWindows: SoakWindows | undefined
   let result: SpeedMeasurementResult | undefined
   const redactions: string[] = []
   const failures: SpeedReport['failures'] = []
@@ -87,15 +116,41 @@ export async function main(args: string[]): Promise<number> {
   try {
     world = await startWorld({ out, repoRoot, windows: 1, workers: false, signal: controller.signal })
     redactions.push(world.home, ...Object.entries(world.runtime).flatMap(([key, value]) => /token/i.test(key) && typeof value === 'string' ? [value] : []))
-    fixture = await prepareSpeedFixture(world, { signal: controller.signal })
+    fixture = await prepareSpeedFixture(world, { signal: controller.signal, echoDelayMs })
     windows = await openWindows({ world, count: 1, executable, out, signal: controller.signal, browserArgs: ['--disable-gpu'] })
     const browser = windows.pages[0]?.context().browser()
     if (!browser) throw new Error('Chromium browser is unavailable after setup')
     chromiumVersion = browser.version()
     profile.chromium = chromiumVersion
     clearTimeout(timer)
-    timer = setTimeout(() => controller.abort(new Error('run exceeded twenty-minute deadline')), RUN_MS)
-    result = await measureSpeed({ world, fixture, windows, samples: count, out, signal: controller.signal })
+    timer = setTimeout(() => controller.abort(new Error(baseRoot ? 'run exceeded fifty-minute deadline' : 'run exceeded twenty-minute deadline')), baseRoot ? PAIRED_RUN_MS : RUN_MS)
+    result = await measure({
+      world, fixture, windows, samples: count, out, signal: controller.signal,
+      pair: baseRoot ? {
+        async start(signal) {
+          const setup = new AbortController()
+          const setupTimer = setTimeout(() => setup.abort(new Error('base setup exceeded five-minute deadline')), SETUP_MS)
+          const setupSignal = AbortSignal.any([signal, setup.signal])
+          try {
+            const baseOut = join(out, 'base')
+            baseWorld = await startWorld({ out: baseOut, repoRoot: baseRoot!, windows: 1, workers: false, signal: setupSignal })
+            redactions.push(baseWorld.home, ...Object.entries(baseWorld.runtime).flatMap(([key, value]) => /token/i.test(key) && typeof value === 'string' ? [value] : []))
+            baseFixture = await prepareSpeedFixture(baseWorld, { signal: setupSignal })
+            baseWindows = await openWindows({ world: baseWorld, count: 1, executable, out: baseOut, signal: setupSignal, browserArgs: ['--disable-gpu'] })
+            return { world: baseWorld, fixture: baseFixture, windows: baseWindows }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            if (message.includes('; cleanup failed:')) {
+              cleanup = 'failed'
+              failures.push({ kind: 'cleanup-failed', message: `base-setup: ${message}` })
+            }
+            throw error
+          } finally {
+            clearTimeout(setupTimer)
+          }
+        },
+      } : undefined,
+    })
     failures.push(...result.failures)
     for (const error of result.diagnosticErrors) failures.push({ kind: 'diagnostic-evidence-error', message: error })
     redactions.push(...result.redactions)
@@ -105,6 +160,9 @@ export async function main(args: string[]): Promise<number> {
   } finally {
     clearTimeout(timer)
     for (const [name, stop] of [
+      ['base-fixture', async () => { await baseFixture?.stop() }],
+      ['base-browser', async () => { await baseWindows?.stop() }],
+      ['base-process-scope', async () => { await baseWorld?.stop() }],
       ['fixture', async () => { await fixture?.stop() }],
       ['browser', async () => { await windows?.stop() }],
       ['process-scope', async () => { await world?.stop() }],
@@ -122,7 +180,8 @@ export async function main(args: string[]): Promise<number> {
     rmSync(join(out, 'daemon.log'), { force: true })
     rmSync(join(out, 'ui-build.log'), { force: true })
   }
-  for (const failure of failures) {
+  if (baseWorld) redactions.push(baseWorld.home, ...Object.entries(baseWorld.runtime).flatMap(([key, value]) => /token/i.test(key) && typeof value === 'string' ? [value] : []))
+  for (const failure of [...failures, ...(result?.pair?.failures ?? [])]) {
     for (const secret of redactions) if (secret) failure.message = failure.message.replaceAll(secret, '<redacted>')
     failure.message = failure.message.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 2048)
   }
@@ -153,18 +212,38 @@ export async function main(args: string[]): Promise<number> {
     }
   }
   writeFileSync(join(out, 'samples.jsonl'), (result?.attempts ?? []).map(row => JSON.stringify(row)).join('\n') + '\n')
+  if (baseRoot && baseCommit && baseBasis) {
+    const paired = result?.pair
+    const metrics = Object.fromEntries(METRICS.map(metric => [metric, {
+      headSamplesMs: paired?.samples.head[metric] ?? [], baseSamplesMs: paired?.samples.base[metric] ?? [],
+    }])) as SpeedPair['metrics']
+    const pairFailures = paired?.failures ?? [{ kind: 'pair-interrupted', message: 'solo run did not reach the paired phase' }]
+    const complete = pairFailures.length === 0 && METRICS.every(metric => {
+      const row = metrics[metric]
+      return row.headSamplesMs.length === row.baseSamplesMs.length && row.headSamplesMs.length >= (smoke ? 1 : PAIR_COUNTS[metric])
+    })
+    if (!complete && pairFailures.length === 0) pairFailures.push({ kind: 'pair-measurement-failed', message: 'not every metric produced the requested paired samples' })
+    const pair: SpeedPair = {
+      version: 1, runId: report.runId, createdAt: report.createdAt, status: complete ? 'complete' : 'incomplete',
+      qualified: complete && !smoke, head: { commit }, base: { commit: baseCommit, basis: baseBasis },
+      metrics, failures: pairFailures, evidence: { samples: 'pair-samples.jsonl' },
+    }
+    writeFileSync(join(out, 'pair.json'), JSON.stringify(pair, null, 2) + '\n')
+    writeFileSync(join(out, 'pair-samples.jsonl'), (paired?.attempts ?? []).map(row => JSON.stringify(row)).join('\n') + '\n')
+  }
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n')
   writeFileSync(join(out, 'misses.json'), JSON.stringify(misses, null, 2) + '\n')
   writeFileSync(join(out, 'summary.md'), renderSpeed(report, undefined, misses))
   try {
     scrubArtifacts(out, redactions)
     if (!validateReport(JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')))) throw new Error('written report failed schema validation')
+    if (baseRoot && !validatePair(JSON.parse(readFileSync(join(out, 'pair.json'), 'utf8')))) throw new Error('written pair failed schema validation')
   } catch {
     report.status = 'incomplete'
     report.qualified = false
     report.cleanup = 'failed'
     report.failures = [{ kind: 'evidence-cleanup-failed', message: 'evidence sanitization or report validation failed' }]
-    for (const name of ['daemon.log', 'ui-build.log', 'traces', 'diagnostics', 'samples.jsonl', 'misses.json']) rmSync(join(out, name), { force: true, recursive: true })
+    for (const name of ['daemon.log', 'ui-build.log', 'base', 'traces', 'diagnostics', 'samples.jsonl', 'pair.json', 'pair-samples.jsonl', 'misses.json']) rmSync(join(out, name), { force: true, recursive: true })
     writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n')
     writeFileSync(join(out, 'samples.jsonl'), '')
     writeFileSync(join(out, 'misses.json'), '[]\n')

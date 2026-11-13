@@ -1721,8 +1721,10 @@ async function runPairedSeries(
     }
   }
 
-  await runMetric('startup', pairCounts.startup, (context, phase, sample) =>
-    recordStartupAttempt(context, phase, sample, signal, contextSet))
+  for (let sample = 1; sample <= pairCounts.startup; sample++) {
+    await runSides(pairSides(sample), 'startup', 'sample', sample, (context, phase, index) =>
+      recordStartupAttempt(context, phase, index, signal, contextSet))
+  }
 
   for (const side of ['head', 'base'] as const) {
     await runSide(side, 'echo', 'warmup', 1, async (context) => {
