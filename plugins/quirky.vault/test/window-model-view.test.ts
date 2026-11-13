@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import type { UiPluginContext } from '@quirky/protocol'
 import { DEFAULT_VIEW, VaultWindowModel } from '../src/window/model'
+import type { ViewState } from '../src/types'
 
 type CallRecord = { method: string; params: Record<string, unknown> }
 type PendingCall = { method: string; resolve: (value: unknown) => void; reject: (error: unknown) => void }
@@ -60,7 +61,7 @@ test('view changes ignore old and equal revisions and read newer state in caller
   await settle()
   expect(model.getSnapshot().view).toEqual(DEFAULT_VIEW)
 
-  const legacyAnswer = { ...DEFAULT_VIEW, scope: 'workspace', query: 'legacy answer' }
+  const legacyAnswer = { ...DEFAULT_VIEW, scope: 'workspace', query: 'legacy answer' } satisfies ViewState
   fake.emit({ view: { ...DEFAULT_VIEW, query: 'event body' } })
   fake.takePending('quirky.vault/getView').resolve(legacyAnswer)
   await settle()
@@ -78,8 +79,8 @@ test('view changes ignore old and equal revisions and read newer state in caller
   expect(countReads(fake.calls)).toBe(readsBeforeStaleEvents)
   expect(model.getSnapshot().view).toEqual(ownView)
 
-  const eventView = { ...DEFAULT_VIEW, scope: 'all', selectedId: 'b', revision: 14 }
-  const callerView = { ...DEFAULT_VIEW, scope: 'workspace', selectedId: 'b', revision: 14 }
+  const eventView = { ...DEFAULT_VIEW, scope: 'all', selectedId: 'b', revision: 14 } satisfies ViewState
+  const callerView = { ...DEFAULT_VIEW, scope: 'workspace', selectedId: 'b', revision: 14 } satisfies ViewState
   fake.emit({ view: eventView })
   expect(countReads(fake.calls)).toBe(readsBeforeStaleEvents + 1)
   fake.takePending('quirky.vault/getView').resolve(callerView)
