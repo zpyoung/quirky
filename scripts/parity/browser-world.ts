@@ -835,6 +835,7 @@ export async function startBrowserWorld(options: {
         prepareCaptureFixtureHome: async (_home, preparation) => {
           const browserEnv = createBrowserEnvironment(home, repoRoot)
           browserEnv.QUIRKY_BROWSER_CHROME = browserChrome
+          delete browserEnv.QUIRKY_UI_DIR
           const preparationEnv = preparation.env
           if (!preparationEnv) {
             const failure = new BrowserFailure('startup-failed', 'startWorld did not provide the fixture environment')
