@@ -24,7 +24,8 @@ export type FramePacing = { frames: number; medianIntervalMs: number; p90Interva
 /** Summarizes drawing-frame intervals; rejects missing or invalid pacing evidence. */
 export function summarizeFrameIntervals(intervalsMs: readonly number[]): FramePacing {
   if (intervalsMs.length === 0 || intervalsMs.some(interval => !Number.isFinite(interval) || interval <= 0)) {
-    throw new Error('frame pacing needs positive finite intervals')
+    const raw = JSON.stringify(intervalsMs, (_key, value: unknown) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value)
+    throw new Error(`frame pacing needs positive finite intervals: ${raw}`)
   }
   const sorted = [...intervalsMs].sort((left, right) => left - right)
   const middle = Math.floor(sorted.length / 2)
@@ -211,10 +212,10 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     observers: Set<FrameObserver>
     channel: MessageChannel
     frameId: number | null
-    frameSequence: number
-    frameTime: number | null
+    callbackSequence: number
+    taskPending: boolean
     active: boolean
-    afterCallback(time: number): void
+    afterCallback(): void
     ensureFrame(): void
   }
   const root = globalThis as typeof globalThis & {
@@ -254,39 +255,39 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       observers: new Set(),
       channel,
       frameId: null,
-      frameSequence: 0,
-      frameTime: null,
+      callbackSequence: 0,
+      taskPending: false,
       active: true,
-      afterCallback(time) {
+      afterCallback() {
         if (!created.active) return
-        const firstCallback = created.frameTime !== time
-        if (firstCallback) {
-          created.frameTime = time
-          created.frameSequence++
+        const sequence = ++created.callbackSequence
+        for (const observer of created.observers) observer.afterFrame(sequence)
+        if (!created.taskPending && created.active) {
+          created.taskPending = true
+          created.channel.port2.postMessage(null)
         }
-        for (const observer of created.observers) observer.afterFrame(created.frameSequence)
-        if (firstCallback && created.active) created.channel.port2.postMessage(created.frameSequence)
       },
       ensureFrame() {
         if (!created.active || created.frameId !== null) return
-        created.frameId = created.originalRequestAnimationFrame.call(root, (time) => {
+        created.frameId = created.originalRequestAnimationFrame.call(root, () => {
           created.frameId = null
-          created.afterCallback(time)
+          created.afterCallback()
           created.ensureFrame()
         })
       }
     }
     hook = created
-    channel.port1.onmessage = (event) => {
-      if (!created.active || typeof event.data !== 'number') return
-      for (const observer of created.observers) observer.afterTask(event.data)
+    channel.port1.onmessage = () => {
+      if (!created.active) return
+      created.taskPending = false
+      for (const observer of created.observers) observer.afterTask(created.callbackSequence)
     }
     created.wrappedRequestAnimationFrame = (callback: FrameRequestCallback) => {
       return created.originalRequestAnimationFrame.call(root, (time) => {
         try {
           callback(time)
         } finally {
-          created.afterCallback(time)
+          created.afterCallback()
         }
       })
     }
@@ -1728,13 +1729,18 @@ export async function measureSpeed(options: {
     if (gpuCompositing !== 'disabled_software') {
       throw new Error(`browser is not compositing in software: ${gpuCompositing}`)
     }
-    const framePacing = {
-      version: 1,
-      ...summarizeFrameIntervals(await measureBrowserFrameIntervals(initialPage, signal)),
-      gpuCompositing
+    let intervalsMs: number[] = []
+    let pacing: FramePacing | { frames: number; error: string }
+    try {
+      intervalsMs = await measureBrowserFrameIntervals(initialPage, signal)
+      pacing = summarizeFrameIntervals(intervalsMs)
+    } catch (error) {
+      pacing = { frames: intervalsMs.length, error: errorText(error) }
     }
+    const framePacing = { version: 1, ...pacing, gpuCompositing, intervalsMs }
     mkdirSync(join(out, 'diagnostics'), { recursive: true })
-    writeFileSync(join(out, 'diagnostics', 'frame-pacing.json'), `${JSON.stringify(framePacing, null, 2)}\n`)
+    const pacingJson = JSON.stringify(framePacing, (_key, value: unknown) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
+    writeFileSync(join(out, 'diagnostics', 'frame-pacing.json'), `${pacingJson}\n`)
     diagnostics.push('diagnostics/frame-pacing.json')
     await runMeasuredSeries(context, sampleCount, signal, contexts)
     if (!metricSampleCountsValid(sampleValues, sampleCount)) {

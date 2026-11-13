@@ -164,11 +164,11 @@ function watchObserverSettlement(id: string): () => boolean {
 }
 
 function mutate(): void { for (const observer of [...clock.mutations]) observer() }
-function runFrameCallbacks(): void {
+function runFrameCallbacks(timestamp?: number): void {
   clock.now += 16
   const frames = clock.frames.splice(0)
   for (const frame of frames) {
-    if (!clock.cancelledFrames.has(frame.id)) frame.callback(clock.now)
+    if (!clock.cancelledFrames.has(frame.id)) frame.callback(timestamp ?? clock.now)
     clock.cancelledFrames.delete(frame.id)
   }
 }
@@ -299,6 +299,48 @@ test('switch waits for the next frame and its post-frame task after ordinary-tas
   runPostFrameTask()
   expect(await result).toMatchObject({ startedAt: 10, endedAt: 26, durationMs: 16 })
   expect(oldPane.getClientRects()).toHaveLength(1)
+})
+
+test('switch does not complete on premature sidebar selection while the old terminal remains', async () => {
+  environment()
+  const button = new FakeElement('.worktree-row__main')
+  button.setAttribute('matches', '[data-worktree-id="worktree-b"] .worktree-row__main')
+  button.setAttribute('aria-pressed', 'true')
+  document.elements.set('[data-worktree-id="worktree-b"] .worktree-row__main', button)
+  pane('session-old')
+  const id = 'switch-old-pane'
+  installBrowserObserver({ id, kind: 'switch', targetId: 'worktree-b', sessionId: 'session-b' })
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('click', button)
+  paint()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  expect(document.querySelector('.qt-pane[data-session="session-old"]')).not.toBeNull()
+  document.elements.delete('.qt-pane[data-session="session-old"]')
+  pane('session-b')
+  paint()
+  expect(await result).toMatchObject({ startedAt: 10, endedAt: 42, durationMs: 32 })
+})
+
+test('consecutive frames with equal native timestamps still paint a fresh acknowledgement', async () => {
+  environment()
+  const { rows, input } = pane('session-a')
+  const id = 'echo-repeated-timestamp'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-a', sequence: 5, key: 'b' })
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'b')
+  runFrameCallbacks(0)
+  runPostFrameTask()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  globalThis.requestAnimationFrame(() => { rows.textContent = 'SPEED_ECHO worker-a session-a 5 b' })
+  runFrameCallbacks(0)
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runPostFrameTask()
+  await expect(result).resolves.toMatchObject({ startedAt: 10, endedAt: 42, durationMs: 32 })
 })
 
 test('an acknowledgement in an ordinary task cannot use the previous frame task', async () => {
@@ -622,4 +664,10 @@ test('rejects empty and non-positive or non-finite frame intervals', () => {
   for (const intervals of [[], [0], [-1], [Number.NaN], [Number.POSITIVE_INFINITY]]) {
     expect(() => summarizeFrameIntervals(intervals)).toThrow('frame pacing needs positive finite intervals')
   }
+})
+
+test('invalid pacing errors retain all sixty raw intervals', () => {
+  const intervals = Array<number>(60).fill(16)
+  intervals[17] = 0
+  expect(() => summarizeFrameIntervals(intervals)).toThrow(JSON.stringify(intervals))
 })
