@@ -111,6 +111,12 @@ function home(): string {
   return dir
 }
 
+function exitingHostEntry(dir: string): string {
+  const entry = join(dir, 'exit-pty-host.ts')
+  writeFileSync(entry, 'process.exit(0)\n')
+  return entry
+}
+
 /** A host that answers hello at `version`, then accepts shutdown without ever replying or closing. */
 function startSilentHost(
   dir: string,
@@ -205,6 +211,41 @@ describe('protocol version handling', () => {
     expect(newer.requests.some((r) => r.type === 'shutdown')).toBe(false)
   })
 
+  test('bounds the hello request when a host stays silent', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir, { silentHello: true })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, { hostEntry: exitingHostEntry(dir), connectTimeoutMs: 300 })
+    const started = Date.now()
+
+    await expect(client.connect()).rejects.toThrow(
+      /^quirky-pty did not answer within 300ms: pty request timed out: hello; see .*pty-host\.log$/
+    )
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  test('times out when retiring a host that goes silent after rejecting the current version', async () => {
+    const dir = home()
+    const oldVersion = 1
+    const host = startFakePtyHost(dir, { version: oldVersion, rejectThenSilent: true })
+    cleanups.push(() => host.stop())
+    const logs: string[] = []
+    const client = newClient(dir, {
+      hostEntry: exitingHostEntry(dir),
+      connectTimeoutMs: 300,
+      log: (message) => logs.push(message)
+    })
+    const started = Date.now()
+
+    await expect(client.connect()).rejects.toThrow()
+    expect(Date.now() - started).toBeLessThan(3000)
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(host.requests[1]).toMatchObject({ type: 'hello', version: oldVersion })
+    expect(logs).toContain(
+      `could not retire quirky-pty speaking protocol ${oldVersion}: pty request timed out: hello`
+    )
+  })
+
   test('adopts a newer host that negotiates the daemon protocol', async () => {
     const dir = home()
     const host = startFakePtyHost(dir, { version: PTY_PROTOCOL_VERSION + 1, minVersion: PTY_PROTOCOL_VERSION })
@@ -247,6 +288,32 @@ describe('protocol version handling', () => {
     expect(messages).toContain(
       `adopted quirky-pty speaking protocol ${PTY_PROTOCOL_VERSION - 1}; this quirkyd speaks ${PTY_PROTOCOL_VERSION}`
     )
+  })
+
+  test('bounds hello timeout when adopting an older legacy host', async () => {
+    const dir = home()
+    const hostVersion = PTY_PROTOCOL_VERSION - 1
+    const host = startFakePtyHost(dir, { version: hostVersion, legacyHello: true, rejectThenSilent: true })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, {
+      hostEntry: exitingHostEntry(dir),
+      connectTimeoutMs: 300,
+      protocol: { min: hostVersion, max: PTY_PROTOCOL_VERSION }
+    })
+    const outcome = await settleWithin(client.connect(), 3000)
+
+    expect(outcome.status).toBe('rejected')
+    if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+    expect(outcome.error.message).toContain('pty request timed out: hello')
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(host.requests[0]).toMatchObject({
+      type: 'hello',
+      version: PTY_PROTOCOL_VERSION,
+      minVersion: hostVersion
+    })
+    expect(host.requests[1]).toMatchObject({ type: 'hello', version: hostVersion })
+    expect(host.requests[1]).not.toHaveProperty('minVersion')
+    expect(host.requests.some((request) => request.type === 'shutdown')).toBe(false)
   })
 
   test('adopts an older host that negotiates within the client range', async () => {
@@ -329,7 +396,6 @@ describe('protocol version handling', () => {
     expect(host.requests.filter((request) => request.type === 'hello')).toHaveLength(1)
     expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
   })
-
 })
 
 describe('restartHost', () => {

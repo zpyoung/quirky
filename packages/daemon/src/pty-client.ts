@@ -56,6 +56,12 @@ export type PtyClientOptions = {
 const RETIRE_WAIT_MS = 5000
 const RESTART_WAIT_MS = 15000
 const WRITE_ACCEPTED_TIMEOUT_MS = 30_000
+const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
+const HELLO_TIMEOUT_MS = 5_000
+
+function helloTimeoutMs(connectTimeoutMs?: number): number {
+  return Math.min(HELLO_TIMEOUT_MS, connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS)
+}
 
 type PtyWriteError = Error & { code: PtyWriteErrorCode; acceptedBytes: number | null }
 
@@ -344,7 +350,7 @@ export class PtyClient {
   }
 
   private async establish(): Promise<void> {
-    const timeoutMs = this.options.connectTimeoutMs ?? 15000
+    const timeoutMs = this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS
     const deadline = Date.now() + timeoutMs
     const retiredHostIdentities = new Set<string>()
     let spawned = false
@@ -434,11 +440,11 @@ export class PtyClient {
     const socket = await this.openSocket(deadline)
     try {
       if (this.closing) throw new Error('pty client closed')
-      const hello = (await this.rawRequest('hello', {
-        token,
-        version: this.protocol.max,
-        minVersion: this.protocol.min
-      })) as PtyResults['hello']
+      const hello = (await this.rawRequest(
+        'hello',
+        { token, version: this.protocol.max, minVersion: this.protocol.min },
+        { timeoutMs: helloTimeoutMs(this.options.connectTimeoutMs) }
+      )) as PtyResults['hello']
       if (this.closing) throw new Error('pty client closed')
       if (!Number.isInteger(hello.version) || hello.version < this.protocol.min || hello.version > this.protocol.max) {
         throw new PtyProtocolRefused(
@@ -480,7 +486,11 @@ export class PtyClient {
     const socket = await this.openSocket(deadline)
     try {
       if (this.closing) throw new Error('pty client closed')
-      const hello = (await this.rawRequest('hello', { token, version })) as PtyResults['hello']
+      const hello = (await this.rawRequest(
+        'hello',
+        { token, version },
+        { timeoutMs: helloTimeoutMs(this.options.connectTimeoutMs) }
+      )) as PtyResults['hello']
       if (this.closing) throw new Error('pty client closed')
       if (!Number.isInteger(hello.version) || hello.version < this.protocol.min || hello.version > this.protocol.max) {
         throw new Error(`quirky-pty answered hello with protocol ${hello.version} outside this quirkyd's range`)
@@ -514,7 +524,11 @@ export class PtyClient {
       const socket = await this.openSocket(deadline)
       try {
         if (this.closing) throw new Error('pty client closed')
-        const hello = (await this.rawRequest('hello', { token, version })) as PtyResults['hello']
+        const hello = (await this.rawRequest(
+          'hello',
+          { token, version },
+          { timeoutMs: helloTimeoutMs(this.options.connectTimeoutMs) }
+        )) as PtyResults['hello']
         if (this.closing) throw new Error('pty client closed')
         const identity = JSON.stringify([token, hello.version, hello.pid])
         if (retiredHostIdentities.has(identity)) return
