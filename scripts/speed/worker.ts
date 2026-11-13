@@ -51,7 +51,7 @@ function parseControl(bytes: number[]): Control | null {
   }
 }
 
-async function runWorker(workerId: string): Promise<void> {
+async function runWorker(workerId: string, echoDelayMs: number): Promise<void> {
   const input = process.stdin
   const output = process.stdout
   if (!input.isTTY || typeof input.setRawMode !== 'function') throw new Error('speed worker requires a raw terminal')
@@ -64,6 +64,7 @@ async function runWorker(workerId: string): Promise<void> {
   let floodRunning = false
   let floodTask: Promise<void> | undefined
   let currentFloodRun: FloodRun | undefined
+  let echoQueue: Promise<void> | undefined
   let controlQueue: Promise<void> = Promise.resolve()
   let controlBytes: number[] | undefined
   let discardControl = false
@@ -166,7 +167,17 @@ async function runWorker(workerId: string): Promise<void> {
       if (closing || !sessionId || byte > 0x7f) continue
       sequence++
       const key = String.fromCharCode(byte)
-      void writeMarker(`SPEED_ECHO ${workerId} ${sessionId} ${sequence} ${key}`).catch(() => undefined)
+      const marker = `SPEED_ECHO ${workerId} ${sessionId} ${sequence} ${key}`
+      if (echoDelayMs === 0) {
+        void writeMarker(marker).catch(() => undefined)
+      } else {
+        const deadline = performance.now() + echoDelayMs
+        echoQueue = (echoQueue ?? Promise.resolve()).then(async () => {
+          const remainingMs = deadline - performance.now()
+          if (remainingMs > 0) await Bun.sleep(remainingMs)
+          await writeMarker(marker)
+        }).catch(() => undefined)
+      }
     }
   })
 }
@@ -174,7 +185,19 @@ async function runWorker(workerId: string): Promise<void> {
 if (import.meta.main) {
   const workerId = process.argv[2]
   if (!workerId) throw new Error('speed worker requires a worker ID')
-  void runWorker(workerId).catch((error: unknown) => {
+  const delayFlag = process.argv[3]
+  let echoDelayMs = 0
+  if (delayFlag !== undefined) {
+    const delayArgument = process.argv[4]
+    if (delayFlag !== '--echo-delay-ms' || delayArgument === undefined) {
+      throw new Error('speed worker expects --echo-delay-ms <n> after its worker ID')
+    }
+    echoDelayMs = Number(delayArgument)
+    if (!Number.isFinite(echoDelayMs) || echoDelayMs < 0) {
+      throw new Error('--echo-delay-ms must be a non-negative number')
+    }
+  }
+  void runWorker(workerId, echoDelayMs).catch((error: unknown) => {
     console.error(`speed worker failed: ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1
   })

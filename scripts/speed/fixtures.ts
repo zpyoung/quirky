@@ -59,7 +59,7 @@ export type SpeedFixture = {
 }
 
 type RpcClient = Pick<SoakWorld['control'], 'callAny'>
-type Options = { signal?: AbortSignal; timeoutMs?: number }
+type Options = { signal?: AbortSignal; timeoutMs?: number; echoDelayMs?: number }
 type WorkerRecord = { sessionId: string; workerId: string }
 type FloodActive = { sessionId: string; workerId: string; runId: string }
 
@@ -337,7 +337,10 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
     for (const [index, worktree] of worktrees.entries()) {
       checkAbort(options.signal)
       const workerIds: [string, string] = [randomUUID(), randomUUID()]
-      const command = (workerId: string) => `${shellQuote(process.execPath)} ${shellQuote(workerScript)} ${shellQuote(workerId)}`
+      const echoDelayArgs = index === 0 && options.echoDelayMs !== undefined
+        ? ` ${shellQuote('--echo-delay-ms')} ${shellQuote(String(options.echoDelayMs))}`
+        : ''
+      const command = (workerId: string) => `${shellQuote(process.execPath)} ${shellQuote(workerScript)} ${shellQuote(workerId)}${echoDelayArgs}`
       const opened = record(await callRpc(rpc, 'quirky.terminal/newTab', {
         workspace: worktree.id,
         cwd: worktree.path,
