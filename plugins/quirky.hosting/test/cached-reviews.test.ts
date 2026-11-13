@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { watch } from 'node:fs/promises'
 import { join } from 'node:path'
-import { RpcErrorCode, type PluginContext, type Worktree } from '@quirky/protocol'
+import { RpcErrorCode, type PluginContext, type ProcessRunner, type RunOptions, type RunResult, type Worktree } from '@quirky/protocol'
 import { isRecord } from '../src/pr-data'
 import { createEnv, type HostingEnv } from '../src/env'
 import { createPRLookup, type PRLookup } from '../src/pr-review'
@@ -210,10 +210,24 @@ function cachedWorktree(index: number, repoIndex: number, overrides: Partial<Wor
 
 function cachedReviewFixture(worktrees: Worktree[], failGit = false) {
   const calls: FixtureCall[] = []
-  const execCalls: Array<{ file: 'git'; args: string[] }> = []
+  const processCalls: Array<{ argv: string[]; options?: RunOptions }> = []
   const store = { get: () => undefined, run: () => undefined, all: () => [] }
+  const processRunner: ProcessRunner = {
+    run: async (argv, options): Promise<RunResult> => {
+      processCalls.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
+      return {
+        stdout: new TextEncoder().encode(''),
+        stdoutText: '',
+        stderr: failGit ? 'Git identity unavailable' : '',
+        exitCode: failGit ? 1 : 0,
+        signal: null,
+        durationMs: 0
+      }
+    }
+  }
   const context = {
     pluginId: 'quirky.hosting',
+    process: processRunner,
     openStore: () => store,
     error: (_kind: string, message: string) => new Error(message),
     emit: () => undefined,
@@ -229,15 +243,9 @@ function cachedReviewFixture(worktrees: Worktree[], failGit = false) {
       throw new Error(`Unexpected context call: ${method}`)
     }
   } as unknown as PluginContext
-  const env = createEnv(context, {
-    exec: async (file, args) => {
-      execCalls.push({ file, args: [...args] })
-      if (failGit) throw new Error('Git identity unavailable')
-      return { stdout: '' }
-    }
-  })
+  const env = createEnv(context)
   cachedReviewEnvironments.push(env)
-  return { env, lookup: createPRLookup(env), calls, execCalls }
+  return { env, lookup: createPRLookup(env), calls, processCalls }
 }
 
 function cachedReviewRaceFixture(worktree: Worktree) {
@@ -352,7 +360,7 @@ test('cachedReviews resolves cold batches from one worktree list without Git spa
       stale: false
     })))
     expect(fixture.calls.map(({ method }) => method)).toEqual(['quirky.worktree/list'])
-    expect(fixture.execCalls).toEqual([])
+    expect(fixture.processCalls).toEqual([])
   }
 })
 
@@ -416,7 +424,7 @@ test('cachedReviews reports unverified HEAD fallback failures with the stable id
     error: 'The current local worktree identity could not be verified.'
   })))
   expect(fixture.calls.map(({ method }) => method)).toEqual(['quirky.worktree/list'])
-  expect(fixture.execCalls.map(({ args }) => args.join(' ')).sort()).toEqual([
+  expect(fixture.processCalls.map(({ argv }) => argv.slice(1).join(' ')).sort()).toEqual([
     ...Array.from({ length: worktrees.length }, () => 'rev-parse --verify HEAD'),
     ...Array.from({ length: worktrees.length }, () => 'symbolic-ref --quiet --short HEAD')
   ].sort())
@@ -436,7 +444,7 @@ test('cachedReviews returns folder workspaces without probing Git', async () => 
     review: null,
     stale: true
   }])
-  expect(fixture.execCalls).toEqual([])
+  expect(fixture.processCalls).toEqual([])
 })
 
 test('cachedReviews validates selector batches before lookup and rejects inactive environments', async () => {
@@ -458,7 +466,7 @@ test('cachedReviews validates selector batches before lookup and rejects inactiv
   }
   expect(await fixture.lookup.cachedReviews({ worktrees: [] }, cachedReviewsCaller)).toEqual({ workspaces: [] })
   expect(fixture.calls).toEqual([])
-  expect(fixture.execCalls).toEqual([])
+  expect(fixture.processCalls).toEqual([])
 
   const unavailable = await fixture.lookup.cachedReviews({ worktrees: ['wt_missing'] }, cachedReviewsCaller).then(
     () => undefined,
