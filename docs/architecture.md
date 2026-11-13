@@ -213,6 +213,19 @@ automations. Interactive Claude and Codex sessions stay in terminal panes with t
 structured interactive session needs a chat view, and native chat is on the dropped list. Once
 hidden panes are unmounted, an interactive terminal costs memory only while it's on screen.
 
+### Federated worker reports
+
+Paired hosts queue worker reports durably and wait for their home's result. A relay pass already
+running when a report is queued is not proof of delivery: after that pass settles, the host reads
+the stored result or joins one new pass. Errors from that new pass reach the caller without retry.
+
+When a peer pulls mail, `quirky.orchestration/federationAck` carries the imported page's
+`results`: up to 50 `{ sequence, id, result }` entries. An acknowledgement that advances the
+cursor must cover every newly acknowledged item. The sender stores those results before moving
+the cursor; missing or mismatched entries leave both unchanged. Replayed acknowledgements at or
+below the cursor remain no-ops. Both paired daemons should run the same build; an older peer's
+result-free acknowledgements are refused, while push-side imports still deliver mail.
+
 ## Browser
 
 The embedded browser splits by audience: the human sees a system webview, and agents drive a Chrome

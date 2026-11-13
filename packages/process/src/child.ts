@@ -21,6 +21,8 @@ export type StartedChild = {
   stdin?: ChildInput
   /** Signals the child's whole process group. Never throws; a group that is gone is ignored. */
   killGroup(signal: 'SIGTERM' | 'SIGKILL'): void
+  /** Whether any member of the child's process group is left. A double without it has no group. */
+  groupAlive?(): boolean
 }
 
 /** Starts a group leader with closed, byte-exact or writable stdin and selectable output pipes. */
@@ -34,6 +36,25 @@ export type StartChild = (argv: readonly string[], init: {
   stdout?: 'pipe' | 'ignore'
   stderr?: 'pipe' | 'ignore'
 }) => StartedChild
+
+/** Interval between process-group SIGKILL attempts. */
+export const GROUP_KILL_INTERVAL_MS = 10
+/** Maximum time spent trying to empty a process group after its leader exits. */
+export const GROUP_KILL_BOUND_MS = 1_000
+
+function validGroupPid(pid: number): boolean {
+  return Number.isInteger(pid) && pid > 1
+}
+
+function groupAlive(pid: number): boolean {
+  if (!validGroupPid(pid)) return false
+  try {
+    process.kill(-pid, 0)
+    return true
+  } catch (error) {
+    return (error as { code?: unknown } | null)?.code !== 'ESRCH'
+  }
+}
 
 /** Starts argv as a group leader; propagates spawn errors without registering a child. */
 export const startChild: StartChild = (argv, init) => {
@@ -61,8 +82,28 @@ export const startChild: StartChild = (argv, init) => {
     } : {}),
     exited: proc.exited.then(() => ({ exitCode: proc.exitCode, signal: proc.signalCode ?? null })),
     killGroup(signal) {
+      if (!validGroupPid(proc.pid)) return
       try { process.kill(-proc.pid, signal) } catch {}
-    }
+    },
+    groupAlive: () => groupAlive(proc.pid),
+  }
+}
+
+/** Repeats SIGKILL until the process group is gone or the cleanup bound expires. */
+export async function killGroupUntilGone(child: StartedChild): Promise<boolean> {
+  const startedAt = Date.now()
+  for (;;) {
+    try { child.killGroup('SIGKILL') } catch {}
+    if (!child.groupAlive) return false
+    let alive = true
+    try { alive = child.groupAlive() } catch {}
+    if (!alive) return false
+
+    const remaining = GROUP_KILL_BOUND_MS - (Date.now() - startedAt)
+    if (remaining <= 0) return true
+    const { promise: delay, resolve } = Promise.withResolvers<void>()
+    setTimeout(resolve, Math.min(GROUP_KILL_INTERVAL_MS, remaining))
+    await delay
   }
 }
 

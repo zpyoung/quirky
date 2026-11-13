@@ -9,7 +9,8 @@ export type RunOptions = {
   /**
    * Deadline in milliseconds, after which the process group is stopped. Default 30,000. Once a
    * leader exits the timer stops for that attempt's stall wait and no further rerun starts after
-   * the deadline, so a call ends within about `timeoutMs + killGraceMs + one stall wait`.
+   * the deadline, so a call ends within about `timeoutMs + killGraceMs + one stall wait + one
+   * second of process-group cleanup`.
    */
   timeoutMs?: number
   /** Stops the process group when aborted. */
@@ -46,6 +47,8 @@ export type RunResult = {
   readonly signal: string | null
   /** Present when the runner stopped the command; output is then incomplete. */
   readonly stopped?: RunStopped
+  /** Present when group members remain after the one-second cleanup bound following the leader's exit. */
+  readonly groupSurvived?: true
   /** Present only when bytes were discarded from the captured output. */
   readonly truncated?: { readonly stdout: boolean; readonly stderr: boolean }
   /** Present when the command could not be started. */
@@ -82,14 +85,22 @@ export type SpawnOptions = {
    * read: an unread pipe fills and the child blocks.
    */
   stdout?: 'pipe' | 'ignore'
-  /** `'tail'` (default) keeps the end of stderr for `stderrTail()`; `'ignore'` discards it. */
-  stderr?: 'tail' | 'ignore'
-  /** How many bytes of stderr are kept. Default 16,384. */
+  /** `'tail'` (default) keeps the end of stderr for `stderrTail()`; `'ignore'` discards it. `'pipe'` exposes raw stderr. */
+  stderr?: 'tail' | 'ignore' | 'pipe'
+  /** How many bytes of stderr are kept in tail mode. Default 16,384. */
   stderrTailBytes?: number
   /** Stops the process group when aborted. */
   signal?: AbortSignal
-  /** Time between SIGTERM and SIGKILL when the child is stopped. Default 2,000. */
+  /** Time between SIGTERM and SIGKILL when the child is stopped. Default 2,000 ms. */
   killGraceMs?: number
+  /**
+   * Gives the whole process group the grace period, not only the leader. After a stop request the
+   * remaining members keep the rest of the grace once the leader has exited; when the leader exits
+   * on its own they get SIGTERM and the grace. Piped output stays open until the group has ended,
+   * and a stop asked for during that time is recorded and can shorten the grace. SIGKILL and
+   * disposal end the grace and output immediately, then await bounded group cleanup. Default false.
+   */
+  groupGrace?: boolean
 }
 
 /** Why the runner ended a child: the caller's `stop()`, its deadline, or an abort or disposal. */
@@ -100,11 +111,13 @@ export type SpawnExit = {
   /** Null when the child was killed by a signal or never started. */
   readonly exitCode: number | null
   readonly signal: string | null
-  /** Present when a stop was asked for before the child had exited. */
+  /** The first stop reason; with `groupGrace`, a request during cleanup can set it after the leader exits. */
   readonly stopped?: SpawnStopped
+  /** Present when members of the process group were still there one second after the last kill began. */
+  readonly groupSurvived?: true
   /** Present when the command could not be started. */
   readonly spawnError?: { readonly code: string; readonly message: string }
-  /** Whole milliseconds from the call to the child's exit. */
+  /** Whole milliseconds from the call to the leader's exit, excluding group cleanup. */
   readonly durationMs: number
 }
 
@@ -126,8 +139,16 @@ export type SpawnedProcess = {
    * on its own and its output did not. Empty when stdout is ignored or the child never started.
    */
   readonly stdout: ReadableStream<Uint8Array>
-  /** The last `stderrTailBytes` of stderr so far, as UTF-8 text. Final once `exited` has resolved. */
+  /**
+   * The last `stderrTailBytes` of stderr so far, as UTF-8 text. Final once `exited` has resolved,
+   * and always empty when `stderr` is `'pipe'`.
+   */
   stderrTail(): string
+  /**
+   * Raw stderr when `stderr` is `'pipe'`, under the rules of `stdout`: read on demand, ended by a
+   * stop, failing with `ProcessStalledError` only when the child ended on its own. Otherwise empty.
+   */
+  readonly stderr: ReadableStream<Uint8Array>
   /**
    * Sends `data` to stdin, in call order. Resolves `true` once it has been handed to the pipe, and
    * `false` when stdin is not piped, was closed, or the child is gone. Never rejects.
@@ -135,12 +156,15 @@ export type SpawnedProcess = {
   write(data: string | Uint8Array): Promise<boolean>
   /** Closes stdin after what was written. Safe to call again. Never rejects. */
   closeInput(): Promise<void>
-  /** Resolves when the child has exited, its process group has been killed and stderr has ended. Never rejects. */
+  /** Resolves when the process group has ended or reached its cleanup bound. Never waits for a reader; never rejects. */
   readonly exited: Promise<SpawnExit>
   /**
-   * Closes stdin, signals the process group, and sends SIGKILL after the grace period. Resolves to
-   * what `exited` resolves to. Ends `stdout`, dropping what was not read. Safe to call again, and
-   * a later call asking for SIGKILL sends it at once.
+   * Closes stdin and signals the process group. A default graceful stop ends piped output while
+   * the stderr tail keeps draining. With `groupGrace`, piped output stays open through the grace.
+   * A later graceful request can only shorten that grace; SIGKILL and disposal end it and all
+   * output immediately. The first stop reason wins, including requests after a natural leader
+   * exit while group grace remains. Resolves to the same result as `exited` after group cleanup.
+   * After completion the result stays unchanged; SIGKILL still closes unread output without signalling.
    */
   stop(options?: StopOptions): Promise<SpawnExit>
 }

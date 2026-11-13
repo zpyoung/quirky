@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { validateValue, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
-import { BrowserActions } from './runtime/actions'
+import { BrowserActions, spansNavigation } from './runtime/actions'
 import { BROWSER_METHODS, READ_ONLY_METHODS, type BrowserMethod } from './runtime/catalog'
 import { BrowserRuntime } from './runtime/driver'
 import { asPluginError, fault } from './runtime/errors'
@@ -430,9 +430,13 @@ export class BrowserService {
     if (method === 'interceptList') return this.runtime.interceptSnapshot(page.browserPageId)
     if (method === 'interceptDisable') {
       return await this.runtime.withInterceptsReleased(page.browserPageId, () =>
-        this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution)))
+        this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution), {
+          spansNavigation: spansNavigation(method, params)
+        }))
     }
-    return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution))
+    return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution), {
+      spansNavigation: spansNavigation(method, params)
+    })
   }
 
 
@@ -451,7 +455,9 @@ export class BrowserService {
       this.runtime.invalidatePage(page.browserPageId, true)
     }
     if (plan.method === 'interceptList') return { command: plan.command, result: this.runtime.interceptSnapshot(page.browserPageId) }
-    const execute = () => this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution))
+    const execute = () => this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution), {
+      spansNavigation: spansNavigation(plan.method, plan.params)
+    })
     const result = await (plan.method === 'interceptDisable'
       ? this.runtime.withInterceptsReleased(page.browserPageId, execute) : execute())
     return { command: plan.command, result }

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import type { OwnerHostIdentity, PluginContext, PluginStore, RegisteredOwnerHost, Worktree } from '@quirky/protocol'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
+import { createProcessRunner, type OwnedProcessRunner, type ProcessSpawner, type SpawnedProcess } from '../../../packages/process/src/api'
 import { environmentRecipeHash, matchesRetainedVmWorkspaceOrigin, migrateVmEnvironments, registerVmEnvironments, runVmProcessBounded, vmRecipeSearchPath } from '../src/daemon/vm'
 import type { VmEnvironment, VmEnvironmentRecipe } from '../src/vm-types'
 
@@ -49,10 +50,14 @@ let remoteMirror: typeof mirror
 let remoteMirrorVisible: boolean
 let failNextRotatedAttach: boolean
 let disposeVm: (() => Promise<void>) | undefined
+let processRunner: OwnedProcessRunner | undefined
+
 let previousHome: string | undefined
 let previousQuirkyHome: string | undefined
 let previousLima: string | undefined
 let previousPath: string | undefined
+let previousTestLimaReady: string | undefined
+let previousTestLimaTerminated: string | undefined
 
 beforeEach(() => {
   home = makeTempHome('quirky-vm-environments-')
@@ -90,6 +95,8 @@ beforeEach(() => {
   previousQuirkyHome = process.env.QUIRKY_HOME
   previousLima = process.env.QUIRKY_LIMACTL
   previousPath = process.env.PATH
+  previousTestLimaReady = process.env.QUIRKY_TEST_LIMA_READY
+  previousTestLimaTerminated = process.env.QUIRKY_TEST_LIMA_TERMINATED
   process.env.HOME = home
   process.env.QUIRKY_HOME = home
   process.env.QUIRKY_LIMACTL = limaPath
@@ -137,8 +144,9 @@ beforeEach(() => {
       fingerprint: rotated ? 'remote-fingerprint-02' : mirror.fingerprint
     }
   }
+  processRunner = createProcessRunner({ owner: `quirky.worktree-test-${home}` })
   const context = {
-    pluginId: 'quirky.worktree', dir: home, dataDir, home,
+    pluginId: 'quirky.worktree', dir: home, dataDir, home, process: processRunner!,
     log() {},
     provide(id: string, implementation: unknown) {
       const name = id.slice('method:quirky.worktree/'.length)
@@ -233,8 +241,17 @@ beforeEach(() => {
 afterEach(async () => {
   await disposeVm?.()
   disposeVm = undefined
+  await processRunner?.dispose()
+  processRunner = undefined
   db?.close()
-  for (const [key, value] of Object.entries({ HOME: previousHome, QUIRKY_HOME: previousQuirkyHome, QUIRKY_LIMACTL: previousLima, PATH: previousPath })) {
+  for (const [key, value] of Object.entries({
+    HOME: previousHome,
+    QUIRKY_HOME: previousQuirkyHome,
+    QUIRKY_LIMACTL: previousLima,
+    PATH: previousPath,
+    QUIRKY_TEST_LIMA_READY: previousTestLimaReady,
+    QUIRKY_TEST_LIMA_TERMINATED: previousTestLimaTerminated
+  })) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value
   }
@@ -260,11 +277,274 @@ function method(name: string): Handler {
 function vmFromResult(result: unknown): VmEnvironment {
   return result as VmEnvironment
 }
+
+function byteStream(...chunks: Uint8Array[]): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk)
+      controller.close()
+    }
+  })
+}
+function processResult(options: {
+  pid?: number | null
+  stdout?: ReadableStream<Uint8Array>
+  stderr?: ReadableStream<Uint8Array>
+  exit?: Record<string, unknown>
+  onStop?: () => void
+} = {}): SpawnedProcess {
+  const exit = options.exit ?? { exitCode: 0, signal: null, durationMs: 1 }
+  return {
+    pid: options.pid === undefined ? 123 : options.pid,
+    stdout: options.stdout ?? byteStream(),
+    stderr: options.stderr ?? byteStream(),
+    stderrTail: () => '',
+    write: async () => false,
+    closeInput: async () => {},
+    exited: Promise.resolve(exit),
+    stop: async () => {
+      options.onStop?.()
+      return exit
+    }
+  } as unknown as SpawnedProcess
+}
+
+function processRecorder(child = processResult()): {
+  spawner: ProcessSpawner
+  calls: Array<{ argv: readonly string[]; options: Record<string, unknown> }>
+} {
+  const calls: Array<{ argv: readonly string[]; options: Record<string, unknown> }> = []
+  const spawner = {
+    spawn(argv: readonly string[], options: Record<string, unknown>) {
+      calls.push({ argv, options })
+      return child
+    }
+  } as unknown as ProcessSpawner
+  return { spawner, calls }
+}
+
+test('runs bounded VM commands through the process runner with merged environment and group grace', async () => {
+  const recorder = processRecorder()
+  await runVmProcessBounded(recorder.spawner, '/bin/bash', ['-c', 's'], {
+    cwd: '/r',
+    timeoutMs: 1000,
+    env: { A: '1' }
+  })
+  expect(recorder.calls).toEqual([{
+    argv: ['/bin/bash', '-c', 's'],
+    options: {
+      cwd: '/r',
+      env: { ...process.env, A: '1' },
+      timeoutMs: 1000,
+      killGraceMs: 5000,
+      stderr: 'pipe',
+      groupGrace: true
+    }
+  }])
+})
+
+test('uses the default VM command deadline when none is supplied', async () => {
+  const recorder = processRecorder()
+  await runVmProcessBounded(recorder.spawner, '/bin/bash', ['-c', 'true'])
+  expect(recorder.calls).toHaveLength(1)
+  expect(recorder.calls[0]?.options.timeoutMs).toBe(900_000)
+})
+
+test('keeps only the first combined 64 KiB of stdout and stderr without stopping the process', async () => {
+  const { promise: stdoutAtLimit, resolve: releaseStdoutAtLimit } = Promise.withResolvers<void>()
+  let stdoutReads = 0
+  let stderrRead = false
+  const stdout = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (stdoutReads === 0) {
+        controller.enqueue(new Uint8Array(65_536).fill(0x61))
+        stdoutReads++
+      } else if (stdoutReads === 1) {
+        controller.enqueue(new Uint8Array([0x62]))
+        stdoutReads++
+        releaseStdoutAtLimit()
+      } else {
+        controller.close()
+      }
+    }
+  }, { highWaterMark: 0 })
+  const stderr = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (!stderrRead) {
+        await stdoutAtLimit
+        controller.enqueue(new Uint8Array([0x63]))
+        stderrRead = true
+      } else {
+        controller.close()
+      }
+    }
+  }, { highWaterMark: 0 })
+  let stopCalls = 0
+  const recorder = processRecorder(processResult({ stdout, stderr, onStop: () => { stopCalls++ } }))
+  const result = await runVmProcessBounded(recorder.spawner, '/bin/bash', ['-c', 's'])
+  expect(result.stdout).toBe('a'.repeat(65_536))
+  expect(result.stderr).toBe('')
+  expect(result.exitCode).toBe(0)
+  expect(result.timedOut).toBe(false)
+  expect(stopCalls).toBe(0)
+})
+
+test('keeps stdout and stderr in order under a combined output cap', async () => {
+  const script = [
+    `printf "%s" "${'a'.repeat(40_000)}"`,
+    'sleep 0.3',
+    `printf "%s" "${'b'.repeat(40_000)}" >&2`,
+    'sleep 0.3',
+    `printf "%s" "${'c'.repeat(40_000)}"`
+  ].join('\n')
+  const result = await runVmProcessBounded(processRunner!, '/bin/bash', ['-c', script])
+  expect(result.exitCode).toBe(0)
+  expect(result.timedOut).toBe(false)
+  expect(result.stdout).toBe('a'.repeat(40_000))
+  expect(result.stderr).toBe('b'.repeat(25_536))
+})
+
+test('counts raw stderr bytes before decoding the combined output cap', async () => {
+  const oneOver = new Uint8Array(3 + 65_533 + 1)
+  oneOver.set([0xef, 0xbb, 0xbf])
+  oneOver.fill(0x65, 3, 3 + 65_533)
+  oneOver[oneOver.length - 1] = 0x65
+  const first = await runVmProcessBounded(
+    processRecorder(processResult({ stderr: byteStream(oneOver) })).spawner,
+    '/bin/bash',
+    ['-c', 's']
+  )
+  expect(first.stderr).toBe(`\uFEFF${'e'.repeat(65_533)}`)
+
+  const invalid = new Uint8Array(3 + 65_532 + 2)
+  invalid.set([0xef, 0xbb, 0xbf])
+  invalid.fill(0x65, 3, 3 + 65_532)
+  invalid.set([0xff, 0x7a], 3 + 65_532)
+  const second = await runVmProcessBounded(
+    processRecorder(processResult({ stderr: byteStream(invalid) })).spawner,
+    '/bin/bash',
+    ['-c', 's']
+  )
+  expect(second.stderr).toBe(`\uFEFF${'e'.repeat(65_532)}�`)
+})
+
+test('preserves VM descendant cleanup after the leader exits naturally', async () => {
+  const marker = join(home, 'child-cleaned')
+  const ready = join(home, 'child-ready')
+  const script = `(trap 'printf cleaned > "$QUIRKY_VM_TEST_MARKER"; exit 0' TERM; : > "$QUIRKY_VM_TEST_READY"; while :; do :; done) >/dev/null 2>&1 & while [ ! -e "$QUIRKY_VM_TEST_READY" ]; do :; done; exit 0`
+  const result = await runVmProcessBounded(processRunner!, '/bin/bash', ['-c', script], {
+    timeoutMs: 10_000,
+    env: { QUIRKY_VM_TEST_MARKER: marker, QUIRKY_VM_TEST_READY: ready }
+  })
+  expect(result.exitCode).toBe(0)
+  expect(result.timedOut).toBe(false)
+  expect(readFileSync(marker, 'utf8')).toBe('cleaned')
+})
+
+test('swallows VM stream failures and does not expose the process-group diagnostic', async () => {
+  const failedStream = (partial: string) => {
+    let read = false
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (!read) {
+          controller.enqueue(new TextEncoder().encode(partial))
+          read = true
+        } else {
+          controller.error(new Error('stream failed'))
+        }
+      }
+    }, { highWaterMark: 0 })
+  }
+  const recorder = processRecorder(processResult({
+    stdout: failedStream('partial stdout'),
+    stderr: failedStream('partial stderr'),
+    exit: { exitCode: 0, signal: null, durationMs: 1, groupSurvived: true }
+  }))
+  const result = await runVmProcessBounded(recorder.spawner, '/bin/bash', ['-c', 's'])
+  expect(result).toMatchObject({
+    exitCode: 0,
+    stdout: 'partial stdout',
+    stderr: 'partial stderr',
+    timedOut: false
+  })
+  expect(result).not.toHaveProperty('groupSurvived')
+})
+
+test('reports the shared runner start error with its executable', async () => {
+  const child = processResult({
+    pid: null,
+    exit: {
+      exitCode: null,
+      signal: null,
+      durationMs: 1,
+      spawnError: { code: 'ENOENT', message: 'command not found' }
+    }
+  })
+  const recorder = processRecorder(child)
+  await expect(runVmProcessBounded(recorder.spawner, '/tmp/missing-command', [])).rejects.toThrow(
+    'Could not start /tmp/missing-command: command not found'
+  )
+})
+
+test('stops and awaits an in-flight VM command during service deactivation', async () => {
+  const ready = join(home, 'doctor-ready')
+  const terminated = join(home, 'doctor-terminated')
+  writeFileSync(limaPath, [
+    '#!/bin/bash',
+    'if [ "$1" = "--version" ]; then',
+    '  printf "limactl version test\\n"',
+    '  trap \'printf terminated > "$QUIRKY_TEST_LIMA_TERMINATED"; exit 0\' TERM',
+    '  printf ready > "$QUIRKY_TEST_LIMA_READY"',
+    '  while :; do sleep 0.01; done',
+    'fi',
+  ].join('\n'), { mode: 0o700 })
+  chmodSync(limaPath, 0o700)
+  process.env.QUIRKY_TEST_LIMA_READY = ready
+  process.env.QUIRKY_TEST_LIMA_TERMINATED = terminated
+  store.run(
+    `INSERT INTO vm_environments
+      (id, repo_id, repo_name, repo_path, recipe_id, recipe_name, recipe_hash, recipe_json,
+       instance_id, backend_executable, state, backend_state, operation_id, operation_kind,
+       operation_state, operation_started_at, operation_updated_at, runtime_name, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    'deactivation-row', 'repo_local', 'local-project', repoPath, recipe.id, recipe.name, 'hash', '{}',
+    'vm-deactivation', limaPath, 'creating', 'unknown', 'operation-deactivation', 'create',
+    'running', Date.now(), Date.now(), 'VM deactivation', Date.now(), Date.now()
+  )
+
+  const doctor = method('vmDoctor')({})
+  await waitForFile(ready)
+  await disposeVm!()
+  await doctor
+
+  expect(readFileSync(terminated, 'utf8')).toBe('terminated')
+  expect(store.get<{ state: string; operation_state: string }>(
+    'SELECT state, operation_state FROM vm_environments WHERE id = ?', 'deactivation-row'
+  )).toEqual({ state: 'interrupted', operation_state: 'interrupted' })
+  await expect(method('vmDoctor')({})).rejects.toThrow('VM lifecycle stopped during plugin deactivation')
+})
+
+function waitForFile(path: string): Promise<void> {
+  if (existsSync(path)) return Promise.resolve()
+  const { promise, resolve } = Promise.withResolvers<void>()
+  const watcher = watch(dirname(path), (_event, filename) => {
+    if (filename?.toString() === basename(path) && existsSync(path)) {
+      watcher.close()
+      resolve()
+    }
+  })
+  if (existsSync(path)) {
+    watcher.close()
+    resolve()
+  }
+  return promise
+}
+
 test('terminates a spawned descendant with its bounded process group', async () => {
   // This uses real OS signals: fake timers cannot exercise detached process-group ownership.
   const marker = join(home, 'child-terminated')
   const script = `(trap 'printf terminated > "$QUIRKY_VM_TEST_MARKER"; exit 0' TERM; while :; do :; done) & wait`
-  const result = await runVmProcessBounded('/bin/bash', ['-c', script], {
+  const result = await runVmProcessBounded(processRunner!, '/bin/bash', ['-c', script], {
     timeoutMs: 1000,
     env: { QUIRKY_VM_TEST_MARKER: marker }
   })
@@ -286,7 +566,7 @@ test('does not search the repository cwd when the inherited VM script PATH is ab
   writeFileSync(trustedExecutable, '#!/bin/bash\nprintf trustedvalue\n', { mode: 0o700 })
   chmodSync(trustedExecutable, 0o700)
 
-  const missingInheritedPath = await runVmProcessBounded('/bin/bash', ['-c', 'quirky-path-probe'], {
+  const missingInheritedPath = await runVmProcessBounded(processRunner!, '/bin/bash', ['-c', 'quirky-path-probe'], {
     cwd: repoPath,
     timeoutMs: 1000,
     env: {
@@ -297,7 +577,7 @@ test('does not search the repository cwd when the inherited VM script PATH is ab
   expect(missingInheritedPath.exitCode).toBe(127)
   expect(existsSync(poisonMarker)).toBe(false)
 
-  const trustedInheritedPath = await runVmProcessBounded('/bin/bash', ['-c', 'quirky-path-probe'], {
+  const trustedInheritedPath = await runVmProcessBounded(processRunner!, '/bin/bash', ['-c', 'quirky-path-probe'], {
     cwd: repoPath,
     timeoutMs: 1000,
     env: {
@@ -440,7 +720,7 @@ test.skipIf(process.platform !== 'darwin')('reattaches an already-running VM wor
 })
 test.skipIf(process.platform !== 'darwin')('refuses lifecycle scripts against a Lima VM recreated under the same name', async () => {
   const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
-  const [observed] = JSON.parse(readFileSync(statePath, 'utf8')) as Array<{ name: string; status: string; dir: string }>
+  const observed = JSON.parse(readFileSync(statePath, 'utf8')) as { name: string; status: string; dir: string }
   const displacedDirectory = join(home, 'displaced-lima-instance')
   renameSync(observed!.dir, displacedDirectory)
   mkdirSync(observed!.dir)
@@ -481,7 +761,7 @@ test.skipIf(process.platform !== 'darwin')('exposes creating records and blocks 
 })
 test.skipIf(process.platform !== 'darwin')('reconciles an already-forgotten host without touching another host registration', async () => {
   const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
-  const [instance] = JSON.parse(readFileSync(statePath, 'utf8')) as Array<{ dir: string }>
+  const instance = JSON.parse(readFileSync(statePath, 'utf8')) as { dir: string }
   rmSync(instance!.dir, { recursive: true, force: true })
   writeFileSync(statePath, '[]\n')
   hostRegistered = false
@@ -495,7 +775,7 @@ test.skipIf(process.platform !== 'darwin')('reconciles an already-forgotten host
 
 test.skipIf(process.platform !== 'darwin')('refuses retirement when the registered host identity was replaced', async () => {
   const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
-  const [instance] = JSON.parse(readFileSync(statePath, 'utf8')) as Array<{ dir: string }>
+  const instance = JSON.parse(readFileSync(statePath, 'utf8')) as { dir: string }
   rmSync(instance!.dir, { recursive: true, force: true })
   writeFileSync(statePath, '[]\n')
   registeredHost = { ...registeredHost, identity: { hostId: 'replacement-host', generation: 'replacement-generation' } }

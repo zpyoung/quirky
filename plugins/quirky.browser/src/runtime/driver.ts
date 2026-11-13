@@ -566,11 +566,17 @@ export class BrowserRuntime {
   }
 
 
-  async withPage<T>(page: BrowserPage, method: string, operation: (execution: PageExecution) => Promise<T>): Promise<T> {
+  async withPage<T>(
+    page: BrowserPage,
+    method: string,
+    operation: (execution: PageExecution) => Promise<T>,
+    options?: { spansNavigation?: boolean }
+  ): Promise<T> {
     const profile = this.profile(page.profileId)
     if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
     if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
     const expectedGeneration = this.generation(page.browserPageId)
+    const expectedBinding = options?.spansNavigation ? profile.epoch?.pages.get(page.browserPageId) : undefined
     const controller = new AbortController()
     const controllers = profile.controllers.get(page.browserPageId) ?? new Set<AbortController>()
     controllers.add(controller)
@@ -582,7 +588,10 @@ export class BrowserRuntime {
         let current: BrowserPage
         try { current = this.store.getPage(page.browserPageId) } catch { throw fault('browser_tab_closed', 'the managed page was closed before the operation ran') }
         if (current.profileId !== page.profileId) throw fault('browser_tab_changed', 'the managed page changed browser profiles before the operation ran')
-        if (this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        if (!options?.spansNavigation && this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        if (expectedBinding && (profile.epoch?.invalid || profile.epoch?.pages.get(page.browserPageId) !== expectedBinding)) {
+          throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        }
         const epoch = await this.ensureEpoch(profile, page.profileId)
         const binding = await this.ensureBinding(epoch, current, this.generation(page.browserPageId))
         if (epoch.activeTabId !== binding.tabId) {
@@ -619,7 +628,9 @@ export class BrowserRuntime {
           await binding.runtime.termination
           throw fault('browser_tab_changed', 'the managed page changed browser profiles during the operation')
         }
-        if (epoch.invalid || this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'browser page identity changed during the operation')
+        if (epoch.invalid || (options?.spansNavigation
+          ? epoch.pages.get(page.browserPageId) !== binding
+          : this.generation(page.browserPageId) !== expectedGeneration)) throw fault('browser_tab_changed', 'browser page identity changed during the operation')
         return result
       }, controller.signal)
     } catch (error) {
@@ -1813,17 +1824,22 @@ export class BrowserRuntime {
     if (completed.has(loaderId) || state.mainFrameUrl === 'about:blank') return
     const eventName = loadState === 'load' ? 'load' : 'DOMContentLoaded'
     const arrived = Promise.withResolvers<void>()
-    const unsubscribe = execution.cdp.subscribe('Page.lifecycleEvent', (event) => {
-      if (event.sessionId === execution.binding.sessionId && event.params.frameId === frameId &&
-          event.params.loaderId === loaderId && event.params.name === eventName) {
-        completed.add(loaderId)
-        arrived.resolve()
-      }
-    })
-    if (completed.has(loaderId)) {
-      unsubscribe()
-      return
+    const checkCurrentDocument = () => {
+      if (state.mainFrameUrl === 'about:blank' ||
+          state.mainFrameLoaderId && completed.has(state.mainFrameLoaderId)) arrived.resolve()
     }
+    const unsubscribeLifecycle = execution.cdp.subscribe('Page.lifecycleEvent', (event) => {
+      if (event.sessionId !== execution.binding.sessionId) return
+      const loaderId = asString(event.params.loaderId)
+      if (event.params.frameId === state.mainFrameId && loaderId && event.params.name === eventName) {
+        completed.add(loaderId)
+      }
+      queueMicrotask(checkCurrentDocument)
+    })
+    const unsubscribeNavigation = execution.cdp.subscribe('Page.frameNavigated', (event) => {
+      if (event.sessionId === execution.binding.sessionId) queueMicrotask(checkCurrentDocument)
+    })
+    checkCurrentDocument()
     const timeout = Promise.withResolvers<void>()
     const aborted = Promise.withResolvers<void>()
     const onAbort = () => aborted.resolve()
@@ -1844,7 +1860,8 @@ export class BrowserRuntime {
     } finally {
       clearTimeout(timer)
       execution.signal?.removeEventListener('abort', onAbort)
-      unsubscribe()
+      unsubscribeLifecycle()
+      unsubscribeNavigation()
     }
   }
 
