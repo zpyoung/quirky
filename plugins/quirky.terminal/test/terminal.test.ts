@@ -876,6 +876,7 @@ function createTerminalServiceRig() {
     }
   }>()
   let nextStreamId = 1
+  let streamSendHandler: ((stream: TestStream) => void) | undefined
 
   const context = {
     error(kind: string, message: string) {
@@ -998,6 +999,7 @@ function createTerminalServiceRig() {
               send(bytes: Uint8Array) {
                 if (record.closed || record.lagged) return false
                 record.sent.push(bytes.slice())
+                streamSendHandler?.(record)
                 return true
               },
               onClose(callback: () => void) {
@@ -1055,6 +1057,9 @@ function createTerminalServiceRig() {
     setSnapshot(handler: TestSnapshot) {
       snapshotHandler = handler
     },
+    onStreamSend(handler: (stream: TestStream) => void) {
+      streamSendHandler = handler
+    },
     setSessionStatus(status: Session['status']) {
       sessionStatus = status
     },
@@ -1075,6 +1080,7 @@ type TerminalServiceState = {
   mobileRecoveryTimers: Map<string, unknown>
   mobileRecoveryPending: Set<string>
   mobileRecoveryQueued: Map<string, symbol>
+  mobileRecoveryRunning: Map<string, symbol>
   resyncAt: Map<string, number>
   resyncWaiters: Set<unknown>
   forgotten: Set<string>
@@ -1487,7 +1493,7 @@ describe('TerminalService output recovery', () => {
 })
 
 describe('TerminalService phone recovery lifecycle', () => {
-  test('keeps phone output suppressed after snapshot failure and cancels recovery after detach or shutdown', async () => {
+  test('keeps phone output suppressed after snapshot failure', async () => {
     const failed = createTerminalServiceRig()
     const failedCaller = failed.caller('mobile', 50)
     const failedAttach = await failed.service.attach({ session: 's1', cols: 80, rows: 24 }, failedCaller)
@@ -1503,7 +1509,9 @@ describe('TerminalService phone recovery lifecycle', () => {
     expect(failed.stream(failedAttach.streamId).sent).toEqual([])
     expect(terminalState(failed.service).mobileHolds.has('s1')).toBe(true)
     failed.service.shutdown()
+  })
 
+  test('sends nothing after detach or shutdown during snapshot recovery', async () => {
     const detached = createTerminalServiceRig()
     const detachedCaller = detached.caller('mobile', 51)
     const detachedAttach = await detached.service.attach({ session: 's1', cols: 80, rows: 24 }, detachedCaller)
@@ -1536,6 +1544,9 @@ describe('TerminalService phone recovery lifecycle', () => {
     await flushMicrotasks()
     expect(stopped.stream(stoppedAttach.streamId).sent).toEqual([])
     expect(terminalState(stopped.service).mobileRecoveryTimers.size).toBe(0)
+  })
+
+  test('ignores late recovery snapshots after exit or session removal', async () => {
     const exited = createTerminalServiceRig()
     const exitedCaller = exited.caller('mobile', 53)
     const exitedAttach = await exited.service.attach({ session: 's1', cols: 80, rows: 24 }, exitedCaller)
@@ -1570,7 +1581,7 @@ describe('TerminalService phone recovery lifecycle', () => {
     removed.service.shutdown()
   })
 
-  test('invalidates an in-flight recovery subscribe and runs one coalesced retry at the cooldown boundary', async () => {
+  test('coalesces in-flight gaps to one trailing recovery at the two-second boundary', async () => {
     const rig = createTerminalServiceRig()
     const caller = rig.caller('mobile', 55)
     const attached = await rig.service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
@@ -1592,6 +1603,7 @@ describe('TerminalService phone recovery lifecycle', () => {
       rig.service.onLagged('s1')
       firstSubscribe.resolve(testSubscription({ offset: 10 }))
       await flushMicrotasks()
+      expect(rig.unsubscribed).toEqual([])
       expect(rig.snapshotCalls).toEqual([])
       expect(rig.stream(attached.streamId).sent).toEqual([])
       await advanceServiceTime(1_999)
@@ -1606,6 +1618,43 @@ describe('TerminalService phone recovery lifecycle', () => {
       rig.service.shutdown()
       mock.timers.reset()
     }
+  })
+  test('unsubscribes a late mobile recovery after the last phone detaches or shutdown', async () => {
+    const detached = createTerminalServiceRig()
+    const detachedCaller = detached.caller('mobile', 56)
+    const detachedAttach = await detached.service.attach({ session: 's1', cols: 80, rows: 24 }, detachedCaller)
+    const detachedSubscribe = Promise.withResolvers<PtySubscription>()
+    detached.setSubscribe((_sessionId, options) => options.mode === 'raw'
+      ? detachedSubscribe.promise
+      : Promise.resolve(testSubscription()))
+    detached.service.onLagged('s1')
+    await waitUntil(() => detached.subscribeCalls.some((call) => call.options.mode === 'raw'))
+    detached.service.detach({ streamId: detachedAttach.streamId }, detachedCaller)
+    expect(detached.unsubscribed).toEqual([])
+    detachedSubscribe.resolve(testSubscription({ offset: 10 }))
+    await flushMicrotasks()
+    expect(detached.unsubscribed).toEqual(['s1'])
+    expect(detached.snapshotCalls).toEqual([])
+    detached.service.shutdown()
+
+    const stopped = createTerminalServiceRig()
+    const stoppedAttach = await stopped.service.attach(
+      { session: 's1', cols: 80, rows: 24 },
+      stopped.caller('mobile', 57)
+    )
+    const stoppedSubscribe = Promise.withResolvers<PtySubscription>()
+    stopped.setSubscribe((_sessionId, options) => options.mode === 'raw'
+      ? stoppedSubscribe.promise
+      : Promise.resolve(testSubscription()))
+    stopped.service.onLagged('s1')
+    await waitUntil(() => stopped.subscribeCalls.some((call) => call.options.mode === 'raw'))
+    stopped.service.shutdown()
+    expect(stopped.unsubscribed).toEqual([])
+    stoppedSubscribe.resolve(testSubscription({ offset: 10 }))
+    await flushMicrotasks()
+    expect(stopped.unsubscribed).toEqual(['s1'])
+    expect(stopped.snapshotCalls).toEqual([])
+    expect(stopped.stream(stoppedAttach.streamId).closed).toBe(true)
   })
 
   test('coalesces host gaps and retries subscribe or snapshot failures at two-second intervals', async () => {
@@ -1680,6 +1729,97 @@ describe('TerminalService phone recovery lifecycle', () => {
       mock.timers.reset()
     }
   })
+  test('clears a pending mobile recovery cooldown timer on shutdown', async () => {
+    const rig = createTerminalServiceRig()
+    const attached = await rig.service.attach({ session: 's1', cols: 80, rows: 24 }, rig.caller('mobile', 58))
+    let rawSubscribes = 0
+    rig.setSubscribe((_sessionId, options) => {
+      if (options.mode !== 'raw') return Promise.resolve(testSubscription())
+      rawSubscribes++
+      return Promise.resolve(testSubscription({ offset: 10 }))
+    })
+    rig.setSnapshot(async () => testSnapshot({ ansi: 'CURRENT', offset: 10 }))
+    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      rig.service.onLagged('s1')
+      await waitUntil(() => rig.stream(attached.streamId).sent.length === 1)
+      await waitUntil(() => !terminalState(rig.service).mobileRecoveryRunning.has('s1'))
+      rig.service.onLagged('s1')
+      expect(terminalState(rig.service).mobileRecoveryTimers.size).toBe(1)
+
+      rig.service.shutdown()
+      expect(terminalState(rig.service).mobileRecoveryTimers.size).toBe(0)
+      await advanceServiceTime(2_000)
+      expect(rawSubscribes).toBe(1)
+      expect(rig.snapshotCalls).toEqual(['s1'])
+    } finally {
+      rig.service.shutdown()
+      mock.timers.reset()
+    }
+  })
+
+  test('does not retry a mobile attach when a gap follows attachment registration', async () => {
+    const rig = createTerminalServiceRig()
+    const caller = rig.caller('mobile', 59)
+    let replayed = false
+    let gapQueued = false
+    const recoverySnapshot = Promise.withResolvers<PtySnapshot>()
+    rig.setSubscribe((sessionId, options) => {
+      if (options.mode === 'screen' && !replayed) {
+        replayed = true
+        rig.service.onData(sessionId, testBytes('replay tail'))
+      }
+      return Promise.resolve(testSubscription({ offset: 0 }))
+    })
+    rig.setSnapshot(() => recoverySnapshot.promise)
+    rig.onStreamSend(() => {
+      if (gapQueued) return
+      gapQueued = true
+      queueMicrotask(() => rig.service.onLagged('s1'))
+    })
+
+    const attached = await rig.service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
+    await waitUntil(() => rig.snapshotCalls.length === 1)
+    expect(rig.subscribeCalls.filter((call) => call.options.mode === 'screen')).toHaveLength(1)
+    expect(rig.stream(attached.streamId).sent.map(text)).toEqual(['replay tail'])
+    expect(terminalState(rig.service).bySession.get('s1')?.size).toBe(1)
+    rig.service.shutdown()
+    recoverySnapshot.resolve(testSnapshot({ ansi: 'LATE', offset: 0 }))
+    await flushMicrotasks()
+  })
+
+  test('does not close a registered resync replacement after a gap', async () => {
+    const rig = createTerminalServiceRig()
+    const caller = rig.caller('ui', 64)
+    rig.setSubscribe(async () => testSubscription())
+    const original = await rig.service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
+    rig.stream(original.streamId).lag()
+
+    let replayed = false
+    let gapQueued = false
+    rig.setSubscribe((sessionId, options) => {
+      if (options.mode === 'screen' && !replayed) {
+        replayed = true
+        rig.service.onData(sessionId, testBytes('replay tail'))
+      }
+      return Promise.resolve(testSubscription({ offset: 0 }))
+    })
+    rig.onStreamSend((stream) => {
+      if (stream.streamId === original.streamId || gapQueued) return
+      gapQueued = true
+      queueMicrotask(() => rig.service.onLagged('s1'))
+    })
+
+    const replacement = await resync(rig.service, { streamId: original.streamId }, caller)
+    await flushMicrotasks()
+    const registered = terminalState(rig.service).byConnection.get(64)?.get(replacement.streamId)
+    expect(registered).toBeDefined()
+    expect(rig.stream(replacement.streamId).closed).toBe(false)
+    expect(rig.stream(replacement.streamId).lagged).toBe(true)
+    expect(rig.stream(original.streamId).closed).toBe(true)
+    rig.service.shutdown()
+  })
+
   test('fences a trailing phone snapshot behind a screen subscribe without replaying its byte twice', async () => {
     const rig = createTerminalServiceRig()
     const desktopCaller = rig.caller('ui', 61)

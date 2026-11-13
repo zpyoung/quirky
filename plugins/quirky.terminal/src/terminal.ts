@@ -187,11 +187,6 @@ export class TerminalService {
           })
         })
         if (this.closed || !open) throw this.context.error('conflict', 'terminal connection closed while attaching')
-        if (this.sessionGeneration(session.id) !== attemptGeneration) {
-          if (stream.lagged) throw this.context.error('conflict', 'terminal output changed while attaching')
-          attachment.generation = this.sessionGeneration(session.id)
-          continue
-        }
         this.untrackPending(attachment)
         return { ...result, restored }
       } catch (error) {
@@ -265,9 +260,6 @@ export class TerminalService {
           isOpen: () => open
         })
       })
-      if (this.sessionGeneration(existing.sessionId) !== generation) {
-        throw this.context.error('conflict', 'terminal output changed while resyncing')
-      }
       this.untrackPending(attachment)
       existing.resyncing = true
       existing.stream.close()
@@ -793,8 +785,8 @@ export class TerminalService {
         const subscription = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
         if (!this.isCurrentMobileRecovery(sessionId, generation, token, mobileHold)) {
           if (
-            !this.closed &&
-            this.bySession.get(sessionId)?.size === 0 &&
+            this.sessionGeneration(sessionId) === generation &&
+            (this.bySession.get(sessionId)?.size ?? 0) === 0 &&
             (this.attaching.get(sessionId) ?? 0) === 0
           ) this.context.pty.unsubscribe(sessionId).catch(() => {})
           return
