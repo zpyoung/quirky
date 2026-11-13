@@ -1,17 +1,14 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import type { Readable } from 'node:stream'
 import { createHash, randomUUID } from 'node:crypto'
 import { accessSync, chmodSync, closeSync, constants as fsConstants, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
-import type { OwnerHostIdentity, OwnerRuntimeCallResult, PluginContext, PluginStore, RegisteredOwnerHost, Repo, Worktree, WorktreeCreateResult } from '@quirky/protocol'
+import type { OwnerHostIdentity, OwnerRuntimeCallResult, PluginContext, PluginStore, ProcessSpawner, RegisteredOwnerHost, Repo, SpawnedProcess, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import type { VmAttachmentRequest, VmBackendState, VmCheckoutMode, VmCreateOutput, VmEnvironment, VmEnvironmentRecipe, VmGuestCreateParams, VmLifecycleState, VmOperationKind, VmOperationState, VmRecipeSnapshot, VmRemoteWorkspace } from '../vm-types'
 import { isRecord } from '../loop-status'
 
 const VM_TIMEOUT_MS = 15 * 60_000
 const VM_DOCTOR_TIMEOUT_MS = 15_000
 const VM_KILL_GRACE_MS = 5_000
-const OUTPUT_DRAIN_GRACE_MS = 1_000
 const MAX_PROCESS_OUTPUT = 64 * 1024
 const MAX_CREATE_OUTPUT = 16 * 1024
 const RECIPE_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/
@@ -61,7 +58,7 @@ type LimaDirectoryStats = { dev: bigint; ino: bigint; birthtimeNs: bigint; isDir
 type VmSavedRuntimeIdentity = { id: string; name: string; endpoint: string; pairedDeviceId: string; scope: 'owner-cli'; grantId: string }
 type LimaExecutable = { executable: string | null; requested: string; error: string | null }
 type ProcessResult = { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }
-type VmService = { store: PluginStore; processes: Map<number, Promise<number | null>>; operations: Set<Promise<void>>; stopping: boolean }
+type VmService = { store: PluginStore; process: ProcessSpawner; processes: Set<SpawnedProcess>; operations: Set<Promise<void>>; stopping: boolean; disposal?: Promise<void> }
 type ProcessOptions = { cwd?: string; env?: Record<string, string>; timeoutMs?: number; service?: VmService }
 type VmContext = PluginContext & { call(method: string, params?: Record<string, unknown>): Promise<unknown> }
 type VmCreateParams = { repo: string; recipe: string; trustHash: string; name?: string; createParams?: VmGuestCreateParams }
@@ -344,140 +341,72 @@ function selectLimaExecutable(): LimaExecutable {
   }
 }
 
-function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
-  try { process.kill(-pid, signal) } catch {
-    try { process.kill(pid, signal) } catch { /* process already exited */ }
-  }
-}
-
-function processGroupExists(pid: number): boolean {
-  try { process.kill(-pid, 0); return true } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== 'ESRCH'
-  }
-}
-
-function delay(ms: number): Promise<void> {
-  const { promise, resolve } = Promise.withResolvers<void>()
-  setTimeout(resolve, ms)
-  return promise
-}
-async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
-  const { promise: timeout, resolve } = Promise.withResolvers<void>()
-  const timer = setTimeout(resolve, ms)
-  try { return await Promise.race([promise.then(() => true), timeout.then(() => false)]) }
-  finally { clearTimeout(timer) }
-}
-
-function waitForChildClose(child: ChildProcess): Promise<number | null> {
-  const { promise, resolve, reject } = Promise.withResolvers<number | null>()
-  child.once('error', reject)
-  child.once('close', (code) => resolve(code))
-  return promise
-}
-
-async function runBounded(executable: string, args: string[], options: ProcessOptions = {}): Promise<ProcessResult> {
+async function runBounded(spawner: ProcessSpawner, executable: string, args: string[], options: ProcessOptions = {}): Promise<ProcessResult> {
   if (options.service?.stopping) throw new Error('VM lifecycle stopped during plugin deactivation')
-  const timeoutMs = options.timeoutMs ?? VM_TIMEOUT_MS
-  let child: ChildProcess
+  let child: SpawnedProcess
   try {
-    child = spawn(executable, args, {
+    child = spawner.spawn([executable, ...args], {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
+      timeoutMs: options.timeoutMs ?? VM_TIMEOUT_MS,
+      killGraceMs: VM_KILL_GRACE_MS,
+      stderr: 'pipe',
+      groupGrace: true
     })
   } catch (error) {
     throw new Error(`Could not start ${executable}: ${messageOf(error)}`)
   }
-  const pid = child.pid
-  const stdout = child.stdout
-  const stderr = child.stderr
-  const closed = waitForChildClose(child)
-  if (stdout === null || stderr === null) {
-    if (pid !== undefined) signalProcessGroup(pid, 'SIGKILL')
-    await closed.catch(() => null)
-    throw new Error(`${executable} did not provide bounded stdout/stderr pipes`)
-  }
-  if (pid !== undefined) options.service?.processes.set(pid, closed.then((code) => code, () => null))
-
-  let timedOut = false
-  let groupStopRequested = false
-  let hardKillTimer: NodeJS.Timeout | undefined
-  const { promise: hardKilled, resolve: resolveHardKilled } = Promise.withResolvers<void>()
-  const stopGroup = () => {
-    if (groupStopRequested || pid === undefined) return
-    groupStopRequested = true
-    signalProcessGroup(pid, 'SIGTERM')
-    if (processGroupExists(pid)) {
-      hardKillTimer = setTimeout(() => {
-        signalProcessGroup(pid, 'SIGKILL')
-        resolveHardKilled()
-      }, VM_KILL_GRACE_MS)
-    } else {
-      resolveHardKilled()
-    }
-  }
-  const timeoutTimer: NodeJS.Timeout = setTimeout(() => {
-    timedOut = true
-    stopGroup()
-  }, timeoutMs)
-  child.once('exit', () => { if (!timedOut) stopGroup() })
+  if (options.service && child.pid !== null) options.service.processes.add(child)
 
   let size = 0
-  const stdoutChunks: Buffer[] = []
-  const stderrChunks: Buffer[] = []
-  const drain = async (stream: Readable, chunks: Buffer[]) => {
+  const stdoutChunks: Uint8Array[] = []
+  const stderrChunks: Uint8Array[] = []
+  const drain = async (stream: ReadableStream<Uint8Array>, chunks: Uint8Array[]) => {
+    const reader = stream.getReader()
     try {
-      for await (const value of stream) {
-        const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array)
+      for (;;) {
+        const { done, value: chunk } = await reader.read()
+        if (done) break
         const room = Math.max(0, MAX_PROCESS_OUTPUT - size)
         if (room > 0) {
-          const kept = chunk.length <= room ? chunk : chunk.subarray(0, room)
+          const kept = chunk.byteLength <= room ? chunk : chunk.subarray(0, room)
           chunks.push(kept)
-          size += kept.length
+          size += kept.byteLength
         }
       }
-    } catch { /* stream closed while the process group was being stopped */ }
-  }
-  const drains = [drain(stdout, stdoutChunks), drain(stderr, stderrChunks)]
-  let exitCode: number | null = null
-  try {
-    exitCode = await closed
-    await Promise.all(drains)
-  } finally {
-    clearTimeout(timeoutTimer)
-    if (pid !== undefined) {
-      if (!groupStopRequested) stopGroup()
-      if (hardKillTimer !== undefined && !processGroupExists(pid)) {
-        clearTimeout(hardKillTimer)
-        resolveHardKilled()
-      }
-      if (groupStopRequested) await hardKilled
-      options.service?.processes.delete(pid)
+    } catch {
+    } finally {
+      reader.releaseLock()
     }
-    if (!stdout.destroyed) stdout.destroy()
-    if (!stderr.destroyed) stderr.destroy()
   }
-  return {
-    exitCode,
-    stdout: Buffer.concat(stdoutChunks).toString('utf8'),
-    stderr: Buffer.concat(stderrChunks).toString('utf8'),
-    timedOut
+  const drains = [drain(child.stdout, stdoutChunks), drain(child.stderr, stderrChunks)]
+  try {
+    const exit = await child.exited
+    await Promise.all(drains)
+    if (exit.spawnError) throw new Error(`Could not start ${executable}: ${exit.spawnError.message}`)
+    return {
+      exitCode: exit.exitCode,
+      stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+      stderr: Buffer.concat(stderrChunks).toString('utf8'),
+      timedOut: exit.stopped === 'timeout'
+    }
+  } finally {
+    if (options.service && child.pid !== null) options.service.processes.delete(child)
   }
 }
 export type VmProcessOptions = Pick<ProcessOptions, 'cwd' | 'env' | 'timeoutMs'>
 export type VmProcessResult = ProcessResult
 
-/** Bounded detached process-group runner used by the VM owner and its child-lifecycle tests. */
-export function runVmProcessBounded(executable: string, args: string[], options: VmProcessOptions = {}): Promise<VmProcessResult> {
-  return runBounded(executable, args, options)
+/** Bounded command runner used by the VM owner and its child-lifecycle tests. */
+export function runVmProcessBounded(spawner: ProcessSpawner, executable: string, args: string[], options: VmProcessOptions = {}): Promise<VmProcessResult> {
+  return runBounded(spawner, executable, args, options)
 }
 function assertServiceActive(context: PluginContext, service: VmService): void {
   if (service.stopping) conflict(context, 'VM lifecycle was interrupted during worktree-plugin deactivation')
 }
 
 function trackServiceOperation<T>(service: VmService, work: () => Promise<T>): Promise<T> {
-  if (service.stopping) return Promise.reject(new Error('VM service is deactivating'))
+  if (service.stopping) return Promise.reject(new Error('VM lifecycle stopped during plugin deactivation'))
   const operation = work()
   const settled = operation.then(() => undefined, () => undefined)
   service.operations.add(settled)
@@ -485,24 +414,23 @@ function trackServiceOperation<T>(service: VmService, work: () => Promise<T>): P
   return operation
 }
 
-async function disposeVmService(service: VmService): Promise<void> {
-  if (service.stopping) return
-  service.stopping = true
-  for (const pid of service.processes.keys()) signalProcessGroup(pid, 'SIGTERM')
-  const exits = [...service.processes.values()].map((exited) => exited.then(() => undefined, () => undefined))
-  if (exits.length > 0) await settlesWithin(Promise.all(exits), VM_KILL_GRACE_MS)
-  for (const pid of service.processes.keys()) {
-    if (processGroupExists(pid)) signalProcessGroup(pid, 'SIGKILL')
+function disposeVmService(service: VmService): Promise<void> {
+  if (!service.disposal) {
+    service.stopping = true
+    service.disposal = (async () => {
+      const processes = [...service.processes]
+      await Promise.all(processes.map((child) => child.stop({ graceMs: VM_KILL_GRACE_MS })))
+      await Promise.all([...service.operations])
+      const now = Date.now()
+      service.store.run(
+        `UPDATE vm_environments SET state = 'interrupted', operation_state = 'interrupted',
+          error = CASE WHEN error IS NULL THEN 'Plugin deactivated while this VM lifecycle operation was in progress' ELSE error END,
+          updated_at = ? WHERE operation_state = 'running' AND state IN (${ACTIVE_STATES.map(() => '?').join(', ')})`,
+        now, ...ACTIVE_STATES
+      )
+    })()
   }
-  await Promise.all([...service.processes.values()].map((exited) => exited.then(() => undefined, () => undefined)))
-  await Promise.all([...service.operations])
-  const now = Date.now()
-  service.store.run(
-    `UPDATE vm_environments SET state = 'interrupted', operation_state = 'interrupted',
-      error = CASE WHEN error IS NULL THEN 'Plugin deactivated while this VM lifecycle operation was in progress' ELSE error END,
-      updated_at = ? WHERE operation_state = 'running' AND state IN (${ACTIVE_STATES.map(() => '?').join(', ')})`,
-    now, ...ACTIVE_STATES
-  )
+  return service.disposal
 }
 
 function commandFailure(command: string, result: ProcessResult): string {
@@ -558,11 +486,11 @@ function backendStateFromStatus(status: string): VmBackendState {
 }
 
 async function inspectLima(executable: string, service: VmService): Promise<{ version: string; instances: LimaInstance[] }> {
-  const version = await runBounded(executable, ['--version'], { timeoutMs: VM_DOCTOR_TIMEOUT_MS, service })
+  const version = await runBounded(service.process, executable, ['--version'], { timeoutMs: VM_DOCTOR_TIMEOUT_MS, service })
   if (version.exitCode !== 0 || version.timedOut) throw new Error(commandFailure('limactl --version', version))
   const versionText = `${version.stdout}\n${version.stderr}`.trim()
   if (!/lima|limactl/i.test(versionText)) throw new Error('Configured executable did not identify itself as Lima/limactl')
-  const listed = await runBounded(executable, ['list', '--all-fields', '--json'], { timeoutMs: VM_DOCTOR_TIMEOUT_MS, service })
+  const listed = await runBounded(service.process, executable, ['list', '--all-fields', '--json'], { timeoutMs: VM_DOCTOR_TIMEOUT_MS, service })
   if (listed.exitCode !== 0 || listed.timedOut) throw new Error(commandFailure('limactl list --all-fields --json', listed))
   return { version: versionText.slice(0, 256), instances: parseLimaInstances(listed.stdout) }
 }
@@ -759,7 +687,7 @@ async function runRecipeScript(context: PluginContext, service: VmService, row: 
   }
   const outputPath = createPrivateOutput(context, row.id, operationId)
   try {
-    const result = await runBounded('/bin/bash', ['-c', script], {
+    const result = await runBounded(service.process, '/bin/bash', ['-c', script], {
       cwd: row.repo_path,
       env: scriptEnvironment(row, operationId, outputPath),
       timeoutMs: VM_TIMEOUT_MS,
@@ -770,7 +698,7 @@ async function runRecipeScript(context: PluginContext, service: VmService, row: 
 }
 
 async function runGuestIdentity(context: PluginContext, service: VmService, executable: string, instanceId: string): Promise<OwnerHostIdentity> {
-  const result = await runBounded(executable, [
+  const result = await runBounded(service.process, executable, [
     'shell', instanceId, '--', 'quirky', 'api', 'call', 'quirky.cli/hostIdentity', '--json'
   ], { timeoutMs: VM_DOCTOR_TIMEOUT_MS, service })
   if (result.exitCode !== 0 || result.timedOut) conflict(context, commandFailure('Lima guest hostIdentity request', result))
@@ -1169,7 +1097,7 @@ async function vmCreate(context: VmContext, store: PluginStore, service: VmServi
     store.run('UPDATE vm_environments SET backend_executable = ? WHERE id = ?', executable, row.id)
     let current = rowById(store, row.id)!
     outputPath = createPrivateOutput(context, row.id, operationId)
-    const result = await runBounded('/bin/bash', ['-c', recipe.create], {
+    const result = await runBounded(service.process, '/bin/bash', ['-c', recipe.create], {
       cwd: current.repo_path,
       env: {
         ...scriptEnvironment(current, operationId, outputPath),
@@ -1489,7 +1417,7 @@ async function vmDestroy(context: VmContext, store: PluginStore, service: VmServ
 export function registerVmEnvironments(context: PluginContext, store: PluginStore): () => Promise<void> {
   const vmContext = context as VmContext
   const locks = new Map<string, Promise<unknown>>()
-  const service: VmService = { store, processes: new Map(), operations: new Set(), stopping: false }
+  const service: VmService = { store, process: context.process, processes: new Set(), operations: new Set(), stopping: false }
   store.run(
     `UPDATE vm_environments SET state = 'interrupted', operation_state = 'interrupted',
       error = CASE WHEN error IS NULL THEN 'Daemon stopped while this VM lifecycle operation was in progress' ELSE error END,

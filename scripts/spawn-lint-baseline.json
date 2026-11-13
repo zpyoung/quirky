@@ -43,6 +43,5 @@
   "plugins/quirky.worktree/src/daemon/create.ts": 1,
   "plugins/quirky.worktree/src/daemon/github.ts": 2,
   "plugins/quirky.worktree/src/daemon/hooks-run.ts": 1,
-  "plugins/quirky.worktree/src/daemon/prepared.ts": 1,
-  "plugins/quirky.worktree/src/daemon/vm.ts": 1
+  "plugins/quirky.worktree/src/daemon/prepared.ts": 1
 }
