@@ -232,7 +232,6 @@ export class LedgerEngine {
     this.ensureHealthy()
     for (;;) {
       const generation = this.generation
-      this.unavailable = true
       let catalog: OwnerCatalog
       try {
         catalog = await readOwnerCatalog(this.context)
