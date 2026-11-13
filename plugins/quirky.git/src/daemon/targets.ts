@@ -150,22 +150,33 @@ export function sendNotes(env: DaemonEnv): Handler {
 
     const worktree = await env.resolve(params, caller)
     const path = scope === 'file' ? (await containedPath(worktree.path, params.path)).rel : undefined
-    const inScope = await listMixedNotes(env, worktree, scope === 'file' ? path : undefined)
-    let selected: Note[]
-    if (scope === 'note') {
-      const note = inScope.find((item) => item.id === params.id)
-      if (!note) throw env.errors.reasoned('not-found', 'no-note', `There is no note ${params.id} in this worktree.`)
-      selected = [note]
-    } else selected = inScope
-    if (selected.length === 0) throw env.errors.reasoned('conflict', 'no-unsent-notes', 'There are no unsent notes.')
-
-    const picked = selected.filter((note) => !env.holds.has(worktree.id, note.id))
-    if (picked.length === 0) throw env.errors.reasoned('conflict', 'all-held', 'All notes are already being sent.')
-    const ids = picked.map((note) => note.id)
+    const gitSnapshot = env.notes.list(worktree.id, path)
+    const gitCandidates = scope === 'note' ? gitSnapshot.filter((note) => note.id === params.id) : gitSnapshot
+    const gitIds = gitCandidates.filter((note) => !env.holds.has(worktree.id, note.id)).map((note) => note.id)
+    const claimedGitIds = new Set(gitIds)
     const holdId = crypto.randomUUID()
+    let ids = gitIds
     let editorReservationAttempted = false
-    env.holds.add(worktree.id, ids)
+    let sendStarted = false
+    if (gitIds.length > 0) env.holds.add(worktree.id, gitIds)
     try {
+      const inScope = await listMixedNotes(env, worktree, path, gitSnapshot)
+      let selected: Note[]
+      if (scope === 'note') {
+        const note = inScope.find((item) => item.id === params.id)
+        if (!note) throw env.errors.reasoned('not-found', 'no-note', `There is no note ${params.id} in this worktree.`)
+        selected = [note]
+      } else selected = inScope
+      if (selected.length === 0) throw env.errors.reasoned('conflict', 'no-unsent-notes', 'There are no unsent notes.')
+
+      const picked = selected.filter((note) =>
+        isMarkdownShelfNote(note) ? !env.holds.has(worktree.id, note.id) : claimedGitIds.has(note.id)
+      )
+      if (picked.length === 0) throw env.errors.reasoned('conflict', 'all-held', 'All notes are already being sent.')
+      ids = picked.map((note) => note.id)
+      env.holds.add(worktree.id, ids)
+      sendStarted = true
+
       const markdown = picked.filter(isMarkdownShelfNote)
       if (markdown.length > 0) editorReservationAttempted = true
       const reservation = markdown.length === 0
@@ -199,7 +210,7 @@ export function sendNotes(env: DaemonEnv): Handler {
       try {
         if (editorReservationAttempted) await releaseMarkdownNotes(env, worktree, holdId)
       } finally {
-        announce(env, worktree.id)
+        if (sendStarted) announce(env, worktree.id)
       }
     }
   }

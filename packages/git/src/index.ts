@@ -6,18 +6,9 @@ import { existsSync, statSync } from 'node:fs'
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { GitDiffPair, GitFileStatus, GitStatusSummary } from '@quirky/protocol'
-import { git, runGit } from './run'
-
-export class GitError extends Error {
-  constructor(
-    message: string,
-    readonly stderr: string,
-    readonly exitCode: number
-  ) {
-    super(message)
-    this.name = 'GitError'
-  }
-}
+import { GitError, git, runGit } from './run'
+import { readWorktreeList } from './worktree-list'
+export { GitError }
 
 /** The requested branch is already checked out in another worktree. */
 export class BranchCheckedOutError extends GitError {
@@ -73,7 +64,7 @@ export async function resolveRepoRoot(path: string): Promise<string> {
 
 /** Every worktree of the repo at `repoPath`, main worktree first (`git worktree list --porcelain`). */
 export async function listWorktrees(repoPath: string): Promise<GitWorktreeInfo[]> {
-  const out = await git(repoPath, ['worktree', 'list', '--porcelain'], { readOnly: true })
+  const out = await readWorktreeList(repoPath)
   const result: GitWorktreeInfo[] = []
   let isFirst = true
   for (const block of out.split(/\n\n+/)) {

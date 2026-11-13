@@ -3,6 +3,7 @@ import {
   DEFAULT_THEME,
   UI_TOOL_SLOTS,
   PLUGIN_API_VERSION,
+  type MountCleanup,
   type NativeBrowserCapability,
   type QuirkyEvent,
   type SettingInfo,
@@ -2938,6 +2939,46 @@ describe('mountView', () => {
     expect(mounts[0]!.cleanups).toBe(1)
     expect(t.methodCalls('ui.report')).toEqual([])
     expect(state(t).slots[SHELF]).toBeUndefined()
+  })
+
+  test('embedded view input updates retain the mounted view and queue the newest input while loading', async () => {
+    const t = setup(makeModel({ views: [view(SHELF_PLUGIN, 'page')], commands: [command(NOTES, 'go')] }))
+    const ready = gate()
+    let mounts = 0
+    let cleanups = 0
+    const content = { draft: '', selection: '' }
+    t.useModule(SHELF_PLUGIN, async () => {
+      await ready.opened
+      return recording([SHELF], () => (_element: HTMLElement, props: { input: { selection: string } }) => {
+        mounts++
+        content.draft = 'unsaved review'
+        content.selection = props.input.selection
+        const cleanup: MountCleanup = () => { cleanups++ }
+        cleanup.updateInput = (input) => {
+          if (!input || typeof input !== 'object' || !('selection' in input) || typeof input.selection !== 'string') return false
+          content.selection = input.selection
+          return true
+        }
+        return cleanup
+      }).module
+    })
+    const notes = recording(['command:acme.notes/go'])
+    t.useModule(NOTES, notes.module)
+    await t.host.refresh()
+    await loaded(t, NOTES)
+    const cleanup = notes.record.contexts[0]!.mountView(SHELF, element(), { selection: 'first' }) as MountCleanup
+    expect(cleanup.updateInput?.({ selection: 'queued' })).toBe(true)
+    ready.open()
+    await until(() => mounts === 1)
+    expect(content).toEqual({ draft: 'unsaved review', selection: 'queued' })
+    content.draft = 'edited review'
+    expect(cleanup.updateInput?.({ selection: 'next' })).toBe(true)
+    expect(content).toEqual({ draft: 'edited review', selection: 'next' })
+    expect(cleanups).toBe(0)
+    cleanup()
+    cleanup()
+    expect(cleanups).toBe(1)
+    expect(cleanup.updateInput?.({ selection: 'stale' })).toBe(false)
   })
 
   test('SC-69: unmounting before the view\'s plugin has loaded mounts nothing', async () => {

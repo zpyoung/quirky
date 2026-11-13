@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button, EmptyState, IconButton } from '@quirky/ui'
-import { parseContributionId } from '@quirky/protocol'
+import { parseContributionId, type MountCleanup } from '@quirky/protocol'
 
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
 import type { DividerRect, PaneRect } from '../../layout/tree'
@@ -94,16 +94,42 @@ function StructuredHost({ controller, session }: { controller: WorkspaceControll
 function HostedViewLayer({ controller, tab }: { controller: WorkspaceController; tab: ViewTab }) {
   const host = useRef<HTMLDivElement>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const mounted = useRef<MountCleanup | null>(null)
+  const appliedInput = useRef<string | null>(null)
   const inputKey = JSON.stringify(tab.input ?? {})
   useEffect(() => {
     const element = host.current
     if (!element) return
     setFailure(null)
+    appliedInput.current = inputKey
     try {
-      return controller.context.mountView(tab.viewId, element, { ...(tab.input ?? {}), tabId: tab.id })
+      mounted.current = controller.context.mountView(tab.viewId, element, { ...(tab.input ?? {}), tabId: tab.id }) as MountCleanup
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       controller.context.log(`could not mount ${tab.viewId} in tab ${tab.id}: ${message}`)
+      setFailure(message)
+    }
+    return () => {
+      mounted.current?.()
+      mounted.current = null
+      appliedInput.current = null
+    }
+  }, [controller, tab.id, tab.viewId])
+  useEffect(() => {
+    const element = host.current
+    if (!element || appliedInput.current === inputKey) return
+    const input = { ...(tab.input ?? {}), tabId: tab.id }
+    setFailure(null)
+    try {
+      if (mounted.current?.updateInput?.(input) !== true) {
+        mounted.current?.()
+        mounted.current = null
+        mounted.current = controller.context.mountView(tab.viewId, element, input) as MountCleanup
+      }
+      appliedInput.current = inputKey
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      controller.context.log(`could not update ${tab.viewId} in tab ${tab.id}: ${message}`)
       setFailure(message)
     }
   }, [controller, tab.id, tab.viewId, inputKey])

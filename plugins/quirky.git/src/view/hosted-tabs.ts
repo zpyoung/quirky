@@ -227,6 +227,11 @@ export function releaseReviewTab(worktree: string, tabId: string): void {
   if (reviewOwners.get(worktree) === tabId) reviewOwners.delete(worktree)
 }
 
+/** Whether a hosted tab currently owns its worktree's Review content. */
+export function ownsReviewTab(worktree: string, tabId: string): boolean {
+  return reviewOwners.get(worktree) === tabId
+}
+
 /**
  * Names a restored legacy diff tab "Review" once it is its worktree's Review tab. Its key and
  * stored input stay as they were because the close guard checks them against each other.

@@ -170,9 +170,15 @@ async function scoped(env: DaemonEnv, params: Record<string, any>, caller: Param
   const path = params.path === undefined ? undefined : (await containedPath(worktree.path, params.path)).rel
   return { worktree, path }
 }
-export async function listMixedNotes(env: DaemonEnv, worktree: Worktree, path?: string): Promise<Note[]> {
+/** Combines Markdown notes with a stable Git snapshot for the same worktree and path. */
+export async function listMixedNotes(
+  env: DaemonEnv,
+  worktree: Worktree,
+  path?: string,
+  gitNotes: readonly Note[] = env.notes.list(worktree.id, path)
+): Promise<Note[]> {
   const markdownNotes = await listMarkdownNotes(env, worktree, path)
-  return [...env.notes.list(worktree.id, path), ...markdownNotes].sort((left, right) =>
+  return [...gitNotes, ...markdownNotes].sort((left, right) =>
     (left.path < right.path ? -1 : left.path > right.path ? 1 : 0) ||
     left.line - right.line ||
     left.startLine - right.startLine ||
