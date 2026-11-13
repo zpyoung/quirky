@@ -608,7 +608,7 @@ export class AgentsService {
   }
 
   private async detectInstalled(): Promise<void> {
-    const loginPath = await readLoginPath(this.context.launch.shell)
+    const loginPath = await readLoginPath(this.context.process, this.context.launch.shell)
     this.search = searchDirs({
       loginPath,
       fallbackPath: process.env.PATH ?? '',
