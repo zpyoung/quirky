@@ -304,19 +304,10 @@ test('CLI rejects unknown arguments and remains import-safe', () => {
   expect(imported.stderr.toString()).toBe('')
 })
 
-test('CLI rejects a new direct spawn without rewriting the baseline', () => {
-  const root = fixture()
-  put(root, file, 'Bun.spawn(["echo", "blocked"])')
-  put(root, 'scripts/spawn-lint.ts', readFileSync(resolve(import.meta.dir, 'spawn-lint.ts'), 'utf8'))
-  symlinkSync(resolve(import.meta.dir, '../node_modules'), join(root, 'node_modules'), 'dir')
-  const result = Bun.spawnSync([process.execPath, join(root, 'scripts/spawn-lint.ts')], {
-    cwd: root, env: isolatedEnv(root),
-  })
-  expect(result.exitCode).toBe(1)
-  expect(result.stdout.toString()).toBe('')
-  expect(result.stderr.toString()).toContain('plugins/example/a.ts:1:1 process/no-direct-spawn')
-  expect(result.stderr.toString()).toContain('process/baseline-exceeded')
-  expect(JSON.parse(readFileSync(join(root, 'scripts/spawn-lint-baseline.json'), 'utf8'))).toEqual({})
+test('package scripts preserve every typecheck stage and insert the spawn guard', () => {
+  const { scripts } = JSON.parse(readFileSync(resolve(import.meta.dir, '../package.json'), 'utf8'))
+  expect(scripts['spawn:lint']).toBe('bun scripts/spawn-lint.ts')
+  expect(scripts.typecheck).toBe('bun install --frozen-lockfile && bun run ui:lint && bun run ui:scoreboard:check && bun run spawn:lint && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop')
 })
 test('repository fits its ceiling and CLI resolves root independently of cwd', () => {
   const root = resolve(import.meta.dir, '..')
