@@ -1855,6 +1855,44 @@
         "title": "Close session"
       },
       {
+        "id": "show-all-events",
+        "title": "Show all events",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "session",
+            "enabled"
+          ]
+        }
+      },
+      {
+        "id": "run-badge",
+        "title": "Run session badge",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "badge": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session",
+            "badge"
+          ]
+        }
+      },
+      {
         "id": "select-tab",
         "title": "Select tab",
         "args": {
