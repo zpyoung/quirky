@@ -196,6 +196,14 @@ describe('compatibility token scanning', () => {
         content: "import { uiTokens } from '@quirky/ui'\nfunction style() { if (true) { var uiTokens = {} } return `var(${uiTokens.color.accent})` }"
       },
       {
+        file: 'plugins/acme.app/src/switch-same-case.ts',
+        content: "import { uiTokens } from '@quirky/ui'\nfunction style(replacement, kind) { switch (kind) { case 1: const uiTokens = replacement; return `var(${uiTokens.color.surface})`; } }"
+      },
+      {
+        file: 'plugins/acme.app/src/switch-other-case.ts',
+        content: "import { uiTokens } from '@quirky/ui'\nfunction style(replacement, kind) { switch (kind) { case 1: return `var(${uiTokens.color.surface})`; case 2: const uiTokens = replacement; break; } }"
+      },
+      {
         file: 'plugins/acme.app/src/indirect.tsx',
         content: "import { uiTokens } from './tokens'\nconst style = `var(${uiTokens.color.surface})`"
       }
@@ -239,6 +247,33 @@ describe('compatibility token scanning', () => {
       ]))
     }
   })
+
+  test('rejects CSS escapes in JavaScript strings and template segments without decoding them', () => {
+    const cases = [
+      {
+        file: 'plugins/acme.app/src/css-escaped-string.ts',
+        content: 'const style = "var(--\\\\63ompat-px-40)"'
+      },
+      {
+        file: 'plugins/acme.app/src/css-escaped-template.ts',
+        content: 'const style = `var(--\\\\63ompat-px-40)`'
+      }
+    ]
+
+    for (const item of cases) {
+      expect(scanTokens(source(item.file, item.content))).toContainEqual(
+        expect.objectContaining({ code: 'unresolved-style-token' })
+      )
+    }
+  })
+
+  test('rejects visible dynamic custom-property prefixes but accepts numeric interpolation', () => {
+    expect(scanTokens(source('plugins/acme.app/src/dynamic-property.ts', 'const property = `--${prefix}`'))).toContainEqual(
+      expect.objectContaining({ code: 'unresolved-style-token' })
+    )
+    expect(scanTokens(source('plugins/acme.app/src/numeric-property.ts', 'const width = `${size}px`'))).toEqual([])
+  })
+
   test('treats arbitrary JavaScript escape spellings as unresolved', () => {
     const content = "const style = 'var(\\u002d\\x2dcompat-px-40)'"
     const evidence = scanTokens(source('plugins/acme.app/src/arbitrary-escape.ts', content))

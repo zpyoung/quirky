@@ -188,6 +188,9 @@ function scopeShadows(scope: ts.Node, name: string): boolean {
   }
   if (ts.isClassExpression(scope) && scope.name?.text === name) return true
   if (ts.isBlock(scope) || ts.isSourceFile(scope)) return scope.statements.some((statement) => declarationsInStatement(statement, name))
+  if (ts.isCaseBlock(scope)) {
+    return scope.clauses.some((clause) => clause.statements.some((statement) => declarationsInStatement(statement, name)))
+  }
   if (ts.isCatchClause(scope)) return !!scope.variableDeclaration && bindingContains(scope.variableDeclaration.name, name)
   if (ts.isForStatement(scope) || ts.isForInStatement(scope) || ts.isForOfStatement(scope)) {
     const initializer = scope.initializer
@@ -291,6 +294,20 @@ function dynamicVarExpressions(node: ts.TemplateExpression): DynamicVarExpressio
   return expressions
 }
 
+function dynamicCustomPropertyExpressions(node: ts.TemplateExpression): ts.Expression[] {
+  const parts = templateParts(node)
+  const expressions: ts.Expression[] = []
+  for (let index = 0; index < node.templateSpans.length; index++) {
+    const before = parts[index] ?? ''
+    const span = node.templateSpans[index]
+    if (!span || !before.endsWith('--')) continue
+    const open = before.lastIndexOf('var(')
+    if (open >= 0 && before.indexOf(')', open + 4) < 0) continue
+    expressions.push(span.expression)
+  }
+  return expressions
+}
+
 function scanTemplateSegments(
   node: ts.TemplateExpression,
   sourceFile: ts.SourceFile,
@@ -303,6 +320,10 @@ function scanTemplateSegments(
     const raw = sourceFile.text.slice(start, end)
     let rawUnresolved = false
     scanText(raw, (code, offset, message) => {
+      if (code === 'unresolved-style-token') rawUnresolved = true
+      report(code, start + offset, message)
+    })
+    scanEscapedCssTokens(raw, (code, offset, message) => {
       if (code === 'unresolved-style-token') rawUnresolved = true
       report(code, start + offset, message)
     })
@@ -397,6 +418,10 @@ export function scanTokens(source: SourceFile): Evidence[] {
           if (code === 'unresolved-style-token') rawUnresolved = true
           report(code, start + offset, message)
         })
+        scanEscapedCssTokens(raw, (code, offset, message) => {
+          if (code === 'unresolved-style-token') rawUnresolved = true
+          report(code, start + offset, message)
+        })
         if (!rawUnresolved) scanDecodedLiteral(node.text, raw, start, report)
       } else if (ts.isRegularExpressionLiteral(node) || ts.isJsxText(node)) {
         const start = node.getStart(sourceFile)
@@ -410,6 +435,9 @@ export function scanTokens(source: SourceFile): Evidence[] {
           if (!safeDynamicTemplate(node, index, sourceFile, imports)) {
             report('unresolved-style-token', expression.getStart(sourceFile), 'Unresolved dynamic style token in var() argument')
           }
+        }
+        for (const expression of dynamicCustomPropertyExpressions(node)) {
+          report('unresolved-style-token', expression.getStart(sourceFile), 'Unresolved dynamic custom-property name')
         }
       }
 
@@ -434,6 +462,7 @@ export function scanTokens(source: SourceFile): Evidence[] {
     .sort((left, right) => left.offset - right.offset || left.evidence.code.localeCompare(right.evidence.code))
     .map(({ evidence }) => evidence)
 }
+
 
 /** Returns the concrete shared UI token findings for the report's shared evidence list. */
 export function sharedTokenEvidence(inventory: Inventory): Evidence[] {
