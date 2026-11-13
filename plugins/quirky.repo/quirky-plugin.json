@@ -1,6 +1,6 @@
 {
   "id": "quirky.repo",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "Repositories",
   "version": "0.1.0",
   "description": "Projects Quirky knows about: git repositories and plain folders, their groups, settings and hooks, and the selectors that name them.",
@@ -1581,6 +1581,7 @@
       {
         "id": "changed",
         "description": "A project or group was added, changed or removed.",
+        "coalesce": [],
         "data": {
           "type": "object",
           "properties": {
