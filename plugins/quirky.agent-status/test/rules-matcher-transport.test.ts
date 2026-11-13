@@ -189,8 +189,15 @@ describe('owned matcher transport', () => {
     f.child.bytes(encoder.encode('{"ready":true}\n{"id":999,"result":null}\n'))
     const bytes = encoder.encode(JSON.stringify({ id: 1, result }))
     const suffix = bytes.indexOf(0xe5)
-    f.child.bytes(bytes.slice(0, suffix))
-    for (const byte of bytes.slice(suffix)) f.child.bytes(Uint8Array.of(byte))
+    f.child.bytes(bytes.subarray(0, suffix))
+    let asciiStart = suffix
+    for (let index = suffix; index < bytes.length; index++) {
+      if (bytes[index]! < 0x80) continue
+      if (asciiStart < index) f.child.bytes(bytes.subarray(asciiStart, index))
+      f.child.bytes(bytes.subarray(index, index + 1))
+      asciiStart = index + 1
+    }
+    if (asciiStart < bytes.length) f.child.bytes(bytes.subarray(asciiStart))
     await flush()
     expect(done()).toBe(false)
     f.child.bytes(encoder.encode('\n'))
