@@ -233,7 +233,7 @@ test('refuse records exact failures and a refusal receipt cannot prove success',
     { exitCode: 2, stdout: '{"error":{"code":"not-found","message":"missing"}}' },
     { exitCode: 1, stdout: '{"error":{"code":"not-found"}}' },
     { exitCode: 1, stdout: '{"error":{"code":"not-found","message":"missing"}}\n{"error":{"code":"not-found","message":"missing"}}' },
-    { exitCode: 1, stdout: '{"error":{"code":"not-found","message":"missing","data":{"reason":"missing"}}}' },
+    { exitCode: 1, stdout: '{"error":{"code":"not-found","message":"missing","reason":"missing","data":{"reason":"missing"},"suggestions":["use an existing selector"]}}' },
     { exitCode: 1, stdout: '{"error":{"code":"conflict","message":"already exists"}}' }
   ]
   const ids = ['refuse-zero', 'refuse-non-one', 'refuse-malformed', 'refuse-multiple', 'refuse-expected', 'refuse-wrong-code']

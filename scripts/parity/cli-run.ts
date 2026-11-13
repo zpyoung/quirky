@@ -98,8 +98,7 @@ function parseCliRefusal(stdout: string, exitCode: number): CliRefusal {
     throw new CliRunFailure('malformed-output', 'CLI did not emit a single JSON error envelope')
   }
   const error = Reflect.get(value, 'error')
-  if (!error || typeof error !== 'object' || Array.isArray(error) ||
-      Object.keys(error).some(key => !['code', 'message', 'data'].includes(key))) {
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
     throw new CliRunFailure('malformed-output', 'CLI did not emit a single JSON error envelope')
   }
   const code = Reflect.get(error, 'code')
