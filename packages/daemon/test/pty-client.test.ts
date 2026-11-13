@@ -274,9 +274,16 @@ describe('protocol version handling', () => {
     expect(connected.status).toBe('resolved')
     expect(client.protocolVersion).toBe(PTY_PROTOCOL_VERSION)
 
-    host.dropConnections()
-    await waitFor(() => (client.protocolVersion === null ? true : undefined), 1000)
-    client.close()
+    const release = host.holdNextHello()
+    try {
+      host.dropConnections()
+      await waitFor(() => (client.protocolVersion === null ? true : undefined), 1000)
+      expect(client.connected).toBe(false)
+      expect(client.protocolVersion).toBeNull()
+    } finally {
+      client.close()
+      release()
+    }
     expect(client.protocolVersion).toBeNull()
   })
 
@@ -342,12 +349,61 @@ describe('restartHost', () => {
     expect(b).toEqual(a)
     expect(client.hostPid).toBe(a.pid)
     expect(client.connected).toBe(true)
+    // detached hosts and socket callbacks run on the real clock, including late notifications
+    await Bun.sleep(300)
     expect(reconnects).toBe(1)
   })
+
+  test('a request during restart announces reconnect only after the replacement answers', async () => {
+    const dir = home()
+    const first = startFakePtyHost(dir)
+    cleanups.push(() => first.stop())
+    const client = newClient(dir)
+    expect((await settleWithin(client.connect(), 2000)).status).toBe('resolved')
+    const announcedPids: (number | null)[] = []
+    client.onReconnect(() => announcedPids.push(client.hostPid))
+
+    const restarting = settleWithin(client.restartHost(), 3000)
+    // the request must reach the real socket on the next macrotask
+    const nextTurn = Promise.withResolvers<void>()
+    setTimeout(nextTurn.resolve, 0)
+    await nextTurn.promise
+    const during = await settleWithin(client.request('list', {}), 1000)
+    first.stop()
+    const result = await restarting
+
+    expect(during).toEqual({ status: 'resolved', value: [] })
+    expect(result.status).toBe('resolved')
+    if (result.status !== 'resolved') throw new Error('restart did not resolve')
+    expect(first.requests.filter((request) => request.type === 'shutdown')).toHaveLength(1)
+    expect(result.value.pid).not.toBe(process.pid)
+    // a late socket callback from the old host must not announce a second reconnect
+    await Bun.sleep(300)
+    expect(announcedPids).toEqual([result.value.pid])
+    expect(client.hostPid).toBe(result.value.pid)
+    expect(client.connected).toBe(true)
+  }, 10000)
 })
 
 
 describe('reconnecting after a failed first connect', () => {
+  test('reconnects immediately after a ready connection drops despite a long retry delay', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, { reconnectDelayMs: { initial: 60_000, max: 60_000 } })
+    expect((await settleWithin(client.connect(), 2000)).status).toBe('resolved')
+    let reconnects = 0
+    client.onReconnect(() => reconnects++)
+
+    host.dropConnections()
+    await waitFor(() => (client.connected && reconnects === 1 ? true : undefined), 2000)
+
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(client.connected).toBe(true)
+    expect(reconnects).toBe(1)
+  }, 10000)
+
   test('connects to a late host and notifies without a request', async () => {
     const dir = home()
     const startMarker = join(dir, 'pty-host.start')
@@ -410,12 +466,11 @@ describe('reconnecting after a failed first connect', () => {
       await waitFor(() => (existsSync(attempts) && readFileSync(attempts, 'utf8').trim().split('\n').length >= 3 ? true : undefined), 5000)
 
       client.close()
-      const countAtClose = readFileSync(attempts, 'utf8').trim().split('\n').length
       // Child-process retries use the real clock and cannot be driven by fake timers.
       await Bun.sleep(100)
-      expect(readFileSync(attempts, 'utf8').trim().split('\n')).toHaveLength(countAtClose)
-      await Bun.sleep(500)
-      expect(readFileSync(attempts, 'utf8').trim().split('\n')).toHaveLength(countAtClose)
+      const countAfterClose = readFileSync(attempts, 'utf8').trim().split('\n').length
+      await Bun.sleep(400)
+      expect(readFileSync(attempts, 'utf8').trim().split('\n')).toHaveLength(countAfterClose)
     })
   }, 15000)
 
@@ -434,6 +489,8 @@ describe('reconnecting after a failed first connect', () => {
     if (outcome.status !== 'rejected') throw new Error('connect did not reject')
     expect(outcome.error.message).toBe('pty client closed')
     await waitFor(() => (host.connectionCount() === 0 ? true : undefined), 2000)
+    // real socket opens can complete after close; fake time cannot drive their callbacks
+    await Bun.sleep(300)
     expect(client.connected).toBe(false)
     expect(host.connectionCount()).toBe(0)
 
@@ -470,18 +527,20 @@ describe('reconnecting after a failed first connect', () => {
       const release = host.holdNextHello()
       renameSync(hiddenToken, token)
       await waitFor(() => (host.requests.some((request) => request.type === 'hello') ? true : undefined), 5000)
-      const countAtClose = existsSync(attempts) ? readFileSync(attempts, 'utf8').trim().split('\n').length : 0
 
       client.close()
       release()
-      await Bun.sleep(500)
+      // an already-spawned child can still append before cancellation settles
+      await Bun.sleep(100)
+      const countAfterClose = existsSync(attempts) ? readFileSync(attempts, 'utf8').trim().split('\n').length : 0
+      await Bun.sleep(400)
 
       expect(client.connected).toBe(false)
       expect(reconnects).toBe(0)
       expect(host.connectionCount()).toBe(0)
       expect(host.requests.filter((request) => request.type === 'hello')).toHaveLength(1)
       const finalCount = existsSync(attempts) ? readFileSync(attempts, 'utf8').trim().split('\n').length : 0
-      expect(finalCount).toBe(countAtClose)
+      expect(finalCount).toBe(countAfterClose)
     })
   }, 15000)
 })

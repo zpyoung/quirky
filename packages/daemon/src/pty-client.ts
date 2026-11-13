@@ -46,7 +46,7 @@ export type PtyClientOptions = {
   log?: (message: string) => void
   /** The protocol versions this client speaks; defaults to the protocol package's constants. */
   protocol?: { min: number; max: number }
-  /** The pause before the first retry and its cap; defaults to 1000 and 30000. */
+  /** The pause after a failed connection attempt and its cap; defaults to 1000 and 30000. */
   reconnectDelayMs?: { initial: number; max: number }
   /** Deadline for an acknowledged write after it has been sent to the host; default 30 seconds. */
   writeAcceptedTimeoutMs?: number
@@ -258,7 +258,6 @@ export class PtyClient {
   private async replaceHost(): Promise<{ pid: number }> {
     await this.connect()
     if (this.closing) throw new Error('pty client closed')
-    this.reconnectOwed = true
     this.keepDown = true
     try {
       if (!(await this.shutdownAndWait(this.options.shutdownWaitMs ?? RESTART_WAIT_MS))) {
@@ -616,7 +615,7 @@ export class PtyClient {
     for (const release of [...this.closeWaiters]) release()
     if (wasReady && !this.closing) {
       this.reconnectOwed = true
-      if (!this.keepDown && !this.restarting) this.startReconnectLoop()
+      if (!this.keepDown && !this.restarting) this.startReconnectLoop(true)
     }
   }
 
@@ -628,18 +627,19 @@ export class PtyClient {
     this.pending.clear()
   }
 
-  private startReconnectLoop(): void {
+  private startReconnectLoop(immediate = false): void {
     if (this.reconnecting || this.closing || this.ready || this.keepDown || this.restarting) return
     this.reconnecting = true
-    void this.reconnectLoop()
+    void this.reconnectLoop(immediate)
   }
 
-  private async reconnectLoop(): Promise<void> {
+  private async reconnectLoop(immediate: boolean): Promise<void> {
     let delay = this.reconnectDelay.initial
     let lastError: string | null = null
+    let waitBeforeAttempt = !immediate
     try {
       while (!this.closing && !this.ready && !this.keepDown && !this.restarting) {
-        await this.waitForRetry(delay)
+        if (waitBeforeAttempt) await this.waitForRetry(delay)
         if (this.closing || this.ready || this.keepDown || this.restarting) break
         try {
           await this.connect()
@@ -651,7 +651,8 @@ export class PtyClient {
             this.options.log?.(`pty reconnect failed: ${message}`)
             lastError = message
           }
-          delay = Math.min(delay * 2, this.reconnectDelay.max)
+          if (waitBeforeAttempt) delay = Math.min(delay * 2, this.reconnectDelay.max)
+          waitBeforeAttempt = true
         }
       }
     } finally {
