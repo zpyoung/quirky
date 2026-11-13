@@ -774,14 +774,14 @@ export class TerminalService {
       } finally {
         this.taps.delete(sessionId)
       }
+      const end = start === undefined ? result.offset + tap.total : Math.max(start + tap.total, result.offset)
+      const after = end - result.offset
+      this.received.set(sessionId, end)
       if (this.closed) {
         stream.close()
         this.refuseWhenClosed()
       }
       if (this.forgotten.has(sessionId)) stream.close()
-      const end = start === undefined ? result.offset + tap.total : Math.max(start + tap.total, result.offset)
-      const after = end - result.offset
-      this.received.set(sessionId, end)
       if (isOpen()) {
         const streams = this.byConnection.get(attachment.connectionId) ?? new Map()
         streams.set(stream.streamId, attachment)
