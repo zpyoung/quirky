@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
-import { spawn, type ChildProcess } from 'node:child_process'
 import { setTimeout as delayTimer, clearTimeout } from 'node:timers'
-import type { PluginContext } from '@quirky/protocol'
+import type { PluginContext, ProcessSpawner, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 import type { Identity, RunOptions, Scope } from './env'
 import { isRecord } from './data'
 import { parseAuthInventory, type AuthAccount } from './auth-inventory'
@@ -35,10 +34,13 @@ type ProcessResult = {
   stderr: string
   exitCode: number | null
   spawnError?: string
+  streamError?: string
+  groupSurvived?: boolean
   timedOut: boolean
   outputLimit: boolean
   aborted: boolean
 }
+type ActiveChild = { child: SpawnedProcess; done: Promise<void>; stopOnDispose: () => Promise<SpawnExit> }
 type FailureReason =
   | 'gh_unavailable'
   | 'not_authenticated'
@@ -79,8 +81,9 @@ export type RuntimeRunner = {
 export function createRuntimeRunner(context: PluginContext, invalidateUnknownWrite: (scope: Scope) => void): RuntimeRunner {
   let active = 0
   let disposed = false
+  let disposePromise: Promise<void> | undefined
   const waiters: Waiter[] = []
-  const activeChildren = new Set<ChildProcess>()
+  const activeChildren = new Set<ActiveChild>()
   const circuits = new Map<string, Circuit>()
   const budgets = new Map<string, RateLimitSnapshot>()
   const rateLimitCache = new Map<string, { snapshot: RateLimitSnapshot; expiresAt: number }>()
@@ -142,6 +145,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
   }
 
   async function run(scope: Scope, args: string[], options: RunOptions = {}, onSuccess?: (output: string) => void): Promise<string> {
+    if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
     validateArguments(args, invalidError)
     const target = await trustedTarget(scope, options)
     const pinnedArgs = pinArguments(args, target)
@@ -168,25 +172,29 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
       for (let attempt = 0; ; attempt += 1) {
         if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
         const childEnv = await environmentFor(scope, options, isAuthCommand)
+        if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
         if (!isAuthCommand && !rateProbe) noteSpend(budgetKey, bucket)
-        const result = await spawnProcess('gh', pinnedArgs, {
+        const result = await spawnProcess(context.process, 'gh', pinnedArgs, {
           cwd: scope.worktree.path,
           env: childEnv,
           timeoutMs,
           maxBytes,
           input: options.input,
           signal: options.signal
-        }, activeChildren)
-        if (result.exitCode === 0 && !result.timedOut && !result.outputLimit && !result.aborted) {
+        }, activeChildren, () => disposed)
+        if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
+        if (result.exitCode === 0 && !result.timedOut && !result.outputLimit && !result.aborted
+          && !result.streamError && !result.groupSurvived) {
           onSuccess?.(result.stdout)
           circuits.delete(circuitKey)
           return result.stdout
         }
         const combined = `${result.stderr}\n${result.stdout}`
         if (result.spawnError) throw normalizeFailure(context, result, combined)
-        if (args[0] === 'auth' && args[1] === 'status' && result.exitCode !== null
+        const cleanFailure = !result.timedOut && !result.outputLimit && !result.aborted && !result.streamError && !result.groupSurvived
+        if (cleanFailure && args[0] === 'auth' && args[1] === 'status' && result.exitCode !== null
           && (/^Logged in to /m.test(combined) || /not logged in|not logged into any GitHub hosts|no hosts are logged in/i.test(combined))) return combined
-        if (args[0] === 'pr' && args[1] === 'checks' && /no checks reported/i.test(combined)) return '[]'
+        if (cleanFailure && args[0] === 'pr' && args[1] === 'checks' && /no checks reported/i.test(combined)) return '[]'
 
         const failure = classifyFailure(result, combined, args)
         if (failure.reason === 'rate_limited' && !rateProbe) setCircuit(circuitKey, bucket, failure.retryAfterMs)
@@ -229,6 +237,7 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
   }
 
   async function resolveBoundToken(scope: Scope, binding: { host: string; user: string }): Promise<string> {
+    if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
     if (binding.host !== scope.repository.host) throw pluginError('binding_host_mismatch', 'The selected GitHub account does not match this repository host.')
     const key = `${scope.repository.host}:${binding.host}:${binding.user}`
     const cached = tokenCache.get(key)
@@ -239,25 +248,26 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     }
 
     const capability = await multiAccountCapability(scope)
+    if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
     if (capability === false) throw pluginError('multi_account_unsupported', 'This GitHub CLI does not support selecting a logged-in account.')
     if (capability === null) throw pluginError('multi_account_capability_unknown', 'Could not verify GitHub CLI account-selection support.')
-    if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
     try {
       const env = processEnvironment()
       stripTokenEnvironment(env)
       delete env.GH_HOST
       delete env.GH_REPO
       env.GH_PROMPT_DISABLED = env.GH_PROMPT_DISABLED || '1'
-      const output = await spawnProcess('gh', ['auth', 'token', '--hostname', binding.host, '--user', binding.user], {
+      const output = await spawnProcess(context.process, 'gh', ['auth', 'token', '--hostname', binding.host, '--user', binding.user], {
         cwd: scope.worktree.path,
         env,
         timeoutMs: 10_000,
-        maxBytes: 64 * 1024,
-        signal: undefined
-      }, activeChildren)
-      if (output.exitCode !== 0 || output.timedOut || output.outputLimit || output.spawnError) {
+        maxBytes: 64 * 1024
+      }, activeChildren, () => disposed)
+      if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
+      if (output.exitCode !== 0 || output.timedOut || output.outputLimit || output.aborted || output.spawnError || output.streamError || output.groupSurvived) {
         const failure = classifyFailure(output, `${output.stderr}\n${output.stdout}`)
-        const negativeTtl = failure.reason === 'timeout' || failure.reason === 'gh_unavailable' || failure.reason === 'network_error'
+        const negativeTtl = output.aborted || output.streamError || output.groupSurvived || failure.reason === 'timeout'
+          || failure.reason === 'gh_unavailable' || failure.reason === 'network_error'
           ? 0
           : NEGATIVE_TOKEN_TTL_MS
         if (negativeTtl > 0) tokenCache.set(key, { token: null, expiresAt: Date.now() + negativeTtl })
@@ -272,38 +282,42 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
       pruneMap(tokenCache, 128)
       return token
     } catch (error) {
-      if (error instanceof Error && isReason(error, 'bound_account_unavailable')) throw error
+      if (error instanceof Error && (isReason(error, 'bound_account_unavailable') || isReason(error, 'plugin_inactive'))) throw error
       throw pluginError('bound_account_unavailable', 'The selected GitHub account token could not be resolved.')
     }
   }
 
   async function multiAccountCapability(scope: Scope): Promise<boolean | null> {
+    if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
     const key = `${scope.repository.host}|${createHash('sha256').update(`${scope.worktree.path}|${process.env.PATH ?? ''}`).digest('hex')}`
     const cached = capabilityCache.get(key)
     if (cached && cached.expiresAt > Date.now()) return cached.supported
     try {
-      if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
       const env = processEnvironment()
       stripTokenEnvironment(env)
       delete env.GH_HOST
       delete env.GH_REPO
       env.GH_PROMPT_DISABLED = env.GH_PROMPT_DISABLED || '1'
-      const result = await spawnProcess('gh', ['auth', 'token', '--help'], {
+      const result = await spawnProcess(context.process, 'gh', ['auth', 'token', '--help'], {
         cwd: scope.worktree.path,
         env,
         timeoutMs: 10_000,
         maxBytes: 64 * 1024
-      }, activeChildren)
-      if (result.spawnError || result.timedOut || result.outputLimit || result.exitCode !== 0) {
-        capabilityCache.set(key, { supported: null, expiresAt: Date.now() + 60_000 })
+      }, activeChildren, () => disposed)
+      if (disposed) throw pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.')
+      if (result.spawnError || result.timedOut || result.outputLimit || result.aborted || result.streamError || result.groupSurvived || result.exitCode !== 0) {
+        if (!result.aborted && !result.streamError && !result.groupSurvived) {
+          capabilityCache.set(key, { supported: null, expiresAt: Date.now() + 60_000 })
+        }
         return null
       }
       const supported = /--user(?:\s|,|\[|$)/.test(`${result.stdout}\n${result.stderr}`)
       capabilityCache.set(key, { supported, expiresAt: supported ? Number.MAX_SAFE_INTEGER : Date.now() + 30 * 60_000 })
       pruneMap(capabilityCache, 64)
       return supported
-    } catch {
-      capabilityCache.set(key, { supported: null, expiresAt: Date.now() + 60_000 })
+    } catch (error) {
+      if (error instanceof Error && isReason(error, 'plugin_inactive')) throw error
+      if (!disposed) capabilityCache.set(key, { supported: null, expiresAt: Date.now() + 60_000 })
       return null
     }
   }
@@ -505,12 +519,11 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     return response
   }
 
-  async function dispose(): Promise<void> {
-    if (disposed) return
+  function dispose(): Promise<void> {
+    if (disposePromise) return disposePromise
     disposed = true
-    const children = [...activeChildren]
-    const closures = children.map((child) => new Promise<void>((resolve) => child.once('close', () => resolve())))
-    for (const child of children) terminateProcess(child)
+    const { promise: completion, resolve: resolveDispose } = createPromiseResolvers<void>()
+    disposePromise = completion
     for (const waiter of waiters.splice(0)) {
       if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort)
       waiter.reject(pluginError('plugin_inactive', 'The GitHub hosting plugin is shutting down.'))
@@ -524,9 +537,27 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
     authInflight.clear()
     tokenCache.clear()
     capabilityCache.clear()
-    await new Promise<void>((resolve) => delayTimer(resolve, 100))
-    for (const child of children) terminateProcess(child, 'SIGKILL')
-    await Promise.all(closures)
+
+    const children = [...activeChildren]
+    const stop = (entries: ActiveChild[]): Promise<void>[] => entries.map((entry) => {
+      try {
+        return entry.stopOnDispose().then(() => undefined, () => undefined)
+      } catch {
+        return Promise.resolve()
+      }
+    })
+    const stopPromises = stop(children)
+    void Promise.resolve().then(async () => {
+      const allChildren = [...activeChildren]
+      const lateChildren = allChildren.filter((entry) => !children.includes(entry))
+      await Promise.allSettled([
+        ...stopPromises,
+        ...stop(lateChildren),
+        ...allChildren.map((entry) => entry.done)
+      ])
+      resolveDispose()
+    })
+    return disposePromise
   }
 
   return { run, json, rest, graphql, authAccounts, validateBinding, rateLimit, dispose }
@@ -622,115 +653,179 @@ export function createRuntimeRunner(context: PluginContext, invalidateUnknownWri
 }
 
 async function spawnProcess(
+  spawner: ProcessSpawner,
   command: string,
   args: string[],
   options: { cwd: string; env: Record<string, string>; timeoutMs: number; maxBytes: number; input?: string; signal?: AbortSignal },
-  activeChildren: Set<ChildProcess>
+  activeChildren: Set<ActiveChild>,
+  isDisposed: () => boolean
 ): Promise<ProcessResult> {
-  const { promise, resolve } = createPromiseResolvers<ProcessResult>()
-  let stdoutBytes = 0
-  let stderrBytes = 0
-  const stdoutChunks: Buffer[] = []
-  const stderrChunks: Buffer[] = []
-  let spawnError: string | undefined
-  let timedOut = false
-  let outputLimit = false
-  let aborted = false
-  let child: ChildProcess
-  if (options.signal?.aborted) return { stdout: '', stderr: '', exitCode: null, timedOut: false, outputLimit: false, aborted: true }
+  if (options.signal?.aborted || isDisposed()) {
+    return { stdout: '', stderr: '', exitCode: null, timedOut: false, outputLimit: false, aborted: true }
+  }
+
+  let child: SpawnedProcess
   try {
-    child = spawn(command, args, {
+    child = spawner.spawn([command, ...args], {
       cwd: options.cwd,
       env: options.env,
-      detached: process.platform !== 'win32',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true
+      stdin: options.input === undefined ? 'ignore' : 'pipe',
+      stderr: 'pipe',
+      timeoutMs: options.timeoutMs,
+      killGraceMs: 100,
+      groupGrace: true,
+      ...(options.signal ? { signal: options.signal } : {})
     })
   } catch (error) {
     return { stdout: '', stderr: '', exitCode: null, spawnError: errorMessage(error), timedOut: false, outputLimit: false, aborted: false }
   }
-  activeChildren.add(child)
-  let finished = false
-  let pendingExit = false
-  let pendingExitCode: number | null = null
-  let killTimer: ReturnType<typeof setTimeout> | undefined
-  let stopping = false
-  const complete = (exitCode: number | null) => {
-    if (finished) return
-    finished = true
-    clearTimeout(timeout)
-    clearTimeout(killTimer)
-    options.signal?.removeEventListener('abort', onAbort)
-    activeChildren.delete(child)
-    resolve({
-      stdout: Buffer.concat(stdoutChunks).toString('utf8'),
-      stderr: Buffer.concat(stderrChunks).toString('utf8'),
-      exitCode,
-      ...(spawnError !== undefined ? { spawnError } : {}),
-      timedOut,
-      outputLimit,
-      aborted
-    })
+
+  let firstStop: 'timeout' | 'outputLimit' | 'aborted' | undefined
+  let streamError: string | undefined
+  let outputBytes = 0
+  let readersCancelled = false
+  let stdoutReader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let stderrReader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let stopPromise: Promise<SpawnExit> | undefined
+  const stdoutChunks: Uint8Array[] = []
+  const stderrChunks: Uint8Array[] = []
+  const doneResolver = createPromiseResolvers<void>()
+
+  const cancelReader = (reader: ReadableStreamDefaultReader<Uint8Array> | undefined) => {
+    if (reader) void reader.cancel().catch(() => {})
   }
-  const finish = (exitCode: number | null) => {
-    if (finished) return
-    if (stopping && killTimer !== undefined) {
-      pendingExit = true
-      pendingExitCode = exitCode
-      return
+  const cancelReaders = () => {
+    readersCancelled = true
+    cancelReader(stdoutReader)
+    cancelReader(stderrReader)
+  }
+  const requestStop = (): Promise<SpawnExit> => {
+    if (!stopPromise) {
+      try {
+        stopPromise = child.stop({ graceMs: 100 })
+      } catch (error) {
+        stopPromise = Promise.reject(error)
+      }
+      void stopPromise.catch(() => {})
     }
-    complete(exitCode)
-  }
-  const stop = () => {
-    if (stopping) return
-    stopping = true
-    terminateProcess(child)
-    killTimer = delayTimer(() => {
-      terminateProcess(child, 'SIGKILL')
-      killTimer = undefined
-      if (pendingExit) complete(pendingExitCode)
-    }, 100)
+    return stopPromise
   }
   const onAbort = () => {
-    aborted = true
-    stop()
+    firstStop ??= 'aborted'
+    cancelReaders()
+    void requestStop()
   }
+  const stopOnDispose = (): Promise<SpawnExit> => {
+    firstStop ??= 'aborted'
+    cancelReaders()
+    return requestStop()
+  }
+  const entry: ActiveChild = { child, done: doneResolver.promise, stopOnDispose }
+  activeChildren.add(entry)
+  if (isDisposed()) {
+    firstStop ??= 'aborted'
+    cancelReaders()
+    void requestStop()
+  }
+
   const timeout = delayTimer(() => {
-    timedOut = true
-    stop()
+    if (firstStop !== undefined) return
+    firstStop = 'timeout'
+    cancelReaders()
+    void requestStop()
   }, options.timeoutMs)
   timeout.unref?.()
   options.signal?.addEventListener('abort', onAbort, { once: true })
   if (options.signal?.aborted) onAbort()
-  child.stdout?.on('data', (chunk: Buffer) => {
-    const next = stdoutBytes + chunk.byteLength
-    if (next + stderrBytes > options.maxBytes) {
-      outputLimit = true
-      stop()
-      return
+
+  if (options.input !== undefined) {
+    void child.write(options.input)
+    void child.closeInput()
+  }
+
+  const recordStreamError = (error: unknown) => {
+    if (firstStop !== undefined || streamError !== undefined) return
+    streamError = errorMessage(error)
+    cancelReaders()
+    void requestStop()
+  }
+  const drain = async (reader: ReadableStreamDefaultReader<Uint8Array>, chunks: Uint8Array[]) => {
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) return
+        if (firstStop !== undefined || streamError !== undefined) return
+        if (outputBytes + value.byteLength > options.maxBytes) {
+          firstStop ??= 'outputLimit'
+          cancelReaders()
+          void requestStop()
+          return
+        }
+        outputBytes += value.byteLength
+        chunks.push(value)
+      }
+    } catch (error) {
+      recordStreamError(error)
     }
-    stdoutBytes = next
-    stdoutChunks.push(chunk)
-  })
-  child.stderr?.on('data', (chunk: Buffer) => {
-    const next = stderrBytes + chunk.byteLength
-    if (stdoutBytes + next > options.maxBytes) {
-      outputLimit = true
-      stop()
-      return
+  }
+
+  const stdoutDone = (() => {
+    try {
+      stdoutReader = child.stdout.getReader()
+      if (readersCancelled) cancelReader(stdoutReader)
+      return drain(stdoutReader, stdoutChunks)
+    } catch (error) {
+      recordStreamError(error)
+      return Promise.resolve()
     }
-    stderrBytes = next
-    stderrChunks.push(chunk)
+  })()
+  const stderrDone = (() => {
+    try {
+      stderrReader = child.stderr.getReader()
+      if (readersCancelled) cancelReader(stderrReader)
+      return drain(stderrReader, stderrChunks)
+    } catch (error) {
+      recordStreamError(error)
+      return Promise.resolve()
+    }
+  })()
+  const exited = child.exited.then((exit) => {
+    if (firstStop === undefined && exit.stopped === 'timeout') {
+      firstStop = 'timeout'
+      cancelReaders()
+      void requestStop()
+    } else if (firstStop === undefined && exit.stopped === 'aborted') {
+      firstStop = 'aborted'
+      cancelReaders()
+      void requestStop()
+    }
+    return exit
   })
-  child.once('error', (error) => {
-    spawnError = errorMessage(error)
-    finish(null)
-  })
-  child.once('close', (code) => finish(code))
-  child.stdin?.on('error', () => {})
-  if (options.input === undefined) child.stdin?.end()
-  else child.stdin?.end(options.input, 'utf8')
-  return promise
+
+  try {
+    const [exit] = await Promise.all([exited, stdoutDone, stderrDone])
+    const spawnError = exit.spawnError ? `${exit.spawnError.code}: ${exit.spawnError.message}` : undefined
+    const timedOut = firstStop === 'timeout' || (firstStop === undefined && exit.stopped === 'timeout')
+    const outputLimit = firstStop === 'outputLimit'
+    const aborted = firstStop === 'aborted' || (firstStop === undefined && exit.stopped === 'aborted')
+    const groupSurvived = exit.groupSurvived === true
+    return {
+      stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+      stderr: Buffer.concat(stderrChunks).toString('utf8'),
+      exitCode: exit.exitCode,
+      ...(spawnError !== undefined ? { spawnError } : {}),
+      ...(streamError !== undefined ? { streamError } : {}),
+      groupSurvived,
+      timedOut,
+      outputLimit,
+      aborted
+    }
+  } finally {
+    clearTimeout(timeout)
+    options.signal?.removeEventListener('abort', onAbort)
+    activeChildren.delete(entry)
+    doneResolver.resolve()
+  }
 }
 
 function createPromiseResolvers<T>(): { promise: Promise<T>; resolve(value: T): void } {
@@ -739,20 +834,6 @@ function createPromiseResolvers<T>(): { promise: Promise<T>; resolve(value: T): 
     resolvePromise = resolve
   })
   return { promise, resolve: resolvePromise }
-}
-
-function terminateProcess(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
-  if (!child.pid) return
-  try {
-    if (process.platform !== 'win32' && child.spawnargs.length > 0) process.kill(-child.pid, signal)
-    else child.kill(signal)
-  } catch {
-    try {
-      child.kill(signal)
-    } catch {
-      return
-    }
-  }
 }
 
 function processEnvironment(): Record<string, string> {
@@ -937,6 +1018,7 @@ function classifyFailure(result: ProcessResult, combined: string, args: readonly
   if (result.aborted) return { reason: 'cancelled' }
   const lower = combined.toLowerCase()
   if (result.spawnError && /enoent|not found|could not find/i.test(result.spawnError)) return { reason: 'gh_unavailable' }
+  if (result.exitCode === 0 && (result.streamError || result.groupSurvived)) return { reason: 'upstream_error' }
   if (/gh:\s*command not found|executable file not found|no such file or directory/.test(lower)) return { reason: 'gh_unavailable' }
   const retryAfterMs = readRetryAfter(combined)
   if (/api rate limit exceeded|secondary rate limit|rate limit exceeded|http 429|status 429/.test(lower)) return { reason: 'rate_limited', ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) }
@@ -967,7 +1049,7 @@ function isPullRequestReadCommand(args: readonly string[]): boolean {
 }
 
 function isTransient(result: ProcessResult, combined: string): boolean {
-  if (result.timedOut || result.outputLimit || result.aborted || result.spawnError) return false
+  if (result.timedOut || result.outputLimit || result.aborted || result.spawnError || result.streamError || result.groupSurvived) return false
   const lower = combined.toLowerCase()
   return /http (500|502|503|504)|status (500|502|503|504)|econnreset|etimedout|socket hang up/.test(lower) || (/http 429|status 429/.test(lower) && readRetryAfter(combined) === undefined)
 }
