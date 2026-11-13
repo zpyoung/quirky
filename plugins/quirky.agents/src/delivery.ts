@@ -6,6 +6,9 @@ import type { AgentEntry, DeliveryOutcome } from './core/types'
 /** How long a liveness check may go unanswered before the delivery gives up on it. */
 const LIVENESS_TIMEOUT_MS = 2000
 
+const RECOVERY_RETRY_MS = 500
+const MAX_EARLY_OUTPUT_BYTES = 4_194_304
+
 /** Per-delivery switches. */
 export type DeliverOptions = {
   /** The agent already shows its input: skip the ready wait and paste once the session is known alive. */
@@ -60,18 +63,28 @@ export class DeliveryRunner {
       const clock = () => this.now() / this.timeScale
       const startedAt = clock()
       const deadline = startedAt + entry.readyTimeoutMs
-      const scanner = createReadyScanner(submit ? entry.submitSignal : entry.readySignal)
+      const signal = submit ? entry.submitSignal : entry.readySignal
+      let scanner = createReadyScanner(signal)
 
       let settled = false
       let subscribed = false
-      let subscribing = true
+      let subscribing = options.ready !== true
+      let acceptingOutput = options.ready !== true
       let pasting = false
-      let deadlineHandled = false
+      let pasteCommitted = false
       let pasteWritten = false
+      let deadlineHandled = false
       let pasteOutcome: DeliveryOutcome = 'pasted'
       let timer: ReturnType<typeof setTimeout> | null = null
       let deadlineTimer: ReturnType<typeof setTimeout> | null = null
       let livenessTimer: ReturnType<typeof setTimeout> | null = null
+      let recoveryTimer: ReturnType<typeof setTimeout> | null = null
+      let retryDue = false
+      let gapObserved = false
+      let earlyBytes = 0
+      let pasteGeneration = 0
+      let subscriptionGeneration = 0
+      let subscribeInFlight: { generation: number; invalidatedByGap: boolean } | null = null
       const early: Uint8Array[] = []
       const removers: Array<() => void> = []
 
@@ -92,6 +105,10 @@ export class DeliveryRunner {
           clearTimeout(deadlineTimer)
           deadlineTimer = null
         }
+        if (recoveryTimer !== null) {
+          clearTimeout(recoveryTimer)
+          recoveryTimer = null
+        }
       }
 
       const settle = (outcome: DeliveryOutcome) => {
@@ -100,6 +117,9 @@ export class DeliveryRunner {
         }
         settled = true
         clearTimer()
+        acceptingOutput = false
+        early.length = 0
+        earlyBytes = 0
         for (const remove of removers) {
           remove()
         }
@@ -179,16 +199,19 @@ export class DeliveryRunner {
 
       const paste = (outcome: DeliveryOutcome) => {
         pasting = true
+        const generation = ++pasteGeneration
         livenessTimer = setTimeout(() => {
           livenessTimer = null
           settle('not-delivered')
         }, Math.max(0, LIVENESS_TIMEOUT_MS * this.timeScale))
         isAlive().then((alive) => {
-          if (settled) {
+          if (settled || generation !== pasteGeneration || !pasting) {
             return
           }
           clearLivenessTimer()
+          pasting = false
           if (alive) {
+            pasteCommitted = true
             writePaste(outcome)
           } else {
             settle('not-delivered')
@@ -201,7 +224,7 @@ export class DeliveryRunner {
           return
         }
         deadlineHandled = true
-        if (!pasting && !subscribing && entry.blindPaste) {
+        if (!gapObserved && !pasting && !subscribing && entry.blindPaste) {
           paste('unconfirmed')
         } else {
           settle('not-delivered')
@@ -209,7 +232,7 @@ export class DeliveryRunner {
       }
 
       const check = () => {
-        if (settled || pasteWritten || pasting || subscribing) {
+        if (settled || pasteCommitted || pasteWritten || pasting || subscribing) {
           return
         }
         const at = clock()
@@ -227,6 +250,108 @@ export class DeliveryRunner {
         }
       }
 
+      let startSubscribe: () => void
+      const maybeStartRetry = () => {
+        if (settled || !retryDue || subscribeInFlight !== null) {
+          return
+        }
+        if (clock() >= deadline) {
+          onDeadline()
+          return
+        }
+        retryDue = false
+        startSubscribe()
+      }
+
+      startSubscribe = () => {
+        if (settled || subscribeInFlight !== null) {
+          return
+        }
+        if (gapObserved && clock() >= deadline) {
+          onDeadline()
+          return
+        }
+        subscribing = true
+        acceptingOutput = true
+        early.length = 0
+        earlyBytes = 0
+        const attempt = { generation: subscriptionGeneration, invalidatedByGap: false }
+        subscribeInFlight = attempt
+        this.pty.subscribe(sessionId).then(
+          ({ replay }) => {
+            if (subscribeInFlight === attempt) {
+              subscribeInFlight = null
+            }
+            if (attempt.invalidatedByGap || attempt.generation !== subscriptionGeneration) {
+              maybeStartRetry()
+              return
+            }
+            if (settled) {
+              this.pty.unsubscribe(sessionId).catch(() => {})
+              return
+            }
+            subscribed = true
+            subscribing = false
+            acceptingOutput = true
+            const at = clock()
+            scanner.push(Buffer.from(replay, 'base64'), at)
+            for (const bytes of early) {
+              scanner.push(bytes, at)
+            }
+            early.length = 0
+            earlyBytes = 0
+            check()
+          },
+          () => {
+            if (subscribeInFlight === attempt) {
+              subscribeInFlight = null
+            }
+            if (attempt.invalidatedByGap || attempt.generation !== subscriptionGeneration) {
+              maybeStartRetry()
+              return
+            }
+            if (settled) {
+              return
+            }
+            subscribing = false
+            settle('not-delivered')
+          }
+        )
+      }
+
+      const recover = () => {
+        if (settled || pasteCommitted || pasteWritten || options.ready === true) {
+          return
+        }
+        gapObserved = true
+        subscriptionGeneration++
+        if (subscribeInFlight !== null) {
+          subscribeInFlight.invalidatedByGap = true
+        }
+        subscribed = false
+        subscribing = true
+        acceptingOutput = false
+        scanner = createReadyScanner(signal)
+        early.length = 0
+        earlyBytes = 0
+        if (timer !== null) {
+          clearTimeout(timer)
+          timer = null
+        }
+        if (pasting) {
+          pasting = false
+          pasteGeneration++
+          clearLivenessTimer()
+        }
+        if (recoveryTimer === null && !retryDue) {
+          recoveryTimer = setTimeout(() => {
+            recoveryTimer = null
+            retryDue = true
+            maybeStartRetry()
+          }, Math.max(0, RECOVERY_RETRY_MS * this.timeScale))
+        }
+      }
+
       const sessionEnded = () => {
         if (pasteWritten) {
           settle(pasteOutcome)
@@ -237,15 +362,25 @@ export class DeliveryRunner {
 
       removers.push(
         this.pty.onData((id, bytes) => {
-          if (id !== sessionId || settled || pasteWritten || pasting) {
+          if (id !== sessionId || settled || pasteCommitted || pasteWritten || pasting || !acceptingOutput) {
             return
           }
           if (subscribing) {
+            if (earlyBytes + bytes.byteLength > MAX_EARLY_OUTPUT_BYTES) {
+              recover()
+              return
+            }
             early.push(bytes)
+            earlyBytes += bytes.byteLength
             return
           }
           scanner.push(bytes, clock())
           check()
+        }),
+        this.pty.onLagged((id) => {
+          if (id === sessionId) {
+            recover()
+          }
         }),
         this.pty.onExit((id) => {
           if (id === sessionId) {
@@ -265,7 +400,6 @@ export class DeliveryRunner {
       )
 
       if (options.ready === true) {
-        subscribing = false
         paste('pasted')
         return
       }
@@ -274,29 +408,7 @@ export class DeliveryRunner {
         deadlineTimer = null
         onDeadline()
       }, Math.max(0, entry.readyTimeoutMs * this.timeScale))
-
-      this.pty.subscribe(sessionId).then(
-        ({ replay }) => {
-          subscribing = false
-          subscribed = true
-          if (settled) {
-            // settled while subscribing, so the settle skipped the unsubscribe
-            this.pty.unsubscribe(sessionId).catch(() => {})
-            return
-          }
-          const at = clock()
-          scanner.push(Buffer.from(replay, 'base64'), at)
-          for (const bytes of early) {
-            scanner.push(bytes, at)
-          }
-          early.length = 0
-          check()
-        },
-        () => {
-          subscribing = false
-          settle('not-delivered')
-        }
-      )
+      startSubscribe()
     })
   }
 }
