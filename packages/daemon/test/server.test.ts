@@ -154,7 +154,7 @@ test('startServer wires native WebSocket sends, budgets, drain, and once-only cl
   try {
     startServer({
       core,
-      handle: (_conn, message) => handled.push(message),
+      handle: async (_conn, message) => { handled.push(message) },
       port: 0,
       rpcToken: 'token',
       daemonVersion: 'test',
