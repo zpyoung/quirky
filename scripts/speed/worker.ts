@@ -131,7 +131,6 @@ async function runWorker(workerId: string): Promise<void> {
       await floodTask
       floodTask = undefined
       currentFloodRun = undefined
-      await writeMarker(`SPEED_STOPPED ${workerId} ${sessionId ?? 'unbound'}`)
       closing = true
       input.pause()
       input.setRawMode(false)

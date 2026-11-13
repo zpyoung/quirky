@@ -60,7 +60,7 @@ export type SpeedFixture = {
 
 type RpcClient = Pick<SoakWorld['control'], 'callAny'>
 type Options = { signal?: AbortSignal; timeoutMs?: number }
-type WorkerRecord = { sessionId: string; workerId: string; ready: boolean }
+type WorkerRecord = { sessionId: string; workerId: string }
 type FloodActive = { sessionId: string; workerId: string; runId: string }
 
 function record(value: unknown): Record<string, unknown> {
@@ -264,10 +264,9 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
           failures.push(error)
         }
       }
-      await Promise.all(workers.map(async ({ sessionId, workerId, ready }) => {
+      await Promise.all(workers.map(async ({ sessionId }) => {
         try {
           await sendControl(sessionId, 'shutdown', {}, cleanupOptions)
-          if (ready) await waitForMarker(rpc, sessionId, `SPEED_STOPPED ${workerId} ${sessionId}`, 5000)
         } catch (error) {
           failures.push(error)
         }
@@ -350,7 +349,7 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
       const echoSession = requiredString(opened.session, 'quirky.terminal/newTab')
       const tabId = requiredString(opened.tab, 'quirky.terminal/newTab tab')
       const echoPane = requiredString(opened.pane, 'quirky.terminal/newTab pane')
-      const echoWorker = { sessionId: echoSession, workerId: workerIds[0], ready: false }
+      const echoWorker = { sessionId: echoSession, workerId: workerIds[0] }
       workers.push(echoWorker)
 
       const split = record(await callRpc(rpc, 'quirky.terminal/splitPane', {
@@ -362,7 +361,7 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
       }, boundedOptions))
       const floodSession = requiredString(split.session, 'quirky.terminal/splitPane')
       const floodPane = requiredString(split.pane, 'quirky.terminal/splitPane pane')
-      const floodWorker = { sessionId: floodSession, workerId: workerIds[1], ready: false }
+      const floodWorker = { sessionId: floodSession, workerId: workerIds[1] }
       workers.push(floodWorker)
       const fixtureWorktree: SpeedFixtureWorktree = {
         id: worktree.id,
@@ -377,7 +376,6 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
       for (const worker of [echoWorker, floodWorker]) {
         await sendControl(worker.sessionId, 'bind', { session: worker.sessionId })
         await waitForMarker(rpc, worker.sessionId, `SPEED_READY ${worker.workerId} ${worker.sessionId}`, WORKER_READY_TIMEOUT_MS, options.signal)
-        worker.ready = true
       }
     }
 

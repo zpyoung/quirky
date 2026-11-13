@@ -63,7 +63,7 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
   }
   const workerBySession = new Map<string, string>()
   const summaryBySession = new Map<string, string>()
-  const stoppedBySession = new Map<string, string>()
+  const stoppedBySession = new Set<string>()
   const pendingSummaryBySession = new Map<string, string>()
   const runIdBySession = new Map<string, string>()
   let sessionCounter = 0
@@ -99,14 +99,15 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
           const runId = command.runId ?? runIdBySession.get(session)!
           pendingSummaryBySession.set(session, `SPEED_FLOOD_SUMMARY:${workerId}:${session}:${runId}:1:2:131072:32`)
         }
-        if (command.op === 'shutdown') stoppedBySession.set(session, `SPEED_STOPPED ${workerId} ${session}`)
+        if (command.op === 'shutdown') stoppedBySession.add(session)
       }
       return { ok: true }
     }
     if (method === 'quirky.terminal/read') {
       const session = String(params.session ?? '')
+      if (stoppedBySession.has(session)) throw new Error(`no such session: ${session}`)
       const pending = pendingSummaryBySession.get(session)
-      const marker = stoppedBySession.get(session) ?? summaryBySession.get(session) ?? `SPEED_READY ${workerBySession.get(session)} ${session}`
+      const marker = summaryBySession.get(session) ?? `SPEED_READY ${workerBySession.get(session)} ${session}`
       if (pending) {
         pendingSummaryBySession.delete(session)
         summaryBySession.set(session, pending)
@@ -370,7 +371,7 @@ function fakeFixtureWorld(options: { failOnSplitAt?: number } = {}) {
   let sessions = 0
   let splitCalls = 0
   const workerBySession = new Map<string, string>()
-  const stoppedBySession = new Map<string, string>()
+  const stoppedBySession = new Set<string>()
   const world = {
     home: fixtureRoot,
     env,
@@ -403,13 +404,14 @@ function fakeFixtureWorld(options: { failOnSplitAt?: number } = {}) {
           const session = String(params.session ?? '')
           if (data.startsWith('\u001e')) {
             const command = JSON.parse(data.slice(1).trim()) as { op: string }
-            if (command.op === 'shutdown') stoppedBySession.set(session, `SPEED_STOPPED ${workerBySession.get(session)} ${session}`)
+            if (command.op === 'shutdown') stoppedBySession.add(session)
           }
           return { ok: true }
         }
         if (method === 'quirky.terminal/read') {
           const session = String(params.session ?? '')
-          return { lines: [stoppedBySession.get(session) ?? `SPEED_READY ${workerBySession.get(session)} ${session}`] }
+          if (stoppedBySession.has(session)) throw new Error(`no such session: ${session}`)
+          return { lines: [`SPEED_READY ${workerBySession.get(session)} ${session}`] }
         }
         if (method === 'quirky.git/diff') {
           return { path: 'speed-diff.txt', source: 'unstaged', staged: false, original: '', modified: speedLines(), binary: false, kind: 'text' }
