@@ -25,6 +25,33 @@ export type SoakEvidence = {
   probes: ProbeRecord[]
   workers: WorkerBeat[]
   daemonExited: boolean
+  daemonLog?: string
+}
+
+export function countDaemonLog(text: string): {
+  unanswered: number
+  byMethod: { method: string; count: number }[]
+  gitTimeouts: number
+} {
+  const counts = new Map<string, number>()
+  let unanswered = 0
+  let gitTimeouts = 0
+  const unansweredPattern = /\b(?:method\s+)?(quirky\.[\w.-]+\/[\w.-]+)(?:\s+in\s+[\w.-]+)? did not answer within \d+\s*ms\b/
+  const gitTimeoutPattern = /\bgit \w+ timed out after \d+ms\b/
+
+  for (const line of text.split(/\r?\n/)) {
+    const match = unansweredPattern.exec(line)
+    if (match) {
+      unanswered += 1
+      const method = match[1]!
+      counts.set(method, (counts.get(method) ?? 0) + 1)
+    }
+    if (gitTimeoutPattern.test(line)) gitTimeouts += 1
+  }
+
+  const byMethod = Array.from(counts, ([method, count]) => ({ method, count }))
+    .sort((left, right) => right.count - left.count || compareText(left.method, right.method))
+  return { unanswered, byMethod, gitTimeouts }
 }
 
 const EXPECTED_WORKERS = 7
@@ -324,6 +351,7 @@ function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy:
     'maxZombies',
     'maxEventsPer5s',
     'maxStallMs',
+    'maxUnanswered',
   ]
   for (const key of limitKeys) {
     if (config.limits[key] > DEFAULT_LIMITS[key]) {
@@ -332,6 +360,11 @@ function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy:
   }
   if (config.fault !== undefined) reasons.push(`fault injected: ${config.fault}`)
   return reasons
+}
+
+function judgeCalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['checks']['calls'] {
+  const result = countDaemonLog(evidence.daemonLog ?? '')
+  return { ...result, ok: result.unanswered <= config.limits.maxUnanswered }
 }
 
 export function judge(
@@ -343,6 +376,7 @@ export function judge(
     zombies: judgeZombies(evidence, config),
     events: judgeEvents(evidence, config),
     stalls: judgeStalls(evidence, config),
+    calls: judgeCalls(evidence, config),
     workers: judgeWorkers(evidence.workers),
     windows: judgeWindows(evidence.windowBeats),
   }

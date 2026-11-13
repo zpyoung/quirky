@@ -4,7 +4,7 @@ import { resolve, join } from 'node:path'
 import { readRuntime } from '@quirky/protocol/node'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
 import type { Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
-import { startFault, type RunningFault } from './soak/faults.ts'
+import { startFault, setGitDelay, type RunningFault } from './soak/faults.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
 import { startProbe, type Probe } from './soak/probe.ts'
 import { judge, windowAlive } from './soak/verdict.ts'
@@ -33,6 +33,24 @@ function heartbeat(worktree: string, path: string, now: number): WorkerBeat {
   } catch {
     return { worktree, lastBeatAgeSeconds: null }
   }
+}
+
+function countSkippedBeats(workers: readonly { path: string }[]): number {
+  let total = 0
+  for (const worker of workers) {
+    let text: string
+    try {
+      text = readFileSync(join(worker.path, 'soak-skips.log'), 'utf8')
+    } catch (error) {
+      if (error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') continue
+      throw error
+    }
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^skipped (\d+) .+$/.exec(line)
+      if (match) total += Number(match[1])
+    }
+  }
+  return total
 }
 
 async function commit(repoRoot: string): Promise<string> {
@@ -95,7 +113,15 @@ export async function main(argv: string[]): Promise<number> {
     const repoRoot = resolve(import.meta.dir, '..')
     const revision = await commit(repoRoot)
     if (interrupted) return interrupted
-    world = await startWorld({ out: config.out, repoRoot, signal: setupAbort.signal, fault: config.fault, windows: config.windows })
+    world = await startWorld({
+      out: config.out,
+      repoRoot,
+      signal: setupAbort.signal,
+      fault: config.fault,
+      windows: config.windows,
+      slowGit: config.slowGitMs !== undefined || config.fault === 'slow-git',
+    })
+    if (config.slowGitMs !== undefined) setGitDelay(world.home, config.slowGitMs)
     if (config.windows > 0) {
       windows = await openWindows({ world, count: config.windows, executable: executable!, out: config.out, signal: setupAbort.signal })
     }
@@ -117,7 +143,16 @@ export async function main(argv: string[]): Promise<number> {
       onPtyHostPid: (pid) => world!.updatePtyHostPid(pid)
     })
     if (config.fault) {
-      fault = startFault({ kind: config.fault, home: world.home, control: world.control, runSeconds: config.minutes * 60, startedAt, signal: runAbort.signal })
+      fault = startFault({
+        kind: config.fault,
+        home: world.home,
+        control: world.control,
+        projects: world.fixtures.worktrees.filter(({ isMain }) => isMain).map(({ path }) => path),
+        out: config.out,
+        runSeconds: config.minutes * 60,
+        startedAt,
+        signal: runAbort.signal,
+      })
     }
     const elapsed = () => (performance.now() - startedAt) / 1000
     const samples: Sample[] = []
@@ -163,6 +198,8 @@ export async function main(argv: string[]): Promise<number> {
     const windowEvidence = windows ? await windows.finish() : { records: [], requests: [] }
     if (interrupted) return interrupted
     const now = Date.now()
+    const daemonLog = readFileSync(join(config.out, 'daemon.log'), 'utf8')
+    const skippedBeatCount = countSkippedBeats(world.workers)
     const evidence = {
       durationSeconds,
       windows: windowEvidence.records.filter(windowAlive).length,
@@ -171,7 +208,8 @@ export async function main(argv: string[]): Promise<number> {
       events: probe.events,
       probes: probe.probes,
       workers: world.workers.map(({ worktree, path }) => heartbeat(worktree, path, now)),
-      daemonExited: daemonMissing || probe.daemonExited()
+      daemonExited: daemonMissing || probe.daemonExited(),
+      daemonLog,
     }
     const judged = judge(evidence, config)
     const rss = samples.flatMap(({ daemonRssKb }) => daemonRssKb === null ? [] : [daemonRssKb])
@@ -180,13 +218,21 @@ export async function main(argv: string[]): Promise<number> {
       commit: revision,
       startedAt: startedIso,
       durationSeconds,
-      config: { minutes: config.minutes, windows: config.windows, worktrees: world.fixtures.worktrees.length, workers: world.workers.length, limits: config.limits },
+      config: {
+        minutes: config.minutes,
+        windows: config.windows,
+        worktrees: world.fixtures.worktrees.length,
+        workers: world.workers.length,
+        limits: config.limits,
+        slowGitMs: config.slowGitMs ?? null,
+      },
       ...judged,
       fault: faultRecord,
       windows: windowEvidence.records,
       windowRequests: windowEvidence.requests,
       daemon: { pid: world.daemonPid, rssKbFirst: rss[0] ?? null, rssKbMax: rss.length ? Math.max(...rss) : null, rssKbLast: rss.at(-1) ?? null },
       skippedSamples,
+      skippedBeats: skippedBeatCount,
       files: { samples: samplesPath, daemonLog: join(config.out, 'daemon.log') }
     }
     writeFileSync(join(config.out, 'soak-report.json'), `${JSON.stringify(report, null, 2)}\n`)
