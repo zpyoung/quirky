@@ -524,7 +524,12 @@ export class BrowserRuntime {
   }
 
 
-  async withPage<T>(page: BrowserPage, method: string, operation: (execution: PageExecution) => Promise<T>): Promise<T> {
+  async withPage<T>(
+    page: BrowserPage,
+    method: string,
+    operation: (execution: PageExecution) => Promise<T>,
+    options?: { spansNavigation?: boolean }
+  ): Promise<T> {
     const profile = this.profile(page.profileId)
     if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
     if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
@@ -540,7 +545,7 @@ export class BrowserRuntime {
         let current: BrowserPage
         try { current = this.store.getPage(page.browserPageId) } catch { throw fault('browser_tab_closed', 'the managed page was closed before the operation ran') }
         if (current.profileId !== page.profileId) throw fault('browser_tab_changed', 'the managed page changed browser profiles before the operation ran')
-        if (this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        if (!options?.spansNavigation && this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
         const epoch = await this.ensureEpoch(profile, page.profileId)
         const binding = await this.ensureBinding(epoch, current, this.generation(page.browserPageId))
         if (epoch.activeTabId !== binding.tabId) {
@@ -577,7 +582,9 @@ export class BrowserRuntime {
           await binding.runtime.termination
           throw fault('browser_tab_changed', 'the managed page changed browser profiles during the operation')
         }
-        if (epoch.invalid || this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'browser page identity changed during the operation')
+        if (epoch.invalid || (options?.spansNavigation
+          ? epoch.pages.get(page.browserPageId) !== binding
+          : this.generation(page.browserPageId) !== expectedGeneration)) throw fault('browser_tab_changed', 'browser page identity changed during the operation')
         return result
       }, controller.signal)
     } catch (error) {
