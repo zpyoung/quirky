@@ -16,6 +16,8 @@ export type BrowserReason =
   | 'browser_timeout'
   | 'browser_eval_error'
   | 'browser_unavailable'
+  | 'browser_client_unavailable'
+  | 'browser_client_ambiguous'
   | 'browser_import_source_unavailable'
   | 'browser_unsafe_replace'
   | 'browser_error'
@@ -36,6 +38,8 @@ const KIND_BY_REASON: Record<BrowserReason, PluginErrorKind> = {
   browser_timeout: 'conflict',
   browser_eval_error: 'conflict',
   browser_unavailable: 'conflict',
+  browser_client_unavailable: 'conflict',
+  browser_client_ambiguous: 'conflict',
   browser_import_source_unavailable: 'conflict',
   browser_unsafe_replace: 'conflict',
   browser_error: 'conflict'
