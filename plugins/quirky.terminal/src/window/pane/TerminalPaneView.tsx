@@ -539,40 +539,79 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     let resyncing = false
     let pendingLag = false
     let resyncFailures = 0
-    const canSend = () => !readOnly && latest.current.interactive
-    let inputClaim: Promise<void> | null = null
-    let inputClaimAt = 0
-    const claimUserInput = (): Promise<void> | null => {
-      if (!canSend() || !gate.allows()) return null
-      if (inputClaim) return inputClaim
-      if (Date.now() - inputClaimAt < 30_000) return null
-      const claim = (async () => {
-        const identity = await context.call('quirky.session/identity', { session: sessionId }) as { processIncarnation: string; live: boolean }
-        if (!identity.live || !identity.processIncarnation) throw new Error('Terminal process is no longer attached.')
-        await context.call('quirky.terminal/userInput', { session: sessionId, expectedIncarnation: identity.processIncarnation })
-        inputClaimAt = Date.now()
-      })()
-      inputClaim = claim
-      void claim.then(
-        () => { if (inputClaim === claim) inputClaim = null },
-        (error: unknown) => {
-          if (inputClaim === claim) inputClaim = null
-          if (!disposed) context.toast('Input blocked', error instanceof Error ? error.message : String(error))
+    const canSend = () => !disposed && !readOnly && latest.current.interactive
+    let attachedIncarnation: string | null = null
+    let identityReady: Promise<string> | null = null
+    let attachment = 0
+    let inputEpoch = 0
+    let inputClaim: Promise<boolean> | null = null
+    let inputClaimAt: number | null = null
+    let inputBlocked = false
+    let inputIntent = false
+    const resetInput = () => {
+      inputEpoch += 1
+      inputClaim = null
+      inputClaimAt = null
+      inputIntent = false
+    }
+    const prepareIdentity = (live: boolean) => {
+      resetInput()
+      inputBlocked = false
+      const currentAttachment = ++attachment
+      attachedIncarnation = null
+      identityReady = null
+      if (!live) return
+      identityReady = context.call('quirky.session/identity', { session: sessionId }).then((value) => {
+        const identity = value as { sessionId?: unknown; processIncarnation?: unknown; live?: unknown } | null
+        if (!identity || identity.sessionId !== sessionId || identity.live !== true ||
+            typeof identity.processIncarnation !== 'string' || identity.processIncarnation.length === 0) {
+          throw new Error('Terminal process is no longer attached.')
         }
-      )
+        if (!disposed && attachment === currentAttachment) attachedIncarnation = identity.processIncarnation
+        return identity.processIncarnation
+      })
+      void identityReady.catch(() => {})
+    }
+    const onInputIntent = () => {
+      inputIntent = true
+      queueMicrotask(() => { inputIntent = false })
+    }
+    const sendInput = (data: string, human = false, wanted = () => true): Promise<boolean> => {
+      if (!canSend() || !gate.allows() || !wanted()) return Promise.resolve(false)
+      const epoch = inputEpoch
+      const write = () => {
+        if (!canSend() || !gate.allows() || !wanted() || epoch !== inputEpoch || inputBlocked) return Promise.resolve(false)
+        return context.call('quirky.terminal/write', { session: sessionId, data }).then(() => true)
+      }
+      if (inputClaim) return inputClaim.then((accepted) => accepted ? write() : false)
+      if (!human) return inputBlocked ? Promise.resolve(false) : write()
+      inputBlocked = false
+      if (inputClaimAt !== null && Date.now() - inputClaimAt < 30_000) return write()
+      const guardedWrite = () => {
+        if (!canSend() || !gate.allows() || !wanted() || epoch !== inputEpoch) return Promise.resolve(false)
+        if (!attachedIncarnation) throw new Error('Terminal process is no longer attached.')
+        return context.call('quirky.terminal/write', { session: sessionId, data, expectedIncarnation: attachedIncarnation }).then(() => {
+          if (disposed || epoch !== inputEpoch) return false
+          inputClaimAt = Date.now()
+          return true
+        })
+      }
+      const claim = (attachedIncarnation ? guardedWrite() : identityReady
+        ? identityReady.then(guardedWrite)
+        : Promise.reject(new Error('Terminal process is not attached.'))).catch((error: unknown) => {
+        if (!disposed && epoch === inputEpoch) {
+          inputBlocked = true
+          inputEpoch += 1
+          context.toast('Input blocked', messageOf(error))
+        }
+        return false
+      })
+      inputClaim = claim
+      void claim.then(() => { if (inputClaim === claim) inputClaim = null })
       return claim
     }
-    const onInputIntent = () => { void claimUserInput()?.catch(() => {}) }
-    const sendInput = (data: string) => {
-      if (!canSend() || !gate.allows()) return
-      const write = () => {
-        if (!disposed && canSend() && gate.allows()) return context.call('quirky.terminal/write', { session: sessionId, data })
-      }
-      // onKey precedes xterm's corresponding onData synchronously. Query replies
-      // emit only onData and never create human input evidence.
-      if (inputClaim) void inputClaim.then(write).catch(() => {})
-      else void write()?.catch(() => {})
-    }
+    const sendHuman = (data: string) => { void sendInput(data, true).catch(() => {}) }
+    const sendGenerated = (data: string) => { void sendInput(data).catch(() => {}) }
 
     term.attachCustomKeyEventHandler((event) => {
       if (event.key === 'Alt') optionSide = event.type === 'keydown' ? (event.location === 1 ? 'left' : event.location === 2 ? 'right' : null) : null
@@ -580,8 +619,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (!action) return true
       event.preventDefault()
       if (action.type === 'send') {
-        onInputIntent()
-        sendInput(action.data)
+        sendHuman(action.data)
       }
       else if (action.position === 'top') term.scrollToTop()
       else term.scrollToBottom()
@@ -589,26 +627,42 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     })
     term.onKey(onInputIntent)
 
-    term.onData((data) => sendInput(latest.current.settings['jis-yen-backslash'] && data === '¥' ? '\\' : data))
-    const graphics = createKittyGraphics(term, sendInput, initial['inline-images'])
+    term.onData((data) => {
+      const human = inputIntent
+      inputIntent = false
+      void sendInput(latest.current.settings['jis-yen-backslash'] && data === '¥' ? '\\' : data, human).catch(() => {})
+    })
+    const graphics = createKittyGraphics(term, sendGenerated, initial['inline-images'])
 
     let pasteQueue: Promise<void> = Promise.resolve()
-    const pasteNow = async (text: string) => {
-      if (!canSend()) return
+    const pasteNow = async (text: string, epoch: number) => {
+      if (epoch !== inputEpoch || !canSend() || !gate.allows()) return
       const plan = planPaste(text, term.modes.bracketedPasteMode)
       if (plan.kind === 'refused') {
         context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')
         return
       }
       if (plan.chunks.length === 0) return
-      await claimUserInput()
-      if (disposed || !canSend()) return
-      const outcome = await runPaste(plan.chunks, (data) => context.call('quirky.terminal/write', { session: sessionId, data }), { closer: plan.closer })
+      let first = true
+      let blocked = false
+      let cancelled = false
+      const outcome = await runPaste(plan.chunks, async (data) => {
+        if (blocked || cancelled) throw new Error('Paste input was cancelled.')
+        const accepted = await sendInput(data, first, () => !cancelled)
+        first = false
+        if (!accepted) {
+          blocked = true
+          throw new Error('Paste input was blocked.')
+        }
+      }, { closer: plan.closer })
+      cancelled = true
+      if (blocked) return
       if (outcome === 'timeout') context.toast('Paste timed out', 'Only part of the text was pasted.')
       else if (outcome === 'failed') context.toast('Paste failed', 'The terminal stopped accepting input.')
     }
     const paste = (text: string) => {
-      pasteQueue = pasteQueue.then(() => pasteNow(text), () => pasteNow(text))
+      const epoch = inputEpoch
+      pasteQueue = pasteQueue.then(() => pasteNow(text, epoch), () => pasteNow(text, epoch))
       return pasteQueue
     }
 
@@ -665,6 +719,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       event.preventDefault()
     }
     const onDrop = (event: DragEvent) => {
+      const epoch = inputEpoch
       const transfer = event.dataTransfer
       if (!transfer) return
       const worktreeDrop = readWorktreePathsDrop(transfer)
@@ -689,7 +744,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
               context.toast('Could not use dropped files', 'The dragged path escapes its worktree.')
               return
             }
-            sendInput(shellEscapePaths(paths))
+            if (epoch === inputEpoch) sendHuman(shellEscapePaths(paths))
           } catch (error) {
             context.toast('Could not use dropped files', messageOf(error))
           }
@@ -700,8 +755,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (paths.length === 0) return
       event.preventDefault()
       event.stopPropagation()
-      onInputIntent()
-      sendInput(shellEscapePaths(paths))
+      sendHuman(shellEscapePaths(paths))
     }
     host.addEventListener('mousedown', onMouseDown, true)
     host.addEventListener('mouseup', onMouseUp)
@@ -841,6 +895,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     async function runResync(): Promise<void> {
       resyncTimer = null
       if (disposed || readOnly || streamId === null) return
+      resetInput()
       const targetStreamId = streamId
       resyncingStreamId = targetStreamId
       streamId = null
@@ -881,6 +936,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
               return
             }
             streamId = attached.streamId
+            prepareIdentity(attached.live !== false)
             writeResetReplay(attached.replay)
             if (attached.live === false) {
               readOnly = true
@@ -934,6 +990,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
           return
         }
         streamId = result.streamId
+        prepareIdentity(result.live !== false)
         await extrasReady
         if (disposed) return
         writeReplay({ write: (bytes, done) => graphics.write(bytes, true, done) }, base64ToBytes(result.replay), gate)
@@ -972,6 +1029,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
 
     return () => {
       disposed = true
+      resetInput()
       runtime.current = null
       if (fitFrame) cancelAnimationFrame(fitFrame)
       themeObserver.disconnect()

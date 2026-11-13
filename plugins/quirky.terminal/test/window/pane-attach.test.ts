@@ -103,6 +103,24 @@ describe('attach, replay and input', () => {
     await act(async () => pane.term().input('ls'))
     expect(fake.callsTo('quirky.terminal/write')[0]!.params).toEqual({ session: 's1', data: 'ls' })
   })
+  test('a browser key uses one guarded write without a separate claim RPC', async () => {
+    const { fake, pane } = await mount()
+    const identityCalls = fake.callsTo('quirky.session/identity').length
+    const callsBeforeKey = fake.calls.length
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
+
+    await pressKey(pane, { key: 'a', keyCode: 65 })
+    await settle()
+
+    expect(fake.calls.slice(callsBeforeKey)).toEqual([{
+      method: 'quirky.terminal/write',
+      params: { session: 's1', data: 'a', expectedIncarnation: 'fixture-s1' }
+    }])
+    expect(fake.callsTo('quirky.session/identity')).toHaveLength(identityCalls)
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
+  })
+
 
   test('replayed queries never answer into the live shell', async () => {
     const { fake, pane } = await mount({}, paneHandlers({ replay: bytesToBase64(text('\x1b[6n\x1b[>q')) }))
