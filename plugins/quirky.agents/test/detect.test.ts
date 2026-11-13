@@ -302,13 +302,22 @@ describe('readLoginPath', () => {
     const pidFile = join(root, 'escaped.pid')
     const shell = script(
       'shell-escaped',
-      `perl -MPOSIX -e 'my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); sleep 30; exit 0; } open my $file, ">", $ARGV[0] or die "open failed: $!"; print $file "$pid\\n"; close $file; waitpid($pid, 0); print "/late/bin";' '${pidFile}'`
+      `exec perl -MPOSIX -e 'my $pid_file = $ARGV[0]; my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); open my $file, ">", $pid_file or die $!; print $file "$$\\n"; close $file; sleep 30; exit 0; } while (!-e $pid_file) { select undef, undef, undef, 0.01; } print "/late/bin";' '${pidFile}'`
     )
-    const runner = realRunner()
+    const real = realRunner()
+    let result: RunResult | undefined
+    const runner: ProcessRunner = {
+      run: async (argv, options) => {
+        result = await real.run(argv, options)
+        return result
+      }
+    }
     const started = Date.now()
     try {
       expect(await readLoginPath(runner, shell, 300)).toBeNull()
       expect(Date.now() - started).toBeLessThan(2000)
+      expect(result?.stdoutText).toBe('/late/bin')
+      expect(result?.signal).toBeNull()
     } finally {
       killProcessInFile(pidFile)
     }
