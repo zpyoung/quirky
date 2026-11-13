@@ -1049,7 +1049,7 @@ export async function startBrowserWorld(options: {
     ensureWorkTime(options.signal, deadline)
     if (options.afterReady) await withinDeadline(options.afterReady(world), options.signal, deadline)
     ensureWorkTime(options.signal, deadline)
-    if (!(await daemonStatus(home, world.daemonPid, deadline))) throw new BrowserFailure('daemon-exited', 'owned daemon exited after readiness', daemonDiagnostics() || undefined)
+    if (!currentDaemon || !(await daemonStatus(home, currentDaemon, deadline))) throw new BrowserFailure('daemon-exited', 'owned daemon exited after readiness', daemonDiagnostics() || undefined)
     return world
   } catch (error) {
     return await abortInFlight(error)
