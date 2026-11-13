@@ -2,10 +2,58 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import type {
+  AskEnvelope,
+  AskSpec,
+  ProcessRunner,
+  ProcessSpawner,
+  RunOptions,
+  RunResult,
+  Session,
+  SessionStatus,
+  SpawnOptions,
+  StructuredMessage
+} from '@quirky/protocol'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { createPiRunner, resolvePiThroughLoginShell } from '../pi-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { createFakePiRpc, type FakePiRpcFixture } from './fakes/fake-pi-rpc'
+
+function runResult(overrides: Partial<RunResult> = {}): RunResult {
+  return {
+    stdout: new Uint8Array(),
+    stdoutText: '',
+    stderr: '',
+    exitCode: 0,
+    signal: null,
+    durationMs: 0,
+    ...overrides
+  }
+}
+
+type RunCall = { argv: string[]; options: RunOptions | undefined }
+type SpawnCall = { argv: string[]; options: SpawnOptions }
+type RecordingProcess = ProcessRunner & ProcessSpawner & { runs: RunCall[]; spawns: SpawnCall[] }
+
+function recordProcess(): RecordingProcess {
+  const runs: RunCall[] = []
+  const spawns: SpawnCall[] = []
+  return {
+    runs,
+    spawns,
+    run(argv, options) {
+      runs.push({ argv: [...argv], options })
+      return processRunner.run(argv, options)
+    },
+    spawn(argv, options) {
+      spawns.push({ argv: [...argv], options })
+      return processRunner.spawn(argv, options)
+    }
+  }
+}
+
+let processRunner: OwnedProcessRunner
+let context: StructuredContext
 
 async function until(check: () => boolean, attempts = 400) {
   for (let i = 0; i < attempts && !check(); i++) await Bun.sleep(5)
@@ -25,10 +73,11 @@ function build(
   agent: 'pi' | 'omp' = 'pi',
   contextWindow?: number | null,
   limits?: { maxFrameBytes?: number; checkTimeoutMs?: number; abortTimeoutMs?: number },
-  fakeOptions: Omit<NonNullable<Parameters<typeof createFakePiRpc>[1]>, 'contextWindow' | 'flavor'> = {}
+  fakeOptions: Omit<NonNullable<Parameters<typeof createFakePiRpc>[1]>, 'contextWindow' | 'flavor'> = {},
+  processOverride: ProcessRunner & ProcessSpawner = processRunner
 ) {
   fake = createFakePiRpc(home, { ...(contextWindow === undefined ? {} : { contextWindow }), flavor: agent, ...fakeOptions })
-  const context: StructuredContext = {
+  context = {
     appendMessage(msg: NewStructuredMessage) {
       const stored = { ...msg, seq: messages.length + 1, at: msg.at ?? Date.now() } as StructuredMessage
       messages.push(stored)
@@ -47,7 +96,8 @@ function build(
     resolvePiPath: async (name) => {
       resolved.push(name)
       return fake.executable
-    }
+    },
+    process: processOverride
   }
   runner = createPiRunner(context, limits)
   session = {
@@ -104,6 +154,7 @@ function writeStandInShell(name: string, body: string) {
 }
 
 beforeEach(() => {
+  processRunner = createProcessRunner({ owner: 'pi-runner-test' })
   home = realpathSync(mkdtempSync(join(tmpdir(), 'pi-runner-')))
   messages = []
   statuses = []
@@ -114,6 +165,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await runner.stop(session.id)
+  await processRunner.dispose()
   rmSync(home, { recursive: true, force: true })
 })
 
@@ -1322,11 +1374,93 @@ exit 0
     expect(messages.some((m) => m.role === 'system' && m.text.startsWith('pi exited'))).toBe(true)
   })
 
+  test('routes login-shell lookup and RPC launch through the process runner', async () => {
+    const recording = recordProcess()
+    const shell = writeStandInShell('recording-login-shell', `printf '%s\\n' '/opt/tools/omp'\n`)
+    await expect(resolvePiThroughLoginShell(recording, shell, 'omp')).resolves.toBe('/opt/tools/omp')
+    expect(recording.runs).toEqual([
+      { argv: [shell, '-l', '-c', 'command -v omp'], options: undefined }
+    ])
+
+    build('pi', undefined, undefined, {}, recording)
+    await runner.start(session, 'hello')
+    await until(() => fake.launch() !== null)
+    expect(recording.spawns).toHaveLength(1)
+    expect(recording.spawns[0]).toEqual({
+      argv: [fake.executable, '--mode', 'rpc'],
+      options: expect.objectContaining({
+        cwd: home,
+        timeoutMs: null,
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'tail',
+        stderrTailBytes: 16_384,
+        killGraceMs: 2_000
+      })
+    })
+  })
+
+  test('stop during pending executable resolution prevents spawning', async () => {
+    const recording = recordProcess()
+    build('pi', undefined, undefined, {}, recording)
+    const deferred = Promise.withResolvers<string>()
+    context.resolvePiPath = () => deferred.promise
+
+    const starting = runner.start(session, 'hello')
+    await runner.stop(session.id)
+    deferred.resolve(fake.executable)
+    await starting
+
+    expect(recording.spawns).toEqual([])
+  })
+
+  test('journals the final assistant frame before a nonzero exit and stderr', async () => {
+    const frame = JSON.stringify({
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'final answer' }] }
+    })
+    const executable = writeStandInShell(
+      'pi-final-frame',
+      `printf '%s\\n' '${frame}'\nprintf '%s\\n' 'rpc transport failed' >&2\nexit 1\n`
+    )
+    context.resolvePiPath = async () => executable
+    runner = createPiRunner(context)
+
+    await runner.start(session, 'hello')
+    await until(() => statuses.at(-1) === 'exited')
+
+    expect(journal()).toEqual([
+      ['user', 'hello'],
+      ['assistant', 'final answer'],
+      ['system', 'pi exited with code 1; stderr: rpc transport failed']
+    ])
+    expect(statuses).toEqual(['working', 'exited'])
+  })
+
+  test('journals a spawn error and marks the session exited', async () => {
+    context.resolvePiPath = async () => join(home, 'missing-pi-executable')
+    runner = createPiRunner(context)
+
+    await runner.start(session, 'hello')
+    await until(() => statuses.at(-1) === 'exited')
+
+    expect(messages.find((message) => message.role === 'system')?.text).toMatch(/^could not start pi: /)
+    expect(statuses).toEqual(['working', 'exited'])
+  })
+
+  test('fails clearly when no process spawner is configured', async () => {
+    delete context.process
+    runner = createPiRunner(context)
+
+    await expect(runner.start(session, 'hello')).rejects.toThrow('no process spawner configured for pi')
+    expect(statuses).toEqual([])
+  })
+
   test('resolves an executable after login-shell profile noise and records shell arguments', async () => {
     const shell = writeStandInShell('login-shell', `printf '%s\\n' "$@" > "\${0%/*}/args"
 printf '%s\\n' 'profile noise' '/opt/tools/omp'
 `)
-    await expect(resolvePiThroughLoginShell(shell, 'omp')).resolves.toBe('/opt/tools/omp')
+    await expect(resolvePiThroughLoginShell(processRunner, shell, 'omp')).resolves.toBe('/opt/tools/omp')
     expect(readFileSync(join(home, 'args'), 'utf8').trimEnd().split('\n')).toEqual([
       '-l',
       '-c',
@@ -1342,14 +1476,32 @@ printf '%s\\n' 'profile noise' '/opt/tools/omp'
     ] as const
     for (const [name, body] of cases) {
       const shell = writeStandInShell(name, body)
-      await expect(resolvePiThroughLoginShell(shell, 'pi')).rejects.toThrow(
+      await expect(resolvePiThroughLoginShell(processRunner, shell, 'pi')).rejects.toThrow(
         'could not find the pi executable on the login shell PATH'
       )
     }
   })
 
+  test('rejects timed-out and spawn-error login-shell lookups', async () => {
+    const shell = join(home, 'unused-login-shell')
+    const timedOut: ProcessRunner = {
+      run: async () => runResult({ stdoutText: '/opt/tools/pi\n', stopped: 'timeout' })
+    }
+    const spawnFailed: ProcessRunner = {
+      run: async () => runResult({
+        exitCode: null,
+        spawnError: { code: 'ENOENT', message: 'login shell could not start' }
+      })
+    }
+
+    await expect(resolvePiThroughLoginShell(timedOut, shell, 'pi')).rejects.toThrow(
+      'could not find the pi executable on the login shell PATH'
+    )
+    await expect(resolvePiThroughLoginShell(spawnFailed, shell, 'pi')).rejects.toThrow('login shell could not start')
+  })
+
   test('rejects when the login shell executable does not exist', async () => {
-    await expect(resolvePiThroughLoginShell(join(home, 'missing-login-shell'), 'pi')).rejects.toThrow()
+    await expect(resolvePiThroughLoginShell(processRunner, join(home, 'missing-login-shell'), 'pi')).rejects.toThrow()
   })
 
   test('start fails clearly when no executable resolver exists', async () => {
