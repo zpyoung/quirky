@@ -82,6 +82,7 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
     let readOnly = false
     let streamId: number | null = null
     let unsubscribe: (() => void) | null = null
+    let resyncTargetStreamId: number | null = null
     let lastResyncAt = -Infinity
     let resyncTimer: ReturnType<typeof setTimeout> | null = null
     let resyncing = false
@@ -119,11 +120,13 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
       if (disposed || readOnly || streamId === null) return
       const targetStreamId = streamId
       streamId = null
+      resyncTargetStreamId = targetStreamId
       resyncing = true
       pendingLag = false
       lastResyncAt = Date.now()
       try {
         const resynced = (await context.call('quirky.terminal/resync', { streamId: targetStreamId, historyLines: scrollbackRef.current })) as TerminalAttachResult
+        resyncTargetStreamId = null
         resyncing = false
         resyncFailures = 0
         if (disposed) {
@@ -134,6 +137,7 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
         if (resynced.live === false) {
           readOnly = true
           streamId = null
+          detach(resynced.streamId)
           return
         }
         streamId = resynced.streamId
@@ -144,8 +148,15 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
         }
       } catch (error) {
         resyncing = false
-        if (disposed || readOnly) return
-        if ((error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound) {
+        const failedStreamId = resyncTargetStreamId
+        resyncTargetStreamId = null
+        if (disposed) {
+          if (failedStreamId !== null) detach(failedStreamId)
+          return
+        }
+        if (readOnly) return
+        const errorCode = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+        if (errorCode === RpcErrorCode.NotFound) {
           resyncFailures = 0
           streamId = null
           try {
@@ -181,6 +192,7 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
           return
         }
         streamId = null
+        detach(targetStreamId)
         const message = error instanceof Error ? error.message : String(error)
         term.write(`\r\n\x1b[31mCould not resync: ${message}\x1b[0m\r\n`)
       }
@@ -237,7 +249,10 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
       themeObserver.disconnect()
       observer.disconnect()
       unsubscribeEvents()
-      if (resyncTimer !== null) clearTimeout(resyncTimer)
+      if (resyncTimer !== null) {
+        clearTimeout(resyncTimer)
+        resyncTimer = null
+      }
       unsubscribe?.()
       if (streamId !== null) detach(streamId)
       termRef.current = null

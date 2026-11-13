@@ -894,6 +894,7 @@ describe('terminal pane', () => {
       expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(4)
       expect(writes.join('')).toContain('Could not resync: host busy')
       expect(fake.streams.size).toBe(0)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
     } finally {
       nodeMock.timers.reset()
     }
@@ -910,6 +911,7 @@ describe('terminal pane', () => {
       await advanceTime(250)
       expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jfinal')
       expect(fake.streams.has(8)).toBe(false)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([8])
       await act(async () => terminals[0]!.input('ignored'))
       expect(fake.callsTo('quirky.terminal/write')).toEqual([])
     } finally {
@@ -950,6 +952,29 @@ describe('terminal pane', () => {
         await Promise.resolve()
       })
       expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([8])
+      expect(fake.streams.size).toBe(0)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+  test('detaches the original stream when an in-flight resync rejects after unmount', async () => {
+    const { promise, reject } = Promise.withResolvers<Record<string, unknown>>()
+    start([shell1], { 'quirky.terminal/resync': () => promise })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      await mounted!.unmount()
+      mounted = null
+      await act(async () => {
+        reject(new RpcError(RpcErrorCode.InternalError, 'host busy'))
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
       expect(fake.streams.size).toBe(0)
     } finally {
       nodeMock.timers.reset()
