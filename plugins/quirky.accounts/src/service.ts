@@ -102,10 +102,11 @@ export class AccountService {
   private active = false
 
   constructor(private readonly context: PluginContext, private readonly store: PluginStore) {
-    this.profiles = new AccountProfiles(context.dataDir)
+    this.profiles = new AccountProfiles(context.dataDir, context.process)
     this.routing = new AccountRouting(context.dataDir, this.profiles)
     this.login = new AccountLoginManager(
       this.profiles,
+      context.process,
       (completion) => this.finishLogin(completion),
       () => this.publishChanged()
     )
@@ -139,7 +140,7 @@ export class AccountService {
     this.active = false
     await this.mutationTail
     await this.login.shutdown()
-    this.usageService?.shutdown()
+    await this.usageService?.shutdown()
     await Promise.allSettled([...this.pendingUsageWork])
   }
 
@@ -328,7 +329,7 @@ export class AccountService {
         }
       }
       if (!this.active) {
-        if (!reauthenticating) this.removeFailedProfile(provider, accountId)
+        if (!reauthenticating) await this.removeFailedProfile(provider, accountId)
         this.fail('conflict', 'The accounts plugin is shutting down.')
       }
       const request: LoginRequest = {
@@ -378,7 +379,7 @@ export class AccountService {
       await this.supersedeLoginsWithinMutation()
       const provider = this.readManagedProvider(params.provider)
       const accountId = params.accountId === null ? null : this.readId(params.accountId)
-      if (accountId !== null) this.verifySelectableAccount(provider, accountId)
+      if (accountId !== null) await this.verifySelectableAccount(provider, accountId)
       const previousId = getActiveAccountId(this.store, provider)
       if (previousId === accountId) {
         if (provider === 'codex' && accountId !== null) this.syncCodexConfigWarning(accountId)
@@ -438,7 +439,7 @@ export class AccountService {
         this.fail('conflict', 'This account is still used by a running session. Close or restart that session before removing the account.')
       }
       try {
-        this.profiles.remove(provider, accountId)
+        await this.profiles.remove(provider, accountId)
       } catch (error) {
         this.fail('conflict', safeMessage(error, 'The managed account could not be removed; it is still available for retry.'))
       }
@@ -564,7 +565,7 @@ export class AccountService {
     if (override.source === 'explicit') {
       if (override.value === null) {
         const home = this.unsetHome(provider)
-        const identity = this.readIdentitySafely(provider, home, provider === 'claude')
+        const identity = await this.readIdentitySafely(provider, home, provider === 'claude')
         const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default', identity.authKind)
         const resumeTranscriptPath = provider === 'codex' && input.resume
           ? await this.prepareCodexResume(input.resume, home, null)
@@ -581,7 +582,7 @@ export class AccountService {
         this.fail('conflict', 'Codex conversations can only be resumed into the System default or a Quirky-managed account.')
       }
       const home = resolve(input.cwd, override.value)
-      const identity = this.readIdentitySafely(provider, home, false)
+      const identity = await this.readIdentitySafely(provider, home, false)
       const label = identity.email ?? `Custom ${provider === 'claude' ? 'Claude' : 'Codex'} home`
       const account = this.identityFor(provider, null, label, 'custom', identity.authKind)
       this.saveSessionIdentityIfPresent(input, account, home)
@@ -594,7 +595,7 @@ export class AccountService {
         : override.source === 'injected'
           ? this.unsetHome(provider)
           : this.profiles.defaultHome(provider)
-      const identity = this.readIdentitySafely(provider, home, provider === 'claude')
+      const identity = await this.readIdentitySafely(provider, home, provider === 'claude')
       const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default', identity.authKind)
       const resumeTranscriptPath = provider === 'codex' && input.resume
         ? await this.prepareCodexResume(input.resume, home, null)
@@ -608,16 +609,17 @@ export class AccountService {
         ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
       }
     }
-    const account = getAccount(this.store, selectedId)
+    let account = getAccount(this.store, selectedId)
     if (!account || account.provider !== provider) this.fail('conflict', `The selected ${provider} account is unavailable; no fallback account was used.`)
     let home: string
     let identity: ProviderIdentity
     try {
       home = this.profiles.ensureOwned(provider, selectedId)
-      identity = this.profiles.readIdentity(provider, home)
+      identity = await this.profiles.readIdentity(provider, home)
     } catch {
       this.fail('conflict', `The selected ${provider} account home is unavailable or untrusted; no fallback account was used.`)
     }
+    account = this.requireSelectedManagedAccount(provider, selectedId, home)
     if (!isProviderAuth(identity) || !this.identityMatchesRecord(account, identity)) {
       this.markNeedsSignIn(account)
       this.fail('conflict', `Sign in to the selected ${provider} account again before launching it.`)
@@ -625,6 +627,7 @@ export class AccountService {
     const resumeTranscriptPath = provider === 'codex' && input.resume
       ? await this.prepareCodexResume(input.resume, home, selectedId)
       : undefined
+    account = this.requireSelectedManagedAccount(provider, selectedId, home)
     if (provider === 'codex') this.syncCodexConfigWarning(account.id)
     const accountIdentity = this.identityFor(provider, account.id, account.label, 'managed', identity.authKind)
     this.saveSessionIdentityIfPresent(input, accountIdentity, home)
@@ -634,6 +637,23 @@ export class AccountService {
       account: accountIdentity,
       ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
     }
+  }
+
+  private requireSelectedManagedAccount(provider: ManagedProvider, accountId: string, preparedHome: string): AccountRecord {
+    const account = getAccount(this.store, accountId)
+    if (getActiveAccountId(this.store, provider) !== accountId || !account || account.provider !== provider) {
+      this.fail('conflict', `The selected ${provider} account changed; no fallback account was used.`)
+    }
+    let home: string
+    try {
+      home = this.profiles.ensureOwned(provider, accountId)
+    } catch {
+      this.fail('conflict', `The selected ${provider} account home is unavailable or untrusted; no fallback account was used.`)
+    }
+    if (resolve(account.home) !== resolve(home) || resolve(preparedHome) !== resolve(home)) {
+      this.fail('conflict', `The selected ${provider} account changed; no fallback account was used.`)
+    }
+    return account
   }
 
   async restart(params: Record<string, unknown>): Promise<AccountState> {
@@ -887,7 +907,7 @@ export class AccountService {
       let identity: ProviderIdentity
       try {
         targetHome = this.profiles.ensureOwned('codex', targetId)
-        identity = this.profiles.readIdentity('codex', targetHome)
+        identity = await this.profiles.readIdentity('codex', targetHome)
       } catch {
         throw new CodexHistoryError('The selected Codex account home is unavailable or untrusted; the previous session was not stopped.')
       }
@@ -922,7 +942,7 @@ export class AccountService {
       const { request } = completion
       const existing = getAccount(this.store, request.accountId)
       if (completion.status !== 'complete' || !completion.identity) {
-        if (!request.reauthenticating) this.removeFailedProfile(request.provider, request.accountId)
+        if (!request.reauthenticating) await this.removeFailedProfile(request.provider, request.accountId)
         this.publishChanged()
         return null
       }
@@ -975,7 +995,7 @@ export class AccountService {
           incrementRevision(this.store)
         })
       } catch (error) {
-        if (!request.reauthenticating) this.removeFailedProfile(request.provider, request.accountId)
+        if (!request.reauthenticating) await this.removeFailedProfile(request.provider, request.accountId)
         if (error instanceof Error && /already added/i.test(error.message)) throw error
         throw new Error(request.provider === 'claude' ? 'Claude sign-in could not be saved.' : 'Codex sign-in could not be saved.')
       }
@@ -990,7 +1010,7 @@ export class AccountService {
   private async buildState(provider?: ManagedProvider): Promise<AccountState> {
     const records = listAccountRecords(this.store)
     const filteredRecords = provider === undefined ? records : records.filter((account) => account.provider === provider)
-    const systemDefault = this.readSystemDefaults()
+    const systemDefault = await this.readSystemDefaults()
     const accounts = filteredRecords.map((account) => this.summary(account))
     const staleSessions = await this.readStaleSessions(provider, systemDefault)
     return {
@@ -1078,30 +1098,31 @@ export class AccountService {
     return result.sort((left, right) => left.sessionId.localeCompare(right.sessionId))
   }
 
-  private readSystemDefaults(): Record<ManagedProvider, SystemAccount> {
-    return {
-      claude: this.readSystemDefault('claude'),
-      codex: this.readSystemDefault('codex')
-    }
+  private async readSystemDefaults(): Promise<Record<ManagedProvider, SystemAccount>> {
+    const [claude, codex] = await Promise.all([
+      this.readSystemDefault('claude'),
+      this.readSystemDefault('codex')
+    ])
+    return { claude, codex }
   }
 
-  private readSystemDefault(provider: ManagedProvider): SystemAccount {
+  private async readSystemDefault(provider: ManagedProvider): Promise<SystemAccount> {
     try {
-      const identity = this.profiles.readIdentity(provider, this.profiles.defaultHome(provider), provider === 'claude')
+      const identity = await this.profiles.readIdentity(provider, this.profiles.defaultHome(provider), provider === 'claude')
       return { label: 'System default', email: identity.email, hasAuth: identity.hasAuth, authKind: identity.authKind }
     } catch {
       return { label: 'System default', email: null, hasAuth: false, authKind: 'unknown' }
     }
   }
 
-  private verifySelectableAccount(provider: ManagedProvider, id: string): void {
+  private async verifySelectableAccount(provider: ManagedProvider, id: string): Promise<void> {
     const account = getAccount(this.store, id)
     if (!account || account.provider !== provider) this.fail('not-found', `The managed ${provider} account was not found.`)
     if (account.needsSignIn) this.fail('conflict', `Sign in to this ${provider} account again before selecting it.`)
     let identity: ProviderIdentity
     try {
       const home = this.profiles.ensureOwned(provider, id)
-      identity = this.profiles.readIdentity(provider, home)
+      identity = await this.profiles.readIdentity(provider, home)
     } catch {
       this.fail('conflict', `The managed ${provider} home is unavailable or untrusted; the current selection was not changed.`)
     }
@@ -1210,9 +1231,9 @@ export class AccountService {
     return { provider, id, label, source, authKind }
   }
 
-  private readIdentitySafely(provider: ManagedProvider, home: string, includeEnvironmentApiKey: boolean): ProviderIdentity {
+  private async readIdentitySafely(provider: ManagedProvider, home: string, includeEnvironmentApiKey: boolean): Promise<ProviderIdentity> {
     try {
-      return this.profiles.readIdentity(provider, home, includeEnvironmentApiKey)
+      return await this.profiles.readIdentity(provider, home, includeEnvironmentApiKey)
     } catch {
       return { email: null, organization: null, authKind: 'unknown', hasAuth: false, identityKey: null }
     }
@@ -1442,9 +1463,9 @@ export class AccountService {
     return work
   }
 
-  private removeFailedProfile(provider: ManagedProvider, id: string): void {
+  private async removeFailedProfile(provider: ManagedProvider, id: string): Promise<void> {
     try {
-      this.profiles.remove(provider, id)
+      await this.profiles.remove(provider, id)
     } catch {
       // A failed cleanup leaves an owned, unlisted profile rather than deleting an unproven path.
     }
