@@ -337,9 +337,9 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             return prepareLaunch(input)
           }
         },
-        emit(event, data) {
+        emit(event, data, options) {
           guard()
-          const emitted = events.emit(id, event, data)
+          const emitted = events.emit(id, event, data, options)
           if (
             id === 'quirky.worktree' &&
             (event === 'changed' || event === 'event:quirky.worktree/changed') &&

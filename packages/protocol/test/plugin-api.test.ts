@@ -27,8 +27,8 @@ type MountCapabilityAssertions = [
 ]
 
 describe('stable plugin API floors', () => {
-  test('the host supports in-place view input updates and earlier releases', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.7.0')
+  test('the host supports immediate emits and earlier releases', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.8.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
@@ -39,11 +39,14 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.7.1')).toContain('apiVersion')
-    expect(pluginApiCompatibilityError('1.8.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.7.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.1')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.9.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('2.0.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
     expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).toContain('apiVersion')
   })
 
   test.each([
