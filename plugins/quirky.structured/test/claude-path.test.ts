@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { afterEach, describe, expect, jest, test } from 'bun:test'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
@@ -113,21 +113,19 @@ describe('resolveClaudeThroughLoginShell', () => {
   }
 
   test('aborts a runner call that resolves only after its signal is aborted', async () => {
-    const originalSetTimeout = globalThis.setTimeout.bind(globalThis)
-    const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation((handler, delay, ...args) =>
-      originalSetTimeout(handler, delay === 30000 ? 20 : delay, ...args)
-    )
+    jest.useFakeTimers()
     const { runner, calls } = abortingRunner()
-    const started = Date.now()
     try {
-      await expect(resolveClaudeThroughLoginShell(runner, '/bin/zsh')).rejects.toThrow(
-        'could not find the claude executable on the login shell PATH'
-      )
-      expect(Date.now() - started).toBeLessThan(1000)
+      const lookup = resolveClaudeThroughLoginShell(runner, '/bin/zsh')
+      jest.advanceTimersByTime(29999)
+      expect(calls[0]?.options?.signal?.aborted).toBe(false)
+      jest.advanceTimersByTime(1)
+      jest.useRealTimers()
+      await expect(lookup).rejects.toThrow('could not find the claude executable on the login shell PATH')
       expect(calls).toHaveLength(1)
       expect(calls[0]?.options?.signal?.aborted).toBe(true)
     } finally {
-      timerSpy.mockRestore()
+      jest.useRealTimers()
     }
   })
 
