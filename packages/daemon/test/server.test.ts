@@ -33,6 +33,25 @@ type OutputCall =
 function wireBytes(payloadBytes: number): number {
   return payloadBytes + (payloadBytes < 126 ? 2 : payloadBytes < 65_536 ? 4 : 10)
 }
+function controlQueueStorageSlots(output: WebSocketOutput): number {
+  const controls: unknown = Reflect.get(output, 'controls')
+  if (Array.isArray(controls)) return controls.length
+  let current: unknown = Reflect.get(output, 'firstControl')
+  let slots = 0
+  while (current !== null && typeof current === 'object') {
+    if (!('next' in current)) throw new Error('invalid pending control queue node')
+    slots++
+    current = current.next
+  }
+  if (current !== null) throw new Error('invalid pending control queue head')
+  return slots
+}
+
+function deferredControlBytes(output: WebSocketOutput): number {
+  const bytes: unknown = Reflect.get(output, 'pendingControlBytes')
+  if (typeof bytes !== 'number') throw new Error('invalid pending control byte count')
+  return bytes
+}
 
 class FakeOutputSocket implements WebSocketOutputSocket {
   readyState = 1
@@ -396,6 +415,62 @@ describe('WebSocketOutput', () => {
     expect(socket.bufferedAmount).toBe(acceptedBytes)
     expect(socket.accepted).toHaveLength(1)
     expect(socket.calls.filter((call) => call.kind === 'binary')).toHaveLength(2)
+  })
+  test('bounds storage while drain alternates one accepted and one deferred control', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    output.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))
+    socket.results.push(0)
+    output.sendText('control-0')
+
+    for (let index = 0; index < 2_000; index++) {
+      output.sendText(`control-${index + 1}`)
+      socket.results.push(1, 0)
+      output.drain()
+    }
+
+    const acceptedTexts = socket.accepted.filter(
+      (call): call is Extract<OutputCall, { kind: 'text' }> => call.kind === 'text'
+    )
+    expect(acceptedTexts).toHaveLength(2_000)
+    expect(acceptedTexts[0]?.value).toBe('control-0')
+    expect(acceptedTexts.at(-1)?.value).toBe('control-1999')
+    expect(deferredControlBytes(output)).toBe(wireBytes(Buffer.byteLength('control-2000', 'utf8')))
+    expect(controlQueueStorageSlots(output)).toBeLessThanOrEqual(65)
+  })
+
+  test('reclaims canceled marker slots behind a blocked control without reordering survivors', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    output.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))
+    socket.results.push(0)
+    output.sendText('first')
+
+    for (let streamId = 1; streamId <= 2_000; streamId++) {
+      output.sendBinary(encodeTerminalLagged(streamId))
+      output.closeStream(streamId)
+    }
+
+    expect(deferredControlBytes(output)).toBe(wireBytes(Buffer.byteLength('first', 'utf8')))
+    expect(controlQueueStorageSlots(output)).toBeLessThanOrEqual(65)
+
+    output.sendBinary(encodeTerminalLagged(2_001))
+    output.sendText('second')
+    socket.results.push(1, 1, 1)
+    output.drain()
+
+    expect(socket.accepted.map((call) => call.kind === 'text' ? call.value : call.value[0])).toEqual([
+      1,
+      'first',
+      2,
+      'second'
+    ])
+    expect(deferredControlBytes(output)).toBe(0)
+    expect(controlQueueStorageSlots(output)).toBe(0)
   })
 
   test('fails once on thrown sends and non-open peers', () => {

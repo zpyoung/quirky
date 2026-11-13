@@ -17,9 +17,16 @@ type LedgerEntry = {
   countsBinaryOutput: boolean
 }
 
-type PendingControl =
+type PendingControlLinks = {
+  previous: PendingControl | null
+  next: PendingControl | null
+  queued: boolean
+}
+
+type PendingControl = (
   | { kind: 'text'; text: string; wireBytes: number }
   | { kind: 'binary'; bytes: Uint8Array; wireBytes: number; markerStreamId: number }
+) & PendingControlLinks
 
 function frameWireLength(payloadBytes: number): number {
   const headerBytes = payloadBytes < 126 ? 2 : payloadBytes < 65_536 ? 4 : 10
@@ -43,8 +50,9 @@ export class WebSocketOutput {
   private readonly streamBytes = new Map<number, number>()
   private outstandingBytes = 0
   private binaryBytes = 0
-  private readonly controls: (PendingControl | undefined)[] = []
-  private controlHead = 0
+  private firstControl: PendingControl | null = null
+  private lastControl: PendingControl | null = null
+  private readonly markerControls = new Map<number, Set<PendingControl>>()
   private pendingControlBytes = 0
 
   constructor(
@@ -58,7 +66,10 @@ export class WebSocketOutput {
       this.enqueueOrSendControl({
         kind: 'text',
         text,
-        wireBytes: frameWireLength(Buffer.byteLength(text, 'utf8'))
+        wireBytes: frameWireLength(Buffer.byteLength(text, 'utf8')),
+        previous: null,
+        next: null,
+        queued: false
       })
     } catch {
       this.failOnce()
@@ -75,7 +86,10 @@ export class WebSocketOutput {
           kind: 'binary',
           bytes,
           wireBytes: frameWireLength(bytes.byteLength),
-          markerStreamId
+          markerStreamId,
+          previous: null,
+          next: null,
+          queued: false
         })
       }
       if (this.hasPendingControls()) return false
@@ -111,13 +125,9 @@ export class WebSocketOutput {
 
   closeStream(streamId: number): void {
     if (this.disposed) return
-    for (let index = this.controlHead; index < this.controls.length; index++) {
-      const control = this.controls[index]
-      if (control?.kind !== 'binary' || control.markerStreamId !== streamId) continue
-      this.pendingControlBytes -= control.wireBytes
-      this.controls[index] = undefined
-    }
-    this.compactControls()
+    const controls = this.markerControls.get(streamId)
+    if (!controls) return
+    for (const control of controls) this.removeQueuedControl(control)
   }
 
   drain(): void {
@@ -168,16 +178,9 @@ export class WebSocketOutput {
   }
 
   private flushControls(): void {
-    this.skipRemovedControls()
-    while (this.controlHead < this.controls.length) {
+    while (this.firstControl !== null) {
       if (!this.ensureOpen()) return
-      const control = this.controls[this.controlHead]
-      if (!control) {
-        this.controlHead++
-        this.skipRemovedControls()
-        continue
-      }
-
+      const control = this.firstControl
       this.reconcile()
       const result = this.sendNativeControl(control)
       if (result === 0) {
@@ -190,14 +193,10 @@ export class WebSocketOutput {
       }
 
       this.appendLedger(control.wireBytes, null, false)
-      this.pendingControlBytes -= control.wireBytes
-      this.controls[this.controlHead] = undefined
-      this.controlHead++
+      this.removeQueuedControl(control)
       this.reconcile()
       if (this.disposed) return
-      this.skipRemovedControls()
     }
-    this.compactControls()
   }
 
   private sendNativeControl(control: PendingControl): number {
@@ -211,30 +210,42 @@ export class WebSocketOutput {
       this.failOnce()
       return false
     }
-    this.controls.push(control)
+    control.previous = this.lastControl
+    control.next = null
+    control.queued = true
+    if (this.lastControl) this.lastControl.next = control
+    else this.firstControl = control
+    this.lastControl = control
     this.pendingControlBytes += control.wireBytes
+    if (control.kind === 'binary') {
+      let markers = this.markerControls.get(control.markerStreamId)
+      if (!markers) {
+        markers = new Set()
+        this.markerControls.set(control.markerStreamId, markers)
+      }
+      markers.add(control)
+    }
     return true
   }
 
   private hasPendingControls(): boolean {
-    this.skipRemovedControls()
-    return this.controlHead < this.controls.length
+    return this.firstControl !== null
   }
 
-  private skipRemovedControls(): void {
-    while (this.controlHead < this.controls.length && this.controls[this.controlHead] === undefined) {
-      this.controlHead++
-    }
-  }
-
-  private compactControls(): void {
-    this.skipRemovedControls()
-    if (this.controlHead === this.controls.length) {
-      this.controls.length = 0
-      this.controlHead = 0
-    } else if (this.controlHead > 64 && this.controlHead * 2 >= this.controls.length) {
-      this.controls.splice(0, this.controlHead)
-      this.controlHead = 0
+  private removeQueuedControl(control: PendingControl): void {
+    if (!control.queued) return
+    if (control.previous) control.previous.next = control.next
+    else this.firstControl = control.next
+    if (control.next) control.next.previous = control.previous
+    else this.lastControl = control.previous
+    control.previous = null
+    control.next = null
+    control.queued = false
+    this.pendingControlBytes -= control.wireBytes
+    if (control.kind === 'binary') {
+      const markers = this.markerControls.get(control.markerStreamId)
+      markers?.delete(control)
+      if (markers?.size === 0) this.markerControls.delete(control.markerStreamId)
     }
   }
 
@@ -307,8 +318,9 @@ export class WebSocketOutput {
     this.streamBytes.clear()
     this.outstandingBytes = 0
     this.binaryBytes = 0
-    this.controls.length = 0
-    this.controlHead = 0
+    this.firstControl = null
+    this.lastControl = null
+    this.markerControls.clear()
     this.pendingControlBytes = 0
   }
 }
