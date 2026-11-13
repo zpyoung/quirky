@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { mock as nodeMock } from 'node:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, RpcError, RpcErrorCode, type AgentDisplayState, type AgentStatusSummary, type QuirkyEvent, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
@@ -641,6 +642,13 @@ describe('terminal pane', () => {
     }
   })
   afterEach(() => restore())
+  async function advanceTime(ms: number) {
+    await act(async () => {
+      nodeMock.timers.tick(ms)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
 
   test('attaches the active terminal session and takes its output from the stream', async () => {
     start([shell1])
@@ -796,6 +804,219 @@ describe('terminal pane', () => {
     expect(terminal.options.theme).toEqual(themeBeforeUnmount)
   })
 
+  test('suppresses generated input during a successful resync replay and resumes input afterward', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('ok')) })
+    })
+    await open({ worktree: WORKTREE.id })
+    const terminal = terminals[0]!
+    const write = terminal.write.bind(terminal)
+    let completeReplay: (() => void) | undefined
+    let daemonWritesAfterGeneratedInput: number | undefined
+    terminal.write = (data, callback) => {
+      if (decode(data).startsWith('\x18\x1b\\\x1bc')) {
+        terminal.input('generated reply')
+        daemonWritesAfterGeneratedInput = fake.callsTo('quirky.terminal/write').length
+        completeReplay = callback
+        write(data)
+        return
+      }
+      write(data, callback)
+    }
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jok')
+      expect(daemonWritesAfterGeneratedInput).toBe(0)
+      expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+      expect(completeReplay).toBeDefined()
+      completeReplay!()
+      await act(async () => terminal.input('user input'))
+      expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+        { session: 's1', data: 'user input' }
+      ])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('unsubscribes immediately on lag and replays a reset-prefixed resync after 250ms', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('ok')) })
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      expect(fake.streams.has(7)).toBe(false)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+      await advanceTime(249)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+      await advanceTime(1)
+      expect(fake.callsTo('quirky.terminal/resync').map((call) => call.params)).toEqual([{ streamId: 7, historyLines: 2000 }])
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jok')
+      expect(fake.streams.has(8)).toBe(true)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('rate limits a continuous lag flood to one resync per two seconds', async () => {
+    let nextStreamId = 8
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: nextStreamId++, replay: bytesToBase64(text('fresh')) })
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      for (const streamId of [8, 9, 10, 11, 12]) {
+        await act(async () => fake.lag(streamId))
+        await advanceTime(2000)
+      }
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(6)
+      expect(fake.streams.has(13)).toBe(true)
+      expect(writes.at(-1)).toBe('\x18\x1b\\\x1bc\x1b[3Jfresh')
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('falls back to attach when resync returns NotFound', async () => {
+    let attaches = 0
+    start([shell1], {
+      'quirky.terminal/attach': () => {
+        const count = attaches++
+        return count === 0 ? attachResult() : attachResult({ streamId: 9, replay: bytesToBase64(text('attached')) })
+      },
+      'quirky.terminal/resync': () => {
+        throw new RpcError(RpcErrorCode.NotFound, 'no such stream: 7')
+      }
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(2)
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jattached')
+      expect(fake.streams.has(9)).toBe(true)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('stops after three transient resync retries and reports the error', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => {
+        throw new RpcError(RpcErrorCode.Internal, 'host busy')
+      }
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      for (let retry = 0; retry < 3; retry++) {
+        await advanceTime(1999)
+        expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(retry + 1)
+        await advanceTime(1)
+        expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(retry + 2)
+      }
+      await advanceTime(2000)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(4)
+      expect(writes.join('')).toContain('Could not resync: host busy')
+      expect(fake.streams.size).toBe(0)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('a resync to an ended session becomes read-only', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('final')), live: false })
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jfinal')
+      expect(fake.streams.has(8)).toBe(false)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([8])
+      await act(async () => terminals[0]!.input('ignored'))
+      expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('clears a pending recovery timer and detaches the current stream on unmount', async () => {
+    start([shell1])
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await mounted!.unmount()
+      mounted = null
+      await advanceTime(1000)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+  test('detaches the replacement stream when resync resolves after unmount', async () => {
+    const { promise, resolve } = Promise.withResolvers<Record<string, unknown>>()
+    start([shell1], { 'quirky.terminal/resync': () => promise })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      await mounted!.unmount()
+      mounted = null
+      await act(async () => {
+        resolve(attachResult({ streamId: 8 }))
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([8])
+      expect(fake.streams.size).toBe(0)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+  test('detaches the original stream when an in-flight resync rejects after unmount', async () => {
+    const { promise, reject } = Promise.withResolvers<Record<string, unknown>>()
+    start([shell1], { 'quirky.terminal/resync': () => promise })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      await mounted!.unmount()
+      mounted = null
+      await act(async () => {
+        reject(new RpcError(RpcErrorCode.Internal, 'host busy'))
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
+      expect(fake.streams.size).toBe(0)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
   test('detaches when the view unmounts', async () => {
     start([shell1])
     const view = await open({ worktree: WORKTREE.id })

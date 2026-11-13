@@ -174,9 +174,29 @@ The terminal worktree view preserves mounted panes on same-worktree input update
 Selecting a session focuses its terminal; later background layout revisions leave
 focused text fields alone.
 
-### API 1.8: Immediate emits
+### API 1.8: Terminal stream recovery
 
-API 1.8 adds an option to daemon plugins' `context.emit`:
+API 1.8 adds optional `ClientStream.lagged`, `lag()` and `onLag(callback)` hooks.
+`lag()` marks an open stream once, sends a binary `TerminalLagged` frame, and invokes its
+lag callbacks. Registering `onLag` after lag invokes the callback immediately.
+Daemon `send(bytes)` returns `false` once the stream is lagged or closed, and `true` when sent.
+The public return type remains `boolean | void` for existing stream implementations.
+
+`UiPluginContext.onStream(streamId, listener, { onLagged })` reports lost output once per
+registration and suppresses subsequent bytes from that stream. A gap detected before registration,
+including overflow of the client's 4 MiB early buffer, reports lag in a microtask unless disposed.
+Unsubscribe and replace the stream rather than continuing to consume incomplete output.
+Plugins using these hooks declare `"apiVersion": "1.8.0"`.
+
+`quirky.terminal/resync({ streamId, historyLines? })` replaces a stream owned by the calling
+connection and returns a fresh replay, offset, history cursor, dimensions, shell state and live
+status. It does not restore an ended process. Requests for one connection and session are spaced
+by two seconds. Desktop panes reset and replay under their input gate; phone viewers recover
+in-band with a screen snapshot and only the live bytes after its offset.
+
+### API 1.9: Immediate emits
+
+API 1.9 adds an option to daemon plugins' `context.emit`:
 
 ```ts
 emit(event: string, data?: unknown, options?: { immediate?: boolean }): boolean
@@ -186,7 +206,7 @@ With `{ immediate: true }`, a coalesced event replaces what its key holds, sends
 other held events first, then goes out inside the call. Its fixed window stays armed; an idle
 key starts a window. Only `true` requests immediate delivery. Plain events ignore the option
 and always send the plugin's held events first. A plugin that passes the option declares
-`"apiVersion": "1.8.0"` or later.
+`"apiVersion": "1.9.0"` or later.
 
 - Everything a plugin emitted before a plain event or immediate emit reaches clients and plugin
   listeners before that event, oldest emit first, unless a later emit replaced the same key.
@@ -194,7 +214,6 @@ and always send the plugin's held events first. A plugin that passes the option 
   other events are disabled or overridden. A disabled or overridden emit releases nothing.
 - No order is promised between coalesced events with different keys when neither is immediate,
   between plugins' events, or between plugin and kernel events.
-
 
 ## Manifest declaration
 
@@ -331,9 +350,10 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.7.0** adds [`MountCleanup.updateInput`](#api-17-in-place-view-input-updates) for mounted
   views that preserve their DOM and resources when accepting new input.
   A plugin that uses it declares `apiVersion` 1.7.0 or later.
-- **1.8.0** adds [`context.emit` immediate delivery](#api-18-immediate-emits) and sends a plugin's
+- **1.8.0** adds [terminal stream lag hooks and recovery](#api-18-terminal-stream-recovery).
+- **1.9.0** adds [`context.emit` immediate delivery](#api-19-immediate-emits) and sends a plugin's
   held events before its next uncoalesced event. A plugin that passes the option declares
-  `apiVersion` 1.8.0 or later.
+  `apiVersion` 1.9.0 or later.
 
 ## Example
 

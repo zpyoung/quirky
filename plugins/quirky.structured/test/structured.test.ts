@@ -12,6 +12,7 @@ import {
   type StructuredMessage
 } from '@quirky/protocol'
 import { startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
+import { liveProcesses } from '../../../packages/process/src/api'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
 import { createCodexRunner } from '../codex-runner'
@@ -661,6 +662,9 @@ describe('the Codex runner inside the plugin', () => {
     const session = await createAgent('codex', '[approve] summarize', { model: 'gpt-5.5', options: { effort: 'high' } })
     expect(session).toMatchObject({ kind: 'structured', agent: 'codex', cwd: home })
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+    expect(liveProcesses()).toContainEqual(
+      expect.objectContaining({ owner: 'quirky.structured', command: fixture.executable })
+    )
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
     const settled = await waitFor(() =>
@@ -702,6 +706,7 @@ describe('the Codex runner inside the plugin', () => {
 
     await call('quirky.structured/stop', { session: session.id })
     expect((await call('quirky.session/get', { session: session.id })).status).toBe('exited')
+    expect(liveProcesses().some((entry) => entry.owner === 'quirky.structured' && entry.command === fixture.executable)).toBe(false)
     expect(await call('quirky.structured/messages', { session: session.id })).toHaveLength(journal.length)
   })
 

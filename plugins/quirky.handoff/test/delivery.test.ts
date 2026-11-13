@@ -96,7 +96,6 @@ describe('SC-48: a confirmed delivery shows a success toast', () => {
   })
 })
 
-
 describe('SC-49: a failed delivery is retried once by itself', () => {
   test('(a) the retry lands: one toast says the brief was resent', async () => {
     const s = await opened()

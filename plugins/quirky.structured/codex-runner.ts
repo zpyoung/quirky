@@ -259,6 +259,7 @@ class CodexRunner implements StructuredRunner {
   ): Running {
     let run!: Running
     const connection = new CodexConnection(
+      this.context.process,
       executable,
       session.cwd,
       environmentWithPatch(this.deps.env ?? process.env, envPatch),

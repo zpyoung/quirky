@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { decodeTerminalOutput, RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
+import {
+  decodeTerminalOutput,
+  encodeTerminalLagged,
+  encodeTerminalOutput,
+  RpcErrorCode,
+  type QuirkyEvent
+} from '@quirky/protocol'
 import { Core, type CoreOptions } from '../../src/service'
 import { Store } from '../../src/store'
 import { openStream } from '../../src/plugins/streams'
@@ -66,6 +72,26 @@ describe('openStream', () => {
     expect(decodeTerminalOutput(conn.binary[0])).toEqual({ streamId: 2, bytes: new Uint8Array([104, 105]) })
   })
 
+  test('lag sends one frame, notifies once and rejects later sends', () => {
+    const conn = fakeConn()
+    const stream = openStream(conn)
+    const first = new Uint8Array([0x61])
+    const calls: string[] = []
+
+    expect(stream.lagged).toBe(false)
+    expect(stream.send(first)).toBe(true)
+    stream.onLag?.(() => calls.push('first'))
+    stream.lag?.()
+    stream.lag?.()
+    expect(stream.lagged).toBe(true)
+    expect(calls).toEqual(['first'])
+
+    stream.onLag?.(() => calls.push('late'))
+    expect(calls).toEqual(['first', 'late'])
+    expect(stream.send(new Uint8Array([0x62]))).toBe(false)
+    expect(conn.binary).toEqual([encodeTerminalOutput(1, first), encodeTerminalLagged(1)])
+  })
+
   test('close runs every onClose callback once, unregisters the closer and stops sends', () => {
     const conn = fakeConn()
     const stream = openStream(conn)
@@ -73,15 +99,20 @@ describe('openStream', () => {
     stream.onClose(() => calls.push('a'))
     stream.onClose(() => calls.push('b'))
 
+    let lagCalls = 0
+    stream.onLag?.(() => lagCalls++)
     stream.close()
     stream.close()
 
     expect(calls).toEqual(['a', 'b'])
     expect(conn.streamClosers.size).toBe(0)
-    stream.send(new Uint8Array([1]))
+    expect(stream.send(new Uint8Array([1]))).toBe(false)
+    stream.lag?.()
+    expect(stream.lagged).toBe(false)
     expect(conn.binary).toEqual([])
-  })
+    expect(lagCalls).toBe(0)
 
+  })
   test('onClose on a closed stream runs the callback at once', () => {
     const stream = openStream(fakeConn())
     stream.close()
@@ -99,7 +130,7 @@ describe('openStream', () => {
     expect(ran).toBe(1)
     expect(conn.streamClosers.size).toBe(0)
 
-    stream.send(new Uint8Array([1]))
+    expect(stream.send(new Uint8Array([1]))).toBe(false)
     stream.close()
     expect(ran).toBe(1)
     expect(conn.binary).toEqual([])
@@ -113,6 +144,17 @@ describe('openStream', () => {
     })
     stream.onClose(() => calls.push('after'))
     stream.close()
+    expect(calls).toEqual(['after'])
+  })
+
+  test('a throwing onLag callback does not stop the others', () => {
+    const stream = openStream(fakeConn())
+    const calls: string[] = []
+    stream.onLag?.(() => {
+      throw new Error('boom')
+    })
+    stream.onLag?.(() => calls.push('after'))
+    stream.lag?.()
     expect(calls).toEqual(['after'])
   })
 
