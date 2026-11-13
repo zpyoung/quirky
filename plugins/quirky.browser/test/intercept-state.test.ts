@@ -67,3 +67,17 @@ test('Fetch settings preserve route and authentication behavior on watched and u
   })
   expect(fetchDomainCommand({ routes: [] }, true)).toEqual({ method: 'Fetch.enable', params: { handleAuthRequests: true } })
 })
+
+test('authoritative Network metadata corrects a held Fetch-domain resource type', () => {
+  const ledger = new InterceptLedger()
+  ledger.hold({ ...request('fetch', 'network-fetch'), resourceType: 'XHR' })
+  ledger.hold({ ...request('xhr', 'network-xhr'), resourceType: 'XHR' })
+  ledger.updateResourceType('unknown', 'Document')
+  ledger.updateResourceType('network-fetch', 'Fetch')
+  expect(ledger.list().map(({ id, resourceType }) => ({ id, resourceType }))).toEqual([
+    { id: 'fetch', resourceType: 'Fetch' }, { id: 'xhr', resourceType: 'XHR' }
+  ])
+  ledger.take()
+  ledger.hold({ ...request('reused', 'network-fetch'), resourceType: 'XHR' })
+  expect(ledger.list()[0]!.resourceType).toBe('XHR')
+})

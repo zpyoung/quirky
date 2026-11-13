@@ -6,6 +6,7 @@ import { BrowserRuntime, browserDevice, cdpWindowsVirtualKeyCode, macOSEditingCo
 import type { BrowserStore } from '../profiles/store'
 import type { BrowserMethod } from './catalog'
 import type { Cookie, SameSite } from '../cookies/types'
+import { fetchDomainCommand } from './intercept'
 
 const HELPER_OBJECT_SCHEMA: Schema = { type: 'object', additionalProperties: true }
 const CAPTURE_SCHEMA: Schema = { type: 'object', properties: { data: { type: 'string' } }, required: ['data'], additionalProperties: true }
@@ -494,27 +495,22 @@ export class BrowserExtraActions {
     }
     const list = patterns as string[]
     const settings = this.runtime.pageSettings(execution.page.browserPageId)
-    await execution.cdp.send('Fetch.enable', {
-      patterns: list.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })),
-      ...(settings.credentials ? { handleAuthRequests: true } : {})
-    }, execution.binding.sessionId)
+    const fetch = fetchDomainCommand({ ...settings, routes: list }, this.runtime.isPageWatched(execution.page.browserPageId))
+    await execution.cdp.send(fetch.method, fetch.params, execution.binding.sessionId)
     this.runtime.updatePageSettings(execution.page.browserPageId, (current) => { current.routes = [...list] })
     return { enabled: true, patterns: list }
   }
 
   private async interceptDisable(execution: PageExecution) {
+    await this.runtime.releaseIntercepts(execution.page.browserPageId)
     const settings = this.runtime.pageSettings(execution.page.browserPageId)
-    if (settings.credentials || this.runtime.isPageWatched(execution.page.browserPageId)) {
-      await execution.cdp.send('Fetch.enable', { handleAuthRequests: true }, execution.binding.sessionId)
-    } else {
-      await execution.cdp.send('Fetch.disable', {}, execution.binding.sessionId)
-    }
-    this.runtime.updatePageSettings(execution.page.browserPageId, (current) => { current.routes = [] })
+    const fetch = fetchDomainCommand(settings, this.runtime.isPageWatched(execution.page.browserPageId))
+    await execution.cdp.send(fetch.method, fetch.params, execution.binding.sessionId)
     return { disabled: true }
   }
 
   private interceptList(execution: PageExecution) {
-    return { patterns: this.runtime.pageSettings(execution.page.browserPageId).routes, requests: [...execution.runtimePage.interceptRequests] }
+    return this.runtime.interceptSnapshot(execution.page.browserPageId)
   }
 
   private async cookieGet(execution: PageExecution, params: Record<string, unknown>) {
@@ -676,10 +672,8 @@ export class BrowserExtraActions {
     const user = stringParam(params, 'user', true)
     const pass = stringParam(params, 'pass', true)
     const settings = this.runtime.pageSettings(execution.page.browserPageId)
-    await execution.cdp.send('Fetch.enable', {
-      ...(settings.routes.length > 0 ? { patterns: settings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
-      handleAuthRequests: true
-    }, execution.binding.sessionId)
+    const fetch = fetchDomainCommand({ ...settings, credentials: { user, pass } }, this.runtime.isPageWatched(execution.page.browserPageId))
+    await execution.cdp.send(fetch.method, fetch.params, execution.binding.sessionId)
     this.runtime.updatePageSettings(execution.page.browserPageId, (current) => { current.credentials = { user, pass } })
     return { configured: true }
   }

@@ -30,6 +30,13 @@ export class InterceptLedger {
     this.requests.delete(id)
   }
 
+  /** Preserves the authoritative resource type even when Network metadata arrives after the pause. */
+  updateResourceType(networkId: string, resourceType: string): void {
+    const id = this.networkRequests.get(networkId)
+    const request = id === undefined ? undefined : this.requests.get(id)
+    if (request) request.resourceType = resourceType
+  }
+
   list(): HeldRequest[] {
     return [...this.requests.values()]
   }

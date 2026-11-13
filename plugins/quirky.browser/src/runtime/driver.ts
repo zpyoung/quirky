@@ -15,6 +15,7 @@ import { BrowserStore, type BrowserPage } from '../profiles/store'
 import type { BrowserIdentityMode } from '../preferences/contract'
 import { identityModeFromSetting, userAgentForIdentity } from '../preferences/identity'
 import { findWatchOccurrences } from './find'
+import { fetchDomainCommand, InterceptLedger, type HeldRequest } from './intercept'
 
 
 export type RuntimeBinding = {
@@ -72,9 +73,10 @@ export type RuntimePageState = {
   binding: RuntimeBinding
   consoleEntries: ConsoleEntry[]
   networkById: Map<string, NetworkEntry>
+  networkResourceTypes: Map<string, string>
   networkEntries: NetworkEntry[]
   harEntries: JsonValue[]
-  interceptRequests: Array<{ id: string; url: string; method: string; headers: Record<string, string>; resourceType: string }>
+  intercepts: InterceptLedger
   navigationReady?: boolean
   mainFrameId?: string
   mainFrameLoaderId?: string
@@ -447,6 +449,7 @@ export class BrowserRuntime {
   private readonly paneWatches = new Map<string, PaneWatchState>()
   private readonly paneWatchesByPage = new Map<string, string>()
   private readonly paneDownloadOwners = new Map<string, { profileId: string; pageId: string; epochId: string }>()
+  private readonly interceptReleases = new Map<string, number>()
   private readonly identityMode: BrowserIdentityMode
   constructor(
     private readonly store: BrowserStore,
@@ -474,6 +477,45 @@ export class BrowserRuntime {
     update(settings)
     this.settings.set(pageId, settings)
     return structuredClone(settings)
+  }
+
+  /** Clears patterns and releases the live binding's held requests without taking the profile lock. Never throws. */
+  async releaseIntercepts(pageId: string): Promise<void> {
+    this.updatePageSettings(pageId, (settings) => { settings.routes = [] })
+    for (const profile of this.profiles.values()) {
+      const epoch = profile.epoch
+      const binding = epoch?.pages.get(pageId)
+      if (!epoch || epoch.invalid || epoch.stopping || !binding) continue
+      await Promise.allSettled(binding.runtime.intercepts.take().map(async (requestId) => {
+        await epoch.cdp.send('Fetch.continueRequest', { requestId }, binding.sessionId, 5_000)
+      }))
+    }
+  }
+
+  /** Keeps queued commands from holding new requests until the locked disable finishes. */
+  async withInterceptsReleased<T>(pageId: string, operation: () => Promise<T>): Promise<T> {
+    this.interceptReleases.set(pageId, (this.interceptReleases.get(pageId) ?? 0) + 1)
+    try {
+      await this.releaseIntercepts(pageId)
+      return await operation()
+    } finally {
+      const remaining = (this.interceptReleases.get(pageId) ?? 1) - 1
+      if (remaining === 0) this.interceptReleases.delete(pageId)
+      else this.interceptReleases.set(pageId, remaining)
+    }
+  }
+
+  /** Returns stored patterns and live pending requests without starting a browser or taking its lock. */
+  interceptSnapshot(pageId: string): { patterns: string[]; requests: HeldRequest[] } {
+    const patterns = this.pageSettings(pageId).routes
+    const profile = this.profiles.get(this.store.getPage(pageId).profileId)
+    const epoch = profile?.epoch
+    if (profile && epoch?.invalid) profile.lossReported = true
+    const binding = epoch?.pages.get(pageId)
+    if (epoch && !epoch.invalid && !epoch.stopping && binding) {
+      return { patterns, requests: binding.runtime.intercepts.list() }
+    }
+    return { patterns, requests: [] }
   }
 
   private testControl(): BrowserTestControl {
@@ -899,21 +941,16 @@ export class BrowserRuntime {
             void this.endPaneWatch(state, 'Watch received an invalid intercepted request.')
             return
           }
-          // Authentication interception pauses ordinary requests too. Resume on this exact
           const settings = this.pageSettings(page.browserPageId)
           const request = objectValue(event.params.request)
-          if (settings.routes.length > 0 && request) {
-            const entries = binding.runtime.interceptRequests
-            entries.push({
-              id: requestId,
-              url: asString(request.url) ?? '',
-              method: asString(request.method) ?? 'GET',
-              headers: headersAsStrings(request.headers),
-              resourceType: asString(event.params.resourceType) ?? 'Other'
-            })
-            if (entries.length > 10_000) entries.splice(0, entries.length - 10_000)
-          }
-          // session outside the profile FIFO held by the pending navigation.
+          if (!this.interceptReleases.has(page.browserPageId) && settings.routes.length > 0 && request && binding.runtime.intercepts.hold({
+            id: requestId,
+            url: asString(request.url) ?? '',
+            method: asString(request.method) ?? 'GET',
+            headers: headersAsStrings(request.headers),
+            resourceType: binding.runtime.networkResourceTypes.get(asString(event.params.networkId) ?? '') ?? asString(event.params.resourceType) ?? 'Other',
+            networkId: asString(event.params.networkId)
+          })) return
           void epoch.cdp.send('Fetch.continueRequest', { requestId }, sessionId, 5_000)
             .catch(() => this.endPaneWatch(state, 'Watch could not resume an intercepted request.'))
         })
@@ -1030,11 +1067,8 @@ export class BrowserRuntime {
           downloadPath: downloadDir,
           eventsEnabled: true
         })
-        const watchSettings = this.pageSettings(page.browserPageId)
-        await epoch.cdp.send('Fetch.enable', {
-          ...(watchSettings.routes.length > 0 ? { patterns: watchSettings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
-          handleAuthRequests: true
-        }, sessionId)
+        const fetch = fetchDomainCommand(this.pageSettings(page.browserPageId), true)
+        await epoch.cdp.send(fetch.method, fetch.params, sessionId)
         await epoch.cdp.send('Security.enable', {}, sessionId)
         await epoch.cdp.send('Security.setOverrideCertificateErrors', { override: true }, sessionId)
         await epoch.cdp.send('Target.setDiscoverTargets', { discover: true })
@@ -1082,14 +1116,10 @@ export class BrowserRuntime {
     for (const unsubscribe of watch.subscriptions) unsubscribe()
     if (watch.downloads.size === 0) this.clearDownloadSubscriptions(watch)
     if (!watch.epoch.invalid && !watch.epoch.stopping) {
-      const settings = this.pageSettings(watch.pageId)
-      const restoreFetch = !this.closingPages.has(watch.pageId) && !this.changingPages.has(watch.pageId) &&
-        (settings.routes.length > 0 || settings.credentials)
-        ? watch.epoch.cdp.send('Fetch.enable', {
-          ...(settings.routes.length > 0 ? { patterns: settings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
-          ...(settings.credentials ? { handleAuthRequests: true } : {})
-        }, watch.binding.sessionId, 5_000)
-        : watch.epoch.cdp.send('Fetch.disable', {}, watch.binding.sessionId, 5_000)
+      const fetch = fetchDomainCommand(this.pageSettings(watch.pageId), false)
+      // disabling Fetch resumes held traffic, so leave it intact on targets being destroyed
+      const restoreFetch = this.closingPages.has(watch.pageId) || this.changingPages.has(watch.pageId)
+        ? Promise.resolve() : watch.epoch.cdp.send(fetch.method, fetch.params, watch.binding.sessionId, 5_000)
       await Promise.allSettled([
         watch.epoch.cdp.send('Page.stopScreencast', {}, watch.binding.sessionId, 5_000),
         restoreFetch,
@@ -1600,6 +1630,7 @@ export class BrowserRuntime {
   }
 
   private startPageTermination(state: RuntimePageState): void {
+    state.intercepts.take()
     if (state.termination) return
     const termination = Promise.withResolvers<void>()
     state.termination = termination.promise
@@ -2129,7 +2160,12 @@ export class BrowserRuntime {
     epoch.pages.set(page.browserPageId, binding)
     await this.enablePageDomains(epoch, binding)
     await this.applySettings(epoch, binding, this.pageSettings(page.browserPageId), page.url)
-    await this.navigateRetainedPage(epoch, page, binding)
+    binding.runtime.intercepts.suspended = true
+    try {
+      await this.navigateRetainedPage(epoch, page, binding)
+    } finally {
+      binding.runtime.intercepts.suspended = false
+    }
     return binding
   }
 
@@ -2275,9 +2311,10 @@ export class BrowserRuntime {
         binding: { browserEpoch: epoch.id, pageGeneration: generation, targetId, sessionId, tabId },
         consoleEntries: [],
         networkById: new Map(),
+        networkResourceTypes: new Map(),
         networkEntries: [],
         harEntries: [],
-        interceptRequests: [],
+        intercepts: new InterceptLedger(),
         domContentLoadedLoaders: new Set(),
         loadedLoaders: new Set()
       }
@@ -2375,12 +2412,8 @@ export class BrowserRuntime {
         ...(settings.reducedMotion === undefined || settings.reducedMotion === null ? [] : [{ name: 'prefers-reduced-motion', value: settings.reducedMotion }])
       ] }, sessionId)
     }
-    if (settings.routes.length > 0 || settings.credentials) {
-      await epoch.cdp.send('Fetch.enable', {
-        ...(settings.routes.length > 0 ? { patterns: settings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
-        ...(settings.credentials ? { handleAuthRequests: true } : {})
-      }, sessionId)
-    }
+    const fetch = fetchDomainCommand(settings, false)
+    if (fetch.method !== 'Fetch.disable') await epoch.cdp.send(fetch.method, fetch.params, sessionId)
   }
 
   private subscribeBrowserEvents(epoch: RuntimeEpoch): void {
@@ -2473,13 +2506,23 @@ export class BrowserRuntime {
         this.pushNavigationEvent(state, { kind: 'document-request', requestId, frameId, loaderId })
       }
       if (!url || !method || !requestId) return
+      // chrome's Fetch domain reports fetch() as XHR; Network retains its resource type
+      const resourceType = asString(event.params.type)
+      if (resourceType) {
+        state.networkResourceTypes.set(requestId, resourceType)
+        state.intercepts.updateResourceType(requestId, resourceType)
+      }
       const timestamp = asFiniteNumber(event.params.wallTime) ?? asFiniteNumber(event.params.timestamp) ?? Date.now() / 1000
       const record: NetworkEntry = { url, method, status: 0, mimeType: '', size: 0, timestamp }
       state.networkEntries.push(record)
       state.networkById.set(requestId, record)
       if (state.networkEntries.length > 10_000) {
         const removed = state.networkEntries.splice(0, state.networkEntries.length - 10_000)
-        for (const [id, entry] of state.networkById) if (removed.includes(entry)) state.networkById.delete(id)
+        for (const [id, entry] of state.networkById) {
+          if (!removed.includes(entry)) continue
+          state.networkById.delete(id)
+          state.networkResourceTypes.delete(id)
+        }
       }
       if (state.captureStartedAt === undefined || timestamp < state.captureStartedAt) return
       const headers = headersAsStrings(request.headers)
@@ -2531,6 +2574,7 @@ export class BrowserRuntime {
       if (event.sessionId !== binding.sessionId) return
       const requestId = asString(event.params.requestId)
       if (!requestId) return
+      state.networkResourceTypes.delete(requestId)
       const size = asFiniteNumber(event.params.encodedDataLength) ?? 0
       const record = state.networkById.get(requestId)
       if (record) record.size = size
@@ -2540,6 +2584,8 @@ export class BrowserRuntime {
       if (event.sessionId !== binding.sessionId) return
       const requestId = asString(event.params.requestId)
       if (!requestId) return
+      state.networkResourceTypes.delete(requestId)
+      state.intercepts.forget(requestId)
       const errorText = asString(event.params.errorText) ?? 'network error'
       if (state.pendingNavigation?.events.some((candidate) => candidate.kind === 'document-request' && candidate.requestId === requestId)) {
         this.pushNavigationEvent(state, { kind: 'loading-failed', requestId, errorText, canceled: event.params.canceled === true })
@@ -2553,16 +2599,14 @@ export class BrowserRuntime {
       }, event.params, 'intercepted request')) return
       const params = event.params as Record<string, unknown>
       const request = params.request as Record<string, unknown>
-      if (this.pageSettings(binding.pageId).routes.length > 0) {
-        state.interceptRequests.push({
-          id: params.requestId as string,
-          url: asString(request.url) ?? '',
-          method: asString(request.method) ?? 'GET',
-          headers: headersAsStrings(request.headers),
-          resourceType: params.resourceType as string
-        })
-        if (state.interceptRequests.length > 10_000) state.interceptRequests.splice(0, state.interceptRequests.length - 10_000)
-      }
+      if (!this.interceptReleases.has(binding.pageId) && this.pageSettings(binding.pageId).routes.length > 0 && state.intercepts.hold({
+        id: params.requestId as string,
+        url: asString(request.url) ?? '',
+        method: asString(request.method) ?? 'GET',
+        headers: headersAsStrings(request.headers),
+        resourceType: state.networkResourceTypes.get(asString(params.networkId) ?? '') ?? params.resourceType as string,
+        networkId: asString(params.networkId)
+      })) return
       void epoch.cdp.send('Fetch.continueRequest', { requestId: params.requestId }, binding.sessionId)
         .catch((error) => this.invalidateEpoch(this.profile(epoch.profileId), epoch, error instanceof Error ? error.message : String(error)))
     })
