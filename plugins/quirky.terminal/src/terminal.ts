@@ -115,6 +115,7 @@ export class TerminalService {
   private readonly mobileHolds = new Map<string, Tap>()
   private readonly mobileRecoveryAt = new Map<string, number>()
   private readonly mobileRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly mobileRecoveryQueued = new Map<string, symbol>()
   private readonly mobileRecoveryPending = new Set<string>()
   private readonly resyncAt = new Map<string, number>()
   private readonly resyncWaiters = new Set<ResyncWaiter>()
@@ -485,32 +486,38 @@ export class TerminalService {
 
   /** Re-subscribes every streamed session and recovers gaps that no longer fit in the host replay buffer. */
   onReconnect = async (): Promise<void> => {
-    for (const [sessionId, attachments] of [...this.bySession]) {
-      if (attachments.size === 0) continue
-      const had = this.received.get(sessionId) ?? 0
-      const hold: Tap = { chunks: [], buffered: 0, total: 0, overflow: false }
-      this.holds.set(sessionId, hold)
-      let recoverMobile = false
-      try {
-        const { replay, offset } = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
-        const bytes = base64ToBytes(replay)
-        const missed = offset - had
-        this.received.set(sessionId, offset + hold.total)
-        if (hold.overflow || missed < 0 || missed > bytes.length) {
-          for (const attachment of [...(this.bySession.get(sessionId) ?? [])]) {
-            if (!attachment.mobile) this.lagAttachment(attachment)
+    if (this.closed) return
+    for (const [sessionId] of [...this.bySession]) {
+      await this.enqueue(sessionId, async () => {
+        if (this.closed) return
+        const attachments = this.bySession.get(sessionId)
+        if (!attachments?.size) return
+        const had = this.received.get(sessionId) ?? 0
+        const hold: Tap = { chunks: [], buffered: 0, total: 0, overflow: false }
+        this.holds.set(sessionId, hold)
+        let recoverMobile = false
+        try {
+          const { replay, offset } = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
+          if (this.closed) return
+          const bytes = base64ToBytes(replay)
+          const missed = offset - had
+          this.received.set(sessionId, offset + hold.total)
+          if (hold.overflow || missed < 0 || missed > bytes.length) {
+            for (const attachment of [...(this.bySession.get(sessionId) ?? [])]) {
+              if (!attachment.mobile) this.lagAttachment(attachment)
+            }
+            recoverMobile = [...(this.bySession.get(sessionId) ?? [])].some((attachment) => attachment.mobile)
+          } else {
+            if (missed > 0) this.sendAll(attachments, bytes.subarray(bytes.length - missed))
+            for (const chunk of hold.chunks) this.sendAll(attachments, chunk)
           }
-          recoverMobile = [...(this.bySession.get(sessionId) ?? [])].some((attachment) => attachment.mobile)
-        } else {
-          if (missed > 0) this.sendAll(attachments, bytes.subarray(bytes.length - missed))
-          for (const chunk of hold.chunks) this.sendAll(attachments, chunk)
+        } catch (error) {
+          if (!this.closed) this.context.log(`could not resume terminal output of ${sessionId}: ${messageOf(error)}`)
+        } finally {
+          if (this.holds.get(sessionId) === hold) this.holds.delete(sessionId)
         }
-      } catch (error) {
-        this.context.log(`could not resume terminal output of ${sessionId}: ${messageOf(error)}`)
-      } finally {
-        if (this.holds.get(sessionId) === hold) this.holds.delete(sessionId)
-      }
-      if (recoverMobile) this.recoverMobileSession(sessionId)
+        if (recoverMobile) this.recoverMobileSession(sessionId)
+      })
     }
   }
 
@@ -523,6 +530,7 @@ export class TerminalService {
       ...this.mobileHolds.keys(),
       ...this.mobileRecoveryAt.keys(),
       ...this.mobileRecoveryTimers.keys(),
+      ...this.mobileRecoveryQueued.keys(),
       ...this.mobileRecoveryPending
     ])) this.clearMobileRecovery(sessionId, true)
     this.holds.clear()
@@ -619,6 +627,7 @@ export class TerminalService {
       this.mobileRecoveryPending.add(sessionId)
       return
     }
+    if (this.mobileRecoveryQueued.has(sessionId)) return
     const now = Date.now()
     const last = this.mobileRecoveryAt.get(sessionId)
     if (last !== undefined && now - last < MOBILE_RECOVERY_COOLDOWN_MS) {
@@ -631,8 +640,18 @@ export class TerminalService {
       }
       return
     }
-    this.mobileRecoveryAt.set(sessionId, now)
-    void this.runMobileRecovery(sessionId)
+    const reservation = Symbol()
+    this.mobileRecoveryQueued.set(sessionId, reservation)
+    void this.enqueue(sessionId, async () => {
+      if (this.mobileRecoveryQueued.get(sessionId) !== reservation) return
+      this.mobileRecoveryQueued.delete(sessionId)
+      if (this.closed || ![...(this.bySession.get(sessionId) ?? [])].some((attachment) => attachment.mobile)) {
+        this.mobileRecoveryPending.delete(sessionId)
+        return
+      }
+      this.mobileRecoveryAt.set(sessionId, Date.now())
+      await this.runMobileRecovery(sessionId)
+    })
   }
 
   private async runMobileRecovery(sessionId: string): Promise<void> {
@@ -684,6 +703,7 @@ export class TerminalService {
     const timer = this.mobileRecoveryTimers.get(sessionId)
     if (timer !== undefined) clearTimeout(timer)
     this.mobileRecoveryTimers.delete(sessionId)
+    this.mobileRecoveryQueued.delete(sessionId)
     this.mobileRecoveryAt.delete(sessionId)
     this.mobileRecoveryPending.delete(sessionId)
     if (clearHold) this.mobileHolds.delete(sessionId)
@@ -766,7 +786,6 @@ export class TerminalService {
         const streams = this.byConnection.get(attachment.connectionId) ?? new Map()
         streams.set(stream.streamId, attachment)
         this.byConnection.set(attachment.connectionId, streams)
-        if (!attachment.mobile) stream.onLag?.(() => this.lagAttachment(attachment))
         if (result.live === false) {
           const set = this.silent.get(sessionId) ?? new Set()
           set.add(attachment)
