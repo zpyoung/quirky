@@ -759,7 +759,30 @@ export function createFederationMail(
         throw new Error('Federation acknowledgement has an invalid direction or cursor')
       }
       const mailDirection = direction as MailDirection
-      return { through: store.acknowledge(binding.id, mailDirection, through as number) }
+      return core.store.transaction(() => {
+        const cursor = store.outboxCursor(binding.id, mailDirection)
+        const acknowledged = through as number
+        if (acknowledged <= cursor) return { through: cursor }
+        const count = acknowledged - cursor
+        const rawResults = params.results
+        const missingResult = (): never => { throw new Error('Federation acknowledgement is missing an import result') }
+        if (count > PAGE_SIZE || !Array.isArray(rawResults) || rawResults.length !== count) missingResult()
+        const results = new Map<number, Record<string, unknown>>()
+        for (const value of rawResults as unknown[]) {
+          const result = objectRecord(value)
+          if (!result || !Number.isSafeInteger(result.sequence) || !Object.hasOwn(result, 'result')) missingResult()
+          results.set(result!.sequence as number, result!)
+        }
+        const items = store.listOutbox(binding.id, mailDirection, cursor, count)
+        if (items.length !== count) missingResult()
+        for (const item of items) {
+          if (results.get(item.sequence)?.id !== item.id) missingResult()
+        }
+        for (const item of items) {
+          store.complete(binding.id, mailDirection, item.id, results.get(item.sequence)!.result)
+        }
+        return { through: store.acknowledge(binding.id, mailDirection, acknowledged) }
+      })
     }
     if (method === IMPORT_METHOD) {
       const direction = params.direction
@@ -810,10 +833,11 @@ export function createFederationMail(
       const items = raw.items.map((item) => assertRelayItem(item, binding.id, incoming))
       if (items.length === 0) break
       if (items.length > PAGE_SIZE) throw new Error(`Peer returned more than ${PAGE_SIZE} federation items`)
-      await importItems(binding, items)
+      const receipt = await importItems(binding, items)
       assertBindingCurrent(binding, generation)
       const through = items.at(-1)!.sequence
-      const ack = objectRecord(await callPeer(binding, ACK_METHOD, { bindingId: binding.id, direction: incoming, through }))
+      const results = receipt.results.map(({ sequence, id, result }) => ({ sequence, id, result }))
+      const ack = objectRecord(await callPeer(binding, ACK_METHOD, { bindingId: binding.id, direction: incoming, through, results }))
       assertBindingCurrent(binding, generation)
       if (ack?.through !== through) throw new Error('Peer refused the committed federation mail acknowledgement')
       pages += 1
