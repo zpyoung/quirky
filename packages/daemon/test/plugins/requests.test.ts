@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { RpcErrorCode, type MethodHandler } from '@quirky/protocol'
-import { DaemonError } from '../../src/errors'
+import { busy, conflict, DaemonError, isRefusal, notAnswering, timedOut } from '../../src/errors'
 import type { Handlers } from '../../src/methods'
 import { Dispatcher, type DispatchHost } from '../../src/plugins/dispatch'
 import { RequestLog, requestDigest } from '../../src/plugins/requests'
@@ -228,6 +228,92 @@ describe('request IDs', () => {
     const error = await failure(t.dispatcher.dispatch('acme.tools/create', { name: 5 }, { conn: conn(1) }, { requestId: 'r-v' }))
     expect(error.code).toBe(RpcErrorCode.InvalidParams)
     expect(t.store.getRequest('r-v')).toBeNull()
+  })
+})
+
+describe('RequestLog refusals', () => {
+  test('Q4: Busy and stalled refusals are not durable outcomes', async () => {
+    const t = setup()
+    const requests = new RequestLog(t.store, { now: () => t.clock.now })
+    const cases: Array<[string, DaemonError]> = [
+      ['r-busy', busy('acme.tools/write', 1, 1)],
+      ['r-stalled', notAnswering('acme.tools/write', 4)]
+    ]
+
+    for (const [requestId, refusal] of cases) {
+      let runs = 0
+      const work = async () => {
+        runs++
+        if (runs === 1) throw refusal
+        return 'ok'
+      }
+
+      expect(isRefusal(refusal)).toBe(true)
+      expect(await failure(requests.run(requestId, 'digest', work))).toBe(refusal)
+      expect(t.store.getRequest(requestId)).toBeNull()
+      expect(await requests.run(requestId, 'digest', work)).toBe('ok')
+      expect(await requests.run(requestId, 'digest', work)).toBe('ok')
+      expect(runs).toBe(2)
+      expect(t.store.getRequest(requestId)?.outcome).toEqual({ result: 'ok' })
+    }
+  })
+
+  test('Q4: a plugin-thrown busy-shaped error is recorded and replayed', async () => {
+    const t = setup()
+    const requests = new RequestLog(t.store, { now: () => t.clock.now })
+    const forged = new DaemonError(
+      RpcErrorCode.Busy,
+      'acme.tools/write is busy: 1 calls are already running',
+      { reason: 'busy', method: 'acme.tools/write', running: 1, limit: 1 }
+    )
+    let runs = 0
+    const work = async () => {
+      runs++
+      if (runs === 1) throw forged
+      return 'ok'
+    }
+
+    expect(isRefusal(forged)).toBe(false)
+    expect(await failure(requests.run('r-forged', 'digest', work))).toBe(forged)
+    expect(t.store.getRequest('r-forged')?.outcome).toEqual({
+      error: { code: forged.code, message: forged.message, data: forged.data }
+    })
+    const replayed = await failure(requests.run('r-forged', 'digest', work))
+    expect(replayed.code).toBe(RpcErrorCode.Busy)
+    expect(replayed.data).toEqual(forged.data)
+    expect(runs).toBe(1)
+  })
+
+  test('Q4: timeout and conflict outcomes remain durable', async () => {
+    const t = setup()
+    const requests = new RequestLog(t.store, { now: () => t.clock.now })
+    const cases: Array<[string, DaemonError]> = [
+      ['r-timeout', timedOut('acme.tools/write', 1_000)],
+      ['r-conflict', conflict('taken')]
+    ]
+
+    for (const [requestId, error] of cases) {
+      let runs = 0
+      const work = async () => {
+        runs++
+        throw error
+      }
+
+      expect(isRefusal(error)).toBe(false)
+      const first = await failure(requests.run(requestId, 'digest', work))
+      expect(first.code).toBe(error.code)
+      expect(t.store.getRequest(requestId)?.outcome).toEqual({
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.data !== undefined ? { data: error.data } : {})
+        }
+      })
+      const replayed = await failure(requests.run(requestId, 'digest', work))
+      expect(replayed.code).toBe(error.code)
+      expect(replayed.message).toBe(error.message)
+      expect(runs).toBe(1)
+    }
   })
 })
 

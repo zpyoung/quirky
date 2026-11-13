@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiPluginContext, WorkspaceOriginView } from '@quirky/protocol'
+import { createRefreshGate } from '@quirky/ui/refresh-gate'
 import type { WorktreeControl } from './control-types'
 import { fetchTags } from './actions'
 import type { Tag } from './view-types'
@@ -125,8 +126,9 @@ export type TreeData = {
 }
 
 /**
- * Projects, groups, workspaces and sessions kept current from the daemon's events. Each load takes
- * a ticket so a slow response never overwrites a newer one.
+ * Projects, groups, workspaces and sessions kept current from the daemon's events. Tree and origins
+ * refreshes each share one in-flight load and one trailing load; hung loads release their slot after
+ * 30 seconds. Tickets prevent slow responses from overwriting a newer load.
  */
 export function useTree(context: UiPluginContext): TreeData {
   const [repos, setRepos] = useState<Repo[]>([])
@@ -194,6 +196,9 @@ export function useTree(context: UiPluginContext): TreeData {
     }
   }, [context])
 
+  const treeRefresh = useMemo(() => createRefreshGate(loadTree), [loadTree])
+  const originsRefresh = useMemo(() => createRefreshGate(loadOrigins), [loadOrigins])
+
   const loadSessions = useCallback(async () => {
     const ticket = ++latestSessions.current
     let next: Session[] | null
@@ -220,8 +225,8 @@ export function useTree(context: UiPluginContext): TreeData {
   }, [context])
 
   useEffect(() => {
-    void loadTree()
-    void loadOrigins()
+    void treeRefresh.request()
+    void originsRefresh.request()
     void loadSessions()
     void loadHeimdall()
     void loadTags()
@@ -230,12 +235,12 @@ export function useTree(context: UiPluginContext): TreeData {
       switch (event.type) {
         case 'quirky.repo/changed':
         case 'quirky.worktree/changed':
-          void loadTree()
-          void loadOrigins()
+          void treeRefresh.request()
+          void originsRefresh.request()
           break
         case 'quirky.worktree/tagsChanged':
           void loadTags()
-          void loadTree()
+          void treeRefresh.request()
           break
         case 'quirky.session/changed': {
           const sessionData = data as { session?: Session } | undefined
@@ -249,7 +254,7 @@ export function useTree(context: UiPluginContext): TreeData {
           break
         }
         case 'plugin.changed':
-          void loadTree()
+          void treeRefresh.request()
           void loadSessions()
           void loadHeimdall()
           void loadTags()
@@ -267,17 +272,19 @@ export function useTree(context: UiPluginContext): TreeData {
     })
     const stopConnection = context.onConnection((status) => {
       if (status !== 'connected') return
-      void loadTree()
-      void loadOrigins()
+      void treeRefresh.request()
+      void originsRefresh.request()
       void loadSessions()
       void loadHeimdall()
       void loadTags()
     })
     return () => {
+      treeRefresh.cancel()
+      originsRefresh.cancel()
       unsubscribe()
       stopConnection()
     }
-  }, [context, loadTree, loadOrigins, loadSessions, loadHeimdall, loadTags])
+  }, [context, treeRefresh, originsRefresh, loadSessions, loadHeimdall, loadTags])
 
   const worktreesWithHeimdall = useMemo<HeimdallAwareWorktree[]>(
     () => worktrees.map((worktree) => ({ ...worktree, heimdallStatus: heimdallByWorktree[worktree.id] ?? null })),
