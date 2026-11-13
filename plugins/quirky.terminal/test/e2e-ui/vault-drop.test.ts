@@ -15,6 +15,7 @@ import {
   stopAll,
   tabsOf,
   terminal,
+  termOf,
   waitFor,
   type Features,
   type Workspace
@@ -120,6 +121,23 @@ test(
         return candidate.activeGroup === sourceGroupNow.id ? candidate : undefined
       })
       expect(layout.activeGroup).not.toBe(targetGroup.id)
+      if (!isTerminalTab(sourceTab)) throw new Error('Vault source must be a terminal tab')
+      const sourcePane = leavesOf(sourceTab.root)[0]!
+      const groupBody = (id: string) => features.win.document.querySelector(`[data-group-body="${id}"]`)
+      const targetGroupBody = groupBody(targetGroup.id)!
+      const sourceGroupBody = groupBody(sourceGroupNow.id)!
+      expect(targetGroupBody.isConnected).toBe(true)
+      expect(sourceGroupBody.isConnected).toBe(true)
+      const sourceTerminal = termOf(features, sourcePane.session)
+      const terminalsBefore = features.terminals.length
+      const expectPreserved = () => {
+        expect(groupBody(targetGroup.id)).toBe(targetGroupBody)
+        expect(targetGroupBody.isConnected).toBe(true)
+        expect(groupBody(sourceGroupNow.id)).toBe(sourceGroupBody)
+        expect(sourceGroupBody.isConnected).toBe(true)
+        expect(termOf(features, sourcePane.session)).toBe(sourceTerminal)
+        expect(features.terminals.length).toBe(terminalsBefore + 1)
+      }
 
       const transfer = trustedCommandTransfer(features, 'command:quirky.vault/resume', {
         id: session.id,
@@ -149,6 +167,7 @@ test(
       }, 20_000)
       expect(starts).toHaveLength(1)
       expect(starts[0]!.argv).toContain('vault-drop-provider-session')
+      expectPreserved()
 
       const noticeSelector = '.toasts [role="status"], .toasts [role="alert"]'
       const existingNotices = new Set(features.win.document.querySelectorAll(noticeSelector))
@@ -161,6 +180,7 @@ test(
       const refused = await layoutOf(h)
       expect(groupsOf(refused).find((group) => group.id === targetGroup.id)?.tabs).toHaveLength(2)
       expect(agentHarness.fakeLog('claude').filter((event) => event.type === 'start')).toHaveLength(1)
+      expectPreserved()
     } finally {
       rmSync(sourceHome, { recursive: true, force: true })
     }

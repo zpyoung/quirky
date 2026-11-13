@@ -418,7 +418,7 @@ describe('hosting process runner boundaries', () => {
 
     const manifest = JSON.parse(readFileSync(resolve(REPO_ROOT, 'plugins/quirky.hosting/quirky-plugin.json'), 'utf8')) as { apiVersion?: unknown }
     expect(typeof manifest.apiVersion).toBe('string')
-    expect(compareVersions(manifest.apiVersion as string, '1.4.0')).toBeGreaterThanOrEqual(0)
+    expect(compareVersions(manifest.apiVersion as string, '1.8.0')).toBeGreaterThanOrEqual(0)
     expect(pluginApiCompatibilityError(manifest.apiVersion)).toBeNull()
   })
 })
