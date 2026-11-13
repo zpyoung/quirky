@@ -220,6 +220,8 @@ Local module hosts check the declaring plugin's floor independently. The CLI che
 The daemon checks existing non-empty `quirky.db` and plugin `store.db` files when opening them.
 It runs SQLite's full integrity check when the main file plus WAL is at most 32 MiB, and the
 quick check above that size. The quick check does not detect mismatches between indexes and rows.
+Inspection and repair read the original database read-only, so committed WAL rows can be
+recovered without checkpointing them into the main file that will be quarantined.
 
 A corrupt store is repaired into a checked copy when possible; otherwise it is replaced with an
 empty database and plugin migrations run again. The original file and any WAL/SHM sidecars stay

@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, mkdtempSync, renameSync, rmSync, statSync, type Stats } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdtempSync, openSync, readSync, renameSync, rmSync, statSync, type Stats } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { Database } from 'bun:sqlite'
 
 export const DEFAULT_BUSY_TIMEOUT_MS = 5000
+const SQLITE_FILE_HEADER = Buffer.from('SQLite format 3\0')
 
 export interface OpenSqliteOptions {
   /** Lock wait in milliseconds, from 0 to 2147483647; defaults to 5000. */
@@ -113,6 +114,32 @@ function walSize(path: string): number {
   }
 }
 
+function prepareWalForReadonlyCheck(path: string): void {
+  let fd: number | undefined
+  let isWalDatabase = false
+  try {
+    fd = openSync(path, 'r')
+    const header = Buffer.alloc(24)
+    isWalDatabase = readSync(fd, header, 0, header.length, 0) === header.length
+      && header.subarray(0, SQLITE_FILE_HEADER.length).equals(SQLITE_FILE_HEADER)
+      && header[18] === 2
+      && header[19] === 2
+  } catch {
+    return
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd)
+      } catch {}
+    }
+  }
+  if (!isWalDatabase) return
+  try {
+    const walFd = openSync(`${path}-wal`, 'wx', 0o600)
+    closeSync(walFd)
+  } catch {}
+}
+
 function vacuumInto(db: Database, path: string): void {
   const query = db.query('VACUUM INTO ?')
   try {
@@ -174,13 +201,18 @@ export function openSqliteOrRecover(
 
   let db: Database | undefined
   let reason: string
+  prepareWalForReadonlyCheck(path)
   try {
-    db = openSqlite(path, { busyTimeoutMs })
+    db = openSqlite(path, { readonly: true, busyTimeoutMs })
     const check = stats.size + walSize(path) <= (options?.fullCheckMaxBytes ?? DEFAULT_FULL_CHECK_MAX_BYTES)
       ? 'integrity_check'
       : 'quick_check'
     const rows = checkDatabase(db, check)
-    if (rows.length === 1 && rows[0] === 'ok') return { db, recovery: null }
+    if (rows.length === 1 && rows[0] === 'ok') {
+      closeRecoveryHandle(db)
+      db = undefined
+      return { db: openSqlite(path, { busyTimeoutMs }), recovery: null }
+    }
     reason = normalizedReason(rows[0] ?? 'integrity check failed')
   } catch (error) {
     closeRecoveryHandle(db)

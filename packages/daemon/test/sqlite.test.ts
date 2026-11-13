@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads'
 import { performance } from 'node:perf_hooks'
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -335,6 +336,96 @@ describe('openSqliteOrRecover', () => {
     assertNoRepairDirectories(file)
   })
 
+  test('inspects a healthy WAL database after its sidecars were removed', () => {
+    const file = join(makeTempDir(), 'healthy-wal.db')
+    const seed = new Database(file, { create: true })
+    try {
+      seed.exec('PRAGMA journal_mode = WAL')
+      seed.exec('CREATE TABLE seed (value TEXT)')
+      seed.exec("INSERT INTO seed (value) VALUES ('kept')")
+      seed.exec('PRAGMA user_version = 11')
+      queryFirst(seed, 'PRAGMA wal_checkpoint(TRUNCATE)')
+    } finally {
+      seed.close(true)
+    }
+    removeSidecars(file)
+
+    const originalBytes = readFileSync(file)
+    expect(originalBytes[18]).toBe(2)
+    expect(originalBytes[19]).toBe(2)
+    const opened = openSqliteOrRecover(file)
+    try {
+      expect(opened.recovery).toBeNull()
+      expect(queryRows(opened.db, 'SELECT value FROM seed')).toEqual([{ value: 'kept' }])
+      expect(queryFirst(opened.db, 'PRAGMA user_version')).toEqual({ user_version: 11 })
+      opened.db.exec('BEGIN IMMEDIATE')
+      opened.db.exec('ROLLBACK')
+    } finally {
+      cleanupRecoveryDb(opened.db)
+    }
+    expect(readFileSync(file).equals(originalBytes)).toBe(true)
+    expect(readdirSync(dirname(file)).some((name) => name.startsWith(`${basename(file)}.corrupt-`))).toBe(false)
+    assertNoRepairDirectories(file)
+  })
+
+  test('repairs committed WAL freelist corruption without changing the original main bytes', () => {
+    const dir = makeTempDir()
+    const sourceFile = join(dir, 'wal-seed.db')
+    const file = join(dir, 'wal-freelist.db')
+    const source = new Database(sourceFile, { create: true })
+    try {
+      source.exec('PRAGMA journal_mode = WAL')
+      source.exec('PRAGMA wal_autocheckpoint = 0')
+      source.exec('CREATE TABLE kept (id INTEGER PRIMARY KEY, value TEXT)')
+      source.exec("INSERT INTO kept VALUES (1, 'before')")
+      source.exec('CREATE TABLE disposable (value BLOB)')
+      source.exec('INSERT INTO disposable VALUES (zeroblob(100000))')
+      source.exec('DROP TABLE disposable')
+      source.exec('PRAGMA user_version = 13')
+      queryFirst(source, 'PRAGMA wal_checkpoint(TRUNCATE)')
+      source.exec("UPDATE kept SET value = 'latest' WHERE id = 1")
+      for (const suffix of ['', '-wal', '-shm']) {
+        copyFileSync(`${sourceFile}${suffix}`, `${file}${suffix}`)
+      }
+    } finally {
+      source.close(true)
+    }
+
+    expect(statSync(`${file}-wal`).size).toBeGreaterThan(0)
+    expect(statSync(`${file}-shm`).size).toBeGreaterThan(0)
+    const originalMainBytes = readFileSync(file)
+    const pageSizeHeader = originalMainBytes.readUInt16BE(16)
+    const pageSize = pageSizeHeader === 1 ? 65536 : pageSizeHeader
+    const trunkPage = originalMainBytes.readUInt32BE(32)
+    expect(trunkPage).toBeGreaterThan(0)
+    originalMainBytes.writeUInt32BE(0x7fffffff, (trunkPage - 1) * pageSize + 4)
+    writeFileSync(file, originalMainBytes)
+    assertReadOnlyCorrupt(file)
+    const readonly = new Database(file, { readonly: true })
+    try {
+      expect(queryFirst(readonly, 'SELECT value FROM kept WHERE id = 1')).toEqual({ value: 'latest' })
+    } finally {
+      readonly.close(true)
+    }
+    expect(readFileSync(file).equals(originalMainBytes)).toBe(true)
+
+    const opened = openSqliteOrRecover(file)
+    try {
+      expect(opened.recovery?.outcome).toBe('repaired')
+      const recovery = opened.recovery!
+      const suffix = recoverySuffix(recovery, file)
+      expect(readFileSync(recovery.quarantinedPath).equals(originalMainBytes)).toBe(true)
+      expect(existsSync(`${file}-wal.corrupt-${suffix}`)).toBe(true)
+      expect(existsSync(`${file}-shm.corrupt-${suffix}`)).toBe(true)
+      expect(queryRows(opened.db, 'PRAGMA integrity_check(1)').map((row) => Object.values(row)[0])).toEqual(['ok'])
+      expect(queryFirst(opened.db, 'SELECT value FROM kept WHERE id = 1')).toEqual({ value: 'latest' })
+      expect(queryFirst(opened.db, 'PRAGMA user_version')).toEqual({ user_version: 13 })
+    } finally {
+      cleanupRecoveryDb(opened.db)
+    }
+    assertNoRepairDirectories(file)
+  })
+
   test('repairs freelist corruption while preserving rows, version, bytes, and mode', () => {
     const file = join(makeTempDir(), 'freelist.db')
     const originalBytes = corruptDatabase(file, 'freelist')
@@ -408,8 +499,8 @@ describe('openSqliteOrRecover', () => {
   test('quarantines non-database bytes and sidecars under one shared suffix', () => {
     const file = join(makeTempDir(), 'garbage.db')
     const originalBytes = openGarbageDatabase(file)
-    writeFileSync(`${file}-wal`, Buffer.alloc(0))
-    writeFileSync(`${file}-shm`, Buffer.alloc(0))
+    writeFileSync(`${file}-wal`, Buffer.alloc(128, 0x57))
+    writeFileSync(`${file}-shm`, Buffer.alloc(128, 0x53))
     const renameCalls: string[] = []
     const opened = openSqliteOrRecover(file, {
       fs: {
@@ -699,8 +790,8 @@ describe('Store SQLite setup', () => {
   test('quarantines a garbage kernel store, creates kernel tables, and calls onRecover once', () => {
     const file = join(makeTempDir(), 'quirky.db')
     const originalBytes = openGarbageDatabase(file)
-    writeFileSync(`${file}-wal`, Buffer.alloc(0))
-    writeFileSync(`${file}-shm`, Buffer.alloc(0))
+    writeFileSync(`${file}-wal`, Buffer.alloc(128, 0x57))
+    writeFileSync(`${file}-shm`, Buffer.alloc(128, 0x53))
     const recoveries: SqliteRecovery[] = []
     const store = new Store(file, { onRecover: (recovery) => recoveries.push(recovery) })
     try {
