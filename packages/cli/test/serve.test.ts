@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PROTOCOL_VERSION, QuirkyClient, RpcError, RpcErrorCode } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
@@ -406,6 +406,56 @@ describe('serve command', () => {
     expect(Date.now() - startedAt).toBeLessThan(5_000)
     expect(jsonLines(execution.output.stdout)).toEqual([])
     expect(daemonSignals()).toEqual(['SIGTERM'])
+  }, 10_000)
+
+  test('aborts a timed-out readiness handshake to a foreign silent socket', async () => {
+    const foreignSocketPath = join(scope.home, 'foreign-silent.sock')
+    const foreignSockets = new Set<Bun.Socket<undefined>>()
+    let accepted = 0
+    const foreignListener = Bun.listen<undefined>({
+      unix: foreignSocketPath,
+      socket: {
+        open(socket) {
+          foreignSockets.add(socket)
+          accepted++
+        },
+        data() {},
+        close(socket) {
+          foreignSockets.delete(socket)
+        }
+      }
+    })
+    const env = daemonEnv({ mode: 'foreign-socket' })
+    env.SERVE_DAEMON_SOCKET_OVERRIDE = foreignSocketPath
+    const execution = directServe(['--json'], env, { timings: { readyMs: 1_500, pollMs: 10 } })
+    const startedAt = Date.now()
+    try {
+      const runtime = await waitFor(() => {
+        const info = readRuntime(scope.home)
+        return info && info.pid === startedPids()[0] && info.socket === foreignSocketPath ? info : undefined
+      })
+      const health = await fetch(`http://127.0.0.1:${runtime.port}/health`).then((response) => response.json()) as { pid: number }
+      expect(health.pid).toBe(runtime.pid)
+      await waitFor(() => accepted > 0 ? true : undefined)
+
+      const failure = await execution.done
+      const data = errorData(failure)
+      expect((failure as RpcError).code).toBe(RpcErrorCode.Timeout)
+      expect(data.reason).toBe('readiness-timeout')
+      expect(Date.now() - startedAt).toBeLessThan(5_000)
+      await waitFor(() => foreignSockets.size === 0 ? true : undefined)
+      expect(foreignSockets.size).toBe(0)
+
+      const probe = await Bun.connect<undefined>({ unix: foreignSocketPath, socket: { data() {} } })
+      probe.end()
+      await waitFor(() => accepted >= 2 ? true : undefined)
+      await waitFor(() => foreignSockets.size === 0 ? true : undefined)
+      expect(accepted).toBeGreaterThanOrEqual(2)
+    } finally {
+      foreignListener.stop(true)
+      for (const socket of foreignSockets) socket.terminate()
+      rmSync(foreignSocketPath, { force: true })
+    }
   }, 10_000)
 
   test.each([

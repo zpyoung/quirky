@@ -15,6 +15,7 @@ const mode = process.env.SERVE_DAEMON_MODE ?? 'ready'
 const startsPath = join(home, 'serve-daemon-starts.log')
 const signalsPath = join(home, 'serve-daemon-signals.log')
 const socket = socketPath(home, 'quirkyd.sock')
+const runtimeSocket = process.env.SERVE_DAEMON_SOCKET_OVERRIDE ?? socket
 const requestedPort = process.env.QUIRKY_PORT
 appendFileSync(
   startsPath,
@@ -109,7 +110,7 @@ function writeRuntime(): void {
     daemonVersion: '0.0.0-serve-stand-in',
     protocolVersion: PROTOCOL_VERSION,
     startedAt: Date.now(),
-    socket
+    socket: runtimeSocket
   } as RuntimeInfo
   runtime = info
   if (mode === 'runtime-garbage') writeFileSync(runtimeFilePath(home), '{not json', { mode: 0o600 })
@@ -126,7 +127,7 @@ function statusResult() {
     ptyHost: { pid: null, alive: false },
     clients: [],
     safeMode: process.argv.includes('--disable-plugins'),
-    socket
+    socket: runtimeSocket
   }
 }
 

@@ -420,9 +420,10 @@ export function createServe(options: ServeOptions = {}): Command {
               }
 
               const statusPromise = (async () => {
+                const connectionAbort = new AbortController()
                 const connecting = QuirkyClient.connectSocket(info.socket as string, {
                   role: 'cli', name: 'quirky serve', token: info.token
-                })
+                }, { signal: connectionAbort.signal })
                 const connectResult = await raceProbe(
                   connecting,
                   Math.min(PROBE_MAX_MS, Math.max(1, readinessDeadline - Date.now())),
@@ -430,7 +431,7 @@ export function createServe(options: ServeOptions = {}): Command {
                   childDone
                 )
                 if (connectResult.kind !== 'value') {
-                  void connecting.then((lateClient) => lateClient.close(), () => {})
+                  connectionAbort.abort()
                   return connectResult
                 }
                 const client = connectResult.value
