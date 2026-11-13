@@ -15,8 +15,12 @@ export type RunOptions = {
   timeoutMs?: number
   /** Stops the process group when aborted. */
   signal?: AbortSignal
-  /** Per stream. A run that writes more is killed. Default 16 MiB. */
+  /** Per-stream in separate mode and shared in combined mode. Default: 16 MiB. */
   maxOutputBytes?: number
+  /** Capture streams independently or append both to stdout. Default: 'separate'. */
+  outputMode?: 'separate' | 'combined'
+  /** Stop at the cap or keep draining while retaining bounded prefixes. Default: 'stop'. */
+  overflow?: 'stop' | 'truncate'
   /** Time between SIGTERM and SIGKILL when a run is stopped. Default 2,000. */
   killGraceMs?: number
   /** The command keeps no state between runs, so it may be run again when its output stalls after it exited. */
@@ -45,6 +49,8 @@ export type RunResult = {
   readonly stopped?: RunStopped
   /** Present when members of the process group were still there one second after the command exited. */
   readonly groupSurvived?: true
+  /** Present only when bytes were discarded from the captured output. */
+  readonly truncated?: { readonly stdout: boolean; readonly stderr: boolean }
   /** Present when the command could not be started. */
   readonly spawnError?: { readonly code: string; readonly message: string }
   readonly durationMs: number

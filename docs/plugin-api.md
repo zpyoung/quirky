@@ -191,13 +191,33 @@ status. It does not restore an ended process. Requests for one connection and se
 by two seconds. Desktop panes reset and replay under their input gate; phone viewers recover
 in-band with a screen snapshot and only the live bytes after its offset.
 
-### API 1.9: Bounded process groups and raw stderr
+### API 1.9: One-shot output policies
 
-API 1.9 adds `stderr: 'pipe'` to `SpawnOptions`. In this mode, `SpawnedProcess.stderr` delivers
+API 1.9 adds `outputMode` and `overflow` to `RunOptions`. Defaults remain `outputMode: 'separate'`
+and `overflow: 'stop'`. In separate mode, `maxOutputBytes` applies independently to stdout and
+stderr. In combined mode, both streams append to `stdout` and `stdoutText` under one shared cap;
+`stderr` is empty, and bytes are combined in the order the drains observe chunks.
+
+With `overflow: 'stop'`, exceeding the cap stops the process group as before. With
+`overflow: 'truncate'`, the runner retains only each bounded prefix and continues draining both
+streams so the command can finish. When any bytes are discarded, `RunResult.truncated` reports
+which captured streams were cut; in combined mode, discarded bytes are attributed to stdout.
+Exact-cap output is not marked truncated. Truncation does not disable deadlines, abort, activation
+disposal or the existing post-exit stall and rerun behavior. A plugin using either option declares
+`"apiVersion": "1.9.0"`.
+
+Captured partial results on post-exit stall errors retain the same truncation flags.
+
+Use the [process declarations](../packages/protocol/src/process.ts) for the complete option and
+result types.
+
+### API 1.10: Bounded process groups and raw stderr
+
+API 1.10 adds `stderr: 'pipe'` to `SpawnOptions`. In this mode, `SpawnedProcess.stderr` delivers
 raw bytes on demand and `stderrTail()` is always empty. In `'tail'` and `'ignore'` modes, `stderr`
 is an empty closed stream and `stderrTail()` retains its existing behavior.
 
-API 1.9 also adds the opt-in `groupGrace: true` spawn option. It gives the whole process group the
+API 1.10 also adds the opt-in `groupGrace: true` spawn option. It gives the whole process group the
 grace period: a natural leader exit sends one SIGTERM to a remaining group, and members already
 given a graceful stop keep the unspent grace after their leader exits. A stop during that grace can
 shorten it. A SIGKILL stop or disposal ends output immediately. Without `groupGrace`, the runner
@@ -349,11 +369,14 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   views that preserve their DOM and resources when accepting new input.
   A plugin that uses it declares `apiVersion` 1.7.0 or later.
 - **1.8.0** adds [terminal stream lag hooks and recovery](#api-18-terminal-stream-recovery).
+- **1.9.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
+  Separate capture and stop-on-overflow remain the defaults. A plugin using either option declares
+  `apiVersion` 1.9.0.
 
-- **1.9.0** adds raw stderr piping and opt-in process-group grace to
-  [`context.process.spawn`](#api-19-bounded-process-groups-and-raw-stderr). `run` and `spawn` wait
+- **1.10.0** adds raw stderr piping and opt-in process-group grace to
+  [`context.process.spawn`](#api-110-bounded-process-groups-and-raw-stderr). `run` and `spawn` wait
   for bounded process-group cleanup and report `groupSurvived: true` if members remain at the
-  bound. A plugin using these additions declares `apiVersion` 1.9.0.
+  bound. A plugin using these additions declares `apiVersion` 1.10.0.
 
 ## Example
 

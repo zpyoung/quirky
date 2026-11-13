@@ -57,7 +57,7 @@ describe('stable plugin API floors', () => {
   })
 
   test('the host supports in-place view input updates and earlier releases', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.9.0')
+    expect(PLUGIN_API_VERSION).toBe('1.10.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
@@ -75,17 +75,34 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).toContain('apiVersion')
   })
 
-  test('the host supports the latest process-runner release and earlier API floors', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.9.0')
+  test('the host supports the 1.8.0 release and earlier API floors', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.10.0')
     expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.7.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.8.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.8.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.9.1')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.10.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.8.1', '1.8.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).not.toBeNull()
     expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).not.toBeNull()
     expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).not.toBeNull()
+  })
+
+  test('the host supports the release that adds output policies to the daemon process runner', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.10.0')
+    expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.1', '1.9.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.10.0', '1.9.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).toContain('apiVersion')
+  })
+
+  test('the host supports raw stderr and bounded process-group cleanup', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.10.0')
+    expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.10.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.10.1')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.11.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.10.0', '1.9.0')).toContain('apiVersion')
   })
 
   test.each([

@@ -16,17 +16,11 @@
   "plugins/quirky.editor/src/notebook/python.ts": 1,
   "plugins/quirky.editor/src/notebook/service.ts": 1,
   "plugins/quirky.git/src/daemon/files.ts": 1,
-  "plugins/quirky.hosting/src/env.ts": 1,
-  "plugins/quirky.hosting/src/identity-remote.ts": 1,
   "plugins/quirky.hosting/src/runtime-runner.ts": 1,
   "plugins/quirky.loops/src/evaluator.ts": 1,
   "plugins/quirky.mobile/src/daemon/notification-presence.ts": 1,
   "plugins/quirky.notifications/src/player.ts": 1,
   "plugins/quirky.terminal/src/emulator.ts": 1,
   "plugins/quirky.terminal/src/open-external.ts": 1,
-  "plugins/quirky.vault/src/actions.ts": 1,
-  "plugins/quirky.worktree/src/daemon/create.ts": 1,
-  "plugins/quirky.worktree/src/daemon/github.ts": 2,
-  "plugins/quirky.worktree/src/daemon/hooks-run.ts": 1,
-  "plugins/quirky.worktree/src/daemon/prepared.ts": 1
+  "plugins/quirky.vault/src/actions.ts": 1
 }
