@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { MethodHandler, PluginCaller, QuirkyClient } from '@quirky/protocol'
 import { connectDaemon } from '@quirky/protocol/node'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness, waitForAsync } from '../../../packages/daemon/test/helpers'
+import { liveProcesses } from '../../../packages/process/src/api'
 import type { EditorBufferInfo, EditorOpenResult, EditorSearchState } from '../src/types'
 type EditorBuffer = EditorBufferInfo
 
@@ -484,7 +485,7 @@ describe('editor core through the daemon API', () => {
       choice: 'discard'
     })).closed).toBe(true)
     const reopened = await t.call<EditorBuffer | null>('quirky.editor/reopen', { worktree: t.worktreeId })
-    expect(reopened?.path).toBe(join(t.root, 'README.md'))
+    expect(reopened?.path).toBe(realpathSync(join(t.root, 'README.md')))
     expect(readFileSync(join(t.root, 'README.md'), 'utf8')).toBe('# before\n')
   })
   test('keeps a dirty edit guarded when its terminal tab is marked replaceable', async () => {
@@ -1141,6 +1142,22 @@ describe('editor core through the daemon API', () => {
       await rg.cleanup()
     }
   }, 30_000)
+  test('held contents searches are owned by quirky.editor until they finish', async () => {
+    const t = await boot()
+    await write(t, 'src/held.ts', 'heldneedle\n')
+    const rg = controlledRg(['heldneedle'])
+    try {
+      const { result } = await rg.start(t, 'heldneedle', 'held-request')
+      expect(liveProcesses()).toContainEqual(expect.objectContaining({ owner: 'quirky.editor', command: 'rg' }))
+
+      rg.release('heldneedle')
+      expect(await result).toMatchObject({ requestId: 'held-request', loading: false, error: null, totalMatches: 1 })
+      expect(liveProcesses().filter((entry) => entry.owner === 'quirky.editor')).toEqual([])
+    } finally {
+      await rg.cleanup()
+    }
+  }, 30_000)
+
 
   test('SC-1/21: explicit terminal groups share a buffer, retain per-tab state and keep preview identity separate', async () => {
     const t = await boot()
