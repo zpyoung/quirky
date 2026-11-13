@@ -267,8 +267,10 @@ function isSupportedSafeAddress(value: string): boolean {
 export class PaneService {
   private readonly db
   private readonly tabs = new Map<string, PaneTab>()
+  private readonly pendingReveals = new Map<string, Promise<void>>()
   private readonly activeByWorktree = new Map<string, string>()
   private readonly updatedAt = new Map<string, number>()
+  private lastUpdatedAt = 0
   private readonly watches = new Map<string, WatchLease>()
   private readonly watchReservations = new Map<string, WatchOwner>()
   private readonly watchStarts = new Map<string, WatchStart>()
@@ -426,6 +428,74 @@ export class PaneService {
     return [...this.tabs.values()].map((tab) => structuredClone(tab))
   }
 
+  /** Reveals this exact managed page without duplicating its Watch pane. */
+  async revealPage(page: BrowserPage, caller: PluginCaller): Promise<{ pane: string; opened: boolean }> {
+    const pageId = page.browserPageId
+    const previous = this.pendingReveals.get(pageId)
+    const pending = Promise.withResolvers<void>()
+    this.pendingReveals.set(pageId, pending.promise)
+    try {
+      if (previous) await previous
+      return await this.revealPageLocked(page, caller)
+    } finally {
+      pending.resolve()
+      if (this.pendingReveals.get(pageId) === pending.promise) this.pendingReveals.delete(pageId)
+    }
+  }
+
+  private async revealPageLocked(page: BrowserPage, caller: PluginCaller): Promise<{ pane: string; opened: boolean }> {
+    if (page.worktreeId === null) throw fault('invalid_argument', `page ${page.browserPageId} belongs to no worktree, so no browser pane can show it`)
+    const active = this.activeByWorktree.get(page.worktreeId)
+    let selected: PaneTab | undefined
+    for (const tab of this.tabs.values()) {
+      if (tab.mode !== 'watch' || tab.page !== page.browserPageId || tab.worktreeId !== page.worktreeId) continue
+      if (!selected || tab.id === active ||
+        (selected.id !== active && (this.updatedAt.get(tab.id) ?? 0) >= (this.updatedAt.get(selected.id) ?? 0))) selected = tab
+    }
+    if (!selected) {
+      const tab = await this.paneOpen({ worktree: `id:${page.worktreeId}`, page: page.browserPageId, mode: 'watch', profile: page.profileId }, caller, false)
+      return { pane: tab.id, opened: true }
+    }
+    this.assertWatchOwner(selected.id, DEFAULT_WATCH_OWNER)
+    if (selected.profileId !== page.profileId) {
+      const starting = this.watchStarts.get(selected.id)
+      if (starting) await starting.promise.catch(() => undefined)
+      this.assertWatchOwner(selected.id, DEFAULT_WATCH_OWNER)
+      const watch = this.watches.get(selected.id)
+      if (watch) await this.stopWatch(watch)
+      if (this.tabs.get(selected.id) !== selected || selected.page !== page.browserPageId ||
+        this.store.getPage(page.browserPageId).profileId !== page.profileId) {
+        throw fault('browser_tab_changed', 'browser page changed while its Watch pane was being revealed')
+      }
+      this.clearPromptsForPane(selected.id)
+      selected.profileId = page.profileId
+      selected.partition = this.partition(page.profileId)
+      selected.url = safeUrl(page.url)
+      selected.title = page.title
+      selected.error = page.loadError?.description ?? null
+      selected.loading = false
+      selected.watchEnded = false
+      selected.command = null
+      selected.canGoBack = false
+      selected.canGoForward = false
+      selected.find = { text: '', current: 0, total: 0 }
+    }
+    await this.openHostedTab(selected)
+    this.setActive(selected)
+    this.saveTab(selected)
+    this.emitChanged()
+    return { pane: selected.id, opened: false }
+  }
+
+  /** Restores the browser selection when a routed page is discarded. */
+  restoreActivePane(paneId: string | null): void {
+    const tab = paneId === null ? undefined : this.tabs.get(paneId)
+    if (!tab) return
+    this.setActive(tab)
+    this.saveTab(tab)
+    this.emitChanged()
+  }
+
   async deactivate(): Promise<void> {
     this.active = false
     const pendingPrompts = [...this.prompts.values()]
@@ -475,6 +545,7 @@ export class PaneService {
       tab.downloads = []
       this.tabs.set(tab.id, tab)
       this.updatedAt.set(tab.id, row.updated_at)
+      this.lastUpdatedAt = Math.max(this.lastUpdatedAt, row.updated_at)
       if (row.active === 1) this.activeByWorktree.set(tab.worktreeId, tab.id)
     }
   }
@@ -496,7 +567,8 @@ export class PaneService {
       copy.url = 'about:blank'
     }
     const existing = this.db.get<{ active: number }>('SELECT active FROM browser_pane_tabs WHERE id=?', tab.id)
-    const updatedAt = Math.max(Date.now(), (this.updatedAt.get(tab.id) ?? 0) + 1)
+    const updatedAt = Math.max(Date.now(), this.lastUpdatedAt + 1)
+    this.lastUpdatedAt = updatedAt
     this.updatedAt.set(tab.id, updatedAt)
     this.db.run(
       'INSERT INTO browser_pane_tabs(id, worktree_id, active, updated_at, data) VALUES(?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET worktree_id=excluded.worktree_id, active=excluded.active, updated_at=excluded.updated_at, data=excluded.data',
@@ -751,7 +823,7 @@ export class PaneService {
     this.resources.delete(tabId)
   }
 
-  private async paneOpen(request: PaneRequests['paneOpen'], caller: PluginCaller): Promise<PaneTab> {
+  private async paneOpen(request: PaneRequests['paneOpen'], caller: PluginCaller, recordVisit = true): Promise<PaneTab> {
     if (typeof request.worktree !== 'string' || request.worktree.trim() === '') throw fault('invalid_argument', 'worktree is required')
     const worktreeId = await this.resolveWorktree(request.worktree, caller, false)
     if (typeof worktreeId !== 'string' || worktreeId === 'all') throw fault('invalid_argument', 'browser panes require one concrete worktree')
@@ -819,29 +891,33 @@ export class PaneService {
         tab.error = page.loadError?.description ?? null
         this.saveTab(tab)
       }
-      const hosted = objectValue(await this.context.call('quirky.terminal/openViewTab', {
-        workspace: worktreeId,
-        ...(request.group === undefined ? {} : { group: request.group }),
-        viewId: 'view:quirky.browser/page',
-        key: `browser:${tab.id}`,
-        title: 'Browser',
-        input: { pane: tab.id },
-        icon: { kind: 'control', name: 'globe' },
-        closeMethod: 'quirky.browser/paneClose',
-        closeParams: { pane: tab.id, fromTab: true },
-        activate: true
-      }))
-      if (!hosted || typeof hosted.tab !== 'string') throw fault('browser_error', 'terminal did not return the hosted browser tab ID')
-      tab.tabId = hosted.tab
+      await this.openHostedTab(tab, request.group)
       this.saveTab(tab)
     } catch (error) {
       await this.removePaneState(tab)
       if (createdPageId) await this.closeCreatedPage(createdPageId)
       throw error
     }
-    this.recordHistory(tab.preview ? pathToFileURL(tab.preview.path).href : tab.url, tab.title)
+    if (recordVisit) this.recordHistory(tab.preview ? pathToFileURL(tab.preview.path).href : tab.url, tab.title)
     this.emitChanged()
     return this.copyTab(tab)
+  }
+
+  private async openHostedTab(tab: PaneTab, group?: string): Promise<void> {
+    const hosted = objectValue(await this.context.call('quirky.terminal/openViewTab', {
+      workspace: tab.worktreeId,
+      ...(group === undefined ? {} : { group }),
+      viewId: 'view:quirky.browser/page',
+      key: `browser:${tab.id}`,
+      title: 'Browser',
+      input: { pane: tab.id },
+      icon: { kind: 'control', name: 'globe' },
+      closeMethod: 'quirky.browser/paneClose',
+      closeParams: { pane: tab.id, fromTab: true },
+      activate: true
+    }))
+    if (!hosted || typeof hosted.tab !== 'string') throw fault('browser_error', 'terminal did not return the hosted browser tab ID')
+    tab.tabId = hosted.tab
   }
 
   private async createPage(worktreeId: string, profileId: string, url: string): Promise<BrowserPage> {
