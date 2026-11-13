@@ -57,6 +57,17 @@ describe('editor git-ignore runner ownership', () => {
     })
   }
 
+  test('keeps two paths in one batch when their NUL-delimited UTF-8 input fills the cap exactly', async () => {
+    const paths = ['é'.repeat((cap - 4) / 2), 'ab']
+    const input = `${paths.join('\0')}\0`
+    const { runner, calls } = recording(({ options }) => result(String(options.input)))
+    expect(Buffer.byteLength(input, 'utf8')).toBe(cap)
+    expect(await ignoredPaths(runner, '/fixture', paths)).toEqual(new Set(paths))
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.argv).toEqual(['git', 'check-ignore', '-z', '--stdin'])
+    expect(calls[0]!.options.input).toBe(input)
+  })
+
   test('omits an oversized path and does not spawn for empty input', async () => {
     const { runner, calls } = recording(({ options }) => result(String(options.input)))
     expect(await ignoredPaths(runner, '/fixture', [])).toEqual(new Set())
