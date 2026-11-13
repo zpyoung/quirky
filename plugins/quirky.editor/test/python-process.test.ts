@@ -445,7 +445,7 @@ describe('Python discovery and notebook setup', () => {
 
   test('uses the feature host runner for candidate listing, metadata description, and selection', async () => {
     const root = temporaryRoot()
-    const candidate = makeExecutable(join(root, '.venv', 'bin', 'python'))
+    const candidate = makeExecutable(join(root, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'))
     const calls: SpawnCall[] = []
     const spawner = recordingSpawner((argv) => pythonResult(argv[0]!), calls)
     const feature = featureHost(spawner.process, root)
