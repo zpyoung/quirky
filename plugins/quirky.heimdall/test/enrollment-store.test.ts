@@ -78,6 +78,30 @@ function makeContext(options: {
     }
   }
 }
+function removeSidecars(path: string): void {
+  const db = new Database(path)
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+  } finally {
+    db.close(true)
+  }
+  rmSync(`${path}-wal`, { force: true })
+  rmSync(`${path}-shm`, { force: true })
+}
+
+function damage(path: string, mode: 'pages' | 'truncate') {
+  const bytes = readFileSync(path)
+  if (mode === 'pages') {
+    const encodedPageSize = bytes.readUInt16BE(16)
+    const pageSize = encodedPageSize === 1 ? 65536 : encodedPageSize
+    bytes.fill(0xa5, pageSize)
+    writeFileSync(path, bytes)
+  } else {
+    writeFileSync(path, bytes.subarray(0, Math.max(100, Math.floor(bytes.length / 2) - 37)))
+  }
+  return readFileSync(path)
+}
+
 function corruptFreelist(path: string) {
   const db = new Database(path)
   try {
@@ -383,7 +407,80 @@ describe('Heimdall persistence and enrollment', () => {
     fixture.close()
   })
 
-  test('future schema is inspected read-only without invoking openStore or altering the database', () => {
+  test('healthy sidecar-less store keeps enrollments and remains writable', () => {
+    const fixture = makeContext()
+    const initial = createKernelStore(fixture.context)
+    const enrollment = makeEnrollment()
+    initial.save(enrollment)
+    initial.close()
+    fixture.close()
+    const path = join(fixture.dataDir, 'store.db')
+    removeSidecars(path)
+
+    const store = createKernelStore(fixture.context)
+    expect(store.readOnly).toBe(false)
+    expect(store.get(enrollment.watcherId)).toEqual(enrollment)
+    const second = makeEnrollment({ watcherId: 'watcher-2', workspaceKey: 'local::/workspace/second' })
+    store.save(second)
+    expect(store.get(second.watcherId)).toEqual(second)
+    expect(readdirSync(fixture.dataDir).filter((name) => name.startsWith('store.db.corrupt-'))).toEqual([])
+    store.close()
+    fixture.close()
+  })
+
+  test('future sidecar-less schema stays read-only without changing the main file', () => {
+    const fixture = makeContext()
+    const initial = createKernelStore(fixture.context)
+    const enrollment = makeEnrollment()
+    initial.save(enrollment)
+    initial.close()
+    fixture.close()
+    const path = join(fixture.dataDir, 'store.db')
+    const writable = new Database(path)
+    const row = writable.query('PRAGMA user_version').get()
+    if (!row || typeof row !== 'object' || !('user_version' in row) || typeof row.user_version !== 'number') {
+      throw new Error('Cannot read fixture schema version')
+    }
+    writable.exec(`PRAGMA user_version = ${row.user_version + 1}`)
+    writable.close(true)
+    removeSidecars(path)
+    const before = readFileSync(path)
+
+    const future = createKernelStore(fixture.context)
+    expect(future.readOnly).toBe(true)
+    expect(future.get(enrollment.watcherId)).toEqual(enrollment)
+    expect(() => future.save(makeEnrollment({ watcherId: 'watcher-2' }))).toThrow('Heimdall storage is read-only')
+    expect(fixture.openStoreNewerVersions()).toEqual(['read-only', 'read-only'])
+    future.close()
+    fixture.close()
+    expect(readFileSync(path)).toEqual(before)
+  })
+
+  for (const mode of ['pages', 'truncate'] as const) {
+    test(`corrupt sidecar-less store recovers from ${mode} damage and preserves the original bytes`, () => {
+      const fixture = makeContext()
+      const initial = createKernelStore(fixture.context)
+      const enrollment = makeEnrollment()
+      initial.save(enrollment)
+      initial.close()
+      fixture.close()
+      const path = join(fixture.dataDir, 'store.db')
+      removeSidecars(path)
+      const original = damage(path, mode)
+
+      const store = createKernelStore(fixture.context)
+      expect(store.readOnly).toBe(false)
+      expect(store.get(enrollment.watcherId)).toBeNull()
+      const fresh = makeEnrollment({ watcherId: 'watcher-fresh' })
+      store.save(fresh)
+      expect(store.get(fresh.watcherId)).toEqual(fresh)
+      expect(readFileSync(findCorruptBackup(path))).toEqual(original)
+      store.close()
+      fixture.close()
+    })
+  }
+
+  test('future schema opens read-only through the kernel without altering the database', () => {
     const fixture = makeContext()
     const initial = createKernelStore(fixture.context)
     const enrollment = makeEnrollment()
@@ -400,8 +497,9 @@ describe('Heimdall persistence and enrollment', () => {
     const future = createKernelStore(fixture.context)
     expect(future.readOnly).toBe(true)
     expect(future.get(enrollment.watcherId)).toEqual(enrollment)
-    expect(fixture.opens()).toBe(1)
+    expect(fixture.openStoreNewerVersions()).toEqual(['read-only', 'read-only'])
     future.close()
+    fixture.close()
 
     expect(readFileSync(path)).toEqual(before)
   })
@@ -443,49 +541,30 @@ describe('Heimdall persistence and enrollment', () => {
     fixture.close()
   })
 
-  test('propagates a lock error from future schema inspection without opening the context store', () => {
+  test('propagates a kernel lock error without quarantining the store', () => {
     const fixture = makeContext()
     const path = join(fixture.dataDir, 'store.db')
     const lock = new Database(path)
     lock.exec('CREATE TABLE seed (id INTEGER)')
     lock.exec('BEGIN EXCLUSIVE')
 
-    let inspectedHandle: Database | undefined
-    let inspectedCloseCalls = 0
-    const originalQuery = Database.prototype.query
-    const originalClose = Database.prototype.close
-    Database.prototype.query = new Proxy(originalQuery, {
-      apply(target, thisArg, args) {
-        if (args[0] === 'PRAGMA user_version') inspectedHandle = thisArg as Database
-        return Reflect.apply(target, thisArg, args)
-      }
-    })
-    Database.prototype.close = function (this: Database, ...args: Parameters<typeof originalClose>) {
-      if (this === inspectedHandle) inspectedCloseCalls++
-      return originalClose.apply(this, args)
-    }
-
     let error: unknown
+    const started = performance.now()
     try {
-      try {
-        createKernelStore(fixture.context)
-      } catch (caught) {
-        error = caught
-      }
+      createKernelStore(fixture.context)
+    } catch (caught) {
+      error = caught
     } finally {
-      Database.prototype.query = originalQuery
-      Database.prototype.close = originalClose
-      if (inspectedHandle && inspectedCloseCalls === 0) inspectedHandle.close(true)
       lock.exec('ROLLBACK')
       lock.close(true)
     }
     expect(error).toBeInstanceOf(Error)
     const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
     expect(code).toBe('SQLITE_BUSY')
-    expect(fixture.opens()).toBe(0)
-    expect(inspectedCloseCalls).toBe(1)
+    expect(performance.now() - started).toBeGreaterThanOrEqual(5_000)
+    expect(fixture.opens()).toBe(1)
     expect(readdirSync(fixture.dataDir).filter((name) => name.startsWith('store.db.corrupt-'))).toEqual([])
-  })
+  }, { timeout: 20_000 })
 })
 
 describe('Heimdall kind registry and enrollment', () => {

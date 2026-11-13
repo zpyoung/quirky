@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
@@ -193,6 +193,41 @@ describe('Heimdall daemon acceptance', () => {
     expect(malformed.traces).toHaveLength(beforeRestart.traces.length)
     expect(existsSync(counterFile)).toBe(false)
   })
+  test('healthy sidecar-less store preserves enrollment after daemon restart', async () => {
+    const enrolled = await client.callAny(`${KERNEL_METHOD}/enroll`, {
+      kind: 'fixture', kindPayload: { valid: true, workspace: 'sidecar-healthy', action: 'none' }
+    }) as { enrollment: { watcherId: string } }
+    const watcherId = enrolled.enrollment.watcherId
+
+    await stopDaemonKeepingHome(harness)
+    const storeDir = join(home, 'plugin-data', KERNEL_METHOD)
+    checkpointAndRemoveSidecars(join(storeDir, 'store.db'))
+
+    harness = await startWithHome()
+    client = await harness.connect('cli')
+    daemonStopped = false
+    ptyStopped = false
+    const plugin = await waitForHeimdallActive()
+    expect(plugin.state).toBe('active')
+    expect(plugin.diagnostics.filter((diagnostic) => diagnostic.level === 'warning')).toHaveLength(0)
+    const inspected = await waitForAsync(async () => {
+      const items = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId }) as Inspection[]
+      return items.length === 1 && items[0]?.enrollment.watcherId === watcherId ? items : undefined
+    })
+    expect(inspected).toHaveLength(1)
+    expect(inspected[0]?.enrollment.watcherId).toBe(watcherId)
+    expect(inspected[0]?.readOnly).toBeFalsy()
+    expect(readdirSync(storeDir).filter((name) => name.startsWith('store.db.corrupt-'))).toHaveLength(0)
+  }, { timeout: 60_000 })
+
+  test('pages-corrupt sidecar-less store is recovered across daemon restarts', async () => {
+    await recoverCorruptSidecarStore('pages')
+  }, { timeout: 60_000 })
+
+  test('truncate-corrupt sidecar-less store is recovered across daemon restarts', async () => {
+    await recoverCorruptSidecarStore('truncate')
+  }, { timeout: 60_000 })
+
   test('inspects a future schema read-only without scheduling or writing', async () => {
     const enrolled = await client.callAny(`${KERNEL_METHOD}/enroll`, {
       kind: 'fixture', kindPayload: { valid: true, workspace: 'forward-schema', action: 'none' }
@@ -338,6 +373,81 @@ describe('Heimdall daemon acceptance', () => {
     expect(readFileSync(counterFile, 'utf8').trim().split('\n')).toHaveLength(1)
   })
 })
+
+async function waitForHeimdallActive() {
+  return waitForAsync(async () => {
+    const plugin = (await client.call('plugin.list', {})).find((entry) => entry.id === KERNEL_METHOD)
+    return plugin?.state === 'active' ? plugin : undefined
+  })
+}
+
+async function recoverCorruptSidecarStore(mode: 'pages' | 'truncate'): Promise<void> {
+  await client.callAny(`${KERNEL_METHOD}/enroll`, {
+    kind: 'fixture', kindPayload: { valid: true, workspace: `sidecar-corrupt-${mode}`, action: 'none' }
+  })
+  await stopDaemonKeepingHome(harness)
+  const storeDir = join(home, 'plugin-data', KERNEL_METHOD)
+  const storePath = join(storeDir, 'store.db')
+  checkpointAndRemoveSidecars(storePath)
+  const damagedBytes = damageStore(storePath, mode)
+
+  harness = await startWithHome()
+  client = await harness.connect('cli')
+  daemonStopped = false
+  ptyStopped = false
+  const recovered = await waitForHeimdallActive()
+  expect(recovered.state).toBe('active')
+  const recoveryWarnings = recovered.diagnostics.filter((diagnostic) =>
+    diagnostic.level === 'warning' &&
+    /^(quarantined|repaired) corrupt store .*plugin-data\/quirky\.heimdall\/store\.db/.test(diagnostic.message)
+  )
+  expect(recoveryWarnings).toHaveLength(1)
+  const backups = corruptMainFiles(storeDir)
+  expect(backups).toHaveLength(1)
+  expect(readFileSync(join(storeDir, backups[0]!))).toEqual(damagedBytes)
+
+  const reenrolled = await client.callAny(`${KERNEL_METHOD}/enroll`, {
+    kind: 'fixture', kindPayload: { valid: true, workspace: `sidecar-reenrolled-${mode}`, action: 'none' }
+  }) as { enrollment: { watcherId: string } }
+  expect(reenrolled.enrollment.watcherId).toBeTruthy()
+
+  await stopDaemonKeepingHome(harness)
+  harness = await startWithHome()
+  client = await harness.connect('cli')
+  daemonStopped = false
+  ptyStopped = false
+  const restarted = await waitForHeimdallActive()
+  expect(restarted.state).toBe('active')
+  expect(corruptMainFiles(storeDir)).toHaveLength(1)
+}
+
+function checkpointAndRemoveSidecars(path: string): void {
+  const database = new Database(path)
+  try {
+    database.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+  } finally {
+    database.close()
+  }
+  rmSync(`${path}-wal`, { force: true })
+  rmSync(`${path}-shm`, { force: true })
+}
+
+function damageStore(path: string, mode: 'pages' | 'truncate') {
+  const bytes = readFileSync(path)
+  if (mode === 'pages') {
+    const encodedPageSize = bytes.readUInt16BE(16)
+    const pageSize = encodedPageSize === 1 ? 65_536 : encodedPageSize
+    bytes.fill(0xa5, pageSize)
+    writeFileSync(path, bytes)
+  } else {
+    writeFileSync(path, bytes.subarray(0, Math.max(100, Math.floor(bytes.length / 2) - 37)))
+  }
+  return readFileSync(path)
+}
+
+function corruptMainFiles(storeDir: string): string[] {
+  return readdirSync(storeDir).filter((name) => /^store\.db\.corrupt-\d+-[0-9a-f]{8}$/.test(name))
+}
 
 async function startWithHome(): Promise<Harness> {
   process.env.HOME = userHome
