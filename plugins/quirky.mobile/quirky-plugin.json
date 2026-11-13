@@ -1,6 +1,6 @@
 {
   "id": "quirky.mobile",
-  "apiVersion": "1.4.0",
+  "apiVersion": "1.12.0",
   "name": "Mobile",
   "version": "0.1.0",
   "description": "Pair phones with Quirky over a direct encrypted connection.",
@@ -16,6 +16,7 @@
         "description": "Read or long-poll the bounded notification-only replay for an authenticated phone; never exposes general daemon events.",
         "connection": true,
         "readOnly": true,
+        "timeout": "40s",
         "params": {
           "type": "object",
           "properties": {
