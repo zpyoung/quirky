@@ -732,6 +732,10 @@
               "type": "integer",
               "minimum": 1
             },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
+            },
             "prRepo": {
               "type": "object",
               "properties": {
@@ -3106,6 +3110,30 @@
             "title": {
               "type": "string",
               "description": "At most 256 characters."
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -3141,6 +3169,30 @@
             "number": {
               "type": "integer",
               "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -3602,6 +3654,10 @@
             },
             "useTemplate": {
               "type": "boolean"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -3677,6 +3733,10 @@
             },
             "stack": {
               "type": "boolean"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -4582,8 +4642,9 @@
     "event": [
       {
         "id": "changed",
-        "description": "Review state changed; refetch. Carries a worktree when only that worktree's Checks entry changed.",
+        "description": "Review state changed; refetch. Coalesces by worktree tag; carries a worktree when only that worktree's Checks entry changed.",
         "worktree": "worktree",
+        "coalesce": [],
         "data": {
           "type": "object",
           "properties": {

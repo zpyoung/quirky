@@ -360,7 +360,7 @@ async function validateFormatTarget(host: EditorServices, buffer: EditorBuffer, 
   return target
 }
 
-async function markdownAction(host: EditorServices, rawParams: Record<string, unknown>, caller: PluginCaller, resources: MarkdownResourcePool): Promise<MarkdownActionResult> {
+async function markdownAction(host: EditorServices, rawParams: Record<string, unknown>, caller: PluginCaller, resources: MarkdownResourcePool, lifecycleSignal: AbortSignal): Promise<MarkdownActionResult> {
   const params = rawParams as ActionParams
   const action = params.action
   if (!action) throw errorOf(host, 'invalid-params', 'markdown action is required.')
@@ -560,7 +560,7 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
 
 
   if (action === 'importImage') return importMarkdownImage(host, buffer, params)
-  if (action === 'exportPdf') return exportMarkdownPdf(host, buffer, params, resources)
+  if (action === 'exportPdf') return exportMarkdownPdf(host, buffer, params, resources, lifecycleSignal)
   throw errorOf(host, 'invalid-params', `Unsupported Markdown action ${String(action)}.`)
 }
 
@@ -687,7 +687,7 @@ async function importMarkdownImage(host: EditorServices, buffer: EditorBuffer, p
         sourcePath = await host.path(buffer.worktreeId, sourceRelative)
       }
     } else {
-      const selected = await chooseMarkdownImage()
+      const selected = await chooseMarkdownImage(host.context.process)
       if (selected === null) return { cancelled: true }
       sourcePath = selected
       const relativePath = posix.relative(buffer.root.replace(/\\/g, '/'), selected.replace(/\\/g, '/'))
@@ -750,53 +750,71 @@ async function importMarkdownImage(host: EditorServices, buffer: EditorBuffer, p
   }
 }
 
-async function exportMarkdownPdf(host: EditorServices, buffer: EditorBuffer, params: ActionParams, resources: MarkdownResourcePool): Promise<MarkdownActionResult> {
+function assertMarkdownActive(signal: AbortSignal): void {
+  if (signal.aborted) throw new Error('Process was aborted.')
+}
+
+async function exportMarkdownPdf(host: EditorServices, buffer: EditorBuffer, params: ActionParams, resources: MarkdownResourcePool, lifecycleSignal: AbortSignal): Promise<MarkdownActionResult> {
+  assertMarkdownActive(lifecycleSignal)
   if (buffer.mode === 'source') throw errorOf(host, 'invalid-params', 'PDF export is available only from rich Markdown or preview mode.')
   const source = currentContent(buffer)
   if (utf8Bytes(source) > RICH_MARKDOWN_MAX_BYTES) throw errorOf(host, 'invalid-params', 'PDF export is unavailable above the 600 KiB rich editing limit.')
   const { body } = splitFrontMatter(source)
   const imageUrls = await resolveMarkdownImages(host, buffer, body, resources)
+  assertMarkdownActive(lifecycleSignal)
   const html = await renderSafeMarkdownHtml(body, { imageUrls })
+  assertMarkdownActive(lifecycleSignal)
   let outputPath: string
   let nativeDestination = false
   if (typeof params.path === 'string' && params.path !== '') {
     if (isAbsolute(params.path) || params.path.split(/[\\/]/).includes('..')) throw errorOf(host, 'invalid-params', 'PDF path must be a worktree-relative authorized destination.')
     outputPath = await host.path(buffer.worktreeId, params.path, { create: true })
   } else {
-    const selected = await choosePdfDestination(buffer.name)
+    const selected = await choosePdfDestination(host.context.process, buffer.name, lifecycleSignal)
+    assertMarkdownActive(lifecycleSignal)
     if (selected === null) return { cancelled: true }
     outputPath = selected
     nativeDestination = true
   }
+  assertMarkdownActive(lifecycleSignal)
   const exists = existsSync(outputPath)
-  if (exists && (!nativeDestination || !(await confirmNativeReplacement(outputPath)))) {
-    if (nativeDestination) return { cancelled: true }
-    throw errorOf(host, 'conflict', 'PDF destination already exists; choose a new path or use the native replacement confirmation.')
+  if (exists) {
+    if (!nativeDestination) throw errorOf(host, 'conflict', 'PDF destination already exists; choose a new path or use the native replacement confirmation.')
+    const confirmed = await confirmNativeReplacement(host.context.process, outputPath, lifecycleSignal)
+    assertMarkdownActive(lifecycleSignal)
+    if (!confirmed) return { cancelled: true }
   }
-  const exported = await exportPdfWithChrome({
+  assertMarkdownActive(lifecycleSignal)
+  const exported = await exportPdfWithChrome(host.context.process, {
     title: buffer.name.replace(/\.(?:md|markdown|mdx)$/i, ''),
     html,
     outputPath,
     replaceExisting: exists
-  })
+  }, { signal: lifecycleSignal })
   return { ...exported, valid: true, cancelled: false }
 }
 
 export function createMarkdownMethods(host: EditorServices): FeatureMethods {
   const resources: MarkdownResourcePool = new Map()
   const detachedPreview = createDetachedMarkdownPreviewService(host)
+  const pdfLifecycle = new AbortController()
+  let disposed = false
   const removeCloseListener = host.onClose((bufferId) => {
     try {
       if (host.get(bufferId).mode === 'preview') return
     } catch {}
     releaseMarkdownImages(resources, bufferId)
   })
-  const markdown = (params: Record<string, unknown>, caller: PluginCaller) => markdownAction(host, params, caller, resources)
+  const markdown = (params: Record<string, unknown>, caller: PluginCaller) =>
+    markdownAction(host, params, caller, resources, pdfLifecycle.signal)
   const notes = createMarkdownNotesMethod(host)
   const workspaceNotes = createWorkspaceNotesMethod(host)
   return {
     methods: { markdown, markdownPreview: detachedPreview.method, notes, workspaceNotes },
     dispose() {
+      if (disposed) return
+      disposed = true
+      pdfLifecycle.abort()
       removeCloseListener()
       releaseMarkdownImages(resources)
       detachedPreview.dispose()
