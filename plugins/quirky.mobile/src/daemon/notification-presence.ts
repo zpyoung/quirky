@@ -14,7 +14,7 @@ export async function readDesktopAway(runner: ProcessRunner): Promise<boolean | 
     if (results.some(result => result.spawnError || result.stopped || result.signal || result.exitCode !== 0)) return null
     const [hid, root] = results
     const idle = /"HIDIdleTime"\s*=\s*(\d+)/.exec(hid.stdoutText)?.[1]
-    const locked = /"IOConsoleLocked"\s*=\s*(Yes|No)/.exec(root.stdoutText)?.[1]
+    const locked = /"IOConsoleLocked"\s*=\s*(Yes|No)\b/.exec(root.stdoutText)?.[1]
     if (locked === 'Yes') return true
     if (!idle || locked !== 'No') return null
     return BigInt(idle) >= 180_000_000_000n

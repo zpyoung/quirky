@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { PluginCaller, PluginContext, ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
@@ -304,13 +304,7 @@ test('mobile presence submits both owned probes and simulator listing uses the s
 
 test.each(['deadline', 'shutdown'])('simulator cancellation maps a rejecting runner after %s', async mode => {
   platform('darwin')
-  const token = 1 as unknown as Timer
-  let deadline: (() => void) | undefined
-  const timer = spyOn(globalThis, 'setTimeout').mockImplementation((handler, delay, ...args) => {
-    expect(delay).toBe(10000)
-    deadline = () => { if (typeof handler === 'function') handler(...args) }
-    return token
-  })
+  const clock = deadlines()
   const { runner } = recording((_argv, options) => {
     const done = Promise.withResolvers<RunResult>()
     options.signal!.addEventListener('abort', () => done.reject(new Error('fixture cancelled')), { once: true })
@@ -319,20 +313,22 @@ test.each(['deadline', 'shutdown'])('simulator cancellation maps a rejecting run
   const service = new EmulatorService({ process: runner, error } as unknown as PluginContext)
   try {
     const pending = service.list()
-    if (mode === 'deadline') deadline!()
+    expect(clock.scheduled.map(timer => timer.delay)).toEqual([10000])
+    if (mode === 'deadline') clock.scheduled[0]!.callback()
     else service.shutdown()
     expect(await pending).toEqual({ available: false, devices: [], reason: mode === 'deadline' ? 'simctl stopped: timeout' : 'Simulator preview service has stopped' })
   } finally {
     service.shutdown()
-    timer.mockRestore()
+    clock.restore()
   }
 })
 
 function deadlines() {
-  const scheduled: { callback(): void; delay: number | undefined; token: Timer }[] = []
+  const scheduled: { callback(): void; delay: number | undefined; token: number }[] = []
   const cleared: unknown[] = []
-  const start = spyOn(globalThis, 'setTimeout').mockImplementation((handler, delay, ...args) => {
-    const token = (scheduled.length + 100) as unknown as Timer
+  const timers: { setTimeout(handler: TimerHandler, delay?: number, ...args: unknown[]): number | Timer } = globalThis
+  const start = spyOn(timers, 'setTimeout').mockImplementation((handler, delay, ...args) => {
+    const token = scheduled.length + 100
     scheduled.push({ callback: () => { if (typeof handler === 'function') handler(...args) }, delay, token })
     return token
   })
@@ -361,6 +357,8 @@ describe('mobile presence keeps its whole-call deadline and unknown semantics', 
     ['', '"IOConsoleLocked" = Yes', true],
     ['', '"IOConsoleLocked" = No', null],
     ['"HIDIdleTime" = 180000000000', '', null],
+    ['"HIDIdleTime" = 180000000000', '"IOConsoleLocked" = Nope', null],
+    ['"HIDIdleTime" = 180000000000', '"IOConsoleLocked" = Yesterday', null],
     ['"HIDIdleTime" = 180000000000', '"IOConsoleLocked" = unknown', null]
   ] as const)('parses HID %s and lock %s as %s', async (hid, root, expected) => {
     platform('darwin')
@@ -554,10 +552,10 @@ describe('simulator commands remain exact, bounded and cancellable', () => {
   })
   test('simulator preserves stderr on ordinary failures and platform guards make zero calls', async () => {
     platform('darwin')
-    const { runner, calls } = recording(async () => result({ exitCode: 7, stderr: '  fixture detail \\n' }))
+    const { runner, calls } = recording(async () => result({ exitCode: 7, stderr: '  fixture detail \n' }))
     const service = new EmulatorService({ process: runner, error } as unknown as PluginContext)
     try {
-      expect(await service.list()).toEqual({ available: false, devices: [], reason: 'fixture detail \\n' })
+      expect(await service.list()).toEqual({ available: false, devices: [], reason: 'fixture detail' })
       platform('linux')
       expect(await service.list()).toMatchObject({ available: false, devices: [] })
       await expect(service.frame({ device })).rejects.toMatchObject({ kind: 'conflict' })
@@ -580,5 +578,20 @@ test.each([1048576, 2097152])('shared runner enforces the %d-byte stopping cap i
       if (!extra) expect(value.exitCode).toBe(0)
       expect(stream === 'stdout' ? value.stdout.byteLength : value.stderr.length).toBe(cap)
     } finally { await runner.dispose() }
+  }
+})
+
+test('all six migration sites remove acquisition allowances and require the shipped public API', () => {
+  const files = [
+    'plugins/quirky.git/src/daemon/files.ts',
+    'plugins/quirky.mobile/src/daemon/notification-presence.ts',
+    'plugins/quirky.notifications/src/player.ts',
+    'plugins/quirky.terminal/src/open-external.ts',
+    'plugins/quirky.terminal/src/emulator.ts',
+    'plugins/quirky.vault/src/actions.ts'
+  ]
+  boundary(files, { git: '1.9.0', mobile: '1.4.0', notifications: '1.9.0', terminal: '1.9.0', vault: '1.9.0' })
+  for (const file of [...files, 'plugins/quirky.mobile/src/daemon/notifications.ts', 'plugins/quirky.notifications/src/service.ts', 'plugins/quirky.terminal/src/layout/service.ts']) {
+    expect(readFileSync(file, 'utf8')).not.toMatch(/from\s+['"]@quirky\/process['"]/)
   }
 })
