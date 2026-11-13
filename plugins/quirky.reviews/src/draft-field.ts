@@ -405,9 +405,10 @@ export function useDraftField<T>(input: DraftFieldInput<T>): DraftField<T> {
   return controller
 }
 
-/** Captures the current identity epoch so a guard stays false after any target change. */
+/** Invalidates captured guards after target changes or unmount. */
 export function useTargetGuard(identity: string): () => () => boolean {
   const target = useRef<{ identity: string; epoch: number } | null>(null)
+  const lifetime = useRef({ active: true })
   if (target.current === null) target.current = { identity, epoch: 0 }
   const epoch = target.current.identity === identity ? target.current.epoch : target.current.epoch + 1
   useLayoutEffect(() => {
@@ -415,7 +416,15 @@ export function useTargetGuard(identity: string): () => () => boolean {
       target.current = { identity, epoch: (target.current?.epoch ?? -1) + 1 }
     }
   }, [identity])
-  return () => () => target.current?.epoch === epoch
+  useLayoutEffect(() => {
+    if (!lifetime.current.active) lifetime.current = { active: true }
+    const current = lifetime.current
+    return () => { current.active = false }
+  }, [])
+  return () => {
+    const current = lifetime.current
+    return () => current.active && target.current?.epoch === epoch
+  }
 }
 
 /** Creates strictly increasing draft versions and rebases retries to the wall clock. */

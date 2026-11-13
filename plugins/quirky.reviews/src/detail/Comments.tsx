@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createDraftVersions, useDraftField, type DraftAction } from '../draft-field'
+import { createDraftVersions, useDraftField, useTargetGuard, type DraftAction } from '../draft-field'
 import { Badge, Button, SectionHeader, StatusDot, Tabs, TextField } from '@quirky/ui'
 import { Markdown, MarkdownComposer } from '@quirky/plugin-tasks/markdown'
 import type { ReviewsSurfaceProps } from '../contracts'
@@ -147,18 +147,21 @@ export function Comments(props: CommentsProps) {
   const [imageError, setImageError] = useState<string | null>(null)
   const suggestionRequest = useRef(0)
   const [draftVersions] = useState(() => createDraftVersions())
+  const targetGuard = useTargetGuard(identity)
   const draftField = useDraftField<string>({
     identity,
     remote: data.draft,
     snapshot: props.snapshot,
     write: async (value) => {
       if (owner === null || targetParams === null) return false
+      const here = targetGuard()
       const base = { ...targetParams, generation: owner.generation, body: value }
       const first = await props.context.call('quirky.reviews/detailSetCommentDraft', {
         ...base,
         draftVersion: draftVersions.next(),
       })
       if (isRecord(first) && first.applied === false) {
+        if (!here()) return false
         draftVersions.rebase()
         const retry = await props.context.call('quirky.reviews/detailSetCommentDraft', {
           ...base,

@@ -742,3 +742,16 @@ test('useDraftField keeps an applied edit through an unrelated local render befo
 
   expect(field.value).toBe('typed')
 })
+
+test('D24 target guards stay false after unmount', async () => {
+  let here = () => false
+  function Probe() {
+    here = useTargetGuard('A')()
+    return null
+  }
+  const root = createRoot(document.createElement('div'))
+  await act(async () => root.render(createElement(Probe)))
+  expect(here()).toBe(true)
+  await act(async () => root.unmount())
+  expect(here()).toBe(false)
+})

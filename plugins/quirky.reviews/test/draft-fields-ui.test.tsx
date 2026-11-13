@@ -28,6 +28,7 @@ type Mounted = {
   calls: Call[]
   refreshedWorktrees: Array<string | null>
   render(state: ReviewsState, snapshot?: number): void
+  unmount(): void
   holdNext(method: string): Deferred<unknown>
   replyNext(method: string, value: unknown): void
 }
@@ -182,6 +183,10 @@ function mount(renderNode: (props: RenderProps) => ReactNode, initialState = sta
   act(draw)
   return {
     element, calls, refreshedWorktrees,
+    unmount() {
+      roots.splice(roots.indexOf(root), 1)
+      act(() => root.unmount())
+    },
     render(next, nextSnapshot = 0) {
       state = next
       snapshot = nextSnapshot
@@ -814,3 +819,37 @@ afterEach(async () => {
 })
 
 afterAll(() => GlobalRegistrator.unregister())
+
+for (const field of ['comment', 'body'] as const) {
+  for (const leave of ['target change', 'unmount'] as const) {
+    test(`D16/D19: ${field} version retry stops after ${leave}`, async () => {
+      const render = (props: RenderProps) => field === 'comment'
+        ? <Comments {...props} surface="detail" />
+        : <ReviewPage {...props} />
+      const ui = mount(render)
+      const method = field === 'comment' ? 'detailSetCommentDraft' : 'detailSetBodyDraft'
+      const first = ui.holdNext(`quirky.reviews/${method}`)
+      if (field === 'comment') changeValue(commentComposer(ui.element), 'old mount')
+      else await click(button(ui.element, 'Edit description'))
+      expect(callCount(ui, method)).toBe(1)
+
+      if (leave === 'target change') {
+        ui.render(stateFor({ repoOwner: 'other-owner', commentDraft: 'other', body: 'other' }), 0)
+      } else {
+        ui.unmount()
+        const remounted = mount(render)
+        if (field === 'comment') changeValue(commentComposer(remounted.element), 'new mount')
+        else {
+          await click(button(remounted.element, 'Edit description'))
+          changeValue(bodyInput(remounted.element), 'new mount')
+        }
+        await settle()
+      }
+      const refreshes = ui.refreshedWorktrees.length
+      await act(async () => first.resolve({ applied: false }))
+      await settle()
+      expect(callCount(ui, method)).toBe(1)
+      expect(ui.refreshedWorktrees).toHaveLength(refreshes)
+    })
+  }
+}

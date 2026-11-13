@@ -8,7 +8,7 @@ import { ChecksList } from './ChecksList'
 import { Comments } from './Comments'
 import { FilesChanged } from './FilesChanged'
 import { useReviewLinkRouting } from '../link-routing'
-import { createDraftVersions, useDraftField, type DraftAction } from '../draft-field'
+import { createDraftVersions, useDraftField, useTargetGuard, type DraftAction } from '../draft-field'
 const tabs = ['conversation', 'checks', 'files'] as const
 const reviewerPattern = /^[A-Za-z0-9-]{1,39}$/
 
@@ -254,12 +254,14 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     ? 'none'
     : `${owner.worktree}|${owner.number}|${owner.repo?.host ?? ''}/${owner.repo?.owner ?? ''}/${owner.repo?.repo ?? ''}`
   const [bodyVersions] = useState(() => createDraftVersions())
+  const bodyGuard = useTargetGuard(bodyIdentity)
   const bodyField = useDraftField<string | null>({
     identity: bodyIdentity,
     remote: detail.bodyDraft,
     snapshot: props.snapshot,
     write: async (value) => {
       if (owner === null) return false
+      const here = bodyGuard()
       const params = {
         worktree: owner.worktree,
         number: owner.number,
@@ -272,6 +274,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
         draftVersion: bodyVersions.next(),
       })
       if (isRecord(first) && first.applied === false) {
+        if (!here()) return false
         bodyVersions.rebase()
         const retry = await props.context.call('quirky.reviews/detailSetBodyDraft', {
           ...params,
