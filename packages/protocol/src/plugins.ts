@@ -453,6 +453,7 @@ export const MIN_JOB_INTERVAL_MS = 1000
 export const MAX_JOB_DURATION_MS = 86_400_000
 export const DEFAULT_JOB_TIMEOUT_MS = 300_000
 export const DEFAULT_READ_METHOD_TIMEOUT_MS = 300_000
+export const DEFAULT_MUTATING_METHOD_TIMEOUT_MS = 600_000
 
 const DURATION_RE = /^(\d+)(ms|s|m|h|d)$/
 const DURATION_UNIT_MS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const
