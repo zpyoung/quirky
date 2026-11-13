@@ -229,19 +229,30 @@ export function parseArtifactJson(text: string): unknown {
   return parsed
 }
 
-function validateArtifact<T extends { commit: string }>(text: string, artifact: BaselineArtifact<T>): T | null {
+type FetchArtifact<T extends { commit: string }> = BaselineArtifact<T> | BaselineArtifact<Baseline>
+
+function validateArtifact<T extends { commit: string }>(
+  text: string,
+  artifact: FetchArtifact<T>,
+  strictJson: boolean,
+): T | Baseline | null {
   try {
-    const value = artifact === TEST_ARTIFACT ? JSON.parse(text) : parseArtifactJson(text)
+    const value = strictJson ? parseArtifactJson(text) : JSON.parse(text)
     return artifact.validate(value)
   } catch {
     return null
   }
 }
 
-function readCached<T extends { commit: string }>(path: string, commit: string, artifact: BaselineArtifact<T>): T | null {
+function readCached<T extends { commit: string }>(
+  path: string,
+  commit: string,
+  artifact: FetchArtifact<T>,
+  strictJson: boolean,
+): T | Baseline | null {
   try {
     if (artifact.maxJsonBytes !== undefined && statSync(path).size > artifact.maxJsonBytes) return null
-    const cached = validateArtifact(readFileSync(path, 'utf8'), artifact)
+    const cached = validateArtifact(readFileSync(path, 'utf8'), artifact, strictJson)
     return cached?.commit === commit ? cached : null
   } catch {
     return null
@@ -313,14 +324,15 @@ export async function fetchBaseline<T extends { commit: string }>(
   found: Found,
   opts: FetchOptions & { artifact?: BaselineArtifact<T> },
 ): Promise<T | Baseline> {
-  const artifact = opts.artifact ?? TEST_ARTIFACT
+  const strictJson = opts.artifact !== undefined
+  const artifact: FetchArtifact<T> = opts.artifact ?? TEST_ARTIFACT
   const common = git(opts.cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
   if (!common) throw new BaselineUnavailable(`${opts.cwd} is not in a git repository`)
   const cacheDir = join(common, artifact.cacheNamespace)
   const cacheName = `${found.commit}${opts.artifact ? `-${found.artifactId}` : ''}.json`
   const cached = join(cacheDir, cacheName)
   if (existsSync(cached)) {
-    const hit = readCached(cached, found.commit, artifact)
+    const hit = readCached(cached, found.commit, artifact, strictJson)
     if (hit) return hit
   }
 
@@ -334,7 +346,7 @@ export async function fetchBaseline<T extends { commit: string }>(
       throw new BaselineUnavailable(`could not download artifact ${found.artifactId}: ${error instanceof Error ? error.message : error}`, { cause: error })
     }
     const text = await readZipEntry(zip, artifact.entry, artifact.maxJsonBytes)
-    const value = validateArtifact(text, artifact)
+    const value = validateArtifact(text, artifact, strictJson)
     if (!value) throw new BaselineUnavailable(`artifact ${found.artifactId} holds an unreadable or unsupported ${artifact.entry}`)
     if (value.commit !== found.commit) {
       throw new BaselineUnavailable(`artifact ${found.artifactId} holds a baseline for ${value.commit}, not ${found.commit}`)
