@@ -326,7 +326,13 @@ export function LedgerApp({
     try {
       const result = await ledgerRequest(context, { operation: 'review', target: effectiveTarget, filters: requestFilters })
       if (candidateGeneration.current !== generation) return
-      setCandidates(result.candidates ?? [])
+      const nextCandidates = result.candidates ?? []
+      const candidateKeys = new Set(nextCandidates.map((candidate) => selectionKey(candidate.entry)))
+      setCandidates(nextCandidates)
+      setTriageSelected((current) => {
+        const retained = current.filter((selection) => candidateKeys.has(selectionKey(selection)))
+        return retained.length === current.length ? current : retained
+      })
       setCandidateError('')
     } catch (reason) {
       if (candidateGeneration.current === generation) setCandidateError(errorMessage(reason))
@@ -518,8 +524,7 @@ export function LedgerApp({
       setSelectionTitles(new Map())
       setTriageSelected([])
       setTriageTitles(new Map())
-      await loadEntries()
-      if (triageOpen) await loadCandidates()
+      await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])
       if (detail) await openDetail(detail)
     } catch (reason) {
       if (isConflict(reason)) {
@@ -528,8 +533,7 @@ export function LedgerApp({
         setSelectionTitles(new Map())
         setTriageSelected([])
         setTriageTitles(new Map())
-        await loadEntries()
-        if (triageOpen) await loadCandidates()
+        await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])
         if (detail) await openDetail(detail)
       } else {
         setActionMessage(errorMessage(reason))
@@ -577,8 +581,7 @@ export function LedgerApp({
     setSelectionTitles(new Map())
     setTriageSelected([])
     setTriageTitles(new Map())
-    await loadEntries()
-    if (triageOpen) await loadCandidates()
+    await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])
   }
 
   const confirmAction = async () => {
@@ -613,9 +616,7 @@ export function LedgerApp({
           break
       }
       setConfirmation(null)
-      await loadEntries()
-      await loadCatalog()
-      if (triageOpen) await loadCandidates()
+      await Promise.all([loadEntries(), loadCatalog(), ...(triageOpen ? [loadCandidates()] : [])])
     } catch (reason) {
       setConfirmation(null)
       if (isConflict(reason)) {

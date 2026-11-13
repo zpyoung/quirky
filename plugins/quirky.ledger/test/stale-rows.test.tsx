@@ -257,3 +257,130 @@ test('a chooser row for a deleted ledger shows not-found, retry, and a route bac
   expect(host.querySelector('h2')?.textContent).toBe('Open ledger')
 })
 
+test('a conflicted confirmed bulk action clears triage candidates while the entry list is held', async () => {
+  const world = fake()
+  const { triage } = await openTriageWithSelection(world)
+  const heldList = Promise.withResolvers<LedgerResponse>()
+  const heldReview = Promise.withResolvers<LedgerResponse>()
+  const listsBefore = operationCount(world, 'list')
+  const listStarted = world.whenCalled('list', listsBefore)
+  world.on.list = () => heldList.promise
+  world.on.review = () => heldReview.promise
+  world.on['bulk-state'] = () => {
+    throw Object.assign(new Error('ledger revision conflict'), { data: { kind: 'conflict', currentRevision: 2 } })
+  }
+  let released = false
+
+  try {
+    await press(namedButton(triage, 'Resolve')!)
+    await press(namedButton(dialog('Confirm ledger action')!, 'Confirm')!)
+    await act(async () => { await listStarted })
+
+    const refreshed = dialog('Operation review')!
+    expect(refreshed.querySelector('[role="alert"]')).not.toBeNull()
+    expect(refreshed.textContent).not.toContain('revision 1')
+    expect(refreshed.querySelectorAll('input[type="checkbox"]')).toHaveLength(0)
+    expect(namedButton(refreshed, 'Approve review (0)')).toBeDefined()
+
+    await releaseReloads(world, heldList, heldReview)
+    released = true
+    const reloaded = dialog('Operation review')!
+    expect(reloaded.textContent).toContain('revision 2')
+    expect(reloaded.querySelectorAll('input[type="checkbox"]')).toHaveLength(1)
+  } finally {
+    if (!released) await releaseReloads(world, heldList, heldReview)
+  }
+})
+
+test('a changed revision event drops a selection not present in the reloaded candidates', async () => {
+  const world = fake()
+  const { triage } = await openTriageWithSelection(world)
+  const reviewsBefore = operationCount(world, 'review')
+  const reviewStarted = world.whenCalled('review', reviewsBefore)
+  world.on.list = () => response(projectSummary, { entries: [entryAt(2)] })
+  world.on.review = () => response(projectSummary, { candidates: [candidateAt(2)] })
+
+  await act(async () => world.emit('quirky.ledger/changed'))
+  await act(async () => { await reviewStarted })
+  await flushRequests(world)
+
+  const refreshed = dialog('Operation review')!
+  expect(refreshed.textContent).toContain('revision 2')
+  expect(namedButton(refreshed, 'Approve review (0)')).toBeDefined()
+  expect(namedButton(refreshed, 'Approve review (1)')).toBeUndefined()
+  expect(refreshed.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false)
+  expect(triage).toBe(refreshed)
+})
+
+test('an unchanged revision event preserves the selected candidate', async () => {
+  const world = fake()
+  const { triage } = await openTriageWithSelection(world)
+  const reviewsBefore = operationCount(world, 'review')
+  const reviewStarted = world.whenCalled('review', reviewsBefore)
+  await act(async () => world.emit('quirky.ledger/changed'))
+  await act(async () => { await reviewStarted })
+  await flushRequests(world)
+
+  const refreshed = dialog('Operation review')!
+  expect(refreshed.textContent).toContain('revision 1')
+  expect(namedButton(refreshed, 'Approve review (1)')).toBeDefined()
+  expect(refreshed.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true)
+  expect(triage).toBe(refreshed)
+})
+
+test('a successful approval clears candidates while its entry list reload is held', async () => {
+  const world = fake()
+  const { triage } = await openTriageWithSelection(world)
+  const heldList = Promise.withResolvers<LedgerResponse>()
+  const heldReview = Promise.withResolvers<LedgerResponse>()
+  const listsBefore = operationCount(world, 'list')
+  const listStarted = world.whenCalled('list', listsBefore)
+  world.on.list = () => heldList.promise
+  world.on.review = () => heldReview.promise
+  let released = false
+
+  try {
+    await press(namedButton(triage, 'Approve review (1)')!)
+    await act(async () => { await listStarted })
+
+    const refreshed = dialog('Operation review')!
+    expect(refreshed.textContent).not.toContain('revision 1')
+    expect(refreshed.querySelectorAll('input[type="checkbox"]')).toHaveLength(0)
+    expect(namedButton(refreshed, 'Approve review (0)')).toBeDefined()
+
+    await releaseReloads(world, heldList, heldReview)
+    released = true
+    expect(dialog('Operation review')?.textContent).toContain('revision 2')
+  } finally {
+    if (!released) await releaseReloads(world, heldList, heldReview)
+  }
+})
+
+test('a successful confirmed bulk action clears candidates while list and review reloads are held', async () => {
+  const world = fake()
+  const { triage } = await openTriageWithSelection(world)
+  const heldList = Promise.withResolvers<LedgerResponse>()
+  const heldReview = Promise.withResolvers<LedgerResponse>()
+  const listsBefore = operationCount(world, 'list')
+  const listStarted = world.whenCalled('list', listsBefore)
+  world.on.list = () => heldList.promise
+  world.on.review = () => heldReview.promise
+  let released = false
+
+  try {
+    await press(namedButton(triage, 'Resolve')!)
+    await press(namedButton(dialog('Confirm ledger action')!, 'Confirm')!)
+    await act(async () => { await listStarted })
+
+    const refreshed = dialog('Operation review')!
+    expect(refreshed.textContent).not.toContain('revision 1')
+    expect(refreshed.querySelectorAll('input[type="checkbox"]')).toHaveLength(0)
+    expect(namedButton(refreshed, 'Approve review (0)')).toBeDefined()
+
+    await releaseReloads(world, heldList, heldReview)
+    released = true
+    expect(dialog('Operation review')?.textContent).toContain('revision 2')
+  } finally {
+    if (!released) await releaseReloads(world, heldList, heldReview)
+  }
+})
