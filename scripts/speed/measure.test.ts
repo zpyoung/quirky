@@ -1,5 +1,10 @@
 import { afterEach, expect, test } from 'bun:test'
-import { installBrowserObserver, waitForBrowserObserver } from './measure.ts'
+import {
+  installBrowserObserver,
+  waitForBrowserObserver,
+  waitForDiagnosticStatusProbe,
+  waitForFloodProgressAfterSnapshot
+} from './measure.ts'
 
 type EventHandler = (event: { target: FakeElement; key?: string }) => void
 
@@ -103,7 +108,7 @@ function pane(sessionId: string, rowsText = ''): { pane: FakeElement; rows: Fake
 
 function fakePage() {
   return {
-    evaluate: async (fn: (argument: string) => unknown, argument: string) => await fn(argument)
+    evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument)
   } as never
 }
 
@@ -206,4 +211,64 @@ test('observer deadline rejects and removes observers when no rendered acknowled
   document.dispatch('keydown', input, 'z')
   await expect(result).rejects.toThrow('timed out after 5ms')
   expect((globalThis as unknown as { __quirkySpeedObservers?: Map<string, unknown> }).__quirkySpeedObservers?.has(id)).toBe(false)
+})
+
+test('bounds hung observer teardown on timeout and abort, closing the owned renderer context', async () => {
+  for (const mode of ['timeout', 'abort'] as const) {
+    let evaluations = 0
+    let closed = 0
+    const pending = new Promise<never>(() => undefined)
+    const page = { evaluate: () => { evaluations++; return pending } } as never
+    const controller = new AbortController()
+    const result = waitForBrowserObserver(
+      page,
+      `hung-${mode}`,
+      mode === 'timeout' ? 5 : 100,
+      mode === 'abort' ? controller.signal : undefined,
+      async () => { closed++ },
+      5
+    )
+    if (mode === 'abort') controller.abort(new Error('run interrupted'))
+    await expect(result).rejects.toThrow('teardown timed out')
+    expect(evaluations).toBe(2)
+    expect(closed).toBe(1)
+  }
+})
+test('flood echo fails when the visible renderer stops after the final echo snapshot', async () => {
+  environment()
+  pane('flood-session', 'SPEED_FLOOD flood-worker flood-session 12 65536')
+  const worktree = {
+    id: 'worktree-a',
+    path: '/repo-a',
+    tabId: 'tab-a',
+    sessions: ['echo-session', 'flood-session'] as [string, string],
+    panes: ['pane-a', 'pane-b'] as [string, string],
+    workerIds: ['echo-worker', 'flood-worker'] as [string, string]
+  }
+  const flood = {
+    runId: 'flood-run',
+    workerId: 'flood-worker',
+    sessionId: 'flood-session',
+    offeredBytesPerChunk: 65_536,
+    intervalMs: 16,
+    offeredBytesPerSecond: 4_096_000,
+    startedAt: 1
+  } as const
+  await expect(waitForFloodProgressAfterSnapshot(fakePage(), worktree, flood, new AbortController().signal, undefined, 5))
+    .rejects.toThrow('timed out after 5ms')
+})
+
+test('diagnostic status evidence requires a successful status.get callback', async () => {
+  const state = { successful: false, ptyHostPid: null as number | null }
+  const probe = { daemonExited: () => false, probes: [{ at: 0, ms: 1, ownLagMs: 0, timedOut: false }] } as never
+  await expect(waitForDiagnosticStatusProbe(probe, state, new AbortController().signal, 5))
+    .rejects.toThrow('successful status.get')
+
+  const recovered = { successful: false, ptyHostPid: null as number | null }
+  const connected = waitForDiagnosticStatusProbe(probe, recovered, new AbortController().signal, 50)
+  queueMicrotask(() => {
+    recovered.successful = true
+    recovered.ptyHostPid = 987
+  })
+  await expect(connected).resolves.toBe(987)
 })

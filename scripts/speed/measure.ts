@@ -2,16 +2,17 @@ import { randomUUID } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Browser, BrowserContext, Page, Route } from 'playwright'
+import type { Browser, BrowserContext, CDPSession, Page, Route } from 'playwright'
 import { BUDGETS, METRICS, type Failure, type Metric } from './contracts.ts'
 import { median } from './report.ts'
-import { startProbe } from '../soak/probe.ts'
+import { startProbe, type Probe } from '../soak/probe.ts'
 import type { SoakWindows } from '../soak/windows.ts'
 import type { SoakWorld } from '../soak/world.ts'
 import type { FloodStart, FloodStats, SpeedFixture, SpeedFixtureWorktree } from './fixtures.ts'
 const MAX_BROWSER_TRACE_BYTES = 32 * 1024 * 1024
 
 const DEADLINE_MS = 30_000
+const OBSERVER_CLEANUP_MS = 2_000
 const VIEWPORT = { width: 1400, height: 880 } as const
 const CHANGES_PANEL = 'panel:quirky.git/source-control'
 const DIFF_VIEW = 'view:quirky.git/diff'
@@ -311,7 +312,9 @@ export async function waitForBrowserObserver(
   page: Pick<Page, 'evaluate'>,
   id: string,
   timeoutMs = DEADLINE_MS,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  closeOwnedContext?: () => Promise<void>,
+  cleanupTimeoutMs = OBSERVER_CLEANUP_MS
 ): Promise<BrowserObservationResult> {
   const pending = page.evaluate((observerId) => {
     const root = globalThis as typeof globalThis & { __quirkySpeedObservers?: Map<string, ObserverEntry> }
@@ -334,19 +337,33 @@ export async function waitForBrowserObserver(
   } finally {
     clearTimeout(timer)
     if (abort) signal?.removeEventListener('abort', abort)
-    await page.evaluate((observerId) => {
-      const root = globalThis as typeof globalThis & { __quirkySpeedObservers?: Map<string, ObserverEntry> }
-      const entry = root.__quirkySpeedObservers?.get(observerId)
-      entry?.dispose()
-      root.__quirkySpeedObservers?.delete(observerId)
-    }, id).catch(() => undefined)
+    await cancelBrowserObserver(page, id, 'browser observer completed or stopped', closeOwnedContext, cleanupTimeoutMs)
   }
 }
-async function cancelBrowserObserver(page: Pick<Page, 'evaluate'>, id: string, message: string): Promise<void> {
-  await page.evaluate(({ observerId, reason }) => {
-    const root = globalThis as typeof globalThis & { __quirkySpeedObservers?: Map<string, ObserverEntry> }
-    root.__quirkySpeedObservers?.get(observerId)?.dispose(new Error(reason))
-  }, { observerId: id, reason: message }).catch(() => undefined)
+
+async function cancelBrowserObserver(
+  page: Pick<Page, 'evaluate'>,
+  id: string,
+  message: string,
+  closeOwnedContext?: () => Promise<void>,
+  timeoutMs = OBSERVER_CLEANUP_MS
+): Promise<void> {
+  try {
+    await withDeadline(page.evaluate(({ observerId, reason }) => {
+      const root = globalThis as typeof globalThis & { __quirkySpeedObservers?: Map<string, ObserverEntry> }
+      const observers = root.__quirkySpeedObservers
+      observers?.get(observerId)?.dispose(new Error(reason))
+      observers?.delete(observerId)
+    }, { observerId: id, reason: message }), timeoutMs, `observer ${id} disposal`)
+  } catch (error) {
+    if (!closeOwnedContext) throw new Error(`observer ${id} teardown timed out: ${errorText(error)}`)
+    try {
+      await withDeadline(closeOwnedContext(), timeoutMs, `observer ${id} renderer close`)
+    } catch (closeError) {
+      throw new Error(`observer ${id} teardown timed out and renderer close failed: ${errorText(closeError)}`)
+    }
+    throw new Error(`observer ${id} teardown timed out; owned context was closed`)
+  }
 }
 
 function withDeadline<T>(task: Promise<T>, timeoutMs: number, label: string, signal?: AbortSignal): Promise<T> {
@@ -431,9 +448,15 @@ async function observeAction(
   const browser = page.context().browser()
   if (!browser) throw new Error('Chromium page is disconnected from its browser')
   await ensurePageAlive(page, browser)
-  await page.evaluate(installBrowserObserver, spec)
+  const closeContext = () => page.context().close()
+  try {
+    await withDeadline(page.evaluate(installBrowserObserver, spec), timeoutMs, `${spec.kind} observer install`, signal)
+  } catch (error) {
+    await cancelBrowserObserver(page, spec.id, errorText(error), closeContext)
+    throw error
+  }
   const beganAt = performance.now()
-  const observationPromise = waitForBrowserObserver(page, spec.id, timeoutMs, signal)
+  const observationPromise = waitForBrowserObserver(page, spec.id, timeoutMs, signal, closeContext)
   try {
     await withDeadline(action(), timeoutMs, `${spec.kind} action`, signal)
     const observation = await observationPromise
@@ -442,8 +465,14 @@ async function observeAction(
     if (!Number.isFinite(controllerActionMs) || controllerActionMs <= 0) throw new Error(`${spec.kind} controller phase returned invalid timing`)
     return { observation, controllerActionMs }
   } catch (error) {
-    await cancelBrowserObserver(page, spec.id, errorText(error))
-    await observationPromise.catch(() => undefined)
+    let cleanupError: unknown
+    try {
+      await cancelBrowserObserver(page, spec.id, errorText(error), closeContext)
+    } catch (caught) {
+      cleanupError = caught
+    }
+    await withDeadline(observationPromise, OBSERVER_CLEANUP_MS, `${spec.kind} observer waiter cleanup`).catch(() => undefined)
+    if (cleanupError !== undefined) throw new Error(`${errorText(error)}; ${errorText(cleanupError)}`)
     throw error
   }
 }
@@ -569,7 +598,7 @@ async function verifyPublicDiff(context: MetricContext): Promise<number> {
   return duration
 }
 
-async function renderedFloodCounter(page: Page, worktree: SpeedWorktree): Promise<number | null> {
+async function renderedFloodCounter(page: Pick<Page, 'evaluate'>, worktree: SpeedWorktree): Promise<number | null> {
   return await page.evaluate(({ sessionId, workerId }) => {
     const pane = document.querySelector(`.qt-pane[data-session="${sessionId.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"]`)
     const text = (pane?.querySelector('.xterm-rows')?.textContent ?? '').replace(/\s+/g, ' ')
@@ -611,8 +640,14 @@ async function beginFlood(context: MetricContext, signal: AbortSignal): Promise<
     id: randomUUID(), kind: 'flood', workerId: worktree.workerIds[1], sessionId: worktree.sessions[1],
     afterCounter: before ?? 0, offeredBytes: 65_536
   }
-  await context.page.evaluate(installBrowserObserver, spec)
-  const progress = waitForBrowserObserver(context.page, spec.id, DEADLINE_MS, signal)
+  const closeContext = () => context.page.context().close()
+  try {
+    await withDeadline(context.page.evaluate(installBrowserObserver, spec), DEADLINE_MS, 'flood observer install', signal)
+  } catch (error) {
+    await cancelBrowserObserver(context.page, spec.id, errorText(error), closeContext)
+    throw error
+  }
+  const progress = waitForBrowserObserver(context.page, spec.id, DEADLINE_MS, signal, closeContext)
   try {
     const start = await withDeadline(context.fixture.startFlood(worktree.id), DEADLINE_MS, 'flood start', signal)
     validateFloodStart(start, worktree)
@@ -620,26 +655,48 @@ async function beginFlood(context: MetricContext, signal: AbortSignal): Promise<
     if (visible.counter === undefined) throw new Error('flood progress was not rendered in its terminal pane')
     return { start, renderedCounter: visible.counter }
   } catch (error) {
-    await cancelBrowserObserver(context.page, spec.id, errorText(error))
-    await progress.catch(() => undefined)
+    let cleanupError: unknown
+    try {
+      await cancelBrowserObserver(context.page, spec.id, errorText(error), closeContext)
+    } catch (caught) {
+      cleanupError = caught
+    }
+    await withDeadline(progress, OBSERVER_CLEANUP_MS, 'flood observer waiter cleanup').catch(() => undefined)
     try {
       await context.fixture.stopFlood()
     } catch (stopError) {
-      throw new Error(`${errorText(error)}; flood cleanup failed: ${errorText(stopError)}`)
+      cleanupError = cleanupError === undefined ? stopError : new Error(`${errorText(cleanupError)}; ${errorText(stopError)}`)
     }
+    if (cleanupError !== undefined) throw new Error(`${errorText(error)}; flood cleanup failed: ${errorText(cleanupError)}`)
     throw error
   }
 }
 
-async function waitForNextFloodProgress(context: MetricContext, start: FloodStart, afterCounter: number, signal: AbortSignal): Promise<number> {
+export async function waitForFloodProgressAfterSnapshot(
+  page: Pick<Page, 'evaluate'>,
+  worktree: SpeedWorktree,
+  start: FloodStart,
+  signal: AbortSignal,
+  closeOwnedContext?: () => Promise<void>,
+  timeoutMs = DEADLINE_MS
+): Promise<{ beforeCounter: number; afterCounter: number }> {
+  const beforeCounter = await withDeadline(renderedFloodCounter(page, worktree), timeoutMs, 'final rendered flood counter snapshot', signal)
+  if (beforeCounter === null) throw new Error('flood renderer has no final counter snapshot')
   const spec: BrowserObservationSpec = {
     id: randomUUID(), kind: 'flood', workerId: start.workerId, sessionId: start.sessionId,
-    afterCounter, offeredBytes: start.offeredBytesPerChunk
+    afterCounter: beforeCounter, offeredBytes: start.offeredBytesPerChunk
   }
-  await context.page.evaluate(installBrowserObserver, spec)
-  const observed = await waitForBrowserObserver(context.page, spec.id, DEADLINE_MS, signal)
-  if (observed.counter === undefined) throw new Error('flood stream did not render a newer counter')
-  return observed.counter
+  try {
+    await withDeadline(page.evaluate(installBrowserObserver, spec), timeoutMs, 'flood progress observer install', signal)
+  } catch (error) {
+    await cancelBrowserObserver(page, spec.id, errorText(error), closeOwnedContext)
+    throw error
+  }
+  const observed = await waitForBrowserObserver(page, spec.id, timeoutMs, signal, closeOwnedContext)
+  if (observed.counter === undefined || observed.counter <= beforeCounter) {
+    throw new Error('flood stream did not render a counter newer than its final echo snapshot')
+  }
+  return { beforeCounter, afterCounter: observed.counter }
 }
 
 async function ensureSelectedWorktree(page: Page, worktree: SpeedWorktree, timeoutMs = DEADLINE_MS): Promise<void> {
@@ -668,9 +725,9 @@ async function startupTrial(
   const ptyBefore = context.world.ptyHostPid()
   if (ptyBefore === null || ptyBefore !== context.ptyHostPid) throw new Error('persistent PTY host changed before daemon restart')
 
-  await context.context.close()
+  await withDeadline(context.context.close(), OBSERVER_CLEANUP_MS, 'previous browser context close')
   contextSet.delete(context.context)
-  const opened = await openContext(context.browser, contextSet)
+  const opened = await openContext(context.browser, contextSet, signal)
   context.context = opened.context
   const page = opened.page
   context.page = page
@@ -876,7 +933,14 @@ async function runFloodEchoSeries(context: MetricContext, sampleCount: number, s
     }
     failurePhase = 'sample'
     failureSample = sampleCount
-    finalRenderedCounter = await waitForNextFloodProgress(context, flood.start, finalRenderedCounter, signal)
+    const progress = await waitForFloodProgressAfterSnapshot(
+      context.page,
+      context.fixture.target,
+      flood.start,
+      signal,
+      () => context.context.close()
+    )
+    finalRenderedCounter = progress.afterCounter
   } catch (error) {
     failure = error
   } finally {
@@ -925,19 +989,38 @@ async function runFloodEchoAttempt(context: MetricContext, phase: SpeedSample['p
   }
 }
 
-async function openContext(browser: Browser, contextSet: Set<BrowserContext>): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: VIEWPORT })
+async function openContext(browser: Browser, contextSet: Set<BrowserContext>, signal?: AbortSignal): Promise<{ context: BrowserContext; page: Page }> {
+  const creation = browser.newContext({ viewport: VIEWPORT })
+  let context: BrowserContext
+  try {
+    context = await withDeadline(creation, DEADLINE_MS, 'browser context creation', signal)
+  } catch (error) {
+    void creation.then((late) => withDeadline(late.close(), OBSERVER_CLEANUP_MS, 'late browser context close').catch(() => undefined), () => undefined)
+    throw error
+  }
   contextSet.add(context)
-  await routeLoopback(context)
-  const page = await context.newPage()
-  page.setDefaultTimeout(DEADLINE_MS)
-  page.setDefaultNavigationTimeout(DEADLINE_MS)
-  return { context, page }
+  try {
+    await withDeadline(routeLoopback(context), DEADLINE_MS, 'browser loopback routing', signal)
+    const pageCreation = context.newPage()
+    let page: Page
+    try {
+      page = await withDeadline(pageCreation, DEADLINE_MS, 'browser page creation', signal)
+    } catch (error) {
+      void pageCreation.then((late) => withDeadline(late.close(), OBSERVER_CLEANUP_MS, 'late browser page close').catch(() => undefined), () => undefined)
+      throw error
+    }
+    page.setDefaultTimeout(DEADLINE_MS)
+    page.setDefaultNavigationTimeout(DEADLINE_MS)
+    return { context, page }
+  } catch (error) {
+    await withDeadline(context.close(), OBSERVER_CLEANUP_MS, 'partial browser context close').catch(() => undefined)
+    throw error
+  }
 }
 
 
-async function writeDiagnosticTrace(out: string, metric: Metric, page: Page, observation: BrowserObservationResult, phases: Record<string, number | null>): Promise<string> {
-  const timeline = await page.evaluate(({ metric, observation, phases }) => {
+async function writeDiagnosticTrace(out: string, metric: Metric, page: Page, observation: BrowserObservationResult, phases: Record<string, number | null>, signal?: AbortSignal): Promise<string> {
+  const timeline = await withDeadline(page.evaluate(({ metric, observation, phases }) => {
     const resources = performance.getEntriesByType('resource').slice(-1000).map((entry) => {
       let pathname = '<invalid-url>'
       try { pathname = new URL(entry.name).pathname } catch {}
@@ -959,33 +1042,58 @@ async function writeDiagnosticTrace(out: string, metric: Metric, page: Page, obs
       navigation: navigation ? { startTime: navigation.startTime, domContentLoadedEventEnd: (navigation as PerformanceNavigationTiming).domContentLoadedEventEnd, loadEventEnd: (navigation as PerformanceNavigationTiming).loadEventEnd } : null,
       resources
     }
-  }, { metric, observation, phases })
+  }, { metric, observation, phases }), DEADLINE_MS, 'browser performance timeline read', signal)
   const relativePath = `timelines/${metric}.json`
   mkdirSync(join(out, 'timelines'), { recursive: true })
   writeFileSync(join(out, relativePath), `${JSON.stringify(timeline, null, 2)}\n`)
   return relativePath
 }
 
-async function startBrowserTrace(browser: Browser): Promise<BrowserTraceSession> {
-  const session = await browser.newBrowserCDPSession()
+async function startBrowserTrace(browser: Browser, signal?: AbortSignal): Promise<BrowserTraceSession> {
+  const creation = browser.newBrowserCDPSession()
+  let session: CDPSession
+  try {
+    session = await withDeadline(creation, DEADLINE_MS, 'Chromium diagnostic CDP session creation', signal)
+  } catch (error) {
+    void creation.then(
+      (late) => withDeadline(late.detach(), OBSERVER_CLEANUP_MS, 'late Chromium CDP session detach').catch(() => undefined),
+      () => undefined
+    )
+    throw error
+  }
+
   const completed = Promise.withResolvers<TraceComplete>()
   void completed.promise.catch(() => undefined)
   const onComplete = (event: TraceComplete) => completed.resolve(event)
   session.on('Tracing.tracingComplete', onComplete)
+  const tracingStart = session.send('Tracing.start', {
+    transferMode: 'ReturnAsStream',
+    streamFormat: 'json',
+    streamCompression: 'none',
+    traceConfig: {
+      recordMode: 'recordUntilFull',
+      traceBufferSizeInKb: 16_384,
+      includedCategories: ['devtools.timeline', 'blink.user_timing', 'loading']
+    }
+  })
   try {
-    await withDeadline(session.send('Tracing.start', {
-      transferMode: 'ReturnAsStream',
-      streamFormat: 'json',
-      streamCompression: 'none',
-      traceConfig: {
-        recordMode: 'recordUntilFull',
-        traceBufferSizeInKb: 16_384,
-        includedCategories: ['devtools.timeline', 'blink.user_timing', 'loading']
-      }
-    }), DEADLINE_MS, 'Chromium diagnostic trace start')
+    await withDeadline(tracingStart, DEADLINE_MS, 'Chromium diagnostic trace start', signal)
   } catch (error) {
-    session.off('Tracing.tracingComplete', onComplete)
-    await session.detach().catch(() => undefined)
+    void tracingStart.then(async () => {
+      try {
+        await withDeadline(session.send('Tracing.end'), OBSERVER_CLEANUP_MS, 'late Chromium trace stop')
+        const result = await withDeadline(completed.promise, OBSERVER_CLEANUP_MS, 'late Chromium trace flush')
+        if (result.stream) await withDeadline(session.send('IO.close', { handle: result.stream }), OBSERVER_CLEANUP_MS, 'late Chromium trace stream close')
+      } catch {
+        return
+      } finally {
+        session.off('Tracing.tracingComplete', onComplete)
+        await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'late Chromium trace session detach').catch(() => undefined)
+      }
+    }, async () => {
+      session.off('Tracing.tracingComplete', onComplete)
+      await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'failed Chromium trace session detach').catch(() => undefined)
+    }).catch(() => undefined)
     throw error
   }
 
@@ -995,9 +1103,15 @@ async function startBrowserTrace(browser: Browser): Promise<BrowserTraceSession>
       if (stopped) throw new Error('Chromium diagnostic trace was already stopped')
       stopped = true
       let stream: string | undefined
+      const deadline = performance.now() + DEADLINE_MS
+      const remaining = () => {
+        const milliseconds = Math.ceil(deadline - performance.now())
+        if (milliseconds <= 0) throw new Error(`Chromium diagnostic trace exceeded ${DEADLINE_MS}ms`)
+        return milliseconds
+      }
       try {
-        await withDeadline(session.send('Tracing.end'), DEADLINE_MS, 'Chromium diagnostic trace stop')
-        const result = await withDeadline(completed.promise, DEADLINE_MS, 'Chromium diagnostic trace flush')
+        await withDeadline(session.send('Tracing.end'), remaining(), 'Chromium diagnostic trace stop')
+        const result = await withDeadline(completed.promise, remaining(), 'Chromium diagnostic trace flush')
         if (result.dataLossOccurred) throw new Error('Chromium diagnostic trace reported data loss')
         stream = result.stream
         if (!stream) throw new Error('Chromium diagnostic trace returned no stream')
@@ -1006,7 +1120,7 @@ async function startBrowserTrace(browser: Browser): Promise<BrowserTraceSession>
         let eof = false
         try {
           while (!eof) {
-            const chunk = await withDeadline(session.send('IO.read', { handle: stream, size: 256 * 1024 }), DEADLINE_MS, 'Chromium diagnostic trace read')
+            const chunk = await withDeadline(session.send('IO.read', { handle: stream, size: 256 * 1024 }), remaining(), 'Chromium diagnostic trace read')
             const text = chunk.base64Encoded ? Buffer.from(chunk.data, 'base64').toString('utf8') : chunk.data
             byteCount += Buffer.byteLength(text, 'utf8')
             if (byteCount > MAX_BROWSER_TRACE_BYTES) throw new Error(`Chromium diagnostic trace exceeded ${MAX_BROWSER_TRACE_BYTES} bytes`)
@@ -1014,16 +1128,16 @@ async function startBrowserTrace(browser: Browser): Promise<BrowserTraceSession>
             eof = chunk.eof
           }
         } finally {
-          await session.send('IO.close', { handle: stream }).catch(() => undefined)
+          await withDeadline(session.send('IO.close', { handle: stream }), OBSERVER_CLEANUP_MS, 'Chromium trace stream close').catch(() => undefined)
           stream = undefined
         }
         const trace = chunks.join('')
         if (!trace.includes('\"traceEvents\"')) throw new Error('Chromium diagnostic trace contained no timeline events')
         return trace
       } finally {
-        if (stream) await session.send('IO.close', { handle: stream }).catch(() => undefined)
+        if (stream) await withDeadline(session.send('IO.close', { handle: stream }), OBSERVER_CLEANUP_MS, 'Chromium trace stream close').catch(() => undefined)
         session.off('Tracing.tracingComplete', onComplete)
-        await session.detach().catch(() => undefined)
+        await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'Chromium trace session detach').catch(() => undefined)
       }
     }
   }
@@ -1036,6 +1150,27 @@ function writeBrowserTrace(out: string, metric: Metric, trace: string): string {
   writeFileSync(join(out, relativePath), trace.endsWith('\n') ? trace : `${trace}\n`)
   return relativePath
 }
+export type DiagnosticStatusEvidence = { successful: boolean; ptyHostPid: number | null }
+
+export async function waitForDiagnosticStatusProbe(
+  probe: Pick<Probe, 'daemonExited'>,
+  status: DiagnosticStatusEvidence,
+  signal?: AbortSignal,
+  timeoutMs = DEADLINE_MS
+): Promise<number> {
+  const deadline = performance.now() + timeoutMs
+  while (!status.successful && !probe.daemonExited() && performance.now() < deadline) {
+    if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('speed diagnostic interrupted')
+    await Bun.sleep(Math.max(1, Math.min(25, deadline - performance.now())))
+  }
+  if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('speed diagnostic interrupted')
+  if (probe.daemonExited()) throw new Error('daemon exited before the independent status.get probe succeeded')
+  if (!status.successful) throw new Error(`independent successful status.get probe did not complete within ${timeoutMs}ms`)
+  if (status.ptyHostPid === null || !Number.isSafeInteger(status.ptyHostPid) || status.ptyHostPid <= 1) {
+    throw new Error('successful status.get probe did not report a PTY host PID')
+  }
+  return status.ptyHostPid
+}
 async function diagnosticTrial(
   context: MetricContext,
   metric: Metric,
@@ -1044,12 +1179,23 @@ async function diagnosticTrial(
   diagnosticPaths: string[],
   diagnosticErrors: string[]
 ): Promise<void> {
-  const probe = startProbe({
-    home: context.world.home,
-    startedAt: performance.now(),
-    onDaemonLost: () => undefined,
-    onPtyHostPid: (pid) => context.world.updatePtyHostPid(pid)
-  })
+  const probeStatus: DiagnosticStatusEvidence = { successful: false, ptyHostPid: null }
+  let probe: Probe | undefined
+  let probeDaemonPid: number | null = null
+  let statusProbePtyHostPid: number | null = null
+  const startStatusProbe = () => {
+    probeDaemonPid = context.world.daemonPid
+    probe = startProbe({
+      home: context.world.home,
+      startedAt: performance.now(),
+      onDaemonLost: () => undefined,
+      onPtyHostPid: (pid) => {
+        probeStatus.successful = true
+        probeStatus.ptyHostPid = pid
+        context.world.updatePtyHostPid(pid)
+      }
+    })
+  }
   let floodStart: FloodStart | undefined
   let browserTrace: BrowserTraceSession | undefined
   let tracePath: string | undefined
@@ -1060,12 +1206,15 @@ async function diagnosticTrial(
   const resultPath = `diagnostics/${metric}.json`
   mkdirSync(join(context.out, 'diagnostics'), { recursive: true })
   try {
-    browserTrace = await startBrowserTrace(context.browser)
+    browserTrace = await startBrowserTrace(context.browser, signal)
+    if (metric !== 'startup') startStatusProbe()
     if (metric === 'startup') {
       const trial = await startupTrial(context, signal, contextSet)
       context.currentWorktreeIndex = 0
       phases = trial.phases
       observation = trial.observation
+      startStatusProbe()
+      if (probeDaemonPid !== trial.daemonPid) throw new Error('startup status probe did not target the replacement daemon')
     } else if (metric === 'echo') {
       const worktree = context.fixture.target
       await closeHostedReview(context.page, context.world, worktree.id)
@@ -1111,7 +1260,14 @@ async function diagnosticTrial(
       const trial = await echoTrial(context.page, context.fixture.target, sequence, 'x', signal)
       const endAt = performance.now()
       context.sessionSequence.set(context.fixture.target.sessions[0], sequence)
-      const endCounter = await waitForNextFloodProgress(context, flood.start, flood.renderedCounter, signal)
+      const endProgress = await waitForFloodProgressAfterSnapshot(
+        context.page,
+        context.fixture.target,
+        flood.start,
+        signal,
+        () => context.context.close()
+      )
+      const endCounter = endProgress.afterCounter
       const stats = await context.fixture.stopFlood()
       floodStart = undefined
       validateFloodStats(stats, flood.start)
@@ -1127,6 +1283,11 @@ async function diagnosticTrial(
         renderedEndCounter: endCounter
       }
     }
+    const activeProbe = probe
+    if (!activeProbe || probeDaemonPid === null) throw new Error('independent status.get probe was not started')
+    statusProbePtyHostPid = await waitForDiagnosticStatusProbe(activeProbe, probeStatus, signal)
+    if (probeDaemonPid !== context.world.daemonPid) throw new Error('daemon changed during the diagnostic status.get probe')
+    if (statusProbePtyHostPid !== context.world.ptyHostPid()) throw new Error('status.get probe did not confirm the fixture PTY host')
     if (!observation) throw new Error(`${metric} diagnostic produced no browser observation`)
     const activeTrace = browserTrace
     if (!activeTrace) throw new Error('Chromium diagnostic trace was not started')
@@ -1134,9 +1295,14 @@ async function diagnosticTrial(
     const traceContents = await activeTrace.stop()
     tracePath = writeBrowserTrace(context.out, metric, traceContents)
     diagnosticPaths.push(tracePath)
-    timelinePath = await writeDiagnosticTrace(context.out, metric, context.page, observation, phases)
+    timelinePath = await writeDiagnosticTrace(context.out, metric, context.page, observation, phases, signal)
     diagnosticPaths.push(timelinePath)
-    const probeEvidence = { probes: probe.probes, events: probe.events, daemonExited: probe.daemonExited() }
+    const probeEvidence = {
+      probes: activeProbe.probes,
+      events: activeProbe.events,
+      daemonExited: activeProbe.daemonExited(),
+      statusGet: { successful: probeStatus.successful, daemonPid: probeDaemonPid, ptyHostPid: statusProbePtyHostPid }
+    }
     const diagnostic = {
       version: 1,
       metric,
@@ -1172,13 +1338,18 @@ async function diagnosticTrial(
       finding: `Diagnostic evidence error: ${message}`,
       ...(floodRunId === undefined ? {} : { floodRunId }),
       ...(tracePath === undefined ? {} : { trace: tracePath }),
-      probe: { probes: probe.probes, events: probe.events, daemonExited: probe.daemonExited() }
+      probe: {
+        probes: probe?.probes ?? [],
+        events: probe?.events ?? [],
+        daemonExited: probe?.daemonExited() ?? false,
+        statusGet: { successful: probeStatus.successful, daemonPid: probeDaemonPid, ptyHostPid: probeStatus.ptyHostPid }
+      }
     }
     writeFileSync(join(context.out, resultPath), `${JSON.stringify(failureEvidence, null, 2)}\n`)
     diagnosticPaths.push(resultPath)
   } finally {
-    probe.finish()
-    probe.stop()
+    probe?.finish()
+    probe?.stop()
     if (floodStart) {
       try { await context.fixture.stopFlood() } catch (error) {
         diagnosticErrors.push(`flood cleanup: ${sanitizeText(errorText(error), context.redactions)}`)
@@ -1326,7 +1497,7 @@ export async function measureSpeed(options: {
     })
   } finally {
     for (const browserContext of contexts) {
-      try { await browserContext.close() } catch (error) {
+      try { await withDeadline(browserContext.close(), OBSERVER_CLEANUP_MS, 'browser context cleanup') } catch (error) {
         failures.push({ kind: 'context-cleanup-failed', message: sanitizeText(errorText(error), redactions) })
       }
     }
