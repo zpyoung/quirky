@@ -101,7 +101,8 @@ export type SplitButtonProps = {
 export type InlineErrorProps = {
   message: string
   action?: { label: string; onAction(): void }
-  onDismiss(): void
+  /** Without it there is no dismiss button. */
+  onDismiss?(): void
 }
 export type ScopeChipProps = { label: string; onRemove(): void; removeLabel?: string }
 
