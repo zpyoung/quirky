@@ -239,12 +239,12 @@ test('owner commands can skip activation, activate explicitly, and reject invali
   let noActivationResult: unknown
   try {
     const first = await Promise.race([noActivationRequest, noActivationReply, timeout])
-    if (first === timedOut) {
+    if (typeof first === 'symbol') {
       noActivationResult = timedOut
     } else if ('event' in first) {
       await shell.call('ui.command.reply', { requestId: first.event.requestId, result: { opened: true } })
       const replied = await Promise.race([noActivationReply, timeout])
-      noActivationResult = replied === timedOut ? timedOut : replied.result
+      noActivationResult = typeof replied === 'symbol' ? timedOut : replied.result
     } else {
       noActivationResult = first.result
     }
@@ -275,7 +275,7 @@ test('owner commands can skip activation, activate explicitly, and reject invali
 
   const ownerCommandsBeforeInvalid = ownerCommands.length
   await expect(auxiliary.call('desktop.window.runOwnerCommand', {
-    windowId: 'owned-window-7', id: command!.id, args: {}, activateOwner: 'no'
+    windowId: 'owned-window-7', id: command!.id, args: {}, activateOwner: 'no' as never
   })).rejects.toMatchObject({
     code: -32602,
     message: 'params.activateOwner must be a boolean'
