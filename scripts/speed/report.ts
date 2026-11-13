@@ -9,6 +9,7 @@ const PAIR_KEYS = ['version', 'runId', 'createdAt', 'status', 'qualified', 'head
 const PAIR_EVIDENCE_KEYS = ['samples']
 const MAX_FAILURES = 100
 const MAX_EVIDENCE_PATHS = 100
+const MAX_PAIR_SAMPLES = 1000
 const MAX_MARKDOWN_CHARS = 16_000
 const MAX_CELL_CHARS = 300
 
@@ -92,7 +93,7 @@ function validFailure(value: unknown): value is Failure {
 }
 
 function validDurationSamples(value: unknown): value is number[] {
-  if (!Array.isArray(value)) return false
+  if (!Array.isArray(value) || value.length > MAX_PAIR_SAMPLES) return false
   for (let index = 0; index < value.length; index += 1) {
     const sample = value[index]
     if (typeof sample !== 'number' || !Number.isFinite(sample) || sample <= 0) return false
@@ -200,7 +201,7 @@ function percentageChange(head: number, base: number): number | null {
 
 export function pairedLowerBoundPercent(head: readonly number[], base: readonly number[]): number | null {
   const count = head.length
-  if (count === 0 || count !== base.length) return null
+  if (count === 0 || count > MAX_PAIR_SAMPLES || count !== base.length) return null
   const differences = new Array<number>(count)
   for (let index = 0; index < count; index += 1) {
     const headSample = head[index]
@@ -233,6 +234,7 @@ export function pairedLowerBoundPercent(head: readonly number[], base: readonly 
 }
 
 export function pairedRegression(head: readonly number[], base: readonly number[]): MetricComparison | null {
+  if (head.length > MAX_PAIR_SAMPLES || base.length > MAX_PAIR_SAMPLES) return null
   const headMedianMs = median(head)
   const baselineMedianMs = median(base)
   if (headMedianMs === null || baselineMedianMs === null || head.length !== base.length) return null

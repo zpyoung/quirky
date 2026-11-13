@@ -258,6 +258,15 @@ describe('report validation', () => {
 
 
 describe('paired regression rule', () => {
+  test('rejects oversized paired evidence before computing confidence bounds', () => {
+    const oversized = pair({ counts: { startup: 1001 } })
+    expect(validatePair(oversized)).toBeNull()
+    expect(comparePair(report(), oversized)).toMatchObject({ status: 'error', reason: 'pair report is malformed' })
+    const row = oversized.metrics.startup
+    expect(pairedLowerBoundPercent(row.headSamplesMs, row.baseSamplesMs)).toBeNull()
+    expect(pairedRegression(row.headSamplesMs, row.baseSamplesMs)).toBeNull()
+  })
+
   test('scenario 1: flags a clean 30% slowdown in every metric', () => {
     const comparison = comparePair(report(), pair({ scale: 1.3 }))
     expect(comparison.status).toBe('compared')
