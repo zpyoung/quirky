@@ -144,6 +144,29 @@ test('matcher worker rejects malformed, unknown, and incomplete input frames', a
   }
 })
 
+for (const [name, bytes] of [
+  ['invalid lead byte', [Uint8Array.of(0xff)]],
+  ['split incomplete sequence', [Uint8Array.of(0xe5), Uint8Array.of(0xb0)]]
+] as const) {
+  test(`invalid UTF-8 inside worker input JSON (${name}) exits without a success reply`, async () => {
+    const child = spawnWorker()
+    const reader = child.stdout.getReader()
+    try {
+      const { line, remainder } = await readLine(reader)
+      expect(line).toBe('{"ready":true}')
+      expect(await child.write('{"id":17,"op":"line","pattern":".","ignoreCase":false,"lines":["')).toBe(true)
+      for (const chunk of bytes) await child.write(chunk)
+      await child.write('"]}\n')
+      await child.closeInput()
+      const output = await readRemaining(reader, remainder)
+      expect((await child.exited).exitCode).toBe(1)
+      expect(output).toBe('')
+    } finally {
+      reader.releaseLock()
+    }
+  })
+}
+
 test('matcher frame reader handles combined and split frames, CRLF, and large split UTF-8 strings', async () => {
   const longValue = `${'a'.repeat(70_000)}尾🙂 "quoted" \\ path\nline`
   const complete = encoder.encode(`${JSON.stringify({ id: 1 })}\n${JSON.stringify({ id: 2 })}\r\n`)

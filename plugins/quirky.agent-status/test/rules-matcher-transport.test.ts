@@ -409,6 +409,37 @@ describe('owned matcher transport', () => {
     }
   }
 
+  for (const [name, bytes] of [
+    ['invalid lead byte', [Uint8Array.of(0xff)]],
+    ['split incomplete sequence', [Uint8Array.of(0xe5), Uint8Array.of(0xb0)]]
+  ] as const) {
+    test(`invalid UTF-8 inside response JSON (${name}) retires the reader and recovers`, async () => {
+      const f = fixture()
+      const pending = f.matcher.matchLines('x', false, ['x'])
+      await ready(f)
+      f.child.bytes(encoder.encode('{"id":1,"result":{"line":"'))
+      for (const chunk of bytes) {
+        f.child.bytes(chunk)
+        await flush()
+      }
+      f.child.bytes(encoder.encode('","match":"x","groups":[]}}\n'))
+      expect(await pending).toEqual(invalid)
+      expect(f.child.stops).toEqual([{ signal: 'SIGKILL' }])
+      await flush()
+      expect(f.child.stdout.locked).toBe(false)
+      expect(f.child.cancellations).toBe(1)
+      const replacement = new Child()
+      f.recorder.children.push(replacement)
+      const recovered = f.matcher.matchLines('tests', false, ['build: 3 tests'])
+      await flush()
+      expect(f.recorder.calls).toHaveLength(2)
+      replacement.send({ ready: true })
+      await flush()
+      replacement.send({ id: JSON.parse(replacement.writes[0]!).id, result: match })
+      expect(await recovered).toEqual(match)
+    })
+  }
+
   for (const rejection of [false, true]) {
     test(`late ${rejection ? 'rejected' : 'closed'} write cannot stop a newer generation`, async () => {
       const time = clock()
