@@ -42,6 +42,7 @@ import type { DurableMutationOptions } from './worker-integration'
 import { fail } from './errors'
 import { targetIdentity, verifyCaller } from './identity'
 import type { SessionIdentity } from './runtime-contracts'
+import { CREATED_NEWEST_FIRST, CREATED_OLDEST_FIRST } from './store'
 import type {
   ServiceCheckParams, ServiceCoordinatorPrincipal, ServiceQuestionView, ServiceReplyParams, ServiceSendParams,
 } from './services/contracts'
@@ -1301,7 +1302,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
       return { mailbox: { kind: 'run', runId }, runId }
     }
     const active = this.core.store.get<{ id: string; run_id: string }>(
-      `SELECT id, run_id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY created_at DESC, id DESC LIMIT 1`,
+      `SELECT id, run_id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
       target.sessionId
     )
     if (active) {
@@ -1337,7 +1338,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
       }
     } else {
       const dispatches = this.core.store.all<{ id: string; run_id: string; assignee_session_id: string | null }>(
-        `SELECT id, run_id, assignee_session_id FROM dispatches WHERE run_id = ? AND status IN ('pending', 'dispatched') AND assignee_session_id IS NOT NULL ORDER BY created_at, id`,
+        `SELECT id, run_id, assignee_session_id FROM dispatches WHERE run_id = ? AND status IN ('pending', 'dispatched') AND assignee_session_id IS NOT NULL ORDER BY ${CREATED_OLDEST_FIRST}`,
         groupRun!.id
       )
       for (const dispatch of dispatches) {
@@ -1505,7 +1506,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
     const bound = this.core.getBoundRun(sessionId)
     if (bound) return { mailbox: { kind: 'run', runId: bound.id }, runId: bound.id }
     const active = this.core.store.get<{ id: string; run_id: string }>(
-      `SELECT id, run_id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY depth DESC, created_at DESC, id DESC LIMIT 1`,
+      `SELECT id, run_id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY depth DESC, ${CREATED_NEWEST_FIRST} LIMIT 1`,
       sessionId
     )
     if (active) return { mailbox: { kind: 'dispatch', dispatchId: active.id as MessageRow['sender'] extends { kind: 'dispatch'; dispatchId: infer D } ? D : never }, runId: active.run_id as RunId }
@@ -2054,7 +2055,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
     return this.store.get<ActiveDispatchRecord>(
       `SELECT id, run_id, task_id, status, assignee_session_id, consumer_generation, supervised, runtime_epoch, process_incarnation
        FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched')
-       ORDER BY depth DESC, created_at DESC, id DESC LIMIT 1`,
+       ORDER BY depth DESC, ${CREATED_NEWEST_FIRST} LIMIT 1`,
       sessionId
     )
   }

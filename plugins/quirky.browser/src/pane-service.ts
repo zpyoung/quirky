@@ -1990,7 +1990,7 @@ export class PaneService {
     const path = this.safeDownloadPath(entry.path)
     if (process.platform !== 'darwin') throw fault('browser_unavailable', 'download opening and Finder reveal are supported only on macOS')
     const args = request.action === 'reveal' ? ['open', '-R', path] : ['open', path]
-    Bun.spawn(args, { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }).unref()
+    this.runtime.openDetached(args, (message) => this.context.log(message))
     return { action: request.action, completed: true, download: structuredClone(entry) }
   }
 

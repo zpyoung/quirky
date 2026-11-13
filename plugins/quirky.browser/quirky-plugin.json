@@ -1,6 +1,6 @@
 {
   "id": "quirky.browser",
-  "apiVersion": "1.1.0",
+  "apiVersion": "1.11.0",
   "name": "Browser",
   "version": "0.1.0",
   "description": "Native human browsing and explicit Watch panes alongside isolated headless browser automation.",
