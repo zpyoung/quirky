@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
+import { quotePosixShellLiteral } from './cli-actor'
 
 export type CliFixtureTools = {
   fixtureBin: string
@@ -16,6 +17,9 @@ export type CliFixtureTools = {
   codexLog: string
   codexEnvironmentLog: string
   claudeLoginLog: string
+  claudeWorkerLog: string
+  workerActorEntry: string
+  workerActorRoot: string
   codexLoginLog: string
   orcaLog: string
   securityLog: string
@@ -60,6 +64,8 @@ export function installCliFixtureTools(home: string): CliFixtureTools {
   const fixtureBin = join(fixtureRoot, 'bin')
   const logs = join(fixtureRoot, 'logs')
   const codexHome = join(fixtureRoot, 'codex')
+  const workerActorRoot = join(root, 'cli-worker-actor')
+  const workerActorEntry = resolve(import.meta.dir, 'cli-worker-actor.ts')
   makeDirectory(fixtureBin)
   makeDirectory(logs)
   makeDirectory(join(root, 'cli-actor'))
@@ -69,11 +75,12 @@ export function installCliFixtureTools(home: string): CliFixtureTools {
   const ompLog = join(logs, 'omp-argv.log')
   const ompInputLog = join(logs, 'omp-stdin.log')
   const claudeLoginLog = join(logs, 'claude-login.log')
+  const claudeWorkerLog = join(logs, 'claude-worker.log')
   const codexLoginLog = join(logs, 'codex-login.log')
   const orcaLog = join(logs, 'orca.log')
   const securityLog = join(logs, 'security.log')
   const egressLog = join(logs, 'egress.log')
-  for (const path of [ompLog, ompInputLog, claudeLoginLog, codexLoginLog, orcaLog, securityLog, egressLog]) privateEmptyFile(path)
+  for (const path of [ompLog, ompInputLog, claudeLoginLog, claudeWorkerLog, codexLoginLog, orcaLog, securityLog, egressLog]) privateEmptyFile(path)
   const ompWrapper = join(fixtureBin, 'omp')
   executable(ompWrapper, `#!/bin/sh
 set -eu
@@ -106,6 +113,15 @@ if [ "$#" -eq 3 ] && [ "$1" = 'auth' ] && [ "$2" = 'login' ] && [ "$3" = '--clau
   chmod 600 "$CLAUDE_CONFIG_DIR/.claude.json" "$CLAUDE_CONFIG_DIR/.credentials.json"
   printf 'login\\n' >> "$QUIRKY_HOME/fixtures/logs/claude-login.log"
   exit 0
+fi
+if [ "$#" -eq 3 ] && [ -n "\${QUIRKY_SESSION_TOKEN:-}" ] &&
+   [ "$1" = '--dangerously-skip-permissions' ] && [ "$2" = '--settings' ]; then
+  case "$3" in
+    \\{*\\})
+      printf '%s %s %s\\n' "$#" "$1" "$2" >> ${quotePosixShellLiteral(claudeWorkerLog)}
+      exec ${quotePosixShellLiteral(process.execPath)} ${quotePosixShellLiteral(workerActorEntry)} worker
+      ;;
+  esac
 fi
 printf '%s\\n' 'claude fixture refuses unsupported arguments' >&2
 exit 64
@@ -189,6 +205,9 @@ if (!globalThis[marker]) {
     codexLog: codex.logPath,
     codexEnvironmentLog: codex.environmentLogPath,
     claudeLoginLog,
+    claudeWorkerLog,
+    workerActorEntry,
+    workerActorRoot,
     codexLoginLog,
     orcaLog,
     securityLog,

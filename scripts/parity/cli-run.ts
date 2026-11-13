@@ -108,6 +108,36 @@ function parseCliRefusal(stdout: string, exitCode: number): CliRefusal {
   }
   return { code, message, ...(Object.hasOwn(error, 'data') ? { data: Reflect.get(error, 'data') } : {}) }
 }
+type ImportedActorReceipt = {
+  id: string
+  argv: string[]
+  stdout: string
+  stderr: string
+  exitCode: number
+  stdoutBytes: number
+  elapsedMs: number
+  format: 'json' | 'jsonl'
+}
+
+function parseImportedActorReceipt(value: unknown): ImportedActorReceipt {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new CliRunFailure('malformed-actor', 'Actor receipt is missing raw CLI fields')
+  }
+  const item = value as Record<string, unknown>
+  if (typeof item.id !== 'string' || !Array.isArray(item.argv) || !item.argv.every((arg: unknown) => typeof arg === 'string') ||
+      typeof item.stdout !== 'string' || typeof item.stderr !== 'string' || typeof item.exitCode !== 'number' ||
+      typeof item.stdoutBytes !== 'number' || typeof item.elapsedMs !== 'number' ||
+      (item.format !== 'json' && item.format !== 'jsonl')) {
+    throw new CliRunFailure('malformed-actor', 'Actor receipt is missing raw CLI fields')
+  }
+  const receipt = item as ImportedActorReceipt
+  if (!receipt.argv.includes('--json') ||
+      !receipt.argv.some((arg, index) => arg === '--runtime' && receipt.argv[index + 1] === 'local')) {
+    throw new CliRunFailure('malformed-actor', 'Actor command omitted explicit local JSON mode')
+  }
+  return receipt
+}
+
 
 export function reduceCliRows(
   rows: CliTableRow[], receipts: CliReceipt[], proven: ReadonlySet<string>,
@@ -291,15 +321,29 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
       importActor(value) {
         if (!Array.isArray(value)) throw new CliRunFailure('malformed-actor', 'Actor receipts must be an array')
         for (const item of value) {
-          if (!item || typeof item !== 'object' || !('id' in item) || typeof item.id !== 'string' || !('argv' in item) || !Array.isArray(item.argv) || !item.argv.every((arg: unknown) => typeof arg === 'string') ||
-              !('stdout' in item) || typeof item.stdout !== 'string' || !('stderr' in item) || typeof item.stderr !== 'string' || !('exitCode' in item) || typeof item.exitCode !== 'number' ||
-              !('stdoutBytes' in item) || typeof item.stdoutBytes !== 'number' || !('elapsedMs' in item) || typeof item.elapsedMs !== 'number' || !('format' in item) || (item.format !== 'json' && item.format !== 'jsonl')) {
-            throw new CliRunFailure('malformed-actor', 'Actor receipt is missing raw CLI fields')
-          }
-          if (!item.argv.includes('--json') || !item.argv.some((arg: unknown, index: number) => arg === '--runtime' && item.argv[index + 1] === 'local')) throw new CliRunFailure('malformed-actor', 'Actor command omitted explicit local JSON mode')
-          currentCheck = item.id
-          adopt(item.id, item.argv, { stdout: item.stdout, stderr: item.stderr, exitCode: item.exitCode, stdoutBytes: item.stdoutBytes, elapsedMs: item.elapsedMs }, item.format)
+          const receipt = parseImportedActorReceipt(item)
+          currentCheck = receipt.id
+          adopt(receipt.id, receipt.argv, {
+            stdout: receipt.stdout,
+            stderr: receipt.stderr,
+            exitCode: receipt.exitCode,
+            stdoutBytes: receipt.stdoutBytes,
+            elapsedMs: receipt.elapsedMs
+          }, receipt.format)
         }
+      },
+      importActorRefusal(value) {
+        const receipt = parseImportedActorReceipt(value)
+        currentCheck = receipt.id
+        recordReceipt(receipt.id, receipt.argv, {
+          stdout: receipt.stdout,
+          stderr: receipt.stderr,
+          exitCode: receipt.exitCode,
+          stdoutBytes: receipt.stdoutBytes,
+          elapsedMs: receipt.elapsedMs
+        }, receipt.format)
+        refusalReceipts.add(receipt.id)
+        return parseCliRefusal(receipt.stdout, receipt.exitCode)
       },
       async onActorLive() {
         await liveWorld.actorLive()
