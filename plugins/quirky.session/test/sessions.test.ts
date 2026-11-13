@@ -24,7 +24,7 @@ let events: QuirkyEvent[]
 beforeEach(async () => {
   resetFakeAgents()
   resetPointerState()
-  h = await startPluginHarness(SESSION_PLUGINS)
+  h = await startPluginHarness(SESSION_PLUGINS, { eventCoalesceMs: 10 })
   ;({ client, events } = await h.connectWithEvents('cli'))
 })
 afterEach(async () => {
@@ -46,7 +46,6 @@ const changedTo = (status: string) =>
   events.find((e) => e.type === 'quirky.session/changed' && (e.data as { session: Session }).session.status === status)
 
 const exportPath = () => `export PATH="${h.home}/bin:$PATH"; `
-
 
 describe('session identity and pointer delivery', () => {
   test('returns a live terminal identity without exposing its launch token', async () => {
@@ -1035,24 +1034,7 @@ describe('session event metadata', () => {
     expect('worktreeId' in removed).toBe(false)
   })
 
-  test('delivers every unread change', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
-    await waitFor(() => changedTo('running'))
-    const before = eventsOf('quirky.session/changed').length
-
-    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
-    await call(client, 'quirky.session/setUnread', { session: session.id, unread: null })
-    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'bell' })
-    await waitFor(() => eventsOf('quirky.session/changed').length === before + 3 || undefined)
-
-    const unreadValues = eventsOf('quirky.session/changed')
-      .filter((event) => sessionDataOf(event)?.id === session.id)
-      .slice(-3)
-      .map((event) => sessionDataOf(event)?.unread)
-    expect(unreadValues).toEqual(['agent', null, 'bell'])
-  })
-
-  test('describes worktree tagging without coalescing', async () => {
+  test('describes changed coalesced per session and worktree tagging', async () => {
     const api = await call<{
       events: { name: string; worktree?: string; coalesce?: string[] }[]
     }>(client, 'api.describe')
@@ -1060,12 +1042,276 @@ describe('session event metadata', () => {
     const removed = api.events.find((event) => event.name === 'quirky.session/removed')!
 
     expect(changed.worktree).toBe('session.worktreeId')
-    expect('coalesce' in changed).toBe(false)
+    expect(changed.coalesce).toEqual(['session.id'])
     expect('worktree' in removed).toBe(false)
     expect('coalesce' in removed).toBe(false)
   })
 })
 
+describe('session event coalescing', () => {
+  // Wall-clock pauses settle client events without expiring the 60-second daemon windows.
+  const stream = (sessionId: string, from: number) =>
+    events.slice(from).flatMap((event) => {
+      if (!('data' in event) || typeof event.data !== 'object' || event.data === null) return []
+      const data = event.data
+      if (event.type === 'quirky.session/removed') {
+        if (!('sessionId' in data)) return []
+        return data.sessionId === sessionId ? ['removed'] : []
+      }
+      if (event.type !== 'quirky.session/changed' || !('session' in data)) return []
+      const session = data.session
+      if (typeof session !== 'object' || session === null || !('id' in session) || session.id !== sessionId) return []
+      if (!('status' in session) || typeof session.status !== 'string') return []
+      const unread = 'unread' in session && typeof session.unread === 'string' ? session.unread : 'none'
+      const providerSession = 'providerSession' in session ? session.providerSession : null
+      const transcriptPath =
+        typeof providerSession === 'object' &&
+        providerSession !== null &&
+        'transcriptPath' in providerSession &&
+        typeof providerSession.transcriptPath === 'string'
+          ? providerSession.transcriptPath
+          : '-'
+      return [`${session.status}:${unread}:${transcriptPath}`]
+    })
+
+  test('an unread burst merges, and removed comes last', async () => {
+    await h.cleanup()
+    h = await startPluginHarness(SESSION_PLUGINS, { eventCoalesceMs: 60_000 })
+    ;({ client, events } = await h.connectWithEvents('cli'))
+
+    const session = await shellSession()
+    await waitFor(() => changedTo('running'))
+    await Bun.sleep(100)
+    const from = events.length
+
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: null })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'bell' })
+    await Bun.sleep(100)
+    expect(stream(session.id, from)).toEqual([])
+
+    await call(client, 'quirky.session/close', { session: session.id })
+    await waitFor(
+      () =>
+        events.find((event) => {
+          if (event.type !== 'quirky.session/removed') return false
+          if (!('data' in event) || typeof event.data !== 'object' || event.data === null || !('sessionId' in event.data)) {
+            return false
+          }
+          return event.data.sessionId === session.id
+        }) || undefined
+    )
+    expect(stream(session.id, from)).toEqual(['running:bell:-', 'removed'])
+  })
+
+  test('every status change arrives, however often it repeats inside one window', async () => {
+    await h.cleanup()
+    h = await startPluginHarness(SESSION_PLUGINS, { eventCoalesceMs: 60_000 })
+    ;({ client, events } = await h.connectWithEvents('cli'))
+
+    const session = await shellSession()
+    await waitFor(() => changedTo('running'))
+    await Bun.sleep(100)
+    let from = events.length
+
+    for (let i = 0; i < 3; i++) {
+      await call(client, 'quirky.session/setStatus', { session: session.id, status: 'working' })
+      await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+      await call(client, 'quirky.session/setUnread', { session: session.id, unread: null })
+      await call(client, 'quirky.session/setStatus', { session: session.id, status: 'waiting' })
+    }
+    await Bun.sleep(100)
+    expect(stream(session.id, from)).toEqual([
+      'working:none:-',
+      'waiting:none:-',
+      'working:none:-',
+      'waiting:none:-',
+      'working:none:-',
+      'waiting:none:-'
+    ])
+
+    from = events.length
+    const exit = async () => {
+      h.pty.exit(session.id, null, { exitSignal: 'SIGHUP', exitCause: 'host-restart' })
+      await waitFor(() => (stream(session.id, from).at(-1)?.startsWith('exited') ? true : undefined))
+    }
+    await exit()
+    await call(client, 'quirky.session/restore', { session: session.id })
+    await exit()
+    await call(client, 'quirky.session/restore', { session: session.id })
+    await exit()
+    await Bun.sleep(100)
+    expect(stream(session.id, from)).toEqual([
+      'exited:none:-',
+      'running:none:-',
+      'exited:none:-',
+      'running:none:-',
+      'exited:none:-'
+    ])
+  })
+
+  test('every transcript path arrives when the provider ID stays or changes', async () => {
+    await h.cleanup()
+    h = await startPluginHarness(SESSION_PLUGINS, { eventCoalesceMs: 60_000 })
+    ;({ client, events } = await h.connectWithEvents('cli'))
+
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await waitFor(() => changedTo('running'))
+    await Bun.sleep(100)
+    const from = events.length
+
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'bell' })
+    await call(client, 'quirky.session/setProviderSession', {
+      session: session.id,
+      id: 'provider-one',
+      transcriptPath: '/tmp/a.jsonl'
+    })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: null })
+    await call(client, 'quirky.session/setProviderSession', {
+      session: session.id,
+      id: 'provider-one',
+      transcriptPath: '/tmp/b.jsonl'
+    })
+    await call(client, 'quirky.session/setProviderSession', {
+      session: session.id,
+      id: 'provider-two',
+      transcriptPath: '/tmp/c.jsonl'
+    })
+    await Bun.sleep(100)
+    expect(stream(session.id, from)).toEqual([
+      'running:bell:/tmp/a.jsonl',
+      'running:none:/tmp/b.jsonl',
+      'running:none:/tmp/c.jsonl'
+    ])
+  })
+
+  test('a provider ID change with the same transcript path emits before the coalescing window ends', async () => {
+    await h.cleanup()
+    h = await startPluginHarness(SESSION_PLUGINS, { eventCoalesceMs: 60_000 })
+    ;({ client, events } = await h.connectWithEvents('cli'))
+
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await waitFor(() => changedTo('running'))
+    const transcriptPath = '/tmp/same.jsonl'
+    const changedState = (event: QuirkyEvent) => {
+      if (event.type !== 'quirky.session/changed') return
+      if (!('data' in event) || typeof event.data !== 'object' || event.data === null || !('session' in event.data)) {
+        return
+      }
+      const changedSession = event.data.session
+      if (typeof changedSession !== 'object' || changedSession === null || !('id' in changedSession)) return
+      const providerSession = 'providerSession' in changedSession ? changedSession.providerSession : null
+      return {
+        id: typeof changedSession.id === 'string' ? changedSession.id : null,
+        status: 'status' in changedSession && typeof changedSession.status === 'string' ? changedSession.status : null,
+        providerSessionId:
+          typeof providerSession === 'object' &&
+          providerSession !== null &&
+          'id' in providerSession &&
+          typeof providerSession.id === 'string'
+            ? providerSession.id
+            : null,
+        transcriptPath:
+          typeof providerSession === 'object' &&
+          providerSession !== null &&
+          'transcriptPath' in providerSession &&
+          typeof providerSession.transcriptPath === 'string'
+            ? providerSession.transcriptPath
+            : null
+      }
+    }
+
+    await call(client, 'quirky.session/setProviderSession', {
+      session: session.id,
+      id: 'provider-one',
+      transcriptPath
+    })
+    await waitFor(
+      () =>
+        eventsOf('quirky.session/changed').some((event) => {
+          const state = changedState(event)
+          return state !== undefined && state.id === session.id && state.providerSessionId === 'provider-one'
+        }) || undefined
+    )
+    const from = events.length
+
+    // With only the provider ID changing, the event must not wait out the 60-second coalescing window.
+    await call(client, 'quirky.session/setProviderSession', {
+      session: session.id,
+      id: 'provider-two',
+      transcriptPath
+    })
+    await waitFor(
+      () =>
+        events.slice(from).some((event) => {
+          const state = changedState(event)
+          return state !== undefined && state.id === session.id && state.providerSessionId === 'provider-two'
+        }) || undefined
+    )
+    expect(
+      events.slice(from).flatMap((event) => {
+        const state = changedState(event)
+        if (state === undefined || state.id !== session.id) return []
+        return [
+          {
+            status: state.status,
+            providerSessionId: state.providerSessionId,
+            transcriptPath: state.transcriptPath
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        status: 'running',
+        providerSessionId: 'provider-two',
+        transcriptPath
+      }
+    ])
+  })
+
+  test('status changes arrive when removed is disabled', async () => {
+    await h.cleanup()
+    h = await startPluginHarness(SESSION_PLUGINS, { eventCoalesceMs: 60_000 })
+    ;({ client, events } = await h.connectWithEvents('cli'))
+
+    const session = await shellSession()
+    await waitFor(() => changedTo('running'))
+    await call(client, 'plugin.disable', { id: 'event:quirky.session/removed' })
+    const from = events.length
+
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'working' })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'waiting' })
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'working' })
+    await Bun.sleep(100)
+    expect(stream(session.id, from)).toEqual(['working:none:-', 'waiting:agent:-', 'working:agent:-'])
+    expect(
+      events
+        .slice(from)
+        .filter((event) => event.type.startsWith('quirky.session/'))
+        .map((event) => event.type)
+    ).toEqual(['quirky.session/changed', 'quirky.session/changed', 'quirky.session/changed'])
+  })
+
+  // This deliberately exercises the daemon's real 250 ms coalescing timer.
+  test('a burst with the real window is two events', async () => {
+    await h.cleanup()
+    h = await startPluginHarness(SESSION_PLUGINS)
+    ;({ client, events } = await h.connectWithEvents('cli'))
+
+    const session = await shellSession()
+    await waitFor(() => changedTo('running'))
+    await Bun.sleep(700)
+    const from = events.length
+
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'agent' })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: null })
+    await call(client, 'quirky.session/setUnread', { session: session.id, unread: 'bell' })
+    await Bun.sleep(700)
+    expect(stream(session.id, from)).toEqual(['running:agent:-', 'running:bell:-'])
+  })
+})
 
 describe('quirky.session/setUnread', () => {
   test('stores the reason, returns the session, and emits changed only when the value changes', async () => {
@@ -1480,7 +1726,6 @@ describe('quirky.session/restore', () => {
     expect(restored.providerSession).toEqual(providerSession)
   })
 
-
   test('an unsupported cold agent restore refuses before spawning and keeps history restorable', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'aider' })
     h.pty.emit(session.id, 'retained history')
@@ -1521,7 +1766,6 @@ describe('quirky.session/restore', () => {
     expect(fakeAgents().calls.filter((entry) => entry.method === 'prepareResume')).toHaveLength(1)
     expect(h.pty.inputs.filter((input) => input.sessionId === session.id)).toEqual([])
   })
-
 
   test('two restores at once send the host one create', async () => {
     const session = await shellSession()
@@ -1876,6 +2120,7 @@ describe('session names', () => {
       const starting = (await call<Session[]>(client, 'quirky.session/list')).find((s) => s.id !== holder.id)!
 
       await setName(holder.id, 'renamed')
+      await waitFor(() => changedSessions().find((session) => session.id === holder.id && session.name === 'renamed') || undefined)
       const before = changedSessions().length
       await call(client, 'quirky.session/close', { session: starting.id })
       writeFileSync(release, '')

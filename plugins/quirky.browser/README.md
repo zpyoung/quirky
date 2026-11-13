@@ -145,13 +145,13 @@ Browser Settings expose the pane defaults, Chrome identity, link routing, termin
 
 Link Routing defaults to the system browser. Cmd-click opens directly; Shift+Cmd-click forces the system browser unless Shift inversion is enabled, when it reverses the configured route for that click. HTTP(S) navigation from terminal and Markdown/editor surfaces retains its originating worktree. Ordinary rich-editor link clicks remain editing; modified navigation uses routing. File links keep their editor/reveal behavior. A failed explicit in-app route is an error, not a silent external fallback.
 
-Chrome identity is `clean` by default; it removes embedding/headless user-agent tokens. `native` preserves Chrome's actual user agent. Changes require a daemon or Browser-plugin restart; an existing runtime keeps its activation-time mode. This is not a credential/fingerprint guarantee.
+Browser identity is `clean` by default; it removes embedding/headless user-agent tokens from managed Chrome and, when the desktop exposes the system webview’s user agent, Native pages too. `native` preserves each engine’s actual user agent. Changes require a daemon or Browser-plugin restart; an existing runtime keeps its activation-time mode. This is not a credential/fingerprint guarantee.
 
 ### Explicit capability limits
 
 - **Cookie import destination:** menu, toolbar hint and per-profile Settings import controls update the selected managed Chrome/Watch profile, not the separate Native WKWebView engine. Hide Hint persists and can be reversed in Settings.
-- **Native clear/removal:** `profileClear`/`profileDelete` and their `tab profile clear|delete` CLI commands require confirmation and refuse active profiles. Current SDK has no deletion completion acknowledgement; native capability rejects before invocation, preserving Chrome data/profile metadata. Successful native clear/removal is **not shipped**. `sa-browser-native-profile-clear-completion` owns the missing barrier; the one-use desktop claim command cannot bypass ordinary destructive confirmation.
-- **Native identity:** no supported native UA override is available. Settings state the limit rather than store a working-looking no-op. Follow-up: `sa-browser-native-identity`.
+- **Native clear/removal:** Desktop Browser storage uses stable, home-scoped identifiers per profile through `Session.setStorageIdentifier`. When supported, `Session.clearStorageData('all')` must report completion before the daemon clears or removes the profile. The headless CLI has no desktop Native-clear acknowledgement and refuses clear/delete, preserving Chrome data and profile metadata. The headless parity run does not prove live WKWebView clearing.
+- **Native identity:** The desktop reads the system webview’s user agent and applies the active `clean` identity before mounting a Native page when the SDK exposes it; `native` keeps the system value. The headless parity run does not provide live WKWebView identity evidence.
 - **Localhost Worktree Labels:** off by default. When on, a worktree's `http://localhost:<port>` link opens at `http://<label>.quirky.localhost:<proxy>/`, which a daemon-owned label proxy routes to that worktree's server, WebSockets included. Agent Chrome reaches it directly. The Native pane routes only `quirky.localhost` through Electrobun's per-partition `Session.setProxy`, which needs macOS 14 or later, and refuses label URLs where that isn't available. `browser localhost-label register|list` manage labels by hand.
 - **Native test state:** `QUIRKY_HOME` alone does not prove WKWebView storage-root isolation. Native nightly scenarios must use newly created UUID profiles only; never clear/use shared Default without independent native-root proof. Web checks cannot prove native storage isolation or deletion.
 
@@ -179,7 +179,7 @@ Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss use
 
 ## Running browser tests
 
-Run `bun scripts/suite.ts plugins/quirky.browser` for the canonical package checks. Real browser automation, extras API/CLI, cookie import, Watch and design-runtime files run on macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome. These checks retain real owned browser processes rather than skipping browser scenarios or substituting mocks.
+Run the single-file browser CLI parity acceptance with `bun test scripts/parity/browser.test.ts`; see the [Orca browser parity table](../../docs/parity/orca-browser.md) for the 80-command inventory and declared gaps. The acceptance uses real owned browser processes and requires macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome.
 
 The browser harness installs the public dependencies of its real plugins, including the Worktrees dependency on `quirky.cli`. It uses temporary process homes and synthetic cookie source files and cleans up the owned browser and daemon. UI import tests verify explicit discovery, file recovery, captured destination confirmation and command execution without pinning explanatory copy or button punctuation.
 
