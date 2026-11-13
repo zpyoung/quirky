@@ -11,8 +11,6 @@
   "plugins/quirky.browser/src/pane-service.ts": 1,
   "plugins/quirky.browser/src/runtime/defaults.ts": 1,
   "plugins/quirky.browser/src/runtime/driver.ts": 1,
-  "plugins/quirky.checks/executor.ts": 2,
   "plugins/quirky.hosting/src/runtime-runner.ts": 1,
-  "plugins/quirky.loops/src/evaluator.ts": 1,
-  "plugins/quirky.worktree/src/daemon/vm.ts": 1
+  "plugins/quirky.loops/src/evaluator.ts": 1
 }

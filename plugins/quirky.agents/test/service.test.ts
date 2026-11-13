@@ -144,7 +144,8 @@ async function failure(promise: Promise<unknown>): Promise<{ code: number; messa
 
 const find = (listing: { agents: any[] }, id: string) => listing.agents.find((agent) => agent.id === id)
 
-const settle = () => Bun.sleep(150)
+// Drain the production 250 ms coalescing window before event-count assertions.
+const settle = () => Bun.sleep(600)
 
 const agentManifest = (id: string, entries: Record<string, unknown>[], extra: Record<string, unknown> = {}): Manifest => ({
   id,
@@ -385,6 +386,7 @@ describe('choosing the agent', () => {
     const t = await start({ installed: ['claude', 'codex'] })
     await t.call(A('setDefault'), { agent: 'claude' })
     expect((await t.call(A('list'))).defaultAgent).toBe('claude')
+    await settle()
     const before = t.changes()
 
     const disabled = await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
@@ -414,9 +416,11 @@ describe('choosing the agent', () => {
     const refusal = await failure(t.call(A('setDefault'), { agent: 'claude' }))
     expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'agent claude is disabled' })
 
+    await settle()
     await t.call('setting.set', { id: 'setting:quirky.agents/default-agent', value: 'claude' })
     await waitFor(() => t.changes() >= 2)
     expect((await t.call(A('list'))).defaultAgent).toBe('claude')
+    await settle()
     const before = t.changes()
 
     await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
@@ -450,6 +454,7 @@ describe('choosing the agent', () => {
     await t.call(A('setDefault'), { agent: 'acme-bot' })
     expect((await t.call(A('list'))).defaultAgent).toBe('acme-bot')
 
+    await settle()
     const before = t.changes()
     await t.call('plugin.disable', { id: 'acme.agents' })
     await waitFor(() => t.changes() > before)

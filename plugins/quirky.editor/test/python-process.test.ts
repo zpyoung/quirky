@@ -96,6 +96,7 @@ function fakeHandle(plan: FakeHandlePlan = {}): FakeHandle {
     handle: {
       pid: 314,
       stdout: plan.stdout ?? streamFrom(plan.chunks),
+      stderr: streamFrom([]),
       stderrTail: () => plan.stderr ?? '',
       write: async () => { writes++; return true },
       closeInput: async () => { closes++ },

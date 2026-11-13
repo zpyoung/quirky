@@ -82,6 +82,7 @@ function fakeHandle(plan: FakePlan, runs: FakeRun[]): SpawnedProcess {
   const handle: SpawnedProcess = {
     pid: 123,
     stdout: plan.stdout ?? textStream(),
+    stderr: textStream(),
     stderrTail: () => plan.stderr ?? '',
     write: async () => true,
     closeInput: async () => {},
