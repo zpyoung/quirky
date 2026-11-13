@@ -776,7 +776,7 @@ describe('Markdown feature disposal and native dialogs', () => {
       }, calls, runs)
       const methods = markdownFeatureFixture(root, runner)
       let settled = false
-      const pending = methods.methods.markdown({ action: 'exportPdf', bufferId: 'buffer-1' }, {} as PluginCaller)
+      const pending = Promise.resolve(methods.methods.markdown({ action: 'exportPdf', bufferId: 'buffer-1' }, {} as PluginCaller))
         .finally(() => { settled = true })
       const drain = pending.catch(() => undefined)
       try {
@@ -833,7 +833,7 @@ describe('Markdown feature disposal and native dialogs', () => {
       }, calls, runs)
       const methods = markdownFeatureFixture(root, runner)
       let settled = false
-      const pending = methods.methods.markdown({ action: 'exportPdf', bufferId: 'buffer-1' }, {} as PluginCaller)
+      const pending = Promise.resolve(methods.methods.markdown({ action: 'exportPdf', bufferId: 'buffer-1' }, {} as PluginCaller))
         .finally(() => { settled = true })
       const drain = pending.catch(() => undefined)
       try {
