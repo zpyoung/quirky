@@ -313,3 +313,39 @@ for (const eventBeforeReply of [false, true]) {
     expect(composer.value).toBe('ab')
   })
 }
+
+test('S1: snapshot stamps fence a queued state render after a draft reply', async () => {
+  const write = Promise.withResolvers<unknown>()
+  const states: { promise: Promise<ReviewsState>; resolve(value: ReviewsState): void }[] = []
+  let initial = true
+  const fake = fakeContext(WORKTREE_A, async (method) => {
+    if (method === 'quirky.reviews/state') {
+      if (initial) { initial = false; return commentState() }
+      const state = Promise.withResolvers<ReviewsState>()
+      states.push(state)
+      return state.promise
+    }
+    if (method === 'quirky.reviews/detailSetCommentDraft') return write.promise
+    if (method === 'quirky.worktree/list') return []
+    return {}
+  })
+  const { element } = await mountSurface(fake, CHECKS_PANEL)
+  const composer = element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add a comment"]')!
+  await act(async () => {
+    composer.value = 'ab'
+    const key = Object.keys(composer).find((name) => name.startsWith('__reactProps$'))!
+    const props = (composer as unknown as Record<string, { onChange(event: unknown): void }>)[key]!
+    props.onChange({ currentTarget: composer, target: composer })
+  })
+  await act(async () => fake.emit(changed(WORKTREE_A)))
+  await act(async () => {
+    states[0]!.resolve(commentState('a'))
+    for (let step = 0; step < 8; step++) await Promise.resolve()
+    write.resolve({ applied: true })
+    for (let step = 0; step < 8; step++) await Promise.resolve()
+    expect(stateCalls(fake)).toHaveLength(3)
+  })
+  expect(composer.value).toBe('ab')
+  await act(async () => states[1]!.resolve(commentState('ab')))
+  expect(composer.value).toBe('ab')
+})

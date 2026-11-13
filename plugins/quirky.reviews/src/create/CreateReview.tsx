@@ -157,7 +157,6 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     baseField.edit(value)
   }
 
-
   const openResult = async () => {
     if (!worktree) return
     const isCurrent = targetGuard()

@@ -442,7 +442,7 @@ test('D15 action status tracks edits, holds, takes, and irreversible identity ch
   await field.controller.settled()
 })
 
-test('D16 discards queued work and does not refresh or surface old failures after unmount', async () => {
+test('D16 discards queued work before a same-target remount', async () => {
   const first = deferred<boolean>()
   const sent: string[] = []
   const field = harness('', {
@@ -454,13 +454,41 @@ test('D16 discards queued work and does not refresh or surface old failures afte
   field.controller.edit('a')
   field.controller.edit('abc')
   field.controller.unmount()
-  first.reject(new Error('late failure'))
-  await flush()
+  field.controller.mount()
+  first.resolve(true)
+  await field.controller.settled()
 
   expect(field.controller.value).toBe('abc')
+  expect(sent).toEqual(['a'])
+})
+
+test('D16 ignores an in-flight rejection after unmount when nothing is queued', async () => {
+  const pending = deferred<boolean>()
+  const sent: string[] = []
+  const field = harness('', {
+    resend: true,
+    write: (value) => {
+      sent.push(value)
+      return pending.promise
+    },
+  })
+  field.controller.edit('abc')
+  const settled = field.controller.settled()
+  field.controller.unmount()
+  pending.reject(new Error('late failure'))
+  await settled
+
   expect(field.controller.error).toBeNull()
   expect(field.refreshCount).toBe(0)
-  expect(sent).toEqual(['a'])
+  expect(sent).toEqual(['abc'])
+
+  field.controller.mount()
+  field.update({ remote: 'new remote', snapshot: nextDraftTick() })
+  await flush()
+
+  expect(field.controller.error).toBeNull()
+  expect(field.refreshCount).toBe(0)
+  expect(sent).toEqual(['abc'])
 })
 
 test('D17 treats a snapshot without a tick as newer than every settle', async () => {
@@ -628,6 +656,30 @@ test('D22 keeps an action edit held when its in-flight write fails afterward', a
   expect(field.writes).toEqual(['xy'])
 })
 
+test('D22 keeps an action edit held when its in-flight write resolves after failure', async () => {
+  const reply = deferred<boolean>()
+  const field = harness('original', {
+    write: (value) => {
+      field.writes.push(value)
+      return reply.promise
+    },
+  })
+  const action = field.controller.begin()
+  action.take()
+  field.controller.edit('xy')
+  const settled = field.controller.settled()
+  action.fail()
+  reply.resolve(true)
+  await settled
+
+  field.update({ remote: 'original', snapshot: nextDraftTick() })
+
+  expect(field.controller.value).toBe('xy')
+  expect(field.controller.error).toBeNull()
+  expect(field.writes).toEqual(['xy'])
+  expect(field.refreshCount).toBe(1)
+})
+
 test('D6 retries a failed write on an explicit fresh tick with the same remote value', async () => {
   const field: DraftFieldHarness<string> = harness('abc', {
     resend: true,
@@ -649,7 +701,7 @@ test('D6 retries a failed write on an explicit fresh tick with the same remote v
   expect(field.controller.error).toBeNull()
 })
 
-test('D23 ignores action completion after a target change', async () => {
+test('D23 ignores action completion after a target change and adopts a later snapshot', async () => {
   for (const finish of ['succeed', 'fail'] as const) {
     let refreshCount = 0
     const field = harness('before', {
@@ -663,6 +715,12 @@ test('D23 ignores action completion after a target change', async () => {
     else action.fail()
 
     expect(field.controller.value).toBe('other')
+    expect(field.writes).toEqual([])
+    expect(refreshCount).toBe(0)
+
+    field.update({ remote: 'later remote', snapshot: nextDraftTick() })
+
+    expect(field.controller.value).toBe('later remote')
     expect(field.writes).toEqual([])
     expect(refreshCount).toBe(0)
   }

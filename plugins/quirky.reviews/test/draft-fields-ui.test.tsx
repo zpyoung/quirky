@@ -118,6 +118,25 @@ function stateFor(options: StateOptions = {}): ReviewsState {
     defaults: DEFAULTS, repoDefaults: {}, botOverrides: [], links: {}, suppressed: {}
   } as unknown as ReviewsState
 }
+function stateWithComment() {
+  const state = stateFor()
+  return {
+    ...state,
+    detail: {
+      ...state.detail,
+      comments: {
+        number: 12,
+        comments: [{
+          kind: 'issue_comment' as const, id: 42, author: 'reviewer', body: 'Existing comment',
+          createdAt: null, state: null, path: null, line: null, startLine: null, threadId: null,
+          isResolved: null, isOutdated: null, reactionSubjectId: null, reactions: [],
+        }],
+        partial: false,
+        partialFailures: [],
+      },
+    },
+  } as ReviewsState
+}
 
 function deferred<T = unknown>(): Deferred<T> {
   const { promise, resolve, reject } = Promise.withResolvers<T>()
@@ -137,7 +156,7 @@ function defaultReply(method: string, params: Record<string, unknown>): unknown 
   return {}
 }
 
-function mount(renderNode: (props: RenderProps) => ReactNode, initialState = stateFor()): Mounted {
+function mount(renderNode: (props: RenderProps) => ReactNode, initialState = stateFor(), confirmResult = false): Mounted {
   const calls: Call[] = []
   const refreshedWorktrees: Array<string | null> = []
   const held = new Map<string, Deferred<unknown>[]>()
@@ -166,7 +185,7 @@ function mount(renderNode: (props: RenderProps) => ReactNode, initialState = sta
     subscribe: () => () => {},
     getSetting: () => undefined,
     toast() {},
-    confirm: async () => false,
+    confirm: async () => confirmResult,
     log() {}
   } as unknown as UiPluginContext
   const refresh = async () => {
@@ -370,6 +389,7 @@ test('C7: a failed base save stays visible and later state cannot replace its va
   ui.render(stateFor({ base: 'main' }), nextDraftTick())
   expect(ui.element.querySelector<HTMLInputElement>('#review-base')!.value).toBe('release')
   expect(ui.element.querySelector('[role="alert"]')?.textContent).toContain('Base branch must differ from the head branch.')
+  expect(callCount(ui, 'createBase')).toBe(1)
 })
 
 for (const [label, selector, key] of [
@@ -411,11 +431,16 @@ test('C10: posting waits for the comment draft write, then clears it with a fenc
   await click(button(ui.element, 'Send comment'))
   expect(callCount(ui, 'detailPostComment')).toBe(0)
   ui.render(stateFor({ commentDraft: 'hello' }), 0)
+  const clearWrite = ui.holdNext('quirky.reviews/detailSetCommentDraft')
   await act(async () => draftWrite.resolve({ applied: true }))
   await settle()
   expect(callCount(ui, 'detailPostComment')).toBe(1)
   paramsWith(callsFor(ui, 'detailPostComment')[0]!, { worktree: WORKTREE_A, number: 12, body: 'hello' })
+  expect(callCount(ui, 'detailSetCommentDraft')).toBe(2)
+  const staleSnapshot = nextDraftTick()
+  await act(async () => clearWrite.resolve({ applied: true }))
   await settle()
+  ui.render(stateFor({ commentDraft: 'hello' }), staleSnapshot)
   expect(commentComposer(ui.element).value).toBe('')
   expect(callsFor(ui, 'detailSetCommentDraft').filter((call) => call.params.body === '')).toHaveLength(1)
 })
@@ -476,13 +501,14 @@ test('C13: a successful body save keeps and re-sends text edited during the save
   await settle()
   ui.render(stateFor({ body: 'first', bodyDraft: null }), nextDraftTick())
   expect(bodyInput(ui.element).value).toBe('first and more')
+  const writesBeforeReply = callCount(ui, 'detailSetBodyDraft')
   await act(async () => save.resolve({ updated: true }))
   await settle()
   expect(bodyInput(ui.element).value).toBe('first and more')
   expect(ui.element.querySelector('[aria-label="Pull request description"]')).not.toBeNull()
   const writes = callsFor(ui, 'detailSetBodyDraft')
-  expect(writes.at(-1)?.params.body).toBe('first and more')
-  expect(writes.at(-1)?.params.number).toBe(12)
+  expect(writes).toHaveLength(writesBeforeReply + 1)
+  paramsWith(writes.at(-1)!, { body: 'first and more', number: 12 })
 })
 
 test('C13: an unchanged successful body save closes the editor without a draft write', async () => {
@@ -514,7 +540,7 @@ test('C14: a held body save does not affect a different PR or save after a pre-w
   const draftWrite = waiting.holdNext('quirky.reviews/detailSetBodyDraft')
   await click(button(waiting.element, 'Edit description'))
   await click(button(waiting.element, 'Save description'))
-  waiting.render(stateFor({ number: 13, body: 'other body' }), 0)
+  waiting.render(stateFor({ number: 13, body: 'other body', bodyDraft: 'other draft' }), 0)
   await act(async () => draftWrite.resolve({ applied: true }))
   await settle()
   expect(callCount(waiting, 'detailUpdateBody')).toBe(0)
@@ -609,9 +635,12 @@ test('C19: same-number repository relinks discard the queued comment text and st
   changeValue(commentComposer(ui.element), 'abc')
   ui.render(stateFor({ repoOwner: 'other-owner', commentDraft: '' }), 0)
   expect(commentComposer(ui.element).value).toBe('')
+  const callsAfterRelink = callCount(ui, 'detailSetCommentDraft')
   await act(async () => first.reject(new Error('stale target')))
   await settle()
+  expect(callCount(ui, 'detailSetCommentDraft')).toBe(callsAfterRelink)
   expect(ui.element.querySelector('[role="alert"]')).toBeNull()
+  expect(callsFor(ui, 'detailSetCommentDraft').some((call) => call.params.body === 'abc')).toBe(false)
   expect(callsFor(ui, 'detailSetCommentDraft').some((call) => call.params.prRepo && (call.params.prRepo as { owner?: string }).owner === 'other-owner' && call.params.body === 'abc')).toBe(false)
 })
 
@@ -622,10 +651,13 @@ test('C19: same-number repository relinks discard the queued description text', 
   changeValue(bodyInput(ui.element), 'ab')
   changeValue(bodyInput(ui.element), 'abc')
   ui.render(stateFor({ repoOwner: 'other-owner', body: 'other body' }), 0)
+  const callsAfterRelink = callCount(ui, 'detailSetBodyDraft')
   await act(async () => first.reject(new Error('stale target')))
   await settle()
+  expect(callCount(ui, 'detailSetBodyDraft')).toBe(callsAfterRelink)
   expect(ui.element.textContent).toContain('other body')
   expect([...ui.element.querySelectorAll('[role="alert"]')].map((alert) => alert.textContent)).toEqual([])
+  expect(callsFor(ui, 'detailSetBodyDraft').some((call) => call.params.body === 'abc')).toBe(false)
   expect(callsFor(ui, 'detailSetBodyDraft').some((call) => call.params.prRepo && (call.params.prRepo as { owner?: string }).owner === 'other-owner' && call.params.body === 'abc')).toBe(false)
 })
 
@@ -636,10 +668,13 @@ test('C19: same-number repository relinks discard the queued title text', async 
   changeValue(titleInput(ui.element), 'ab')
   changeValue(titleInput(ui.element), 'abc')
   ui.render(stateFor({ repoOwner: 'other-owner', titleDraft: null }), 0)
+  const callsAfterRelink = callCount(ui, 'checksSetTitleDraft')
   await act(async () => first.reject(new Error('stale target')))
   await settle()
+  expect(callCount(ui, 'checksSetTitleDraft')).toBe(callsAfterRelink)
   expect(button(ui.element, 'Edit pull request title').textContent?.trim()).toBe('Review 12')
   expect([...ui.element.querySelectorAll('[role="alert"]')].map((alert) => alert.textContent)).toEqual([])
+  expect(callsFor(ui, 'checksSetTitleDraft').some((call) => call.params.title === 'abc')).toBe(false)
   expect(callsFor(ui, 'checksSetTitleDraft').some((call) => call.params.prRepo && (call.params.prRepo as { owner?: string }).owner === 'other-owner' && call.params.title === 'abc')).toBe(false)
 })
 
@@ -650,10 +685,55 @@ test('C19: same-number repository relinks discard the queued files view', async 
   changeValue(fileFilter(ui.element), 'src/a')
   ui.render(stateFor({ repoOwner: 'other-owner', fileFilter: '' }), 0)
   expect(fileFilter(ui.element).value).toBe('')
+  const callsAfterRelink = callCount(ui, 'detailSetFilesView')
   await act(async () => first.reject(new Error('stale target')))
   await settle()
+  expect(callCount(ui, 'detailSetFilesView')).toBe(callsAfterRelink)
   expect(ui.element.querySelector('[role="alert"]')).toBeNull()
+  expect(callsFor(ui, 'detailSetFilesView').some((call) => call.params.fileFilter === 'src/a')).toBe(false)
   expect(callsFor(ui, 'detailSetFilesView').some((call) => call.params.prRepo && (call.params.prRepo as { owner?: string }).owner === 'other-owner' && call.params.fileFilter === 'src/a')).toBe(false)
+})
+test('Comments refuses a same-tick duplicate edit save', async () => {
+  const ui = mount((props) => <Comments {...props} surface="detail" />, stateWithComment())
+  await click(button(ui.element, 'Edit'))
+  const edit = ui.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit comment #42"]')!
+  changeValue(edit, 'Edited comment')
+  const write = ui.holdNext('quirky.reviews/detailEditComment')
+  const save = button(ui.element, 'Save edit')
+  await act(async () => { save.click(); save.click() })
+  expect(callCount(ui, 'detailEditComment')).toBe(1)
+  await act(async () => write.resolve({ edited: true }))
+  await settle()
+})
+
+test('Comments refuses posting while an edit is pending', async () => {
+  const ui = mount((props) => <Comments {...props} surface="detail" />, stateWithComment())
+  changeValue(commentComposer(ui.element), 'hello')
+  await settle()
+  await click(button(ui.element, 'Edit'))
+  const write = ui.holdNext('quirky.reviews/detailEditComment')
+  await click(button(ui.element, 'Save edit'))
+  expect(callCount(ui, 'detailEditComment')).toBe(1)
+  await act(async () => { button(ui.element, 'Send comment').closest('form')!.requestSubmit() })
+  await settle()
+  expect(callCount(ui, 'detailPostComment')).toBe(0)
+  await act(async () => write.resolve({ edited: true }))
+  await settle()
+})
+
+test('Comments refuses posting while a delete is pending', async () => {
+  const ui = mount((props) => <Comments {...props} surface="detail" />, stateWithComment(), true)
+  changeValue(commentComposer(ui.element), 'hello')
+  await settle()
+  const write = ui.holdNext('quirky.reviews/detailDeleteComment')
+  await click(button(ui.element, 'Delete'))
+  await settle()
+  expect(callCount(ui, 'detailDeleteComment')).toBe(1)
+  await act(async () => { button(ui.element, 'Send comment').closest('form')!.requestSubmit() })
+  await settle()
+  expect(callCount(ui, 'detailPostComment')).toBe(0)
+  await act(async () => write.resolve({ deleted: true }))
+  await settle()
 })
 
 test('C19 and C23: comment and body writers retry a false applied reply with a rebased version', async () => {
@@ -778,37 +858,59 @@ test('C25: a failed body save keeps edits made during the save without resending
 })
 
 for (const action of ['post', 'body save', 'title save', 'generation'] as const) {
-  test(`C26: duplicate ${action} activation starts only one daemon action`, async () => {
+  test(`C26: duplicate ${action} activation starts only one daemon action and releases after completion`, async () => {
     if (action === 'post') {
       const ui = mount((props) => <Comments {...props} surface="detail" />)
       changeValue(commentComposer(ui.element), 'hello')
       await settle()
-      ui.holdNext('quirky.reviews/detailPostComment')
+      const first = ui.holdNext('quirky.reviews/detailPostComment')
       const send = button(ui.element, 'Send comment')
       await act(async () => { send.click(); send.click() })
       expect(callCount(ui, 'detailPostComment')).toBe(1)
+      await act(async () => first.resolve({ posted: true }))
+      await settle()
+      changeValue(commentComposer(ui.element), 'hello again')
+      await settle()
+      await click(button(ui.element, 'Send comment'))
+      expect(callCount(ui, 'detailPostComment')).toBe(2)
     } else if (action === 'body save') {
       const ui = mount((props) => <ReviewPage {...props} />)
       await click(button(ui.element, 'Edit description'))
       await settle()
-      ui.holdNext('quirky.reviews/detailUpdateBody')
+      const first = ui.holdNext('quirky.reviews/detailUpdateBody')
       const save = button(ui.element, 'Save description')
       await act(async () => { save.click(); save.click() })
       expect(callCount(ui, 'detailUpdateBody')).toBe(1)
+      await act(async () => first.resolve({ updated: true }))
+      await settle()
+      await click(button(ui.element, 'Edit description'))
+      await settle()
+      await click(button(ui.element, 'Save description'))
+      expect(callCount(ui, 'detailUpdateBody')).toBe(2)
     } else if (action === 'title save') {
       const ui = mount((props) => <ChecksPanel {...props} />)
       await click(button(ui.element, 'Edit pull request title'))
       await settle()
-      ui.holdNext('quirky.reviews/checksSaveTitle')
+      const first = ui.holdNext('quirky.reviews/checksSaveTitle')
       const save = button(ui.element, 'Save pull request title')
       await act(async () => { save.click(); save.click() })
       expect(callCount(ui, 'checksSaveTitle')).toBe(1)
+      await act(async () => first.resolve({ updated: true }))
+      await settle()
+      await click(button(ui.element, 'Edit pull request title'))
+      await settle()
+      await click(button(ui.element, 'Save pull request title'))
+      expect(callCount(ui, 'checksSaveTitle')).toBe(2)
     } else {
       const ui = mount((props) => <CreateReview {...props} />)
-      ui.holdNext('quirky.reviews/createGenerate')
+      const first = ui.holdNext('quirky.reviews/createGenerate')
       const generate = button(ui.element, 'Generate PR details with AI')
       await act(async () => { generate.click(); generate.click() })
       expect(callCount(ui, 'createGenerate')).toBe(1)
+      await act(async () => first.resolve({ title: 'Generated title', body: 'Generated body' }))
+      await settle()
+      await click(button(ui.element, 'Generate PR details with AI'))
+      expect(callCount(ui, 'createGenerate')).toBe(2)
     }
   })
 }

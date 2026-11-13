@@ -1081,7 +1081,6 @@ function assertTitleDraftFence(env: ReviewsEnv, checks: ChecksEntry, currentRepo
   }
 }
 
-
 async function linkReview(env: ReviewsEnv, worktree: Worktree, number: number, suppliedRepo: RepoIdentity | undefined, caller: PluginCaller): Promise<JsonRecord> {
   const lookup = await callLookup(env, 'review', {
     worktree: worktree.id,

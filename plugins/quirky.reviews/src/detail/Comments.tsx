@@ -224,7 +224,7 @@ export function Comments(props: CommentsProps) {
   }
 
   const submit = async () => {
-    if (pendingRef.current?.identity === identity && pendingRef.current.action.status() !== 'gone') return
+    if (pendingOtherRef.current || pendingRef.current?.identity === identity && pendingRef.current.action.status() !== 'gone') return
     if (targetParams === null || draft.trim() === '') return
     const action = draftField.begin()
     const token = { identity, action }
@@ -261,7 +261,6 @@ export function Comments(props: CommentsProps) {
     }
   }
 
-
   const selectMention = (login: string) => {
     setSharedDraft(draft.replace(/@[A-Za-z0-9-]*$/, `@${login} `))
     setMentionOptions([])
@@ -283,7 +282,7 @@ export function Comments(props: CommentsProps) {
   }
 
   const editComment = async (commentId: number) => {
-    if (pending || targetParams === null || editDraft.trim() === '') return
+    if (pendingOtherRef.current || pending || targetParams === null || editDraft.trim() === '') return
     pendingOtherRef.current = true
     setPendingOther(true)
     setActionError(null)
