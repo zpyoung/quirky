@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Markdown, MarkdownComposer } from '@quirky/plugin-tasks/markdown'
 import { Badge, Button, FormRow, ListRow, Menu, SectionHeader, StatusDot, Tabs, TextField } from '@quirky/ui'
 import type { JsonRecord, ReviewsSurfaceProps, ReviewData } from '../contracts'
@@ -8,6 +8,7 @@ import { ChecksList } from './ChecksList'
 import { Comments } from './Comments'
 import { FilesChanged } from './FilesChanged'
 import { useReviewLinkRouting } from '../link-routing'
+import { createDraftVersions, useDraftField, useTargetGuard, type DraftAction } from '../draft-field'
 const tabs = ['conversation', 'checks', 'files'] as const
 const reviewerPattern = /^[A-Za-z0-9-]{1,39}$/
 
@@ -249,10 +250,46 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const workspaceRequest = useRef(0)
   const workspaceBusyRef = useRef(false)
+  const bodyIdentity = owner === null
+    ? 'none'
+    : `${owner.worktree}|${owner.number}|${owner.repo?.host ?? ''}/${owner.repo?.owner ?? ''}/${owner.repo?.repo ?? ''}`
+  const [bodyVersions] = useState(() => createDraftVersions())
+  const bodyGuard = useTargetGuard(bodyIdentity)
+  const bodyField = useDraftField<string | null>({
+    identity: bodyIdentity,
+    remote: detail.bodyDraft,
+    snapshot: props.snapshot,
+    write: async (value) => {
+      if (owner === null) return false
+      const here = bodyGuard()
+      const params = {
+        worktree: owner.worktree,
+        number: owner.number,
+        generation: owner.generation,
+        ...(owner.repo === null ? {} : { prRepo: owner.repo }),
+        body: value,
+      }
+      const first = await props.context.call('quirky.reviews/detailSetBodyDraft', {
+        ...params,
+        draftVersion: bodyVersions.next(),
+      })
+      if (isRecord(first) && first.applied === false) {
+        if (!here()) return false
+        bodyVersions.rebase()
+        const retry = await props.context.call('quirky.reviews/detailSetBodyDraft', {
+          ...params,
+          draftVersion: bodyVersions.next(),
+        })
+        return isRecord(retry) && typeof retry.applied === 'boolean' ? retry.applied : undefined
+      }
+      return isRecord(first) && typeof first.applied === 'boolean' ? first.applied : undefined
+    },
+    refresh: props.refresh,
+    resend: true,
+  })
   const [bodyEditing, setBodyEditing] = useState(false)
-  const [bodyDraft, setBodyDraft] = useState(detail.bodyDraft ?? review?.body ?? '')
   const [bodySaveError, setBodySaveError] = useState<string | null>(null)
-  const bodyRevision = useRef(Date.now() * 1000 + Math.floor(Math.random() * 1000))
+  const bodySaveAction = useRef<DraftAction<string | null> | null>(null)
   const author = itemAuthor(detail.details)
   const updated = relativeUpdated(itemUpdated(detail.details))
   const canEditBody = itemDetails(detail.details)?.viewerCanUpdate === true
@@ -289,13 +326,9 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   }, [props.context, targetKey, url])
 
   useEffect(() => {
-    setBodyDraft(detail.bodyDraft ?? review?.body ?? '')
+    setBodyEditing(false)
     setBodySaveError(null)
-  }, [targetKey, detail.bodyDraft, review?.body])
-
-  useEffect(() => {
-    bodyRevision.current = Date.now() * 1000 + Math.floor(Math.random() * 1000)
-  }, [targetKey])
+  }, [bodyIdentity])
 
   const requestContext = () => {
     if (owner === null) return null
@@ -374,33 +407,42 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   }
 
   const updateBodyDraft = (value: string | null) => {
-    if (owner === null) return
-    setBodyDraft(value ?? '')
-    bodyRevision.current += 1
-    void props.context.call('quirky.reviews/detailSetBodyDraft', {
-      worktree: owner.worktree,
-      number: owner.number,
-      generation: owner.generation,
-      ...(owner.repo === null ? {} : { prRepo: owner.repo }),
-      body: value,
-      draftVersion: bodyRevision.current,
-    }).catch((error: unknown) => setBodySaveError(errorText(error)))
+    bodyField.edit(value)
+    setBodySaveError(null)
   }
 
   const saveBody = async () => {
     if (owner === null || review === null) return
+    if (bodySaveAction.current !== null && bodySaveAction.current.status() !== 'gone') return
+    const action = bodyField.begin()
+    bodySaveAction.current = action
     setBodySaveError(null)
     try {
+      await bodyField.settled()
+      if (action.status() === 'gone') return
+      const value = action.take()
+      if (value === null) {
+        action.fail()
+        return
+      }
       await props.context.call('quirky.reviews/detailUpdateBody', {
         surface: 'detail',
         worktree: owner.worktree,
         number: owner.number,
         ...(owner.repo === null ? {} : { prRepo: owner.repo }),
-        body: bodyDraft,
+        body: value,
       })
-      setBodyEditing(false)
+      if (action.status() === 'gone') return
+      const unchanged = action.status() === 'same'
+      action.succeed(null)
+      if (unchanged) setBodyEditing(false)
     } catch (error) {
-      setBodySaveError(errorText(error))
+      if (action.status() !== 'gone') {
+        action.fail()
+        setBodySaveError(errorText(error))
+      }
+    } finally {
+      if (bodySaveAction.current === action) bodySaveAction.current = null
     }
   }
 
@@ -496,8 +538,8 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
           <section className="ui-stack" aria-label="Pull request description">
             <SectionHeader title="Description" actions={canEditBody && !bodyEditing ? <Button onClick={() => { updateBodyDraft(body); setBodyEditing(true) }}>Edit description</Button> : undefined} />
             {bodyEditing ? <div className="ui-stack">
-              <MarkdownComposer value={bodyDraft} onChange={updateBodyDraft} label="Pull request description" minRows={8} onSubmit={() => void saveBody()} />
-              {bodySaveError ? <p role="alert"><StatusDot status="failing" label="Error" /> {bodySaveError}</p> : null}
+              <MarkdownComposer value={bodyField.value ?? body} onChange={updateBodyDraft} label="Pull request description" minRows={8} onSubmit={() => void saveBody()} />
+              {bodySaveError ?? bodyField.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {bodySaveError ?? bodyField.error}</p> : null}
               <div className="ui-cluster">
                 <Button variant="primary" onClick={() => void saveBody()}>Save description</Button>
                 <Button onClick={() => { setBodyEditing(false); updateBodyDraft(null) }}>Cancel</Button>

@@ -111,7 +111,11 @@ export type ReviewsEnv = {
   windowCommand(id: string, args: JsonRecord): Promise<unknown>
   onDispose(callback: () => void | Promise<void>): void
 }
-export type ReviewsSurfaceProps = { context: UiPluginContext; state: ReviewsState; refresh(): Promise<void> }
+export type ReviewsSurfaceProps = {
+  context: UiPluginContext; state: ReviewsState; refresh(): Promise<void>
+  /** Tick taken before the request that produced state; absent means newest. */
+  snapshot?: number
+}
 export type ReviewMethodTable = Record<string, MethodHandler>
 
 // Slice contracts (disjoint write ownership):

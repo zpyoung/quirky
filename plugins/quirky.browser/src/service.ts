@@ -427,6 +427,13 @@ export class BrowserService {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }
+    if (method === 'interceptList') return this.runtime.interceptSnapshot(page.browserPageId)
+    if (method === 'interceptDisable') {
+      return await this.runtime.withInterceptsReleased(page.browserPageId, () =>
+        this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution), {
+          spansNavigation: spansNavigation(method, params)
+        }))
+    }
     return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution), {
       spansNavigation: spansNavigation(method, params)
     })
@@ -447,9 +454,12 @@ export class BrowserService {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }
-    const result = await this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution), {
+    if (plan.method === 'interceptList') return { command: plan.command, result: this.runtime.interceptSnapshot(page.browserPageId) }
+    const execute = () => this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution), {
       spansNavigation: spansNavigation(plan.method, plan.params)
     })
+    const result = await (plan.method === 'interceptDisable'
+      ? this.runtime.withInterceptsReleased(page.browserPageId, execute) : execute())
     return { command: plan.command, result }
   }
 

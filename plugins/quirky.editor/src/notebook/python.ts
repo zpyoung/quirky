@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import type { ProcessSpawner, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 import { accessSync, constants, existsSync, realpathSync } from 'node:fs'
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
@@ -21,59 +21,124 @@ const PROBE_CODE = [
   'print(json.dumps({"path": sys.executable, "version": platform.python_version(), "ipykernel": importlib.util.find_spec("ipykernel") is not None, "pip": importlib.util.find_spec("pip") is not None, "externallyManaged": managed}))'
 ].join('; ')
 
-function appendBounded(current: string, chunk: string): string {
-  const combined = current + chunk
-  return combined.length > MAX_SETUP_OUTPUT ? combined.slice(-MAX_SETUP_OUTPUT) : combined
+function appendBounded(current: string, chunk: string, limit: number): string {
+  if (limit <= 0) return ''
+  if (chunk.length >= limit) return chunk.slice(-limit)
+  const remaining = limit - chunk.length
+  return current.length > remaining ? current.slice(-remaining) + chunk : current + chunk
 }
 
-export async function runCommand(command: string, args: string[], options: { cwd: string; timeoutMs: number }): Promise<CommandResult> {
-  const { promise, resolve: resolveResult, reject } = Promise.withResolvers<CommandResult>()
-  const child = spawn(command, args, {
+type StdoutPump = { promise: Promise<string>; cancel(): Promise<void> }
+
+function collectStdout(stream: ReadableStream<Uint8Array>, limit: number): StdoutPump {
+  const reader = stream.getReader()
+  let released = false
+  const promise = (async () => {
+    const decoder = new TextDecoder()
+    let output = ''
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) {
+          output = appendBounded(output, decoder.decode(), limit)
+          return output
+        }
+        output = appendBounded(output, decoder.decode(value, { stream: true }), limit)
+      }
+    } finally {
+      released = true
+      reader.releaseLock()
+    }
+  })()
+  return {
+    promise,
+    async cancel() {
+      if (released) return
+      try {
+        await reader.cancel()
+      } catch {
+        return
+      }
+    }
+  }
+}
+
+function stopForCleanup(child: SpawnedProcess): Promise<SpawnExit | undefined> {
+  try {
+    return Promise.resolve(child.stop({ signal: 'SIGKILL' })).catch(() => undefined)
+  } catch {
+    return Promise.resolve(undefined)
+  }
+}
+
+export async function runCommand(
+  runner: ProcessSpawner,
+  command: string,
+  args: string[],
+  options: { cwd: string; timeoutMs: number; tailCharacters?: number }
+): Promise<CommandResult> {
+  const tailCharacters = options.tailCharacters ?? MAX_SETUP_OUTPUT
+  const child = runner.spawn([command, ...args], {
     cwd: options.cwd,
     env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: process.platform !== 'win32',
-    windowsHide: true
+    timeoutMs: options.timeoutMs,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'tail',
+    stderrTailBytes: tailCharacters * 4,
+    killGraceMs: 0
   })
-  let stdout = ''
-  let stderr = ''
-  let settled = false
-  const timer = setTimeout(() => {
-    terminate(child)
-    if (!settled) {
-      settled = true
-      reject(new Error(`command timed out after ${options.timeoutMs} ms`))
-    }
-  }, options.timeoutMs)
-  child.stdout?.setEncoding('utf8')
-  child.stderr?.setEncoding('utf8')
-  child.stdout?.on('data', (chunk: string) => { stdout = appendBounded(stdout, chunk) })
-  child.stderr?.on('data', (chunk: string) => { stderr = appendBounded(stderr, chunk) })
-  child.once('error', (failure) => {
-    clearTimeout(timer)
-    if (!settled) {
-      settled = true
-      reject(failure)
-    }
-  })
-  child.once('close', (code) => {
-    clearTimeout(timer)
-    if (!settled) {
-      settled = true
-      resolveResult({ code, stdout, stderr })
-    }
-  })
-  return promise
-}
 
-function terminate(child: ReturnType<typeof spawn>): void {
-  const pid = child.pid
-  if (!pid) return
+  let output: StdoutPump
   try {
-    if (process.platform !== 'win32') process.kill(-pid, 'SIGTERM')
-    else child.kill('SIGTERM')
-  } catch {
-    try { child.kill('SIGTERM') } catch { /* already gone */ }
+    output = collectStdout(child.stdout, tailCharacters)
+  } catch (cause) {
+    await stopForCleanup(child)
+    throw cause
+  }
+  let stdoutFailure: unknown
+  let stdoutFailed = false
+  const stdoutPromise = output.promise.catch((cause) => {
+    stdoutFailure = cause
+    stdoutFailed = true
+    throw cause
+  })
+
+  let timedOut = false
+  let forcedStop: Promise<SpawnExit | undefined> | undefined
+  const deadline = Promise.withResolvers<never>()
+  const timer = setTimeout(() => {
+    timedOut = true
+    forcedStop ??= stopForCleanup(child)
+    deadline.reject(new Error(`command timed out after ${options.timeoutMs} ms`))
+  }, options.timeoutMs)
+
+  let completion: [SpawnExit, string]
+  try {
+    completion = await Promise.race([
+      Promise.all([child.exited, stdoutPromise]),
+      deadline.promise
+    ])
+  } catch (cause) {
+    forcedStop ??= stopForCleanup(child)
+    await Promise.allSettled([forcedStop, output.cancel()])
+    if (stdoutFailed) throw stdoutFailure
+    if (timedOut) throw new Error(`command timed out after ${options.timeoutMs} ms`)
+    throw cause
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const [exit, stdout] = completion
+  if (exit.spawnError) throw new Error(exit.spawnError.message)
+  if (exit.stopped === 'timeout') throw new Error(`command timed out after ${options.timeoutMs} ms`)
+  if (exit.stopped === 'aborted') throw new Error('command was aborted')
+  if (exit.stopped === 'stop') throw new Error('command was stopped')
+  const stderr = child.stderrTail()
+  return {
+    code: exit.exitCode,
+    stdout,
+    stderr: tailCharacters <= 0 ? '' : stderr.slice(-tailCharacters)
   }
 }
 
@@ -136,11 +201,15 @@ function parseRoot(path: string): string {
   return current
 }
 
-export async function describePython(path: string, source: PythonEnvironment['source'] = 'selected'): Promise<PythonEnvironment> {
+export async function describePython(
+  runner: ProcessSpawner,
+  path: string,
+  source: PythonEnvironment['source'] = 'selected'
+): Promise<PythonEnvironment> {
   if (!path.trim()) throw new Error('Python executable path is required')
   const executable = isAbsolute(path) ? resolve(path) : path
   if (isAbsolute(executable) && !isExecutable(executable)) throw new Error(`Python is not executable: ${path}`)
-  const result = await runCommand(executable, ['-c', PROBE_CODE], { cwd: process.cwd(), timeoutMs: 10_000 })
+  const result = await runCommand(runner, executable, ['-c', PROBE_CODE], { cwd: process.cwd(), timeoutMs: 10_000 })
   if (result.code !== 0) throw new Error(`Python validation failed: ${result.stderr.trim() || result.stdout.trim() || `exit code ${result.code}`}`)
   let metadata: unknown
   try {
@@ -166,11 +235,11 @@ export async function describePython(path: string, source: PythonEnvironment['so
   }
 }
 
-export async function describeCandidates(candidates: PythonCandidate[]): Promise<PythonEnvironment[]> {
+export async function describeCandidates(runner: ProcessSpawner, candidates: PythonCandidate[]): Promise<PythonEnvironment[]> {
   const result: PythonEnvironment[] = []
   for (const candidate of candidates) {
     try {
-      result.push(await describePython(candidate.path, candidate.source))
+      result.push(await describePython(runner, candidate.path, candidate.source))
     } catch {
       // A candidate can disappear between discovery and probe; omit only that unusable interpreter.
     }
@@ -178,21 +247,26 @@ export async function describeCandidates(candidates: PythonCandidate[]): Promise
   return result
 }
 
-export async function installIpykernel(python: PythonEnvironment, cwd: string): Promise<{ python: PythonEnvironment; command: string }> {
+export async function installIpykernel(
+  runner: ProcessSpawner,
+  python: PythonEnvironment,
+  cwd: string
+): Promise<{ python: PythonEnvironment; command: string }> {
   if (python.externallyManaged) throw new Error('This Python is externally managed; create a workspace virtual environment instead.')
   if (!python.hasPip) {
-    const ensured = await runCommand(python.path, ['-m', 'ensurepip'], { cwd, timeoutMs: 600_000 })
+    const ensured = await runCommand(runner, python.path, ['-m', 'ensurepip'], { cwd, timeoutMs: 600_000 })
     if (ensured.code !== 0) throw new Error(`ensurepip failed: ${ensured.stderr.trim() || ensured.stdout.trim()}`)
   }
   const command = `${shellQuote(python.path)} -m pip install -U ipykernel`
-  const installed = await runCommand(python.path, ['-m', 'pip', 'install', '-U', 'ipykernel'], { cwd, timeoutMs: 600_000 })
+  const installed = await runCommand(runner, python.path, ['-m', 'pip', 'install', '-U', 'ipykernel'], { cwd, timeoutMs: 600_000 })
   if (installed.code !== 0) throw new Error(`${command}\n${installed.stderr.trim() || installed.stdout.trim()}`)
-  const verified = await describePython(python.path, python.source)
+  const verified = await describePython(runner, python.path, python.source)
   if (!verified.hasIpykernel) throw new Error(`ipykernel installation did not verify: ${installed.stderr.trim()}`)
   return { python: verified, command }
 }
 
 export async function createWorkspaceVenv(
+  runner: ProcessSpawner,
   selected: PythonEnvironment,
   notebookDir: string,
   rootPath: string
@@ -205,13 +279,13 @@ export async function createWorkspaceVenv(
   const venvPython = process.platform === 'win32' ? join(venvDir, 'Scripts', 'python.exe') : join(venvDir, 'bin', 'python')
   const commandParts: string[] = []
   if (!existsSync(venvPython)) {
-    const created = await runCommand(selected.path, ['-m', 'venv', venvDir], { cwd: workspaceRoot, timeoutMs: 120_000 })
+    const created = await runCommand(runner, selected.path, ['-m', 'venv', venvDir], { cwd: workspaceRoot, timeoutMs: 120_000 })
     if (created.code !== 0) throw new Error(`virtual environment creation failed: ${created.stderr.trim() || created.stdout.trim()}`)
     commandParts.push(`${shellQuote(selected.path)} -m venv ${shellQuote(venvDir)}`)
   }
-  const candidate = await describePython(venvPython, 'venv')
+  const candidate = await describePython(runner, venvPython, 'venv')
   if (!candidate.hasIpykernel) {
-    const installed = await installIpykernel(candidate, workspaceRoot)
+    const installed = await installIpykernel(runner, candidate, workspaceRoot)
     commandParts.push(installed.command)
     return { python: installed.python, path: venvDir, command: commandParts.join(' && ') }
   }

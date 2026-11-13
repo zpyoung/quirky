@@ -36,6 +36,8 @@ Bulk input is explicit: `fill --value-file <path>`, `eval --expression-file <pat
 
 Advanced automation adds history, semantic locators, keyboard/mouse and form operations, uploads/downloads, full-page screenshots/PDF, console/network/HAR, interception and page emulation. `exec` remains a closed typed command parser: it cannot launch or retarget the helper, close its session, change transport, or bypass ordinary page scoping.
 
+`intercept enable` holds matching requests on the selected managed page until `intercept disable` releases them. `intercept list` shows only pending requests, each with `pending: true`. List and disable remain available while a held navigation blocks another command. Re-enabling replaces the patterns without releasing requests already held. Each page holds at most 1,000 requests; further matches pass through. Watch uses the same queue, which survives stopping Watch. Closing a page, changing its profile or losing its browser discards held requests; patterns survive profile changes and browser loss.
+
 ```sh
 quirky browser full-screenshot --page <page-id> --format png --json
 quirky browser pdf --page <page-id> --json
