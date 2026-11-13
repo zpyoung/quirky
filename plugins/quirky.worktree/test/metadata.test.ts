@@ -192,6 +192,11 @@ describe('worktree unread event attribution', () => {
     const set = (params: Record<string, unknown>) =>
       call(client, 'quirky.worktree/set', { worktree: worktree.id, ...params }) as Promise<Worktree>
 
+    const { event: createdEvent, result: created } = await next(() =>
+      createWt(client, { repo: repo.id, name: 'event-shape' })
+    )
+    expect(createdEvent).toEqual({ repoId: repo.id, worktreeId: created.id })
+
     const { event: firstEvent, result: first } = await next(() =>
       set({ unread: false, unreadSource: 'notifications' })
     )
@@ -214,6 +219,11 @@ describe('worktree unread event attribution', () => {
       unread: false,
       unreadSource: 'notifications'
     })
+
+    const { event: markReadEvent, result: markRead } = await next(() => set({ unread: false }))
+    expect(markRead.unread).toBe(false)
+    expect(markRead).not.toHaveProperty('unreadSource')
+    expect(markReadEvent).toEqual({ repoId: repo.id, worktreeId: worktree.id, unread: false })
 
     const { event: normalEvent, result: normal } = await next(() => set({ unread: true }))
     expect(normal).not.toHaveProperty('unreadSource')
