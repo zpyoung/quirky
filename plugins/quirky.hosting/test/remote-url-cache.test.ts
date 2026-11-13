@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { execFile } from 'node:child_process'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
-import type { PluginContext, Worktree } from '@quirky/protocol'
+import type { PluginContext, ProcessRunner, Worktree } from '@quirky/protocol'
 import { createEnv, type HostingEnv } from '../src/env'
 
-const execFileAsync = promisify(execFile)
 const ORIGIN = 'https://github.com/test-owner/test-repo.git'
 const ENVIRONMENT_KEYS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'] as const
 
@@ -17,6 +15,7 @@ let linked = ''
 let env: HostingEnv | undefined
 let remoteSpawns = 0
 let spawnDelayMs = 0
+const processRunners: OwnedProcessRunner[] = []
 const savedEnvironment = new Map<string, string | undefined>()
 
 function git(cwd: string, ...args: string[]): void {
@@ -28,10 +27,11 @@ function worktree(path: string): Worktree {
   return { id: 'wt_000000000000', repoId: 'repo_00', path, kind: 'git' } as unknown as Worktree
 }
 
-function createContext(): PluginContext {
+function createContext(processRunner: ProcessRunner): PluginContext {
   const store = { get: () => undefined, run: () => undefined, all: () => [] }
   return {
     pluginId: 'quirky.hosting',
+    process: processRunner,
     openStore: () => store,
     error: (_kind: string, message: string) => new Error(message),
     log: () => undefined
@@ -39,13 +39,17 @@ function createContext(): PluginContext {
 }
 
 function createCountingEnv(): HostingEnv {
-  return createEnv(createContext(), {
-    exec: async (file, args, options) => {
-      if (args[0] === 'remote') remoteSpawns += 1
-      if (spawnDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, spawnDelayMs))
-      return execFileAsync(file, args, { ...options, encoding: 'utf8' })
+  const runner = createProcessRunner({ owner: `hosting-remote-cache-${processRunners.length}` })
+  processRunners.push(runner)
+  const processRunner: ProcessRunner = {
+    run: async (argv, options) => {
+      if (argv[0] === 'git' && argv[1] === 'remote') remoteSpawns += 1
+      // Keep local Git runs open while concurrent config stamps join their in-flight entries.
+      if (spawnDelayMs > 0 && argv[1] === 'remote') await new Promise((resolve) => setTimeout(resolve, spawnDelayMs))
+      return runner.run(argv, options)
     }
-  })
+  }
+  return createEnv(createContext(processRunner))
 }
 
 beforeEach(() => {
@@ -79,6 +83,7 @@ beforeEach(() => {
 afterEach(async () => {
   await env?.dispose()
   env = undefined
+  for (const runner of processRunners.splice(0).reverse()) await runner.dispose()
   for (const [key, value] of savedEnvironment) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value

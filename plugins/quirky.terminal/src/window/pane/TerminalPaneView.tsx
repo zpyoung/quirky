@@ -35,6 +35,15 @@ import { createKittyGraphics } from './kittyGraphics'
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
 const LINK_CLICK_SETTING_KEYS = ['link-click', 'link-middle-click'] as const
+const RESYNC_RESET_PREFIX = new Uint8Array([0x18, 0x1b, 0x5c, 0x1b, 0x63, 0x1b, 0x5b, 0x33, 0x4a])
+const MAX_RESYNC_RETRIES = 3
+
+function concatBytes(prefix: Uint8Array, bytes: Uint8Array): Uint8Array {
+  const combined = new Uint8Array(prefix.length + bytes.length)
+  combined.set(prefix)
+  combined.set(bytes, prefix.length)
+  return combined
+}
 
 
 /** xterm highlights at most this many matches; a count at the limit means there may be more. */
@@ -523,7 +532,13 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     let readOnly = false
     let disposed = false
     let streamId: number | null = null
+    let resyncingStreamId: number | null = null
     let unsubscribe: (() => void) | null = null
+    let lastResyncAt = -Infinity
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null
+    let resyncing = false
+    let pendingLag = false
+    let resyncFailures = 0
     const canSend = () => !readOnly && latest.current.interactive
     let inputClaim: Promise<void> | null = null
     let inputClaimAt = 0
@@ -805,6 +820,110 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     sentSize.current = { cols: term.cols, rows: term.rows }
 
     const detach = (id: number) => void context.call('quirky.terminal/detach', { streamId: id }).catch(() => {})
+    const writeResetReplay = (replay: string) => {
+      const combined = concatBytes(RESYNC_RESET_PREFIX, base64ToBytes(replay))
+      writeReplay({ write: (bytes, done) => graphics.write(bytes, true, done) }, combined, gate)
+    }
+    function subscribeStream(id: number) {
+      return context.onStream(id, (bytes) => graphics.write(bytes), { onLagged: () => handleLag(id) })
+    }
+    function handleLag(laggedStreamId: number): void {
+      if (disposed || readOnly || laggedStreamId !== streamId) return
+      unsubscribe?.()
+      unsubscribe = null
+      if (resyncing) {
+        pendingLag = true
+        return
+      }
+      if (resyncTimer !== null) return
+      resyncTimer = setTimeout(() => void runResync(), Math.max(250, lastResyncAt + 2_000 - Date.now()))
+    }
+    async function runResync(): Promise<void> {
+      resyncTimer = null
+      if (disposed || readOnly || streamId === null) return
+      const targetStreamId = streamId
+      resyncingStreamId = targetStreamId
+      streamId = null
+      resyncing = true
+      pendingLag = false
+      lastResyncAt = Date.now()
+      let resynced: { streamId: number; replay: string; live: boolean }
+      try {
+        resynced = await context.call('quirky.terminal/resync', {
+          streamId: targetStreamId,
+          historyLines: latest.current.settings.scrollback
+        }) as { streamId: number; replay: string; live: boolean }
+      } catch (error) {
+        resyncing = false
+        if (disposed) {
+          if (resyncingStreamId !== null) detach(resyncingStreamId)
+          resyncingStreamId = null
+          return
+        }
+        resyncingStreamId = null
+        if (readOnly) {
+          streamId = targetStreamId
+          return
+        }
+        const errorCode = error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined
+        if (errorCode === RpcErrorCode.NotFound) {
+          resyncFailures = 0
+          streamId = null
+          try {
+            const attached = await context.call('quirky.terminal/attach', {
+              session: sessionId,
+              cols: term.cols,
+              rows: term.rows,
+              historyLines: latest.current.settings.scrollback
+            }) as { streamId: number; replay: string; live: boolean }
+            if (disposed) {
+              detach(attached.streamId)
+              return
+            }
+            streamId = attached.streamId
+            writeResetReplay(attached.replay)
+            if (attached.live === false) {
+              readOnly = true
+              return
+            }
+            unsubscribe = subscribeStream(attached.streamId)
+          } catch (attachError) {
+            if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${attachError instanceof Error ? attachError.message : String(attachError)}\x1b[0m\r\n`)
+          }
+          return
+        }
+        resyncFailures += 1
+        if (resyncFailures <= MAX_RESYNC_RETRIES) {
+          streamId = targetStreamId
+          handleLag(targetStreamId)
+        } else {
+          streamId = null
+          detach(targetStreamId)
+          term.write(`\r\n\x1b[31mCould not resync: ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`)
+        }
+        return
+      }
+      resyncingStreamId = null
+      resyncing = false
+      resyncFailures = 0
+      if (disposed) {
+        detach(resynced.streamId)
+        return
+      }
+      writeResetReplay(resynced.replay)
+      if (resynced.live === false) {
+        readOnly = true
+        detach(resynced.streamId)
+        streamId = null
+        return
+      }
+      streamId = resynced.streamId
+      unsubscribe = subscribeStream(resynced.streamId)
+      if (pendingLag) {
+        pendingLag = false
+        handleLag(resynced.streamId)
+      }
+    }
     void extrasReady.then(() => disposed ? null : context.call('quirky.terminal/attach', {
       session: sessionId, cols: term.cols, rows: term.rows, historyLines: initial.scrollback
     }))
@@ -821,7 +940,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
           readOnly = true
           return
         }
-        unsubscribe = context.onStream(result.streamId, (bytes) => graphics.write(bytes))
+        unsubscribe = subscribeStream(result.streamId)
       })
       .catch((error: Error) => {
         if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${error.message}\x1b[0m\r\n`)
@@ -858,8 +977,16 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       systemTheme?.removeEventListener('change', systemChanged)
       observer.disconnect()
       unsubscribeEvents()
+      if (resyncTimer !== null) {
+        clearTimeout(resyncTimer)
+        resyncTimer = null
+      }
       unsubscribe?.()
       if (streamId !== null) detach(streamId)
+      if (resyncingStreamId !== null) {
+        detach(resyncingStreamId)
+        resyncingStreamId = null
+      }
       releaseFocusContext()
       textarea?.removeEventListener('focus', onTextareaFocus)
       textarea?.removeEventListener('blur', releaseFocusContext)
