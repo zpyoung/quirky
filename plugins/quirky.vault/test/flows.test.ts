@@ -19,11 +19,13 @@ afterEach(async () => {
   for (const rig of rigs.splice(0).reverse()) await rig.cleanup()
 })
 
-async function start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean } = {}): Promise<VaultRig> {
+async function start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean; scanBarrier?: boolean } = {}): Promise<VaultRig> {
   const rig = await VaultRig.start(options)
   rigs.push(rig)
   return rig
 }
+
+
 
 function recordOf(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -40,16 +42,12 @@ function waitForEvent(client: QuirkyClient, predicate: (event: QuirkyEvent) => b
   return promise
 }
 
-function scanProgress(event: QuirkyEvent, filePath: string): boolean {
-  if (event.type !== 'quirky.vault/scanProgress') return false
-  const data = recordOf(event.data)
-  return data?.phase === 'reading' && data.current === filePath
-}
-
 function results(response: SearchResponse): SearchResults {
   if (response.kind !== 'results') throw new Error(`expected search results, got ${response.kind}`)
   return response
 }
+
+
 
 function userRecord(sessionId: string, cwd: string, content: unknown, at: number): JsonRecord {
   return {
@@ -90,16 +88,14 @@ function largeTranscript(sessionId: string, finalMarker: string): JsonRecord[] {
 
 describe('vault public acceptance flows', () => {
   test('coalesced list callers cancel independently and a new scan generation wins after all consumers cancel', async () => {
-    const vault = await start()
+    const vault = await start({ scanBarrier: true })
+    const barrier = vault.scanBarrier
+    if (!barrier) throw new Error('scan barrier fixture was not enabled')
     const sessionId = 'flow-large-cancel-session'
     const sourcePath = await writeJsonlFixture(vault.sourceHome, 'claude', sessionId, largeTranscript(sessionId, 'initialscanfinalmarker'))
     const secondClient = await vault.h.connect('cli')
-    const targetProgressEvents: QuirkyEvent[] = []
-    const unlisten = vault.client.onEvent((event) => {
-      if (scanProgress(event, sourcePath)) targetProgressEvents.push(event)
-    })
 
-    const firstProgress = waitForEvent(vault.client, (event) => scanProgress(event, sourcePath))
+    await barrier.arm(sourcePath, ['list'])
     const firstOutcome = vault.client.callAny('quirky.vault/list', {
       host: 'local', agents: ['claude'], unlimited: true, requestToken: 'shared-caller-one'
     }).then(
@@ -109,48 +105,58 @@ describe('vault public acceptance flows', () => {
     const secondOutcome = secondClient.callAny('quirky.vault/list', {
       host: 'local', agents: ['claude'], unlimited: true, requestToken: 'shared-caller-two'
     }) as Promise<PublicListResult>
-    await firstProgress
+    // Public progress follows a 250 ms coalescing window; this barrier marks the real parse point.
+    await barrier.waitUntilBlocked('list')
+    expect(await barrier.listStarts()).toBe(1)
     const cancelledOne = await vault.call<{ cancelled: boolean }>('cancelList', { requestToken: 'shared-caller-one' })
     expect(cancelledOne.cancelled).toBe(true)
     const firstSettled = await firstOutcome
     expect(firstSettled.kind).toBe('rejected')
+    await barrier.release()
 
     const secondResult = await secondOutcome
     const secondSession = secondResult.sessions.find((session) => session.sessionId === sessionId)
     if (!secondSession) throw new Error(`shared scan did not include ${sessionId}`)
     expect(secondSession.previewMessages.some((message) => message.text.includes('initialscanfinalmarker'))).toBe(true)
-    expect(targetProgressEvents.length).toBe(1)
+    expect(await barrier.listStarts()).toBe(1)
 
     const supersededMarker = 'supersededscanmarker'
     await writeJsonlFixture(vault.sourceHome, 'claude', sessionId, largeTranscript(sessionId, supersededMarker))
-    const allCancelledProgress = waitForEvent(vault.client, (event) => scanProgress(event, sourcePath))
+    await barrier.arm(sourcePath, ['list'])
     const allCancelledOutcome = vault.client.callAny('quirky.vault/list', {
       host: 'local', agents: ['claude'], unlimited: true, force: true, requestToken: 'all-consumers-cancelled'
     }).then(
       (value) => ({ kind: 'fulfilled' as const, value }),
       (error: unknown) => ({ kind: 'rejected' as const, error })
     )
-    await allCancelledProgress
+    await barrier.waitUntilBlocked('list')
+    expect(await barrier.listStarts()).toBe(2)
     const cancelledAll = await vault.call<{ cancelled: boolean }>('cancelList', { requestToken: 'all-consumers-cancelled' })
     expect(cancelledAll.cancelled).toBe(true)
+    expect((await allCancelledOutcome).kind).toBe('rejected')
+    // Wait for the aborted parser gate to settle before arming the replacement generation.
+    await barrier.release()
 
     const finalMarker = 'newgenerationfinalmarker'
     await writeJsonlFixture(vault.sourceHome, 'claude', sessionId, [
       userRecord(sessionId, '/tmp/vault-cancellation-worktree', 'replacement transcript user turn', Date.UTC(2026, 9, 2, 10, 0, 0)),
       assistantRecord(sessionId, '/tmp/vault-cancellation-worktree', finalMarker, Date.UTC(2026, 9, 2, 10, 0, 1))
     ])
+    await barrier.arm(sourcePath, ['list'])
     const currentPromise = vault.call<PublicListResult>('list', {
       host: 'local', agents: ['claude'], unlimited: true, force: true, requestToken: 'new-generation'
     })
-    expect((await allCancelledOutcome).kind).toBe('rejected')
+    await barrier.waitUntilBlocked('list')
+    expect(await barrier.listStarts()).toBe(3)
+    await barrier.release()
     const current = await currentPromise
     const currentSession = current.sessions.find((session) => session.sessionId === sessionId)
     if (!currentSession) throw new Error(`new scan generation lost ${sessionId}`)
     expect(currentSession.previewMessages.some((message) => message.text.includes(finalMarker))).toBe(true)
     expect(currentSession.previewMessages.some((message) => message.text.includes(supersededMarker))).toBe(false)
-    unlisten()
     secondClient.close()
   })
+
   test('unlimited view depth exceeds the scanner default while an explicit limit still wins', async () => {
     const vault = await start()
     const existing = await vault.call<PublicListResult>('list', {
