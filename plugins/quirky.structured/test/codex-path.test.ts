@@ -6,6 +6,8 @@ import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/
 import { resolveCodexThroughLoginShell } from '../codex-path'
 
 const clock = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
+const realSetTimeout = globalThis.setTimeout
+const realClearTimeout = globalThis.clearTimeout
 
 const dirs: string[] = []
 const ownedRunners: OwnedProcessRunner[] = []
@@ -122,19 +124,23 @@ describe('resolveCodexThroughLoginShell', () => {
   }
 
   test('aborts a runner call that resolves only after its signal is aborted', async () => {
-    jest.useFakeTimers()
-    const { runner, calls } = abortingRunner()
+    const { promise: guard, reject } = Promise.withResolvers<never>()
+    const guardTimer = realSetTimeout(() => reject(new Error('lookup did not finish within 900ms')), 900)
     try {
+      jest.useFakeTimers()
+      const { runner, calls } = abortingRunner()
       const lookup = resolveCodexThroughLoginShell(runner, '/bin/zsh')
+      const boundedLookup = Promise.race([lookup, guard])
       clock.advanceTimersByTime(29999)
       expect(calls[0]?.options?.signal?.aborted).toBe(false)
       clock.advanceTimersByTime(1)
-      jest.useRealTimers()
-      await expect(lookup).rejects.toThrow('could not find the codex executable on the login shell PATH')
+      const abortedAtDeadline = calls[0]?.options?.signal?.aborted
+      await expect(boundedLookup).rejects.toThrow('could not find the codex executable on the login shell PATH')
       assertCall(calls, '/bin/zsh')
-      expect(calls[0]?.options?.signal?.aborted).toBe(true)
+      expect(abortedAtDeadline).toBe(true)
     } finally {
       jest.useRealTimers()
+      realClearTimeout(guardTimer)
     }
   })
 
