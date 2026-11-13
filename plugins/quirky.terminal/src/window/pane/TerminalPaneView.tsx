@@ -87,6 +87,8 @@ export type TerminalPaneProps = {
   active: boolean
   /** The terminal must not reclaim focus while the embedded dock owns keyboard input. */
   suppressAutoFocus?: boolean
+  /** False when the workspace coordinates selection focus explicitly; imperative focus remains available. */
+  autoFocus?: boolean
   /** False once the process has exited, so keystrokes are not sent to a dead session. */
   interactive: boolean
   /** True while a divider or panel drag is resizing the pane; the shell is told the final size once the drag ends. */
@@ -965,7 +967,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (event.type === 'theme.changed') applyTheme()
     })
 
-    if (latest.current.active && !latest.current.suppressAutoFocus) term.focus()
+    if (latest.current.active && latest.current.autoFocus !== false && !latest.current.suppressAutoFocus) term.focus()
 
     return () => {
       disposed = true
@@ -1066,8 +1068,9 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     runtime.current?.syncOsc52()
   }, [settings['allow-osc52']])
 
+  // lifting selection suppression is not a focus request
   useEffect(() => {
-    if (active && !suppressAutoFocus) runtime.current?.term.focus()
+    if (active && latest.current.autoFocus !== false && !suppressAutoFocus) runtime.current?.term.focus()
   }, [active, suppressAutoFocus])
 
   const wasDragging = useRef(dragging)

@@ -179,13 +179,18 @@ export class WorkspaceController {
   private unsubscribes: (() => void)[] = []
   private settingOverrides: Record<string, unknown> = {}
   private stopped = false
-  private loading = false
+  private loadPromise: Promise<void> | null = null
   private reloadAfter = false
+  private reloadEnsure = false
   private loadingSessions = false
   private wasReconnecting = false
   private guardUntil = 0
   private startSession: string | undefined
   private didFocusInput = false
+  private selectionSeq = 0
+  private selectionMutationsPending = 0
+  private selectionRefocusRevision: number | null = null
+  private selectionMutation: Promise<void> = Promise.resolve()
   private lastReport = ''
   private mountedAccessories: Record<string, string[]> = {}
   /** Receives the view report whenever it changes. */
@@ -289,6 +294,7 @@ export class WorkspaceController {
 
   stop(): void {
     this.stopped = true
+    this.selectionSeq += 1
     this.pendingFocusPane = null
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe()
     this.listeners.clear()
@@ -308,22 +314,39 @@ export class WorkspaceController {
     return this.load(false)
   }
 
-  private async load(ensure: boolean): Promise<void> {
-    if (this.loading) {
+  private load(ensure: boolean): Promise<void> {
+    if (this.stopped) return Promise.resolve()
+    if (this.loadPromise) {
       this.reloadAfter = true
-      return
+      this.reloadEnsure ||= ensure
+      return this.loadPromise
     }
-    this.loading = true
-    try {
-      let first = ensure
+
+    const run = async () => {
+      let nextEnsure = ensure
       do {
         this.reloadAfter = false
-        await this.loadOnce(first)
-        first = false
+        this.reloadEnsure = false
+        await this.loadOnce(nextEnsure)
+        nextEnsure = this.reloadEnsure
       } while (this.reloadAfter && !this.stopped)
-    } finally {
-      this.loading = false
     }
+    const finish = () => {
+      this.loadPromise = null
+      if (this.stopped || this.didFocusInput || this.startSession === undefined) return
+      this.didFocusInput = true
+      const seq = ++this.selectionSeq
+      void this.selectRequestedSession(this.startSession, seq)
+    }
+    const promise = Promise.resolve().then(run).then(
+      () => finish(),
+      (error) => {
+        finish()
+        throw error
+      }
+    )
+    this.loadPromise = promise
+    return promise
   }
 
   private async loadOnce(ensure: boolean): Promise<void> {
@@ -367,23 +390,41 @@ export class WorkspaceController {
   }
 
   private afterWorkspace(workspace: Workspace): void {
-    if (!this.didFocusInput && this.startSession !== undefined) {
-      this.didFocusInput = true
-      void this.openRequestedSession(workspace, this.startSession)
-    }
     const unknown = groupsInOrder(workspace.root).some((group) =>
       group.tabs.some((tab) => isTerminalTab(tab) && paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
     )
     if (unknown) void this.reloadSessions()
   }
 
-  private async openRequestedSession(workspace: Workspace, sessionId: string): Promise<void> {
+  selectSession(session: string | undefined): void {
+    if (this.stopped) return
+    const seq = ++this.selectionSeq
+    this.startSession = session
+    this.didFocusInput = true
+    this.pendingFocusPane = null
+    this.set({ selectionError: null })
+    if (session === undefined) {
+      if (!this.floating && (!this.ws || !hasTabs(this.ws))) void this.load(true)
+      return
+    }
+    void this.selectRequestedSession(session, seq)
+  }
+
+  private isCurrentSelection(seq: number): boolean {
+    return !this.stopped && this.selectionSeq === seq
+  }
+
+  private async selectRequestedSession(sessionId: string, seq: number): Promise<void> {
+    if (!this.isCurrentSelection(seq)) return
+    if (!this.ws || this.loadPromise) await this.load(false)
+    if (!this.isCurrentSelection(seq)) return
+
     let session = this.state.sessions[sessionId]
     if (!session) {
       try {
         session = (await this.context.call('quirky.session/get', { session: sessionId })) as Session
       } catch (error) {
-        if (this.stopped) return
+        if (!this.isCurrentSelection(seq)) return
         const message = hasCode(error, RpcErrorCode.NotFound)
           ? `Session ${sessionId} was not found.`
           : `Could not open session ${sessionId}: ${messageOf(error)}`
@@ -391,52 +432,81 @@ export class WorkspaceController {
         return
       }
     }
-    if (this.stopped) return
+    if (!this.isCurrentSelection(seq)) return
+
+    const workspace = this.ws
+    if (!workspace) return
     if (session.worktreeId !== workspace.id) {
       this.set({ selectionError: `Session ${sessionId} belongs to a different worktree.` })
       return
     }
-
     this.set({ sessions: { ...this.state.sessions, [sessionId]: session }, selectionError: null })
-    const current = this.ws ?? workspace
-    const existing = locateSession(current, sessionId)
-    if (existing) {
-      await this.focusRequestedSession(current, sessionId)
-      return
-    }
+    this.enqueueSelectionMutation(async () => {
+      if (!this.isCurrentSelection(seq)) return
+      const current = this.ws
+      if (!current) return
 
-    const group = groupsInOrder(current.root)[0]
-    if (!group) {
-      this.set({ selectionError: `No workspace group is available for session ${sessionId}.` })
-      return
-    }
+      const existing = locateSession(current, sessionId)
+      if (existing) {
+        await this.focusRequestedSession(sessionId, seq)
+        return
+      }
 
-    let result: { workspace?: Workspace } | undefined
-    try {
-      result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, { group: group.id, session: sessionId })) as
-        | { workspace?: Workspace }
-        | undefined
-    } catch (error) {
+      const targetGroup = groupsInOrder(current.root)[0]
+      if (!targetGroup) {
+        if (this.isCurrentSelection(seq)) this.set({ selectionError: `No workspace group is available for session ${sessionId}.` })
+        return
+      }
+
+      let result: { workspace?: Workspace } | undefined
+      try {
+        result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, { group: targetGroup.id, session: sessionId })) as
+          | { workspace?: Workspace }
+          | undefined
+      } catch (error) {
+        if (this.isCurrentSelection(seq)) this.set({ selectionError: `Could not open session ${sessionId}: ${messageOf(error)}` })
+        return
+      }
       if (this.stopped) return
-      this.set({ selectionError: `Could not open session ${sessionId}: ${messageOf(error)}` })
-      return
-    }
-    if (this.stopped) return
-    if (!result?.workspace) {
-      this.set({ selectionError: `Could not open session ${sessionId}.` })
-      return
-    }
-    this.apply(result.workspace)
-    const adopted = locateSession(this.ws ?? result.workspace, sessionId)
-    if (!adopted) {
-      this.set({ selectionError: `Could not select session ${sessionId}.` })
-      return
-    }
-    await this.focusRequestedSession(this.ws ?? result.workspace, sessionId)
+      if (result?.workspace) {
+        this.apply(result.workspace)
+        this.selectionRefocusRevision = this.ws?.revision ?? result.workspace.revision
+      }
+      if (!this.isCurrentSelection(seq)) return
+      if (!result?.workspace) {
+        this.set({ selectionError: `Could not open session ${sessionId}.` })
+        return
+      }
+      const adopted = this.ws ? locateSession(this.ws, sessionId) : null
+      if (!adopted) {
+        this.set({ selectionError: `Could not select session ${sessionId}.` })
+        return
+      }
+      await this.focusRequestedSession(sessionId, seq)
+    }, true)
   }
 
-  private async focusRequestedSession(workspace: Workspace, sessionId: string): Promise<void> {
-    const loc = locateSession(workspace, sessionId)
+  private enqueueSelectionMutation<T>(mutation: () => Promise<T>, selection = false): Promise<T> {
+    if (selection) this.selectionMutationsPending += 1
+    const run = async () => {
+      try {
+        return await mutation()
+      } finally {
+        if (selection) this.selectionMutationsPending -= 1
+      }
+    }
+    const next = this.selectionMutation.then(run, run)
+    this.selectionMutation = next.then(
+      () => undefined,
+      () => undefined
+    )
+    return next
+  }
+
+  private async focusRequestedSession(sessionId: string, seq: number): Promise<void> {
+    if (!this.isCurrentSelection(seq)) return
+    const workspace = this.ws
+    const loc = workspace ? locateSession(workspace, sessionId) : null
     if (!loc) {
       this.set({ selectionError: `Could not select session ${sessionId}.` })
       return
@@ -445,13 +515,48 @@ export class WorkspaceController {
     if (
       loc.tab.activePane === loc.leaf.id &&
       loc.group.activeTab === loc.tab.id &&
-      workspace.activeGroup === loc.group.id &&
+      workspace?.activeGroup === loc.group.id &&
       shown
     ) {
+      this.focusPaneHandle(loc.leaf.id)
       return
     }
-    const focused = await this.run('focusPane', { pane: loc.leaf.id }, 'select the session')
-    if (!focused && !this.stopped) this.set({ selectionError: `Could not select session ${sessionId}.` })
+
+    let result: { workspace?: Workspace } | undefined
+    try {
+      result = (await this.context.call(`${TERMINAL_PREFIX}focusPane`, { pane: loc.leaf.id })) as
+        | { workspace?: Workspace }
+        | undefined
+    } catch (error) {
+      if (!this.isCurrentSelection(seq)) return
+      if (hasCode(error, RpcErrorCode.Conflict)) void this.refresh()
+      else this.context.toast('Could not select the session', messageOf(error))
+      this.set({ selectionError: `Could not select session ${sessionId}.` })
+      return
+    }
+    if (this.stopped) return
+    if (result?.workspace) {
+      this.apply(result.workspace)
+      this.selectionRefocusRevision = this.ws?.revision ?? result.workspace.revision
+    }
+    if (!this.isCurrentSelection(seq)) return
+    const current = this.ws
+    const selected = current ? locateSession(current, sessionId) : null
+    if (!selected) {
+      this.set({ selectionError: `Could not select session ${sessionId}.` })
+      return
+    }
+    this.focusPaneHandle(selected.leaf.id)
+  }
+
+  private focusPaneHandle(paneId: string): void {
+    const handle = this.handles.get(paneId)
+    if (!handle) {
+      this.pendingFocusPane = paneId
+      return
+    }
+    this.pendingFocusPane = null
+    handle.focus()
   }
 
   private async reloadSessions(): Promise<void> {
@@ -531,6 +636,7 @@ export class WorkspaceController {
   private apply(workspace: Workspace): void {
     const held = this.state.workspace
     if (held && workspace.revision < held.revision) return
+    if (this.selectionRefocusRevision !== null && workspace.revision > this.selectionRefocusRevision) this.selectionRefocusRevision = null
     if (this.pendingFocusPane !== null && !locatePane(workspace, this.pendingFocusPane)) this.pendingFocusPane = null
     this.set({ workspace, status: 'ready', preview: null })
     this.afterWorkspace(workspace)
@@ -548,7 +654,9 @@ export class WorkspaceController {
   }
 
   setPaneState(paneId: string, report: PaneReport): void {
+    if (this.stopped) return
     this.set({ paneStates: { ...this.state.paneStates, [paneId]: report } })
+    this.focusPendingPane(paneId)
   }
 
   setDockState(paneId: string, dock: DockState): void {
@@ -609,11 +717,19 @@ export class WorkspaceController {
     handle.scrollToBottom()
   }
 
+  /** Selection RPC results may update layout without authorizing automatic terminal focus. */
+  get suppressLayoutAutoFocus(): boolean {
+    return this.selectionMutationsPending > 0 || this.selectionRefocusRevision === this.ws?.revision
+  }
+
   /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field or dock owner keeps it. */
   refocus(): void {
     const { menu, dialog, rename } = this.state
-    if (menu || dialog || rename || !this.ws) return
-    const pane = focusedPaneOf(this.ws)?.leaf.id
+    const workspace = this.ws
+    if (menu || dialog || rename || !workspace || this.selectionMutationsPending > 0) return
+    if (this.selectionRefocusRevision === workspace.revision) return
+    this.selectionRefocusRevision = null
+    const pane = focusedPaneOf(workspace)?.leaf.id
     const dock = pane ? this.state.dockStates[pane] : undefined
     const host = pane ? this.state.dockHosts[pane] : undefined
     if (dock?.enabled && dock.supported && dock.docked && dock.mounted && host?.mounted && !dock.passthrough) return
@@ -739,29 +855,44 @@ export class WorkspaceController {
   }
 
   async focusPane(paneId: string): Promise<void> {
-    const ws = this.ws
-    const loc = ws ? locatePane(ws, paneId) : null
-    if (!ws || !loc) return
-    const shown = loc.tab.expandedPane === null || loc.tab.expandedPane === paneId
-    if (loc.tab.activePane === paneId && loc.group.activeTab === loc.tab.id && ws.activeGroup === loc.group.id && shown) return
-    await this.run('focusPane', { pane: paneId }, 'focus the pane')
+    const current = this.ws
+    const focused = current ? locatePane(current, paneId) : null
+    if (!current || !focused || this.stopped) return
+    const visible = focused.tab.expandedPane === null || focused.tab.expandedPane === paneId
+    // autofocus reports the applied layout, not a new selection to replay after queued input
+    if (focused.tab.activePane === paneId && focused.group.activeTab === focused.tab.id && current.activeGroup === focused.group.id && visible) return
+    await this.enqueueSelectionMutation(async () => {
+      if (this.stopped) return
+      const ws = this.ws
+      const loc = ws ? locatePane(ws, paneId) : null
+      if (!ws || !loc) return
+      const shown = loc.tab.expandedPane === null || loc.tab.expandedPane === paneId
+      if (loc.tab.activePane === paneId && loc.group.activeTab === loc.tab.id && ws.activeGroup === loc.group.id && shown) return
+      await this.run('focusPane', { pane: paneId }, 'focus the pane')
+    })
   }
 
   /** Activates a pane through the daemon, then requests native focus, a scroll to bottom and a visible flash. */
   async focusPaneForCommand(paneId: string): Promise<boolean> {
-    const workspace = await this.run('focusPane', { pane: paneId }, 'focus the pane')
-    if (!workspace) return false
-    const loc = locatePane(workspace, paneId)
-    if (!loc || this.state.sessions[loc.leaf.session]?.kind === 'structured') return false
-    this.pendingFocusPane = paneId
-    this.set({ focusFlash: { pane: paneId, token: ++this.focusFlashToken } })
-    this.focusPendingPane(paneId)
-    return true
+    return this.enqueueSelectionMutation(async () => {
+      if (this.stopped) return false
+      const workspace = await this.run('focusPane', { pane: paneId }, 'focus the pane')
+      if (!workspace) return false
+      const loc = locatePane(workspace, paneId)
+      if (!loc || this.state.sessions[loc.leaf.session]?.kind === 'structured') return false
+      this.pendingFocusPane = paneId
+      this.set({ focusFlash: { pane: paneId, token: ++this.focusFlashToken } })
+      this.focusPendingPane(paneId)
+      return true
+    })
   }
 
-  private async cycleFocus(offset: 1 | -1): Promise<void> {
-    const at = this.ws ? focusedTabOf(this.ws) : null
-    if (at && isTerminalTab(at.tab)) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
+  private cycleFocus(offset: 1 | -1): Promise<void> {
+    return this.enqueueSelectionMutation(async () => {
+      if (this.stopped) return
+      const at = this.ws ? focusedTabOf(this.ws) : null
+      if (at && isTerminalTab(at.tab)) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
+    })
   }
 
   focusNext(): Promise<void> {
@@ -1247,15 +1378,18 @@ export class WorkspaceController {
         })) as Session)
         startedSession = session
         if (this.stopped) return
-        const targetGroup = group ?? this.ws?.activeGroup
-        const result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, {
-          group: targetGroup,
-          session: session.id
-        })) as { workspace?: Workspace } | undefined
-        if (this.stopped) return
-        if (!result?.workspace) throw new Error(`Could not adopt session ${session.id}.`)
-        this.set({ sessions: { ...this.state.sessions, [session.id]: this.state.sessions[session.id] ?? session } })
-        this.apply(result.workspace)
+        await this.enqueueSelectionMutation(async () => {
+          if (this.stopped) return
+          const targetGroup = group ?? this.ws?.activeGroup
+          const result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, {
+            group: targetGroup,
+            session: session.id
+          })) as { workspace?: Workspace } | undefined
+          if (this.stopped) return
+          if (!result?.workspace) throw new Error(`Could not adopt session ${session.id}.`)
+          this.set({ sessions: { ...this.state.sessions, [session.id]: this.state.sessions[session.id] ?? session } })
+          this.apply(result.workspace)
+        })
       } else {
         const spec = { ...(group === null ? {} : { group }), agent: request.agent, ...(text === '' ? {} : { prompt: text }) }
         const result = (await this.context.call(`${TERMINAL_PREFIX}newTab`, { workspace: this.workspaceId, ...spec })) as { workspace?: Workspace } | undefined

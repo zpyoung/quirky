@@ -377,6 +377,7 @@ export function DockHost(props: Props) {
           context={context}
           sessionId={sessionId}
           active={active}
+          autoFocus={!controller.suppressLayoutAutoFocus}
           dragging={workspaceDragging || resize !== null}
           suppressAutoFocus={suppressTerminalFocus}
           onState={terminalProps.onState}

@@ -3075,3 +3075,302 @@ test('an auxiliary view context reads and updates its own daemon route without c
     params: { windowId: route.windowId, id: 'command:acme.dashboard/openActivityThread', args: { worktreeId: 'worktree-1' } }
   }])
 })
+
+type MountWithInput = (() => void) & { updateInput?: (input: unknown) => boolean }
+
+const mountWithInput = (host: WindowPluginHost, id: string, input?: unknown): MountWithInput =>
+  host.mount(id, element(), { input }) as MountWithInput
+
+test('a view mount accepts and declines input updates without taking ownership of cleanup', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  const received: unknown[] = []
+  const updates: unknown[] = []
+  let cleanups = 0
+  t.useModule(NOTES, recording([PAGE], () => (_el: unknown, props: unknown) => {
+    received.push(props)
+    const cleanup = () => cleanups++
+    return Object.assign(cleanup, {
+      updateInput(input: unknown) {
+        updates.push(input)
+        return (input as { same?: boolean } | null)?.same === true
+      }
+    })
+  }).module)
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE, { step: 1 })
+  expect(typeof unmount.updateInput).toBe('function')
+  expect(state(t).slots[PAGE]).toEqual({ status: 'loading' })
+  await settled(t, PAGE)
+  expect(received).toEqual([{ input: { step: 1 }, report: expect.any(Function) }])
+
+  const accepted = { same: true, step: 2 }
+  const declined = { same: false, step: 3 }
+  expect(unmount.updateInput!(accepted)).toBe(true)
+  expect(unmount.updateInput!(declined)).toBe(false)
+  expect(updates).toEqual([accepted, declined])
+  expect(cleanups).toBe(0)
+
+  unmount()
+  expect(cleanups).toBe(1)
+})
+
+test('a view mount without an updater returns false for undefined and plain cleanup results', async () => {
+  const idWithoutCleanup = 'view:acme.notes/empty'
+  const idWithCleanup = 'view:acme.notes/plain'
+  const t = setup(makeModel({ views: [view(NOTES, 'empty'), view(NOTES, 'plain')] }))
+  let cleanups = 0
+  t.useModule(NOTES, recording([idWithoutCleanup, idWithCleanup], (id) => () => {
+    if (id === idWithoutCleanup) return undefined
+    return () => cleanups++
+  }).module)
+  await t.host.refresh()
+
+  const empty = mountWithInput(t.host, idWithoutCleanup)
+  const plain = mountWithInput(t.host, idWithCleanup)
+  await Promise.all([settled(t, idWithoutCleanup), settled(t, idWithCleanup)])
+
+  expect(empty.updateInput!({ step: 2 })).toBe(false)
+  expect(plain.updateInput!({ step: 2 })).toBe(false)
+  expect(cleanups).toBe(0)
+  plain()
+  expect(cleanups).toBe(1)
+  empty()
+})
+
+test('a throwing view input updater is logged and declined without releasing the mount', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  let cleanups = 0
+  t.useModule(NOTES, recording([PAGE], () => () => Object.assign(
+    () => cleanups++,
+    { updateInput() { throw new Error('boom') } }
+  )).module)
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE, { step: 1 })
+  await settled(t, PAGE)
+  expect(unmount.updateInput!({ step: 2 })).toBe(false)
+  expect(t.logs).toContain('acme.notes: updateInput failed: boom')
+  expect(cleanups).toBe(0)
+
+  unmount()
+  expect(cleanups).toBe(1)
+})
+
+test('view input updates during module loading coalesce to the latest input', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  const importGate = gate()
+  const received: unknown[] = []
+  t.useModule(NOTES, async () => {
+    await importGate.opened
+    return recording([PAGE], () => (_el: unknown, props: unknown) => {
+      received.push(props)
+      return undefined
+    }).module
+  })
+  await t.host.refresh()
+  await until(() => t.imports.length === 1)
+
+  const unmount = mountWithInput(t.host, PAGE, { step: 1 })
+  expect(state(t).slots[PAGE]).toEqual({ status: 'loading' })
+  expect(unmount.updateInput!({ step: 2 })).toBe(true)
+  expect(unmount.updateInput!({ step: 3 })).toBe(true)
+  expect(received).toEqual([])
+
+  importGate.open()
+  await settled(t, PAGE)
+  expect(received).toEqual([{ input: { step: 3 }, report: expect.any(Function) }])
+  expect(unmount.updateInput!({ step: 4 })).toBe(false)
+  unmount()
+})
+
+test('failed view loads, missing providers, throwing mounts, and missing contributions never accept input', async () => {
+  const loadId = 'view:acme.load/page'
+  const activationId = 'view:acme.activation/page'
+  const missingProviderId = 'view:acme.missing/page'
+  const mountFailureId = 'view:acme.throw/page'
+  const absentId = 'view:acme.absent/page'
+  const t = setup(makeModel({
+    views: [
+      view('acme.load', 'page'),
+      view('acme.activation', 'page'),
+      view('acme.missing', 'page'),
+      view('acme.throw', 'page')
+    ]
+  }))
+  t.useModule('acme.activation', {
+    activate() {
+      throw new Error('activation failed')
+    }
+  })
+  t.useModule('acme.missing', { activate() {} })
+  t.useModule('acme.throw', recording([mountFailureId], () => () => {
+    throw new Error('mount failed')
+  }).module)
+  await t.host.refresh()
+
+  const load = mountWithInput(t.host, loadId)
+  const activation = mountWithInput(t.host, activationId)
+  const missingProvider = mountWithInput(t.host, missingProviderId)
+  const mountFailure = mountWithInput(t.host, mountFailureId)
+  const absent = mountWithInput(t.host, absentId)
+  await Promise.all([
+    settled(t, loadId),
+    settled(t, activationId),
+    settled(t, missingProviderId),
+    settled(t, mountFailureId)
+  ])
+
+  for (const [id, mount] of [
+    [loadId, load],
+    [activationId, activation],
+    [missingProviderId, missingProvider],
+    [mountFailureId, mountFailure],
+    [absentId, absent]
+  ] as const) {
+    expect(state(t).slots[id]?.status).toBe('error')
+    expect(mount.updateInput!({ step: 2 })).toBe(false)
+    mount()
+  }
+})
+
+test('released view mounts reject input without calling the plugin updater', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  let updaterCalls = 0
+  let cleanups = 0
+  t.useModule(NOTES, recording([PAGE], () => () => Object.assign(
+    () => cleanups++,
+    { updateInput() { updaterCalls++; return true } }
+  )).module)
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE)
+  await settled(t, PAGE)
+  unmount()
+  expect(unmount.updateInput!({ step: 2 })).toBe(false)
+  expect(updaterCalls).toBe(0)
+  expect(cleanups).toBe(1)
+})
+
+test('owner, contribution module, module URL, and API changes invalidate old view updaters', async () => {
+  const cases: {
+    name: string
+    nextModel: (model: UiModel) => UiModel
+  }[] = [
+    {
+      name: 'owner',
+      nextModel: () => makeModel({ views: [{ ...view('acme.other', 'page'), id: PAGE }] })
+    },
+    {
+      name: 'contribution module',
+      nextModel: (model) => makeModel({
+        views: [{ ...model.views[0]!, module: '/plugins/acme.notes/other.js' }],
+        modules: model.modules
+      })
+    },
+    {
+      name: 'module URL',
+      nextModel: (model) => makeModel({
+        views: model.views,
+        modules: {
+          ...model.modules,
+          [NOTES]: { ...model.modules[NOTES]!, url: '/plugins/acme.notes/other-ui.js' }
+        }
+      })
+    },
+    {
+      name: 'module API version',
+      nextModel: (model) => makeModel({
+        views: model.views,
+        modules: { ...model.modules, [NOTES]: { ...model.modules[NOTES]!, apiVersion: '1.0.0' } }
+      })
+    }
+  ]
+
+  for (const staleCase of cases) {
+    const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+    let updaterCalls = 0
+    let cleanups = 0
+    t.useModule(NOTES, recording([PAGE], () => () => Object.assign(
+      () => cleanups++,
+      { updateInput() { updaterCalls++; return true } }
+    )).module)
+    await t.host.refresh()
+    const unmount = mountWithInput(t.host, PAGE)
+    await settled(t, PAGE)
+
+    t.setModel(staleCase.nextModel(state(t).model!))
+    await t.host.refresh()
+
+    expect(unmount.updateInput!({ reason: staleCase.name })).toBe(false)
+    expect(updaterCalls).toBe(0)
+    expect(cleanups).toBe(1)
+    unmount()
+    t.host.stop()
+  }
+})
+
+test('a provide breach invalidates a mounted view updater before it can accept another input', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  let context!: UiPluginContext
+  let updaterCalls = 0
+  let cleanups = 0
+  t.useModule(NOTES, {
+    activate(next) {
+      context = next
+      context.provide(PAGE, () => Object.assign(
+        () => cleanups++,
+        {
+          updateInput() {
+            updaterCalls++
+            try {
+              context.provide('command:acme.notes/undeclared', () => {})
+            } catch {}
+            return true
+          }
+        }
+      ))
+    }
+  })
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE)
+  await settled(t, PAGE)
+  expect(unmount.updateInput!({ step: 2 })).toBe(false)
+  expect(unmount.updateInput!({ step: 3 })).toBe(false)
+  expect(updaterCalls).toBe(1)
+  expect(cleanups).toBe(1)
+  expect(state(t).slots[PAGE]?.status).toBe('error')
+})
+
+test('non-view mounts reject input without invoking an attached updater', async () => {
+  const entries = [
+    section(NOTES, 'list'),
+    panel(NOTES, 'panel'),
+    overlay(NOTES, 'overlay'),
+    slot('status-bar', NOTES, 'status'),
+    slot('settings-section', NOTES, 'settings'),
+    slot('activity-item', NOTES, 'activity')
+  ]
+  const ids = entries.map((entry) => entry.id)
+  const t = setup(makeModel({
+    sidebarSections: [entries[0]!],
+    panels: [entries[1]!],
+    overlays: [entries[2]!],
+    statusBars: [entries[3]!],
+    settingsSections: [entries[4]!],
+    activityItems: [entries[5]!]
+  }))
+  let updaterCalls = 0
+  t.useModule(NOTES, recording(ids, () => () => Object.assign(
+    () => {},
+    { updateInput() { updaterCalls++; return true } }
+  )).module)
+  await t.host.refresh()
+
+  const mounts = ids.map((id) => mountWithInput(t.host, id, { ignored: true }))
+  await Promise.all(ids.map((id) => settled(t, id)))
+  for (const mount of mounts) expect(mount.updateInput!({ step: 2 })).toBe(false)
+  expect(updaterCalls).toBe(0)
+  mounts.forEach((mount) => mount())
+})

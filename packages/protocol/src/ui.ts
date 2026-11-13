@@ -294,13 +294,21 @@ export type UiToastState = {
 export type UiState = { windows: UiWindowInfo[]; layout: UiLayout; slots: UiSlotState[]; toasts: UiToastState[] }
 
 /**
+ * A mounted view may accept new input in place; false or no updater asks the host to remount.
+ * Cleanup remains callable for every slot kind. Plugin API 1.7.0.
+ */
+export type MountCleanup = (() => void) & {
+  updateInput?(input: unknown): boolean
+}
+
+/**
  * Renders a slot into `element`; the returned function cleans up. `report` sends a JSON summary
  * of what the slot shows. A view embedded with `mountView` gets `input` and no `report`.
  */
 export type MountFunction = (
   element: HTMLElement,
   props: { input?: unknown; report?(state: unknown): void }
-) => (() => void) | void
+) => MountCleanup | void
 
 /** Runs a command, with the arguments it was invoked with. */
 export type CommandHandler = (args?: unknown) => unknown

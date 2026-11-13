@@ -3,6 +3,8 @@ import {
   PLUGIN_API_VERSION,
   pluginApiCompatibilityError,
   type ClientStream,
+  type MountCleanup,
+  type MountFunction,
   type PluginContext,
   type ProcessRunner,
   type ProcessSpawner,
@@ -33,14 +35,21 @@ type StreamCapabilityAssertions = [
 ]
 
 
+type MountCapabilityAssertions = [
+  Assert<(() => void) extends MountFunction ? true : false>,
+  Assert<(() => () => void) extends MountFunction ? true : false>,
+  Assert<(() => MountCleanup) extends MountFunction ? true : false>,
+  Assert<NonNullable<MountCleanup['updateInput']> extends (input: unknown) => boolean ? true : false>,
+]
+
 describe('stable plugin API floors', () => {
   test('the host supports the release that introduced daemon plugin spawning', () => {
     expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
   })
 
-  test('the host supports the 1.7.0 release and earlier API floors', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.7.0')
+  test('the host supports in-place view input updates and earlier releases', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.8.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
@@ -51,10 +60,21 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.7.1')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.8.0')).not.toBeNull()
-    expect(pluginApiCompatibilityError('2.0.0')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1', '1.7.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('2.0.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).toContain('apiVersion')
+  })
+
+  test('the host supports the 1.8.0 release and earlier API floors', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.8.0')
+    expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.1')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).not.toBeNull()
   })
 
   test.each([

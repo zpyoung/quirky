@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { UiPluginContext } from '@quirky/protocol'
+import type { MountCleanup, UiPluginContext } from '@quirky/protocol'
 import { SessionsPanel, type SessionsReport } from './window/SessionsPanel'
 import { paneMenuContributions, paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, tabMenuContributions, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
 import { mountFloatingOverlay } from './window/floating'
@@ -83,12 +83,14 @@ export function activate(context: UiPluginContext): void {
     const worktree = worktreeOf(props.input)
     const source = worktree === null ? null : watchQuickCommands(context, worktree)
     const reporting = source ? reportQuickCommandsMenu(source, (state) => props.report?.(state)) : null
-    const unmount = mountWorkspace(context, element, reporting ? { ...props, report: reporting.report } : props, worktree !== null && source ? workspaceSlots(context, worktree, source, menuContributions) : {})
-    return () => {
-      unmount()
+    const workspaceCleanup = mountWorkspace(context, element, reporting ? { ...props, report: reporting.report } : props, worktree !== null && source ? workspaceSlots(context, worktree, source, menuContributions) : {})
+    const cleanup: MountCleanup = () => {
+      workspaceCleanup()
       reporting?.stop()
       source?.dispose()
     }
+    cleanup.updateInput = (input) => workspaceCleanup.updateInput?.(input) ?? false
+    return cleanup
   })
 
   context.provide(QUICK_COMMANDS_PANEL, (element: HTMLElement, props: MountProps) => mountQuickCommandsPanel(context, element, { report: props.report }))
