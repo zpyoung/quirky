@@ -597,6 +597,31 @@ describe('serialized session selection mutations', () => {
     expect(view.last().active).toBe('s-bg-1')
   })
 
+  test('a superseded successful session lookup preserves the latest selection error', async () => {
+    const lookup = deferred<unknown>()
+    const view = await mountFixture(fakeDaemon(selectionRaceWorkspace()), {
+      extra: {
+        'quirky.session/get': (params) => {
+          if (params.session === 's-bg-1') return lookup.promise
+          throw new RpcError(RpcErrorCode.NotFound, 'missing session')
+        }
+      }
+    })
+    views.push(view)
+    await view.updateInput({ worktree: 'wt-main', session: 's-bg-1' })
+    await settle()
+    await view.updateInput({ worktree: 'wt-main', session: 'missing' })
+    await settleSeveral()
+    expect(view.controller().getSnapshot().selectionError).toBe('Session missing was not found.')
+
+    await run(() => lookup.resolve(session('s-bg-1')))
+    await settleSeveral()
+
+    expect(view.controller().getSnapshot().selectionError).toBe('Session missing was not found.')
+    expect(callsTo(view.fake, 'adoptSession')).toEqual([])
+    expect(callsTo(view.fake, 'focusPane')).toEqual([])
+  })
+
   test('a late NotFound from a superseded session lookup is silent', async () => {
     const daemon = fakeDaemon(selectionRaceWorkspace())
     const firstLookup = deferred<unknown>()
@@ -623,6 +648,48 @@ describe('serialized session selection mutations', () => {
     expect(callsTo(view.fake, 'adoptSession')).toEqual([])
     expect(view.fake.toasts).toEqual([])
     expect(view.last().active).toBe('s-2')
+    expect(view.controller().getSnapshot().selectionError).toBeNull()
+  })
+
+  test('an adoption result reconciles queued selection before a delayed layout refresh', async () => {
+    const daemon = fakeDaemon(selectionRaceWorkspace())
+    const adoptGate = deferred<void>()
+    const adopted = deferred<Workspace>()
+    const responseGate = deferred<void>()
+    const reloadGate = deferred<void>()
+    let reads = 0
+    const view = await mountFixture(daemon, {
+      extra: {
+        'quirky.session/get': () => session('s-bg-1'),
+        'quirky.terminal/workspace': async () => {
+          if (reads++ > 0) await reloadGate.promise
+          return { workspace: daemon.workspace }
+        },
+        'quirky.terminal/adoptSession': async (params) => {
+          await adoptGate.promise
+          const workspace = daemon.set(appendSessionTab(daemon.workspace, params.group as string, params.session as string))
+          adopted.resolve(workspace)
+          await responseGate.promise
+          return { workspace }
+        }
+      }
+    })
+    views.push(view)
+    await view.updateInput({ worktree: 'wt-main', session: 's-bg-1' })
+    await settleSeveral()
+    expect(callsTo(view.fake, 'adoptSession')).toEqual([{ group: 'grp-1', session: 's-bg-1' }])
+    await view.updateInput({ worktree: 'wt-main', session: 's-5' })
+    adoptGate.resolve()
+    await emitLayout(view, await adopted.promise)
+    await run(() => responseGate.resolve())
+    await settleSeveral()
+
+    expect(callsTo(view.fake, 'focusPane')).toEqual([{ pane: 'pane-5' }])
+    expect(daemon.workspace.activeGroup).toBe('grp-2')
+    expect(view.last().active).toBe('s-5')
+    await run(() => reloadGate.resolve())
+    await settleSeveral()
+    expect(view.last().active).toBe('s-5')
     expect(view.controller().getSnapshot().selectionError).toBeNull()
   })
 

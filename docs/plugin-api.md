@@ -164,6 +164,10 @@ input once. Failed or released mounts and non-view slots do not accept updates. 
 the contribution's owner or module still ends the mount. Embedded `mountView` handles
 do not use this hook. Plugins using the hook declare `"apiVersion": "1.7.0"` or later.
 
+The terminal worktree view preserves mounted panes on same-worktree input updates.
+Selecting a session focuses its terminal; later background layout revisions leave
+focused text fields alone.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
