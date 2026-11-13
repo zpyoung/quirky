@@ -219,10 +219,114 @@ describe('the worktree view', () => {
     expect(view.tabs().map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true'])
   })
 
+  test('shows a loading state while the worktree is resolving', async () => {
+    const pending = Promise.withResolvers<unknown>().promise
+    start([shell1], { 'quirky.worktree/resolve': () => pending })
+    const view = await open({ worktree: WORKTREE.id })
+
+    expect(view.element.querySelector('main')?.textContent).toContain('Loading sessions…')
+    expect(view.tabs()).toEqual([])
+  })
+
+  test('shows a Retry error on the first load and clears it after retry succeeds', async () => {
+    let resolveCalls = 0
+    const { promise: pending, resolve: finishResolve } = Promise.withResolvers<unknown>()
+    start([shell1], {
+      'quirky.worktree/resolve': () => {
+        if (++resolveCalls === 1) throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return pending
+      }
+    })
+    const view = await open({ worktree: WORKTREE.id })
+    const alert = view.element.querySelector('[role="alert"]')!
+
+    expect(alert.textContent).toContain('Could not load sessions: boom')
+    expect([...alert.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Retry'])
+    expect(fake.toasts).toEqual([])
+    expect(view.lastReport()).toEqual({ worktree: WORKTREE.id, tabs: [], active: null, visibleSessions: [] })
+
+    await view.click(alert.querySelector('button')!)
+    await settle()
+    expect(view.element.querySelector('main')?.textContent).toContain('Loading sessions…')
+    expect(resolveCalls).toBe(2)
+
+    await act(async () => finishResolve(WORKTREE))
+    await settle()
+    expect(view.tabs()).toHaveLength(1)
+    expect(view.element.querySelector('[role="alert"]')).toBeNull()
+    expect(resolveCalls).toBe(2)
+  })
+
+  test('keeps loaded tabs and toasts when a refresh fails', async () => {
+    let fail = false
+    start([shell1, claude], {
+      'quirky.session/list': () => {
+        if (fail) throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return [shell1, claude]
+      }
+    })
+    const view = await open({ worktree: WORKTREE.id })
+
+    fail = true
+    await fake.emit({ type: 'quirky.worktree/changed', data: {} } as QuirkyEvent)
+    await settle()
+
+    expect(view.tabs()).toHaveLength(2)
+    expect(view.element.querySelector('[role="alert"]')).toBeNull()
+    expect(fake.toasts.at(-1)).toEqual({ title: 'Could not load sessions', body: 'boom' })
+  })
+
+  test('shows a reconnecting state instead of the terminal while disconnected', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    expect(view.element.querySelector('.terminal-host')).not.toBeNull()
+
+    await fake.setConnection('reconnecting')
+    expect(view.element.querySelector('main')?.textContent).toContain('Reconnecting…')
+    expect(view.element.querySelector('.terminal-host')).toBeNull()
+
+    await fake.setConnection('connected')
+    await settle()
+    expect(view.element.querySelector('main')?.textContent).not.toContain('Reconnecting…')
+    expect(view.element.querySelector('.terminal-host')).not.toBeNull()
+  })
+
+  test('runs a badge through the session command and reads its current daemon definition', async () => {
+    let current = session({
+      id: 's1',
+      badges: { 'acme.tools/k': { label: 'Open', command: 'command:acme.tools/open', args: { x: 1 } } }
+    })
+    start([current], {
+      'quirky.session/get': (params: { session: string }) => {
+        if (params.session !== current.id) throw new RpcError(RpcErrorCode.NotFound, `no such session: ${params.session}`)
+        return current
+      }
+    })
+    const view = await open({ worktree: WORKTREE.id })
+    const openBadge = [...view.element.querySelectorAll('button')].find((button) => button.textContent === 'Open')!
+
+    await view.click(openBadge)
+    expect(fake.executed).toEqual([{
+      id: 'command:quirky.session/run-badge',
+      args: { session: 's1', badge: 'acme.tools/k' }
+    }])
+
+    current = {
+      ...current,
+      badges: { 'acme.tools/k': { label: 'Open', command: 'command:acme.tools/open-latest', args: { latest: true } } }
+    }
+    await fake.command('run-badge', { session: 's1', badge: 'acme.tools/k' })
+    expect(fake.executed.at(-1)).toEqual({ id: 'command:acme.tools/open-latest', args: { latest: true } })
+    await expect(fake.command('run-badge', { session: 's1', badge: 'acme.tools/none' })).rejects.toThrow(
+      'session s1 has no badge acme.tools/none with a command'
+    )
+  })
+
   test('a worktree that does not resolve is reported as missing', async () => {
     start([], { 'quirky.worktree/resolve': () => Promise.reject(new RpcError(RpcErrorCode.NotFound, 'no such worktree')) })
     const view = await open({ worktree: 'nowhere' })
-    expect(view.element.textContent).toContain('Worktree not found')
+    expect(view.element.querySelector('header')?.textContent).toContain('Quirky')
+    expect(view.element.querySelector('main')?.textContent).toContain('Worktree not found')
     expect(view.lastReport()).toEqual({ worktree: 'nowhere', tabs: [], active: null, visibleSessions: [] })
   })
 
