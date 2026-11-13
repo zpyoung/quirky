@@ -522,6 +522,132 @@ describe('connection output queues', () => {
     }
   })
 
+  test('a lagged superseded subscribe cannot mark the current subscription lagged', async () => {
+    const host = startHost({ maxSessionQueuedBytes: 64 })
+    const { client, conn } = await queuedClient(host)
+    await client.request('create', createParams('A', ['/bin/cat']))
+    const output = collect(client, 'A')
+    const seen = events(client)
+    const deferredFlushes: Array<() => void> = []
+    const schedule = globalThis.setTimeout
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(new Proxy(schedule, {
+      apply(target, receiver, parameters) {
+        const [callback, delay, ...args] = parameters
+        if (delay !== 0 || typeof callback !== 'function') return Reflect.apply(target, receiver, parameters)
+        deferredFlushes.push(() => Reflect.apply(callback, undefined, args))
+        return Reflect.apply(target, receiver, [() => {}, delay, ...args])
+      }
+    }))
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    let calls = 0
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const index = calls++
+      const result = await subscribe(...args)
+      if (index === 0) {
+        args[1]('A', new Uint8Array(56))
+        args[1]('A', new Uint8Array(1))
+      } else {
+        args[1]('A', new TextEncoder().encode('fresh'))
+      }
+      return result
+    })
+    try {
+      await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      expect(conn.holding.get('A')?.lagged).toBe(true)
+      expect(deferredFlushes).toHaveLength(1)
+
+      const second = await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      const current = conn.holding.get('A')
+      expect(second.live).toBe(true)
+      expect(current).toBeDefined()
+      expect(current?.lagged).toBe(false)
+      expect(current?.bytes).toBeGreaterThan(0)
+      expect(conn.heldBytes).toBe(current?.bytes)
+      expect(host.server.manager.subscriberCount('A')).toBe(1)
+      expect(deferredFlushes).toHaveLength(2)
+
+      deferredFlushes[0]!()
+      expect(conn.holding.get('A')).toBe(current)
+      expect(conn.heldBytes).toBe(current?.bytes)
+      deferredFlushes[1]!()
+      await client.request('list', {})
+      await waitFor(() => output.text() === 'fresh')
+      expect(seen).toEqual([])
+      expect(client.closed).toBe(false)
+    } finally {
+      timer.mockRestore()
+      hook.mockRestore()
+    }
+  })
+
+  test('a rejected lagged superseded subscribe leaves the current hold intact', async () => {
+    const host = startHost({ maxSessionQueuedBytes: 64 })
+    const { client, conn } = await queuedClient(host)
+    await client.request('create', createParams('A', ['/bin/cat']))
+    const output = collect(client, 'A')
+    const seen = events(client)
+    const firstLagged = Promise.withResolvers<void>()
+    const firstGate = Promise.withResolvers<void>()
+    const deferredFlushes: Array<() => void> = []
+    const schedule = globalThis.setTimeout
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(new Proxy(schedule, {
+      apply(target, receiver, parameters) {
+        const [callback, delay, ...args] = parameters
+        if (delay !== 0 || typeof callback !== 'function') return Reflect.apply(target, receiver, parameters)
+        deferredFlushes.push(() => Reflect.apply(callback, undefined, args))
+        return Reflect.apply(target, receiver, [() => {}, delay, ...args])
+      }
+    }))
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    let calls = 0
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const index = calls++
+      const result = await subscribe(...args)
+      if (index === 0) {
+        args[1]('A', new Uint8Array(56))
+        args[1]('A', new Uint8Array(1))
+        firstLagged.resolve()
+        await firstGate.promise
+      } else {
+        args[1]('A', new TextEncoder().encode('fresh'))
+      }
+      return result
+    })
+    try {
+      const first = client.request('subscribe', { sessionId: 'A', mode: 'raw' }).then(
+        () => null,
+        (error: Error) => error
+      )
+      await firstLagged.promise
+      expect(conn.holding.get('A')?.lagged).toBe(true)
+
+      const second = await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      const current = conn.holding.get('A')
+      expect(second.live).toBe(true)
+      expect(current).toBeDefined()
+      expect(current?.lagged).toBe(false)
+      expect(current?.bytes).toBeGreaterThan(0)
+      expect(deferredFlushes).toHaveLength(1)
+
+      firstGate.reject(new Error('first subscribe failed'))
+      expect(await first).toMatchObject({ message: 'first subscribe failed' })
+      expect(deferredFlushes).toHaveLength(1)
+      expect(conn.holding.get('A')).toBe(current)
+      expect(conn.heldBytes).toBe(current?.bytes)
+      expect(host.server.manager.subscriberCount('A')).toBe(1)
+
+      deferredFlushes[0]!()
+      await client.request('list', {})
+      await waitFor(() => output.text() === 'fresh')
+      expect(seen).toEqual([])
+      expect(client.closed).toBe(false)
+    } finally {
+      firstGate.resolve()
+      timer.mockRestore()
+      hook.mockRestore()
+    }
+  })
+
   for (const [label, capability] of [
     ['omitted', {}],
     ['false', { sessionLagged: false }],

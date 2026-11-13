@@ -395,12 +395,12 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
       return
     }
     const isCurrent = conn.holding.get(sessionId) === held
+    if (!isCurrent) return
     if (held.lagged) {
-      if (isCurrent) conn.holding.delete(sessionId)
+      conn.holding.delete(sessionId)
       send(conn, { type: 'lagged', sessionId })
       return
     }
-    if (!isCurrent) return
     conn.holding.delete(sessionId)
     for (const frame of held.frames) {
       if (conn.closed) break
@@ -433,7 +433,7 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         return result
       },
       (error) => {
-        if (held.lagged && !held.cancelled) {
+        if (held.lagged && !held.cancelled && conn.holding.get(sessionId) === held) {
           setTimeout(() => finishSubscribe(conn, sessionId, held), 0)
         } else {
           if (conn.holding.get(sessionId) === held) {
