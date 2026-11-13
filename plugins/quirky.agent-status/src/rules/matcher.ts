@@ -235,6 +235,8 @@ export class Matcher {
         return { unavailable: `could not start the matcher process: ${exit.spawnError?.message ?? 'unknown error'}` }
       } catch (error) {
         return { unavailable: `could not start the matcher process: ${errorMessage(error)}` }
+      } finally {
+        this.retirement = this.stop(child)
       }
     }
 
