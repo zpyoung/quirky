@@ -226,6 +226,23 @@ describe('Dispatcher method deadlines', () => {
     expect(t.lines()).not.toContain('other-ran')
   })
 
+  test('refuses forwarding past a deadline even when synchronous work delays its timer', async () => {
+    const t = setup({ readTimeoutMs: 20 })
+    t.plugin(
+      [method('read', { readOnly: true }), method('other')],
+      `context.provide('${CONTRIBUTION}', async (_params, caller) => {
+        const until = Date.now() + 60
+        while (Date.now() < until) {}
+        try { await context.forward('acme.tools/other', {}, caller) }
+        catch (error) { record('forward-error:' + error.message) }
+      })
+      context.provide('method:acme.tools/other', () => record('other-ran'))`
+    )
+    timeout(await t.reject(t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })), METHOD, 20)
+    expect(t.lines()).toContain('forward-error:forwarding caller is no longer active')
+    expect(t.lines()).not.toContain('other-ran')
+  })
+
   test('M7 refuses at four unanswered handlers before resolving the fifth implementation', async () => {
     const t = setup({ readTimeoutMs: 25 })
     t.plugin([method('read', { readOnly: true })], `context.provide('${CONTRIBUTION}', async () => { record('ran'); return new Promise(() => {}) })`)

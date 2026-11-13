@@ -28,7 +28,7 @@ import { onConnectionClose, openStream } from './streams'
  * never recorded or confirmed and run with the caller `{ role: 'plugin', pluginId: 'kernel' }`.
  */
 export type DispatchSource = { conn: ClientConn } | { pluginId: string } | { kernel: true }
-type ForwardingBinding = { pluginId: string; source: DispatchSource; active: boolean }
+type ForwardingBinding = { pluginId: string; source: DispatchSource; active: boolean; deadlineAt?: number }
 
 /** What the dispatcher needs from the plugin host. */
 export type DispatchHost = Pick<PluginHost, 'contributions' | 'resolveImplementation'>
@@ -127,7 +127,10 @@ export class Dispatcher {
   /** Dispatches with the exact client source bound to a caller from this plugin's active handler. */
   forward(pluginId: string, method: string, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
     const binding = this.forwardedCallers.get(caller)
-    if (!binding || binding.pluginId !== pluginId || !binding.active || !('conn' in binding.source)) {
+    if (
+      !binding || binding.pluginId !== pluginId || !binding.active || !('conn' in binding.source) ||
+      (binding.deadlineAt !== undefined && Date.now() >= binding.deadlineAt)
+    ) {
       throw conflict('forwarding caller is no longer active')
     }
     return this.dispatch(method, params, binding.source)
@@ -250,7 +253,7 @@ export class Dispatcher {
     const implementation = (await this.plugins.resolveImplementation(id)) as MethodHandler
     const sessionAuthority = 'conn' in from ? await this.resolveSessionAuthority?.(from.conn) : undefined
     const caller = callerOf(from, target.connection, sessionAuthority ?? undefined)
-    const binding = { pluginId: plugin, source: from, active: true }
+    const binding: ForwardingBinding = { pluginId: plugin, source: from, active: true }
     this.forwardedCallers.set(caller, binding)
     const closeBinding = () => {
       binding.active = false
@@ -259,7 +262,9 @@ export class Dispatcher {
     try {
       const timeoutMs = methodTimeoutMs(target, this.readTimeoutMs)
       if (timeoutMs === null) return await implementation(params, caller)
-      return await this.invokeWithDeadline(target.name, id, plugin, timeoutMs, params, caller, implementation, closeBinding)
+      const deadlineAt = Date.now() + timeoutMs
+      binding.deadlineAt = deadlineAt
+      return await this.invokeWithDeadline(target.name, id, plugin, timeoutMs, deadlineAt, params, caller, implementation, closeBinding)
     } catch (error) {
       if (error instanceof DaemonError) throw error
       this.log(`method ${target.name} failed in ${plugin}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
@@ -274,12 +279,12 @@ export class Dispatcher {
     contributionId: string,
     plugin: string,
     timeoutMs: number,
+    deadlineAt: number,
     params: Record<string, unknown>,
     caller: PluginCaller,
     implementation: MethodHandler,
     closeBinding: () => void
   ): Promise<unknown> {
-    const deadlineAt = Date.now() + timeoutMs
     const deadline = Promise.withResolvers<HandlerOutcome>()
     let timer: ReturnType<typeof setTimeout>
     let settled = false
