@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { BUDGETS, METRICS, type Metric, type MetricResult, type SpeedReport } from './contracts'
-import { compareReports, compatibleProfiles, createMisses, median, renderSpeed, validateReport } from './report'
+import { compareReports, compatibleProfiles, createMisses, median, renderSpeed, validateMisses, validateReport } from './report'
 
 const SHA_A = 'a'.repeat(40)
 const SHA_B = 'b'.repeat(40)
@@ -93,6 +93,13 @@ describe('report validation', () => {
     expect(validateReport(value)).toBeNull()
   })
 
+
+  test('rejects a complete unqualified report with no samples', () => {
+    const empty = Object.fromEntries(METRIC_LIST.map((metric) => [metric, []])) as Partial<Record<Metric, number[]>>
+    const value = report({ qualified: false, samples: empty })
+    expect(validateReport(value)).toBeNull()
+  })
+
   test('requires matching counts for complete reports but accepts uneven partial counts', () => {
     const unevenComplete = report({ samples: { echo: Array(21).fill(2) } })
     const unevenPartial = report({
@@ -152,13 +159,27 @@ describe('report validation', () => {
 })
 
 describe('profile compatibility and comparison', () => {
-  test('accepts identical measurement profiles and detects any incompatible runner field', () => {
+  test('ignores image version but compares Chromium and CPU profile fields', () => {
     const main = report({ commit: SHA_A })
     const head = report({ commit: SHA_B })
+    head.profile.imageVersion = '20261102.1'
     expect(compatibleProfiles(main.profile, head.profile)).toBe(true)
-    head.profile.chromium = 'Chromium 141.0'
-    expect(compatibleProfiles(main.profile, head.profile)).toBe(false)
-    expect(compareReports(main, head).status).toBe('unavailable')
+    expect(compareReports(head, main).status).toBe('compared')
+
+    const chromiumChanged = report({ commit: SHA_B })
+    chromiumChanged.profile.chromium = 'Chromium 141.0'
+    expect(compatibleProfiles(main.profile, chromiumChanged.profile)).toBe(false)
+    expect(compareReports(chromiumChanged, main).status).toBe('unavailable')
+
+    const cpuChanged = report({ commit: SHA_B })
+    cpuChanged.profile.cpuModel = 'Apple M4'
+    expect(compatibleProfiles(main.profile, cpuChanged.profile)).toBe(false)
+    expect(compareReports(cpuChanged, main).status).toBe('unavailable')
+
+    const cpuCountChanged = report({ commit: SHA_B })
+    cpuCountChanged.profile.cpuCount = 10
+    expect(compatibleProfiles(main.profile, cpuCountChanged.profile)).toBe(false)
+    expect(compareReports(cpuCountChanged, main).status).toBe('unavailable')
   })
 
   test('uses the strict unrounded greater-than-25-percent rule', () => {
@@ -232,17 +253,77 @@ describe('Speed markdown and misses', () => {
         diff: Array(20).fill(1000.001),
         floodEcho: Array(20).fill(100),
       },
-      diagnostics: ['diagnostics/echo.json', 'diagnostics/diff.json'],
+      diagnostics: [
+        'diagnostics/echo.json', 'traces/echo.json', 'timelines/echo.json',
+        'diagnostics/diff.json', 'traces/diff.json', 'timelines/diff.json',
+        'diagnostics/startup.json',
+      ],
     })
     const misses = createMisses(value)
     expect(misses.map((miss) => miss.metric)).toEqual(['echo', 'diff'])
     expect(misses.map(({ metric, budgetMs, medianMs, samples, diagnostics }) => ({ metric, budgetMs, medianMs, samples, diagnostics }))).toEqual([
-      { metric: 'echo', budgetMs: 50, medianMs: 50.001, samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json', 'diagnostics/diff.json'] },
-      { metric: 'diff', budgetMs: 1000, medianMs: 1000.001, samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json', 'diagnostics/diff.json'] },
+      { metric: 'echo', budgetMs: 50, medianMs: 50.001, samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json', 'traces/echo.json', 'timelines/echo.json'] },
+      { metric: 'diff', budgetMs: 1000, medianMs: 1000.001, samples: 'samples.jsonl', diagnostics: ['diagnostics/diff.json', 'traces/diff.json', 'timelines/diff.json'] },
     ])
     expect(misses[0]?.finding.toLowerCase()).toContain('diagnosis unavailable')
     expect(misses[0]?.finding).toContain('diagnostics/echo.json')
-    expect(misses[0]?.finding).toContain('diagnostics/diff.json')
+    expect(misses[0]?.finding).not.toContain('diagnostics/diff.json')
+    expect(misses[1]?.finding).toContain('diagnostics/diff.json')
+    expect(misses[1]?.finding).not.toContain('diagnostics/echo.json')
+  })
+
+  test('validates and renders an observed miss finding', () => {
+    const value = report({ commit: SHA_B, samples: { echo: Array(20).fill(51) } })
+    const generated = createMisses(value)[0]!
+    const observed = {
+      ...generated,
+      finding: 'Observed echo controllerUntilFreshPaintMs=12.500 ms; status.get probes=8, max=1.2 ms, ownLagMs=0.3 ms.',
+    }
+
+    expect(validateMisses([observed], value)).toEqual([observed])
+    expect(renderSpeed(value, null, [observed])).toContain(observed.finding)
+    expect(renderSpeed(value, compareReports(value, report({ commit: SHA_A })), [observed])).toContain(observed.finding)
+    expect(renderSpeed(value, {
+      status: 'error', head: null, baseline: null, reason: 'baseline download failed',
+      reasons: ['baseline download failed'], metrics: Object.fromEntries(METRIC_LIST.map((metric) => [metric, null])) as Record<Metric, null>,
+    }, [observed])).toContain(observed.finding)
+  })
+
+  test('rejects forged miss identity, measurements, and unsafe or cross-metric paths', () => {
+    const value = report({ commit: SHA_B, samples: { echo: Array(20).fill(51) } })
+    const miss = createMisses(value)[0]!
+    const forged = [
+      { ...miss, metric: 'diff' },
+      { ...miss, commit: SHA_A },
+      { ...miss, budgetMs: 49 },
+      { ...miss, medianMs: 52 },
+      { ...miss, samples: 'other-samples.jsonl' },
+      { ...miss, samples: '../samples.jsonl' },
+      { ...miss, diagnostics: ['../../diagnostics/echo.json'] },
+      { ...miss, diagnostics: ['diagnostics/diff.json'] },
+    ]
+    for (const candidate of forged) expect(validateMisses([candidate], value)).toBeNull()
+    expect(validateMisses([], value)).toBeNull()
+    expect(validateMisses([miss, miss], value)).toBeNull()
+  })
+
+  test('falls back to unavailable diagnosis and escapes bounded findings', () => {
+    const value = report({ commit: SHA_B, qualified: false, samples: { echo: Array(20).fill(51) }, diagnostics: [] })
+    const generated = createMisses(value)[0]!
+    const invalid = { ...generated, commit: SHA_A, finding: 'forged diagnosis' }
+    expect(validateMisses([invalid], value)).toBeNull()
+    expect(renderSpeed(value)).toContain('Diagnosis unavailable')
+    const fallback = renderSpeed(value, null, [invalid])
+    expect(fallback).toContain('Diagnosis unavailable')
+    expect(fallback).not.toContain('forged diagnosis')
+
+    const observed = { ...generated, finding: `<phase|${'x'.repeat(350)} status.get probes=8 max=1.2 ms ownLagMs=0.3 ms` }
+    expect(validateMisses([observed], value)).toEqual([observed])
+    const markdown = renderSpeed(value, null, [observed])
+    expect(markdown).toContain('status.get probes=8 max=1.2 ms ownLagMs=0.3 ms')
+    expect(markdown).toContain('\\<phase\\|')
+    expect(markdown).not.toContain('x'.repeat(400))
+    expect(markdown.length).toBeLessThan(20_000)
   })
 
   test('states when diagnostic evidence is unavailable and bounds rendered failure text', () => {

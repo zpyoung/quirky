@@ -7,7 +7,7 @@ const EVIDENCE_KEYS = ['samples', 'diagnostics', 'misses']
 const PROFILE_FIELDS: readonly (keyof SpeedProfile)[] = [
   'workloadVersion', 'worktrees', 'terminals', 'diffAddedLines', 'renderer', 'startup',
   'floodChunkBytes', 'floodIntervalMs', 'runner', 'os', 'arch', 'cpuModel', 'cpuCount',
-  'bun', 'chromium', 'imageVersion',
+  'bun', 'chromium',
 ]
 const MAX_FAILURES = 100
 const MAX_EVIDENCE_PATHS = 100
@@ -122,7 +122,7 @@ export function validateReport(value: unknown): SpeedReport | null {
   const counts = METRICS.map((metric) => (value.metrics as Record<Metric, { samplesMs: unknown[] }>)[metric].samplesMs.length)
   if (value.status === 'complete') {
     const completeCount = counts[0]
-    if (completeCount === undefined || counts.some((count) => count !== completeCount)) return null
+    if (completeCount === undefined || completeCount < 1 || counts.some((count) => count !== completeCount)) return null
     if (value.qualified && completeCount < 20) return null
   }
   return value as unknown as SpeedReport
@@ -299,8 +299,7 @@ function failureText(failure: Failure): string {
   return `${failure.kind}${location} ${failure.message}`
 }
 
-function missLines(report: SpeedReport): string[] {
-  const misses = createMisses(report)
+function missLines(report: SpeedReport, misses: readonly SpeedMiss[]): string[] {
   if (misses.length === 0) return []
   return [
     '',
@@ -309,7 +308,7 @@ function missLines(report: SpeedReport): string[] {
       const shownDiagnostics = miss.diagnostics.slice(0, 5)
       const diagnostics = shownDiagnostics.length > 0 ? shownDiagnostics.map((path) => `\`${escaped(path)}\``).join(', ') : 'no diagnostic paths'
       const remaining = miss.diagnostics.length > shownDiagnostics.length ? ` (+${miss.diagnostics.length - shownDiagnostics.length} more)` : ''
-      return `- ${miss.metric}: ${miss.medianMs} ms over ${miss.budgetMs} ms; samples \`${escaped(miss.samples)}\`; diagnostics ${diagnostics}${remaining}; ${escaped(miss.finding)}`
+      return `- ${miss.metric}: ${miss.medianMs} ms over ${miss.budgetMs} ms; samples \`${escaped(miss.samples)}\`; diagnostics ${diagnostics}${remaining}; ${escaped(miss.finding, 2048)}`
     }),
   ]
 }
@@ -330,7 +329,7 @@ function boundedMarkdown(lines: string[]): string {
 }
 
 /** Renders bounded advisory Markdown without turning absent or invalid evidence into a pass. */
-export function renderSpeed(current: SpeedReport | null, comparison?: Comparison | null): string {
+export function renderSpeed(current: SpeedReport | null, comparison?: Comparison | null, misses?: SpeedMiss[]): string {
   const lines = ['### Speed', '']
   const comparisonReason = comparison?.reason ?? comparison?.reasons?.[0] ?? null
   if (current === null) {
@@ -341,48 +340,50 @@ export function renderSpeed(current: SpeedReport | null, comparison?: Comparison
     lines.push('not measured: current speed report is malformed')
     return boundedMarkdown(lines)
   }
+  const fallbackMisses = calculatedMisses(current)
+  const selectedMisses = misses === undefined ? fallbackMisses : validateMissesAgainstReport(misses, current, fallbackMisses) ?? fallbackMisses
   if (current.status === 'incomplete') {
     const failure = current.failures[0]
     lines.push(`not measured: ${escaped(failure ? failureText(failure) : 'benchmark run incomplete')}`, '')
-    lines.push(...currentRows(current))
+    lines.push(...currentRows(current), ...missLines(current, selectedMisses))
     return boundedMarkdown(lines)
   }
   if (!current.qualified) {
     lines.push('not measured: smoke report is unqualified', '')
-    lines.push(...currentRows(current))
+    lines.push(...currentRows(current), ...missLines(current, selectedMisses))
     return boundedMarkdown(lines)
   }
 
   if (comparison?.status === 'error') {
     lines.push(`not measured: ${escaped(comparisonReason ?? 'comparison evidence could not be read')}`, '')
-    lines.push(...currentRows(current), ...missLines(current))
+    lines.push(...currentRows(current), ...missLines(current, selectedMisses))
     return boundedMarkdown(lines)
   }
   if (comparison?.status === 'compared') {
     if (!isSafeComparison(comparison, current)) {
       lines.push('not measured: comparison data is malformed', '')
-      lines.push(...currentRows(current), ...missLines(current))
+      lines.push(...currentRows(current), ...missLines(current, selectedMisses))
       return boundedMarkdown(lines)
     }
     lines.push(`Compared main \`${comparison.baseline!.commit}\` (${escaped(ageText(comparison.baseline!.ageMs))}, run \`${escaped(comparison.baseline!.runId)}\`) with PR \`${comparison.head!.commit}\` (run \`${escaped(comparison.head!.runId)}\`).`, '')
-    lines.push(...comparedRows(comparison), ...missLines(current))
+    lines.push(...comparedRows(comparison), ...missLines(current, selectedMisses))
     return boundedMarkdown(lines)
   }
 
   const reason = comparisonReason ?? 'no compatible baseline'
   lines.push(`not compared: ${escaped(reason)}`, `PR commit \`${current.commit}\` (run \`${escaped(current.runId)}\`).`, '')
-  lines.push(...currentRows(current), ...missLines(current))
+  lines.push(...currentRows(current), ...missLines(current, selectedMisses))
   return boundedMarkdown(lines)
 }
 
-/** Creates evidence references only for completed metrics whose recomputed median exceeds its fixed budget. */
-export function createMisses(report: SpeedReport): SpeedMiss[] {
-  if (report.status !== 'complete' || !validateReport(report)) return []
+/** Derives the expected miss records from an already validated report. */
+function calculatedMisses(report: SpeedReport): SpeedMiss[] {
+  if (report.status !== 'complete') return []
   const misses: SpeedMiss[] = []
   for (const metric of METRICS) {
     const medianMs = median(report.metrics[metric].samplesMs)
     if (medianMs === null || medianMs <= BUDGETS[metric]) continue
-    const diagnostics = [...report.evidence.diagnostics]
+    const diagnostics = report.evidence.diagnostics.filter((path) => path.endsWith(`/${metric}.json`))
     misses.push({
       metric,
       budgetMs: BUDGETS[metric],
@@ -397,4 +398,40 @@ export function createMisses(report: SpeedReport): SpeedMiss[] {
     })
   }
   return misses
+}
+
+/** Creates evidence references only for completed metrics whose recomputed median exceeds its fixed budget. */
+export function createMisses(report: SpeedReport): SpeedMiss[] {
+  if (!validateReport(report)) return []
+  return calculatedMisses(report)
+}
+
+function validateMissesAgainstReport(value: unknown, report: SpeedReport, expected: SpeedMiss[]): SpeedMiss[] | null {
+  if (!Array.isArray(value) || value.length !== expected.length) return null
+  const validated: SpeedMiss[] = []
+  for (let index = 0; index < value.length; index++) {
+    const candidate = value[index]
+    const miss = expected[index]
+    if (!miss || !isRecord(candidate) || !hasExactKeys(candidate, ['metric', 'budgetMs', 'medianMs', 'commit', 'runId', 'samples', 'diagnostics', 'finding'])) return null
+    if (candidate.metric !== miss.metric
+      || candidate.budgetMs !== miss.budgetMs
+      || candidate.medianMs !== miss.medianMs
+      || candidate.commit !== report.commit
+      || candidate.runId !== report.runId
+      || candidate.samples !== report.evidence.samples
+      || !isSafeEvidencePath(candidate.samples)
+      || !Array.isArray(candidate.diagnostics)
+      || !candidate.diagnostics.every(isSafeEvidencePath)
+      || candidate.diagnostics.length !== miss.diagnostics.length
+      || candidate.diagnostics.some((path, pathIndex) => path !== miss.diagnostics[pathIndex])
+      || !isBoundedText(candidate.finding, 2048)) return null
+    validated.push(candidate as unknown as SpeedMiss)
+  }
+  return validated
+}
+
+/** Validates serialized miss evidence against a report and its metric-specific paths. */
+export function validateMisses(value: unknown, report: SpeedReport): SpeedMiss[] | null {
+  if (!validateReport(report)) return null
+  return validateMissesAgainstReport(value, report, calculatedMisses(report))
 }
