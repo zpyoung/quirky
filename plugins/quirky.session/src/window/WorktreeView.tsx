@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react'
-import { EmptyState } from '@quirky/ui'
+import { EmptyState, InlineError } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { WorktreeSessions } from './model'
 import { SessionTabs } from './SessionTabs'
@@ -59,7 +59,7 @@ export function WorktreeView({
   /** The element the view is mounted on, which carries the theme's custom properties. */
   themeSource: Element
 }) {
-  const { status, worktree, sessions, active } = useSyncExternalStore(store.subscribe, store.getSnapshot)
+  const { status, failure, worktree, sessions, active } = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { connected, epoch } = useConnection(context)
 
   return (
@@ -71,11 +71,19 @@ export function WorktreeView({
             <span style={path}>{worktree.path}</span>
           </>
         ) : (
-          <span style={path}>{status === 'missing' ? 'Worktree not found' : 'Quirky'}</span>
+          <span style={path}>Quirky</span>
         )}
       </header>
       {worktree && <SessionTabs context={context} store={store} sessions={sessions} active={active} />}
       <main style={body}>
+        {status === 'loading' && <EmptyState message="Loading sessions…" />}
+        {status === 'missing' && <EmptyState message="Worktree not found" />}
+        {status === 'failed' && failure !== null && (
+          <InlineError
+            message={`Could not load sessions: ${failure}`}
+            action={{ label: 'Retry', onAction: () => store.retry() }}
+          />
+        )}
         {status === 'ready' && !active && (
           <EmptyState
             message="No sessions in this worktree."
