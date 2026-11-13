@@ -693,6 +693,67 @@ describe('resolveNeed', () => {
     expect(closed(s, empty.id).resolvedAt).toBeNull()
   })
 
+  test('finding actions route typed and fallback reasons to shipping', async () => {
+    const s = setup()
+    const routed: { worktreeId: string; findingId: string; valid: boolean; reason: string }[] = []
+    s.app.services.shipping.personVerdict = async (worktreeId, findingId, valid, reason) => {
+      routed.push({ worktreeId, findingId, valid, reason })
+      return { ok: true }
+    }
+    const cases: { action: NeedAction; findingId: string; reason?: string; text?: string; expected: string }[] = [
+      { action: 'finding-dismiss', findingId: 'f1', reason: 'the name is fine', expected: 'the name is fine' },
+      { action: 'finding-dismiss', findingId: 'f2', reason: 'avatar reason', text: '  my own reason  ', expected: 'my own reason' },
+      { action: 'finding-dismiss', findingId: 'f3', expected: 'dismissed by you' },
+      { action: 'finding-dismiss', findingId: 'f4', reason: '   ', text: '  ', expected: 'dismissed by you' },
+      { action: 'finding-valid', findingId: 'f5', reason: 'avatar reason', text: '  it is a real bug  ', expected: 'it is a real bug' },
+      { action: 'finding-valid', findingId: 'f6', expected: 'judged valid by you' }
+    ]
+
+    for (const item of cases) {
+      const detail = { findingId: item.findingId, ...(item.reason === undefined ? {} : { reason: item.reason }) }
+      const need = addNeed(s, 'wt-1', 'merge-blocked', [item.action], detail)
+      expect(await s.svc.resolveNeed(need.id, item.action, item.text)).toEqual({ ok: true })
+      expect(closed(s, need.id)).toMatchObject({
+        resolution: item.action === 'finding-dismiss' ? 'dismissed' : 'sent-to-worker'
+      })
+    }
+
+    expect(routed).toEqual(cases.map((item) => ({
+      worktreeId: 'wt-1',
+      findingId: item.findingId,
+      valid: item.action === 'finding-valid',
+      reason: item.expected
+    })))
+    expect(s.wakes()).toBe(cases.length)
+  })
+
+  test('a failed finding verdict is returned without closing or waking', async () => {
+    const s = setup()
+    s.app.services.shipping.personVerdict = async () => ({ ok: false, error: 'could not resolve the thread: boom' })
+    const need = addNeed(s, 'wt-1', 'merge-blocked', ['finding-dismiss'], { findingId: 'f1', reason: 'the name is fine' })
+
+    expect(await s.svc.resolveNeed(need.id, 'finding-dismiss')).toEqual({ ok: false, error: 'could not resolve the thread: boom' })
+    expect(closed(s, need.id)).toMatchObject({ resolvedAt: null, resolution: null })
+    expect(s.app.store.journalSince(0).filter((entry) => entry.data.type === 'need-resolved')).toEqual([])
+    expect(s.wakes()).toBe(0)
+  })
+
+  test('finding actions without a usable finding ID are refused before shipping is called', async () => {
+    const s = setup()
+    let called = false
+    s.app.services.shipping.personVerdict = async () => {
+      called = true
+      return { ok: true }
+    }
+    for (const detail of [{}, { findingId: '   ' }]) {
+      const need = addNeed(s, 'wt-1', 'merge-blocked', ['finding-dismiss'], detail)
+      expect(await s.svc.resolveNeed(need.id, 'finding-dismiss')).toEqual({ ok: false, error: 'invalid: finding' })
+      expect(closed(s, need.id)).toMatchObject({ resolvedAt: null, resolution: null })
+    }
+    expect(called).toBe(false)
+  })
+
+
   test('question needs forward typed answers, reject empty answers, and defer event effects to onAskResolved', async () => {
     const questions = [
       { id: 'q1', type: 'select', question: 'Format?', required: true, options: [{ value: 'v1', label: 'Keep v1' }] },

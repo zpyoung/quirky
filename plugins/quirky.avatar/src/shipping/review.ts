@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ProcessRunner, QuirkyEvent } from '@quirky/protocol'
-import type { AvatarApp, Finding, Mandate } from '../contracts'
+import type { AvatarApp, Finding, Mandate, NeedAction } from '../contracts'
 import { quoteAsData, sanitize } from '../sanitize'
 import { handoffEpoch, sendRefusal, type Outbox, readCompare, readHead } from './outbox'
 
@@ -14,6 +14,7 @@ export type Review = {
   onEvent(event: QuirkyEvent): Promise<void>
   intakeComments(worktreeId: string): Promise<{ added: number; number: number | null; threads: Thread[]; partial: boolean }>
   judgeFinding(worktreeId: string, findingId: string, valid: boolean, reason: string, epoch?: number | null): Promise<void>
+  personVerdict(worktreeId: string, findingId: string, valid: boolean, reason: string, epoch?: number | null): Promise<{ ok: boolean; error?: string }>
   recordSkillFinding(worktreeId: string, summary: string, detail?: Record<string, unknown>): Finding
   reviewedSha(worktreeId: string): string | null
 }
@@ -251,6 +252,51 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = cr
       app.journal(row.worktreeId, 'finding', { fixed: true, findingId: row.id, note })
     })
   }
+  const findingNeedActions: NeedAction[] = ['finding-dismiss', 'finding-valid', 'take-back']
+
+  const closeFindingNeeds = (worktreeId: string, findingId: string, resolution: string): void => {
+    for (const need of app.needs.list({ worktreeId, open: true })) {
+      if (need.kind === 'merge-blocked' && need.detail.findingId === findingId) app.needs.close(need.id, resolution)
+    }
+  }
+
+  const raiseHumanFindingNeed = (row: Finding, reason: string): void => {
+    const open = app.needs.list({ worktreeId: row.worktreeId, open: true }).filter(
+      (need) => need.kind === 'merge-blocked' && need.detail.findingId === row.id
+    )
+    const current = open.find((need) =>
+      need.actions.length === findingNeedActions.length && need.actions.every((action, index) => action === findingNeedActions[index])
+    )
+    app.store.transaction(() => {
+      for (const need of open) {
+        if (need === current) continue
+        app.needs.close(need.id, 'superseded')
+      }
+      if (current !== undefined) return
+      app.journal(row.worktreeId, 'finding', { judged: true, findingId: row.id, valid: false, held: 'messaging switch is off', source: row.source })
+      app.needs.add({
+        worktreeId: row.worktreeId,
+        kind: 'merge-blocked',
+        title: `A human review thread needs you: ${row.summary}`,
+        detail: { findingId: row.id, threadId: row.threadId, reason },
+        actions: findingNeedActions
+      })
+    })
+  }
+
+  const findingMessage = (row: Finding): string => {
+    const where = typeof row.detail.path === 'string'
+      ? `${row.detail.path}${typeof row.detail.line === 'number' ? `:${row.detail.line}` : ''}`
+      : ''
+    return `A review finding was judged valid. Fix it and say when it is done.\n${quoteAsData(`review finding (${row.source})`, `${where === '' ? '' : `${where}\n`}${row.summary}`)}`
+  }
+
+  const withoutPersonVerdict = (detail: Record<string, unknown>): Record<string, unknown> => {
+    const next = { ...detail }
+    delete next.verdictBy
+    return next
+  }
+
 
   /** Records that a review saw only part of the diff, so the commit is never counted as reviewed, and asks the human once per head. */
   const blockPartial = (run: Pending, diff: ReviewDiff, sessionId: string, count: number): void => {
@@ -438,16 +484,17 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = cr
       const cleanReason = sanitize(reason)
 
       if (valid) {
+        if (row.detail.verdictBy === 'person' && row.valid === false) {
+          app.journal(worktreeId, 'finding', { kept: true, findingId, valid: false, by: 'person' })
+          return
+        }
         const sends = (typeof row.detail.sends === 'number' ? row.detail.sends : 0) + 1
         app.store.transaction(() => {
-          app.store.findings.put({ ...row, valid: true, reason: cleanReason, detail: { ...row.detail, sends } })
+          app.store.findings.put({ ...row, valid: true, reason: cleanReason, detail: { ...withoutPersonVerdict(row.detail), sends } })
           app.journal(worktreeId, 'finding', { judged: true, findingId, valid: true, source: row.source, reason: cleanReason, sends })
+          closeFindingNeeds(worktreeId, findingId, 'judged')
         })
-        const where = typeof row.detail.path === 'string' ? `${row.detail.path}${typeof row.detail.line === 'number' ? `:${row.detail.line}` : ''}` : ''
-        await app.services.supervisor.send(
-          worktreeId,
-          `A review finding was judged valid. Fix it and say when it is done.\n${quoteAsData(`review finding (${row.source})`, `${where === '' ? '' : `${where}\n`}${row.summary}`)}`
-        )
+        await app.services.supervisor.send(worktreeId, findingMessage(row))
         if (!stillCurrent(worktreeId, epoch)) return
         if (sends >= REPEAT_LIMIT) app.services.supervisor.recordDenial(worktreeId, true)
         return
@@ -458,24 +505,15 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = cr
         const mandate = app.store.mandates.get(worktreeId)
         const messaging = (mandate?.switches ?? app.settings().switches).messaging
         if (!messaging) {
-          const open = app.needs.list({ worktreeId, open: true }).some((need) => need.kind === 'merge-blocked' && need.detail.findingId === findingId)
-          if (!open) {
-            app.journal(worktreeId, 'finding', { judged: true, findingId, valid: false, held: 'messaging switch is off', source: row.source })
-            app.needs.add({
-              worktreeId,
-              kind: 'merge-blocked',
-              title: `A human review thread needs you: ${row.summary}`,
-              detail: { findingId, threadId: row.threadId, reason: cleanReason },
-              actions: ['review-accept', 'review-reject', 'take-back']
-            })
-          }
+          raiseHumanFindingNeed(row, cleanReason)
           return
         }
       }
 
       app.store.transaction(() => {
-        app.store.findings.put({ ...row, valid: false, reason: cleanReason })
+        app.store.findings.put({ ...row, valid: false, reason: cleanReason, detail: withoutPersonVerdict(row.detail) })
         app.journal(worktreeId, 'finding', { judged: true, findingId, valid: false, source: row.source, reason: cleanReason })
+        closeFindingNeeds(worktreeId, findingId, 'judged')
       })
       const number = typeof row.detail.number === 'number' ? row.detail.number : null
       if (row.threadId === null || number === null) return
@@ -496,6 +534,70 @@ export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = cr
         app.journal(worktreeId, 'finding', { resolveFailed: true, findingId, error: error instanceof Error ? error.message : String(error) })
       })
     },
+    async personVerdict(worktreeId, findingId, valid, reason, capturedEpoch) {
+      const epoch = capturedEpoch === undefined ? handoffEpoch(app, worktreeId) : capturedEpoch
+      if (epoch === null) return { ok: false, error: 'this worktree is not handed off' }
+      if (!stillCurrent(worktreeId, epoch)) return { ok: false, error: 'this worktree was taken back' }
+
+      const row = app.store.findings.get(findingId)
+      if (row === null || row.worktreeId !== worktreeId) return { ok: false, error: 'unknown finding' }
+      if (row.detail.human !== true) return { ok: false, error: 'the finding is not a human review thread' }
+      const cleanReason = sanitize(reason)
+
+      if (!valid) {
+        const number = row.detail.number
+        if (row.threadId === null || typeof number !== 'number') {
+          return { ok: false, error: 'the finding has no review thread to resolve' }
+        }
+        try {
+          await call('quirky.hosting/resolveThread', { worktree: worktreeId, number, threadId: row.threadId, action: 'resolve' })
+        } catch (error) {
+          if (!stillCurrent(worktreeId, epoch)) return { ok: false, error: 'this worktree was taken back' }
+          const detail = error instanceof Error ? error.message : String(error)
+          app.journal(worktreeId, 'finding', { resolveFailed: true, findingId, error: detail, by: 'person' })
+          return { ok: false, error: `could not resolve the thread: ${detail}` }
+        }
+        if (!stillCurrent(worktreeId, epoch)) return { ok: false, error: 'this worktree was taken back' }
+      }
+
+      const current = app.store.findings.get(findingId)
+      if (current === null || current.worktreeId !== worktreeId) return { ok: false, error: 'unknown finding' }
+      const sends = valid ? (typeof current.detail.sends === 'number' ? current.detail.sends : 0) + 1 : undefined
+      app.store.transaction(() => {
+        app.store.findings.put({
+          ...current,
+          valid,
+          reason: cleanReason,
+          detail: { ...current.detail, verdictBy: 'person', ...(sends === undefined ? {} : { sends }) }
+        })
+        app.journal(worktreeId, 'finding', {
+          judged: true,
+          findingId,
+          valid,
+          source: current.source,
+          reason: cleanReason,
+          ...(sends === undefined ? {} : { sends }),
+          by: 'person',
+          ...(valid ? {} : { threadResolved: true })
+        })
+        closeFindingNeeds(worktreeId, findingId, valid ? 'sent-to-worker' : 'dismissed')
+      })
+
+      if (valid) {
+        let sent: { sent: boolean; reason?: string }
+        try {
+          sent = await app.services.supervisor.send(worktreeId, findingMessage(current))
+        } catch (error) {
+          sent = { sent: false, reason: error instanceof Error ? error.message : String(error) }
+        }
+        if (!sent.sent) {
+          app.journal(worktreeId, 'event', { type: 'send-failed', reason: sent.reason ?? 'not sent', findingId })
+          app.services.brain.wake()
+        }
+      }
+      return { ok: true }
+    },
+
 
     recordSkillFinding(worktreeId, summary, detail = {}) {
       return saveFinding(worktreeId, 'skill', firstLine(sanitize(summary)), detail, null, null)

@@ -13,6 +13,21 @@ const DEPENDENCIES = [
   'quirky.git', 'quirky.hosting', 'quirky.structured', 'quirky.heimdall', 'quirky.notifications'
 ]
 
+const NEED_ACTIONS = [
+  'allow-once',
+  'deny',
+  'confirm',
+  'redo',
+  'review-accept',
+  'review-reject',
+  'finding-dismiss',
+  'finding-valid',
+  'answer',
+  'restart',
+  'take-back',
+  'restart-to-handoff'
+]
+
 afterEach(cleanupDaemons)
 
 async function startAvatar() {
@@ -54,6 +69,7 @@ describe('quirky.avatar as a built-in plugin', () => {
       'avatar handoff',
       'avatar log',
       'avatar report',
+      'avatar resolve-need',
       'avatar status',
       'avatar take-back'
     ])
@@ -106,11 +122,52 @@ describe('quirky.avatar as a built-in plugin', () => {
     expect(await call('quirky.avatar/settings')).toMatchObject({ defaultLevel: 'full', judgmentTimeoutSeconds: 55 })
     await expect(call('quirky.avatar/mandate')).rejects.toMatchObject({ message: expect.stringContaining('worktreeId') })
   })
+
+  test('accepts both finding actions at the resolveNeed method boundary', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    for (const action of ['finding-dismiss', 'finding-valid']) {
+      expect(await client.call('quirky.avatar/resolveNeed' as never, { needId: 'missing', action } as never) as unknown).toEqual({ ok: false, error: 'unknown need' })
+    }
+  })
+
+  test('reports all twelve allowed actions for an unknown resolveNeed action', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    await expect(client.call('quirky.avatar/resolveNeed' as never, { needId: 'missing', action: 'not-a-need-action' } as never)).rejects.toMatchObject({
+      message: expect.stringContaining(`action must be one of ${NEED_ACTIONS.join(', ')}`)
+    })
+  })
 })
 
 describe('quirky avatar CLI module', () => {
   test('has a handler for every declared command', () => {
     const manifest = JSON.parse(readFileSync(join(PLUGIN_DIR, 'quirky-plugin.json'), 'utf8')) as { contributes: { 'cli-command': { id: string }[] } }
     expect(Object.keys(commands).sort()).toEqual(manifest.contributes['cli-command'].map((command) => command.id).sort())
+    expect(manifest.contributes['cli-command'].map(({ id }) => id)).toContain('resolve-need')
+  })
+
+  test('lists all need actions in both method schemas in order', () => {
+    const manifest = JSON.parse(readFileSync(join(PLUGIN_DIR, 'quirky-plugin.json'), 'utf8')) as {
+      contributes: {
+        method: {
+          id: string
+          params?: { properties?: { action?: { enum?: string[] } } }
+          result?: {
+            properties?: {
+              needsYou?: {
+                items?: {
+                  properties?: {
+                    actions?: { items?: { enum?: string[] } }
+                  }
+                }
+              }
+            }
+          }
+        }[]
+      }
+    }
+    const report = manifest.contributes.method.find(({ id }) => id === 'report')
+    const resolveNeed = manifest.contributes.method.find(({ id }) => id === 'resolveNeed')
+    expect(report?.result?.properties?.needsYou?.items?.properties?.actions?.items?.enum).toEqual(NEED_ACTIONS)
+    expect(resolveNeed?.params?.properties?.action?.enum).toEqual(NEED_ACTIONS)
   })
 })

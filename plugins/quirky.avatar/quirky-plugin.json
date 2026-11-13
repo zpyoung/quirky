@@ -410,6 +410,8 @@
                         "redo",
                         "review-accept",
                         "review-reject",
+                        "finding-dismiss",
+                        "finding-valid",
                         "answer",
                         "restart",
                         "take-back",
@@ -682,6 +684,8 @@
                 "redo",
                 "review-accept",
                 "review-reject",
+                "finding-dismiss",
+                "finding-valid",
                 "answer",
                 "restart",
                 "take-back",
@@ -1143,6 +1147,33 @@
           "quirky.avatar/report"
         ]
       },
+      {
+        "id": "resolve-need",
+        "words": "resolve-need",
+        "summary": "resolve a need with one of its actions",
+        "positionals": [
+          {
+            "name": "need",
+            "description": "the need to resolve",
+            "required": true
+          },
+          {
+            "name": "action",
+            "description": "the action to take",
+            "required": true
+          }
+        ],
+        "flags": {
+          "text": {
+            "type": "string",
+            "description": "a reason for the action"
+          }
+        },
+        "methods": [
+          "quirky.avatar/resolveNeed"
+        ]
+      },
+
       {
         "id": "log",
         "words": "log",

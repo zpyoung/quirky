@@ -88,7 +88,7 @@ It also runs a watchdog job. Each event is appended to the journal first, then d
 | `package.json` | `@quirky/plugin-avatar`, same shape as `plugins/quirky.ask/package.json`. |
 | `main.ts` | Thin wiring, like `plugins/quirky.heimdall/main.ts`: provides methods, the `tool-gate`, the launch-hook, jobs and subscriptions. |
 | `store-migrations.ts` | SQLite migrations for the tables in Data models. |
-| `cli.ts` | `quirky avatar handoff\|status\|report\|log\|take-back [--all]` (R-8). |
+| `cli.ts` | `quirky avatar handoff\|status\|report\|log\|take-back [--all]` and `resolve-need <need> <action> [--text <text>]` (R-8). Report needs include their ids and action names. |
 | `src/contracts.ts` | Every shared type in Data models. **Created first; other units import from here only.** |
 | `src/store.ts` | Typed access over the store; the journal is append-only. |
 | `src/gate/classify.ts` | Pure: `classifyCall(call, ctx) → ActionClass[]`. |
@@ -201,7 +201,7 @@ type StructuredStartOptions = { /* existing */ toolPolicy?: 'default' | 'deny-al
 | `sidebarStatus` | `{}`, then `Record<worktreeId, AvatarWorktreeStatus>` | Feeds H4. |
 | `report` | `{}`, then `ReportModel` | R-45. |
 | `log` | `{worktreeId?, limit?, before?}`, then `JournalEntry[]` | |
-| `resolveNeed` | `{needId, action: NeedAction, text?, answers?: Record<string, unknown>}`, then `{ok, error?}` | One-click actions or typed `AskAnswer` entries keyed by question ID. Accepted actions are listed under `NeedAction` in Data models. |
+| `resolveNeed` | `{needId, action: NeedAction, text?, answers?: Record<string, unknown>}`, then `{ok, error?}` | One-click actions or typed `AskAnswer` entries keyed by question ID. `finding-dismiss` and `finding-valid` call `shipping.personVerdict`, close the need as `dismissed` or `sent-to-worker`, journal the finding id and wake the brain. Text replaces the verdict's default reason. Accepted actions are listed under `NeedAction` in Data models. |
 | `mandate` | `{worktreeId}`, then `Mandate \| null` | Prefill after take-back (R-49) and the current values shown beside proposed edits in Report. |
 | `settings` / `setSettings` | — | Settings → Avatar. |
 
@@ -241,7 +241,7 @@ type GateService = { classifyContext(worktreeId: string): Promise<ClassifyContex
 type HandoffService = { handoff(items: HandoffInput[]): Promise<{ worktreeId: string; ok: boolean; error?: string }[]>; takeBack(sel: { worktreeIds: string[] } | { all: true }): Promise<{ worktreeId: string; ok: boolean; handedBackWith: string[] }[]>; eligibility(): Promise<SheetRow[]>; mandate(worktreeId: string): Mandate | null; active(): { worktreeId: string; sessionId: string | null; state: WorktreeState; mandate: Mandate }[]; setState(worktreeId: string, state: WorktreeState, note: string): void; resolveNeed(needId: string, action: NeedAction, text?: string, answers?: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> }
 type BrainService = { judge(call: ToolCall, mandate: Mandate, deadlineMs: number): Promise<{ decision: 'allow' | 'deny' | 'held'; reliedOn: string; reason: string } | 'timeout' | 'unavailable'>; wake(): void; ready(): boolean }
 type SupervisorService = { send(worktreeId: string, text: string): Promise<{ sent: boolean; reason?: string }>; stepIn(worktreeId: string, text: string): Promise<{ sent: boolean; reason?: string }>; startSession(worktreeId: string, note: string): Promise<{ sessionId: string | null; error?: string }>; restartWorker(worktreeId: string, note: string): Promise<{ sessionId: string | null; error?: string }>; park(worktreeId: string, story: string): void; recordDenial(worktreeId: string, countsAsDenial: boolean): void }
-type ShippingService = { runDoneWhen(worktreeId: string): Promise<{ pass: boolean; output: string }>; startReview(worktreeId: string): Promise<{ started: boolean; reason?: string }>; judgeFinding(worktreeId: string, findingId: string, valid: boolean, reason: string): Promise<void>; openPr(worktreeId: string): Promise<{ ok: boolean; reason?: string }>; merge(worktreeId: string): Promise<{ ok: boolean; reason?: string }>; mergeMainIn(worktreeId: string): Promise<{ ok: boolean; reason?: string }>; reconcileOutbox(): Promise<void>; cancelOutbox(worktreeId: string): number }
+type ShippingService = { runDoneWhen(worktreeId: string): Promise<{ pass: boolean; output: string }>; startReview(worktreeId: string): Promise<{ started: boolean; reason?: string }>; judgeFinding(worktreeId: string, findingId: string, valid: boolean, reason: string): Promise<void>; personVerdict(worktreeId: string, findingId: string, valid: boolean, reason: string): Promise<{ ok: boolean; error?: string }>; openPr(worktreeId: string): Promise<{ ok: boolean; reason?: string }>; merge(worktreeId: string): Promise<{ ok: boolean; reason?: string }>; mergeMainIn(worktreeId: string): Promise<{ ok: boolean; reason?: string }>; reconcileOutbox(): Promise<void>; cancelOutbox(worktreeId: string): number }
 type ReportService = { report(): ReportModel; status(): { handoffs: { worktreeId: string; name: string; state: WorktreeState; level: Level }[]; needsYouCount: number }; sidebarStatus(): Record<string, AvatarWorktreeStatus> }
 type AvatarServices = { gate: GateService; handoff: HandoffService; brain: BrainService; supervisor: SupervisorService; shipping: ShippingService; report: ReportService }
 type AvatarSettings = { defaultLevel: Level; switches: Switches; houseRules: string[]; allowCommands: string[]; denyCommands: string[]; deployCommands: string[]; brainAgent: AgentKind; brainModel: string | null; judgmentTimeoutSeconds: number }
@@ -464,7 +464,8 @@ type DecideInput = { call: ToolCall; classes: ActionClass[]; mandate: Mandate; s
 - **`judgeFinding`** (R-30):
   - **Valid:** sends the finding to the worker.
   - **Invalid from a bot:** enqueues an outbox `thread-reply` with the reason, then calls `quirky.hosting/resolveThread`.
-  - **Invalid from a human:** only allowed when `switches.messaging` is on. Otherwise it adds a `merge-blocked` need and the thread stays unresolved (SC-21).
+  - **Invalid from a human:** only allowed when `switches.messaging` is on. Otherwise it adds a `merge-blocked` need with `finding-dismiss`, `finding-valid`, `take-back`, leaving the stored verdict unchanged and the thread unresolved (SC-21). `finding-dismiss` resolves the thread first, then records the person's dismissal without posting a reply, regardless of the messaging switch. `finding-valid` records a valid verdict and sends the finding to the worker; the thread stays unresolved. A failed resolve leaves the need open to retry.
+  - Every written verdict closes that finding's open held needs in the same transaction. A person's verdict carries `detail.verdictBy: 'person'`; an avatar verdict removes it. The avatar cannot send a finding the person dismissed, but may raise a new need for a reopened thread. An old held need with mandate-edit actions is superseded when a new finding need is raised.
   - **Valid but repeating:** a valid finding sent 3 times without the worker fixing it calls `supervisor.recordDenial` as a stuck signal.
 - **`setMergeOrder`** (an extra `BrainAction`: `{type:'setMergeOrder'; sharedGoalId: string; order: string[]}`) stores `SharedGoal.mergeOrder` (R-5, R-33).
   - `mergebar.ts` refuses to merge a shared-goal worktree whose predecessors in `mergeOrder` aren't merged.
@@ -509,7 +510,7 @@ type GateOutcome = 'allow' | 'deny' | 'held' | 'retry' | 'passthrough'
 type JournalEntry = { seq: number; at: number; worktreeId: string | null; kind: JournalKind; data: Record<string, unknown> }
 type JournalKind = 'handoff' | 'take-back' | 'gate' | 'event' | 'brain-action' | 'brain-error' | 'rotation' | 'ask' | 'guess' | 'stuck' | 'ladder' | 'done-check' | 'finding' | 'outbox' | 'skipped-call' | 'sleep' | 'mandate-proposal' | 'notify'
 type NeedKind = 'held-call' | 'question' | 'guess' | 'mandate-edit' | 'parked' | 'gate-failed' | 'brain-error' | 'merge-blocked'
-type NeedAction = 'allow-once' | 'deny' | 'confirm' | 'redo' | 'review-accept' | 'review-reject' | 'answer' | 'restart' | 'take-back' | 'restart-to-handoff'
+type NeedAction = 'allow-once' | 'deny' | 'confirm' | 'redo' | 'review-accept' | 'review-reject' | 'finding-dismiss' | 'finding-valid' | 'answer' | 'restart' | 'take-back' | 'restart-to-handoff'
 type NeedsYouItem = { id: string; worktreeId: string; kind: NeedKind; title: string; detail: Record<string, unknown>; actions: NeedAction[]; createdAt: number; resolvedAt: number | null; resolution: string | null }
 type Approval = { id: string; worktreeId: string; fingerprint: string; usedAt: number | null }
 type Guess = { id: string; worktreeId: string; question: string; choice: string; confirmedAt: number | null; redoneAt: number | null; commitsSince: string[] }
