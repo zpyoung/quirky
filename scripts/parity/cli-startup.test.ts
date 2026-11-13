@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -7,8 +8,10 @@ import {
   assertNoSecrets,
   assertOwnedReadiness,
   assertServeRefusal,
+  captureStartupProcessIdentity,
   cleanupStartupChecks,
-  parseServeLines
+  parseServeLines,
+  runStartupChecks
 } from './cli-startup'
 import { createServeEnvironment } from './cli-world'
 import type { CliCheckContext } from './cli-checks'
@@ -128,11 +131,13 @@ test('startup cleanup handles gone and live children without signaling the world
   try {
     gone.kill('SIGTERM')
     await gone.exited
+    const liveServeIdentity = captureStartupProcessIdentity(liveServe.pid)
+    if (!liveServeIdentity) throw new Error('could not capture live serve test process identity')
     const context = {
       state: {
         startupProcesses: [
           { servePid: gone.pid, home: join(home, 'serve-gone') },
-          { servePid: liveServe.pid, home: join(home, 'serve-live') }
+          { servePid: liveServe.pid, serveIdentity: liveServeIdentity, home: join(home, 'serve-live') }
         ]
       },
       world: {
@@ -151,6 +156,113 @@ test('startup cleanup handles gone and live children without signaling the world
     for (const child of [gone, liveServe, worldDaemon]) {
       if (child.exitCode === null) child.kill('SIGKILL')
       await child.exited
+    }
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 10_000)
+
+test('startup cleanup refuses a PTY PID whose captured start identity is stale', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-cli-startup-stale-pty-'))
+  const home = join(root, 'isolated-home')
+  mkdirSync(home)
+  const env = { HOME: home, QUIRKY_HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', TMPDIR: home, LANG: 'C', TZ: 'UTC' }
+  const goneServe = Bun.spawn(['/bin/sleep', '60'], { env, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })
+  const stalePty = Bun.spawn(['/bin/sleep', '60'], { env, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })
+  const worldDaemon = Bun.spawn(['/bin/sleep', '60'], { env, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })
+  try {
+    const stalePtyIdentity = captureStartupProcessIdentity(stalePty.pid)
+    if (!stalePtyIdentity) throw new Error('could not capture stale PTY test process identity')
+    goneServe.kill('SIGTERM')
+    await goneServe.exited
+    const context = {
+      state: {
+        startupProcesses: [{
+          servePid: goneServe.pid,
+          home: join(home, 'serve-stale-pty'),
+          ptyHostPid: stalePty.pid,
+          ptyHostIdentity: { ...stalePtyIdentity, started: 'Mon Jan 01 00:00:00 1990' }
+        }]
+      },
+      world: {
+        home, daemonPid: worldDaemon.pid,
+        serveEnvironment(candidate: string) { return createServeEnvironment(candidate, home, env, root) }
+      }
+    } as unknown as Pick<CliCheckContext, 'state' | 'world'>
+    const errors: string[] = []
+    await cleanupStartupChecks(context, errors)
+    expect(errors).toEqual([])
+    expect(stalePty.signalCode).toBeNull()
+    expect(() => process.kill(stalePty.pid, 0)).not.toThrow()
+  } finally {
+    for (const child of [goneServe, stalePty, worldDaemon]) {
+      if (child.exitCode === null) child.kill('SIGKILL')
+      await child.exited
+    }
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 10_000)
+
+test('startup checks stop before proving readiness when cancellation follows the already-running refusal', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-cli-startup-cancel-'))
+  const home = join(root, 'world-home')
+  mkdirSync(home)
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({ pid: process.pid }))
+  })
+  const cancelled = new Error('startup checks cancelled')
+  const proofs: string[] = []
+  const imports: unknown[] = []
+  let abort = false
+  let spawnAttempts = 0
+  try {
+    const listening = Promise.withResolvers<void>()
+    server.once('error', listening.reject)
+    server.listen(0, '127.0.0.1', listening.resolve)
+    await listening.promise
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('health stand-in did not bind')
+    writeFileSync(join(home, 'runtime.json'), JSON.stringify({
+      pid: process.pid,
+      port: address.port,
+      token: 'startup-token',
+      hookToken: 'startup-hook-token',
+      daemonVersion: 'test',
+      protocolVersion: 1,
+      startedAt: Date.now()
+    }))
+    const context = {
+      state: {},
+      world: {
+        home,
+        daemonPid: process.pid,
+        serveEnvironment() { spawnAttempts += 1; throw new Error('unexpected serve spawn') }
+      },
+      check() { if (abort) throw cancelled },
+      refuse() {
+        abort = true
+        return {
+          code: 'conflict',
+          message: 'already running',
+          data: { reason: 'already-running', pid: process.pid, port: address.port, home }
+        }
+      },
+      async call() { return { pid: process.pid, home } },
+      prove(id: string) { proofs.push(id) },
+      importActor(receipt: unknown) { imports.push(receipt) },
+      importActorRefusal() { throw new Error('unexpected actor refusal import') }
+    } as unknown as CliCheckContext
+
+    await expect(runStartupChecks(context)).rejects.toBe(cancelled)
+    expect(proofs).toEqual([])
+    expect(imports).toEqual([])
+    expect(context.state.startupProcesses).toBeUndefined()
+    expect(spawnAttempts).toBe(0)
+  } finally {
+    if (server.listening) {
+      const closed = Promise.withResolvers<void>()
+      server.close(error => error ? closed.reject(error) : closed.resolve())
+      await closed.promise
     }
     rmSync(root, { recursive: true, force: true })
   }

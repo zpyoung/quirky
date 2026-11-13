@@ -44,11 +44,21 @@ export type ServeStopped = {
 
 type ObjectValue = Record<string, unknown>
 type ServeSubprocess = Bun.Subprocess<'ignore', 'pipe', 'pipe'>
+export type StartupProcessIdentity = {
+  pid: number
+  ppid: number
+  pgid: number
+  started: string
+  command: string
+}
 type StartupProcess = {
   home: string
   servePid: number
+  serveIdentity?: StartupProcessIdentity
   daemonPid?: number
+  daemonIdentity?: StartupProcessIdentity
   ptyHostPid?: number | null
+  ptyHostIdentity?: StartupProcessIdentity
   child?: ServeSubprocess
 }
 type LineCapture = {
@@ -271,17 +281,20 @@ function trackOwnedPid(context: CliCheckContext, pid: number): void {
 function recordReadinessPids(context: CliCheckContext, actor: StartupActor, value: ObjectValue): void {
   if (typeof value.pid === 'number' && Number.isInteger(value.pid) && value.pid > 0) {
     actor.record.daemonPid = value.pid
+    actor.record.daemonIdentity = captureStartupProcessIdentity(value.pid)
     trackOwnedPid(context, value.pid)
   }
   if (typeof value.ptyHostPid === 'number' && Number.isInteger(value.ptyHostPid) && value.ptyHostPid > 0) {
     actor.record.ptyHostPid = value.ptyHostPid
+    actor.record.ptyHostIdentity = captureStartupProcessIdentity(value.ptyHostPid)
     trackOwnedPid(context, value.ptyHostPid)
   } else if (value.ptyHostPid === null) {
     actor.record.ptyHostPid = null
   }
 }
 
-function startServe(context: CliCheckContext, home: string, flags: string[]): StartupActor {
+function startServe(context: CliCheckContext, home: string, flags: string[], checkId: string): StartupActor {
+  context.check(checkId)
   const argv = [process.execPath, context.world.paths.cliEntry, 'serve', ...flags, '--runtime', 'local', '--json']
   const child = Bun.spawn(argv, {
     cwd: context.world.paths.repoRoot,
@@ -290,7 +303,11 @@ function startServe(context: CliCheckContext, home: string, flags: string[]): St
     stdout: 'pipe',
     stderr: 'pipe'
   }) as ServeSubprocess
-  const record: StartupProcess = { home, servePid: child.pid, child }
+  const identity = captureStartupProcessIdentity(child.pid)
+  const record: StartupProcess = {
+    home, servePid: child.pid, child,
+    ...(identity ? { serveIdentity: identity } : {})
+  }
   startupProcesses(context).push(record)
   context.world.scope.track(child.pid)
   return {
@@ -303,27 +320,41 @@ function startServe(context: CliCheckContext, home: string, flags: string[]): St
   }
 }
 
-async function verifyStatusReadiness(home: string, runtime: RuntimeInfo, deadline: number): Promise<ObjectValue> {
+async function verifyStatusReadiness(
+  context: CliCheckContext,
+  home: string,
+  runtime: RuntimeInfo,
+  deadline: number,
+  checkId: string
+): Promise<ObjectValue> {
   const remaining = deadline - Date.now()
   if (remaining <= 0) throw new Error('serve readiness deadline expired before status.get')
   const socket = runtime.socket ?? socketPath(home, 'quirkyd.sock')
-  const connecting = QuirkyClient.connectSocket(socket, {
-    role: 'cli', name: 'quirky CLI parity startup', token: runtime.token
-  })
+  const controller = new AbortController()
+  let connecting: Promise<QuirkyClient> | undefined
   let client: QuirkyClient
   try {
-    client = await awaitWithin(connecting, remaining, 'serve status socket connection')
+    client = await awaitWithin(context, () => {
+      const connection = QuirkyClient.connectSocket(socket, {
+        role: 'cli', name: 'quirky CLI parity startup', token: runtime.token
+      }, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(remaining)]) })
+      connecting = connection
+      return connection
+    }, remaining, 'serve status socket connection', checkId)
   } catch (error) {
-    void connecting.then(lateClient => lateClient.close(), () => {})
+    controller.abort(error)
+    if (connecting) void connecting.then(lateClient => lateClient.close(), () => {})
     throw error
   }
   try {
     const callRemaining = deadline - Date.now()
     if (callRemaining <= 0) throw new Error('serve readiness deadline expired before status.get')
     const status = object(await awaitWithin(
-      client.call('status.get', {}, { timeoutMs: callRemaining }),
+      context,
+      () => client.call('status.get', {}, { timeoutMs: callRemaining }),
       callRemaining,
-      'serve status.get readiness probe'
+      'serve status.get readiness probe',
+      checkId
     ), 'serve status.get result')
     equal(status.pid, runtime.pid, 'serve status.get PID and runtime.json PID')
     equal(status.home, home, 'serve status.get home')
@@ -332,21 +363,35 @@ async function verifyStatusReadiness(home: string, runtime: RuntimeInfo, deadlin
     ensure(typeof status.safeMode === 'boolean', 'serve status.get safe-mode value must be a boolean')
     return status
   } finally {
+    controller.abort()
     client.close()
   }
 }
 
-async function firstResponse(context: CliCheckContext, actor: StartupActor, timeoutMs: number): Promise<StartupResponse> {
+async function firstResponse(
+  context: CliCheckContext,
+  actor: StartupActor,
+  timeoutMs: number,
+  checkId: string
+): Promise<StartupResponse> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
+    context.check(checkId)
     const remaining = deadline - Date.now()
     if (remaining <= 0) throw new Error(`serve process ${actor.child.pid} did not respond within ${timeoutMs}ms`)
-    const line = await actor.stdout.nextLine(remaining)
-    if (line === undefined) throw new Error(`serve process ${actor.child.pid} did not respond within ${timeoutMs}ms`)
+    const line = await actor.stdout.nextLine(Math.min(100, remaining))
+    context.check(checkId)
+    if (line === undefined) {
+      if (actor.child.exitCode !== null || Date.now() >= deadline) {
+        throw new Error(`serve process ${actor.child.pid} did not respond within ${timeoutMs}ms`)
+      }
+      continue
+    }
     if (line.length === 0) continue
     const value = object(parseJson(line, `serve process ${actor.child.pid} output`), 'serve response')
     if (value.event === 'ready') {
       recordReadinessPids(context, actor, value)
+      context.check(checkId)
       const ready = value as unknown as ServeReady
       const runtime = readRuntime(actor.record.home)
       if (!runtime) throw new Error(`serve home ${actor.record.home} did not produce runtime.json`)
@@ -358,11 +403,13 @@ async function firstResponse(context: CliCheckContext, actor: StartupActor, time
       const healthRemaining = deadline - Date.now()
       if (healthRemaining <= 0) throw new Error('serve readiness deadline expired before /health')
       if (!(await awaitWithin(
-        isDaemonAlive(runtime, Math.min(1_500, healthRemaining)),
+        context,
+        () => isDaemonAlive(runtime, Math.min(1_500, healthRemaining)),
         healthRemaining,
-        'serve /health readiness probe'
+        'serve /health readiness probe',
+        checkId
       ))) throw new Error(`serve daemon ${runtime.pid} did not answer /health`)
-      const status = await verifyStatusReadiness(actor.record.home, runtime, deadline)
+      const status = await verifyStatusReadiness(context, actor.record.home, runtime, deadline, checkId)
       const ptyHost = object(status.ptyHost, 'serve status.get PTY host')
       equal(ready.ptyHostPid, ptyHost.pid, 'serve readiness PTY host PID and status.get PID')
       equal(ready.safeMode, status.safeMode, 'serve readiness and status.get safe mode')
@@ -378,22 +425,86 @@ async function firstResponse(context: CliCheckContext, actor: StartupActor, time
   }
 }
 
-async function awaitWithin<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  const timeout = Promise.withResolvers<never>()
-  const timer = setTimeout(() => timeout.reject(new Error(`${label} exceeded ${timeoutMs}ms`)), timeoutMs)
+type CheckedPromiseResult<T> =
+  | { kind: 'value'; value: T }
+  | { kind: 'error'; error: unknown }
+
+type CheckedWaitResult<T> = CheckedPromiseResult<T> | { kind: 'tick' } | { kind: 'timeout' }
+
+async function awaitWithin<T>(
+  context: CliCheckContext,
+  operation: () => Promise<T>,
+  timeoutMs: number,
+  label: string,
+  checkId: string
+): Promise<T> {
+  context.check(checkId)
+  const observed: Promise<CheckedPromiseResult<T>> = Promise.resolve().then(operation).then(
+    value => ({ kind: 'value' as const, value }),
+    error => ({ kind: 'error' as const, error })
+  )
+  const timeout = Promise.withResolvers<CheckedWaitResult<T>>()
+  const timer = setTimeout(() => timeout.resolve({ kind: 'timeout' }), timeoutMs)
+  const deadline = Date.now() + timeoutMs
   try {
-    return await Promise.race([promise, timeout.promise])
+    for (;;) {
+      context.check(checkId)
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) throw new Error(`${label} exceeded ${timeoutMs}ms`)
+      const result = await Promise.race([
+        observed,
+        timeout.promise,
+        Bun.sleep(Math.min(100, remaining)).then(() => ({ kind: 'tick' } as const))
+      ])
+      context.check(checkId)
+      if (result.kind === 'tick') continue
+      if (result.kind === 'timeout') throw new Error(`${label} exceeded ${timeoutMs}ms`)
+      if (result.kind === 'error') throw result.error
+      return result.value
+    }
   } finally {
     clearTimeout(timer)
   }
 }
 
-async function actorReceipt(actor: StartupActor, id: string, timeoutMs = 15_000): Promise<CliActorReceipt> {
-  const [exitCode, stderr] = await Promise.all([
-    awaitWithin(actor.child.exited, timeoutMs, `serve actor ${id} exit`),
-    actor.stderr
-  ])
-  await actor.stdout.done
+async function awaitWhileChecking<T>(
+  context: CliCheckContext,
+  operation: () => Promise<T>,
+  checkId: string
+): Promise<T> {
+  context.check(checkId)
+  const observed: Promise<CheckedPromiseResult<T>> = Promise.resolve().then(operation).then(
+    value => ({ kind: 'value' as const, value }),
+    error => ({ kind: 'error' as const, error })
+  )
+  for (;;) {
+    context.check(checkId)
+    const result = await Promise.race([
+      observed,
+      Bun.sleep(100).then(() => ({ kind: 'tick' } as const))
+    ])
+    context.check(checkId)
+    if (result.kind === 'tick') continue
+    if (result.kind === 'error') throw result.error
+    if (result.kind === 'value') return result.value
+  }
+}
+
+async function actorReceipt(
+  context: CliCheckContext,
+  actor: StartupActor,
+  id: string,
+  checkId: string,
+  timeoutMs = 15_000
+): Promise<CliActorReceipt> {
+  const [exitCode, stderr] = await awaitWithin(
+    context,
+    () => Promise.all([actor.child.exited, actor.stderr]),
+    timeoutMs,
+    `serve actor ${id} exit`,
+    checkId
+  )
+  await awaitWhileChecking(context, () => actor.stdout.done, checkId)
   const stdout = actor.stdout.text()
   return {
     id,
@@ -407,14 +518,22 @@ async function actorReceipt(actor: StartupActor, id: string, timeoutMs = 15_000)
   }
 }
 
-async function requireExit(actor: StartupActor, expected: number, timeoutMs: number, label: string): Promise<number> {
-  const exitCode = await awaitWithin(actor.child.exited, timeoutMs, label)
+async function requireExit(
+  context: CliCheckContext,
+  actor: StartupActor,
+  expected: number,
+  timeoutMs: number,
+  label: string,
+  checkId: string
+): Promise<number> {
+  const exitCode = await awaitWithin(context, () => actor.child.exited, timeoutMs, label, checkId)
   equal(exitCode, expected, `${label} exit code`)
   return exitCode
 }
 
 
-async function freeLoopbackPort(): Promise<number> {
+
+async function freeLoopbackPort(context: CliCheckContext, checkId: string): Promise<number> {
   const server = createServer()
   const listening = Promise.withResolvers<void>()
   const onError = (error: Error) => listening.reject(error)
@@ -422,7 +541,7 @@ async function freeLoopbackPort(): Promise<number> {
   server.once('listening', () => listening.resolve())
   try {
     server.listen(0, '127.0.0.1')
-    await listening.promise
+    await awaitWhileChecking(context, () => listening.promise, checkId)
     const address = server.address()
     if (!address || typeof address === 'string') throw new Error('free-port probe did not receive a TCP address')
     return address.port
@@ -448,19 +567,39 @@ function isPidAlive(pid: number, child?: ServeSubprocess): boolean {
   }
 }
 
-function signalPid(pid: number, signal: NodeJS.Signals, child?: ServeSubprocess): void {
-  if (child) child.kill(signal)
-  else process.kill(pid, signal)
+function isOriginalPidAlive(pid: number, identity: unknown, child?: ServeSubprocess): boolean {
+  return startupIdentityMatches(pid, identity) && isPidAlive(pid, child)
 }
 
-async function waitForPidExit(pid: number, child: ServeSubprocess | undefined, timeoutMs: number): Promise<boolean> {
+function signalPid(
+  pid: number,
+  signal: NodeJS.Signals,
+  identity: unknown,
+  child?: ServeSubprocess
+): boolean {
+  if (!startupIdentityMatches(pid, identity) || (child && child.exitCode !== null)) return false
+  if (child) child.kill(signal)
+  else process.kill(pid, signal)
+  return true
+}
+
+async function waitForPidExit(
+  pid: number,
+  child: ServeSubprocess | undefined,
+  timeoutMs: number,
+  identity: unknown,
+  context?: CliCheckContext,
+  checkId?: string
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
-  while (isPidAlive(pid, child)) {
+  for (;;) {
+    if (context && checkId) context.check(checkId)
+    if (!isOriginalPidAlive(pid, identity, child)) return true
     const remaining = deadline - Date.now()
     if (remaining <= 0) return false
     await Bun.sleep(Math.min(100, remaining))
+    if (context && checkId) context.check(checkId)
   }
-  return true
 }
 
 async function stopReadyActor(
@@ -471,11 +610,15 @@ async function stopReadyActor(
   receiptId: string
 ): Promise<{ stop: ServeStopped; runtimeRemoved: true; daemonGone: true; ptyHostAfterStop: 'alive' | 'absent' }> {
   if (protectedWorldPids(context.world).has(actor.child.pid)) throw new Error('refusing to signal a world-owned serve process')
-  actor.child.kill('SIGTERM')
-  await Bun.sleep(50)
-  if (actor.child.exitCode === null) actor.child.kill('SIGINT')
-  await requireExit(actor, 0, 15_000, `serve actor ${receiptId} stop`)
-  await actor.stdout.done
+  if (!signalPid(actor.child.pid, 'SIGTERM', actor.record.serveIdentity, actor.child)) {
+    throw new Error(`serve process ${actor.child.pid} identity changed before SIGTERM`)
+  }
+  await awaitWhileChecking(context, () => Bun.sleep(50), receiptId)
+  if (actor.child.exitCode === null && !signalPid(actor.child.pid, 'SIGINT', actor.record.serveIdentity, actor.child)) {
+    throw new Error(`serve process ${actor.child.pid} identity changed before SIGINT`)
+  }
+  await requireExit(context, actor, 0, 15_000, `serve actor ${receiptId} stop`, receiptId)
+  await awaitWhileChecking(context, () => actor.stdout.done, receiptId)
   const stdout = actor.stdout.text()
   const parsed = parseServeLines(stdout)
   if (parsed.lines !== 2 || !parsed.ready || !parsed.stopped) throw new Error(`serve actor ${receiptId} did not emit exactly ready and stopped records`)
@@ -487,10 +630,14 @@ async function stopReadyActor(
   assertCleanStop(parsed.stopped, { pid: ready.pid, signal: 'SIGTERM' })
   assertNoSecrets(stdout, runtime)
   if (existsSync(join(actor.record.home, 'runtime.json'))) throw new Error(`serve actor ${receiptId} left runtime.json behind`)
-  if (!(await waitForPidExit(ready.pid, undefined, 15_000))) throw new Error(`serve daemon ${ready.pid} remained alive after a clean stop`)
+  if (!actor.record.daemonIdentity) throw new Error(`serve daemon ${ready.pid} identity was not recorded`)
+  if (!(await waitForPidExit(ready.pid, undefined, 15_000, actor.record.daemonIdentity, context, receiptId))) {
+    throw new Error(`serve daemon ${ready.pid} remained alive after a clean stop`)
+  }
   const ptyHostAfterStop = typeof ready.ptyHostPid === 'number' && isPidAlive(ready.ptyHostPid) ? 'alive' : 'absent'
-  const receipt = await actorReceipt(actor, receiptId)
+  const receipt = await actorReceipt(context, actor, receiptId, receiptId)
   equal(receipt.exitCode, 0, `serve actor ${receiptId} exit code`)
+  context.check(receiptId)
   context.importActor([receipt])
   return { stop: parsed.stopped, runtimeRemoved: true, daemonGone: true, ptyHostAfterStop }
 }
@@ -502,10 +649,11 @@ function statusPidAndHome(value: unknown, context: CliCheckContext, label: strin
 }
 
 async function assertWorldUnchanged(context: CliCheckContext, id: string): Promise<void> {
-  const status = await context.call(id, ['status'])
+  const status = await awaitWithin(context, () => context.call(id, ['status']), 15_000, `${id} status`, id)
   statusPidAndHome(status, context, `${id} status`)
   const runtime = readRuntime(context.world.home)
-  if (!runtime || runtime.pid !== context.world.daemonPid || !(await isDaemonAlive(runtime))) {
+  if (!runtime || runtime.pid !== context.world.daemonPid ||
+      !(await awaitWithin(context, () => isDaemonAlive(runtime), 1_500, `${id} health`, id))) {
     throw new Error(`${id} changed or stopped the world daemon`)
   }
 }
@@ -515,12 +663,14 @@ async function checkAlreadyRunning(context: CliCheckContext): Promise<void> {
   const runtime = readRuntime(context.world.home)
   if (!runtime) throw new Error('world daemon runtime.json is missing')
   const refusal = await context.refuse('startup-already-running-refusal', ['serve'])
+  context.check('startup-already-running')
   assertServeRefusal(refusal, 'already-running', {
     pid: context.world.daemonPid,
     port: runtime.port,
     home: context.world.home
   })
   await assertWorldUnchanged(context, 'startup-already-running')
+  context.check('startup-already-running')
   context.prove('startup-already-running', {
     refusal: 'already-running', namedWorldDaemon: refusal.data && object(refusal.data, 'already-running refusal data').pid === context.world.daemonPid,
     worldDaemonUnchanged: true
@@ -532,26 +682,28 @@ async function checkPortInUse(context: CliCheckContext): Promise<void> {
   const worldRuntime = readRuntime(context.world.home)
   if (!worldRuntime) throw new Error('world daemon runtime.json is missing')
   const home = join(context.world.home, 'serve-port')
-  const actor = startServe(context, home, ['--port', String(worldRuntime.port)])
-  const response = await firstResponse(context, actor, 15_000)
+  const actor = startServe(context, home, ['--port', String(worldRuntime.port)], 'startup-port-in-use')
+  const response = await firstResponse(context, actor, 15_000, 'startup-port-in-use')
   if (response.kind !== 'refusal') throw new Error('serve accepted the world daemon port')
-  await requireExit(actor, 1, 15_000, 'serve port-in-use refusal')
-  const receipt = await actorReceipt(actor, 'startup-port-in-use-refusal')
+  await requireExit(context, actor, 1, 15_000, 'serve port-in-use refusal', 'startup-port-in-use')
+  const receipt = await actorReceipt(context, actor, 'startup-port-in-use-refusal', 'startup-port-in-use')
+  context.check('startup-port-in-use')
   const refusal = context.importActorRefusal(receipt)
   assertServeRefusal(refusal, 'port-in-use', { port: worldRuntime.port })
   if (existsSync(join(home, 'runtime.json')) || existsSync(join(home, 'logs/daemon.log'))) {
     throw new Error('serve port-in-use created a runtime file or daemon log')
   }
   await assertWorldUnchanged(context, 'startup-port-in-use')
+  context.check('startup-port-in-use')
   context.prove('startup-port-in-use', { refusal: 'port-in-use', started: false, worldDaemonUnchanged: true })
 }
 
 async function checkReady(context: CliCheckContext): Promise<void> {
   context.check('startup-ready')
   const home = join(context.world.home, 'serve-ready')
-  const port = await freeLoopbackPort()
-  const actor = startServe(context, home, ['--port', String(port)])
-  const response = await firstResponse(context, actor, 30_000)
+  const port = await freeLoopbackPort(context, 'startup-ready')
+  const actor = startServe(context, home, ['--port', String(port)], 'startup-ready')
+  const response = await firstResponse(context, actor, 30_000, 'startup-ready')
   if (response.kind !== 'ready') throw new Error('serve refused its free readiness port')
   assertOwnedReadiness(response.ready, {
     home,
@@ -559,8 +711,11 @@ async function checkReady(context: CliCheckContext): Promise<void> {
     runtime: { pid: response.runtime.pid, port: response.runtime.port },
     port
   })
-  if (!(await isDaemonAlive(response.runtime))) throw new Error(`serve daemon ${response.runtime.pid} is not healthy`)
+  if (!(await awaitWithin(context, () => isDaemonAlive(response.runtime), 1_500, 'serve readiness health', 'startup-ready'))) {
+    throw new Error(`serve daemon ${response.runtime.pid} is not healthy`)
+  }
   const stopped = await stopReadyActor(context, actor, response.ready, response.runtime, 'startup-ready')
+  context.check('startup-ready')
   context.prove('startup-ready', {
     owned: true,
     portHonored: true,
@@ -581,8 +736,12 @@ async function checkReady(context: CliCheckContext): Promise<void> {
 async function checkConcurrent(context: CliCheckContext): Promise<void> {
   context.check('startup-concurrent')
   const home = join(context.world.home, 'serve-race')
-  const actors = [startServe(context, home, []), startServe(context, home, [])]
-  const responses = await Promise.all(actors.map(actor => firstResponse(context, actor, 30_000)))
+  const actors = [
+    startServe(context, home, [], 'startup-concurrent'),
+    startServe(context, home, [], 'startup-concurrent')
+  ]
+  const responses = await Promise.all(actors.map(actor => firstResponse(context, actor, 30_000, 'startup-concurrent')))
+  context.check('startup-concurrent')
   const readyIndices = responses.flatMap((response, index) => response.kind === 'ready' ? [index] : [])
   const refusalIndices = responses.flatMap((response, index) => response.kind === 'refusal' ? [index] : [])
   if (readyIndices.length !== 1 || refusalIndices.length !== 1) throw new Error(`serve race returned ${readyIndices.length} ready and ${refusalIndices.length} refused processes`)
@@ -592,12 +751,16 @@ async function checkConcurrent(context: CliCheckContext): Promise<void> {
   const loser = actors[loserIndex]!
   const winnerResponse = responses[winnerIndex]!
   if (winnerResponse.kind !== 'ready') throw new Error('serve race winner did not return readiness')
-  await requireExit(loser, 1, 15_000, 'serve concurrency refusal')
-  const refusalReceipt = await actorReceipt(loser, 'startup-concurrent-refusal')
+  await requireExit(context, loser, 1, 15_000, 'serve concurrency refusal', 'startup-concurrent')
+  const refusalReceipt = await actorReceipt(context, loser, 'startup-concurrent-refusal', 'startup-concurrent')
+  context.check('startup-concurrent')
   const refusal = context.importActorRefusal(refusalReceipt)
   assertServeRefusal(refusal, 'already-running', { pid: winnerResponse.ready.pid, home })
-  if (!(await isDaemonAlive(winnerResponse.runtime))) throw new Error('serve race winner is not healthy')
+  if (!(await awaitWithin(context, () => isDaemonAlive(winnerResponse.runtime), 1_500, 'serve race health', 'startup-concurrent'))) {
+    throw new Error('serve race winner is not healthy')
+  }
   const stopped = await stopReadyActor(context, winner, winnerResponse.ready, winnerResponse.runtime, 'startup-concurrent')
+  context.check('startup-concurrent')
   context.prove('startup-concurrent', {
     readyCount: 1,
     loserReason: 'already-running',
@@ -606,36 +769,51 @@ async function checkConcurrent(context: CliCheckContext): Promise<void> {
   })
 }
 
-async function waitForOrphanRelease(home: string, pid: number, timeoutMs: number): Promise<void> {
+async function waitForOrphanRelease(
+  context: CliCheckContext,
+  home: string,
+  pid: number,
+  identity: unknown,
+  timeoutMs: number,
+  checkId: string
+): Promise<void> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
+    context.check(checkId)
     const runtime = readRuntime(home)
-    if (!isPidAlive(pid) && (!runtime || runtime.pid !== pid)) return
+    if (!isOriginalPidAlive(pid, identity) && (!runtime || runtime.pid !== pid)) return
     const remaining = deadline - Date.now()
     if (remaining <= 0) throw new Error(`orphaned serve daemon ${pid} did not exit and release runtime.json within ${timeoutMs}ms`)
     await Bun.sleep(Math.min(100, remaining))
+    context.check(checkId)
   }
 }
 
 async function checkParentLoss(context: CliCheckContext): Promise<void> {
   context.check('startup-parent-loss')
   const home = join(context.world.home, 'serve-race')
-  const orphan = startServe(context, home, [])
-  const orphanResponse = await firstResponse(context, orphan, 30_000)
+  const orphan = startServe(context, home, [], 'startup-parent-loss')
+  const orphanResponse = await firstResponse(context, orphan, 30_000, 'startup-parent-loss')
   if (orphanResponse.kind !== 'ready') throw new Error('serve refused after the concurrency winner stopped')
   const orphanPid = orphanResponse.ready.pid
   const orphanStartedAt = Date.now()
   if (protectedWorldPids(context.world).has(orphan.child.pid)) throw new Error('refusing to kill a world-owned serve process')
-  orphan.child.kill('SIGKILL')
-  await awaitWithin(orphan.child.exited, 5_000, 'SIGKILLed serve process exit')
-  await waitForOrphanRelease(home, orphanPid, 15_000)
+  if (!signalPid(orphan.child.pid, 'SIGKILL', orphan.record.serveIdentity, orphan.child)) {
+    throw new Error(`serve process ${orphan.child.pid} identity changed before SIGKILL`)
+  }
+  await awaitWithin(context, () => orphan.child.exited, 5_000, 'SIGKILLed serve process exit', 'startup-parent-loss')
+  await waitForOrphanRelease(
+    context, home, orphanPid, orphan.record.daemonIdentity, 15_000, 'startup-parent-loss'
+  )
   const orphanExitMs = Date.now() - orphanStartedAt
 
-  const restarted = startServe(context, home, [])
-  const restartedResponse = await firstResponse(context, restarted, 30_000)
+  context.check('startup-parent-loss')
+  const restarted = startServe(context, home, [], 'startup-parent-loss')
+  const restartedResponse = await firstResponse(context, restarted, 30_000, 'startup-parent-loss')
   if (restartedResponse.kind !== 'ready') throw new Error('serve did not restart after its parent was killed')
   if (restartedResponse.ready.pid === orphanPid) throw new Error('serve restart reused the orphan daemon PID')
   const stopped = await stopReadyActor(context, restarted, restartedResponse.ready, restartedResponse.runtime, 'startup-parent-loss')
+  context.check('startup-parent-loss')
   context.prove('startup-parent-loss', {
     serveKilled: 'SIGKILL',
     orphanExited: true,
@@ -670,6 +848,53 @@ async function attemptCleanup(errors: string[], label: string, operation: () => 
 
 function validPid(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0
+}
+
+function startupProcessSnapshot(): Map<number, StartupProcessIdentity> {
+  try {
+    const result = execFileSync('/bin/ps', ['-A', '-o', 'pid=,ppid=,pgid=,lstart=,command='], {
+      encoding: 'utf8',
+      timeout: 2_000,
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    const processes = new Map<number, StartupProcessIdentity>()
+    for (const line of result.split('\n')) {
+      const columns = line.trim().split(/\s+/)
+      const [pid, ppid, pgid] = columns.slice(0, 3).map(Number)
+      if (!validPid(pid) || !Number.isInteger(ppid) || ppid < 0 || !Number.isInteger(pgid) || pgid < 0 || columns.length < 9) continue
+      processes.set(pid, {
+        pid, ppid, pgid,
+        started: columns.slice(3, 8).join(' '),
+        command: columns.slice(8).join(' ')
+      })
+    }
+    return processes
+  } catch {
+    return new Map()
+  }
+}
+
+export function captureStartupProcessIdentity(pid: number): StartupProcessIdentity | undefined {
+  return validPid(pid) ? startupProcessSnapshot().get(pid) : undefined
+}
+
+function validStartupProcessIdentity(value: unknown): value is StartupProcessIdentity {
+  return isObject(value) && validPid(value.pid) &&
+    Number.isInteger(value.ppid) && (value.ppid as number) >= 0 &&
+    Number.isInteger(value.pgid) && (value.pgid as number) >= 0 &&
+    typeof value.started === 'string' && value.started.length > 0 &&
+    typeof value.command === 'string' && value.command.length > 0
+}
+
+function sameStartupProcess(left: unknown, right: StartupProcessIdentity | undefined): boolean {
+  if (!validStartupProcessIdentity(left) || !right) return false
+  return left.pid === right.pid && left.started === right.started &&
+    (left.command === right.command || (left.ppid === right.ppid && left.pgid === right.pgid))
+}
+
+function startupIdentityMatches(pid: number, identity: unknown): identity is StartupProcessIdentity {
+  return validStartupProcessIdentity(identity) && identity.pid === pid &&
+    sameStartupProcess(identity, startupProcessSnapshot().get(pid))
 }
 
 function recordsForCleanup(context: Pick<CliCheckContext, 'state' | 'world'>, errors: string[]): StartupProcess[] {
@@ -717,11 +942,44 @@ function ptyHostCommand(home: string, pid: number): string {
   }
 }
 
-function ptyPidForCleanup(record: StartupProcess, protectedPids: ReadonlySet<number>): number | undefined {
-  if (typeof record.ptyHostPid === 'number') return protectedPids.has(record.ptyHostPid) ? undefined : record.ptyHostPid
+function ptyHostHasHomeAssociation(home: string, pid: number, command: string): boolean {
+  if (command.includes(home)) return true
+  try {
+    const processInfo = execFileSync('/bin/ps', ['eww', '-p', String(pid)], {
+      cwd: home,
+      env: { HOME: home, QUIRKY_HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', TMPDIR: join(home, 'tmp'), LANG: 'C', TZ: 'UTC' },
+      encoding: 'utf8',
+      timeout: 2_000,
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    return processInfo.includes(`QUIRKY_HOME=${home}`) || processInfo.includes(`HOME=${home}`)
+  } catch {
+    return false
+  }
+}
+
+function ptyPidForCleanup(
+  record: StartupProcess,
+  protectedPids: ReadonlySet<number>
+): { pid: number; identity: StartupProcessIdentity } | undefined {
+  if (typeof record.ptyHostPid === 'number') {
+    const identity = record.ptyHostIdentity
+    return protectedPids.has(record.ptyHostPid) ||
+      !validStartupProcessIdentity(identity) ||
+      identity.pid !== record.ptyHostPid
+      ? undefined
+      : { pid: record.ptyHostPid, identity }
+  }
   const pid = readPtyPid(record.home)
   if (!pid || protectedPids.has(pid)) return undefined
-  return ptyHostCommand(record.home, pid).includes('pty-host') ? pid : undefined
+  const identity = captureStartupProcessIdentity(pid)
+  if (!identity) return undefined
+  const command = ptyHostCommand(record.home, pid)
+  if (!command.includes('pty-host') || !ptyHostHasHomeAssociation(record.home, pid, command) ||
+      !startupIdentityMatches(pid, identity)) return undefined
+  record.ptyHostPid = pid
+  record.ptyHostIdentity = identity
+  return { pid, identity }
 }
 
 export async function cleanupStartupChecks(
@@ -730,57 +988,76 @@ export async function cleanupStartupChecks(
 ): Promise<void> {
   const records = recordsForCleanup(context, errors)
   const protectedPids = protectedWorldPids(context.world)
-  const serves = new Map<number, StartupProcess>()
+  const serves = new Map<number, StartupProcess[]>()
   for (const record of records) {
     if (protectedPids.has(record.servePid)) {
       errors.push(`startup cleanup refused to signal protected world PID ${record.servePid}`)
       continue
     }
-    serves.set(record.servePid, record)
+    const candidates = serves.get(record.servePid)
+    if (candidates) candidates.push(record)
+    else serves.set(record.servePid, [record])
   }
 
-  for (const [pid, record] of serves) {
+  for (const [pid, candidates] of serves) {
     await attemptCleanup(errors, `serve ${pid} SIGTERM`, () => {
-      if (isPidAlive(pid, record.child)) signalPid(pid, 'SIGTERM', record.child)
+      const record = candidates.find(candidate => startupIdentityMatches(pid, candidate.serveIdentity))
+      if (record) signalPid(pid, 'SIGTERM', record.serveIdentity, record.child)
     })
   }
-  for (const [pid, record] of serves) {
+  for (const [pid, candidates] of serves) {
     await attemptCleanup(errors, `serve ${pid} graceful wait`, async () => {
-      if (await waitForPidExit(pid, record.child, 12_000)) return
-      signalPid(pid, 'SIGKILL', record.child)
-      if (!(await waitForPidExit(pid, record.child, 2_000))) throw new Error('process remained alive after SIGKILL')
+      const record = candidates.find(candidate => startupIdentityMatches(pid, candidate.serveIdentity))
+      if (!record || await waitForPidExit(pid, record.child, 12_000, record.serveIdentity)) return
+      if (!signalPid(pid, 'SIGKILL', record.serveIdentity, record.child)) return
+      if (!(await waitForPidExit(pid, record.child, 2_000, record.serveIdentity))) {
+        throw new Error('process remained alive after SIGKILL')
+      }
     })
   }
 
-  const daemons = new Map<number, StartupProcess>()
+  const daemons = new Map<number, StartupProcess[]>()
   for (const record of records) {
     if (!validPid(record.daemonPid) || protectedPids.has(record.daemonPid)) continue
-    daemons.set(record.daemonPid, record)
+    const candidates = daemons.get(record.daemonPid)
+    if (candidates) candidates.push(record)
+    else daemons.set(record.daemonPid, [record])
   }
-  for (const [pid, record] of daemons) {
+  for (const [pid, candidates] of daemons) {
     await attemptCleanup(errors, `serve-home daemon ${pid} wait`, async () => {
-      if (await waitForPidExit(pid, undefined, 10_000)) return
-      signalPid(pid, 'SIGKILL')
-      if (!(await waitForPidExit(pid, undefined, 2_000))) throw new Error('daemon remained alive after SIGKILL')
+      const record = candidates.find(candidate => startupIdentityMatches(pid, candidate.daemonIdentity))
+      if (!record || await waitForPidExit(pid, undefined, 10_000, record.daemonIdentity)) return
+      if (!signalPid(pid, 'SIGKILL', record.daemonIdentity)) return
+      if (!(await waitForPidExit(pid, undefined, 2_000, record.daemonIdentity))) {
+        throw new Error('daemon remained alive after SIGKILL')
+      }
       throw new Error('daemon survived cleanup and was sent SIGKILL')
     })
   }
 
-  const ptyHosts = new Map<number, string>()
+  type PtyCleanupTarget = { home: string; identity: StartupProcessIdentity }
+  const ptyHosts = new Map<number, PtyCleanupTarget[]>()
   for (const record of records) {
-    const pid = ptyPidForCleanup(record, protectedPids)
-    if (pid) ptyHosts.set(pid, record.home)
+    const target = ptyPidForCleanup(record, protectedPids)
+    if (!target) continue
+    const candidates = ptyHosts.get(target.pid)
+    if (candidates) candidates.push({ home: record.home, identity: target.identity })
+    else ptyHosts.set(target.pid, [{ home: record.home, identity: target.identity }])
   }
-  for (const [pid, home] of ptyHosts) {
+  for (const [pid, candidates] of ptyHosts) {
     await attemptCleanup(errors, `serve-home PTY host ${pid} SIGTERM`, () => {
-      if (isPidAlive(pid)) signalPid(pid, 'SIGTERM')
+      const target = candidates.find(candidate => startupIdentityMatches(pid, candidate.identity))
+      if (target) signalPid(pid, 'SIGTERM', target.identity)
     })
   }
-  for (const [pid] of ptyHosts) {
+  for (const [pid, candidates] of ptyHosts) {
     await attemptCleanup(errors, `serve-home PTY host ${pid} graceful wait`, async () => {
-      if (await waitForPidExit(pid, undefined, 5_000)) return
-      signalPid(pid, 'SIGKILL')
-      if (!(await waitForPidExit(pid, undefined, 2_000))) throw new Error('PTY host remained alive after SIGKILL')
+      const target = candidates.find(candidate => startupIdentityMatches(pid, candidate.identity))
+      if (!target || await waitForPidExit(pid, undefined, 5_000, target.identity)) return
+      if (!signalPid(pid, 'SIGKILL', target.identity)) return
+      if (!(await waitForPidExit(pid, undefined, 2_000, target.identity))) {
+        throw new Error('PTY host remained alive after SIGKILL')
+      }
     })
   }
 }
