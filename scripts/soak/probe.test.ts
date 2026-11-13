@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, jest, spyOn, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -34,6 +34,64 @@ let savedSetTimeout: typeof setTimeout | undefined
 let savedProcessKill: typeof process.kill | undefined
 
 const realSetTimeout = globalThis.setTimeout
+
+const timerControls = jest as unknown as { advanceTimersByTime(ms: number): void }
+const advanceTimersByTime = (ms: number): void => timerControls.advanceTimersByTime(ms)
+
+type ProbeClock = {
+  now(): number
+  jumpTo(ms: number): void
+  advanceBy(ms: number): void
+}
+
+async function drainMicrotasks(rounds = 32): Promise<void> {
+  for (let index = 0; index < rounds; index++) await Promise.resolve()
+}
+
+async function drainUntil(predicate: () => boolean, rounds = 32): Promise<void> {
+  for (let index = 0; index < rounds; index++) {
+    if (predicate()) return
+    await Promise.resolve()
+  }
+  expect(predicate()).toBe(true)
+}
+
+async function withProbeClock(
+  action: (clock: ProbeClock) => Promise<void>,
+  clockOnly = false
+): Promise<void> {
+  jest.useFakeTimers()
+  const probeIndex = activeProbes.length
+  let monotonicNow = performance.now()
+  let restoreOwnedClock: (() => void) | undefined
+  try {
+    if (clockOnly) {
+      const clockSpy = spyOn(performance, 'now').mockImplementation(() => monotonicNow)
+      restoreOwnedClock = () => clockSpy.mockRestore()
+    }
+    const clock: ProbeClock = {
+      now: () => performance.now(),
+      jumpTo: (ms) => {
+        monotonicNow = ms
+      },
+      advanceBy: (ms) => {
+        advanceTimersByTime(ms)
+        if (clockOnly) monotonicNow += ms
+      }
+    }
+    await action(clock)
+  } finally {
+    try {
+      for (const probe of activeProbes.slice(probeIndex)) probe.stop()
+      await drainMicrotasks()
+    } finally {
+      restoreOwnedClock?.()
+      jest.useRealTimers()
+    }
+  }
+}
+
+
 
 afterEach(() => {
   if (savedSetTimeout) globalThis.setTimeout = savedSetTimeout
@@ -746,4 +804,312 @@ test('tracks each distinct positive safe-integer pty host PID once', () => {
   tracker.update(41)
   expect(tracker.current()).toBe(41)
   expect(tracked).toEqual([41, 88])
+})
+
+test('records a pending status watchdog at its exact deadline and ignores late settlement', async () => {
+  await withProbeClock(async (clock) => {
+    for (const lateSettlement of ['resolve', 'reject'] as const) {
+      const status = deferred<unknown>()
+      const client = fakeClient(() => status.promise)
+      let connectionCalls = 0
+      let lostCalls = 0
+      const pidCalls: number[] = []
+      const probe = launch({
+        probeTimeoutMs: 40,
+        connect: () => {
+          connectionCalls++
+          return Promise.resolve(client)
+        },
+        onDaemonLost: () => lostCalls++,
+        onPtyHostPid: (pid: number | null) => {
+          if (pid !== null) pidCalls.push(pid)
+        }
+      })
+      await drainUntil(() => client.calls.includes('status.get'))
+      expect(connectionCalls).toBe(1)
+      expect(client.calls).toEqual(['status.get'])
+
+      clock.advanceBy(39)
+      await drainMicrotasks()
+      expect(probe.probes).toEqual([])
+      expect(lostCalls).toBe(0)
+
+      clock.advanceBy(1)
+      await drainMicrotasks()
+      const expectTerminalResult = () => {
+        expect(probe.probes).toEqual([{ at: 0, ms: 40, ownLagMs: 0, timedOut: true }])
+        expect(lostCalls).toBe(1)
+        expect(probe.daemonExited()).toBe(false)
+        expect(client.closeCalls).toBe(1)
+        expect(pidCalls).toEqual([])
+        expect(connectionCalls).toBe(1)
+        expect(client.calls).toEqual(['status.get'])
+      }
+      expectTerminalResult()
+
+      if (lateSettlement === 'resolve') status.resolve({ ptyHost: { pid: 99 } })
+      else status.reject(new Error('late status failure'))
+      await drainMicrotasks()
+      clock.advanceBy(1000)
+      await drainMicrotasks()
+      expectTerminalResult()
+    }
+  })
+})
+
+test('classifies the exact RPC timeout error as a status timeout before the watchdog', async () => {
+  await withProbeClock(async (clock) => {
+    const status = deferred<unknown>()
+    const client = fakeClient(() => status.promise)
+    let connectionCalls = 0
+    let lostCalls = 0
+    const pidCalls: number[] = []
+    const probe = launch({
+      probeTimeoutMs: 40,
+      connect: () => {
+        connectionCalls++
+        return Promise.resolve(client)
+      },
+      onDaemonLost: () => lostCalls++,
+      onPtyHostPid: (pid: number | null) => {
+        if (pid !== null) pidCalls.push(pid)
+      }
+    })
+    await drainUntil(() => client.calls.includes('status.get'))
+
+    clock.advanceBy(5)
+    status.reject(new Error('RPC call timed out after 40 ms'))
+    await drainMicrotasks()
+    const expectTerminalResult = () => {
+      expect(probe.probes).toEqual([{ at: 0, ms: 40, ownLagMs: 0, timedOut: true }])
+      expect(lostCalls).toBe(1)
+      expect(probe.daemonExited()).toBe(false)
+      expect(client.closeCalls).toBe(1)
+      expect(pidCalls).toEqual([])
+      expect(connectionCalls).toBe(1)
+      expect(client.calls).toEqual(['status.get'])
+    }
+    expectTerminalResult()
+
+    clock.advanceBy(1000)
+    await drainMicrotasks()
+    expectTerminalResult()
+  })
+})
+
+test('classifies an ordinary status rejection at the deadline by elapsed time', async () => {
+  await withProbeClock(async (clock) => {
+    const status = deferred<unknown>()
+    const client = fakeClient(() => status.promise)
+    let connectionCalls = 0
+    let lostCalls = 0
+    const pidCalls: number[] = []
+    const probe = launch({
+      probeTimeoutMs: 40,
+      connect: () => {
+        connectionCalls++
+        return Promise.resolve(client)
+      },
+      onDaemonLost: () => lostCalls++,
+      onPtyHostPid: (pid: number | null) => {
+        if (pid !== null) pidCalls.push(pid)
+      }
+    })
+    await drainUntil(() => client.calls.includes('status.get'))
+
+    const beganAt = clock.now()
+    clock.jumpTo(beganAt + 40)
+    status.reject(new Error('ordinary status failure'))
+    await drainMicrotasks()
+    const expectTerminalResult = () => {
+      expect(probe.probes).toEqual([{ at: 0, ms: 40, ownLagMs: 0, timedOut: true }])
+      expect(lostCalls).toBe(1)
+      expect(probe.daemonExited()).toBe(false)
+      expect(client.closeCalls).toBe(1)
+      expect(pidCalls).toEqual([])
+      expect(connectionCalls).toBe(1)
+      expect(client.calls).toEqual(['status.get'])
+    }
+    expectTerminalResult()
+
+    clock.advanceBy(1000)
+    await drainMicrotasks()
+    expectTerminalResult()
+  }, true)
+})
+
+test('keeps an early ordinary status rejection nonterminal and waits 250 ms before retrying', async () => {
+  await withProbeClock(async (clock) => {
+    const firstStatus = deferred<unknown>()
+    const secondStatus = deferred<unknown>()
+    let statusCalls = 0
+    const client = fakeClient(() => {
+      statusCalls++
+      return statusCalls === 1 ? firstStatus.promise : secondStatus.promise
+    })
+    let connectionCalls = 0
+    let lostCalls = 0
+    const probe = launch({
+      probeTimeoutMs: 40,
+      connect: () => {
+        connectionCalls++
+        return Promise.resolve(client)
+      },
+      onDaemonLost: () => lostCalls++
+    })
+    await drainUntil(() => client.calls.includes('status.get'))
+    expect(statusCalls).toBe(1)
+
+    clock.advanceBy(5)
+    firstStatus.reject(new Error('ordinary status failure'))
+    await drainMicrotasks()
+    const ordinaryFailure = [{ at: 0, ms: 5, ownLagMs: 0, timedOut: false }]
+    expect(probe.probes).toEqual(ordinaryFailure)
+    expect(lostCalls).toBe(0)
+    expect(client.closeCalls).toBe(0)
+
+    clock.advanceBy(249)
+    await drainMicrotasks()
+    expect(statusCalls).toBe(1)
+    expect(client.calls).toEqual(['status.get'])
+    clock.advanceBy(1)
+    await drainUntil(() => statusCalls === 2)
+    expect(statusCalls).toBe(2)
+    expect(client.calls).toEqual(['status.get', 'status.get'])
+    expect(probe.probes).toEqual(ordinaryFailure)
+    expect(lostCalls).toBe(0)
+    expect(connectionCalls).toBe(1)
+
+    probe.stop()
+    await drainMicrotasks()
+    clock.advanceBy(1000)
+    await drainMicrotasks()
+    expect(probe.probes).toEqual(ordinaryFailure)
+    expect(lostCalls).toBe(0)
+    expect(connectionCalls).toBe(1)
+  })
+})
+
+test('does not accept successful status replies at or beyond the watchdog deadline', async () => {
+  await withProbeClock(async (clock) => {
+    for (const elapsedMs of [40, 41]) {
+      const status = deferred<unknown>()
+      const client = fakeClient(() => status.promise)
+      let connectionCalls = 0
+      let lostCalls = 0
+      const pidCalls: number[] = []
+      const probe = launch({
+        probeTimeoutMs: 40,
+        connect: () => {
+          connectionCalls++
+          return Promise.resolve(client)
+        },
+        onDaemonLost: () => lostCalls++,
+        onPtyHostPid: (pid: number | null) => {
+          if (pid !== null) pidCalls.push(pid)
+        }
+      })
+      await drainUntil(() => client.calls.includes('status.get'))
+      const beganAt = clock.now()
+      clock.jumpTo(beganAt + elapsedMs)
+
+      status.resolve({ ptyHost: { pid: 42 } })
+      await drainMicrotasks()
+      const expectTerminalResult = () => {
+        expect(probe.probes).toEqual([{ at: 0, ms: 40, ownLagMs: 0, timedOut: true }])
+        expect(lostCalls).toBe(1)
+        expect(probe.daemonExited()).toBe(false)
+        expect(client.closeCalls).toBe(1)
+        expect(pidCalls).toEqual([])
+        expect(connectionCalls).toBe(1)
+        expect(client.calls).toEqual(['status.get'])
+      }
+      expectTerminalResult()
+
+      clock.advanceBy(1000)
+      await drainMicrotasks()
+      expectTerminalResult()
+    }
+  }, true)
+})
+
+test('closes connections that resolve at or beyond the connection deadline without using them', async () => {
+  await withProbeClock(async (clock) => {
+    for (const elapsedMs of [40, 41]) {
+      const connecting = deferred<QuirkyClient>()
+      const client = fakeClient()
+      let connectionCalls = 0
+      let lostCalls = 0
+      const probe = launch({
+        connectTimeoutMs: 40,
+        connect: () => {
+          connectionCalls++
+          return connecting.promise
+        },
+        onDaemonLost: () => lostCalls++
+      })
+      await drainUntil(() => connectionCalls === 1)
+      const beganAt = clock.now()
+      clock.jumpTo(beganAt + elapsedMs)
+
+      connecting.resolve(client)
+      await drainMicrotasks()
+      const expectTerminalResult = () => {
+        expect(probe.probes).toEqual([{ at: 0, ms: 40, ownLagMs: 0, timedOut: true }])
+        expect(lostCalls).toBe(1)
+        expect(probe.daemonExited()).toBe(false)
+        expect(client.closeCalls).toBe(1)
+        expect(client.calls).toEqual([])
+        expect(connectionCalls).toBe(1)
+      }
+      expectTerminalResult()
+
+      clock.advanceBy(1000)
+      await drainMicrotasks()
+      expectTerminalResult()
+    }
+  }, true)
+})
+
+test('uses the default 30,000 ms connection deadline', async () => {
+  await withProbeClock(async (clock) => {
+    const connecting = deferred<QuirkyClient>()
+    const client = fakeClient()
+    let connectionCalls = 0
+    let lostCalls = 0
+    const probe = launch({
+      connect: () => {
+        connectionCalls++
+        return connecting.promise
+      },
+      onDaemonLost: () => lostCalls++
+    })
+    await drainUntil(() => connectionCalls === 1)
+
+    clock.advanceBy(29_999)
+    await drainMicrotasks()
+    expect(probe.probes).toEqual([])
+    expect(lostCalls).toBe(0)
+    expect(probe.daemonExited()).toBe(false)
+    expect(connectionCalls).toBe(1)
+
+    clock.advanceBy(1)
+    await drainMicrotasks()
+    const expectTerminalResult = () => {
+      expect(probe.probes).toEqual([{ at: 0, ms: 30_000, ownLagMs: 0, timedOut: true }])
+      expect(lostCalls).toBe(1)
+      expect(probe.daemonExited()).toBe(false)
+      expect(connectionCalls).toBe(1)
+      expect(client.calls).toEqual([])
+    }
+    expectTerminalResult()
+
+    connecting.resolve(client)
+    await drainMicrotasks()
+    expect(client.closeCalls).toBe(1)
+    clock.advanceBy(1000)
+    await drainMicrotasks()
+    expectTerminalResult()
+    expect(client.closeCalls).toBe(1)
+  })
 })
