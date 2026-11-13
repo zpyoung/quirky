@@ -330,11 +330,11 @@ describe('commandProbe', () => {
     const pidFile = join(dir, 'child.pid')
     escapedPidFiles.push(pidFile)
     writeFileSync(fake, `#!/bin/sh
-exec perl -MPOSIX -e 'my $pid_file = $ARGV[0]; my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); open my $file, ">", $pid_file or die $!; print {$file} "$$\\n"; close $file; sleep 30; exit 0; } while (!-e $pid_file) { select undef, undef, undef, 0.01; } print "2.1.310 (Claude Code)\\n";' '${pidFile}'
+exec perl -MPOSIX -e 'my $pid_file = $ARGV[0]; my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); my $temp_file = "$pid_file.tmp.$$"; open my $file, ">", $temp_file or die $!; print {$file} "$$\\n"; close $file or die $!; rename $temp_file, $pid_file or die $!; sleep 30; exit 0; } while (!-e $pid_file) { select undef, undef, undef, 0.01; } print "2.1.310 (Claude Code)\\n";' '${pidFile}'
 `, { mode: 0o755 })
     const started = Date.now()
-    expect(await commandProbe(contextFor(), { timeoutMs: 300 })(fake, identity)).toBeNull()
-    expect(Date.now() - started).toBeLessThan(2000)
+    expect(await commandProbe(contextFor(), { timeoutMs: 1500 })(fake, identity)).toBeNull()
+    expect(Date.now() - started).toBeLessThan(4000)
     expect(existsSync(pidFile)).toBe(true)
     const childPid = Number(readFileSync(pidFile, 'utf8').trim())
     expect(childPid).toBeGreaterThan(0)

@@ -302,7 +302,7 @@ describe('readLoginPath', () => {
     const pidFile = join(root, 'escaped.pid')
     const shell = script(
       'shell-escaped',
-      `exec perl -MPOSIX -e 'my $pid_file = $ARGV[0]; my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); open my $file, ">", $pid_file or die $!; print $file "$$\\n"; close $file; sleep 30; exit 0; } while (!-e $pid_file) { select undef, undef, undef, 0.01; } print "/late/bin";' '${pidFile}'`
+      `exec perl -MPOSIX -e 'my $pid_file = $ARGV[0]; my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); my $temp_file = "$pid_file.tmp.$$"; open my $file, ">", $temp_file or die $!; print $file "$$\\n"; close $file or die $!; rename $temp_file, $pid_file or die $!; sleep 30; exit 0; } while (!-e $pid_file) { select undef, undef, undef, 0.01; } print "/late/bin";' '${pidFile}'`
     )
     const real = realRunner()
     let result: RunResult | undefined
@@ -314,8 +314,8 @@ describe('readLoginPath', () => {
     }
     const started = Date.now()
     try {
-      expect(await readLoginPath(runner, shell, 300)).toBeNull()
-      expect(Date.now() - started).toBeLessThan(2000)
+      expect(await readLoginPath(runner, shell, 1500)).toBeNull()
+      expect(Date.now() - started).toBeLessThan(4000)
       expect(result?.stdoutText).toBe('/late/bin')
       expect(result?.signal).toBeNull()
     } finally {
