@@ -1254,7 +1254,7 @@ function updateAgentSurface(env: ReviewsEnv, context: AgentContext, change: (sur
     if (!agentSurfaceIsCurrent(state, context)) return
     change(context.surface === 'checks' ? state.checksByWorktree[context.worktree]! : state.detail)
     applied = true
-  })
+  }, context.surface === 'checks' ? context.worktree : undefined)
   return applied
 }
 
@@ -1478,7 +1478,7 @@ async function launchAgent(env: ReviewsEnv, params: Record<string, unknown>, cal
       if (sameAgentTarget(env, currentDialog, context, rawDialog.action)) state.agentDialog = null
       if (context.surface === 'checks') state.checksByWorktree[context.worktree]!.error = partialMessage
       else state.detail.error = partialMessage
-    })
+    }, context.surface === 'checks' ? context.worktree : undefined)
     return {
       delivered: true,
       sessionId: createdValue.id,

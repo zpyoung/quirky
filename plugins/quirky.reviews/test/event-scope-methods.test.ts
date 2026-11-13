@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { JsonRecord, ReviewData, ReviewsEnv, ReviewsStore } from '../src/contracts'
 import { newChecksEntry, createReviewsEnv } from '../src/env'
 import { detailMethods } from '../src/detail/methods'
+import { checksMethods } from '../src/checks/methods'
 
 type EmittedChange = { type: string; data: unknown }
 type CallStub = (method: string, params?: JsonRecord) => Promise<unknown>
@@ -577,4 +578,91 @@ describe('reviews detail-method event scope', () => {
 
     expect(() => env.update((state) => { state.audience = 'bots' }, 'w1')).toThrow()
   })
+})
+
+function agentEnv(deliver: () => Promise<unknown>) {
+  const fixture = unitEnv()
+  const { env } = fixture
+  env.resolve = async (params) => ({ id: params.worktree, kind: 'git', repoId: 'r', path: '/tmp/reviews-scope' }) as never
+  env.call = async (method) => {
+    if (method === 'quirky.agents/list') return {
+      defaultAgent: 'test-agent',
+      agents: [{ id: 'test-agent', enabled: true, installed: true, isDefault: true }]
+    }
+    if (method === 'quirky.session/create') return { id: 'session-1', agent: 'test-agent' }
+    if (method === 'quirky.agents/deliver') return deliver()
+    if (method === 'quirky.hosting/resolveThread') return { resolved: true }
+    throw new Error(`Unexpected agent call: ${method}`)
+  }
+  return { ...fixture, checks: checksMethods(env) }
+}
+
+const conflictsDialog = { surface: 'checks', worktree: 'w1', number: 12, action: 'conflicts', prompt: 'Resolve conflicts' }
+
+describe('review agent launch event scope', () => {
+  test('undelivered Checks prompts record only a worktree-scoped error', async () => {
+    const { env, events, checks } = agentEnv(async () => ({ delivery: 'not-delivered' }))
+    await checks.checksSetAgentDialog!(conflictsDialog, {} as never)
+    events.length = 0
+
+    expect(await checks.checksLaunchAgent!({ worktree: 'w1' }, {} as never)).toMatchObject({ delivered: false })
+
+    expect(env.read().checksByWorktree.w1!.error).toContain('was not delivered')
+    expectTagged(events)
+  })
+
+  test('delivered queued threads and the final dialog clear stay Checks-owned', async () => {
+    const { env, events, checks } = agentEnv(async () => ({ delivery: 'pasted' }))
+    env.update((state) => {
+      state.checksByWorktree.w1!.queuedComments = ['T1']
+    }, 'w1')
+    await checks.checksSetAgentDialog!({ ...conflictsDialog, action: 'comments' }, {} as never)
+    events.length = 0
+
+    expect(await checks.checksLaunchAgent!({ worktree: 'w1' }, {} as never)).toMatchObject({ delivered: true, resolved: ['T1'] })
+
+    expect(env.read().checksByWorktree.w1!.queuedComments).toEqual([])
+    expect(storedComments(env).find((comment) => comment.threadId === 'T1')?.isResolved).toBe(true)
+    expect(env.read().agentDialog).toBeNull()
+    expect(events).toHaveLength(2)
+    expectTagged(events)
+  })
+
+  test('detail launch errors remain globally visible', async () => {
+    const { env, events, checks } = agentEnv(async () => ({ delivery: 'not-delivered' }))
+    await checks.checksSetAgentDialog!({ ...conflictsDialog, surface: 'detail' }, {} as never)
+    events.length = 0
+
+    expect(await checks.checksLaunchAgent!({ worktree: 'w1' }, {} as never)).toMatchObject({ delivered: false })
+
+    expect(env.read().detail.error).toContain('was not delivered')
+    expectUntagged(events)
+  })
+
+  for (const replacement of [
+    { ...conflictsDialog, surface: 'detail', prompt: 'Detail replacement' },
+    { ...conflictsDialog, worktree: 'w2', number: 13, prompt: 'Other worktree replacement' }
+  ]) {
+    test(`launch completion leaves the replacement ${replacement.surface}/${replacement.worktree} dialog alone`, async () => {
+      const delivery = Promise.withResolvers<unknown>()
+      const delivering = Promise.withResolvers<void>()
+      const { env, events, checks } = agentEnv(() => {
+        delivering.resolve()
+        return delivery.promise
+      })
+      await checks.checksSetAgentDialog!(conflictsDialog, {} as never)
+      const launch = checks.checksLaunchAgent!({ worktree: 'w1' }, {} as never)
+      await delivering.promise
+      await checks.checksSetAgentDialog!(replacement, {} as never)
+      const saved = structuredClone(env.read().agentDialog)
+      events.length = 0
+      delivery.resolve({ delivery: 'pasted' })
+
+      expect(await launch).toMatchObject({ delivered: true })
+
+      expect(events).toHaveLength(1)
+      expectTagged(events)
+      expect(env.read().agentDialog).toEqual(saved)
+    })
+  }
 })
