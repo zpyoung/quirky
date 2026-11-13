@@ -187,3 +187,31 @@ describe('RunningHandlers', () => {
     otherRelease()
   })
 })
+
+test('clears every warned owner when an override changes ownership during a refusal episode', () => {
+  const t = setup()
+  const first = t.handlers.enter(contributionId, 'acme.tools', 3)!
+  const second = t.handlers.enter(contributionId, 'acme.tools', 3)!
+  const third = t.handlers.enter(contributionId, 'acme.tools', 3)!
+  expect(t.handlers.enter(contributionId, 'acme.tools', 3)).toBeNull()
+  expect(t.handlers.enter(contributionId, 'acme.override', 3)).toBeNull()
+  expect(t.handlers.enter(contributionId, 'acme.override', 3)).toBeNull()
+  expect(t.added).toEqual([
+    { pluginId: 'acme.tools', message: limitWarning },
+    { pluginId: 'acme.override', message: limitWarning }
+  ])
+  first()
+  expect(t.removed).toEqual([])
+  second()
+  expect(t.removed).toEqual([
+    { pluginId: 'acme.tools', message: limitWarning },
+    { pluginId: 'acme.override', message: limitWarning }
+  ])
+  third()
+  expect(t.handlers.count(contributionId)).toBe(0)
+  expect(t.removed).toHaveLength(2)
+  expect(t.logs).toEqual([
+    limitLog,
+    'method acme.tools/read in acme.tools is under its limit again; 3 calls were refused'
+  ])
+})

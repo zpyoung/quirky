@@ -9,6 +9,7 @@ export type RunningOptions = {
 
 type WarningEpisode = {
   pluginId: string
+  recipients: Set<string>
   message: string
   limit: number
   refused: number
@@ -33,11 +34,12 @@ export class RunningHandlers {
         episode.refused++
       } else {
         const message = `${contributionId} has reached its limit of ${limit} running handlers; calls over the limit are refused`
-        episode = { pluginId, message, limit, refused: 1 }
+        episode = { pluginId, recipients: new Set(), message, limit, refused: 1 }
         this.warningEpisodes.set(contributionId, episode)
         const method = contributionId.startsWith('method:') ? contributionId.slice('method:'.length) : contributionId
         this.options?.log?.(`method ${method} in ${pluginId} has reached its limit of ${limit} running handlers; refusing calls over the limit`)
       }
+      episode.recipients.add(pluginId)
       this.options?.warn(pluginId, episode.message)
       return null
     }
@@ -55,7 +57,7 @@ export class RunningHandlers {
       const episode = this.warningEpisodes.get(contributionId)
       if (episode && currentCount <= Math.floor(episode.limit / 2)) {
         this.warningEpisodes.delete(contributionId)
-        this.options?.unwarn(episode.pluginId, episode.message)
+        for (const recipient of episode.recipients) this.options?.unwarn(recipient, episode.message)
         const method = contributionId.startsWith('method:') ? contributionId.slice('method:'.length) : contributionId
         this.options?.log?.(`method ${method} in ${episode.pluginId} is under its limit again; ${episode.refused} calls were refused`)
       }
