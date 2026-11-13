@@ -75,6 +75,8 @@ export type FakePtyHostOptions = {
   onRequest?: (request: PtyRequest) => void
   /** The highest host protocol version; defaults to the package's current version. */
   version?: number
+  silentHello?: boolean
+  rejectThenSilent?: boolean
   /** The lowest host protocol version; defaults to `version`. */
   minVersion?: number
   /** Simulates a host from before version negotiation that accepts only its exact version. */
@@ -164,6 +166,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   let nextPid = 4000
   let writeAcceptedHandler: AcceptedWriteHandler | undefined
   const failures = new Map<PtyRequest['type'], string>()
+  let rejectedVersion = false
 
   function flush(socket: Socket<ConnState>) {
     const state = socket.data
@@ -224,6 +227,8 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   function handle(socket: Socket<ConnState>, request: PtyRequest) {
     requests.push(request)
     options.onRequest?.(request)
+    if (request.type === 'hello' && options.silentHello) return
+    if (options.rejectThenSilent && rejectedVersion) return
     if (!socket.data.authed) {
       if (request.type !== 'hello' || request.token !== token) {
         endConnection(socket)
@@ -238,6 +243,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
             { min: minVersion, max: version }
           )
       if (negotiated === null) {
+        rejectedVersion = options.rejectThenSilent ?? false
         fail(socket, request.id, `unsupported protocol version ${request.version}, host speaks ${version}`)
         endAfterWrites(socket)
         return

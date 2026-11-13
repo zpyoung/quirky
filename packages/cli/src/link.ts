@@ -74,6 +74,7 @@ export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options:
   const get = () => {
     if (closed) return Promise.reject(new Error('daemon link is closed'))
     return (current ??= connect().catch((error) => {
+      if (closed) throw new Error('daemon link is closed')
       const message = error instanceof Error ? error.message : String(error)
       if (
         error instanceof RpcError ||
@@ -84,12 +85,19 @@ export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options:
       throw new DaemonUnavailableError(message)
     }))
   }
+  const assertOpen = (client: RpcLinkClient) => {
+    if (!closed) return
+    client.close()
+    throw new Error('daemon link is closed')
+  }
+
   const reconnect = async () => {
     if (closed) throw new Error('daemon link is closed')
     const previous = current
     current = null
     if (previous) (await previous.catch(() => null))?.close()
-    await get()
+    const client = await get()
+    assertOpen(client)
   }
 
   const isDestructive = (method: string) =>
@@ -111,6 +119,7 @@ export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options:
     for (let resends = 0; ; resends++) {
       try {
         const client = await get()
+        assertOpen(client)
         return await client.callAny(method, params, {
           requestId,
           ...(callOptions?.timeoutMs === undefined ? {} : { timeoutMs: callOptions.timeoutMs })
@@ -120,8 +129,10 @@ export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options:
         if (method === 'quirky.cli/runtimeCall' || isDestructive(method) || resends >= MAX_RESENDS) throw new ConnectionLostError(base)
         // the daemon may have run the call, so an unreachable daemon here still owes the user the base
         await reconnect().catch(() => {
+          if (closed) throw new Error('daemon link is closed')
           throw new ConnectionLostError(base)
         })
+        if (closed) throw new Error('daemon link is closed')
       }
     }
   }
@@ -130,15 +141,16 @@ export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options:
     for (;;) {
       try {
         const client = await get()
+        assertOpen(client)
         const envelope = (await client.callAny('quirky.ask/wait', { askId, timeoutMs: ASK_WAIT_MS })) as AskEnvelope
         if (envelope.status !== 'pending') return envelope
       } catch (error) {
         if (!isConnectionLost(error)) throw error
         await reconnect()
+        if (closed) throw new Error('daemon link is closed')
       }
     }
   }
-
   const invoke = async (
     method: string,
     params: Record<string, unknown>,
