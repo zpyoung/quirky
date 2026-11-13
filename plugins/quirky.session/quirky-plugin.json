@@ -1,6 +1,6 @@
 {
   "id": "quirky.session",
-  "apiVersion": "1.10.0",
+  "apiVersion": "1.12.0",
   "name": "Sessions",
   "version": "0.1.0",
   "description": "Terminal and structured agent sessions in a worktree.",
@@ -1606,6 +1606,7 @@
       },
       {
         "id": "sleepWorkspace",
+        "timeout": "30m",
         "description": "Durably records recovery intent, stops resumable terminal and structured sessions while retaining PTY or provider history, and returns per-session sleep outcomes.",
         "params": {
           "type": "object",
@@ -1638,6 +1639,7 @@
       },
       {
         "id": "wakeWorkspace",
+        "timeout": "30m",
         "description": "Restores stopped shell history and resumes agents using their saved provider conversation identity; partial failures remain retryable.",
         "params": {
           "type": "object",

@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcErrorCode } from '@quirky/protocol'
+import { DEFAULT_MUTATING_METHOD_TIMEOUT_MS, RpcErrorCode } from '@quirky/protocol'
 import { DaemonError } from '../../src/errors'
 import { Dispatcher, methodTimeoutMs } from '../../src/plugins/dispatch'
 import { PluginHost } from '../../src/plugins/host'
@@ -19,6 +19,7 @@ const BOUND_WARNING = `${CONTRIBUTION} has 4 or more handlers that never finishe
 
 type SetupOptions = {
   readTimeoutMs?: number
+  mutatingTimeoutMs?: number
   statusHandler?: (params: unknown, conn: ClientConn) => unknown
 }
 
@@ -80,7 +81,8 @@ function setup(options: SetupOptions = {}) {
   }
   dispatcher = new Dispatcher(handlers as never, host, (message) => logs.push(message), {
     unanswered,
-    readTimeoutMs: options.readTimeoutMs
+    readTimeoutMs: options.readTimeoutMs,
+    mutatingTimeoutMs: options.mutatingTimeoutMs
   })
   const conn = (overrides: Partial<ClientConn> = {}): ClientConn => ({
     id: 7,
@@ -157,12 +159,13 @@ describe('Dispatcher method deadlines', () => {
     expect(boundWarnings(t)).toBe(0)
   })
 
-  test('M2 chooses declared and default read deadlines but leaves unbounded methods alone', async () => {
-    expect(methodTimeoutMs({ readOnly: true }, 300_000)).toBe(300_000)
-    expect(methodTimeoutMs({}, 300_000)).toBeNull()
-    expect(methodTimeoutMs({ readOnly: false }, 300_000)).toBeNull()
-    expect(methodTimeoutMs({ timeout: '75s' }, 300_000)).toBe(75_000)
-    expect(methodTimeoutMs({ readOnly: true, timeout: '2s' }, 300_000)).toBe(2_000)
+  test('M2 chooses declared deadlines over read and mutating defaults', async () => {
+    expect(methodTimeoutMs({ readOnly: true }, 300_000, 600_000)).toBe(300_000)
+    expect(methodTimeoutMs({}, 300_000, 600_000)).toBe(600_000)
+    expect(methodTimeoutMs({ readOnly: false }, 300_000, 600_000)).toBe(600_000)
+    expect(methodTimeoutMs({ timeout: '75s' }, 300_000, 600_000)).toBe(75_000)
+    expect(methodTimeoutMs({ readOnly: true, timeout: '2s' }, 300_000, 600_000)).toBe(2_000)
+    expect(methodTimeoutMs({ timeout: '24h' }, 300_000, 600_000)).toBe(86_400_000)
 
     const t = setup({ readTimeoutMs: 200 })
     t.plugin([method('read', { readOnly: true })], `context.provide('${CONTRIBUTION}', async () => new Promise(() => {}))`)
@@ -174,12 +177,70 @@ describe('Dispatcher method deadlines', () => {
   })
 
   test('M3 lets a mutating method without a declared timeout finish past the read timeout', async () => {
-    const t = setup({ readTimeoutMs: 200 })
+    const t = setup({ readTimeoutMs: 100, mutatingTimeoutMs: 2_000 })
     t.plugin([method('read')], `context.provide('${CONTRIBUTION}', async () => { await new Promise((resolve) => setTimeout(resolve, 600)); return 'done' })`)
 
     expect(await t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })).toBe('done')
     expect(t.unanswered.count(CONTRIBUTION)).toBe(0)
     expect(t.logs.some((line) => line.includes(`method ${METHOD} in acme.tools did not answer`))).toBe(false)
+  })
+
+  // these integration cases exercise the platform clock while plugin activation also uses real timers
+  test('times out an undeclared mutating method and records the unanswered handler', async () => {
+    const t = setup({ mutatingTimeoutMs: 200 })
+    t.plugin([method('read')], `context.provide('${CONTRIBUTION}', async () => Promise.withResolvers().promise)`)
+    const started = Date.now()
+
+    timeout(await t.reject(t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })), METHOD, 200)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(200)
+    expect(Date.now() - started).toBeLessThan(500)
+    expect(t.unanswered.count(CONTRIBUTION)).toBe(1)
+    expect(t.logs).toContain(`method ${METHOD} in acme.tools did not answer within 200 ms (1 unanswered)`)
+  })
+
+  test('lets a declared mutating deadline extend the default', async () => {
+    const t = setup({ mutatingTimeoutMs: 200 })
+    t.plugin([method('read', { timeout: '2s' })], `context.provide('${CONTRIBUTION}', async () => { const delay = Promise.withResolvers(); setTimeout(delay.resolve, 600); await delay.promise; return 'slow' })`)
+
+    expect(await t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })).toBe('slow')
+    expect(t.unanswered.count(CONTRIBUTION)).toBe(0)
+  })
+
+  test('lets a declared mutating deadline shorten the default', async () => {
+    const t = setup({ mutatingTimeoutMs: 5_000 })
+    t.plugin([method('read', { timeout: '1s' })], `context.provide('${CONTRIBUTION}', async () => Promise.withResolvers().promise)`)
+
+    timeout(await t.reject(t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })))
+  })
+
+  test('refuses a fifth unanswered mutating invocation without running its handler', async () => {
+    const t = setup({ mutatingTimeoutMs: 25 })
+    t.plugin([method('read')], `context.provide('${CONTRIBUTION}', async () => { record('ran'); return Promise.withResolvers().promise })`)
+    for (let index = 0; index < 4; index++) {
+      timeout(await t.reject(t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })), METHOD, 25)
+    }
+
+    const error = await t.reject(t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() }))
+    expect(error.code).toBe(RpcErrorCode.Timeout)
+    expect(error.data).toEqual({ reason: 'stalled', method: METHOD, unanswered: 4 })
+    expect(t.lines().filter((line) => line === 'ran')).toHaveLength(4)
+  })
+
+  test('defaults mutating invocations to the exported ten-minute deadline', async () => {
+    expect(DEFAULT_MUTATING_METHOD_TIMEOUT_MS).toBe(600_000)
+    const t = setup()
+    t.plugin([method('read')], `context.provide('${CONTRIBUTION}', async () => Promise.withResolvers().promise)`)
+    const schedule = globalThis.setTimeout
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((...args: Parameters<typeof setTimeout>) => {
+      const [callback, delay, ...callbackArgs] = args
+      return schedule(callback, delay === DEFAULT_MUTATING_METHOD_TIMEOUT_MS ? 25 : delay, ...callbackArgs)
+    }) as typeof setTimeout)
+    try {
+      timeout(await t.reject(t.dispatcher.dispatch(METHOD, {}, { conn: t.conn() })), METHOD, DEFAULT_MUTATING_METHOD_TIMEOUT_MS)
+      expect(t.unanswered.count(CONTRIBUTION)).toBe(1)
+    } finally {
+      timer.mockRestore()
+    }
   })
 
   test('M4 returns an in-time result without logging or counting it', async () => {
@@ -416,7 +477,7 @@ describe('Dispatcher method deadlines', () => {
   })
 
   test('M12 leaves kernel methods outside plugin deadlines', async () => {
-    const t = setup({ readTimeoutMs: 200, statusHandler: async () => { await sleep(600); return 'kernel result' } })
+    const t = setup({ readTimeoutMs: 200, mutatingTimeoutMs: 200, statusHandler: async () => { await sleep(600); return 'kernel result' } })
 
     expect(await t.dispatcher.dispatch('status.get', {}, { kernel: true })).toBe('kernel result')
   })

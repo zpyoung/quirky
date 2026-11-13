@@ -253,6 +253,15 @@ export function assignWorktrees(worktrees: FixtureWorktree[], count: number): Fi
   return selected
 }
 
+/** Chromium arguments for an isolated headless browser, with the caller's extras last. */
+export function chromiumArgs(platform: NodeJS.Platform, extra: readonly string[]): string[] {
+  return [
+    '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
+    ...(platform === 'linux' ? ['--no-sandbox'] : []),
+    ...extra
+  ]
+}
+
 /** Opens real renderers and waits for each worktree's own Changes polling. */
 export async function openWindows(options: {
   world: SoakWorld
@@ -260,6 +269,7 @@ export async function openWindows(options: {
   executable: string
   out: string
   signal: AbortSignal
+  browserArgs?: readonly string[]
 }): Promise<SoakWindows> {
   const { world, count, executable, out, signal } = options
   const worktrees = assignWorktrees(world.fixtures.worktrees, count)
@@ -292,8 +302,7 @@ export async function openWindows(options: {
   try {
     throwIfAborted(signal)
     if (worktrees.length !== count) throw new Error(`requested ${count} windows but only ${worktrees.length} worktrees are available`)
-    const args = ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1']
-    if (process.platform === 'linux') args.push('--no-sandbox')
+    const args = chromiumArgs(process.platform, options.browserArgs ?? [])
     launch = chromium.launchServer({
       executablePath: executable,
       headless: true,

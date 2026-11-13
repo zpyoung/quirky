@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   PLUGIN_API_VERSION,
+  RpcErrorCode,
   pluginApiCompatibilityError,
   type ClientStream,
   type MountCleanup,
@@ -57,7 +58,7 @@ describe('stable plugin API floors', () => {
   })
 
   test('the host supports immediate emits and earlier releases', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.13.0')
+    expect(PLUGIN_API_VERSION).toBe('1.14.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
@@ -87,20 +88,20 @@ describe('stable plugin API floors', () => {
   })
 
   test('the host supports output-gap recovery and earlier releases', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.13.0')
+    expect(PLUGIN_API_VERSION).toBe('1.14.0')
     expect(pluginApiCompatibilityError('1.11.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.11.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.12.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.12.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.13.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.13.1')).toContain('apiVersion')
-    expect(pluginApiCompatibilityError('1.14.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.14.1')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.15.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('1.13.0', '1.12.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('1.12.0', '1.11.0')).toContain('apiVersion')
   })
 
   test('the host supports the 1.8.0 release and earlier API floors', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.13.0')
+    expect(PLUGIN_API_VERSION).toBe('1.14.0')
     expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.7.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.8.0')).toBeNull()
@@ -116,7 +117,7 @@ describe('stable plugin API floors', () => {
   })
 
   test('the host supports the release that adds output policies to the daemon process runner', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.13.0')
+    expect(PLUGIN_API_VERSION).toBe('1.14.0')
     expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.9.0', '1.9.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.9.1', '1.9.0')).toContain('apiVersion')
@@ -125,7 +126,7 @@ describe('stable plugin API floors', () => {
   })
 
   test('the host supports raw stderr and bounded process-group cleanup', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.13.0')
+    expect(PLUGIN_API_VERSION).toBe('1.14.0')
     expect(pluginApiCompatibilityError('1.10.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.11.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.11.1', '1.11.0')).toContain('apiVersion')
@@ -134,11 +135,21 @@ describe('stable plugin API floors', () => {
   })
 
   test('the host supports method deadlines and stalled-job diagnostics', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.13.0')
+    expect(PLUGIN_API_VERSION).toBe('1.14.0')
     expect(pluginApiCompatibilityError('1.12.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.12.1', '1.12.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('1.13.0', '1.12.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('1.12.0', '1.11.0')).toContain('apiVersion')
+  })
+
+  test('the host supports the running-handler limit release', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.14.0')
+    expect(RpcErrorCode.Busy).toBe(-32012)
+    expect(pluginApiCompatibilityError('1.13.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.14.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.14.1', '1.14.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.15.0', '1.14.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.14.0', '1.13.0')).toContain('apiVersion')
   })
 
   test.each([

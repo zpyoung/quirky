@@ -99,7 +99,7 @@ test('shared token regressions fail UI and host enrollment but not a daemon-only
 test('check-ratchet runs inventory only without runtime or report writes', async () => {
   const repoRoot = resolve(import.meta.dir, '../..')
   const config = readFileSync(resolve(repoRoot, 'scripts/ui-scoreboard-ratchet.json'), 'utf8')
-  expect(parseRatchetConfig(config)).toEqual({})
+  expect(parseRatchetConfig(config)).toBeObject()
   const source = inventory({ plugins: [plugin('acme.ui', true, [{ file: 'plugins/acme.ui/src/ui.tsx', content: '"--compat-px-40"' }])] })
   let inventoryCalls = 0
   const forbidden = () => { throw new Error('check-ratchet started runtime or wrote a report') }

@@ -28,12 +28,13 @@ import { runLaunchHooks, type LaunchAdditions } from './launch-hooks'
 import { inspectPlugin, renderInspection, type PluginInstallDeps } from './install'
 import { LayoutService } from './layout'
 import { createPtyApi } from './pty-api'
+import { RunningHandlers } from './running'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
 import { describeSqliteRecovery } from '../sqlite'
 import { FileResourceRegistry } from '../file-resources'
 import { UiService } from './ui-service'
-import { UnansweredHandlers } from './unanswered'
+import { UnansweredHandlers, type UnansweredOptions } from './unanswered'
 
 export type PluginRuntimeOptions = {
   home: string
@@ -89,14 +90,16 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
 
   const events = new PluginEvents(plugins, (event) => core.broadcast(event), log, { coalesceMs: options.eventCoalesceMs })
   const hostPower = options.hostPower ?? new HostPowerService(log, null)
-  const unanswered = new UnansweredHandlers({
+  const warnings: UnansweredOptions = {
     warn(pluginId, message) {
       if (plugins.list().find((plugin) => plugin.id === pluginId)?.diagnostics.some((item) => item.message === message)) return
       log(`${pluginId}: ${message}`)
       plugins.addWarning(pluginId, message)
     },
     unwarn: (pluginId, message) => plugins.removeWarning(pluginId, message)
-  })
+  }
+  const unanswered = new UnansweredHandlers(warnings)
+  const running = new RunningHandlers({ ...warnings, log })
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs, unanswered })
   const distros = new DistroService({
     home,
@@ -140,6 +143,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   const dispatcher = new Dispatcher(handlers, plugins, log, {
     store,
     unanswered,
+    running,
     resolveSessionAuthority: (conn) => options.sessionAuthority.resolveForConnection(conn),
     kernelDescribers: {
       'plugin.install': async (params) =>

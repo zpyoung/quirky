@@ -302,5 +302,5 @@ for (const crash of [false, true]) test(`runner-owned sleep ${crash ? 'crashes' 
 })
 
 test('browser requires the streaming process API', () => {
-  expect(JSON.parse(readFileSync(join(import.meta.dir, '../quirky-plugin.json'), 'utf8')).apiVersion).toBe('1.11.0')
+  expect(JSON.parse(readFileSync(join(import.meta.dir, '../quirky-plugin.json'), 'utf8')).apiVersion).toBe('1.12.0')
 })

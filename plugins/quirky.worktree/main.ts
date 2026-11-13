@@ -37,6 +37,7 @@ import { getProjectMetadata, projectMetadata, setExternalInboxSuppressed, setPro
 import { assignTag, createTag, deleteTag, listTags, updateTag } from './src/daemon/tags'
 import { ActiveViews, readViews, setViews } from './src/daemon/views'
 import { archiveWorktree, linkReference, listReferences, unlinkReference, type RecordEnv } from './src/daemon/records'
+import { findReferences, type ReferenceSearchEnv } from './src/daemon/reference-search'
 import { readStatusDefinitions, setStatusDefinitions } from './src/daemon/statuses'
 import { navigate, navigationHistoryMove, navigationIndex, navigationState, navigationStep, openIn } from './src/daemon/navigation'
 import { availableHosts } from './src/daemon/hosts'
@@ -379,6 +380,18 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     },
     changed: (data) => void context.emit('changed', data)
   }
+  const referenceSearchEnv: ReferenceSearchEnv = {
+    store,
+    identitySource: filesystemIdentitySource,
+    repoIds: async () => (await listRepos()).map((repo) => repo.id),
+    resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
+    sessions: () => context.call('quirky.session/list'),
+    processes: async () => {
+      if (!context.pty.connected) throw new Error('PTY host is not connected')
+      return context.pty.list()
+    },
+    fail
+  }
   const projectEnv = {
     store,
     fail,
@@ -634,9 +647,10 @@ export async function activate(context: PluginContext): Promise<PluginActivation
       return statuses
     },
     archive: (params, caller) => archiveWorktree(recordEnv, params as { worktree: string; archivedAt?: unknown }, identityOf(caller)),
+    findReferences: (params, caller) => findReferences(referenceSearchEnv, params, identityOf(caller)),
     references: (params, caller) => listReferences(recordEnv, String(params.worktree), identityOf(caller)),
     linkReference: (params, caller) => linkReference(recordEnv, params as { worktree: string; url: unknown; label?: unknown }, identityOf(caller)),
-    unlinkReference: (params, caller) => unlinkReference(recordEnv, params as { worktree: string; reference: unknown }, identityOf(caller)),
+    unlinkReference: (params, caller) => unlinkReference(recordEnv, params as { worktree: string; reference?: unknown; url?: unknown }, identityOf(caller)),
     options: () => readStockOptions(store),
     setOptions(params) {
       const before = readStockOptions(store)

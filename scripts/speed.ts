@@ -78,7 +78,7 @@ export async function main(args: string[]): Promise<number> {
   let cleanup: SpeedReport['cleanup'] = 'complete'
   let chromiumVersion = 'unavailable'
   const profile: SpeedReport['profile'] = {
-    workloadVersion: 1, worktrees: 10, terminals: 20, diffAddedLines: 5000,
+    workloadVersion: 2, compositor: 'software', worktrees: 10, terminals: 20, diffAddedLines: 5000,
     renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context',
     floodChunkBytes: 65536, floodIntervalMs: 16,
     runner: process.env.QUIRKY_SPEED_RUNNER || 'local', os: platform(), arch: arch(), cpuModel: cpu[0]!.model, cpuCount: cpu.length,
@@ -88,7 +88,7 @@ export async function main(args: string[]): Promise<number> {
     world = await startWorld({ out, repoRoot, windows: 1, workers: false, signal: controller.signal })
     redactions.push(world.home, ...Object.entries(world.runtime).flatMap(([key, value]) => /token/i.test(key) && typeof value === 'string' ? [value] : []))
     fixture = await prepareSpeedFixture(world, { signal: controller.signal })
-    windows = await openWindows({ world, count: 1, executable, out, signal: controller.signal })
+    windows = await openWindows({ world, count: 1, executable, out, signal: controller.signal, browserArgs: ['--disable-gpu'] })
     const browser = windows.pages[0]?.context().browser()
     if (!browser) throw new Error('Chromium browser is unavailable after setup')
     chromiumVersion = browser.version()

@@ -1,6 +1,6 @@
 {
   "id": "quirky.loops",
-  "apiVersion": "1.11.0",
+  "apiVersion": "1.12.0",
   "name": "Background loops",
   "version": "0.1.0",
   "description": "Durable Claude and Codex background loops with until-done, queue, and interval presets.",
@@ -187,6 +187,7 @@
       },
       {
         "id": "resume",
+        "timeout": "30m",
         "description": "Resumes a paused loop and optionally raises its iteration cap by a positive count.",
         "params": {
           "type": "object",
@@ -198,6 +199,7 @@
       },
       {
         "id": "stop",
+        "timeout": "30m",
         "description": "Stops after the current iteration, or immediately aborts the owned structured session when mode is now.",
         "params": {
           "type": "object",
@@ -340,6 +342,7 @@
       },
       {
         "id": "closeView",
+        "timeout": "30m",
         "description": "Explicitly cancels, detaches, or stops and then removes the matching hosted loop tab.",
         "params": {
           "type": "object",

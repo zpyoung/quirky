@@ -513,6 +513,7 @@
       },
       {
         "id": "send",
+        "timeout": "24h",
         "description": "Types a prompt into a session's agent, but never into one waiting for approval or an answer. The text is pasted, then Enter is written after the agent's submit delay and only after a fresh check; the call waits for the agent to start. Fails with conflict and a data.reason: agent-blocked (the agent is waiting; nothing was submitted), prompt-stalled (typed and submitted but the agent did not start in time), not-an-agent, or session-exited.",
         "params": {
           "type": "object",
