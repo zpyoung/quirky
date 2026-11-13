@@ -417,7 +417,7 @@ export async function executeRun(
       throw new ProcessStalledError(
         argv[0] ?? '',
         attempts,
-        resultFromBytes(outcome.stdout, outcome.stderr, outcome.exit.exitCode, outcome.exit.signal, startedAt)
+        resultFromBytes(outcome.stdout, outcome.stderr, outcome.exit.exitCode, outcome.exit.signal, startedAt, undefined, outcome.truncated)
       )
     }
   }

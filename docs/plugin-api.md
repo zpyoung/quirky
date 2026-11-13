@@ -183,6 +183,8 @@ Exact-cap output is not marked truncated. Truncation does not disable deadlines,
 disposal or the existing post-exit stall and rerun behavior. A plugin using either option declares
 `"apiVersion": "1.8.0"`.
 
+Captured partial results on post-exit stall errors retain the same truncation flags.
+
 Use the [process declarations](../packages/protocol/src/process.ts) for the complete option and
 result types.
 

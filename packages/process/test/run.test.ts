@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, realpathSync, rmdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createProcessRunner, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, liveProcesses } from '../src/api'
+import { createProcessRunner, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, liveProcesses, ProcessStalledError } from '../src/api'
 import type { OwnedProcessRunner, ProcessRunnerOptions, RunOptions, RunResult } from '../src/api'
 import { startChild } from '../src/child'
 
@@ -911,3 +911,55 @@ function controlledOutput(): ControlledOutput {
     },
   }
 }
+
+test.each([
+  { outputMode: 'separate' as const, rerunnable: false },
+  { outputMode: 'combined' as const, rerunnable: false },
+  { outputMode: 'separate' as const, rerunnable: true },
+  { outputMode: 'combined' as const, rerunnable: true },
+])('stalled output preserves truncation in the partial result for %j', async ({ outputMode, rerunnable }) => {
+  let starts = 0
+  const runner = makeRunner({
+    stallMs: 5,
+    start: () => {
+      starts++
+      const output = new TextEncoder().encode(starts === 3 ? 'last attempt output' : 'first attempt output')
+      return {
+        pid: 910_100 + starts,
+        stdout: new ReadableStream<Uint8Array>({
+          start(controller) { controller.enqueue(output) },
+        }),
+        stderr: outputStream(outputMode === 'separate' ? ['UVWXY'] : []),
+        exited: Promise.resolve({ exitCode: 7, signal: null }),
+        killGroup() {},
+      }
+    },
+  })
+  const error = await withTimeout(
+    runner.run(['/fake/truncated-partial'], {
+      outputMode,
+      overflow: 'truncate',
+      maxOutputBytes: 4,
+      rerunnable,
+      timeoutMs: 1_000,
+    }).then(() => undefined, (reason: unknown) => reason),
+    1_000,
+    'truncated stalled partial result'
+  )
+  const prefix = rerunnable ? 'last' : 'firs'
+  expect(error).toBeInstanceOf(ProcessStalledError)
+  expect(error).toMatchObject({
+    command: '/fake/truncated-partial',
+    attempts: rerunnable ? 3 : 1,
+    partialResult: {
+      stdout: new TextEncoder().encode(prefix),
+      stdoutText: prefix,
+      stderr: outputMode === 'separate' ? 'UVWX' : '',
+      exitCode: 7,
+      signal: null,
+      truncated: { stdout: true, stderr: outputMode === 'separate' },
+    },
+  })
+  expect((error as ProcessStalledError).partialResult?.stopped).toBeUndefined()
+  expect(starts).toBe(rerunnable ? 3 : 1)
+})
