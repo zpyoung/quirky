@@ -6,8 +6,7 @@ import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/
 import type { ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
 import { createOutbox } from '../src/shipping/outbox'
 import { mergeReady } from '../src/shipping/mergebar'
-import { createReview, type GitRunner, pickReviewerAgent } from '../src/shipping/review'
-import * as reviewModule from '../src/shipping/review'
+import { createGitRunner, createReview, type GitRunner, pickReviewerAgent } from '../src/shipping/review'
 import { forBranchFake, handOff, lsRemote, manifestChecked, readyPushTarget, takeBack } from './shipping-support'
 import { type FakeCalls, makeTestApp, sampleMandate } from './support'
 
@@ -45,15 +44,6 @@ afterEach(async () => {
   }
 })
 
-type CreateGitRunner = (process: ProcessRunner, timeoutMs?: number) => GitRunner
-
-function createGitRunnerFactory(): CreateGitRunner {
-  const factory: unknown = Reflect.get(reviewModule, 'createGitRunner')
-  expect(typeof factory).toBe('function')
-  if (typeof factory !== 'function') throw new Error('createGitRunner is not exported')
-  return factory as CreateGitRunner
-}
-
 function processResult(stdoutText: string, overrides: Partial<RunResult> = {}): RunResult {
   return {
     stdout: new TextEncoder().encode(stdoutText),
@@ -74,7 +64,7 @@ function gitHarness(run: ProcessRunner['run'], timeoutMs?: number) {
       return run(argv, options)
     }
   }
-  const git = createGitRunnerFactory()(process, timeoutMs)
+  const git = createGitRunner(process, timeoutMs)
   return { git, calls }
 }
 
@@ -86,7 +76,7 @@ async function withGitCommand(scriptBody: string, run: (directory: string) => Pr
   writeFileSync(executable, `#!/bin/sh\n${scriptBody}\n`)
   chmodSync(executable, 0o755)
   const previousPath = process.env.PATH
-  process.env.QUIRKY_HOME = '/tmp/quirky-g1-134.DAvngZ'
+  process.env.QUIRKY_HOME = directory
   process.env.PATH = directory
   try {
     await run(directory)
@@ -831,7 +821,7 @@ describe('createGitRunner and default review git runner', () => {
       const script = `printf '%s' 'xxxxxxxxxxxxxxxx'\n/bin/sleep 0.05\nprintf '%s' '${stderr}' >&2`
       await withGitCommand(script, async (directory) => {
         const process = makeRealProcessRunner()
-        const git = createGitRunnerFactory()(process, 5_000)
+        const git = createGitRunner(process, 5_000)
         expect(await git(directory, ['diff'], 4)).toEqual({
           ok: false,
           stdout: 'x'.repeat(16),

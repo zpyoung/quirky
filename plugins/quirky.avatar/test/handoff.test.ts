@@ -42,7 +42,7 @@ async function withClaudeCommand(stdoutText: string | null, run: () => Promise<v
       writeFileSync(executable, `#!/bin/sh\nprintf '%s\\n' '${stdoutText}'\n`)
       chmodSync(executable, 0o755)
     }
-    process.env.QUIRKY_HOME = '/tmp/quirky-g1-134.DAvngZ'
+    process.env.QUIRKY_HOME = directory
     process.env.PATH = directory
     await run()
   } finally {

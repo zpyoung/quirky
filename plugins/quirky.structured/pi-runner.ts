@@ -295,14 +295,19 @@ class PiRunner implements StructuredRunner {
   }
 
   private async readOutput(run: Running, settle: () => void): Promise<void> {
+    const reader = run.child.stdout.getReader()
     try {
-      for await (const chunk of run.child.stdout) {
-        this.read(run, Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        this.read(run, Buffer.from(value.buffer, value.byteOffset, value.byteLength))
       }
     } catch {
       if (!run.stopped && !run.exited) {
         void run.child.stop({ signal: 'SIGTERM', graceMs: TERM_GRACE_MS })
       }
+    } finally {
+      reader.releaseLock()
     }
     const exit = await run.child.exited
     this.exit(run, settle, exit)

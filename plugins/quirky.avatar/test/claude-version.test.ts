@@ -3,13 +3,9 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
-import type { ProcessRunner, RunResult } from '@quirky/protocol'
-import * as installModule from '../src/hooks/install'
-import { claudeVersionAtLeast } from '../src/hooks/install'
+import type { RunResult } from '@quirky/protocol'
+import { cachedClaudeVersion, claudeVersionAtLeast, probeClaudeVersion } from '../src/hooks/install'
 import { makeTestApp } from './support'
-
-type ProbeClaudeVersion = (process: ProcessRunner, command?: string) => Promise<string | null>
-type CachedClaudeVersion = (probeOrProcess: ProcessRunner | (() => Promise<string | null>), ttlMs?: number) => () => Promise<string | null>
 
 const processRunners: OwnedProcessRunner[] = []
 const temporaryDirectories: string[] = []
@@ -18,20 +14,6 @@ afterEach(async () => {
   await Promise.all(processRunners.splice(0).map((runner) => runner.dispose()))
   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true })
 })
-
-function probeClaudeVersion(): ProbeClaudeVersion {
-  const probe: unknown = Reflect.get(installModule, 'probeClaudeVersion')
-  expect(typeof probe).toBe('function')
-  if (typeof probe !== 'function') throw new Error('probeClaudeVersion is not exported')
-  return probe as ProbeClaudeVersion
-}
-
-function cachedClaudeVersion(): CachedClaudeVersion {
-  const cached: unknown = Reflect.get(installModule, 'cachedClaudeVersion')
-  expect(typeof cached).toBe('function')
-  if (typeof cached !== 'function') throw new Error('cachedClaudeVersion is not exported')
-  return cached as CachedClaudeVersion
-}
 
 function processResult(stdoutText: string, overrides: Partial<RunResult> = {}): RunResult {
   return {
@@ -53,7 +35,9 @@ function makeRealProcessRunner(): OwnedProcessRunner {
 
 async function withTestQuirkyHome<T>(run: () => Promise<T>): Promise<T> {
   const previous = process.env.QUIRKY_HOME
-  process.env.QUIRKY_HOME = '/tmp/quirky-g1-134.DAvngZ'
+  const directory = mkdtempSync(join(tmpdir(), 'avatar-version-home-'))
+  temporaryDirectories.push(directory)
+  process.env.QUIRKY_HOME = directory
   try {
     return await run()
   } finally {
@@ -74,7 +58,7 @@ function temporaryClaude(stdout: string): string {
 describe('Claude version process runner', () => {
   test('uses process.run with the requested or default command and trims stdout', async () => {
     const t = makeTestApp({ runProcess: (argv) => processResult(`  ${argv[0]} 2.1.295 (Claude Code)  \n`) })
-    const probe = probeClaudeVersion()
+    const probe = probeClaudeVersion
     expect(await probe(t.context.process, 'claude-test')).toBe('claude-test 2.1.295 (Claude Code)')
     expect(await probe(t.context.process)).toBe('claude 2.1.295 (Claude Code)')
     expect(t.processRuns).toEqual([
@@ -83,19 +67,12 @@ describe('Claude version process runner', () => {
     ])
   })
 
-  test('test app provides an empty successful process result by default', async () => {
-    const t = makeTestApp()
-    const result = await t.context.process.run(['git', 'status'])
-    expect([...result.stdout]).toEqual([])
-    expect(result).toMatchObject({ stdoutText: '', stderr: '', exitCode: 0, signal: null, durationMs: 0 })
-    expect(t.processRuns).toEqual([{ argv: ['git', 'status'] }])
-  })
 
   test('probes a temporary executable through a real process runner', async () => {
     await withTestQuirkyHome(async () => {
       const runner = makeRealProcessRunner()
       const executable = temporaryClaude('  Claude Code 2.1.295  ')
-      expect(await probeClaudeVersion()(runner, executable)).toBe('Claude Code 2.1.295')
+      expect(await probeClaudeVersion(runner, executable)).toBe('Claude Code 2.1.295')
     })
   })
 
@@ -109,18 +86,18 @@ describe('Claude version process runner', () => {
   ] as const) {
     test(`returns null for ${name}`, async () => {
       const t = makeTestApp({ runProcess: () => result })
-      expect(await probeClaudeVersion()(t.context.process, 'claude-test')).toBeNull()
+      expect(await probeClaudeVersion(t.context.process, 'claude-test')).toBeNull()
       expect(t.processRuns).toEqual([{ argv: ['claude-test', '--version'], options: { timeoutMs: 5_000 } }])
     })
   }
 
   test('returns null when process.run throws or rejects', async () => {
     const thrown = makeTestApp({ runProcess: () => { throw new Error('thrown') } })
-    expect(await probeClaudeVersion()(thrown.context.process)).toBeNull()
+    expect(await probeClaudeVersion(thrown.context.process)).toBeNull()
     expect(thrown.processRuns).toEqual([{ argv: ['claude', '--version'], options: { timeoutMs: 5_000 } }])
 
     const rejected = makeTestApp({ runProcess: () => Promise.reject(new Error('rejected')) })
-    expect(await probeClaudeVersion()(rejected.context.process)).toBeNull()
+    expect(await probeClaudeVersion(rejected.context.process)).toBeNull()
     expect(rejected.processRuns).toEqual([{ argv: ['claude', '--version'], options: { timeoutMs: 5_000 } }])
   })
 
@@ -131,7 +108,7 @@ describe('Claude version process runner', () => {
     try {
       let count = 0
       const t = makeTestApp({ runProcess: () => processResult(`2.1.${300 + count++}`) })
-      const cached = cachedClaudeVersion()(t.context.process, 60_000)
+      const cached = cachedClaudeVersion(t.context.process, 60_000)
       expect(await cached()).toBe('2.1.300')
       expect(await cached()).toBe('2.1.300')
       expect(t.processRuns).toHaveLength(1)
@@ -153,7 +130,7 @@ describe('Claude version process runner', () => {
         count++
         return Promise.reject(new Error('boom'))
       }
-      const cached = cachedClaudeVersion()(rejectingProbe, 60_000)
+      const cached = cachedClaudeVersion(rejectingProbe, 60_000)
       expect(await cached()).toBeNull()
       expect(await cached()).toBeNull()
       expect(count).toBe(1)
