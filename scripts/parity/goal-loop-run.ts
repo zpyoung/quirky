@@ -301,8 +301,11 @@ function diagnostic(text: string, ctx?: Pick<RunContext, 'root' | 'tokens'>): st
   value = value.replace(/("[^"]*(?:token|authorization|secret|password)[^"]*"\s*:\s*")[^"]*(")/gi, '$1<redacted>$2')
     .replace(/((?:token|authorization|secret|password)\s*[=:]\s*)[^\s,"'}]+/gi, '$1<redacted>')
     .replace(/Bearer\s+[^\s,"'}]+/gi, 'Bearer <redacted>')
+  if (Buffer.byteLength(value, 'utf8') <= STDERR_LIMIT_BYTES) return value
   const bytes = Buffer.from(value, 'utf8')
-  return bytes.length <= STDERR_LIMIT_BYTES ? value : bytes.subarray(bytes.length - STDERR_LIMIT_BYTES).toString('utf8')
+  let start = bytes.length - STDERR_LIMIT_BYTES
+  while ((bytes[start]! & 0xc0) === 0x80) start += 1
+  return bytes.subarray(start).toString('utf8')
 }
 
 function safeValue(value: unknown, ctx: Pick<RunContext, 'root' | 'tokens'>): unknown {

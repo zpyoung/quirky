@@ -28,6 +28,24 @@ test('CLI output must be one valid JSON document and a successful exit', () => {
   expect(() => parseGoalLoopOutput('{"error":{"message":"exact owned failure"}}', 2)).toThrow('exact owned failure')
 })
 
+test('UTF-8 failure diagnostics retain complete characters within the byte budget', async () => {
+  const world = {
+    root: '/owned/fixture', env: {}, start: async () => {}, cleanup: async () => {}
+  } as unknown as GoalLoopWorld
+  const text = '\u754c'.repeat(5000)
+  const report = await runGoalLoop({
+    createWorld: async () => world,
+    executeStep: async () => { throw Object.assign(new Error(text), { stderrTail: text }) }
+  })
+  const error = report.steps[0]!.error!
+  expect(report.ok).toBe(false)
+  for (const value of [error.message, error.stderrTail!]) {
+    expect(Buffer.byteLength(value)).toBeLessThanOrEqual(8192)
+    expect(value).not.toContain('\ufffd')
+    expect(value.endsWith('\u754c')).toBe(true)
+  }
+})
+
 for (const fault of faults) {
   test(`${fault} preserves failure, dependent not-run steps and cleanup`, async () => {
     let cleaned = false
