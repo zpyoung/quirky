@@ -1,6 +1,7 @@
 import type { MethodHandler, PluginCaller, PluginContext } from '@quirky/protocol'
 import type { FeatureMethods } from './src/types'
 import { createLazyMarkdownMethods } from './src/markdown/lazy'
+import { createWorkspaceNotesMethod } from './src/markdown/workspace-notes'
 import { createNotebookMethods } from './src/notebook/service'
 import { createViewerMethods } from './src/viewers/service'
 import { EditorDaemon } from './src/daemon/service'
@@ -28,6 +29,11 @@ const UI_COMMAND_METHODS = [
 export async function activate(context: PluginContext): Promise<void> {
   const core = new EditorDaemon(context)
   const markdownMethods = createLazyMarkdownMethods(core.services)
+  const handleWorkspaceNotes = createWorkspaceNotesMethod(core.services)
+  const workspaceNotes = (params: Record<string, unknown>, caller: PluginCaller) => {
+    if (editor !== core) throw core.services.context.error('conflict', 'The editor is stopping.')
+    return handleWorkspaceNotes(params, caller)
+  }
   const notebookMethods = createNotebookMethods(core.services)
   const viewerMethods = createViewerMethods(core.services)
   editor = core
@@ -46,6 +52,7 @@ export async function activate(context: PluginContext): Promise<void> {
   const methods = {
     ...core.methods,
     ...markdownMethods.methods,
+    workspaceNotes,
     ...notebookMethods.methods,
     ...viewerMethods.methods,
     ...uiCommandMethods

@@ -5,7 +5,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
-import type { MarkdownReviewNote } from '../src/markdown/notes'
+import type { MarkdownReviewNote } from '../src/markdown/note-store'
 
 type CommandHandlers = Parameters<SurfaceProps['registerCommandHandlers']>[0]
 type MountedSurface = {
