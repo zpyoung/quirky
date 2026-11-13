@@ -117,7 +117,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     data === undefined ? context.error(kind, message) : Object.assign(context.error(kind, message), { data })
 
   const listRepos = async () => (await context.call('quirky.repo/list')) as Repo[]
-  const preparedEnv = { store, ownerId: preparationOwnerId, log: context.log }
+  const preparedEnv = { store, ownerId: preparationOwnerId, process: context.process, log: context.log }
   let preparedPoolQueue: KeyedQueue | undefined
   const armPreparedExpiry = (): void => {
     const queue = preparedPoolQueue
@@ -244,6 +244,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
   preparedPoolQueue = poolQueue
   const createEnv: CreateEnv = {
     ...listEnv,
+    process: context.process,
     fail,
     changed: (data) => void context.emit('changed', data),
     call: (method, params) => context.call(method, params),
@@ -271,6 +272,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
 
   const removeEnv: RemoveEnv = {
     ...listEnv,
+    process: context.process,
     removing,
     inflight: new Map<string, InFlightRemove>(),
     fail,

@@ -485,6 +485,7 @@ export function activate(context: PluginContext): void {
   }
 
   const structuredContext: StructuredContext = {
+    process: context.process,
     appendMessage,
     setStatus,
     createAsk,

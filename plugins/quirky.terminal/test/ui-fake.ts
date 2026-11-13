@@ -54,6 +54,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const eventListeners = new Set<(event: QuirkyEvent) => void>()
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const streams = new Map<number, (bytes: Uint8Array) => void>()
+  const streamOptions = new Map<number, { onLagged?: () => void }>()
   const opened: { id: string; input: unknown }[] = []
   const toasts: { title: string; body: string }[] = []
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
@@ -105,9 +106,17 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     },
     getLayout: () => layout,
     onLayout: () => () => {},
-    onStream(streamId, listener) {
+    onStream(
+      streamId: number,
+      listener: (bytes: Uint8Array) => void,
+      options?: { onLagged?: () => void }
+    ) {
       streams.set(streamId, listener)
-      return () => streams.delete(streamId)
+      if (options) streamOptions.set(streamId, options)
+      return () => {
+        streams.delete(streamId)
+        streamOptions.delete(streamId)
+      }
     },
     onConnection(listener) {
       connectionListeners.add(listener)
@@ -143,6 +152,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     toasts,
     confirms,
     streams,
+    streamOptions,
+    /** Signals output loss on an active stream as the protocol client would. */
+    lag: (streamId: number) => act(async () => void streamOptions.get(streamId)?.onLagged?.()),
     layout,
     state,
     contextKeys,
