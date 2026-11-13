@@ -151,6 +151,26 @@ unawaited writes. Callers own their result/frame limits and must stop abandoned 
 There is no raw Bun subprocess, stderr stream, IPC, PTY, inherited stdio, arbitrary-signal API,
 sandbox or detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
 
+### API 1.7: Terminal stream recovery
+
+API 1.7 adds optional `ClientStream.lagged`, `lag()` and `onLag(callback)` hooks.
+`lag()` marks an open stream once, sends a binary `TerminalLagged` frame, and invokes its
+lag callbacks. Registering `onLag` after lag invokes the callback immediately.
+Daemon `send(bytes)` returns `false` once the stream is lagged or closed, and `true` when sent.
+The public return type remains `boolean | void` for existing stream implementations.
+
+`UiPluginContext.onStream(streamId, listener, { onLagged })` reports lost output once per
+registration and suppresses subsequent bytes from that stream. A gap detected before registration,
+including overflow of the client's 4 MiB early buffer, reports lag in a microtask unless disposed.
+Unsubscribe and replace the stream rather than continuing to consume incomplete output.
+Plugins using these hooks declare `"apiVersion": "1.7.0"`.
+
+`quirky.terminal/resync({ streamId, historyLines? })` replaces a stream owned by the calling
+connection and returns a fresh replay, offset, history cursor, dimensions, shell state and live
+status. It does not restore an ended process. Requests for one connection and session are spaced
+by two seconds. Desktop panes reset and replay under their input gate; phone viewers recover
+in-band with a screen snapshot and only the live bytes after its offset.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -263,6 +283,7 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.6.0** adds [`context.process.spawn`](#api-16-streaming-and-session-length-processes) for
   streaming and session-length daemon children under the same activation owner as `run`.
   A plugin that uses it declares `apiVersion` 1.6.0 or later.
+- **1.7.0** adds [terminal stream lag hooks and recovery](#api-17-terminal-stream-recovery).
 
 ## Example
 

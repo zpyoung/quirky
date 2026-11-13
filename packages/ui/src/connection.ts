@@ -1,4 +1,4 @@
-import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
+import { QuirkyClient, type QuirkyEvent, type TerminalStreamOptions } from '@quirky/protocol'
 import { INITIAL_DELAY_MS, nextDelay } from './lib/backoff'
 import { daemonAnswers } from './lib/probe'
 import { loadDesktopClientId } from './lib/desktop-client-id'
@@ -67,9 +67,9 @@ export class Connection {
   }
 
   /** Binary frames of terminal stream `streamId`; the returned function unsubscribes. */
-  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void {
+  onStream(streamId: number, listener: (bytes: Uint8Array) => void, options?: TerminalStreamOptions): () => void {
     if (!this.client) throw new Error('Not connected')
-    return this.client.onTerminalOutput(streamId, listener)
+    return this.client.onTerminalOutput(streamId, listener, options)
   }
 
   /** Reports each change between connected and not connected; the returned function unsubscribes. */

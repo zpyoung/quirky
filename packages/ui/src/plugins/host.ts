@@ -7,6 +7,7 @@ import {
   evaluateWhen,
   whenMentions,
   type QuirkyEvent,
+  type TerminalStreamOptions,
   type SettingInfo,
   type ToastKind,
   type ToastOptions,
@@ -34,7 +35,7 @@ export type HostDeps = {
   onEvent(listener: (event: QuirkyEvent) => void): () => void
   importModule(url: string): Promise<unknown>
   /** Binary terminal frames for stream `streamId`; the returned function unsubscribes. */
-  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void
+  onStream(streamId: number, listener: (bytes: Uint8Array) => void, options?: TerminalStreamOptions): () => void
   /** Connection status changes as plugins see them; the returned function unsubscribes. */
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** The shell's confirm dialog; resolves true when the person confirms. */
@@ -1057,8 +1058,8 @@ export class WindowPluginHost {
         this.layoutListeners.add(listener)
         return track(() => this.layoutListeners.delete(listener))
       }),
-      onStream: live((streamId: number, listener: (bytes: Uint8Array) => void) =>
-        track(this.deps.onStream(streamId, listener))
+      onStream: live((streamId: number, listener: (bytes: Uint8Array) => void, options?: TerminalStreamOptions) =>
+        track(this.deps.onStream(streamId, listener, options))
       ),
       onConnection: live((listener: (status: 'connected' | 'reconnecting') => void) =>
         track(this.deps.onConnection(listener))

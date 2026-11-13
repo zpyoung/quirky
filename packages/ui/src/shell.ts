@@ -144,7 +144,7 @@ export function createShell(options: ShellOptions): AppContextValue {
   const plugins = new WindowPluginHost({
     call: (method, params) => connection.callAny(method, params),
     onEvent: (listener) => connection.onEvent(listener),
-    onStream: (streamId, listener) => connection.onStream(streamId, listener),
+    onStream: (streamId, listener, options) => connection.onStream(streamId, listener, options),
     onConnection: (listener) => connection.onStatus(listener),
     importModule: options.importModule,
     confirm: confirmForPlugin,
