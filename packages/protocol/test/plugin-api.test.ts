@@ -34,6 +34,11 @@ type StreamCapabilityAssertions = [
 
 
 describe('stable plugin API floors', () => {
+  test('the host supports the release that introduced daemon plugin spawning', () => {
+    expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+  })
+
   test('the host supports the 1.7.0 release and earlier API floors', () => {
     expect(PLUGIN_API_VERSION).toBe('1.7.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
