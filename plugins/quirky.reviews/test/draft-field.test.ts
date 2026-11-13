@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, test } from 'bun:test'
-import { act, createElement } from 'react'
+import { act, createElement, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import {
@@ -7,6 +7,8 @@ import {
   createDraftVersions,
   nextDraftTick,
   useTargetGuard,
+  useDraftField,
+  type DraftField,
   type DraftFieldController,
   type DraftWrite,
 } from '../src/draft-field'
@@ -470,6 +472,24 @@ test('D17 treats a snapshot without a tick as newer than every settle', async ()
   expect(field.controller.value).toBe('newer remote')
 })
 
+test('D17 does not treat an unchanged unticked remote as a fresh snapshot', async () => {
+  const field = harness('old', {
+    resend: true,
+    write: (value) => {
+      field.writes.push(value)
+      return Promise.reject(new Error('stale_target'))
+    },
+  })
+  field.controller.edit('local')
+  await field.controller.settled()
+
+  field.update({ remote: 'old', snapshot: undefined })
+
+  expect(field.writes).toEqual(['local'])
+  expect(field.controller.value).toBe('local')
+  expect(field.controller.error).toBe('stale_target')
+})
+
 test('D18 preserves the local reference when equal values have the same structure', () => {
   const initial = { labels: ['one'], enabled: true }
   const field = harness(initial, {
@@ -585,6 +605,50 @@ test('D22 holds action edits over restored snapshots after failure without resen
   expect(field.refreshCount).toBe(refreshesBeforeFailure + 1)
 })
 
+test('D22 keeps an action edit held when its in-flight write fails afterward', async () => {
+  const reply = deferred<boolean>()
+  const field = harness('original', {
+    resend: true,
+    write: (value) => {
+      field.writes.push(value)
+      return reply.promise
+    },
+  })
+  const action = field.controller.begin()
+  action.take()
+  field.controller.edit('xy')
+  action.fail()
+  reply.reject(new Error('write failed'))
+  await field.controller.settled()
+
+  field.update({ remote: 'original', snapshot: nextDraftTick() })
+
+  expect(field.controller.value).toBe('xy')
+  expect(field.controller.error).toBe('write failed')
+  expect(field.writes).toEqual(['xy'])
+})
+
+test('D6 retries a failed write on an explicit fresh tick with the same remote value', async () => {
+  const field = harness('abc', {
+    resend: true,
+    write: (value) => {
+      field.writes.push(value)
+      return field.writes.length === 1
+        ? Promise.reject(new Error('stale_target'))
+        : Promise.resolve(true)
+    },
+  })
+  field.controller.edit('abc')
+  await field.controller.settled()
+  expect(field.controller.error).toBe('stale_target')
+
+  field.update({ remote: 'abc', snapshot: nextDraftTick() })
+  await field.controller.settled()
+
+  expect(field.writes).toEqual(['abc', 'abc'])
+  expect(field.controller.error).toBeNull()
+})
+
 test('D23 ignores action completion after a target change', async () => {
   for (const finish of ['succeed', 'fail'] as const) {
     let refreshCount = 0
@@ -620,4 +684,61 @@ test('D24 target guards stay false after identity changes away and back', async 
   await act(async () => root.render(createElement(Probe, { identity: 'A' })))
   expect(here()).toBe(false)
   expect(guard()).toBe(true)
+})
+
+test('useDraftField keeps reset text through a local render with unchanged unticked props', async () => {
+  let field!: DraftField<string>
+  let rerender!: () => void
+  function Probe() {
+    const [, setRevision] = useState(0)
+    rerender = () => setRevision((revision) => revision + 1)
+    field = useDraftField({
+      identity: 'target-a',
+      remote: 'abc',
+      snapshot: undefined,
+      write: async () => true,
+      refresh: async () => {},
+    })
+    return null
+  }
+
+  const root = createRoot(document.createElement('div'))
+  roots.push(root)
+  await act(async () => root.render(createElement(Probe)))
+  await act(async () => {
+    field.reset('')
+    rerender()
+  })
+
+  expect(field.value).toBe('')
+})
+
+test('useDraftField keeps an applied edit through an unrelated local render before refresh', async () => {
+  const write = deferred<boolean>()
+  let field!: DraftField<string>
+  let rerender!: () => void
+  function Probe() {
+    const [, setRevision] = useState(0)
+    rerender = () => setRevision((revision) => revision + 1)
+    field = useDraftField({
+      identity: 'target-a',
+      remote: '',
+      snapshot: undefined,
+      write: () => write.promise,
+      refresh: async () => {},
+    })
+    return null
+  }
+
+  const root = createRoot(document.createElement('div'))
+  roots.push(root)
+  await act(async () => root.render(createElement(Probe)))
+  await act(async () => field.edit('typed'))
+  await act(async () => {
+    write.resolve(true)
+    await flush()
+  })
+  await act(async () => rerender())
+
+  expect(field.value).toBe('typed')
 })

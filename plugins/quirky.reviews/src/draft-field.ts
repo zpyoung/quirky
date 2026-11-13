@@ -57,6 +57,7 @@ export interface DraftFieldController<T> extends DraftField<T> {
 
 class DraftFieldControllerImpl<T> implements DraftFieldController<T> {
   private input: DraftFieldInput<T>
+  private lastRemote: T
   private identity: string
   private epoch = 0
   private revision = 0
@@ -80,6 +81,7 @@ class DraftFieldControllerImpl<T> implements DraftFieldController<T> {
 
   constructor(input: DraftFieldInput<T>) {
     this.input = input
+    this.lastRemote = input.remote
     this.identity = input.identity
     this.currentValue = input.remote
     this.view = { value: input.remote, error: null }
@@ -106,6 +108,7 @@ class DraftFieldControllerImpl<T> implements DraftFieldController<T> {
     this.input = input
     if (input.identity !== this.identity) {
       this.identity = input.identity
+      this.lastRemote = input.remote
       this.epoch++
       this.revision = 0
       this.currentValue = input.remote
@@ -121,7 +124,9 @@ class DraftFieldControllerImpl<T> implements DraftFieldController<T> {
       this.publish()
       return
     }
-    this.receiveSnapshot(input.remote, input.snapshot)
+    const remoteChanged = !this.equal(input.remote, this.lastRemote)
+    this.lastRemote = input.remote
+    this.receiveSnapshot(input.remote, input.snapshot, remoteChanged)
   }
 
   edit(value: T): void {
@@ -251,8 +256,8 @@ class DraftFieldControllerImpl<T> implements DraftFieldController<T> {
     this.resolveSettleWaiters()
   }
 
-  private receiveSnapshot(remote: T, snapshot: number | undefined): void {
-    if (this.activeAction || this.inFlight || this.queued || !this.isFresh(snapshot)) return
+  private receiveSnapshot(remote: T, snapshot: number | undefined, remoteChanged: boolean): void {
+    if (this.activeAction || this.inFlight || this.queued || !this.isFresh(snapshot, remoteChanged)) return
     if (this.dirty) {
       if (this.retryPending && !this.retryUsed && this.input.resend) {
         this.retryPending = false
@@ -276,8 +281,8 @@ class DraftFieldControllerImpl<T> implements DraftFieldController<T> {
     }
   }
 
-  private isFresh(snapshot: number | undefined): boolean {
-    return snapshot === undefined || this.fence === null || snapshot > this.fence
+  private isFresh(snapshot: number | undefined, remoteChanged: boolean): boolean {
+    return snapshot === undefined ? remoteChanged : this.fence === null || snapshot > this.fence
   }
 
   private enqueue(request: DraftWriteRequest<T>): void {
@@ -353,7 +358,7 @@ class DraftFieldControllerImpl<T> implements DraftFieldController<T> {
     } else {
       this.currentError = error instanceof Error ? error.message : String(error)
       this.blocked = true
-      this.retryPending = Boolean(this.input.resend && !this.retryUsed)
+      this.retryPending = Boolean(this.input.resend && !this.retryUsed && !this.held)
     }
     this.publish()
   }
