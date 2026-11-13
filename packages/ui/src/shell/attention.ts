@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { createRefreshGate } from '../refresh-gate'
 import type { Ask, AskAnswer, AskEnvelope, QuirkyEvent, Repo, Session, Worktree } from '@quirky/protocol'
 import { UI_READ_TIMEOUT_MS, type Connection } from '../connection'
 import { useConnection, usePluginHost } from '../context'
@@ -166,7 +167,8 @@ export function createAttentionStore(
     }
   }
 
-  const refreshInventory = async () => {
+  const refreshInventory = createRefreshGate(async () => {
+    if (!active) return
     const [repos, worktrees] = await Promise.all([
       fetchList<Repo>('repos', 'quirky.repo/list', {}),
       fetchList<Worktree>('worktrees', 'quirky.worktree/list', {})
@@ -176,7 +178,7 @@ export function createAttentionStore(
       ...(repos === null ? {} : { repos }),
       ...(worktrees === null ? {} : { worktrees })
     })
-  }
+  }, { clock })
 
   let scopeVersion = 0
   const setFilter = (filterRepoIds: string[]) => {
@@ -203,7 +205,8 @@ export function createAttentionStore(
     }
   }
 
-  const refreshSessions = async () => {
+  const refreshSessions = createRefreshGate(async () => {
+    if (!active) return
     sessionListCallsInFlight += 1
     try {
       const sessions = await fetchList<Session>('sessions', 'quirky.session/list', {})
@@ -211,28 +214,28 @@ export function createAttentionStore(
     } finally {
       sessionListCallsInFlight -= 1
     }
-  }
+  }, { clock })
 
   const applySessionEvent = (event: QuirkyEvent) => {
     const current = state.sessions
     if (current === null || state.errors.sessions !== undefined || sessionListCallsInFlight > 0) {
-      void refreshSessions()
+      void refreshSessions.request()
       return
     }
     if (!('data' in event) || typeof event.data !== 'object' || event.data === null || Array.isArray(event.data)) {
-      void refreshSessions()
+      void refreshSessions.request()
       return
     }
     const data = event.data
     if (event.type === 'quirky.session/changed') {
       if (!('session' in data)) {
-        void refreshSessions()
+        void refreshSessions.request()
         return
       }
       const session = data.session
       if (typeof session !== 'object' || session === null || Array.isArray(session) ||
         !('id' in session) || typeof session.id !== 'string') {
-        void refreshSessions()
+        void refreshSessions.request()
         return
       }
       const sessionId = session.id
@@ -244,12 +247,12 @@ export function createAttentionStore(
       return
     }
     if (!('sessionId' in data)) {
-      void refreshSessions()
+      void refreshSessions.request()
       return
     }
     const sessionId = data.sessionId
     if (typeof sessionId !== 'string') {
-      void refreshSessions()
+      void refreshSessions.request()
       return
     }
     if (!current.some((session) => session.id === sessionId)) return
@@ -306,8 +309,8 @@ export function createAttentionStore(
 
   const refresh = () => {
     if (!active) return
-    void refreshInventory()
-    void refreshSessions()
+    void refreshInventory.request()
+    void refreshSessions.request()
     void refreshAsks()
     void refreshScope()
     void refreshIdentities()
@@ -322,10 +325,10 @@ export function createAttentionStore(
     switch (event.type) {
       case 'quirky.repo/changed':
       case 'quirky.worktree/changed':
-        void refreshInventory()
+        void refreshInventory.request()
         break
       case 'quirky.worktree/projectMetadataChanged':
-        void refreshInventory()
+        void refreshInventory.request()
         void refreshIdentities()
         break
       case 'quirky.worktree/optionsChanged': {
@@ -382,6 +385,8 @@ export function createAttentionStore(
   const stop = () => {
     if (!active) return
     active = false
+    refreshInventory.cancel()
+    refreshSessions.cancel()
     unsubscribeEvents?.()
     unsubscribeConnected?.()
     unsubscribeHost?.()

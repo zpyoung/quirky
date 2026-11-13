@@ -118,10 +118,12 @@ export async function startChrome(
       env: cleanEnvironment(home),
       stdin: 'ignore',
       stdout: 'ignore',
-      stderr: 'ignore',
-      detached: true
+      stderr: 'ignore'
     })
   } catch {
+    throw fault('browser_unavailable', 'the configured Chrome executable could not be started')
+  }
+  if (child.pid === null) {
     throw fault('browser_unavailable', 'the configured Chrome executable could not be started')
   }
   try {

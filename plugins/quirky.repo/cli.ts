@@ -3,6 +3,7 @@ import { RpcErrorCode, type CliArgs, type CliContext, type CliModule, type HookS
 import { groupSubtreeIds } from './src/groups'
 
 type ScanResult = { repos: { path: string; name: string }[]; truncated: boolean }
+type SearchRefsResult = { refs: { name: string; kind: string; target: string }[]; truncated: boolean }
 type ImportResult = {
   results: { path: string; status: string; repoId?: string; error?: string }[]
   imported: number
@@ -165,6 +166,17 @@ const named: CliModule['commands'] = {
       if (result.groupId) lines.push(`group ${String(args.flags.group)} (${result.groupId})`)
       return lines.join('\n')
     })
+  },
+
+  async 'search-refs'(args, ctx) {
+    const [repo] = args.positionals as [string]
+    const query = args.flags.query as string
+    const result = (await ctx.call('quirky.repo/searchRefs', { repo, ...flagParams(args, { query: 'query', limit: 'limit' }) })) as SearchRefsResult
+    ctx.out.result(result, () =>
+      result.refs.length
+        ? ctx.format.table(['KIND', 'NAME', 'TARGET'], result.refs.map((ref) => [ref.kind, ref.name, ref.target.slice(0, 12)]))
+        : `no refs match ${query.trim()}`
+    )
   },
 
   async show(args, ctx) {

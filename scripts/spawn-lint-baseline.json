@@ -1,6 +1,2 @@
 {
-  "plugins/quirky.browser/src/cookies/sources.ts": 1,
-  "plugins/quirky.browser/src/pane-service.ts": 1,
-  "plugins/quirky.browser/src/runtime/defaults.ts": 1,
-  "plugins/quirky.browser/src/runtime/driver.ts": 1
 }

@@ -16,6 +16,7 @@ import type { BrowserIdentityMode } from '../preferences/contract'
 import { identityModeFromSetting, userAgentForIdentity } from '../preferences/identity'
 import { findWatchOccurrences } from './find'
 import { fetchDomainCommand, InterceptLedger, type HeldRequest } from './intercept'
+import { launchDetachedOpen } from './process'
 
 
 export type RuntimeBinding = {
@@ -439,6 +440,34 @@ function cdpTransportFailure(error: unknown): boolean {
   return message.includes('websocket') || message.includes('malformed json') || message.includes('malformed envelope') || message.includes('50 mib frame')
 }
 
+/** Creates a user-approved external launch bound to the originating Watch lease. */
+export function createExternalPrompt(
+  event: CdpEvent,
+  mainFrameUrl: string | undefined,
+  isCurrentWatch: () => boolean,
+  dependencies: Pick<BrowserDependencies, 'process' | 'log'>
+): RuntimePanePrompt | null {
+  const url = asString(event.params.url)
+  if (!url || event.params.userGesture !== true) return null
+  try { if (new URL(url).protocol !== 'mailto:') return null } catch { return null }
+  let origin = 'unknown origin'
+  if (mainFrameUrl) {
+    try { origin = new URL(mainFrameUrl).origin } catch { origin = 'unknown origin' }
+  }
+  return {
+    id: randomUUID(),
+    kind: 'external',
+    origin,
+    message: `${origin} requested opening an email link in another app.`,
+    respond: async (input) => {
+      if (!isCurrentWatch()) throw fault('browser_tab_changed', 'the external-app prompt belongs to a stale Watch lease')
+      if (!input.accept) return
+      if (process.platform !== 'darwin') throw fault('browser_unavailable', 'external-app launching is supported only on macOS')
+      launchDetachedOpen(dependencies, ['open', url])
+    }
+  }
+}
+
 export class BrowserRuntime {
   private readonly profiles = new Map<string, ProfileRuntime>()
   private readonly generations = new Map<string, number>()
@@ -460,6 +489,9 @@ export class BrowserRuntime {
     this.identityMode = identityModeFromSetting(identityMode)
     for (const page of store.listPages()) this.generations.set(page.browserPageId, 0)
     this.dependencies.onControl?.(this.testControl())
+  }
+  openDetached(args: readonly string[], fallbackLog?: (message: string) => void): void {
+    launchDetachedOpen(this.dependencies, args, fallbackLog)
   }
   pageSettings(pageId: string): PageSettings {
     const current = this.settings.get(pageId)
@@ -523,8 +555,7 @@ export class BrowserRuntime {
       crashHelper: async (profileId) => {
         const epoch = this.profile(profileId).epoch
         if (!epoch) throw fault('browser_error', 'no owned browser helper is running for that profile')
-        epoch.helper.child.kill('SIGKILL')
-        await epoch.helper.child.exited
+        await epoch.helper.child.stop({ signal: 'SIGKILL' })
       }
     }
   }
@@ -1273,24 +1304,13 @@ export class BrowserRuntime {
   }
 
   private emitExternalPrompt(watch: PaneWatchState, event: CdpEvent): void {
-    const url = asString(event.params.url)
-    if (!url || event.params.userGesture !== true) return
-    let protocol = ''
-    try { protocol = new URL(url).protocol } catch { return }
-    if (protocol === 'http:' || protocol === 'https:' || protocol !== 'mailto:') return
-    const origin = this.originOf(watch.binding.runtime.mainFrameUrl)
-    const prompt: RuntimePanePrompt = {
-      id: randomUUID(),
-      kind: 'external',
-      origin,
-      message: `${origin} requested opening an email link in another app.`,
-      respond: async (input) => {
-        if (!this.isCurrentPaneWatch(watch)) throw fault('browser_tab_changed', 'the external-app prompt belongs to a stale Watch lease')
-        if (!input.accept) return
-        if (process.platform !== 'darwin') throw fault('browser_unavailable', 'external-app launching is supported only on macOS')
-        Bun.spawn(['open', url], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }).unref()
-      }
-    }
+    const prompt = createExternalPrompt(
+      event,
+      watch.binding.runtime.mainFrameUrl,
+      () => this.isCurrentPaneWatch(watch),
+      this.dependencies
+    )
+    if (!prompt) return
     try { watch.callbacks.onPrompt(prompt) } catch { /* without an attached pane no external app is launched */ }
   }
 

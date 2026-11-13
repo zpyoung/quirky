@@ -4,6 +4,7 @@ import * as groups from './src/groups'
 import { cloneRepo, createRepo, addRepo, removeRepo } from './src/projects'
 import { importRepos, scan } from './src/scan'
 import * as settings from './src/settings'
+import { searchRefs } from './src/search-refs'
 import { createStore } from './src/store'
 
 type Params = Record<string, any>
@@ -21,6 +22,7 @@ export function activate(context: PluginContext): void {
   provide('import', (params) => importRepos(env, params as Parameters<typeof importRepos>[1]))
   provide('remove', (params) => removeRepo(env, String(params.repo), params.expectedLedgers as { ledgerId: string; revision: number }[] | undefined))
   provide('resolve', (params) => env.resolve(String(params.selector)))
+  provide('searchRefs', (params) => searchRefs(env, params as Parameters<typeof searchRefs>[1]))
   provide('show', (params) => settings.show(env, params as Parameters<typeof settings.show>[1]))
   provide('set', (params) => settings.set(env, params as settings.SetParams))
   provide('hooks', (params) => settings.hooks(env, params as Parameters<typeof settings.hooks>[1]))

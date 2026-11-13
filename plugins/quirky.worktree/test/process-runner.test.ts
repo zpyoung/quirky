@@ -1033,6 +1033,6 @@ test('worktree scanner boundary is clear including the vm runner at its API floo
   expect(baseline['plugins/quirky.worktree/src/daemon/vm.ts']).toBeUndefined()
   const manifest = JSON.parse(readFileSync('plugins/quirky.worktree/quirky-plugin.json', 'utf8')) as { apiVersion: string }
   expect(manifest.apiVersion).toBe('1.11.0')
-  expect(PLUGIN_API_VERSION).toBe('1.13.0')
+  expect(PLUGIN_API_VERSION).toBe('1.14.0')
   expect(pluginApiCompatibilityError(manifest.apiVersion)).toBeNull()
 })

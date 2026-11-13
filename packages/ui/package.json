@@ -11,6 +11,7 @@
     "./desktop-bridge": "./src/desktop-bridge.ts",
     "./terminal-theme": "./src/terminal-theme.ts",
     "./editor-print": "./src/editor-print.ts",
+    "./refresh-gate": "./src/refresh-gate.ts",
     "./editor-theme": "./src/editor-theme.ts"
   },
   "type": "module",

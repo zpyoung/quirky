@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from 'node:util'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import type { CliWorld } from './cli-world'
 import { actorReceiptFiles, readActorReceipts, type CliActorReceipt } from './cli-actor'
+import { assertNoOutsideCalls, cleanupLocalChecks, LOCAL_CHECK_IDS, runLocalChecks } from './cli-local'
 
 const CHECK_IDS = [
   'catalog',
@@ -19,7 +20,8 @@ const CHECK_IDS = [
   'actor-gate-create', 'actor-gate-list', 'actor-gate-resolve',
   'actor-send', 'actor-check', 'actor-inbox',
   'file-open', 'file-state', 'file-read', 'file-close',
-  'accounts-list', 'skill-show', 'skill-status', 'skill-install', 'skill-update', 'status'
+  'accounts-list', 'skill-show', 'skill-status', 'skill-install', 'skill-update', 'status',
+  ...LOCAL_CHECK_IDS
 ] as const
 
 export const checkIds = new Set<string>(CHECK_IDS)
@@ -27,7 +29,8 @@ export const checkIds = new Set<string>(CHECK_IDS)
 export type CliCheckContext = {
   world: CliWorld
   state: Record<string, unknown>
-  call(id: string, argv: string[], format?: 'json' | 'jsonl'): Promise<unknown>
+  call(id: string, argv: string[], format?: 'json' | 'jsonl', options?: { cwd?: string }): Promise<unknown>
+  refuse(id: string, argv: string[], options?: { cwd?: string }): Promise<{ code: string; message: string; data?: unknown }>
   prove(id: string, evidence: Record<string, unknown>): void
   check(id: string): void
   importActor(receipts: unknown): void
@@ -998,7 +1001,13 @@ export async function runCliChecks(context: CliCheckContext): Promise<void> {
   await runLoopChecks(context)
   await runAutomationChecks(context)
   await runFileAndSkillChecks(context)
+  await runLocalChecks(context)
   await removeOwnedWorktree(context)
+  assertNoOutsideCalls({
+    egressLog: context.world.paths.egressLog,
+    orcaLog: context.world.paths.orcaLog,
+    securityLog: context.world.paths.securityLog
+  })
 }
 
 export async function cleanupCliChecks(context: CliCheckContext): Promise<void> {
@@ -1074,6 +1083,7 @@ export async function cleanupCliChecks(context: CliCheckContext): Promise<void> 
     await closeUntrackedTabs('exitTerminalBaseline', 'exit')
   }
 
+  await cleanupLocalChecks(context, attempt, errors)
   const worktreeId = optionalString(context.state, 'worktreeId')
   const repoId = optionalString(context.state, 'repoId')
   if (worktreeId && repoId && context.state.worktreeRemoved !== true) {

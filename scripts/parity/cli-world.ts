@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { delimiter, isAbsolute, join, resolve } from 'node:path'
+import { delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { daemonEntryHash, isDaemonAlive, readRuntime } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope, type ProcessScopeSpawnOptions } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
@@ -14,7 +14,7 @@ const STARTUP_TIMEOUT_MS = 30_000
 const PROCESS_TABLE_TIMEOUT_MS = 2_000
 const PROCESS_TABLE_LIMIT_BYTES = 16 * 1024 * 1024
 
-export type CliWorldExecuteOptions = { signal?: AbortSignal; timeoutMs?: number }
+export type CliWorldExecuteOptions = { signal?: AbortSignal; timeoutMs?: number; cwd?: string }
 export type CliWorldHooks = {
   beforeStart?: () => Promise<void> | void
   afterReady?: (world: CliWorld) => Promise<void> | void
@@ -474,6 +474,26 @@ function validateCliArgv(argv: string[], cliEntry: string): void {
   if (!localRuntime || !jsonOutput) throw new CliWorldError('invalid-cli-arguments', 'CLI calls require explicit --runtime local --json')
 }
 
+
+function isWithinDirectory(root: string, candidate: string): boolean {
+  const path = relative(root, candidate)
+  return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+}
+
+function resolveCliCwd(cwd: string | undefined, repoRoot: string, home: string): string {
+  if (cwd === undefined) return repoRoot
+  if (!isAbsolute(cwd)) throw new CliWorldError('invalid-cli-arguments', 'CLI cwd must be absolute')
+  let realCwd: string
+  try {
+    realCwd = realpathSync(cwd)
+  } catch {
+    throw new CliWorldError('invalid-cli-arguments', 'CLI cwd must resolve inside the owned home or checkout root')
+  }
+  if (realCwd !== repoRoot && !isWithinDirectory(home, realCwd)) {
+    throw new CliWorldError('invalid-cli-arguments', 'CLI cwd must resolve inside the owned home or checkout root')
+  }
+  return realCwd
+}
 function ensureWorldLive(daemon: CliBoundedChild, closed: boolean): void {
   if (closed) throw new CliWorldError('world-closed', 'CLI world has already been cleaned up')
   if (daemon.exitCode !== null) throw new CliWorldError('daemon-exited', 'owned daemon exited; refusing CLI auto-start')
@@ -529,6 +549,7 @@ function makeWorld(options: {
       checkInterrupted(signal)
       ensureWorldLive(options.daemon, closed)
       validateCliArgv(argv, options.paths.cliEntry)
+      const cwd = resolveCliCwd(executeOptions.cwd, options.paths.repoRoot, options.home)
       captureProcesses()
       if (!(await healthCheck(options.home, options.daemon.pid, options.env, signal))) {
         throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
@@ -537,7 +558,7 @@ function makeWorld(options: {
       let result: CliWorldResult
       try {
         result = await runBoundedChild(options.scope, options.env, argv, {
-          cwd: options.paths.repoRoot,
+          cwd,
           signal,
           timeoutMs
         })
@@ -616,14 +637,14 @@ export function createCliEnvironment(home: string, repoRoot: string, fixtureBin:
     CODEX_HOME: join(root, 'codex'),
     CLI_PARITY_CLI_ENTRY: join(checkout, 'packages/cli/src/main.ts'),
     CLI_PARITY_CODEX_FIXTURE: join(root, 'fixtures/codex/codex-app-server-fixture'),
-    NODE_OPTIONS: `--require=${preload}`,
+    BUN_OPTIONS: `--preload=${preload}`,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
   }
   for (const key of [
     'QUIRKY_RUNTIME', 'QUIRKY_PAIRING', 'QUIRKY_PAIRING_CODE', 'QUIRKY_SESSION_ID', 'QUIRKY_SESSION_TOKEN', 'QUIRKY_WORKTREE_ID',
     'CLAUDE_CONFIG_DIR', 'OPENAI_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_API_KEY',
     'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
-    'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_SSH', 'GIT_SSH_COMMAND'
+    'NODE_OPTIONS',
   ]) delete environment[key]
   return environment
 }
@@ -697,6 +718,26 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
     await options.hooks?.beforeStart?.()
     checkInterrupted(options.signal)
     if (Date.now() >= startupDeadline) throw new CliWorldError('startup-timeout', 'CLI world startup exceeded 30 seconds')
+    const selfTestUrl = 'https://cli-parity-guard.invalid/self-test'
+    const selfTestSentinel = 'CLI_PARITY_EGRESS_GUARD_ACTIVE\n'
+    let guardTest: FixtureCommandResult
+    try {
+      guardTest = await setupRun([
+        process.execPath,
+        '-e',
+        `fetch(${JSON.stringify(selfTestUrl)}).then(() => { process.exitCode = 3 }, (error) => { if (error instanceof Error && error.message.includes('non-loopback')) process.stdout.write(${JSON.stringify(selfTestSentinel)}); else process.exitCode = 4 })`
+      ], repoRoot)
+    } catch {
+      if (options.signal?.aborted) checkInterrupted(options.signal)
+      throw new CliWorldError('egress-guard-inactive', 'fetch egress guard self-test could not be run')
+    }
+    let egressLog = ''
+    try {
+      egressLog = readFileSync(paths.egressLog, 'utf8')
+    } catch {}
+    if (guardTest.exitCode !== 0 || guardTest.stdout !== selfTestSentinel || egressLog !== `${selfTestUrl}\n`) {
+      throw new CliWorldError('egress-guard-inactive', 'fetch egress guard self-test failed')
+    }
     daemon = scope.spawn([process.execPath, daemonEntry], {
       cwd: repoRoot,
       env,
