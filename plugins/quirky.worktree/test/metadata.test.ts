@@ -176,7 +176,10 @@ describe('worktree unread event attribution', () => {
     type ChangedData = { repoId: string; worktreeId: string; unread?: boolean; unreadSource?: string }
     const changes = () => watcher.events
       .filter((event) => event.type === 'quirky.worktree/changed')
-      .map((event) => event.data as ChangedData)
+      .map((event) => {
+        if (!('data' in event)) throw new Error('expected a worktree plugin event')
+        return event.data as ChangedData
+      })
     const next = async <T>(action: () => Promise<T>) => {
       const before = changes().length
       const result = await action()

@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 import * as fsp from 'node:fs/promises'
-import type { PluginContext, PluginNotification, QuirkyEvent, UiState } from '@quirky/protocol'
+import type { PluginContext, PluginEvent, PluginNotification, QuirkyEvent, UiState } from '@quirky/protocol'
 import { PluginEvents } from '../../../packages/daemon/src/plugins/events'
 import type { PluginHost } from '../../../packages/daemon/src/plugins/host'
 import { waitFor } from '../../../packages/daemon/test/helpers'
@@ -96,8 +96,9 @@ function worktreeEventBridge(deliver: (event: QuirkyEvent) => void) {
         ? [declaration]
         : []
   } as unknown as PluginHost
-  const delivered: QuirkyEvent[] = []
+  const delivered: PluginEvent[] = []
   const events = new PluginEvents(host, (event) => {
+    if (!('data' in event)) throw new Error('expected a plugin event')
     delivered.push(event)
     deliver(event)
   }, () => {})
@@ -118,7 +119,7 @@ function worktreeSetEvent(params: unknown): WorktreeChangedData {
 }
 
 
-const ownWorktreeChanges = (events: QuirkyEvent[]) =>
+const ownWorktreeChanges = (events: PluginEvent[]) =>
   events.filter((event) => event.type === 'quirky.worktree/changed').filter((event) => {
     const data = event.data as WorktreeChangedData
     return data.unreadSource === 'notifications'
@@ -146,7 +147,7 @@ const OWN_WORKTREE_SET = {
 
 const BACKGROUND_SESSION = { id: 'bg', worktreeId: 'w1', unread: 'agent' }
 
-const clearBackgroundSession = ['quirky.session/setUnread', { session: 'bg', unread: null }]
+const clearBackgroundSession: [string, unknown] = ['quirky.session/setUnread', { session: 'bg', unread: null }]
 
 const taggedMarkRead = {
   type: 'quirky.worktree/changed',
