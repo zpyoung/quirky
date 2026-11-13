@@ -20,6 +20,9 @@ type FakeOptions = {
   settings?: Record<string, boolean>
   deferSend?: boolean
   uiSlots?: unknown[]
+  failGets?: number
+  badGets?: unknown[]
+  holdFirstGet?: boolean
 }
 
 type Fake = {
@@ -35,6 +38,9 @@ type Fake = {
   completeSend(recoveredDraft: string, outcome: SendResult['outcome']): void
   resolveSend(outcome: SendResult['outcome'], accepted: boolean): void
   announceAgentStatus(row: { sessionId: string; state?: string } | null): void
+  failNextGets(n: number): void
+  rejectHeldGet(error: unknown): void
+  connection(status: 'connected' | 'reconnecting'): void
 }
 
 const baseState = (overrides: Partial<DockState> = {}): DockState => ({
@@ -85,6 +91,11 @@ function fakeContext(options: FakeOptions = {}): Fake {
   let resolveDeferredSend: ((outcome: SendResult['outcome'], accepted: boolean) => void) | null = null
   let deferredSendId: string | null = null
   let deferredSendText: string | null = null
+  let failGetsRemaining = options.failGets ?? 0
+  const badGets = [...(options.badGets ?? [])]
+  let getOrdinal = 0
+  let rejectHeldGetCall: ((error: unknown) => void) | null = null
+  let connectionListener: ((status: 'connected' | 'reconnecting') => void) | null = null
 
   const publish = () => {
     const event = { type: 'quirky.terminal-dock/changed', data: { pane: current.pane, state: current } } as QuirkyEvent
@@ -96,7 +107,20 @@ function fakeContext(options: FakeOptions = {}): Fake {
     return current
   }
   const handlers: Record<string, Handler> = {
-    [`${PLUGIN_METHOD}get`]: () => current,
+    [`${PLUGIN_METHOD}get`]: () => {
+      const ordinal = ++getOrdinal
+      if (options.holdFirstGet && ordinal === 1) {
+        const held = Promise.withResolvers<unknown>()
+        rejectHeldGetCall = held.reject
+        return held.promise
+      }
+      if (failGetsRemaining > 0) {
+        failGetsRemaining -= 1
+        throw new Error(`read failed ${ordinal}`)
+      }
+      if (badGets.length > 0) return badGets.shift()
+      return current
+    },
     [`${PLUGIN_METHOD}set`]: (params) => {
       if (('draft' in params || 'attachments' in params) && params.revision !== current.revision) {
         throw Object.assign(new Error('draft revision conflict'), { code: 'CONFLICT', state: current })
@@ -197,7 +221,12 @@ function fakeContext(options: FakeOptions = {}): Fake {
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
     onLayout: () => () => {},
     onStream: () => () => {},
-    onConnection: () => () => {},
+    onConnection(listener: (status: 'connected' | 'reconnecting') => void) {
+      connectionListener = listener
+      return () => {
+        if (connectionListener === listener) connectionListener = null
+      }
+    },
     async confirm() { return true },
     toast(title: string, body: string) { toasts.push({ title, body }) },
     setPanelBadge() {},
@@ -215,6 +244,14 @@ function fakeContext(options: FakeOptions = {}): Fake {
     get state() { return current },
     callsTo: (method: string) => calls.filter((call) => call.method === method),
     announce(change: Partial<DockState>) { commit(change) },
+    failNextGets(n) { failGetsRemaining += n },
+    rejectHeldGet(error) {
+      if (rejectHeldGetCall === null) throw new Error('no held get is active')
+      const reject = rejectHeldGetCall
+      rejectHeldGetCall = null
+      reject(error)
+    },
+    connection(status) { connectionListener?.(status) },
     announceAgentStatus(row: { sessionId: string; state?: string } | null) {
       const event = { type: 'quirky.agent-status/changed', data: { sessionId: current.session, row } } as QuirkyEvent
       for (const listener of listeners) listener(event)
@@ -267,6 +304,14 @@ async function settle(): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
   setTimeout(resolve, SETTLE_MS)
   await act(async () => await promise)
+}
+async function waitFor(ms: number): Promise<void> {
+  // Happy DOM and React schedule retries on platform timers, so these waits use the real clock.
+  await act(async () => {
+    const { promise, resolve } = Promise.withResolvers<void>()
+    setTimeout(resolve, ms)
+    await promise
+  })
 }
 
 async function openComposer(fake: Fake, input: { pane?: string; session?: string } = {}) {
@@ -716,5 +761,174 @@ describe('terminal dock composer behavior', () => {
     expect(view.editor().value).toBe('first\n\nsecond')
     expect(view.text()).not.toContain('Send may not have completed.')
     expect(fake.sent).toHaveLength(1)
+  })
+  test('recovers a failed first read without showing an event or retaining its error', async () => {
+    const fake = fakeContext({ state: baseState({ draft: 'kept draft' }), failGets: 1 })
+    const view = await openComposer(fake)
+
+    expect(view.text()).toContain('read failed 1')
+    expect(view.editor().value).toBe('')
+    await waitFor(650)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(2)
+    expect(view.editor().value).toBe('kept draft')
+    expect(view.text()).not.toContain('read failed')
+  })
+
+  test('drops a failed read overtaken by a pane event', async () => {
+    const fake = fakeContext({ holdFirstGet: true })
+    const view = await openComposer(fake)
+
+    await act(async () => fake.announce({ revision: 2, draft: 'from event' }))
+    fake.rejectHeldGet(new Error('late failure'))
+    await waitFor(650)
+
+    expect(view.editor().value).toBe('from event')
+    expect(view.text()).not.toContain('late failure')
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(1)
+  })
+
+  test('cancels the pending retry on unmount', async () => {
+    const fake = fakeContext({ failGets: 1 })
+    await openComposer(fake)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(1)
+    await act(async () => void (mounted as () => void)())
+    mounted = undefined
+    await waitFor(650)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(1)
+  })
+
+  test('saves typing made while the initial read is failing after recovery', async () => {
+    const fake = fakeContext({ state: baseState({ draft: 'kept draft' }), failGets: 1 })
+    const view = await openComposer(fake)
+
+    await view.type('typed while offline')
+    await waitFor(650)
+
+    expect(view.editor().value).toBe('typed while offline')
+    expect(view.text()).not.toContain('read failed')
+    expect(view.text()).not.toContain('conflict')
+
+    await waitFor(600)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)).toHaveLength(1)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)[0]?.params).toEqual({
+      pane: 'pane-a',
+      revision: 1,
+      draft: 'typed while offline'
+    })
+    expect(fake.state.draft).toBe('typed while offline')
+  })
+
+  test('retries a failed reconnect read without replacing a newer conflict error', async () => {
+    const fake = fakeContext()
+    const view = await openComposer(fake)
+    await view.type('local unsynced text')
+    await act(async () => fake.announce({ revision: fake.state.revision + 1, draft: 'newer remote draft' }))
+    expect(view.text()).toContain('conflict')
+
+    fake.failNextGets(1)
+    fake.connection('connected')
+    await settle()
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(2)
+    expect(view.text()).toContain('conflict')
+    expect(view.text()).not.toContain('read failed')
+    await waitFor(650)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(3)
+    expect(view.text()).toContain('conflict')
+    expect(view.editor().value).toBe('local unsynced text')
+  })
+
+  test('retries malformed state replies and saves typing made while offline', async () => {
+    const fake = fakeContext({
+      state: baseState({ draft: 'kept draft' }),
+      badGets: [{ pane: 'pane-a', session: 'session-a' }]
+    })
+    const view = await openComposer(fake)
+
+    expect(view.text()).toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('')
+    expect(view.button('Send')!.disabled).toBe(true)
+    await view.type('typed meanwhile')
+    await waitFor(650)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(2)
+    expect(view.text()).not.toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('typed meanwhile')
+    await waitFor(600)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)).toHaveLength(1)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)[0]?.params).toEqual({
+      pane: 'pane-a',
+      revision: 1,
+      draft: 'typed meanwhile'
+    })
+  })
+
+  test('rejects another pane state and saves typing after the valid retry', async () => {
+    const fake = fakeContext({
+      state: baseState({ draft: 'kept draft' }),
+      badGets: [baseState({ pane: 'pane-b', draft: 'foreign draft' })]
+    })
+    const view = await openComposer(fake)
+
+    expect(view.text()).toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('')
+    await view.type('typed meanwhile')
+    await waitFor(650)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(2)
+    expect(view.text()).not.toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('typed meanwhile')
+    expect(view.text()).not.toContain('foreign draft')
+    await waitFor(600)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)).toHaveLength(1)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)[0]?.params).toEqual({
+      pane: 'pane-a',
+      revision: 1,
+      draft: 'typed meanwhile'
+    })
+  })
+
+  test('rejects another session state and saves typing after the valid retry', async () => {
+    const fake = fakeContext({
+      state: baseState({ draft: 'kept draft' }),
+      badGets: [baseState({ session: 'session-b', draft: 'foreign draft' })]
+    })
+    const view = await openComposer(fake)
+
+    expect(view.text()).toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('')
+    await view.type('typed meanwhile')
+    await waitFor(650)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(2)
+    expect(view.text()).not.toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('typed meanwhile')
+    expect(view.text()).not.toContain('foreign draft')
+    await waitFor(600)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)).toHaveLength(1)
+    expect(fake.callsTo(`${PLUGIN_METHOD}set`)[0]?.params).toEqual({
+      pane: 'pane-a',
+      revision: 1,
+      draft: 'typed meanwhile'
+    })
+  })
+
+  test('keeps rejecting wrong-session replies without accepting their state', async () => {
+    const wrongSession = baseState({ session: 'session-b', draft: 'foreign draft' })
+    const fake = fakeContext({ badGets: [wrongSession, wrongSession] })
+    const view = await openComposer(fake)
+
+    expect(view.text()).toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('')
+    await waitFor(650)
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(2)
+    expect(view.text()).toContain('Terminal dock returned invalid state.')
+    expect(view.editor().value).toBe('')
+    expect(view.text()).not.toContain('foreign draft')
   })
 })
