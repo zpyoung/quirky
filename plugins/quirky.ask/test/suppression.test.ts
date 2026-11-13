@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import type { LaunchHookInput, PluginContext } from '@quirky/protocol'
+import type { LaunchHookInput, PluginContext, ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { SUPPRESSION_PROMPT } from '../src/core/claude-flags'
 import { ClaudeVersionGate, commandProbe, suppressionHook } from '../suppression'
 
@@ -158,7 +159,30 @@ describe('suppressionHook', () => {
 
 describe('commandProbe', () => {
   const dirs: string[] = []
-  afterEach(() => {
+  const processRunners: OwnedProcessRunner[] = []
+  const escapedPidFiles: string[] = []
+  let nextRunnerId = 0
+
+  function makeProcessRunner(): OwnedProcessRunner {
+    const runner = createProcessRunner({ owner: `ask-probe-test-${++nextRunnerId}` })
+    processRunners.push(runner)
+    return runner
+  }
+
+  function killEscapedChildren(): void {
+    for (const pidFile of escapedPidFiles.splice(0)) {
+      if (!existsSync(pidFile)) continue
+      const pid = Number(readFileSync(pidFile, 'utf8').trim())
+      if (!Number.isSafeInteger(pid) || pid <= 0) continue
+      try {
+        process.kill(pid, 'SIGKILL')
+      } catch {}
+    }
+  }
+
+  afterEach(async () => {
+    killEscapedChildren()
+    await Promise.all(processRunners.splice(0).map((runner) => runner.dispose()))
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
   })
 
@@ -173,6 +197,7 @@ describe('commandProbe', () => {
     writeFileSync(`${launcher}.json`, JSON.stringify(behavior))
     const envInputs: unknown[] = []
     const context = {
+      process: makeProcessRunner(),
       launch: {
         commandArgv: (command: string) => ['/bin/sh', '-c', `exec ${command}`],
         env: (input: unknown) => {
@@ -183,6 +208,167 @@ describe('commandProbe', () => {
     } as unknown as PluginContext
     return { launcher, context, envInputs, log: () => readFileSync(`${launcher}.log.jsonl`, 'utf8') }
   }
+
+  function runResult(overrides: Partial<RunResult> = {}): RunResult {
+    const stdoutText = overrides.stdoutText ?? '2.1.310 (Claude Code)\n'
+    return {
+      stdout: Buffer.from(stdoutText),
+      stdoutText,
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      durationMs: 1,
+      ...overrides
+    }
+  }
+
+  function recordingContext(
+    run: ProcessRunner['run'] = async () => runResult(),
+    launchOverrides: {
+      commandArgv?: (line: string) => string[]
+      env?: (metadata: unknown) => Record<string, string>
+    } = {}
+  ) {
+    const calls: { argv: string[]; options?: RunOptions }[] = []
+    const commandArgvCalls: string[] = []
+    const envInputs: unknown[] = []
+    const env = { HOME: '/probe/home', PATH: '/probe/bin' }
+    const processRunner: ProcessRunner = {
+      run: async (argv, options) => {
+        calls.push({ argv: [...argv], options })
+        return run(argv, options)
+      }
+    }
+    const context = {
+      process: processRunner,
+      launch: {
+        commandArgv: (line: string) => {
+          commandArgvCalls.push(line)
+          return launchOverrides.commandArgv?.(line) ?? ['/bin/sh', '-l', '-c', line]
+        },
+        env: (metadata: unknown) => {
+          envInputs.push(metadata)
+          return launchOverrides.env?.(metadata) ?? env
+        }
+      }
+    } as unknown as PluginContext
+    return { context, calls, commandArgvCalls, envInputs, env }
+  }
+
+  function expectRunCall(
+    call: { argv: string[]; options?: RunOptions },
+    env: Record<string, string>,
+    timeoutMs: number
+  ): void {
+    expect(call.argv).toEqual(['/bin/sh', '-l', '-c', "'claude' '--version'"])
+    expect(call.options).toBeDefined()
+    const { signal, ...options } = call.options!
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(options).toEqual({ env, timeoutMs, killGraceMs: 0, maxOutputBytes: 1048576 })
+  }
+
+  const identity = { sessionId: 's', worktreeId: 'w' }
+
+  test('runs the version command with exact runner options and launch metadata', async () => {
+    const fake = recordingContext()
+    const output = '2.1.310 (Claude Code)\n'
+    expect(await commandProbe(fake.context)('claude', identity)).toBe(output)
+    expect(await commandProbe(fake.context, { timeoutMs: 200 })('claude', identity)).toBe(output)
+    expect(fake.commandArgvCalls).toEqual(["'claude' '--version'", "'claude' '--version'"])
+    expect(fake.envInputs).toEqual([
+      { sessionId: 's', worktreeId: 'w', agent: 'claude' },
+      { sessionId: 's', worktreeId: 'w', agent: 'claude' }
+    ])
+    expect(fake.calls).toHaveLength(2)
+    expectRunCall(fake.calls[0]!, fake.env, 3000)
+    expectRunCall(fake.calls[1]!, fake.env, 200)
+  })
+
+  test('returns null for every unsuccessful runner result', async () => {
+    const failures = [
+      runResult({ exitCode: 1 }),
+      runResult({ exitCode: null, stopped: 'timeout' }),
+      runResult({ exitCode: null, stopped: 'aborted' }),
+      runResult({ exitCode: null, stopped: 'overflow' }),
+      runResult({ exitCode: null, spawnError: { code: 'ENOENT', message: 'missing' } })
+    ]
+    for (const failure of failures) {
+      const fake = recordingContext(async () => failure)
+      expect(await commandProbe(fake.context)('claude', identity)).toBeNull()
+      expect(fake.calls).toHaveLength(1)
+    }
+  })
+
+  test('returns null when the runner rejects', async () => {
+    const fake = recordingContext(async () => {
+      throw new Error('runner disposed')
+    })
+    expect(await commandProbe(fake.context)('claude', identity)).toBeNull()
+    expect(fake.calls).toHaveLength(1)
+  })
+
+  test('returns null when launch throws or the command does not tokenize', async () => {
+    const commandArgvFailure = recordingContext(undefined, {
+      commandArgv: () => {
+        throw new Error('no shell')
+      }
+    })
+    expect(await commandProbe(commandArgvFailure.context)('claude', identity)).toBeNull()
+    expect(commandArgvFailure.calls).toHaveLength(0)
+
+    const envFailure = recordingContext(undefined, {
+      env: () => {
+        throw new Error('no environment')
+      }
+    })
+    expect(await commandProbe(envFailure.context)('claude', identity)).toBeNull()
+    expect(envFailure.calls).toHaveLength(0)
+
+    const unclosedQuote = recordingContext()
+    expect(await commandProbe(unclosedQuote.context)('claude "unterminated', identity)).toBeNull()
+    expect(unclosedQuote.calls).toHaveLength(0)
+  })
+
+  test('keeps the whole-call deadline when an aborted fake runner holds the call', async () => {
+    const fake = recordingContext(async (_argv, options) => {
+      const { promise, resolve } = Promise.withResolvers<RunResult>()
+      options?.signal?.addEventListener('abort', () => {
+        resolve(runResult({ exitCode: null, stopped: 'aborted' }))
+      }, { once: true })
+      return promise
+    })
+    const started = Date.now()
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    try {
+      const { promise, reject } = Promise.withResolvers<never>()
+      deadline = setTimeout(() => reject(new Error('probe did not abort the runner')), 900)
+      const output = await Promise.race([
+        commandProbe(fake.context, { timeoutMs: 200 })('claude', identity),
+        promise
+      ])
+      expect(output).toBeNull()
+      expect(fake.calls).toHaveLength(1)
+      expect(Date.now() - started).toBeLessThan(1000)
+    } finally {
+      clearTimeout(deadline)
+    }
+  })
+
+  test('returns at the whole-call deadline while an escaped child holds stdout open', async () => {
+    const fake = installFake({})
+    const pidFile = `${fake.launcher}.child.pid`
+    escapedPidFiles.push(pidFile)
+    writeFileSync(fake.launcher, `#!/bin/sh
+exec perl -MPOSIX -e 'my $pid_file = $ARGV[0]; my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); open my $file, ">", $pid_file or die $!; print {$file} "$$\\n"; close $file; sleep 30; exit 0; } while (!-e $pid_file) { select undef, undef, undef, 0.01; } print "2.1.310 (Claude Code)\\n";' '${pidFile}'
+`)
+    const started = Date.now()
+    expect(await commandProbe(fake.context, { timeoutMs: 300 })(fake.launcher, identity)).toBeNull()
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(existsSync(pidFile)).toBe(true)
+    const childPid = Number(readFileSync(pidFile, 'utf8').trim())
+    expect(childPid).toBeGreaterThan(0)
+    expect(() => process.kill(childPid, 0)).not.toThrow()
+  })
 
   test('reads the stdout of the fake agent started with --version', async () => {
     const fake = installFake({ version: { stdout: '2.1.0 (Claude Code)\n' } })
