@@ -212,6 +212,7 @@ test('check-ratchet runs inventory only without runtime or report writes', async
   const forbidden = () => { throw new Error('check-ratchet started runtime or wrote a report') }
   const exitCode = await runUiScoreboard(['--check-ratchet'], {
     repoRoot, collectInventory: () => { inventoryCalls++; return source },
+    readFile: async () => JSON.stringify({ host: ['compatibility-tokens'] }),
     captureApplication: forbidden, reviewManifest: forbidden, mkdir: forbidden,
   })
   expect(exitCode).toBe(0)

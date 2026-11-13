@@ -1,0 +1,880 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.session/structured": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.session/worktree": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (loaded.status === 'missing') return <EmptyState message=\"Session not found\" />"
+      },
+      "anchor": "if (loaded.status === 'missing')",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<EmptyState message=\"Session not found\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (loaded.status === 'loading') return <EmptyState message=\"Loading session…\" />"
+      },
+      "anchor": "if (loaded.status === 'loading')",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<EmptyState message=\"Loading session…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (loaded.status === 'failed') {\n    return <InlineError message={`Could not load the session: ${loaded.failure}`} action={{ label: 'Retry', onAction: load }} />\n  }"
+      },
+      "anchor": "if (loaded.status === 'failed')",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<InlineError message={`Could not load the session: ${loaded.failure}`} action={{ label: 'Retry', onAction: load }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (worktree === null) {\n      root.render(<EmptyState message=\"Pick a worktree to see its sessions.\" />)\n      report?.({ worktree: null, tabs: [], active: null, visibleSessions: [] })\n      return () => root.unmount()\n    }"
+      },
+      "anchor": "if (worktree === null)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<EmptyState message=\"Pick a worktree to see its sessions.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "if (!connected) return <EmptyState message=\"Reconnecting…\" />"
+      },
+      "anchor": "if (!connected)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/SessionView.tsx",
+          "quote": "<EmptyState message=\"Reconnecting…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/SessionView.tsx",
+          "quote": "import { EmptyState } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "context.toast('Could not send', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "context.toast('Could not send', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "if (phase.status === 'off') return <EmptyState message=\"Structured sessions are off\" />"
+      },
+      "anchor": "if (phase.status === 'off')",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "<EmptyState message=\"Structured sessions are off\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "phase.status === 'loading' && messages.length === 0 && <NoticeLine>Loading messages…</NoticeLine>"
+      },
+      "anchor": "phase.status === 'loading' && messages.length === 0 &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "<NoticeLine>Loading messages…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "phase.status === 'failed' && (\n          <InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />\n        )"
+      },
+      "anchor": "phase.status === 'failed' &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "<InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "phase.status === 'ready' && messages.length === 0 && <EmptyState message=\"No messages yet.\" />"
+      },
+      "anchor": "phase.status === 'ready' && messages.length === 0 &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "<EmptyState message=\"No messages yet.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'loading' && <EmptyState message=\"Loading sessions…\" />"
+      },
+      "anchor": "status === 'loading' &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<EmptyState message=\"Loading sessions…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'missing' && <EmptyState message=\"Worktree not found\" />"
+      },
+      "anchor": "status === 'missing' &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<EmptyState message=\"Worktree not found\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'failed' && failure !== null && (\n          <InlineError\n            message={`Could not load sessions: ${failure}`}\n            action={{ label: 'Retry', onAction: () => store.retry() }}\n          />\n        )"
+      },
+      "anchor": "status === 'failed' && failure !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<InlineError\n            message={`Could not load sessions: ${failure}`}\n            action={{ label: 'Retry', onAction: () => store.retry() }}\n          />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'ready' && !active && (\n          <EmptyState\n            message=\"No sessions in this worktree.\"\n            action={{ label: 'New shell', onAction: () => void store.create('shell', '', false) }}\n          />\n        )"
+      },
+      "anchor": "status === 'ready' && !active &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<EmptyState\n            message=\"No sessions in this worktree.\"\n            action={{ label: 'New shell', onAction: () => void store.create('shell', '', false) }}\n          />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/model.ts",
+        "quote": "this.context.toast('Could not start session', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.toast('Could not start session', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/model.ts",
+        "quote": "this.context.toast('Could not close session', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.toast('Could not close session', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/model.ts",
+        "quote": "this.context.toast('Could not load sessions', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.toast('Could not load sessions', messageOf(error))"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "case 'tool':\n      return (\n        <article aria-label={`${message.role} message`} style={row}>\n          <Badge>tool</Badge>\n          <details>\n            <summary>{firstLine(message.text) || 'tool'}</summary>\n            <pre style={code}>{message.text}</pre>\n          </details>\n        </article>\n      )"
+      },
+      "anchor": "case 'tool':",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "firstLine(message.text) || 'tool'"
+      },
+      "anchor": "firstLine(message.text) ||",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "case 'system':\n      return (\n        <article aria-label={`${message.role} message`} style={row}>\n          <Badge>{message.role}</Badge>\n          <div style={body}>{message.text}</div>\n        </article>\n      )"
+      },
+      "anchor": "case 'system':",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "default:\n      return (\n        <article aria-label={`${message.role} message`} style={row}>\n          <Badge>{message.role}</Badge>\n          <div style={body}>{message.text}</div>\n        </article>\n      )"
+      },
+      "anchor": "default:",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "active && activePresentation && (\n        <div style={summary} role=\"status\">\n          {active.unread ? <UnreadBell reason={active.unread} /> : <StatusDot session={active} now={now} />}\n          <span>{active.unread ? `${UNREAD_LABELS[active.unread]} · ${activePresentation.label}` : activePresentation.label}</span>\n          {activePresentation.progress !== null && (\n            <Badge tone=\"accent\" label={`Progress ${activePresentation.progress}%`}>\n              {activePresentation.progress}%\n            </Badge>\n          )}\n        </div>\n      )"
+      },
+      "anchor": "active && activePresentation &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "active.unread ? <UnreadBell reason={active.unread} /> : <StatusDot session={active} now={now} />"
+      },
+      "anchor": "active.unread ?",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "active.unread ? `${UNREAD_LABELS[active.unread]} · ${activePresentation.label}` : activePresentation.label"
+      },
+      "anchor": "active.unread ?",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "activePresentation.progress !== null && (\n            <Badge tone=\"accent\" label={`Progress ${activePresentation.progress}%`}>\n              {activePresentation.progress}%\n            </Badge>\n          )"
+      },
+      "anchor": "activePresentation.progress !== null &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "sessions.length > 0 && (\n        <div style={sessionControls} role=\"group\" aria-label=\"Session actions\">\n          {sessions.map((session) => (\n            <div key={session.id} style={sessionControlGroup} role=\"group\" aria-label={`Actions for ${session.title}`}>\n              <span style={sessionName}>{session.title}</span>\n              {Object.entries(session.badges ?? {}).map(([key, badge]) => badge.command ? (\n                <Button key={key} type=\"button\" title={badge.tooltip} onClick={() => void context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })}>\n                  {badge.label}\n                </Button>\n              ) : (\n                <span key={key} title={badge.tooltip}>\n                  <Badge label={badge.tooltip ?? badge.label}>{badge.label}</Badge>\n                </span>\n              ))}\n              <IconButton\n                label={`Close ${session.title}`}\n                title={`Close ${session.title}`}\n                onClick={() => void store.close(session)}\n              >\n                ×\n              </IconButton>\n            </div>\n          ))}\n        </div>\n      )"
+      },
+      "anchor": "sessions.length > 0 &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "badge.command ? (\n                <Button key={key} type=\"button\" title={badge.tooltip} onClick={() => void context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })}>\n                  {badge.label}\n                </Button>\n              ) : (\n                <span key={key} title={badge.tooltip}>\n                  <Badge label={badge.tooltip ?? badge.label}>{badge.label}</Badge>\n                </span>\n              )"
+      },
+      "anchor": "badge.command ?",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "pending && (\n        <PromptDialog\n          request={pending}\n          store={store}\n          onClose={() => setPending((current) => current === pending ? null : current)}\n        />\n      )"
+      },
+      "anchor": "pending &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "if (session.kind === 'structured') return <StructuredView context={context} session={session} />"
+      },
+      "anchor": "if (session.kind === 'structured')",
+      "reason": "Session kind and lifecycle select the active pane or ended-session controls."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "session.status === 'exited' && <ExitedBar session={session} onClose={onClose} />"
+      },
+      "anchor": "session.status === 'exited' &&",
+      "reason": "Session kind and lifecycle select the active pane or ended-session controls."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "exited ? (\n        <div style={ended} role=\"status\">session ended</div>\n      ) : (\n        <form\n          style={form}\n          onSubmit={(event: FormEvent) => {\n            event.preventDefault()\n            void send()\n          }}\n        >\n          <div style={field}>\n            <FormRow label=\"Message\" htmlFor={messageId}>\n              <textarea\n                id={messageId}\n                rows={2}\n                value={text}\n                placeholder=\"Message (Enter to send, Shift+Enter for a new line)\"\n                className=\"ui-text-field__input\"\n                style={textarea}\n                onChange={(event) => setText(event.target.value)}\n                onKeyDown={(event) => {\n                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {\n                    event.preventDefault()\n                    void send()\n                  }\n                }}\n              />\n            </FormRow>\n          </div>\n          <Button type=\"submit\" variant=\"primary\" disabled={!text.trim()}>\n            Send\n          </Button>\n        </form>\n      )"
+      },
+      "anchor": "exited ?",
+      "reason": "The ended-session notice replaces the composer after exit; it is not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "worktree ? (\n          <>\n            <strong style={title}>{worktree.name}</strong>\n            <span style={path}>{worktree.path}</span>\n          </>\n        ) : (\n          <span style={path}>Quirky</span>\n        )"
+      },
+      "anchor": "worktree ?",
+      "reason": "Loaded worktree identity and active session select the header, tabs and pane, not a state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "worktree && <SessionTabs context={context} store={store} sessions={sessions} active={active} />"
+      },
+      "anchor": "worktree &&",
+      "reason": "Loaded worktree identity and active session select the header, tabs and pane, not a state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "active && (\n          <SessionView\n            key={`${active.id}:${epoch}`}\n            context={context}\n            themeSource={themeSource}\n            session={active}\n            connected={connected}\n            onClose={() => void store.close(active)}\n          />\n        )"
+      },
+      "anchor": "active &&",
+      "reason": "Loaded worktree identity and active session select the header, tabs and pane, not a state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/ExitedBar.tsx",
+        "quote": "role=\"status\""
+      },
+      "reason": "Accessible live status announces session activity or exit rather than a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "role=\"status\""
+      },
+      "reason": "Accessible live status announces session activity or exit rather than a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "role=\"status\""
+      },
+      "reason": "Accessible live status announces session activity or exit rather than a loading, empty or error state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "onAction: load"
+      },
+      "route": {
+        "target": "quirky.session/get",
+        "invoke": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "context.call('quirky.session/get', { session: id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/ui.tsx",
+            "quote": "function load(): void {\n    if (id === null) return\n    setLoaded((current) => current.status === 'failed' ? { status: 'loading' } : current)\n    const attempt = ++latest.current\n    void readSession(context, id).then((result) => {\n      if (cancelled.current || attempt !== latest.current) return\n      setLoaded((current) => result.status === 'failed' && current.status === 'ready' ? current : result)\n    })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/ui.tsx",
+            "quote": "async function readSession(context: UiPluginContext, id: string): Promise<Exclude<Loaded, { status: 'loading' }>> {\n  try {\n    const session = (await context.call('quirky.session/get', { session: id })) as Session\n    return { status: 'ready', session }\n  } catch (error) {\n    if ((error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound) return { status: 'missing' }\n    return { status: 'failed', failure: messageOf(error) }\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/ExitedBar.tsx",
+        "quote": "onClick={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/NewSessionMenu.tsx",
+        "quote": "onAction: () => context.openView(AGENTS_VIEW_ID)"
+      },
+      "route": {
+        "target": "view:quirky.agents/settings",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/NewSessionMenu.tsx",
+          "quote": "context.openView(AGENTS_VIEW_ID)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/NewSessionMenu.tsx",
+        "quote": "onAction: () => onPick(entry.request)"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onClose={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onClick={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onSubmit={(event) => { event.preventDefault(); void submit() }}"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+            "quote": "const submit = async () => {\n    if (!canSubmit) return\n    setSubmitting(true)\n    try {\n      if (await store.create(request.agent, prompt, request.background)) onClose()\n    } finally {\n      setSubmitting(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onChange={(event) => setPrompt(event.target.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent message draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onKeyDown={(event) => {\n              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {\n                event.preventDefault()\n                void submit()\n              }\n            }}"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+            "quote": "const submit = async () => {\n    if (!canSubmit) return\n    setSubmitting(true)\n    try {\n      if (await store.create(request.agent, prompt, request.background)) onClose()\n    } finally {\n      setSubmitting(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onChange={(id) => store.open(id)}"
+      },
+      "route": {
+        "target": "view:quirky.session/worktree",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.openView(WORKTREE_VIEW_ID, session === undefined ? { worktree } : { worktree, session })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "open(session?: string): void {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    this.context.openView(WORKTREE_VIEW_ID, session === undefined ? { worktree } : { worktree, session })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onPick={pick}"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+            "quote": "const pick = (request: NewSessionRequest) => {\n    if (request.agent === 'shell') void store.create('shell', '', false)\n    else setPending(request)\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onClick={() => void context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })}"
+      },
+      "route": {
+        "target": "command:quirky.session/run-badge",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+          "quote": "context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onClick={() => void store.close(session)}"
+      },
+      "route": {
+        "target": "quirky.session/close",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/close', { session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async close(session: Session): Promise<void> {\n    if (session.status !== 'exited') {\n      const ok = await this.context.confirm({\n        title: 'Close session',\n        body: `\"${session.title}\" is still running. Close it?`,\n        confirmLabel: 'Close'\n      })\n      if (!ok) return\n    }\n    try {\n      await this.context.call('quirky.session/close', { session: session.id })\n    } catch (error) {\n      this.context.toast('Could not close session', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onClose={() => setPending((current) => current === pending ? null : current)}"
+      },
+      "transient": "draft",
+      "reason": "Cancels the unsent new-session draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "onClose={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "onChange={(event) => {\n                const enabled = event.target.checked\n                rememberShowAllEvents(session, enabled)\n                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled })\n              }}"
+      },
+      "route": {
+        "target": "command:quirky.session/show-all-events",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "onAction: load"
+      },
+      "route": {
+        "target": "quirky.structured/messages",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "context\n      .call('quirky.structured/messages', { session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+            "quote": "function load(): void {\n    const attempt = ++latest.current\n    if (!loadedOnce.current) setPhase({ status: 'loading' })\n    void context\n      .call('quirky.structured/messages', { session: session.id })\n      .then((loaded) => {\n        if (cancelled.current || attempt !== latest.current) return\n        loadedOnce.current = true\n        setPhase({ status: 'ready' })\n        add(loaded as StructuredMessage[])\n      })\n      .catch((error: { code?: unknown }) => {\n        if (cancelled.current || attempt !== latest.current) return\n        if (error?.code === RpcErrorCode.MethodNotFound) {\n          loadedOnce.current = false\n          setPhase({ status: 'off' })\n        } else if (!loadedOnce.current) {\n          setPhase({ status: 'failed', message: messageOf(error) })\n        }\n      })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "onSubmit={(event: FormEvent) => {\n            event.preventDefault()\n            void send()\n          }}"
+      },
+      "route": {
+        "target": "quirky.structured/send",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "context.call('quirky.structured/send', { session: session.id, text: value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+            "quote": "const send = async () => {\n    const value = text.trim()\n    if (!value) return\n    setText('')\n    try {\n      await context.call('quirky.structured/send', { session: session.id, text: value })\n    } catch (error) {\n      context.toast('Could not send', messageOf(error))\n      setText(value)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "onChange={(event) => setText(event.target.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent message draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+        "quote": "onKeyDown={(event) => {\n                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {\n                    event.preventDefault()\n                    void send()\n                  }\n                }}"
+      },
+      "route": {
+        "target": "quirky.structured/send",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+          "quote": "context.call('quirky.structured/send', { session: session.id, text: value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/StructuredView.tsx",
+            "quote": "const send = async () => {\n    const value = text.trim()\n    if (!value) return\n    setText('')\n    try {\n      await context.call('quirky.structured/send', { session: session.id, text: value })\n    } catch (error) {\n      context.toast('Could not send', messageOf(error))\n      setText(value)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/TerminalPane.tsx",
+        "quote": "onLagged: () => handleLag(id)"
+      },
+      "notAction": "subscription",
+      "reason": "Terminal stream lag is a subscription callback, not a user action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "onAction: () => store.retry()"
+      },
+      "route": {
+        "target": "quirky.session/list",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/list', { worktree: worktree.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "retry(): void {\n    if (this.stopped || this.snapshot.status !== 'failed') return\n    this.queued = []\n    this.commit({ status: 'loading', failure: null, worktree: null, sessions: [] })\n    void this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "private async load(): Promise<void> {\n    if (this.loading) {\n      this.reloadAfter = true\n      return\n    }\n    this.loading = true\n    try {\n      do {\n        this.reloadAfter = false\n        await this.loadOnce()\n      } while (this.reloadAfter && !this.stopped)\n    } finally {\n      this.loading = false\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "private async loadOnce(): Promise<void> {\n    let worktree: Worktree\n    let sessions: Session[]\n    try {\n      worktree = (await this.context.call('quirky.worktree/resolve', { selector: this.selector })) as Worktree\n      sessions = (await this.context.call('quirky.session/list', { worktree: worktree.id })) as Session[]\n    } catch (error) {\n      if (this.stopped) return\n      const gone = (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound\n      this.queued = []\n      if (gone) this.commit({ status: 'missing', failure: null, worktree: null, sessions: [] })\n      else if (this.snapshot.status === 'ready') this.context.toast('Could not load sessions', messageOf(error))\n      else this.commit({ status: 'failed', failure: messageOf(error), worktree: null, sessions: [] })\n      return\n    }\n    if (this.stopped) return\n    const byId = new Map(sessions.map((session) => [session.id, session]))\n    for (const event of this.queued.splice(0)) this.applyToMap(byId, event, worktree.id)\n    const loadedSessions = [...byId.values()]\n    pruneShowAllEvents(worktree.id, loadedSessions)\n    this.commit({\n      status: 'ready',\n      failure: null,\n      worktree: { id: worktree.id, name: worktree.name, path: worktree.path },\n      sessions: loadedSessions\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "onAction: () => void store.create('shell', '', false)"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "onClose={() => void store.close(active)}"
+      },
+      "route": {
+        "target": "quirky.session/close",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/close', { session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async close(session: Session): Promise<void> {\n    if (session.status !== 'exited') {\n      const ok = await this.context.confirm({\n        title: 'Close session',\n        body: `\"${session.title}\" is still running. Close it?`,\n        confirmLabel: 'Close'\n      })\n      if (!ok) return\n    }\n    try {\n      await this.context.call('quirky.session/close', { session: session.id })\n    } catch (error) {\n      this.context.toast('Could not close session', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    }
+  ]
+}
