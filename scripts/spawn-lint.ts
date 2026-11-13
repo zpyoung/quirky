@@ -136,7 +136,20 @@ function bunImportReceiverNames(node: ts.ImportDeclaration, receivers: Set<strin
   for (const specifier of bindings.elements) {
     if (specifier.isTypeOnly) continue
     const imported = specifier.propertyName?.text ?? specifier.name.text
+    if (imported === 'default') {
+      receivers.add(specifier.name.text)
+      continue
+    }
     if (forbiddenBunMembers.has(imported)) add(specifier)
+  }
+}
+
+function bunReExportMembers(node: ts.ExportDeclaration, add: (node: ts.Node) => void): void {
+  if (importedModuleName(node) !== 'bun' || node.isTypeOnly || !node.exportClause || !ts.isNamedExports(node.exportClause)) return
+  for (const specifier of node.exportClause.elements) {
+    if (specifier.isTypeOnly) continue
+    const exported = specifier.propertyName?.text ?? specifier.name.text
+    if (forbiddenBunMembers.has(exported)) add(specifier.propertyName ?? specifier.name)
   }
 }
 
@@ -171,11 +184,12 @@ function staticMember(node: ts.PropertyAccessExpression | ts.ElementAccessExpres
 }
 
 function inTypePosition(node: ts.Node): boolean {
-  if (!ts.isTypeNode(node)) return false
-  if (ts.isExpressionWithTypeArguments(node) && ts.isHeritageClause(node.parent) &&
-    node.parent.token === ts.SyntaxKind.ExtendsKeyword &&
-    (ts.isClassDeclaration(node.parent.parent) || ts.isClassExpression(node.parent.parent))) return false
-  return true
+  if (ts.isExpressionWithTypeArguments(node)) {
+    if (!ts.isHeritageClause(node.parent)) return false
+    return !(node.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+      (ts.isClassDeclaration(node.parent.parent) || ts.isClassExpression(node.parent.parent)))
+  }
+  return ts.isTypeNode(node)
 }
 
 /** Find direct Bun primitive access and child_process acquisition in one source file. */
@@ -192,20 +206,38 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
   const collectImports = (node: ts.Node): void => {
     if (childProcessAcquisition(node)) add(node)
     if (ts.isImportDeclaration(node)) bunImportReceiverNames(node, receivers, add)
+    if (ts.isExportDeclaration(node)) bunReExportMembers(node, add)
     ts.forEachChild(node, collectImports)
   }
   collectImports(sourceFile)
+
+  const addBunObjectMembers = (pattern: ts.ObjectBindingPattern | ts.ObjectLiteralExpression): void => {
+    const properties = ts.isObjectBindingPattern(pattern) ? pattern.elements : pattern.properties
+    for (const property of properties) {
+      let name: ts.PropertyName | ts.BindingName | undefined
+      if (ts.isBindingElement(property)) {
+        if (property.dotDotDotToken) continue
+        name = property.propertyName ?? property.name
+      } else if (ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)) {
+        name = property.name
+      } else continue
+      if (name) {
+        const member = propertyName(name)
+        if (member && forbiddenBunMembers.has(member)) add(name)
+      }
+    }
+  }
 
   const visitRuntime = (node: ts.Node): void => {
     if (inTypePosition(node)) return
     if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
       forbiddenBunMembers.has(staticMember(node) ?? '') && isBunReceiver(node.expression, receivers)) add(node)
-    if (ts.isVariableDeclaration(node) && node.initializer && ts.isObjectBindingPattern(node.name) && isBunReceiver(node.initializer, receivers)) {
-      for (const element of node.name.elements) {
-        const member = propertyName(element.propertyName ?? element.name)
-        if (member && forbiddenBunMembers.has(member)) add(element.propertyName ?? element.name)
-      }
-    }
+    if (ts.isVariableDeclaration(node) && node.initializer && ts.isObjectBindingPattern(node.name) &&
+      isBunReceiver(node.initializer, receivers)) addBunObjectMembers(node.name)
+    if (ts.isParameter(node) && node.initializer && ts.isObjectBindingPattern(node.name) &&
+      isBunReceiver(node.initializer, receivers)) addBunObjectMembers(node.name)
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isObjectLiteralExpression(node.left) && isBunReceiver(node.right, receivers)) addBunObjectMembers(node.left)
     ts.forEachChild(node, visitRuntime)
   }
   visitRuntime(sourceFile)

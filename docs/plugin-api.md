@@ -70,8 +70,8 @@ the session is no longer available; removals with no announced row remain untagg
 "quirky.tasks/changed" coalesces with one key for the daemon, and Tasks clients apply the result of their own actions rather than waiting for an event.
 
 `quirky.reviews/changed` carries a worktree tag for updates confined to one Checks entry and its
-Checks dialog. Shared updates and evictions remain untagged. It is not coalesced because draft
-fields consume daemon echoes.
+Checks dialog; shared updates and evictions remain untagged. It coalesces per tag. Review draft
+fields keep local input and request state themselves after their writes settle.
 
 ### API 1.4: Process runner
 
