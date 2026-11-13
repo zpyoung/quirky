@@ -258,6 +258,8 @@ describe('speed evidence', () => {
     expect(baseline.with?.path).toBe('speed/report.json')
     const qualify = steps('speed').find(step => step.id === 'qualify')!
     expect(qualify.run).toContain('validateReport')
+    expect(qualify.run).toContain('parseArtifactJson')
+    expect(qualify.run).not.toContain('.json()')
     expect(qualify.run).toContain('qualified')
   })
 

@@ -200,7 +200,7 @@ jobs:
         env:
           HEAD_SHA: ${{ github.sha }}
         run: |
-          bun -e 'import { validateReport } from "./scripts/speed/report.ts"; let r = null; try { r = validateReport(await Bun.file("speed/report.json").json()) } catch {} console.log(`qualified=${r?.qualified === true && r.status === "complete" && r.cleanup === "complete" && r.commit === process.env.HEAD_SHA}`)' >> "$GITHUB_OUTPUT"
+          bun -e 'import { validateReport } from "./scripts/speed/report.ts"; import { parseArtifactJson } from "./scripts/test-baseline/baseline.ts"; let r = null; try { r = validateReport(parseArtifactJson(await Bun.file("speed/report.json").text())) } catch {} console.log(`qualified=${r?.qualified === true && r.status === "complete" && r.cleanup === "complete" && r.commit === process.env.HEAD_SHA}`)' >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         if: always()
