@@ -680,23 +680,28 @@ export async function waitForFloodProgressAfterSnapshot(
   closeOwnedContext?: () => Promise<void>,
   timeoutMs = DEADLINE_MS
 ): Promise<{ beforeCounter: number; afterCounter: number }> {
-  const beforeCounter = await withDeadline(renderedFloodCounter(page, worktree), timeoutMs, 'final rendered flood counter snapshot', signal)
-  if (beforeCounter === null) throw new Error('flood renderer has no final counter snapshot')
-  const spec: BrowserObservationSpec = {
-    id: randomUUID(), kind: 'flood', workerId: start.workerId, sessionId: start.sessionId,
-    afterCounter: beforeCounter, offeredBytes: start.offeredBytesPerChunk
+  const deadline = performance.now() + timeoutMs
+  let beforeCounter = await withDeadline(renderedFloodCounter(page, worktree), timeoutMs, 'final rendered flood counter snapshot', signal)
+  const observeNext = async (afterCounter: number): Promise<number> => {
+    const spec: BrowserObservationSpec = {
+      id: randomUUID(), kind: 'flood', workerId: start.workerId, sessionId: start.sessionId,
+      afterCounter, offeredBytes: start.offeredBytesPerChunk
+    }
+    try {
+      await withDeadline(page.evaluate(installBrowserObserver, spec), Math.max(1, deadline - performance.now()), 'flood progress observer install', signal)
+    } catch (error) {
+      await cancelBrowserObserver(page, spec.id, errorText(error), closeOwnedContext)
+      throw error
+    }
+    const observed = await waitForBrowserObserver(page, spec.id, Math.max(1, deadline - performance.now()), signal, closeOwnedContext)
+    if (observed.counter === undefined || observed.counter <= afterCounter) {
+      throw new Error('flood stream did not render a counter newer than its final echo snapshot')
+    }
+    return observed.counter
   }
-  try {
-    await withDeadline(page.evaluate(installBrowserObserver, spec), timeoutMs, 'flood progress observer install', signal)
-  } catch (error) {
-    await cancelBrowserObserver(page, spec.id, errorText(error), closeOwnedContext)
-    throw error
-  }
-  const observed = await waitForBrowserObserver(page, spec.id, timeoutMs, signal, closeOwnedContext)
-  if (observed.counter === undefined || observed.counter <= beforeCounter) {
-    throw new Error('flood stream did not render a counter newer than its final echo snapshot')
-  }
-  return { beforeCounter, afterCounter: observed.counter }
+  if (beforeCounter === null) beforeCounter = await observeNext(0)
+  const afterCounter = await observeNext(beforeCounter)
+  return { beforeCounter, afterCounter }
 }
 
 async function ensureSelectedWorktree(page: Page, worktree: SpeedWorktree, timeoutMs = DEADLINE_MS): Promise<void> {

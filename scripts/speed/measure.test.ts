@@ -258,6 +258,38 @@ test('flood echo fails when the visible renderer stops after the final echo snap
     .rejects.toThrow('timed out after 5ms')
 })
 
+test('flood liveness waits through a blank viewport then requires another fresh counter', async () => {
+  environment()
+  const { rows } = pane('flood-session')
+  const worktree = {
+    id: 'worktree-a', path: '/repo-a', tabId: 'tab-a',
+    sessions: ['echo-session', 'flood-session'] as [string, string],
+    panes: ['pane-a', 'pane-b'] as [string, string],
+    workerIds: ['echo-worker', 'flood-worker'] as [string, string]
+  }
+  const flood = {
+    runId: 'flood-run', workerId: 'flood-worker', sessionId: 'flood-session',
+    offeredBytesPerChunk: 65_536, intervalMs: 16, offeredBytesPerSecond: 4_096_000, startedAt: 1
+  } as const
+  let installed = 0
+  const page = {
+    async evaluate(fn: (argument: unknown) => unknown, argument: unknown) {
+      const value = fn(argument)
+      if (fn === installBrowserObserver) {
+        const counter = 12 + installed++
+        queueMicrotask(() => {
+          rows.textContent = `SPEED_FLOOD flood-worker flood-session ${counter} 65536`
+          mutate()
+          paint()
+        })
+      }
+      return await value
+    }
+  } as never
+  await expect(waitForFloodProgressAfterSnapshot(page, worktree, flood, new AbortController().signal, undefined, 1000))
+    .resolves.toEqual({ beforeCounter: 12, afterCounter: 13 })
+})
+
 test('diagnostic status evidence requires a successful status.get callback', async () => {
   const state = { successful: false, ptyHostPid: null as number | null }
   const probe = { daemonExited: () => false, probes: [{ at: 0, ms: 1, ownLagMs: 0, timedOut: false }] } as never
