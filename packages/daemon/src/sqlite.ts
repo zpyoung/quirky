@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { chmodSync, closeSync, existsSync, mkdtempSync, openSync, readSync, renameSync, rmSync, statSync, type Stats } from 'node:fs'
+import { chmodSync, closeSync, constants, copyFileSync, existsSync, mkdtempSync, openSync, readSync, renameSync, rmSync, statSync, type Stats } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { Database } from 'bun:sqlite'
 
@@ -140,6 +140,14 @@ function prepareWalForReadonlyCheck(path: string): void {
   } catch {}
 }
 
+function copyFileForInspection(source: string, destination: string): void {
+  try {
+    copyFileSync(source, destination, constants.COPYFILE_FICLONE)
+  } catch {
+    copyFileSync(source, destination)
+  }
+}
+
 function vacuumInto(db: Database, path: string): void {
   const query = db.query('VACUUM INTO ?')
   try {
@@ -200,45 +208,77 @@ export function openSqliteOrRecover(
   }
 
   let db: Database | undefined
-  let reason: string
-  prepareWalForReadonlyCheck(path)
-  try {
-    db = openSqlite(path, { readonly: true, busyTimeoutMs })
-    const check = stats.size + walSize(path) <= (options?.fullCheckMaxBytes ?? DEFAULT_FULL_CHECK_MAX_BYTES)
-      ? 'integrity_check'
-      : 'quick_check'
-    const rows = checkDatabase(db, check)
-    if (rows.length === 1 && rows[0] === 'ok') {
-      closeRecoveryHandle(db)
-      db = undefined
-      return { db: openSqlite(path, { busyTimeoutMs }), recovery: null }
-    }
-    reason = normalizedReason(rows[0] ?? 'integrity check failed')
-  } catch (error) {
-    closeRecoveryHandle(db)
-    db = undefined
-    if (!isSqliteCorruption(error)) throw error
-    reason = corruptionErrorReason(error)
-  }
-  closeRecoveryHandle(db)
-
+  let inspection: Database | undefined
   let repairDirectory: string | undefined
   let copyPath: string | undefined
+  let reason = ''
+  let healthy = false
   try {
-    repairDirectory = mkdtempSync(join(dirname(path), `.${basename(path)}.repair-`))
-    const candidatePath = join(repairDirectory, 'copy.db')
-    if (tryRepairCopy(path, candidatePath, busyTimeoutMs)) {
-      chmodSync(candidatePath, stats.mode & 0o777)
-      copyPath = candidatePath
-    }
-  } catch {
-    copyPath = undefined
-  }
+    try {
+      prepareWalForReadonlyCheck(path)
+      db = openSqlite(path, { readonly: true, busyTimeoutMs })
+      db.exec('BEGIN')
+      const schema = db.query('SELECT name FROM sqlite_schema LIMIT 1')
+      try {
+        schema.get()
+      } finally {
+        schema.finalize()
+      }
 
-  const suffix = `${Date.now()}-${randomBytes(4).toString('hex')}`
-  const quarantinedPath = `${path}.corrupt-${suffix}`
-  const rename = options?.fs?.renameSync ?? renameSync
-  try {
+      repairDirectory = mkdtempSync(join(dirname(path), `.${basename(path)}.repair-`))
+      const inspectionPath = join(repairDirectory, 'inspection.db')
+      copyFileForInspection(path, inspectionPath)
+      const originalWalPath = `${path}-wal`
+      if (existsSync(originalWalPath)) {
+        copyFileForInspection(originalWalPath, `${inspectionPath}-wal`)
+      }
+      closeRecoveryHandle(db)
+      db = undefined
+
+      inspection = openSqlite(inspectionPath, { busyTimeoutMs })
+      const check = stats.size + walSize(path) <= (options?.fullCheckMaxBytes ?? DEFAULT_FULL_CHECK_MAX_BYTES)
+        ? 'integrity_check'
+        : 'quick_check'
+      const rows = checkDatabase(inspection, check)
+      if (rows.length === 1 && rows[0] === 'ok') {
+        healthy = true
+      } else {
+        reason = normalizedReason(rows[0] ?? 'integrity check failed')
+      }
+    } catch (error) {
+      if (!isSqliteCorruption(error)) throw error
+      reason = corruptionErrorReason(error)
+    } finally {
+      closeRecoveryHandle(inspection)
+      inspection = undefined
+      closeRecoveryHandle(db)
+      db = undefined
+    }
+
+    if (healthy) {
+      if (repairDirectory) {
+        rmSync(repairDirectory, { recursive: true, force: true })
+        repairDirectory = undefined
+      }
+      return { db: openSqlite(path, { busyTimeoutMs }), recovery: null }
+    }
+
+    try {
+      if (!repairDirectory) {
+        repairDirectory = mkdtempSync(join(dirname(path), `.${basename(path)}.repair-`))
+      }
+      const candidatePath = join(repairDirectory, 'copy.db')
+      if (tryRepairCopy(path, candidatePath, busyTimeoutMs)) {
+        chmodSync(candidatePath, stats.mode & 0o777)
+        copyPath = candidatePath
+      }
+    } catch {
+      copyPath = undefined
+    }
+
+    const suffix = `${Date.now()}-${randomBytes(4).toString('hex')}`
+    const quarantinedPath = `${path}.corrupt-${suffix}`
+    const rename = options?.fs?.renameSync ?? renameSync
     for (const sidecarSuffix of ['-wal', '-shm']) {
       const sidecar = `${path}${sidecarSuffix}`
       if (existsSync(sidecar)) rename(sidecar, `${sidecar}.corrupt-${suffix}`)
@@ -256,6 +296,8 @@ export function openSqliteOrRecover(
       recovery: { outcome: 'quarantined', path, quarantinedPath, reason }
     }
   } finally {
+    closeRecoveryHandle(inspection)
+    closeRecoveryHandle(db)
     if (repairDirectory) rmSync(repairDirectory, { recursive: true, force: true })
   }
 }

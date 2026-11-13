@@ -481,6 +481,60 @@ describe('openSqliteOrRecover', () => {
     assertNoRepairDirectories(file)
   })
 
+  test('quarantines CHECK violations that remain after REINDEX', () => {
+    const dir = makeTempDir()
+    const file = join(dir, 'check-violation.db')
+    const copyFile = join(dir, 'check-copy.db')
+    const seed = new Database(file, { create: true })
+    try {
+      seed.exec('PRAGMA ignore_check_constraints = ON')
+      seed.exec('CREATE TABLE kept (value INTEGER CHECK (value > 0))')
+      seed.exec('INSERT INTO kept VALUES (-1)')
+    } finally {
+      seed.close(true)
+    }
+    const originalBytes = readFileSync(file)
+
+    const source = new Database(file, { readonly: true })
+    try {
+      const vacuum = source.query('VACUUM INTO ?')
+      try {
+        vacuum.run(copyFile)
+      } finally {
+        vacuum.finalize()
+      }
+    } finally {
+      source.close(true)
+    }
+
+    const copy = new Database(copyFile)
+    try {
+      const checkBeforeReindex = queryRows(copy, 'PRAGMA integrity_check(1)')
+        .map((row) => String(Object.values(row)[0]))
+      expect(queryFirst(copy, 'PRAGMA ignore_check_constraints')).toEqual({ ignore_check_constraints: 0 })
+      expect(checkBeforeReindex).not.toEqual(['ok'])
+      expect(() => copy.exec('REINDEX')).not.toThrow()
+      const checkAfterReindex = queryRows(copy, 'PRAGMA integrity_check(1)')
+        .map((row) => String(Object.values(row)[0]))
+      expect(checkAfterReindex).not.toEqual(['ok'])
+    } finally {
+      copy.close(true)
+    }
+
+    const opened = openSqliteOrRecover(file)
+    try {
+      expect(opened.recovery?.outcome).toBe('quarantined')
+      const recovery = opened.recovery!
+      recoverySuffix(recovery, file)
+      expect(readFileSync(recovery.quarantinedPath).equals(originalBytes)).toBe(true)
+      expect(queryRows(opened.db, 'PRAGMA integrity_check(1)').map((row) => String(Object.values(row)[0]))).toEqual(['ok'])
+      expect(queryRows(opened.db, "SELECT name FROM sqlite_schema WHERE name = 'kept'")).toEqual([])
+    } finally {
+      cleanupRecoveryDb(opened.db)
+    }
+    assertNoRepairDirectories(file)
+  })
+
   test('repairs a freelist-corrupt file whose path contains an apostrophe', () => {
     const file = join(makeTempDir(), "o'brien.db")
     const originalBytes = corruptDatabase(file, 'freelist')
