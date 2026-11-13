@@ -14,6 +14,7 @@ export type WorktreeListReader = {
   stats(): WorktreeListStats
 }
 
+/** Returns fresh listings after changes to git's listing inputs; unverifiable layouts always run git. */
 export function createWorktreeListReader(options: {
   /** Runs git; defaults to `git(repo, ['worktree', 'list', '--porcelain'], { readOnly: true })`. */
   run?: (repo: string) => Promise<string>
@@ -197,7 +198,6 @@ function fingerprint(repo: string, env: Record<string, string | undefined>): Fin
     return null
   }
 }
-
 
 const sharedReader = createWorktreeListReader()
 onGitWrite(() => sharedReader.drop())

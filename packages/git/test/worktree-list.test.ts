@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { GitError, listRegistrations, listWorktrees } from '../src/index'
@@ -156,6 +156,44 @@ describe('worktree-list reader', () => {
       })
     }
   }, 30_000)
+
+  test('refreshes a packed checked-out ref after committing and repacking without an intervening read', async () => {
+    const { createWorktreeListReader } = await import('../src/worktree-list')
+    const repo = makeRepository('repacked-ref')
+    const linked = addBranchWorktree(repo)
+    gitSync(repo, 'pack-refs', '--all')
+    const looseRef = join(repo, '.git', 'refs', 'heads', 'one')
+    expect(existsSync(looseRef)).toBe(false)
+    const reader = createWorktreeListReader({ now: noQuietPeriod })
+    const before = freshListing(repo)
+    expect(await reader.read(repo)).toBe(before)
+
+    commitFile(linked, 'commit before repacking')
+    gitSync(repo, 'pack-refs', '--all')
+    expect(existsSync(looseRef)).toBe(false)
+    const after = freshListing(repo)
+    expect(after).not.toBe(before)
+    expect(await reader.read(repo)).toBe(after)
+    expect(await reader.read(repo)).toBe(after)
+    expect(reader.stats()).toEqual({ hits: 1, spawns: 2, uncacheable: 0, entries: 1 })
+  })
+
+  test('refreshes the listing when repository config makes the main checkout bare', async () => {
+    const { createWorktreeListReader } = await import('../src/worktree-list')
+    const repo = makeRepository('bare-config')
+    addBranchWorktree(repo)
+    const reader = createWorktreeListReader({ now: noQuietPeriod })
+    const before = freshListing(repo)
+    expect(await reader.read(repo)).toBe(before)
+
+    gitSync(repo, 'config', 'core.bare', 'true')
+    const after = freshListing(repo)
+    expect(after).not.toBe(before)
+    expect(after.split('\n\n')[0]).toContain('\nbare')
+    expect(await reader.read(repo)).toBe(after)
+    expect(await reader.read(repo)).toBe(after)
+    expect(reader.stats()).toEqual({ hits: 1, spawns: 2, uncacheable: 0, entries: 1 })
+  })
 
   test('never remembers a listing during the quiet period', async () => {
     const { createWorktreeListReader } = await import('../src/worktree-list')
