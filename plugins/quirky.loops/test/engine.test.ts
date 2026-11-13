@@ -142,6 +142,10 @@ class Runtime {
       error(kind, message) { return Object.assign(new Error(message), { code: kind }) },
       process: {
         run: async (argv, options) => {
+          if (argv[0] === 'git' && !argv.includes('--git-path')) {
+            await nextTurn()
+            throw new Error('Loop engine tests must not run evidence git')
+          }
           runtime.processCalls.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
           const handler = runtime.processHandler
           if (handler === null) throw new Error('Loop engine tests must not run subprocesses')

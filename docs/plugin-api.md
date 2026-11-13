@@ -252,6 +252,24 @@ The daemon validates manifests during discovery, inspection and installation. A 
 
 Local module hosts check the declaring plugin's floor independently. The CLI checks module-backed command metadata before importing a CLI module; generic RPC-only CLI commands do not need a local module gate. The UI host checks each plugin's module metadata before import and contains a failure to that plugin. The daemon's release does not authorize newer code in an older CLI or UI process.
 
+## Store recovery
+
+The daemon checks existing non-empty `quirky.db` and plugin `store.db` files when opening them.
+It runs SQLite's full integrity check when the main file plus WAL is at most 32 MiB, and the
+quick check above that size. The quick check does not detect mismatches between indexes and rows.
+Validation checks a writable snapshot in a private temporary directory while the original stays
+read-only. Snapshot copies use filesystem cloning when available. Repair reads committed WAL
+rows without checkpointing them into the original main file that will be quarantined.
+
+A corrupt store is repaired into a checked copy when possible; otherwise it is replaced with an
+empty database and plugin migrations run again. The original file and any WAL/SHM sidecars stay
+beside the store as `<file>.corrupt-<timestamp>-<8 hex>`, with one suffix shared by the three files.
+Quirky never deletes these originals. Lock, permission, migration and schema-version errors do
+not trigger recovery.
+
+Kernel recoveries are logged. Plugin recoveries also appear as warning diagnostics in `plugin.list`,
+including when a later migration fails. `context.openStore` and the plugin API version are unchanged.
+
 ## Lifecycle, cleanup and trust
 
 The stable contract includes the existing daemon, CLI and UI activation shapes, context methods, contribution schemas and cleanup behavior. Daemon `activate(context)` may return an activation disposer; modules may also implement `deactivate()`. UI modules implement `activate(context)` and may implement `deactivate()`. UI mount functions return cleanup functions when they own DOM or other mounted resources. Context subscription methods return unsubscribe functions. Plugins should release resources they create and must not assume a context remains usable after its activation ends.

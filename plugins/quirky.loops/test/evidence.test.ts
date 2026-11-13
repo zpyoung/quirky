@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PluginContext, StructuredMessage } from '@quirky/protocol'
+import type { PluginContext, ProcessRunner, RunOptions, RunResult, StructuredMessage } from '@quirky/protocol'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import type { GatherInput, LoopConfig, LoopSnapshot } from '../src/types'
 import { EvidenceEngine, sessionCumulativeCostUsd } from '../src/evidence'
 import { checkpointChangedPaths, diffTrees, snapshotWorkingTree } from '../src/diff'
@@ -12,6 +13,7 @@ import { findProtectedPaths } from '../src/progress'
 
 const roots: string[] = []
 const engines: EvidenceEngine[] = []
+const processRunners: OwnedProcessRunner[] = []
 const ownedPids = new Set<number>()
 const environmentNames = ['HOME', 'QUIRKY_HOME', 'XDG_CONFIG_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_INDEX_FILE', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_CONFIG_COUNT'] as const
 let savedEnvironment = Object.fromEntries(environmentNames.map((name) => [name, process.env[name]]))
@@ -46,8 +48,15 @@ function tempRoot(): string {
   return path
 }
 
+function realProcessRunner(): OwnedProcessRunner {
+  const runner = createProcessRunner({ owner: 'quirky.loops.test' })
+  processRunners.push(runner)
+  return runner
+}
+
 afterEach(async () => {
   await Promise.all(engines.splice(0).map((engine) => engine.shutdown()))
+  await Promise.all(processRunners.splice(0).map((runner) => runner.dispose()))
   for (const pid of ownedPids) {
     try { process.kill(pid, 'SIGKILL') } catch { /* the owned child already exited */ }
   }
@@ -112,6 +121,7 @@ function makeContext(root: string, handlers: Record<string, (params: Record<stri
       }),
       async hooks() { return { env: {}, args: [] } }
     },
+    process: realProcessRunner(),
     async call(method: string, params: Record<string, unknown> = {}) {
       const handler = handlers[method]
       if (handler) return await handler(params)
@@ -120,6 +130,53 @@ function makeContext(root: string, handlers: Record<string, (params: Record<stri
       throw new Error(`unexpected method ${method}`)
     }
   } as unknown as PluginContext
+}
+
+type ProcessCall = { argv: string[]; options?: RunOptions }
+type ProcessHandler = (argv: readonly string[], options: RunOptions | undefined, index: number) => RunResult | Promise<RunResult>
+
+function runResult(stdoutText = '', overrides: Partial<RunResult> = {}): RunResult {
+  return { stdout: Buffer.from(stdoutText), stdoutText, stderr: '', exitCode: 0, signal: null, durationMs: 0, ...overrides }
+}
+
+function fakeRunner(handler: ProcessHandler = () => runResult()): { runner: ProcessRunner; calls: ProcessCall[] } {
+  const calls: ProcessCall[] = []
+  const runner: ProcessRunner = {
+    async run(argv, options) {
+      calls.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
+      return await handler(argv, options, calls.length - 1)
+    }
+  }
+  return { runner, calls }
+}
+
+function expectGitOptions(call: ProcessCall, cwd: string): RunOptions {
+  expect(call.options).toBeDefined()
+  const options = call.options!
+  expect(options.cwd).toBe(cwd)
+  expect(options.maxOutputBytes).toBe(16 * 1024 * 1024)
+  expect(options.killGraceMs).toBe(2_000)
+  expect(options.timeoutMs).toBeGreaterThan(0)
+  expect(options.signal).toBeInstanceOf(AbortSignal)
+  return options
+}
+
+function expectGitOptionsShape(call: ProcessCall, cwd: string, withPrivateIndex: boolean, rerunnable = false): RunOptions {
+  const options = expectGitOptions(call, cwd)
+  const keys = [
+    'cwd', 'killGraceMs', 'maxOutputBytes', 'signal', 'timeoutMs',
+    ...(withPrivateIndex ? ['env'] : []), ...(rerunnable ? ['rerunnable'] : [])
+  ]
+  expect(Object.keys(options).sort()).toEqual(keys.sort())
+  if (withPrivateIndex) {
+    const indexFile = options.env?.GIT_INDEX_FILE
+    expect(indexFile).toContain('quirky-loop-index-')
+    expect(options.env).toEqual({ ...process.env, GIT_INDEX_FILE: indexFile, GIT_OPTIONAL_LOCKS: '0' })
+  } else {
+    expect(options).not.toHaveProperty('env')
+  }
+  if (rerunnable) expect(options.rerunnable).toBe(true)
+  return options
 }
 
 function git(cwd: string, ...args: string[]): string {
@@ -383,9 +440,256 @@ wait
 })
 
 describe('private Git snapshots, diffs and checkpoint boundaries', () => {
+  test('uses the exact runner options for a snapshot and shrinks its shared deadline', async () => {
+    const cwd = '/repo'
+    const start = Date.now()
+    setSystemTime(start)
+    try {
+      const { runner, calls } = fakeRunner((argv) => {
+        if (argv[1] === 'rev-parse' && argv[2] === '--show-toplevel') {
+          setSystemTime(start + 25)
+          return runResult(`${cwd}\n`)
+        }
+        if (argv[1] === 'write-tree') return runResult(`${'a'.repeat(40)}\n`)
+        return runResult()
+      })
+
+      expect(await snapshotWorkingTree(runner, cwd, undefined, 5_000)).toBe('a'.repeat(40))
+      expect(calls.map((call) => call.argv)).toEqual([
+        ['git', 'rev-parse', '--show-toplevel'],
+        ['git', 'rev-parse', '--verify', '-q', 'HEAD^{tree}'],
+        ['git', 'read-tree', 'HEAD'],
+        ['git', 'add', '-A', '--', '.'],
+        ['git', 'write-tree']
+      ])
+      const timeouts = calls.map((call, index) => {
+        const options = expectGitOptionsShape(call, cwd, index >= 2, index < 2)
+        expect(options.timeoutMs).toBeLessThanOrEqual(5_000)
+        return options.timeoutMs!
+      })
+      expect(timeouts[1]).toBeLessThan(timeouts[0]!)
+      expect(timeouts.at(-1)).toBeLessThanOrEqual(timeouts[1]!)
+    } finally {
+      setSystemTime()
+    }
+  })
+
+  test('uses bounded runner options without an index environment for diffs and checkpoints', async () => {
+    const cwd = '/repo'
+    const diffRunner = fakeRunner((argv) => argv[1] === 'rev-parse'
+      ? runResult(`${cwd}\n`)
+      : runResult('', { stdout: Buffer.from('1\t0\ta.txt\0') }))
+
+    expect(await diffTrees(diffRunner.runner, cwd, 'before-tree', 'after-tree')).toEqual({
+      added: 1, removed: 0, files: ['a.txt']
+    })
+    expect(diffRunner.calls.map((call) => call.argv)).toEqual([
+      ['git', 'rev-parse', '--show-toplevel'],
+      ['git', 'diff', '--numstat', '-z', '--no-renames', '--no-ext-diff', 'before-tree', 'after-tree']
+    ])
+    for (const [index, call] of diffRunner.calls.entries()) {
+      const options = expectGitOptionsShape(call, cwd, false, index === 0)
+      expect(options.timeoutMs).toBeLessThanOrEqual(30_000)
+    }
+
+    const commit = 'b'.repeat(40)
+    const checkpointRunner = fakeRunner((argv) => {
+      if (argv[1] === 'rev-parse' && argv[2] === '--show-toplevel') return runResult(`${cwd}\n`)
+      if (argv[1] === 'rev-parse' && argv[2] === 'HEAD') return runResult(`${commit}\n`)
+      return runResult()
+    })
+    expect(await checkpointChangedPaths(checkpointRunner.runner, cwd, 'L', 4, ['a.txt'], [])).toBe(commit)
+    expect(checkpointRunner.calls.map((call) => call.argv)).toEqual([
+      ['git', 'rev-parse', '--show-toplevel'],
+      ['git', 'add', '-A', '--', ':(literal)a.txt'],
+      ['git', 'commit', '--only', '-m', 'loop(L): iteration 4', '--', ':(literal)a.txt'],
+      ['git', 'rev-parse', 'HEAD']
+    ])
+    for (const [index, call] of checkpointRunner.calls.entries()) {
+      const options = expectGitOptionsShape(call, cwd, false, index === 0 || index === 3)
+      expect(options.timeoutMs).toBeLessThanOrEqual(30_000)
+    }
+  })
+
+  test('marks only read-only Git commands rerunnable', async () => {
+    const cwd = '/repo'
+    const tree = 'a'.repeat(40)
+    const commit = 'b'.repeat(40)
+    let snapshotHasHead = true
+    const { runner, calls } = fakeRunner((argv) => {
+      const args = argv.slice(1)
+      if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') return runResult(`${cwd}\n`)
+      if (args[0] === 'rev-parse' && args[1] === '--verify') {
+        return snapshotHasHead ? runResult(`${tree}\n`) : runResult('', { exitCode: 1, stderr: 'unborn branch' })
+      }
+      if (args[0] === 'symbolic-ref') return runResult('refs/heads/main\n')
+      if (args[0] === 'show-ref') return runResult('', { exitCode: 1, stderr: 'missing ref' })
+      if (args[0] === 'write-tree') return runResult(`${tree}\n`)
+      if (args[0] === 'diff') return runResult('', { stdout: Buffer.from('1\t0\ta.txt\0') })
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return runResult(`${commit}\n`)
+      return runResult()
+    })
+
+    expect(await snapshotWorkingTree(runner, cwd)).toBe(tree)
+    snapshotHasHead = false
+    expect(await snapshotWorkingTree(runner, cwd)).toBe(tree)
+    expect(await diffTrees(runner, cwd, 'before-tree', 'after-tree')).toEqual({
+      added: 1, removed: 0, files: ['a.txt']
+    })
+    expect(await checkpointChangedPaths(runner, cwd, 'L', 4, ['a.txt'], [])).toBe(commit)
+
+    const expectedCalls: { argv: string[]; rerunnable: boolean; privateIndex: boolean }[] = [
+      { argv: ['git', 'rev-parse', '--show-toplevel'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'rev-parse', '--verify', '-q', 'HEAD^{tree}'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'read-tree', 'HEAD'], rerunnable: false, privateIndex: true },
+      { argv: ['git', 'add', '-A', '--', '.'], rerunnable: false, privateIndex: true },
+      { argv: ['git', 'write-tree'], rerunnable: false, privateIndex: true },
+      { argv: ['git', 'rev-parse', '--show-toplevel'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'rev-parse', '--verify', '-q', 'HEAD^{tree}'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'symbolic-ref', '--quiet', 'HEAD'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'show-ref', '--verify', '--quiet', 'refs/heads/main'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'read-tree', '--empty'], rerunnable: false, privateIndex: true },
+      { argv: ['git', 'add', '-A', '--', '.'], rerunnable: false, privateIndex: true },
+      { argv: ['git', 'write-tree'], rerunnable: false, privateIndex: true },
+      { argv: ['git', 'rev-parse', '--show-toplevel'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'diff', '--numstat', '-z', '--no-renames', '--no-ext-diff', 'before-tree', 'after-tree'], rerunnable: false, privateIndex: false },
+      { argv: ['git', 'rev-parse', '--show-toplevel'], rerunnable: true, privateIndex: false },
+      { argv: ['git', 'add', '-A', '--', ':(literal)a.txt'], rerunnable: false, privateIndex: false },
+      { argv: ['git', 'commit', '--only', '-m', 'loop(L): iteration 4', '--', ':(literal)a.txt'], rerunnable: false, privateIndex: false },
+      { argv: ['git', 'rev-parse', 'HEAD'], rerunnable: true, privateIndex: false }
+    ]
+    expect(calls.map((call) => call.argv)).toEqual(expectedCalls.map((call) => call.argv))
+    for (const [index, expected] of expectedCalls.entries()) {
+      const call = calls[index]!
+      expectGitOptionsShape(call, cwd, expected.privateIndex, expected.rerunnable)
+      if (expected.rerunnable) expect(call.options).toHaveProperty('rerunnable', true)
+      else expect(call.options).not.toHaveProperty('rerunnable')
+    }
+  })
+
+  test('does not call Git for an expired deadline or an already aborted caller', async () => {
+    const { runner, calls } = fakeRunner()
+    const controller = new AbortController()
+    controller.abort()
+
+    expect(await snapshotWorkingTree(runner, '/repo', undefined, 0)).toBeNull()
+    expect(await snapshotWorkingTree(runner, '/repo', controller.signal)).toBeNull()
+    expect(await diffTrees(runner, '/repo', 'before-tree', 'after-tree', controller.signal)).toBeNull()
+    expect(await checkpointChangedPaths(runner, '/repo', 'L', 4, ['a.txt'], [], controller.signal)).toBeNull()
+    expect(calls).toHaveLength(0)
+  })
+
+  test('aborts an abort-only runner at the shared deadline and when the caller aborts', async () => {
+    const waitForAbort: ProcessHandler = (_argv, options) => {
+      const { promise, resolve } = Promise.withResolvers<RunResult>()
+      const signal = options?.signal
+      const finish = () => resolve(runResult('/repo\n', { stopped: 'aborted' }))
+      if (signal?.aborted) finish()
+      else signal?.addEventListener('abort', finish, { once: true })
+      return promise
+    }
+
+    // The abort-only fake needs the real operation timer to exercise its deadline signal.
+    const deadlineRunner = fakeRunner(waitForAbort)
+    const startedAt = Date.now()
+    expect(await snapshotWorkingTree(deadlineRunner.runner, '/repo', undefined, 40)).toBeNull()
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+    expect(deadlineRunner.calls).toHaveLength(1)
+    expect(deadlineRunner.calls[0]?.options?.signal?.aborted).toBe(true)
+
+    const callerRunner = fakeRunner(waitForAbort)
+    const controller = new AbortController()
+    const result = snapshotWorkingTree(callerRunner.runner, '/repo', controller.signal, 2_000)
+    controller.abort()
+    expect(await result).toBeNull()
+    expect(callerRunner.calls).toHaveLength(1)
+    expect(callerRunner.calls[0]?.options?.signal?.aborted).toBe(true)
+  })
+
+  test('maps failed runner outcomes to null through every public Git helper', async () => {
+    const cwd = '/repo'
+    const operations: ((runner: ProcessRunner, signal?: AbortSignal) => Promise<unknown>)[] = [
+      (runner, signal) => snapshotWorkingTree(runner, cwd, signal),
+      (runner, signal) => diffTrees(runner, cwd, 'before-tree', 'after-tree', signal),
+      (runner, signal) => checkpointChangedPaths(runner, cwd, 'L', 4, ['a.txt'], [], signal)
+    ]
+    const failures: RunResult[] = [
+      runResult(`${cwd}\n`, { spawnError: { code: 'ENOENT', message: 'missing executable' } }),
+      runResult(`${cwd}\n`, { stopped: 'timeout' }),
+      runResult(`${cwd}\n`, { stopped: 'overflow' }),
+      runResult(`${cwd}\n`, { exitCode: 2, stderr: 'git failed' })
+    ]
+
+    for (const operation of operations) {
+      for (const failure of failures) {
+        const { runner, calls } = fakeRunner(() => failure)
+        await expect(operation(runner)).resolves.toBeNull()
+        expect(calls).toHaveLength(1)
+        expect(calls[0]?.argv).toEqual(['git', 'rev-parse', '--show-toplevel'])
+      }
+
+      const rejected = fakeRunner(() => { throw new Error('runner disposed') })
+      await expect(operation(rejected.runner)).resolves.toBeNull()
+      expect(rejected.calls).toHaveLength(1)
+    }
+  })
+
+  test('treats an aborted result as failure with or without the caller signal', async () => {
+    const cwd = '/repo'
+    const operations: ((runner: ProcessRunner, signal?: AbortSignal) => Promise<unknown>)[] = [
+      (runner, signal) => snapshotWorkingTree(runner, cwd, signal),
+      (runner, signal) => diffTrees(runner, cwd, 'before-tree', 'after-tree', signal),
+      (runner, signal) => checkpointChangedPaths(runner, cwd, 'L', 4, ['a.txt'], [], signal)
+    ]
+
+    for (const operation of operations) {
+      const controller = new AbortController()
+      const withCaller = fakeRunner(() => {
+        controller.abort()
+        return runResult(`${cwd}\n`, { stopped: 'aborted' })
+      })
+      await expect(operation(withCaller.runner, controller.signal)).resolves.toBeNull()
+      expect(withCaller.calls).toHaveLength(1)
+      expect(withCaller.calls[0]?.options?.signal?.aborted).toBe(true)
+
+      const withoutCaller = fakeRunner(() => runResult(`${cwd}\n`, { stopped: 'aborted' }))
+      await expect(operation(withoutCaller.runner)).resolves.toBeNull()
+      expect(withoutCaller.calls).toHaveLength(1)
+    }
+  })
+
+  test('does not mistake a failed show-ref command for an unborn branch', async () => {
+    const cwd = '/repo'
+    const failures: RunResult[] = [
+      runResult('', { exitCode: 1, spawnError: { code: 'ENOENT', message: 'missing executable' } }),
+      runResult('', { stopped: 'timeout' }),
+      runResult('', { stopped: 'overflow' }),
+      runResult('', { exitCode: 2, stderr: 'git failed' })
+    ]
+
+    for (const failure of failures) {
+      const { runner, calls } = fakeRunner((argv) => {
+        if (argv[1] === 'rev-parse' && argv[2] === '--show-toplevel') return runResult(`${cwd}\n`)
+        if (argv[1] === 'rev-parse' && argv[2] === '--verify') return runResult('', { exitCode: 1, stderr: 'unborn branch' })
+        if (argv[1] === 'symbolic-ref') return runResult('refs/heads/main\n')
+        if (argv[1] === 'show-ref') return failure
+        return runResult('a'.repeat(40))
+      })
+
+      await expect(snapshotWorkingTree(runner, cwd)).resolves.toBeNull()
+      expect(calls.map((call) => call.argv)).toEqual([
+        ['git', 'rev-parse', '--show-toplevel'],
+        ['git', 'rev-parse', '--verify', '-q', 'HEAD^{tree}'],
+        ['git', 'symbolic-ref', '--quiet', 'HEAD'],
+        ['git', 'show-ref', '--verify', '--quiet', 'refs/heads/main']
+      ])
+    }
+  })
+
   test('snapshots staged, untracked, deleted and binary files without changing the real index', async () => {
     const root = tempRoot()
     const cwd = join(root, 'repo')
+    const runner = realProcessRunner()
     initRepo(cwd)
     writeFileSync(join(cwd, 'changed.txt'), 'before\n')
     writeFileSync(join(cwd, 'deleted.txt'), 'remove me\n')
@@ -402,9 +706,9 @@ describe('private Git snapshots, diffs and checkpoint boundaries', () => {
     writeFileSync(join(cwd, 'untracked.txt'), 'untracked content\n')
     const indexPath = join(cwd, '.git', 'index')
     const realIndexBefore = readFileSync(indexPath)
-    const after = await snapshotWorkingTree(cwd)
+    const after = await snapshotWorkingTree(runner, cwd)
     expect(after).not.toBeNull()
-    const diff = await diffTrees(cwd, before, after)
+    const diff = await diffTrees(runner, cwd, before, after)
     expect(diff?.files).toEqual(expect.arrayContaining(['changed.txt', 'deleted.txt', 'binary.dat', 'untracked.txt', unusualPath]))
     expect(diff?.added).toBeGreaterThan(0)
     expect(diff?.removed).toBeGreaterThan(0)
@@ -414,22 +718,24 @@ describe('private Git snapshots, diffs and checkpoint boundaries', () => {
   test('snapshots an unborn branch from an empty private index', async () => {
     const root = tempRoot()
     const cwd = join(root, 'repo')
+    const runner = realProcessRunner()
     mkdirSync(cwd, { recursive: true })
     git(cwd, 'init', '-q')
     writeFileSync(join(cwd, 'first.txt'), 'first tree\n')
-    expect(await snapshotWorkingTree(cwd)).toMatch(/^[0-9a-f]{40,64}$/)
+    expect(await snapshotWorkingTree(runner, cwd)).toMatch(/^[0-9a-f]{40,64}$/)
     expect(git(cwd, 'status', '--short')).toBe('?? first.txt')
   })
 
   test('does not turn a corrupt existing HEAD object into an empty snapshot', async () => {
     const root = tempRoot()
     const cwd = join(root, 'repo')
+    const runner = realProcessRunner()
     initRepo(cwd)
     writeFileSync(join(cwd, 'tracked.txt'), 'committed\n')
     commitAll(cwd, 'base')
     const head = git(cwd, 'rev-parse', 'HEAD')
     rmSync(join(cwd, '.git', 'objects', head.slice(0, 2), head.slice(2)))
-    expect(await snapshotWorkingTree(cwd)).toBeNull()
+    expect(await snapshotWorkingTree(runner, cwd)).toBeNull()
   })
 
   test('aborting a gather kills its hanging Git filter group and skips checkpointing', async () => {
@@ -450,11 +756,13 @@ describe('private Git snapshots, diffs and checkpoint boundaries', () => {
     const childPidPath = join(root, 'filter-child.pid')
     writeFileSync(filterPath, `#!/bin/sh
 cat >/dev/null
+trap 'if [ -n "$child" ]; then wait "$child"; fi; exit 0' TERM
 sleep 30 &
-printf '%s\\n' "$!" > '${childPidPath}'
+child=$!
+printf '%s\\n' "$child" > '${childPidPath}'
 printf ready > '${readyPath}'
-wait
-`, { mode: 0o755 })
+wait "$child"
+    `, { mode: 0o755 })
     chmodSync(filterPath, 0o755)
     git(cwd, 'config', 'filter.loop-hang.clean', filterPath)
     writeFileSync(join(cwd, 'tracked.txt'), 'changed\n')
@@ -475,8 +783,17 @@ wait
       expect(evidence.treeAfter).toBeNull()
       expect(evidence.diff).toBeNull()
       expect(evidence.checkpointCommit).toBeNull()
+      const childExitDeadline = Date.now() + 3000
       let alive = true
-      try { process.kill(childPid, 0) } catch { alive = false }
+      while (alive && Date.now() < childExitDeadline) {
+        try {
+          process.kill(childPid, 0)
+        } catch {
+          alive = false
+          break
+        }
+        await Bun.sleep(10)
+      }
       expect(alive).toBe(false)
       expect(Date.now() - abortedAt).toBeLessThan(5000)
       expect(readFileSync(indexPath)).toEqual(indexBefore)
@@ -488,6 +805,7 @@ wait
   test('Git operation deadline kills a filter child holding owned stdio', async () => {
     const root = tempRoot()
     const cwd = join(root, 'repo')
+    const runner = realProcessRunner()
     initRepo(cwd)
     writeFileSync(join(cwd, 'tracked.txt'), 'base\n')
     commitAll(cwd, 'base')
@@ -499,10 +817,12 @@ wait
     const childPidPath = join(root, 'filter-child.pid')
     writeFileSync(filterPath, `#!/bin/sh
 cat >/dev/null
+trap 'if [ -n "$child" ]; then wait "$child"; fi; exit 0' TERM
 sleep 30 &
-printf '%s\\n' "$!" > '${childPidPath}'
+child=$!
+printf '%s\\n' "$child" > '${childPidPath}'
 printf ready > '${readyPath}'
-wait
+wait "$child"
 `, { mode: 0o755 })
     chmodSync(filterPath, 0o755)
     git(cwd, 'config', 'filter.loop-hang.clean', filterPath)
@@ -511,15 +831,24 @@ wait
     const watcher = watch(root, () => {
       if (existsSync(readyPath)) ready.resolve()
     })
-    const snapshot = snapshotWorkingTree(cwd, undefined, 5_000)
+    const snapshot = snapshotWorkingTree(runner, cwd, undefined, 5_000)
     try {
       if (existsSync(readyPath)) ready.resolve()
       await ready.promise
       const childPid = Number(readFileSync(childPidPath, 'utf8'))
       ownedPids.add(childPid)
       expect(await snapshot).toBeNull()
+      const childExitDeadline = Date.now() + 3000
       let alive = true
-      try { process.kill(childPid, 0) } catch { alive = false }
+      while (alive && Date.now() < childExitDeadline) {
+        try {
+          process.kill(childPid, 0)
+        } catch {
+          alive = false
+          break
+        }
+        await Bun.sleep(10)
+      }
       expect(alive).toBe(false)
     } finally {
       watcher.close()
@@ -528,18 +857,19 @@ wait
 
   test('returns null for folder workspaces and excludes private loop notes from diffs', async () => {
     const root = tempRoot()
-    expect(await snapshotWorkingTree(join(root, 'folder'))).toBeNull()
     const cwd = join(root, 'repo')
+    const runner = realProcessRunner()
+    expect(await snapshotWorkingTree(runner, join(root, 'folder'))).toBeNull()
     initRepo(cwd)
     mkdirSync(join(cwd, '.quirky', 'loops'), { recursive: true })
     writeFileSync(join(cwd, 'code.txt'), 'base\n')
     writeFileSync(join(cwd, '.quirky', 'loops', 'notes.md'), 'base notes\n')
     commitAll(cwd, 'base')
-    const before = await snapshotWorkingTree(cwd)
+    const before = await snapshotWorkingTree(runner, cwd)
     writeFileSync(join(cwd, 'code.txt'), 'changed\n')
     writeFileSync(join(cwd, '.quirky', 'loops', 'notes.md'), 'changed notes\n')
-    const after = await snapshotWorkingTree(cwd)
-    expect((await diffTrees(cwd, before, after))?.files).toEqual(['code.txt'])
+    const after = await snapshotWorkingTree(runner, cwd)
+    expect((await diffTrees(runner, cwd, before, after))?.files).toEqual(['code.txt'])
   })
 
   test('protected path globs support stars, question, classes, braces and directory suffixes', () => {
@@ -572,18 +902,19 @@ wait
   test('checkpoint commits only iteration paths and leaves unrelated staged content intact', async () => {
     const root = tempRoot()
     const cwd = join(root, 'repo')
+    const runner = realProcessRunner()
     initRepo(cwd)
     writeFileSync(join(cwd, 'owned.txt'), 'base owned\n')
     writeFileSync(join(cwd, 'other.txt'), 'base other\n')
     commitAll(cwd, 'base')
     writeFileSync(join(cwd, 'other.txt'), 'unrelated staged\n')
     git(cwd, 'add', 'other.txt')
-    const before = await snapshotWorkingTree(cwd)
+    const before = await snapshotWorkingTree(runner, cwd)
     writeFileSync(join(cwd, 'owned.txt'), 'iteration change\n')
     writeFileSync(join(cwd, 'new.txt'), 'iteration addition\n')
-    const after = await snapshotWorkingTree(cwd)
-    const diff = await diffTrees(cwd, before, after)
-    const checkpoint = await checkpointChangedPaths(cwd, 'Evidence test', 4, diff?.files ?? [], [])
+    const after = await snapshotWorkingTree(runner, cwd)
+    const diff = await diffTrees(runner, cwd, before, after)
+    const checkpoint = await checkpointChangedPaths(runner, cwd, 'Evidence test', 4, diff?.files ?? [], [])
     expect(checkpoint).toMatch(/^[0-9a-f]{40,64}$/)
     expect(git(cwd, 'show', '--format=', '--name-only', 'HEAD').split('\n').filter(Boolean).sort()).toEqual(['new.txt', 'owned.txt'])
     expect(git(cwd, 'diff', '--cached', '--name-only')).toBe('other.txt')
@@ -593,15 +924,16 @@ wait
   test('checkpoint skips protected, aborted and empty deltas', async () => {
     const root = tempRoot()
     const cwd = join(root, 'repo')
+    const runner = realProcessRunner()
     initRepo(cwd)
     writeFileSync(join(cwd, 'owned.txt'), 'base\n')
     commitAll(cwd, 'base')
     const head = git(cwd, 'rev-parse', 'HEAD')
     const controller = new AbortController()
     controller.abort()
-    expect(await checkpointChangedPaths(cwd, 'Evidence test', 2, ['owned.txt'], ['owned.txt'])).toBeNull()
-    expect(await checkpointChangedPaths(cwd, 'Evidence test', 2, ['owned.txt'], [], controller.signal)).toBeNull()
-    expect(await checkpointChangedPaths(cwd, 'Evidence test', 2, [], [])).toBeNull()
+    expect(await checkpointChangedPaths(runner, cwd, 'Evidence test', 2, ['owned.txt'], ['owned.txt'])).toBeNull()
+    expect(await checkpointChangedPaths(runner, cwd, 'Evidence test', 2, ['owned.txt'], [], controller.signal)).toBeNull()
+    expect(await checkpointChangedPaths(runner, cwd, 'Evidence test', 2, [], [])).toBeNull()
     expect(git(cwd, 'rev-parse', 'HEAD')).toBe(head)
   })
 })

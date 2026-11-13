@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { PluginContext, Schema } from '@quirky/protocol'
 import type { AuthorizedEnrollment, Enrollment, EnrollmentInput, KernelOptions, KernelStore, KindRegistry, OrchestrationPort, WatcherKind } from '../src/contracts'
@@ -21,7 +21,14 @@ afterEach(() => {
   for (const path of tempHomes.splice(0).reverse()) rmSync(path, { recursive: true, force: true })
 })
 
-type ContextFixture = { context: PluginContext; home: string; dataDir: string; opens: () => number; close: () => void }
+type ContextFixture = {
+  context: PluginContext
+  home: string
+  dataDir: string
+  opens: () => number
+  openStoreNewerVersions: () => Array<'read-only' | undefined>
+  close: () => void
+}
 
 function makeContext(options: {
   call?: (method: string, params?: Record<string, unknown>) => Promise<unknown>
@@ -31,6 +38,7 @@ function makeContext(options: {
   const dataDir = join(home, 'plugin-data', 'quirky.heimdall')
   mkdirSync(dataDir, { recursive: true, mode: 0o700 })
   let openCount = 0
+  const openStoreNewerVersions: Array<'read-only' | undefined> = []
   const context = {
     pluginId: 'quirky.heimdall',
     dir: home,
@@ -42,9 +50,12 @@ function makeContext(options: {
     emit() { return false },
     subscribe() { return () => {} },
     call: options.call ?? (async () => { throw new Error('unexpected context.call') }),
-    openStore(migrations: Parameters<PluginContext['openStore']>[0]) {
+    openStore(migrations: Parameters<PluginContext['openStore']>[0], options?: Parameters<PluginContext['openStore']>[1]) {
       openCount++
-      const opened = openPluginStore({ home, pluginId: 'quirky.heimdall', migrations, isActive: () => true })
+      openStoreNewerVersions.push(options?.newerVersion)
+      const opened = openPluginStore({
+        home, pluginId: 'quirky.heimdall', migrations, isActive: () => true, newerVersion: options?.newerVersion
+      })
       openedHandles.push(opened.close)
       return opened.store
     },
@@ -59,12 +70,65 @@ function makeContext(options: {
     context,
     home,
     dataDir,
+    openStoreNewerVersions: () => [...openStoreNewerVersions],
     opens: () => openCount,
     close() {
       const close = openedHandles.pop()
       close?.()
     }
   }
+}
+function corruptFreelist(path: string) {
+  const db = new Database(path)
+  try {
+    db.exec('CREATE TABLE freelist_fixture (payload BLOB)')
+    const insert = db.query('INSERT INTO freelist_fixture(payload) VALUES (?)')
+    try {
+      const payload = Buffer.alloc(4096, 0x41)
+      for (let i = 0; i < 128; i++) insert.run(payload)
+    } finally {
+      insert.finalize()
+    }
+    db.exec('DELETE FROM freelist_fixture; PRAGMA user_version = 2; PRAGMA wal_checkpoint(TRUNCATE)')
+    const journalMode = db.query('PRAGMA journal_mode = DELETE')
+    try {
+      expect(journalMode.get()).toEqual({ journal_mode: 'delete' })
+    } finally {
+      journalMode.finalize()
+    }
+  } finally {
+    db.close(true)
+  }
+  rmSync(`${path}-wal`, { force: true })
+  rmSync(`${path}-shm`, { force: true })
+
+  const bytes = readFileSync(path)
+  const encodedPageSize = bytes.readUInt16BE(16)
+  const pageSize = encodedPageSize === 1 ? 65536 : encodedPageSize
+  const trunkPage = bytes.readUInt32BE(32)
+  expect(pageSize).toBeGreaterThan(0)
+  expect(bytes.readUInt32BE(36)).toBeGreaterThan(0)
+  expect(trunkPage).toBeGreaterThan(0)
+  bytes.writeUInt32BE(0x7fffffff, (trunkPage - 1) * pageSize + 4)
+  writeFileSync(path, bytes)
+
+  const checkDb = new Database(path, { readonly: true })
+  const integrityCheck = checkDb.query('PRAGMA integrity_check(1)')
+  let rows: unknown
+  try {
+    rows = integrityCheck.all()
+  } finally {
+    integrityCheck.finalize()
+    checkDb.close(true)
+  }
+  expect(rows).not.toEqual([{ integrity_check: 'ok' }])
+  return bytes
+}
+
+function findCorruptBackup(path: string): string {
+  const names = readdirSync(dirname(path)).filter((name) => /^store\.db\.corrupt-\d+-[0-9a-f]{8}$/.test(name))
+  expect(names).toHaveLength(1)
+  return join(dirname(path), names[0]!)
 }
 
 function makeEnrollment(overrides: Partial<Enrollment> = {}): Enrollment {
@@ -340,6 +404,87 @@ describe('Heimdall persistence and enrollment', () => {
     future.close()
 
     expect(readFileSync(path)).toEqual(before)
+  })
+  test('passes corrupt store recovery to the kernel and stays writable afterward', () => {
+    const fixture = makeContext()
+    const path = join(fixture.dataDir, 'store.db')
+    const original = Buffer.alloc(8192, 0x41)
+    writeFileSync(path, original)
+
+    const store = createKernelStore(fixture.context)
+    const enrollment = makeEnrollment()
+    expect(fixture.opens()).toBe(1)
+    expect(fixture.openStoreNewerVersions()).toEqual(['read-only'])
+    expect(store.readOnly).toBe(false)
+    store.save(enrollment)
+    expect(store.get(enrollment.watcherId)).toEqual(enrollment)
+    expect(readFileSync(findCorruptBackup(path))).toEqual(original)
+    store.close()
+    fixture.close()
+  })
+
+  test('repairs a corrupt future schema while keeping its enrollment read-only', () => {
+    const fixture = makeContext()
+    const initial = createKernelStore(fixture.context)
+    const enrollment = makeEnrollment()
+    initial.save(enrollment)
+    initial.close()
+    fixture.close()
+
+    const path = join(fixture.dataDir, 'store.db')
+    const original = corruptFreelist(path)
+    const future = createKernelStore(fixture.context)
+    expect(future.readOnly).toBe(true)
+    expect(future.get(enrollment.watcherId)).toEqual(enrollment)
+    expect(() => future.save(makeEnrollment({ watcherId: 'watcher-2' }))).toThrow('Heimdall storage is read-only')
+    expect(fixture.openStoreNewerVersions()).toEqual(['read-only', 'read-only'])
+    expect(readFileSync(findCorruptBackup(path))).toEqual(original)
+    future.close()
+    fixture.close()
+  })
+
+  test('propagates a lock error from future schema inspection without opening the context store', () => {
+    const fixture = makeContext()
+    const path = join(fixture.dataDir, 'store.db')
+    const lock = new Database(path)
+    lock.exec('CREATE TABLE seed (id INTEGER)')
+    lock.exec('BEGIN EXCLUSIVE')
+
+    let inspectedHandle: Database | undefined
+    let inspectedCloseCalls = 0
+    const originalQuery = Database.prototype.query
+    const originalClose = Database.prototype.close
+    Database.prototype.query = new Proxy(originalQuery, {
+      apply(target, thisArg, args) {
+        if (args[0] === 'PRAGMA user_version') inspectedHandle = thisArg as Database
+        return Reflect.apply(target, thisArg, args)
+      }
+    })
+    Database.prototype.close = function (this: Database, ...args: Parameters<typeof originalClose>) {
+      if (this === inspectedHandle) inspectedCloseCalls++
+      return originalClose.apply(this, args)
+    }
+
+    let error: unknown
+    try {
+      try {
+        createKernelStore(fixture.context)
+      } catch (caught) {
+        error = caught
+      }
+    } finally {
+      Database.prototype.query = originalQuery
+      Database.prototype.close = originalClose
+      if (inspectedHandle && inspectedCloseCalls === 0) inspectedHandle.close(true)
+      lock.exec('ROLLBACK')
+      lock.close(true)
+    }
+    expect(error).toBeInstanceOf(Error)
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+    expect(code).toBe('SQLITE_BUSY')
+    expect(fixture.opens()).toBe(0)
+    expect(inspectedCloseCalls).toBe(1)
+    expect(readdirSync(fixture.dataDir).filter((name) => name.startsWith('store.db.corrupt-'))).toEqual([])
   })
 })
 

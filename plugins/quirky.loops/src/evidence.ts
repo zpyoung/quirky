@@ -195,7 +195,7 @@ export class EvidenceEngine implements EvidenceEngineContract {
   constructor(private readonly context: PluginContext) {}
 
   snapshot(cwd: string): Promise<string | null> {
-    return snapshotWorkingTree(cwd)
+    return snapshotWorkingTree(this.context.process, cwd)
   }
 
   async validate(agent: LoopAgent, config: LoopConfig, _cwd: string): Promise<void> {
@@ -268,8 +268,8 @@ export class EvidenceEngine implements EvidenceEngineContract {
   private async gatherActive(input: GatherInput, active: ActiveGather): Promise<IterationEvidence> {
     const markers = parseMarkers(input.messages)
     const agentOutput = outputTail(input.messages)
-    const treeAfter = await snapshotWorkingTree(input.loop.cwd, active.controller.signal)
-    const diff = await diffTrees(input.loop.cwd, input.treeBefore, treeAfter, active.controller.signal)
+    const treeAfter = await snapshotWorkingTree(this.context.process, input.loop.cwd, active.controller.signal)
+    const diff = await diffTrees(this.context.process, input.loop.cwd, input.treeBefore, treeAfter, active.controller.signal)
     const protectedPatterns = input.loop.config.protectedPaths?.filter((pattern) => pattern.trim() !== '') ?? []
     const protectedPathHits = protectedPatterns.length === 0
       ? []
@@ -307,6 +307,7 @@ export class EvidenceEngine implements EvidenceEngineContract {
       !aborted
     ) {
       checkpointCommit = await checkpointChangedPaths(
+        this.context.process,
         input.loop.cwd,
         input.loop.name,
         input.n,
