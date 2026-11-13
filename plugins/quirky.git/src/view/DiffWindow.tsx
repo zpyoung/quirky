@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Button, Dialog, EmptyState } from '@quirky/ui'
-import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import type { MountCleanup, MountFunction, UiPluginContext } from '@quirky/protocol'
 
 import { DIFF_VIEW_ID, SESSIONS_VIEW_ID, type DiffViewInput, type ReviewSnapshot } from '../shared/view-input'
 import { ConflictFile } from './ConflictFile'
@@ -9,7 +9,7 @@ import { ConflictReview } from './ConflictReview'
 import { ReviewDiff } from './ReviewDiff'
 import { messageOf } from './data'
 import { registerView, reviewViewFor, type ViewHandle } from './registry'
-import { activateHostedDiff, claimReviewTab, closeHostedDiff, nameReviewTab, releaseReviewTab, updateHostedDiffDirty } from './hosted-tabs'
+import { activateHostedDiff, claimReviewTab, closeHostedDiff, nameReviewTab, ownsReviewTab, releaseReviewTab, updateHostedDiffDirty } from './hosted-tabs'
 import { useDiffSettings } from './settings'
 import type { Controller, ViewReport } from './types'
 
@@ -78,7 +78,8 @@ function useFoldsIntoReview(context: UiPluginContext, input: DiffViewInput): boo
 /** The view for one input; a second Review tab of a worktree renders nothing while it closes. */
 function DiffWindow(props: { context: UiPluginContext; input: DiffViewInput; report(state: ViewReport): void }) {
   const duplicate = useFoldsIntoReview(props.context, props.input)
-  return duplicate ? null : <DiffTab {...props} />
+  // keep the ownership claim alive while resetting input-scoped content
+  return duplicate ? null : <DiffTab key={JSON.stringify(props.input)} {...props} />
 }
 
 /** The view's content for one input: the mode's component under the view's settings and handle. */
@@ -241,7 +242,7 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
   )
 }
 
-/** The `view:quirky.git/diff` mount function; the host remounts it with the new input whenever the input changes. */
+/** The `view:quirky.git/diff` mount; same-tab Review input changes keep their ownership mount alive. */
 export function mountDiffView(context: UiPluginContext): MountFunction {
   return (element, { input, report }) => {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
@@ -252,11 +253,29 @@ export function mountDiffView(context: UiPluginContext): MountFunction {
       root.render(<EmptyState message="Open a worktree first." />)
       return () => root.unmount()
     }
-    root.render(
-      <div data-git-view-root className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
-        <DiffWindow context={context} input={parsed} report={send} />
-      </div>
-    )
-    return () => root.unmount()
+    const render = (next: DiffViewInput) => {
+      const tree = (
+        <div data-git-view-root className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
+          <DiffWindow context={context} input={next} report={send} />
+        </div>
+      )
+      root.render(tree)
+    }
+    render(parsed)
+    const cleanup: MountCleanup = () => root.unmount()
+    cleanup.updateInput = (nextInput) => {
+      const next = parseInput(nextInput)
+      if (
+        parsed.mode !== 'review' ||
+        next === null ||
+        next.mode !== 'review' ||
+        next.worktree !== parsed.worktree ||
+        next.tabId !== parsed.tabId ||
+        (next.tabId !== undefined && !ownsReviewTab(next.worktree, next.tabId))
+      ) return false
+      render(next)
+      return true
+    }
+    return cleanup
   }
 }

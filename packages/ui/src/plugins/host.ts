@@ -147,7 +147,9 @@ type EmbeddedHandle = {
   readonly id: string
   /** The plugin that owns the view. */
   readonly plugin: string
-  cleanup?: () => void
+  input: unknown
+  state: 'pending' | 'mounted' | 'failed'
+  cleanup?: MountCleanup
   released: boolean
 }
 
@@ -644,32 +646,36 @@ export class WindowPluginHost {
     if (entry.kind === 'overlay' && handle.report === undefined) report({})
   }
 
-  private async runEmbedded(handle: EmbeddedHandle, entry: UiSlotEntry, element: HTMLElement, input: unknown): Promise<void> {
+  private async runEmbedded(handle: EmbeddedHandle, entry: UiSlotEntry, element: HTMLElement): Promise<void> {
     try {
       await this.ensureLoaded(entry.plugin)
     } catch {
+      handle.state = 'failed'
       return
     }
     if (handle.released) return
     const session = this.runtimes.get(entry.plugin)?.session
     const implementation = session?.provided.get(handle.id)
     if (typeof implementation !== 'function') {
+      handle.state = 'failed'
       this.deps.log(`${entry.plugin} did not provide ${handle.id}`)
       return
     }
     let cleanup: unknown
     try {
-      cleanup = implementation(element, { input })
+      cleanup = implementation(element, { input: handle.input })
     } catch (error) {
+      handle.state = 'failed'
       if (!handle.released) this.deps.log(`${entry.plugin}: ${messageOf(error)}`)
       return
     }
-    const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
+    const cleanupFn = typeof cleanup === 'function' ? (cleanup as MountCleanup) : undefined
     if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
       this.runCleanup(entry.plugin, cleanupFn)
       return
     }
     handle.cleanup = cleanupFn
+    handle.state = 'mounted'
   }
 
   private releaseEmbedded(handle: EmbeddedHandle): void {
@@ -678,6 +684,22 @@ export class WindowPluginHost {
     const cleanup = handle.cleanup
     handle.cleanup = undefined
     this.runCleanup(handle.plugin, cleanup)
+  }
+
+  private updateEmbeddedInput(handle: EmbeddedHandle, input: unknown): boolean {
+    if (handle.released || handle.state === 'failed') return false
+    if (handle.state === 'pending') {
+      handle.input = input
+      return true
+    }
+    try {
+      if (handle.cleanup?.updateInput?.(input) !== true || handle.released) return false
+      handle.input = input
+      return true
+    } catch (error) {
+      this.deps.log(`${handle.plugin}: updateInput failed: ${messageOf(error)}`)
+      return false
+    }
   }
 
   private updateMountInput(handle: MountHandle, input: unknown): boolean {
@@ -1114,10 +1136,12 @@ export class WindowPluginHost {
       mountView: live((viewId: string, element: HTMLElement, input?: unknown) => {
         const entry = this.state.model?.views.find((candidate) => candidate.id === viewId)
         if (!entry) throw new Error(`no contribution ${viewId}`)
-        const handle: EmbeddedHandle = { id: viewId, plugin: entry.plugin, released: false }
+        const handle: EmbeddedHandle = { id: viewId, plugin: entry.plugin, input, state: 'pending', released: false }
         this.embedded.add(handle)
-        void this.runEmbedded(handle, entry, element, input)
-        return track(() => this.releaseEmbedded(handle))
+        void this.runEmbedded(handle, entry, element)
+        const cleanup: MountCleanup = track(() => this.releaseEmbedded(handle))
+        cleanup.updateInput = (next) => this.updateEmbeddedInput(handle, next)
+        return cleanup
       }),
       setPanelBadge: live((panelId: string, count: number | null, title?: string, tone?: 'needs-you' | 'failing') => {
         const owner = [...(this.state.model?.panels ?? []), ...(this.state.model?.sidebarSections ?? [])].find((entry) => entry.id === panelId)?.plugin
