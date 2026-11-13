@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { createInterface, type Interface } from 'node:readline'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { createActorReceiptStore, executeCli, type CliActorReceipt, type CliActorReceiptStore } from './cli-actor'
+import type { Readable } from 'node:stream'
 
 const COMMAND_TIMEOUT_MS = 15_000
 const WORKER_ASK_TIMEOUT_MS = 40_000
@@ -177,7 +178,7 @@ function readField(lines: string[], prefix: string): string | undefined {
 }
 
 export function parseWorkerPreamble(text: string): ParsedWorkerPreamble {
-  const lines = text.split(/\r?\n/)
+  const lines = text.split(/\r\n?|\n/)
   const sessionId = readField(lines, 'Your own Quirky session ID is:')
   const worktreeId = readField(lines, 'Your workspace ID is:')
   const runId = readField(lines, 'Your Run ID is:')
@@ -210,42 +211,42 @@ function installWorkerSignalHandlers(): void {
   process.on('SIGINT', finish)
 }
 
-function collectBracketedPaste(): Promise<string> {
+/** Collect one bracketed paste and submit it only after the terminal sends Enter. */
+export function collectBracketedPaste(input: Readable = process.stdin): Promise<string> {
   const start = '\x1b[200~'
   const end = '\x1b[201~'
   const { promise, resolve } = Promise.withResolvers<string>()
+  let pending = ''
   let paste = ''
   let receiving = false
   let waitingForEnter = false
-  const finish = () => {
-    process.stdin.off('data', onData)
-    resolve(paste)
-  }
-  const onData = (chunk: Buffer | string) => {
-    let text = Buffer.isBuffer(chunk) ? chunk.toString() : chunk
+  const onData = (chunk: string) => {
+    pending += chunk
     if (!receiving && !waitingForEnter) {
-      const startAt = text.indexOf(start)
-      if (startAt < 0) return
-      text = text.slice(startAt + start.length)
+      const startAt = pending.indexOf(start)
+      if (startAt < 0) {
+        pending = pending.slice(-(start.length - 1))
+        return
+      }
+      pending = pending.slice(startAt + start.length)
       receiving = true
     }
     if (receiving) {
-      const endAt = text.indexOf(end)
-      if (endAt < 0) {
-        paste += text
-        return
-      }
-      paste += text.slice(0, endAt)
+      const endAt = pending.indexOf(end)
+      if (endAt < 0) return
+      paste = pending.slice(0, endAt)
+      pending = pending.slice(endAt + end.length)
       receiving = false
       waitingForEnter = true
-      text = text.slice(endAt + end.length)
-      if (text === '\r' || text === '\n' || /[\r\n]$/.test(text)) finish()
-    } else if (waitingForEnter && (text === '\r' || text === '\n')) {
-      finish()
+    }
+    if (waitingForEnter && /[\r\n]$/.test(pending)) {
+      input.off('data', onData)
+      resolve(paste)
     }
   }
-  process.stdin.on('data', onData)
-  process.stdin.resume()
+  input.setEncoding('utf8')
+  input.on('data', onData)
+  input.resume()
   return promise
 }
 
@@ -275,6 +276,7 @@ async function runWorker(env: ActorEnvironment): Promise<void> {
   }
   process.stdin.setRawMode(true)
   const pasted = await collectBracketedPaste()
+  process.stdout.write('\x1b]0;⠋ Claude Code\x07\r\n✻ Working… (esc to interrupt)\r\n')
   let preamble: ParsedWorkerPreamble
   try {
     preamble = parseWorkerPreamble(pasted)

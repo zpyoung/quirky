@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
+import { PassThrough } from 'node:stream'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createCliEnvironment, createCliWorld } from './cli-world'
 import { createCliFixtures, installCliFixtureTools } from './cli-fixtures'
 import { createActorReceiptStore, parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
+import { collectBracketedPaste, parseWorkerPreamble } from './cli-worker-actor'
 import * as runner from './cli-run'
 import type { CliTableRow } from './cli-table'
 import * as probes from './cli-checks'
@@ -240,6 +242,38 @@ test('Claude worker mode accepts only the session-attested default launch argv',
     expect(readFileSync(log, 'utf8')).toBe(`3 ${yolo} ${settings}\n`)
   })
 }, 20_000)
+
+test('worker preambles preserve identity across carriage-return terminal transport', () => {
+  const text = [
+    'Your own Quirky session ID is: session_fixture',
+    'Your workspace ID is: worktree_fixture',
+    'Your Run ID is: run_fixture',
+    'Your Task ID is: task_fixture',
+    'Your Dispatch ID is: ctx_fixture',
+    '=== TASK ===',
+    'cli-parity-worker-hold'
+  ].join('\r')
+  expect(parseWorkerPreamble(text)).toEqual({
+    sessionId: 'session_fixture', worktreeId: 'worktree_fixture', runId: 'run_fixture',
+    taskId: 'task_fixture', dispatchId: 'ctx_fixture', mode: 'hold'
+  })
+})
+
+test('worker paste waits for Enter and preserves delimiters split across stdin chunks', async () => {
+  const input = new PassThrough()
+  try {
+    const result = collectBracketedPaste(input)
+    let completed = false
+    void result.then(() => { completed = true })
+    for (const chunk of ['noise\x1b[20', '0~Your Task\rλ', '\x1b[2', '01', '~']) input.write(chunk)
+    await Promise.resolve()
+    expect(completed).toBe(false)
+    input.write('\r')
+    expect(await result).toBe('Your Task\rλ')
+  } finally {
+    input.destroy()
+  }
+})
 
 test('worker actor rejects every unsupported argv before creating its receipt root', () => {
   withHome((home) => {
