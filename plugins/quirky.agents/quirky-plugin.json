@@ -1,6 +1,6 @@
 {
   "id": "quirky.agents",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "Agents",
   "version": "0.1.0",
   "description": "The catalog of agent CLIs Quirky can launch, with their detection, launch and resume data.",
@@ -1992,6 +1992,7 @@
       {
         "id": "changed",
         "description": "The catalog, detection, an agent's configuration or a setting changed in a way that alters list.",
+        "coalesce": [],
         "data": { "type": "object" }
       },
       {
