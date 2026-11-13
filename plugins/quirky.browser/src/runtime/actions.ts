@@ -44,6 +44,11 @@ function stringParam(params: Record<string, unknown>, key: string, allowEmpty = 
   return value
 }
 
+export function spansNavigation(method: BrowserMethod, params: Record<string, unknown>): boolean {
+  return method === 'wait' && (params.selector === undefined ||
+    typeof params.selector === 'string' && !params.selector.startsWith('qbr1:'))
+}
+
 export class BrowserActions {
   private readonly refs = new Map<string, RefEntry>()
   private readonly projections = new Map<string, Projection>()
