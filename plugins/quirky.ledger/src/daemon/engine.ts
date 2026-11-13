@@ -107,6 +107,7 @@ export class LedgerEngine {
   private reconciledGeneration = -1
   private unavailable = false
   private catalogRefresh: Promise<OwnerCatalog> | null = null
+  private catalogRefreshQueued: Promise<OwnerCatalog> | null = null
 
   constructor(context: PluginContext) {
     this.context = context
@@ -137,7 +138,7 @@ export class LedgerEngine {
       if (event.type !== 'quirky.repo/changed' && event.type !== 'quirky.worktree/changed') return
       this.generation += 1
       this.unavailable = true
-      const task = this.refreshCatalog()
+      const task = this.refreshCatalog(true)
       void task.catch((error) => this.context.log(`ledger owner reconciliation failed: ${errorMessage(error)}`))
     })
     if (this.store && !this.storeFailure) {
@@ -218,8 +219,28 @@ export class LedgerEngine {
     }
   }
 
-  private refreshCatalog(): Promise<OwnerCatalog> {
-    if (this.catalogRefresh) return this.catalogRefresh
+  private refreshCatalog(joinInFlight = false): Promise<OwnerCatalog> {
+    const current = this.catalogRefresh
+    if (joinInFlight) {
+      if (current) return current
+      if (this.catalogRefreshQueued) return this.catalogRefreshQueued
+    }
+    // a client request arriving mid-read needs the next fresh read, shared with its peers.
+    if (this.catalogRefreshQueued) return this.catalogRefreshQueued
+    if (current) {
+      let queued!: Promise<OwnerCatalog>
+      queued = current.then(
+        () => this.startCatalogRefresh(queued),
+        () => this.startCatalogRefresh(queued)
+      )
+      this.catalogRefreshQueued = queued
+      return queued
+    }
+    return this.startCatalogRefresh()
+  }
+
+  private startCatalogRefresh(queued?: Promise<OwnerCatalog>): Promise<OwnerCatalog> {
+    if (queued && this.catalogRefreshQueued === queued) this.catalogRefreshQueued = null
     let task!: Promise<OwnerCatalog>
     task = this.refreshCatalogUntilCurrent().finally(() => {
       if (this.catalogRefresh === task) this.catalogRefresh = null
