@@ -89,16 +89,22 @@ export async function readChunk(reader: ReadableStreamDefaultReader<Uint8Array>,
   }
 }
 
-/** All the bytes of a git pipe. */
-async function drain(stream: ReadableStream<Uint8Array>, exited: Promise<unknown>, stallMs: number): Promise<Uint8Array> {
+/** All pipe bytes; only mutation collection may keep partial bytes after the post-exit stall guard. */
+async function drain(stream: ReadableStream<Uint8Array>, exited: Promise<unknown>, stallMs: number, allowPartial = false): Promise<Uint8Array> {
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
-  for (;;) {
-    const { done, value } = await readChunk(reader, exited, stallMs)
-    if (done) break
-    chunks.push(value)
-    total += value.byteLength
+  try {
+    for (;;) {
+      const { done, value } = await readChunk(reader, exited, stallMs)
+      if (done) break
+      chunks.push(value)
+      total += value.byteLength
+    }
+  } catch (error) {
+    if (!allowPartial || !(error instanceof PipeStalledError)) throw error
+  } finally {
+    reader.releaseLock()
   }
   const bytes = new Uint8Array(total)
   let at = 0
@@ -160,18 +166,16 @@ export async function gitEnv(cwd: string, options: RunGitOptions = {}): Promise<
 }
 
 /**
- * Runs `git` with an args array in `cwd`; never throws on a non-zero exit. With `timeoutMs` the
- * process is killed once it elapses and the result has `timedOut: true`. Output that does not end
- * after git exited (see `PipeStalledError`) is run again when `readOnly`, else, and when every
- * attempt stalls, fails with `GitError`.
+ * Runs `git` with an args array in `cwd`; never throws on a non-zero exit. With `timeoutMs` a live
+ * process is killed once it elapses and the result has `timedOut: true`. Read-only runs retry
+ * post-exit output stalls, failing with `GitError` after three attempts. Mutations never retry:
+ * they preserve the child's exit status and bytes already drained if its output stalls.
  */
 export async function runGit(cwd: string, args: string[], options: RunGitOptions = {}): Promise<GitResult> {
   if (!options.readOnly) {
     return withGitWrite(async () => {
       const env = await resolvedGitEnv(cwd, options)
-      return runGitOnce(cwd, args, options, env).catch((err) => {
-        throw err instanceof PipeStalledError ? new GitError(`git ${args[0]}: ${err.message}`, '', -1) : err
-      })
+      return runGitOnce(cwd, args, options, env)
     })
   }
   const share = options.input === undefined && options.share !== false
@@ -214,28 +218,36 @@ async function runGitOnce(
       throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
     }
     let timedOut = false
-    const timer = remainingTimeoutMs === undefined ? undefined : setTimeout(() => {
+    let didExit = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const exited = proc.exited.then((code) => {
+      didExit = true
+      clearTimeout(timer)
+      return code
+    })
+    if (remainingTimeoutMs !== undefined) timer = setTimeout(() => {
+      if (didExit || proc.exitCode !== null) return
       timedOut = true
       proc.kill()
     }, remainingTimeoutMs)
     try {
       const stallMs = options.stallMs ?? (options.readOnly ? PIPE_STALL_MS : PIPE_STALL_MS * 10)
       const [stdout, stderr, exitCode] = await Promise.all([
-        drain(proc.stdout as ReadableStream<Uint8Array>, proc.exited, stallMs),
-        drain(proc.stderr as ReadableStream<Uint8Array>, proc.exited, stallMs),
-        proc.exited
+        drain(proc.stdout as ReadableStream<Uint8Array>, exited, stallMs, !options.readOnly),
+        drain(proc.stderr as ReadableStream<Uint8Array>, exited, stallMs, !options.readOnly),
+        exited
       ])
       return { stdout, stderr: new TextDecoder().decode(stderr), exitCode, ...(timedOut ? { timedOut } : {}) }
     } finally {
       clearTimeout(timer)
-      if (proc.exitCode === null) proc.kill()
-      await proc.exited
+      if (!didExit && proc.exitCode === null) proc.kill()
+      await exited
     }
   })
   return slot.timedOut ? { stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true } : slot.value
 }
 
-/** Like `runGit` but throws `GitError` on a non-zero exit; returns stdout as text. */
+/** Like `runGit`, including partial output on mutation pipe stalls; throws `GitError` on nonzero exit, otherwise returns stdout text. */
 export async function git(cwd: string, args: string[], options: RunGitOptions = {}): Promise<string> {
   const r = await runGit(cwd, args, options)
   if (r.exitCode !== 0) {
