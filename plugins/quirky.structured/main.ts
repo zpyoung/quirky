@@ -20,6 +20,7 @@ import { resolveClaudeThroughLoginShell } from './claude-path'
 import { createClaudeRunner } from './claude-runner'
 import { resolveCodexThroughLoginShell } from './codex-path'
 import { createCodexRunner } from './codex-runner'
+import { createPiRunner, resolvePiThroughLoginShell } from './pi-runner'
 import { Journal, journalMigrations } from './journal'
 import type {
   NewStructuredMessage,
@@ -27,10 +28,11 @@ import type {
   StructuredLaunchOptions,
   StructuredRunner,
   StructuredRunnerFactory,
-  StructuredStartOptions
+  StructuredStartOptions,
+  ToolPolicy
 } from './runner'
 
-type StructuredAgent = 'claude' | 'codex'
+type StructuredAgent = 'claude' | 'codex' | 'pi' | 'omp'
 type OwnerToken = { key: string; sessionId: string | null }
 type StructuredSendResult =
   | { ok: true }
@@ -48,7 +50,7 @@ type LiveSession = {
   lease: { env: Record<string, string>; release(): void } | null
 }
 
-const AGENT_TITLES: Record<StructuredAgent, string> = { claude: 'Claude', codex: 'Codex' }
+const AGENT_TITLES: Record<StructuredAgent, string> = { claude: 'Claude', codex: 'Codex', pi: 'Pi', omp: 'Omp' }
 const MAX_PROVIDER_SESSION_ID = 512
 const INVALID_PROVIDER_ID = /[\x00-\x1f\x7f-\x9f]/
 
@@ -174,7 +176,8 @@ function structuredEnvironment(userEnv: Record<string, string | null>, prepared:
   return env
 }
 
-const isStructuredAgent = (value: unknown): value is StructuredAgent => value === 'claude' || value === 'codex'
+const isStructuredAgent = (value: unknown): value is StructuredAgent =>
+  value === 'claude' || value === 'codex' || value === 'pi' || value === 'omp'
 
 /** Tests inject one runner through this seam; production runners are selected by provider. */
 function testRunnerFactory(): StructuredRunnerFactory | undefined {
@@ -492,7 +495,8 @@ export function activate(context: PluginContext): void {
       await persistProviderSession(sessionId, providerSession)
     },
     resolveClaudePath: () => resolveClaudeThroughLoginShell(context.launch.shell),
-    resolveCodexPath: () => resolveCodexThroughLoginShell(context.launch.shell)
+    resolveCodexPath: () => resolveCodexThroughLoginShell(context.launch.shell),
+    resolvePiPath: (agent) => resolvePiThroughLoginShell(context.launch.shell, agent)
   }
 
   const injectedRunner = testRunnerFactory()?.(structuredContext)
@@ -500,7 +504,12 @@ export function activate(context: PluginContext): void {
     if (injectedRunner) return injectedRunner
     const cached = agentRunners.get(agent)
     if (cached) return cached
-    const runner = agent === 'claude' ? createClaudeRunner(structuredContext) : createCodexRunner(structuredContext)
+    const runner =
+      agent === 'claude'
+        ? createClaudeRunner(structuredContext)
+        : agent === 'codex'
+          ? createCodexRunner(structuredContext)
+          : createPiRunner(structuredContext)
     agentRunners.set(agent, runner)
     return runner
   }
@@ -534,7 +543,7 @@ export function activate(context: PluginContext): void {
 
   const resolveStructuredLaunch = async (
     params: Record<string, unknown>
-  ): Promise<{ structured: StructuredLaunchOptions; launchSettings: unknown } | null> => {
+  ): Promise<{ structured: StructuredLaunchOptions; launchSettings: Session['launchSettings'] } | null> => {
     if (params.model === undefined && params.options === undefined) return null
     const raw = await context.call('quirky.agents/resolveLaunch', {
       agent: params.agent,
@@ -563,10 +572,10 @@ export function activate(context: PluginContext): void {
       if (key === 'model') structured.model = value
       else structured.effort = value
     }
-    return { structured, launchSettings: resolution.launchSettings ?? null }
+    return { structured, launchSettings: (resolution.launchSettings as Session['launchSettings']) ?? null }
   }
 
-  const launchOptionsFromSnapshot = (session: Session): StructuredLaunchOptions => {
+  const launchOptionsFromSnapshot = (session: Session): StructuredStartOptions => {
     const snapshot = session.launchSettings
     if (snapshot === null || snapshot === undefined) return {}
     if (snapshot.agent !== session.agent) {
@@ -580,11 +589,18 @@ export function activate(context: PluginContext): void {
       throw context.error('conflict', `session ${session.id} has malformed structured launch settings`)
     }
     const values = rawOptions as Record<string, unknown>
-    const unsupported = Object.keys(values).find((key) => key !== 'model' && key !== 'effort')
+    const unsupported = Object.keys(values).find((key) => key !== 'model' && key !== 'effort' && key !== 'toolPolicy')
     if (unsupported !== undefined) {
       throw context.error('conflict', `session ${session.id} has unsupported structured launch option "${unsupported}"`)
     }
-    const options: StructuredLaunchOptions = {}
+    const options: StructuredStartOptions = {}
+    if (Object.hasOwn(values, 'toolPolicy')) {
+      const policy = values.toolPolicy
+      if (typeof policy !== 'object' || policy === null || Array.isArray(policy) || Reflect.get(policy, 'value') !== 'deny-all') {
+        throw context.error('conflict', `session ${session.id} has an unreadable tool policy`)
+      }
+      options.toolPolicy = 'deny-all'
+    }
     for (const key of ['model', 'effort'] as const) {
       const selected = values[key]
       if (selected === undefined) continue
@@ -665,10 +681,22 @@ export function activate(context: PluginContext): void {
     await Promise.all(stops)
   }
 
+  const splitToolPolicy = (params: Record<string, unknown>): { toolPolicy: ToolPolicy; launchParams: Record<string, unknown> } => {
+    const raw = params.options
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { toolPolicy: 'default', launchParams: params }
+    const { toolPolicy, ...rest } = raw as Record<string, unknown>
+    if (toolPolicy === undefined) return { toolPolicy: 'default', launchParams: params }
+    if (toolPolicy !== 'default' && toolPolicy !== 'deny-all') {
+      throw context.error('invalid-params', 'options.toolPolicy must be "default" or "deny-all"')
+    }
+    const { options: _options, ...others } = params
+    return { toolPolicy, launchParams: Object.keys(rest).length > 0 ? { ...others, options: rest } : others }
+  }
+
   const create: MethodHandler = async (params, caller) => {
     const ownerPluginId = await ownerPluginFor(caller)
     if (!isStructuredAgent(params.agent)) {
-      throw context.error('invalid-params', 'structured sessions support only the claude or codex agent')
+      throw context.error('invalid-params', 'structured sessions support only the claude, codex, pi or omp agent')
     }
     if (params.extraArgs !== undefined) {
       throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")
@@ -703,10 +731,20 @@ export function activate(context: PluginContext): void {
       ? undefined
       : await lifetimePlugin(params, caller)
     const agent = params.agent
+    const { toolPolicy, launchParams } = splitToolPolicy(params)
     const prompt = typeof params.prompt === 'string' ? params.prompt : undefined
     const worktree = await resolveWorktree(params.worktree, caller)
     ensureActive()
-    const resolution = await resolveStructuredLaunch(params)
+    const resolution = await resolveStructuredLaunch(launchParams)
+    let launchSettings = resolution?.launchSettings
+    if (toolPolicy === 'deny-all') {
+      launchSettings = {
+        ...(launchSettings ?? {}),
+        agent,
+        options: { ...(launchSettings?.options ?? {}), toolPolicy: { value: 'deny-all', source: 'explicit' } },
+        summary: `${launchSettings?.summary ?? AGENT_TITLES[agent]} · No tools`
+      }
+    }
     ensureActive()
     const title = typeof params.title === 'string' ? params.title : await nextTitle(worktree.id, agent)
     ensureActive()
@@ -718,8 +756,8 @@ export function activate(context: PluginContext): void {
             cwd: worktree.path,
             ...(params.prompt === undefined ? {} : { prompt: params.prompt }),
             ...(params.submitPrompt === undefined ? {} : { submitPrompt: params.submitPrompt }),
-            ...(params.model === undefined ? {} : { model: params.model }),
-            ...(params.options === undefined ? {} : { options: params.options })
+            ...(launchParams.model === undefined ? {} : { model: launchParams.model }),
+            ...(launchParams.options === undefined ? {} : { options: launchParams.options })
           })
         )
       : {}
@@ -729,7 +767,7 @@ export function activate(context: PluginContext): void {
       kind: 'structured',
       title,
       ...(background === undefined ? {} : { background }),
-      ...(resolution?.launchSettings ? { launchSettings: resolution.launchSettings } : {})
+      ...(launchSettings ? { launchSettings } : {})
     })) as Session
     if (!active) return registered
     const token: OwnerToken = { key: '', sessionId: registered.id }
@@ -788,8 +826,9 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
-      const launchOptions: StructuredLaunchOptions = {
+      const launchOptions: StructuredStartOptions = {
         ...(resolution?.structured ?? {}),
+        ...(toolPolicy === 'deny-all' ? { toolPolicy } : {}),
         env: environmentForLease(lease.env, environment)
       }
       startRunner(registered, agent, prompt, launchOptions, token)
@@ -830,10 +869,11 @@ export function activate(context: PluginContext): void {
     }
     if (!originalIsDirectory) throw context.error('conflict', `the session's folder ${old.cwd} no longer exists`)
 
-    let options: StructuredLaunchOptions
+    let options: StructuredStartOptions
     try {
       options = launchOptionsFromSnapshot(old)
     } catch (error) {
+      if (error instanceof Error && error.message === `session ${old.id} has an unreadable tool policy`) throw error
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
     const key = `${agent}:${providerSession.id}`
@@ -942,7 +982,7 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
-      const launchOptions: StructuredLaunchOptions = {
+      const launchOptions: StructuredStartOptions = {
         ...options,
         env: environmentForLease(lease.env, environment)
       }

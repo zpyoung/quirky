@@ -1,0 +1,173 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import type { ApiDescription, ContributionInfo, PluginInfo } from '@quirky/protocol'
+import { commands } from '../cli'
+import { avatarBuiltins, cleanupDaemons, startAvatarHarness, useTempAgentHome } from './daemon-support'
+
+useTempAgentHome()
+
+const PLUGIN_DIR = resolve(import.meta.dir, '..')
+const DEPENDENCIES = [
+  'quirky.worktree', 'quirky.session', 'quirky.agent-status', 'quirky.agents', 'quirky.ask', 'quirky.checks',
+  'quirky.git', 'quirky.hosting', 'quirky.structured', 'quirky.heimdall', 'quirky.notifications'
+]
+
+const NEED_ACTIONS = [
+  'allow-once',
+  'deny',
+  'confirm',
+  'redo',
+  'review-accept',
+  'review-reject',
+  'finding-dismiss',
+  'finding-valid',
+  'answer',
+  'restart',
+  'take-back',
+  'restart-to-handoff'
+]
+
+afterEach(cleanupDaemons)
+
+async function startAvatar() {
+  return startAvatarHarness(avatarBuiltins())
+}
+
+const ids = (contributions: unknown) => (contributions as { id: string }[]).map((entry) => entry.id).sort()
+
+describe('quirky.avatar as a built-in plugin', () => {
+  test('loads as a valid startup built-in with its dependencies and no error diagnostics', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    const plugins = (await client.call('plugin.list', {})) as PluginInfo[]
+    const info = plugins.find((plugin) => plugin.id === 'quirky.avatar')!
+    expect(info).toMatchObject({ source: 'builtin', activation: 'startup', apiVersion: '1.3.0', dependencies: DEPENDENCIES })
+    expect(info.diagnostics.filter((diagnostic) => diagnostic.level === 'error')).toEqual([])
+    expect(info.state).toBe('active')
+  })
+
+  test('the catalog lists its methods, event and CLI commands', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    const api = (await client.call('api.describe', {})) as ApiDescription
+    const methods = api.methods.filter((method) => method.plugin === 'quirky.avatar')
+    expect(methods.map((method) => method.name)).toEqual([
+      'quirky.avatar/eligibility',
+      'quirky.avatar/handoff',
+      'quirky.avatar/log',
+      'quirky.avatar/mandate',
+      'quirky.avatar/report',
+      'quirky.avatar/resolveNeed',
+      'quirky.avatar/setSettings',
+      'quirky.avatar/settings',
+      'quirky.avatar/sidebarStatus',
+      'quirky.avatar/status',
+      'quirky.avatar/takeBack'
+    ])
+    expect(api.events.filter((event) => event.plugin === 'quirky.avatar').map((event) => event.name)).toEqual(['quirky.avatar/changed'])
+    expect(api.cli.groups.find((group) => group.plugin === 'quirky.avatar')).toEqual({ plugin: 'quirky.avatar', words: 'avatar', aliases: [] })
+    expect(api.cli.commands.filter((command) => command.plugin === 'quirky.avatar').map((command) => command.words).sort()).toEqual([
+      'avatar handoff',
+      'avatar log',
+      'avatar report',
+      'avatar resolve-need',
+      'avatar status',
+      'avatar take-back'
+    ])
+  })
+
+  test('declares `changed` as one coalesced stream with no key', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    const events = (await client.call('plugin.contributions', { kind: 'event' } as never)) as unknown as ContributionInfo[]
+    const changed = events.find((entry) => entry.id === 'event:quirky.avatar/changed')
+    expect(changed).toMatchObject({ plugin: 'quirky.avatar', data: { coalesce: [] } })
+  })
+
+  test('declares the gate, hooks, jobs and every UI contribution', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    const contributions = async (kind: string) => ids(await client.call('plugin.contributions', { kind } as never))
+    expect(await contributions('tool-gate')).toEqual(['tool-gate:quirky.avatar/gate'])
+    expect(await contributions('launch-hook')).toContain('launch-hook:quirky.avatar/gate-hooks')
+    expect(await contributions('window-bar-item')).toEqual(['window-bar-item:quirky.avatar/pill'])
+    expect(await contributions('panel')).toEqual(['panel:quirky.avatar/panel'])
+    expect(await contributions('view')).toEqual(['view:quirky.avatar/avatar'])
+    expect(await contributions('overlay')).toEqual(['overlay:quirky.avatar/sheet'])
+    expect(await contributions('command')).toEqual(['command:quirky.avatar/handoff', 'command:quirky.avatar/open-report'])
+    expect(await contributions('settings-section')).toEqual(['settings-section:quirky.avatar/avatar'])
+    const [section] = (await client.call('plugin.contributions', { kind: 'settings-section' } as never)) as unknown as ContributionInfo[]
+    expect(section!.data.order).toBe(45)
+    expect(await contributions('setting')).toEqual(
+      [
+        'default-level', 'switch-messaging', 'switch-history-rewrite', 'switch-deploys', 'house-rules', 'allow-commands',
+        'deny-commands', 'deploy-commands', 'brain-agent', 'brain-model', 'judgment-timeout-seconds', 'agent-hooks'
+      ].map((name) => `setting:quirky.avatar/${name}`).sort()
+    )
+    const settingEntries = (await client.call('plugin.contributions', { kind: 'setting' } as never)) as unknown as ContributionInfo[]
+    expect(settingEntries.every((entry) => entry.data.hidden === true)).toBe(true)
+    const [gate] = (await client.call('plugin.contributions', { kind: 'tool-gate' } as never)) as unknown as ContributionInfo[]
+    expect(gate!.data.agents).toEqual(['claude', 'codex', 'pi', 'omp'])
+    const [panel] = (await client.call('plugin.contributions', { kind: 'panel' } as never)) as unknown as ContributionInfo[]
+    expect(panel!.data.defaultSlot).toBe('left-bottom')
+  })
+
+  test('the watchdog runs every minute and the records check every 15 seconds', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    const jobs = (await client.call('job.list', {})) as { id: string; plugin: string; intervalMs: number }[]
+    expect(jobs.find((job) => job.id === 'job:quirky.avatar/watchdog')).toMatchObject({ plugin: 'quirky.avatar', intervalMs: 60_000 })
+    expect(jobs.find((job) => job.id === 'job:quirky.avatar/records')).toMatchObject({ plugin: 'quirky.avatar', intervalMs: 15_000 })
+  })
+
+  test('methods that need no module answer through the daemon and reject bad params', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    const call = (method: string, params: Record<string, unknown> = {}) => client.call(method as never, params as never) as unknown as Promise<unknown>
+    expect(await call('quirky.avatar/settings')).toMatchObject({ defaultLevel: 'full', judgmentTimeoutSeconds: 55 })
+    await expect(call('quirky.avatar/mandate')).rejects.toMatchObject({ message: expect.stringContaining('worktreeId') })
+  })
+
+  test('accepts both finding actions at the resolveNeed method boundary', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    for (const action of ['finding-dismiss', 'finding-valid']) {
+      expect(await client.call('quirky.avatar/resolveNeed' as never, { needId: 'missing', action } as never) as unknown).toEqual({ ok: false, error: 'unknown need' })
+    }
+  })
+
+  test('reports all twelve allowed actions for an unknown resolveNeed action', async () => {
+    const client = await (await startAvatar()).connect('cli')
+    await expect(client.call('quirky.avatar/resolveNeed' as never, { needId: 'missing', action: 'not-a-need-action' } as never)).rejects.toMatchObject({
+      message: expect.stringContaining(`action must be one of ${NEED_ACTIONS.join(', ')}`)
+    })
+  })
+})
+
+describe('quirky avatar CLI module', () => {
+  test('has a handler for every declared command', () => {
+    const manifest = JSON.parse(readFileSync(join(PLUGIN_DIR, 'quirky-plugin.json'), 'utf8')) as { contributes: { 'cli-command': { id: string }[] } }
+    expect(Object.keys(commands).sort()).toEqual(manifest.contributes['cli-command'].map((command) => command.id).sort())
+    expect(manifest.contributes['cli-command'].map(({ id }) => id)).toContain('resolve-need')
+  })
+
+  test('lists all need actions in both method schemas in order', () => {
+    const manifest = JSON.parse(readFileSync(join(PLUGIN_DIR, 'quirky-plugin.json'), 'utf8')) as {
+      contributes: {
+        method: {
+          id: string
+          params?: { properties?: { action?: { enum?: string[] } } }
+          result?: {
+            properties?: {
+              needsYou?: {
+                items?: {
+                  properties?: {
+                    actions?: { items?: { enum?: string[] } }
+                  }
+                }
+              }
+            }
+          }
+        }[]
+      }
+    }
+    const report = manifest.contributes.method.find(({ id }) => id === 'report')
+    const resolveNeed = manifest.contributes.method.find(({ id }) => id === 'resolveNeed')
+    expect(report?.result?.properties?.needsYou?.items?.properties?.actions?.items?.enum).toEqual(NEED_ACTIONS)
+    expect(resolveNeed?.params?.properties?.action?.enum).toEqual(NEED_ACTIONS)
+  })
+})

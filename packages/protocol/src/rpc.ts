@@ -293,3 +293,5 @@ export const RPC_PATH = '/rpc'
 /** Agent hooks POST here: `/hook/<agent>?session=<id>` with header `x-quirky-hook-token`. */
 export const HOOK_PATH_PREFIX = '/hook/'
 export const HOOK_TOKEN_HEADER = 'x-quirky-hook-token'
+/** Blocking tool-gate requests POST here: `/gate/<agent>?session=<id>`, with the same token header as hooks. */
+export const GATE_PATH_PREFIX = '/gate/'

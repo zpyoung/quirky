@@ -27,6 +27,7 @@ import { UpdateDialog } from './UpdateDialog'
 import { useAutomationAvailability } from './useAutomationAvailability'
 import { projectionForSelection, useSidebarActivity } from './useSidebarActivity'
 import { useTree } from './useTree'
+import { useAvatarHandoff } from './useAvatarHandoff'
 import { useLoopStatus } from './useLoopStatus'
 import { CleanupDialog } from './CleanupDialog'
 import { ExternalInbox } from './ExternalInbox'
@@ -159,6 +160,7 @@ function NewSectionDialog({ context, onClose }: { context: UiPluginContext; onCl
 /** The sidebar's workspace tree with its menus, dialogs, add-project form and `ui state` report. */
 export function WorktreesSection({ context, report, requests, addProjectRequests }: Props) {
   const { repos, groups, worktrees, sessions, sessionsSettled, tags, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded } = useTree(context)
+  const handoffToAvatar = useAvatarHandoff(context)
   const pendingAsks = useWorktreeAttention(context)
   const now = useNow()
   const [layout, setLayout] = useState(() => context.getLayout())
@@ -1042,6 +1044,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
             groupBy={activeId === 'needs-you' ? 'section-project' : spec.display.groupBy}
             emptyProjects={tree.hidden.count === 0}
             onOpen={clearSelection}
+            onHandoffToAvatar={handoffToAvatar ?? undefined}
             onSelectToggle={selectToggle}
             onTagsOpen={(ids, anchor) => setTagsTarget({ ids, anchor })}
             collapsed={collapsed}
@@ -1082,7 +1085,8 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
               { label: 'Tag', onAction: () => bulkRoot.current && setTagsTarget({ ids: bulkIds, anchor: bulkRoot.current }) },
               { label: 'Section', onAction: () => setBulkMenu('section') },
               { label: 'Status', onAction: () => setBulkMenu('status') },
-              { label: 'Sleep', onAction: () => void sleepSelected() }
+              { label: 'Sleep', onAction: () => void sleepSelected() },
+              ...(handoffToAvatar ? [{ label: 'Hand off…', onAction: () => handoffToAvatar(bulkIds) }] : [])
             ]}
             onClear={clearSelection}
           />

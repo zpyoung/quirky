@@ -126,6 +126,14 @@ export type PluginHostPower = {
   readonly suspended: boolean
   /** Replays suspend synchronously if already sleeping. The disposer is idempotent. */
   subscribe(listener: HostPowerListener): () => void
+  /**
+   * Prevents idle system sleep (the display may still sleep) until the returned disposer runs.
+   * Holds are ref-counted across the host, the disposer is idempotent, and revoking the plugin releases its holds.
+   * A no-op on platforms without a native source.
+   */
+  keepAwake(reason: string): () => void
+  /** `{ onBattery: false, externalDisplay: null }` where unsupported; `externalDisplay` is null when unknown. */
+  powerState(): { onBattery: boolean; externalDisplay: boolean | null }
 }
 
 /** Trusted transports authenticate peers before admission; authorization is checked on every call. */
@@ -410,6 +418,34 @@ export type LaunchPatch = {
 
 /** Adjusts a session's launch environment, args and JSON args before the agent starts. */
 export type LaunchHook = (launch: LaunchHookInput) => LaunchPatch | void | Promise<LaunchPatch | void>
+
+/** A blocking question from an agent hook to the plugin that provides `tool-gate`. */
+export type ToolGateRequest = {
+  agent: string
+  sessionId: string
+  event: string
+  /** How long the daemon waits for the provider before answering `unavailable`. */
+  deadlineMs: number
+  /** The agent's hook payload, passed through untouched. */
+  payload: unknown
+}
+
+/**
+ * The provider's answer. `encoded` is the exact stdout text the agent must see, or null when there
+ * is none; `exitCode` defaults to 0 and, when present, must be an integer from 0 to 255. A `deny`
+ * accepts `encoded: null` or text containing a character other than ASCII space, tab, carriage
+ * return or newline; `allow` and `passthrough` may use an empty string. The daemon normalizes an
+ * `unavailable` answer to `encoded: null` with no `exitCode`.
+ */
+export type ToolGateDecision = {
+  decision: 'allow' | 'deny' | 'passthrough' | 'unavailable'
+  reason: string
+  encoded: string | null
+  exitCode?: number
+}
+
+/** Answers one tool-gate request; `signal` aborts when the deadline passes. */
+export type ToolGateProvider = (request: ToolGateRequest, signal: AbortSignal) => Promise<ToolGateDecision>
 
 export type JobRunStatus = 'running' | 'ok' | 'failed' | 'timed-out'
 

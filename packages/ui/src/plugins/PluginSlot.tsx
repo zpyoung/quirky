@@ -17,6 +17,7 @@ export function PluginSlot({ id, input }: Props) {
     ...(state.model?.sidebarSections ?? []),
     ...(state.model?.activityItems ?? []),
     ...(state.model?.statusBars ?? []),
+    ...(state.model?.windowBarItems ?? []),
     ...(state.model?.panels ?? []),
     ...(state.model?.settingsSections ?? []),
     ...(state.model?.views ?? []),
@@ -41,7 +42,7 @@ export function PluginSlot({ id, input }: Props) {
     return unmount
   }, [host, id, input, plugin, module, retry])
 
-  const statusBar = entry?.kind === 'status-bar'
+  const statusBar = entry?.kind === 'status-bar' || entry?.kind === 'window-bar-item'
   return (
     <section
       className={`plugin-slot${statusBar ? ' plugin-status-bar-slot' : ''}`}

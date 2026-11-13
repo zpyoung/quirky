@@ -637,6 +637,14 @@
               "enum": ["review", "creation"],
               "description": "Require a fresh validated GitHub review or creation-head target immediately before pushing."
             },
+            "expectedBranch": {
+              "type": "string",
+              "description": "With purpose, require both the validated target's local and destination branch to match this branch."
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "Require the validated target's local HEAD to match this full commit id."
+            },
             "worktree": {
               "type": "string",
               "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."

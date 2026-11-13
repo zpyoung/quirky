@@ -46,9 +46,10 @@ export class CodexConnection {
     executable: string,
     cwd: string,
     env: NodeJS.ProcessEnv,
-    private readonly handlers: CodexConnectionHandlers
+    private readonly handlers: CodexConnectionHandlers,
+    serverArgs: readonly string[] = []
   ) {
-    this.child = spawn(executable, ['app-server'], {
+    this.child = spawn(executable, ['app-server', ...serverArgs], {
       cwd,
       env,
       stdio: 'pipe',
