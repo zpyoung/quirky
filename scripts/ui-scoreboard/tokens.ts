@@ -295,6 +295,19 @@ function dynamicVarExpressions(node: ts.TemplateExpression): DynamicVarExpressio
 }
 
 function dynamicCustomPropertyExpressions(node: ts.TemplateExpression): ts.Expression[] {
+  const parent = node.parent
+  let propertyNamePosition =
+    (ts.isVariableDeclaration(parent) && parent.initializer === node) ||
+    (ts.isComputedPropertyName(parent) && parent.expression === node) ||
+    (ts.isElementAccessExpression(parent) && parent.argumentExpression === node)
+  if (ts.isCallExpression(parent) && parent.arguments.includes(node)) {
+    const callee = parent.expression
+    const method = ts.isPropertyAccessExpression(callee) ? callee.name.text
+      : ts.isElementAccessExpression(callee) && callee.argumentExpression && ts.isStringLiteralLike(callee.argumentExpression)
+        ? callee.argumentExpression.text : null
+    propertyNamePosition ||= method === 'setProperty' || method === 'getPropertyValue' || method === 'removeProperty'
+  }
+  if (!propertyNamePosition) return []
   const parts = templateParts(node)
   const expressions: ts.Expression[] = []
   for (let index = 0; index < node.templateSpans.length; index++) {

@@ -284,6 +284,30 @@ describe('compatibility token scanning', () => {
     expect(scanTokens(source('plugins/acme.app/src/bem.tsx', 'const View = () => <span className={`git-row__status git-row__status--${tone}`} />'))).toEqual([])
   })
 
+  test.each([
+    ['throw', 'throw new UsageError(`--${name} must be a number`);'],
+    ['map', 'flags.map((name) => `--${name}`);'],
+    ['array', "['pr', 'merge', `--${method}`];"],
+    ['call', 'ctx.fail(`could not read --${name}: ${reason}`);'],
+    ['arrow', 'const flag = (name) => `--${name}`;'],
+    ['jsx', 'const View = () => <span className={`--${name}`} />;']
+  ])('ignores dynamic flag text in a %s position', (_position, content) => {
+    expect(scanTokens(source('plugins/acme.app/src/flag-text.tsx', content))).toEqual([])
+  })
+
+  test.each([
+    ['element access', 'vars[`--${token}`];'],
+    ['computed property', '({ [`--${token}`]: value });'],
+    ['setProperty', 'style.setProperty(`--${token}`, value);'],
+    ['getPropertyValue', 'style.getPropertyValue(`--${token}`);'],
+    ['computed method', 'style["setProperty"](`--${token}`, value);'],
+    ['removeProperty', 'style.removeProperty(`--${token}`);']
+  ])('rejects a dynamic custom-property name in %s', (_position, content) => {
+    expect(scanTokens(source('plugins/acme.app/src/property-name.ts', content))).toContainEqual(
+      expect.objectContaining({ code: 'unresolved-style-token', message: 'Unresolved dynamic custom-property name' })
+    )
+  })
+
   test('treats arbitrary JavaScript escape spellings as unresolved', () => {
     const content = "const style = 'var(\\u002d\\x2dcompat-px-40)'"
     const evidence = scanTokens(source('plugins/acme.app/src/arbitrary-escape.ts', content))
