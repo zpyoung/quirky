@@ -2,12 +2,18 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { encodePtyJson, type PtySessionInfo } from '@quirky/protocol'
+import { decodeTerminalFrame, encodePtyData, encodePtyJson, type PluginCaller, type PluginContext, type PtySessionInfo, type PtySnapshot } from '@quirky/protocol'
 import { RuntimeSessionAuthority } from '../src/session-authority'
 import { Store } from '../src/store'
 import { createPtyApi } from '../src/plugins/pty-api'
 import { PtyClient } from '../src/pty-client'
 import type { ClientConn } from '../src/types'
+import { mock } from 'node:test'
+import { openStream, onConnectionClose } from '../src/plugins/streams'
+import { WebSocketOutput } from '../src/websocket-output'
+import { TerminalService } from '../../../plugins/quirky.terminal/src/terminal'
+import { DeliveryRunner } from '../../../plugins/quirky.agents/src/delivery'
+import { validateEntry } from '../../../plugins/quirky.agents/src/core/entry'
 
 function stubClient(options: { failUnsubscribe?: boolean } = {}) {
   const requests: Array<{ type: string; sessionId: string }> = []
@@ -204,7 +210,7 @@ describe('PTY subscription holds', () => {
   })
 })
 
-function lagClient() {
+function lagClient(handle?: (type: string, sessionId: string) => unknown) {
   const client = new PtyClient({ home: '/isolated' })
   const requests: Array<{ type: string; sessionId: string; id: number }> = []
   const internal = client as unknown as {
@@ -216,6 +222,7 @@ function lagClient() {
   const request = (type: string, params: { sessionId: string }): Promise<unknown> => {
     const id = nextId++
     requests.push({ type, sessionId: params.sessionId, id })
+    if (handle) return Promise.resolve(handle(type, params.sessionId))
     if (type !== 'subscribe') return Promise.resolve({})
     const pending = Promise.withResolvers<unknown>()
     internal.pending.set(id, { resolve: pending.resolve, reject: pending.reject, timer: undefined })
@@ -226,6 +233,9 @@ function lagClient() {
     const bytes = Buffer.concat(messages.map((message) => encodePtyJson(message)))
     internal.handleChunk({ end() { throw new Error('invalid fixture frame') } }, bytes)
   }
+  const data = (sessionId: string, text: string) => {
+    internal.handleChunk({ end() {} }, encodePtyData(sessionId, new TextEncoder().encode(text)))
+  }
   const response = (index: number, ok = true) => ({
     id: requests[index]!.id,
     ok,
@@ -233,7 +243,7 @@ function lagClient() {
   })
   const count = (type: string, sessionId?: string) =>
     requests.filter((entry) => entry.type === type && (sessionId === undefined || entry.sessionId === sessionId)).length
-  return { client, input, response, count, requests }
+  return { client, input, data, response, count, requests }
 }
 
 describe('PTY output lag invalidation', () => {
@@ -339,6 +349,158 @@ describe('PTY output lag invalidation', () => {
     expect(() => b.api.onLagged(() => {})).toThrow('no longer active')
     a.revoke()
   })
+})
+
+test('host lag joins deferred desktop markers, mobile snapshots and agent readiness on one client', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+  const snapshot = Promise.withResolvers<PtySnapshot>()
+  const takingSnapshot = Promise.withResolvers<void>()
+  const agentSubscribed = Promise.withResolvers<void>()
+  const phoneReset = Promise.withResolvers<void>()
+  let recovering = false
+  let recoverySubscribes = 0
+  const ready = '\x1b[?2004h\x1b[?25h'
+  const host = lagClient((type) => {
+    if (type === 'subscribe') {
+      if (recovering && ++recoverySubscribes === 2) agentSubscribed.resolve()
+      return {
+        replay: recovering ? Buffer.from(ready).toString('base64') : '',
+        offset: recovering ? 100 : 0,
+        historyCursor: null, cols: 80, rows: 24, shellState: 'unsupported', live: true
+      }
+    }
+    if (type === 'snapshot') {
+      takingSnapshot.resolve()
+      return snapshot.promise
+    }
+    if (type === 'list') return [{ sessionId: 'A', alive: true }]
+    return {}
+  })
+  const writes: string[] = []
+  host.client.sendData = (_id, bytes) => { writes.push(new TextDecoder().decode(bytes)) }
+  const terminal = createPtyApi(host.client, 'quirky.terminal')
+  const agents = createPtyApi(host.client, 'quirky.agents')
+  const context = {
+    pty: terminal.api,
+    error: (_kind: string, message: string) => new Error(message),
+    log() {},
+    emit: () => true,
+    call: async () => ({
+      id: 'A', kind: 'terminal', agent: 'shell', worktreeId: 'wt_main', cwd: '/isolated',
+      title: 'Shell', status: 'running', createdAt: 1, lastActivityAt: 1,
+      exitCode: null, exitSignal: null, exitCause: null, restorable: false
+    })
+  } as unknown as PluginContext
+  const service = new TerminalService(context, async () => new Map())
+  const removeData = terminal.api.onData(service.onData)
+  const removeLag = terminal.api.onLagged(service.onLagged)
+  const peers: Array<{ conn: ClientConn; output: WebSocketOutput }> = []
+  const peer = (id: number, mobile: boolean) => {
+    let buffered = 0
+    let blocked = false
+    const frames: Uint8Array[] = []
+    const output = new WebSocketOutput({
+      readyState: 1,
+      getBufferedAmount: () => buffered,
+      send(text) {
+        if (blocked) return 0
+        buffered += Buffer.byteLength(text) + 2
+        return 1
+      },
+      sendBinary(bytes) {
+        if (blocked) return 0
+        frames.push(bytes.slice())
+        buffered += bytes.length + (bytes.length < 126 ? 2 : 4)
+        const frame = decodeTerminalFrame(bytes)
+        if (mobile && frame?.kind === 'output') phoneReset.resolve()
+        return 1
+      }
+    }, () => { throw new Error('unexpected bounded output failure') })
+    const conn: ClientConn = {
+      id, role: mobile ? 'mobile' : 'ui', subscribed: false, closed: false, transport: 'websocket',
+      streams: new Map(), streamClosers: new Map(), nextStreamId: 1,
+      sendText: (text) => output.sendText(text),
+      sendBinary: (bytes) => output.sendBinary(bytes),
+      closeStreamOutput: (streamId) => output.closeStream(streamId)
+    }
+    const caller: PluginCaller = {
+      role: mobile ? 'mobile' : 'ui',
+      ...(mobile ? { deviceId: 'fixture-phone' } : {}),
+      connection: {
+        id, transport: 'websocket',
+        openStream: () => openStream(conn),
+        onClose: (callback) => onConnectionClose(conn, callback)
+      }
+    }
+    peers.push({ conn, output })
+    return {
+      conn, caller, output, frames,
+      block() { output.sendText('busy'); blocked = true },
+      drain() { blocked = false; buffered = 0; output.drain() }
+    }
+  }
+  const desktop = peer(10, false)
+  const phone = peer(11, true)
+  try {
+    const attached = await service.attach({ session: 'A', cols: 80, rows: 24 }, desktop.caller)
+    const phoneAttached = await service.attach({ session: 'A', cols: 80, rows: 24 }, phone.caller)
+    const checked = validateEntry('quirky.agents', 'fixture', {
+      label: 'Fixture', detect: 'fixture', prompt: 'stdin-after-start',
+      readySignal: 'render-cursor-after-bracketed-paste', readyTimeoutMs: 2_000
+    })
+    if (!checked.ok) throw new Error(checked.error)
+    const runner = new DeliveryRunner({ pty: agents.api, onSessionGone: () => () => {} })
+    const delivery = runner.deliver('A', checked.entry, 'one prompt', false)
+    await Promise.resolve()
+    desktop.block()
+    recovering = true
+    host.input({ type: 'lagged', sessionId: 'A' })
+    await takingSnapshot.promise
+    expect(desktop.frames).toEqual([])
+    expect(phone.frames).toEqual([])
+    expect(host.count('unsubscribe')).toBe(0)
+    host.data('A', 'tail')
+    mock.timers.tick(500)
+    await agentSubscribed.promise
+    expect(await delivery).toBe('pasted')
+    expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~'])
+    expect(host.count('unsubscribe')).toBe(0)
+    snapshot.resolve({
+      ansi: 'screen', offset: 100, cols: 80, rows: 24, cursor: { x: 0, y: 0 },
+      modes: { alternateScreen: false, bracketedPaste: false, mouseTracking: false, applicationCursor: false },
+      cwd: '/isolated', title: null, shellState: 'unsupported'
+    })
+    await phoneReset.promise
+    const received = phone.frames.map((bytes) => decodeTerminalFrame(bytes))
+    expect(received.every((frame) => frame?.kind === 'output' && frame.streamId === phoneAttached.streamId)).toBe(true)
+    expect(received.map((frame) => frame?.kind === 'output' ? new TextDecoder().decode(frame.bytes) : '').join(''))
+      .toBe('\x18\x1b\\\x1bc\x1b[3Jscreen' + 'tail')
+    desktop.drain()
+    expect(desktop.frames.map((bytes) => decodeTerminalFrame(bytes)))
+      .toEqual([{ kind: 'lagged', streamId: attached.streamId }])
+    service.shutdown()
+    for (const { conn, output } of peers) {
+      conn.closed = true
+      for (const close of [...conn.streamClosers.values()]) close()
+      output.dispose()
+      expect(conn.streamClosers.size).toBe(0)
+    }
+    const sends = phone.frames.length + desktop.frames.length
+    const requests = host.requests.length
+    mock.timers.tick(10_000)
+    host.data('A', 'late')
+    expect(phone.frames.length + desktop.frames.length).toBe(sends)
+    expect(host.requests.length).toBe(requests)
+    expect(host.count('unsubscribe', 'A')).toBe(1)
+  } finally {
+    service.shutdown()
+    removeData()
+    removeLag()
+    terminal.revoke()
+    agents.revoke()
+    for (const { output } of peers) output.dispose()
+    mock.timers.reset()
+  }
 })
 
 describe('PTY input fan-out', () => {
