@@ -15,3 +15,61 @@ export type WorktreeCleanupContext = {
   volatile: boolean | null
   remoteConnected: boolean | null
 }
+export type ReferenceItem = { id: string; host: string; project: string; sigil: '#' | '!'; number: number }
+export type ReferenceSearchQuery =
+  | { kind: 'url'; url: string; item: string | null }
+  | { kind: 'key'; key: string }
+export type ReferenceSearchLink = {
+  source: 'reference' | 'linkedPR' | 'linkedIssue'
+  referenceId: string | null
+  url: string
+  label: string
+  item: string | null
+}
+export type ReferenceSessionLiveness = 'live' | 'unverifiable' | 'exited'
+export type ReferenceSearchSession = {
+  id: string
+  name: string | null
+  title: string
+  agent: string
+  kind: string
+  status: string
+  liveness: ReferenceSessionLiveness
+  linked: boolean
+  lastActivityAt: number
+}
+export type ReferenceSearchMatch = {
+  worktree: {
+    id: string
+    repoId: string
+    name: string
+    path: string | null
+    kind: string
+    archivedAt: number | null
+    lastActivityAt: number
+    state: 'present' | 'stale'
+    staleReason: 'folder-missing' | 'folder-replaced' | 'project-unregistered' | null
+  }
+  links: ReferenceSearchLink[]
+  linkTotal: number
+  sessions: ReferenceSearchSession[] | null
+  sessionTotal: number | null
+}
+export type ReferenceSearchEvidence = {
+  sessions: 'listed' | 'unavailable'
+  sessionsReason: string | null
+  processes: 'listed' | 'unavailable'
+  processesReason: string | null
+  skippedSessions: number
+}
+export type ReferenceSearchResult = {
+  query: ReferenceSearchQuery
+  items: ReferenceItem[]
+  ambiguous: boolean
+  matches: ReferenceSearchMatch[]
+  total: number
+  truncated: boolean
+  archivedOmitted: number
+  stale: number
+  evidence: ReferenceSearchEvidence
+}

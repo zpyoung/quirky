@@ -1,5 +1,4 @@
 import { basename, isAbsolute, resolve } from 'node:path'
-import type { Worktree } from '@quirky/protocol'
 import { contains, pathForms } from './paths'
 
 /** A selector that cannot be evaluated at all, as opposed to one that matches nothing. */
@@ -7,6 +6,9 @@ export class SelectorSyntaxError extends Error {}
 
 /** What `current` and relative `path:` selectors are read against. */
 export type CallerIdentity = { cwd?: string; worktreeId?: string }
+
+/** The fields a selector reads; a null path never matches a folder name, `path:` or cwd. */
+export type SelectableWorktree = { id: string; name: string; path: string | null; branch: string | null }
 
 /** The one ID a selector can only mean, or null when it needs the full search; never throws. */
 export function selectedId(selector: string, identity: CallerIdentity = {}): string | null {
@@ -23,15 +25,16 @@ export function selectedId(selector: string, identity: CallerIdentity = {}): str
  * identity on disk, which a display name doesn't hide). Folder workspaces of one project share a
  * folder, so the exact name goes first or the primary's own name would turn ambiguous.
  */
-function named(worktrees: Worktree[], text: string): Worktree[] {
+function named<T extends SelectableWorktree>(worktrees: T[], text: string): T[] {
   const byName = worktrees.filter((worktree) => worktree.name === text)
-  return byName.length > 0 ? byName : worktrees.filter((worktree) => basename(worktree.path) === text)
+  return byName.length > 0 ? byName : worktrees.filter((worktree) => worktree.path !== null && basename(worktree.path) === text)
 }
 
-function innermost(worktrees: Worktree[], path: string): Worktree[] {
+function innermost<T extends SelectableWorktree>(worktrees: T[], path: string): T[] {
   const targets = pathForms(path)
-  let best: { worktree: Worktree; length: number } | null = null
+  let best: { worktree: T; length: number } | null = null
   for (const worktree of worktrees) {
+    if (worktree.path === null) continue
     for (const form of pathForms(worktree.path)) {
       if (targets.some((target) => contains(form, target)) && (!best || form.length > best.length)) {
         best = { worktree, length: form.length }
@@ -41,7 +44,7 @@ function innermost(worktrees: Worktree[], path: string): Worktree[] {
   return best ? [best.worktree] : []
 }
 
-function current(worktrees: Worktree[], identity: CallerIdentity): Worktree[] {
+function current<T extends SelectableWorktree>(worktrees: T[], identity: CallerIdentity): T[] {
   if (identity.worktreeId) return worktrees.filter((worktree) => worktree.id === identity.worktreeId)
   if (identity.cwd) return innermost(worktrees, resolve(identity.cwd))
   return []
@@ -54,7 +57,7 @@ function current(worktrees: Worktree[], identity: CallerIdentity): Worktree[] {
  * falls back to workspaces whose folder has that name, so a display name doesn't hide it. Throws
  * SelectorSyntaxError for an empty selector or value, or a relative `path:` with no cwd to read it against.
  */
-export function matchWorktrees(worktrees: Worktree[], selector: string, identity: CallerIdentity = {}): Worktree[] {
+export function matchWorktrees<T extends SelectableWorktree>(worktrees: T[], selector: string, identity: CallerIdentity = {}): T[] {
   const text = selector.trim()
   if (text === '') throw new SelectorSyntaxError('selector must not be empty')
   if (text === 'current' || text === 'active') return current(worktrees, identity)

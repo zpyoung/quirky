@@ -1,5 +1,6 @@
 import type { CliArgs, CliContext, CliModule, ProjectGroup, Worktree, WorktreeCreateResult, WorktreeRemoveResult, WorkspaceOriginView } from '@quirky/protocol'
 import type { CleanupCandidate, CleanupRemovalResult, CleanupSelection, StockWorktreeOptions, WorktreeSleepState } from './src/control-types'
+import type { ReferenceSearchResult } from './src/parity-types'
 
 const worktreeRecord = (ctx: CliContext, worktree: Worktree) =>
   ctx.format.record([
@@ -221,6 +222,48 @@ function vmLifecycleParams(args: CliArgs, ctx: CliContext): Record<string, unkno
   const instanceId = stringFlag(args, 'instance')
   if (instanceId === undefined || instanceId === '') throw ctx.usage('--instance must name the exact instanceId from vm-list or vm-show')
   return { vm: args.positionals[0], instanceId }
+}
+
+function referenceSearchText(result: ReferenceSearchResult): string {
+  const target = result.query.kind === 'key' ? result.query.key : result.query.item ?? result.query.url
+  const lines = [result.total === 0
+    ? `no worktree is linked to ${target}`
+    : `${result.total} worktree${result.total === 1 ? '' : 's'} linked to ${target}`]
+  if (result.archivedOmitted > 0) {
+    lines.push(`${result.archivedOmitted} archived worktree${result.archivedOmitted === 1 ? '' : 's'} not shown; pass --include-archived`)
+  }
+  if (result.total === 0) return lines.join('\n')
+  if (result.stale > 0) {
+    lines.push(result.stale === 1
+      ? '1 match is stale; its folder or project is gone or replaced'
+      : `${result.stale} matches are stale; their folders or projects are gone or replaced`)
+  }
+  if (result.ambiguous) lines.push(`ambiguous: ${target} matches ${result.items.length} items: ${result.items.map((item) => item.id).join(', ')}`)
+  if (result.truncated) lines.push(`showing ${result.matches.length} of ${result.total} worktrees; raise --limit (max 200)`)
+  if (result.evidence.sessions === 'unavailable') lines.push(`sessions unavailable: ${result.evidence.sessionsReason}`)
+  if (result.evidence.processes === 'unavailable') lines.push(`process liveness unverifiable: ${result.evidence.processesReason}`)
+  for (const match of result.matches) {
+    const worktree = match.worktree
+    const state = worktree.state === 'present' ? 'present' : `stale: ${worktree.staleReason}`
+    lines.push('', `${worktree.name}  ${worktree.id}  ${state}  ${worktree.path ?? '-'}${worktree.archivedAt === null ? '' : '  archived'}`)
+    for (const link of match.links) {
+      const kind = link.source === 'linkedPR' ? '(pull request) ' : link.source === 'linkedIssue' ? '(issue) ' : ''
+      lines.push(`  link     ${kind}${link.label}  ${link.url}`)
+    }
+    const extraLinks = match.linkTotal - match.links.length
+    if (extraLinks > 0) lines.push(`  ${extraLinks} more link${extraLinks === 1 ? '' : 's'} not shown (${match.linkTotal} total)`)
+    if (match.sessions === null) {
+      lines.push('  sessions unknown')
+    } else {
+      if (match.sessions.length === 0) lines.push('  no sessions')
+      for (const session of match.sessions) {
+        lines.push(`  session  ${session.id}  ${session.agent}  ${session.liveness}  linked: ${session.linked ? 'yes' : 'no'}`)
+      }
+      const extraSessions = (match.sessionTotal ?? 0) - match.sessions.length
+      if (extraSessions > 0) lines.push(`  ${extraSessions} more session${extraSessions === 1 ? '' : 's'} not shown (${match.sessionTotal} total)`)
+    }
+  }
+  return lines.join('\n')
 }
 
 const named: CliModule['commands'] = {
@@ -640,6 +683,20 @@ const named: CliModule['commands'] = {
       : 'no linked references')
   },
 
+  async 'find-reference'(args, ctx) {
+    const query = args.positionals[0]
+    if (query === undefined) throw ctx.usage('usage: quirky worktree find-reference <query>')
+    const params: Record<string, unknown> = { query }
+    for (const flag of ['worktree', 'repo']) {
+      const value = stringFlag(args, flag)
+      if (value !== undefined) params[flag] = value
+    }
+    if (args.flags['include-archived'] !== undefined) params.includeArchived = args.flags['include-archived']
+    if (args.flags.limit !== undefined) params.limit = args.flags.limit
+    const result = await ctx.call('quirky.worktree/findReferences', params) as ReferenceSearchResult
+    ctx.out.result(result, () => referenceSearchText(result))
+  },
+
   async 'link-reference'(args, ctx) {
     const [worktree] = args.positionals as [string]
     const url = stringFlag(args, 'url')
@@ -651,8 +708,13 @@ const named: CliModule['commands'] = {
 
   async 'unlink-reference'(args, ctx) {
     const [worktree, reference] = args.positionals as [string, string]
-    const result = await ctx.call('quirky.worktree/unlinkReference', { worktree, reference })
-    ctx.out.result(result, () => `unlinked ${reference}`)
+    let key: 'reference' | 'url' = 'reference'
+    try {
+      const url = new URL(reference)
+      if (url.protocol === 'http:' || url.protocol === 'https:') key = 'url'
+    } catch {}
+    const result = await ctx.call('quirky.worktree/unlinkReference', { worktree, [key]: reference }) as { ok: true; removed: boolean }
+    ctx.out.result(result, () => result.removed ? `unlinked ${reference}` : `${reference} was not linked`)
   },
 
   async archive(args, ctx) {

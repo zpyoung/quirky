@@ -137,6 +137,41 @@ test('an incompatible nearest main profile falls back to the older compatible an
   expect(JSON.parse(readFileSync(join(out, 'baseline.json'), 'utf8')).commit).toBe(base)
   expect(readSpeedEvidence(out, newHead)).not.toContain('not measured:')
 })
+test('a version-2 report skips the nearest valid legacy baseline without losing medians', async () => {
+  const { cwd, base, head } = repo()
+  const v1 = report(head, 51)
+  const current = {
+    ...v1,
+    profile: { ...v1.profile, workloadVersion: 2, compositor: 'software' },
+  } as unknown as SpeedReport
+  const out = stage(current)
+  const gh = async (args: string[]) => {
+    const endpoint = args.find(arg => arg.includes('/actions/runs/'))
+    if (endpoint) {
+      return JSON.stringify({ id: 7, event: 'push', path: '.github/workflows/tests.yml', head_branch: 'main', head_sha: base, repository: { id: 10 }, head_repository: { id: 10 } })
+    }
+    return JSON.stringify({ id: 3, name: `speed-baseline-${base}`, expired: false, created_at: '2026-11-12T00:00:00Z', workflow_run: { id: 7, repository_id: 10, head_repository_id: 10, head_branch: 'main', head_sha: base } })
+  }
+  const download = async (_args: string[], dest: string) => {
+    const source = temp()
+    writeFileSync(join(source, 'report.json'), JSON.stringify(report(base)))
+    expect(Bun.spawnSync(['zip', '-q', dest, 'report.json'], { cwd: source }).exitCode).toBe(0)
+  }
+
+  const code = await runCi(['compare', '--current', join(out, 'report.json'), '--out', out, '--event', 'pull_request', '--head', head], {
+    cwd, env: { GITHUB_REPOSITORY: 'acme/quirky' }, gh, download, err: () => {},
+  })
+  const comparison = JSON.parse(readFileSync(join(out, 'comparison.json'), 'utf8'))
+  const summary = readFileSync(join(out, 'summary.md'), 'utf8')
+  expect(code).toBe(0)
+  expect(comparison.status).toBe('unavailable')
+  expect(comparison.reason).toBe('no qualifying compatible main baseline in the first 500 ancestors')
+  expect(summary).toContain('not compared: no qualifying compatible main baseline in the first 500 ancestors')
+  for (const metric of METRICS) expect(summary).toContain(`| ${metric} | ${metric === 'echo' ? 51 : 10} | 20 |`)
+  expect(summary).not.toContain('not measured:')
+  expect(readSpeedEvidence(out, head)).not.toContain('not measured:')
+})
+
 test('runCi carries a report-correlated miss from an external current directory through the Tests evidence reader', async () => {
   const { cwd, head } = repo()
   const current = report(head, 51)

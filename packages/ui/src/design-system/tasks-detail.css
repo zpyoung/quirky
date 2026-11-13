@@ -11,14 +11,14 @@
   display: grid;
   gap: var(--ui-space-16);
   margin-inline: auto;
-  max-width: var(--compat-px-720);
+  max-width: 45rem;
   padding: var(--ui-space-16);
   width: 100%;
 }
 
 .quirky-tasks-issue--empty {
   align-content: center;
-  min-height: var(--compat-px-320);
+  min-height: 20rem;
 }
 
 .quirky-tasks-issue__toolbar,
@@ -82,7 +82,7 @@
 }
 
 .quirky-tasks-issue__title-group {
-  flex: 1 1 var(--compat-px-280);
+  flex: 1 1 17.5rem;
   min-width: 0;
 }
 
@@ -150,7 +150,7 @@
 
 .quirky-tasks-issue__field {
   display: grid;
-  flex: 0 1 var(--compat-px-180);
+  flex: 0 1 11.25rem;
   gap: var(--ui-space-4);
 }
 
@@ -164,18 +164,18 @@
 }
 
 .quirky-tasks-issue__labels {
-  flex: 1 1 var(--compat-px-320);
+  flex: 1 1 20rem;
 }
 
 .quirky-tasks-issue__labels > .ui-text-field,
 .quirky-tasks-issue__assignees > .ui-text-field {
-  flex: 0 1 var(--compat-px-180);
+  flex: 0 1 11.25rem;
   min-width: 0;
 }
 
 .quirky-tasks-issue__assignee-section {
   display: grid;
-  flex: 1 1 var(--compat-px-280);
+  flex: 1 1 17.5rem;
   gap: var(--ui-space-6);
   min-width: 0;
 }
@@ -244,7 +244,7 @@
 .quirky-tasks-new-issue__collections {
   display: grid;
   gap: var(--ui-space-12);
-  grid-template-columns: repeat(auto-fit, minmax(var(--compat-px-220), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(13.75rem, 1fr));
 }
 
 .quirky-tasks-new-issue__fieldset,
@@ -263,7 +263,7 @@
 .quirky-tasks-new-issue__choices {
   display: grid;
   gap: var(--ui-space-6);
-  max-height: var(--compat-px-160);
+  max-height: 10rem;
   overflow: auto;
 }
 
@@ -390,7 +390,7 @@
 }
 
 .quirky-tasks-markdown-composer__image-input .ui-text-field {
-  flex: 1 1 var(--compat-px-220);
+  flex: 1 1 13.75rem;
   min-width: 0;
 }
 
@@ -412,7 +412,7 @@
 .quirky-tasks-markdown-composer__preview {
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-control);
-  min-height: var(--compat-px-60);
+  min-height: 3.75rem;
   overflow-wrap: anywhere;
   padding: var(--ui-space-12);
 }
@@ -466,7 +466,7 @@
 }
 
 .quirky-tasks-project-picker__add .ui-text-field {
-  flex: 1 1 var(--compat-px-280);
+  flex: 1 1 17.5rem;
   min-width: 0;
 }
 
@@ -480,7 +480,7 @@
 }
 
 .quirky-tasks-projects__choice {
-  flex: 1 1 var(--compat-px-220);
+  flex: 1 1 13.75rem;
   justify-content: flex-start;
   min-width: 0;
   text-align: left;
@@ -513,8 +513,8 @@
 }
 
 .quirky-tasks-projects__query .ui-text-field {
-  flex: 1 1 var(--compat-px-240);
-  max-width: var(--compat-px-520);
+  flex: 1 1 15rem;
+  max-width: 32.5rem;
   min-width: 0;
 }
 
@@ -537,7 +537,7 @@
   display: grid;
   gap: var(--ui-space-6);
   grid-template-columns: auto 1fr;
-  min-width: var(--compat-px-160);
+  min-width: 10rem;
 }
 
 .quirky-tasks-projects__column-option input[type='range'] {
@@ -569,7 +569,7 @@
 .quirky-tasks-projects__skeleton {
   background: var(--ui-rail);
   border-radius: var(--ui-radius-mark);
-  height: var(--compat-px-30);
+  height: 1.875rem;
 }
 
 .quirky-tasks-projects__table-scroll {
@@ -608,14 +608,14 @@
 }
 
 .quirky-tasks-project-guidance__form .ui-text-field {
-  flex: 1 1 var(--compat-px-280);
+  flex: 1 1 17.5rem;
   min-width: 0;
 }
 
 .quirky-tasks-project-preview {
   display: grid;
   gap: var(--ui-space-8);
-  max-height: var(--compat-px-520);
+  max-height: 32.5rem;
   min-width: 0;
   overflow: auto;
 }
@@ -663,7 +663,7 @@
 }
 
 .quirky-tasks-project-table__actions-column {
-  width: var(--compat-px-170);
+  width: 10.625rem;
 }
 
 .quirky-tasks-project-table th,
@@ -724,7 +724,7 @@
 }
 
 .quirky-tasks-project-table__cell {
-  max-width: var(--compat-px-720);
+  max-width: 45rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -765,7 +765,7 @@
 }
 
 .quirky-tasks-projects__multi-select {
-  max-width: var(--compat-px-220);
+  max-width: 13.75rem;
 }
 
 .quirky-tasks-projects__inline-trigger {
@@ -784,7 +784,7 @@
 }
 
 .quirky-tasks-projects__inline-input {
-  width: calc(var(--compat-px-136) + var(--compat-px-4));
+  width: calc(8.5rem + var(--ui-space-4));
 }
 
 .quirky-tasks-project-board__fallback {
@@ -806,7 +806,7 @@
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-control);
   display: flex;
-  flex: 0 0 calc(var(--compat-px-240) + var(--compat-px-32));
+  flex: 0 0 17rem;
   flex-direction: column;
   gap: var(--ui-space-8);
   min-width: 0;
@@ -854,14 +854,14 @@
 .quirky-tasks-project-board__avatar {
   align-items: center;
   border: var(--ui-border-width) solid var(--ui-border);
-  border-radius: var(--compat-px-999);
+  border-radius: 50%;
   display: inline-flex;
-  flex: 0 0 var(--compat-px-24);
+  flex: 0 0 var(--ui-space-24);
   font-size: var(--ui-font-label);
-  height: var(--compat-px-24);
+  height: var(--ui-space-24);
   justify-content: center;
   overflow: hidden;
-  width: var(--compat-px-24);
+  width: var(--ui-space-24);
 }
 
 .quirky-tasks-project-board__avatar img {
@@ -901,13 +901,13 @@
 }
 
 .quirky-tasks-project-roadmap__track {
-  min-width: calc(var(--compat-px-280) + var(--ui-space-16) + var(--ui-space-4) + var(--roadmap-total-width));
-  width: calc(var(--compat-px-280) + var(--ui-space-16) + var(--ui-space-4) + var(--roadmap-total-width));
+  min-width: calc(17.5rem + var(--ui-space-16) + var(--ui-space-4) + var(--roadmap-total-width));
+  width: calc(17.5rem + var(--ui-space-16) + var(--ui-space-4) + var(--roadmap-total-width));
 }
 
 .quirky-tasks-project-roadmap__grid {
   display: grid;
-  grid-template-columns: calc(var(--compat-px-280) + var(--ui-space-16) + var(--ui-space-4)) var(--roadmap-total-width);
+  grid-template-columns: calc(17.5rem + var(--ui-space-16) + var(--ui-space-4)) var(--roadmap-total-width);
 }
 
 .quirky-tasks-project-roadmap__grid--header {
@@ -946,7 +946,7 @@
 
 .quirky-tasks-project-roadmap__row {
   border-bottom: var(--ui-border-width) solid var(--ui-border);
-  min-height: var(--compat-px-38);
+  min-height: 2.375rem;
 }
 
 .quirky-tasks-project-roadmap__item {
@@ -968,7 +968,7 @@
     var(--ui-transparent) 0 calc(var(--roadmap-tick-width) - var(--ui-border-width)),
     var(--ui-border) calc(var(--roadmap-tick-width) - var(--ui-border-width)) var(--roadmap-tick-width)
   );
-  min-height: var(--compat-px-38);
+  min-height: 2.375rem;
   position: relative;
   width: var(--roadmap-total-width);
 }
@@ -990,22 +990,22 @@
 .quirky-tasks-project-roadmap__marker {
   background: var(--ui-accent);
   border-radius: var(--ui-radius-mark);
-  height: var(--compat-px-20);
+  height: 1.25rem;
   top: var(--ui-space-8);
-  width: var(--compat-px-12);
+  width: var(--ui-space-12);
 }
 
 .quirky-tasks-project-roadmap__range {
   background: var(--ui-accent);
   border-radius: var(--ui-radius-control);
-  height: var(--compat-px-16);
+  height: var(--ui-space-16);
   top: var(--ui-space-12);
 }
 
 .quirky-tasks-project-roadmap__undated ul {
   display: grid;
   gap: var(--ui-space-8);
-  padding-inline-start: var(--compat-px-24);
+  padding-inline-start: var(--ui-space-24);
 }
 
 
@@ -1054,14 +1054,14 @@
   background: var(--ui-surface);
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-control);
-  box-shadow: var(--compat-shadow-panel-menu);
+  box-shadow: 0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow);
   display: grid;
   gap: var(--ui-space-6);
   inset-block-start: 100%;
   inset-inline-start: 0;
-  max-height: var(--compat-px-320);
+  max-height: 20rem;
   max-width: calc(100vw - var(--ui-space-16) - var(--ui-space-16));
-  min-width: var(--compat-px-220);
+  min-width: 13.75rem;
   overflow: auto;
   padding: var(--ui-space-8);
   position: absolute;
@@ -1106,14 +1106,14 @@
 
 .tasks-pr__main {
   display: grid;
-  flex: 1 1 var(--compat-px-320);
+  flex: 1 1 20rem;
   gap: var(--ui-space-16);
   min-width: 0;
 }
 
 .tasks-pr__aside {
   display: grid;
-  flex: 0 1 var(--compat-px-220);
+  flex: 0 1 13.75rem;
   gap: var(--ui-space-12);
   min-width: 0;
 }

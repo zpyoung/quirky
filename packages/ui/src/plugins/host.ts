@@ -31,6 +31,7 @@ import {
   type DesktopWindowSummary
 } from '@quirky/protocol'
 import type { DesktopWindowRoute } from '../desktop-bridge'
+import { THEME_VARIABLE_NAMES } from './appearance'
 
 /** What the host needs from its surroundings; the React shell wires these to `Connection` and the browser. */
 export type HostDeps = {
@@ -185,7 +186,7 @@ const TERMINAL_KEYS_FIRST = 'terminalKeysFirst'
 function themeVariablesOf(model: UiModel): Record<string, string> {
   const theme = model.themes.find((candidate) => candidate.id === model.theme.active) ?? DEFAULT_THEME
   const variables: Record<string, string> = {}
-  for (const token of THEME_TOKENS) variables[`--${token}`] = theme.colors[token] ?? DEFAULT_THEME.colors[token]
+  for (const token of THEME_TOKENS) variables[THEME_VARIABLE_NAMES[token]] = theme.colors[token] ?? DEFAULT_THEME.colors[token]
   return variables
 }
 
