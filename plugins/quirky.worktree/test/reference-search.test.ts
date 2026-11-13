@@ -1,4 +1,11 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { RpcErrorCode, type PluginStore, type QuirkyClient, type Repo, type RpcError, type Worktree } from '@quirky/protocol'
+import { waitFor } from '../../../packages/daemon/test/helpers'
+import type { CallerIdentity } from '../selector'
+import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
+import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
+import { listReferences, unlinkReference, type RecordEnv } from '../src/daemon/records'
+import type { WorktreeControl } from '../src/control-types'
 import type { GitHubWorktreeLink, PtySessionInfo } from '@quirky/protocol'
 import type { WorktreeReference } from '../src/parity-types'
 import {
@@ -382,5 +389,157 @@ describe('session liveness', () => {
     expect(sessionLiveness({ id: 's', kind: 'terminal', status: 'unknown' }, [pty('s')])).toBe('unverifiable')
     expect(sessionLiveness({ id: 's', kind: 'unknown', status: 'working' }, [pty('s')])).toBe('unverifiable')
     expect(sessionLiveness({ id: 's', kind: 'structured', status: 'exited' }, [])).toBe('exited')
+  })
+})
+let unlinkHarness: PluginHarness | undefined
+afterEach(async () => {
+  await unlinkHarness?.cleanup()
+  unlinkHarness = undefined
+})
+
+const daemonCall = (client: QuirkyClient, method: string, params: Record<string, unknown> = {}) =>
+  client.callAny(method, params)
+
+async function unlinkWorld() {
+  unlinkHarness = await startPluginHarness()
+  fakeRegistrations(unlinkHarness.git!)
+  const repo = await daemonCall(
+    unlinkHarness.client,
+    'quirky.repo/add',
+    { path: addFakeRepo(unlinkHarness.git!, 'api') }
+  ) as Repo
+  const worktrees = await daemonCall(unlinkHarness.client, 'quirky.worktree/list', { repo: repo.id }) as Worktree[]
+  const worktree = worktrees[0]!
+  const pull = await daemonCall(unlinkHarness.client, 'quirky.worktree/linkReference', {
+    worktree: worktree.id,
+    url: 'https://github.com/acme/api/pull/5123',
+    label: 'PR 5123'
+  }) as WorktreeReference
+  const tracker = await daemonCall(unlinkHarness.client, 'quirky.worktree/linkReference', {
+    worktree: worktree.id,
+    url: 'https://tracker.example/issues/42',
+    label: 'APP-42'
+  }) as WorktreeReference
+  return { t: unlinkHarness, worktree, pull, tracker }
+}
+
+async function rpcFailure(promise: Promise<unknown>): Promise<RpcError> {
+  try {
+    await promise
+  } catch (error) {
+    return error as RpcError
+  }
+  throw new Error('expected the call to fail')
+}
+
+describe('reference unlinking', () => {
+  test('an absent ID succeeds without writing or emitting and preserves stored reference metadata', async () => {
+    const references = [
+      ref('ref-one', 'https://tracker.example/issues/1', 'One', 11),
+      ref('ref-two', 'https://tracker.example/issues/2', 'Two', 22)
+    ]
+    const writes: { sql: string; params: unknown[] }[] = []
+    const events: unknown[] = []
+    const store = {
+      get<T>(sql: string): T | null {
+        expect(sql).toBe('SELECT references_json FROM worktrees WHERE id = ?')
+        return { references_json: JSON.stringify(references) } as T
+      },
+      run(sql: string, ...params: unknown[]) {
+        writes.push({ sql, params })
+        return { changes: 1, lastInsertRowid: 0 }
+      }
+    } as unknown as PluginStore
+    const worktree = { id: 'wt-a', repoId: 'alpha' } as WorktreeControl
+    const env: RecordEnv = {
+      store,
+      fail: (_kind, message) => new Error(message),
+      find: async (_selector: string, _identity: CallerIdentity) => ({ worktree, all: [worktree] }),
+      changed: (data) => events.push(data)
+    }
+
+    const before = await listReferences(env, 'id:wt-a', {})
+    const result = await unlinkReference(env, { worktree: 'id:wt-a', reference: 'ref_missing' }, {})
+    const after = await listReferences(env, 'id:wt-a', {})
+
+    expect(result).toEqual({ ok: true, removed: false })
+    expect(after).toEqual(before)
+    expect(after).toEqual(references)
+    expect(writes).toEqual([])
+    expect(events).toEqual([])
+  })
+
+  test('removes one present ID, emits one change, and succeeds idempotently on the second call', async () => {
+    const { t, worktree, pull, tracker } = await unlinkWorld()
+    const eventsClient = await t.h.connectWithEvents('ui')
+    const changedCount = () => eventsClient.events.filter((event) => event.type === 'quirky.worktree/changed').length
+    const before = changedCount()
+
+    expect(await daemonCall(eventsClient.client, 'quirky.worktree/unlinkReference', {
+      worktree: worktree.id,
+      reference: pull.id
+    })).toEqual({ ok: true, removed: true })
+    await waitFor(() => changedCount() > before)
+    expect(changedCount() - before).toBe(1)
+    expect(await daemonCall(t.client, 'quirky.worktree/references', { worktree: worktree.id })).toEqual([tracker])
+    expect(await daemonCall(eventsClient.client, 'quirky.worktree/unlinkReference', {
+      worktree: worktree.id,
+      reference: pull.id
+    })).toEqual({ ok: true, removed: false })
+  })
+
+  test('removes by exact URL only', async () => {
+    const { t, worktree, pull, tracker } = await unlinkWorld()
+    expect(await daemonCall(t.client, 'quirky.worktree/unlinkReference', {
+      worktree: worktree.id,
+      url: tracker.url
+    })).toEqual({ ok: true, removed: true })
+    expect(await daemonCall(t.client, 'quirky.worktree/references', { worktree: worktree.id })).toEqual([pull])
+
+    expect(await daemonCall(t.client, 'quirky.worktree/unlinkReference', {
+      worktree: worktree.id,
+      url: `${tracker.url}/`
+    })).toEqual({ ok: true, removed: false })
+    expect(await daemonCall(t.client, 'quirky.worktree/references', { worktree: worktree.id })).toEqual([pull])
+  })
+
+  test('rejects invalid removal arguments while a missing worktree remains not-found', async () => {
+    const { t, worktree, pull, tracker } = await unlinkWorld()
+    const invalid = [
+      { worktree: worktree.id },
+      { worktree: worktree.id, reference: pull.id, url: tracker.url },
+      { worktree: worktree.id, reference: '' },
+      { worktree: worktree.id, reference: 5 },
+      { worktree: worktree.id, url: 'javascript:alert(1)' },
+      { worktree: worktree.id, url: 'https://tracker.example/' + 'x'.repeat(2_049) }
+    ]
+    for (const params of invalid) {
+      expect((await rpcFailure(daemonCall(t.client, 'quirky.worktree/unlinkReference', params))).code).toBe(RpcErrorCode.InvalidParams)
+    }
+    expect((await rpcFailure(daemonCall(t.client, 'quirky.worktree/unlinkReference', {
+      worktree: 'id:missing',
+      reference: 'ref_missing'
+    }))).code).toBe(RpcErrorCode.NotFound)
+  })
+})
+
+describe('reference search boundary regressions', () => {
+  test('explicit GitLab routes outrank route-like subgroup names', () => {
+    for (const route of ['merge_requests', 'issues']) {
+      const sigil = route === 'merge_requests' ? '!' : '#'
+      const url = `https://gitlab.example/group/sub/pull/7/-/${route}/45`
+      const key = `group/sub/pull/7${sigil}45`
+      expect(referenceItemOf(url)?.id).toBe(`gitlab.example/${key}`)
+      const rows = [storedWorktree('nested', { references: [ref('nested-ref', url)] })]
+      expect(search(key, rows).matches.map((match) => match.worktree.id)).toEqual(['nested'])
+      expect(search('group/sub#7', rows).matches).toEqual([])
+    }
+  })
+
+  test('non-string statuses cannot establish session liveness', () => {
+    const malformed = { ...session('malformed', 'wt-a', 'working', { kind: 'structured' }), status: ['working'] }
+    expect(sessionLiveness(malformed, null)).toBe('unverifiable')
+    const result = search('acme/api#5123', world, { sessions: { rows: [malformed] } })
+    expect(result.matches[0]!.sessions).toMatchObject([{ id: 'malformed', status: '', liveness: 'unverifiable', linked: false }])
   })
 })

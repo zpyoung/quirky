@@ -50,6 +50,13 @@ function itemForParts(host: string, projectParts: string[], sigil: '#' | '!', nu
 
 function itemFromUrl(url: URL): ReferenceItem | null {
   const parts = url.pathname.split('/').slice(1)
+  for (let index = 2; index < parts.length - 2; index++) {
+    if (parts[index] !== '-') continue
+    const route = parts[index + 1]
+    if (route === 'issues' || route === 'merge_requests') {
+      return itemForParts(url.host, parts.slice(0, index), route === 'issues' ? '#' : '!', parts[index + 2]!)
+    }
+  }
   if (parts.length >= 4 && parts[2] === 'pull') {
     const item = itemForParts(url.host, parts.slice(0, 2), '#', parts[3]!)
     if (item) return item
@@ -60,16 +67,8 @@ function itemFromUrl(url: URL): ReferenceItem | null {
       const item = itemForParts(url.host, parts.slice(0, index), '#', parts[index + 1]!)
       if (item) return item
     }
-    if (segment === '-' && parts[index + 1] === 'issues') {
-      const item = itemForParts(url.host, parts.slice(0, index), '#', parts[index + 2]!)
-      if (item) return item
-    }
     if (segment === 'merge_requests') {
       const item = itemForParts(url.host, parts.slice(0, index), '!', parts[index + 1]!)
-      if (item) return item
-    }
-    if (segment === '-' && parts[index + 1] === 'merge_requests') {
-      const item = itemForParts(url.host, parts.slice(0, index), '!', parts[index + 2]!)
       if (item) return item
     }
   }
@@ -121,7 +120,7 @@ export function referenceItemOf(value: string): ReferenceItem | null {
 /** Determines liveness from status and runner evidence; terminal records need a live PTY, structured records do not. */
 export function sessionLiveness(session: Record<string, unknown>, processes: PtySessionInfo[] | null): ReferenceSessionLiveness {
   if (session.status === 'exited') return 'exited'
-  if (!LIVE_STATUSES.has(String(session.status))) return 'unverifiable'
+  if (typeof session.status !== 'string' || !LIVE_STATUSES.has(session.status)) return 'unverifiable'
   if (session.kind === 'structured') return 'live'
   if (session.kind !== 'terminal' || typeof session.id !== 'string' || processes === null) return 'unverifiable'
   const process = processes.find((candidate) => candidate.sessionId === session.id)

@@ -636,7 +636,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     archive: (params, caller) => archiveWorktree(recordEnv, params as { worktree: string; archivedAt?: unknown }, identityOf(caller)),
     references: (params, caller) => listReferences(recordEnv, String(params.worktree), identityOf(caller)),
     linkReference: (params, caller) => linkReference(recordEnv, params as { worktree: string; url: unknown; label?: unknown }, identityOf(caller)),
-    unlinkReference: (params, caller) => unlinkReference(recordEnv, params as { worktree: string; reference: unknown }, identityOf(caller)),
+    unlinkReference: (params, caller) => unlinkReference(recordEnv, params as { worktree: string; reference?: unknown; url?: unknown }, identityOf(caller)),
     options: () => readStockOptions(store),
     setOptions(params) {
       const before = readStockOptions(store)

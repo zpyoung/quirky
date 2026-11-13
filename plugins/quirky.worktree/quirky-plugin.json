@@ -2186,9 +2186,9 @@
       },
       {
         "id": "unlinkReference",
-        "description": "Unlink one manual reference by its stable reference ID.",
-        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "reference": { "type": "string" } }, "required": ["worktree", "reference"], "additionalProperties": false },
-        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+        "description": "Unlink one manual reference by its stable ID or exact stored URL; an absent link succeeds without a write.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "reference": { "type": "string" }, "url": { "type": "string" } }, "required": ["worktree"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" }, "removed": { "type": "boolean" } }, "required": ["ok", "removed"], "additionalProperties": false }
       },
       {
         "id": "navigate",
