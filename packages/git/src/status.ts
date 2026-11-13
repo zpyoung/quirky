@@ -10,15 +10,7 @@ import type {
   GitStatusEntry
 } from '@quirky/protocol'
 import { GitError } from './index'
-import {
-  drainText,
-  gitEnv,
-  readChunk,
-  retryStalled,
-  runGit,
-  shareGitRead,
-  withGitReadSlot
-} from './run'
+import { retryStalled, runGit, shareGitRead, streamNullRecords } from './run'
 import { effectiveUpstream } from './upstream'
 
 /** The most entries a status returns before it stops reading and reports `capped`. */
@@ -189,69 +181,23 @@ class PorcelainReader {
 
 /** Runs the porcelain v2 status, stopping git as soon as more than `limit` entries have been read. */
 function readPorcelain(cwd: string, limit: number, dropUntracked: (path: string) => Promise<boolean>): Promise<Snapshot> {
-  return retryStalled(() => readPorcelainOnce(cwd, limit, dropUntracked))
+  return retryStalled((timeoutMs) => readPorcelainOnce(cwd, limit, dropUntracked, timeoutMs))
 }
 
 async function readPorcelainOnce(
   cwd: string,
   limit: number,
-  dropUntracked: (path: string) => Promise<boolean>
+  dropUntracked: (path: string) => Promise<boolean>,
+  timeoutMs: number
 ): Promise<Snapshot> {
-  const env = await gitEnv(cwd, { readOnly: true })
-  return withGitReadSlot(async () => {
-    const args = ['-c', 'core.quotePath=false', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all']
-    let proc: ReturnType<typeof Bun.spawn>
-    try {
-      proc = Bun.spawn(['git', ...args], {
-        cwd,
-        env,
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe'
-      })
-    } catch (err) {
-      throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
-    }
-    let stopped = false
-    let exited = false
-    try {
-      const stderr = drainText(proc)
-      const reader = new PorcelainReader(limit, dropUntracked)
-      const decoder = new TextDecoder()
-      let carry = ''
-      const stdout = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-      read: for (;;) {
-        const { done, value } = await readChunk(stdout, proc.exited)
-        if (done) break
-        carry += decoder.decode(value, { stream: true })
-        const records = carry.split('\0')
-        carry = records.pop() ?? ''
-        for (const record of records) {
-          if (await reader.record(record)) {
-            stopped = true
-            break read
-          }
-        }
-      }
-      if (!stopped && carry.length > 0) await reader.record(carry)
-      if (stopped) proc.kill()
-      const exitCode = await proc.exited
-      exited = true
-      const errText = await stderr
-      if (!stopped && exitCode !== 0) {
-        throw new GitError(`git status failed (exit ${exitCode})${errText.trim() ? `: ${errText.trim()}` : ''}`, errText, exitCode)
-      }
-      return reader.snapshot
-    } finally {
-      if (!exited) {
-        try {
-          proc.kill()
-        } finally {
-          await proc.exited
-        }
-      }
-    }
-  })
+  const reader = new PorcelainReader(limit, dropUntracked)
+  await streamNullRecords(
+    cwd,
+    ['-c', 'core.quotePath=false', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all'],
+    (record) => reader.record(record),
+    { timeoutMs }
+  )
+  return reader.snapshot
 }
 
 type LineCount = { added: number; removed: number } | { binary: true }

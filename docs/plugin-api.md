@@ -151,6 +151,23 @@ unawaited writes. Callers own their result/frame limits and must stop abandoned 
 There is no raw Bun subprocess, stderr stream, IPC, PTY, inherited stdio, arbitrary-signal API,
 sandbox or detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
 
+### API 1.7: In-place view input updates
+
+API 1.7 adds `MountCleanup`, a cleanup function with an optional
+`updateInput(input: unknown): boolean` hook. A mounted view can return `true` to accept
+new input without replacing its DOM or resources. Returning `false`, omitting the hook,
+or throwing makes the host clean up the old mount and mount a fresh child with the new input.
+Plain cleanup functions and mounts returning `void` remain compatible.
+
+While a view's module is loading, input updates coalesce so its mount receives the latest
+input once. Failed or released mounts and non-view slots do not accept updates. Changing
+the contribution's owner or module still ends the mount. Embedded `mountView` handles
+do not use this hook. Plugins using the hook declare `"apiVersion": "1.7.0"` or later.
+
+The terminal worktree view preserves mounted panes on same-worktree input updates.
+Selecting a session focuses its terminal; later background layout revisions leave
+focused text fields alone.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -282,6 +299,9 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.6.0** adds [`context.process.spawn`](#api-16-streaming-and-session-length-processes) for
   streaming and session-length daemon children under the same activation owner as `run`.
   A plugin that uses it declares `apiVersion` 1.6.0 or later.
+- **1.7.0** adds [`MountCleanup.updateInput`](#api-17-in-place-view-input-updates) for mounted
+  views that preserve their DOM and resources when accepting new input.
+  A plugin that uses it declares `apiVersion` 1.7.0 or later.
 
 ## Example
 
