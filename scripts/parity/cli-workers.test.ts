@@ -257,22 +257,22 @@ test('task list correlates context dispatch and completed worker to the dashboar
 
 test('worker preamble parser reads real completion and hold preambles and rejects missing identity lines', () => {
   const task = (spec: string) => ({
-    id: 'task-1', runId: 'run-1', parentTaskId: null, dependencyTaskIds: [], createdBySessionId: 'session-C',
+    id: 'task_1', runId: 'run_1', parentTaskId: null, dependencyTaskIds: [], createdBySessionId: 'session-C',
     taskTitle: 'CLI worker task', displayName: 'CLI worker task', spec, status: 'ready', result: null,
     createdAt: '2026-11-13T00:00:00.000Z', completedAt: null
-  }) as Parameters<typeof buildWorkerPreamble>[0]
+  }) satisfies Parameters<typeof buildWorkerPreamble>[0]
   const dispatch = {
-    id: 'ctx_dispatch-1', runId: 'run-1', taskId: 'task-1', contractVersion: 1, status: 'dispatched',
+    id: 'ctx_dispatch-1', runId: 'run_1', taskId: 'task_1', contractVersion: 1, status: 'dispatched',
     assigneeSessionId: 'session-W', creatorSessionId: 'session-C', creatorDispatchId: null, retryOfDispatchId: null,
     depth: 0, failureCount: 0, lastFailure: null, terminationReason: null, consumerGeneration: 1,
     createdAt: '2026-11-13T00:00:00.000Z', dispatchedAt: '2026-11-13T00:00:00.000Z', completedAt: null, lastHeartbeatAt: null
-  } as Parameters<typeof buildWorkerPreamble>[1]
+  } satisfies Parameters<typeof buildWorkerPreamble>[1]
   const session = {
     sessionId: 'session-W', live: true, runtimeEpoch: 'epoch-1', processIncarnation: 'incarnation-1',
     source: 'terminal_launch', kind: 'terminal', providerId: 'claude', worktreeId: 'worktree-1'
   } as Parameters<typeof buildWorkerPreamble>[2]
   const complete = parseWorkerPreamble(buildWorkerPreamble(task('cli-parity-worker-complete'), dispatch, session, 'session-C', 2))
-  expect(complete).toEqual({ sessionId: 'session-W', worktreeId: 'worktree-1', runId: 'run-1', taskId: 'task-1', dispatchId: 'ctx_dispatch-1', mode: 'complete' })
+  expect(complete).toEqual({ sessionId: 'session-W', worktreeId: 'worktree-1', runId: 'run_1', taskId: 'task_1', dispatchId: 'ctx_dispatch-1', mode: 'complete' })
   const hold = parseWorkerPreamble(buildWorkerPreamble(task('cli-parity-worker-hold'), dispatch, session, 'session-C', 2))
   expect(hold).toEqual({ ...complete, mode: 'hold' })
   expectRejected(() => parseWorkerPreamble(buildWorkerPreamble(task('cli-parity-worker-complete'), dispatch, session, 'session-C', 2).replace('Your Dispatch ID is: ctx_dispatch-1\n', '')))

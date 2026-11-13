@@ -510,10 +510,9 @@ function readStore(store: CliActorReceiptStore): CliActorReceipt[] {
 }
 function importAvailableActorReceipts(context: CliCheckContext, receipts: readonly CliActorReceipt[], imported: Set<string>): void {
   const current = receipts.filter(receipt => !imported.has(receipt.id))
-  const successful = current.filter(receipt => receipt.exitCode === 0)
-  if (successful.length > 0) context.importActor(successful)
   for (const receipt of current) {
-    if (receipt.exitCode !== 0) context.importActorRefusal(receipt)
+    if (receipt.id === 'workers-reply-mismatch') context.importActorRefusal(receipt)
+    else context.importActor([receipt])
     imported.add(receipt.id)
   }
 }
@@ -854,7 +853,7 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
   const stopRepeat = actorReceipt(coordinatorReceipts, 'workers-stop-repeat')
   const stopResult = actorResult(stopReceipt, 'worker-stop')
   const stopRepeatResult = actorResult(stopRepeat, 'worker-stop repeat')
-  const stoppedShow = await productCall(context, 'workers-show-stopped', ['orchestration', 'worker-show', '--dispatch', stopDispatchId], 'workers-stop')
+  const stoppedShow = object(await productCall(context, 'workers-show-stopped', ['orchestration', 'worker-show', '--dispatch', stopDispatchId], 'workers-stop'), 'stopped worker-show')
   const stopSessions = await productCall(context, 'workers-stop-pty', ['terminal', 'sessions'], 'workers-stop')
   const unauthorizedStop = await productRefusal(context, 'workers-unauthorized-stop', ['orchestration', 'worker-stop', '--dispatch', abandonDispatchId], 'workers-stop')
   const stopSessionId = nonEmptyText(object(stoppedShow.worker, 'stopped worker-show worker').sessionId, 'stopped worker session ID')
