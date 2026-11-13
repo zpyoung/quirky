@@ -99,28 +99,6 @@ or `dispose`. A helper needing only spawning can accept `ProcessSpawner`; run-on
 can continue accepting `ProcessRunner`. See the [process declarations](../packages/protocol/src/process.ts)
 for every option and handle member.
 
-### API 1.7: Bounded process groups and raw stderr
-
-API 1.7 adds `stderr: 'pipe'` to `SpawnOptions`. In this mode, `SpawnedProcess.stderr` delivers
-raw bytes on demand and `stderrTail()` is always empty. In `'tail'` and `'ignore'` modes, `stderr`
-is an empty closed stream and `stderrTail()` retains its existing behavior.
-
-API 1.7 also adds the opt-in `groupGrace: true` spawn option. It gives the whole process group the
-grace period: a natural leader exit sends one SIGTERM to a remaining group, and members already
-given a graceful stop keep the unspent grace after their leader exits. A stop during that grace can
-shorten it. A SIGKILL stop or disposal ends output immediately. Without `groupGrace`, the runner
-keeps API 1.6's immediate group cleanup and output-stop behavior.
-
-After a leader exits, both `run` and `spawn` repeat SIGKILL every 10 ms until its process group is
-gone or the one-second cleanup bound expires. They remain in the live table while cleanup runs;
-`spawn.exited` and `run()` settle after cleanup, without waiting for an output reader. A result
-includes `groupSurvived: true` when members remain at the bound. `spawn`'s `durationMs` still
-measures the leader's exit; `run`'s `durationMs` measures the result.
-
-Piped output stays open through a graceful group grace and closes quietly within one stall wait
-after the group ends. A requested stop is not reported as an output stall. A natural-exit output
-stall still fails with `ProcessStalledError`, with its wait starting after group cleanup.
-
 #### Deadlines and streams belong to the caller
 
 `spawn` returns a handle synchronously, not a Promise. Its `stdout` is a demand-driven
@@ -175,6 +153,65 @@ impose concurrency limits or apply run's total-output cap. It does not bound arb
 unawaited writes. Callers own their result/frame limits and must stop abandoned children.
 There is no raw Bun subprocess, IPC, PTY, inherited stdio, arbitrary-signal API, sandbox or
 detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
+
+### API 1.7: In-place view input updates
+
+API 1.7 adds `MountCleanup`, a cleanup function with an optional
+`updateInput(input: unknown): boolean` hook. A mounted view can return `true` to accept
+new input without replacing its DOM or resources. Returning `false`, omitting the hook,
+or throwing makes the host clean up the old mount and mount a fresh child with the new input.
+Plain cleanup functions and mounts returning `void` remain compatible.
+
+While a view's module is loading, input updates coalesce so its mount receives the latest
+input once. Failed or released mounts and non-view slots do not accept updates. Changing
+the contribution's owner or module still ends the mount. Embedded `mountView` handles
+do not use this hook. Plugins using the hook declare `"apiVersion": "1.7.0"` or later.
+
+The terminal worktree view preserves mounted panes on same-worktree input updates.
+Selecting a session focuses its terminal; later background layout revisions leave
+focused text fields alone.
+
+### API 1.8: Terminal stream recovery
+
+API 1.8 adds optional `ClientStream.lagged`, `lag()` and `onLag(callback)` hooks.
+`lag()` marks an open stream once, sends a binary `TerminalLagged` frame, and invokes its
+lag callbacks. Registering `onLag` after lag invokes the callback immediately.
+Daemon `send(bytes)` returns `false` once the stream is lagged or closed, and `true` when sent.
+The public return type remains `boolean | void` for existing stream implementations.
+
+`UiPluginContext.onStream(streamId, listener, { onLagged })` reports lost output once per
+registration and suppresses subsequent bytes from that stream. A gap detected before registration,
+including overflow of the client's 4 MiB early buffer, reports lag in a microtask unless disposed.
+Unsubscribe and replace the stream rather than continuing to consume incomplete output.
+Plugins using these hooks declare `"apiVersion": "1.8.0"`.
+
+`quirky.terminal/resync({ streamId, historyLines? })` replaces a stream owned by the calling
+connection and returns a fresh replay, offset, history cursor, dimensions, shell state and live
+status. It does not restore an ended process. Requests for one connection and session are spaced
+by two seconds. Desktop panes reset and replay under their input gate; phone viewers recover
+in-band with a screen snapshot and only the live bytes after its offset.
+
+### API 1.9: Bounded process groups and raw stderr
+
+API 1.9 adds `stderr: 'pipe'` to `SpawnOptions`. In this mode, `SpawnedProcess.stderr` delivers
+raw bytes on demand and `stderrTail()` is always empty. In `'tail'` and `'ignore'` modes, `stderr`
+is an empty closed stream and `stderrTail()` retains its existing behavior.
+
+API 1.9 also adds the opt-in `groupGrace: true` spawn option. It gives the whole process group the
+grace period: a natural leader exit sends one SIGTERM to a remaining group, and members already
+given a graceful stop keep the unspent grace after their leader exits. A stop during that grace can
+shorten it. A SIGKILL stop or disposal ends output immediately. Without `groupGrace`, the runner
+keeps API 1.6's immediate group cleanup and output-stop behavior.
+
+After a leader exits, both `run` and `spawn` repeat SIGKILL every 10 ms until its process group is
+gone or the one-second cleanup bound expires. They remain in the live table while cleanup runs;
+`spawn.exited` and `run()` settle after cleanup, without waiting for an output reader. A result
+includes `groupSurvived: true` when members remain at the bound. `spawn`'s `durationMs` still
+measures the leader's exit; `run`'s `durationMs` measures the result.
+
+Piped output stays open through a graceful group grace and closes quietly within one stall wait
+after the group ends. A requested stop is not reported as an output stall. A natural-exit output
+stall still fails with `ProcessStalledError`, with its wait starting after group cleanup.
 
 ## Manifest declaration
 
@@ -240,6 +277,24 @@ The daemon validates manifests during discovery, inspection and installation. A 
 
 Local module hosts check the declaring plugin's floor independently. The CLI checks module-backed command metadata before importing a CLI module; generic RPC-only CLI commands do not need a local module gate. The UI host checks each plugin's module metadata before import and contains a failure to that plugin. The daemon's release does not authorize newer code in an older CLI or UI process.
 
+## Store recovery
+
+The daemon checks existing non-empty `quirky.db` and plugin `store.db` files when opening them.
+It runs SQLite's full integrity check when the main file plus WAL is at most 32 MiB, and the
+quick check above that size. The quick check does not detect mismatches between indexes and rows.
+Validation checks a writable snapshot in a private temporary directory while the original stays
+read-only. Snapshot copies use filesystem cloning when available. Repair reads committed WAL
+rows without checkpointing them into the original main file that will be quarantined.
+
+A corrupt store is repaired into a checked copy when possible; otherwise it is replaced with an
+empty database and plugin migrations run again. The original file and any WAL/SHM sidecars stay
+beside the store as `<file>.corrupt-<timestamp>-<8 hex>`, with one suffix shared by the three files.
+Quirky never deletes these originals. Lock, permission, migration and schema-version errors do
+not trigger recovery.
+
+Kernel recoveries are logged. Plugin recoveries also appear as warning diagnostics in `plugin.list`,
+including when a later migration fails. `context.openStore` and the plugin API version are unchanged.
+
 ## Lifecycle, cleanup and trust
 
 The stable contract includes the existing daemon, CLI and UI activation shapes, context methods, contribution schemas and cleanup behavior. Daemon `activate(context)` may return an activation disposer; modules may also implement `deactivate()`. UI modules implement `activate(context)` and may implement `deactivate()`. UI mount functions return cleanup functions when they own DOM or other mounted resources. Context subscription methods return unsubscribe functions. Plugins should release resources they create and must not assume a context remains usable after its activation ends.
@@ -290,11 +345,15 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.6.0** adds [`context.process.spawn`](#api-16-streaming-and-session-length-processes) for
   streaming and session-length daemon children under the same activation owner as `run`.
   A plugin that uses it declares `apiVersion` 1.6.0 or later.
+- **1.7.0** adds [`MountCleanup.updateInput`](#api-17-in-place-view-input-updates) for mounted
+  views that preserve their DOM and resources when accepting new input.
+  A plugin that uses it declares `apiVersion` 1.7.0 or later.
+- **1.8.0** adds [terminal stream lag hooks and recovery](#api-18-terminal-stream-recovery).
 
-- **1.7.0** adds raw stderr piping and opt-in process-group grace to
-  [`context.process.spawn`](#api-17-bounded-process-groups-and-raw-stderr). `run` and `spawn` wait
+- **1.9.0** adds raw stderr piping and opt-in process-group grace to
+  [`context.process.spawn`](#api-19-bounded-process-groups-and-raw-stderr). `run` and `spawn` wait
   for bounded process-group cleanup and report `groupSurvived: true` if members remain at the
-  bound. A plugin using these additions declares `apiVersion` 1.7.0.
+  bound. A plugin using these additions declares `apiVersion` 1.9.0.
 
 ## Example
 

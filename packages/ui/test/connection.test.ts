@@ -176,6 +176,24 @@ test('onStream receives the binary frames of its stream until it unsubscribes, a
   expect(frames).toEqual([[104, 105]])
 })
 
+test('onStream reports lag once and suppresses output after the gap', async () => {
+  const daemon = startMockDaemon()
+  stops.push(daemon.stop)
+  const { store, connection } = connect(daemon.url)
+  await until(() => store.getState().connection === 'connected')
+  const received: number[][] = []
+  let lagged = 0
+  connection.onStream(7, (bytes) => received.push([...bytes]), { onLagged: () => lagged++ })
+  const client = connection.client as unknown as { handleMessage(data: unknown): void }
+  const deliver = (frame: Uint8Array) => client.handleMessage(frame)
+  deliver(encodeTerminalOutput(7, new Uint8Array([1])))
+  deliver(new Uint8Array([2, 0, 0, 0, 7]))
+  deliver(new Uint8Array([2, 0, 0, 0, 7]))
+  deliver(encodeTerminalOutput(7, new Uint8Array([2])))
+  expect(lagged).toBe(1)
+  expect(received).toEqual([[1]])
+})
+
 test('onEvent receives every event as well as the store, and a throwing listener harms neither', () => {
   const store = new Store()
   const connection = new Connection(store, { hash: '', host: 'x' })

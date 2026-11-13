@@ -21,6 +21,11 @@ let session: Session
 
 function makeContext(): StructuredContext {
   return {
+    process: {
+      spawn() {
+        throw new Error('Claude runner must not spawn a process')
+      }
+    },
     appendMessage(msg: NewStructuredMessage) {
       const stored = { ...msg, seq: messages.length + 1, at: msg.at ?? Date.now() } as StructuredMessage
       messages.push(stored)

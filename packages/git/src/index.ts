@@ -202,7 +202,8 @@ function decodeSide(bytes: Uint8Array): Side {
 }
 
 async function readBlob(cwd: string, spec: string): Promise<Side> {
-  const r = await runGit(cwd, ['show', spec], { readOnly: true })
+  const r = await runGit(cwd, ['show', spec], { readOnly: true, maxOutputBytes: MAX_TEXT_BYTES })
+  if (r.overflow === true) return { text: '', binary: true }
   if (r.exitCode !== 0) return { text: '', binary: false }
   return decodeSide(r.stdout)
 }

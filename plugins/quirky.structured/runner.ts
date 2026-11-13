@@ -1,4 +1,5 @@
 import type {
+  ProcessSpawner,
   AskEnvelope,
   AskSpec,
   Session,
@@ -19,6 +20,7 @@ export type NewStructuredMessage = {
 
 /** What the plugin gives a runner to journal, report status, ask questions, persist provider identity and resolve executables. */
 export type StructuredContext = {
+  process: ProcessSpawner
   /** Stores the message and emits `quirky.structured/message`. */
   appendMessage(msg: NewStructuredMessage): StructuredMessage
   /** Reports the session's status to `quirky.session`; done and waiting also settle the session. */

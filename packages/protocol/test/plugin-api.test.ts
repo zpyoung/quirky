@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import {
   PLUGIN_API_VERSION,
   pluginApiCompatibilityError,
+  type ClientStream,
+  type MountCleanup,
+  type MountFunction,
   type PluginContext,
   type ProcessRunner,
   type ProcessSpawner,
@@ -9,6 +12,8 @@ import {
   type SpawnExit,
   type SpawnOptions,
   type SpawnedProcess,
+  type TerminalStreamOptions,
+  type UiPluginContext
 } from '@quirky/protocol'
 
 type Assert<T extends true> = T
@@ -24,10 +29,35 @@ type ProcessCapabilityAssertions = [
   Assert<SpawnExit['groupSurvived'] extends true | undefined ? true : false>,
   Assert<RunResult['groupSurvived'] extends true | undefined ? true : false>,
 ]
+type StreamCapabilityAssertions = [
+  Assert<ClientStream['send'] extends (bytes: Uint8Array) => boolean | void ? true : false>,
+  Assert<ClientStream['lagged'] extends boolean | undefined ? true : false>,
+  Assert<ClientStream['lag'] extends (() => void) | undefined ? true : false>,
+  Assert<ClientStream['onLag'] extends ((callback: () => void) => void) | undefined ? true : false>,
+  Assert<Parameters<UiPluginContext['onStream']>[2] extends TerminalStreamOptions | undefined ? true : false>,
+  Assert<
+    { streamId: number; send(bytes: Uint8Array): void; onClose(callback: () => void): void; close(): void } extends ClientStream
+      ? true
+      : false
+  >,
+]
+
+
+type MountCapabilityAssertions = [
+  Assert<(() => void) extends MountFunction ? true : false>,
+  Assert<(() => () => void) extends MountFunction ? true : false>,
+  Assert<(() => MountCleanup) extends MountFunction ? true : false>,
+  Assert<NonNullable<MountCleanup['updateInput']> extends (input: unknown) => boolean ? true : false>,
+]
 
 describe('stable plugin API floors', () => {
-  test('the host supports the latest additive process-runner release', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.7.0')
+  test('the host supports the release that introduced daemon plugin spawning', () => {
+    expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+  })
+
+  test('the host supports in-place view input updates and earlier releases', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.9.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
@@ -38,9 +68,24 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.7.1')).not.toBeNull()
-    expect(pluginApiCompatibilityError('2.0.0')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1', '1.7.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('2.0.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).toContain('apiVersion')
+  })
+
+  test('the host supports the latest process-runner release and earlier API floors', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.9.0')
+    expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.1')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.10.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).not.toBeNull()
   })
 
   test.each([

@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginStore, StoreMigration, StoreValue } from '@quirky/protocol'
-import { openSqlite } from '../sqlite'
+import { openSqlite, openSqliteOrRecover, type SqliteRecovery } from '../sqlite'
 
 /** Where a plugin keeps its private files, including its SQLite store. Pure path math; creates nothing. */
 export function pluginDataDir(home: string, pluginId: string): string {
@@ -19,6 +19,8 @@ export interface OpenPluginStoreOptions {
   newerVersion?: 'read-only'
   /** Lock wait in milliseconds for this connection; defaults to 5000. */
   busyTimeoutMs?: number
+  /** Called before migrations when the store had to be repaired or quarantined. */
+  onRecover?: (recovery: SqliteRecovery) => void
 }
 
 function isThenable(value: unknown): boolean {
@@ -44,7 +46,8 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
   const dir = pluginDataDir(home, pluginId)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   const file = join(dir, 'store.db')
-  let db = openSqlite(file, { busyTimeoutMs: options.busyTimeoutMs })
+  const { db: writableDb, recovery } = openSqliteOrRecover(file, { busyTimeoutMs: options.busyTimeoutMs })
+  let db = writableDb
   let readOnly = false
   let closed = false
   const close = () => {
@@ -105,6 +108,7 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
   }
 
   try {
+    if (recovery) options.onRecover?.(recovery)
     const version = userVersion(db)
     if (version > migrations.length) {
       if (options.newerVersion !== 'read-only') {
