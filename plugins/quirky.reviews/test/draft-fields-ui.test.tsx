@@ -387,9 +387,10 @@ test('C7: a failed base save stays visible and later state cannot replace its va
   await act(async () => write.reject(new Error('Base branch must differ from the head branch.')))
   await settle()
   ui.render(stateFor({ base: 'main' }), nextDraftTick())
+  await settle()
+  expect(callCount(ui, 'createBase')).toBe(1)
   expect(ui.element.querySelector<HTMLInputElement>('#review-base')!.value).toBe('release')
   expect(ui.element.querySelector('[role="alert"]')?.textContent).toContain('Base branch must differ from the head branch.')
-  expect(callCount(ui, 'createBase')).toBe(1)
 })
 
 for (const [label, selector, key] of [
