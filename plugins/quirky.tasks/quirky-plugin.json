@@ -1,6 +1,6 @@
 {
   "id": "quirky.tasks",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "GitHub Tasks",
   "version": "0.1.0",
   "description": "Browse GitHub tasks, discuss issues and work with Projects v2.",
@@ -3297,6 +3297,7 @@
       {
         "id": "changed",
         "description": "Tasks state changed; refetch the current projection.",
+        "coalesce": [],
         "data": {
           "type": "object",
           "properties": {

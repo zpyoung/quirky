@@ -1,4 +1,4 @@
-import type { ItemKind, ItemTarget, TaskListResult, TaskRepo } from '../contracts'
+import type { ItemKind, ItemTarget, TaskListResult, TaskRepo, TasksState } from '../contracts'
 import { queryForKind } from './search'
 
 /**
@@ -25,6 +25,14 @@ export type Preset = { id: string; label: string; query: string }
 export function object(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   return value as Record<string, unknown>
+}
+
+/** Returns the value as a Tasks state when it has the fields every Tasks surface reads, else null. */
+export function parseTasksState(value: unknown): TasksState | null {
+  const raw = object(value)
+  const navigation = object(raw?.navigation)
+  if (!raw || !navigation || !object(navigation.lastList) || !object(raw.preferences) || typeof raw.revision !== 'number') return null
+  return value as TasksState
 }
 
 export function strings(value: unknown): string[] {

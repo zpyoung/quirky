@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, ListRow, Menu, TextField, type MenuItem } from '@quirky/ui'
-import type { ItemKind, ItemTarget, TaskItem, TasksSurfaceProps } from '../contracts'
+import type { ItemKind, ItemTarget, TaskItem, TasksState, TasksSurfaceProps } from '../contracts'
 import { IssueSurface } from '../issue/IssueSurface'
 import { PrDetail, type ReviewerOptions } from './PrDetail'
 import { place } from './place'
@@ -10,11 +10,12 @@ import { useAgentActivity } from './useAgentActivity'
 import { usePrDescription } from './usePrDescription'
 import {
   checkResult, checkSummary, countFilters, currentPreset, errorMessage, filterPills, filtersFromQuery, mergeMeta,
-  listViewKey, normalizedPreset, object, optionalLogins, parseListResult, parseSource, presetQuery, relativeTime, replaceFilters, reviewAuthors,
+  listViewKey, normalizedPreset, object, optionalLogins, parseListResult, parseTasksState, parseSource, presetQuery, relativeTime, replaceFilters, reviewAuthors,
   reviewState, rowKey, rowTarget, strings,
   type CheckResult, type ListData, type ListItem, type ListSource, type MergeMetadata, type Preset
 } from './model'
 import { useReviewNavigation } from './useReviewNavigation'
+import { committed, createSearchLane, expected, observe, sending, settled, typed, type SearchLane } from './search-lane'
 
 export { WorkspaceComposer } from './WorkspaceComposer'
 export { useReviewNavigation } from './useReviewNavigation'
@@ -147,7 +148,7 @@ function linkedWorktree(item: ListItem): string | undefined {
  * `initialFocus` says whether the mount that created this view asked for focus on a row; left undefined,
  * the list asks the place memory itself.
  */
-export function TasksList({ context, state, refresh, initialFocus, onDataChanged, listRefreshToken }: TasksSurfaceProps & { initialFocus?: boolean; onDataChanged?: () => void; listRefreshToken?: number }) {
+export function TasksList({ context, state, refresh, adopt, initialFocus, onDataChanged, listRefreshToken }: TasksSurfaceProps & { adopt(state: TasksState): void; initialFocus?: boolean; onDataChanged?: () => void; listRefreshToken?: number }) {
   const navigation = state.navigation
   const mode = navigation.mode === 'prs' ? 'prs' : 'issues'
   const currentKey = listViewKey({ source: navigation.source, mode, repoIds: navigation.repoIds, query: navigation.query, page: navigation.page })
@@ -199,6 +200,10 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   const mergeReadOwners = useRef(new Map<string, string>())
   const mutationInFlight = useRef(new Set<string>())
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const searchLaneRef = useRef<SearchLane | null>(null)
+  const searchLane = searchLaneRef.current ?? (searchLaneRef.current = createSearchLane())
+  const [searchSettlement, setSearchSettlement] = useState(0)
+  const mounted = useRef(true)
   const checkTriggered = useRef(new Set<string>())
   const listScroll = useRef<HTMLDivElement | null>(null)
   const restoredScroll = useRef<string | null>(null)
@@ -210,6 +215,13 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
   }
   const viewerRequested = useRef(false)
   const activity = useAgentActivity(context)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      clearTimeout(searchTimer.current)
+    }
+  }, [])
 
   const kind: ItemKind = mode === 'prs' ? 'pullRequest' : 'issue'
   const allRepoIds = result?.repositories.map((repo) => repo.id) ?? []
@@ -330,23 +342,6 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     setOptimistic((previous) => pruneIssueRetentions(previous, currentKey, visibleResult))
   }, [visibleResult, currentKey])
 
-  useEffect(() => {
-    clearTimeout(searchTimer.current)
-    if (navigation.mode === 'projects') return
-    const kindForMode: ItemKind = navigation.mode === 'prs' ? 'pullRequest' : 'issue'
-    let normalized: string
-    try {
-      normalized = queryForKind(navigation.query, kindForMode)
-    } catch (cause) {
-      setSearchDraft(navigation.query)
-      setError(errorMessage(cause))
-      return
-    }
-    setSearchDraft(normalized)
-    if (normalized !== navigation.query) {
-      void context.call('quirky.tasks/navigate', { query: normalized, page: 1 }).catch((cause) => setError(errorMessage(cause)))
-    }
-  }, [context, navigation.mode, navigation.query])
 
   useEffect(() => {
     if (!filtersOpen || !filterRepoId) {
@@ -371,19 +366,54 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     return () => { live = false }
   }, [context, filterRepoId, filtersOpen, result?.repositories])
 
-  const navigate = useCallback(async (patch: Record<string, unknown>) => {
+  const navigate = useCallback(async (patch: Record<string, unknown>): Promise<TasksState | null> => {
     try {
-      await context.call('quirky.tasks/navigate', patch)
+      const next = parseTasksState(await context.call('quirky.tasks/navigate', patch))
+      if (!next) throw new Error('Invalid Tasks state from daemon')
+      adopt(next)
+      return next
     } catch (cause) {
       setError(errorMessage(cause))
+      return null
     }
-  }, [context])
+  }, [adopt, context])
+  const sendSearch = useCallback(async (query: string, patch: Record<string, unknown>) => {
+    sending(searchLane, query)
+    const reply = await navigate({ ...patch, query })
+    settled(searchLane, reply)
+    if (mounted.current) setSearchSettlement((value) => value + 1)
+    return reply
+  }, [navigate, searchLane])
+  useEffect(() => {
+    const action = observe(searchLane, { mode: navigation.mode, query: navigation.query })
+    if (action === 'drop') {
+      clearTimeout(searchTimer.current)
+      searchTimer.current = undefined
+      return
+    }
+    if (action === 'keep') return
+    clearTimeout(searchTimer.current)
+    searchTimer.current = undefined
+    const kindForMode: ItemKind = navigation.mode === 'prs' ? 'pullRequest' : 'issue'
+    let normalized: string
+    try {
+      normalized = queryForKind(navigation.query, kindForMode)
+    } catch (cause) {
+      setSearchDraft(navigation.query)
+      setError(errorMessage(cause))
+      return
+    }
+    setSearchDraft(normalized)
+    if (normalized !== navigation.query) void sendSearch(normalized, { page: 1 })
+  }, [navigation.mode, navigation.query, searchLane, searchSettlement, sendSearch])
   const reportNavigationError = useCallback((message: string) => setError(message), [])
   const openReview = useReviewNavigation(context, reportNavigationError)
 
   const commitSearch = useCallback((value: string) => {
+    committed(searchLane)
     setSearchDraft(value)
     clearTimeout(searchTimer.current)
+    searchTimer.current = undefined
     let next: string
     try {
       next = queryForKind(value, kind)
@@ -395,10 +425,11 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
       setError('Search query exceeds the 8192-byte limit.')
       return
     }
-    if (next !== navigation.query) void navigate({ query: next, page: 1, scrollTop: 0 })
-  }, [kind, navigation.query, navigate])
+    if (next !== expected(searchLane, navigation.query)) void sendSearch(next, { page: 1, scrollTop: 0 })
+  }, [kind, navigation.query, searchLane, sendSearch])
 
   const onSearchChange = (value: string) => {
+    typed(searchLane)
     setSearchDraft(value)
     clearTimeout(searchTimer.current)
     searchTimer.current = setTimeout(() => commitSearch(value), 750)
@@ -410,7 +441,8 @@ export function TasksList({ context, state, refresh, initialFocus, onDataChanged
     event.preventDefault()
     const selected = item.id === 'open' ? (kind === 'issue' ? 'issues' : 'prs') : item.id
     try {
-      await context.call('quirky.tasks/preferences', { defaultTaskViewPreset: selected })
+      const next = parseTasksState(await context.call('quirky.tasks/preferences', { defaultTaskViewPreset: selected }))
+      if (next) adopt(next)
     } catch (cause) {
       setError(errorMessage(cause))
     }
