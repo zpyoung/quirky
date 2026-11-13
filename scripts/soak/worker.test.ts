@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { startChild } from '../../packages/process/src/child.ts'
 import { DEFAULT_BEAT_MS } from './worker.ts'
 
 const worker = resolve(import.meta.dir, 'worker.ts')
@@ -19,20 +20,23 @@ test('skips missed beats instead of replaying hooks after slow git', async () =>
   writeFileSync(hook, `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';\nawait Bun.stdin.text();\nappendFileSync(${JSON.stringify(hookLog)}, Date.now() + '\\n');\n`)
   chmodSync(git, 0o755)
   chmodSync(hook, 0o755)
-  const child = Bun.spawn([process.execPath, worker, '0'], {
+  const child = startChild([process.execPath, worker, '0'], {
     cwd: home,
     env: { ...process.env, QUIRKY_HOME: home, QUIRKY_SOAK_BEAT_MS: '300', PATH: `${home}:/usr/bin:/bin` },
-    detached: true,
     stdout: 'ignore',
     stderr: 'pipe'
   })
   const stderr = new Response(child.stderr).text()
   try {
-    // The subprocess owns its clock; this checks real hook spacing across a stalled git process.
+    // the subprocess owns its clock; fake timers cannot check hook spacing across a stalled git process
     await Bun.sleep(4000)
     const times = readFileSync(hookLog, 'utf8').trim().split('\n').map(Number)
     expect(times.length).toBeGreaterThanOrEqual(4)
-    for (let i = 1; i < times.length; i++) expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(250)
+    for (let i = 1; i < times.length; i++) {
+      const gap = times[i]! - times[i - 1]!
+      if (gap < 250) console.error('hook times:', times)
+      expect(gap).toBeGreaterThanOrEqual(250)
+    }
     const skips = readFileSync(join(home, 'soak-skips.log'), 'utf8').trim().split('\n')
     let skipped = 0
     for (const line of skips) {
@@ -44,7 +48,7 @@ test('skips missed beats instead of replaying hooks after slow git', async () =>
       expect(line).toMatch(/^cycle \d+ .+$/)
     }
   } finally {
-    try { process.kill(-child.pid, 'SIGKILL') } catch {}
+    child.killGroup('SIGKILL')
     await child.exited
     const errors = await stderr
     rmSync(home, { recursive: true, force: true })

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { QuirkyClient, PluginContext } from '@quirky/protocol'
+import { startChild, type StartedChild } from '../../packages/process/src/child.ts'
 import { faultPlan, installFaultPlugin, installSlowGit, setGitDelay, startFault } from './faults.ts'
 import { activate } from './faults/main.ts'
 
@@ -108,16 +109,15 @@ test('killing the slow-git process group also kills its sleep child', async () =
   const pidFile = join(root, 'slow-git.pids')
   const wrapper = join(home, 'fakebin', 'git')
   let pid: number | undefined
-  let child: Bun.Subprocess | undefined
+  let child: StartedChild | undefined
   try {
     installSlowGit(home, process.env.PATH ?? '', pidFile)
     setGitDelay(home, 30_000)
-    const spawned = Bun.spawn([wrapper, 'worktree', 'list'], {
+    const spawned = startChild([wrapper, 'worktree', 'list'], {
       cwd: repo,
       stdin: 'ignore',
       stdout: 'ignore',
       stderr: 'ignore',
-      detached: true,
     })
     child = spawned
     pid = spawned.pid

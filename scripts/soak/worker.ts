@@ -99,7 +99,8 @@ async function run(): Promise<void> {
     nextStart += beat
     const now = performance.now()
     if (nextStart <= now) {
-      const skipped = Math.floor((now - nextStart) / beat) + 1
+      // leave a full beat after an overrun so recovery cannot compress the next hook interval
+      const skipped = Math.ceil((now + beat - nextStart) / beat)
       nextStart += skipped * beat
       try {
         appendFileSync(join(worktreePath, 'soak-skips.log'), `skipped ${skipped} ${new Date().toISOString()}\n`)
