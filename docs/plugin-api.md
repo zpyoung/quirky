@@ -299,10 +299,10 @@ Unanswered handlers have passed their deadline or outlived their revoked activat
 settling. Counts last for the daemon process and survive plugin reloads. Once a method has four
 or more unanswered handlers, new calls fail before activation with Timeout and data
 `{ reason: 'stalled', method, unanswered }`, reporting the real count. Calls already admitted may
-still time out and increase that count beyond four; there is no in-flight concurrency limit.
+still time out and increase that count beyond four. See
+[API 1.14 running-handler limit](#api-114-running-handler-limit).
 The plugin carries one warning while the count is at least four. Finishing handlers clears it
 once fewer than four remain; a daemon restart also clears the count.
-In-flight admission limits are tracked separately in g2-77.
 
 A job that has not settled five seconds after its timeout remains `running`, with no next run.
 `JobInfo.stalled` reports `{ handlers }`, and the plugin carries a warning. `job.run` rejects
@@ -333,6 +333,23 @@ connection, counting outstanding wire bytes. JSON and lag markers share a bounde
 FIFO when the native socket cannot accept them. Terminal output is not queued again:
 `send` returns `false` and lags the stream. Accepted bytes remain accounted until native
 drainage, even after their stream closes. Unrecoverable control backpressure closes with 1013.
+
+### API 1.14: Running-handler limit
+
+By default, a plugin method may have at most 1,024 running handlers. A handler is running from
+dispatcher admission until its promise settles, even if its caller has already received a timeout.
+Kernel methods are not counted.
+
+When a method is at its limit, additional calls fail before plugin code runs with
+`RpcErrorCode.Busy` (`-32012`) and data `{ reason: 'busy', method, running, limit }`. A Busy
+refusal runs no plugin code, so callers may safely retry it later. Direct Busy and `stalled`
+admission refusals are not recorded under a request ID, so a later retry with that ID runs the
+method instead of replaying the refusal. If a handler runs and propagates a refusal from a
+nested call, its error is recorded normally: retrying must not repeat the outer handler's effects.
+
+A method's first refusal adds a warning to the plugin; later refusals do not duplicate it. The
+warning clears when that method's running count falls to half the limit. A plugin that depends on
+this error declares `"apiVersion": "1.14.0"`.
 
 ## Manifest declaration
 
@@ -490,6 +507,9 @@ a new event, and does not change authentication or version refusal.
   a 300-second read-only method default, and reload-safe refusal once four handlers are unanswered.
 - **1.13.0** adds [`PluginPty.onLagged`](#api-113-host-output-gap-recovery), invalidating
   session subscriptions before notifying plugins and bounding host and daemon output queues.
+- **1.14.0** adds the [per-method running-handler limit](#api-114-running-handler-limit): 1,024
+  handlers per plugin method by default. Calls over the limit fail with Busy before plugin code
+  runs; Busy and stalled refusals are not stored under request IDs.
 
 ## Example
 

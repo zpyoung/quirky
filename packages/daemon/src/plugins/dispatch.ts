@@ -14,13 +14,14 @@ import {
   type PluginSessionAuthority,
   type Schema
 } from '@quirky/protocol'
-import { DaemonError, conflict, internal, invalidParams, notAnswering, timedOut, unauthorized } from '../errors'
+import { DaemonError, busy, conflict, internal, invalidParams, isRefusal, notAnswering, timedOut, unauthorized } from '../errors'
 import type { Handlers } from '../methods'
 import { Store } from '../store'
 import type { ClientConn } from '../types'
 import { Confirmations, type ConfirmStore, type ConfirmTarget, type KernelDescriber } from './confirm'
 import type { PluginHost } from './host'
 import { RequestLog, requestDigest, type RequestStore } from './requests'
+import { DEFAULT_MAX_RUNNING_HANDLERS, RunningHandlers } from './running'
 import { UnansweredHandlers } from './unanswered'
 import { onConnectionClose, openStream } from './streams'
 
@@ -56,6 +57,10 @@ export type DispatcherOptions = {
   readTimeoutMs?: number
   /** Deadline for mutating plugin methods without a declared timeout; defaults to 600 seconds. */
   mutatingTimeoutMs?: number
+  /** Shared count of running plugin handlers; private and silent when absent. */
+  running?: RunningHandlers
+  /** Maximum running handlers per plugin method; defaults to 1,024. */
+  maxRunning?: number
 }
 
 const KERNEL_PLUGIN_ID = 'kernel'
@@ -114,6 +119,8 @@ export class Dispatcher {
   private readonly unanswered: UnansweredHandlers
   private readonly readTimeoutMs: number
   private readonly mutatingTimeoutMs: number
+  private readonly running: RunningHandlers
+  private readonly maxRunning: number
 
   constructor(
     private readonly handlers: Handlers,
@@ -127,6 +134,8 @@ export class Dispatcher {
     this.unanswered = options.unanswered ?? new UnansweredHandlers()
     this.readTimeoutMs = options.readTimeoutMs ?? DEFAULT_READ_METHOD_TIMEOUT_MS
     this.mutatingTimeoutMs = options.mutatingTimeoutMs ?? DEFAULT_MUTATING_METHOD_TIMEOUT_MS
+    this.running = options.running ?? new RunningHandlers()
+    this.maxRunning = options.maxRunning ?? DEFAULT_MAX_RUNNING_HANDLERS
     this.requests = new RequestLog(store, { now: options.now, log })
     this.confirmations = new Confirmations(store, (method, params, from) => this.dispatch(method, params, from), {
       now: options.now,
@@ -259,26 +268,37 @@ export class Dispatcher {
     }
     const { id, plugin } = target.contribution!
     if (this.unanswered.blocked(id, plugin)) throw notAnswering(target.name, this.unanswered.count(id))
-    const implementation = (await this.plugins.resolveImplementation(id)) as MethodHandler
-    const sessionAuthority = 'conn' in from ? await this.resolveSessionAuthority?.(from.conn) : undefined
-    const caller = callerOf(from, target.connection, sessionAuthority ?? undefined)
-    const binding: ForwardingBinding = { pluginId: plugin, source: from, active: true }
-    this.forwardedCallers.set(caller, binding)
-    const closeBinding = () => {
-      binding.active = false
-      this.forwardedCallers.delete(caller)
-    }
+    const releaseRunning = this.running.enter(id, plugin, this.maxRunning)
+    if (releaseRunning === null) throw busy(target.name, this.running.count(id), this.maxRunning)
+    let deadlineOwnsSlot = false
     try {
-      const timeoutMs = methodTimeoutMs(target, this.readTimeoutMs, this.mutatingTimeoutMs)
-      const deadlineAt = Date.now() + timeoutMs
-      binding.deadlineAt = deadlineAt
-      return await this.invokeWithDeadline(target.name, id, plugin, timeoutMs, deadlineAt, params, caller, implementation, closeBinding)
-    } catch (error) {
-      if (error instanceof DaemonError) throw error
-      this.log(`method ${target.name} failed in ${plugin}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
-      throw internal(`${plugin}: ${error instanceof Error ? error.message : String(error)}`)
+      const implementation = (await this.plugins.resolveImplementation(id)) as MethodHandler
+      const sessionAuthority = 'conn' in from ? await this.resolveSessionAuthority?.(from.conn) : undefined
+      const caller = callerOf(from, target.connection, sessionAuthority ?? undefined)
+      const binding: ForwardingBinding = { pluginId: plugin, source: from, active: true }
+      this.forwardedCallers.set(caller, binding)
+      const closeBinding = () => {
+        binding.active = false
+        this.forwardedCallers.delete(caller)
+      }
+      try {
+        const timeoutMs = methodTimeoutMs(target, this.readTimeoutMs, this.mutatingTimeoutMs)
+        const deadlineAt = Date.now() + timeoutMs
+        binding.deadlineAt = deadlineAt
+        deadlineOwnsSlot = true
+        return await this.invokeWithDeadline(target.name, id, plugin, timeoutMs, deadlineAt, params, caller, implementation, closeBinding, releaseRunning)
+      } catch (error) {
+        if (error instanceof DaemonError && isRefusal(error)) {
+          throw new DaemonError(error.code, error.message, error.data)
+        }
+        if (error instanceof DaemonError) throw error
+        this.log(`method ${target.name} failed in ${plugin}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+        throw internal(`${plugin}: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        closeBinding()
+      }
     } finally {
-      closeBinding()
+      if (!deadlineOwnsSlot) releaseRunning()
     }
   }
 
@@ -291,7 +311,8 @@ export class Dispatcher {
     params: Record<string, unknown>,
     caller: PluginCaller,
     implementation: MethodHandler,
-    closeBinding: () => void
+    closeBinding: () => void,
+    releaseRunning: () => void
   ): Promise<unknown> {
     const deadline = Promise.withResolvers<HandlerOutcome>()
     let timer: ReturnType<typeof setTimeout>
@@ -323,6 +344,7 @@ export class Dispatcher {
       } else {
         closeBinding()
       }
+      releaseRunning()
     }
     const handlerResult = handler.then(
       (value): HandlerOutcome => {
