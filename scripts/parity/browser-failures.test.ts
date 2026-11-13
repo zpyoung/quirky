@@ -3,13 +3,95 @@ import { existsSync, lstatSync, mkdtempSync, realpathSync, rmSync, readdirSync, 
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { runBrowserParity, validateOutcomes, type BrowserCheck } from './browser-run'
-import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, readShimLogs, type BrowserWorld, type CliReceipt } from './browser-world'
+import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, type BrowserWorld, type CliReceipt } from './browser-world'
+import type { RuntimeInfo } from '@quirky/protocol/node'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
 import { networkChecks } from './browser-checks-network'
+
+test('daemon status retries transient health misses while the owned daemon remains alive', async () => {
+  const runtime: RuntimeInfo = { pid: 37, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  let attempts = 0
+  let now = 0
+  const alive = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    now: () => now,
+    readRuntime: () => runtime,
+    isDaemonAlive: async () => ++attempts >= 3,
+    sleep: async (milliseconds) => { now += milliseconds }
+  })
+  expect(alive).toBe(true)
+  expect(attempts).toBe(3)
+})
+
+test('daemon status returns immediately when the owned daemon exits during a probe', async () => {
+  const runtime: RuntimeInfo = { pid: 38, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  const probe = Promise.withResolvers<boolean>()
+  const exited = Promise.withResolvers<number>()
+  const probeStarted = Promise.withResolvers<void>()
+  const status = daemonStatus('/owned/home', { pid: runtime.pid, exited: exited.promise }, 5_000, {
+    now: () => 0,
+    readRuntime: () => runtime,
+    isDaemonAlive: () => { probeStarted.resolve(); return probe.promise }
+  })
+  await probeStarted.promise
+  exited.resolve(0)
+  expect(await status).toBe(false)
+})
+
+test('daemon status stops a pending probe when the world is aborted', async () => {
+  const runtime: RuntimeInfo = { pid: 41, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  const controller = new AbortController()
+  const probe = Promise.withResolvers<boolean>()
+  const probeStarted = Promise.withResolvers<void>()
+  const status = daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    signal: controller.signal,
+    now: () => 0,
+    readRuntime: () => runtime,
+    isDaemonAlive: () => { probeStarted.resolve(); return probe.promise }
+  })
+  await probeStarted.promise
+  controller.abort()
+  expect(await status).toBe(false)
+})
+
+test('daemon status refuses missing or mismatched runtime ownership before probing', async () => {
+  const runtime: RuntimeInfo = { pid: 39, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  for (const current of [null, { ...runtime, pid: runtime.pid + 1 }]) {
+    let probes = 0
+    const status = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+      now: () => 0,
+      readRuntime: () => current,
+      isDaemonAlive: async () => { probes++; return true }
+    })
+    expect(status).toBe(false)
+    expect(probes).toBe(0)
+  }
+})
+
+test('daemon status rejects a successful probe after runtime ownership changes', async () => {
+  const runtime: RuntimeInfo = { pid: 40, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  let reads = 0
+  const status = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    now: () => 0,
+    readRuntime: () => ++reads === 1 ? runtime : { ...runtime, pid: runtime.pid + 1 },
+    isDaemonAlive: async () => true
+  })
+  expect(status).toBe(false)
+})
+
+test('daemon status refuses a health reply received after its retry budget', async () => {
+  const runtime: RuntimeInfo = { pid: 42, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  let now = 0
+  const status = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    now: () => now,
+    readRuntime: () => runtime,
+    isDaemonAlive: async () => { now = 5_001; return true }
+  })
+  expect(status).toBe(false)
+})
 
 test('builtin plugin fixture links every checkout plugin except Accounts', () => {
   const repoRoot = resolve(import.meta.dir, '../..')

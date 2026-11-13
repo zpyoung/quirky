@@ -1,7 +1,11 @@
-import { expect, test } from 'bun:test'
+import { expect, jest, test } from 'bun:test'
 import { chromium, type BrowserServer, type Page } from 'playwright'
 import { BrowserFailure, type BrowserWorld } from './browser-world'
-import { isGreenSample, isRedSample, openWatchRenderer, sampleWatchMarker, verifyWatchAndRestartOutcome, waitForWatchSample, type WatchPixelSample } from './browser-pane'
+import { isGreenSample, isRedSample, openWatchRenderer, sampleWatchMarker, verifyWatchAndRestartOutcome, waitForWatchImage, waitForWatchSample, type WatchPixelSample } from './browser-pane'
+
+const clock = jest as typeof jest & {
+  advanceTimersByTime(milliseconds: number): void
+}
 
 type Outcome = {
   watch?: { beforeSample: WatchPixelSample | null; afterSample: WatchPixelSample | null }
@@ -183,6 +187,78 @@ test('global cancellation remains a deadline rather than a frame-window failure'
   }, Date.now() + 20)).rejects.toMatchObject({ kind: 'deadline', message: 'fixture run interrupted' })
 })
 
+test('a visible plugin activation error refuses a missing Watch pane immediately with the banner text', async () => {
+  const text = 'quirky.terminal failed to activate: activation timed out'
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
+  const previousStyle = Object.getOwnPropertyDescriptor(globalThis, 'getComputedStyle')
+  const banner = { textContent: text, getClientRects: () => [{}] }
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: {
+    querySelectorAll: () => [banner], querySelector: () => null
+  } })
+  Object.defineProperty(globalThis, 'getComputedStyle', { configurable: true, value: () => ({ display: 'block', visibility: 'visible' }) })
+  const diagnosticsStarted = Promise.withResolvers<void>()
+  const diagnosticResponse = Promise.withResolvers<unknown>()
+  const page = {
+    waitForFunction: async (predicate: (id: string) => unknown, id: string) => ({
+      jsonValue: async () => predicate(id), dispose: async () => {}
+    }),
+    evaluate: () => { diagnosticsStarted.resolve(); return diagnosticResponse.promise },
+    locator: () => { throw new Error('must reject activation before trying to decode an absent image') }
+  } as unknown as Page
+  const pending = waitForWatchImage(page, 'pane-fixture', {
+    signal: new AbortController().signal, deadline: Date.now() + 5_000
+  }).catch((error: unknown) => error)
+  try {
+    const observed = await Promise.race([
+      pending.then(failure => ({ status: 'failed' as const, failure })),
+      diagnosticsStarted.promise.then(() => ({ status: 'waiting-for-diagnostics' as const }))
+    ])
+    expect(observed.status).toBe('failed')
+    if (observed.status !== 'failed') throw new Error('activation error waited for diagnostics')
+    const failure = observed.failure
+    expect(failure).toBeInstanceOf(BrowserFailure)
+    if (!(failure instanceof BrowserFailure)) throw new Error('expected a Watch failure')
+    expect(failure.kind).toBe('wrong-page')
+    expect(failure.message).toContain(text)
+    expect(failure.message).not.toContain('Watch pane mount deadline reached')
+  } finally {
+    diagnosticResponse.resolve({ renderedPanes: [], banners: [text] })
+    await pending
+    if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument)
+    else Reflect.deleteProperty(globalThis, 'document')
+    if (previousStyle) Object.defineProperty(globalThis, 'getComputedStyle', previousStyle)
+    else Reflect.deleteProperty(globalThis, 'getComputedStyle')
+  }
+})
+
+test('frame failure diagnostics retain a slow renderer response instead of a one-second timeout', async () => {
+  clock.useFakeTimers()
+  const text = 'quirky.terminal failed to activate: activation timed out'
+  const diagnosisStarted = Promise.withResolvers<void>()
+  const response = Promise.withResolvers<{ renderedPanes: string[]; banners: string[] }>()
+  const page = {
+    locator: () => ({ evaluate: async () => { throw new BrowserFailure('deadline', 'Watch sample window exhausted') } }),
+    evaluate: () => { diagnosisStarted.resolve(); return response.promise }
+  } as unknown as Page
+  try {
+    const pending = waitForWatchSample(page, 'pane-fixture', { width: 800, height: 600 }, isRedSample, 'red marker', {
+      signal: new AbortController().signal, deadline: Date.now() + 10_000
+    }, Date.now() + 20).catch((error: unknown) => error)
+    await diagnosisStarted.promise
+    clock.advanceTimersByTime(1_100)
+    response.resolve({ renderedPanes: [], banners: [text] })
+    const failure = await pending
+    expect(failure).toBeInstanceOf(BrowserFailure)
+    if (!(failure instanceof BrowserFailure)) throw new Error('expected a Watch failure')
+    expect(failure.kind).toBe('wrong-page')
+    expect(failure.message).toContain(text)
+    expect(failure.message).not.toContain('Watch failure diagnostics deadline reached')
+  } finally {
+    response.resolve({ renderedPanes: [], banners: [text] })
+    clock.useRealTimers()
+  }
+})
+
 test('a renderer connection failure still tracks its pid and closes the server', async () => {
   const tracked: number[] = []
   let closeCalls = 0
@@ -276,3 +352,55 @@ for (const [command, field] of [['orca', 'orcaLog'], ['security', 'securityLog']
   })
 }
 
+test('readiness-handle disposal cannot replace an observed activation error', async () => {
+  const text = 'quirky.terminal failed to activate: activation timed out'
+  const disposalStarted = Promise.withResolvers<void>()
+  const disposal = Promise.withResolvers<void>()
+  const page = {
+    waitForFunction: async () => ({
+      jsonValue: async () => ({ activationError: text }),
+      dispose: () => { disposalStarted.resolve(); return disposal.promise }
+    }),
+    evaluate: async () => ({ renderedPanes: [] })
+  } as unknown as Page
+  const pending = waitForWatchImage(page, 'pane-fixture', {
+    signal: new AbortController().signal, deadline: Date.now() + 5_000
+  }).catch((error: unknown) => error)
+  await disposalStarted.promise
+  disposal.reject(new Error('renderer closed during handle disposal'))
+  const failure = await pending
+  expect(failure).toBeInstanceOf(BrowserFailure)
+  if (!(failure instanceof BrowserFailure)) throw new Error('expected a Watch failure')
+  expect(failure.kind).toBe('wrong-page')
+  expect(failure.message).toContain(text)
+  expect(failure.message).not.toContain('renderer closed during handle disposal')
+})
+
+test('readiness serialization is bounded even when the renderer replies after the startup window', async () => {
+  clock.useFakeTimers()
+  const serializationStarted = Promise.withResolvers<void>()
+  const response = Promise.withResolvers<{ ready: true }>()
+  const page = {
+    waitForFunction: async () => ({
+      jsonValue: () => { serializationStarted.resolve(); return response.promise },
+      dispose: async () => {}
+    }),
+    evaluate: async () => ({ renderedPanes: [] })
+  } as unknown as Page
+  try {
+    const pending = waitForWatchImage(page, 'pane-fixture', {
+      signal: new AbortController().signal, deadline: Date.now() + 60_000
+    }).catch((error: unknown) => error)
+    await serializationStarted.promise
+    clock.advanceTimersByTime(30_001)
+    response.resolve({ ready: true })
+    const failure = await pending
+    expect(failure).toBeInstanceOf(BrowserFailure)
+    if (!(failure instanceof BrowserFailure)) throw new Error('expected a Watch failure')
+    expect(failure.kind).toBe('wrong-page')
+    expect(failure.message).toContain('Watch readiness details deadline reached')
+  } finally {
+    response.resolve({ ready: true })
+    clock.useRealTimers()
+  }
+})

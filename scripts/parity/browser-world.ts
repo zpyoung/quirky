@@ -645,13 +645,61 @@ function withinDeadline<T>(operation: Promise<T>, signal: AbortSignal | undefine
   return promise
 }
 
-async function daemonStatus(home: string, daemon: Pick<PipeChild, 'pid' | 'exited'>, deadline: number): Promise<boolean> {
-  const runtime = readRuntime(home)
-  if (!runtime || runtime.pid !== daemon.pid || Date.now() >= deadline) return false
-  return await Promise.race([
-    isDaemonAlive(runtime, Math.max(1, Math.min(300, deadline - Date.now()))),
-    daemon.exited.then(() => false)
-  ])
+type DaemonStatusOptions = {
+  signal?: AbortSignal
+  readRuntime?: typeof readRuntime
+  isDaemonAlive?: typeof isDaemonAlive
+  sleep?: (milliseconds: number) => Promise<void>
+  now?: () => number
+}
+
+export async function daemonStatus(
+  home: string,
+  daemon: Pick<PipeChild, 'pid' | 'exited'>,
+  deadline: number,
+  options: DaemonStatusOptions = {}
+): Promise<boolean> {
+  const now = options.now ?? Date.now
+  const readOwnedRuntime = options.readRuntime ?? readRuntime
+  const probe = options.isDaemonAlive ?? isDaemonAlive
+  const sleep = options.sleep ?? ((milliseconds) => Bun.sleep(milliseconds))
+  const retryDeadline = Math.min(deadline, now() + 5_000)
+  let exited = false
+  let aborted = options.signal?.aborted ?? false
+  const stopped = Promise.withResolvers<void>()
+  const onAbort = () => {
+    aborted = true
+    stopped.resolve()
+  }
+  const onExit = () => {
+    exited = true
+    stopped.resolve()
+  }
+  daemon.exited.then(onExit, onExit)
+  options.signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    while (now() < retryDeadline) {
+      if (aborted || exited || options.signal?.aborted) return false
+      const runtime = readOwnedRuntime(home)
+      if (!runtime || runtime.pid !== daemon.pid) return false
+      const remaining = retryDeadline - now()
+      if (remaining <= 0) return false
+      const alive = await Promise.race([
+        probe(runtime, Math.max(1, Math.min(300, remaining))),
+        stopped.promise.then(() => false)
+      ])
+      if (aborted || exited || options.signal?.aborted || now() >= retryDeadline) return false
+      const afterProbe = readOwnedRuntime(home)
+      if (!afterProbe || afterProbe.pid !== daemon.pid) return false
+      if (alive) return true
+      const pause = Math.min(50, retryDeadline - now())
+      if (pause <= 0) return false
+      await Promise.race([sleep(pause), stopped.promise])
+    }
+    return false
+  } finally {
+    options.signal?.removeEventListener('abort', onAbort)
+  }
 }
 
 async function waitForDaemon(
@@ -955,7 +1003,12 @@ export async function startBrowserWorld(options: {
         throw new BrowserFailure('invalid-cli-arguments', 'runtime selection is fixed to the owned local daemon')
       }
       const activeDaemon = currentDaemon
-      if (!activeDaemon || !(await daemonStatus(home, activeDaemon, deadline))) {
+      if (!activeDaemon) {
+        throw new BrowserFailure('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start', daemonDiagnostics() || undefined)
+      }
+      const daemonHealthy = await daemonStatus(home, activeDaemon, deadline, { signal: options.signal })
+      ensureWorkTime(options.signal, deadline)
+      if (!daemonHealthy) {
         throw new BrowserFailure('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start', daemonDiagnostics() || undefined)
       }
 
@@ -1029,7 +1082,12 @@ export async function startBrowserWorld(options: {
       }
       if (exitCode !== 0 && !(cliOptions.allowFailure ?? false)) {
         const after = readRuntime(home)
-        if (!after || after.pid !== activeDaemon.pid || !(await daemonStatus(home, activeDaemon, deadline))) {
+        if (!after || after.pid !== activeDaemon.pid) {
+          throw new BrowserFailure('daemon-exited', 'owned daemon exited during the CLI operation', receipt.stderrTail || undefined)
+        }
+        const daemonHealthy = await daemonStatus(home, activeDaemon, deadline, { signal: options.signal })
+        ensureWorkTime(options.signal, deadline)
+        if (!daemonHealthy) {
           throw new BrowserFailure('daemon-exited', 'owned daemon exited during the CLI operation', receipt.stderrTail || undefined)
         }
         throw new BrowserFailure('cli-nonzero', `CLI command exited with code ${exitCode}`, receipt.stderrTail || undefined)
@@ -1104,7 +1162,10 @@ export async function startBrowserWorld(options: {
     ensureWorkTime(options.signal, deadline)
     if (options.afterReady) await withinDeadline(options.afterReady(world), options.signal, deadline)
     ensureWorkTime(options.signal, deadline)
-    if (!currentDaemon || !(await daemonStatus(home, currentDaemon, deadline))) throw new BrowserFailure('daemon-exited', 'owned daemon exited after readiness', daemonDiagnostics() || undefined)
+    if (!currentDaemon) throw new BrowserFailure('daemon-exited', 'owned daemon exited after readiness', daemonDiagnostics() || undefined)
+    const daemonHealthy = await daemonStatus(home, currentDaemon, deadline, { signal: options.signal })
+    ensureWorkTime(options.signal, deadline)
+    if (!daemonHealthy) throw new BrowserFailure('daemon-exited', 'owned daemon exited after readiness', daemonDiagnostics() || undefined)
     return world
   } catch (error) {
     return await abortInFlight(error)

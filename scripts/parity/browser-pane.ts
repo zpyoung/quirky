@@ -425,25 +425,37 @@ async function failWatchSample(
       banners: [...document.querySelectorAll('.banner, [role="alert"]')].map(node => node.textContent?.slice(0, 200)),
       visibleText: document.body.innerText.slice(0, 600)
     }
-  }, paneId), Math.min(c.deadline, Date.now() + 1_000), c.signal, 'Watch failure diagnostics deadline reached')
+  }, paneId), Math.min(c.deadline, Date.now() + 5_000), c.signal, 'Watch failure diagnostics deadline reached')
     .catch((error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }))
   remainingMs(c.deadline, c.signal, 'Watch run deadline reached')
   const detail = latestError instanceof Error ? latestError.message : latestError === undefined ? null : String(latestError)
   throw new BrowserFailure('wrong-page', `${description} did not render before the Watch pane deadline; lastSample=${JSON.stringify(latestSample ?? null)}; lastError=${JSON.stringify(detail)}; renderer=${JSON.stringify(renderer)}`)
 }
 
-async function waitForWatchImage(uiPage: Page, paneId: string, c: Pick<CheckContext, 'signal' | 'deadline'>): Promise<void> {
+export async function waitForWatchImage(uiPage: Page, paneId: string, c: Pick<CheckContext, 'signal' | 'deadline'>): Promise<void> {
   const deadline = Math.min(c.deadline, Date.now() + RENDERER_STARTUP_MS)
-  const root = uiPage.locator(watchPaneSelector(paneId))
+  let activationFailure: BrowserFailure | undefined
   try {
-    await awaitOperation(() => root.waitFor({
-      state: 'visible', timeout: remainingMs(deadline, c.signal, 'Watch pane mount deadline reached')
-    }), deadline, c.signal, 'Watch pane mount deadline reached')
-    const image = root.locator('.qbp-watch-image')
-    await awaitOperation(() => image.waitFor({
-      state: 'visible', timeout: remainingMs(deadline, c.signal, 'Watch first image deadline reached')
-    }), deadline, c.signal, 'Watch first image deadline reached')
-    await awaitOperation(() => image.evaluate(async node => {
+    const readiness = await awaitOperation(() => uiPage.waitForFunction(expectedPane => {
+      const visible = (node: Element) => node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden'
+      for (const banner of document.querySelectorAll<HTMLElement>('.plugin-slot-error[role="alert"]')) {
+        const text = banner.textContent?.trim() ?? ''
+        if (visible(banner) && text.includes('failed to activate:')) return { activationError: text }
+      }
+      const root = document.querySelector<HTMLElement>(`.qbp[data-browser-pane=${JSON.stringify(expectedPane)}]`)
+      const image = root?.querySelector<HTMLImageElement>('.qbp-watch-image')
+      if (!root || !image || !visible(root) || !visible(image) || !image.complete ||
+          image.naturalWidth <= 0 || image.naturalHeight <= 0) return false
+      return { ready: true }
+    }, paneId, { timeout: remainingMs(deadline, c.signal, 'Watch pane mount deadline reached') }),
+    deadline, c.signal, 'Watch pane mount deadline reached')
+    const state = await awaitOperation(() => readiness.jsonValue(), deadline, c.signal, 'Watch readiness details deadline reached')
+      .finally(() => { void readiness.dispose().catch(() => undefined) })
+    if (state && 'activationError' in state) {
+      activationFailure = new BrowserFailure('wrong-page', `Plugin activation failed while waiting for Watch: ${state.activationError}`)
+      throw activationFailure
+    }
+    await awaitOperation(() => uiPage.locator(`${watchPaneSelector(paneId)} .qbp-watch-image`).evaluate(async node => {
       const image = node as HTMLImageElement
       await image.decode()
       if (image.naturalWidth <= 0 || image.naturalHeight <= 0) throw new Error('Watch image decoded without pixels')
@@ -451,6 +463,7 @@ async function waitForWatchImage(uiPage: Page, paneId: string, c: Pick<CheckCont
     deadline, c.signal, 'Watch image decode deadline reached')
   } catch (error) {
     if (c.signal.aborted) throw deadlineFailure(c.signal, 'Watch run interrupted')
+    if (activationFailure) throw activationFailure
     remainingMs(c.deadline, c.signal, 'Watch run deadline reached')
     await failWatchSample(uiPage, paneId, 'visible decoded Watch image', c, undefined, error)
   }
