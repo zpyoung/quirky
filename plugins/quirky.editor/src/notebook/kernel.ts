@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process'
 import { chmodSync, mkdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
+import type { ProcessSpawner, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 import type { PythonEnvironment } from './python'
 
 export type KernelFrame = {
@@ -37,16 +37,8 @@ function delay(milliseconds: number): Promise<void> {
   return promise
 }
 
-function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (!child.pid) return
-  try {
-    if (process.platform !== 'win32') process.kill(-child.pid, signal)
-    else child.kill(signal)
-  } catch {
-    try { child.kill(signal) } catch { /* already exited */ }
-  }
-}
 
+/** Owns the long-lived bridge process for one notebook kernel session. */
 export class KernelSession {
   readonly id = randomUUID()
   readonly python: PythonEnvironment
@@ -54,9 +46,9 @@ export class KernelSession {
   readonly bridgePath: string
   readonly quirkyHome: string
   readonly home: string
-  #child: ChildProcess | null = null
+  #process: ProcessSpawner
+  #child: SpawnedProcess | null = null
   #status: KernelStatus = 'starting'
-  #stderr = ''
   #stdout = ''
   #active: Execution | null = null
   #queue: Execution[] = []
@@ -64,33 +56,44 @@ export class KernelSession {
   #ready = Promise.withResolvers<ReadyFrame>()
   #readySettled = false
   #exit = Promise.withResolvers<void>()
-  #receive = Promise.resolve()
+  #invalidated = Promise.withResolvers<void>()
+  #deliveryInvalidated = false
+  #stdoutLoop: Promise<void> | null = null
   #executionCount: number | null = null
   #error: string | null = null
+  #protocolFailureDetail: string | null = null
   #onStatusChange: ((session: KernelSession) => void) | undefined
   #startPromise: Promise<KernelStartResult> | null = null
   #shutdownPromise: Promise<void> | null = null
+  #shutdownGraceMs: number
+  #exitDrainMs: number
+  #stopRequested = false
 
   constructor(
+    process: ProcessSpawner,
     python: PythonEnvironment,
     cwd: string,
     bridgePath: string,
     home: string,
     onStatusChange?: (session: KernelSession) => void,
-    quirkyHome = home
+    quirkyHome = home,
+    timing: { shutdownGraceMs?: number; exitDrainMs?: number } = {}
   ) {
+    this.#process = process
     this.python = python
     this.cwd = cwd
     this.bridgePath = bridgePath
     this.home = home
     this.quirkyHome = quirkyHome
     this.#onStatusChange = onStatusChange
+    this.#shutdownGraceMs = timing.shutdownGraceMs ?? SHUTDOWN_GRACE_MS
+    this.#exitDrainMs = timing.exitDrainMs ?? 1_000
   }
 
   get status(): KernelStatus { return this.#status }
   get busy(): boolean { return this.#busy }
-  get pid(): number | undefined { return this.#child?.pid }
-  get stderr(): string { return this.#stderr }
+  get pid(): number | undefined { return this.#child?.pid ?? undefined }
+  get stderr(): string { return this.#diagnostic() }
   get executionCount(): number | null { return this.#executionCount }
   get error(): string | null { return this.#error }
 
@@ -102,7 +105,6 @@ export class KernelSession {
   }
 
   async #start(): Promise<KernelStartResult> {
-    let child: ChildProcess
     const configDir = join(this.home, 'jupyter', 'config')
     const dataDir = join(this.home, 'jupyter', 'data')
     const runtimeDir = join(this.home, 'jupyter', 'runtime')
@@ -123,42 +125,34 @@ export class KernelSession {
       JUPYTER_RUNTIME_DIR: runtimeDir,
       IPYTHONDIR: ipythonDir
     }
+    let child: SpawnedProcess
     try {
-      child = spawn(this.python.path, ['-u', this.bridgePath], {
+      child = this.#process.spawn([this.python.path, '-u', this.bridgePath], {
         cwd: this.cwd,
         env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        detached: process.platform !== 'win32',
-        windowsHide: true
+        stdin: 'pipe',
+        timeoutMs: null,
+        killGraceMs: 5_000,
+        stderrTailBytes: 16_384
       })
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       this.#markDead(detail)
       return { status: 'failed', detail, session: this }
     }
+
     this.#child = child
-    child.stdout?.setEncoding('utf8')
-    child.stderr?.setEncoding('utf8')
-    child.stdout?.on('data', (chunk: string) => {
-      this.#receive = this.#receive.then(() => this.#acceptStdout(chunk)).catch((error) => this.#protocolFailure(error))
-    })
-    child.stderr?.on('data', (chunk: string) => {
-      this.#stderr = `${this.#stderr}${chunk}`.slice(-4000)
-    })
-    child.once('error', (error) => {
-      this.#markDead(error.message)
-    })
-    child.once('close', (code, signal) => {
+    this.#stdoutLoop = this.#readStdout(child)
+    void child.exited.then(async (exit) => {
       this.#exit.resolve()
-      if (this.#status !== 'stopping' && this.#status !== 'stopped' && this.#status !== 'missing-ipykernel') {
-        this.#markDead(`kernel bridge exited${code === null ? '' : ` with code ${code}`}${signal ? ` (${signal})` : ''}`)
-      }
-    })
+      await this.#handleExit(exit)
+    }).catch((error) => this.#protocolFailure(error))
+
     const timer = setTimeout(() => {
       if (this.#status !== 'starting') return
       const detail = `kernel did not become ready within ${READY_TIMEOUT_MS} ms`
       this.#markDead(detail)
-      killGroup(child, 'SIGTERM')
+      this.#stopChild()
     }, READY_TIMEOUT_MS)
     const readiness = await this.#ready.promise
     clearTimeout(timer)
@@ -178,7 +172,9 @@ export class KernelSession {
   }
 
   execute(code: string, onFrame: Execution['onFrame']): Promise<CellExecutionResult> {
-    if (this.#status !== 'ready') return Promise.resolve({ status: 'dead', executionCount: this.#executionCount, stderr: this.#stderr || this.#error || 'The kernel is not ready.' })
+    if (this.#status !== 'ready') {
+      return Promise.resolve({ status: 'dead', executionCount: this.#executionCount, stderr: this.#diagnostic() || this.#error || 'The kernel is not ready.' })
+    }
     const { promise, resolve } = Promise.withResolvers<CellExecutionResult>()
     this.#queue.push({ code, onFrame, resolve })
     this.#pump()
@@ -189,16 +185,12 @@ export class KernelSession {
     if (this.#active || !this.#queue.length || this.#status !== 'ready') return
     this.#active = this.#queue.shift()!
     this.#busy = true
-    try {
-      this.#child?.stdin?.write(`${JSON.stringify({ op: 'execute', code: this.#active.code })}\n`)
-    } catch (error) {
-      this.#markDead(error instanceof Error ? error.message : String(error))
-      if (this.#child) killGroup(this.#child, 'SIGTERM')
-    }
+    void this.#write(`${JSON.stringify({ op: 'execute', code: this.#active.code })}\n`)
   }
 
   async interrupt(): Promise<{ interrupted: boolean; stalled: boolean }> {
-    if (!this.#active || !this.#child?.stdin || this.#status !== 'ready') return { interrupted: false, stalled: false }
+    const child = this.#child
+    if (!this.#active || !child || this.#status !== 'ready') return { interrupted: false, stalled: false }
     const active = this.#active
     const completed = Promise.withResolvers<void>()
     const originalResolve = active.resolve
@@ -206,15 +198,13 @@ export class KernelSession {
       originalResolve(result)
       completed.resolve()
     }
-    try {
-      this.#child.stdin.write('{"op":"interrupt"}\n')
-    } catch (error) {
-      this.#markDead(error instanceof Error ? error.message : String(error))
-      if (this.#child) killGroup(this.#child, 'SIGTERM')
-      return { interrupted: false, stalled: false }
-    }
-    const result = await Promise.race([completed.promise.then(() => true), delay(10_000).then(() => false)])
-    return { interrupted: true, stalled: !result && this.#active === active }
+    void this.#write('{"op":"interrupt"}\n').catch(() => {})
+    const outcome = await Promise.race([
+      completed.promise.then(() => 'completed' as const),
+      delay(10_000).then(() => 'timeout' as const)
+    ])
+    if (this.#status !== 'ready') return { interrupted: false, stalled: false }
+    return { interrupted: true, stalled: outcome === 'timeout' && this.#active === active }
   }
 
   shutdown(): Promise<void> {
@@ -225,21 +215,33 @@ export class KernelSession {
   }
 
   async #shutdown(): Promise<void> {
-    const child = this.#child
     if (this.#status === 'stopped') return
+    this.#invalidateDelivery()
     this.#setStatus('stopping')
     this.#settleReady({ status: 'failed', detail: this.#error ?? 'Kernel shut down before becoming ready.' })
     this.#failQueued('Kernel shut down before execution.')
+    const child = this.#child
     if (!child) {
       this.#finishActive('dead')
       this.#setStatus('stopped')
       return
     }
-    try { child.stdin?.end() } catch { /* the bridge may already have exited */ }
-    const clean = await Promise.race([this.#exit.promise.then(() => true), delay(SHUTDOWN_GRACE_MS).then(() => false)])
-    if (!clean) {
-      killGroup(child, 'SIGKILL')
-      await Promise.race([this.#exit.promise, delay(1_000)])
+
+    try {
+      void child.closeInput().catch(() => {})
+    } catch {}
+    const exited = await Promise.race([
+      this.#exit.promise.then(() => true),
+      delay(this.#shutdownGraceMs).then(() => false)
+    ])
+    if (!exited) {
+      try {
+        const stopped = child.stop({ signal: 'SIGKILL' })
+        await Promise.race([
+          stopped.then(() => undefined, () => undefined),
+          delay(1_000)
+        ])
+      } catch {}
     }
     this.#finishActive('dead')
     this.#setStatus('stopped')
@@ -251,8 +253,16 @@ export class KernelSession {
     this.#onStatusChange?.(this)
   }
 
+  #invalidateDelivery(): void {
+    if (this.#deliveryInvalidated) return
+    this.#deliveryInvalidated = true
+    this.#stdout = ''
+    this.#invalidated.resolve()
+  }
+
   #markDead(detail: string): void {
-    if (this.#status === 'stopping' || this.#status === 'stopped' || this.#status === 'missing-ipykernel') return
+    if (this.#status === 'dead' || this.#status === 'stopping' || this.#status === 'stopped' || this.#status === 'missing-ipykernel') return
+    this.#invalidateDelivery()
     this.#error ??= detail
     this.#setStatus('dead')
     this.#settleReady({ status: 'failed', detail: this.#error })
@@ -261,8 +271,9 @@ export class KernelSession {
   }
 
   #failQueued(message: string): void {
+    const stderr = this.#diagnostic() || message
     for (const pending of this.#queue.splice(0)) {
-      pending.resolve({ status: 'dead', executionCount: this.#executionCount, stderr: this.#stderr || message })
+      pending.resolve({ status: 'dead', executionCount: this.#executionCount, stderr })
     }
   }
 
@@ -272,10 +283,65 @@ export class KernelSession {
     this.#ready.resolve(result)
   }
 
+  async #readStdout(child: SpawnedProcess): Promise<void> {
+    const reader = child.stdout.getReader()
+    const decoder = new TextDecoder()
+    try {
+      for (;;) {
+        if (this.#deliveryInvalidated) return
+        let result: { kind: 'invalidated' } | { kind: 'read'; done: boolean; value: Uint8Array | undefined }
+        try {
+          result = await Promise.race([
+            reader.read().then(({ done, value }) => ({ kind: 'read' as const, done, value })),
+            this.#invalidated.promise.then(() => ({ kind: 'invalidated' as const }))
+          ])
+        } catch (error) {
+          if (!this.#deliveryInvalidated) {
+            const detail = error instanceof Error ? error.message : String(error)
+            this.#protocolFailure(new Error(`kernel bridge stdout failed: ${detail}`))
+          }
+          return
+        }
+        if (result.kind === 'invalidated') return
+        if (result.done) {
+          const finalChunk = decoder.decode()
+          if (finalChunk && !this.#deliveryInvalidated) {
+            try {
+              await this.#acceptStdout(finalChunk)
+            } catch (error) {
+              if (!this.#deliveryInvalidated) this.#protocolFailure(error)
+            }
+          }
+          return
+        }
+        const text = decoder.decode(result.value, { stream: true })
+        if (text && !this.#deliveryInvalidated) {
+          try {
+            await this.#acceptStdout(text)
+          } catch (error) {
+            if (!this.#deliveryInvalidated) this.#protocolFailure(error)
+            return
+          }
+        }
+      }
+    } finally {
+      if (this.#deliveryInvalidated) {
+        try { void reader.cancel().catch(() => {}) } catch {}
+      } else {
+        try { reader.releaseLock() } catch {}
+      }
+    }
+  }
+
   async #acceptStdout(chunk: string): Promise<void> {
+    if (this.#deliveryInvalidated) return
     this.#stdout += chunk
     if (this.#stdout.length > MAX_FRAME_BYTES * 2) throw new Error('kernel bridge sent an oversized partial frame')
     for (;;) {
+      if (this.#deliveryInvalidated) {
+        this.#stdout = ''
+        return
+      }
       const newline = this.#stdout.indexOf('\n')
       if (newline < 0) return
       const line = this.#stdout.slice(0, newline)
@@ -284,11 +350,19 @@ export class KernelSession {
       let parsed: unknown
       try { parsed = JSON.parse(line) } catch { throw new Error('kernel bridge sent malformed NDJSON') }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('kernel bridge frame must be an object')
-      await this.#handleFrame(parsed as KernelFrame)
+      await Promise.race([
+        this.#handleFrame(parsed as KernelFrame),
+        this.#invalidated.promise
+      ])
+      if (this.#deliveryInvalidated) {
+        this.#stdout = ''
+        return
+      }
     }
   }
 
   async #handleFrame(frame: KernelFrame): Promise<void> {
+    if (this.#deliveryInvalidated) return
     if (frame.type === 'ready') {
       this.#settleReady({ status: 'ready' })
       return
@@ -315,15 +389,65 @@ export class KernelSession {
     if (!active) return
     this.#active = null
     this.#busy = false
-    active.resolve({ status, executionCount: this.#executionCount, stderr: this.#stderr })
+    active.resolve({ status, executionCount: this.#executionCount, stderr: this.#diagnostic() })
     this.#pump()
   }
 
+  #diagnostic(): string {
+    const stderr = this.#child?.stderrTail() ?? ''
+    const combined = this.#protocolFailureDetail === null ? stderr : `${stderr}\n${this.#protocolFailureDetail}`
+    return combined.slice(-4_000)
+  }
+
+  #write(data: string): Promise<boolean> {
+    const child = this.#child
+    if (!child) return Promise.resolve(false)
+    let pending: Promise<boolean>
+    try {
+      pending = child.write(data)
+    } catch (error) {
+      if (!this.#deliveryInvalidated) {
+        const detail = error instanceof Error ? error.message : String(error)
+        this.#protocolFailure(new Error(`kernel bridge stdin failed: ${detail}`))
+      }
+      return Promise.resolve(false)
+    }
+    return pending.then((written) => {
+      if (!written && !this.#deliveryInvalidated) this.#protocolFailure(new Error('kernel bridge stdin failed: the pipe is closed'))
+      return written
+    }, (error) => {
+      if (!this.#deliveryInvalidated) {
+        const detail = error instanceof Error ? error.message : String(error)
+        this.#protocolFailure(new Error(`kernel bridge stdin failed: ${detail}`))
+      }
+      return false
+    })
+  }
+
+  #stopChild(): void {
+    if (!this.#child || this.#stopRequested) return
+    this.#stopRequested = true
+    try { void this.#child.stop().catch(() => {}) } catch {}
+  }
+
   #protocolFailure(error: unknown): void {
+    if (this.#deliveryInvalidated) return
     const detail = error instanceof Error ? error.message : String(error)
+    this.#protocolFailureDetail ??= detail
     this.#error ??= detail
-    this.#stderr = `${this.#stderr}\n${detail}`.slice(-4000)
     this.#markDead(detail)
-    if (this.#child) killGroup(this.#child, 'SIGTERM')
+    this.#stopChild()
+  }
+
+  async #handleExit(exit: SpawnExit): Promise<void> {
+    if (exit.spawnError) {
+      this.#markDead(exit.spawnError.message)
+      return
+    }
+    if (this.#deliveryInvalidated || this.#status === 'stopping' || this.#status === 'stopped' || this.#status === 'missing-ipykernel') return
+    const stdoutLoop = this.#stdoutLoop ?? Promise.resolve()
+    await Promise.race([stdoutLoop, delay(this.#exitDrainMs)])
+    if (this.#deliveryInvalidated || this.#status === 'stopping' || this.#status === 'stopped' || this.#status === 'missing-ipykernel') return
+    this.#markDead(`kernel bridge exited${exit.exitCode === null ? '' : ` with code ${exit.exitCode}`}${exit.signal ? ` (${exit.signal})` : ''}`)
   }
 }
