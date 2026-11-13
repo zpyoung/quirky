@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import type { ProcessSpawner, SpawnExit, SpawnOptions, SpawnedProcess, StopOptions } from '@quirky/protocol'
 import { accessSync, constants, copyFileSync, existsSync, linkSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, closeSync, unlinkSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -11,65 +11,197 @@ const MAX_PROCESS_OUTPUT = 8192
 
 export type ProcessResult = { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
 
-type ManagedProcessResult = { result: ProcessResult; outputComplete: boolean; shutdownRequested: boolean }
+type ProcessOptions = { timeoutMs: number; home?: string; signal?: AbortSignal }
+type ManagedProcessResult = {
+  result: ProcessResult
+  exit: SpawnExit
+  outputComplete: boolean
+  shutdownRequested: boolean
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
+}
 
 async function runProcessWithCompletion(
+  runner: ProcessSpawner,
   command: string,
   args: string[],
-  options: { timeoutMs: number; home?: string },
-  isComplete?: () => boolean
+  options: ProcessOptions,
+  isComplete?: () => boolean,
+  pollIntervalMs = 50
 ): Promise<ManagedProcessResult> {
-  const { promise, resolve, reject } = Promise.withResolvers<ManagedProcessResult>()
-  const child = spawn(command, args, {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-    ...(options.home === undefined ? {} : { env: { ...process.env, HOME: options.home, USERPROFILE: options.home } })
-  })
+  if (options.signal?.aborted) throw new Error('Process was aborted.')
+  const spawnOptions: SpawnOptions = {
+    timeoutMs: options.timeoutMs,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'tail',
+    stderrTailBytes: MAX_PROCESS_OUTPUT * 4,
+    killGraceMs: 0,
+    ...(options.home === undefined ? {} : { env: { ...process.env, HOME: options.home, USERPROFILE: options.home } }),
+    ...(options.signal === undefined ? {} : { signal: options.signal })
+  }
+  let child: SpawnedProcess
+  try {
+    child = runner.spawn([command, ...args], spawnOptions)
+  } catch (error) {
+    throw asError(error)
+  }
+
   let stdout = ''
-  let stderr = ''
-  let timedOut = false
   let outputComplete = false
   let shutdownRequested = false
-  let processError: Error | null = null
-  child.stdout?.on('data', (chunk: Buffer | string) => { stdout = (stdout + chunk.toString()).slice(-MAX_PROCESS_OUTPUT) })
-  child.stderr?.on('data', (chunk: Buffer | string) => { stderr = (stderr + chunk.toString()).slice(-MAX_PROCESS_OUTPUT) })
+  let timedOut = false
+  let aborted = false
+  let exitSettled = false
+  let exitResult: SpawnExit | undefined
+  let readFailed = false
+  let readFailure: unknown
+  let completionFailed = false
+  let completionFailure: unknown
+  let stopFailed = false
+  let stopFailure: unknown
+  let outputReader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  const stopOperations: Promise<void>[] = []
+
+  function requestStop(stopOptions: StopOptions, cancelOutput = false): void {
+    try {
+      const operation = child.stop(stopOptions)
+      stopOperations.push(Promise.resolve(operation).then(
+        () => {},
+        (error: unknown) => {
+          if (!stopFailed) {
+            stopFailed = true
+            stopFailure = error
+          }
+        }
+      ))
+    } catch (error) {
+      if (!stopFailed) {
+        stopFailed = true
+        stopFailure = error
+      }
+    }
+    if (cancelOutput && outputReader) {
+      try {
+        void outputReader.cancel().catch(() => {})
+      } catch {}
+    }
+  }
+
+  const exitPromise = child.exited.then(
+    (exit) => {
+      exitSettled = true
+      exitResult = exit
+      return exit
+    },
+    (error: unknown) => {
+      requestStop({ signal: 'SIGKILL', graceMs: 0 }, true)
+      throw error
+    }
+  )
+  const drainPromise = (async () => {
+    const reader = child.stdout.getReader()
+    outputReader = reader
+    const decoder = new TextDecoder()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        const decoded = done ? decoder.decode() : decoder.decode(value, { stream: true })
+        if (decoded !== '') {
+          stdout += decoded
+          if (stdout.length > MAX_PROCESS_OUTPUT) stdout = stdout.slice(-MAX_PROCESS_OUTPUT)
+        }
+        if (done) break
+      }
+    } catch (error) {
+      readFailed = true
+      readFailure = error
+      throw error
+    } finally {
+      reader.releaseLock()
+    }
+  })()
   const timer = setTimeout(() => {
     timedOut = true
-    child.kill('SIGKILL')
+    requestStop({ signal: 'SIGKILL', graceMs: 0 }, true)
   }, options.timeoutMs)
   const pollForCompletion = () => {
-    if (!isComplete || outputComplete || child.exitCode !== null || child.signalCode !== null || !isComplete()) return
+    if (isComplete === undefined || outputComplete || exitSettled || timedOut || aborted || options.signal?.aborted) return
+    let complete: boolean
+    try {
+      complete = isComplete()
+    } catch (error) {
+      completionFailed = true
+      completionFailure = error
+      requestStop({ signal: 'SIGKILL', graceMs: 0 }, true)
+      return
+    }
+    if (!complete) return
     outputComplete = true
-    shutdownRequested = child.kill('SIGTERM')
+    shutdownRequested = true
+    requestStop({ graceMs: 2000 })
   }
-  const completionPoller = isComplete === undefined ? undefined : setInterval(pollForCompletion, 50)
-  const cleanup = () => {
-    clearTimeout(timer)
-    clearInterval(completionPoller)
+  const completionPoller = isComplete === undefined ? undefined : setInterval(pollForCompletion, pollIntervalMs)
+  const abortProcess = () => {
+    aborted = true
+    requestStop({ signal: 'SIGKILL', graceMs: 0 }, true)
   }
-  child.once('error', (error) => { processError = error })
-  child.once('close', (code, signal) => {
-    cleanup()
-    if (processError) {
-      reject(processError)
-      return
-    }
-    if (timedOut) {
-      reject(new Error(`Process timed out after ${options.timeoutMs} ms.`))
-      return
-    }
-    resolve({ result: { code, signal, stdout, stderr }, outputComplete, shutdownRequested })
-  })
-  pollForCompletion()
-  return promise
+  options.signal?.addEventListener('abort', abortProcess, { once: true })
+  if (options.signal?.aborted) abortProcess()
+  if (isComplete !== undefined) queueMicrotask(pollForCompletion)
+
+  let joinFailed = false
+  let joinFailure: unknown
+  try {
+    const [, exit] = await Promise.all([drainPromise, exitPromise])
+    exitResult = exit
+  } catch (error) {
+    joinFailed = true
+    joinFailure = error
+    requestStop({ signal: 'SIGKILL', graceMs: 0 }, true)
+    await Promise.allSettled([drainPromise, exitPromise])
+  }
+  let waitedForStops = 0
+  while (waitedForStops < stopOperations.length) {
+    await stopOperations[waitedForStops]!
+    waitedForStops += 1
+  }
+  clearTimeout(timer)
+  clearInterval(completionPoller!)
+  options.signal?.removeEventListener('abort', abortProcess)
+
+  if (readFailed) throw readFailure
+  if (completionFailed) throw asError(completionFailure)
+  if (joinFailed) throw asError(joinFailure)
+  if (stopFailed) throw asError(stopFailure)
+  const exit = exitResult!
+  if (exit.spawnError) throw new Error(exit.spawnError.message)
+  if (timedOut || exit.stopped === 'timeout') throw new Error(`Process timed out after ${options.timeoutMs} ms.`)
+  if (aborted || options.signal?.aborted || exit.stopped === 'aborted') throw new Error('Process was aborted.')
+  const ownedCompletionStop = isComplete !== undefined && outputComplete && shutdownRequested && exit.stopped === 'stop'
+  if (exit.stopped === 'stop' && !ownedCompletionStop) throw new Error('Process was stopped.')
+  return {
+    result: {
+      code: exit.exitCode,
+      signal: exit.signal as NodeJS.Signals | null,
+      stdout,
+      stderr: child.stderrTail().slice(-MAX_PROCESS_OUTPUT)
+    },
+    exit,
+    outputComplete,
+    shutdownRequested
+  }
 }
 
 export async function runProcess(
+  runner: ProcessSpawner,
   command: string,
   args: string[],
-  options: { timeoutMs: number; home?: string }
+  options: ProcessOptions
 ): Promise<ProcessResult> {
-  return (await runProcessWithCompletion(command, args, options)).result
+  return (await runProcessWithCompletion(runner, command, args, options)).result
 }
 
 function isCompletePdfArtifact(path: string): boolean {
@@ -79,6 +211,10 @@ function isCompletePdfArtifact(path: string): boolean {
   } catch {
     return false
   }
+}
+
+function assertNotAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error('Process was aborted.')
 }
 
 function pdfProcessFailure(result: ProcessResult): Error {
@@ -158,21 +294,28 @@ function assertPdfArtifact(path: string): void {
   }
 }
 
-export async function exportPdfWithChrome(input: {
-  title: string
-  html: string
-  outputPath: string
-  replaceExisting: boolean
-}): Promise<{ path: string; size: number }> {
+export async function exportPdfWithChrome(
+  runner: ProcessSpawner,
+  input: {
+    title: string
+    html: string
+    outputPath: string
+    replaceExisting: boolean
+  },
+  options: { signal?: AbortSignal; timeoutMs?: number; pollIntervalMs?: number } = {}
+): Promise<{ path: string; size: number }> {
+  assertNotAborted(options.signal)
   const chrome = findChrome()
   const temp = mkdtempSync(join(tmpdir(), 'quirky-markdown-pdf-'))
   const profile = join(temp, 'profile')
   const documentPath = join(temp, 'document.html')
   const renderedPdf = join(temp, 'rendered.pdf')
+  const timeoutMs = options.timeoutMs ?? PDF_TIMEOUT_MS
   let stagedPdf: string | null = null
   try {
     writeFileSync(documentPath, makePdfHtml(input.title, input.html), { encoding: 'utf8', mode: 0o600 })
-    const { result, outputComplete, shutdownRequested } = await runProcessWithCompletion(chrome, [
+    assertNotAborted(options.signal)
+    const completion = await runProcessWithCompletion(runner, chrome, [
       '--headless=new',
       '--disable-gpu',
       '--disable-extensions',
@@ -185,13 +328,18 @@ export async function exportPdfWithChrome(input: {
       `--print-to-pdf=${renderedPdf}`,
       '--print-to-pdf-no-header',
       fileUrl(documentPath)
-    ], { timeoutMs: PDF_TIMEOUT_MS, home: temp }, () => isCompletePdfArtifact(renderedPdf))
-    // A handled SIGTERM can become a watchdog exit; the validated artifact predates our owned shutdown.
-    if (result.code !== 0 && !(outputComplete && shutdownRequested)) throw pdfProcessFailure(result)
+    ], { timeoutMs, home: temp, signal: options.signal }, () => isCompletePdfArtifact(renderedPdf), options.pollIntervalMs ?? 50)
+    const { result, exit, outputComplete, shutdownRequested } = completion
+    // Publish only after a clean exit or the stop owned by an observed complete artifact.
+    const cleanExit = exit.exitCode === 0 && exit.signal === null && exit.stopped === undefined
+    const ownedCompletion = outputComplete && shutdownRequested && exit.stopped === 'stop'
+    if (!cleanExit && !ownedCompletion) throw pdfProcessFailure(result)
     assertPdfArtifact(renderedPdf)
+    assertNotAborted(options.signal)
     if (existsSync(input.outputPath) && !input.replaceExisting) throw new Error('PDF destination already exists.')
     stagedPdf = join(dirname(input.outputPath), `.${basename(input.outputPath)}.${randomUUID()}.tmp`)
     copyFileSync(renderedPdf, stagedPdf, constants.COPYFILE_EXCL)
+    assertNotAborted(options.signal)
     if (input.replaceExisting) renameSync(stagedPdf, input.outputPath)
     else {
       linkSync(stagedPdf, input.outputPath)
@@ -206,15 +354,14 @@ export async function exportPdfWithChrome(input: {
   }
 }
 
-export async function choosePdfDestination(title: string): Promise<string | null> {
+export async function choosePdfDestination(runner: ProcessSpawner, title: string, signal?: AbortSignal): Promise<string | null> {
   if (process.platform !== 'darwin') throw new Error('A native PDF save dialog is available only on macOS; pass an explicit authorized path.')
   const defaultName = `${basename(title).replace(/\.(?:md|markdown)$/i, '') || 'Document'}.pdf`
   const script = `POSIX path of (choose file name with prompt "Export Markdown as PDF" default name "${defaultName.replace(/[\\"]/g, '\\$&')}" )`
-  const result = await runProcess('osascript', ['-e', script], { timeoutMs: 300_000 })
+  const result = await runProcess(runner, 'osascript', ['-e', script], { timeoutMs: 300_000, signal })
   if (result.code !== 0) {
     if (/-128|User canceled|User cancelled/i.test(`${result.stderr}\n${result.stdout}`)) return null
     throw new Error(`Could not open the PDF save dialog: ${result.stderr || result.stdout}`)
   }
   return result.stdout.trim()
 }
-
