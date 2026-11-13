@@ -330,7 +330,6 @@ export async function exportPdfWithChrome(
       fileUrl(documentPath)
     ], { timeoutMs, home: temp, signal: options.signal }, () => isCompletePdfArtifact(renderedPdf), options.pollIntervalMs ?? 50)
     const { result, exit, outputComplete, shutdownRequested } = completion
-    // Publish only after a clean exit or the stop owned by an observed complete artifact.
     const cleanExit = exit.exitCode === 0 && exit.signal === null && exit.stopped === undefined
     const ownedCompletion = outputComplete && shutdownRequested && exit.stopped === 'stop'
     if (!cleanExit && !ownedCompletion) throw pdfProcessFailure(result)

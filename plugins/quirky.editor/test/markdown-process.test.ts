@@ -33,6 +33,34 @@ function temporaryRoot(): string {
   return root
 }
 
+let platformOverrideQueue = Promise.resolve()
+
+async function withPlatform<T>(platform: 'darwin' | 'linux', action: () => Promise<T>): Promise<T> {
+  const previous = platformOverrideQueue
+  const turn = Promise.withResolvers<void>()
+  platformOverrideQueue = previous.then(() => turn.promise)
+  await previous
+
+  let descriptor: PropertyDescriptor | undefined
+  let overridden = false
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    if (!descriptor) throw new Error('Expected process.platform to have an own property descriptor.')
+    const override: PropertyDescriptor = 'value' in descriptor
+      ? { ...descriptor, value: platform }
+      : { configurable: true, enumerable: descriptor.enumerable, writable: true, value: platform }
+    Object.defineProperty(process, 'platform', override)
+    overridden = true
+    return await action()
+  } finally {
+    try {
+      if (overridden && descriptor) Object.defineProperty(process, 'platform', descriptor)
+    } finally {
+      turn.resolve()
+    }
+  }
+}
+
 function setChromePath(root: string): string {
   const path = join(root, 'chrome-fixture')
   writeFileSync(path, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
@@ -124,7 +152,7 @@ function outputPathFrom(argv: readonly string[], prefix: string): string {
 
 function exportFixture(
   plan: (renderedPdf: string, runs: FakeRun[]) => FakePlan,
-  settings: { existing?: boolean; timeoutMs?: number; pollIntervalMs?: number } = {}
+  settings: { existing?: boolean; replaceExisting?: boolean; timeoutMs?: number; pollIntervalMs?: number } = {}
 ): {
   root: string
   outputPath: string
@@ -135,7 +163,7 @@ function exportFixture(
   const root = temporaryRoot()
   setChromePath(root)
   const outputPath = join(root, 'report.pdf')
-  if (settings.existing !== false) writeFileSync(outputPath, 'existing destination bytes')
+  if (settings.existing ?? true) writeFileSync(outputPath, 'existing destination bytes')
   const calls: SpawnCall[] = []
   const runs: FakeRun[] = []
   const runner = recordingSpawner((argv, _options, activeRuns) => {
@@ -146,13 +174,14 @@ function exportFixture(
     title: 'report.md',
     html: '<p>fixture</p>',
     outputPath,
-    replaceExisting: settings.existing !== false
+    replaceExisting: settings.replaceExisting ?? true
   }, {
     timeoutMs: settings.timeoutMs ?? 60_000,
     pollIntervalMs: settings.pollIntervalMs ?? 5
   })
   return { root, outputPath, calls, runs, promise }
 }
+
 
 function expectSpawnConfiguration(call: SpawnCall, timeoutMs: number, home: string, signal?: AbortSignal): void {
   const profile = outputPathFrom(call.argv, '--user-data-dir=')
@@ -203,7 +232,26 @@ function assertDestinationPreserved(path: string): void {
   expect(readFileSync(path, 'utf8')).toBe('existing destination bytes')
 }
 
-function deactivationTestScript(resultPath: string): string {
+function markdownFeatureFixture(root: string, runner: ProcessSpawner) {
+  const buffer = {
+    id: 'buffer-1', kind: 'markdown', mode: 'rich', content: '# Fixture', draft: null,
+    relativePath: 'report.md', name: 'report.md', root, worktreeId: 'worktree-1', readOnly: false
+  }
+  const host = {
+    context: { process: runner, error: (_kind: string, message: string) => new Error(message) },
+    get: () => buffer,
+    resolve: async () => ({ id: 'worktree-1', path: root }),
+    path: async (_worktree: string, relativePath: string) => {
+      const path = join(root, relativePath)
+      mkdirSync(dirname(path), { recursive: true })
+      return path
+    },
+    onClose: () => () => {}
+  } as unknown as EditorServices
+  return createMarkdownMethods(host)
+}
+
+function deactivationTestScript(resultPath: string, pluginRoot: string): string {
   return `
 import { expect, mock, test } from 'bun:test'
 import { writeFileSync } from 'node:fs'
@@ -220,19 +268,19 @@ class FakeCore {
     events.push('core-dispose-end')
   }
 }
-mock.module('../src/daemon/service', () => ({ EditorDaemon: FakeCore }))
-mock.module('../src/markdown/service', () => ({
+mock.module(${JSON.stringify(join(pluginRoot, 'src/daemon/service.ts'))}, () => ({ EditorDaemon: FakeCore }))
+mock.module(${JSON.stringify(join(pluginRoot, 'src/markdown/service.ts'))}, () => ({
   createMarkdownMethods: () => ({ methods: {}, dispose() { events.push('markdown-dispose') } })
 }))
-mock.module('../src/notebook/service', () => ({
+mock.module(${JSON.stringify(join(pluginRoot, 'src/notebook/service.ts'))}, () => ({
   createNotebookMethods: () => ({ methods: {}, dispose() { events.push('notebook-dispose') } })
 }))
-mock.module('../src/viewers/service', () => ({
+mock.module(${JSON.stringify(join(pluginRoot, 'src/viewers/service.ts'))}, () => ({
   createViewerMethods: () => ({ methods: {}, dispose() { events.push('viewer-dispose') } })
 }))
 test('Markdown disposal begins before core cleanup is awaited', async () => {
   // This subprocess isolates Bun module mocks and the plugin module's lifecycle state.
-  const main = await import('../main')
+  const main = await import(${JSON.stringify(join(pluginRoot, 'main.ts'))})
   await main.activate({ pluginId: 'quirky.editor', subscribe: () => () => {}, provide() {} })
   const pending = main.deactivate()
   expect(events.slice(0, 2)).toEqual(['markdown-dispose', 'core-dispose-start'])
@@ -285,6 +333,18 @@ describe('Markdown process output and failures', () => {
       options: { timeoutMs: 1234, stdin: 'ignore', stdout: 'pipe', stderr: 'tail', stderrTailBytes: TAIL * 4, killGraceMs: 0 }
     })
   })
+
+  test('flushes an incomplete UTF-8 sequence at clean stdout EOF', async () => {
+    const calls: SpawnCall[] = []
+    const runner = recordingSpawner(() => ({
+      stdout: byteStream(Buffer.from('valid output'), Uint8Array.from([0xe2, 0x82])),
+      exit: { exitCode: 0, signal: null, durationMs: 1 }
+    }), calls)
+    const result = await runProcess(runner, 'fixture', [], { timeoutMs: 100 })
+    expect(result.stdout).toBe('valid output�')
+    expect(calls).toHaveLength(1)
+  })
+
 
   test('keeps exact N−1, N and N+1 character tails', async () => {
     for (const length of [TAIL - 1, TAIL, TAIL + 1]) {
@@ -403,6 +463,31 @@ describe('Markdown process output and failures', () => {
 })
 
 describe('Markdown PDF publication gate', () => {
+  test('rejects an existing destination when replacement is disabled without staging', async () => {
+    const fixture = exportFixture((renderedPdf) => {
+      writeFileSync(renderedPdf, pdfBytes())
+      return { exit: { exitCode: 0, signal: null, durationMs: 1 }, stdout: textStream() }
+    }, { existing: true, replaceExisting: false })
+    await expect(fixture.promise).rejects.toThrow('PDF destination already exists.')
+    expect(fixture.calls).toHaveLength(1)
+    assertDestinationPreserved(fixture.outputPath)
+    expectCleaned(fixture)
+  })
+
+  test('publishes a new destination through the exclusive non-replacement path without staging', async () => {
+    const fixture = exportFixture((renderedPdf) => {
+      writeFileSync(renderedPdf, pdfBytes())
+      return { exit: { exitCode: 0, signal: null, durationMs: 1 }, stdout: textStream() }
+    }, { existing: false, replaceExisting: false })
+    const result = await fixture.promise
+    expect(fixture.calls).toHaveLength(1)
+    expect(fixture.runs[0]!.stops).toEqual([])
+    assertPdfPublished(fixture.outputPath)
+    expect(result).toEqual({ path: fixture.outputPath, size: pdfBytes().length })
+    expectCleaned(fixture)
+    expectSpawnConfiguration(fixture.calls[0]!, 60_000, dirname(outputPathFrom(fixture.calls[0]!.argv, '--user-data-dir=')))
+  })
+
   test('publishes a complete artifact only after an owned graceful completion stop', async () => {
     const timeline: string[] = []
     const fixture = exportFixture((renderedPdf) => ({
@@ -674,16 +759,131 @@ describe('Markdown feature disposal and native dialogs', () => {
     await expect(methods.methods.markdown({ action: 'exportPdf', bufferId: buffer.id, path: 'report.pdf' }, {} as PluginCaller)).rejects.toThrow('Process was aborted.')
     expect(calls).toHaveLength(1)
   })
+
+  test('disposal aborts a pending native destination chooser before Chrome starts', async () => {
+    await withPlatform('darwin', async () => {
+      const root = temporaryRoot()
+      const dialogStarted = Promise.withResolvers<void>()
+      const calls: SpawnCall[] = []
+      const runs: FakeRun[] = []
+      let resolveExit: ((exit: SpawnExit) => void) | undefined
+      const runner = recordingSpawner((_argv, _options) => {
+        dialogStarted.resolve()
+        return {
+          stdout: textStream(),
+          onStop(_stopOptions, settleExit) { resolveExit = settleExit }
+        }
+      }, calls, runs)
+      const methods = markdownFeatureFixture(root, runner)
+      let settled = false
+      const pending = methods.methods.markdown({ action: 'exportPdf', bufferId: 'buffer-1' }, {} as PluginCaller)
+        .finally(() => { settled = true })
+      const drain = pending.catch(() => undefined)
+      try {
+        await dialogStarted.promise
+        expect(calls).toHaveLength(1)
+        expect(calls[0]!.argv).toEqual([
+          'osascript',
+          '-e',
+          'POSIX path of (choose file name with prompt "Export Markdown as PDF" default name "report.pdf" )'
+        ])
+        const signal = calls[0]!.options.signal
+        methods.dispose()
+        expect(signal).toBeInstanceOf(AbortSignal)
+        expect(signal?.aborted).toBe(true)
+        expect(calls[0]!.options.timeoutMs).toBe(300_000)
+        expect(runs[0]!.stops).toEqual([{ signal: 'SIGKILL', graceMs: 0 }])
+        expect(calls.map(({ argv }) => argv[0])).toEqual(['osascript'])
+      } finally {
+        methods.dispose()
+        if (!settled && runs.length > 0) {
+          let stopping: Promise<SpawnExit> | undefined
+          if (!resolveExit) stopping = runs[0]!.handle.stop({ signal: 'SIGKILL', graceMs: 0 })
+          resolveExit?.({ exitCode: null, signal: 'SIGKILL', stopped: 'aborted', durationMs: 1 })
+          await stopping?.catch(() => undefined)
+        }
+        await drain
+      }
+      await expect(pending).rejects.toThrow('Process was aborted.')
+      expect(calls).toHaveLength(1)
+    })
+  })
+
+  test('disposal aborts a pending native replacement chooser before Chrome starts', async () => {
+    await withPlatform('darwin', async () => {
+      const root = temporaryRoot()
+      const outputPath = join(root, 'report.pdf')
+      writeFileSync(outputPath, 'existing destination bytes')
+      const replacementStarted = Promise.withResolvers<void>()
+      const calls: SpawnCall[] = []
+      const runs: FakeRun[] = []
+      let index = 0
+      let resolveExit: ((exit: SpawnExit) => void) | undefined
+      const runner = recordingSpawner(() => {
+        index += 1
+        if (index === 1) return {
+          stdout: textStream(`${outputPath}\n`),
+          exit: { exitCode: 0, signal: null, durationMs: 1 }
+        }
+        replacementStarted.resolve()
+        return {
+          stdout: textStream(),
+          onStop(_stopOptions, settleExit) { resolveExit = settleExit }
+        }
+      }, calls, runs)
+      const methods = markdownFeatureFixture(root, runner)
+      let settled = false
+      const pending = methods.methods.markdown({ action: 'exportPdf', bufferId: 'buffer-1' }, {} as PluginCaller)
+        .finally(() => { settled = true })
+      const drain = pending.catch(() => undefined)
+      try {
+        await replacementStarted.promise
+        expect(calls).toHaveLength(2)
+        expect(calls[0]!.argv).toEqual([
+          'osascript',
+          '-e',
+          'POSIX path of (choose file name with prompt "Export Markdown as PDF" default name "report.pdf" )'
+        ])
+        expect(calls[1]!.argv).toEqual([
+          'osascript',
+          '-e',
+          `display dialog "${outputPath} already exists. Replace it?" buttons {"Cancel", "Replace"} default button "Replace" cancel button "Cancel"`
+        ])
+        expect(calls.map(({ options }) => options.timeoutMs)).toEqual([300_000, 300_000])
+        const ownerSignal = calls[0]!.options.signal
+        methods.dispose()
+        expect(ownerSignal).toBeInstanceOf(AbortSignal)
+        expect(ownerSignal?.aborted).toBe(true)
+        expect(calls.map(({ options }) => options.signal)).toEqual([ownerSignal, ownerSignal])
+        expect(calls[1]!.options.signal).toBe(ownerSignal)
+        expect(runs[0]!.stops).toEqual([])
+        expect(runs[1]!.stops).toEqual([{ signal: 'SIGKILL', graceMs: 0 }])
+      } finally {
+        methods.dispose()
+        if (!settled && runs.length > 1) {
+          let stopping: Promise<SpawnExit> | undefined
+          if (!resolveExit) stopping = runs[1]!.handle.stop({ signal: 'SIGKILL', graceMs: 0 })
+          resolveExit?.({ exitCode: null, signal: 'SIGKILL', stopped: 'aborted', durationMs: 1 })
+          await stopping?.catch(() => undefined)
+        }
+        await drain
+      }
+      await expect(pending).rejects.toThrow('Process was aborted.')
+      expect(calls.map(({ argv }) => argv[0])).toEqual(['osascript', 'osascript'])
+      expect(readFileSync(outputPath, 'utf8')).toBe('existing destination bytes')
+    })
+  })
+
   test('main deactivation starts Markdown disposal before a held core disposer', async () => {
     const root = temporaryRoot()
-    const scriptPath = join(import.meta.dir, 'markdown-main-deactivation.fixture.test.ts')
+    const scriptPath = join(root, 'markdown-main-deactivation.fixture.ts')
     const resultPath = join(root, 'deactivation-order.json')
     const runner = createProcessRunner({ owner: 'markdown-deactivation-order' })
     runners.push(runner)
     const previousHome = process.env.QUIRKY_HOME
     process.env.QUIRKY_HOME = root
     try {
-      writeFileSync(scriptPath, deactivationTestScript(resultPath))
+      writeFileSync(scriptPath, deactivationTestScript(resultPath, resolve(REPO_ROOT, 'plugins/quirky.editor')))
       const result = await runProcess(runner, process.execPath, ['test', scriptPath], { timeoutMs: 15_000, home: root })
       expect(result.code).toBe(0)
       expect(JSON.parse(readFileSync(resultPath, 'utf8'))).toEqual([
@@ -700,91 +900,109 @@ describe('Markdown feature disposal and native dialogs', () => {
     }
   })
 
+  test('routes native chooser and replacement helpers through the recording spawner on darwin', async () => {
+    const signal = new AbortController().signal
+    await withPlatform('darwin', async () => {
+      const calls: SpawnCall[] = []
+      let index = 0
+      const runner = recordingSpawner(() => {
+        index += 1
+        return {
+          stdout: textStream(index === 1 ? '/tmp/guide.pdf\n' : index === 2 ? '/tmp/image.png\n' : 'button returned:Replace\n'),
+          exit: { exitCode: 0, signal: null, durationMs: 1 }
+        }
+      }, calls)
+      expect(await choosePdfDestination(runner, 'guide.md', signal)).toBe('/tmp/guide.pdf')
+      expect(await chooseMarkdownImage(runner)).toBe('/tmp/image.png')
+      expect(await confirmNativeReplacement(runner, '/tmp/guide.pdf', signal)).toBe(true)
+      expect(calls.map(({ argv }) => argv)).toEqual([
+        ['osascript', '-e', 'POSIX path of (choose file name with prompt "Export Markdown as PDF" default name "guide.pdf" )'],
+        ['osascript', '-e', 'POSIX path of (choose file with prompt "Import an image into this Markdown document")'],
+        ['osascript', '-e', 'display dialog "/tmp/guide.pdf already exists. Replace it?" buttons {"Cancel", "Replace"} default button "Replace" cancel button "Cancel"']
+      ])
+      expect(calls.map(({ options }) => options.timeoutMs)).toEqual([300_000, 300_000, 300_000])
+      expect(calls[0]!.options.signal).toBe(signal)
+      expect(calls[1]!.options.signal).toBeUndefined()
+      expect(calls[2]!.options.signal).toBe(signal)
+    })
 
-  test('routes native chooser and replacement helpers through the recording spawner', async () => {
-    if (process.platform !== 'darwin') {
+    await withPlatform('linux', async () => {
       const calls: SpawnCall[] = []
       const runner = recordingSpawner(() => ({ exit: { exitCode: 0, signal: null, durationMs: 1 } }), calls)
-      await expect(choosePdfDestination(runner, 'guide.md')).rejects.toThrow('A native PDF save dialog is available only on macOS')
+      const signal = new AbortController().signal
+      await expect(choosePdfDestination(runner, 'guide.md', signal)).rejects.toThrow('A native PDF save dialog is available only on macOS')
       await expect(chooseMarkdownImage(runner)).rejects.toThrow('A native image chooser is available only on macOS')
-      expect(await confirmNativeReplacement(runner, '/tmp/guide.pdf')).toBe(false)
+      expect(await confirmNativeReplacement(runner, '/tmp/guide.pdf', signal)).toBe(false)
       expect(calls).toEqual([])
-      return
-    }
+    })
+  })
 
-    const calls: SpawnCall[] = []
-    let index = 0
-    const runner = recordingSpawner(() => {
-      index += 1
-      return {
-        stdout: textStream(index === 1 ? '/tmp/guide.pdf\n' : index === 2 ? '/tmp/image.png\n' : 'button returned:Replace\n'),
+  test.each(['', 'button returned:Cancel'])('returns false for a successful replacement dialog with stdout %j', async (stdout) => {
+    await withPlatform('darwin', async () => {
+      const calls: SpawnCall[] = []
+      const runner = recordingSpawner(() => ({
+        stderr: 'button returned:Cancel',
+        stdout: textStream(stdout),
         exit: { exitCode: 0, signal: null, durationMs: 1 }
-      }
-    }, calls)
-    const signal = new AbortController().signal
-    expect(await choosePdfDestination(runner, 'guide.md', signal)).toBe('/tmp/guide.pdf')
-    expect(await chooseMarkdownImage(runner)).toBe('/tmp/image.png')
-    expect(await confirmNativeReplacement(runner, '/tmp/guide.pdf', signal)).toBe(true)
-    expect(calls.map(({ argv }) => argv)).toEqual([
-      ['osascript', '-e', 'POSIX path of (choose file name with prompt "Export Markdown as PDF" default name "guide.pdf" )'],
-      ['osascript', '-e', 'POSIX path of (choose file with prompt "Import an image into this Markdown document")'],
-      ['osascript', '-e', 'display dialog "/tmp/guide.pdf already exists. Replace it?" buttons {"Cancel", "Replace"} default button "Replace" cancel button "Cancel"']
-    ])
-    expect(calls.map(({ options }) => options.timeoutMs)).toEqual([300_000, 300_000, 300_000])
-    expect(calls[0]!.options.signal).toBe(signal)
-    expect(calls[2]!.options.signal).toBe(signal)
+      }), calls)
+      expect(await confirmNativeReplacement(runner, '/tmp/guide.pdf')).toBe(false)
+      expect(calls).toHaveLength(1)
+      expect(calls[0]!.options.timeoutMs).toBe(300_000)
+    })
   })
 
   test('maps native cancellation and preserves dialog errors after process classification', async () => {
-    if (process.platform !== 'darwin') return
-    const calls: SpawnCall[] = []
-    let index = 0
-    const runner = recordingSpawner(() => {
-      index += 1
-      return {
-        stderr: index === 1 ? 'User cancelled' : index === 2 ? '' : index === 3 ? '-128' : index === 4 ? 'button returned:Cancel' : index === 5 ? 'Save failed' : 'Replace failed',
-        stdout: textStream(index === 2 ? 'User canceled' : index === 4 ? 'detail' : ''),
-        exit: { exitCode: index === 1 ? 1 : 2, signal: null, durationMs: 1 }
-      }
-    }, calls)
-    expect(await choosePdfDestination(runner, 'guide.md')).toBeNull()
-    expect(await chooseMarkdownImage(runner)).toBeNull()
-    expect(await confirmNativeReplacement(runner, '/tmp/guide.pdf')).toBe(false)
-    await expect(chooseMarkdownImage(runner)).rejects.toThrow('Could not open the image chooser: button returned:Cancel')
-    await expect(choosePdfDestination(runner, 'guide.md')).rejects.toThrow('Could not open the PDF save dialog: Save failed')
-    await expect(confirmNativeReplacement(runner, '/tmp/guide.pdf')).rejects.toThrow('Could not confirm replacement: Replace failed')
-    expect(calls).toHaveLength(6)
+    await withPlatform('darwin', async () => {
+      const calls: SpawnCall[] = []
+      let index = 0
+      const runner = recordingSpawner(() => {
+        index += 1
+        return {
+          stderr: index === 1 ? 'User cancelled' : index === 2 ? '' : index === 3 ? '-128' : index === 4 ? 'button returned:Cancel' : index === 5 ? 'Save failed' : 'Replace failed',
+          stdout: textStream(index === 2 ? 'User canceled' : index === 4 ? 'detail' : ''),
+          exit: { exitCode: index === 1 ? 1 : 2, signal: null, durationMs: 1 }
+        }
+      }, calls)
+      expect(await choosePdfDestination(runner, 'guide.md')).toBeNull()
+      expect(await chooseMarkdownImage(runner)).toBeNull()
+      expect(await confirmNativeReplacement(runner, '/tmp/guide.pdf')).toBe(false)
+      await expect(chooseMarkdownImage(runner)).rejects.toThrow('Could not open the image chooser: button returned:Cancel')
+      await expect(choosePdfDestination(runner, 'guide.md')).rejects.toThrow('Could not open the PDF save dialog: Save failed')
+      await expect(confirmNativeReplacement(runner, '/tmp/guide.pdf')).rejects.toThrow('Could not confirm replacement: Replace failed')
+      expect(calls).toHaveLength(6)
 
-    const timeoutCalls: SpawnCall[] = []
-    const timeout = recordingSpawner(() => ({
-      stderr: 'User canceled',
-      exit: { exitCode: null, signal: 'SIGKILL', stopped: 'timeout', durationMs: 1 }
-    }), timeoutCalls)
-    await expect(chooseMarkdownImage(timeout)).rejects.toThrow('Process timed out after 300000 ms.')
-    expect(timeoutCalls).toHaveLength(1)
+      const timeoutCalls: SpawnCall[] = []
+      const timeout = recordingSpawner(() => ({
+        stderr: 'User canceled',
+        exit: { exitCode: null, signal: 'SIGKILL', stopped: 'timeout', durationMs: 1 }
+      }), timeoutCalls)
+      await expect(chooseMarkdownImage(timeout)).rejects.toThrow('Process timed out after 300000 ms.')
+      expect(timeoutCalls).toHaveLength(1)
 
-    const abortCalls: SpawnCall[] = []
-    const aborted = recordingSpawner(() => ({
-      stderr: 'User canceled',
-      exit: { exitCode: null, signal: 'SIGKILL', stopped: 'aborted', durationMs: 1 }
-    }), abortCalls)
-    await expect(chooseMarkdownImage(aborted)).rejects.toThrow('Process was aborted.')
-    expect(abortCalls).toHaveLength(1)
+      const abortCalls: SpawnCall[] = []
+      const aborted = recordingSpawner(() => ({
+        stderr: 'User canceled',
+        exit: { exitCode: null, signal: 'SIGKILL', stopped: 'aborted', durationMs: 1 }
+      }), abortCalls)
+      await expect(chooseMarkdownImage(aborted)).rejects.toThrow('Process was aborted.')
+      expect(abortCalls).toHaveLength(1)
 
-    const readFailure = new Error('dialog stdout read failed')
-    const stream = controlledStream()
-    const readCalls: SpawnCall[] = []
-    const broken = recordingSpawner(() => ({
-      stderr: 'User canceled',
-      stdout: stream.stream,
-      exit: { exitCode: 0, signal: null, durationMs: 1 },
-      onStop() {}
-    }), readCalls)
-    const pending = chooseMarkdownImage(broken)
-    stream.fail(readFailure)
-    await expect(pending).rejects.toBe(readFailure)
-    expect(readCalls).toHaveLength(1)
+      const readFailure = new Error('dialog stdout read failed')
+      const stream = controlledStream()
+      const readCalls: SpawnCall[] = []
+      const broken = recordingSpawner(() => ({
+        stderr: 'User canceled',
+        stdout: stream.stream,
+        exit: { exitCode: 0, signal: null, durationMs: 1 },
+        onStop() {}
+      }), readCalls)
+      const pending = chooseMarkdownImage(broken)
+      stream.fail(readFailure)
+      await expect(pending).rejects.toBe(readFailure)
+      expect(readCalls).toHaveLength(1)
+    })
   })
+
 })
 
 describe('large Markdown command output', () => {
