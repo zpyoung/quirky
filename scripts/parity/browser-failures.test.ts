@@ -1,15 +1,49 @@
 import { expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { runBrowserParity, validateOutcomes, type BrowserCheck } from './browser-run'
-import { parseBrowserArgs, createBrowserEnvironment, boundedDiagnostic, decodeCliReceipt, BrowserFailure, readShimLogs, type BrowserWorld, type CliReceipt } from './browser-world'
+import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, readShimLogs, type BrowserWorld, type CliReceipt } from './browser-world'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
 import { networkChecks } from './browser-checks-network'
+
+test('builtin plugin fixture links every checkout plugin except Accounts', () => {
+  const repoRoot = resolve(import.meta.dir, '../..')
+  const checkout = realpathSync(repoRoot)
+  const pluginsRoot = join(checkout, 'plugins')
+  const home = mkdtempSync(join(tmpdir(), 'quirky-browser-plugins-'))
+  try {
+    const expected = readdirSync(pluginsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(pluginsRoot, entry.name, 'quirky-plugin.json')))
+      .map((entry) => {
+        const manifest: unknown = JSON.parse(readFileSync(join(pluginsRoot, entry.name, 'quirky-plugin.json'), 'utf8'))
+        if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest) ||
+          !('id' in manifest) || typeof manifest.id !== 'string') {
+          throw new Error(`plugin manifest is missing a string id: ${entry.name}`)
+        }
+        return { name: entry.name, id: manifest.id }
+      })
+    const included = expected.filter((plugin) => plugin.id !== 'quirky.accounts')
+    const fixture = createBuiltinPluginsDirectory(home, checkout)
+
+    expect(fixture.includedPlugins).toEqual(included.map(({ id }) => id).sort())
+    expect(fixture.excludedPlugins).toEqual(['quirky.accounts'])
+    expect(readdirSync(fixture.directory).sort()).toEqual(included.map(({ name }) => name).sort())
+    for (const plugin of included) {
+      const link = join(fixture.directory, plugin.name)
+      expect(lstatSync(link).isSymbolicLink()).toBe(true)
+      const target = realpathSync(link)
+      expect(target).toBe(realpathSync(join(pluginsRoot, plugin.name)))
+      expect(target.startsWith(`${checkout}${sep}`)).toBe(true)
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
 
 const row = (id: string, disposition: BrowserRow['disposition'] = 'covered'): BrowserRow => ({
   id, command: id, equivalent: `quirky browser ${id}`, check: id, disposition, reason: disposition === 'gap' ? 'known capability gap' : '', primary: true, deferred: false

@@ -1,4 +1,4 @@
-import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { checkSchemaDeclaration, validateValue, type Schema } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
@@ -171,6 +171,46 @@ export function createBrowserEnvironment(home: string, repoRoot: string): Record
     ...env,
     PATH: `${shimBin}${delimiter}${env.PATH ?? ''}`,
     ...(chrome ? { QUIRKY_BROWSER_CHROME: chrome } : {})
+  }
+}
+
+export function createBuiltinPluginsDirectory(home: string, repoRoot: string): {
+  directory: string
+  includedPlugins: string[]
+  excludedPlugins: string[]
+} {
+  const checkout = realpathSync(repoRoot)
+  const pluginsRoot = join(checkout, 'plugins')
+  const directory = join(resolve(home), 'builtin-plugins')
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const includedPlugins: string[] = []
+  const excludedPlugins: string[] = []
+  for (const entry of readdirSync(pluginsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const pluginPath = join(pluginsRoot, entry.name)
+    const manifestPath = join(pluginPath, 'quirky-plugin.json')
+    if (!existsSync(manifestPath)) continue
+    let manifest: unknown
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    } catch (error) {
+      throw new BrowserFailure('invalid-cli-contract', `could not read a plugin manifest: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest) ||
+      !('id' in manifest) || typeof manifest.id !== 'string') {
+      throw new BrowserFailure('invalid-cli-contract', `plugin manifest is missing a string id: ${manifestPath}`)
+    }
+    if (manifest.id === 'quirky.accounts') {
+      excludedPlugins.push(manifest.id)
+      continue
+    }
+    symlinkSync(realpathSync(pluginPath), join(directory, entry.name), 'dir')
+    includedPlugins.push(manifest.id)
+  }
+  return {
+    directory,
+    includedPlugins: includedPlugins.sort(),
+    excludedPlugins: excludedPlugins.sort()
   }
 }
 
@@ -425,6 +465,7 @@ function createCleanup(
   getFixture: () => BrowserFixture | undefined,
   getDaemonPid: () => number | undefined,
   getDaemonIdentity: () => ProcessIdentity | undefined,
+  getExcludedPlugins: () => readonly string[],
   retainedIdentities: Map<number, ProcessIdentity>
 ): { cleanup(): Promise<BrowserCleanup>; processEvidence(): Promise<Record<string, unknown>> } {
   let cleanupPromise: Promise<BrowserCleanup> | undefined
@@ -459,6 +500,7 @@ function createCleanup(
     }
     const logState = readShimLogs(home)
     return {
+      excludedPlugins: [...getExcludedPlugins()],
       trackedIdentities: tracked.map(({ pid, started, command }) => ({
         pid,
         started,
@@ -515,6 +557,7 @@ function createCleanup(
       if (!fixtureStopped) errors.push('fixture did not stop')
       if (!homeRemoved) errors.push('owned browser home was not removed')
       const evidence: Record<string, unknown> = {
+        excludedPlugins: [...getExcludedPlugins()],
         trackedIdentities: tracked.map(({ pid, started, command }) => ({
           pid,
           started,
@@ -754,6 +797,7 @@ export async function startBrowserWorld(options: {
   afterReady?: (world: BrowserWorld) => Promise<void>
   beforeBrowser?: boolean
 } = {}): Promise<BrowserWorld> {
+  const bootsUi = !options.beforeBrowser && !options.afterReady
   const startedAt = Date.now()
   const defaultDeadline = startedAt + (options.beforeBrowser ? EARLY_WORK_DEADLINE_MS : WORK_DEADLINE_MS)
   const deadline = options.beforeBrowser ? Math.min(options.deadline ?? defaultDeadline, defaultDeadline) : options.deadline ?? defaultDeadline
@@ -778,6 +822,7 @@ export async function startBrowserWorld(options: {
   let daemonIdentity: ProcessIdentity | undefined
   let startupFailure: BrowserFailure | undefined
   let soakWorld: SoakWorld | undefined
+  let excludedPlugins: string[] = []
   const retainedIdentities = new Map<number, ProcessIdentity>()
   const cleanupTools = createCleanup(
     scope,
@@ -786,6 +831,7 @@ export async function startBrowserWorld(options: {
     () => fixture,
     () => currentDaemon?.pid,
     () => daemonIdentity,
+    () => excludedPlugins,
     retainedIdentities
   )
   const daemonDiagnostics = (): string => {
@@ -827,7 +873,7 @@ export async function startBrowserWorld(options: {
         out: soakOut,
         repoRoot,
         signal: options.signal,
-        windows: !options.beforeBrowser && !options.afterReady ? 1 : 0,
+        windows: bootsUi ? 1 : 0,
         workers: false
       },
       {
@@ -835,7 +881,11 @@ export async function startBrowserWorld(options: {
         prepareCaptureFixtureHome: async (_home, preparation) => {
           const browserEnv = createBrowserEnvironment(home, repoRoot)
           browserEnv.QUIRKY_BROWSER_CHROME = browserChrome
-          delete browserEnv.QUIRKY_UI_DIR
+          if (bootsUi) {
+            const pluginFixture = createBuiltinPluginsDirectory(home, repoRoot)
+            browserEnv.QUIRKY_BUILTIN_PLUGINS_DIR = pluginFixture.directory
+            excludedPlugins = pluginFixture.excludedPlugins
+          }
           const preparationEnv = preparation.env
           if (!preparationEnv) {
             const failure = new BrowserFailure('startup-failed', 'startWorld did not provide the fixture environment')

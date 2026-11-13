@@ -129,7 +129,7 @@ const watchPageHtml = `<!doctype html>
   </style>
 </head>
 <body>
-  <button id="watch-marker" type="button" data-state="red" data-clicks="0" style="position:fixed;left:0;top:0;width:240px;height:160px;margin:0;border:0;padding:0;background:rgb(225,30,30);color:#ffffff;font:16px sans-serif">Watch Marker: red (0)</button>
+  <button id="watch-marker" type="button" data-state="red" data-clicks="0" style="position:fixed;left:0;top:0;width:240px;height:160px;margin:0;border:0;padding:6px 8px;box-sizing:border-box;display:flex;align-items:flex-start;justify-content:flex-start;background:rgb(225,30,30);color:#ffffff;font:16px sans-serif">Watch Marker: red (0)</button>
   <script>
     const marker = document.querySelector('#watch-marker');
     marker.addEventListener('click', () => {
