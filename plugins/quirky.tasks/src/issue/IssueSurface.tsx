@@ -336,6 +336,7 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
   const navigateBack = async () => {
     try {
       await props.context.call('quirky.tasks/navigate', { detail: null })
+      await props.refresh()
     } catch (error: unknown) {
       setLoadError(errorText(error))
     }

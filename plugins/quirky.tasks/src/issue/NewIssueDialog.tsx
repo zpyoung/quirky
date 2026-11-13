@@ -253,6 +253,7 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
       await saveQueue.current
       if (draftFailure.current) throw new Error(`The issue draft was not saved: ${errorText(draftFailure.current)}`)
       await props.context.call('quirky.tasks/navigate', { newIssue: false })
+      await props.refresh()
     } catch (reason: unknown) {
       setError(errorText(reason))
     }
