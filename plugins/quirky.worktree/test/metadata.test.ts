@@ -72,6 +72,48 @@ describe('SC-9: removing a project drops its metadata', () => {
     const listed = await listWorktrees(client, { repo: readded.id })
     expect(listed.find((w) => w.path === path)).toMatchObject({ id: fixLogin!.id, name: 'fix-login', displayName: null, comment: '' })
   })
+  test('a group removal releases worktree membership after the pending repo refresh', async () => {
+    const { client, repoDir, repo, t } = await start()
+    addWorktrees(repoDir, 'grouped')
+    const worktree = (await listWorktrees(client, { repo: repo.id })).find((item) => item.name === 'grouped')!
+    const group = await call(client, 'quirky.repo/groupCreate', { name: 'release-target' }) as { id: string }
+    await call(client, 'quirky.worktree/set', { worktree: worktree.id, projectGroupId: group.id })
+    expect(storedRows(t.h.home, 'id = ?', worktree.id)).toMatchObject([{ project_group_id: group.id }])
+
+    // Drain setup events through the production 250 ms COALESCE_INTERVAL_MS window.
+    await Bun.sleep(300)
+    const watcher = await t.h.connectWithEvents('cli')
+    const repoChanges = () => watcher.events.filter((event) => event.type === 'quirky.repo/changed')
+    const beforeRename = repoChanges().length
+    // This leading event primes the repo key so groupDelete is held as its latest refresh.
+    await call(client, 'quirky.repo/groupRename', { group: group.id, name: 'renamed-target' })
+    const renameEvents = await waitFor(() => {
+      const current = repoChanges()
+      return current.length > beforeRename ? current.slice(beforeRename) : undefined
+    })
+    expect(renameEvents).toHaveLength(1)
+    // PluginEvents dispatches subscribers with setImmediate; drain both queue turns before deletion.
+    for (let turn = 0; turn < 2; turn++) {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      setImmediate(resolve)
+      await promise
+    }
+
+    const beforeDelete = repoChanges().length
+    await call(client, 'quirky.repo/groupDelete', { group: group.id })
+    const deleteEvents = await waitFor(() => {
+      const current = repoChanges()
+      return current.length > beforeDelete ? current.slice(beforeDelete) : undefined
+    })
+    expect(deleteEvents).toHaveLength(1)
+
+    await waitFor(() => {
+      const row = storedRows(t.h.home, 'id = ?', worktree.id)[0]
+      return row?.project_group_id === null ? true : undefined
+    })
+    const listed = (await listWorktrees(client, { repo: repo.id })).find((item) => item.id === worktree.id)
+    expect(listed).toMatchObject({ projectGroupId: null })
+  })
 })
 
 describe('SC-40: display name, note, status, pin and unread are set and listed', () => {
@@ -173,6 +215,16 @@ describe('worktree unread event attribution', () => {
     const { event: normalEvent, result: normal } = await next(() => set({ unread: true }))
     expect(normal).not.toHaveProperty('unreadSource')
     expect(normalEvent).toEqual({
+      repoId: repo.id,
+      worktreeId: worktree.id,
+      unread: true
+    })
+
+    // This shares the unread=true key, so assert the newly delivered payload rather than the first event.
+    const { event: repeatedNormalEvent, result: repeatedNormal } = await next(() => set({ unread: true }))
+    expect(repeatedNormal.unread).toBe(true)
+    expect(repeatedNormal).not.toHaveProperty('unreadSource')
+    expect(repeatedNormalEvent).toEqual({
       repoId: repo.id,
       worktreeId: worktree.id,
       unread: true
