@@ -69,6 +69,13 @@ type TranscriptPoll = TranscriptFence & {
 }
 type OscTurn = { providerId: string; turnId: string; turnStartedAt: number }
 type TranscriptOwner = { session: Session; row: AgentRow }
+type AnnouncedRow = {
+  state: AgentRow['state']
+  agent: AgentRow['agent']
+  leadProviderSession: AgentRow['lead']['providerSession']
+  turnStartedAt: AgentRow['turnStartedAt']
+  worktreeId: string
+}
 
 /** One hook, as the daemon delivered it or as the spool replays it. */
 export type HookInput = {
@@ -130,6 +137,7 @@ const hasHookOrProgramStatus = (row: AgentRow | null): boolean =>
  */
 export class AgentStatusService {
   private readonly queues = new Map<string, Promise<void>>()
+  private readonly announcedRows = new Map<string, AnnouncedRow>()
   private readonly hookedSessions = new Set<string>()
   private readonly caches = new Map<string, NormalizerCache>()
   private readonly records = new Map<string, ProgramStatusRecords>()
@@ -228,10 +236,7 @@ export class AgentStatusService {
       this.cancelTranscriptPoll(sessionId)
       this.oscTurns.delete(sessionId)
       this.cancelProgramRetry(sessionId)
-      this.context.emit(
-        'changed',
-        session ? { sessionId, worktreeId: session.worktreeId, row: null } : { sessionId, row: null }
-      )
+      this.emitChanged(sessionId, null, session?.worktreeId)
     })
   }
 
@@ -882,8 +887,47 @@ export class AgentStatusService {
       this.activity.sync(session, row, startsTurn)
     })
     await this.publish(session, row)
-    this.context.emit('changed', { sessionId: session.id, worktreeId: session.worktreeId, row })
+    this.emitChanged(session.id, row, session.worktreeId)
     this.wake(session.id)
+  }
+
+  private emitChanged(sessionId: string, row: AgentRow | null, worktreeId?: string): void {
+    const previous = this.announcedRows.get(sessionId)
+    if (row === null) {
+      const removedWorktreeId = worktreeId ?? previous?.worktreeId
+      try {
+        this.context.emit(
+          'changed',
+          removedWorktreeId === undefined
+            ? { sessionId, row: null }
+            : { sessionId, worktreeId: removedWorktreeId, row: null },
+          { immediate: true }
+        )
+      } finally {
+        this.announcedRows.delete(sessionId)
+      }
+      return
+    }
+
+    const immediate = previous === undefined ||
+      previous.state !== row.state ||
+      previous.agent !== row.agent ||
+      previous.leadProviderSession !== row.lead.providerSession ||
+      previous.turnStartedAt !== row.turnStartedAt
+    const announcedWorktreeId = worktreeId ?? previous?.worktreeId
+    const data = announcedWorktreeId === undefined
+      ? { sessionId, row }
+      : { sessionId, worktreeId: announcedWorktreeId, row }
+    const accepted = this.context.emit('changed', data, { immediate })
+    if (!accepted || announcedWorktreeId === undefined) return
+
+    this.announcedRows.set(sessionId, {
+      state: row.state,
+      agent: row.agent,
+      leadProviderSession: row.lead.providerSession,
+      turnStartedAt: row.turnStartedAt,
+      worktreeId: announcedWorktreeId
+    })
   }
 
   private wake(sessionId: string): void {
