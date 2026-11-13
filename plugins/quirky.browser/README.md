@@ -28,7 +28,7 @@ quirky browser exec --page <page-id> --command 'fill "#email" "agent@example.tes
 quirky browser tab close --page <page-id> --yes --json
 ```
 
-Page operations accept an explicit `--page` or use the existing worktree/current-directory scope rules. `--worktree all` is for read-only page listings. `tab switch --focus` fails explicitly because native window focus is unsupported in this headless feature.
+Page operations accept an explicit `--page` or use the existing worktree/current-directory scope rules. `--worktree all` is for read-only page listings. `tab switch --focus` reveals the selected page in a Watch pane in its worktree and switches one Quirky window to that worktree, reusing an existing Watch pane. `open-url --client caller` creates and reveals a Default-profile page in its worktree; routing chooses the caller's matching window (the focused one if several match), a sole connected window if none match, or an explicit `--client <connection-id>` when ambiguous, and neither command raises or activates an OS window.
 
 CLI values are literal data. In particular, a string beginning with `@file:` is passed unchanged; the CLI does not read files or stdin implicitly.
 

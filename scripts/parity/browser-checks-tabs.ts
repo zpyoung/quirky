@@ -1,11 +1,174 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { QuirkyClient } from '@quirky/protocol'
+import { readRuntime, rpcUrl } from '@quirky/protocol/node'
 import { BrowserFailure } from './browser-world'
 import type { BrowserCheck, CheckContext } from './browser-run'
 
 type Tab = { browserPageId: string; profileId: string; worktreeId: string; index: number; title: string; url: string; active: boolean }
 type Profiles = { profiles: Array<{ id: string; label: string; scope: string }> }
 type PageReceipt = { browserPageId: string; profileId?: string }
+type PaneTab = { id: string; page?: string | null; mode: string; profileId: string }
+type PaneState = { tabs: PaneTab[] }
+type TerminalTab = { id: string; kind?: string; viewId?: string; key?: string }
+type TerminalGroup = { kind: 'group'; id: string; activeTab: string | null; tabs: TerminalTab[] }
+type TerminalNode = TerminalGroup | { kind: 'split'; first: TerminalNode; second: TerminalNode }
+type TerminalWorkspace = { workspace: { activeGroup: string; root: TerminalNode } }
+type UiState = { windows: Array<{ connId: number }> }
+type WindowState = { layout: { view: unknown; worktree?: string } }
+type PageList = { tabs: Tab[] }
+
+async function connectClient(c: CheckContext, role: 'cli' | 'ui') {
+  const runtime = readRuntime(c.world.home)
+  if (!runtime) throw new BrowserFailure('daemon-exited', 'temporary browser daemon runtime is unavailable')
+  return await QuirkyClient.connect(rpcUrl(runtime), role === 'ui'
+    ? { role, name: 'browser-parity-stand-in' }
+    : { role, worktreeId: c.world.worktreeA })
+}
+
+async function uiState(client: QuirkyClient) {
+  const state = await client.callAny('ui.state', {}) as UiState
+  if (!state || !Array.isArray(state.windows)) throw new BrowserFailure('wrong-page', 'ui.state did not return its windows')
+  return state
+}
+
+async function waitForNoWindows(client: QuirkyClient) {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if ((await uiState(client)).windows.length === 0) return
+    await Bun.sleep(25)
+  }
+  throw new BrowserFailure('wrong-page', 'stand-in UI window remained connected')
+}
+
+async function paneState(c: CheckContext, worktree: string) {
+  return await c.call<PaneState>('pane state', { worktree }, '')
+}
+
+async function closeNewPanes(c: CheckContext, worktree: string, baseline: Set<string> | undefined, tracked: Set<string>) {
+  const paneIds = new Set(tracked)
+  const failures: string[] = []
+  if (baseline) {
+    try {
+      const current = await paneState(c, worktree)
+      for (const pane of current.tabs) if (!baseline.has(pane.id)) paneIds.add(pane.id)
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  for (const pane of paneIds) {
+    if (baseline?.has(pane)) continue
+    try {
+      if (!(await c.call<boolean>('pane close', { pane }, ''))) failures.push(`pane ${pane} did not close`)
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (failures.length) throw new Error(failures.join('; '))
+}
+
+async function closeNewPages(c: CheckContext, baseline: Set<string> | undefined, tracked: Set<string>) {
+  const pageIds = new Set(tracked)
+  const failures: string[] = []
+  if (baseline) {
+    try {
+      const current = await c.call<PageList>('tab list', { worktree: 'all' }, '')
+      for (const tab of current.tabs) if (!baseline.has(tab.browserPageId)) pageIds.add(tab.browserPageId)
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  for (const page of pageIds) {
+    if (baseline?.has(page)) continue
+    try {
+      const closed = await c.call<{ closed: boolean }>('tab close', { yes: true }, page)
+      if (!closed.closed) failures.push(`page ${page} did not close`)
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (failures.length) throw new Error(failures.join('; '))
+}
+
+async function finishProbe(
+  c: CheckContext,
+  observer: QuirkyClient | undefined,
+  ui: QuirkyClient | undefined,
+  worktree: string,
+  baselinePanes: Set<string> | undefined,
+  baselinePages: Set<string> | undefined,
+  createdPanes: Set<string>,
+  createdPages: Set<string>
+) {
+  const failures: string[] = []
+  try {
+    await closeNewPanes(c, worktree, baselinePanes, createdPanes)
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error))
+  }
+  try {
+    await closeNewPages(c, baselinePages, createdPages)
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error))
+  }
+  try {
+    ui?.close()
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error))
+  }
+  if (observer) {
+    try {
+      await waitForNoWindows(observer)
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    } finally {
+      observer.close()
+    }
+  }
+  if (failures.length) throw new Error(failures.join('; '))
+}
+
+function terminalGroups(node: TerminalNode): TerminalGroup[] {
+  if (node.kind === 'group') return [node]
+  return [...terminalGroups(node.first), ...terminalGroups(node.second)]
+}
+
+function hostedBrowserTabIsActive(workspace: TerminalWorkspace, pane: string) {
+  const groups = terminalGroups(workspace.workspace.root)
+  const hosted = groups.flatMap((group) => group.tabs).find((tab) =>
+    tab.kind === 'view' && tab.viewId === 'view:quirky.browser/page' && tab.key === `browser:${pane}`
+  )
+  const activeGroup = groups.find((group) => group.id === workspace.workspace.activeGroup)
+  return Boolean(hosted && activeGroup?.activeTab === hosted.id)
+}
+
+async function terminalWorkspace(client: QuirkyClient, worktree: string) {
+  return await client.callAny('quirky.terminal/workspace', { workspace: worktree }) as TerminalWorkspace
+}
+
+async function windowState(client: QuirkyClient, connId: number) {
+  return await client.callAny('ui.window.state', { connId }) as WindowState
+}
+
+async function windowConnId(client: QuirkyClient) {
+  return (await client.callAny('ui.window.self', {}) as { connId: number }).connId
+}
+
+async function pageIds(c: CheckContext) {
+  return new Set((await c.call<PageList>('tab list', { worktree: 'all' }, '')).tabs.map((tab) => tab.browserPageId))
+}
+
+async function paneIds(c: CheckContext, worktree: string) {
+  return new Set((await paneState(c, worktree)).tabs.map((tab) => tab.id))
+}
+
+function paneForPage(state: PaneState, page: string) {
+  return state.tabs.filter((pane) => pane.page === page)
+}
+
+function viewForWorktree(worktree: string) {
+  return { id: 'view:quirky.session/worktree', input: { worktree } }
+}
+
 
 async function location(c: CheckContext, title: string, path: string) {
   const observed = await c.observe<{ title: string; url: string }>('({title:document.title,url:location.href})')
@@ -65,12 +228,57 @@ export const tabChecks: BrowserCheck[] = [
     return { selectedByPage: c.state.pageA, selectedByReturnedIndex: target!.index, disposable }
   } },
   { id: 'tab-switch-focus', async run(c) {
-    const reply = await c.probe('tab switch', { focus: true })
-    if (reply.exitCode === 0) throw new BrowserFailure('wrong-page', 'headless tool has no executing visible-focus observer')
-    c.assert(JSON.stringify(reply.result).includes('Visible pane focus belongs to browser UI; automation is headless.'), 'unexpected focus refusal')
-    const current = await c.call<{ tab: Tab }>('tab current', { worktree: c.world.worktreeA }, '')
-    c.equal(current.tab.browserPageId, c.state.pageA)
-    return { gap: 'Reveal the selected browser page and route browser URLs to the intended client', refusal: reply.result, selected: current.tab.browserPageId }
+    let observer: QuirkyClient | undefined
+    let ui: QuirkyClient | undefined
+    let baselinePanes: Set<string> | undefined
+    const createdPanes = new Set<string>()
+    try {
+      observer = await connectClient(c, 'cli')
+      c.equal((await uiState(observer)).windows, [])
+      const selectedBefore = await c.call<{ tab: Tab }>('tab current', { worktree: c.world.worktreeA }, '')
+      const panesBefore = await paneState(c, c.world.worktreeA)
+      c.assert(paneForPage(panesBefore, c.state.pageA).length === 0, 'Page A already has a browser pane')
+      baselinePanes = new Set(panesBefore.tabs.map((pane) => pane.id))
+
+      const refusal = await c.probe('tab switch', { focus: true })
+      const refusalText = JSON.stringify(refusal.result)
+      c.assert(refusal.exitCode !== 0, 'focus without a window unexpectedly succeeded')
+      c.assert(refusalText.includes('browser_client_unavailable') && refusalText.includes('no Quirky window is connected to show the page'), 'unexpected no-window focus error')
+      c.equal((await c.call<{ tab: Tab }>('tab current', { worktree: c.world.worktreeA }, '')).tab.browserPageId, selectedBefore.tab.browserPageId)
+      c.equal(await paneState(c, c.world.worktreeA), panesBefore, 'no-window focus changed pane state')
+
+      ui = await connectClient(c, 'ui')
+      const connId = await windowConnId(ui)
+      const focused = await c.probe('tab switch', { focus: true })
+      c.assert(focused.exitCode === 0, `focus with a stand-in window failed: ${JSON.stringify(focused.result)}`)
+      const result = focused.result as { switched: number; browserPageId: string; focused?: boolean; pane?: string; paneOpened?: boolean; client?: number }
+      if (typeof result.pane !== 'string') throw new BrowserFailure('wrong-page', 'focus result omitted its pane ID')
+      const pane = result.pane
+      createdPanes.add(pane)
+      const current = await c.call<{ tab: Tab }>('tab current', { worktree: c.world.worktreeA }, '')
+      c.equal(current.tab.browserPageId, c.state.pageA)
+      c.equal(result, { switched: current.tab.index, browserPageId: c.state.pageA, focused: true, pane, paneOpened: true, client: connId })
+
+      const shown = await windowState(observer, connId)
+      c.equal(shown.layout.view, viewForWorktree(c.world.worktreeA))
+      c.equal(shown.layout.worktree, c.world.worktreeA)
+      const state = await paneState(c, c.world.worktreeA)
+      const matches = paneForPage(state, c.state.pageA)
+      c.equal(matches.length, 1)
+      c.equal(matches[0]!.id, pane)
+      c.equal(matches[0]!.mode, 'watch')
+      c.equal(matches[0]!.profileId, current.tab.profileId)
+      c.assert(hostedBrowserTabIsActive(await terminalWorkspace(observer, c.world.worktreeA), pane), 'hosted browser tab is not active in the worktree workspace')
+
+      const repeated = await c.probe('tab switch', { focus: true })
+      c.assert(repeated.exitCode === 0, `repeated focus failed: ${JSON.stringify(repeated.result)}`)
+      const repeatedResult = repeated.result as { switched: number; browserPageId: string; focused?: boolean; pane?: string; paneOpened?: boolean; client?: number }
+      c.equal(repeatedResult, { switched: current.tab.index, browserPageId: c.state.pageA, focused: true, pane, paneOpened: false, client: connId })
+      c.equal(paneForPage(await paneState(c, c.world.worktreeA), c.state.pageA).map((tab) => tab.id), [pane])
+      return { noWindow: { error: refusal.result, selectionUnchanged: true, panesUnchanged: true }, first: result, repeated: repeatedResult, window: shown.layout, pane: matches[0] }
+    } finally {
+      await finishProbe(c, observer, ui, c.world.worktreeA, baselinePanes, undefined, createdPanes, new Set())
+    }
   } },
   { id: 'tab-close', async run(c) {
     const disposable = c.state.disposable
@@ -179,12 +387,59 @@ export const tabChecks: BrowserCheck[] = [
     return { navigated, observed }
   } },
   { id: 'open-url', async run(c) {
-    const opened = await c.call<PageReceipt>('open-url', { url: `${c.world.fixture.origin}/page`, worktree: c.world.worktreeA }, '')
-    const { tab } = await c.call<{ tab: Tab }>('tab show', {}, opened.browserPageId)
-    c.equal(tab.profileId, 'default'); c.equal(tab.worktreeId, c.world.worktreeA)
-    const title = await c.observe('document.title', opened.browserPageId)
-    c.equal(title, 'Parity fixture')
-    await c.call('tab close', { yes: true }, opened.browserPageId)
-    return { gap: 'Reveal the selected browser page and route browser URLs to the intended client', tab, title, scope: 'local managed Default-profile page; no paired-client routing observer' }
+    let observer: QuirkyClient | undefined
+    let ui: QuirkyClient | undefined
+    let baselinePanes: Set<string> | undefined
+    let baselinePages: Set<string> | undefined
+    const createdPanes = new Set<string>()
+    const createdPages = new Set<string>()
+    try {
+      const local = await c.call<PageReceipt>('open-url', { url: `${c.world.fixture.origin}/page`, worktree: c.world.worktreeA }, '')
+      createdPages.add(local.browserPageId)
+      const { tab } = await c.call<{ tab: Tab }>('tab show', {}, local.browserPageId)
+      c.equal(tab.profileId, 'default'); c.equal(tab.worktreeId, c.world.worktreeA)
+      const title = await c.observe('document.title', local.browserPageId)
+      c.equal(title, 'Parity fixture')
+      const localPageId = local.browserPageId
+      const localTab = tab
+      const localTitle = title
+      const closedLocal = await c.call<{ closed: boolean }>('tab close', { yes: true }, localPageId)
+      c.assert(closedLocal.closed, 'local open-url page did not close')
+      createdPages.delete(localPageId)
+
+      observer = await connectClient(c, 'cli')
+      c.equal((await uiState(observer)).windows, [])
+      baselinePanes = await paneIds(c, c.world.worktreeA)
+      baselinePages = await pageIds(c)
+      ui = await connectClient(c, 'ui')
+      const connId = await windowConnId(ui)
+      const routed = await c.call<PageReceipt & { pane: string; client: number }>('open-url', {
+        url: `${c.world.fixture.origin}/page`,
+        worktree: c.world.worktreeA,
+        client: 'caller'
+      }, '')
+      createdPages.add(routed.browserPageId)
+      createdPanes.add(routed.pane)
+      c.assert(routed.client === connId, 'open-url result named the wrong window')
+      const { tab: routedTab } = await c.call<{ tab: Tab }>('tab show', {}, routed.browserPageId)
+      c.equal({ profileId: routedTab.profileId, worktreeId: routedTab.worktreeId, url: routedTab.url }, {
+        profileId: 'default',
+        worktreeId: c.world.worktreeA,
+        url: `${c.world.fixture.origin}/page`
+      })
+      const panes = await paneState(c, c.world.worktreeA)
+      const matches = paneForPage(panes, routed.browserPageId)
+      c.equal(matches.length, 1)
+      c.equal(matches[0]!.id, routed.pane)
+      c.equal(matches[0]!.mode, 'watch')
+      c.equal(matches[0]!.profileId, routedTab.profileId)
+      const shown = await windowState(observer, connId)
+      c.equal(shown.layout.view, viewForWorktree(c.world.worktreeA))
+      c.equal(shown.layout.worktree, c.world.worktreeA)
+      c.assert(hostedBrowserTabIsActive(await terminalWorkspace(observer, c.world.worktreeA), routed.pane), 'hosted browser tab is not active in the worktree workspace')
+      return { local: { tab: localTab, title: localTitle, scope: 'local managed Default-profile page' }, routed, pane: matches[0], window: shown.layout }
+    } finally {
+      await finishProbe(c, observer, ui, c.world.worktreeA, baselinePanes, baselinePages, createdPanes, createdPages)
+    }
   } }
 ]
