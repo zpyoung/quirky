@@ -1,6 +1,6 @@
 {
   "id": "quirky.accounts",
-  "apiVersion": "1.3.0",
+  "apiVersion": "1.11.0",
   "name": "Accounts and Usage",
   "version": "0.1.0",
   "description": "Read provider usage and manage isolated Claude and Codex accounts.",

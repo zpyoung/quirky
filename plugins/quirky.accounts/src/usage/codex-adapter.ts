@@ -1,4 +1,3 @@
-import { spawn, type ChildProcess } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { mapCodexUsage } from './mappers'
 import { codexHome, managedCodexAuthPath } from './credentials'
@@ -42,118 +41,151 @@ function rpcFailure(runtime: ProviderRuntime, error: string, kind: 'cli-unavaila
   return errorSnapshot('codex', runtime.now(), error, kind, kind === 'cli-unavailable' ? 'unavailable' : 'error', { source: 'cli' })
 }
 
-function terminate(child: ChildProcess): void {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  child.kill('SIGTERM')
-  const hardKill = setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-  }, 1_000)
-  child.once('close', () => clearTimeout(hardKill))
-}
 
 function appServerRateLimits(runtime: ProviderRuntime, home: string): Promise<ProviderSnapshot> {
-  return new Promise((resolve) => {
-    const child = spawn('codex', ['-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server'], {
-      cwd: home,
-      env: { ...process.env, CODEX_HOME: home },
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true
-    })
-    runtime.processes.track(child)
-    let settled = false
-    let buffer = ''
-    let outputBytes = 0
-    let currentTimeout: ReturnType<typeof setTimeout> | null = null
-    const abort = (): void => finish(rpcFailure(runtime, 'Codex usage refresh was cancelled'))
-    function cleanup(): void {
-      if (currentTimeout) clearTimeout(currentTimeout)
-      currentTimeout = null
-      runtime.signal.removeEventListener('abort', abort)
-      child.stdout?.removeAllListeners('data')
-      child.stderr?.removeAllListeners('data')
-    }
-    function finish(result: ProviderSnapshot): void {
-      if (settled) return
-      settled = true
-      cleanup()
-      if (child.exitCode !== null || child.signalCode !== null) {
-        resolve(result)
-        return
-      }
-      let closeDeadline: ReturnType<typeof setTimeout> | null = null
-      child.once('close', () => {
-        if (closeDeadline) clearTimeout(closeDeadline)
-        resolve(result)
-      })
-      closeDeadline = setTimeout(() => resolve(result), 1_500)
-      terminate(child)
-    }
-    function request(id: number, method: string, params: unknown = {}): void {
-      child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
-    }
-    function notification(method: string): void {
-      child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', method, params: {} })}\n`)
-    }
-    function processLine(line: string): void {
-      if (!line) return
-      let message: Record<string, unknown> | null
+  const child = runtime.processes.spawn('codex', ['-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server'], {
+    cwd: home,
+    env: { ...process.env, CODEX_HOME: home },
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'ignore',
+    timeoutMs: null,
+    killGraceMs: 1_000,
+    signal: runtime.signal
+  })
+  const { promise, resolve } = Promise.withResolvers<ProviderSnapshot>()
+  let settled = false
+  let buffer = ''
+  let outputBytes = 0
+  let stdoutPump = Promise.resolve()
+  let currentTimeout: ReturnType<typeof setTimeout> | undefined
+  const abort = (): void => finish(rpcFailure(runtime, 'Codex usage refresh was cancelled'))
+  function cleanup(): void {
+    clearTimeout(currentTimeout)
+    currentTimeout = undefined
+    runtime.signal.removeEventListener('abort', abort)
+  }
+  function finish(result: ProviderSnapshot, closeInput = false): void {
+    if (settled) return
+    settled = true
+    cleanup()
+    if (closeInput) {
       try {
-        message = record(JSON.parse(line) as unknown)
-      } catch {
+        void child.closeInput().catch(() => {})
+      } catch {}
+    }
+    void (async () => {
+      try {
+        await child.stop({ graceMs: 1_000 })
+      } catch {}
+      resolve(result)
+    })()
+  }
+  function write(message: string): void {
+    try {
+      void child.write(message).catch(() => {})
+    } catch {}
+  }
+  function request(id: number, method: string, params: unknown = {}): string {
+    return `${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`
+  }
+  function notification(method: string): string {
+    return `${JSON.stringify({ jsonrpc: '2.0', method, params: {} })}\n`
+  }
+  function processLine(line: string): void {
+    if (!line) return
+    let message: Record<string, unknown> | null
+    try {
+      message = record(JSON.parse(line) as unknown)
+    } catch {
+      return
+    }
+    const id = finiteNumber(message?.id)
+    if (id === 1) {
+      if (message?.error) {
+        finish(rpcFailure(runtime, 'Codex App Server initialization failed'))
         return
       }
-      const id = finiteNumber(message?.id)
-      if (id === 1) {
-        if (message?.error) {
-          finish(rpcFailure(runtime, 'Codex App Server initialization failed'))
+      clearTimeout(currentTimeout)
+      currentTimeout = setTimeout(() => finish(rpcFailure(runtime, 'Codex rate limit request timed out')), RPC_READ_TIMEOUT_MS)
+      write(notification('initialized'))
+      write(request(2, 'account/rateLimits/read'))
+      return
+    }
+    if (id !== 2) return
+    if (message?.error) {
+      finish(rpcFailure(runtime, 'Codex App Server could not read rate limits'))
+      return
+    }
+    const mapped = mapCodexUsage(message?.result, runtime.now())
+    if (mapped.status !== 'ok') {
+      finish(rpcFailure(runtime, 'Codex App Server response did not include quota', 'parse'))
+      return
+    }
+    finish(mapped, true)
+  }
+  async function readStdout(): Promise<void> {
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+    const decoder = new TextDecoder('utf-8')
+    try {
+      reader = child.stdout.getReader()
+      while (!settled) {
+        const { done, value } = await reader.read()
+        if (done) return
+        outputBytes += value.byteLength
+        if (outputBytes > 524_288) {
+          finish(rpcFailure(runtime, 'Codex App Server response was too large', 'parse'))
           return
         }
-        if (currentTimeout) clearTimeout(currentTimeout)
-        currentTimeout = setTimeout(() => finish(rpcFailure(runtime, 'Codex rate limit request timed out')), RPC_READ_TIMEOUT_MS)
-        notification('initialized')
-        request(2, 'account/rateLimits/read')
-        return
+        buffer += decoder.decode(value, { stream: true })
+        let newline = buffer.indexOf('\n')
+        while (newline >= 0) {
+          const line = buffer.slice(0, newline).trim()
+          buffer = buffer.slice(newline + 1)
+          processLine(line)
+          if (settled) return
+          newline = buffer.indexOf('\n')
+        }
       }
-      if (id !== 2) return
-      if (message?.error) {
-        finish(rpcFailure(runtime, 'Codex App Server could not read rate limits'))
-        return
+    } catch {
+      if (!settled) {
+        finish(rpcFailure(
+          runtime,
+          runtime.signal.aborted ? 'Codex usage refresh was cancelled' : 'Codex App Server exited unexpectedly'
+        ))
       }
-      const mapped = mapCodexUsage(message?.result, runtime.now())
-      if (mapped.status !== 'ok') {
-        finish(rpcFailure(runtime, 'Codex App Server response did not include quota', 'parse'))
-        return
-      }
-      finish(mapped)
+    } finally {
+      reader?.releaseLock()
     }
-    child.stdout?.on('data', (chunk: Buffer) => {
-      outputBytes += chunk.byteLength
-      if (outputBytes > 512 * 1024) {
-        finish(rpcFailure(runtime, 'Codex App Server response was too large', 'parse'))
-        return
-      }
-      buffer += chunk.toString('utf8')
-      let newline = buffer.indexOf('\n')
-      while (newline >= 0) {
-        const line = buffer.slice(0, newline).trim()
-        buffer = buffer.slice(newline + 1)
-        processLine(line)
-        if (settled) return
-        newline = buffer.indexOf('\n')
-      }
+  }
+  runtime.signal.addEventListener('abort', abort, { once: true })
+  void child.exited.then((exit) => {
+    if (settled) return
+    if (exit.spawnError) {
+      finish(rpcFailure(runtime, 'Codex CLI could not be started', 'cli-unavailable'))
+      return
+    }
+    void stdoutPump.then(() => {
+      if (settled) return
+      finish(rpcFailure(
+        runtime,
+        exit.exitCode === 0 ? 'Codex App Server exited before returning quota' : 'Codex App Server exited unexpectedly'
+      ))
     })
-    child.stderr?.on('data', () => undefined)
-    child.once('error', () => finish(rpcFailure(runtime, 'Codex CLI could not be started', 'cli-unavailable')))
-    child.once('close', (code) => {
-      if (!settled) finish(rpcFailure(runtime, code === 0 ? 'Codex App Server exited before returning quota' : 'Codex App Server exited unexpectedly'))
-    })
-    runtime.signal.addEventListener('abort', abort, { once: true })
-    if (runtime.signal.aborted) abort()
+  }, () => {
     if (!settled) {
-      currentTimeout = setTimeout(() => finish(rpcFailure(runtime, 'Codex App Server initialization timed out')), RPC_INITIALIZE_TIMEOUT_MS)
-      request(1, 'initialize', { clientInfo: { name: 'orca', version: '1.0.0' } })
+      void stdoutPump.then(() => {
+        if (!settled) finish(rpcFailure(runtime, 'Codex App Server exited unexpectedly'))
+      })
     }
   })
+  if (runtime.signal.aborted) abort()
+  if (!settled) {
+    currentTimeout = setTimeout(() => finish(rpcFailure(runtime, 'Codex App Server initialization timed out')), RPC_INITIALIZE_TIMEOUT_MS)
+    stdoutPump = readStdout()
+    write(request(1, 'initialize', { clientInfo: { name: 'orca', version: '1.0.0' } }))
+  }
+  return promise
 }
 
 function backendHeaders(auth: CodexAuth): Record<string, string> | null {

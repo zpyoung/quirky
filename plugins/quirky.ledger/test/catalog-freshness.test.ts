@@ -209,6 +209,32 @@ test('unchanged catalog reads do not reconcile or write the store', async () => 
   })
 })
 
+test('filing by ledger id cannot replace a ledger deleted during shared catalog resolution', async () => {
+  await withFixture(async (fixture) => {
+    const caller = { role: 'cli' } as PluginCaller
+    const content = { title: 'Original ledger', context: 'Catalog race', recommendation: 'Keep the requested identity' }
+    const created = await fixture.engine.request({
+      operation: 'file', target: { owner: { tier: 'project', id: fixture.initialRepo.id } }, type: 'proposal', content
+    }, caller)
+    const target = { ledgerId: created.ledger!.ledgerId }
+    const barrier = fixture.gateNextRead()
+    const inventory = fixture.request()
+    await barrier.entered
+    const deleting = fixture.engine.request({
+      operation: 'delete-ledger', target, ifLedgerRevision: created.ledger!.revision, confirmed: true
+    }, caller)
+    const filing = fixture.engine.request({ operation: 'file', target, type: 'proposal', content }, caller)
+    const result = Promise.allSettled([deleting, filing])
+    barrier.release()
+    await inventory
+    const [deleted, filed] = await result
+    expect(deleted.status).toBe('fulfilled')
+    expect(filed).toMatchObject({ status: 'rejected', reason: { data: { kind: 'not-found' } } })
+    const catalog = await fixture.engine.request({ operation: 'catalog' }, caller)
+    expect(catalog.ledgers).toEqual([])
+  })
+})
+
 test('requests arriving during one read share a single fresh follow-up inventory read', async () => {
   await withFixture(async (fixture) => {
     const before = fixture.callSnapshot()

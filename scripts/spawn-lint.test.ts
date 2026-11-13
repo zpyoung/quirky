@@ -307,7 +307,7 @@ test('CLI rejects unknown arguments and remains import-safe', () => {
 test('package scripts preserve every typecheck stage and insert the spawn guard', () => {
   const { scripts } = JSON.parse(readFileSync(resolve(import.meta.dir, '../package.json'), 'utf8'))
   expect(scripts['spawn:lint']).toBe('bun scripts/spawn-lint.ts')
-  expect(scripts.typecheck).toBe('bun install --frozen-lockfile && bun run ui:lint && bun run spawn:lint && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop')
+  expect(scripts.typecheck).toBe('bun install --frozen-lockfile && bun run ui:lint && bun run ui:scoreboard:check && bun run spawn:lint && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop')
 })
 test('repository fits its ceiling and CLI resolves root independently of cwd', () => {
   const root = resolve(import.meta.dir, '..')

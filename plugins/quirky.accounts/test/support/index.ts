@@ -308,8 +308,7 @@ export async function cleanupAll(): Promise<void> {
   }
   await restoreProviderFetch()
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
-  for (const key of ENV_KEYS) {
-    const value = originalEnv.get(key)
+  for (const [key, value] of originalEnv) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value
   }

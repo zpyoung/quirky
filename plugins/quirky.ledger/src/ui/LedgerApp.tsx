@@ -326,7 +326,13 @@ export function LedgerApp({
     try {
       const result = await ledgerRequest(context, { operation: 'review', target: effectiveTarget, filters: requestFilters })
       if (candidateGeneration.current !== generation) return
-      setCandidates(result.candidates ?? [])
+      const nextCandidates = result.candidates ?? []
+      const candidateKeys = new Set(nextCandidates.map((candidate) => selectionKey(candidate.entry)))
+      setCandidates(nextCandidates)
+      setTriageSelected((current) => {
+        const retained = current.filter((selection) => candidateKeys.has(selectionKey(selection)))
+        return retained.length === current.length ? current : retained
+      })
       setCandidateError('')
     } catch (reason) {
       if (candidateGeneration.current === generation) setCandidateError(errorMessage(reason))
@@ -363,9 +369,10 @@ export function LedgerApp({
 
   const owners = catalog?.owners ?? []
   const currentSummary = response?.ledger ?? null
-  const pageTitle = summaryTitle(currentSummary, effectiveTarget, owners)
+  const catalogSummary = effectiveTarget?.ledgerId ? catalog?.ledgers?.find((summary) => summary.ledgerId === effectiveTarget.ledgerId) : undefined
+  const pageTitle = currentSummary || !catalogSummary ? summaryTitle(currentSummary, effectiveTarget, owners) : catalogSummary.name
   const ownerForPage = currentSummary?.owner ?? effectiveTarget?.owner ?? currentSummary?.formerOwner ?? null
-  const pageTier = currentSummary?.tier ?? ownerForPage?.tier ?? 'project'
+  const pageTier = currentSummary?.tier ?? ownerForPage?.tier ?? catalogSummary?.tier ?? 'project'
   const runtimeText = runtimeTip(response ?? catalog)
   const workspaceFolder = workspaceRepo?.kind === 'folder' || workspace?.kind === 'folder'
   const pageLedgerTarget = effectiveTarget
@@ -517,8 +524,7 @@ export function LedgerApp({
       setSelectionTitles(new Map())
       setTriageSelected([])
       setTriageTitles(new Map())
-      await loadEntries()
-      if (triageOpen) await loadCandidates()
+      await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])
       if (detail) await openDetail(detail)
     } catch (reason) {
       if (isConflict(reason)) {
@@ -527,8 +533,7 @@ export function LedgerApp({
         setSelectionTitles(new Map())
         setTriageSelected([])
         setTriageTitles(new Map())
-        await loadEntries()
-        if (triageOpen) await loadCandidates()
+        await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])
         if (detail) await openDetail(detail)
       } else {
         setActionMessage(errorMessage(reason))
@@ -576,8 +581,7 @@ export function LedgerApp({
     setSelectionTitles(new Map())
     setTriageSelected([])
     setTriageTitles(new Map())
-    await loadEntries()
-    if (triageOpen) await loadCandidates()
+    await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])
   }
 
   const confirmAction = async () => {
@@ -612,9 +616,7 @@ export function LedgerApp({
           break
       }
       setConfirmation(null)
-      await loadEntries()
-      await loadCatalog()
-      if (triageOpen) await loadCandidates()
+      await Promise.all([loadEntries(), loadCatalog(), ...(triageOpen ? [loadCandidates()] : [])])
     } catch (reason) {
       setConfirmation(null)
       if (isConflict(reason)) {
@@ -905,7 +907,7 @@ export function LedgerApp({
             <ListRow
               title={rowLabel}
               trailing={<Button type="button" aria-label={`Open ledger ${summary.name}`} onClick={() => {
-                setOwnerTarget(summary.owner ? { owner: summary.owner } : { ledgerId: summary.ledgerId })
+                setOwnerTarget({ ledgerId: summary.ledgerId })
               }}>Open</Button>}
             />
           </li>

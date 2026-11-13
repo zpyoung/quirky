@@ -1,10 +1,2 @@
 {
-  "plugins/quirky.accounts/src/login.ts": 1,
-  "plugins/quirky.accounts/src/profiles.ts": 1,
-  "plugins/quirky.accounts/src/usage/codex-adapter.ts": 1,
-  "plugins/quirky.accounts/src/usage/process.ts": 1,
-  "plugins/quirky.agent-status/src/rules/matcher.ts": 1,
-  "plugins/quirky.automations/src/external/command.ts": 1,
-  "plugins/quirky.hosting/src/runtime-runner.ts": 1,
-  "plugins/quirky.loops/src/evaluator.ts": 1
 }

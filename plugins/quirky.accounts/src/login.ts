@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { spawn, type ChildProcess } from 'node:child_process'
+import type { ProcessSpawner, SpawnedProcess } from '@quirky/protocol'
 import { chmodSync, lstatSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AccountSummary, ManagedProvider, PendingLogin } from './types'
@@ -32,8 +32,10 @@ export type LoginTask = {
   baselineAuthHash: string | null
   browserScript: string | null
   browserUrlFile: string | null
-  child: ChildProcess | null
+  child: SpawnedProcess | null
   stdout: string
+  stdoutFailed: boolean
+  mustCommitBeforeStdoutFailure: boolean
   finalizing: boolean
   done: boolean
   cancelled: boolean
@@ -43,7 +45,6 @@ export type LoginTask = {
   finish: () => void
   pollTimer: ReturnType<typeof setInterval> | null
   linkTimeout: ReturnType<typeof setTimeout> | null
-  killTimer: ReturnType<typeof setTimeout> | null
 }
 
 const MAX_LOGIN_TASKS = 32
@@ -56,6 +57,7 @@ export class AccountLoginManager {
 
   constructor(
     private readonly profiles: AccountProfiles,
+    private readonly spawner: ProcessSpawner,
     private readonly onFinished: LoginFinished,
     private readonly onChanged: LoginChanged
   ) {}
@@ -80,6 +82,8 @@ export class AccountLoginManager {
       browserUrlFile: null,
       child: null,
       stdout: '',
+      stdoutFailed: false,
+      mustCommitBeforeStdoutFailure: false,
       finalizing: false,
       done: false,
       cancelled: false,
@@ -88,8 +92,7 @@ export class AccountLoginManager {
       finished: promise,
       finish: resolve,
       pollTimer: null,
-      linkTimeout: null,
-      killTimer: null
+      linkTimeout: null
     }
     this.tasks.set(id, task)
     this.trimCompleted()
@@ -168,16 +171,21 @@ export class AccountLoginManager {
       env.BROWSER = capture.script
       this.watchClaudeLink(task)
     }
-    const child = spawn(request.provider, args, {
+    const child = this.spawner.spawn([request.provider, ...args], {
       cwd: request.home,
       env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: process.platform !== 'win32'
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'ignore',
+      timeoutMs: LOGIN_TIMEOUT_MS[request.provider],
+      killGraceMs: 2_000
     })
     task.child = child
-    child.stdout?.on('data', (chunk: Buffer) => this.onOutput(task, chunk.toString('utf8')))
-    child.once('error', () => void this.finishTask(task, null, true))
-    child.once('close', (code) => void this.finishTask(task, code, false))
+    const stdout = this.readStdout(task, child)
+    void child.exited.then(async (exit) => {
+      await stdout
+      await this.finishTask(task, exit.exitCode, exit.spawnError !== undefined)
+    })
     if (request.provider === 'claude' && request.copyLink) {
       task.linkTimeout = setTimeout(() => {
         if (task.pollTimer) clearInterval(task.pollTimer)
@@ -185,21 +193,37 @@ export class AccountLoginManager {
         task.linkTimeout = null
       }, COPY_LINK_WINDOW_MS)
     }
-    const timeout = setTimeout(() => {
-      if (task.done || task.finalizing) return
-      this.killProcess(task)
-    }, LOGIN_TIMEOUT_MS[request.provider])
-    timeout.unref()
-    child.once('close', () => clearTimeout(timeout))
+  }
+
+  private async readStdout(task: LoginTask, child: SpawnedProcess): Promise<void> {
+    const reader = child.stdout.getReader()
+    const decoder = new TextDecoder('utf-8')
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        this.onOutput(task, decoder.decode(value, { stream: true }))
+      }
+      const finalChunk = decoder.decode()
+      if (finalChunk) this.onOutput(task, finalChunk)
+    } catch {
+      if (!task.done && !task.finalizing) {
+        task.stdoutFailed = true
+        task.mustCommitBeforeStdoutFailure = task.mustCommit
+        this.killProcess(task)
+      }
+    } finally {
+      reader.releaseLock()
+    }
   }
 
   private onOutput(task: LoginTask, chunk: string): void {
     if (task.done || task.finalizing) return
     task.stdout = `${task.stdout}${chunk}`.slice(-MAX_OUTPUT_CHARS)
-    if (task.request.provider === 'codex') {
-      const url = trustedCodexUrl(task.stdout)
-      if (url && task.pending.url !== url) this.publishUrl(task, url)
-    }
+    const url = task.request.provider === 'claude'
+      ? trustedClaudeUrlInOutput(task.stdout)
+      : trustedCodexUrl(task.stdout)
+    if (url && task.pending.url !== url) this.publishUrl(task, url)
   }
 
   private watchClaudeLink(task: LoginTask): void {
@@ -236,14 +260,15 @@ export class AccountLoginManager {
     task.finalizing = true
     this.clearTaskTimers(task)
     const codexAuthChanged = task.request.provider === 'codex' && this.codexAuthChanged(task)
-    const shouldCommit = codexAuthChanged || (!task.cancelled && (exitCode === 0 || task.mustCommit))
+    const shouldCommit = (!task.stdoutFailed || task.mustCommitBeforeStdoutFailure) &&
+      (codexAuthChanged || (!task.cancelled && (exitCode === 0 || task.mustCommit)))
     let status: LoginCompletion['status'] = task.cancelled && !codexAuthChanged ? 'cancelled' : 'error'
     let identity: ProviderIdentity | null = null
     let error = status === 'cancelled' ? null : redactProviderError(task.request.provider)
     if (shouldCommit) {
       try {
         this.profiles.protectAuthFile(task.request.provider, task.request.home)
-        identity = this.profiles.readIdentity(task.request.provider, task.request.home)
+        identity = await this.profiles.readIdentity(task.request.provider, task.request.home)
         if (isProviderAuth(identity)) {
           status = 'complete'
           error = null
@@ -298,39 +323,16 @@ export class AccountLoginManager {
 
   private killProcess(task: LoginTask): void {
     const child = task.child
-    if (!child || child.exitCode !== null || child.signalCode !== null) return
-    child.stdin?.end()
-    const pid = child.pid
-    if (pid !== undefined && process.platform !== 'win32') {
-      try {
-        process.kill(-pid, 'SIGTERM')
-      } catch {
-        child.kill('SIGTERM')
-      }
-      task.killTimer = setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) {
-          try {
-            process.kill(-pid, 'SIGKILL')
-          } catch {
-            child.kill('SIGKILL')
-          }
-        }
-      }, 2000)
-      task.killTimer.unref()
-      return
-    }
-    child.kill('SIGTERM')
-    task.killTimer = setTimeout(() => child.kill('SIGKILL'), 2000)
-    task.killTimer.unref()
+    if (!child || task.done || task.finalizing) return
+    void child.closeInput().catch(() => {})
+    void child.stop({ graceMs: 2_000 })
   }
 
   private clearTaskTimers(task: LoginTask): void {
     if (task.pollTimer) clearInterval(task.pollTimer)
     if (task.linkTimeout) clearTimeout(task.linkTimeout)
-    if (task.killTimer) clearTimeout(task.killTimer)
     task.pollTimer = null
     task.linkTimeout = null
-    task.killTimer = null
   }
 
   private removeBrowserCapture(task: LoginTask): void {
@@ -365,11 +367,24 @@ function createBrowserCapture(home: string): { script: string; urlFile: string }
   return { script, urlFile }
 }
 
+function trustedClaudeUrlInOutput(text: string): string | null {
+  const candidates = text.match(/https:\/\/[^\s"'<>]+/g) ?? []
+  for (const candidate of candidates) {
+    const url = trustedClaudeUrl(candidate.replace(/[.,;:)\]]+$/, ''))
+    if (url) return url
+  }
+  return null
+}
+
 function trustedClaudeUrl(text: string): string | null {
   try {
     if (!text || text.length > 8192 || /[\u0000-\u001f\u007f]/.test(text)) return null
     const url = new URL(text)
-    if (url.protocol !== 'https:' || !['claude.ai', 'claude.com'].includes(url.hostname) || url.pathname !== '/oauth/authorize') return null
+    if (
+      url.protocol !== 'https:' ||
+      !['claude.ai', 'claude.com', 'console.anthropic.com', 'platform.claude.com'].includes(url.hostname) ||
+      url.pathname !== '/oauth/authorize'
+    ) return null
     const redirectText = url.searchParams.get('redirect_uri')
     if (!redirectText) return null
     const redirect = new URL(redirectText)
@@ -382,17 +397,22 @@ function trustedClaudeUrl(text: string): string | null {
 
 function trustedCodexUrl(output: string): string | null {
   const marker = 'navigate to this url to authenticate:'
-  const start = output.toLocaleLowerCase('en-US').indexOf(marker)
-  if (start < 0) return null
-  const searchable = output.slice(start + marker.length)
-  const match = /(https:\/\/\S+?)[.,;:)\]]*(?:\s|$)/.exec(searchable)
-  if (!match?.[1]) return null
-  try {
-    const url = new URL(match[1])
-    if (url.protocol !== 'https:' || url.hostname !== 'auth.openai.com' || url.pathname !== '/oauth/authorize') return null
-    return url.toString()
-  } catch {
-    return null
+  const lowercase = output.toLocaleLowerCase('en-US')
+  let searchFrom = 0
+  for (;;) {
+    const start = lowercase.indexOf(marker, searchFrom)
+    if (start < 0) return null
+    const searchable = output.slice(start + marker.length)
+    const match = /(https:\/\/\S+?)[.,;:)\]]*(?:\s|$)/.exec(searchable)
+    if (match?.[1]) {
+      try {
+        const url = new URL(match[1])
+        if (url.protocol === 'https:' && url.hostname === 'auth.openai.com' && url.pathname === '/oauth/authorize') {
+          return url.toString()
+        }
+      } catch {}
+    }
+    searchFrom = start + marker.length
   }
 }
 
