@@ -58,7 +58,13 @@ async function bootAttention() {
     return view?.id === CURRENT_VIEW && (view.input as { worktree?: string } | undefined)?.worktree === current.id
   })
   const attention = attentionStoreFor(env.win.connection, env.win.host)
-  await env.win.waitFor(() => attention.getSnapshot().worktrees?.some((worktree) => worktree.id === current.id))
+  await env.win.waitFor(() => {
+    const { repos, worktrees } = attention.getSnapshot()
+    return repos?.some((repo) => repo.id === currentRepo.id) &&
+      repos.some((repo) => repo.id === otherRepo.id) &&
+      worktrees?.some((worktree) => worktree.id === current.id) &&
+      worktrees.some((worktree) => worktree.id === other.id)
+  })
   return { env, attention, current, other, currentRepo, otherRepo }
 }
 

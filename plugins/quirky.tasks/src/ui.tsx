@@ -5,7 +5,7 @@ import { Button, ControlIcon, EmptyState, FormRow, IconButton, SectionHeader, Ta
 import { TASKS_TOOL, TASKS_VIEW, TASKS_SETTINGS_VIEW, type TasksState, type TaskPreferences } from './contracts'
 import { CompactTasks } from './list/CompactTasks'
 import { place } from './list/place'
-import { object as record } from './list/model'
+import { object as record, parseTasksState } from './list/model'
 import { TasksList, WorkspaceComposer } from './list/TasksList'
 import { effectiveList } from './list/useCompactList'
 import { IssueSurface } from './issue/IssueSurface'
@@ -15,29 +15,32 @@ import { ProjectsSurface } from './projects/ProjectsSurface'
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
 async function readState(context: UiPluginContext): Promise<TasksState> {
-  const value = await context.call('quirky.tasks/state', {})
-  if (!object(value) || !object(value.navigation) || !object(value.preferences) || typeof value.revision !== 'number') throw new Error('Invalid Tasks state from daemon')
-  return value as TasksState
+  const next = parseTasksState(await context.call('quirky.tasks/state', {}))
+  if (!next) throw new Error('Invalid Tasks state from daemon')
+  return next
 }
 function useTasksState(context: UiPluginContext) {
   const [state, setState] = useState<TasksState | null>(null)
   const [error, setError] = useState('')
   const generation = useRef(0)
+  const adopt = useCallback((next: TasksState) => {
+    setState(previous => !previous || next.revision >= previous.revision ? next : previous)
+    setError('')
+  }, [])
   const refresh = useCallback(async () => {
     const request = ++generation.current
     try {
       const next = await readState(context)
       if (request !== generation.current) return
-      setState(previous => !previous || next.revision >= previous.revision ? next : previous)
-      setError('')
+      adopt(next)
     } catch (cause) { if (request === generation.current) setError(message(cause)) }
-  }, [context])
+  }, [context, adopt])
   useEffect(() => {
     void refresh()
     const off = context.subscribe(event => { if (event.type === 'quirky.tasks/changed' || event.type.startsWith('setting.')) void refresh() })
     return () => { generation.current++; off() }
   }, [context, refresh])
-  return { state, error, refresh }
+  return { state, error, adopt, refresh }
 }
 
 function TasksSettings({ context, state, refresh, report }: { context: UiPluginContext; state: TasksState; refresh(): Promise<void>; report?: (state: unknown) => void }) {
@@ -134,7 +137,7 @@ function useTabCounts(context: UiPluginContext, navigation: TasksState['navigati
 }
 
 function TasksApp({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
-  const { state, error, refresh } = useTasksState(context)
+  const { state, error, adopt, refresh } = useTasksState(context)
   const root = useRef<HTMLDivElement>(null)
   const { counts, reload: reloadCounts } = useTabCounts(context, state?.navigation ?? null)
   const refreshAndCount = useCallback(async () => {
@@ -171,14 +174,18 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement) { active.blur(); event.preventDefault(); return }
       event.preventDefault()
       if (state?.navigation.detail) {
-        void context.call('quirky.tasks/navigate', { detail: null }).catch(cause => context.toast('Could not close the task', message(cause)))
+        void context.call('quirky.tasks/navigate', { detail: null }).then(value => {
+          const next = parseTasksState(value)
+          if (next) adopt(next)
+          else void refresh()
+        }).catch(cause => context.toast('Could not close the task', message(cause)))
         return
       }
       collapse()
     }
     document.addEventListener('keydown', key)
     return () => document.removeEventListener('keydown', key)
-  }, [context, collapse, state?.navigation.detail, state?.navigation.newIssue])
+  }, [context, collapse, adopt, refresh, state?.navigation.detail, state?.navigation.newIssue])
   const navigate = async (mode: 'issues' | 'prs' | 'projects') => {
     try { await context.call('quirky.tasks/navigate', { mode, detail: null, newIssue: false }); await refresh() }
     catch (cause) { context.toast('Could not change Tasks view', message(cause)) }
@@ -192,7 +199,7 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
     <ToolPanelFrame title="Tasks" tabs={state && <Tabs label="Task mode" items={tabs} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />} actions={<IconButton label="Collapse Tasks" title="Collapse Tasks" onClick={collapse}><ControlIcon name="arrows-in" /></IconButton>}>
       {error && <EmptyState message={error} action={{ label: 'Retry', onAction: () => void refresh() }} />}
       {!state ? <p role="status">Loading Tasks…</p> : <>
-        <main className="tasks-body">{state.navigation.mode === 'projects' ? state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refreshAndCount} initialFocus={initialFocus} onDataChanged={reloadCounts} listRefreshToken={listRefreshToken} />}</main>
+        <main className="tasks-body">{state.navigation.mode === 'projects' ? state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refreshAndCount} adopt={adopt} initialFocus={initialFocus} onDataChanged={reloadCounts} listRefreshToken={listRefreshToken} />}</main>
         {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refreshAfterIssueCreate} />}
       </>}
     </ToolPanelFrame>

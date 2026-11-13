@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createProcessRunner, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, liveProcesses, ProcessStalledError } from '../src/api'
 import type { OwnedProcessRunner, ProcessRunnerOptions, RunOptions, RunResult } from '../src/api'
-import { startChild } from '../src/child'
+import { startChild, type StartedChild, type StartChild } from '../src/child'
 
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -53,6 +53,14 @@ function trackPid(stdoutText: string): number {
   return pid
 }
 
+function trackPidFile(path: string): number | undefined {
+  try {
+    return trackPid(readFileSync(path, 'utf8'))
+  } catch {
+    return undefined
+  }
+}
+
 async function expectPidGone(pid: number, waitMs = 2_000): Promise<void> {
   const deadline = Date.now() + waitMs
   while (Date.now() <= deadline) {
@@ -67,6 +75,39 @@ async function expectPidGone(pid: number, waitMs = 2_000): Promise<void> {
     await promise
   }
   throw new Error(`process ${pid} remained alive after ${waitMs}ms`)
+}
+
+function groupDouble(options: {
+  pid?: number
+  stdout?: ReadableStream<Uint8Array>
+  stderr?: ReadableStream<Uint8Array>
+  exit?: Promise<{ exitCode: number | null; signal: string | null }>
+  groupAlive?: () => boolean
+  onSignal?: (signal: 'SIGTERM' | 'SIGKILL') => void
+} = {}): StartedChild & {
+  finish(exitCode?: number | null, signal?: string | null): void
+  signals: Array<{ signal: 'SIGTERM' | 'SIGKILL'; at: number }>
+} {
+  const exit = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+  const signals: Array<{ signal: 'SIGTERM' | 'SIGKILL'; at: number }> = []
+  const child = {
+    pid: options.pid ?? 900_020,
+    stdout: options.stdout ?? new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+    stderr: options.stderr ?? new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+    exited: options.exit ?? exit.promise,
+    signals,
+    finish(exitCode: number | null = 0, signal: string | null = null) { exit.resolve({ exitCode, signal }) },
+    killGroup(signal: 'SIGTERM' | 'SIGKILL') {
+      signals.push({ signal, at: Date.now() })
+      options.onSignal?.(signal)
+    },
+    ...(options.groupAlive ? { groupAlive: options.groupAlive } : {}),
+  }
+  return child
+}
+
+function asStart(child: StartedChild): StartChild {
+  return () => child
 }
 
 test('resolves successful stdout and stderr with a whole-millisecond duration', async () => {
@@ -518,6 +559,302 @@ test('overflow escalates an already-aborted group immediately without replacing 
   expect(result.signal).toBe('SIGKILL')
   expect(result.stdout.byteLength).toBe(1)
 }, 15_000)
+
+test('1: run waits for repeated group kills before settling and unregistering', async () => {
+  let aliveUntil = 0
+  let aliveCalls = 0
+  let settled = false
+  const child = groupDouble({
+    groupAlive: () => { aliveCalls++; return Date.now() < aliveUntil },
+  })
+  const runner = makeRunner({ start: asStart(child) })
+  const pending = runner.run(['fake'], { timeoutMs: 5_000 })
+  void pending.then(() => { settled = true })
+  aliveUntil = Date.now() + 45
+  child.finish(4)
+  await Bun.sleep(25)
+  expect(settled).toBe(false)
+  expect(runner.live()).toHaveLength(1)
+  const result = await pending
+  expect(result.exitCode).toBe(4)
+  expect(child.signals.length).toBeGreaterThanOrEqual(3)
+  expect(child.signals.every(call => call.signal === 'SIGKILL')).toBe(true)
+  expect(runner.live()).toEqual([])
+  const signals = child.signals.length
+  const aliveCount = aliveCalls
+  await Bun.sleep(60)
+  expect(child.signals).toHaveLength(signals)
+  expect(aliveCalls).toBe(aliveCount)
+}, 5_000)
+
+test('2: run reports a surviving group with the leader exit code at the cleanup bound', async () => {
+  const child = groupDouble({ groupAlive: () => true })
+  const runner = makeRunner({ start: asStart(child) })
+  const startedAt = Date.now()
+  const pending = runner.run(['fake'], { timeoutMs: 5_000 })
+  child.finish(7)
+  const result = await pending
+  const cleanupMs = Date.now() - startedAt
+  expect(cleanupMs).toBeGreaterThanOrEqual(1_000)
+  expect(cleanupMs).toBeLessThanOrEqual(1_300)
+  expect(result.exitCode).toBe(7)
+  expect(result.groupSurvived).toBe(true)
+  expect(runner.live()).toEqual([])
+}, 5_000)
+
+test.each(['timeout', 'aborted', 'disposal', 'overflow'] as const)('2a: a stopped run keeps %s and groupSurvived', async reason => {
+  let finish!: (exitCode?: number | null, signal?: string | null) => void
+  let outputController: ReadableStreamDefaultController<Uint8Array> | undefined
+  const output = reason === 'overflow'
+    ? new ReadableStream<Uint8Array>({ start(controller) { outputController = controller } })
+    : new ReadableStream<Uint8Array>({ start(controller) { controller.close() } })
+  const child = groupDouble({
+    stdout: output,
+    groupAlive: () => true,
+    onSignal(signal) { finish(null, signal) },
+  })
+  finish = child.finish
+  let starts = 0
+  const runner = makeRunner({ start: () => { starts++; return child }, stallMs: 20 })
+  const abort = new AbortController()
+  const options: RunOptions = {
+    timeoutMs: reason === 'timeout' ? 25 : 5_000,
+    killGraceMs: 0,
+    rerunnable: true,
+    maxOutputBytes: 1,
+    ...(reason === 'aborted' ? { signal: abort.signal } : {}),
+  }
+  const pending = runner.run(['fake'], options)
+  if (reason === 'aborted') abort.abort()
+  if (reason === 'disposal') {
+    const disposal = runner.dispose()
+    const result = await pending
+    await disposal
+    expect(result.stopped).toBe('aborted')
+    expect(result.groupSurvived).toBe(true)
+    expect(starts).toBe(1)
+  }
+  if (reason === 'overflow') outputController!.enqueue(new Uint8Array([1, 2]))
+  const result = await pending
+  expect(result.stopped).toBe(reason === 'timeout' || reason === 'overflow' ? reason : 'aborted')
+  expect(result.groupSurvived).toBe(true)
+  expect(runner.live()).toEqual([])
+  expect(starts).toBe(1)
+}, 5_000)
+test('M8: disposal during timeout cleanup preserves timeout as the first stop reason', async () => {
+  let alive = true
+  let leaderExited = false
+  const timedOut = Promise.withResolvers<void>()
+  const cleanupStarted = Promise.withResolvers<void>()
+  const child = groupDouble({
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGTERM') timedOut.resolve()
+      if (signal === 'SIGKILL' && leaderExited) cleanupStarted.resolve()
+    },
+  })
+  const runner = makeRunner({ start: asStart(child) })
+  const pending = runner.run(['/fake/timeout-then-dispose'], {
+    timeoutMs: 20, killGraceMs: 0,
+  })
+  try {
+    await timedOut.promise
+    leaderExited = true
+    child.finish(7)
+    await cleanupStarted.promise
+    const disposal = runner.dispose()
+    alive = false
+    const result = await pending
+    await disposal
+    expect(result.stopped).toBe('timeout')
+    expect(result.exitCode).toBeNull()
+    expect(runner.live()).toEqual([])
+  } finally {
+    alive = false
+    leaderExited = true
+    child.finish(7)
+    const disposal = runner.dispose()
+    await pending
+    await disposal
+  }
+}, 5_000)
+
+test('2a: rerunnable held output on a surviving group returns captured bytes without retrying', async () => {
+  let stdoutCancellations = 0
+  let stderrCancellations = 0
+  let stdoutController!: ReadableStreamDefaultController<Uint8Array>
+  const firstRead = Promise.withResolvers<void>()
+  const stdout = new ReadableStream<Uint8Array>({
+    start(controller) { stdoutController = controller },
+    pull() { firstRead.resolve() },
+    cancel() { stdoutCancellations++ },
+  })
+  const stderr = new ReadableStream<Uint8Array>({ cancel() { stderrCancellations++ } })
+  const child = groupDouble({ stdout, stderr, groupAlive: () => true })
+  let starts = 0
+  const runner = makeRunner({
+    stallMs: 20,
+    start: () => { starts++; return child },
+  })
+  const pending = runner.run(['fake'], { timeoutMs: 5_000, rerunnable: true })
+  await firstRead.promise
+  stdoutController.enqueue(new TextEncoder().encode('early\n'))
+  child.finish(0)
+  const result = await pending
+  expect(result.stdoutText).toBe('early\n')
+  expect(result.exitCode).toBe(0)
+  expect(result.groupSurvived).toBe(true)
+  expect(starts).toBe(1)
+  expect(stdoutCancellations).toBe(1)
+  expect(stderrCancellations).toBe(1)
+}, 5_000)
+
+test('2a: rerunnable pipe stalls wait for each attempt group cleanup before retrying', async () => {
+  let firstCleanupDeadline: number | undefined
+  let firstCleanupDone = false
+  let startedBeforeCleanup = false
+  let starts = 0
+  const first = groupDouble({
+    stdout: new ReadableStream<Uint8Array>({ start() {} }),
+    groupAlive: () => {
+      firstCleanupDeadline ??= Date.now() + 40
+      const alive = Date.now() < firstCleanupDeadline
+      if (!alive) firstCleanupDone = true
+      return alive
+    },
+  })
+  const second = groupDouble({
+    stdout: new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('second'))
+      controller.close()
+    } }),
+    exit: Promise.resolve({ exitCode: 0, signal: null }),
+    groupAlive: () => false,
+  })
+  const runner = makeRunner({
+    stallMs: 20,
+    start: () => {
+      starts++
+      if (starts === 1) return first
+      if (!firstCleanupDone) startedBeforeCleanup = true
+      return second
+    },
+  })
+  const pending = runner.run(['fake'], { timeoutMs: 5_000, rerunnable: true })
+  first.finish(0)
+  const result = await pending
+  expect(result.stdoutText).toBe('second')
+  expect(starts).toBe(2)
+  expect(firstCleanupDone).toBe(true)
+  expect(startedBeforeCleanup).toBe(false)
+}, 5_000)
+
+test('2a: child-exit rejection waits for bounded group cleanup before unregistering', async () => {
+  const exitError = new Error('fake exit rejection')
+  const aliveUntil = Date.now() + 70
+  let aliveCalls = 0
+  const child = groupDouble({
+    exit: Promise.reject(exitError),
+    groupAlive: () => { aliveCalls++; return Date.now() < aliveUntil },
+  })
+  const runner = makeRunner({ start: asStart(child) })
+  const pending = runner.run(['fake'], { timeoutMs: 5_000 }).then(
+    () => undefined,
+    error => error,
+  )
+  await Bun.sleep(25)
+  expect(runner.live()).toHaveLength(1)
+  const error = await pending
+  expect(error).toBe(exitError)
+  expect(aliveCalls).toBeGreaterThan(1)
+  expect(runner.live()).toEqual([])
+}, 5_000)
+
+test('4: run disposal during natural-exit cleanup returns aborted after cleanup', async () => {
+  let aliveUntil: number | undefined
+  const child = groupDouble({
+    groupAlive: () => {
+      aliveUntil ??= Date.now() + 80
+      return Date.now() < aliveUntil
+    },
+  })
+  const runner = makeRunner({ start: asStart(child) })
+  const pending = runner.run(['fake'], { timeoutMs: 5_000 })
+  child.finish(0)
+  while (child.signals.length === 0) await Bun.sleep(1)
+  const disposal = runner.dispose()
+  const [result] = await Promise.all([pending, disposal])
+  expect(result.stopped).toBe('aborted')
+  expect(result.groupSurvived).toBeUndefined()
+  expect(runner.live()).toEqual([])
+}, 5_000)
+
+test('6: rerunnable run cleans up the leader fork race on every invocation', async () => {
+  const runner = makeRunner()
+  const pidFile = join(homeDir, 'run-race-descendant.pid')
+  const countFile = join(homeDir, 'run-race-count.txt')
+  const command = 'printf x >> \"$COUNT_FILE\"; (exec /bin/sleep 5) & echo $! > \"$PID_FILE\"; echo early; exit 0'
+  for (let index = 0; index < 5; index++) {
+    rmSync(pidFile, { recursive: false, force: true })
+    let pid: number | undefined
+    try {
+      const result = await withTimeout(
+        runner.run(['/bin/sh', '-c', command], {
+          env: { COUNT_FILE: countFile, PID_FILE: pidFile },
+          timeoutMs: 10_000,
+          rerunnable: true,
+        }),
+        900,
+        'fork-race run',
+      )
+      pid = trackPidFile(pidFile)
+      expect(result.stdoutText).toBe('early\n')
+      expect(result.exitCode).toBe(0)
+      expect(result.groupSurvived).toBeUndefined()
+      expect(pid).toBeGreaterThan(1)
+      await expectPidGone(pid!, 900)
+    } finally {
+      pid ??= trackPidFile(pidFile)
+    }
+  }
+  expect(readFileSync(countFile, 'utf8')).toBe('xxxxx')
+}, 10_000)
+
+test('2a: surviving-group cleanup cancels held readers before the stall wait', async () => {
+  let stdoutController!: ReadableStreamDefaultController<Uint8Array>
+  let stdoutCancellations = 0
+  let stderrCancellations = 0
+  const firstRead = Promise.withResolvers<void>()
+  const stdout = new ReadableStream<Uint8Array>({
+    start(controller) { stdoutController = controller },
+    pull() { firstRead.resolve() },
+    cancel() { stdoutCancellations++ },
+  }, { highWaterMark: 0 })
+  const stderr = new ReadableStream<Uint8Array>({
+    pull() {},
+    cancel() { stderrCancellations++ },
+  }, { highWaterMark: 0 })
+  const child = groupDouble({ stdout, stderr, groupAlive: () => true })
+  let starts = 0
+  const runner = makeRunner({
+    start: () => { starts++; return child },
+    stallMs: 10_000,
+  })
+  const pending = runner.run(['fake'], { timeoutMs: 5_000, rerunnable: true })
+  await firstRead.promise
+  stdoutController.enqueue(new TextEncoder().encode('early\n'))
+  const leaderExitAt = Date.now()
+  child.finish(0)
+  const result = await withTimeout(pending, 1_300, 'surviving-group cleanup')
+  expect(Date.now() - leaderExitAt).toBeGreaterThanOrEqual(1_000)
+  expect(Date.now() - leaderExitAt).toBeLessThanOrEqual(1_300)
+  expect(result.stdoutText).toBe('early\n')
+  expect(result.groupSurvived).toBe(true)
+  expect(starts).toBe(1)
+  expect(stdoutCancellations).toBe(1)
+  expect(stderrCancellations).toBe(1)
+}, 5_000)
+
 test('truncate preserves exact-cap separate output and flags each discarded stream independently', async () => {
   let stdoutText = 'abcd'
   let stderrText = 'UVWX'

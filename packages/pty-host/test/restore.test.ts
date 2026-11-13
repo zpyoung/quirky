@@ -3,8 +3,8 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Checkpoint, readCheckpoint, writeCheckpoint } from '../src/history/checkpoint'
-import { HistoryLog } from '../src/history/log'
-import { CheckpointScheduler, GROUND, MODE_RESET, rebuildScreen } from '../src/history/restore'
+import { HistoryLog, loadStoredLogIndex, type StoredLogIndex, readSegments } from '../src/history/log'
+import { CheckpointScheduler, GROUND, MODE_RESET, rebuildScreen, REBUILD_BLOCK_BYTES, REBUILD_BLOCK_ENTRIES } from '../src/history/restore'
 import { OutputScanner } from '../src/scanner'
 import { Screen } from '../src/screen'
 
@@ -108,6 +108,73 @@ async function rebuilt(dir: string, cols = 80, rows = 24) {
   const result = await rebuildScreen(dir, screen, { ...FALLBACK, cols, rows })
   await screen.settled()
   return { screen, result }
+}
+
+function saveCheckpoint(dir: string, offset: number, overrides: Partial<Checkpoint> = {}): void {
+  mkdirSync(dir, { recursive: true })
+  writeCheckpoint(dir, {
+    version: 1,
+    offset,
+    cols: 80,
+    rows: 24,
+    ansi: 'checkpoint\r\n',
+    cwd: '/checkpoint',
+    title: 'checkpoint title',
+    savedAt: 1,
+    ...overrides
+  })
+}
+
+function countIndexOutputReads(index: StoredLogIndex): () => number {
+  let bytes = 0
+  const openReader = index.reader.bind(index)
+  index.reader = () => {
+    const reader = openReader()
+    const readOutput = reader.readOutput.bind(reader)
+    reader.readOutput = (segment, record, from, to) => {
+      bytes += Math.max(0, Math.min(record.length, to) - Math.max(0, from))
+      return readOutput(segment, record, from, to)
+    }
+    return reader
+  }
+  return () => bytes
+}
+
+function recordScreen(screen: Screen) {
+  let largestWrite = 0
+  let settledCount = 0
+  const write = screen.write.bind(screen)
+  screen.write = (data, callback) => {
+    largestWrite = Math.max(largestWrite, typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength)
+    write(data, callback)
+  }
+  const settled = screen.settled.bind(screen)
+  screen.settled = () => {
+    settledCount++
+    return settled()
+  }
+  return { largestWrite: () => largestWrite, settledCount: () => settledCount }
+}
+
+async function replaySegmentsOnce(dir: string) {
+  const screen = track(new Screen({ cols: 80, rows: 24 }))
+  let cols = 80
+  let rows = 24
+  const { segments } = readSegments(dir)
+  for (const segment of segments) {
+    for (const record of segment.records) {
+      if (record.kind === 'resize') {
+        await screen.settled()
+        cols = Math.max(1, record.cols!)
+        rows = Math.max(1, record.rows!)
+        screen.resize(cols, rows)
+      } else if (record.kind === 'output') {
+        screen.write(record.bytes!)
+      }
+    }
+  }
+  await screen.settled()
+  return { screen, cols, rows, cwd: FALLBACK.cwd, title: null, offset: segments.at(-1)?.endOffset ?? 0 }
 }
 
 const PAGE_ONE = `${ESC}[1;32mhello${ESC}[0m world\r\nsecond line\r\n${ESC}[2;5Hxx${ESC}[31mred${ESC}[0m`
@@ -322,6 +389,160 @@ describe('rebuildScreen', () => {
   })
 })
 
+describe('rebuildScreen from a stored index', () => {
+  test('reads no output before a checkpoint at the log end', async () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 100, rows: 30 })
+    log.appendOutput(Buffer.alloc(2 * 1024 * 1024, 0x61))
+    const offset = log.offset
+    log.close()
+    saveCheckpoint(dir, offset, { cols: 100, rows: 30, ansi: `${ESC}[1;32mcheckpoint${ESC}[0m\r\n` })
+
+    const index = await loadStoredLogIndex(dir)
+    const outputBytes = countIndexOutputReads(index)
+    const screen = track(new Screen({ cols: 80, rows: 24 }))
+    const result = await rebuildScreen(index, screen, FALLBACK)
+    await screen.settled()
+    const expected = await rebuilt(dir)
+
+    expect(outputBytes()).toBe(0)
+    expect(result).toEqual(expected.result)
+    expect(text(screen)).toEqual(text(expected.screen))
+    expect(result.source).toBe('checkpoint+log')
+  })
+
+  test('uses a checkpoint when the index has no readable segments', async () => {
+    const empty = freshDir()
+    saveCheckpoint(empty, 7, { cols: 100, rows: 30, ansi: 'empty checkpoint\r\n', cwd: '/empty', title: 'empty' })
+    const emptyIndex = await loadStoredLogIndex(empty)
+    const emptyScreen = track(new Screen({ cols: 80, rows: 24 }))
+    const emptyResult = await rebuildScreen(emptyIndex, emptyScreen, FALLBACK)
+    await emptyScreen.settled()
+    expect(emptyResult).toMatchObject({ source: 'checkpoint', offset: 0, cols: 100, rows: 30, cwd: '/empty', title: 'empty' })
+    expect(text(emptyScreen)[0]).toBe('empty checkpoint')
+
+    const bad = freshDir()
+    saveCheckpoint(bad, 5, {
+      cols: 101,
+      rows: 31,
+      ansi: 'bad-magic checkpoint\r\n',
+      cwd: '/bad',
+      title: 'bad checkpoint title'
+    })
+    writeFileSync(join(bad, 'output.1.log'), Buffer.from('not a segment'))
+    writeFileSync(join(bad, 'output.log'), Buffer.from('also not a segment'))
+    const badIndex = await loadStoredLogIndex(bad)
+    const badScreen = track(new Screen({ cols: 80, rows: 24 }))
+    const badResult = await rebuildScreen(badIndex, badScreen, FALLBACK)
+    await badScreen.settled()
+    expect(badResult).toMatchObject({
+      source: 'checkpoint',
+      offset: 0,
+      cols: 101,
+      rows: 31,
+      cwd: '/bad',
+      title: 'bad checkpoint title'
+    })
+    expect(text(badScreen)[0]).toBe('bad-magic checkpoint')
+
+    const removed = freshDir()
+    const log = HistoryLog.create(removed, { cols: 80, rows: 24, maxSegmentBytes: 40 })
+    log.appendOutput(enc('first output long'))
+    log.appendOutput(enc('last'))
+    const removedAt = log.offset
+    log.close()
+    saveCheckpoint(removed, removedAt, {
+      cols: 102,
+      rows: 32,
+      ansi: 'removed-log checkpoint\r\n',
+      cwd: '/removed',
+      title: 'removed checkpoint title'
+    })
+    const removedIndex = await loadStoredLogIndex(removed)
+    rmSync(join(removed, 'output.1.log'), { force: true })
+    rmSync(join(removed, 'output.log'), { force: true })
+    const removedScreen = track(new Screen({ cols: 80, rows: 24 }))
+    const removedResult = await rebuildScreen(removedIndex, removedScreen, FALLBACK)
+    await removedScreen.settled()
+    expect(removedResult).toMatchObject({
+      source: 'checkpoint',
+      offset: 0,
+      cols: 102,
+      rows: 32,
+      cwd: '/removed',
+      title: 'removed checkpoint title'
+    })
+    expect(removedIndex.stale).toBe(true)
+    expect(text(removedScreen)[0]).toBe('removed-log checkpoint')
+
+    const noCheckpoint = freshDir()
+    mkdirSync(noCheckpoint, { recursive: true })
+    writeFileSync(join(noCheckpoint, 'output.log'), Buffer.from('bad log'))
+    const noCheckpointIndex = await loadStoredLogIndex(noCheckpoint)
+    const noteScreen = track(new Screen({ cols: 80, rows: 24 }))
+    const noteResult = await rebuildScreen(noCheckpointIndex, noteScreen, FALLBACK)
+    await noteScreen.settled()
+    expect(noteResult.source).toBe('none')
+    expect(text(noteScreen)[0]).toBe('[history could not be read]')
+  })
+
+  test('replays large output through bounded writes and matches a whole-log replay', async () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    log.appendOutput(Buffer.alloc(1024 * 1024, 0x78))
+    const line = Buffer.alloc(128, 0x79)
+    for (let i = 0; i < 4000; i++) log.appendOutput(line)
+    log.close()
+
+    const expected = await replaySegmentsOnce(dir)
+    const index = await loadStoredLogIndex(dir)
+    const screen = track(new Screen({ cols: 80, rows: 24 }))
+    const metrics = recordScreen(screen)
+    const result = await rebuildScreen(index, screen, FALLBACK)
+
+    expect(metrics.largestWrite()).toBeLessThanOrEqual(REBUILD_BLOCK_BYTES)
+    expect(metrics.settledCount()).toBeGreaterThanOrEqual(5)
+    expect(text(screen)).toEqual(text(expected.screen))
+    expect([result.source, result.cols, result.rows, result.cwd, result.title, result.offset]).toEqual([
+      'log',
+      expected.cols,
+      expected.rows,
+      expected.cwd,
+      expected.title,
+      expected.offset
+    ])
+  })
+
+  test('yields for resize entries and for entries behind a checkpoint', async () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    for (let i = 0; i < 10_000; i++) log.appendOutput(new Uint8Array())
+    for (let i = 0; i < 8999; i++) log.appendResize(80 + (i % 40), 24 + (i % 20))
+    log.appendResize(120, 40)
+    log.appendOutput(enc('x'))
+    const end = log.offset
+    log.close()
+    saveCheckpoint(dir, 0, { ansi: 'at the start\r\n' })
+
+    const index = await loadStoredLogIndex(dir)
+    const screen = track(new Screen({ cols: 80, rows: 24 }))
+    const metrics = recordScreen(screen)
+    const result = await rebuildScreen(index, screen, FALLBACK)
+    expect(metrics.settledCount()).toBeGreaterThanOrEqual(9000)
+    expect([result.cols, result.rows]).toEqual([120, 40])
+    expect(result.offset).toBe(end)
+
+    saveCheckpoint(dir, end, { cols: 120, rows: 40, ansi: 'past every record\r\n' })
+    const pastIndex = await loadStoredLogIndex(dir)
+    const pastScreen = track(new Screen({ cols: 80, rows: 24 }))
+    const pastMetrics = recordScreen(pastScreen)
+    const pastResult = await rebuildScreen(pastIndex, pastScreen, FALLBACK)
+    expect(pastMetrics.settledCount()).toBeGreaterThanOrEqual(Math.floor(9000 / REBUILD_BLOCK_ENTRIES))
+    expect(pastResult).toMatchObject({ source: 'checkpoint+log', cols: 120, rows: 40, offset: end })
+    expect(text(pastScreen)[0]).toBe('past every record')
+  }, 30000)
+})
+
 describe('rebuildScreen after a clear (SC-34)', () => {
   const lines = (n: number, prefix = 'old') => Array.from({ length: n }, (_, i) => `${prefix}-${i}`).join('\r\n')
 
@@ -396,6 +617,52 @@ describe('rebuildScreen after a clear (SC-34)', () => {
     expect([result.cols, result.rows]).toEqual([60, 20])
     expect(screen.snapshot().cols).toBe(60)
   })
+
+  test('bounds scanned bytes between settles when a clear skips large pre-clear output', async () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    const preClear = Buffer.concat([
+      enc(`${ESC}]7;file://localhost/tmp${BEL}${ESC}]0;pre-clear title${BEL}`),
+      Buffer.alloc(REBUILD_BLOCK_BYTES * 8, 0x78),
+      enc('\r\npre-clear sentinel\r\n')
+    ])
+    log.appendOutput(preClear)
+    log.appendClear()
+    log.appendOutput(enc('post-clear output\r\n'))
+    const end = log.offset
+    log.close()
+
+    const index = await loadStoredLogIndex(dir)
+    const screen = track(new Screen({ cols: 80, rows: 24 }))
+    let scannedSinceSettle = 0
+    let largestScannedBetweenSettles = 0
+    const openReader = index.reader.bind(index)
+    index.reader = () => {
+      const reader = openReader()
+      const readOutput = reader.readOutput.bind(reader)
+      reader.readOutput = (segment, record, from, to) => {
+        const bytes = readOutput(segment, record, from, to)
+        scannedSinceSettle += bytes.length
+        return bytes
+      }
+      return reader
+    }
+    const settled = screen.settled.bind(screen)
+    screen.settled = () => {
+      largestScannedBetweenSettles = Math.max(largestScannedBetweenSettles, scannedSinceSettle)
+      scannedSinceSettle = 0
+      return settled()
+    }
+
+    const result = await rebuildScreen(index, screen, FALLBACK)
+    await screen.settled()
+
+    expect(largestScannedBetweenSettles).toBeLessThanOrEqual(REBUILD_BLOCK_BYTES)
+    expect(result).toMatchObject({ source: 'log', offset: end, cwd: '/tmp', title: 'pre-clear title' })
+    expect(text(screen)[0]).toBe('post-clear output')
+    expect(text(screen).join('\n')).not.toContain('pre-clear sentinel')
+  })
+
 })
 
 describe('MODE_RESET', () => {

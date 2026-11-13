@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import { RpcErrorCode, type PluginCaller, type PluginContext, type PluginStore, type Worktree } from '@quirky/protocol'
 import type {
   ImportRecord,
@@ -105,7 +106,8 @@ export class LedgerEngine {
   private generation = 0
   private reconciledGeneration = -1
   private unavailable = false
-  private reconciliation: Promise<void> | null = null
+  private catalogRefresh: Promise<OwnerCatalog> | null = null
+  private catalogRefreshQueued: Promise<OwnerCatalog> | null = null
 
   constructor(context: PluginContext) {
     this.context = context
@@ -136,8 +138,7 @@ export class LedgerEngine {
       if (event.type !== 'quirky.repo/changed' && event.type !== 'quirky.worktree/changed') return
       this.generation += 1
       this.unavailable = true
-      const task = this.performReconciliation(this.generation)
-      this.reconciliation = task
+      const task = this.refreshCatalog(true)
       void task.catch((error) => this.context.log(`ledger owner reconciliation failed: ${errorMessage(error)}`))
     })
     if (this.store && !this.storeFailure) {
@@ -160,7 +161,6 @@ export class LedgerEngine {
     this.ensureHealthy()
     if (!OPERATIONS.includes(request.operation)) this.fail('invalid-request', 'unknown ledger operation')
     if (!DESTRUCTIVE.has(request.operation)) return null
-    await this.ensureCatalog()
     const resolved = await this.resolveTarget(request, caller)
     if (!resolved.ledger) this.fail('not-found', 'ledger not found')
     const ledger = resolved.ledger
@@ -212,45 +212,76 @@ export class LedgerEngine {
 
   private async ensureCatalog(): Promise<OwnerCatalog> {
     this.ensureHealthy()
-    for (;;) {
-      if (this.reconciliation) {
-        try {
-          await this.reconciliation
-        } catch {
-          // The latched error is reported below; a later event/request can retry reconciliation.
-        }
-      }
-      if (this.reconciledGeneration !== this.generation || this.unavailable || !this.catalog) {
-        const task = this.performReconciliation(this.generation)
-        this.reconciliation = task
-        try {
-          await task
-        } catch {
-          this.unavailable = true
-        }
-      }
-      if (this.reconciledGeneration === this.generation && !this.unavailable && this.catalog) return this.catalog
-      if (!this.reconciliation) this.fail('catalog-unavailable', 'Owner catalog could not be reconciled')
-      if (this.reconciliation) {
-        try {
-          await this.reconciliation
-        } catch {
-          this.fail('catalog-unavailable', 'Owner catalog could not be reconciled')
-        }
-      }
+    try {
+      return await this.refreshCatalog()
+    } catch {
+      this.fail('catalog-unavailable', 'Owner catalog could not be reconciled')
     }
   }
 
-  private async performReconciliation(generation: number): Promise<void> {
+  private refreshCatalog(joinInFlight = false): Promise<OwnerCatalog> {
+    const current = this.catalogRefresh
+    if (joinInFlight) {
+      if (current) return current
+      if (this.catalogRefreshQueued) return this.catalogRefreshQueued
+    }
+    // a client request arriving mid-read needs the next fresh read, shared with its peers.
+    if (this.catalogRefreshQueued) return this.catalogRefreshQueued
+    if (current) {
+      let queued!: Promise<OwnerCatalog>
+      queued = current.then(
+        () => this.startCatalogRefresh(queued),
+        () => this.startCatalogRefresh(queued)
+      )
+      this.catalogRefreshQueued = queued
+      return queued
+    }
+    return this.startCatalogRefresh()
+  }
+
+  private startCatalogRefresh(queued?: Promise<OwnerCatalog>): Promise<OwnerCatalog> {
+    if (queued && this.catalogRefreshQueued === queued) this.catalogRefreshQueued = null
+    let task!: Promise<OwnerCatalog>
+    task = this.refreshCatalogUntilCurrent().finally(() => {
+      if (this.catalogRefresh === task) this.catalogRefresh = null
+    })
+    this.catalogRefresh = task
+    return task
+  }
+
+  private async refreshCatalogUntilCurrent(): Promise<OwnerCatalog> {
+    this.ensureHealthy()
+    for (;;) {
+      const generation = this.generation
+      let catalog: OwnerCatalog
+      try {
+        catalog = await readOwnerCatalog(this.context)
+      } catch (error) {
+        if (generation !== this.generation) continue
+        this.unavailable = true
+        throw error
+      }
+      if (generation !== this.generation) continue
+      const cached = this.catalog
+      if (cached && isDeepStrictEqual(cached, catalog)) {
+        this.reconciledGeneration = generation
+        this.unavailable = false
+        return cached
+      }
+      let reconciled: boolean
+      try {
+        reconciled = await this.performReconciliation(generation, catalog)
+      } catch (error) {
+        if (generation !== this.generation) continue
+        throw error
+      }
+      if (reconciled) return catalog
+    }
+  }
+
+  private async performReconciliation(generation: number, catalog: OwnerCatalog): Promise<boolean> {
     const store = this.ensureHealthy()
     this.unavailable = true
-    let catalog: OwnerCatalog
-    try {
-      catalog = await readOwnerCatalog(this.context)
-    } catch (error) {
-      this.unavailable = true
-      throw error
-    }
     const identities = new Map<string, string>()
     const projectRepos = catalog.repos.filter((repo) => repo.kind === 'git')
     for (const repo of projectRepos) {
@@ -261,7 +292,7 @@ export class LedgerEngine {
         identities.set(repo.id, attached?.identity_key ?? await canonicalRepositoryIdentity(repo))
       }
     }
-    if (generation !== this.generation) return
+    if (generation !== this.generation) return false
     const changed = store.transaction(() => {
       let any = false
       const now = isoNow()
@@ -327,11 +358,12 @@ export class LedgerEngine {
       }
       return any
     })
-    if (generation !== this.generation) return
+    if (generation !== this.generation) return false
     this.catalog = catalog
     this.reconciledGeneration = generation
     this.unavailable = false
     if (changed) this.context.emit('changed', {})
+    return true
   }
 
   private updateMetadata(

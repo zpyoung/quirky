@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { Button, ContextMenu, ControlIcon, EmptyState, IconButton, ListRow, Tabs, ToolPanelFrame } from '@quirky/ui'
 import { TASKS_VIEW, type ItemKind, type TaskNavigation, type TasksState } from '../contracts'
-import { countFilters, errorMessage, filtersFromQuery, normalizedPreset, object, parseSource, presetQuery, rowKey, rowTarget, tokenize, type ListItem } from './model'
+import { countFilters, errorMessage, filtersFromQuery, normalizedPreset, object, parseSource, parseTasksState, presetQuery, rowKey, rowTarget, tokenize, type ListItem } from './model'
 import { place } from './place'
 import { rowDescription, rowStatus } from './row-status'
 import { queryForKind } from './search'
@@ -13,12 +13,6 @@ import { useReviewNavigation } from './useReviewNavigation'
 type RowAction = { id: string; label: string; run(): void }
 type FilterLine = { label: string; count: number }
 
-function parseState(value: unknown): TasksState | null {
-  const raw = object(value)
-  const navigation = object(raw?.navigation)
-  if (!raw || !navigation || !object(navigation.lastList) || !object(raw.preferences) || typeof raw.revision !== 'number') return null
-  return value as TasksState
-}
 
 function presetChoices(kind: ItemKind): { label: string; query: string }[] {
   return kind === 'issue'
@@ -76,7 +70,7 @@ function useTasksState(context: UiPluginContext) {
   const refresh = useCallback(async (method: 'quirky.tasks/prepare' | 'quirky.tasks/state') => {
     const request = ++generation.current
     try {
-      const next = parseState(await context.call(method, {}))
+      const next = parseTasksState(await context.call(method, {}))
       if (!next) throw new Error('Invalid Tasks state from daemon')
       if (request === generation.current) adopt(next)
     } catch (cause) {
@@ -186,7 +180,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
 
   const navigate = async (patch: Record<string, unknown>): Promise<TasksState | null> => {
     try {
-      const next = parseState(await context.call('quirky.tasks/navigate', patch))
+      const next = parseTasksState(await context.call('quirky.tasks/navigate', patch))
       if (next) adopt(next)
       return next
     } catch (cause) {
@@ -203,7 +197,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
     place.requestFocus('row')
     const detail = rowTarget(item)
     try {
-      const next = parseState(await context.call('quirky.tasks/navigate', { ...listPatch, detail }))
+      const next = parseTasksState(await context.call('quirky.tasks/navigate', { ...listPatch, detail }))
       const current = next ?? { ...state, navigation: { ...state.navigation, detail } }
       if (next) adopt(next)
       context.openView(TASKS_VIEW, { navigation: current.navigation, revision: current.revision })

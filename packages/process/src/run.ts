@@ -1,5 +1,5 @@
 import type { RunOptions, RunResult, RunStopped } from '@quirky/protocol'
-import type { ChildExit, StartedChild, StartChild } from './child'
+import { killGroupUntilGone, type ChildExit, type StartedChild, type StartChild } from './child'
 import { ProcessStalledError } from './errors'
 import { PipeStalledError, readChunk } from './stall'
 
@@ -87,6 +87,7 @@ function resultFromBytes(
   signal: string | null,
   startedAt: number,
   stopped?: RunStopped,
+  groupSurvived?: true,
   truncated?: RunResult['truncated']
 ): RunResult {
   let decodedStdout: string | undefined
@@ -100,6 +101,7 @@ function resultFromBytes(
     exitCode,
     signal,
     ...(stopped === undefined ? {} : { stopped }),
+    ...(groupSurvived === undefined ? {} : { groupSurvived }),
     ...(truncated === undefined ? {} : { truncated }),
     durationMs: Date.now() - startedAt,
   }
@@ -133,9 +135,10 @@ function makeStoppedResult(
   exit: ChildExit,
   startedAt: number,
   stopped: RunStopped,
-  truncated?: RunResult['truncated']
+  groupSurvived?: true,
+  truncated?: RunResult['truncated'],
 ): RunResult {
-  return resultFromBytes(stdout, stderr, null, exit.signal, startedAt, stopped, truncated)
+  return resultFromBytes(stdout, stderr, null, exit.signal, startedAt, stopped, groupSurvived, truncated)
 }
 
 
@@ -169,6 +172,8 @@ async function runAttempt({
   const stderrOutput = outputMode === 'combined' ? stdoutCapture : stderrCapture
   let exit: ChildExit | undefined
   let stopped: RunStopped | undefined
+  let groupSurvived = false
+  let groupCleanupComplete = false
   let attemptFinished = false
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined
   let graceTimer: ReturnType<typeof setTimeout> | undefined
@@ -218,7 +223,7 @@ async function runAttempt({
   }
   const stopForDisposal = () => {
     if (attemptFinished) return
-    stopped = 'aborted'
+    stopped ??= 'aborted'
     clearStopTimers()
     if (!exit) killGroup('SIGKILL')
     resolveStopRequested()
@@ -226,23 +231,35 @@ async function runAttempt({
 
   unregister = config.onStart(child, stopForDisposal)
 
-  const exited = child.exited.then(
-    (childExit) => {
-      exit = childExit
-      clearStopTimers()
-      // a one-shot command must not leave descendants alive or holding its output pipes open
-      killGroup('SIGKILL')
-      unregister()
-      return childExit
-    },
-    (error) => {
-      unregister()
-      throw error
-    }
-  )
-
   const stdoutReader = child.stdout.getReader()
   const stderrReader = child.stderr.getReader()
+  const exited = child.exited.then(
+    async childExit => {
+      exit = childExit
+      clearStopTimers()
+      try {
+        groupSurvived = await killGroupUntilGone(child)
+        if (groupSurvived) {
+          stdoutReader.cancel().catch(() => {})
+          stderrReader.cancel().catch(() => {})
+        }
+      } finally {
+        groupCleanupComplete = true
+        unregister()
+      }
+      return childExit
+    },
+    async error => {
+      clearStopTimers()
+      try {
+        await killGroupUntilGone(child)
+      } finally {
+        groupCleanupComplete = true
+        unregister()
+      }
+      throw error
+    },
+  )
 
   const drain = async (reader: ReadableStreamDefaultReader<Uint8Array>, output: OutputCapture): Promise<void> => {
     try {
@@ -293,6 +310,7 @@ async function runAttempt({
           exit ?? { exitCode: null, signal: null },
           startedAt,
           stopped,
+          groupSurvived ? true : undefined,
           captureTruncation(stdoutCapture, stderrCapture)
         ),
       }
@@ -311,7 +329,25 @@ async function runAttempt({
             exit ?? { exitCode: null, signal: null },
             startedAt,
             stopped,
-            captureTruncation(stdoutCapture, stderrCapture)
+            groupSurvived ? true : undefined,
+            captureTruncation(stdoutCapture, stderrCapture),
+          ),
+        }
+      }
+      if (groupSurvived) {
+        attemptFinished = true
+        const completedExit = exit ?? { exitCode: null, signal: null }
+        return {
+          kind: 'result',
+          result: resultFromBytes(
+            stdoutCapture.bytes(),
+            stderrCapture.bytes(),
+            completedExit.exitCode,
+            completedExit.signal,
+            startedAt,
+            undefined,
+            true,
+            captureTruncation(stdoutCapture, stderrCapture),
           ),
         }
       }
@@ -335,11 +371,12 @@ async function runAttempt({
         completedExit.signal,
         startedAt,
         undefined,
+        groupSurvived ? true : undefined,
         captureTruncation(stdoutCapture, stderrCapture)
       ),
     }
   } catch (error) {
-    if (!exit) killGroup('SIGKILL')
+    if (!groupCleanupComplete) killGroup('SIGKILL')
     void stdoutReader.cancel().catch(() => {})
     void stderrReader.cancel().catch(() => {})
     await Promise.allSettled([exited, stdoutDone, stderrDone])
@@ -390,7 +427,7 @@ export async function executeRun(
   for (;;) {
     if (config.isDisposed() || stoppedByRunner || options.signal?.aborted) {
       if (lastStall) {
-        return makeStoppedResult(lastStall.stdout, lastStall.stderr, lastStall.exit, startedAt, 'aborted', lastStall.truncated)
+        return makeStoppedResult(lastStall.stdout, lastStall.stderr, lastStall.exit, startedAt, 'aborted', undefined, lastStall.truncated)
       }
       return emptyResult('aborted', Date.now() - startedAt)
     }
@@ -411,13 +448,13 @@ export async function executeRun(
     if (outcome.kind === 'result') return outcome.result
     lastStall = outcome
     if (config.isDisposed() || stoppedByRunner || options.signal?.aborted) {
-      return makeStoppedResult(outcome.stdout, outcome.stderr, outcome.exit, startedAt, 'aborted', outcome.truncated)
+      return makeStoppedResult(outcome.stdout, outcome.stderr, outcome.exit, startedAt, 'aborted', undefined, outcome.truncated)
     }
     if (!options.rerunnable || attempts >= MAX_STALL_ATTEMPTS || Date.now() >= deadlineMs) {
       throw new ProcessStalledError(
         argv[0] ?? '',
         attempts,
-        resultFromBytes(outcome.stdout, outcome.stderr, outcome.exit.exitCode, outcome.exit.signal, startedAt, undefined, outcome.truncated)
+        resultFromBytes(outcome.stdout, outcome.stderr, outcome.exit.exitCode, outcome.exit.signal, startedAt, undefined, undefined, outcome.truncated)
       )
     }
   }

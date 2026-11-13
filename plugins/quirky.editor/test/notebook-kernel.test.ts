@@ -236,6 +236,7 @@ function handMade(options: {
   const handle: SpawnedProcess = {
     pid: 4242,
     stdout,
+    stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
     stderrTail: options.stderr ?? (() => ''),
     write: options.write ?? (async () => true),
     closeInput: options.closeInput ?? (async () => {}),

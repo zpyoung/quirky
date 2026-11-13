@@ -5,11 +5,105 @@ import { createProcessScope, type ProcessScope } from '../../../scripts/test-sup
 import { PtyClient } from '../src/client'
 import { type CreateParams, SessionManager } from '../src/session'
 import { startPtyServer, type PtyServer, type PtyServerOptions } from '../src/server'
+import { createProcessRunner } from '@quirky/process'
+import type { ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
 
 const ENTRY = new URL('../src/main.ts', import.meta.url).pathname
 
 const cleanups: Array<() => Promise<void> | void> = []
 const scopes = new Map<string, ProcessScope>()
+
+let nextRunnerId = 0
+
+export type HeldRunnerOptions = {
+  hold?: boolean
+  result?: RunResult
+  error?: unknown
+  never?: boolean
+}
+
+export type HeldRunner = {
+  runner: Pick<ProcessRunner, 'run'>
+  calls: Array<{ argv: readonly string[]; options?: RunOptions }>
+  readonly inFlight: number
+  readonly highestInFlight: number
+  release(): void
+}
+
+/** Holds process-table calls until release, then returns the selected outcome or runs them for real. */
+export function heldRunner(options: HeldRunnerOptions = {}): HeldRunner {
+  const real = createProcessRunner({ owner: `pty-host-test-${nextRunnerId++}` })
+  onCleanup(() => real.dispose())
+  const calls: HeldRunner['calls'] = []
+  const waiting: Array<() => void> = []
+  const never = Promise.withResolvers<RunResult>().promise
+  let released = !options.hold
+  let inFlight = 0
+  let highestInFlight = 0
+
+  const outcome = (argv: readonly string[], runOptions?: RunOptions): Promise<RunResult> => {
+    if (options.never) return never
+    if (options.error !== undefined) return Promise.reject(options.error)
+    if (options.result !== undefined) return Promise.resolve(options.result)
+    return real.run(argv, runOptions)
+  }
+
+  const run: ProcessRunner['run'] = (argv, runOptions) => {
+    calls.push({ argv: [...argv], options: runOptions })
+    inFlight++
+    highestInFlight = Math.max(highestInFlight, inFlight)
+    const { promise, resolve, reject } = Promise.withResolvers<RunResult>()
+    const start = () => {
+      void Promise.resolve().then(() => outcome(argv, runOptions)).then(
+        (value) => { inFlight--; resolve(value) },
+        (error) => { inFlight--; reject(error) }
+      )
+    }
+    if (released) start()
+    else waiting.push(start)
+    return promise
+  }
+
+  return {
+    runner: { run },
+    calls,
+    get inFlight() { return inFlight },
+    get highestInFlight() { return highestInFlight },
+    release() {
+      released = true
+      for (const start of waiting.splice(0)) start()
+    }
+  }
+}
+
+export type ProcessKillTarget = { pid: number; signal?: NodeJS.Signals | number }
+
+export function recordProcessKillTargets(): {
+  targets: ProcessKillTarget[]
+  clear(): void
+  restore(): void
+} {
+  const targets: ProcessKillTarget[] = []
+  const original = process.kill
+  let recording = true
+  process.kill = ((pid: number, signal?: NodeJS.Signals | number) => {
+    if (recording) targets.push({ pid, signal })
+    return original.call(process, pid, signal)
+  }) as typeof process.kill
+  const restore = () => {
+    if (!recording) return
+    recording = false
+    process.kill = original
+  }
+  onCleanup(restore)
+  return {
+    targets,
+    clear() {
+      targets.length = 0
+    },
+    restore
+  }
+}
 
 export function onCleanup(fn: () => Promise<void> | void): void {
   cleanups.push(fn)

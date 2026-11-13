@@ -14,6 +14,7 @@ function makeHandle(options: {
   return {
     pid: null,
     stdout: options.stdout ?? new ReadableStream<Uint8Array>({ start() {} }),
+    stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
     stderrTail: () => options.stderr ?? '',
     write: options.write ?? (async () => true),
     closeInput: options.closeInput ?? (async () => {}),

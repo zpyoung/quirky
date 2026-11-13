@@ -1992,6 +1992,7 @@
       {
         "id": "changed",
         "description": "The catalog, detection, an agent's configuration or a setting changed in a way that alters list.",
+        "coalesce": [],
         "data": { "type": "object" }
       },
       {
