@@ -12,6 +12,10 @@ If a daemon plugin needs a subprocess, use `context.process.run` for aggregated 
 See the [process runner](../docs/plugin-api.md#api-14-process-runner) and
 [spawn reference](../docs/plugin-api.md#api-16-streaming-and-session-length-processes).
 
+Avatar's Claude version probes and review diffs use `run` and require API 1.4.0.
+Structured Pi and Oh My Pi sessions require API 1.6.0: login-shell lookup uses `run`,
+and RPC children use `spawn` with process-group shutdown and a bounded stderr tail.
+
 ## Removing a project
 
 `quirky repo rm <selector>` forgets the selected project and its settings/group
