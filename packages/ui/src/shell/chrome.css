@@ -352,8 +352,8 @@ button.ui-status-bar-item:focus-visible {
   display: grid;
   gap: var(--ui-space-8);
   inline-size: max-content;
-  inset-block-end: calc(var(--ui-row-single) + var(--compat-px-40) + var(--ui-space-16));
-  inset-inline-end: calc(var(--compat-px-40) + var(--ui-space-16));
+  inset-block-end: calc(var(--ui-row-single) + 2.5rem + var(--ui-space-16));
+  inset-inline-end: calc(2.5rem + var(--ui-space-16));
   max-inline-size: calc(100vw - var(--ui-space-24));
   position: fixed;
   z-index: 20;
