@@ -268,9 +268,11 @@ export class QuirkyClient {
 
     return () => {
       registration.active = false
-      if (this.streamHandlers.get(streamId) === registration) this.streamHandlers.delete(streamId)
-      this.streamBuffers.delete(streamId)
-      this.laggedStreams.delete(streamId)
+      if (this.streamHandlers.get(streamId) === registration) {
+        this.streamHandlers.delete(streamId)
+        this.streamBuffers.delete(streamId)
+        this.laggedStreams.delete(streamId)
+      }
     }
   }
 
@@ -349,6 +351,7 @@ export class QuirkyClient {
   private handleClose(): void {
     if (this.closed) return
     this.closed = true
+    for (const registration of this.streamHandlers.values()) registration.active = false
     for (const { reject } of this.pending.values()) reject(new ConnectionLost())
     this.pending.clear()
     this.streamBuffers.clear()

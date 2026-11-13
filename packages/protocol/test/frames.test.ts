@@ -105,6 +105,43 @@ test('pre-listener overflow drops buffered output and asynchronously notifies un
   expect(canceledCalls).toBe(0)
 })
 
+test('disposing a replaced listener preserves the replacement stream lag latch', async () => {
+  const client = makeClient()
+  const streamId = 12
+  deliver(client, encodeTerminalLagged(streamId))
+  let replacementOutput = 0
+  let replacementLagged = 0
+
+  const disposeFirst = client.onTerminalOutput(streamId, () => {}, { onLagged: () => {} })
+  const disposeReplacement = client.onTerminalOutput(
+    streamId,
+    () => replacementOutput++,
+    { onLagged: () => replacementLagged++ }
+  )
+  disposeFirst()
+  deliver(client, encodeTerminalOutput(streamId, new Uint8Array([0x61])))
+
+  expect(replacementOutput).toBe(0)
+  expect(replacementLagged).toBe(0)
+  await Promise.resolve()
+  expect(replacementLagged).toBe(1)
+  disposeReplacement()
+})
+
+test('socket close cancels a queued pre-listener lag notification', async () => {
+  const client = makeClient()
+  const events: string[] = []
+  client.onClose(() => events.push('closed'))
+  deliver(client, encodeTerminalLagged(13))
+  client.onTerminalOutput(13, () => {}, { onLagged: () => events.push('lagged') })
+
+  internals(client).handleClose()
+
+  expect(events).toEqual(['closed'])
+  await Promise.resolve()
+  expect(events).toEqual(['closed'])
+})
+
 test('terminal lag latches are bounded to the newest 1024 stream ids', () => {
   const client = makeClient()
   for (let streamId = 0; streamId <= 1024; streamId++) {
