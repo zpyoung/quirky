@@ -414,7 +414,11 @@ export async function executeRun(
       return makeStoppedResult(outcome.stdout, outcome.stderr, outcome.exit, startedAt, 'aborted', outcome.truncated)
     }
     if (!options.rerunnable || attempts >= MAX_STALL_ATTEMPTS || Date.now() >= deadlineMs) {
-      throw new ProcessStalledError(argv[0] ?? '', attempts)
+      throw new ProcessStalledError(
+        argv[0] ?? '',
+        attempts,
+        resultFromBytes(outcome.stdout, outcome.stderr, outcome.exit.exitCode, outcome.exit.signal, startedAt)
+      )
     }
   }
 }
