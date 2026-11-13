@@ -67,6 +67,8 @@ change. Agent-status removals retain the worktree tag of their last announced ro
 the session is no longer available; removals with no announced row remain untagged.
 `quirky.agent-status/settled` carries a worktree tag and is not coalesced.
 
+"quirky.tasks/changed" coalesces with one key for the daemon, and Tasks clients apply the result of their own actions rather than waiting for an event.
+
 `quirky.reviews/changed` carries a worktree tag for updates confined to one Checks entry and its
 Checks dialog. Shared updates and evictions remain untagged. It is not coalesced because draft
 fields consume daemon echoes.

@@ -159,11 +159,61 @@ type Mounted = {
   settle(): Promise<void>
 }
 
-async function settle() {
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)))
+type QuietReply = { wait: Promise<void>; release(): void }
+type QuietDaemon = {
+  current(): TasksState
+  setState(next: TasksState): void
+  holdNextStateRead(): QuietReply
+  holdNextNavigateReply(): QuietReply
+  setNavigateReply(handler: ((params: Record<string, unknown>, next: TasksState) => unknown) | null): void
+  readState(): TasksState | Promise<TasksState>
+  navigate(params: Record<string, unknown>): unknown
 }
 
-async function mountExpanded(options: { state?: TasksState; handlers?: Record<string, Handler>; beforeMount?: () => void; cloneRepoIdsOnStateRead?: boolean } = {}): Promise<Mounted> {
+function holdQuietReply(): QuietReply {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  return { wait: promise, release: resolve }
+}
+
+function createQuietDaemon(initial: TasksState): QuietDaemon {
+  let state = initial
+  let navigateReply: ((params: Record<string, unknown>, next: TasksState) => unknown) | null = null
+  const stateReads: QuietReply[] = []
+  const navigateReplies: QuietReply[] = []
+  return {
+    current: () => state,
+    setState: (next) => { state = next },
+    holdNextStateRead: () => {
+      const held = holdQuietReply()
+      stateReads.push(held)
+      return held
+    },
+    holdNextNavigateReply: () => {
+      const held = holdQuietReply()
+      navigateReplies.push(held)
+      return held
+    },
+    setNavigateReply: (handler) => { navigateReply = handler },
+    readState: () => {
+      const snapshot = state
+      const held = stateReads.shift()
+      return held ? held.wait.then(() => snapshot) : snapshot
+    },
+    navigate: (params) => {
+      const next = { ...state, revision: state.revision + 1, navigation: { ...state.navigation, ...params } as TasksState['navigation'] }
+      const reply = navigateReply ? navigateReply(params, next) : next
+      state = next
+      const held = navigateReplies.shift()
+      return held ? held.wait.then(() => reply) : reply
+    }
+  }
+}
+
+async function settle(milliseconds = 20) {
+  await act(async () => new Promise((resolve) => setTimeout(resolve, milliseconds)))
+}
+
+async function mountExpanded(options: { state?: TasksState; handlers?: Record<string, Handler>; beforeMount?: () => void; cloneRepoIdsOnStateRead?: boolean; quietDaemon?: QuietDaemon } = {}): Promise<Mounted> {
   const provided = new Map<string, unknown>()
   const calls: Mounted['calls'] = []
   const commands: Mounted['commands'] = []
@@ -171,17 +221,20 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
   const toasts: string[] = []
   const listeners = new Set<(event: Event) => void>()
   let state = options.state ?? prsState
+  const currentState = () => options.quietDaemon?.current() ?? state
   const emit = async (event: Event) => {
     await act(async () => { for (const listener of listeners) listener(event) })
     await settle()
   }
   const handlers: Record<string, Handler> = {
-    'quirky.tasks/prepare': () => state,
+    'quirky.tasks/prepare': () => currentState(),
     'quirky.tasks/state': () => {
+      if (options.quietDaemon) return options.quietDaemon.readState()
       if (!options.cloneRepoIdsOnStateRead || state.navigation.repoIds === null) return state
       return { ...state, navigation: { ...state.navigation, repoIds: [...state.navigation.repoIds] } }
     },
     'quirky.tasks/navigate': (params) => {
+      if (options.quietDaemon) return options.quietDaemon.navigate(params)
       state = { ...state, revision: state.revision + 1, navigation: { ...state.navigation, ...params } as TasksState['navigation'] }
       for (const listener of listeners) listener({ type: 'quirky.tasks/changed' })
       return state
@@ -219,7 +272,7 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
     cleanup = (provided.get(VIEW) as Mount)(element, {})
   })
   await settle()
-  return { element, calls, commands, confirms, toasts, current: () => state, emit, settle }
+  return { element, calls, commands, confirms, toasts, current: currentState, emit, settle }
 }
 
 const labelOf = (element: Element) => element.getAttribute('aria-label') ?? ''
@@ -240,6 +293,23 @@ async function click(element: Element | null | undefined) {
   await act(async () => element.click())
   await settle()
 }
+async function typeSearch(element: HTMLElement, value: string) {
+  const input = element.querySelector<HTMLInputElement>('[data-tasks-search]')
+  if (!input) throw new Error('expected the Tasks search input')
+  await act(async () => setInputValue(input, value))
+  await settle()
+}
+
+async function enterSearch(element: HTMLElement) {
+  const input = element.querySelector<HTMLInputElement>('[data-tasks-search]')
+  if (!input) throw new Error('expected the Tasks search input')
+  await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })) })
+  await settle()
+}
+
+const searchQueries = (calls: Mounted['calls']) => calls
+  .filter((call) => call.method === 'quirky.tasks/navigate' && typeof call.params.query === 'string')
+  .map((call) => call.params.query as string)
 
 const prDetailState = (number = 274) => withNavigation({ detail: target(pr(number)) })
 
@@ -1536,3 +1606,301 @@ test('a pull request that could not be loaded says so and offers Retry', async (
   expect(button(pane, 'Retry')).toBeDefined()
   expect(button(pane, 'Review')).toBeUndefined()
 })
+test('U1: one held echo keeps newer typed text until its timer commits', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+  await typeSearch(element, 'is:open a b')
+
+  await emit({ type: 'quirky.tasks/changed' })
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open a b')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual(['is:open a', 'is:open a b'])
+})
+
+test('U2: a delayed earlier read cannot replace text typed after a later commit', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+  const heldRead = daemon.holdNextStateRead()
+  await emit({ type: 'quirky.tasks/changed' })
+  await typeSearch(element, 'is:open a b')
+  await enterSearch(element)
+  await typeSearch(element, 'is:open a b c')
+
+  await act(async () => { heldRead.release() })
+  await settle()
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open a b c')
+  await emit({ type: 'quirky.tasks/changed' })
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open a b c')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual(['is:open a', 'is:open a b', 'is:open a b c'])
+})
+
+test('U3: nine later commits do not overflow bookkeeping for the first delayed read', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open q1')
+  await enterSearch(element)
+  const heldRead = daemon.holdNextStateRead()
+  await emit({ type: 'quirky.tasks/changed' })
+  for (let index = 2; index <= 9; index++) {
+    await typeSearch(element, `is:open q${index}`)
+    await enterSearch(element)
+  }
+  await typeSearch(element, 'is:open typed')
+
+  await act(async () => { heldRead.release() })
+  await settle()
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open typed')
+  await settle(800)
+  expect(searchQueries(calls).at(-1)).toBe('is:open typed')
+})
+
+test('U4: a second commit can restore the observed query while the first reply is held', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const firstReply = daemon.holdNextNavigateReply()
+  const secondReply = daemon.holdNextNavigateReply()
+  const { element, calls, current } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open b')
+  await enterSearch(element)
+  await typeSearch(element, 'is:open')
+  await enterSearch(element)
+
+  expect(searchQueries(calls)).toEqual(['is:open b', 'is:open'])
+  await act(async () => { firstReply.release() })
+  await settle()
+  await act(async () => { secondReply.release() })
+  await settle()
+  expect(current().navigation.query).toBe('is:open')
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open')
+})
+
+test('U5: repeated queries remain distinguishable across a delayed read', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+  await typeSearch(element, 'is:open b')
+  await enterSearch(element)
+  const heldRead = daemon.holdNextStateRead()
+  await emit({ type: 'quirky.tasks/changed' })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+  expect(searchQueries(calls)).toEqual(['is:open a', 'is:open b', 'is:open a'])
+  await typeSearch(element, 'is:open a c')
+
+  await act(async () => { heldRead.release() })
+  await settle()
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open a c')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual(['is:open a', 'is:open b', 'is:open a', 'is:open a c'])
+})
+
+test('U6: pressing Enter twice for the same in-flight query sends one navigate', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const heldReply = daemon.holdNextNavigateReply()
+  const { element, calls } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open b')
+  await enterSearch(element)
+  await enterSearch(element)
+
+  expect(searchQueries(calls)).toEqual(['is:open b'])
+  await act(async () => { heldReply.release() })
+  await settle()
+})
+
+test('U7: an external query read cannot overwrite text after the user commits over it', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const heldReply = daemon.holdNextNavigateReply()
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  const initial = daemon.current()
+  daemon.setState({ ...initial, revision: initial.revision + 1, navigation: { ...initial.navigation, query: 'is:open x' } })
+  const heldRead = daemon.holdNextStateRead()
+  await emit({ type: 'quirky.tasks/changed' })
+  await typeSearch(element, 'is:open b')
+  await enterSearch(element)
+  await typeSearch(element, 'is:open b c')
+
+  await act(async () => { heldRead.release() })
+  await settle()
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open b c')
+  await act(async () => { heldReply.release() })
+  await settle()
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open b c')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual(['is:open b', 'is:open b c'])
+})
+
+test('U8: an external non-normalized query is committed through the search lane', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  const initial = daemon.current()
+  daemon.setState({ ...initial, revision: initial.revision + 1, navigation: { ...initial.navigation, query: 'is:pr is:open foo' } })
+  await emit({ type: 'quirky.tasks/changed' })
+
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open foo')
+  expect(calls.filter((call) => call.method === 'quirky.tasks/navigate')).toEqual([
+    { method: 'quirky.tasks/navigate', params: { query: 'is:open foo', page: 1 } }
+  ])
+  await typeSearch(element, 'is:open foo bar')
+  await emit({ type: 'quirky.tasks/changed' })
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open foo bar')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual(['is:open foo', 'is:open foo bar'])
+})
+
+test('U9: switching to Projects cancels uncommitted search text', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open zzz')
+  const projectsTab = [...element.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.trim() === 'Projects')!
+  await click(projectsTab)
+  await settle(800)
+  expect(searchQueries(calls)).toEqual([])
+})
+
+test('G1: an external query replaces typed text and cancels its timer', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open mine')
+  const current = daemon.current()
+  daemon.setState({ ...current, revision: current.revision + 1, navigation: { ...current.navigation, query: 'is:open other' } })
+  await emit({ type: 'quirky.tasks/changed' })
+
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open other')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual([])
+})
+
+test('G2: an external query landing after a user commit wins over its delayed reply', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const heldReply = daemon.holdNextNavigateReply()
+  const { element, calls, emit } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open b')
+  await enterSearch(element)
+  await typeSearch(element, 'is:open b c')
+  const current = daemon.current()
+  daemon.setState({ ...current, revision: current.revision + 1, navigation: { ...current.navigation, query: 'is:open x' } })
+  await emit({ type: 'quirky.tasks/changed' })
+  await act(async () => { heldReply.release() })
+  await settle()
+
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open x')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual(['is:open b'])
+})
+
+test('G3: changing mode while typing adopts the Issues query and cancels the timer', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open mine')
+  const issuesTab = [...element.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.startsWith('Issues'))!
+  await click(issuesTab)
+
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open')
+  await settle(800)
+  expect(searchQueries(calls)).toEqual([])
+})
+
+test('G4: a failed search commit preserves its text and can be retried', async () => {
+  const daemon = createQuietDaemon(prsState)
+  daemon.setNavigateReply(() => { throw new Error('boom') })
+  const { element, calls } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open a')
+  expect([...element.querySelectorAll('[role="alert"]')].some((alert) => alert.textContent?.includes('boom'))).toBe(true)
+  daemon.setNavigateReply(null)
+  await enterSearch(element)
+  expect(searchQueries(calls)).toEqual(['is:open a', 'is:open a'])
+  expect(daemon.current().navigation.query).toBe('is:open a')
+})
+
+test('G5: a failed commit does not prevent a newer typed query from committing', async () => {
+  const daemon = createQuietDaemon(prsState)
+  let first = true
+  daemon.setNavigateReply((_params, next) => {
+    if (first) {
+      first = false
+      throw new Error('boom')
+    }
+    return next
+  })
+  const { element, calls } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+  await typeSearch(element, 'is:open a b')
+  await settle(800)
+
+  expect(searchQueries(calls)).toEqual(['is:open a', 'is:open a b'])
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open a b')
+})
+
+test('G6: an unreadable navigate reply is reported and the query can be sent again', async () => {
+  const daemon = createQuietDaemon(prsState)
+  daemon.setNavigateReply(() => ({}))
+  const { element, calls } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+
+  expect([...element.querySelectorAll('[role="alert"]')].some((alert) => alert.textContent?.includes('Invalid Tasks state from daemon'))).toBe(true)
+  expect(element.querySelector<HTMLInputElement>('[data-tasks-search]')?.value).toBe('is:open a')
+  daemon.setNavigateReply(null)
+  await enterSearch(element)
+  expect(searchQueries(calls)).toEqual(['is:open a', 'is:open a'])
+})
+
+test('A1: a search commit loads the list for its reply query without an event', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element, calls } = await mountExpanded({ quietDaemon: daemon })
+  await typeSearch(element, 'is:open a')
+  await enterSearch(element)
+
+  expect(calls.filter((call) => call.method === 'quirky.tasks/list').at(-1)?.params.query).toBe('is:open a')
+})
+
+test('A2: clicking a row selects it without an event', async () => {
+  const daemon = createQuietDaemon(prsState)
+  const { element } = await mountExpanded({ quietDaemon: daemon })
+  await click(rowButtons(element)[0])
+
+  expect(element.querySelector('.tasks-list__list .ui-list-row--selected')).not.toBeNull()
+})
+
+test('A3: Escape closes the detail without an event', async () => {
+  const state = prDetailState(274)
+  const daemon = createQuietDaemon(state)
+  const { element, current } = await mountExpanded({ state, quietDaemon: daemon })
+  await press('Escape')
+
+  expect(current().navigation.detail).toBeNull()
+  expect(element.querySelector('.tasks-list__list .ui-list-row--selected')).toBeNull()
+}, 30_000)
+
+test('A4: Cancel closes the new-issue dialog without an event', async () => {
+  const state = withNavigation({ ...issuesNavigation, newIssue: true })
+  const daemon = createQuietDaemon(state)
+  const { element, current } = await mountExpanded({ state, quietDaemon: daemon })
+  await click(button(element, 'Cancel'))
+
+  expect(current().navigation.newIssue).toBe(false)
+  expect(button(element, 'Cancel')).toBeUndefined()
+})
+
+test('A5: Back to Project clears the issue detail without an event', async () => {
+  const state = withNavigation({ mode: 'projects', detail: target(issue(7)), project: projectTarget })
+  const daemon = createQuietDaemon(state)
+  const { element, current } = await mountExpanded({
+    state,
+    quietDaemon: daemon,
+    handlers: { ...projectHandlers, 'quirky.tasks/issue': () => issueDetail(7) }
+  })
+  await click(button(element, 'Back to Project'))
+
+  expect(current().navigation.detail).toBeNull()
+  expect(element.querySelector('.quirky-tasks-issue__back')).toBeNull()
+}, 30_000)
