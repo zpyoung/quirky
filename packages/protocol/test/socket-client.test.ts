@@ -290,8 +290,8 @@ describe('QuirkyClient.connectSocket', () => {
   })
 
   test('aborting after hello completion does not close the established client', async () => {
-    const daemon = fakeDaemon((request, reply) => {
-      helloOk(request, reply)
+    const daemon = fakeDaemon((request, reply, socket) => {
+      helloOk(request, reply, socket)
       if (request.method === 'echo') reply(ok(request.id, request.params))
     })
     const controller = new AbortController()
