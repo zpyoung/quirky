@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { GitDiff, GitDiffSource } from '@quirky/protocol'
 import { NotAllowedError } from './conflicts'
 import { GitError } from './index'
-import { drainText, gitEnv, readChunk, retryStalled, runGit, withGitWrite } from './run'
+import { runGit, withGitWrite } from './run'
 
 export const MAX_BLOB_BYTES = 10 * 1024 * 1024
 export const MAX_RENDER_LINES_PER_SIDE = 120_000
@@ -76,56 +76,22 @@ async function gitCommitExists(cwd: string, oid: string): Promise<boolean> {
  * killed and the side is `tooBig`. A path absent at a real revision is an empty side; any other
  * failure throws.
  */
-function readBlob(cwd: string, spec: string): Promise<Side> {
-  return retryStalled(() => readBlobOnce(cwd, spec))
-}
-
-async function readBlobOnce(cwd: string, spec: string): Promise<Side> {
-  const proc = Bun.spawn(['git', 'show', '--no-textconv', '--end-of-options', spec], {
-    cwd,
-    env: await gitEnv(cwd, { readOnly: true }),
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe'
+async function readBlob(cwd: string, spec: string): Promise<Side> {
+  const r = await runGit(cwd, ['show', '--no-textconv', '--end-of-options', spec], {
+    readOnly: true,
+    maxOutputBytes: MAX_BLOB_BYTES
   })
-  const stderr = drainText(proc)
-  const chunks: Uint8Array[] = []
-  let total = 0
-  let tooBig = false
-  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-  for (;;) {
-    const { done, value } = await readChunk(reader, proc.exited)
-    if (done) break
-    total += value.length
-    if (total > MAX_BLOB_BYTES) {
-      tooBig = true
-      proc.kill()
-      await reader.cancel().catch(() => {})
-      break
-    }
-    chunks.push(value)
-  }
-  const [message, exitCode] = await Promise.all([stderr, proc.exited])
-  if (tooBig) return { bytes: new Uint8Array(0), tooBig: true, present: true }
-  if (exitCode === 0) return { bytes: concat(chunks, total), tooBig: false, present: true }
+  if (r.overflow === true) return { bytes: new Uint8Array(0), tooBig: true, present: true }
+  if (r.exitCode === 0) return { bytes: r.stdout, tooBig: false, present: true }
 
+  const message = r.stderr
   const revision = spec.slice(0, spec.indexOf(':'))
   const unbornHead = revision === 'HEAD' && /invalid object name 'HEAD'/.test(message)
   // git words an unknown commit like a missing path, so a hex revision has to be checked itself
   const knownRevision = !OID.test(revision) || (await gitCommitExists(cwd, revision))
   if (unbornHead || (MISSING_BLOB.test(message) && knownRevision)) return EMPTY
   const detail = message.trim()
-  throw new GitError(`git show failed (exit ${exitCode})${detail ? `: ${detail}` : ''}`, message, exitCode)
-}
-
-function concat(chunks: Uint8Array[], total: number): Uint8Array {
-  const out = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    out.set(chunk, offset)
-    offset += chunk.length
-  }
-  return out
+  throw new GitError(`git show failed (exit ${r.exitCode})${detail ? `: ${detail}` : ''}`, message, r.exitCode)
 }
 
 type WorkingFile = { side: Side; hash: string | null; deleted: boolean }
@@ -318,81 +284,34 @@ export async function saveWorkingFile(
 
 const PATCH_ARGS = ['--patch', '--minimal', '--no-color', '--no-ext-diff']
 
-/** The output of `git diff` with `args`, or `omitted` once it passes `MAX_BLOB_BYTES` and the process is killed. */
-function capturePatch(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
-  return retryStalled(() => capturePatchOnce(cwd, args, env))
-}
-
-async function capturePatchOnce(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
-  const proc = Bun.spawn(['git', 'diff', ...args], {
-    cwd,
-    env: await gitEnv(cwd, { readOnly: true, ...(env ? { env } : {}) }),
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe'
+/** The output of `git diff` with `args`, or `omitted` when the runner hits `MAX_BLOB_BYTES`. */
+async function capturePatch(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
+  const r = await runGit(cwd, ['diff', ...args], {
+    readOnly: true,
+    maxOutputBytes: MAX_BLOB_BYTES,
+    ...(env ? { env, share: false } : {})
   })
-  const stderr = drainText(proc)
-  const chunks: Uint8Array[] = []
-  let total = 0
-  let omitted = false
-  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-  for (;;) {
-    const { done, value } = await readChunk(reader, proc.exited)
-    if (done) break
-    total += value.length
-    if (total > MAX_BLOB_BYTES) {
-      omitted = true
-      proc.kill()
-      await reader.cancel().catch(() => {})
-      break
-    }
-    chunks.push(value)
+  if (r.overflow === true) return { patch: '', omitted: true }
+  if (r.exitCode !== 0) {
+    const detail = r.stderr.trim()
+    throw new GitError(`git diff failed (exit ${r.exitCode})${detail ? `: ${detail}` : ''}`, r.stderr, r.exitCode)
   }
-  const [message, exitCode] = await Promise.all([stderr, proc.exited])
-  if (omitted) return { patch: '', omitted: true }
-  if (exitCode !== 0) {
-    const detail = message.trim()
-    throw new GitError(`git diff failed (exit ${exitCode})${detail ? `: ${detail}` : ''}`, message, exitCode)
-  }
-  return { patch: new TextDecoder().decode(concat(chunks, total)), omitted: false }
+  return { patch: new TextDecoder().decode(r.stdout), omitted: false }
 }
 
 /**
- * The NUL-separated listing of untracked, non-ignored paths, or null once it passes
- * `MAX_BLOB_BYTES` (the process is killed). Each listed path appears at least four times in a
- * patch of it, so a listing that large already means an omitted patch.
+ * The NUL-separated listing of untracked, non-ignored paths, or null once the runner hits
+ * `MAX_BLOB_BYTES`. Each listed path appears at least four times in a patch of it, so a listing
+ * that large already means an omitted patch.
  */
-function untrackedListing(cwd: string): Promise<string | null> {
-  return retryStalled(async () => {
-    const proc = Bun.spawn(['git', 'ls-files', '--others', '--exclude-standard', '-z'], {
-      cwd,
-      env: await gitEnv(cwd, { readOnly: true }),
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-    const stderr = drainText(proc)
-    const chunks: Uint8Array[] = []
-    let total = 0
-    let tooLarge = false
-    const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-    for (;;) {
-      const { done, value } = await readChunk(reader, proc.exited)
-      if (done) break
-      total += value.length
-      if (total > MAX_BLOB_BYTES) {
-        tooLarge = true
-        proc.kill()
-        await reader.cancel().catch(() => {})
-        break
-      }
-      chunks.push(value)
-    }
-    const [message, exitCode] = await Promise.all([stderr, proc.exited])
-    if (tooLarge) return null
-    if (exitCode !== 0) throw new GitError(`git ls-files failed (exit ${exitCode}): ${message.trim()}`, message, exitCode)
-    return new TextDecoder().decode(concat(chunks, total))
+async function untrackedListing(cwd: string): Promise<string | null> {
+  const r = await runGit(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], {
+    readOnly: true,
+    maxOutputBytes: MAX_BLOB_BYTES
   })
+  if (r.overflow === true) return null
+  if (r.exitCode !== 0) throw new GitError(`git ls-files failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
+  return new TextDecoder().decode(r.stdout)
 }
 
 /**
