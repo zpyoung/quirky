@@ -155,12 +155,25 @@ describe('editing and deleting notes', () => {
 
   test('every mutation announces notesChanged for the worktree', async () => {
     w = await startWorld()
-    const { handle } = await addThree(w)
+    const handle = (await w.api('addNote', { path: 'math.ts', line: 30, body: '  Handle the empty list  ' })).note
+    await waitFor(() => w!.notesChanged().length >= 1, 5000)
+    await w.api('addNote', { path: 'util.ts', startLine: 2, line: 4, body: 'Rename x' })
+    await waitFor(() => w!.notesChanged().length >= 2, 5000)
+    await w.api('addNote', { path: 'math.ts', line: 5, body: 'Typo' })
+    await waitFor(() => w!.notesChanged().length >= 3, 5000)
     await w.api('editNote', { id: handle.id, body: 'again' })
+    await waitFor(() => w!.notesChanged().length >= 4, 5000)
     await w.api('deleteNote', { id: handle.id })
+    await waitFor(() => w!.notesChanged().length >= 5, 5000)
     await w.api('clearNotes', { yes: true })
     await waitFor(() => w!.notesChanged().length >= 6, 5000)
-    expect(w.notesChanged().map((event) => (event as { data: unknown }).data)).toEqual(Array(6).fill({ worktreeId: w.feat.id }))
+    expect(w.notesChanged()).toEqual(
+      Array(6).fill({
+        type: 'quirky.git/notesChanged',
+        data: { worktreeId: w.feat.id },
+        worktreeId: w.feat.id
+      })
+    )
   })
 
   test('NA-47: a note has no sent state, and a note from another worktree is not found', async () => {

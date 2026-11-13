@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { RpcErrorCode, type GitCompare, type GitHistory, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { git } from '../../../quirky.repo/test/git-fixtures'
+import { COALESCE_INTERVAL_MS } from '../../../../packages/daemon/src/plugins/coalesce'
 import { addPeer, commitInFeat, isolateScenarioGit, startScenario, type Scenario } from './fixture'
+import { waitFor } from '../../../../packages/daemon/test/helpers'
 
 const { scratch } = isolateScenarioGit()
 let s: Scenario | undefined
@@ -186,7 +188,8 @@ describe('setBase and branches', () => {
     expect(await s.api('compare', { worktree: w2.id })).toMatchObject({ baseSource: 'detected' })
     expect(await s.api('setBase', { clear: true })).toEqual({ target: 'worktree', base: null })
     expect(await shown(s.feat)).toBeNull()
-    await Bun.sleep(80)
+    await waitFor(() => s!.changedEvents() >= before + 4)
+    await Bun.sleep(COALESCE_INTERVAL_MS + 60)
     expect(s.changedEvents()).toBe(before + 4)
   })
 

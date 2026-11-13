@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PROTOCOL_VERSION } from '@quirky/protocol'
+import { stopAllProcesses } from '@quirky/process'
 import {
   ensureHome,
   readRuntime,
@@ -46,6 +47,8 @@ export type DaemonOptions = {
   launchHookTimeoutMs?: number
   /** Longest a job timer sleeps before re-checking the clock; defaults to 60 seconds. */
   schedulerRecheckMs?: number
+  /** Window for coalesced plugin events; defaults to 250 ms and can be set by tests. */
+  eventCoalesceMs?: number
   ptyHostEntry?: string
   cliEntry?: string
   /** Login shell that agents run under; defaults to `$SHELL`. */
@@ -206,6 +209,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     hostPower,
     launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
     schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000,
+    eventCoalesceMs: options.eventCoalesceMs,
     shell,
     ...(interactivePath === undefined ? {} : { interactivePath }),
     safeMode: options.safeMode ?? false,
@@ -296,7 +300,11 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       try {
         await plugins.stop()
       } finally {
-        hostPower.dispose()
+        try {
+          await stopAllProcesses()
+        } finally {
+          hostPower.dispose()
+        }
       }
       await pluginRuntime.fileResources.close()
       pty.close()

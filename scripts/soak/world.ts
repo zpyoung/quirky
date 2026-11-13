@@ -117,6 +117,23 @@ function pidOf(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
 }
 
+/** Keeps detached PTY hosts owned by the soak even before the probe connects. */
+export function createPtyHostTracker(
+  track: (pid: number) => void,
+  initialPid?: unknown
+): { current(): number | null; update(pid: unknown): void } {
+  const tracked = new Set<number>()
+  let currentPid: number | null = null
+  const update = (pid: unknown) => {
+    currentPid = pidOf(pid)
+    if (currentPid === null || tracked.has(currentPid)) return
+    tracked.add(currentPid)
+    track(currentPid)
+  }
+  update(initialPid)
+  return { current: () => currentPid, update }
+}
+
 async function waitForDaemon(home: string, process: Pick<Bun.Subprocess, 'pid' | 'exited'>, signal?: AbortSignal): Promise<RuntimeInfo> {
   const deadline = performance.now() + 30_000
   const exited = process.exited.then((code) => ({ kind: 'exit' as const, code }))
@@ -236,7 +253,7 @@ export async function startWorld(options: StartWorldOptions): Promise<SoakWorld>
         throw new Error('soak.faults did not report a clean initial state')
       }
     }
-    let currentPtyHostPid = pidOf(asRecord(status.ptyHost).pid)
+    const ptyHost = createPtyHostTracker((pid) => scope.track(pid), asRecord(status.ptyHost).pid)
     const fixtures = await registerCaptureFixtures(activeControl, prepared, { timeoutMs: 30_000, signal: options.signal })
     const workerScript = resolve(repoRoot, 'scripts/soak/worker.ts')
     const workers: Worker[] = []
@@ -264,10 +281,8 @@ export async function startWorld(options: StartWorldOptions): Promise<SoakWorld>
       home,
       runtime,
       daemonPid: runtime.pid,
-      ptyHostPid: () => currentPtyHostPid,
-      updatePtyHostPid(pid) {
-        currentPtyHostPid = pidOf(pid)
-      },
+      ptyHostPid: ptyHost.current,
+      updatePtyHostPid: ptyHost.update,
       control: activeControl,
       fixtures,
       workers,

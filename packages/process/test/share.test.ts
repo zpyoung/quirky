@@ -7,7 +7,7 @@ import type { RunOptions } from '@quirky/protocol'
 
 const runners: OwnedProcessRunner[] = []
 const dirs: string[] = []
-const argv = ['/bin/sh', '-c', 'echo x >> counter; sleep 0.2; echo done']
+const argv = ['/bin/sh', '-c', 'echo x >> counter; if mkdir stagger 2>/dev/null; then sleep 0.15; else rmdir stagger; sleep 0.35; fi; echo done']
 function runner() {
   const value = createProcessRunner({ owner: 'share' })
   runners.push(value)
@@ -51,7 +51,7 @@ test('22: every effective execution option separates calls and runner instances 
   const cwd = await directory()
   const otherCwd = await directory()
   const pairs: [left: RunOptions, right: RunOptions, argv?: readonly string[]][] = [
-    [{}, {}, ['/bin/sh', '-c', 'echo x >> counter; sleep 0.2; echo other']],
+    [{}, {}, ['/bin/sh', '-c', 'echo x >> counter; sleep 0.35; echo other']],
     [{ cwd }, { cwd: otherCwd }],
     [{ env: { PATH: '/bin:/usr/bin', A: '1' } }, { env: { PATH: '/bin:/usr/bin', A: '2' } }],
     [{ timeoutMs: 4_000 }, { timeoutMs: 5_000 }],
@@ -108,12 +108,13 @@ test('sharing canonicalizes environment entry order and snapshots the current in
   expect(await count(cwd)).toBe(1)
   const previous = globalThis.process.env.QUIRKY_PROCESS_SHARE_TEST
   try {
-    globalThis.process.env.QUIRKY_PROCESS_SHARE_TEST = 'first'
-    const pending = process.run(['/bin/sh', '-c', 'sleep 0.1; printf "$QUIRKY_PROCESS_SHARE_TEST"'], { share: true, timeoutMs: 5_000 })
-    globalThis.process.env.QUIRKY_PROCESS_SHARE_TEST = 'second'
-    const next = process.run(['/bin/sh', '-c', 'sleep 0.1; printf "$QUIRKY_PROCESS_SHARE_TEST"'], { share: true, timeoutMs: 5_000 })
+    globalThis.process.env.QUIRKY_PROCESS_SHARE_TEST = '0.1'
+    const command = ['/bin/sh', '-c', 'sleep "$QUIRKY_PROCESS_SHARE_TEST"; printf "$QUIRKY_PROCESS_SHARE_TEST"']
+    const pending = process.run(command, { share: true, timeoutMs: 5_000 })
+    globalThis.process.env.QUIRKY_PROCESS_SHARE_TEST = '0.25'
+    const next = process.run(command, { share: true, timeoutMs: 5_000 })
     const results = await Promise.all([pending, next])
-    expect(results.map(result => result.stdoutText)).toEqual(['first', 'second'])
+    expect(results.map(result => result.stdoutText)).toEqual(['0.1', '0.25'])
   } finally {
     if (previous === undefined) delete globalThis.process.env.QUIRKY_PROCESS_SHARE_TEST
     else globalThis.process.env.QUIRKY_PROCESS_SHARE_TEST = previous
@@ -147,4 +148,4 @@ test('a rejected shared run is removed before the next identical call', async ()
   const result = await process.run(['fake'], { share: true, timeoutMs: 1_000 })
   expect(result.stdoutText).toBe('ok')
   expect(starts).toBe(2)
-})
+}, 15_000)

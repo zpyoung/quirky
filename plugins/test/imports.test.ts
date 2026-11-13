@@ -37,9 +37,8 @@ function isRuntimeBuiltin(specifier: string): boolean {
 }
 
 /**
- * Finds the imports in one plugin source file that reach beyond the plugin's public surface:
- * relative paths leaving `pluginDir`, absolute paths, and packages that are neither runtime
- * built-ins, `@quirky/protocol`, nor in `declared`.
+ * Finds imports that leave the plugin's public surface. The shared process runner is kernel-owned;
+ * other packages must be runtime built-ins, `@quirky/protocol`, or declared dependencies.
  */
 export function scanImports(source: string, file: string, pluginDir: string, declared: ReadonlySet<string>): ImportViolation[] {
   const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
@@ -65,6 +64,8 @@ export function scanImports(source: string, file: string, pluginDir: string, dec
         if (target !== pluginDir && !target.startsWith(pluginDir + sep)) flag('relative path leaves the plugin')
       } else if (specifier.startsWith('/')) {
         flag('absolute path')
+      } else if (packageOf(specifier) === '@quirky/process') {
+        flag('plugins reach the process runner through context.process')
       } else if (!isRuntimeBuiltin(specifier) && packageOf(specifier) !== '@quirky/protocol' && !declared.has(packageOf(specifier))) {
         flag('package is not declared in the plugin package.json')
       }
@@ -99,6 +100,19 @@ describe('import fence', () => {
       }
     }
     expect(violations).toEqual([])
+  })
+
+  test('plugins reach the runner only through context, even with a declared dependency', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const file = join(dir, 'src', 'a.ts')
+    const declared = new Set(['@quirky/process'])
+    expect(scanImports("import { createProcessRunner } from '@quirky/process'", file, dir, declared)).toEqual([{
+      file,
+      line: 1,
+      specifier: '@quirky/process',
+      reason: 'plugins reach the process runner through context.process'
+    }])
+    expect(scanImports("import type { ProcessRunner } from '@quirky/protocol'", file, dir, declared)).toEqual([])
   })
 
   test('ignores import-like text in action values, comments, and strings', () => {

@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { GitDiff, GitDiffSource } from '@quirky/protocol'
 import { NotAllowedError } from './conflicts'
 import { GitError } from './index'
-import { drainText, gitEnv, readChunk, retryStalled, runGit } from './run'
+import { drainText, gitEnv, readChunk, retryStalled, runGit, withGitWrite } from './run'
 
 export const MAX_BLOB_BYTES = 10 * 1024 * 1024
 export const MAX_RENDER_LINES_PER_SIDE = 120_000
@@ -287,31 +287,33 @@ export async function saveWorkingFile(
   content: string,
   expected?: string | null
 ): Promise<{ hash: string }> {
-  const full = join(cwd, path)
-  let mode: number | undefined
-  let currentHash: string | null = null
-  try {
-    const info = await lstat(full)
-    if (info.isSymbolicLink()) throw new NotAllowedError(`${path} is a symbolic link and cannot be saved.`)
-    if (!info.isFile()) throw new NotAllowedError(`${path} is not a regular file.`)
-    mode = info.mode & 0o7777
-    if (expected !== undefined) currentHash = await hashFile(full)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
-  if (expected !== undefined && currentHash !== expected) throw new ChangedOnDiskError()
+  return withGitWrite(async () => {
+    const full = join(cwd, path)
+    let mode: number | undefined
+    let currentHash: string | null = null
+    try {
+      const info = await lstat(full)
+      if (info.isSymbolicLink()) throw new NotAllowedError(`${path} is a symbolic link and cannot be saved.`)
+      if (!info.isFile()) throw new NotAllowedError(`${path} is not a regular file.`)
+      mode = info.mode & 0o7777
+      if (expected !== undefined) currentHash = await hashFile(full)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    if (expected !== undefined && currentHash !== expected) throw new ChangedOnDiskError()
 
-  const bytes = new TextEncoder().encode(content)
-  const temp = join(dirname(full), `.${basename(full)}.${randomBytes(6).toString('hex')}.tmp`)
-  try {
-    await writeFile(temp, bytes, { flag: 'wx' })
-    if (mode !== undefined) await chmod(temp, mode)
-    await rename(temp, full)
-  } catch (error) {
-    await unlink(temp).catch(() => {})
-    throw error
-  }
-  return { hash: contentHash(bytes) }
+    const bytes = new TextEncoder().encode(content)
+    const temp = join(dirname(full), `.${basename(full)}.${randomBytes(6).toString('hex')}.tmp`)
+    try {
+      await writeFile(temp, bytes, { flag: 'wx' })
+      if (mode !== undefined) await chmod(temp, mode)
+      await rename(temp, full)
+    } catch (error) {
+      await unlink(temp).catch(() => {})
+      throw error
+    }
+    return { hash: contentHash(bytes) }
+  })
 }
 
 const PATCH_ARGS = ['--patch', '--minimal', '--no-color', '--no-ext-diff']

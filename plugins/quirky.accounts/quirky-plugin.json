@@ -1,6 +1,6 @@
 {
   "id": "quirky.accounts",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "Accounts and Usage",
   "version": "0.1.0",
   "description": "Read provider usage and manage isolated Claude and Codex accounts.",
@@ -296,11 +296,13 @@
     "event": [
       {
         "id": "changed",
+        "coalesce": [],
         "description": "Account, preference, sign-in, selection, and stale-session state changed; clients refetch the current generation.",
         "data": { "type": "object", "properties": { "revision": { "type": "integer" } }, "required": ["revision"] }
       },
       {
         "id": "usageChanged",
+        "coalesce": [],
         "description": "A secret-free provider usage snapshot changed.",
         "data": { "type": "object", "properties": { "providers": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "inactive": { "type": "object", "additionalProperties": true }, "updatedAt": { "type": "integer" } }, "required": ["providers", "inactive", "updatedAt"] }
       }

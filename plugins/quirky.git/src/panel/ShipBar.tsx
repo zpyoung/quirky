@@ -1,5 +1,5 @@
-import { useState, type ReactNode, type RefObject } from 'react'
-import { ContextMenu, ControlIcon, FormRow, IconButton, InlineError, SplitButton } from '@quirky/ui'
+import type { ReactNode, RefObject } from 'react'
+import { ControlIcon, FormRow, IconButton, InlineError, SplitButton } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { SendMenu } from '../notes/SendMenu'
@@ -19,11 +19,12 @@ type Props = {
   context: UiPluginContext
   worktree: string
   step: ShipStep
-  items: readonly ShipMenuItem[]
   /** A step is running: the button shows it and cannot be pressed again. */
   busy: boolean
   onStep(): void
-  onChoose(id: ShipMenuId): void
+  /** The panel owns the menu so it outlives changes of step. */
+  menuOpen: boolean
+  onOpenMenu(anchor: { x: number; y: number }): void
   /** The message field shows while there is something to commit. */
   showMessage: boolean
   message: string
@@ -43,37 +44,36 @@ type Props = {
   aside?: ReactNode
 }
 
-const CARET_LABEL = 'More commit and remote actions'
+export const CARET_LABEL = 'More commit and remote actions'
 
-const toMenu = (items: readonly ShipMenuItem[]): ContextMenuItem[] =>
+/** The caret's menu entries; choosing one passes its id to the panel. */
+export const shipMenuEntries = (items: readonly ShipMenuItem[], onChoose: (id: ShipMenuId) => void): ContextMenuItem[] =>
   items.map((item) => ({
     id: item.id,
     label: item.label,
     enabled: item.enabled,
     ...(item.detail === undefined ? {} : { detail: item.detail }),
     ...(item.separatorBefore ? { separatorBefore: true } : {}),
-    ...(item.danger ? { danger: true } : {})
+    ...(item.danger ? { danger: true } : {}),
+    onSelect: () => onChoose(item.id)
   }))
 
 /** The quiet status line of a branch with nothing left to do, with the caret beside it. */
-function QuietStep({ step, items, onChoose }: Pick<Props, 'step' | 'items' | 'onChoose'>) {
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
-  const entries = toMenu(items).map((entry) => ({ ...entry, onSelect: () => onChoose(entry.id as ShipMenuId) }))
+function QuietStep({ step, menuOpen, onOpenMenu }: Pick<Props, 'step' | 'menuOpen' | 'onOpenMenu'>) {
   return (
     <div className="ui-cluster git-ship__quiet">
       <p className="ui-text-muted" role="status" title={step.reason} data-git-up-to-date>{step.label}</p>
       <IconButton
         label={CARET_LABEL}
         aria-haspopup="menu"
-        aria-expanded={at !== null}
+        aria-expanded={menuOpen}
         onClick={(event) => {
           const box = event.currentTarget.getBoundingClientRect()
-          setAt({ x: box.right, y: box.bottom })
+          onOpenMenu({ x: box.right, y: box.bottom })
         }}
       >
         <ControlIcon name="caret-down" />
       </IconButton>
-      {at && <ContextMenu x={at.x} y={at.y} align="end" label={CARET_LABEL} items={entries} onClose={() => setAt(null)} />}
     </div>
   )
 }
@@ -91,10 +91,10 @@ export function ShipErrorLine({ error, onDismiss }: { error: ShipErrorView; onDi
 /**
  * The area pinned to the bottom of the panel, top to bottom: "Send N notes to agent", the
  * message field with ✦ at its right end, the error line, and the ship button with its caret.
- * It holds no logic; the panel owns what each step does.
+ * The panel owns the menu and what each step does, so the menu survives a change of step.
  */
 export function ShipBar(props: Props) {
-  const { context, worktree, step, items, busy, onStep, onChoose, showMessage, message, onMessage, messageRef, locked, sparkle, writtenBy, error, onDismissError, selecting, aside } = props
+  const { context, worktree, step, busy, onStep, menuOpen, onOpenMenu, showMessage, message, onMessage, messageRef, locked, sparkle, writtenBy, error, onDismissError, selecting, aside } = props
   const notes = useNotes(context, worktree)
   const noteLabel = `Send ${notes.length} ${notes.length === 1 ? 'note' : 'notes'} to agent`
   return (
@@ -137,7 +137,7 @@ export function ShipBar(props: Props) {
       {error && <ShipErrorLine error={error} onDismiss={onDismissError} />}
       {aside}
       {step.kind === 'up-to-date' ? (
-        <QuietStep step={step} items={items} onChoose={onChoose} />
+        <QuietStep step={step} menuOpen={menuOpen} onOpenMenu={onOpenMenu} />
       ) : (
         <SplitButton
           label={step.label}
@@ -146,8 +146,8 @@ export function ShipBar(props: Props) {
           busy={busy}
           title={step.reason}
           menuLabel={CARET_LABEL}
-          items={toMenu(items)}
-          onChoose={(id) => onChoose(id as ShipMenuId)}
+          menuOpen={menuOpen}
+          onOpenMenu={onOpenMenu}
         />
       )}
     </div>

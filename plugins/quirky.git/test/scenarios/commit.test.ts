@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { COALESCE_INTERVAL_MS } from '../../../../packages/daemon/src/plugins/coalesce'
 import { installHook, isolateScenarioGit, jsonError, startScenario, type Scenario } from './fixture'
 
 const { scratch } = isolateScenarioGit()
@@ -21,7 +22,7 @@ describe('commit', () => {
     const { sha } = await s.api('commit', { message: 'Add math' })
     expect(sha).toBe(s.gitIn('rev-parse', 'HEAD'))
     expect(s.gitIn('log', '-1', '--format=%s')).toBe('Add math')
-    await Bun.sleep(60)
+    await Bun.sleep(COALESCE_INTERVAL_MS + 60)
     expect(s.changedEvents()).toBe(before + 1)
   })
 

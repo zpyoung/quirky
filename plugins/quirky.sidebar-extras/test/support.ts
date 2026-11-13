@@ -131,6 +131,7 @@ export type ActivityProjection = ExtrasState & {
 
 export type DirtyResult = {
   worktreeId: string | null
+  instanceId: string | null
   count: number
   capped: boolean
   title: string

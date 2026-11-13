@@ -12,6 +12,8 @@ Committing and deleting an untracked file keep keyboard focus in Source Control.
 
 Closing the base-ref picker returns focus to the current base-ref button, including when the picker opened from More source control actions. If no base is available after closing, focus returns to More commit and remote actions.
 
+The More commit and remote actions menu stays open while the ship bar changes, and Escape returns focus to the caret shown at that moment.
+
 ## Name candidates
 
 `aiName({ action: 'branchName' })` returns a branch-name candidate from the exact worktree's checked-out branch, resolved base comparison, committed changed paths, and staged/unstaged paths. An optional `session` adds user/assistant messages from that exact structured session as captured work-prompt context. The returned branch name must pass Git's `check-ref-format --branch` validation.

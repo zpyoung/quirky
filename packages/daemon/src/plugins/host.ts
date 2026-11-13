@@ -34,7 +34,7 @@ type ExtensionMembers = Pick<
   | 'launch'
   | 'createFileResource'
 > &
-  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward'>>
+  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward' | 'process'>>
 
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
 export type ContextExtension = {
@@ -130,6 +130,7 @@ function withTimeout<T>(work: () => T | Promise<T>, ms: number, message: string)
 export class PluginHost {
   private discovered: DiscoveredPlugin[] = []
   private registry: Registry = computeRegistry([], new Set())
+  private registryRevision = 0
   private readonly runtimes = new Map<string, Runtime>()
   private derivedDiagnostics = new Map<string, PluginDiagnostic[]>()
   private cliAliases: CliAliasResolution = { accepted: new Map(), dropped: new Map() }
@@ -199,6 +200,11 @@ export class PluginHost {
   /** Every discovered entry sorted by ID, built-in first; a duplicate ID appears once per source. */
   list(): PluginInfo[] {
     return this.registry.entries.map((entry) => this.infoOf(entry))
+  }
+
+  /** A number that changes whenever the registry is recomputed. While it is the same, the declarations and each plugin's status and manifest fields are the same. */
+  revision(): number {
+    return this.registryRevision
   }
 
   /** The `cli` module path and declared `cliAliases` of a plugin's manifest; empty for an unknown or unparsable plugin. */
@@ -305,6 +311,7 @@ export class PluginHost {
     )
     this.disabledSets = { user, distro, safeMode: inSafeMode }
     this.registry = computeRegistry(this.discovered, new Set([...user, ...inSafeMode]), [...distro])
+    this.registryRevision += 1
     this.cliAliases = this.resolveAliases()
     this.derivedDiagnostics = new Map()
     const derive = this.options.deriveDiagnostics
@@ -564,10 +571,11 @@ export class PluginHost {
           throw new Error(`${id}: context.${member} is not available`)
         }
       })
-    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients' | 'hostPower' | 'forward'> = {
+    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward' | 'process'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients' | 'hostPower' | 'forward' | 'process'> = {
       dataDir: '',
       clients: unavailableObject<PluginContext['clients']>('clients'),
       hostPower: unavailableObject<PluginContext['hostPower']>('hostPower'),
+      process: unavailableObject<PluginContext['process']>('process'),
       home: '',
       pty: unavailableObject<PluginContext['pty']>('pty'),
       launch: unavailableObject<PluginContext['launch']>('launch'),
@@ -612,6 +620,7 @@ export class PluginHost {
       ...created,
       clients: created?.clients ?? defaults.clients,
       hostPower: created?.hostPower ?? defaults.hostPower,
+      process: created?.process ?? defaults.process,
       log: (message) => {
         for (const line of String(message).split(/\r\n|\r|\n/)) this.options.log(`${id}: ${line}`)
       },

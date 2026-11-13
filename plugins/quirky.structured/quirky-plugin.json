@@ -1,6 +1,6 @@
 {
   "id": "quirky.structured",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.6.0",
   "name": "Structured sessions",
   "version": "0.1.0",
   "description": "Background native Claude, Codex, Pi and Oh My Pi sessions without terminals: journaled messages, with Claude and Codex permission prompts as asks. Pi and Oh My Pi run their tools without asking.",

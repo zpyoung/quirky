@@ -8,6 +8,7 @@ import { createFakeGit, useTestGit } from '@quirky/git/testing'
 import { RpcErrorCode, type GitDiff, type GitStatusEntry, type ReviewFile, type ReviewModel, type Worktree } from '@quirky/protocol'
 import { readReview } from '../../src/daemon/review'
 import type { DaemonEnv } from '../../src/daemon/env'
+import { waitFor } from '../../../../packages/daemon/test/helpers'
 import { commitInFeat, isolateScenarioGit, startScenario, type Scenario } from './fixture'
 
 const { scratch } = isolateScenarioGit()
@@ -374,8 +375,16 @@ describe('review marks', () => {
     s = await startScenario(scratch)
     s.write('b.ts', 'bee\nbuzz\n')
     s.write('a.ts', 'one\nuno\n')
+    let marked = { review: countOf('quirky.git/reviewChanged'), changed: countOf('quirky.git/changed') }
     await mark('b.ts')
+    await waitFor(
+      () => countOf('quirky.git/reviewChanged') > marked.review && countOf('quirky.git/changed') > marked.changed
+    )
+    marked = { review: countOf('quirky.git/reviewChanged'), changed: countOf('quirky.git/changed') }
     await mark('a.ts')
+    await waitFor(
+      () => countOf('quirky.git/reviewChanged') > marked.review && countOf('quirky.git/changed') > marked.changed
+    )
     await review()
     await s.flushEvents()
     const quiet = { review: countOf('quirky.git/reviewChanged'), changed: countOf('quirky.git/changed') }
@@ -385,7 +394,7 @@ describe('review marks', () => {
 
     s.write('b.ts', 'bee\n')
     await review()
-    await s.flushEvents()
+    await waitFor(() => countOf('quirky.git/reviewChanged') >= quiet.review + 1)
     expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 1)
     expect(countOf('quirky.git/changed')).toBeGreaterThan(quiet.changed)
     await review()
@@ -394,7 +403,7 @@ describe('review marks', () => {
 
     await s.client.callAny('quirky.worktree/set', { worktree: s.feat.id, baseRef: 'main' })
     await review()
-    await s.flushEvents()
+    await waitFor(() => countOf('quirky.git/reviewChanged') >= quiet.review + 2)
     expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 2)
     await review()
     await s.flushEvents()
@@ -429,13 +438,21 @@ describe('review marks', () => {
     let step = 0
     for (const mutation of [() => mark('b.ts'), () => mark('b.ts', false), () => s!.api('setBase', { base: 'origin/main' })]) {
       await mutation()
-      await s.flushEvents()
       step++
+      await waitFor(
+        () =>
+          countOf('quirky.git/reviewChanged') >= before.review + step &&
+          countOf('quirky.git/changed') >= before.changed + step
+      )
       expect(countOf('quirky.git/reviewChanged')).toBe(before.review + step)
       expect(countOf('quirky.git/changed')).toBeGreaterThanOrEqual(before.changed + step)
     }
     const last = s.events.filter((event) => event.type === 'quirky.git/reviewChanged').at(-1)
-    expect(last).toMatchObject({ data: { worktreeId: s.feat.id } })
+    expect(last).toEqual({
+      type: 'quirky.git/reviewChanged',
+      data: { worktreeId: s.feat.id },
+      worktreeId: s.feat.id
+    })
   })
 })
 

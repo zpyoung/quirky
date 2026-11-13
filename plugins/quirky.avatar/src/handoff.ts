@@ -5,9 +5,9 @@ import type { AvatarApp, HandoffInput, HandoffRow, HandoffService, Mandate, Need
 import { agentLabel } from './agent-label'
 import { HOOKED_AGENTS, NO_HOOKED_AGENT_REASON, resolveHookedAgent } from './agents'
 import { applyMandatePatch, normalizeHandoffInput, type MandatePatch } from './mandate'
+import { cachedClaudeVersion } from './hooks/install'
 
 const MIN_CLAUDE_VERSION: readonly number[] = [2, 1, 295]
-const VERSION_TTL_MS = 60_000
 const CODEX_UNGATED_NOTE = "Codex's hosted tools (web search, image generation) aren't gated"
 
 type WorktreeInfo = { id: string; name: string; displayName?: string | null; repoId: string; path: string; kind: string; hostId?: unknown; remote?: unknown }
@@ -40,23 +40,6 @@ function versionAtLeast(output: string, minimum: readonly number[]): boolean {
   return true
 }
 
-function cachedClaudeVersion(): () => Promise<string | null> {
-  let cached: { at: number; value: string | null } | null = null
-  return async () => {
-    if (cached !== null && Date.now() - cached.at < VERSION_TTL_MS) return cached.value
-    let value: string | null = null
-    try {
-      const proc = Bun.spawn(['claude', '--version'], { stdout: 'pipe', stderr: 'ignore' })
-      const timer = setTimeout(() => proc.kill(), 5_000)
-      value = (await new Response(proc.stdout).text()).trim() || null
-      clearTimeout(timer)
-    } catch {
-      value = null
-    }
-    cached = { at: Date.now(), value }
-    return value
-  }
-}
 
 const UNGATED_TERMINAL_REASON = "Can't hand off: an agent is running in a terminal the avatar can't gate; start it from New agent"
 
@@ -85,7 +68,7 @@ function briefText(mandate: Mandate, updated: boolean): string {
  * worktrees back or resolve in-flight gate requests.
  */
 export function register(app: AvatarApp, deps: HandoffDeps = {}): () => void {
-  const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
+  const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion(app.context.process)
   const pendingBriefs = new Map<string, Brief>()
   const resolvingNeeds = new Set<string>()
   let disposed = false

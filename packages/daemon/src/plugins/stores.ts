@@ -1,7 +1,8 @@
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginStore, StoreMigration, StoreValue } from '@quirky/protocol'
+import { openSqlite } from '../sqlite'
 
 /** Where a plugin keeps its private files, including its SQLite store. Pure path math; creates nothing. */
 export function pluginDataDir(home: string, pluginId: string): string {
@@ -16,6 +17,8 @@ export interface OpenPluginStoreOptions {
   isActive: () => boolean
   /** Opt in to read-only access to a schema newer than the supplied migration list. */
   newerVersion?: 'read-only'
+  /** Lock wait in milliseconds for this connection; defaults to 5000. */
+  busyTimeoutMs?: number
 }
 
 function isThenable(value: unknown): boolean {
@@ -41,7 +44,7 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
   const dir = pluginDataDir(home, pluginId)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   const file = join(dir, 'store.db')
-  let db = new Database(file)
+  let db = openSqlite(file, { busyTimeoutMs: options.busyTimeoutMs })
   let readOnly = false
   let closed = false
   const close = () => {
@@ -107,12 +110,15 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
       if (options.newerVersion !== 'read-only') {
         throw new Error(`${pluginId} store is at version ${version}, but the plugin knows ${migrations.length} migrations`)
       }
+      closed = true
       db.close()
-      db = new Database(file, { readonly: true })
+      db = openSqlite(file, { readonly: true, busyTimeoutMs: options.busyTimeoutMs })
+      closed = false
       readOnly = true
       return { store, close }
     }
     db.exec('PRAGMA journal_mode = WAL')
+    db.exec('PRAGMA synchronous = NORMAL')
     for (let i = version; i < migrations.length; i++) {
       db.exec('BEGIN IMMEDIATE')
       try {

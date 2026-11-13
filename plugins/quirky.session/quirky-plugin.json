@@ -1,6 +1,6 @@
 {
   "id": "quirky.session",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "Sessions",
   "version": "0.1.0",
   "description": "Terminal and structured agent sessions in a worktree.",
@@ -1702,6 +1702,7 @@
     "event": [
       {
         "id": "changed",
+        "worktree": "session.worktreeId",
         "description": "A session was created or its state changed.",
         "data": {
           "type": "object",

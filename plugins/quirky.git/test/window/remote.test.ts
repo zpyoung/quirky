@@ -112,6 +112,8 @@ test('SC-29: Fetch, Fast-forward and Rebase from origin/main run through the dae
   await w.win.waitFor(() => w.git('rev-parse', 'HEAD') === peer.git('rev-parse', 'HEAD'))
 
   await openChevron(w)
+  await w.win.waitFor(() => primaryNow().label === 'Pushed to origin/zoe/feat')
+  expect(q('[role="menu"]')).not.toBeNull()
   await click(caretEntry('Rebase from origin/main'))
   await w.win.waitFor(() => Bun.spawnSync(['git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'], { cwd: w.dir }).exitCode === 0)
   expect(w.problems()).toEqual([])

@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from 'bun:test'
 import { createProcessRunner, type OwnedProcessRunner } from '../src/api'
+import type { StartChild } from '../src/child'
 
 const runners: OwnedProcessRunner[] = []
 
-function runner() {
-  const value = createProcessRunner({ owner: 'test' })
+function runner(start?: StartChild) {
+  const value = createProcessRunner({ owner: 'test', start })
   runners.push(value)
   return value
 }
@@ -116,4 +117,50 @@ test('15: ignored stdin is already closed', async () => {
   expect(await child.write('x')).toBe(false)
   expect(await readBytes(child.stdout)).toEqual(new Uint8Array())
   expect((await child.exited).exitCode).toBe(0)
+}, 15_000)
+
+test('16: queued byte writes snapshot their buffers before writing', async () => {
+  const child = runner().spawn(['/bin/cat'], { stdin: 'pipe', timeoutMs: 5_000 })
+  const buffer = new Uint8Array([65, 10])
+  const first = child.write(buffer)
+  buffer[0] = 66
+  const second = child.write(buffer)
+  buffer[0] = 67
+  const closed = child.closeInput()
+
+  expect(await Promise.all([first, second])).toEqual([true, true])
+  await closed
+  expect(await readBytes(child.stdout)).toEqual(new Uint8Array([65, 10, 66, 10]))
+  expect((await child.exited).exitCode).toBe(0)
+}, 15_000)
+
+test('17: a queued write is skipped when the child exits during a successful flush', async () => {
+  const sent: Uint8Array[] = []
+  const { promise: exited, resolve: resolveExit } =
+    Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+  const start: StartChild = () => ({
+    pid: 1,
+    stdout: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+    stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+    exited,
+    stdin: {
+      write(chunk) {
+        sent.push(chunk.slice())
+        resolveExit({ exitCode: 0, signal: null })
+      },
+      async flush() {},
+      async end() {},
+    },
+    killGroup() {},
+  })
+  const child = runner(start).spawn(['/fake'], { stdin: 'pipe', timeoutMs: 5_000 })
+  const first = child.write('quit\n')
+  const second = child.write('after\n')
+
+  expect(await Promise.all([first, second])).toEqual([true, false])
+  const exit = await child.exited
+  expect(sent).toEqual([new TextEncoder().encode('quit\n')])
+  expect(exit.exitCode).toBe(0)
+  expect(exit.signal).toBeNull()
+  expect(exit.stopped).toBeUndefined()
 }, 15_000)

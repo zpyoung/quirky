@@ -17,6 +17,12 @@ Project and worktree Actions menus take keyboard focus when opened and close on 
 the click also activates the Worktrees panel. When opened from an Actions button, Escape restores focus
 to that button so Tab continues from there; outside clicks and action selection do not restore focus.
 
+Attention badge refreshes share one in-flight load and merge pending sources. Session and question
+events reload only their own data; hosting events reload the cached review projection. Worktree
+changes refresh each window's projection without reactivating its selection. Selection changes,
+replacement instances and reconnects still activate it. With the All activity window, session
+events do not reload the projection.
+
 Closing Rename or the Delete Workspace confirmation returns keyboard focus to that worktree's
 Actions button while its row remains visible, including after a display-name change.
 

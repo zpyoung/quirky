@@ -1,10 +1,19 @@
 /** Branch compare: the committed changes between a merge base and HEAD, and the file lists they are built from. */
 import { lstat, readFile, readlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { resolve, join } from 'node:path'
 import type { GitChange, GitChangeStatus, GitCompare } from '@quirky/protocol'
 import { MAX_BLOB_BYTES } from './diffs'
 import { GitError } from './index'
-import { drainText, git, gitEnv, readChunk, retryStalled, runGit } from './run'
+import {
+  drainText,
+  git,
+  gitEnv,
+  readChunk,
+  retryStalled,
+  runGit,
+  shareGitRead,
+  withGitReadSlot
+} from './run'
 import { STATUS_ENTRY_LIMIT } from './status'
 
 const decoder = new TextDecoder()
@@ -113,47 +122,63 @@ async function untrackedChange(cwd: string, path: string): Promise<GitChange> {
  * true, so a huge listing is never held in memory. Throws `GitError` when git fails on its own,
  * and a stalled pipe (see `retryStalled`) when git's output does not end after it exited.
  */
-async function streamTokens(cwd: string, args: string[], onToken: (token: string) => boolean | Promise<boolean>): Promise<void> {
-  let proc: ReturnType<typeof Bun.spawn>
-  try {
-    proc = Bun.spawn(['git', ...args], {
-      cwd,
-      env: await gitEnv(cwd, { readOnly: true }),
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-  } catch (err) {
-    throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
-  }
-  const stderr = drainText(proc)
-  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-  const stream = new TextDecoder()
-  let carry = ''
-  let stopped = false
-  try {
-    read: for (;;) {
-      const { done, value } = await readChunk(reader, proc.exited)
-      if (done) break
-      carry += stream.decode(value, { stream: true })
-      const tokens = carry.split('\0')
-      carry = tokens.pop() ?? ''
-      for (const token of tokens) {
-        if (await onToken(token)) {
-          stopped = true
-          break read
+async function streamTokens(
+  cwd: string,
+  args: string[],
+  onToken: (token: string) => boolean | Promise<boolean>
+): Promise<void> {
+  const env = await gitEnv(cwd, { readOnly: true })
+  return withGitReadSlot(async () => {
+    let proc: ReturnType<typeof Bun.spawn>
+    try {
+      proc = Bun.spawn(['git', ...args], {
+        cwd,
+        env,
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe'
+      })
+    } catch (err) {
+      throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
+    }
+    let stopped = false
+    let exited = false
+    try {
+      const stderr = drainText(proc)
+      const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
+      const stream = new TextDecoder()
+      let carry = ''
+      read: for (;;) {
+        const { done, value } = await readChunk(reader, proc.exited)
+        if (done) break
+        carry += stream.decode(value, { stream: true })
+        const tokens = carry.split('\0')
+        carry = tokens.pop() ?? ''
+        for (const token of tokens) {
+          if (await onToken(token)) {
+            stopped = true
+            break read
+          }
+        }
+      }
+      if (!stopped && carry.length > 0) await onToken(carry)
+      if (stopped) proc.kill()
+      const exitCode = await proc.exited
+      exited = true
+      const errText = await stderr
+      if (!stopped && exitCode !== 0) {
+        throw new GitError(`git ${args[0]} failed (exit ${exitCode})${errText.trim() ? `: ${errText.trim()}` : ''}`, errText, exitCode)
+      }
+    } finally {
+      if (!exited) {
+        try {
+          proc.kill()
+        } finally {
+          await proc.exited
         }
       }
     }
-    if (!stopped && carry.length > 0) await onToken(carry)
-  } finally {
-    if (stopped) proc.kill()
-  }
-  const exitCode = await proc.exited
-  const errText = await stderr
-  if (!stopped && exitCode !== 0) {
-    throw new GitError(`git ${args[0]} failed (exit ${exitCode})${errText.trim() ? `: ${errText.trim()}` : ''}`, errText, exitCode)
-  }
+  })
 }
 
 /** The tokens of the first `bound` records of `diff --raw -z` (`numstat` false) or `diff --numstat -z` (true) against `from`. */
@@ -240,10 +265,32 @@ async function recreatedChange(cwd: string, from: string, path: string): Promise
  * paths git reports (then sorted) and `capped` is set only when more exist; untracked paths in
  * `sharedSymlinks` that are symlinks are left out. Throws `GitError` when git fails.
  */
-export async function worktreeChangeList(
+export function worktreeChangeList(
   cwd: string,
   from: string,
   options: { limit?: number; sharedSymlinks?: string[] } = {}
+): Promise<{ changes: GitChange[]; capped: boolean }> {
+  const limit = options.limit ?? STATUS_ENTRY_LIMIT
+  const sharedSymlinks = [...new Set(options.sharedSymlinks ?? [])].sort()
+  const key = JSON.stringify([
+    'worktreeChangeList',
+    resolve(cwd),
+    from,
+    limit,
+    sharedSymlinks,
+    process.env.PATH ?? ''
+  ])
+  return shareGitRead(
+    key,
+    () => worktreeChangeListOnce(cwd, from, { limit, sharedSymlinks }),
+    (value) => structuredClone(value)
+  )
+}
+
+async function worktreeChangeListOnce(
+  cwd: string,
+  from: string,
+  options: { limit?: number; sharedSymlinks?: string[] }
 ): Promise<{ changes: GitChange[]; capped: boolean }> {
   const limit = options.limit ?? STATUS_ENTRY_LIMIT
   const shared = new Set(options.sharedSymlinks ?? [])
@@ -340,7 +387,12 @@ async function resolveCommitOid(cwd: string, rev: string): Promise<string | null
  * (`invalid-base`, `unborn-head`, `no-merge-base`) are results with a `message`, not errors.
  * `baseSource` is left null for the caller, which knows where `base` came from.
  */
-export async function compare(cwd: string, base: string): Promise<GitCompare> {
+export function compare(cwd: string, base: string): Promise<GitCompare> {
+  const key = JSON.stringify(['compare', resolve(cwd), base, process.env.PATH ?? ''])
+  return shareGitRead(key, () => compareOnce(cwd, base), (value) => structuredClone(value))
+}
+
+async function compareOnce(cwd: string, base: string): Promise<GitCompare> {
   const [baseOid, headOid] = await Promise.all([resolveCommitOid(cwd, base), resolveCommitOid(cwd, 'HEAD')])
   const result: GitCompare = {
     status: 'ready',

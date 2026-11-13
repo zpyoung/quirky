@@ -61,6 +61,16 @@ function fakeChild(options: {
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  const timeout = Promise.withResolvers<never>()
+  const timer = setTimeout(() => timeout.reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+  try {
+    return await Promise.race([promise, timeout.promise])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 test('rejects a stalled output stream when the command is not rerunnable', async () => {
   let starts = 0
   const child = fakeChild({ stdout: stream([], false) })
@@ -130,4 +140,88 @@ test('returns partial output for a stopped stalled run without retrying it', asy
   expect(result.stdoutText).toBe('partial')
   expect(starts).toBe(1)
   expect(signals).toContain('SIGTERM')
+}, 15_000)
+
+test('stops the deadline once the leader exits so a stall longer than timeoutMs rejects or retries', async () => {
+  let oneShotStarts = 0
+  const oneShotRunner = makeRunner({
+    stallMs: 250,
+    start: () => {
+      oneShotStarts++
+      return fakeChild({ stdout: stream([], false) })
+    }
+  })
+  const oneShotError = await withTimeout(
+    oneShotRunner.run(['/fake/stalled-past-deadline'], { timeoutMs: 80 }).then(
+      () => undefined,
+      (reason: unknown) => reason
+    ),
+    5_000,
+    'non-rerunnable stalled run'
+  )
+  expect(oneShotError).toBeInstanceOf(ProcessStalledError)
+  expect((oneShotError as ProcessStalledError).attempts).toBe(1)
+  expect((oneShotError as Error).message).toBe('/fake/stalled-past-deadline exited but its output did not end')
+  expect(oneShotStarts).toBe(1)
+
+  let firstAttemptStarts = 0
+  const firstAttemptRunner = makeRunner({
+    stallMs: 150,
+    start: () => {
+      firstAttemptStarts++
+      return fakeChild({ stdout: stream([], false) })
+    }
+  })
+  const firstAttemptError = await withTimeout(
+    firstAttemptRunner.run(['/fake/rerunnable-past-deadline'], { rerunnable: true, timeoutMs: 80 }).then(
+      () => undefined,
+      (reason: unknown) => reason
+    ),
+    5_000,
+    'single rerunnable stall past deadline'
+  )
+  expect(firstAttemptError).toBeInstanceOf(ProcessStalledError)
+  expect((firstAttemptError as ProcessStalledError).attempts).toBe(1)
+  expect((firstAttemptError as Error).message).toBe('/fake/rerunnable-past-deadline exited but its output did not end')
+  expect(firstAttemptStarts).toBe(1)
+
+  let secondAttemptStarts = 0
+  const secondAttemptRunner = makeRunner({
+    stallMs: 1_000,
+    start: () => {
+      secondAttemptStarts++
+      return fakeChild({ stdout: stream([], false) })
+    }
+  })
+  const secondAttemptError = await withTimeout(
+    secondAttemptRunner.run(['/fake/two-stalls-past-deadline'], { rerunnable: true, timeoutMs: 1_900 }).then(
+      () => undefined,
+      (reason: unknown) => reason
+    ),
+    5_000,
+    'second rerunnable stall past deadline'
+  )
+  expect(secondAttemptError).toBeInstanceOf(ProcessStalledError)
+  expect((secondAttemptError as ProcessStalledError).attempts).toBe(2)
+  expect(secondAttemptStarts).toBe(2)
+
+  let eventualSuccessStarts = 0
+  const eventualSuccessRunner = makeRunner({
+    stallMs: 150,
+    start: () => {
+      eventualSuccessStarts++
+      return eventualSuccessStarts < 3
+        ? fakeChild({ stdout: stream([], false) })
+        : fakeChild({ stdout: stream([new TextEncoder().encode('ok')]) })
+    }
+  })
+  const result = await withTimeout(
+    eventualSuccessRunner.run(['/fake/three-attempt-success'], { rerunnable: true, timeoutMs: 5_000 }),
+    5_000,
+    'successful rerunnable run'
+  )
+  expect(result.stdoutText).toBe('ok')
+  expect(result.exitCode).toBe(0)
+  expect(result.stopped).toBeUndefined()
+  expect(eventualSuccessStarts).toBe(3)
 }, 15_000)

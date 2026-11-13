@@ -32,15 +32,17 @@ describe('quirky.git methods', () => {
       modified: 'new'
     })
     await call('quirky.git/stage', { worktree: g.main.id, paths: ['a.txt'] })
+    await waitFor(() => events.filter((e) => e.type === 'quirky.git/changed').length >= 1)
     await call('quirky.git/unstage', { worktree: g.main.id, paths: ['a.txt'] })
+    await waitFor(() => events.filter((e) => e.type === 'quirky.git/changed').length >= 2)
     expect(await call('quirky.git/commit', { worktree: g.main.id, message: 'msg' })).toEqual({
       sha: 'c'.repeat(40)
     })
     await waitFor(() => events.filter((e) => e.type === 'quirky.git/changed').length >= 3)
-    expect(events.filter((e) => e.type === 'quirky.git/changed').map((e) => (e as { data: unknown }).data)).toEqual([
-      { worktreeId: g.main.id },
-      { worktreeId: g.main.id },
-      { worktreeId: g.main.id }
+    expect(events.filter((e) => e.type === 'quirky.git/changed')).toEqual([
+      { type: 'quirky.git/changed', data: { worktreeId: g.main.id }, worktreeId: g.main.id },
+      { type: 'quirky.git/changed', data: { worktreeId: g.main.id }, worktreeId: g.main.id },
+      { type: 'quirky.git/changed', data: { worktreeId: g.main.id }, worktreeId: g.main.id }
     ])
     expect(g.git.calls.map((c) => [c.fn, c.args[0]])).toEqual([
       ['statusV2', g.main.path],

@@ -160,7 +160,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
   useEffect(() => {
     void refresh()
   }, [])
-  useRefreshTriggers(context, () => void refresh(), POLL_MS)
+  useRefreshTriggers(context, () => void refresh(), POLL_MS, worktree)
 
   const publish = (view: EditorView) => {
     const found = conflictBlocks(view.state.sliceDoc())

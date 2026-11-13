@@ -1,5 +1,6 @@
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
 import type { DistroManifest } from '@quirky/protocol'
+import { openSqlite } from './sqlite'
 
 type Row = Record<string, any>
 
@@ -48,6 +49,11 @@ export interface RuntimeAuthorityRow {
   ptyCreatedAt: number | null
 }
 
+export interface StoreOptions {
+  /** Lock wait in milliseconds for this connection; defaults to 5000. */
+  busyTimeoutMs?: number
+}
+
 /**
  * SQLite persistence for settings, UI state, requests, confirmations, distro data and hashed runtime authority.
  * The tables v1 wrote (repos, sessions, asks and the rest) stay readable for the legacy importer.
@@ -55,8 +61,19 @@ export interface RuntimeAuthorityRow {
 export class Store {
   private readonly db: Database
 
-  constructor(path: string) {
-    this.db = new Database(path, { create: true })
+  constructor(path: string, options?: StoreOptions) {
+    this.db = openSqlite(path, { busyTimeoutMs: options?.busyTimeoutMs })
+    try {
+      this.setup()
+    } catch (error) {
+      try {
+        this.db.close()
+      } catch {}
+      throw error
+    }
+  }
+
+  private setup(): void {
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec('PRAGMA synchronous = NORMAL')
     this.db.exec(`

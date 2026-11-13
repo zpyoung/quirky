@@ -1,9 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import type { Session } from '@quirky/protocol'
+import type { ProcessRunner, Session, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 import type { StructuredContext, StructuredRunner, StructuredStartOptions, ToolPolicy } from './runner'
 
 const TOOLS_DISABLED = 'tools are disabled for this session'
-const STDERR_TAIL_CHARS = 16 * 1024
+const STDERR_TAIL_BYTES = 16 * 1024
 const MAX_FRAME_BYTES = 256 * 1024 * 1024
 const TERM_GRACE_MS = 2_000
 const SUMMARY_LIMIT = 160
@@ -18,19 +17,13 @@ const DENY_ALL_ARGS = { pi: ['--no-tools', '--no-extensions', '--no-mcp'], omp: 
  * Finds the user's `pi` or `omp` executable the way their terminal would: `command -v` in a login
  * shell, so PATH entries added by shell profiles count. Throws when nothing is found.
  */
-export async function resolvePiThroughLoginShell(shell: string, agent: PiAgent): Promise<string> {
-  const child = spawn(shell, ['-l', '-c', `command -v ${agent}`], { stdio: ['ignore', 'pipe', 'ignore'] })
-  const closed = Promise.withResolvers<number | null>()
-  child.once('error', closed.reject)
-  child.once('close', (code) => closed.resolve(code))
-  const output = (async () => {
-    let text = ''
-    for await (const chunk of child.stdout) text += Buffer.from(chunk).toString('utf8')
-    return text
-  })()
-  const [text, exitCode] = await Promise.all([output, closed.promise])
-  const executable = text.trim().split('\n').at(-1) ?? ''
-  if (exitCode !== 0 || !executable) throw new Error(`could not find the ${agent} executable on the login shell PATH`)
+export async function resolvePiThroughLoginShell(process: ProcessRunner, shell: string, agent: PiAgent): Promise<string> {
+  const result = await process.run([shell, '-l', '-c', `command -v ${agent}`])
+  if (result.spawnError !== undefined) throw new Error(result.spawnError.message)
+  const executable = result.stdoutText.trim().split('\n').at(-1) ?? ''
+  if (result.stopped !== undefined || result.exitCode !== 0 || !executable) {
+    throw new Error(`could not find the ${agent} executable on the login shell PATH`)
+  }
   return executable
 }
 
@@ -80,10 +73,9 @@ type Running = {
   session: Session
   agent: PiAgent
   toolPolicy: ToolPolicy
-  child: ChildProcessWithoutNullStreams
+  child: SpawnedProcess
   frameChunks: Buffer[]
   frameBytes: number
-  stderr: string
   contextWindow: number | null
   lastContextTokens: number | null
   working: boolean
@@ -154,11 +146,17 @@ class PiRunner implements StructuredRunner {
       ...(typeof options.model === 'string' ? ['--model', options.model] : []),
       ...(typeof options.effort === 'string' ? ['--thinking', options.effort] : [])
     ]
-    const child = spawn(executable, args, {
+    const spawner = this.context.process
+    if (!spawner) throw new Error(`no process spawner configured for ${agent}`)
+    const child = spawner.spawn([executable, ...args], {
       cwd: session.cwd,
       env: environmentWithPatch(options.env),
-      stdio: 'pipe',
-      detached: process.platform !== 'win32'
+      timeoutMs: null,
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'tail',
+      stderrTailBytes: STDERR_TAIL_BYTES,
+      killGraceMs: TERM_GRACE_MS
     })
     const closed = Promise.withResolvers<void>()
     const run: Running = {
@@ -168,7 +166,6 @@ class PiRunner implements StructuredRunner {
       child,
       frameChunks: [],
       frameBytes: 0,
-      stderr: '',
       contextWindow: null,
       lastContextTokens: null,
       working: false,
@@ -184,15 +181,7 @@ class PiRunner implements StructuredRunner {
       closed: closed.promise
     }
     this.running.set(session.id, run)
-    child.stdout.on('data', (chunk: Buffer) => this.read(run, chunk))
-    child.stderr.on('data', (chunk: Buffer) => {
-      run.stderr = (run.stderr + chunk.toString('utf8')).slice(-STDERR_TAIL_CHARS)
-    })
-    child.stdin.on('error', () => {})
-    child.once('error', (error) => this.exit(run, closed.resolve, `could not start ${agent}: ${error.message}`))
-    child.once('close', (code, signal) =>
-      this.exit(run, closed.resolve, `${agent} exited${code === null ? ` (${signal})` : ` with code ${code}`}`)
-    )
+    void this.readOutput(run, closed.resolve)
     if (agent === 'pi' || toolPolicy !== 'deny-all') this.write(run, { id: STATE_REQUEST_ID, type: 'get_state' })
     if (prompt === undefined || prompt === '') {
       this.context.setStatus(session.id, 'running')
@@ -229,8 +218,14 @@ class PiRunner implements StructuredRunner {
     run.frameChunks = []
     run.frameBytes = 0
     this.running.delete(sessionId)
-    this.terminate(run)
-    await Promise.race([run.closed, new Promise((resolve) => setTimeout(resolve, TERM_GRACE_MS * 2))])
+    void run.child.stop({ signal: 'SIGTERM', graceMs: TERM_GRACE_MS })
+    const timeout = Promise.withResolvers<void>()
+    const timer = setTimeout(timeout.resolve, TERM_GRACE_MS * 2)
+    try {
+      await Promise.race([run.closed, timeout.promise])
+    } finally {
+      clearTimeout(timer)
+    }
     this.context.setStatus(sessionId, 'exited')
   }
 
@@ -291,30 +286,7 @@ class PiRunner implements StructuredRunner {
 
   private write(run: Running, command: Record<string, unknown>): void {
     if (run.stopped || run.exited) return
-    try {
-      run.child.stdin.write(`${JSON.stringify(command)}\n`)
-    } catch {
-      // the close event reports a dead process
-    }
-  }
-
-  private terminate(run: Running): void {
-    const signal = (name: NodeJS.Signals) => {
-      try {
-        if (process.platform !== 'win32' && run.child.pid !== undefined) process.kill(-run.child.pid, name)
-        else run.child.kill(name)
-      } catch {
-        // already gone
-      }
-    }
-    try {
-      run.child.stdin.end()
-    } catch {
-      // already closed
-    }
-    signal('SIGTERM')
-    const timer = setTimeout(() => signal('SIGKILL'), TERM_GRACE_MS)
-    void run.closed.then(() => clearTimeout(timer))
+    void run.child.write(`${JSON.stringify(command)}\n`)
   }
 
   private clearAbort(run: Running): void {
@@ -322,7 +294,26 @@ class PiRunner implements StructuredRunner {
     run.abortTimer = null
   }
 
-  private exit(run: Running, settle: () => void, reason: string): void {
+  private async readOutput(run: Running, settle: () => void): Promise<void> {
+    const reader = run.child.stdout.getReader()
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        this.read(run, Buffer.from(value.buffer, value.byteOffset, value.byteLength))
+      }
+    } catch {
+      if (!run.stopped && !run.exited) {
+        void run.child.stop({ signal: 'SIGTERM', graceMs: TERM_GRACE_MS })
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    const exit = await run.child.exited
+    this.exit(run, settle, exit)
+  }
+
+  private exit(run: Running, settle: () => void, exit: SpawnExit): void {
     if (run.exited) return
     run.exited = true
     this.clearCheck(run)
@@ -330,7 +321,10 @@ class PiRunner implements StructuredRunner {
     settle()
     if (run.stopped || this.running.get(run.session.id) !== run) return
     this.running.delete(run.session.id)
-    const tail = run.stderr.trim()
+    const reason = exit.spawnError !== undefined
+      ? `could not start ${run.agent}: ${exit.spawnError.message}`
+      : `${run.agent} exited${exit.exitCode === null ? ` (${exit.signal})` : ` with code ${exit.exitCode}`}`
+    const tail = run.child.stderrTail().trim()
     this.context.appendMessage({
       sessionId: run.session.id,
       role: 'system',

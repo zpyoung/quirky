@@ -878,3 +878,110 @@ describe('the conflict card takes the ship bar place', () => {
     unmount()
   })
 })
+
+describe('the caret menu outlives the ship bar it was opened from', () => {
+  const oneFile = compareOf({ entries: [{ path: 'a.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1, ahead: 1 })
+  const behind = (fake: Fake) => {
+    fake.status = statusOf([], { upstreamStatus: up(0, 1) })
+    fake.compare = oneFile
+  }
+  const changed = (fake: Fake) => act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+  const menu = () => q(document.body, '[role="menu"]')
+  const quiet = (element: HTMLElement) => q(element, '[data-git-up-to-date]')
+  const caret = (element: HTMLElement) => byLabel(element, CARET)
+
+  test('button to quiet line keeps the menu and refreshes its entries', async () => {
+    const { fake, element, unmount } = await open(behind)
+    expect(shipButton(element)?.textContent).toBe('Pull 1 commit')
+    await openCaret(element)
+    expect(menuItem('Fast-forward')?.disabled).toBe(false)
+
+    fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
+    await changed(fake)
+    await settle()
+
+    expect(shipButton(element)).toBeNull()
+    expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
+    expect(menu()).not.toBeNull()
+    expect(menuItem('Fast-forward')?.disabled).toBe(true)
+    expect(detailOf('Fast-forward')).toBe('nothing to pull')
+    expect(caret(element)?.getAttribute('aria-expanded')).toBe('true')
+    const before = fake.calls.length
+    await click(menuItem('Fetch'))
+    expect(fake.calls.slice(before).filter((call) => call.method === 'quirky.git/fetch')).toHaveLength(1)
+    expect(menu()).toBeNull()
+    expect(caret(element)?.getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(caret(element))
+    unmount()
+  })
+
+  test('quiet line to button keeps the menu and enables Fast-forward', async () => {
+    const { fake, element, unmount } = await open((f) => { f.compare = oneFile })
+    expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
+    await openCaret(element)
+    expect(detailOf('Fast-forward')).toBe('nothing to pull')
+
+    fake.status = statusOf([], { upstreamStatus: up(0, 1) })
+    await changed(fake)
+    await settle()
+
+    expect(shipButton(element)?.textContent).toBe('Pull 1 commit')
+    expect(menu()).not.toBeNull()
+    expect(menuItem('Fast-forward')?.disabled).toBe(false)
+    expect(caret(element)?.getAttribute('aria-expanded')).toBe('true')
+    unmount()
+  })
+
+  test('the menu survives the bar disappearing and returning, then runs a choice once', async () => {
+    const { fake, element, unmount } = await open(behind)
+    await openCaret(element)
+    fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
+    fake.compare = compareOf()
+    await changed(fake)
+    await settle()
+
+    expect(caret(element)).toBeNull()
+    expect(q(element, '[data-git-ship-bar]')).toBeNull()
+    expect(menu()).not.toBeNull()
+
+    fake.compare = oneFile
+    await changed(fake)
+    await settle()
+
+    expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
+    expect(menu()).not.toBeNull()
+    await click(menuItem('Rebase from origin/main'))
+    expect(fake.called('quirky.git/rebaseFromBase')).toHaveLength(1)
+    expect(menu()).toBeNull()
+    expect(caret(element)?.getAttribute('aria-expanded')).toBe('false')
+    unmount()
+  })
+
+  test('Escape focuses the caret shown now, not the detached opening caret', async () => {
+    const { fake, element, unmount } = await open(behind)
+    const openingCaret = caret(element)
+    await openCaret(element)
+    fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
+    await changed(fake)
+    await settle()
+
+    expect(caret(element)).not.toBe(openingCaret)
+    await press(menu()!, 'Escape')
+    expect(menu()).toBeNull()
+    expect(document.activeElement).toBe(caret(element))
+    unmount()
+  })
+
+  test('a merge operation closes the menu with the ship bar', async () => {
+    const { fake, element, unmount } = await open(behind)
+    await openCaret(element)
+    expect(menu()).not.toBeNull()
+    fake.status = statusOf([], { operation: 'merge', upstreamStatus: up(0, 1) })
+    await changed(fake)
+    await settle()
+
+    expect(q(element, '[data-git-ship-bar]')).toBeNull()
+    expect(menu()).toBeNull()
+    unmount()
+  })
+})

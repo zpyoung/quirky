@@ -87,12 +87,15 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
   }, [context, kind])
   useEffect(() => {
     void refresh()
-    const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() })
+    const options = kind === 'checks'
+      ? (layoutWorktree === null ? undefined : { worktreeId: layoutWorktree })
+      : { worktreeId: null }
+    const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() }, options)
     const offConnection = context.onConnection((status) => {
       if (status === 'connected') { request.current++; setState(null); void refresh() }
     })
     return () => { request.current++; offEvent(); offConnection() }
-  }, [context, refresh, layoutWorktree])
+  }, [context, refresh, kind, layoutWorktree])
   useEffect(() => { if (state && report) report(surfaceSummary(kind, state, error !== null)) }, [state, kind, report, error])
   const fail = (failure: unknown) => context.toast('Reviews', failure instanceof Error ? failure.message : 'The action failed.', { kind: 'error' })
   return <section className="ui-stack" data-review-surface={kind} style={{ height: '100%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}>

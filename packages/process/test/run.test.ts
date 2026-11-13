@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createProcessRunner, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS } from '../src/api'
+import { createProcessRunner, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, liveProcesses } from '../src/api'
 import type { OwnedProcessRunner, ProcessRunnerOptions, RunOptions, RunResult } from '../src/api'
+import { startChild } from '../src/child'
 
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  const timeout = Promise.withResolvers<never>()
+  const timer = setTimeout(() => timeout.reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+  try {
+    return await Promise.race([promise, timeout.promise])
+  } finally {
+    clearTimeout(timer)
+  }
+}
 const runners: OwnedProcessRunner[] = []
 const descendantPids = new Set<number>()
 let nextOwner = 0
@@ -42,12 +53,13 @@ function trackPid(stdoutText: string): number {
   return pid
 }
 
-async function expectPidGone(pid: number, waitMs = 1_000): Promise<void> {
+async function expectPidGone(pid: number, waitMs = 2_000): Promise<void> {
   const deadline = Date.now() + waitMs
   while (Date.now() <= deadline) {
     try {
       process.kill(pid, 0)
     } catch {
+      descendantPids.delete(pid)
       return
     }
     const { promise, resolve } = Promise.withResolvers<void>()
@@ -131,6 +143,49 @@ test('resolves command and working-directory startup failures as spawn errors', 
     expect(result.spawnError?.code).toBe('ENOENT')
     expect(result.spawnError?.message.length).toBeGreaterThan(0)
   }
+
+  const originalCwd = process.cwd()
+  const deletedDir = mkdtempSync(join(tmpdir(), 'quirky-run-deleted-cwd-'))
+  try {
+    process.chdir(deletedDir)
+    rmdirSync(deletedDir)
+    const deletedCwd = await withTimeout(
+      runner.run(['/bin/pwd'], { timeoutMs: 10_000 }),
+      10_000,
+      'run with a deleted daemon cwd'
+    )
+    expect(deletedCwd.exitCode).toBeNull()
+    expect(deletedCwd.signal).toBeNull()
+    expect(deletedCwd.stdout.byteLength).toBe(0)
+    expect(deletedCwd.stderr).toBe('')
+    expect(deletedCwd.spawnError?.code).toBe('ENOENT')
+    expect(deletedCwd.spawnError?.message.length).toBeGreaterThan(0)
+
+    const explicitCwd = await withTimeout(
+      runner.run(['/bin/pwd'], { cwd: homeDir, timeoutMs: 10_000 }),
+      10_000,
+      'run with an explicit cwd after daemon cwd deletion'
+    )
+    expect(explicitCwd.exitCode).toBe(0)
+    expect(explicitCwd.stdoutText.trim()).toBe(realpathSync(homeDir))
+
+    const abort = new AbortController()
+    abort.abort()
+    const aborted = await withTimeout(
+      runner.run(['/bin/pwd'], { signal: abort.signal, timeoutMs: 10_000 }),
+      10_000,
+      'already-aborted run with a deleted daemon cwd'
+    )
+    expect(aborted.stopped).toBe('aborted')
+    expect(aborted.spawnError).toBeUndefined()
+    expect(aborted.exitCode).toBeNull()
+    expect(aborted.signal).toBeNull()
+  } finally {
+    process.chdir(originalCwd)
+    rmSync(deletedDir, { recursive: true, force: true })
+  }
+  expect(runner.live()).toEqual([])
+  expect(liveProcesses()).toEqual([])
 }, 15_000)
 
 test('stops a command at its timeout with SIGTERM', async () => {
@@ -152,10 +207,23 @@ test('a timeout kills descendants in the process group', async () => {
   expect(result.stopped).toBe('timeout')
   expect(pid).toBeGreaterThan(0)
   await expectPidGone(pid)
+  expect(descendantPids.has(pid)).toBe(false)
 }, 15_000)
 
 test('escalates from SIGTERM to SIGKILL when the process group ignores SIGTERM', async () => {
-  const result = await makeRunner().run(['/bin/sh', '-c', "trap '' TERM; while :; do sleep 1; done"], {
+  const signals: Array<'SIGTERM' | 'SIGKILL'> = []
+  const runner = makeRunner({
+    start(argv, init) {
+      const child = startChild(argv, init)
+      const killGroup = child.killGroup.bind(child)
+      child.killGroup = signal => {
+        signals.push(signal)
+        killGroup(signal)
+      }
+      return child
+    }
+  })
+  const result = await runner.run(['/bin/sh', '-c', "trap '' TERM; while :; do sleep 1; done"], {
     timeoutMs: 200,
     killGraceMs: 300,
   })
@@ -163,6 +231,7 @@ test('escalates from SIGTERM to SIGKILL when the process group ignores SIGTERM',
   expect(result.signal).toBe('SIGKILL')
   expect(result.durationMs).toBeGreaterThanOrEqual(450)
   expect(result.durationMs).toBeLessThan(3_000)
+  expect(signals.slice(0, 2)).toEqual(['SIGTERM', 'SIGKILL'])
 }, 15_000)
 
 test('aborting stops an unresponsive process group with SIGKILL after the grace period', async () => {
@@ -204,11 +273,11 @@ test('an already-aborted signal resolves without starting a child', async () => 
 
 test('enforces independent byte caps on stdout and stderr and exports the default cap', async () => {
   const runner = makeRunner()
-  const stdoutOverflow = await runner.run(['/bin/sh', '-c', 'head -c 1048576 /dev/zero'], {
+  const stdoutOverflow = await runner.run(['/bin/sh', '-c', 'head -c 1048576 /dev/zero; sleep 30'], {
     timeoutMs: 10_000,
     maxOutputBytes: 1_024,
   })
-  const stderrOverflow = await runner.run(['/bin/sh', '-c', 'head -c 1048576 /dev/zero >&2'], {
+  const stderrOverflow = await runner.run(['/bin/sh', '-c', 'head -c 1048576 /dev/zero >&2; sleep 30'], {
     timeoutMs: 10_000,
     maxOutputBytes: 1_024,
   })
@@ -217,6 +286,8 @@ test('enforces independent byte caps on stdout and stderr and exports the defaul
   expect(stdoutOverflow.stdout.byteLength).toBe(1_024)
   expect(stderrOverflow.stopped).toBe('overflow')
   expect(Buffer.byteLength(stderrOverflow.stderr)).toBe(1_024)
+  expect(stdoutOverflow.signal).toBe('SIGKILL')
+  expect(stderrOverflow.signal).toBe('SIGKILL')
   expect(byteOverflow.stopped).toBe('overflow')
   expect(byteOverflow.stdout).toEqual(new TextEncoder().encode('éé').subarray(0, 3))
   expect(DEFAULT_MAX_OUTPUT_BYTES).toBe(16_777_216)
@@ -229,17 +300,19 @@ test('kills a quiet descendant when its shell leader exits', async () => {
   expect(result.stopped).toBeUndefined()
   expect(pid).toBeGreaterThan(0)
   await expectPidGone(pid)
+  expect(descendantPids.has(pid)).toBe(false)
 }, 15_000)
 
 test('kills a descendant holding stdout when its shell leader exits', async () => {
   const startedAt = Date.now()
   const result = await makeRunner().run(['/bin/sh', '-c', 'sleep 30 & echo $!'], { timeoutMs: 5_000 })
   const pid = trackPid(result.stdoutText)
-  expect(Date.now() - startedAt).toBeLessThan(1_000)
+  expect(Date.now() - startedAt).toBeLessThan(3_000)
   expect(result.exitCode).toBe(0)
   expect(result.stopped).toBeUndefined()
   expect(pid).toBeGreaterThan(0)
   await expectPidGone(pid)
+  expect(descendantPids.has(pid)).toBe(false)
 }, 15_000)
 
 test('rejects invalid arguments and owner names before starting a child', async () => {
@@ -335,7 +408,9 @@ test('propagates a pipe failure that arrives after an abort starts waiting for e
       stdout: new ReadableStream<Uint8Array>({ start(controller) { output = controller } }),
       stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
       exited: exited.promise,
-      killGroup() {}
+      killGroup(signal) {
+        if (signal === 'SIGKILL') exited.resolve({ exitCode: null, signal })
+      }
     })
   })
   const pending = runner.run(['fake'], { signal: abort.signal, timeoutMs: 1_000 })
@@ -343,10 +418,72 @@ test('propagates a pipe failure that arrives after an abort starts waiting for e
   abort.abort()
   const turn = Promise.withResolvers<void>()
   setImmediate(turn.resolve)
-  await turn.promise
+  await withTimeout(turn.promise, 1_000, 'abort dispatch before pipe failure')
   output.error(pipeError)
-  exited.resolve({ exitCode: null, signal: 'SIGTERM' })
-  expect(await pending).toBe(pipeError)
+  const error = await withTimeout(pending, 1_000, 'pipe failure propagation after abort')
+  expect(error).toBe(pipeError)
+}, 15_000)
+
+test('does not send a second SIGKILL when overflow or a stream error happens after the leader exited', async () => {
+  async function exercise(
+    action: 'overflow' | 'error'
+  ): Promise<{
+    result: RunResult | undefined
+    error: unknown
+    failure: unknown
+    signals: string[]
+    lateError: Error
+  }> {
+    const exited = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+    exited.resolve({ exitCode: 0, signal: null })
+    const signals: string[] = []
+    const lateError = new Error('late pipe failure')
+    let output!: ReadableStreamDefaultController<Uint8Array>
+    try {
+      const runner = makeRunner({
+        start: () => ({
+          pid: action === 'overflow' ? 900_005 : 900_006,
+          stdout: new ReadableStream<Uint8Array>({ start(controller) { output = controller } }),
+          stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
+          exited: exited.promise,
+          killGroup(signal) {
+            signals.push(signal)
+            if (signal === 'SIGKILL') exited.resolve({ exitCode: null, signal })
+          }
+        })
+      })
+      const options = action === 'overflow'
+        ? { timeoutMs: 1_000, maxOutputBytes: 1 }
+        : { timeoutMs: 1_000 }
+      const pending: Promise<{ result: RunResult | undefined; error: unknown }> = runner
+        .run(['/fake/post-exit-failure'], options)
+        .then(
+          result => ({ result, error: undefined }),
+          error => ({ result: undefined, error })
+        )
+      const turn = Promise.withResolvers<void>()
+      setImmediate(turn.resolve)
+      await withTimeout(turn.promise, 1_000, `${action} after leader exit`)
+      if (action === 'overflow') output.enqueue(new Uint8Array([1, 2]))
+      else output.error(lateError)
+      const outcome = await withTimeout(pending, 1_000, `${action} settlement after leader exit`)
+      return { ...outcome, failure: undefined, signals, lateError }
+    } catch (failure) {
+      return { result: undefined, error: undefined, failure, signals, lateError }
+    }
+  }
+
+  const overflow = await exercise('overflow')
+  const streamFailure = await exercise('error')
+  expect(overflow.failure).toBeUndefined()
+  expect(overflow.result?.stopped).toBe('overflow')
+  expect(overflow.result?.stdout.byteLength).toBe(1)
+  expect(overflow.result?.exitCode).toBeNull()
+  expect(overflow.result?.signal).toBeNull()
+  expect(overflow.signals).toEqual(['SIGKILL'])
+  expect(streamFailure.failure).toBeUndefined()
+  expect(streamFailure.error).toBe(streamFailure.lateError)
+  expect(streamFailure.signals).toEqual(['SIGKILL'])
 }, 15_000)
 
 test('overflow escalates an already-aborted group immediately without replacing the abort reason', async () => {

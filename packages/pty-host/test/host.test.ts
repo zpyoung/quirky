@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { isatty } from 'node:tty'
 import { base64ToBytes, PTY_PROTOCOL_VERSION, type PtyEvent } from '@quirky/protocol'
 import { PtyClient } from '../src/client'
 import { readSegments } from '../src/history/log'
+import { SocketWriter } from '../src/writer'
 import { concat, runCleanups, startHost, text, waitFor, type TestHost } from './helpers'
 
 // Process-scope startup and cleanup can each outlast Bun's 5 s default under suite load.
@@ -274,6 +275,312 @@ describe('subscribe', () => {
     expect(sub.offset).toBe(3)
     expect(sub.live).toBe(false)
   })
+})
+
+type QueuedConnection = {
+  socket: Bun.Socket<QueuedConnection>
+  writer: SocketWriter
+  holding: Map<string, Uint8Array[]>
+  heldBytes: number
+  closed: boolean
+  sink: (sessionId: string, bytes: Uint8Array) => void
+}
+
+async function queuedClient(host: TestHost) {
+  let connection: QueuedConnection | undefined
+  const send = SocketWriter.prototype.send
+  const capture = spyOn(SocketWriter.prototype, 'send').mockImplementation(function (this: SocketWriter, ...args) {
+    // the native socket carries the server's connection state; the writer keeps it private
+    const owner = this as unknown as { socket: Bun.Socket<QueuedConnection> }
+    connection = owner.socket.data
+    return send.apply(this, args)
+  })
+  try {
+    const client = await host.connect()
+    return { client, conn: connection! }
+  } finally {
+    capture.mockRestore()
+  }
+}
+
+describe('connection output queues', () => {
+  test('repeated subscribe holds release their bytes and preserve ordered live output', async () => {
+    const cap = 1024
+    const host = startHost({ maxConnectionQueuedBytes: cap })
+    const { client, conn } = await queuedClient(host)
+    await client.request('create', createParams('A', ['/bin/cat']))
+    const out = collect(client, 'A')
+    const expected: string[] = []
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const result = await subscribe(...args)
+      const frame = `${expected.length}:`.padEnd(400, '.')
+      expected.push(frame)
+      args[1]('A', new TextEncoder().encode(frame))
+      return result
+    })
+    try {
+      for (let round = 0; round < 16; round++) {
+        await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+        await waitFor(() => out.frames() >= round + 1, 2000, `subscribe round ${round} to flush`)
+        expect(conn.holding.size).toBe(0)
+        expect(conn.heldBytes).toBe(0)
+        expect(conn.closed).toBe(false)
+        expect(client.closed).toBe(false)
+        expect(out.frames()).toBe(round + 1)
+        expect(out.text()).toBe(expected.join(''))
+      }
+      const final = 'live-after-rounds:'.padEnd(cap - 8, '.')
+      conn.sink('A', new TextEncoder().encode(final))
+      await waitFor(() => out.frames() >= 17, 2000, 'live output after repeated holds')
+      expect(out.frames()).toBe(17)
+      expect(out.text()).toBe(expected.join('') + final)
+      expect(conn.closed).toBe(false)
+      expect(client.closed).toBe(false)
+    } finally {
+      hook.mockRestore()
+    }
+  })
+
+  test('overlapping subscribes keep the latest hold and release superseded bytes', async () => {
+    const cap = 2048
+    const host = startHost({ maxConnectionQueuedBytes: cap })
+    const control = await host.connect()
+    await control.request('create', createParams('A', sh("stty -echo; printf 'READY\\n'; exec cat")))
+    await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\n'.length)
+    const { client, conn } = await queuedClient(host)
+    const out = collect(client, 'A')
+    const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+    const taken = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    let calls = 0
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const index = calls++
+      const result = await subscribe(...args)
+      taken[index].resolve()
+      await gates[index].promise
+      return result
+    })
+    const timerFinished = Promise.withResolvers<void>()
+    const schedule = globalThis.setTimeout
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(new Proxy(schedule, {
+      apply(target, receiver, parameters) {
+        const [callback, delay, ...args] = parameters
+        if (delay !== 0 || typeof callback !== 'function') return Reflect.apply(target, receiver, parameters)
+        return Reflect.apply(target, receiver, [() => {
+          callback(...args)
+          timerFinished.resolve()
+        }, delay])
+      }
+    }))
+    try {
+      const first = client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      void first.catch(() => {})
+      await taken[0].promise
+      control.sendInput('A', new TextEncoder().encode('between\n'))
+      await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\nbetween\r\n'.length)
+      expect(conn.heldBytes).toBeGreaterThan(0)
+      expect(out.text()).toBe('')
+
+      const second = client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      void second.catch(() => {})
+      await taken[1].promise
+      control.sendInput('A', new TextEncoder().encode('after\n'))
+      await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\nbetween\r\nafter\r\n'.length)
+      expect(out.text()).toBe('')
+      // equal-deadline timers need not run FIFO, so observe the old timer before releasing the latest reply
+      gates[0].resolve()
+      const earlier = await first
+      await timerFinished.promise
+      timer.mockRestore()
+      expect(conn.holding.has('A')).toBe(true)
+      expect(out.text()).toBe('')
+      gates[1].resolve()
+      const latest = await second
+      expect(text(base64ToBytes(earlier.replay))).toBe('READY\r\n')
+      expect(text(base64ToBytes(latest.replay))).toBe('READY\r\nbetween\r\n')
+      await waitFor(() => out.all().length >= 'after\r\n'.length, 2000, 'latest subscribe hold to flush')
+      expect(text(base64ToBytes(latest.replay)) + out.text()).toBe('READY\r\nbetween\r\nafter\r\n')
+      expect(conn.heldBytes).toBe(0)
+      expect(conn.holding.size).toBe(0)
+
+      const burst = 'live-after-overlap:'.padEnd(cap - 8, '.')
+      conn.sink('A', new TextEncoder().encode(burst))
+      await waitFor(() => out.all().length >= 'after\r\n'.length + burst.length, 2000, 'near-cap live burst')
+      expect(out.text()).toBe('after\r\n' + burst)
+      expect(conn.closed).toBe(false)
+      expect(client.closed).toBe(false)
+    } finally {
+      for (const gate of gates) gate.resolve()
+      timer.mockRestore()
+      hook.mockRestore()
+    }
+  })
+
+  test('live overflow drops the sink once and clears bytes before the peer closes', async () => {
+    const host = startHost({ maxConnectionQueuedBytes: 1024 })
+    const control = await host.connect()
+    await control.request('create', createParams('A', ['/bin/cat']))
+    const { client, conn } = await queuedClient(host)
+    await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+    await waitFor(() => conn.holding.size === 0)
+    const blocked = spyOn(conn.socket, 'write').mockReturnValue(0)
+    const end = spyOn(conn.socket, 'end').mockImplementation(() => 0)
+    const drop = spyOn(host.server.manager, 'dropSink')
+    try {
+      conn.sink('A', new Uint8Array(700))
+      const flushed = conn.writer.flushed()
+      conn.sink('A', new Uint8Array(700))
+      expect(conn.closed).toBe(true)
+      expect(conn.writer.queuedBytes).toBe(0)
+      expect(conn.heldBytes).toBe(0)
+      expect(conn.holding.size).toBe(0)
+      expect(host.server.manager.subscriberCount('A')).toBe(0)
+      expect(drop).toHaveBeenCalledTimes(1)
+      expect(end).toHaveBeenCalledTimes(1)
+      conn.sink('A', new Uint8Array(700))
+      expect(end).toHaveBeenCalledTimes(1)
+      await flushed
+      expect((await control.request('list', {}))[0].sessionId).toBe('A')
+    } finally {
+      blocked.mockRestore()
+      end.mockRestore()
+      drop.mockRestore()
+    }
+  })
+
+  test('subscribe-held output shares the cap and cannot flush after sever', async () => {
+    const host = startHost({ maxConnectionQueuedBytes: 1024 })
+    const { client, conn } = await queuedClient(host)
+    await client.request('create', createParams('A', ['/bin/cat']))
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const result = await subscribe(...args)
+      args[1]('A', new Uint8Array(700))
+      args[1]('A', new Uint8Array(700))
+      return result
+    })
+    try {
+      const response = client.request('subscribe', { sessionId: 'A', mode: 'raw' }).catch(() => null)
+      await waitFor(() => conn.closed, 2000, 'held overflow')
+      await response
+      expect(conn.holding.size).toBe(0)
+      expect(conn.heldBytes).toBe(0)
+      expect(conn.writer.queuedBytes).toBe(0)
+      expect(host.server.manager.subscriberCount('A')).toBe(0)
+    } finally {
+      hook.mockRestore()
+    }
+  })
+
+  test('a JSON reply exceeding the shared queue cap severs and clears the connection', async () => {
+    const host = startHost({ maxConnectionQueuedBytes: 1024 })
+    const { client, conn } = await queuedClient(host)
+    await client.request('create', createParams('A', ['/bin/cat']))
+    await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+    await waitFor(() => conn.holding.size === 0)
+    const blocked = spyOn(conn.socket, 'write').mockReturnValue(0)
+    try {
+      conn.sink('A', new Uint8Array(950))
+      const response = client.request('list', {}).catch(() => null)
+      await waitFor(() => conn.closed, 2000, 'JSON overflow')
+      expect(conn.writer.queuedBytes).toBe(0)
+      expect(host.server.manager.subscriberCount('A')).toBe(0)
+      blocked.mockRestore()
+      await response
+    } finally {
+      blocked.mockRestore()
+    }
+  })
+
+  test('unsubscribe cancels held subscribe output before its deferred flush', async () => {
+    const host = startHost()
+    const { client, conn } = await queuedClient(host)
+    await client.request('create', createParams('A', ['/bin/cat']))
+    const subscribe = host.server.manager.subscribe.bind(host.server.manager)
+    const { promise: gate, resolve: release } = Promise.withResolvers<void>()
+    const hook = spyOn(host.server.manager, 'subscribe').mockImplementation(async (...args) => {
+      const result = await subscribe(...args)
+      args[1]('A', new TextEncoder().encode('stale'))
+      await gate
+      return result
+    })
+    const out = collect(client, 'A')
+    const response = client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+    void response.catch(() => {})
+    try {
+      await waitFor(() => conn.holding.get('A')?.length)
+      await client.request('unsubscribe', { sessionId: 'A' })
+      expect(conn.holding.has('A')).toBe(false)
+      expect(conn.heldBytes).toBe(0)
+      release()
+      await response
+      await client.request('list', {})
+      expect(out.text()).toBe('')
+    } finally {
+      release()
+      hook.mockRestore()
+    }
+  })
+
+  for (const operation of ['unsubscribe', 'forget', 'stopWithHistory', 'kill', 'bare kill', 'killed SIGINT', 'SIGTERM', 'SIGKILL', 'TERM', 'KILL', 'SIGUSR1'] as const) {
+    test(`${operation} reclaims only eligible session frames without breaking framing`, async () => {
+      const host = startHost()
+      const control = await host.connect()
+      await control.request('create', createParams('A', sh("trap '' USR1; printf READY; exec cat")))
+      await control.request('create', createParams('B', ['/bin/cat']))
+      await waitFor(() => host.server.manager.list().find((s) => s.sessionId === 'A')!.offset > 0)
+      const { client, conn } = await queuedClient(host)
+      const a = collect(client, 'A')
+      const b = collect(client, 'B')
+      await client.request('subscribe', { sessionId: 'A', mode: 'raw' })
+      await client.request('subscribe', { sessionId: 'B', mode: 'raw' })
+      await waitFor(() => conn.holding.size === 0)
+      const write = conn.socket.write.bind(conn.socket)
+      let first = true
+      const blocked = spyOn(conn.socket, 'write').mockImplementation((bytes) => {
+        if (!first) return 0
+        first = false
+        return write((bytes as Uint8Array).subarray(0, 7))
+      })
+      try {
+        conn.sink('A', new TextEncoder().encode('started'))
+        conn.sink('A', new TextEncoder().encode('unstarted'))
+        conn.sink('B', new TextEncoder().encode('other-session'))
+        const request = operation === 'unsubscribe'
+          ? client.request('unsubscribe', { sessionId: 'A' })
+          : operation === 'kill'
+            ? control.request('kill', { sessionId: 'A', reason: 'killed' })
+            : operation === 'bare kill'
+              ? control.request('kill', { sessionId: 'A' })
+              : operation === 'killed SIGINT'
+                ? control.request('kill', { sessionId: 'A', signal: 'SIGINT', reason: 'killed' })
+                : operation === 'SIGTERM' || operation === 'SIGKILL' || operation === 'TERM' || operation === 'KILL' || operation === 'SIGUSR1'
+                  ? control.request('kill', { sessionId: 'A', signal: operation })
+                  : control.request(operation, { sessionId: 'A' })
+        void request.catch(() => {})
+        if (operation === 'unsubscribe') {
+          await waitFor(() => host.server.manager.subscriberCount('A') === 0)
+        } else {
+          await request
+        }
+        if (operation === 'SIGUSR1') {
+          expect(conn.writer.queuedForTag('A')).toBeGreaterThan(0)
+        } else {
+          expect(conn.writer.queuedForTag('A')).toBe(0)
+        }
+        expect(conn.writer.queuedForTag('B')).toBeGreaterThan(0)
+        blocked.mockRestore()
+        conn.writer.drain()
+        await request
+        await waitFor(() => b.text() === 'other-session')
+        expect(a.text()).toBe(operation === 'SIGUSR1' ? 'startedunstarted' : 'started')
+        expect(await client.request('list', {})).toBeArray()
+      } finally {
+        blocked.mockRestore()
+      }
+    })
+  }
 })
 
 describe('terminal queries', () => {

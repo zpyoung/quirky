@@ -1,6 +1,6 @@
 {
   "id": "quirky.vault",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.3.0",
   "name": "Agent Session History",
   "version": "0.1.0",
   "description": "Browse agent-owned sessions and opt in to local transcript search.",
@@ -1048,6 +1048,7 @@
       },
       {
         "id": "searchStatus",
+        "coalesce": [],
         "data": { "type": "object" }
       },
       {

@@ -456,9 +456,11 @@ describe('quirky.accounts daemon API acceptance', () => {
     })
     expect(live).toMatchObject({ accountId: idA, session: { usedPercent: 33 }, weekly: { usedPercent: 12 }, usageMetadata: { source: 'live-session' } })
 
+    await Bun.sleep(600)
     const eventCount = h.events.filter((event) => event.type === 'quirky.accounts/usageChanged').length
     expect((await postStatusline()).status).toBe(200)
     await call<UsageState>(h, 'quirky.accounts/usage')
+    await Bun.sleep(600)
     expect(h.events.filter((event) => event.type === 'quirky.accounts/usageChanged').length).toBe(eventCount)
 
     await call(h, 'quirky.accounts/select', { provider: 'claude', accountId: idB })

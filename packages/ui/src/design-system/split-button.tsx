@@ -6,22 +6,26 @@ import { ControlIcon } from './tool-icons'
 import { Button, IconButton } from './primitives'
 
 /**
- * A primary action with a caret that lists the alternatives. Items the caller marks
- * `enabled: false` stay visible with their `detail` reason. Choosing an item or pressing Escape
- * closes the menu and returns focus to the caret.
+ * A primary action with a caret menu. The caller may own that menu's lifecycle with `onOpenMenu`.
+ * Items marked `enabled: false` stay visible with their `detail` reason. Internal menu choices
+ * and Escape close the menu and return focus to the caret.
  */
-export function SplitButton({ label, onClick, disabled, busy, title, menuLabel, items, onChoose }: SplitButtonProps) {
+export function SplitButton({ label, onClick, disabled, busy, title, menuLabel, items, onChoose, onOpenMenu, menuOpen }: SplitButtonProps) {
   const caret = useRef<HTMLButtonElement>(null)
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
 
   const open = () => {
+    if (busy) return
     const rect = caret.current?.getBoundingClientRect()
-    if (rect) setAnchor({ x: rect.right, y: rect.bottom })
+    if (!rect) return
+    const position = { x: rect.right, y: rect.bottom }
+    if (onOpenMenu) onOpenMenu(position)
+    else setAnchor(position)
   }
   const withChoose = (list: ContextMenuItem[]): ContextMenuItem[] =>
     list.map((item) => {
       if (item.submenu) return { ...item, submenu: withChoose(item.submenu) }
-      if (item.id === undefined) return item
+      if (item.id === undefined || onChoose === undefined) return item
       return {
         ...item,
         onSelect: () => {
@@ -30,7 +34,7 @@ export function SplitButton({ label, onClick, disabled, busy, title, menuLabel, 
         },
       }
     })
-  const menuItems = withChoose(items)
+  const menuItems = items && !onOpenMenu ? withChoose(items) : []
 
   return (
     <span className="ui-split-button">
@@ -50,13 +54,13 @@ export function SplitButton({ label, onClick, disabled, busy, title, menuLabel, 
         label={menuLabel}
         className="ui-split-button__caret"
         aria-haspopup="menu"
-        aria-expanded={anchor !== null}
+        aria-expanded={onOpenMenu ? menuOpen === true : anchor !== null}
         disabled={busy}
         onClick={open}
       >
         <ControlIcon name="caret-down" />
       </IconButton>
-      {anchor && (
+      {!onOpenMenu && anchor && (
         <ContextMenu
           items={menuItems}
           label={menuLabel}

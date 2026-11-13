@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Approval, HandoffInput, LateAnswer, Level, NeedKind, NeedAction, WorktreeState } from '../src/contracts'
+import type { RunOptions, RunResult } from '@quirky/protocol'
 import { register } from '../src/handoff'
+import { claudeVersionAtLeast } from '../src/hooks/install'
 import { makeTestApp, type FakeCalls } from './support'
 
 type Wt = Record<string, unknown>
@@ -18,6 +20,40 @@ const pathOf = (name: string) => {
 
 const wt = (id: string, extra: Wt = {}): Wt => ({ id, name: id, repoId: 'repo-1', path: pathOf(id), kind: 'git', ...extra })
 const session = (id: string, worktreeId: string, extra: Sess = {}): Sess => ({ id, kind: 'terminal', agent: 'claude', worktreeId, status: 'running', createdAt: 1, lastActivityAt: 2, exitCode: null, ...extra })
+function runResult(stdoutText: string, overrides: Partial<RunResult> = {}): RunResult {
+  return {
+    stdout: new TextEncoder().encode(stdoutText),
+    stdoutText,
+    stderr: '',
+    exitCode: 0,
+    signal: null,
+    durationMs: 0,
+    ...overrides
+  }
+}
+
+async function withClaudeCommand(stdoutText: string | null, run: () => Promise<void>): Promise<void> {
+  const directory = mkdtempSync(join(tmpdir(), 'avatar-claude-command-'))
+  const previousQuirkyHome = process.env.QUIRKY_HOME
+  const previousPath = process.env.PATH
+  try {
+    if (stdoutText !== null) {
+      const executable = join(directory, 'claude')
+      writeFileSync(executable, `#!/bin/sh\nprintf '%s\\n' '${stdoutText}'\n`)
+      chmodSync(executable, 0o755)
+    }
+    process.env.QUIRKY_HOME = directory
+    process.env.PATH = directory
+    await run()
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH
+    else process.env.PATH = previousPath
+    if (previousQuirkyHome === undefined) delete process.env.QUIRKY_HOME
+    else process.env.QUIRKY_HOME = previousQuirkyHome
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
 
 const input = (worktreeId: string, extra: Partial<HandoffInput> = {}): HandoffInput => ({
   worktreeId,
@@ -33,7 +69,16 @@ const input = (worktreeId: string, extra: Partial<HandoffInput> = {}): HandoffIn
   ...extra
 })
 
-type Options = { worktrees?: Wt[]; sessions?: Sess[]; heimdall?: unknown[]; claudeVersion?: string | null; calls?: FakeCalls; settings?: Record<string, unknown> }
+type Options = {
+  worktrees?: Wt[]
+  sessions?: Sess[]
+  heimdall?: unknown[]
+  claudeVersion?: string | null
+  useDefaultClaudeVersion?: boolean
+  runProcess?: (argv: readonly string[], options?: RunOptions) => Promise<RunResult> | RunResult
+  calls?: FakeCalls
+  settings?: Record<string, unknown>
+}
 
 function setup(options: Options = {}) {
   const worktrees = options.worktrees ?? [wt('wt-1'), wt('wt-2')]
@@ -41,6 +86,7 @@ function setup(options: Options = {}) {
   const sent: { session: string; text: string }[] = []
   const t = makeTestApp({
     settings: options.settings,
+    runProcess: options.runProcess,
     fakeCalls: {
       'quirky.worktree/list': () => worktrees,
       'quirky.repo/list': () => [{ id: 'repo-1', name: 'quirky', displayName: null, groupId: 'grp-1' }, { id: 'repo-2', name: 'solo', displayName: 'Solo', groupId: null }],
@@ -87,7 +133,9 @@ function setup(options: Options = {}) {
     return 0
   }
   const version = options.claudeVersion === undefined ? '2.1.300' : options.claudeVersion
-  const dispose = register(t.app, { claudeVersion: async () => version })
+  const dispose = options.useDefaultClaudeVersion
+    ? register(t.app)
+    : register(t.app, { claudeVersion: async () => version })
   return { ...t, worktrees, sessions, sent, gate, sup, wakes: () => wakes, cancelled, dispose: dispose as () => void, svc: t.app.services.handoff }
 }
 
@@ -228,6 +276,53 @@ describe('eligibility', () => {
     for (const claudeVersion of ['2.1.295 (Claude Code)', '3.0.0', null]) {
       const s = setup({ worktrees: [wt('a')], sessions: [session('s1', 'a')], claudeVersion })
       expect((await s.svc.eligibility())[0]).toMatchObject({ eligible: true, reason: null })
+    }
+  })
+
+  test('uses the default process version probe, caches it, and preserves known-version eligibility', async () => {
+    for (const [version, expected] of [
+      ['2.1.300', { eligible: true, reason: null }],
+      ['2.1.294', { eligible: false, reason: 'Claude is too old to fail closed; update Claude' }]
+    ] as const) {
+      await withClaudeCommand(`Claude Code ${version}`, async () => {
+        const s = setup({
+          worktrees: [wt('wt-1')],
+          sessions: [session('s1', 'wt-1')],
+          useDefaultClaudeVersion: true,
+          runProcess: () => runResult(`Claude Code ${version}`)
+        })
+        try {
+          expect((await s.svc.eligibility())[0]).toMatchObject(expected)
+          expect((await s.svc.eligibility())[0]).toMatchObject(expected)
+          expect(s.processRuns).toEqual([{ argv: ['claude', '--version'], options: { timeoutMs: 5_000 } }])
+        } finally {
+          s.dispose()
+        }
+      })
+    }
+  })
+
+  test('keeps unreadable default probes eligible while the gate still rejects an unknown version', async () => {
+    expect(claudeVersionAtLeast(null)).toBe(false)
+    for (const runResultValue of [
+      runResult('', { exitCode: null, stopped: 'timeout' }),
+      runResult('', { exitCode: null, spawnError: { code: 'ENOENT', message: 'claude not found' } })
+    ]) {
+      await withClaudeCommand(null, async () => {
+        const s = setup({
+          worktrees: [wt('wt-1')],
+          sessions: [session('s1', 'wt-1')],
+          useDefaultClaudeVersion: true,
+          runProcess: () => runResultValue
+        })
+        try {
+          expect((await s.svc.eligibility())[0]).toMatchObject({ eligible: true, reason: null })
+          expect((await s.svc.eligibility())[0]).toMatchObject({ eligible: true, reason: null })
+          expect(s.processRuns).toEqual([{ argv: ['claude', '--version'], options: { timeoutMs: 5_000 } }])
+        } finally {
+          s.dispose()
+        }
+      })
     }
   })
 

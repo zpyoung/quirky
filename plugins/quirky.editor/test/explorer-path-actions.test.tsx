@@ -33,7 +33,8 @@ type Fixture = {
   settings: Map<string, unknown>
 }
 type Mounted = { element: HTMLElement; unmount(): Promise<void> }
-type FixtureOptions = { displayRoot?: string; extraFiles?: Record<string, string> }
+const HELD_EVENT_MS = 60_000
+type FixtureOptions = { displayRoot?: string; extraFiles?: Record<string, string>; eventWindow?: 'default' }
 type Transfer = DropData & {
   readonly types: string[]
   effectAllowed: DataTransfer['effectAllowed']
@@ -151,7 +152,11 @@ async function makeFixture(options: FixtureOptions = {}): Promise<Fixture> {
     git(root, home, ['-c', 'user.email=editor-paths@test', '-c', 'user.name=Editor Paths Test', 'add', '.'])
     git(root, home, ['-c', 'user.email=editor-paths@test', '-c', 'user.name=Editor Paths Test', 'commit', '-q', '-m', 'initial'])
 
-    harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
+    harness = await startHarness({
+      home,
+      builtinPluginsDir: builtinsDir(),
+      ...(options.eventWindow === 'default' ? {} : { eventCoalesceMs: HELD_EVENT_MS })
+    })
     const client = await harness.connect('cli')
     const { client: uiClient } = await harness.connectWithEvents('ui')
     const repo = await call<{ id: string }>(client, 'quirky.repo/add', { path: root })
@@ -2045,7 +2050,7 @@ for (const { field, pattern } of [
 }
 
 test('Explorer follows external creates and deletes in root and expanded directories without an editor buffer', async () => {
-  const fixture = await makeFixture()
+  const fixture = await makeFixture({ eventWindow: 'default' })
   const panel = await renderExplorer(fixture)
   const rootFile = join(fixture.root, 'external-root.txt')
   const childDirectory = join(fixture.root, 'nested')
@@ -2068,7 +2073,7 @@ test('Explorer follows external creates and deletes in root and expanded directo
 }, 60_000)
 
 test('Explorer refreshes an active Names filter after external filesystem changes', async () => {
-  const fixture = await makeFixture()
+  const fixture = await makeFixture({ eventWindow: 'default' })
   const panel = await renderExplorer(fixture)
   const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')
   if (!query) throw new Error('Missing Explorer Names query')
@@ -2766,3 +2771,115 @@ test('Explorer contents results open after normal tabs without changing their pi
     { id: after.tabId, bufferId: after.buffer.id, pinned: false, preview: false }
   ])
 }, 30_000)
+
+function holdExplorerStateResponses(fixture: Fixture) {
+  const context = makeContext(fixture)
+  const listeners = new Set<Parameters<UiPluginContext['subscribe']>[0]>()
+  const subscribe = context.subscribe
+  context.subscribe = (next) => {
+    listeners.add(next)
+    const unsubscribe = subscribe(next)
+    return () => {
+      listeners.delete(next)
+      unsubscribe()
+    }
+  }
+  const originalCall = context.call
+  const release = Promise.withResolvers<void>()
+  const control = { hold: 'none' as 'none' | 'next' | 'all', held: 0, reads: 0 }
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/state') {
+      const hold = control.hold !== 'none'
+      if (control.hold === 'next') control.hold = 'none'
+      const snapshot = await originalCall(method, params)
+      control.reads++
+      if (hold) {
+        control.held++
+        await release.promise
+      }
+      return snapshot
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const emitChanged = () => {
+    for (const listener of listeners) {
+      void listener({ type: 'quirky.editor/changed', data: { revision: 0 } })
+    }
+  }
+  return { context, control, release, emitChanged }
+}
+
+test('Explorer keeps a folder open when a state fetch from before the expand resolves after it', async () => {
+  const fixture = await makeFixture()
+  const nested = join(fixture.root, 'nested')
+  const existing = join(fixture.root, FILE_A)
+  await call(fixture.client, 'quirky.editor/explorer', { worktree: fixture.worktree.id, action: 'select', path: nested })
+  const { context, control, release, emitChanged } = holdExplorerStateResponses(fixture)
+  const panel = await renderExplorer(fixture, context)
+  try {
+    await waitForUi(() => findRow(panel.element, nested) || false)
+    control.hold = 'next'
+    await act(async () => emitChanged())
+    await waitForUi(() => control.held === 1 || false)
+    const nestedRow = findRow(panel.element, nested)
+    if (!nestedRow) throw new Error('Missing nested directory row')
+    await act(async () => nestedRow.click())
+    await waitForUi(() => findRow(panel.element, existing) || false)
+    release.resolve()
+    await flushReact()
+    await flushReact()
+    // Let real React/daemon scheduling settle; fake timers would also advance the coalescer.
+    await Bun.sleep(300)
+    await flushReact()
+    expect(findRow(panel.element, existing)).not.toBeNull()
+  } finally {
+    release.resolve()
+  }
+}, 60_000)
+
+test('Explorer keeps a folder open across a root reload while its state fetch is still out', async () => {
+  const fixture = await makeFixture()
+  const nested = join(fixture.root, 'nested')
+  const existing = join(fixture.root, FILE_A)
+  await call(fixture.client, 'quirky.editor/explorer', { worktree: fixture.worktree.id, action: 'select', path: nested })
+  const { context, control, release } = holdExplorerStateResponses(fixture)
+  const panel = await renderExplorer(fixture, context)
+  const rootListingGate = { started: false, released: Promise.withResolvers<void>() }
+  let holdNextRootList = false
+  const originalCall = context.call
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (holdNextRootList && method === 'quirky.editor/explorer' && params.action === 'list' && params.path === undefined) {
+      holdNextRootList = false
+      rootListingGate.started = true
+      await rootListingGate.released.promise
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  try {
+    const loadingFiles = () => Array.from(panel.element.querySelectorAll<HTMLElement>('[role="status"]'))
+      .some((status) => status.textContent?.trim() === 'Loading files…')
+    await waitForUi(() => control.reads > 0 || false)
+    await flushReact()
+    await waitForUi(() => findRow(panel.element, nested) || false)
+    control.hold = 'all'
+    const nestedRow = findRow(panel.element, nested)
+    if (!nestedRow) throw new Error('Missing nested directory row')
+    await act(async () => nestedRow.click())
+    await waitForUi(() => findRow(panel.element, existing) || false)
+    const refresh = panel.element.querySelector<HTMLButtonElement>('button[aria-label="Refresh Explorer"]')
+    if (!refresh) throw new Error('Missing Refresh Explorer action')
+    holdNextRootList = true
+    await act(async () => refresh.click())
+    await waitForUi(() => rootListingGate.started || false)
+    await waitForUi(() => loadingFiles() || false)
+    rootListingGate.released.resolve()
+    await waitForUi(() => !loadingFiles() || false)
+    // Let real React/daemon scheduling settle; fake timers would also advance the coalescer.
+    await Bun.sleep(300)
+    await flushReact()
+    expect(findRow(panel.element, existing)).not.toBeNull()
+  } finally {
+    release.resolve()
+    rootListingGate.released.resolve()
+  }
+}, 60_000)

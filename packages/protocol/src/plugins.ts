@@ -2,6 +2,7 @@ import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, P
 import type { ClientRole, QuirkyEvent } from './rpc'
 import type { ToastAction, ToastKind } from './ui'
 import type { SessionLaunch } from './model'
+import type { ProcessRunner, ProcessSpawner } from './process'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
 export type PluginSource = 'builtin' | 'installed'
@@ -96,6 +97,13 @@ export type PluginContext = {
   readonly home: string
   /** The PTY host connection; listeners registered through it are removed when the plugin is revoked. */
   readonly pty: PluginPty
+  /**
+   * Owns this plugin's subprocesses: `run` aggregates output with a default deadline and output
+   * cap; `spawn` streams output and requires an explicit deadline (or null). Both kill the process
+   * group when this activation is disposed. Usable inside `deactivate` and the activation disposer;
+   * after disposal, `run` rejects and `spawn` throws synchronously.
+   */
+  readonly process: ProcessRunner & ProcessSpawner
   /** Synchronous native lifecycle fences; subscriptions are removed when this activation is revoked. */
   readonly hostPower: PluginHostPower
   /** Broadcasts `notify` with `desktop` defaulting to true; with no desktop client connected, runs the kernel notifier. */

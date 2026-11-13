@@ -1,6 +1,6 @@
 import type { SerializeAddon } from '@xterm/addon-serialize'
 import { Screen } from '../screen'
-import { LogReader, newestClearOffset } from './log'
+import { type HistoryLog, LogReader, newestClearOffset } from './log'
 
 /** The most output bytes one window reads, so a single page or attach stays bounded. */
 const READ_CAP_BYTES = 8 * 1024 * 1024
@@ -41,6 +41,9 @@ type Piece = { offset: number; bytes: Uint8Array }
 type Window = Located & { size: Size | null; events: WindowEvent[]; lead: Uint8Array }
 
 export type HistoryPage = { lines: string[]; cursor: string | null }
+
+/** A live writer's index, or a stored session's history directory. */
+export type LogSource = string | HistoryLog
 
 /** The opaque paging token for the output position where a page's window begins. */
 export function formatCursor(offset: number): string {
@@ -251,10 +254,10 @@ function sgrState(bytes: Uint8Array): Uint8Array {
  * carries the SGR state in effect at its start, found in at most `LEAD_IN_BYTES` before it, so
  * rows keep colours set earlier. A log that cannot be read gives an empty window.
  */
-function readWindow(dir: string, before: number | undefined, lines: number, screenRows: number): Window {
+function readWindow(dir: LogSource, before: number | undefined, lines: number, screenRows: number): Window {
   let reader: LogReader | null = null
   try {
-    reader = LogReader.open(dir)
+    reader = typeof dir === 'string' ? LogReader.open(dir) : dir.reader()
     const located = locate(reader, before, lines, screenRows)
     const floor = newestClearOffset(reader.segments) ?? reader.segments[0]?.startOffset ?? 0
     const lead = located.start > floor ? sgrState(readRange(reader, Math.max(floor, located.start - LEAD_IN_BYTES), located.start)) : new Uint8Array()
@@ -421,7 +424,7 @@ function serializeRow(screen: Screen, y: number): string {
  * A damaged log yields what can be read, never an error.
  */
 export async function pageBefore(
-  dir: string,
+  dir: LogSource,
   options: { before?: number; lines: number; format: 'text' | 'ansi'; screenRows: number }
 ): Promise<HistoryPage> {
   const page = await renderPage(dir, options)
@@ -430,14 +433,14 @@ export async function pageBefore(
 
 /** A text page that keeps each row's `wrapped` flag; the same rows and cursor as `pageBefore`. */
 async function pageRowsBefore(
-  dir: string,
+  dir: LogSource,
   options: { before?: number; lines: number; screenRows: number }
 ): Promise<{ rows: Array<{ text: string; wrapped: boolean }>; cursor: string | null }> {
   return renderPage(dir, { ...options, format: 'text' })
 }
 
 async function renderPage(
-  dir: string,
+  dir: LogSource,
   options: { before?: number; lines: number; format: 'text' | 'ansi'; screenRows: number }
 ): Promise<{ rows: Array<{ text: string; wrapped: boolean }>; cursor: string | null }> {
   const read = readWindow(dir, options.before, options.lines, options.screenRows)
@@ -467,7 +470,7 @@ async function renderPage(
  * when nothing older is retained. With no readable output the replay is the live screen alone.
  */
 export async function composeReplay(
-  dir: string,
+  dir: LogSource,
   options: {
     historyLines: number
     live: { ansi: string; cols: number; rows: number; cursor: { x: number; y: number } }
@@ -495,12 +498,12 @@ export async function composeReplay(
 }
 
 /** The last `lines` text rows above the live screen, for a plain `read`; trimmed, unlike a page. */
-export async function textLinesAbove(dir: string, lines: number, screenRows: number): Promise<string[]> {
+export async function textLinesAbove(dir: LogSource, lines: number, screenRows: number): Promise<string[]> {
   return (await textRowsAbove(dir, lines, screenRows)).map((row) => row.text)
 }
 
 /** Like `textLinesAbove`, with each row's `wrapped` flag so a caller can rejoin wrapped lines. */
-export async function textRowsAbove(dir: string, lines: number, screenRows: number): Promise<Array<{ text: string; wrapped: boolean }>> {
+export async function textRowsAbove(dir: LogSource, lines: number, screenRows: number): Promise<Array<{ text: string; wrapped: boolean }>> {
   if (lines <= 0) return []
   const page = await pageRowsBefore(dir, { lines, screenRows })
   return page.rows.slice(-lines)

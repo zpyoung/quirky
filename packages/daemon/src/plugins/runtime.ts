@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { createProcessRunner, type OwnedProcessRunner } from '@quirky/process'
 import {
   isReservedLaunchEnv,
   KERNEL_METHOD_SCHEMAS,
@@ -43,6 +44,8 @@ export type PluginRuntimeOptions = {
   launchHookTimeoutMs: number
   /** Longest a job timer sleeps before re-checking the clock. */
   schedulerRecheckMs?: number
+  /** Window for coalesced plugin events; defaults to 250 ms and can be set by tests. */
+  eventCoalesceMs?: number
   /** Login shell that agents run under; reported by `context.launch.shell`. */
   shell: string
   /** PATH of the user's interactive shell for `context.launch.commandArgv`; omitted or undefined keeps the login shell's PATH. */
@@ -83,7 +86,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntime {
   const { home, plugins, core, store, log, launchHookTimeoutMs } = options
 
-  const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
+  const events = new PluginEvents(plugins, (event) => core.broadcast(event), log, { coalesceMs: options.eventCoalesceMs })
   const hostPower = options.hostPower ?? new HostPowerService(log, null)
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
   const distros = new DistroService({
@@ -140,6 +143,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   const admittedByPlugin = new Map<string, Set<() => void>>()
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
+  const processRunners = new Map<string, OwnedProcessRunner>()
   const fileResources = new FileResourceRegistry()
 
   const buildEnv = (input: {
@@ -171,8 +175,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       let opened: OpenedStore | undefined
       const ptyApi = createPtyApi(core.pty, id, log, options.sessionAuthority)
       ptyApis.set(id, ptyApi)
+      const processRunner = createProcessRunner({ owner: id })
+      processRunners.set(id, processRunner)
 
       return {
+        process: Object.freeze({ run: processRunner.run, spawn: processRunner.spawn }),
         clients: {
           accept: (clientOptions: Parameters<PluginContext['clients']['accept']>[0]) => {
             guard()
@@ -396,20 +403,29 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       }
     },
     async revoke(pluginId) {
-      hostPower.revoke(pluginId)
-      const admitted = admittedByPlugin.get(pluginId)
-      if (admitted !== undefined) {
-        for (const revoke of [...admitted]) revoke()
+      const stopping = processRunners.get(pluginId)?.dispose()
+      processRunners.delete(pluginId)
+      try {
+        hostPower.revoke(pluginId)
+        const admitted = admittedByPlugin.get(pluginId)
+        if (admitted !== undefined) {
+          for (const revoke of [...admitted]) revoke()
+        }
+        await fileResources.revokePlugin(pluginId)
+        events.removeAll(pluginId)
+        options.sessionAuthority.releasePlugin(pluginId)
+        scheduler.revokePlugin(pluginId)
+        ptyApis.get(pluginId)?.revoke()
+        ptyApis.delete(pluginId)
+      } finally {
+        try {
+          await stopping
+        } finally {
+          const opened = openedStores.get(pluginId)
+          openedStores.delete(pluginId)
+          opened?.close()
+        }
       }
-      await fileResources.revokePlugin(pluginId)
-      events.removeAll(pluginId)
-      options.sessionAuthority.releasePlugin(pluginId)
-      scheduler.revokePlugin(pluginId)
-      ptyApis.get(pluginId)?.revoke()
-      ptyApis.delete(pluginId)
-      const opened = openedStores.get(pluginId)
-      openedStores.delete(pluginId)
-      opened?.close()
     }
   }
 

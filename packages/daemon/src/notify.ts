@@ -1,5 +1,7 @@
-import type { PluginNotification, QuirkyEvent } from '@quirky/protocol'
+import type { ProcessRunner, PluginNotification, QuirkyEvent } from '@quirky/protocol'
+import { kernelProcess } from './kernel-process'
 
+export const NOTIFY_TIMEOUT_MS = 10_000
 /** What a notification asks to sound like: `file: null` is the system sound, `volume` is 0-100. */
 export type NotificationSound = { file: string | null; volume: number }
 
@@ -16,17 +18,20 @@ export function notificationScript(title: string, body: string, sound?: Notifica
 }
 
 /** Shows a macOS notification through `osascript`; failures are ignored. */
-export const osascriptNotifier: Notifier = ({ title, body, sound }) => {
-  try {
-    Bun.spawn(['osascript', '-e', notificationScript(title, body, sound)], {
-      stdin: 'ignore',
-      stdout: 'ignore',
-      stderr: 'ignore'
-    }).unref()
-  } catch {
-    return
+export function createOsascriptNotifier(runner: ProcessRunner): Notifier {
+  return ({ title, body, sound }) => {
+    try {
+      void runner.run(
+        ['osascript', '-e', notificationScript(title, body, sound)],
+        { timeoutMs: NOTIFY_TIMEOUT_MS, killGraceMs: 0, maxOutputBytes: 65_536 }
+      ).catch(() => {})
+    } catch {
+      return
+    }
   }
 }
+
+export const osascriptNotifier: Notifier = createOsascriptNotifier(kernelProcess)
 
 export type NotifyDeps = {
   broadcast(event: QuirkyEvent): void

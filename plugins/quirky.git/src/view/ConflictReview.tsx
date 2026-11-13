@@ -117,7 +117,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
   useEffect(() => {
     void refresh()
   }, [])
-  useRefreshTriggers(context, () => void refresh(), POLL_MS)
+  useRefreshTriggers(context, () => void refresh(), POLL_MS, worktree)
 
   bind({ isDirty: () => false })
 

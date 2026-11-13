@@ -1,4 +1,28 @@
+import { resolve } from 'node:path'
 import { GitError } from './index'
+import { createGitScheduler } from './scheduler'
+
+export { createGitScheduler, DEFAULT_GIT_CONCURRENCY, type GitScheduler, type GitSchedulerOptions, type GitSlotResult } from './scheduler'
+
+/** Bounds git children and coalesces post-arrival reads across the package. */
+export const gitScheduler = createGitScheduler()
+
+/** Holds a read slot until a single leaf child has exited. */
+export async function withGitReadSlot<T>(work: () => Promise<T>): Promise<T> {
+  const result = await gitScheduler.withSlot('read', undefined, work)
+  if (result.timedOut) throw new Error('git read slot expired without a deadline')
+  return result.value
+}
+
+/** Shares a post-arrival read cohort without sharing mutable results. */
+export function shareGitRead<T>(key: string, run: () => Promise<T>, clone: (value: T) => T): Promise<T> {
+  return gitScheduler.shareRead(key, run, clone)
+}
+
+/** Invalidates read cohorts on entry and settlement of a repository mutation. */
+export function withGitWrite<T>(work: () => Promise<T>): Promise<T> {
+  return gitScheduler.withWrite(work)
+}
 
 export type GitResult = { stdout: Uint8Array; stderr: string; exitCode: number; timedOut?: boolean }
 
@@ -14,6 +38,8 @@ export type RunGitOptions = {
   env?: Record<string, string>
   /** How long git's output may stay unfinished after git exited before the run counts as stalled; default `PIPE_STALL_MS` (ten times that for a command that may write). */
   stallMs?: number
+  /** Joins a post-arrival cohort for identical reads without stdin; defaults to true. */
+  share?: boolean
 }
 
 /** Quiet time after git exited, or after its last chunk, past which a read of its output counts as stalled. */
@@ -141,46 +167,72 @@ export async function gitEnv(cwd: string, options: RunGitOptions = {}): Promise<
  */
 export async function runGit(cwd: string, args: string[], options: RunGitOptions = {}): Promise<GitResult> {
   if (!options.readOnly) {
-    return runGitOnce(cwd, args, options).catch((err) => {
-      throw err instanceof PipeStalledError ? new GitError(`git ${args[0]}: ${err.message}`, '', -1) : err
+    return withGitWrite(async () => {
+      const env = await resolvedGitEnv(cwd, options)
+      return runGitOnce(cwd, args, options, env).catch((err) => {
+        throw err instanceof PipeStalledError ? new GitError(`git ${args[0]}: ${err.message}`, '', -1) : err
+      })
     })
   }
-  return retryStalled(() => runGitOnce(cwd, args, options))
+  const share = options.input === undefined && options.share !== false
+  const deadline = share && options.timeoutMs !== undefined ? Date.now() + options.timeoutMs : undefined
+  const env = await resolvedGitEnv(cwd, options)
+  const run = () => {
+    const remaining = deadline === undefined ? undefined : deadline - Date.now()
+    if (remaining !== undefined && remaining <= 0) {
+      return Promise.resolve<GitResult>({ stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true })
+    }
+    const runOptions = remaining === undefined ? options : { ...options, timeoutMs: remaining }
+    return retryStalled(() => runGitOnce(cwd, args, runOptions, env))
+  }
+  if (!share) return run()
+  const entries = Object.entries(env).filter((entry) => entry[1] !== undefined).sort(([a], [b]) => a.localeCompare(b))
+  const key = JSON.stringify(['runGit', resolve(cwd), args, entries, options.timeoutMs ?? null, options.stallMs ?? null])
+  return shareGitRead(key, run, (result) => ({ ...result, stdout: result.stdout.slice() }))
 }
 
-async function runGitOnce(cwd: string, args: string[], options: RunGitOptions): Promise<GitResult> {
-  let proc: ReturnType<typeof Bun.spawn>
-  const input = typeof options.input === 'string' ? new TextEncoder().encode(options.input) : options.input
+async function resolvedGitEnv(cwd: string, options: RunGitOptions): Promise<Record<string, string | undefined>> {
   try {
-    proc = Bun.spawn(['git', ...args], {
-      cwd,
-      env: await gitEnv(cwd, options),
-      stdin: input ?? 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
+    return await gitEnv(cwd, options)
   } catch (err) {
     throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
   }
-  let timedOut = false
-  const timer =
-    options.timeoutMs === undefined
-      ? undefined
-      : setTimeout(() => {
-          timedOut = true
-          proc.kill()
-        }, options.timeoutMs)
-  try {
-    const stallMs = options.stallMs ?? (options.readOnly ? PIPE_STALL_MS : PIPE_STALL_MS * 10)
-    const [stdout, stderr, exitCode] = await Promise.all([
-      drain(proc.stdout as ReadableStream<Uint8Array>, proc.exited, stallMs),
-      drain(proc.stderr as ReadableStream<Uint8Array>, proc.exited, stallMs),
-      proc.exited
-    ])
-    return { stdout, stderr: new TextDecoder().decode(stderr), exitCode, ...(timedOut ? { timedOut } : {}) }
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
+}
+
+async function runGitOnce(
+  cwd: string,
+  args: string[],
+  options: RunGitOptions,
+  env: Record<string, string | undefined>
+): Promise<GitResult> {
+  const input = typeof options.input === 'string' ? new TextEncoder().encode(options.input) : options.input
+  const slot = await gitScheduler.withSlot(options.readOnly ? 'read' : 'write', options.timeoutMs, async (remainingTimeoutMs) => {
+    let proc: ReturnType<typeof Bun.spawn>
+    try {
+      proc = Bun.spawn(['git', ...args], { cwd, env, stdin: input ?? 'ignore', stdout: 'pipe', stderr: 'pipe' })
+    } catch (err) {
+      throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
+    }
+    let timedOut = false
+    const timer = remainingTimeoutMs === undefined ? undefined : setTimeout(() => {
+      timedOut = true
+      proc.kill()
+    }, remainingTimeoutMs)
+    try {
+      const stallMs = options.stallMs ?? (options.readOnly ? PIPE_STALL_MS : PIPE_STALL_MS * 10)
+      const [stdout, stderr, exitCode] = await Promise.all([
+        drain(proc.stdout as ReadableStream<Uint8Array>, proc.exited, stallMs),
+        drain(proc.stderr as ReadableStream<Uint8Array>, proc.exited, stallMs),
+        proc.exited
+      ])
+      return { stdout, stderr: new TextDecoder().decode(stderr), exitCode, ...(timedOut ? { timedOut } : {}) }
+    } finally {
+      clearTimeout(timer)
+      if (proc.exitCode === null) proc.kill()
+      await proc.exited
+    }
+  })
+  return slot.timedOut ? { stdout: new Uint8Array(0), stderr: '', exitCode: 143, timedOut: true } : slot.value
 }
 
 /** Like `runGit` but throws `GitError` on a non-zero exit; returns stdout as text. */
