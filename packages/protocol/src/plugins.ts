@@ -67,8 +67,10 @@ export type PluginContext = {
   /**
    * Broadcasts `<pluginId>/<event>` to subscribed clients and plugins. Returns false when the event is disabled or
    * overridden; for an event declaring `coalesce`, true means it was sent or is held as the latest for its key.
+   * Pass `{ immediate: true }` when listeners must not miss the change: it replaces any held event for its key and
+   * sends the plugin's other held events first. Plain events are always sent immediately.
    */
-  emit(event: string, data?: unknown): boolean
+  emit(event: string, data?: unknown, options?: { immediate?: boolean }): boolean
   /** Listens to every daemon event; the returned function unsubscribes. */
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
