@@ -84,7 +84,11 @@ export class DeliveryRunner {
       let earlyBytes = 0
       let pasteGeneration = 0
       let subscriptionGeneration = 0
-      let subscribeInFlight: { generation: number; invalidatedByGap: boolean } | null = null
+      let subscribeInFlight: {
+        generation: number
+        invalidatedByGap: boolean
+        hostHoldInvalidated: boolean
+      } | null = null
       const early: Uint8Array[] = []
       const removers: Array<() => void> = []
 
@@ -220,11 +224,19 @@ export class DeliveryRunner {
       }
 
       const onDeadline = () => {
-        if (settled || pasteWritten || deadlineHandled) {
+        if (settled || pasteWritten) {
+          return
+        }
+        if (gapObserved) {
+          deadlineHandled = true
+          settle('not-delivered')
+          return
+        }
+        if (deadlineHandled) {
           return
         }
         deadlineHandled = true
-        if (!gapObserved && !pasting && !subscribing && entry.blindPaste) {
+        if (!pasting && !subscribing && entry.blindPaste) {
           paste('unconfirmed')
         } else {
           settle('not-delivered')
@@ -275,7 +287,11 @@ export class DeliveryRunner {
         acceptingOutput = true
         early.length = 0
         earlyBytes = 0
-        const attempt = { generation: subscriptionGeneration, invalidatedByGap: false }
+        const attempt = {
+          generation: subscriptionGeneration,
+          invalidatedByGap: false,
+          hostHoldInvalidated: false
+        }
         subscribeInFlight = attempt
         this.pty.subscribe(sessionId).then(
           ({ replay }) => {
@@ -283,6 +299,13 @@ export class DeliveryRunner {
               subscribeInFlight = null
             }
             if (attempt.invalidatedByGap || attempt.generation !== subscriptionGeneration) {
+              if (!attempt.hostHoldInvalidated) {
+                if (settled) {
+                  this.pty.unsubscribe(sessionId).catch(() => {})
+                } else {
+                  subscribed = true
+                }
+              }
               maybeStartRetry()
               return
             }
@@ -319,7 +342,7 @@ export class DeliveryRunner {
         )
       }
 
-      const recover = () => {
+      const recover = (hostHoldInvalidated: boolean) => {
         if (settled || pasteCommitted || pasteWritten || options.ready === true) {
           return
         }
@@ -327,8 +350,11 @@ export class DeliveryRunner {
         subscriptionGeneration++
         if (subscribeInFlight !== null) {
           subscribeInFlight.invalidatedByGap = true
+          subscribeInFlight.hostHoldInvalidated ||= hostHoldInvalidated
         }
-        subscribed = false
+        if (hostHoldInvalidated) {
+          subscribed = false
+        }
         subscribing = true
         acceptingOutput = false
         scanner = createReadyScanner(signal)
@@ -342,6 +368,10 @@ export class DeliveryRunner {
           pasting = false
           pasteGeneration++
           clearLivenessTimer()
+        }
+        if (clock() >= deadline) {
+          onDeadline()
+          return
         }
         if (recoveryTimer === null && !retryDue) {
           recoveryTimer = setTimeout(() => {
@@ -367,7 +397,7 @@ export class DeliveryRunner {
           }
           if (subscribing) {
             if (earlyBytes + bytes.byteLength > MAX_EARLY_OUTPUT_BYTES) {
-              recover()
+              recover(false)
               return
             }
             early.push(bytes)
@@ -379,7 +409,7 @@ export class DeliveryRunner {
         }),
         this.pty.onLagged((id) => {
           if (id === sessionId) {
-            recover()
+            recover(true)
           }
         }),
         this.pty.onExit((id) => {
