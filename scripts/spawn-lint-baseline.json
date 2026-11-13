@@ -19,7 +19,6 @@
   "plugins/quirky.browser/src/pane-service.ts": 1,
   "plugins/quirky.browser/src/runtime/defaults.ts": 1,
   "plugins/quirky.browser/src/runtime/driver.ts": 1,
-  "plugins/quirky.checks/executor.ts": 2,
   "plugins/quirky.editor/src/daemon/explorer.ts": 1,
   "plugins/quirky.editor/src/daemon/inventory.ts": 1,
   "plugins/quirky.editor/src/daemon/search.ts": 1,
