@@ -115,7 +115,9 @@ function setup(patch: Partial<World> = {}) {
       for (const listener of [...connectionListeners]) listener('connected')
       await settle()
     },
-    listenerCount: () => listeners.size + connectionListeners.size
+    listenerCount: () => listeners.size + connectionListeners.size,
+    eventListenerCount: () => listeners.size,
+    connectionListenerCount: () => connectionListeners.size
   }
 }
 
@@ -292,6 +294,249 @@ test('five refresh events during a deferred load coalesce into one trailing unio
     releaseGate()
     dispose()
   }
+})
+
+test('a trailing burst ending in a session event retains the earlier worktree refresh', async () => {
+  const h = setup({ worktrees: [wt('w1')] })
+  const { promise: started, resolve: startGate } = Promise.withResolvers<void>()
+  const { promise: wait, resolve: releaseGate } = Promise.withResolvers<void>()
+  let badgesBefore = 0
+  let deferNextSession = false
+  let queuedEvents = false
+  const trailing: { startedAfterRunningBadge: boolean | null } = { startedAfterRunningBadge: null }
+  const originalCall = h.context.call.bind(h.context)
+  const context = {
+    ...h.context,
+    async call(method: string, params?: Record<string, unknown>) {
+      if (queuedEvents && trailing.startedAfterRunningBadge === null) {
+        trailing.startedAfterRunningBadge = h.badges.length === badgesBefore + 1
+      }
+      const result = await originalCall(method, params)
+      if (method === 'quirky.session/list' && deferNextSession) {
+        deferNextSession = false
+        startGate()
+        await wait
+      }
+      return result
+    }
+  } as unknown as UiPluginContext
+  const time = fakeClock()
+  const dispose = startAttentionBadge(context, time.clock)
+  try {
+    await h.settle()
+    const allSources = [
+      'quirky.worktree/list',
+      'quirky.session/list',
+      'quirky.ask/list',
+      'quirky.sidebar-extras/projection'
+    ].sort()
+    expect(h.calls.map((call) => call.method).sort()).toEqual(allSources)
+    expect(h.badges).toHaveLength(1)
+    badgesBefore = h.badges.length
+    const callsBefore = h.calls.length
+
+    deferNextSession = true
+    await h.emit('quirky.session/changed')
+    await started
+    queuedEvents = true
+    await h.emit('quirky.worktree/changed')
+    await h.emit('quirky.session/changed')
+    expect(h.calls.slice(callsBefore).map((call) => call.method)).toEqual(['quirky.session/list'])
+    expect(h.badges).toHaveLength(badgesBefore)
+
+    releaseGate()
+    await h.settle()
+    const burstCalls = h.calls.slice(callsBefore)
+    expect(burstCalls).toHaveLength(5)
+    expect(burstCalls.slice(1).map((call) => call.method).sort()).toEqual(allSources)
+    expect(trailing.startedAfterRunningBadge).toBe(true)
+    expect(h.badges).toHaveLength(badgesBefore + 2)
+  } finally {
+    dispose()
+    releaseGate()
+  }
+})
+
+test('a trailing burst ending in an ask event retains the queued session refresh', async () => {
+  const h = setup({ worktrees: [wt('w1')] })
+  const { promise: started, resolve: startGate } = Promise.withResolvers<void>()
+  const { promise: wait, resolve: releaseGate } = Promise.withResolvers<void>()
+  let badgesBefore = 0
+  let deferNextSession = false
+  let queuedEvents = false
+  const trailing: { startedAfterRunningBadge: boolean | null } = { startedAfterRunningBadge: null }
+  const originalCall = h.context.call.bind(h.context)
+  const context = {
+    ...h.context,
+    async call(method: string, params?: Record<string, unknown>) {
+      if (queuedEvents && trailing.startedAfterRunningBadge === null) {
+        trailing.startedAfterRunningBadge = h.badges.length === badgesBefore + 1
+      }
+      const result = await originalCall(method, params)
+      if (method === 'quirky.session/list' && deferNextSession) {
+        deferNextSession = false
+        startGate()
+        await wait
+      }
+      return result
+    }
+  } as unknown as UiPluginContext
+  const time = fakeClock()
+  const dispose = startAttentionBadge(context, time.clock)
+  try {
+    await h.settle()
+    const allSources = [
+      'quirky.worktree/list',
+      'quirky.session/list',
+      'quirky.ask/list',
+      'quirky.sidebar-extras/projection'
+    ].sort()
+    expect(h.calls.map((call) => call.method).sort()).toEqual(allSources)
+    expect(h.badges).toHaveLength(1)
+    badgesBefore = h.badges.length
+    const callsBefore = h.calls.length
+
+    deferNextSession = true
+    await h.emit('quirky.session/changed')
+    await started
+    queuedEvents = true
+    await h.emit('quirky.session/changed')
+    await h.emit('quirky.ask/created')
+    expect(h.calls.slice(callsBefore).map((call) => call.method)).toEqual(['quirky.session/list'])
+    expect(h.badges).toHaveLength(badgesBefore)
+
+    releaseGate()
+    await h.settle()
+    const burstCalls = h.calls.slice(callsBefore)
+    expect(burstCalls).toHaveLength(3)
+    expect(burstCalls.slice(1).map((call) => call.method).sort()).toEqual([
+      'quirky.ask/list',
+      'quirky.session/list'
+    ].sort())
+    expect(burstCalls.filter((call) => call.method === 'quirky.ask/list').map((call) => call.params)).toEqual([
+      { pendingOnly: true }
+    ])
+    expect(trailing.startedAfterRunningBadge).toBe(true)
+    expect(h.badges).toHaveLength(badgesBefore + 2)
+  } finally {
+    dispose()
+    releaseGate()
+  }
+})
+
+async function expectLoadedDisposalCancelsQueuedWork(outcome: 'resolve' | 'reject') {
+  const h = setup({ worktrees: [wt('w1')] })
+  const time = fakeClock()
+  const gate = Promise.withResolvers<void>()
+  const started = Promise.withResolvers<void>()
+  const callAttempts: { method: string; params: unknown }[] = []
+  const badgeAttempts: Badge[] = []
+  let deferNextSession = false
+  let revoked = false
+  let gateReleased = false
+  let stop: () => void = () => {}
+  let disposed = false
+  const releaseGate = (reject = false) => {
+    if (gateReleased) return
+    gateReleased = true
+    if (reject) gate.reject(new Error('deferred session refresh rejected'))
+    else gate.resolve()
+  }
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    stop()
+  }
+  const originalCall = h.context.call.bind(h.context)
+  const context = {
+    ...h.context,
+    async call(method: string, params?: Record<string, unknown>) {
+      callAttempts.push({ method, params })
+      if (revoked) throw new Error('quirky.worktree is not active')
+      const result = await originalCall(method, params)
+      if (method === 'quirky.session/list' && deferNextSession) {
+        deferNextSession = false
+        started.resolve()
+        await gate.promise
+      }
+      return result
+    },
+    setPanelBadge(panel: string, count: number | null, title?: string, tone?: string) {
+      badgeAttempts.push({ panel, count, title, tone })
+      if (revoked) throw new Error('quirky.worktree is not active')
+      ;(h.context.setPanelBadge as (...args: unknown[]) => void)(panel, count, title, tone)
+    }
+  } as unknown as UiPluginContext
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown) => void unhandled.push(reason)
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    stop = startAttentionBadge(context, time.clock)
+    await h.settle()
+    const allSources = [
+      'quirky.worktree/list',
+      'quirky.session/list',
+      'quirky.ask/list',
+      'quirky.sidebar-extras/projection'
+    ].sort()
+    expect(callAttempts.map((call) => call.method).sort()).toEqual(allSources)
+    expect(badgeAttempts).toHaveLength(1)
+    expect(h.badges).toHaveLength(1)
+    const callsBefore = callAttempts.length
+    const badgesBefore = badgeAttempts.length
+
+    deferNextSession = true
+    await h.emit('quirky.session/changed')
+    await started.promise
+    await h.emit('quirky.worktree/changed')
+    expect(callAttempts.slice(callsBefore).map((call) => call.method)).toEqual(['quirky.session/list'])
+    expect(badgeAttempts).toHaveLength(badgesBefore)
+
+    dispose()
+    revoked = true
+    expect(h.eventListenerCount()).toBe(0)
+    expect(h.connectionListenerCount()).toBe(0)
+    expect(time.running()).toBe(false)
+    const callsAtDispose = callAttempts.length
+    const contextCallsAtDispose = h.calls.length
+    const badgeAttemptsAtDispose = badgeAttempts.length
+    const successfulBadgesAtDispose = h.badges.length
+    releaseGate(outcome === 'reject')
+    await h.settle()
+    await h.settle()
+    time.advance(60_000)
+    await h.settle()
+
+    expect(callAttempts).toHaveLength(callsAtDispose)
+    expect(h.calls).toHaveLength(contextCallsAtDispose)
+    expect(badgeAttempts).toHaveLength(badgeAttemptsAtDispose)
+    expect(h.badges).toHaveLength(successfulBadgesAtDispose)
+    expect(time.running()).toBe(false)
+    expect(time.cleared()).toBe(1)
+
+  } finally {
+    try {
+      dispose()
+    } finally {
+      revoked = true
+      releaseGate()
+      try {
+        await h.settle()
+        await h.settle()
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+      }
+    }
+  }
+  expect(unhandled).toEqual([])
+}
+
+test('disposing after a successful load cancels queued work when the session refresh resolves', async () => {
+  await expectLoadedDisposalCancelsQueuedWork('resolve')
+})
+
+test('disposing after a successful load cancels queued work when the session refresh rejects', async () => {
+  await expectLoadedDisposalCancelsQueuedWork('reject')
 })
 
 test('an unrelated event does not reload anything', async () => {

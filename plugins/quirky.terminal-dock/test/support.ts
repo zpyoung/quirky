@@ -8,11 +8,11 @@ import { openTab } from '../../quirky.terminal/test/e2e/support'
 
 export type DockHarness = E2eHarness
 
-type DockE2EOptions = { holdBeforeEnter?: boolean }
+type DockE2EOptions = { holdBeforeEnter?: boolean; countReconciles?: boolean }
 export type DockSubmitWait = { reached: Promise<void>; dispose(): void }
 
 
-function prepareBeforeSubmitBuiltins(home: string): string {
+function prepareDockBuiltins(home: string, options: DockE2EOptions): string {
   const pluginRoot = resolve(import.meta.dir, '..', '..')
   const overlayRoot = join(home, 'dock-test-builtins')
   const sourceDock = join(pluginRoot, 'quirky.terminal-dock')
@@ -29,11 +29,12 @@ function prepareBeforeSubmitBuiltins(home: string): string {
   const mainUrl = pathToFileURL(join(sourceDock, 'main.ts')).href
   const stagePath = join(home, 'dock-before-enter')
   writeFileSync(join(overlayDock, 'main.ts'), [
-    `import { writeFileSync } from 'node:fs'`,
+    `import { appendFileSync, writeFileSync } from 'node:fs'`,
     `import { activate as activateDock } from ${JSON.stringify(mainUrl)}`,
     `export async function activate(context) {`,
     `  await activateDock(context, {`,
-    `    beforeSubmit(signal) {`,
+    ...(options.countReconciles ? [`    reconciled() { appendFileSync(${JSON.stringify(join(home, 'dock-reconciles'))}, '.') },`] : []),
+    ...(options.holdBeforeEnter ? [`    beforeSubmit(signal) {`,
     `      writeFileSync(${JSON.stringify(stagePath)}, '')`,
     `      const { promise, resolve } = Promise.withResolvers<void>()`,
     `      const aborted = () => {`,
@@ -43,7 +44,7 @@ function prepareBeforeSubmitBuiltins(home: string): string {
     `      if (signal.aborted) aborted()`,
     `      else signal.addEventListener('abort', aborted, { once: true })`,
     `      return promise`,
-    `    }`,
+    `    }`] : []),
     `  })`,
     `}`,
     `export { deactivate } from ${JSON.stringify(mainUrl)}`,
@@ -78,7 +79,7 @@ export function waitForDockBeforeEnter(harness: DockHarness): DockSubmitWait {
 export async function startDockE2E(options: DockE2EOptions = {}): Promise<DockHarness> {
   const harness = await E2eHarness.start({
     shell: '/bin/bash',
-    ...(options.holdBeforeEnter ? { builtinPluginsDir: prepareBeforeSubmitBuiltins } : {})
+    ...(options.holdBeforeEnter || options.countReconciles ? { builtinPluginsDir: (home: string) => prepareDockBuiltins(home, options) } : {})
   })
   try {
     harness.writeBinScript('dock-fake-claude', FAKE_TUI)
@@ -91,6 +92,12 @@ export async function startDockE2E(options: DockE2EOptions = {}): Promise<DockHa
     await harness.cleanup()
     throw error
   }
+}
+
+/** Counts actual reconcile passes in an isolated daemon fixture. */
+export function reconcileCount(harness: DockHarness): number {
+  const path = join(harness.home, 'dock-reconciles')
+  return existsSync(path) ? readFileSync(path).length : 0
 }
 
 const FAKE_TUI = `if [ "$1" = "--version" ]; then printf '1.0.0 (dock fake)\\n'; exit 0; fi

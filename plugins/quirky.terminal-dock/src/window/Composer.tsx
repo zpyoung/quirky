@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, type SyntheticEvent, type UIEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { Badge, Button, EmptyState, FormRow, IconButton, SectionHeader } from '@quirky/ui'
+import { StateLoader } from './loader'
 import type { DockAttachment, DockOptions, DockQuestion, DockState, PickerItem, SendResult } from '../types'
 
 const PLUGIN_METHOD = 'quirky.terminal-dock/'
@@ -216,6 +217,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
   const [dirty, setDirty] = useState(false)
   const [conflicted, setConflicted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [picker, setPicker] = useState<PickerState | null>(null)
   const [cursor, setCursor] = useState(0)
@@ -351,9 +353,30 @@ export function Composer({ context, pane, session, registerActions }: Props) {
 
   useEffect(() => {
     disposedRef.current = false
+    const acceptState = (incoming: DockState) => {
+      setLoadError(null)
+      reconcileState(incoming)
+      if (localVersionRef.current > syncedVersionRef.current) schedulePersist()
+    }
+    const loader = new StateLoader<DockState>({
+      read: async () => {
+        const result = await context.call(`${PLUGIN_METHOD}get`, { pane, session })
+        if (!isDockState(result) || result.pane !== pane || result.session !== session) {
+          throw new Error('Terminal dock returned invalid state.')
+        }
+        return result
+      },
+      onState: acceptState,
+      onFailure: (reason) => {
+        if (!disposedRef.current) setLoadError(errorMessage(reason))
+      }
+    })
     const unsubscribe = context.subscribe((event) => {
       const changed = stateFromEvent(event)
-      if (changed !== null && changed.pane === pane) reconcileState(changed.state)
+      if (changed !== null && changed.pane === pane && changed.state.session === session) {
+        loader.settle()
+        acceptState(changed.state)
+      }
       if (statusWasRemoved(event, session)) setAgentStatus(null)
       else {
         const status = statusFromEvent(event, session)
@@ -362,25 +385,26 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     })
     const unsubscribeConnection = context.onConnection((connection) => {
       if (connection === 'connected') {
-        void refreshState()
+        void loader.load()
         void context.call('quirky.agent-status/get', { session }).then((result) => {
           if (!disposedRef.current) setAgentStatus(statusOf(result, session))
         }).catch(() => {})
+      } else {
+        loader.settle()
       }
     })
-    void refreshState().then((loaded) => {
-      if (loaded !== null && localVersionRef.current > syncedVersionRef.current) schedulePersist()
-    })
+    void loader.load()
     void context.call('quirky.agent-status/get', { session }).then((result) => {
       if (!disposedRef.current) setAgentStatus(statusOf(result, session))
     }).catch(() => {})
     return () => {
       disposedRef.current = true
+      loader.dispose()
       clearDebounce()
       unsubscribe()
       unsubscribeConnection()
     }
-  }, [context, pane, session, clearDebounce, reconcileState, refreshState, schedulePersist])
+  }, [context, pane, session, clearDebounce, reconcileState, schedulePersist])
 
   useEffect(() => {
     if (state?.question?.id !== undefined) setAnswers([])
@@ -727,17 +751,18 @@ export function Composer({ context, pane, session, registerActions }: Props) {
   const contextUsage = state?.options.context ?? null
   const contextPercent = contextUsage !== null && contextUsage.limit > 0 ? Math.min(100, Math.max(0, Math.round((contextUsage.used / contextUsage.limit) * 100))) : null
   const contextStyle = contextPercent === null ? undefined : { '--qtd-context-used': `${contextPercent}%` } as CSSProperties
+  const visibleError = error ?? loadError
 
   return (
     <div className={`qtd-composer${state?.passthrough ? ' qtd-passthrough' : ''}`} onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() }} onDrop={onDrop}>
-      {(state?.passthrough || disabledReason !== null && state !== null || state?.notice || state?.options.notice || warning !== null || error !== null) && (
+      {(state?.passthrough || disabledReason !== null && state !== null || state?.notice || state?.options.notice || warning !== null || visibleError !== null) && (
         <div className="qtd-status-row" role="group" aria-label="Composer status">
           {state?.passthrough && <div className="qtd-notice qtd-passthrough-notice" role="status" title="Passthrough active — terminal has keyboard focus" aria-description="Passthrough active — terminal has keyboard focus">Passthrough active — terminal has keyboard focus</div>}
           {disabledReason !== null && state !== null && <div id="qtd-disabled-reason" className="qtd-notice" role="status" title={disabledReason} aria-description={disabledReason}>{disabledReason}</div>}
           {state?.notice && <div className="qtd-notice" role="status" title={state.notice} aria-description={state.notice}>{state.notice}</div>}
           {state?.options.notice && <div className="qtd-notice" role="status" title={state.options.notice} aria-description={state.options.notice}>{state.options.notice}</div>}
           {warning !== null && <div className="qtd-notice qtd-warning" role="alert" title={warning} aria-description={warning}>{warning}</div>}
-          {error !== null && <div className="qtd-notice qtd-error" role="alert" title={error} aria-description={error}>{error}</div>}
+          {visibleError !== null && <div className="qtd-notice qtd-error" role="alert" title={visibleError} aria-description={visibleError}>{visibleError}</div>}
         </div>
       )}
       {(activeQuestion !== null && !activeQuestion.dismissed || picker !== null) && (

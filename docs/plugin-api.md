@@ -151,6 +151,23 @@ unawaited writes. Callers own their result/frame limits and must stop abandoned 
 There is no raw Bun subprocess, stderr stream, IPC, PTY, inherited stdio, arbitrary-signal API,
 sandbox or detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
 
+### API 1.7: In-place view input updates
+
+API 1.7 adds `MountCleanup`, a cleanup function with an optional
+`updateInput(input: unknown): boolean` hook. A mounted view can return `true` to accept
+new input without replacing its DOM or resources. Returning `false`, omitting the hook,
+or throwing makes the host clean up the old mount and mount a fresh child with the new input.
+Plain cleanup functions and mounts returning `void` remain compatible.
+
+While a view's module is loading, input updates coalesce so its mount receives the latest
+input once. Failed or released mounts and non-view slots do not accept updates. Changing
+the contribution's owner or module still ends the mount. Embedded `mountView` handles
+do not use this hook. Plugins using the hook declare `"apiVersion": "1.7.0"` or later.
+
+The terminal worktree view preserves mounted panes on same-worktree input updates.
+Selecting a session focuses its terminal; later background layout revisions leave
+focused text fields alone.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -215,6 +232,24 @@ The daemon validates manifests during discovery, inspection and installation. A 
 
 Local module hosts check the declaring plugin's floor independently. The CLI checks module-backed command metadata before importing a CLI module; generic RPC-only CLI commands do not need a local module gate. The UI host checks each plugin's module metadata before import and contains a failure to that plugin. The daemon's release does not authorize newer code in an older CLI or UI process.
 
+## Store recovery
+
+The daemon checks existing non-empty `quirky.db` and plugin `store.db` files when opening them.
+It runs SQLite's full integrity check when the main file plus WAL is at most 32 MiB, and the
+quick check above that size. The quick check does not detect mismatches between indexes and rows.
+Validation checks a writable snapshot in a private temporary directory while the original stays
+read-only. Snapshot copies use filesystem cloning when available. Repair reads committed WAL
+rows without checkpointing them into the original main file that will be quarantined.
+
+A corrupt store is repaired into a checked copy when possible; otherwise it is replaced with an
+empty database and plugin migrations run again. The original file and any WAL/SHM sidecars stay
+beside the store as `<file>.corrupt-<timestamp>-<8 hex>`, with one suffix shared by the three files.
+Quirky never deletes these originals. Lock, permission, migration and schema-version errors do
+not trigger recovery.
+
+Kernel recoveries are logged. Plugin recoveries also appear as warning diagnostics in `plugin.list`,
+including when a later migration fails. `context.openStore` and the plugin API version are unchanged.
+
 ## Lifecycle, cleanup and trust
 
 The stable contract includes the existing daemon, CLI and UI activation shapes, context methods, contribution schemas and cleanup behavior. Daemon `activate(context)` may return an activation disposer; modules may also implement `deactivate()`. UI modules implement `activate(context)` and may implement `deactivate()`. UI mount functions return cleanup functions when they own DOM or other mounted resources. Context subscription methods return unsubscribe functions. Plugins should release resources they create and must not assume a context remains usable after its activation ends.
@@ -265,6 +300,9 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.6.0** adds [`context.process.spawn`](#api-16-streaming-and-session-length-processes) for
   streaming and session-length daemon children under the same activation owner as `run`.
   A plugin that uses it declares `apiVersion` 1.6.0 or later.
+- **1.7.0** adds [`MountCleanup.updateInput`](#api-17-in-place-view-input-updates) for mounted
+  views that preserve their DOM and resources when accepting new input.
+  A plugin that uses it declares `apiVersion` 1.7.0 or later.
 
 ## Example
 
