@@ -330,7 +330,7 @@ describe('worktree identity and delayed group assignment', () => {
         ...(data === undefined ? {} : { data })
       }),
       find: async () => ({ worktree, all: [worktree] }),
-      known: () => null,
+      known: async () => null,
       resolveRepo: async () => ({
         id: worktree.repoId,
         name: 'zero-birthtime',

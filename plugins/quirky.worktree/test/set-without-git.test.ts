@@ -303,3 +303,50 @@ test('overlapping projects keep ambiguous id metadata updates as conflicts after
   })
   expect(storedRows(project.t.h.home, 'id = ?', fix!.id)[0]?.comment).toBe('')
 })
+
+test('a newly registered overlapping project conflicts before it is ever listed', async () => {
+  const { project, fix, path } = await startFix()
+  expect(fix).toBeDefined()
+  await call(project.client, 'quirky.repo/add', { path })
+  const refused = await failure(setById(project.client, fix!.id, { comment: 'must not save' }))
+  expect(refused.code).toBe(RpcErrorCode.Conflict)
+  expect(storedRows(project.t.h.home, 'id = ?', fix!.id)[0]?.comment).toBe('')
+})
+
+test('a new external checkout registered as a project invalidates older ownership facts', async () => {
+  const { project, fix } = await startFix()
+  const later = addExternalWorktree(project.repoDir, join(scratch(), 'later'), 'zoe/later')
+  await call(project.client, 'quirky.repo/add', { path: later })
+  const refused = await failure(setById(project.client, fix!.id, { comment: 'must not save' }))
+  expect(refused.code).toBe(RpcErrorCode.Conflict)
+})
+
+test('an in-flight old listing cannot restore facts invalidated by project registration', async () => {
+  const { project, fix } = await startFix()
+  const real = gitApi()
+  const gate = Promise.withResolvers<void>()
+  const entered = Promise.withResolvers<void>()
+  releaseHeldGit.push(() => gate.resolve())
+  let held = false
+  useTestGit({
+    ...real,
+    listRegistrations: async (...args: Parameters<typeof real.listRegistrations>) => {
+      const registrations = await real.listRegistrations(...args)
+      if (!held) {
+        held = true
+        entered.resolve()
+        await gate.promise
+      }
+      return registrations
+    }
+  })
+  const pending = track(listWorktrees(project.client, { repo: project.repo.id }))
+  await entered.promise
+  const later = addExternalWorktree(project.repoDir, join(scratch(), 'later'), 'zoe/later')
+  await call(project.client, 'quirky.repo/add', { path: later })
+  await call(project.client, 'quirky.worktree/projectOrder', {})
+  gate.resolve()
+  await pending
+  const refused = await failure(setById(project.client, fix!.id, { comment: 'must not save' }))
+  expect(refused.code).toBe(RpcErrorCode.Conflict)
+})

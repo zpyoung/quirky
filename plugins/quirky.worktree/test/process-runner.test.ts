@@ -527,6 +527,7 @@ function createEnv(fixture: Fixture, process: ProcessRunner): CreateEnv {
     log: (message) => fixture.logs.push(message),
     removing: new Set(),
     listed: new Map(),
+    catalog: { generation: 0 },
     fail,
     changed: () => {},
     process,

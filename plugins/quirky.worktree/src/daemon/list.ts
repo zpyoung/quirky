@@ -20,7 +20,10 @@ export type ListEnv = {
   identitySource?: DirectoryIdentitySource
   /** IDs whose remove is in flight in this daemon. */
   removing: ReadonlySet<string>
+  /** Owner-qualified keys preserve ambiguity when several projects list the same workspace. */
   listed: Map<string, Facts>
+  /** Prevents reads started under old project registrations from repopulating remembered facts. */
+  catalog: { generation: number }
 }
 
 /** The `repoId` of a workspace that belongs to a group's parent folder rather than a project. */
@@ -28,7 +31,8 @@ export const groupRepoId = (groupId: string): string => `group:${groupId}`
 
 type Facts = Pick<Worktree, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'kind' | 'groupId'>
 
-function rememberListing(env: ListEnv, repoId: string, facts: Map<string, Facts>): void {
+function rememberListing(env: ListEnv, repoId: string, facts: Map<string, Facts>, generation: number): void {
+  if (generation !== env.catalog.generation) return
   for (const [id, cached] of env.listed) {
     if (cached.repoId === repoId) env.listed.delete(id)
   }
@@ -133,6 +137,7 @@ function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path
  * `prune: false` skips that removal for callers that only need the IDs.
  */
 async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise<WorktreeControl[]> {
+  const generation = env.catalog.generation
   const registrations = await gitApi().listRegistrations(repo.path)
   const registered = new Set(registrations.map((registration) => worktreeIdForPath(registration.path)))
   const preparations = new Set<string>()
@@ -172,7 +177,7 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
     }
     return result.sort(compare)
   })
-  rememberListing(env, repo.id, listed)
+  rememberListing(env, repo.id, listed, generation)
   return worktrees
 }
 
@@ -197,7 +202,7 @@ function listFolderProject(env: ListEnv, repo: Repo): WorktreeControl[] {
     }
     return result.sort(compare)
   })
-  rememberListing(env, repo.id, listed)
+  rememberListing(env, repo.id, listed, env.catalog.generation)
   return worktrees
 }
 
@@ -230,7 +235,7 @@ export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] 
       })
       .sort(compare)
   )
-  rememberListing(env, repoId, listed)
+  rememberListing(env, repoId, listed, env.catalog.generation)
   return worktrees
 }
 

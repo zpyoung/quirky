@@ -14,8 +14,8 @@ export type SetEnv = {
   fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
   /** The one workspace a selector names, with every listed workspace for reading relations. */
   find(selector: string, identity: CallerIdentity): Promise<{ worktree: Worktree; all: Worktree[] }>
-  /** The workspace from its latest listing for a metadata-only set by id, or null to take the full lookup. */
-  known(id: string): Worktree | null
+  /** A listed workspace after checking current project ownership, without running git; null takes the full lookup. */
+  known(id: string): Promise<Worktree | null>
   resolveRepo(selector: string): Promise<Repo>
   groups(): Promise<ProjectGroup[]>
   call(method: string, params: Record<string, unknown>): Promise<unknown>
@@ -126,7 +126,7 @@ export async function setWorktree(
     guard === undefined
   let worktree: Worktree
   if (canUseKnown) {
-    worktree = env.known(params.worktree.slice(3)) ?? (await env.find(params.worktree, identity)).worktree
+    worktree = (await env.known(params.worktree.slice(3))) ?? (await env.find(params.worktree, identity)).worktree
   } else {
     worktree = (await env.find(params.worktree, identity)).worktree
   }
