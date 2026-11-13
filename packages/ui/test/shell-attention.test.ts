@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { existsSync, symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { QuirkyClient, type Ask, type AskSpec, type Repo, type Worktree } from '@quirky/protocol'
+import { QuirkyClient, type Ask, type AskSpec, type QuirkyEvent, type Repo, type Session, type Worktree } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { chromium } from 'playwright'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
@@ -417,32 +417,57 @@ test('the needs-you count and toast ignore the narrowed project, and Open worktr
   expect((await pendingAsks(env)).some((ask) => ask.id === askId)).toBe(true)
 })
 
-type Call = { method: string; params: Record<string, unknown> }
+type Call = { method: string; params: Record<string, unknown>; options?: { timeoutMs?: number } }
+type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(reason?: unknown): void }
 
-function fakeScopeStore(options: { filterRepoIds: string[]; selected: string | null; worktrees: Partial<Worktree>[] }) {
+function deferred<T>(): Deferred<T> {
+  const { promise, resolve, reject } = Promise.withResolvers<T>()
+  return { promise, resolve, reject }
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let turn = 0; turn < 12; turn += 1) await Promise.resolve()
+}
+
+function fakeScopeStore(options: {
+  filterRepoIds: string[]
+  selected: string | null
+  worktrees: Partial<Worktree>[]
+  sessions?: Session[]
+  asks?: Ask[]
+  sessionList?: () => Promise<Session[]>
+  failMethod?: string
+}) {
   const calls: Call[] = []
-  const listeners = new Set<(event: never) => void>()
+  const listeners = new Set<(event: QuirkyEvent) => void>()
   const connection = {
-    async callAny(method: string, params: Record<string, unknown> = {}) {
-      calls.push({ method, params })
+    async callAny(method: string, params: Record<string, unknown> = {}, callOptions?: { timeoutMs?: number }) {
+      calls.push({ method, params, ...(callOptions === undefined ? {} : { options: callOptions }) })
+      if (options.failMethod === method) throw new Error('RPC call timed out after 20 ms')
       switch (method) {
         case 'quirky.repo/list':
           return [{ id: 'r1' }, { id: 'r2' }, { id: 'empty' }]
         case 'quirky.worktree/list':
           return options.worktrees
         case 'quirky.session/list':
+          return options.sessionList ? await options.sessionList() : options.sessions ?? []
         case 'quirky.ask/list':
+          return options.asks ?? []
         case 'quirky.worktree/projectMetadataList':
           return []
         case 'quirky.worktree/options':
           return { filterRepoIds: options.filterRepoIds }
         case 'ui.window.self':
           return { connId: 7 }
+        case 'quirky.session/get':
+          return { worktreeId: 'wt1' }
+        case 'quirky.ask/answer':
+          return { askId: params.askId, status: 'answered' }
         default:
           return {}
       }
     },
-    onEvent(listener: (event: never) => void) {
+    onEvent(listener: (event: QuirkyEvent) => void) {
       listeners.add(listener)
       return () => void listeners.delete(listener)
     },
@@ -456,8 +481,177 @@ function fakeScopeStore(options: { filterRepoIds: string[]; selected: string | n
   }
   const store = createAttentionStore(connection as never, host as never)
   const stop = store.subscribe(() => {})
-  return { store, calls, stop, navigated: () => calls.filter((call) => call.method === 'quirky.worktree/navigate').map((call) => call.params) }
+  return {
+    store,
+    calls,
+    stop,
+    emit: (event: QuirkyEvent) => listeners.forEach((listener) => listener(event)),
+    navigated: () => calls.filter((call) => call.method === 'quirky.worktree/navigate').map((call) => call.params)
+  }
 }
+
+test('attention refresh reads have deadlines, while answer and navigation calls do not', async () => {
+  const asks = [
+    { id: 'delegated', createdAt: 2, envelope: { status: 'pending' }, handoff: true, sessionId: 's1', worktreeId: null },
+    { id: 'answer', createdAt: 1, envelope: { status: 'pending' }, handoff: false, sessionId: null, worktreeId: null }
+  ] as unknown as Ask[]
+  const fake = fakeScopeStore({ filterRepoIds: [], selected: 'a', worktrees: [row('a', 'r1', 1)], asks })
+  await flushMicrotasks()
+  expect(await fake.store.openDelegatedQuestion('delegated')).toBe(true)
+  expect(await fake.store.openWorktree('a')).toBeNull()
+  expect(await fake.store.navigateHistory('back')).toBeNull()
+  expect(await fake.store.navigateHistory('forward')).toBeNull()
+  expect(await fake.store.selectProject('r1')).toBeNull()
+  expect(await fake.store.answer('answer', {}, [])).toBeNull()
+
+  for (const method of [
+    'quirky.repo/list',
+    'quirky.worktree/list',
+    'quirky.session/list',
+    'quirky.ask/list',
+    'quirky.worktree/options',
+    'quirky.worktree/projectMetadataList',
+    'ui.window.self',
+    'quirky.session/get'
+  ]) {
+    expect(fake.calls.filter((call) => call.method === method).length).toBeGreaterThan(0)
+    const reads = fake.calls.filter((call) => call.method === method).map((call) => call.options)
+    expect(reads.length).toBeGreaterThan(0)
+    expect(reads).toEqual(Array.from({ length: reads.length }, () => ({ timeoutMs: 30000 })))
+  }
+  for (const method of [
+    'quirky.ask/answer',
+    'quirky.worktree/navigate',
+    'quirky.worktree/setOptions',
+    'quirky.worktree/navigationBack',
+    'quirky.worktree/navigationForward'
+  ]) {
+    expect(fake.calls.filter((call) => call.method === method).length).toBeGreaterThan(0)
+    expect(fake.calls.filter((call) => call.method === method).every((call) => call.options === undefined)).toBe(true)
+  }
+  fake.stop()
+})
+
+test('a timed-out attention list read records its error', async () => {
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: [],
+    failMethod: 'quirky.repo/list'
+  })
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().errors.repos).toBe('RPC call timed out after 20 ms')
+  fake.stop()
+})
+
+const session = (id: string): Session => ({ id } as Session)
+
+test('changed session events replace an existing session and append a new one without refetching', async () => {
+  const a = session('a')
+  const b = session('b')
+  const a2 = { ...a, label: 'updated' } as Session
+  const c = session('c')
+  const fake = fakeScopeStore({ filterRepoIds: [], selected: null, worktrees: [], sessions: [a, b] })
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().sessions).toEqual([a, b])
+  const initialListCalls = fake.calls.filter((call) => call.method === 'quirky.session/list').length
+
+  fake.emit({ type: 'quirky.session/changed', data: { session: a2 } } as unknown as QuirkyEvent)
+  expect(fake.store.getSnapshot().sessions).toEqual([a2, b])
+  fake.emit({ type: 'quirky.session/changed', data: { session: c } } as unknown as QuirkyEvent)
+  expect(fake.store.getSnapshot().sessions).toEqual([a2, b, c])
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(initialListCalls)
+  fake.stop()
+})
+
+test('removed session events drop a known session and do not publish for unknown IDs', async () => {
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: [],
+    sessions: [session('a'), session('b')]
+  })
+  await flushMicrotasks()
+  const initialListCalls = fake.calls.filter((call) => call.method === 'quirky.session/list').length
+  let publications = 0
+  const unsubscribe = fake.store.subscribe(() => { publications += 1 })
+
+  fake.emit({ type: 'quirky.session/removed', data: { sessionId: 'missing' } } as unknown as QuirkyEvent)
+  expect(publications).toBe(0)
+  expect(fake.store.getSnapshot().sessions).toEqual([session('a'), session('b')])
+  fake.emit({ type: 'quirky.session/removed', data: { sessionId: 'b' } } as unknown as QuirkyEvent)
+  expect(publications).toBe(1)
+  expect(fake.store.getSnapshot().sessions).toEqual([session('a')])
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(initialListCalls)
+  unsubscribe()
+  fake.stop()
+})
+
+test('malformed session events refresh the session list', async () => {
+  const fake = fakeScopeStore({ filterRepoIds: [], selected: null, worktrees: [], sessions: [session('a')] })
+  await flushMicrotasks()
+  const malformed: QuirkyEvent[] = [
+    { type: 'quirky.session/changed', data: {} } as unknown as QuirkyEvent,
+    { type: 'quirky.session/changed', data: { session: { id: 1 } } } as unknown as QuirkyEvent,
+    { type: 'quirky.session/removed', data: { sessionId: 1 } } as unknown as QuirkyEvent
+  ]
+  for (const event of malformed) {
+    const before = fake.calls.filter((call) => call.method === 'quirky.session/list').length
+    fake.emit(event)
+    expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(before + 1)
+    await flushMicrotasks()
+  }
+  fake.stop()
+})
+
+test('an event after a failed session load refreshes the list again', async () => {
+  let failFirst = true
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: [],
+    sessionList: async () => {
+      if (failFirst) {
+        failFirst = false
+        throw new Error('session list timed out')
+      }
+      return [session('a')]
+    }
+  })
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().errors.sessions).toBe('session list timed out')
+  const before = fake.calls.filter((call) => call.method === 'quirky.session/list').length
+  fake.emit({ type: 'quirky.session/changed', data: { session: session('b') } } as unknown as QuirkyEvent)
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(before + 1)
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().sessions).toEqual([session('a')])
+  fake.stop()
+})
+
+test('an event during a session list call starts a newer read and discards the earlier result', async () => {
+  const pending: Deferred<Session[]>[] = []
+  const fake = fakeScopeStore({
+    filterRepoIds: [],
+    selected: null,
+    worktrees: [],
+    sessionList: () => {
+      const result = deferred<Session[]>()
+      pending.push(result)
+      return result.promise
+    }
+  })
+  expect(pending).toHaveLength(1)
+  fake.emit({ type: 'quirky.session/changed', data: { session: session('from-event') } } as unknown as QuirkyEvent)
+  expect(pending).toHaveLength(2)
+  pending[0]!.resolve([session('stale')])
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().sessions).toBeNull()
+  pending[1]!.resolve([session('newer')])
+  await flushMicrotasks()
+  expect(fake.store.getSnapshot().sessions).toEqual([session('newer')])
+  expect(fake.calls.filter((call) => call.method === 'quirky.session/list')).toHaveLength(2)
+  fake.stop()
+})
 
 const row = (id: string, repoId: string, lastActivityAt: number): Partial<Worktree> => ({ id, repoId, lastActivityAt, createdAt: 0, name: id, removing: false })
 

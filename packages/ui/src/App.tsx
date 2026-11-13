@@ -6,6 +6,7 @@ import { ConnectionBanner } from './components/ConnectionBanner'
 import { MainArea } from './components/MainArea'
 import { SettingsDialog } from './components/SettingsDialog'
 import { Toasts } from './components/Toasts'
+import { ShellErrorBoundary } from './components/ShellErrorBoundary'
 import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
@@ -48,6 +49,10 @@ const EMPTY_CHROME: ToolShellChrome = { rail: 0, splitter: 0, centerMinWidth: 0,
 type WorkspaceMeasurement = { width: number; height: number; chrome: ToolShellChrome }
 
 export function App() {
+  return <ShellErrorBoundary><AppContent /></ShellErrorBoundary>
+}
+
+function AppContent() {
   const state = useAppState()
   const { model, layout, windowRoute } = usePluginState()
   const host = usePluginHost()
