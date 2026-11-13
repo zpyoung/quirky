@@ -111,15 +111,21 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).toContain('apiVersion')
   })
 
-  test('the host supports raw stderr, bounded process-group cleanup and method deadlines', () => {
+  test('the host supports raw stderr and bounded process-group cleanup', () => {
     expect(PLUGIN_API_VERSION).toBe('1.12.0')
     expect(pluginApiCompatibilityError('1.10.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.11.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.12.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.12.1')).toContain('apiVersion')
-    expect(pluginApiCompatibilityError('1.13.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.11.1', '1.11.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('1.12.0', '1.11.0')).toContain('apiVersion')
     expect(pluginApiCompatibilityError('1.11.0', '1.10.0')).toContain('apiVersion')
+  })
+
+  test('the host supports method deadlines and stalled-job diagnostics', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.12.0')
+    expect(pluginApiCompatibilityError('1.12.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.12.1', '1.12.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.13.0', '1.12.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.12.0', '1.11.0')).toContain('apiVersion')
   })
 
   test.each([
