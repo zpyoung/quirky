@@ -67,7 +67,10 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     logMaxBytes: options.logMaxBytes,
     tailBytes: options.tailBytes,
     checkpointIntervalMs: options.checkpointIntervalMs,
-    shellReadyTimeoutMs: options.shellReadyTimeoutMs
+    shellReadyTimeoutMs: options.shellReadyTimeoutMs,
+    processRunner: options.processRunner,
+    shutdownDrainMs: options.shutdownDrainMs,
+    storedIndex: options.storedIndex
   })
   const connections = new Set<Connection>()
 
@@ -255,19 +258,21 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         manager.resize(request.sessionId, request.cols, request.rows)
         return {}
       case 'kill':
-        manager.kill(request.sessionId, request.signal, request.reason)
-        if (!request.signal || request.signal === 'SIGTERM' || request.signal === 'TERM' ||
-            request.signal === 'SIGKILL' || request.signal === 'KILL' || request.reason === 'killed') {
-          purgeSession(request.sessionId)
-        }
-        return {}
+        return manager.kill(request.sessionId, request.signal, request.reason).then(() => {
+          if (!request.signal || request.signal === 'SIGTERM' || request.signal === 'TERM' ||
+              request.signal === 'SIGKILL' || request.signal === 'KILL' || request.reason === 'killed') {
+            purgeSession(request.sessionId)
+          }
+          return {}
+        })
       case 'stopWithHistory':
         purgeSession(request.sessionId)
         return manager.stopWithHistory(request.sessionId).then(() => ({}))
       case 'forget':
-        manager.forget(request.sessionId)
-        purgeSession(request.sessionId)
-        return {}
+        return manager.forget(request.sessionId).then(() => {
+          purgeSession(request.sessionId)
+          return {}
+        })
       case 'list':
         return manager.list()
       case 'subscribe':

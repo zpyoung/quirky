@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'bun:test'
 import { ProcessRunnerDisposedError } from '@quirky/process'
 import type { ProcessRunner, RunResult } from '@quirky/protocol'
@@ -35,6 +38,12 @@ async function microtask(): Promise<void> {
 }
 
 const empty = parseProcessTable('')
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    return entry.isDirectory() ? sourceFiles(path) : [path]
+  })
+}
 
 describe('process tables', () => {
   test('parses only rows containing two integer pids', () => {
@@ -42,6 +51,7 @@ describe('process tables', () => {
       children: new Map([[1, [12]], [3, [15]]])
     })
   })
+
 
   test('walks every descendant of the root and tracked roots once, excluding roots through cycles', () => {
     const table = parseProcessTable('2 1\n3 2\n4 90\n5 4\n6 5\n2 6\n6 3\n7 7\n8 8\n9 3\n')
@@ -354,7 +364,7 @@ describe('process tables', () => {
       tables.fresh(),
       tables.recent(50),
       tables.recent(50)
-    ])).toEqual(Array(5).fill(empty))
+    ])).toEqual([empty, empty, empty, empty, empty])
     expect(count).toBe(1)
 
     firstRun.resolve(result('2 1\n'))
@@ -368,4 +378,11 @@ describe('process tables', () => {
     expect(await next).toEqual(parseProcessTable('3 1\n'))
     tables.close()
   })
+
+  test('S18: no synchronous spawn is present under pty-host source', () => {
+    const src = fileURLToPath(new URL('../src/', import.meta.url))
+    const matches = sourceFiles(src).filter((path) => readFileSync(path, 'utf8').includes('spawnSync'))
+    expect(matches).toEqual([])
+  })
+
 })

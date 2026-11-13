@@ -3,10 +3,12 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
-import { base64ToBytes, type PtyEvent } from '@quirky/protocol'
+import { base64ToBytes, type PtyEvent, type PtySessionInfo } from '@quirky/protocol'
+import { StoredSessions } from '../src/stored'
 import { readCheckpoint, writeCheckpoint } from '../src/history/checkpoint'
 import { HistoryLog, LogReader, readSegments } from '../src/history/log'
 import { readMeta, writeMeta } from '../src/history/meta'
+import { pageBefore, parseCursor } from '../src/history/reader'
 import { type CreateParams, DEFAULT_TAIL_BYTES, SessionManager, type SessionManagerOptions } from '../src/session'
 import { concat, onCleanup, runCleanups, scopeForHome, tempHome, text, trackSessionProcesses, waitFor } from './helpers'
 
@@ -123,8 +125,8 @@ async function readUntil(manager: SessionManager, sessionId: string, lines: numb
 /** Waits until the session's checkpoint covers everything it has printed. */
 async function checkpointCaughtUp(manager: SessionManager, home: string, sessionId: string): Promise<void> {
   await waitFor(
-    () => {
-      const offset = manager.list().find((info) => info.sessionId === sessionId)?.offset ?? 0
+    async () => {
+      const offset = (await manager.list()).find((info) => info.sessionId === sessionId)?.offset ?? 0
       const checkpoint = readCheckpoint(dirOf(home, sessionId))
       return offset > 0 && checkpoint?.offset === offset
     },
@@ -141,12 +143,11 @@ function crashImage(home: string): string {
 }
 
 /** A stored session on disk whose log is `output`, with a stale meta cwd. */
-function storedSession(sessionId: string, output: string, metaCwd = '/qm-stale'): string {
-  const home = tempHome()
+function storedSession(sessionId: string, output: string | readonly string[], metaCwd = '/qm-stale', home = tempHome()): string {
   const dir = dirOf(home, sessionId)
   mkdirSync(dir, { recursive: true })
   const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
-  log.appendOutput(enc(output))
+  for (const chunk of typeof output === 'string' ? [output] : output) log.appendOutput(enc(chunk))
   log.close()
   writeMeta(dir, {
     version: 1,
@@ -166,6 +167,60 @@ function storedSession(sessionId: string, output: string, metaCwd = '/qm-stale')
   return home
 }
 
+type IndexSliceCall = { path: string; position: number }
+
+function holdFirstStoredIndexSlice(pathToHold?: string) {
+  const calls: IndexSliceCall[] = []
+  const { promise: held, resolve: release } = Promise.withResolvers<void>()
+  const { promise: firstSlice, resolve: started } = Promise.withResolvers<void>()
+  let didHold = false
+  return {
+    calls,
+    firstSlice,
+    release,
+    storedIndex: {
+      beforeSlice: async (path: string, position: number) => {
+        calls.push({ path, position })
+        if (!didHold && position === 0 && (!pathToHold || path === pathToHold)) {
+          didHold = true
+          started()
+          await held
+        }
+      }
+    }
+  }
+}
+
+async function countLogReaderOpens<T>(work: () => Promise<T>): Promise<{ value: T; calls: number }> {
+  const open = LogReader.open
+  let calls = 0
+  LogReader.open = (dir) => {
+    calls++
+    return open.call(LogReader, dir)
+  }
+  try {
+    return { value: await work(), calls }
+  } finally {
+    LogReader.open = open
+  }
+}
+
+
+function oneStoredOffset(infos: PtySessionInfo[], sessionId: string): number {
+  const matches = infos.filter((info) => info.sessionId === sessionId)
+  expect(matches).toHaveLength(1)
+  return matches[0]!.offset
+}
+
+function logEndOffset(dir: string): number {
+  const reader = LogReader.open(dir)
+  try {
+    return reader.segments.at(-1)?.endOffset ?? 0
+  } finally {
+    reader.close()
+  }
+}
+
 function tempDir(): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'qm-')))
   onCleanup(() => rmSync(dir, { recursive: true, force: true }))
@@ -181,8 +236,8 @@ describe('defaults', () => {
     const { manager } = newManager()
     const ghost = 'unknown session: ghost'
     expect(() => manager.resize('ghost', 80, 24)).toThrow(ghost)
-    expect(() => manager.kill('ghost')).toThrow(ghost)
-    expect(() => manager.forget('ghost')).toThrow(ghost)
+    await expect(manager.kill('ghost')).rejects.toThrow(ghost)
+    await expect(manager.forget('ghost')).rejects.toThrow(ghost)
     await expect(manager.subscribe('ghost', () => {})).rejects.toThrow(ghost)
     await expect(manager.read('ghost', 1)).rejects.toThrow(ghost)
     await expect(manager.snapshot('ghost')).rejects.toThrow(ghost)
@@ -228,7 +283,7 @@ describe('shell-ready barrier', () => {
     // READY goes before the marker: printed after it, the released input's echo can beat it on a busy host
     await manager.create(params('b', sh(`sleep 0.7; echo READY; ${MARKER}; cat`), { shellReady: true }))
     const out = await tap(manager, 'b')
-    expect(manager.list()[0]!.shellState).toBe('pending')
+    expect((await manager.list())[0]!.shellState).toBe('pending')
     manager.write('b', enc('one\n'))
     manager.write('b', enc('two\n'))
     await Bun.sleep(300)
@@ -238,7 +293,7 @@ describe('shell-ready barrier', () => {
     const printed = out.text()
     expect(printed.indexOf('READY')).toBeLessThan(printed.indexOf('one'))
     expect(printed.indexOf('one')).toBeLessThan(printed.indexOf('two'))
-    expect(manager.list()[0]!.shellState).toBe('ready')
+    expect((await manager.list())[0]!.shellState).toBe('ready')
     expect(printed).not.toContain('777')
 
     const logged = readSegments(dirOf(home, 'b')).segments.flatMap((s) => s.records.filter((r) => r.kind === 'output').map((r) => text(r.bytes!)))
@@ -253,22 +308,22 @@ describe('shell-ready barrier', () => {
     manager.write('late', enc('late\n'))
     await Bun.sleep(150)
     expect(out.text()).toBe('')
-    expect(manager.list()[0]!.shellState).toBe('pending')
+    expect((await manager.list())[0]!.shellState).toBe('pending')
     await waitFor(() => out.text().includes('late'), 3000, 'input after timeout')
-    expect(manager.list()[0]!.shellState).toBe('timed_out')
+    expect((await manager.list())[0]!.shellState).toBe('timed_out')
   })
 
   test('SC-4: the manager option sets the timeout when the request does not', async () => {
     const { manager } = newManager({ shellReadyTimeoutMs: 200 })
     await manager.create(params('opt', ['/bin/cat'], { shellReady: true }))
-    await waitFor(() => manager.list()[0]!.shellState === 'timed_out', 3000, 'timeout from the option')
+    await waitFor(async () => (await manager.list())[0]!.shellState === 'timed_out', 3000, 'timeout from the option')
   })
 
   test('SC-5: sessions without shellReady have no barrier', async () => {
     const { manager } = newManager()
     await manager.create(params('plain', ['/bin/cat']))
     const out = await tap(manager, 'plain')
-    expect(manager.list()[0]!.shellState).toBe('unsupported')
+    expect((await manager.list())[0]!.shellState).toBe('unsupported')
     manager.write('plain', enc('now\n'))
     await waitFor(() => out.text().includes('now'), 1000, 'immediate input')
   })
@@ -298,7 +353,7 @@ describe('facts', () => {
       { type: 'fact', sessionId: 'f', fact: { kind: 'command-finished', exitCode: 4 } },
       { type: 'fact', sessionId: 'f', fact: { kind: 'cwd', cwd: '/tmp' } }
     ])
-    expect(manager.list()[0]).toMatchObject({ title: 't2', cwd: '/tmp' })
+    expect((await manager.list())[0]).toMatchObject({ title: 't2', cwd: '/tmp' })
   })
 
   test('SC-32: sequences split across reads are seen once', async () => {
@@ -318,7 +373,7 @@ describe('facts', () => {
       { type: 'fact', sessionId: 'split', fact: { kind: 'command-finished', exitCode: 4 } },
       { type: 'fact', sessionId: 'split', fact: { kind: 'cwd', cwd: '/tmp' } }
     ])
-    expect(manager.list()[0]).toMatchObject({ cwd: '/tmp' })
+    expect((await manager.list())[0]).toMatchObject({ cwd: '/tmp' })
   }, 30000)
 
   test('a listener that stops listening gets no more events', async () => {
@@ -418,13 +473,13 @@ describe('attach', () => {
     const { manager } = newManager()
     const total = 300
     await manager.create(params('f', sh(`i=0; while [ $i -lt ${total} ]; do echo line-$i; i=$((i+1)); sleep 0.005; done; sleep 30`)))
-    await waitFor(() => manager.list()[0]!.offset > 100, 5000, 'some output')
+    await waitFor(async () => (await manager.list())[0]!.offset > 100, 5000, 'some output')
 
     const chunks: Uint8Array[] = []
     const sub = await manager.subscribe('f', (_id, bytes) => chunks.push(bytes))
     await waitFor(() => text(concat(chunks)).includes(`line-${total - 1}\r\n`), 15000, 'the rest of the output')
     expect(sub.offset).toBeGreaterThan(0)
-    expect(sub.offset + concat(chunks).length).toBe(manager.list()[0]!.offset)
+    expect(sub.offset + concat(chunks).length).toBe((await manager.list())[0]!.offset)
 
     const term = await paint(base64ToBytes(sub.replay))
     await feed(term, concat(chunks))
@@ -436,7 +491,7 @@ describe('attach', () => {
     const total = 400000
     await manager.create(params('hot', sh(`i=0; while [ $i -lt ${total} ]; do echo line-$i; i=$((i+1)); done; sleep 30`)))
     const attached: Array<{ sub: Awaited<ReturnType<SessionManager['subscribe']>>; chunks: Uint8Array[] }> = []
-    await waitFor(() => manager.list()[0]!.offset > 20000, 15000, 'some output')
+    await waitFor(async () => (await manager.list())[0]!.offset > 20000, 15000, 'some output')
     for (let i = 0; i < 6; i++) {
       const chunks: Uint8Array[] = []
       attached.push({ sub: await manager.subscribe('hot', (_id, bytes) => chunks.push(bytes), { historyLines: 300 }), chunks })
@@ -482,7 +537,7 @@ describe('attach', () => {
     manager.write('w', enc('tail-end\n'))
     await waitFor(() => text(concat(live)).includes('tail-end\r\n'), 5000, 'more output')
     expect(first.all()).toBe(`RAW_READY\r\n${input.replaceAll('\n', '\r\n')}tail-end\r\n`)
-    expect(sub.offset + concat(live).length).toBe(manager.list()[0]!.offset)
+    expect(sub.offset + concat(live).length).toBe((await manager.list())[0]!.offset)
     expect(text(concat([replay, ...live]))).toBe(first.all().slice(sub.offset - replay.length))
   })
 
@@ -501,7 +556,7 @@ describe('attach', () => {
       cursor: { x: 5, y: 0 }
     })
     expect(snap.ansi).toContain('hello')
-    expect(snap.offset).toBe(manager.list()[0]!.offset)
+    expect(snap.offset).toBe((await manager.list())[0]!.offset)
     expect(JSON.parse(JSON.stringify(snap))).toEqual(snap)
   })
 
@@ -609,7 +664,7 @@ describe('history and read', () => {
     const { manager } = newManager()
     const long = 'abcdefghij'.repeat(5)
     await manager.create(params('uwx', sh(`printf '${long}'`), { cols: 20, rows: 10 }))
-    await waitFor(() => manager.list().every((info) => !info.alive), 5000, 'exit')
+    await waitFor(async () => (await manager.list()).every((info) => !info.alive), 5000, 'exit')
     expect((await manager.read('uwx', 0, true)).lines).toEqual([long])
   })
 
@@ -640,7 +695,7 @@ describe('history and read', () => {
   test('read with unwrap keeps the space across scrollback rows of a stopped session', async () => {
     const { manager } = newManager()
     await manager.create(params('uwstop', sh(`printf 'abcde fghij klmno pqrst'`), { cols: 6, rows: 3 }))
-    await waitFor(() => manager.list().every((info) => !info.alive), 5000, 'exit')
+    await waitFor(async () => (await manager.list()).every((info) => !info.alive), 5000, 'exit')
     expect((await manager.read('uwstop', 10, true)).lines).toEqual(['abcde fghij klmno pqrst'])
   })
 
@@ -657,7 +712,7 @@ describe('history and read', () => {
     manager.resize('rs', 100, 30)
     manager.write('rs', enc('\n'))
     await waitFor(() => out.text().includes('30 100'), 5000, 'stty size output')
-    expect(manager.list()[0]).toMatchObject({ cols: 100, rows: 30 })
+    expect((await manager.list())[0]).toMatchObject({ cols: 100, rows: 30 })
     expect(await manager.read('rs', 0)).toMatchObject({ cols: 100, rows: 30 })
     await waitFor(() => readMeta(dirOf(home, 'rs'))?.cols === 100, 3000, 'meta size')
     const sizes = readSegments(dirOf(home, 'rs')).segments.flatMap((s) => s.records.filter((r) => r.kind === 'resize').map((r) => [r.cols, r.rows]))
@@ -701,7 +756,7 @@ describe('exit', () => {
     await manager.create(params('e', sh('printf hello; exit 3')))
     await waitFor(() => exits.length > 0, 5000, 'exit event')
     expect(exits[0]).toEqual({ type: 'exit', sessionId: 'e', exitCode: 3, exitSignal: null, exitCause: 'exited' })
-    expect(manager.list()[0]).toMatchObject({ state: 'exited', alive: false, exitCode: 3, exitSignal: null, exitCause: 'exited', offset: 5 })
+    expect((await manager.list())[0]).toMatchObject({ state: 'exited', alive: false, exitCode: 3, exitSignal: null, exitCause: 'exited', offset: 5 })
     expect(manager.isAlive('e')).toBe(false)
     expect(readMeta(dirOf(home, 'e'))).toMatchObject({ exitCode: 3, exitSignal: null, exitCause: 'exited', restorable: false })
     expect(readMeta(dirOf(home, 'e'))!.endedAt).toBeGreaterThan(0)
@@ -720,7 +775,7 @@ describe('exit', () => {
     const { manager, home } = newManager()
     const exits = exitEvents(manager)
     await manager.create(params('k', sh('sleep 30 & wait')))
-    manager.kill('k', undefined, 'killed')
+    await manager.kill('k', undefined, 'killed')
     await waitFor(() => exits.length > 0, 5000, 'exit event')
     expect(exits[0]).toEqual({ type: 'exit', sessionId: 'k', exitCode: 137, exitSignal: 'SIGKILL', exitCause: 'killed' })
     expect(readMeta(dirOf(home, 'k'))).toMatchObject({ exitCause: 'killed', restorable: false })
@@ -735,7 +790,7 @@ describe('exit', () => {
       const seen = await readUntil(manager, 'bg', 0, (lines) => lines.some((line) => /^bg=\d+$/.test(line)))
       bgPid = Number(seen.lines.find((line) => /^bg=\d+$/.test(line))!.slice(3))
       expect(() => process.kill(bgPid, 0)).not.toThrow()
-      manager.kill('bg', undefined, 'killed')
+      await manager.kill('bg', undefined, 'killed')
       await waitFor(() => exits.length > 0, 2000, 'exit event')
       await waitFor(
         () => {
@@ -764,17 +819,17 @@ describe('exit', () => {
     const { manager } = newManager()
     const exits = exitEvents(manager)
     await manager.create(params('k', sh('sleep 30 & wait')))
-    manager.kill('k')
+    await manager.kill('k')
     await waitFor(() => exits.length > 0, 5000, 'exit event')
     expect(exits[0]).toMatchObject({ exitCode: 143, exitSignal: 'SIGTERM', exitCause: 'exited' })
-    expect(() => manager.kill('k', 'SIGNOPE')).toThrow(/signal/i)
+    await expect(manager.kill('k', 'SIGNOPE')).rejects.toThrow(/signal/i)
   })
 
   test('a failed start leaves nothing behind and the id can be used again', async () => {
     const { manager, home } = newManager()
     await expect(manager.create(params('bad', ['/bin/cat'], { cwd: '/definitely/not/here' }))).rejects.toThrow()
     expect(existsSync(dirOf(home, 'bad'))).toBe(false)
-    expect(manager.list()).toEqual([])
+    expect((await manager.list())).toEqual([])
     await manager.create(params('bad', ['/bin/cat']))
   })
 
@@ -785,13 +840,13 @@ describe('exit', () => {
     await manager.shutdown()
 
     const { manager: next } = newManager({}, home)
-    expect(next.list()[0]).toMatchObject({ state: 'restorable' })
+    expect((await next.list())[0]).toMatchObject({ state: 'restorable' })
     const created = await next.create(params('s', sh('echo new-run; sleep 30')))
     expect(created.restored).toBe(false)
     const result = await readUntil(next, 's', 50, (lines) => lines.includes('new-run'))
     expect(result.lines).not.toContain('old-run')
-    expect(next.list()).toHaveLength(1)
-    expect(next.list()[0]).toMatchObject({ state: 'running' })
+    expect((await next.list())).toHaveLength(1)
+    expect((await next.list())[0]).toMatchObject({ state: 'running' })
   })
 })
 
@@ -808,7 +863,7 @@ describe('cold restore', () => {
     const crashed = crashImage(home)
 
     const { manager: second } = newManager({}, crashed)
-    const stored = second.list().find((info) => info.sessionId === 's1')!
+    const stored = (await second.list()).find((info) => info.sessionId === 's1')!
     expect(stored).toMatchObject({
       state: 'restorable',
       pid: 0,
@@ -837,8 +892,8 @@ describe('cold restore', () => {
       return at >= 0 && lines.slice(at + 1).some((line) => line.trim() !== '')
     })
     expect(screen.lines).toContain('before-crash')
-    expect(second.list().find((info) => info.sessionId === 's1')).toMatchObject({ state: 'running', alive: true, exitCause: null })
-    expect(second.list().find((info) => info.sessionId === 's1')!.offset).toBeGreaterThan(preOffset)
+    expect((await second.list()).find((info) => info.sessionId === 's1')).toMatchObject({ state: 'running', alive: true, exitCause: null })
+    expect((await second.list()).find((info) => info.sessionId === 's1')!.offset).toBeGreaterThan(preOffset)
     expect(readMeta(dirOf(crashed, 's1'))).toMatchObject({ endedAt: null, restorable: false, exitCode: null, exitCause: null })
 
     second.write('s1', enc('pwd\n'))
@@ -876,7 +931,7 @@ describe('cold restore', () => {
     await first.create(params('s', sh('echo first-life; sleep 30')))
     await checkpointCaughtUp(first, home, 's')
     const { manager: second, home: crashed } = newManager({}, crashImage(home))
-    const before = second.list()[0]!.offset
+    const before = (await second.list())[0]!.offset
     await second.create(params('s', ['/bin/cat'], { restore: true }))
     second.write('s', enc('second-life\n'))
     await readUntil(second, 's', 10, (lines) => lines.includes('second-life'))
@@ -887,8 +942,8 @@ describe('cold restore', () => {
     const output = segments.flatMap((segment) => segment.records.filter((r) => r.kind === 'output').map((r) => text(r.bytes!))).join('')
     expect(output.indexOf('first-life')).toBeGreaterThanOrEqual(0)
     expect(output.indexOf('first-life')).toBeLessThan(output.indexOf('second-life'))
-    expect(segments.at(-1)!.endOffset).toBe(second.list()[0]!.offset)
-    expect(second.list()[0]!.offset).toBeGreaterThan(before)
+    expect(segments.at(-1)!.endOffset).toBe((await second.list())[0]!.offset)
+    expect((await second.list())[0]!.offset).toBeGreaterThan(before)
   })
 
   test('SC-21: queries in the history produce no input to the restored shell', async () => {
@@ -899,12 +954,12 @@ describe('cold restore', () => {
 
     const { manager: second } = newManager({}, crashed)
     await second.create(params('q', ['/bin/cat'], { restore: true }))
-    const offset = second.list()[0]!.offset
+    const offset = (await second.list())[0]!.offset
     const out = await tap(second, 'q')
     await second.subscribe('q', () => {})
     await second.snapshot('q')
     await Bun.sleep(600)
-    expect(second.list()[0]!.offset).toBe(offset)
+    expect((await second.list())[0]!.offset).toBe(offset)
     expect(out.text()).toBe('')
     expect((await second.read('q', 10)).lines).toContain('q-done')
 
@@ -951,13 +1006,13 @@ describe('cold restore', () => {
       writeFileSync(join(both, 'output.log'), 'garbage that is no log')
 
       const { manager } = newManager({}, home)
-      expect(manager.list().map((info) => [info.sessionId, info.state])).toEqual(
+      expect((await manager.list()).map((info) => [info.sessionId, info.state])).toEqual(
         expect.arrayContaining([['torn', 'restorable'], ['nocp', 'restorable'], ['nolog', 'restorable'], ['neither', 'restorable']])
       )
       const screens: Record<string, string[]> = {}
       for (const id of ['torn', 'nocp', 'nolog', 'neither']) {
         await manager.create(params(id, ['/bin/cat'], { restore: true }))
-        expect(manager.list().find((info) => info.sessionId === id)).toMatchObject({ state: 'running' })
+        expect((await manager.list()).find((info) => info.sessionId === id)).toMatchObject({ state: 'running' })
         screens[id] = (await manager.read(id, 20)).lines
       }
       expect(screens.torn).toEqual(expect.arrayContaining(['old-1', 'old-2']))
@@ -993,7 +1048,7 @@ describe('cold restore', () => {
     })
     const { manager } = newManager({}, home)
     await expect(manager.create(params('g', ['/bin/cat'], { cwd: '/definitely/not/here', restore: true }))).rejects.toThrow()
-    expect(manager.list()).toMatchObject([{ sessionId: 'g', state: 'restorable' }])
+    expect((await manager.list())).toMatchObject([{ sessionId: 'g', state: 'restorable' }])
     expect(existsSync(dir)).toBe(true)
 
     const restored = await manager.create(params('g', ['/bin/cat'], { restore: true }))
@@ -1008,7 +1063,7 @@ describe('cold restore', () => {
     mkdirSync(join(home, 'sessions', 'badmeta'), { recursive: true })
     writeFileSync(join(home, 'sessions', 'badmeta', 'meta.json'), '{"version":1')
     const { manager } = newManager({}, home)
-    expect(manager.list()).toEqual([])
+    expect((await manager.list())).toEqual([])
     await expect(manager.read('junk', 1)).rejects.toThrow('unknown session: junk')
     expect(readFileSync(join(home, 'sessions', 'junk', 'output.log'), 'utf8')).toBe('old raw log')
   })
@@ -1030,7 +1085,7 @@ describe('shutdown and stored sessions', () => {
     }
 
     const { manager: next } = newManager({}, home)
-    const listed = next.list()
+    const listed = await next.list()
     expect(listed.map((info) => info.sessionId).sort()).toEqual(['a', 'b'])
     for (const info of listed) {
       expect(info).toMatchObject({ state: 'restorable', pid: 0, alive: false, exitCode: null, exitSignal: null, exitCause: 'host-restart' })
@@ -1052,7 +1107,7 @@ describe('shutdown and stored sessions', () => {
     await manager.shutdown()
 
     const { manager: next } = newManager({}, home)
-    expect(next.list()[0]).toMatchObject({ sessionId: 'x', state: 'exited', alive: false, exitCode: 0, exitCause: 'exited', pid: 0 })
+    expect((await next.list())[0]).toMatchObject({ sessionId: 'x', state: 'exited', alive: false, exitCode: 0, exitCause: 'exited', pid: 0 })
     const chunks: Uint8Array[] = []
     const sub = await next.subscribe('x', (_id, bytes) => chunks.push(bytes))
     expect(sub.live).toBe(false)
@@ -1078,10 +1133,10 @@ describe('shutdown and stored sessions', () => {
 
     const { manager: next } = newManager({}, home)
     expect(existsSync(dirOf(home, 'x'))).toBe(true)
-    next.forget('x')
+    await next.forget('x')
     expect(existsSync(dirOf(home, 'x'))).toBe(false)
-    expect(next.list()).toEqual([])
-    expect(() => next.forget('x')).toThrow('unknown session: x')
+    expect((await next.list())).toEqual([])
+    await expect(next.forget('x')).rejects.toThrow('unknown session: x')
     await expect(next.history('x')).rejects.toThrow('unknown session: x')
   })
 
@@ -1089,9 +1144,9 @@ describe('shutdown and stored sessions', () => {
     const { manager, home } = newManager()
     const { pid } = await manager.create(params('f', sh('echo hi; sleep 100')))
     await readUntil(manager, 'f', 0, (lines) => lines.includes('hi'))
-    manager.forget('f')
+    await manager.forget('f')
     expect(existsSync(dirOf(home, 'f'))).toBe(false)
-    expect(manager.list()).toEqual([])
+    expect((await manager.list())).toEqual([])
     await waitFor(
       () => {
         try {
@@ -1138,8 +1193,9 @@ describe('removed sinks and shutdown races', () => {
     await manager.create(params('r', sh('echo hi; sleep 30')))
     await readUntil(manager, 'r', 0, (lines) => lines.includes('hi'))
     const pending = manager.subscribe('r', () => {})
-    manager.forget('r')
-    await expect(pending).rejects.toThrow()
+    void pending.catch(() => {})
+    await manager.forget('r')
+    await expect(pending).rejects.toThrow('subscription cancelled')
   })
 
   test('a stored session reports the cwd the rebuild recovered, not the stale meta cwd', async () => {
@@ -1165,7 +1221,433 @@ describe('removed sinks and shutdown races', () => {
     await expect(restoring).rejects.toThrow('Terminal host is shutting down')
     await stopped
     expect(manager.isAlive('w')).toBe(false)
-    expect(manager.list()).toMatchObject([{ sessionId: 'w', state: 'restorable' }])
+    expect((await manager.list())).toMatchObject([{ sessionId: 'w', state: 'restorable' }])
     await expect(manager.create(params('n', ['/bin/cat']))).rejects.toThrow('Terminal host is shutting down')
+  })
+})
+describe('stored session index', () => {
+  test('S30: list awaits offsets without opening a synchronous reader', async () => {
+    const output = 'stored-1\r\nstored-2\r\n'
+    const home = storedSession('x', output)
+    storedSession('y', 'second-1\r\n', '/qm-stale', home)
+    const dir = dirOf(home, 'x')
+    writeCheckpoint(dir, {
+      version: 1,
+      offset: enc(output).length,
+      cols: 80,
+      rows: 24,
+      ansi: output,
+      cwd: '/tmp',
+      title: 'stored title',
+      savedAt: Date.now()
+    })
+    const slices: IndexSliceCall[] = []
+    const { manager } = newManager({
+      storedIndex: { beforeSlice: (path, position) => { slices.push({ path, position }) } }
+    }, home)
+
+    const pending = manager.list()
+    expect(pending).toBeInstanceOf(Promise)
+    const measured = await countLogReaderOpens(() => pending)
+    expect(measured.calls).toBe(0)
+    expect(measured.value).toHaveLength(2)
+    expect(measured.value[0]).toMatchObject({
+      sessionId: 'x',
+      state: 'restorable',
+      exitCause: 'host-lost',
+      cols: 80,
+      rows: 24,
+      title: 'stored title'
+    })
+    expect(measured.value[0]!.offset).toBe(logEndOffset(dir))
+    expect(measured.value[1]!.offset).toBe(logEndOffset(dirOf(home, 'y')))
+    expect(measured.value[1]).toMatchObject({
+      sessionId: 'y',
+      state: 'restorable',
+      exitCause: 'host-lost',
+      cols: 80,
+      rows: 24,
+      title: null
+    })
+    expect(slices.filter((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toHaveLength(2)
+  })
+
+  test('S31: list, subscribe, read, snapshot and history share one stored index', async () => {
+    const output = Array.from({ length: 50 }, (_, index) => `line-${index + 1}\r\n`)
+    const home = storedSession('x', output)
+    const slices: IndexSliceCall[] = []
+    const { manager } = newManager({
+      storedIndex: { beforeSlice: (path, position) => { slices.push({ path, position }) } }
+    }, home)
+
+    const measured = await countLogReaderOpens(async () => {
+      const listed = await manager.list()
+      const subscribed = await manager.subscribe('x', () => {})
+      const read = await manager.read('x', 100)
+      const snapshot = await manager.snapshot('x')
+      const firstPage = await manager.history('x', { lines: 10 })
+      const previousPage = await manager.history('x', { lines: 10, before: firstPage.cursor ?? undefined })
+      return { listed, subscribed, read, snapshot, firstPage, previousPage }
+    })
+    const pageOptions = { lines: 10, format: 'text' as const, screenRows: 24 }
+    const expectedFirst = await pageBefore(dirOf(home, 'x'), pageOptions)
+    const expectedPrevious = await pageBefore(dirOf(home, 'x'), { ...pageOptions, before: parseCursor(expectedFirst.cursor!) })
+    expect(measured.calls).toBe(0)
+    expect(measured.value.listed).toHaveLength(1)
+    expect(text(base64ToBytes(measured.value.subscribed.replay))).toContain('line-50')
+    expect(measured.value.subscribed).toMatchObject({ live: false, cols: 80, rows: 24, shellState: 'unsupported' })
+    expect(measured.value.read.lines).toContain('line-1')
+    expect(measured.value.read.lines).toContain('line-50')
+    expect(measured.value.snapshot.ansi).toContain('line-50')
+    expect(measured.value.firstPage.cursor).not.toBeNull()
+    expect(measured.value.firstPage).toEqual(expectedFirst)
+    expect(measured.value.previousPage).toEqual(expectedPrevious)
+    expect(slices.filter((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toHaveLength(1)
+  })
+
+  test('S32: concurrent first reads share one in-flight index load', async () => {
+    const home = storedSession('x', 'one\r\ntwo\r\nthree\r\n')
+    const slices: IndexSliceCall[] = []
+    const { manager } = newManager({
+      storedIndex: { beforeSlice: (path, position) => { slices.push({ path, position }) } }
+    }, home)
+
+    const measured = await countLogReaderOpens(async () => Promise.all([
+      manager.list(),
+      manager.list(),
+      manager.subscribe('x', () => {}),
+      manager.read('x', 5)
+    ]))
+    expect(measured.calls).toBe(0)
+    expect(measured.value[0]).toHaveLength(1)
+    expect(text(base64ToBytes(measured.value[2].replay))).toContain('three')
+    expect(measured.value[3].lines).toContain('three')
+    expect(slices.filter((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toHaveLength(1)
+  })
+
+  test('index loads are cached per entry and limited to four concurrent sessions', async () => {
+    const home = storedSession('s0', 'entry\r\n')
+    for (let index = 1; index < 6; index++) storedSession(`s${index}`, 'entry\r\n', '/qm-stale', home)
+    const { promise: gate, resolve: release } = Promise.withResolvers<void>()
+    let entered = 0
+    let active = 0
+    let maximum = 0
+    const sessions = new StoredSessions(home, {
+      beforeSlice: async (_path, position) => {
+        if (position !== 0) return
+        entered++
+        active++
+        maximum = Math.max(maximum, active)
+        if (entered <= 4) await gate
+        active--
+      }
+    })
+    const entries = Array.from({ length: 6 }, (_, index) => sessions.get(`s${index}`)!)
+    const first = sessions.index(entries[0]!)
+    expect(sessions.index(entries[0]!)).toBe(first)
+    const all = entries.map((entry) => sessions.index(entry))
+    await waitFor(() => entered >= 4, 5000, 'four concurrent stored index loads')
+    expect(entered).toBe(4)
+    expect(maximum).toBe(4)
+    release()
+    await Promise.all(all)
+    expect(entered).toBe(6)
+    expect(maximum).toBe(4)
+  })
+
+  test('a non-retained index is used once and loaded again on the next call', async () => {
+    const home = storedSession('large', '')
+    const dir = dirOf(home, 'large')
+    const log = HistoryLog.openForAppend(dir, { cols: 80, rows: 24 })
+    for (let index = 0; index < 65_536; index++) log.appendResize((index % 80) + 1, 24)
+    log.close()
+    const slices: IndexSliceCall[] = []
+    const sessions = new StoredSessions(home, {
+      beforeSlice: (path, position) => { slices.push({ path, position }) }
+    })
+    const entry = sessions.get('large')!
+    const firstPromise = sessions.index(entry)
+    expect(sessions.index(entry)).toBe(firstPromise)
+    const first = await firstPromise
+    expect(first.entries).toBeGreaterThan(65_536)
+    expect(first.retain).toBe(false)
+    const secondPromise = sessions.index(entry)
+    expect(secondPromise).not.toBe(firstPromise)
+    expect((await secondPromise).retain).toBe(false)
+    expect(slices.filter((slice) => slice.position === 0)).toHaveLength(2)
+  })
+
+  test('S33: restore rebuilds from the stored index before spawning', async () => {
+    const home = storedSession('x', 'restore-me\r\n')
+    const slices: IndexSliceCall[] = []
+    const { manager } = newManager({
+      storedIndex: { beforeSlice: (path, position) => { slices.push({ path, position }) } }
+    }, home)
+
+    const measured = await countLogReaderOpens(() => manager.create(params('x', ['/bin/cat'], { restore: true })))
+    expect(measured.calls).toBe(0)
+    expect(measured.value).toMatchObject({ restored: true, pid: expect.any(Number) })
+    expect(slices.filter((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toHaveLength(1)
+  })
+
+  test('S34: stop stores the live offset without loading the new entry to list it', async () => {
+    const slices: IndexSliceCall[] = []
+    const { manager, home } = newManager({
+      storedIndex: { beforeSlice: (path, position) => { slices.push({ path, position }) } }
+    })
+    await manager.create(params('s', sh("printf 'kept-1\\r\\nkept-2\\r\\n'; exec cat")))
+    await readUntil(manager, 's', 10, (lines) => lines.includes('kept-2'))
+    const liveOffset = oneStoredOffset(await manager.list(), 's')
+
+    await manager.stopWithHistory('s')
+    const listed = await manager.list()
+    expect(oneStoredOffset(listed, 's')).toBe(liveOffset)
+    expect(listed[0]).toMatchObject({ state: 'restorable', exitCause: 'stopped' })
+    expect(slices.some((slice) => slice.path.includes('/sessions/s/'))).toBe(false)
+    const read = await manager.read('s', 200)
+    expect(read.lines).toEqual(expect.arrayContaining(['kept-1', 'kept-2']))
+    expect(slices.some((slice) => slice.path.includes('/sessions/s/'))).toBe(true)
+  })
+
+  test('S35: forgetting an entry during its load invalidates the pending stored read', async () => {
+    const home = storedSession('x', 'old\r\n')
+    const held = holdFirstStoredIndexSlice()
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    const listing = manager.list()
+    await held.firstSlice
+    const pendingSubscribe = manager.subscribe('x', () => {})
+    void pendingSubscribe.catch(() => {})
+
+    await manager.forget('x')
+    expect(existsSync(dirOf(home, 'x'))).toBe(false)
+    held.release()
+    expect((await listing).some((info) => info.sessionId === 'x')).toBe(false)
+    await expect(pendingSubscribe).rejects.toThrow('unknown session: x')
+    expect(held.calls.filter((slice) => slice.position === 0)).toHaveLength(1)
+  })
+
+  test('S36: replacing an entry during its load cannot return the old history', async () => {
+    const oldLines = Array.from({ length: 50 }, (_, index) => `old-${index + 1}\r\n`)
+    const home = storedSession('x', oldLines)
+    const held = holdFirstStoredIndexSlice()
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    const stored = (manager as unknown as { stored: StoredSessions }).stored
+    const oldEntry = stored.get('x')!
+    const listing = manager.list()
+    await held.firstSlice
+    const pendingRead = manager.read('x', 50)
+    void pendingRead.catch(() => {})
+
+    await manager.create(params('x', sh("seq -f 'new-%g' 1 50; exec cat")))
+    await readUntil(manager, 'x', 50, (lines) => lines.includes('new-50'))
+    await manager.stopWithHistory('x')
+    const newEntry = stored.get('x')!
+    const newOffset = readSegments(dirOf(home, 'x')).segments.at(-1)!.endOffset
+    expect(newEntry).not.toBe(oldEntry)
+
+    held.release()
+    const listed = await listing
+    await expect(pendingRead).rejects.toThrow('session x changed while it was being read')
+    expect(oneStoredOffset(listed, 'x')).toBe(newOffset)
+    expect(listed.filter((info) => info.sessionId === 'x')).toHaveLength(1)
+    expect(listed.find((info) => info.sessionId === 'x')).toMatchObject({ state: 'restorable' })
+    const read = await manager.read('x', 50)
+    expect(read.lines.some((line) => line.startsWith('new-'))).toBe(true)
+    expect(read.lines.some((line) => line.startsWith('old-'))).toBe(false)
+    expect(held.calls.filter((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toHaveLength(2)
+  })
+
+  test('S37: restoring during a stored read never returns new shell output', async () => {
+    const home = storedSession('x', 'stored-line\r\n')
+    const held = holdFirstStoredIndexSlice()
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    const pendingRead = manager.read('x', 5)
+    const readResult = pendingRead.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error })
+    )
+    await held.firstSlice
+    const restoring = manager.create(params('x', sh('echo new-shell; exec cat'), { restore: true }))
+    held.release()
+    expect(await restoring).toMatchObject({ restored: true })
+
+    const result = await readResult
+    if ('error' in result) {
+      expect(result.error).toMatchObject({ message: 'session x changed while it was being read' })
+    } else {
+      expect(result.value.lines).toContain('stored-line')
+      expect(result.value.lines).not.toContain('new-shell')
+    }
+  })
+
+  test('S38: a stale truncated index reloads in slices with and without a checkpoint', async () => {
+    for (const withCheckpoint of [false, true]) {
+      const id = withCheckpoint ? 'checkpointed' : 'plain'
+      const chunks = Array.from({ length: 200 }, (_, index) => `line-${index + 1}\r\n`)
+      const output = chunks.join('')
+      const home = storedSession(id, chunks)
+      const dir = dirOf(home, id)
+      if (withCheckpoint) {
+        writeCheckpoint(dir, {
+          version: 1,
+          offset: enc(output).length,
+          cols: 80,
+          rows: 24,
+          ansi: 'checkpoint-screen\r\n',
+          cwd: '/tmp',
+          title: null,
+          savedAt: Date.now()
+        })
+      }
+      const slices: IndexSliceCall[] = []
+      const { manager } = newManager({
+        storedIndex: { beforeSlice: (path, position) => { slices.push({ path, position }) } }
+      }, home)
+      const measured = await countLogReaderOpens(async () => {
+        await manager.list()
+        const path = join(dir, 'output.log')
+        truncateSync(path, Math.floor(statSync(path).size / 2))
+        const first = await manager.read(id, 300)
+        const second = await manager.read(id, 300)
+        const listed = await manager.list()
+        return { first, second, listed }
+      })
+      expect(measured.calls).toBe(0)
+      if (withCheckpoint) {
+        expect(measured.value.first.lines).toContain('checkpoint-screen')
+        expect(measured.value.second.lines.at(-1)).toBe('checkpoint-screen')
+      } else {
+        expect(measured.value.first.lines).toContain('[history could not be read]')
+        const retainedLines = measured.value.second.lines.filter((line) => /^line-\d+$/.test(line))
+        expect(retainedLines.length).toBeGreaterThan(0)
+        expect(retainedLines.every((line) => Number(line.slice(5)) < 200)).toBe(true)
+      }
+      const reader = LogReader.open(dir)
+      const truncatedOffset = reader.segments.at(-1)?.endOffset ?? 0
+      reader.close()
+      expect(oneStoredOffset(measured.value.listed, id)).toBe(truncatedOffset)
+      expect(slices.filter((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toHaveLength(2)
+    }
+  })
+
+  test('S39: unreadable stored history lists at zero and subscribes to the note screen', async () => {
+    const home = storedSession('x', 'history\r\n')
+    writeFileSync(join(dirOf(home, 'x'), 'output.log'), 'bad magic')
+    const slices: IndexSliceCall[] = []
+    const { manager } = newManager({
+      storedIndex: { beforeSlice: (path, position) => { slices.push({ path, position }) } }
+    }, home)
+    const measured = await countLogReaderOpens(async () => ({
+      listed: await manager.list(),
+      subscribed: await manager.subscribe('x', () => {})
+    }))
+    expect(measured.calls).toBe(0)
+    expect(oneStoredOffset(measured.value.listed, 'x')).toBe(0)
+    expect(bufferLines(await paint(base64ToBytes(measured.value.subscribed.replay))).join('\n')).toContain('[history could not be read]')
+    expect(slices.some((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toBe(true)
+  })
+
+  test('S40: a stored session restored while list waits appears as one live entry', async () => {
+    const home = storedSession('h', 'held-history\r\n')
+    storedSession('x', 'old-history\r\n', '/qm-stale', home)
+    const held = holdFirstStoredIndexSlice(join(dirOf(home, 'h'), 'output.log'))
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    const stored = (manager as unknown as { stored: StoredSessions }).stored
+    await manager.read('x', 5)
+    const oldEntry = stored.get('x')!
+    const listing = manager.list()
+    await held.firstSlice
+    const restoring = await manager.create(params('x', sh('echo restored; exec cat'), { restore: true }))
+    expect(stored.get('x')).toBeUndefined()
+    held.release()
+
+    const infos = await listing
+    expect(restoring.restored).toBe(true)
+    expect(infos.filter((info) => info.sessionId === 'x')).toHaveLength(1)
+    expect(infos.find((info) => info.sessionId === 'x')).toMatchObject({ state: 'running', alive: true, pid: restoring.pid })
+    expect(oneStoredOffset(infos, 'h')).toBe(enc('held-history\r\n').length)
+    expect(held.calls.filter((slice) => slice.path.endsWith('output.log') && slice.position === 0)).toHaveLength(2)
+    expect(oldEntry.sessionId).toBe('x')
+  })
+
+  test('S40: a live session stopped while list waits appears once as stored with its seeded offset', async () => {
+    const home = storedSession('h', 'held-history\r\n')
+    const held = holdFirstStoredIndexSlice(join(dirOf(home, 'h'), 'output.log'))
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    await manager.create(params('y', sh("printf 'stopped-y\\r\\n'; exec cat")))
+    await readUntil(manager, 'y', 10, (lines) => lines.includes('stopped-y'))
+    const listing = manager.list()
+    await held.firstSlice
+    await manager.stopWithHistory('y')
+    const expectedOffset = readSegments(dirOf(home, 'y')).segments.at(-1)!.endOffset
+    held.release()
+
+    const infos = await listing
+    expect(infos.filter((info) => info.sessionId === 'y')).toHaveLength(1)
+    expect(infos.find((info) => info.sessionId === 'y')).toMatchObject({ state: 'restorable', pid: 0, offset: expectedOffset })
+    expect(oneStoredOffset(infos, 'h')).toBe(enc('held-history\r\n').length)
+    expect(held.calls.some((slice) => slice.path.includes('/sessions/y/'))).toBe(false)
+  })
+
+  test('S40: a live session forgotten while list waits is absent from its snapshot', async () => {
+    const home = storedSession('h', 'held-history\r\n')
+    const held = holdFirstStoredIndexSlice(join(dirOf(home, 'h'), 'output.log'))
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    await manager.create(params('f', sh('exec cat')))
+    const listing = manager.list()
+    await held.firstSlice
+    await manager.forget('f')
+    held.release()
+
+    const infos = await listing
+    expect(infos.some((info) => info.sessionId === 'f')).toBe(false)
+    expect(infos.filter((info) => info.sessionId === 'h')).toHaveLength(1)
+    expect(oneStoredOffset(infos, 'h')).toBe(enc('held-history\r\n').length)
+  })
+
+  test('S40: a stored session forgotten while list waits is absent from its snapshot', async () => {
+    const home = storedSession('h', 'held-history\r\n')
+    storedSession('g', 'forgotten-history\r\n', '/qm-stale', home)
+    const held = holdFirstStoredIndexSlice(join(dirOf(home, 'h'), 'output.log'))
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    const listing = manager.list()
+    await held.firstSlice
+    await manager.forget('g')
+    expect(existsSync(dirOf(home, 'g'))).toBe(false)
+    held.release()
+
+    const infos = await listing
+    expect(infos.some((info) => info.sessionId === 'g')).toBe(false)
+    expect(infos.filter((info) => info.sessionId === 'h')).toHaveLength(1)
+    expect(oneStoredOffset(infos, 'h')).toBe(enc('held-history\r\n').length)
+  })
+
+  test('S40: create/forget churn preserves the waiting entry identity without extra index loads', async () => {
+    const home = storedSession('h', 'held-history\r\n')
+    const held = holdFirstStoredIndexSlice(join(dirOf(home, 'h'), 'output.log'))
+    const { manager } = newManager({ storedIndex: held.storedIndex }, home)
+    const stored = (manager as unknown as { stored: StoredSessions }).stored
+    const hEntry = stored.get('h')!
+    const listing = manager.list()
+    await held.firstSlice
+
+    for (let index = 0; index < 20; index++) {
+      const sessionId = `churn-${index}`
+      await manager.create(params(sessionId, sh('exit 0')))
+      await waitFor(
+        () => !manager.isAlive(sessionId) && readMeta(dirOf(home, sessionId))?.endedAt !== null,
+        5000,
+        `churn session ${sessionId} to exit`
+      )
+      await manager.forget(sessionId)
+      expect(stored.get(sessionId)).toBeUndefined()
+    }
+    expect(stored.get('h')).toBe(hEntry)
+    held.release()
+
+    const infos = await listing
+    expect(infos.map((info) => info.sessionId)).toEqual(['h'])
+    expect(oneStoredOffset(infos, 'h')).toBe(enc('held-history\r\n').length)
+    expect(held.calls.filter((slice) => slice.position === 0)).toHaveLength(1)
   })
 })
