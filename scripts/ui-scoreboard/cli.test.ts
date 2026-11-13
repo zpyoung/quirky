@@ -10,7 +10,7 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'scoreboard-cli-')); roots.push(root)
   const inventory: Inventory = {
     repoRoot: root, commit: 'fixture', sourceDigest: 'digest', dirty: false,
-    plugins: [{ id: 'acme.ui', directory: 'plugins/acme.ui', hasUi: true, targets: ['view'], sources: [{ file: 'plugins/acme.ui/src/ui.ts', content: '"--compat-px-40"' }] }],
+    plugins: [{ id: 'acme.ui', directory: 'plugins/acme.ui', hasUi: true, targets: ['view'], sources: [{ file: 'plugins/acme.ui/src/ui.tsx', content: '"--compat-px-40"' }] }],
     targets: [{ id: 'view', plugin: 'acme.ui', title: 'View', kind: 'view' }], sharedSources: [], failures: [],
     exclusions: [{ plugin: 'quirky.avatar', reason: 'paused-unmerged', branch: 'zpyoung/avatar-plugin', pr: 305, steerDate: '2026-11-13' }],
   }
@@ -19,10 +19,51 @@ function fixture() {
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 const quiet = { stdout: (_: string) => {}, stderr: (_: string) => {} }
 function report(output: string): ScoreboardReport { return JSON.parse(readFileSync(join(output, 'scoreboard.json'), 'utf8')) }
+function manyActionInventory(inventory: Inventory): Inventory {
+  const file = 'plugins/acme.ui/src/ui.tsx'
+  const invoke = "context.call('acme.ui/save', {})"
+  const extraActions = Array.from({ length: 26 }, (_, index) =>
+    `  <button onClick={() => doAction(${index})}>Action ${index}</button>`,
+  ).join('\n')
+  const content = `export function Main() {
+  return <>
+    <button onClick={() => ${invoke}}>Save</button>
+${extraActions}
+  </>
+}`
+  const noState = {
+    applicable: false,
+    reason: 'This view has no state branches.',
+    evidence: [{ file, quote: 'export function Main' }],
+  }
+  const coverage = {
+    schemaVersion: 1,
+    surfaces: {
+      'view:acme.ui/main': { loading: noState, empty: noState, error: noState },
+    },
+    states: [],
+    notState: [],
+    actions: [{
+      site: { file, quote: `onClick={() => ${invoke}}` },
+      route: { invoke: { file, quote: invoke }, target: 'acme.ui/save' },
+    }],
+  }
+  const plugin = inventory.plugins[0]!
+  plugin.targets = ['view:acme.ui/main']
+  plugin.sources = [{ file, content }]
+  plugin.contributions = {
+    methods: ['acme.ui/save'], commands: [],
+    cliCommands: [{ id: 'save', words: 'save', methods: ['acme.ui/save'] }],
+  }
+  plugin.coverage = { file: 'plugins/acme.ui/ui-scoreboard.json', content: JSON.stringify(coverage) }
+  return inventory
+}
 
 test('help and malformed arguments perform no filesystem or runtime work', async () => {
   const forbidden = () => { throw new Error('side effect') }
-  expect(await runUiScoreboard(['--help'], { ...quiet, collectInventory: forbidden, mkdir: forbidden })).toBe(0)
+  const help: string[] = []
+  expect(await runUiScoreboard(['--help'], { ...quiet, stdout: (text) => help.push(text), collectInventory: forbidden, mkdir: forbidden })).toBe(0)
+  expect(help.join('\n')).toContain("source audit read from each plugin's ui-scoreboard.json")
   for (const args of [[], ['--wat'], ['--help', '--help'], ['--static-only', '--output', 'relative'], ['--check-ratchet', '--output', '/tmp/no'], ['--static-only', '--author-family', 'openai', '--output', '/tmp/no'], ['--author-family', 'no', '--output', '/tmp/no'], ['--static-only', '--output', '/tmp/no', '--output', '/tmp/no']]) {
     expect(await runUiScoreboard(args, { ...quiet, collectInventory: forbidden, mkdir: forbidden })).toBe(2)
   }
@@ -36,11 +77,32 @@ test('static-only writes complete honest reports and never starts runtime', asyn
   const value = report(output)
   expect(value).toMatchObject({ mode: 'static-only', goalPassed: false, status: 'failed', sourceDigest: 'digest', threshold: 85 })
   expect(value.plugins[0]!.checks).toHaveLength(6)
-  expect(value.plugins[0]!.checks.find((check) => check.id === 'commands')).toMatchObject({ status: 'fail', reason: 'not-implemented' })
+  expect(value.plugins[0]!.checks.find((check) => check.id === 'commands')).toMatchObject({ status: 'fail', reason: 'coverage-file-missing' })
   expect(value.cells.map((cell) => [cell.theme, cell.code, cell.score])).toEqual([['dark', 'not-run', null], ['light', 'not-run', null]])
   expect(readFileSync(join(output, 'scoreboard.md'), 'utf8')).toContain('--compat-px-40')
   expect(messages.join('\n')).toContain(join(output, 'scoreboard.json'))
   expect(messages.join('\n')).toContain(join(output, 'scoreboard.md'))
+})
+test('Markdown caps failed source-audit evidence and JSON retains all evidence', async () => {
+  const { output, inventory } = fixture()
+  expect(await runUiScoreboard(['--static-only', '--output', output], {
+    ...quiet, collectInventory: () => manyActionInventory(inventory),
+  })).toBe(1)
+
+  const value = report(output)
+  const commands = value.plugins[0]!.checks.find((check) => check.id === 'commands')!
+  expect(commands.evidence).toHaveLength(27)
+  expect(commands.evidence.some((item) => item.code === 'action-routed')).toBe(true)
+
+  const markdown = readFileSync(join(output, 'scoreboard.md'), 'utf8')
+  const section = markdown.split('### acme.ui: commands\n')[1]!.split('\n\n### ')[0]!
+  expect(section.split('\n').filter((line) => line.startsWith('- coverage-missing:'))).toHaveLength(25)
+  expect(section).toContain('… and 1 more in scoreboard.json')
+  expect(section).not.toContain('action-routed')
+  const json = JSON.parse(readFileSync(join(output, 'scoreboard.json'), 'utf8')) as ScoreboardReport
+  const storedCommands = json.plugins[0]!.checks.find((check) => check.id === 'commands')!
+  expect(storedCommands.evidence).toHaveLength(27)
+  expect(storedCommands.evidence.some((item) => item.code === 'action-routed')).toBe(true)
 })
 
 test('render contributions keep screenshots applicable in static-only mode without a UI module', async () => {

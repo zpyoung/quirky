@@ -5,7 +5,7 @@ import { extname, join, relative, resolve, sep } from 'node:path'
 import type { UiModel, UiSlotEntry } from '@quirky/protocol'
 import { discoverCaptureTargets } from '../ui-review/capture'
 import type { CaptureTarget } from '../ui-review/contracts'
-import type { Evidence, Exclusion, Inventory, PluginInventory, SourceFile } from './contracts'
+import type { CliCommandDeclaration, Evidence, Exclusion, Inventory, PluginContributions, PluginInventory, SourceFile } from './contracts'
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs', '.html', '.htm', '.svg', '.css', '.scss', '.sass', '.less'])
 const EXCLUDED_DIRECTORIES = new Set(['node_modules', 'vendor', 'dist', 'build', 'coverage', '.git', 'test', 'tests', '__tests__', '__test__', '_test', '_tests', 'fixture', 'fixtures', '__fixtures__', '_fixtures'])
@@ -103,6 +103,7 @@ function readProductionTree(
 
     for (const entry of entries) {
       const childRelative = relativeDirectory ? join(relativeDirectory, entry.name) : entry.name
+      if (relativeDirectory.length === 0 && entry.name === 'ui-scoreboard.json') continue
       if (shouldSkipPath(childRelative)) continue
       const absolute = join(directory, entry.name)
       const file = pathFromRoot(repoRoot, absolute)
@@ -138,6 +139,101 @@ function readProductionTree(
   return sources.sort((left, right) => compareText(left.file, right.file))
 }
 
+function readCoverageFile(
+  repoRoot: string,
+  directory: string,
+  hasUi: boolean,
+  targets: readonly string[],
+  snapshots: Map<string, string>,
+  failures: Evidence[]
+): SourceFile | undefined {
+  const absolute = join(repoRoot, 'plugins', directory, 'ui-scoreboard.json')
+  const file = pathFromRoot(repoRoot, absolute)
+  let stat: Stats
+  try {
+    stat = lstatSync(absolute)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    failures.push(evidence('plugin-coverage-unreadable', `Cannot inspect plugin coverage file ${file}: ${errorMessage(error)}`))
+    snapshots.set(file, '[unreadable]')
+    return undefined
+  }
+
+  if (!hasUi && targets.length === 0) {
+    failures.push(evidence('unexpected-coverage-file', `Coverage file has no UI entry or targets in ${file}`))
+  }
+  if (stat.isSymbolicLink()) {
+    failures.push(evidence('source-symlink', `Plugin coverage file is a symlink: ${file}`))
+    snapshots.set(file, '[symlink]')
+    return undefined
+  }
+  if (!stat.isFile()) {
+    failures.push(evidence('invalid-coverage-file', `Plugin coverage path is not a regular file: ${file}`))
+    snapshots.set(file, '[unreadable]')
+    return undefined
+  }
+
+  try {
+    const content = readFileSync(absolute, 'utf8')
+    snapshots.set(file, content)
+    return { file, content }
+  } catch (error) {
+    failures.push(evidence('plugin-coverage-unreadable', `Cannot read plugin coverage file ${file}: ${errorMessage(error)}`))
+    snapshots.set(file, '[unreadable]')
+    return undefined
+  }
+}
+
+function fullMethodId(pluginId: string, methodId: string): string {
+  return methodId.includes('/') ? methodId : `${pluginId}/${methodId}`
+}
+
+function contributionMethodIds(pluginId: string, entries: unknown): string[] {
+  if (!Array.isArray(entries)) return []
+  const ids: string[] = []
+  for (const rawEntry of entries) {
+    const id = record(rawEntry)?.id
+    if (typeof id === 'string' && id.trim().length > 0) ids.push(fullMethodId(pluginId, id))
+  }
+  return ids
+}
+
+function parsePluginContributions(pluginId: string, contributions: Record<string, unknown> | undefined): PluginContributions {
+  const rawCommands = contributions?.command
+  const commands = Array.isArray(rawCommands)
+    ? rawCommands.flatMap((rawEntry) => {
+      const id = record(rawEntry)?.id
+      return typeof id === 'string' && id.trim().length > 0 ? [`command:${pluginId}/${id}`] : []
+    })
+    : []
+  const cliCommands: CliCommandDeclaration[] = []
+  const rawCliCommands = contributions?.['cli-command']
+  if (Array.isArray(rawCliCommands)) {
+    for (const rawEntry of rawCliCommands) {
+      const entry = record(rawEntry)
+      if (entry === undefined) continue
+      const id = entry.id
+      if (typeof id !== 'string' || id.trim().length === 0) continue
+      const rawMethods = Array.isArray(entry.methods)
+        ? entry.methods
+        : typeof entry.method === 'string' ? [entry.method] : []
+      const methods = rawMethods
+        .filter((method): method is string => typeof method === 'string' && method.trim().length > 0)
+        .map((method) => fullMethodId(pluginId, method))
+      cliCommands.push({
+        id,
+        ...(typeof entry.words === 'string' ? { words: entry.words } : {}),
+        methods
+      })
+    }
+  }
+  return {
+    methods: contributionMethodIds(pluginId, contributions?.method),
+    commands,
+    cliCommands
+  }
+}
+
 function gitEnvironment(repoRoot: string): Record<string, string> {
   return {
     PATH: process.env.PATH ?? '/usr/bin:/bin',
@@ -167,7 +263,7 @@ function productionPath(path: string): boolean {
   const normalized = path.replaceAll('\\', '/')
   const parts = normalized.split('/')
   if (parts[0] === 'plugins' && parts.length >= 3) {
-    if (parts.length === 3 && parts[2] === 'quirky-plugin.json') return true
+    if (parts.length === 3 && (parts[2] === 'quirky-plugin.json' || parts[2] === 'ui-scoreboard.json')) return true
     return isProductionSource(parts.slice(2).join('/'))
   }
   if ((parts[0] === 'packages' || parts[0] === 'apps') && parts.length >= 4 && parts[2] === 'src') {
@@ -228,7 +324,17 @@ function parseManifest(
   } catch (error) {
     failures.push(evidence('invalid-plugin-manifest', `Cannot parse ${file}: ${errorMessage(error)}`))
   }
-  if (manifest === undefined) return { id: directory, directory: `plugins/${directory}`, hasUi: false, targets: [], sources: [] }
+  if (manifest === undefined) {
+    const coverage = readCoverageFile(repoRoot, directory, false, [], snapshots, failures)
+    return {
+      id: directory,
+      directory: `plugins/${directory}`,
+      hasUi: false,
+      targets: [],
+      sources: [],
+      ...(coverage === undefined ? {} : { coverage })
+    }
+  }
 
   const declaredId = manifest?.id
   const id = typeof declaredId === 'string' && PLUGIN_ID.test(declaredId) ? declaredId : directory
@@ -276,7 +382,18 @@ function parseManifest(
     }
   }
 
-  return { id, directory: `plugins/${directory}`, hasUi, targets: targetIds.get(id) ?? [], sources: [] }
+  const pluginTargets = targetIds.get(id) ?? []
+  const pluginContributions = parsePluginContributions(id, contributionRecord)
+  const coverage = readCoverageFile(repoRoot, directory, hasUi, pluginTargets, snapshots, failures)
+  return {
+    id,
+    directory: `plugins/${directory}`,
+    hasUi,
+    targets: pluginTargets,
+    sources: [],
+    contributions: pluginContributions,
+    ...(coverage === undefined ? {} : { coverage })
+  }
 }
 
 
