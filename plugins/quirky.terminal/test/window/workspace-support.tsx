@@ -1,4 +1,5 @@
 import { act } from 'react'
+import type { MountCleanup } from '@quirky/protocol'
 import { RpcError, RpcErrorCode, type Session } from '@quirky/protocol'
 import * as ops from '../../src/layout/ops'
 import { sequentialIds } from '../../src/layout/tree'
@@ -253,16 +254,32 @@ export type MountedWorkspace = Awaited<ReturnType<typeof mountFixture>>
 /** Mounts the workspace view over `daemon` and waits until it has loaded. */
 export async function mountFixture(
   daemon: FakeDaemon,
-  options: { input?: unknown; settings?: Record<string, unknown>; extra?: Record<string, Handler>; view?: Record<string, unknown> } = {}
+  options: {
+    input?: unknown
+    settings?: Record<string, unknown>
+    extra?: Record<string, Handler>
+    view?: Record<string, unknown>
+    provider?: boolean
+  } = {}
 ) {
   const fake = fakeContext({ ...daemon.handlers, ...options.extra }, options.settings)
   const element = document.createElement('div')
   document.body.appendChild(element)
   const reports: any[] = []
   const input = options.input ?? { worktree: WORKTREE }
-  let cleanup: (() => void) | void = undefined
+  let cleanup: MountCleanup | undefined
   await act(async () => {
-    cleanup = workspace.mountWorkspace(fake.context, element, { input, report: (state) => void reports.push(state) }, options.view)
+    if (options.provider) {
+      // The pane module reads window at evaluation time, so activate only after happy-dom is registered.
+      const ui = await import('../../src/ui')
+      ui.activate(fake.context)
+      cleanup = fake.provided.get('view:quirky.session/worktree')!(element, {
+        input,
+        report: (state: unknown) => void reports.push(state)
+      })
+    } else {
+      cleanup = workspace.mountWorkspace(fake.context, element, { input, report: (state) => void reports.push(state) }, options.view)
+    }
   })
   await settle()
   await settle()
@@ -275,6 +292,14 @@ export async function mountFixture(
     controller: () => workspace.focusedController()!,
     q: <T extends Element = HTMLElement>(selector: string) => element.querySelector<T>(selector),
     qa: <T extends Element = HTMLElement>(selector: string) => [...element.querySelectorAll<T>(selector)],
+    updateInput: async (nextInput: unknown): Promise<boolean> => {
+      if (typeof cleanup?.updateInput !== 'function') return false
+      let accepted = false
+      await act(async () => {
+        accepted = cleanup!.updateInput!(nextInput)
+      })
+      return accepted
+    },
     unmount: async () => {
       await act(async () => cleanup?.())
       element.remove()
