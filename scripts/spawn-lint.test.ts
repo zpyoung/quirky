@@ -89,6 +89,10 @@ test.each([...genericInstantiationCases, ...extractionCases])('detects each forb
   const diagnostics = scanSourceContent(file, source)
   expect(diagnostics).toHaveLength(count)
   expect(diagnostics.every(diagnostic => diagnostic.rule === 'process/no-direct-spawn')).toBe(true)
+  const padding = 1_048_577
+  expect(scanSourceContent(file, ' '.repeat(padding) + source)).toEqual(
+    diagnostics.map(diagnostic => ({ ...diagnostic, column: diagnostic.column + padding }))
+  )
 })
 test('reports aliased re-exports at their original Bun member names', () => {
   expect(scanSourceContent(file, 'export { spawn as launch, spawnSync as sync } from "bun"').map(diagnostic => diagnostic.column))
