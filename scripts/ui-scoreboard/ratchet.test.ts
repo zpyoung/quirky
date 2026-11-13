@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { runUiScoreboard } from '../ui-scoreboard'
 import { checkRatchet, parseRatchetConfig } from './ratchet'
-import type { Evidence, Inventory, PluginInventory, SourceFile } from './contracts'
+import type { Evidence, Inventory, PluginInventory, SourceFile, StaticCheckId } from './contracts'
 
 function plugin(id: string, hasUi = true, sources: SourceFile[] = []): PluginInventory {
   return { id, directory: `plugins/${id}`, hasUi, targets: [], sources }
@@ -21,6 +21,110 @@ function inventory(options: {
   }
 }
 
+const auditUi = `import { EmptyState, InlineError } from '@quirky/ui'
+export function Main({ status }: { status: string }) {
+  if (status === 'busy') return <EmptyState message="Loading items" />
+  if (status === 'none') return <EmptyState message="No items yet" />
+  if (status === 'bad') return <InlineError message="Could not load" />
+  return <button onClick={() => context.call('acme.app/save', {})}>Save</button>
+}`
+
+function passingAuditPlugin(ui = auditUi): PluginInventory {
+  const coverage = {
+    schemaVersion: 1,
+    surfaces: {
+      'view:acme.app/main': {
+        loading: { applicable: true },
+        empty: { applicable: true },
+        error: { applicable: true },
+      },
+    },
+    states: [
+      {
+        surface: 'view:acme.app/main', state: 'loading',
+        site: { file: 'plugins/acme.app/src/ui.tsx', quote: "if (status === 'busy')" },
+        anchor: "if (status === 'busy')",
+        render: {
+          component: 'EmptyState',
+          element: { file: 'plugins/acme.app/src/ui.tsx', quote: '<EmptyState message="Loading items" />' },
+          import: { file: 'plugins/acme.app/src/ui.tsx', quote: "import { EmptyState, InlineError } from '@quirky/ui'" },
+        },
+      },
+      {
+        surface: 'view:acme.app/main', state: 'empty',
+        site: { file: 'plugins/acme.app/src/ui.tsx', quote: "if (status === 'none')" },
+        anchor: "if (status === 'none')",
+        render: {
+          component: 'EmptyState',
+          element: { file: 'plugins/acme.app/src/ui.tsx', quote: '<EmptyState message="No items yet" />' },
+          import: { file: 'plugins/acme.app/src/ui.tsx', quote: "import { EmptyState, InlineError } from '@quirky/ui'" },
+        },
+      },
+      {
+        surface: 'view:acme.app/main', state: 'error',
+        site: { file: 'plugins/acme.app/src/ui.tsx', quote: "if (status === 'bad')" },
+        anchor: "if (status === 'bad')",
+        render: {
+          component: 'InlineError',
+          element: { file: 'plugins/acme.app/src/ui.tsx', quote: '<InlineError message="Could not load" />' },
+          import: { file: 'plugins/acme.app/src/ui.tsx', quote: "import { EmptyState, InlineError } from '@quirky/ui'" },
+        },
+      },
+    ],
+    notState: [],
+    actions: [{
+      site: { file: 'plugins/acme.app/src/ui.tsx', quote: 'onClick' },
+      route: {
+        invoke: { file: 'plugins/acme.app/src/ui.tsx', quote: "context.call('acme.app/save', {})" },
+        target: 'acme.app/save',
+      },
+    }],
+  }
+  return {
+    id: 'acme.app', directory: 'plugins/acme.app', hasUi: true,
+    targets: ['view:acme.app/main'],
+    sources: [
+      { file: 'plugins/acme.app/src/ui.tsx', content: ui },
+      { file: 'plugins/acme.app/src/main.ts', content: 'setTimeout(run, 30_000, { onTimeout: cleanup })' },
+    ],
+    contributions: {
+      methods: ['acme.app/save'],
+      commands: ['command:acme.app/refresh'],
+      cliCommands: [{ id: 'save', words: 'save', methods: ['acme.app/save'] }],
+    },
+    coverage: { file: 'plugins/acme.app/ui-scoreboard.json', content: JSON.stringify(coverage) },
+  }
+}
+
+const allStaticChecks = ['compatibility-tokens', 'loading', 'empty', 'error', 'commands'] as const
+
+test('ratchet accepts all static checks and enforces the enrolled source audit', () => {
+  const enrollment = { 'acme.app': [...allStaticChecks] }
+  expect({ ...parseRatchetConfig(JSON.stringify(enrollment)) }).toEqual(enrollment)
+  const passing = checkRatchet(inventory({ plugins: [passingAuditPlugin()] }), enrollment)
+  expect(passing.exitCode).toBe(0)
+  expect(passing.failures).toEqual([])
+
+  const missingBranch = passingAuditPlugin(auditUi.replace(
+    "  if (status === 'busy')",
+    "  if (!rows) return null\n  if (status === 'busy')",
+  ))
+  const failed = checkRatchet(inventory({ plugins: [missingBranch] }), enrollment)
+  expect(failed.exitCode).toBe(1)
+  expect(failed.failures).toContainEqual(expect.objectContaining({
+    code: 'coverage-missing',
+    message: expect.stringMatching(/^acme\.app \/ loading:/),
+  }))
+
+  const daemonTimeout = passingAuditPlugin()
+  daemonTimeout.sources.find((source) => source.file.endsWith('/main.ts'))!.content =
+    'setTimeout(() => {}, 30_000, { onTimeout: () => cleanup() })'
+  expect(checkRatchet(inventory({ plugins: [daemonTimeout] }), enrollment).exitCode).toBe(0)
+
+  expect(checkRatchet(inventory({ plugins: [passingAuditPlugin()] }), {
+    'acme.app': ['screenshots' as unknown as StaticCheckId],
+  }).exitCode).toBe(2)
+})
 const valid = ['compatibility-tokens'] as const
 
 test('parses empty and valid ratchets while rejecting malformed or duplicate config entries', () => {
@@ -47,9 +151,12 @@ test('prototype-named plugin keys are treated as unknown enrollment', () => {
   }
 })
 
-test('rejects deleted plugin enrollment and unimplemented static checks as configuration errors', () => {
+test('rejects deleted plugins and screenshots while accepting implemented static checks', () => {
   expect(checkRatchet(inventory(), { 'acme.deleted': [...valid] }).exitCode).toBe(2)
-  expect(checkRatchet(inventory({ plugins: [plugin('acme.ui')] }), { 'acme.ui': ['loading'] }).exitCode).toBe(2)
+  expect(checkRatchet(inventory({ plugins: [plugin('acme.ui')] }), { 'acme.ui': ['loading'] }).exitCode).toBe(1)
+  expect(checkRatchet(inventory({ plugins: [plugin('acme.ui')] }), {
+    'acme.ui': ['screenshots' as unknown as StaticCheckId],
+  }).exitCode).toBe(2)
 })
 
 test('inventory errors fail even when no checks are enrolled', () => {

@@ -266,10 +266,74 @@ Exit 0 certifies a complete passing full report (or passing ratchet), 1 means fa
 An omitted reviewer theme is an operational failure: measured cells are retained, and no
 further target reviews are requested.
 
-**This item cannot certify goal 3 yet.** Loading, empty, error and command checks report
-`fail: not-implemented` for UI plugins until the ordered source-audit follow-up lands.
-Manifest command counts and shared-component imports are not evidence of coverage.
-Daemon-only plugins receive explicit non-applicable cells, not invented visual scores.
+### State and action coverage
+
+The four UI checks read `plugins/<id>/ui-scoreboard.json`. A missing file fails
+all four checks. The file is strict JSON with `schemaVersion: 1`, a `surfaces`
+map and `states`, `notState` and `actions` arrays. Unknown keys, duplicate keys
+and empty quotes are rejected.
+
+A ref is `{ "file": "...", "quote": "..." }`. Its file path must be canonical,
+repository-relative and point into the plugin's UI import graph. The quote must
+occur exactly once in that file. Add an optional `anchor` if a quote contains
+multiple candidates of the entry's category; it must occur once in the quote
+and start at the intended candidate.
+
+List a decision for each state on every surface key. Keys are target IDs such as
+`view:quirky.example/main`; a UI plugin without targets uses `ui`. An
+`applicable: true` decision requires a matching `states` entry. A false
+decision requires a `reason` and at least one evidence ref.
+
+`states` entries require `surface`, `state`, `site` and `render`; `anchor` is
+optional. The render is linked to the candidate named by `site`:
+
+- A shared component render has `component`, `element` and `import` fields, with
+  optional `via` refs. Quote the JSX element; `import` must quote a named value
+  import from `@quirky/ui` in the same file. Use `via` for complete helper
+  declarations when a helper returns the render.
+- A toast render has `component: "toast"`, `call` and optional `via` refs. Quote
+  the toast call.
+- Loading accepts `EmptyState` or `NoticeLine`; empty accepts `EmptyState`;
+  error accepts `InlineError`, `FormRow` with an `error` attribute, or `toast`.
+
+`notState` entries require `site` and a nonempty `reason`; `anchor` is
+optional. They classify a state candidate that is not one of the three covered
+states.
+
+Each `actions` entry requires `site` and exactly one of `route`, `transient` or
+`notAction`; `anchor` is optional:
+
+- `route` contains an `invoke` ref, a `target` string and optional `via` refs.
+  `invoke` identifies the public route expression; `target` records its
+  resolved value.
+- `transient` is `caret`, `hover` or `draft`, with a nonempty `reason`.
+- `notAction` is `lifecycle`, `subscription` or `forwarded`, also with a
+  nonempty `reason`.
+
+Routes must resolve to a declared target or method and a CLI command:
+
+| UI expression | Target | API | CLI |
+| --- | --- | --- | --- |
+| `.call(M)` for a plugin method | `M` | `M` | `quirky <group> <declared words>`, otherwise `quirky <group> <method>` |
+| `.call(M)` for a kernel method | `M` | `M` | The matching `quirky <command>` form |
+| `.executeCommand(C)` | `C` (`command:<plugin>/<id>`) | `ui.command.run` | `quirky ui run C` |
+| `.openView(V)` | `V` (`view:<plugin>/<id>`) | `ui.view.open` | `quirky ui open-view V` |
+| `.togglePanel(P)` | `P` (`panel:<plugin>/<id>`) | `ui.panel.open` | `quirky ui open-panel P` |
+| `.closeView()` | `ui.view.close` | `ui.view.close` | `quirky ui close-view` |
+
+Targets resolve string literals, plain templates and one top-level `const` hop
+(in the same file or a named import from a relative UI file). Templates may
+interpolate those values. Put the resolved string in `target`.
+
+This is a syntactic audit, not a semantic judge. It cannot tell whether a
+message is really an error, whether a custom spinner means loading, or whether
+a `notState`, `transient` or `notAction` reason is sound. It links helpers by
+name but does not prove a helper is called. It also cannot prove a `.call` or
+`.toast` receiver is the plugin context, or that an `executeCommand` target is
+implemented. Reviewers still judge route equivalence: the host's `openView`
+uses `ui.window.view.open`, while the CLI route is `ui.view.open`. A component
+handler prop without an `on` prefix is invisible to discovery; handlers inside
+its DOM are still found.
 
 The bounded token scan checks literal names and visible unresolved token construction, not
 arbitrary data flow or dependency-injected CSS. Semantic hue/tile templates and directly
@@ -279,9 +343,11 @@ comments and the legacy compatibility definition sheet are excluded from consump
 A dynamic custom-property prefix starts at an identifier boundary. BEM modifier class names
 such as `ui-button--${variant}` are not custom-property evidence.
 
-`scripts/ui-scoreboard-ratchet.json` initially enrolls nothing. A repair worker enrolls newly
-passing plugin/static-check pairs in the same PR; reviewers reject deleting enrollment to hide
-regressions. Only `compatibility-tokens` is currently enrollable, including for `host`.
+`scripts/ui-scoreboard-ratchet.json` initially enrolls nothing. A repair worker
+enrolls newly passing plugin/static-check pairs in the same PR; reviewers reject
+deleting enrollment to hide regressions. All five static checks are enrollable
+for plugins. `screenshots` remain unenrollable, and the host row still has only
+token and screenshot checks.
 The ratchet runs from `typecheck` and directly in the Tests workflow's Plan job, including draft
 PRs. Non-enrolled debt stays visible in reports without blocking unrelated work.
 Screenshots/model review never run automatically from these static gates.
