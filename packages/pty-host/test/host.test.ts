@@ -365,7 +365,7 @@ describe('connection output queues', () => {
     const host = startHost({ maxConnectionQueuedBytes: cap })
     const control = await host.connect()
     await control.request('create', createParams('A', sh("stty -echo; printf 'READY\\n'; exec cat")))
-    await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\n'.length)
+    await waitFor(async () => (await host.server.manager.list())[0].offset === 'READY\r\n'.length)
     const { client, conn } = await queuedClient(host)
     const out = collect(client, 'A')
     const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
@@ -396,7 +396,7 @@ describe('connection output queues', () => {
       void first.catch(() => {})
       await taken[0].promise
       control.sendInput('A', new TextEncoder().encode('between\n'))
-      await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\nbetween\r\n'.length)
+      await waitFor(async () => (await host.server.manager.list())[0].offset === 'READY\r\nbetween\r\n'.length)
       expect(conn.heldBytes).toBeGreaterThan(0)
       expect(out.text()).toBe('')
 
@@ -404,7 +404,7 @@ describe('connection output queues', () => {
       void second.catch(() => {})
       await taken[1].promise
       control.sendInput('A', new TextEncoder().encode('after\n'))
-      await waitFor(() => host.server.manager.list()[0].offset === 'READY\r\nbetween\r\nafter\r\n'.length)
+      await waitFor(async () => (await host.server.manager.list())[0].offset === 'READY\r\nbetween\r\nafter\r\n'.length)
       expect(out.text()).toBe('')
       // equal-deadline timers need not run FIFO, so observe the old timer before releasing the latest reply
       gates[0].resolve()
@@ -547,7 +547,7 @@ describe('connection output queues', () => {
       const control = await host.connect()
       await control.request('create', createParams('A', sh("trap '' USR1; printf READY; exec cat")))
       await control.request('create', createParams('B', ['/bin/cat']))
-      await waitFor(() => host.server.manager.list().find((s) => s.sessionId === 'A')!.offset > 0)
+      await waitFor(async () => (await host.server.manager.list()).find((s) => s.sessionId === 'A')!.offset > 0)
       const { client, conn } = await queuedClient(host)
       const a = collect(client, 'A')
       const b = collect(client, 'B')

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { startHarness, type Harness } from '../../../../packages/daemon/test/helpers'
 import { writeEveryAgentFixture } from '../fixtures/scanner-fixtures'
+import { createScanBarrier, installScanBarrier, type ScanBarrier } from './scan-barrier'
 
 const SOURCE_HOME_ENV = 'QUIRKY_VAULT_SOURCE_HOME'
 const PLUGIN_IDS = [
@@ -18,15 +19,16 @@ const PLUGIN_IDS = [
 ]
 const PLUGINS_ROOT = join(import.meta.dir, '..', '..', '..')
 
-export function createVaultBuiltinPluginsDir(home: string, options: { isolateVaultPlugin?: boolean } = {}): string {
+export function createVaultBuiltinPluginsDir(home: string, options: { isolateVaultPlugin?: boolean; scanBarrier?: boolean } = {}): string {
   const builtinPluginsDir = join(home, 'builtins')
   mkdirSync(builtinPluginsDir, { recursive: true })
   for (const id of PLUGIN_IDS) {
     const source = join(PLUGINS_ROOT, id)
     const destination = join(builtinPluginsDir, id)
-    if (options.isolateVaultPlugin && id === 'quirky.vault') {
-      // In-process daemons share Bun's module cache; isolate the plugin's module-level service.
+    if ((options.isolateVaultPlugin || options.scanBarrier) && id === 'quirky.vault') {
+      // Copy the vault plugin for module isolation or barrier instrumentation.
       cpSync(source, destination, { recursive: true })
+      if (options.scanBarrier) installScanBarrier(home, destination)
     } else {
       symlinkSync(source, destination, 'dir')
     }
@@ -49,14 +51,16 @@ export class VaultRig {
     public readonly expected: FixtureExpectation['expected'],
     public readonly fixturePaths: FixtureExpectation['paths'],
     private readonly builtinPluginsDir: string,
-    private readonly previousSourceHome: string | undefined
+    private readonly previousSourceHome: string | undefined,
+    public readonly scanBarrier: ScanBarrier | undefined
   ) {}
 
-  static async start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean } = {}): Promise<VaultRig> {
+  static async start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean; scanBarrier?: boolean } = {}): Promise<VaultRig> {
     const home = mkdtempSync(join(tmpdir(), 'qv-home-'))
     let sourceHome: string | undefined
     const previousSourceHome = process.env[SOURCE_HOME_ENV]
     let harness: Harness | undefined
+    let scanBarrier: ScanBarrier | undefined
     try {
       const fixtureSourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
       sourceHome = fixtureSourceHome
@@ -64,12 +68,21 @@ export class VaultRig {
       const fixture: FixtureExpectation = options.includeEveryAgentFixture === false
         ? { expected: {}, paths: {} }
         : await writeEveryAgentFixture(fixtureSourceHome, { cwdRoot: join(fixtureSourceHome, 'workspaces') })
-      const builtinPluginsDir = createVaultBuiltinPluginsDir(home, { isolateVaultPlugin: options.isolateVaultPlugin })
+      scanBarrier = options.scanBarrier ? createScanBarrier(home) : undefined
+      const builtinPluginsDir = createVaultBuiltinPluginsDir(home, {
+        isolateVaultPlugin: options.isolateVaultPlugin,
+        scanBarrier: options.scanBarrier
+      })
       harness = await startHarness({ home, builtinPluginsDir })
       const connected = await harness.connectWithEvents('cli')
-      return new VaultRig(harness, connected.client, connected.events, home, fixtureSourceHome, fixture.expected, fixture.paths, builtinPluginsDir, previousSourceHome)
+      return new VaultRig(harness, connected.client, connected.events, home, fixtureSourceHome, fixture.expected, fixture.paths, builtinPluginsDir, previousSourceHome, scanBarrier)
     } catch (error) {
       const cleanupErrors: unknown[] = []
+      try {
+        await scanBarrier?.close()
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError)
+      }
       try {
         await harness?.cleanup()
       } catch (cleanupError) {
@@ -125,6 +138,7 @@ export class VaultRig {
         failed = true
       }
     }
+    await attempt(async () => { await this.scanBarrier?.close() })
     await attempt(() => this.h.cleanup())
     await attempt(() => rmSync(this.home, { recursive: true, force: true }))
     await attempt(() => rmSync(this.sourceHome, { recursive: true, force: true }))
