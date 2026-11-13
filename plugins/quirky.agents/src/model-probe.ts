@@ -1,109 +1,122 @@
+import type { ProcessSpawner, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 import { isPlainObject } from './core/guards'
+
 const MAX_OUTPUT_BYTES = 256 * 1024
 const DRAIN_GRACE_MS = 250
 const KILL_GRACE_MS = 250
-const GROUP_POLL_MS = 20
 
-type Child = ReturnType<typeof Bun.spawn>
 export type ModelProbeResult = { ok: true; stdout: string } | { ok: false; reason: 'timeout' | 'too-much-output' | 'could-not-start' | 'nonzero-exit' | 'output-not-closed' | 'malformed-output' }
-type ProbeRace = { kind: 'exit'; code: number | null } | { kind: 'timeout' } | { kind: 'too-much-output' }
-
-function signalGroup(child: Child, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-child.pid, signal)
-  } catch {
-    try {
-      child.kill(signal)
-    } catch {
-      // the process already exited
-    }
-  }
-}
-
-function groupAlive(child: Child): boolean {
-  try {
-    process.kill(-child.pid, 0)
-    return true
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM'
-  }
-}
-
-async function terminateGroup(child: Child): Promise<void> {
-  signalGroup(child, 'SIGTERM')
-  const deadline = Date.now() + KILL_GRACE_MS
-  while (groupAlive(child) && Date.now() < deadline) await Bun.sleep(GROUP_POLL_MS)
-  if (groupAlive(child)) signalGroup(child, 'SIGKILL')
-  await Promise.race([child.exited, Bun.sleep(KILL_GRACE_MS)])
-}
 
 async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
   try {
     await reader.cancel()
   } catch {
-    // the stream may already have released its reader
+    // The stream may already have released its reader.
   }
 }
 
 /** Starts a declared argv directly; process time and retained stdout are bounded independently. */
-export async function runModelProbe(argv: string[], timeoutMs: number): Promise<ModelProbeResult> {
-  let child: Child
+export async function runModelProbe(spawner: ProcessSpawner, argv: string[], timeoutMs: number): Promise<ModelProbeResult> {
+  let handle: SpawnedProcess
   try {
-    const options = { cwd: process.cwd(), env: process.env, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore', detached: true } as const
-    child = Bun.spawn(argv, options as unknown as Bun.SpawnOptions.OptionsObject<'ignore', 'pipe', 'ignore'>)
+    handle = spawner.spawn(argv, {
+      cwd: process.cwd(),
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'ignore',
+      timeoutMs,
+      killGraceMs: KILL_GRACE_MS
+    })
   } catch {
     return { ok: false, reason: 'could-not-start' }
   }
+  if (handle.pid === null) {
+    await handle.exited.catch(() => undefined)
+    return { ok: false, reason: 'could-not-start' }
+  }
 
-  const tooMuchOutput = Promise.withResolvers<ProbeRace>()
-  const reader = (child.stdout as ReadableStream<Uint8Array>).getReader()
+  const reader = handle.stdout.getReader()
   const chunks: Buffer[] = []
   let bytes = 0
-  const output = (async (): Promise<string | null> => {
+  let tooMuchOutput = false
+  let stdoutClosed = false
+  let outputNotClosed = false
+  let streamError: unknown
+  let readerSettled = false
+  let stdout = ''
+  const output = (async () => {
     try {
       for (;;) {
         const { done, value } = await reader.read()
-        if (done) return Buffer.concat(chunks, bytes).toString('utf8')
+        if (done) {
+          stdoutClosed = true
+          stdout = Buffer.concat(chunks, bytes).toString('utf8')
+          return
+        }
         bytes += value.byteLength
         if (bytes > MAX_OUTPUT_BYTES) {
-          tooMuchOutput.resolve({ kind: 'too-much-output' })
-          signalGroup(child, 'SIGTERM')
-          return null
+          tooMuchOutput = true
+          void cancelReader(reader)
+          void handle.stop({ graceMs: KILL_GRACE_MS })
+          return
         }
         chunks.push(Buffer.from(value))
       }
-    } catch {
-      return null
+    } catch (error) {
+      streamError = error
+      void handle.stop({ graceMs: KILL_GRACE_MS })
     } finally {
-      reader.releaseLock()
+      readerSettled = true
+      try {
+        reader.releaseLock()
+      } catch {
+        // A pending read owns the lock until cancellation settles.
+      }
     }
   })()
-  const timeoutResult = Promise.withResolvers<ProbeRace>()
-  const timeoutTimer = setTimeout(() => timeoutResult.resolve({ kind: 'timeout' }), timeoutMs)
+
+  let timedOut = false
+  const timeoutTimer = setTimeout(() => {
+    timedOut = true
+    void handle.stop({ graceMs: KILL_GRACE_MS })
+  }, timeoutMs)
   timeoutTimer.unref()
-  const exited: Promise<ProbeRace> = child.exited.then((code) => ({ kind: 'exit', code }))
-  const first = await Promise.race([exited, timeoutResult.promise, tooMuchOutput.promise])
-  clearTimeout(timeoutTimer)
-  if (first.kind !== 'exit') {
-    await terminateGroup(child)
-    await cancelReader(reader)
-    void output
-    return { ok: false, reason: first.kind }
+
+  let exit: SpawnExit
+  try {
+    exit = await handle.exited
+  } catch {
+    exit = { exitCode: null, signal: null, durationMs: 0 }
   }
 
-  const drained = await Promise.race([
-    output.then((stdout) => ({ complete: true as const, stdout })),
-    Bun.sleep(DRAIN_GRACE_MS).then(() => ({ complete: false as const, stdout: null }))
-  ])
-  if (!drained.complete) {
-    await terminateGroup(child)
-    await cancelReader(reader)
-    return { ok: false, reason: 'output-not-closed' }
+  if (!readerSettled && !tooMuchOutput && !timedOut && exit.stopped === undefined && exit.spawnError === undefined) {
+    const drained = await Promise.race([
+      output.then(() => true),
+      Bun.sleep(DRAIN_GRACE_MS).then(() => false)
+    ])
+    if (!drained) {
+      outputNotClosed = true
+      void cancelReader(reader)
+      void handle.stop({ graceMs: KILL_GRACE_MS })
+    }
+  } else if (!readerSettled && (exit.stopped !== undefined || exit.spawnError !== undefined || timedOut)) {
+    await Promise.race([output, Bun.sleep(DRAIN_GRACE_MS)])
   }
-  await terminateGroup(child)
-  if (drained.stdout === null || first.code !== 0) return { ok: false, reason: 'nonzero-exit' }
-  return { ok: true, stdout: drained.stdout }
+
+  clearTimeout(timeoutTimer)
+  const stoppedExit = await handle.stop({ graceMs: KILL_GRACE_MS })
+  if (stoppedExit.spawnError) exit = stoppedExit
+
+  if (exit.spawnError) return { ok: false, reason: 'could-not-start' }
+  if (tooMuchOutput) return { ok: false, reason: 'too-much-output' }
+  if (timedOut || exit.stopped === 'timeout') return { ok: false, reason: 'timeout' }
+  if (exit.stopped !== undefined) return { ok: false, reason: 'nonzero-exit' }
+  if (outputNotClosed || (streamError instanceof Error && streamError.name === 'ProcessStalledError')) return { ok: false, reason: 'output-not-closed' }
+  if (exit.exitCode !== 0 || streamError !== undefined || !stdoutClosed) return { ok: false, reason: 'nonzero-exit' }
+  return { ok: true, stdout }
 }
+
 const MAX_CODEX_MODEL_PAGES = 32
 const MAX_CODEX_MODELS = 4096
 const CODEX_MODEL_PAGE_SIZE = 100
@@ -113,6 +126,7 @@ class ProbeFailure extends Error {
     super(message)
   }
 }
+
 async function boundedJsonResponse(response: Response, controller: AbortController, provider: string): Promise<unknown> {
   const reader = response.body?.getReader()
   if (!reader) throw new ProbeFailure('malformed-output', `${provider} returned an empty model-list response.`)
@@ -146,32 +160,39 @@ async function boundedJsonResponse(response: Response, controller: AbortControll
 
 /** Queries Codex's real stdio app-server `model/list` API using an account-prepared environment. */
 export async function runCodexAppServerModelProbe(
+  spawner: ProcessSpawner,
   argv: string[],
   timeoutMs: number,
   env: Record<string, string>,
   cwd: string
 ): Promise<ModelProbeResult> {
-  let child: Child
+  let handle: SpawnedProcess
   try {
-    const options = { cwd, env, stdin: 'pipe', stdout: 'pipe', stderr: 'ignore', detached: true } as const
-    child = Bun.spawn(argv, options as unknown as Bun.SpawnOptions.OptionsObject<'pipe', 'pipe', 'ignore'>)
+    handle = spawner.spawn(argv, {
+      cwd, env, stdin: 'pipe', stdout: 'pipe', stderr: 'ignore', timeoutMs, killGraceMs: KILL_GRACE_MS
+    })
   } catch {
     return { ok: false, reason: 'could-not-start' }
   }
-
-  const stdin = child.stdin as Bun.FileSink
-  const stdout = child.stdout as ReadableStream<Uint8Array>
-  const send = async (message: Record<string, unknown>): Promise<void> => {
-    stdin.write(`${JSON.stringify(message)}\n`)
-    await stdin.flush()
+  if (handle.pid === null) {
+    await handle.exited.catch(() => undefined)
+    return { ok: false, reason: 'could-not-start' }
   }
-  const reader = stdout.getReader()
+
+  const reader = handle.stdout.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: true })
-  const timeout = Promise.withResolvers<ModelProbeResult>()
-  let timeoutTimer: ReturnType<typeof setTimeout> | undefined
   let buffer = ''
   let outputBytes = 0
-  let settled = false
+  let streamError: unknown
+  let observedExit: SpawnExit | undefined
+  const exited = handle.exited.then((exit) => {
+    observedExit = exit
+    return exit
+  })
+  const send = async (message: Record<string, unknown>): Promise<void> => {
+    const accepted = await handle.write(`${JSON.stringify(message)}\n`)
+    if (!accepted) throw new ProbeFailure('output-not-closed', 'Codex app-server closed stdin before accepting a request.')
+  }
 
   const readMessage = async (): Promise<Record<string, unknown>> => {
     for (;;) {
@@ -192,15 +213,25 @@ export async function runCodexAppServerModelProbe(
         if (!isPlainObject(value)) throw new ProbeFailure('malformed-output', 'Codex app-server returned a non-object message.')
         return value
       }
-      const { done, value } = await reader.read()
-      if (done) {
-        buffer += decoder.decode()
+      let chunk
+      try {
+        chunk = await reader.read()
+      } catch (error) {
+        streamError = error
+        throw error
+      }
+      if (chunk.done) {
+        try {
+          buffer += decoder.decode()
+        } catch {
+          throw new ProbeFailure('malformed-output', 'Codex app-server returned invalid UTF-8.')
+        }
         throw new ProbeFailure(buffer === '' ? 'output-not-closed' : 'malformed-output', 'Codex app-server closed before completing its response.')
       }
-      outputBytes += value.byteLength
+      outputBytes += chunk.value.byteLength
       if (outputBytes > MAX_OUTPUT_BYTES) throw new ProbeFailure('too-much-output', 'Codex app-server exceeded the output limit.')
       try {
-        buffer += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(chunk.value, { stream: true })
       } catch {
         throw new ProbeFailure('malformed-output', 'Codex app-server returned invalid UTF-8.')
       }
@@ -254,7 +285,13 @@ export async function runCodexAppServerModelProbe(
         throw new ProbeFailure('too-much-output', 'Codex app-server returned too many models.')
       }
       data.push(...result.data)
-      if (result.nextCursor === null) return JSON.stringify({ data, nextCursor: null })
+      if (result.nextCursor === null) {
+        const stdout = JSON.stringify({ data, nextCursor: null })
+        if (Buffer.byteLength(stdout, 'utf8') > MAX_OUTPUT_BYTES) {
+          throw new ProbeFailure('too-much-output', 'Codex app-server model snapshot exceeded the output limit.')
+        }
+        return stdout
+      }
       if (nextCursor === '' || nextCursor === cursor) {
         throw new ProbeFailure('malformed-output', 'Codex app-server returned an invalid model-list cursor.')
       }
@@ -263,39 +300,58 @@ export async function runCodexAppServerModelProbe(
     throw new ProbeFailure('too-much-output', 'Codex app-server model listing exceeded the page limit.')
   }
 
-  const work = operation().then(
-    (stdout) => {
-      settled = true
-      timeout.resolve({ ok: true, stdout })
-    },
-    (error: unknown) => {
-      settled = true
-      timeout.resolve({
-        ok: false,
-        reason: error instanceof ProbeFailure ? error.reason : 'malformed-output'
-      })
-    }
-  )
-  timeoutTimer = setTimeout(() => {
-    if (settled) return
-    settled = true
-    timeout.resolve({ ok: false, reason: 'timeout' })
+  type Exchange =
+    | { kind: 'complete'; stdout: string }
+    | { kind: 'failure'; error: unknown }
+    | { kind: 'exit'; exit: SpawnExit }
+    | { kind: 'timeout' }
+  let timedOut = false
+  const deadline = Promise.withResolvers<Exchange>()
+  const timeoutTimer = setTimeout(() => {
+    timedOut = true
+    void handle.stop({ graceMs: KILL_GRACE_MS })
+    deadline.resolve({ kind: 'timeout' })
   }, timeoutMs)
   timeoutTimer.unref()
-  void child.exited.then((code) => {
-    if (settled) return
-    settled = true
-    timeout.resolve({ ok: false, reason: code === 0 ? 'output-not-closed' : 'nonzero-exit' })
-  })
-
-  const result = await timeout.promise
+  const operationResult: Promise<Exchange> = operation().then(
+    (stdout) => ({ kind: 'complete', stdout }),
+    (error: unknown) => ({ kind: 'failure', error })
+  )
+  const exitResult = exited.then((exit): Exchange => ({ kind: 'exit', exit }))
+  const exchange = await Promise.race([operationResult, exitResult, deadline.promise])
   clearTimeout(timeoutTimer)
-  const closing = Promise.resolve(stdin.end()).catch(() => undefined)
-  await Promise.race([closing, Bun.sleep(DRAIN_GRACE_MS)])
-  await terminateGroup(child)
   await cancelReader(reader)
-  void work
-  return result
+  try {
+    reader.releaseLock()
+  } catch {
+    // A pending read owns the lock until cancellation settles.
+  }
+  void handle.closeInput().catch(() => undefined)
+  const exitBeforeCleanup = observedExit
+  const exit = await handle.stop({ graceMs: KILL_GRACE_MS })
+
+  if (exit.spawnError || exitBeforeCleanup?.spawnError) return { ok: false, reason: 'could-not-start' }
+  if (outputBytes > MAX_OUTPUT_BYTES || (exchange.kind === 'failure' && exchange.error instanceof ProbeFailure && exchange.error.reason === 'too-much-output')) {
+    return { ok: false, reason: 'too-much-output' }
+  }
+  if (timedOut || exit.stopped === 'timeout' || exitBeforeCleanup?.stopped === 'timeout') return { ok: false, reason: 'timeout' }
+  if (exit.stopped === 'aborted' || exitBeforeCleanup?.stopped === 'aborted') return { ok: false, reason: 'nonzero-exit' }
+  if (exchange.kind === 'complete') return { ok: true, stdout: exchange.stdout }
+  if (exchange.kind === 'timeout') return { ok: false, reason: 'timeout' }
+  if (exchange.kind === 'exit') {
+    if (exchange.exit.stopped !== undefined || exchange.exit.exitCode !== 0) return { ok: false, reason: 'nonzero-exit' }
+    return { ok: false, reason: 'output-not-closed' }
+  }
+  if (streamError instanceof Error && streamError.name === 'ProcessStalledError') return { ok: false, reason: 'output-not-closed' }
+  if (streamError !== undefined) return { ok: false, reason: 'nonzero-exit' }
+  if (exchange.error instanceof ProbeFailure) {
+    if (exchange.error.reason === 'output-not-closed') {
+      const naturalExit = exitBeforeCleanup ?? (exit.stopped === undefined ? exit : undefined)
+      if (naturalExit !== undefined && naturalExit.stopped === undefined && naturalExit.exitCode !== 0) return { ok: false, reason: 'nonzero-exit' }
+    }
+    return { ok: false, reason: exchange.error.reason }
+  }
+  return { ok: false, reason: 'malformed-output' }
 }
 const ANTHROPIC_MODELS_URL = 'https://api.anthropic.com/v1/models'
 const ANTHROPIC_API_VERSION = '2026-10-21'
@@ -574,39 +630,39 @@ type PiDiscoveredModel = { id: string; label: string; options: { id: string; cho
 
 /** Queries Pi's declared RPC `get_available_models` operation in a bounded, sessionless process. */
 export async function runPiRpcModelProbe(
+  spawner: ProcessSpawner,
   argv: string[],
   timeoutMs: number,
   env: Record<string, string>,
   cwd: string
 ): Promise<ModelProbeResult> {
-  let child: Child
+  let handle: SpawnedProcess
   try {
-    const options = { cwd, env, stdin: 'pipe', stdout: 'pipe', stderr: 'ignore', detached: true } as const
-    child = Bun.spawn(argv, options as unknown as Bun.SpawnOptions.OptionsObject<'pipe', 'pipe', 'ignore'>)
+    handle = spawner.spawn(argv, {
+      cwd, env, stdin: 'pipe', stdout: 'pipe', stderr: 'ignore', timeoutMs, killGraceMs: KILL_GRACE_MS
+    })
   } catch {
     return { ok: false, reason: 'could-not-start' }
   }
+  if (handle.pid === null) {
+    await handle.exited.catch(() => undefined)
+    return { ok: false, reason: 'could-not-start' }
+  }
 
-  const stdin = child.stdin as Bun.FileSink
-  const reader = (child.stdout as ReadableStream<Uint8Array>).getReader()
+  const reader = handle.stdout.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: true })
-  const result = Promise.withResolvers<ModelProbeResult>()
-  let timeoutTimer: ReturnType<typeof setTimeout> | undefined
   let buffer = ''
   let outputBytes = 0
   let requestNumber = 0
-  let inputClosed = false
-  let settled = false
-
-  const closeInput = async (): Promise<void> => {
-    if (inputClosed) return
-    inputClosed = true
-    const closing = Promise.resolve(stdin.end()).catch(() => undefined)
-    await Promise.race([closing, Bun.sleep(DRAIN_GRACE_MS)])
-  }
+  let streamError: unknown
+  let observedExit: SpawnExit | undefined
+  const exited = handle.exited.then((exit) => {
+    observedExit = exit
+    return exit
+  })
   const send = async (message: Record<string, unknown>): Promise<void> => {
-    stdin.write(`${JSON.stringify(message)}\n`)
-    await stdin.flush()
+    const accepted = await handle.write(`${JSON.stringify(message)}\n`)
+    if (!accepted) throw new ProbeFailure('output-not-closed', 'Pi RPC closed stdin before accepting a request.')
   }
   const readMessage = async (): Promise<Record<string, unknown> | null> => {
     for (;;) {
@@ -627,8 +683,14 @@ export async function runPiRpcModelProbe(
         if (!isPlainObject(value)) throw new ProbeFailure('malformed-output', 'Pi RPC returned a non-object record.')
         return value
       }
-      const { done, value } = await reader.read()
-      if (done) {
+      let chunk
+      try {
+        chunk = await reader.read()
+      } catch (error) {
+        streamError = error
+        throw error
+      }
+      if (chunk.done) {
         try {
           buffer += decoder.decode()
         } catch {
@@ -637,10 +699,10 @@ export async function runPiRpcModelProbe(
         if (buffer !== '') throw new ProbeFailure('malformed-output', 'Pi RPC closed with an incomplete record.')
         return null
       }
-      outputBytes += value.byteLength
+      outputBytes += chunk.value.byteLength
       if (outputBytes > MAX_OUTPUT_BYTES) throw new ProbeFailure('too-much-output', 'Pi RPC exceeded the output limit.')
       try {
-        buffer += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(chunk.value, { stream: true })
       } catch {
         throw new ProbeFailure('malformed-output', 'Pi RPC returned invalid UTF-8.')
       }
@@ -662,13 +724,13 @@ export async function runPiRpcModelProbe(
       if (message.id !== id || message.command !== type || typeof message.success !== 'boolean') {
         throw new ProbeFailure('malformed-output', 'Pi RPC returned an unmatched response.')
       }
-      if (!message.success) throw new ProbeFailure('nonzero-exit', `Pi RPC ${type} failed.`)
+      if (!message.success) throw new ProbeFailure('malformed-output', `Pi RPC ${type} returned an error response.`)
       if (Object.hasOwn(message, 'error')) throw new ProbeFailure('malformed-output', 'Pi RPC returned an invalid successful response.')
       return message.data
     }
   }
 
-  const operation = async (): Promise<string> => {
+  const operation = async (): Promise<{ stdout: string; exit: SpawnExit }> => {
     const available = await request('get_available_models')
     if (!isPlainObject(available) || !Array.isArray(available.models) ||
       Object.keys(available).some((name) => name !== 'models')) {
@@ -721,42 +783,66 @@ export async function runPiRpcModelProbe(
     if (Buffer.byteLength(stdout, 'utf8') > MAX_OUTPUT_BYTES) {
       throw new ProbeFailure('too-much-output', 'Pi RPC model snapshot exceeded the output limit.')
     }
-    await closeInput()
+    void handle.closeInput().catch(() => undefined)
     for (;;) {
       const message = await readMessage()
       if (message === null) break
       if (message.type === 'response') throw new ProbeFailure('malformed-output', 'Pi RPC returned an unexpected extra response.')
     }
-    const code = await child.exited
-    if (code !== 0) throw new ProbeFailure('nonzero-exit', 'Pi RPC exited unsuccessfully.')
-    return stdout
+    return { stdout, exit: await exited }
   }
 
-  const work = operation().then(
-    (stdout) => {
-      settled = true
-      result.resolve({ ok: true, stdout })
-    },
-    (error: unknown) => {
-      settled = true
-      result.resolve({
-        ok: false,
-        reason: error instanceof ProbeFailure ? error.reason : 'malformed-output'
-      })
-    }
-  )
-  timeoutTimer = setTimeout(() => {
-    if (settled) return
-    settled = true
-    result.resolve({ ok: false, reason: 'timeout' })
+  type Exchange =
+    | { kind: 'complete'; stdout: string; exit: SpawnExit }
+    | { kind: 'failure'; error: unknown }
+    | { kind: 'timeout' }
+  let timedOut = false
+  const deadline = Promise.withResolvers<Exchange>()
+  const timeoutTimer = setTimeout(() => {
+    timedOut = true
+    void handle.stop({ graceMs: KILL_GRACE_MS })
+    deadline.resolve({ kind: 'timeout' })
   }, timeoutMs)
   timeoutTimer.unref()
-
-  const probeResult = await result.promise
+  const operationResult: Promise<Exchange> = operation().then(
+    ({ stdout, exit }) => ({ kind: 'complete', stdout, exit }),
+    (error: unknown) => ({ kind: 'failure', error })
+  )
+  const exchange = await Promise.race([operationResult, deadline.promise])
   clearTimeout(timeoutTimer)
-  await closeInput()
-  await terminateGroup(child)
   await cancelReader(reader)
-  void work
-  return probeResult
+  try {
+    reader.releaseLock()
+  } catch {
+    // A pending read owns the lock until cancellation settles.
+  }
+  void handle.closeInput().catch(() => undefined)
+  const exitBeforeCleanup = observedExit
+  const exit = await handle.stop({ graceMs: KILL_GRACE_MS })
+  const observed = exitBeforeCleanup ?? (exchange.kind === 'complete' ? exchange.exit : undefined)
+
+  if (exit.spawnError || observed?.spawnError) return { ok: false, reason: 'could-not-start' }
+  if (outputBytes > MAX_OUTPUT_BYTES || (exchange.kind === 'failure' && exchange.error instanceof ProbeFailure && exchange.error.reason === 'too-much-output')) {
+    return { ok: false, reason: 'too-much-output' }
+  }
+  if (timedOut || exit.stopped === 'timeout' || observed?.stopped === 'timeout') return { ok: false, reason: 'timeout' }
+  if (exit.stopped === 'aborted' || observed?.stopped !== undefined) return { ok: false, reason: 'nonzero-exit' }
+  if (exchange.kind === 'complete') {
+    if (exchange.exit.stopped !== undefined || exchange.exit.exitCode !== 0) return { ok: false, reason: 'nonzero-exit' }
+    return { ok: true, stdout: exchange.stdout }
+  }
+  if (exchange.kind === 'timeout') return { ok: false, reason: 'timeout' }
+  if (exchange.error instanceof ProbeFailure && exchange.error.reason === 'malformed-output') {
+    return { ok: false, reason: 'malformed-output' }
+  }
+  if (streamError instanceof Error && streamError.name === 'ProcessStalledError') return { ok: false, reason: 'output-not-closed' }
+  if (exchange.error instanceof ProbeFailure && exchange.error.reason === 'output-not-closed') {
+    const naturalExit = observed ?? (exit.stopped === undefined ? exit : undefined)
+    if (naturalExit !== undefined && naturalExit.stopped === undefined && naturalExit.exitCode !== 0) return { ok: false, reason: 'nonzero-exit' }
+    return { ok: false, reason: 'output-not-closed' }
+  }
+  if (observed?.exitCode !== undefined && observed.exitCode !== 0) return { ok: false, reason: 'nonzero-exit' }
+  if (streamError !== undefined) return { ok: false, reason: 'nonzero-exit' }
+  if (exchange.error instanceof ProbeFailure) return { ok: false, reason: exchange.error.reason }
+  return { ok: false, reason: 'malformed-output' }
 }
