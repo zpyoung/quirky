@@ -110,6 +110,20 @@ describe('SocketWriter', () => {
       { kind: 'json', message: { requestId: 1, ok: true } }
     ])
   })
+  test('remainingForTag includes a started frame tail without changing discardable bytes', () => {
+    const socket = new TestSocket()
+    socket.writeLimit = 1
+    const writer = new SocketWriter(socket, 128)
+    const frame = new Uint8Array(100)
+
+    expect(writer.send(frame, 'A')).toBe(true)
+    expect(writer.queuedBytes).toBe(99)
+    expect(writer.remainingForTag('A')).toBe(99)
+    expect(writer.queuedForTag('A')).toBe(0)
+
+    expect(writer.dropTag('A')).toBe(0)
+    expect(writer.remainingForTag('A')).toBe(99)
+  })
 
   test('dropTag resolves flush waiters when it removes the last queued bytes', async () => {
     const socket = new TestSocket()

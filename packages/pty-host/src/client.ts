@@ -58,7 +58,8 @@ export class PtyClient {
     return this.request('hello', {
       token,
       version: PTY_PROTOCOL_VERSION,
-      minVersion: PTY_PROTOCOL_MIN_VERSION
+      minVersion: PTY_PROTOCOL_MIN_VERSION,
+      sessionLagged: true
     })
   }
 
