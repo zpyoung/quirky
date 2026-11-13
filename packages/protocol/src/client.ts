@@ -198,18 +198,7 @@ export class QuirkyClient {
 
   /** Like `call`, but for any method name, including ones plugins provide; the result is untyped. */
   callAny(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown> {
-    const result = this.send(method, params, options)
-    if (method !== 'quirky.terminal/detach' || typeof params.streamId !== 'number') return result
-    const streamId = params.streamId
-    return result.then((value) => {
-      // a detach acknowledgement fences the last frames even after the owning plugin stops
-      const registration = this.streamHandlers.get(streamId)
-      if (registration) registration.active = false
-      this.streamHandlers.delete(streamId)
-      this.streamBuffers.delete(streamId)
-      this.laggedStreams.delete(streamId)
-      return value
-    })
+    return this.send(method, params, options)
   }
 
   private send(method: string, params: unknown, options?: CallOptions): Promise<unknown> {
