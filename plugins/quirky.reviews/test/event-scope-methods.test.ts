@@ -666,3 +666,64 @@ describe('review agent launch event scope', () => {
     })
   }
 })
+
+describe('review agent dialog event scope', () => {
+  test('opening and editing a Checks dialog tags its own worktree', async () => {
+    const { env, events } = unitEnv()
+    const checks = checksMethods(env)
+
+    await checks.checksSetAgentDialog!(conflictsDialog, {} as never)
+
+    expect(events).toHaveLength(1)
+    expectTagged(events)
+    expect(env.view('w1').checks.agentDialog).toMatchObject({ prompt: 'Resolve conflicts', visible: true })
+    expect(env.view('w2').checks.agentDialog).toBeNull()
+    events.length = 0
+
+    await checks.checksSetAgentDialog!({ ...conflictsDialog, prompt: 'Updated prompt' }, {} as never)
+
+    expect(events).toHaveLength(1)
+    expectTagged(events)
+    expect(env.view('w1').checks.agentDialog?.prompt).toBe('Updated prompt')
+  })
+
+  for (const [before, after] of [
+    [conflictsDialog, { ...conflictsDialog, worktree: 'w2', number: 13 }],
+    [{ ...conflictsDialog, surface: 'detail' }, conflictsDialog],
+    [conflictsDialog, { ...conflictsDialog, surface: 'detail' }]
+  ] as const) {
+    test(`replacing ${before.surface}/${before.worktree} with ${after.surface}/${after.worktree} is global`, async () => {
+      const { env, events } = unitEnv()
+      const checks = checksMethods(env)
+      await checks.checksSetAgentDialog!(before, {} as never)
+      events.length = 0
+
+      await checks.checksSetAgentDialog!(after, {} as never)
+
+      expect(events).toHaveLength(1)
+      expectUntagged(events)
+      expect(env.read().agentDialog).toMatchObject({ surface: after.surface, target: { worktree: after.worktree, number: after.number } })
+      if (after.surface === 'checks') expect(env.view(after.worktree === 'w1' ? 'w2' : 'w1').checks.agentDialog).toBeNull()
+      else expect(env.view('w2').checks.agentDialog).toEqual(env.read().agentDialog)
+    })
+  }
+
+  for (const initial of ['checks', 'detail', 'none'] as const) {
+    for (const action of ['hide', 'clear'] as const) {
+      test(`${action} with a ${initial} dialog emits ${initial === 'checks' ? 'the owner tag' : 'globally'}`, async () => {
+        const { env, events } = unitEnv()
+        const checks = checksMethods(env)
+        if (initial !== 'none') await checks.checksSetAgentDialog!({ ...conflictsDialog, surface: initial }, {} as never)
+        const previous = structuredClone(env.read().agentDialog)
+        events.length = 0
+
+        await checks.checksSetAgentDialog!({ action, ...(action === 'hide' ? { surface: 'checks' } : {}) }, {} as never)
+
+        expect(events).toHaveLength(1)
+        if (initial === 'checks') expectTagged(events)
+        else expectUntagged(events)
+        expect(env.read().agentDialog).toEqual(action === 'clear' ? null : initial === 'checks' ? { ...previous, visible: false } : previous)
+      })
+    }
+  }
+})
