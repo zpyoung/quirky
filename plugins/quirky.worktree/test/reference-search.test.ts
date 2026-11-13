@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type PluginStore, type QuirkyClient, type Repo, type RpcError, type Worktree } from '@quirky/protocol'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { waitFor } from '../../../packages/daemon/test/helpers'
+import { PtyClient } from '../../../packages/daemon/src/pty-client'
 import type { CallerIdentity } from '../selector'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
@@ -915,6 +916,37 @@ describe('stored reference search', () => {
     }
   })
 
+  test('does not reconnect or list a disconnected PTY host during a stored search', async () => {
+    const { t, worktreeA } = await searchWorld()
+    t.sessions.sessions = [session('running', worktreeA.id, 'running'), session('exited', worktreeA.id, 'exited')]
+    const watcher = await t.h.connectWithEvents('ui')
+    const before = rawStoreSnapshot(t.h.home)
+    const requestsBefore = t.h.pty.requests.length
+    const descriptor = Object.getOwnPropertyDescriptor(PtyClient.prototype, 'connected')!
+    const request = spyOn(PtyClient.prototype, 'request')
+    const connect = spyOn(PtyClient.prototype, 'connect')
+    Object.defineProperty(PtyClient.prototype, 'connected', { ...descriptor, get: () => false })
+    try {
+      const result = await daemonCall(watcher.client, 'quirky.worktree/findReferences', {
+        query: 'https://github.com/acme/api/pull/5123', worktree: worktreeA.id
+      }) as ReferenceSearchResult
+      expect(request.mock.calls.filter(([type]) => type === 'list')).toEqual([])
+      expect(connect).not.toHaveBeenCalled()
+      expect(t.h.pty.requests.slice(requestsBefore)).toEqual([])
+      expect(result.evidence.processes).toBe('unavailable')
+      expect(result.evidence.processesReason).toContain('not connected')
+      expect(result.matches[0]?.sessions?.map(({ id, liveness }) => [id, liveness])).toEqual([
+        ['running', 'unverifiable'], ['exited', 'exited']
+      ])
+      expect(rawStoreSnapshot(t.h.home)).toEqual(before)
+      expect(watcher.events.filter((event) => event.type.startsWith('quirky.worktree/'))).toEqual([])
+    } finally {
+      request.mockRestore()
+      connect.mockRestore()
+      Object.defineProperty(PtyClient.prototype, 'connected', descriptor)
+    }
+  })
+
   test('uses the real session and PTY listing for terminal liveness', async () => {
     const { t, worktreeA } = await searchWorld({ realSession: true })
     const session = await daemonCall(t.client, 'quirky.session/create', {
@@ -926,5 +958,12 @@ describe('stored reference search', () => {
     }) as ReferenceSearchResult
     expect(result.matches[0]?.sessions).toMatchObject([{ id: session.id, kind: 'terminal', liveness: 'live', linked: false }])
     expect(result.evidence).toMatchObject({ sessions: 'listed', processes: 'listed' })
+    await daemonCall(t.client, 'quirky.session/close', { session: session.id })
+    const closed = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'https://github.com/acme/api/pull/5123'
+    }) as ReferenceSearchResult
+    const closedSession = closed.matches[0]?.sessions?.find(({ id }) => id === session.id)
+    expect(closed.evidence.sessions).toBe('listed')
+    expect(closedSession === undefined || closedSession.liveness === 'exited').toBe(true)
   })
 })

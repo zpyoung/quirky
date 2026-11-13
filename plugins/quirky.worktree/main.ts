@@ -386,7 +386,10 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     repoIds: async () => (await listRepos()).map((repo) => repo.id),
     resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
     sessions: () => context.call('quirky.session/list'),
-    processes: () => context.pty.list(),
+    processes: async () => {
+      if (!context.pty.connected) throw new Error('PTY host is not connected')
+      return context.pty.list()
+    },
     fail
   }
   const projectEnv = {
