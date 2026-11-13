@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:
 import { watch } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { RpcErrorCode, type PluginContext, type Worktree } from '@quirky/protocol'
+import { RpcErrorCode, type PluginContext, type ProcessRunner, type RunOptions, type RunResult, type Worktree } from '@quirky/protocol'
 import { isRecord } from '../src/pr-data'
 import { createEnv, type HostingConfiguration, type HostingEnv } from '../src/env'
 import type { RateLimitSnapshot } from '../src/runtime-runner'
@@ -218,6 +218,7 @@ type CachedReviewFixtureOptions = {
 
 function cachedReviewFixture(worktrees: Worktree[], failGit = false, options: CachedReviewFixtureOptions = {}) {
   const calls: FixtureCall[] = []
+  const processCalls: Array<{ argv: string[]; options?: RunOptions }> = []
   const execCalls: Array<{ file: 'git'; args: string[]; cwd: string }> = []
   const configurations = new Map<string, HostingConfiguration>()
   const store = {
@@ -237,8 +238,27 @@ function cachedReviewFixture(worktrees: Worktree[], failGit = false, options: Ca
     },
     all: () => []
   }
+  const processRunner: ProcessRunner = {
+    run: async (argv, runOptions): Promise<RunResult> => {
+      if (argv[0] !== 'git') throw new Error(`Unexpected fixture process: ${argv.join(' ')}`)
+      const args = argv.slice(1)
+      const cwd = runOptions?.cwd ?? ''
+      processCalls.push({ argv: [...argv], ...(runOptions === undefined ? {} : { options: runOptions }) })
+      execCalls.push({ file: 'git', args, cwd })
+      const stdout = failGit ? '' : options.gitOutput ? await options.gitOutput(args, cwd) : ''
+      return {
+        stdout: new TextEncoder().encode(stdout),
+        stdoutText: stdout,
+        stderr: failGit ? 'Git identity unavailable' : '',
+        exitCode: failGit ? 1 : 0,
+        signal: null,
+        durationMs: 0
+      }
+    }
+  }
   const context = {
     pluginId: 'quirky.hosting',
+    process: processRunner,
     openStore: () => store,
     error: (_kind: string, message: string) => new Error(message),
     emit: () => undefined,
@@ -254,19 +274,13 @@ function cachedReviewFixture(worktrees: Worktree[], failGit = false, options: Ca
       throw new Error(`Unexpected context call: ${method}`)
     }
   } as unknown as PluginContext
-  const env = createEnv(context, {
-    exec: async (file, args, execOptions) => {
-      const recordedArgs = [...args]
-      execCalls.push({ file, args: recordedArgs, cwd: execOptions.cwd })
-      if (failGit) throw new Error('Git identity unavailable')
-      return { stdout: options.gitOutput ? await options.gitOutput(recordedArgs, execOptions.cwd) : '' }
-    }
-  })
+  const env = createEnv(context)
   cachedReviewEnvironments.push(env)
   return {
     env,
     lookup: createPRLookup(env),
     calls,
+    processCalls,
     execCalls,
     setConfiguration: (worktree: Worktree, configuration: HostingConfiguration) => {
       configurations.set(worktree.repoId, configuration)
@@ -557,7 +571,7 @@ test('cachedReviews resolves cold batches from one worktree list without Git spa
       stale: false
     })))
     expect(fixture.calls.map(({ method }) => method)).toEqual(['quirky.worktree/list'])
-    expect(fixture.execCalls).toEqual([])
+    expect(fixture.processCalls).toEqual([])
   }
 })
 
@@ -621,7 +635,7 @@ test('cachedReviews reports unverified HEAD fallback failures with the stable id
     error: 'The current local worktree identity could not be verified.'
   })))
   expect(fixture.calls.map(({ method }) => method)).toEqual(['quirky.worktree/list'])
-  expect(fixture.execCalls.map(({ args }) => args.join(' ')).sort()).toEqual([
+  expect(fixture.processCalls.map(({ argv }) => argv.slice(1).join(' ')).sort()).toEqual([
     ...Array.from({ length: worktrees.length }, () => 'rev-parse --verify HEAD'),
     ...Array.from({ length: worktrees.length }, () => 'symbolic-ref --quiet --short HEAD')
   ].sort())
@@ -675,7 +689,7 @@ test('cachedReviews returns folder workspaces without probing Git', async () => 
     review: null,
     stale: true
   }])
-  expect(fixture.execCalls).toEqual([])
+  expect(fixture.processCalls).toEqual([])
 })
 
 test('cachedReviews validates selector batches before lookup and rejects inactive environments', async () => {
@@ -697,7 +711,7 @@ test('cachedReviews validates selector batches before lookup and rejects inactiv
   }
   expect(await fixture.lookup.cachedReviews({ worktrees: [] }, cachedReviewsCaller)).toEqual({ workspaces: [] })
   expect(fixture.calls).toEqual([])
-  expect(fixture.execCalls).toEqual([])
+  expect(fixture.processCalls).toEqual([])
 
   const unavailable = await fixture.lookup.cachedReviews({ worktrees: ['wt_missing'] }, cachedReviewsCaller).then(
     () => undefined,
