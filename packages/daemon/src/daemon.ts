@@ -17,6 +17,7 @@ import { defaultCliEntry, installIntegrationFiles } from './launch'
 import { InteractivePath } from './interactive-path'
 import { osascriptNotifier, type Notifier } from './notify'
 import { PluginHost } from './plugins/host'
+import { createPluginChangedBroadcast } from './plugins/changed-broadcast'
 import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
 import { buildUiModel } from './plugins/ui-model'
 import { PtyClient } from './pty-client'
@@ -185,14 +186,19 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     onRemoveClient: (conn) => lateRuntime?.layout.dropConnection(conn),
     onEvent: (event) => lateRuntime?.events.deliver(event)
   })
+  const pluginChanged = createPluginChangedBroadcast({ send: () => core.broadcast({ type: 'plugin.changed' }) })
 
   const plugins = new PluginHost({
     builtinDir: options.builtinPluginsDir === undefined ? defaultBuiltinPluginsDir() : options.builtinPluginsDir,
     installedDir: installedPluginsDir,
     store,
     emit: (event) => {
-      core.broadcast(event)
-      if (event.type === 'plugin.changed') lateRuntime?.scheduler.sync()
+      if (event.type === 'plugin.changed') {
+        lateRuntime?.scheduler.sync()
+        pluginChanged.signal()
+      } else {
+        core.broadcast(event)
+      }
     },
     log,
     activationTimeoutMs: options.pluginActivationTimeoutMs,
@@ -316,6 +322,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
         } finally {
           clearTimeout(timer)
         }
+        pluginChanged.dispose()
       } finally {
         try {
           await stopAllProcesses()
