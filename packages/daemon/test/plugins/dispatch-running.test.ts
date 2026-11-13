@@ -370,3 +370,26 @@ describe('Dispatcher running-handler admission', () => {
     expect(calls).toBe(5)
   })
 })
+
+test('a request ID records an inner refusal after its own handler has already run', async () => {
+  const t = setup({ maxRunning: 1 })
+  const gate = t.gate()
+  let writes = 0
+  t.plugin([{ id: 'read', readOnly: true }, { id: 'write', timeout: '5s' }], {
+    read: () => gate.promise,
+    write: async (_params, _caller, context) => {
+      writes++
+      return await context.call(METHOD, {})
+    }
+  })
+  const first = t.call()
+  await started(t, 1)
+  busy(await t.error(t.call('acme.tools/write', 'r1')), 1)
+  busy(await t.error(t.call('acme.tools/write', 'r1')), 1)
+  expect(writes).toBe(1)
+  gate.resolve('done')
+  await first
+  busy(await t.error(t.call('acme.tools/write', 'r1')), 1)
+  expect(await t.call('acme.tools/write', 'r2')).toBe('done')
+  expect(writes).toBe(2)
+})

@@ -311,9 +311,10 @@ Kernel methods are not counted.
 
 When a method is at its limit, additional calls fail before plugin code runs with
 `RpcErrorCode.Busy` (`-32012`) and data `{ reason: 'busy', method, running, limit }`. A Busy
-refusal runs no plugin code, so callers may safely retry it later. Busy and `stalled` refusals are
-not recorded under a request ID, so a later retry with that ID runs the method instead of replaying
-the refusal.
+refusal runs no plugin code, so callers may safely retry it later. Direct Busy and `stalled`
+admission refusals are not recorded under a request ID, so a later retry with that ID runs the
+method instead of replaying the refusal. If a handler runs and propagates a refusal from a
+nested call, its error is recorded normally: retrying must not repeat the outer handler's effects.
 
 A method's first refusal adds a warning to the plugin; later refusals do not duplicate it. The
 warning clears when that method's running count falls to half the limit. A plugin that depends on

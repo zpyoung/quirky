@@ -13,7 +13,7 @@ import {
   type PluginSessionAuthority,
   type Schema
 } from '@quirky/protocol'
-import { DaemonError, busy, conflict, internal, invalidParams, notAnswering, timedOut, unauthorized } from '../errors'
+import { DaemonError, busy, conflict, internal, invalidParams, isRefusal, notAnswering, timedOut, unauthorized } from '../errors'
 import type { Handlers } from '../methods'
 import { Store } from '../store'
 import type { ClientConn } from '../types'
@@ -280,6 +280,9 @@ export class Dispatcher {
         deadlineOwnsSlot = true
         return await this.invokeWithDeadline(target.name, id, plugin, timeoutMs, deadlineAt, params, caller, implementation, closeBinding, releaseRunning)
       } catch (error) {
+        if (error instanceof DaemonError && isRefusal(error)) {
+          throw new DaemonError(error.code, error.message, error.data)
+        }
         if (error instanceof DaemonError) throw error
         this.log(`method ${target.name} failed in ${plugin}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
         throw internal(`${plugin}: ${error instanceof Error ? error.message : String(error)}`)
