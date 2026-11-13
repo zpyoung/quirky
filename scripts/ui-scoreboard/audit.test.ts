@@ -93,6 +93,60 @@ describe('quote-bound source audit', () => {
     expect(cell(data, 'commands').status).toBe('pass')
   })
 
+  test.each([
+    'export function Main({ rows }) { if (!rows) return null; return rows.map((r) => <Row key={r.id} />) }',
+    'const body = ready ? rows.map((r) => <Row />) : null'
+  ])('callback-only renders still require source-state coverage: %s', (content) => {
+    const data = actionFixture(content, {})
+    const coverage = JSON.parse(data.plugin.coverage!.content)
+    coverage.actions = []
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id).status).toBe('fail')
+      expect(codes(data, id)).toContain('coverage-missing')
+    }
+  })
+
+  test('an unclassified leaf outside a valid shared render fails all three state checks', () => {
+    const content = fullSource.replace(`if (status === 'busy') return ${busy}`, `if (status === 'busy') { const extra = <p>Offline</p>; return ${busy} }`)
+    const data = fixture(content)
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id).status).toBe('fail')
+      expect(cell(data, id).evidence).toContainEqual(expect.objectContaining({ code: 'coverage-missing', message: expect.stringContaining('Offline') }))
+    }
+    expect(cell(data, 'commands').status).toBe('pass')
+  })
+
+  test('both same-start logical candidates can be classified by their exact anchors', () => {
+    const expression = 'a && <b /> || <i />'
+    const data = actionFixture(`export const Main = () => <div>{${expression}}</div>`, {})
+    const coverage = JSON.parse(data.plugin.coverage!.content)
+    coverage.actions = []
+    coverage.notState = [
+      { site: ref(expression), anchor: 'a &&', reason: 'Layout choice' },
+      { site: ref(expression), anchor: 'a && <b /> ||', reason: 'Layout fallback' }
+    ]
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+  })
+
+  test('a branch that writes the DOM and returns has one addressable classification', () => {
+    const content = 'export function Main() { if (!rows) { el.append(d); return null } return <div /> }'
+    const data = actionFixture(content, {})
+    const coverage = JSON.parse(data.plugin.coverage!.content)
+    coverage.actions = []
+    coverage.notState = [{ site: ref('if (!rows)'), reason: 'Layout choice' }]
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+  })
+
+  test('a parameter cannot borrow a shadowed top-level route prefix', () => {
+    const invoke = 'context.call(`${API}save`)'
+    const content = `const API = 'acme.app/'; export function Main(API) { return <button onClick={() => ${invoke}}>Save</button> }`
+    const data = actionFixture(content, { route: { invoke: ref(invoke), target: 'acme.app/save' } })
+    expect(codes(data, 'commands')).toContain('route-target-unresolved')
+  })
+
   test('rejects raw elements and unaccepted component/state pairs', () => {
     const coverage = fullCoverage()
     coverage.states[0]!.render = { component: 'EmptyState', element: ref('<p className="muted">Loading…</p>'), import: ref(sharedImport) }
@@ -158,6 +212,14 @@ describe('quote-bound source audit', () => {
     coverage.states[2]!.site = ref('context.toast()')
     coverage.states[2]!.render = { component: 'toast', call: ref('context.toast()') }
     expect(codes(fixture(content.replace(toast, 'context.toast()'), coverage), 'error')).toContain('render-element-invalid')
+  })
+
+  test('a loading state cannot use toast even when the call is valid and linked', () => {
+    const toast = "context.toast('Loading items')"
+    const coverage = fullCoverage()
+    coverage.states[0]!.render = { component: 'toast', call: ref(toast) }
+    const content = fullSource.replace(`return ${busy}`, `{ ${toast}; return null }`)
+    expect(codes(fixture(content, coverage), 'loading')).toContain('render-not-accepted')
   })
 
   test('accepts NoticeLine for loading and FormRow only with an error attribute', () => {
@@ -289,6 +351,44 @@ describe('quote-bound source audit', () => {
 
   test.each(['onClick', 'onDoubleClick', 'onAuxClick', 'onSubmit', 'onDrop', 'onAction', 'onSelect', 'onChoose', 'onConfirm', 'onRetry', 'onSave'])('requires decisive event %s to route or forward', (name) => {
     expect(codes(actionFixture(`const props = { ${name}: () => change() }`, { transient: 'draft', reason: 'Unsaved' }, name), 'commands')).toContain('transient-not-allowed')
+  })
+
+  test.each([
+    ['<button onClick={() => destroy()} />', 'onClick'],
+    ["el.addEventListener('click', () => destroy())", "el.addEventListener('click'"],
+    ['el.onclick = () => destroy()', 'el.onclick'],
+    ["el['onclick'] = () => destroy()", "el['onclick']"]
+  ])('decisive handler %s rejects transient and subscription classifications', (content, site) => {
+    for (const classification of [{ transient: 'hover', reason: 'Temporary' }, { notAction: 'subscription', reason: 'Listener' }]) {
+      expect(codes(actionFixture(content, classification, site), 'commands')).toContain('transient-not-allowed')
+    }
+  })
+
+  test('a dynamic element assignment requires a route or forwarding', () => {
+    const content = 'el[eventName] = () => destroy()'
+    expect(codes(actionFixture(content, { transient: 'hover', reason: 'Unknown' }, 'el[eventName]'), 'commands')).toContain('transient-not-allowed')
+    const routed = actionFixture(`el[eventName] = () => ${save}`, { route: { invoke: ref(save), target: 'acme.app/save' } }, 'el[eventName]')
+    expect(cell(routed, 'commands').status).toBe('pass')
+    expect(cell(actionFixture('el[eventName] = onPick', { notAction: 'forwarded', reason: 'Parent handles it' }, 'el[eventName]'), 'commands').status).toBe('pass')
+  })
+
+  test.each(['get', 'set'])('computed %s accessors are unresolved candidates, not silent passes', (accessor) => {
+    const signature = accessor === 'get' ? 'get [key]()' : 'set [key](value)'
+    const content = `createElement('div', { ${signature} { ${accessor === 'get' ? 'return f' : 'destroy()'} } })`
+    expect(codes(actionFixture(content, { transient: 'hover', reason: 'Temporary' }, '[key]'), 'commands')).toContain('transient-not-allowed')
+    const routed = `createElement('div', { ${signature} { ${save} } })`
+    expect(cell(actionFixture(routed, { route: { invoke: ref(save), target: 'acme.app/save' } }, '[key]'), 'commands').status).toBe('pass')
+  })
+
+  test.each(['js', 'mjs', 'cjs'])('discovery and audit parse .%s modules identically', (extension) => {
+    const helperFile = `plugins/acme.app/src/handlers.${extension}`
+    const entry = `import './handlers.${extension}'`
+    const rejected = actionFixture(entry, { site: ref('onClick', helperFile), transient: 'draft', reason: 'Unsaved' })
+    rejected.plugin.sources.push({ file: helperFile, content: 'export const Action = () => <button onClick={() => destroy()}>Run</button>' })
+    expect(codes(rejected, 'commands')).toContain('transient-not-allowed')
+    const routed = actionFixture(entry, { site: ref('onClick', helperFile), route: { invoke: ref(save, helperFile), target: 'acme.app/save' } })
+    routed.plugin.sources.push({ file: helperFile, content: `export const Action = () => <button onClick={() => ${save}}>Save</button>` })
+    expect(cell(routed, 'commands').status).toBe('pass')
   })
 
   test('computed literal decisive handler names still require a public route', () => {

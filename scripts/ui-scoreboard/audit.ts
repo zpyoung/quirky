@@ -35,6 +35,7 @@ function unwrap(node: ts.Node): ts.Node {
 
 function lastName(node: ts.Node): string | undefined {
   node = unwrap(node)
+  if (ts.isElementAccessExpression(node) && node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression)) return node.argumentExpression.text
   return ts.isIdentifier(node) ? node.text : ts.isPropertyAccessExpression(node) ? node.name.text : undefined
 }
 
@@ -55,11 +56,11 @@ function candidateNode(candidate: Candidate, source: ts.SourceFile): ts.Node | u
       case 'toast-call': case 'event-listener': case 'unresolved-listener': return ts.isCallExpression(node)
       case 'status-role': case 'jsx-handler': return ts.isJsxAttribute(node)
       case 'state-text': return ts.isJsxText(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
-      case 'handler-property': return ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isMethodDeclaration(node)
-      case 'handler-assignment': return ts.isBinaryExpression(node)
+      case 'handler-property': return ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)
+      case 'handler-assignment': case 'unresolved-assignment': return ts.isBinaryExpression(node)
       case 'command-entry': return ts.isPropertyAssignment(node)
       case 'unresolved-spread': return ts.isJsxSpreadAttribute(node) || ts.isSpreadAssignment(node)
-      case 'unresolved-computed': return ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node) || ts.isShorthandPropertyAssignment(node)
+      case 'unresolved-computed': return ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node) || ts.isShorthandPropertyAssignment(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)
       default: return false
     }
   }
@@ -205,12 +206,12 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
     const candidates = discoverCandidates(plugin, graph.files)
     const sources = new Map(graph.files.map((file) => {
       const text = plugin.sources.find((source) => source.file === file)!.content
-      return [file, ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /\.[jt]sx$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS)] as const
+      const kind = /\.[jt]sx$/i.test(file) ? ts.ScriptKind.TSX : /\.(?:js|mjs|cjs)$/i.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS
+      return [file, ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind)] as const
     }))
     const nodeOf = (candidate: Candidate) => candidateNode(candidate, sources.get(candidate.file)!)
     const owners = new Map<Candidate, AuditId[][]>()
-    const stateSites: Array<{ candidate: Candidate; state: StateKind }> = []
-    const staleHelperRegions: Array<LocatedNode & { state: StateKind }> = []
+    const staleWitnessRegions: Array<LocatedNode & { state: StateKind }> = []
     const claim = (candidate: Candidate, ids: AuditId[]) => {
       const previous = owners.get(candidate) ?? []
       if (previous.length) add([...new Set([...previous.flat(), ...ids])], issue('coverage-duplicate', `Candidate ${candidate.kind} is covered more than once`, { file: candidate.file, node: nodeOf(candidate)! }))
@@ -227,6 +228,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       if (!resolved) return undefined
       const candidate = selectCandidate(resolved, candidates, category, anchor)
       if ('code' in candidate) { add(ids, candidate); return undefined }
+      if (!nodeOf(candidate)) { add(ids, issue('site-node-invalid', `Candidate ${candidate.kind} has no matching syntax node`, resolved)); return undefined }
       claim(candidate, ids)
       return candidate
     }
@@ -254,10 +256,16 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       const value: Render = entry.render
       const accepted = entry.state === 'loading' ? ['EmptyState', 'NoticeLine'] : entry.state === 'empty' ? ['EmptyState'] : ['InlineError', 'FormRow', 'toast']
       if (!accepted.includes(value.component)) add(ids, issue('render-not-accepted', `${value.component} is not accepted for ${entry.state}`))
-      const reference = resolve(value.component === 'toast' ? value.call : value.element, ids)
+      const renderRef = value.component === 'toast' ? value.call : value.element
+      const resolvedRender = resolveRef(plugin, graph.files, renderRef)
+      if ('code' in resolvedRender) add(ids, resolvedRender)
+      const reference = 'code' in resolvedRender ? undefined : resolvedRender
       const importRef = value.component === 'toast' ? undefined : resolve(value.import, ids)
       if (!reference) {
         let roots = candidate ? controlled(nodeOf(candidate)!) : []
+        if ('code' in resolvedRender && resolvedRender.code === 'evidence-missing' && candidate && renderRef.file === candidate.file && !value.via?.length) {
+          for (const node of roots) staleWitnessRegions.push({ file: candidate.file, node, state: entry.state })
+        }
         for (const via of value.via ?? []) {
           const resolved = resolve(via, ids)
           const quoted = ts.createSourceFile(via.file, via.quote, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
@@ -272,7 +280,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
           }
           if (source && referencesName(roots, helper.name)) visit(source)
           if (matches.length === 1) {
-            staleHelperRegions.push({ file: via.file, node: matches[0]!, state: entry.state })
+            staleWitnessRegions.push({ file: via.file, node: matches[0]!, state: entry.state })
             roots = matches
           }
         }
@@ -374,7 +382,6 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       for (const entry of coverage.states) {
         if (!surfaces.includes(entry.surface)) add([entry.state], { ...issue('surface-unknown', `Unknown state surface ${entry.surface}`), targetId: entry.surface })
         const candidate = mapSite(entry.site, entry.anchor, 'state', [entry.state])
-        if (candidate) stateSites.push({ candidate, state: entry.state })
         render(entry, candidate)
       }
       for (const entry of coverage.notState) {
@@ -390,10 +397,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       if (owners.has(candidate)) continue
       let ids: readonly AuditId[] = candidate.category === 'action' ? ['commands'] : STATE_IDS
       if (candidate.category === 'state' && LEAVES[candidate.kind] && node) {
-        const related = [
-          ...stateSites.filter((site) => site.candidate.file === candidate.file && controlled(nodeOf(site.candidate)!).some((root) => contains(root, node))).map((site) => site.state),
-          ...staleHelperRegions.filter((region) => region.file === candidate.file && contains(region.node, node)).map((region) => region.state)
-        ]
+        const related = staleWitnessRegions.filter((region) => region.file === candidate.file && contains(region.node, node)).map((region) => region.state)
         if (related.length) ids = [...new Set(related)]
       }
       add(ids, issue('coverage-missing', `Unmapped ${candidate.category} candidate ${candidate.kind}: ${candidate.anchorText}`, at))

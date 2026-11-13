@@ -275,9 +275,9 @@ and empty quotes are rejected.
 
 A ref is `{ "file": "...", "quote": "..." }`. Its file path must be canonical,
 repository-relative and point into the plugin's UI import graph. The quote must
-occur exactly once in that file. Add an optional `anchor` if a quote contains
-multiple candidates of the entry's category; it must occur once in the quote
-and start at the intended candidate.
+occur exactly once in that file. Add an optional, nonempty `anchor` if a quote
+contains multiple candidates of the entry's category; it must equal the complete
+candidate anchor text and occur once in the quote at the intended candidate's start.
 
 List a decision for each state on every surface key. Keys are target IDs such as
 `view:quirky.example/main`; a UI plugin without targets uses `ui`. An
@@ -310,20 +310,32 @@ Each `actions` entry requires `site` and exactly one of `route`, `transient` or
 - `notAction` is `lifecycle`, `subscription` or `forwarded`, also with a
   nonempty `reason`.
 
+The classifications have these restrictions:
+
+- Decisive events such as click, submit, drop and retry must route or forward,
+  not use a transient, lifecycle or subscription classification.
+- Unresolved spreads, computed names, listeners and element assignments may
+  only route or forward.
+- A native `<form>` without `onSubmit` cannot be covered; add a routed handler.
+- `forwarded` is checked by shape: an `on*` reference or single call, or a
+  simple props spread. A locally declared handler named `on*` can pass; the
+  reviewer must check that it actually forwards.
+
 Routes must resolve to a declared target or method and a CLI command:
 
 | UI expression | Target | API | CLI |
 | --- | --- | --- | --- |
 | `.call(M)` for a plugin method | `M` | `M` | `quirky <group> <declared words>`, otherwise `quirky <group> <method>` |
 | `.call(M)` for a kernel method | `M` | `M` | The matching `quirky <command>` form |
-| `.executeCommand(C)` | `C` (`command:<plugin>/<id>`) | `ui.command.run` | `quirky ui run C` |
+| `.executeCommand(C)` or a `command: C` property | `C` (`command:<plugin>/<id>`) | `ui.command.run` | `quirky ui run C` |
 | `.openView(V)` | `V` (`view:<plugin>/<id>`) | `ui.view.open` | `quirky ui open-view V` |
 | `.togglePanel(P)` | `P` (`panel:<plugin>/<id>`) | `ui.panel.open` | `quirky ui open-panel P` |
 | `.closeView()` | `ui.view.close` | `ui.view.close` | `quirky ui close-view` |
 
 Targets resolve string literals, plain templates and one top-level `const` hop
-(in the same file or a named import from a relative UI file). Templates may
-interpolate those values. Put the resolved string in `target`.
+(in the same file or a named import from a relative UI file), only if no nearer
+binding shadows that name. Templates may interpolate those values. Put the
+resolved string in `target`.
 
 This is a syntactic audit, not a semantic judge. It cannot tell whether a
 message is really an error, whether a custom spinner means loading, or whether
