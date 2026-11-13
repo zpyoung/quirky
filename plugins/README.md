@@ -12,6 +12,15 @@ If a daemon plugin needs a subprocess, use `context.process.run` for aggregated 
 See the [process runner](../docs/plugin-api.md#api-14-process-runner) and
 [spawn reference](../docs/plugin-api.md#api-16-streaming-and-session-length-processes).
 
+Login PATH detection, structured executable lookup, Claude version probes and loop Git
+evidence use the plugin-owned runner, so unload and daemon shutdown stop their process groups.
+Probes cap each output stream at 1 MiB: login PATH detection allows five seconds, version
+probes three seconds, and structured executable lookup thirty seconds. Background jobs in
+the probe's process group are killed when its shell exits. Loop Git evidence retains its
+shared thirty-second deadline and 16 MiB per-stream limit; only side-effect-free reference
+reads may rerun. Whole-call abort signals keep these deadlines even after the leader exits
+while another process holds its output open.
+
 ## Removing a project
 
 `quirky repo rm <selector>` forgets the selected project and its settings/group

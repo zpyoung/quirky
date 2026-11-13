@@ -134,26 +134,53 @@ function attemptRetention(entries: JournalEntry[]): { known: boolean; pending: S
   return { known: latest.size > 0, pending }
 }
 
+function isSqliteCorruptionError(error: unknown): boolean {
+  if (!record(error)) return false
+  const code = error.code
+  return typeof code === 'string' && (code.startsWith('SQLITE_CORRUPT') || code === 'SQLITE_NOTADB')
+}
+
 function futureHandle(path: string): ReadOnlyStore | null {
   if (!existsSync(path)) return null
-  const db = new Database(path, { readonly: true })
-  const row: unknown = db.query('PRAGMA user_version').get()
-  if (!record(row) || !finite(row.user_version)) { db.close(); throw new Error('Cannot read Heimdall schema version') }
-  const version = row.user_version
-  if (version <= VERSION) { db.close(); return null }
-  return {
-    version,
-    get<T>(sql: string, ...params: StoreValue[]) {
-      return (db.query(sql).get(...(params as never[])) as T | null) ?? null
-    },
-    all<T>(sql: string, ...params: StoreValue[]) {
-      return db.query(sql).all(...(params as never[])) as T[]
-    },
-    run() { throw new Error('Heimdall storage is read-only') },
-    exec() { throw new Error('Heimdall storage is read-only') },
-    transaction() { throw new Error('Heimdall storage is read-only') },
-    // A native read-only connection has an explicit lifetime, unlike the public context-owned handle.
-    close: () => db.close()
+  let owned: Database | undefined
+  const closeOwned = () => {
+    const db = owned
+    owned = undefined
+    db?.close()
+  }
+  try {
+    const db = new Database(path, { readonly: true })
+    owned = db
+    const row: unknown = db.query('PRAGMA user_version').get()
+    if (!record(row) || !finite(row.user_version)) throw new Error('Cannot read Heimdall schema version')
+    const version = row.user_version
+    if (version <= VERSION) {
+      closeOwned()
+      return null
+    }
+    const rows: unknown = db.query('PRAGMA integrity_check(1)').all()
+    if (!Array.isArray(rows) || rows.length !== 1 || !record(rows[0]) || rows[0].integrity_check !== 'ok') {
+      closeOwned()
+      return null
+    }
+    owned = undefined
+    return {
+      version,
+      get<T>(sql: string, ...params: StoreValue[]) {
+        return (db.query(sql).get(...(params as never[])) as T | null) ?? null
+      },
+      all<T>(sql: string, ...params: StoreValue[]) {
+        return db.query(sql).all(...(params as never[])) as T[]
+      },
+      run() { throw new Error('Heimdall storage is read-only') },
+      exec() { throw new Error('Heimdall storage is read-only') },
+      transaction() { throw new Error('Heimdall storage is read-only') },
+      close: () => db.close()
+    }
+  } catch (error) {
+    closeOwned()
+    if (isSqliteCorruptionError(error)) return null
+    throw error
   }
 }
 
@@ -161,9 +188,9 @@ export function createKernelStore(context: PluginContext): KernelStore {
   const path = join(context.dataDir, 'store.db')
   // The public store checks version after setting WAL: inspect first to leave future files untouched.
   const future = futureHandle(path)
-  const readOnly = future !== null
-  if (!readOnly) { mkdirSync(context.dataDir, { recursive: true, mode: 0o700 }); chmodSync(context.dataDir, 0o700) }
-  const db = future ?? context.openStore([migration])
+  if (future === null) { mkdirSync(context.dataDir, { recursive: true, mode: 0o700 }); chmodSync(context.dataDir, 0o700) }
+  const db = future ?? context.openStore([migration], { newerVersion: 'read-only' })
+  const readOnly = future !== null || (db.readOnly ?? false)
   if (!readOnly) db.exec('PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;')
   let closed = false
   function live(write = false): void {
