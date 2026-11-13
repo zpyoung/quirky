@@ -61,6 +61,7 @@ export async function activate(context: PluginContext): Promise<void> {
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
 
   context.pty.onData(terminal.onData)
+  context.pty.onLagged(terminal.onLagged)
   context.pty.onExit(terminal.onExit)
   context.pty.onFact((sessionId, fact) => {
     const event = factEvent(sessionId, fact)

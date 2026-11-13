@@ -405,7 +405,8 @@ describe('hosting process runner boundaries', () => {
   test('migrated hosting files have zero spawns, clean baseline keys and a supported API floor', () => {
     const migratedFiles = [
       'plugins/quirky.hosting/src/env.ts',
-      'plugins/quirky.hosting/src/identity-remote.ts'
+      'plugins/quirky.hosting/src/identity-remote.ts',
+      'plugins/quirky.hosting/src/runtime-runner.ts'
     ]
     for (const file of migratedFiles) {
       expect(scanSourceContent(file, readFileSync(resolve(REPO_ROOT, file), 'utf8'))).toEqual([])
@@ -414,11 +415,11 @@ describe('hosting process runner boundaries', () => {
     const baseline = JSON.parse(readFileSync(resolve(REPO_ROOT, 'scripts/spawn-lint-baseline.json'), 'utf8')) as Record<string, number>
     expect(baseline['plugins/quirky.hosting/src/env.ts']).toBeUndefined()
     expect(baseline['plugins/quirky.hosting/src/identity-remote.ts']).toBeUndefined()
-    expect(baseline['plugins/quirky.hosting/src/runtime-runner.ts']).toBe(1)
+    expect(baseline['plugins/quirky.hosting/src/runtime-runner.ts']).toBeUndefined()
 
     const manifest = JSON.parse(readFileSync(resolve(REPO_ROOT, 'plugins/quirky.hosting/quirky-plugin.json'), 'utf8')) as { apiVersion?: unknown }
     expect(typeof manifest.apiVersion).toBe('string')
-    expect(compareVersions(manifest.apiVersion as string, '1.9.0')).toBeGreaterThanOrEqual(0)
+    expect(compareVersions(manifest.apiVersion as string, '1.11.0')).toBeGreaterThanOrEqual(0)
     expect(pluginApiCompatibilityError(manifest.apiVersion)).toBeNull()
   })
 })

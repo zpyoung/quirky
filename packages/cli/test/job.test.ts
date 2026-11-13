@@ -70,8 +70,17 @@ describe('job list', () => {
     expect((await run(['job', 'list'])).stdout).toBe('no jobs\n')
   })
 
+  test('prints a stalled job instead of running in the STATE column', async () => {
+    daemon.addJob('job:acme.poll/tick', { state: 'running', nextRunAt: null, stalled: { handlers: 4 } })
+    const result = await run(['job', 'list'])
+    expect(result.code).toBe(0)
+    expect(result.stdout.trimEnd().split('\n')[1].split(/\s+/)).toEqual([
+      'job:acme.poll/tick', 'acme.poll', '1m', 'stalled', '-', '-'
+    ])
+  })
+
   test('--json prints the raw result', async () => {
-    const job = daemon.addJob('job:acme.poll/tick', { nextRunAt: 5 })
+    const job = daemon.addJob('job:acme.poll/tick', { state: 'running', nextRunAt: null, stalled: { handlers: 4 } })
     const result = await run(['job', 'list', '--json'])
     expect(JSON.parse(result.stdout)).toEqual([job])
   })

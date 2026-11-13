@@ -38,6 +38,8 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - run: bun install --frozen-lockfile
+      - name: Check enrolled UI scoreboard checks
+        run: bun run ui:scoreboard:check
 
       - name: Plan the run
         env:

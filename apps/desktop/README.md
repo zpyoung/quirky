@@ -238,6 +238,58 @@ states remain reviewable. Renderer screenshots do not certify OS chrome, native 
 focus or notifications; those belong to native QA. The existing, not-yet-restyled UI is expected
 to fail against the new goldens.
 
+## UI scoreboard
+
+The scoreboard discovers every immediate plugin manifest, including plugins without UI,
+and the five host screenshot targets. It scans plugin production source and shared UI source
+for compatibility-token consumption; shared findings fail every UI-bearing plugin and the host.
+The absent, paused `quirky.avatar` branch is listed separately, not counted as a plugin.
+Plugins with declared render contributions count as UI-bearing even without a UI module.
+
+```sh
+# Full, fresh two-theme capture and independent model review; every image must score 85.
+bun run ui:scoreboard -- --author-family openai --output /tmp/quirky-ui-scoreboard
+
+# No browser, build, daemon or reviewer. Screenshots remain explicitly unmeasured.
+bun run ui:scoreboard -- --static-only --output /tmp/quirky-ui-static
+
+# Enrolled static checks only; no runtime or artifact directory.
+bun run ui:scoreboard:check
+```
+
+Both reporting modes write `scoreboard.json` and `scoreboard.md` to a fresh absolute directory,
+print their paths, and retain failures and non-applicable reasons. Full mode accepts `--reviewer`
+and `--browser` as above, but no filters, threshold override, skip-build or historical report.
+Dirty production source blocks capture; source changes during measurement invalidate the run.
+Exit 0 certifies a complete passing full report (or passing ratchet), 1 means failed checks,
+2 means operational/inventory errors; cancellation awaits cleanup and exits 130/143.
+An omitted reviewer theme is an operational failure: measured cells are retained, and no
+further target reviews are requested.
+
+**This item cannot certify goal 3 yet.** Loading, empty, error and command checks report
+`fail: not-implemented` for UI plugins until the ordered source-audit follow-up lands.
+Manifest command counts and shared-component imports are not evidence of coverage.
+Daemon-only plugins receive explicit non-applicable cells, not invented visual scores.
+
+The bounded token scan checks literal names and visible unresolved token construction, not
+arbitrary data flow or dependency-injected CSS. Semantic hue/tile templates and directly
+imported literal `uiTokens` catalog paths are supported. Escaped, incomplete and unsupported
+dynamic custom-property names fail rather than being guessed. Tests, fixtures, build output,
+comments and the legacy compatibility definition sheet are excluded from consumption checks.
+A dynamic custom-property prefix starts at an identifier boundary. BEM modifier class names
+such as `ui-button--${variant}` are not custom-property evidence.
+
+`scripts/ui-scoreboard-ratchet.json` initially enrolls nothing. A repair worker enrolls newly
+passing plugin/static-check pairs in the same PR; reviewers reject deleting enrollment to hide
+regressions. Only `compatibility-tokens` is currently enrollable, including for `host`.
+The ratchet runs from `typecheck` and directly in the Tests workflow's Plan job, including draft
+PRs. Non-enrolled debt stays visible in reports without blocking unrelated work.
+Screenshots/model review never run automatically from these static gates.
+
+Full measurement uses the existing isolated headless renderer and installed reviewer prerequisites.
+It never installs browsers, resets usage or changes accounts. Native menus, window chrome and
+native-only surfaces cannot be certified by renderer screenshots; missing surfaces remain failures.
+
 ## Why the build unpacks the installer
 
 `hutch electrobun build --env=stable` produces a self-extracting installer. In Electrobun 2.0.4 it

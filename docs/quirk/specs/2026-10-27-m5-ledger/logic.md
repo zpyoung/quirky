@@ -30,7 +30,7 @@ Expose every operation to authenticated agents and people, including approve, se
 
 ## Decisions Locked
 
-- Targeting: cwd/workspace defaults to its project; group selects membership; explicit owner selects a live project/group; direct ledger selection reaches detached ledgers. Conflicting selectors fail.
+- Targeting: cwd/workspace defaults to its project; group selects membership; explicit owner selects a live project/group; direct ledger selection reaches any ledger, but filing by id requires an attached live owner. Chooser rows open by ledger id, independent of their displayed owner. Conflicting selectors fail.
 - Responses: use Quirky's existing JSON/CLI envelope, stable domain error identifiers and current revision on conflicts; import with skipped records exits 1 while preserving its successful result.
 - Revision semantics: no-op edits/state do not bump; revert restores known editable content/state as a new revision, retains extra legacy fields, and follows actor/review rules.
 - Ownership: records are outside checkouts; lifecycle reconciliation happens on startup/catalog change and before requests, fixing Orca's delayed re-add recovery.

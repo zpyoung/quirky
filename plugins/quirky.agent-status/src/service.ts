@@ -163,7 +163,7 @@ export class AgentStatusService {
   private readonly sender: Sender
   private readonly waits: Waits
   private readonly sources: RuleSources
-  private readonly matcher = new Matcher()
+  private readonly matcher: Matcher
   private readonly sampler: ScreenSampler
   private readonly screen: ScreenDeps
   private stopped = false
@@ -176,6 +176,7 @@ export class AgentStatusService {
     private readonly now: () => number = Date.now,
     private readonly timing: Timing = timingFrom(process.env)
   ) {
+    this.matcher = new Matcher(context.process)
     this.sources = new RuleSources({
       userDir: join(context.home, 'agent-rules'),
       builtinDir: join(context.dir, 'rules'),
