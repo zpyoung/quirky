@@ -6,6 +6,11 @@ const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '
 const CODE_EXTENSION_SET: Record<string, true> = {
   '.ts': true, '.tsx': true, '.js': true, '.jsx': true, '.mts': true, '.cts': true, '.mjs': true, '.cjs': true
 }
+const IGNORED_ASSET_EXTENSIONS: Record<string, true> = {
+  '.json': true, '.css': true, '.scss': true, '.sass': true, '.less': true, '.styl': true,
+  '.svg': true, '.png': true, '.jpg': true, '.jpeg': true, '.gif': true, '.webp': true, '.avif': true, '.ico': true,
+  '.bmp': true, '.tif': true, '.tiff': true
+}
 const STATE_TEXT = /\b(loading|no [a-z]+( [a-z]+)? (yet|found)|nothing|empty|error|failed|unable|could ?n[o'’]t|retry|try again|offline)\b/i
 const SHARED_RENDER_TAGS: Record<string, true> = { EmptyState: true, NoticeLine: true, InlineError: true }
 const DOM_WRITE_PROPERTIES: Record<string, true> = { textContent: true, innerHTML: true, innerText: true }
@@ -62,15 +67,20 @@ function resolveModule(importer: string, specifier: string, directory: string, s
   const base = posix.normalize(posix.join(posix.dirname(importer), normalizedPath(specifier)))
   if (!insidePlugin(base, directory)) return { kind: 'outside' }
   const explicitExtension = extname(base).toLowerCase()
-  if (explicitExtension && !CODE_EXTENSION_SET[explicitExtension]) return { kind: 'ignored' }
+  const isCodeExtension = CODE_EXTENSION_SET[explicitExtension] === true
+  if (explicitExtension && !isCodeExtension && IGNORED_ASSET_EXTENSIONS[explicitExtension] === true) {
+    return { kind: 'ignored' }
+  }
 
   const candidates: string[] = []
-  if (explicitExtension) {
+  if (isCodeExtension) {
     candidates.push(base)
     if (explicitExtension === '.js') {
       const stem = base.slice(0, -explicitExtension.length)
       candidates.push(`${stem}.ts`, `${stem}.tsx`)
     }
+  } else if (explicitExtension) {
+    for (const extension of CODE_EXTENSIONS) candidates.push(`${base}${extension}`)
   } else {
     for (const extension of CODE_EXTENSIONS) candidates.push(`${base}${extension}`)
     for (const extension of CODE_EXTENSIONS) candidates.push(`${base}/index${extension}`)
@@ -80,7 +90,7 @@ function resolveModule(importer: string, specifier: string, directory: string, s
     if (!insidePlugin(candidate, directory)) return { kind: 'outside' }
     if (sources.has(candidate) && codeFile(candidate)) return { kind: 'file', file: candidate }
   }
-  return { kind: 'unresolved' }
+  return explicitExtension && !isCodeExtension ? { kind: 'ignored' } : { kind: 'unresolved' }
 }
 
 function moduleSpecifiers(file: ts.SourceFile): Array<{ text: string; position: number }> {
@@ -187,7 +197,7 @@ function containsRender(node: ts.Node): boolean {
   return contains(node, (current) => ts.isJsxElement(current)
     || ts.isJsxSelfClosingElement(current)
     || ts.isJsxFragment(current)
-    || createElementCall(current), true)
+    || createElementCall(current), false)
 }
 
 function enclosingFunction(node: ts.Node): ts.FunctionLikeDeclaration | undefined {
@@ -314,11 +324,14 @@ export function discoverCandidates(plugin: PluginInventory, files: readonly stri
       if (ts.isIfStatement(node)) {
         const start = node.getStart(parsed)
         const end = ifAnchorEnd(node, parsed)
-        if ((hasReturn(node.thenStatement) || (node.elseStatement && hasReturn(node.elseStatement)))
-          && (() => { const fn = enclosingFunction(node); return fn !== undefined && containsRender(fn) })()) {
+        const hasBranchReturn = hasReturn(node.thenStatement)
+          || (node.elseStatement !== undefined && hasReturn(node.elseStatement))
+        const renderFunction = hasBranchReturn ? enclosingFunction(node) : undefined
+        const isBranchReturn = renderFunction !== undefined && containsRender(renderFunction)
+        if (isBranchReturn) {
           add('state', 'branch-return', start, end)
-        }
-        if (contains(node.thenStatement, isDomWrite, true) || (node.elseStatement && contains(node.elseStatement, isDomWrite, true))) {
+        } else if (contains(node.thenStatement, isDomWrite, true)
+          || (node.elseStatement && contains(node.elseStatement, isDomWrite, true))) {
           add('state', 'branch-dom-write', start, end)
         }
       } else if ((ts.isCaseClause(node) || ts.isDefaultClause(node)) && hasReturn(node)) {
@@ -429,8 +442,16 @@ export function discoverCandidates(plugin: PluginInventory, files: readonly stri
       }
 
       if (ts.isBinaryExpression(node) && assignmentLeft(node)) {
-        const name = propertyAccessName(node.left) ?? ''
-        if (/^on[a-z]/.test(name)) add('action', 'handler-assignment', node.left.getStart(parsed), node.left.end)
+        const left = node.left
+        const name = propertyAccessName(left) ?? ''
+        if (/^on[a-z]/.test(name)) {
+          add('action', 'handler-assignment', left.getStart(parsed), left.end)
+        } else if (ts.isElementAccessExpression(left)
+          && left.argumentExpression
+          && !ts.isStringLiteralLike(left.argumentExpression)
+          && !ts.isNumericLiteral(left.argumentExpression)) {
+          add('action', 'unresolved-assignment', left.getStart(parsed), left.end)
+        }
         if (name === 'textContent') {
           const literal = directLiteral(node.right)
           if (literal && STATE_TEXT.test(stateTextValue(literal))) add('state', 'state-text', literal.getStart(parsed), literal.end)

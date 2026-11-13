@@ -58,6 +58,26 @@ describe('UI source discovery', () => {
     expect(result.files).not.toContain('plugins/acme.app/src/main.ts')
   })
 
+  test('resolves dotted code suffixes while preserving explicit-code and non-code import behavior', () => {
+    const inventory = plugin([
+      source('plugins/acme.app/src/ui.tsx', "import './list.model'; import './explicit.js'; import './missing.ts'; import './styles.css'; import './icon.svg'"),
+      source('plugins/acme.app/src/list.model.ts', 'export const model = 1'),
+      source('plugins/acme.app/src/explicit.js', 'export const explicit = 1'),
+      source('plugins/acme.app/src/explicit.ts', 'export const explicit = 2')
+    ])
+
+    const result = discoverUiFiles(inventory)
+
+    expect(result.files).toEqual([
+      'plugins/acme.app/src/explicit.js',
+      'plugins/acme.app/src/list.model.ts',
+      'plugins/acme.app/src/ui.tsx'
+    ])
+    expect(result.failures.map(({ code, basis }) => ({ code, basis }))).toEqual([
+      { code: 'ui-import-unresolved', basis: 'source-audit' }
+    ])
+  })
+
   test('reports missing UI entry and unresolved or out-of-plugin imports as source-audit evidence', () => {
     const missingEntry = discoverUiFiles(plugin([source('plugins/acme.app/src/main.ts', 'export {}')]))
     expect(missingEntry.files).toEqual([])
@@ -138,6 +158,73 @@ function actions(node: unknown, condition: boolean, eventName: string, handler: 
     candidateFor(content, candidates, 'unresolved-spread', '...props')
     candidateFor(content, candidates, 'unresolved-computed', '[eventName]')
     candidateFor(content, candidates, 'unresolved-listener', 'node.addEventListener(eventName')
+  })
+
+  test('recognizes render branches inside nested callbacks but skips their control statements', () => {
+    const file = 'plugins/acme.app/src/ui.tsx'
+    const content = `
+function mapped(rows: unknown[]) {
+  if (!rows) return null
+  return rows.map((row) => <Row />)
+}
+function conditional(rows: unknown[], ready: boolean) {
+  if (!rows) return null
+  return ready ? rows.map((row) => <Row />) : null
+}
+function created(rows: unknown[]) {
+  if (!rows) return null
+  return rows.map((row) => createElement('Row', null))
+}
+function nested(rows: unknown[], target: unknown, condition: boolean) {
+  if (condition) rows.map(() => { return <Row /> })
+  if (target) rows.map(() => { target.textContent = 'value' })
+}
+`
+    const candidates = discoverCandidates(plugin([source(file, content)]), [file])
+
+    expect(candidates.filter((item) => item.kind === 'branch-return').map((item) => item.anchorText)).toEqual([
+      'if (!rows)', 'if (!rows)', 'if (!rows)'
+    ])
+    candidateFor(content, candidates, 'branch-return', 'if (!rows)')
+    candidateFor(content, candidates, 'conditional-render', 'ready ?')
+    expect(candidates.some((item) => item.kind === 'branch-return' && item.anchorText === 'if (condition)')).toBe(false)
+    expect(candidates.some((item) => item.kind === 'branch-dom-write' && item.anchorText === 'if (target)')).toBe(false)
+  })
+
+  test('prioritizes branch returns and retains distinct nested logical render anchors', () => {
+    const file = 'plugins/acme.app/src/ui.tsx'
+    const content = `
+function View(rows: unknown[], target: unknown, a: boolean) {
+  if (!rows) { target.textContent = ''; return null }
+  if (target) target.appendChild(rows)
+  target.onclick = () => {}
+  return <div>{a && <b /> || <i />}</div>
+}
+`
+    const candidates = discoverCandidates(plugin([source(file, content)]), [file])
+    const spans = candidates.map((item) => `${item.category}:${item.anchorStart}:${item.anchorEnd}`)
+
+    candidateFor(content, candidates, 'branch-return', 'if (!rows)')
+    candidateFor(content, candidates, 'branch-dom-write', 'if (target)')
+    candidateFor(content, candidates, 'handler-assignment', 'target.onclick')
+    candidateFor(content, candidates, 'conditional-render', 'a &&')
+    candidateFor(content, candidates, 'conditional-render', 'a && <b /> ||')
+    expect(candidates.filter((item) => item.kind === 'branch-dom-write')).toHaveLength(1)
+    expect(spans).toHaveLength(new Set(spans).size)
+  })
+
+  test('distinguishes literal indexed handlers from dynamic assignments', () => {
+    const file = 'plugins/acme.app/src/ui.tsx'
+    const content = `
+function actions(el: unknown, key: string, handler: unknown) {
+  el['onclick'] = handler
+  el[key] = handler
+}
+`
+    const candidates = discoverCandidates(plugin([source(file, content)]), [file])
+
+    candidateFor(content, candidates, 'handler-assignment', "el['onclick']")
+    candidateFor(content, candidates, 'unresolved-assignment', 'el[key]')
   })
 
   test('reports all unresolved action forms and leaves a handled form without a native-submit candidate', () => {
