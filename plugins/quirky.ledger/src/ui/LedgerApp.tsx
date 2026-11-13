@@ -363,9 +363,10 @@ export function LedgerApp({
 
   const owners = catalog?.owners ?? []
   const currentSummary = response?.ledger ?? null
-  const pageTitle = summaryTitle(currentSummary, effectiveTarget, owners)
+  const catalogSummary = effectiveTarget?.ledgerId ? catalog?.ledgers?.find((summary) => summary.ledgerId === effectiveTarget.ledgerId) : undefined
+  const pageTitle = currentSummary || !catalogSummary ? summaryTitle(currentSummary, effectiveTarget, owners) : catalogSummary.name
   const ownerForPage = currentSummary?.owner ?? effectiveTarget?.owner ?? currentSummary?.formerOwner ?? null
-  const pageTier = currentSummary?.tier ?? ownerForPage?.tier ?? 'project'
+  const pageTier = currentSummary?.tier ?? ownerForPage?.tier ?? catalogSummary?.tier ?? 'project'
   const runtimeText = runtimeTip(response ?? catalog)
   const workspaceFolder = workspaceRepo?.kind === 'folder' || workspace?.kind === 'folder'
   const pageLedgerTarget = effectiveTarget
@@ -905,7 +906,7 @@ export function LedgerApp({
             <ListRow
               title={rowLabel}
               trailing={<Button type="button" aria-label={`Open ledger ${summary.name}`} onClick={() => {
-                setOwnerTarget(summary.owner ? { owner: summary.owner } : { ledgerId: summary.ledgerId })
+                setOwnerTarget({ ledgerId: summary.ledgerId })
               }}>Open</Button>}
             />
           </li>
