@@ -2,12 +2,31 @@ import { expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RegisteredCaptureFixtures } from '../ui-review/fixtures'
+import type { PreparedCaptureFixtureHome, RegisteredCaptureFixtures } from '../ui-review/fixtures'
 import { prepareSpeedFixture } from './fixtures.ts'
 import { createFloodChunk, writeWorkerOutput } from './worker.ts'
 import { startWorld } from '../soak/world.ts'
+import { fixtureIssue, fixturePullRequest } from '../../plugins/quirky.tasks/test/fixtures/list'
 
 const liveSessions = Array.from({ length: 20 }, (_, index) => `session-${index + 1}`)
+const fixtureTasks: PreparedCaptureFixtureHome['tasks'] = {
+  owner: 'fixture-owner',
+  repo: 'fixture-repo',
+  originUrl: 'https://github.com/fixture-owner/fixture-repo.git',
+  issue: fixtureIssue('fixture-owner', 'fixture-repo', 1, '2026-11-01T00:00:00Z'),
+  pullRequest: fixturePullRequest('fixture-owner', 'fixture-repo', 2, '2026-11-02T00:00:00Z'),
+  sshCommand: '/bin/false'
+}
+
+function fixtureFiles(root: string): PreparedCaptureFixtureHome['files'] {
+  return {
+    source: join(root, 'src/app.ts'),
+    markdown: join(root, 'docs/review-notes.md'),
+    notebook: join(root, 'notebooks/summary.ipynb'),
+    svg: join(root, 'assets/fixture-diagram.svg'),
+    csv: join(root, 'data/metrics.csv')
+  }
+}
 
 test('builds ten two-pane worktrees, a committed empty diff, and isolated raw workers', async () => {
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'quirky-speed-fixture-'))
@@ -30,18 +49,18 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
     isMain: index === 0,
     status: 'idle' as const
   }))
-  const fixtures = {
+  const fixtures: RegisteredCaptureFixtures = {
     home: fixtureRoot,
     repoPath,
     projects: [{ name: 'fixture', path: repoPath }],
     worktreesRoot: join(fixtureRoot, 'worktrees'),
-    files: {},
-    tasks: {},
+    files: fixtureFiles(repoPath),
+    tasks: fixtureTasks,
     cleanup() {},
     repo: { id: 'fixture-repo' },
     primaryWorktree: { id: 'worktree-1', path: repoPath, repoId: 'fixture-repo', name: 'worktree-1' },
     worktrees: initialWorktrees
-  } as RegisteredCaptureFixtures
+  }
   const workerBySession = new Map<string, string>()
   const summaryBySession = new Map<string, string>()
   const stoppedBySession = new Map<string, string>()
@@ -49,67 +68,87 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
   const runIdBySession = new Map<string, string>()
   let sessionCounter = 0
   let extraCounter = 0
+  let initialControlClosed = false
+  let replacementControlCalls = 0
+  const handleRpc = async (method: string, params: Record<string, unknown> = {}) => {
+    calls.push({ method, params })
+    if (method === 'quirky.worktree/create') {
+      extraCounter++
+      const path = join(fixtureRoot, `extra-${extraCounter}`)
+      mkdirSync(path)
+      return { worktree: { id: `extra-${extraCounter}`, path, name: `extra-${extraCounter}` } }
+    }
+    if (method === 'quirky.terminal/newTab' || method === 'quirky.terminal/splitPane') {
+      sessionCounter++
+      const session = `speed-session-${sessionCounter}`
+      const workerId = String(params.command ?? '').split(' ').at(-1)?.replaceAll("'", '')
+        ?? String(params.title ?? '').split(' ').at(-1)!
+      workerBySession.set(session, workerId)
+      return method.endsWith('newTab')
+        ? { session, tab: `tab-${sessionCounter}`, pane: `pane-${sessionCounter}` }
+        : { session, pane: `pane-${sessionCounter}` }
+    }
+    if (method === 'quirky.terminal/write') {
+      const data = String(params.data ?? '')
+      const session = String(params.session ?? '')
+      if (data.startsWith('\u001e')) {
+        const command = JSON.parse(data.slice(1).trim()) as { op: string; runId?: string }
+        const workerId = workerBySession.get(session)!
+        if (command.op === 'flood-start') runIdBySession.set(session, command.runId!)
+        if (command.op === 'flood-stop') {
+          const runId = command.runId ?? runIdBySession.get(session)!
+          pendingSummaryBySession.set(session, `SPEED_FLOOD_SUMMARY:${workerId}:${session}:${runId}:1:2:131072:32`)
+        }
+        if (command.op === 'shutdown') stoppedBySession.set(session, `SPEED_STOPPED ${workerId} ${session}`)
+      }
+      return { ok: true }
+    }
+    if (method === 'quirky.terminal/read') {
+      const session = String(params.session ?? '')
+      const pending = pendingSummaryBySession.get(session)
+      const marker = stoppedBySession.get(session) ?? summaryBySession.get(session) ?? `SPEED_READY ${workerBySession.get(session)} ${session}`
+      if (pending) {
+        pendingSummaryBySession.delete(session)
+        summaryBySession.set(session, pending)
+        return { lines: [marker], cols: 120, rows: 40, alt: false }
+      }
+      return { lines: [marker], cols: 120, rows: 40, alt: false }
+    }
+    if (method === 'quirky.git/diff') {
+      return { path: 'speed-diff.txt', source: 'unstaged', staged: false, original: '', modified: speedLines(), binary: false, kind: 'text' }
+    }
+    return { ok: true }
+  }
+  const initialControl = {
+    async callAny(method: string, params: Record<string, unknown> = {}) {
+      if (initialControlClosed) throw new Error('the original control connection is closed')
+      return handleRpc(method, params)
+    },
+    close() {
+      initialControlClosed = true
+    }
+  }
   const world = {
     home: fixtureRoot,
     env,
     fixtures,
     preserved: [] as string[],
     preserveSessions(ids: string[]) { this.preserved = ids },
-    control: {
-      async callAny(method: string, params: Record<string, unknown> = {}) {
-        calls.push({ method, params })
-        if (method === 'quirky.worktree/create') {
-          extraCounter++
-          const path = join(fixtureRoot, `extra-${extraCounter}`)
-          mkdirSync(path)
-          return { worktree: { id: `extra-${extraCounter}`, path, name: `extra-${extraCounter}` } }
-        }
-        if (method === 'quirky.terminal/newTab' || method === 'quirky.terminal/splitPane') {
-          sessionCounter++
-          const session = `speed-session-${sessionCounter}`
-          const workerId = String(params.command ?? '').split(' ').at(-1)?.replaceAll("'", '')
-            ?? String(params.title ?? '').split(' ').at(-1)!
-          workerBySession.set(session, workerId)
-          return method.endsWith('newTab')
-            ? { session, tab: `tab-${sessionCounter}`, pane: `pane-${sessionCounter}` }
-            : { session, pane: `pane-${sessionCounter}` }
-        }
-        if (method === 'quirky.terminal/write') {
-          const data = String(params.data ?? '')
-          const session = String(params.session ?? '')
-          if (data.startsWith('\u001e')) {
-            const command = JSON.parse(data.slice(1).trim()) as { op: string; runId?: string }
-            const workerId = workerBySession.get(session)!
-            if (command.op === 'flood-start') runIdBySession.set(session, command.runId!)
-            if (command.op === 'flood-stop') {
-              const runId = command.runId ?? runIdBySession.get(session)!
-              pendingSummaryBySession.set(session, `SPEED_FLOOD_SUMMARY:${workerId}:${session}:${runId}:1:2:131072:32`)
-            }
-            if (command.op === 'shutdown') stoppedBySession.set(session, `SPEED_STOPPED ${workerId} ${session}`)
-          }
-          return { ok: true }
-        }
-        if (method === 'quirky.terminal/read') {
-          const session = String(params.session ?? '')
-          const pending = pendingSummaryBySession.get(session)
-          const marker = stoppedBySession.get(session) ?? summaryBySession.get(session) ?? `SPEED_READY ${workerBySession.get(session)} ${session}`
-          if (pending) {
-            pendingSummaryBySession.delete(session)
-            summaryBySession.set(session, pending)
-            return { lines: [marker], cols: 120, rows: 40, alt: false }
-          }
-          return { lines: [marker], cols: 120, rows: 40, alt: false }
-        }
-        if (method === 'quirky.git/diff') {
-          return { path: 'speed-diff.txt', source: 'unstaged', staged: false, original: '', modified: speedLines(), binary: false, kind: 'text' }
-        }
-        return { ok: true }
-      }
-    }
+    control: initialControl
   }
+  const controller = new AbortController()
 
   try {
-    const fixture = await prepareSpeedFixture(world as never)
+    const fixture = await prepareSpeedFixture(world as never, { signal: controller.signal })
+    const originalControl = world.control
+    originalControl.close()
+    world.control = {
+      async callAny(method: string, params: Record<string, unknown> = {}) {
+        replacementControlCalls++
+        return handleRpc(method, params)
+      },
+      close() {}
+    }
     expect(fixture.worktrees).toHaveLength(10)
     expect(fixture.worktrees.every(({ sessions, tabId }) => sessions.length === 2 && tabId.length > 0)).toBe(true)
     expect(fixture.target).toBe(fixture.worktrees[0])
@@ -147,9 +186,15 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
     expect(stats.firstCounter).toBeLessThanOrEqual(stats.lastCounter)
     const nextFlood = await fixture.startFlood()
     expect(nextFlood.runId).not.toBe(flood.runId)
+    controller.abort(new Error('cancelled setup'))
     const nextStats = await fixture.stopFlood()
     expect(nextStats.runId).toBe(nextFlood.runId)
+    expect(replacementControlCalls).toBeGreaterThan(0)
     await fixture.stop()
+    const workerControls = calls.filter(({ method }) => method === 'quirky.terminal/write')
+      .map(({ params }) => JSON.parse(String(params.data).slice(1).trim()) as { op: string })
+    expect(workerControls.filter(({ op }) => op === 'flood-stop')).toHaveLength(2)
+    expect(workerControls.filter(({ op }) => op === 'shutdown')).toHaveLength(20)
     expect(calls.filter(({ method }) => method === 'quirky.terminal/write')
       .every(({ params }) => String(params.data).startsWith('\u001e'))).toBe(true)
     await fixture.stop()
@@ -309,18 +354,18 @@ function fakeFixtureWorld(options: { failOnSplitAt?: number } = {}) {
     isMain: index === 0,
     status: 'idle' as const
   }))
-  const fixtures = {
+  const fixtures: RegisteredCaptureFixtures = {
     home: fixtureRoot,
     repoPath,
     projects: [],
     worktreesRoot: join(fixtureRoot, 'worktrees'),
-    files: {},
-    tasks: {},
+    files: fixtureFiles(repoPath),
+    tasks: fixtureTasks,
     cleanup() {},
     repo: { id: 'fixture-repo' },
     primaryWorktree: { id: worktrees[0]!.id, path: repoPath, repoId: 'fixture-repo', name: worktrees[0]!.name },
     worktrees
-  } as RegisteredCaptureFixtures
+  }
   let extraCounter = 0
   let sessions = 0
   let splitCalls = 0
@@ -412,25 +457,25 @@ function fakeWorldHarness(options: { shutdownFails?: boolean; failConnectionAt?:
     isMain: index === 0,
     status: 'idle' as const
   }))
-  const captureFixtures = {
+  const captureFixtures: RegisteredCaptureFixtures = {
     home,
     repoPath: join(home, 'project'),
     projects: [{ name: 'fixture', path: join(home, 'project') }],
     worktreesRoot: join(home, 'worktrees'),
-    files: {},
-    tasks: {},
+    files: fixtureFiles(join(home, 'project')),
+    tasks: fixtureTasks,
     cleanup() {},
     repo: { id: 'soak-repo' },
     primaryWorktree: { id: captureWorktrees[0]!.id, path: captureWorktrees[0]!.path, repoId: 'soak-repo', name: 'worktree-1' },
     worktrees: captureWorktrees
   }
-  const prepared = {
+  const prepared: PreparedCaptureFixtureHome = {
     home,
     repoPath: join(home, 'project'),
     projects: [{ name: 'fixture', path: join(home, 'project') }],
     worktreesRoot: join(home, 'worktrees'),
-    files: {},
-    tasks: {},
+    files: fixtureFiles(join(home, 'project')),
+    tasks: fixtureTasks,
     cleanup() {}
   }
   const dependencies = {

@@ -190,30 +190,39 @@ function safeError(error: unknown, home: string): Error {
 
 /** Extends the disposable soak repositories with the ten-worktree renderer workload. */
 export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' | 'fixtures' | 'control' | 'preserveSessions'>, options: Options = {}): Promise<SpeedFixture> {
-  const rpc: RpcClient = world.control
+  const rpc: RpcClient = {
+    callAny(method, params, rpcOptions) {
+      return world.control.callAny(method, params, rpcOptions)
+    }
+  }
   const boundedOptions = { timeoutMs: options.timeoutMs ?? SETUP_TIMEOUT_MS, signal: options.signal }
+  const cleanupOptions = { timeoutMs: SETUP_TIMEOUT_MS }
   const created: SpeedFixtureWorktree[] = []
   const workers: WorkerRecord[] = []
   let activeFlood: FloodActive | undefined
   let stopPromise: Promise<void> | undefined
 
-  const sendControl = async (sessionId: string, op: string, extras: Record<string, unknown> = {}) => {
-    await callRpc(rpc, 'quirky.terminal/write', { session: sessionId, data: controlBytes(op, extras) }, boundedOptions)
+  const sendControl = async (
+    sessionId: string,
+    op: string,
+    extras: Record<string, unknown> = {},
+    rpcOptions: Required<Pick<Options, 'timeoutMs'>> & Options = boundedOptions
+  ) => {
+    await callRpc(rpc, 'quirky.terminal/write', { session: sessionId, data: controlBytes(op, extras) }, rpcOptions)
   }
 
   const stopFlood = async (): Promise<FloodStats> => {
     const current = activeFlood
     if (!current) throw new Error('the speed flood worker is not running')
-    await sendControl(current.sessionId, 'flood-stop', { runId: current.runId })
+    await sendControl(current.sessionId, 'flood-stop', { runId: current.runId }, cleanupOptions)
     const deadline = performance.now() + FLOOD_STOP_TIMEOUT_MS
     const summaryPattern = new RegExp(
       `SPEED_FLOOD_SUMMARY:${escapeRegExp(current.workerId)}:${escapeRegExp(current.sessionId)}:${escapeRegExp(current.runId)}:(\\d+):(\\d+):(\\d+):([\\d.]+)`
     )
     try {
       while (performance.now() < deadline) {
-        checkAbort(options.signal)
         const result = await callRpc(rpc, 'quirky.terminal/read', { session: current.sessionId, lines: 30 }, {
-          timeoutMs: Math.min(5000, Math.max(1, Math.ceil(deadline - performance.now()))), signal: options.signal
+          timeoutMs: Math.min(5000, Math.max(1, Math.ceil(deadline - performance.now())))
         })
         const text = compactTerminalText(terminalText(result))
         const match = summaryPattern.exec(text)
@@ -257,8 +266,8 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
       }
       await Promise.all(workers.map(async ({ sessionId, workerId, ready }) => {
         try {
-          await sendControl(sessionId, 'shutdown')
-          if (ready) await waitForMarker(rpc, sessionId, `SPEED_STOPPED ${workerId} ${sessionId}`, 5000, options.signal)
+          await sendControl(sessionId, 'shutdown', {}, cleanupOptions)
+          if (ready) await waitForMarker(rpc, sessionId, `SPEED_STOPPED ${workerId} ${sessionId}`, 5000)
         } catch (error) {
           failures.push(error)
         }
