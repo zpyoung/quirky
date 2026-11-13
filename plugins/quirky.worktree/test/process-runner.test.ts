@@ -1019,19 +1019,20 @@ test('GitHub config rollback accepts unset exit five, retains config values and 
   expect(remoteRun.calls.some((call) => githubArgs(call).join(' ') === `remote remove ${remotePlan.pushTarget.remoteName}`)).toBe(true)
 })
 
-test('worktree scanner boundary is clear while long-lived vm allowance and API floor remain', () => {
+test('worktree scanner boundary is clear including the vm runner at its API floor', () => {
   const migratedFiles = [
     'plugins/quirky.worktree/src/daemon/create.ts',
     'plugins/quirky.worktree/src/daemon/github.ts',
     'plugins/quirky.worktree/src/daemon/prepared.ts',
-    'plugins/quirky.worktree/src/daemon/hooks-run.ts'
+    'plugins/quirky.worktree/src/daemon/hooks-run.ts',
+    'plugins/quirky.worktree/src/daemon/vm.ts'
   ]
   for (const path of migratedFiles) expect(scanSourceContent(path, readFileSync(path, 'utf8'))).toEqual([])
   const baseline = JSON.parse(readFileSync('scripts/spawn-lint-baseline.json', 'utf8')) as Record<string, number>
   for (const path of migratedFiles) expect(baseline[path]).toBeUndefined()
-  expect(baseline['plugins/quirky.worktree/src/daemon/vm.ts']).toBeGreaterThan(0)
+  expect(baseline['plugins/quirky.worktree/src/daemon/vm.ts']).toBeUndefined()
   const manifest = JSON.parse(readFileSync('plugins/quirky.worktree/quirky-plugin.json', 'utf8')) as { apiVersion: string }
-  expect(manifest.apiVersion).toBe('1.9.0')
-  expect(PLUGIN_API_VERSION).toBe('1.10.0')
+  expect(manifest.apiVersion).toBe('1.11.0')
+  expect(PLUGIN_API_VERSION).toBe('1.12.0')
   expect(pluginApiCompatibilityError(manifest.apiVersion)).toBeNull()
 })

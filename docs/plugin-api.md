@@ -113,7 +113,8 @@ for every option and handle member.
 
 `spawn` returns a handle synchronously, not a Promise. Its `stdout` is a demand-driven
 `ReadableStream<Uint8Array>`; chunks are bytes, not lines or frames. Drain stdout or stop the child.
-`stderrTail()` reads a bounded, automatically drained tail, final when `exited` resolves.
+`stderrTail()` reads a bounded, automatically drained tail in `'tail'` mode, final when `exited`
+resolves. With `stderr: 'pipe'`, read raw bytes from `stderr` instead.
 `write` preserves call order and resolves whether bytes reached the pipe, not whether the child
 consumed them. `write` and `closeInput` do not reject for a dead or closed pipe.
 
@@ -126,19 +127,26 @@ These defaults apply:
 - Stdin is `'ignore'`, stdout is `'pipe'`, stderr is `'tail'`, the stderr tail is 16,384 bytes,
   and kill grace is 2,000 ms.
 
-`stop()` sends SIGTERM to the process group and escalates to SIGKILL after the grace period;
-`stop({ signal: 'SIGKILL' })` skips the grace. Stopping ends stdout and discards unread output.
-`stop` resolves to the same exit object as `exited`. Cancelling stdout alone does not stop the child.
+`stop()` sends SIGTERM to the process group and escalates to SIGKILL after the grace period.
+By default, a graceful stop closes piped stdout/stderr and discards their unread bytes, while
+the automatic stderr tail continues draining through shutdown. With `groupGrace: true`, piped
+output stays open through the remaining group grace, even after the leader exits.
+A later graceful stop can only shorten that grace. `stop({ signal: 'SIGKILL' })` and disposal
+end it and close all output immediately, then wait for bounded group cleanup.
+The first stop reason wins. A stop during natural-exit group grace records its reason even though
+the leader already exited. After cleanup, the completed result stays unchanged; a hard stop still
+closes unread output without sending another signal. `stop` resolves to the same exit object as
+`exited`. Cancelling stdout alone does not request process termination.
 
 #### Start failures resolve; bad calls throw
 
 Bad arguments/options and a disposed runner throw synchronously before returning a handle.
-A command that cannot start instead returns an inactive handle with `pid: null`, closed stdout,
-an empty stderr tail, writes resolving `false`, and `spawnError` in its resolved exit.
-An already-aborted signal returns an inactive handle whose exit is marked `stopped: 'aborted'`.
+An unstartable command returns an inactive handle with `pid: null`, closed stdout and stderr,
+an empty stderr tail, writes resolving `false`, and `spawnError` in its resolved exit. An
+already-aborted signal returns an inactive handle whose exit is marked `stopped: 'aborted'`.
 `exited` resolves for nonzero exits, explicit stop, timeout, abort and start failure; it does not
-reject for those outcomes. A post-exit stdout stall errors the stream with `ProcessStalledError`
-after the existing 1,000 ms stall wait, without rerunning the command.
+reject for those outcomes. A post-exit stdout stall errors with `ProcessStalledError` after group
+cleanup and the existing 1,000 ms stall wait, without rerunning the command.
 
 #### Activation ownership covers both methods
 
@@ -158,8 +166,8 @@ daemon crashes or SIGKILL do not guarantee cleanup.
 Spawn does not split shell strings, parse lines/frames, retry, deduplicate, cache, restart,
 impose concurrency limits or apply run's total-output cap. It does not bound arbitrarily many
 unawaited writes. Callers own their result/frame limits and must stop abandoned children.
-There is no raw Bun subprocess, stderr stream, IPC, PTY, inherited stdio, arbitrary-signal API,
-sandbox or detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
+There is no raw Bun subprocess, IPC, PTY, inherited stdio, arbitrary-signal API, sandbox or
+detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
 
 ### API 1.7: In-place view input updates
 
@@ -239,14 +247,36 @@ and always send the plugin's held events first. A plugin that passes the option 
 - No order is promised between coalesced events with different keys when neither is immediate,
   between plugins' events, or between plugin and kernel events.
 
-### API 1.11: Host output-gap recovery
+### API 1.11: Bounded process groups and raw stderr
+
+API 1.11 adds `stderr: 'pipe'` to `SpawnOptions`. In this mode, `SpawnedProcess.stderr` delivers
+raw bytes on demand and `stderrTail()` is always empty. In `'tail'` and `'ignore'` modes, `stderr`
+is an empty closed stream and `stderrTail()` retains its existing behavior.
+
+API 1.11 also adds the opt-in `groupGrace: true` spawn option. It gives the whole process group the
+grace period: a natural leader exit sends one SIGTERM to a remaining group, and members already
+given a graceful stop keep the unspent grace after their leader exits. A stop during that grace can
+shorten it. A SIGKILL stop or disposal ends output immediately. Without `groupGrace`, the runner
+keeps API 1.6's immediate group cleanup and output-stop behavior.
+
+After a leader exits, both `run` and `spawn` repeat SIGKILL every 10 ms until its process group is
+gone or the one-second cleanup bound expires. They remain in the live table while cleanup runs;
+`spawn.exited` and `run()` settle after cleanup, without waiting for an output reader. A result
+includes `groupSurvived: true` when members remain at the bound. `spawn`'s `durationMs` still
+measures the leader's exit; `run`'s `durationMs` measures the result.
+
+Piped output stays open through a graceful group grace and closes quietly within one stall wait
+after the group ends. A requested stop is not reported as an output stall. A natural-exit output
+stall still fails with `ProcessStalledError`, with its wait starting after group cleanup.
+
+### API 1.12: Host output-gap recovery
 
 `context.pty.onLagged(listener)` reports a session whose host output subscription was shed.
 Before calling any listener, the daemon invalidates that session's shared subscription holds
 and pending subscribe attempts. Other sessions are unchanged. Listeners can immediately
 `subscribe` again; an older promise cannot restore its hold or release a replacement.
 The registration returns a remover and is removed on plugin revocation. Listener failures
-are logged without stopping other plugins. Plugins using it declare `"apiVersion": "1.11.0"`.
+are logged without stopping other plugins. Plugins using it declare `"apiVersion": "1.12.0"`.
 
 The host bounds each subscription at 4 MiB and each connection at 32 MiB, counting encoded
 queued and subscribe-held output, including the remainder of a started frame. Shedding drops
@@ -410,7 +440,11 @@ a new event, and does not change authentication or version refusal.
 - **1.10.0** adds [`context.emit` immediate delivery](#api-110-immediate-emits) and sends a plugin's
   held events before its next uncoalesced event. A plugin that passes the option declares
   `apiVersion` 1.10.0 or later.
-- **1.11.0** adds [`PluginPty.onLagged`](#api-111-host-output-gap-recovery), invalidating
+- **1.11.0** adds raw stderr piping and opt-in process-group grace to
+  [`context.process.spawn`](#api-111-bounded-process-groups-and-raw-stderr). `run` and `spawn` wait
+  for bounded process-group cleanup and report `groupSurvived: true` if members remain at the
+  bound. A plugin using these additions declares `apiVersion` 1.11.0.
+- **1.12.0** adds [`PluginPty.onLagged`](#api-112-host-output-gap-recovery), invalidating
   session subscriptions before notifying plugins and bounding host and daemon output queues.
 
 ## Example
