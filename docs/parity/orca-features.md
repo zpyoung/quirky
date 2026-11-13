@@ -52,10 +52,12 @@ Every check below is a literal single-file test command. An optional `title` is 
 The Goal-12 rehearsal composes public Quirky operations instead of reproducing Orca spellings:
 
 - Worktree creation uses `--base`, not `--base-branch`.
+- `worktree create --agent` accepts catalog IDs rather than a fixed CLI list. Ordinary local creates validate explicit non-shell agents before allocating a worktree when the agent service is available. Without that service, launches without model/option picks retain the existing fallback; model/option picks require it.
 - Quirky session IDs stand in for Orca terminal handles.
 - `accounts usage` returns `providers[]`; `accounts list` is not Orca's `result.rateLimits` usage report.
 - A Quirky removal receipt may retain an unmerged branch. If it does, cleanup must use the receipt's exact branch and head with `worktree delete-branch`, not raw `git branch -D`.
 - Repeated loop turns use the native Codex fixture rather than a real Claude process. This does not attest a live Claude/model/account configuration. No harness file is migrated by this PR.
+- Compound terminal commands use `/bin/sh -c <quoted script>` so the exec-based launcher runs the entire script, including its input read and final shell.
 
 ## Export shape and validation
 
