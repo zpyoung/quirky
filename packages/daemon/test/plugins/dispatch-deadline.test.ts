@@ -30,6 +30,7 @@ function setup(options: SetupOptions = {}) {
   const disabled = new Set<string>()
   const logs: string[] = []
   let dispatcher!: Dispatcher
+  const unavailable = () => { throw new Error('unused test context service') }
   const host = new PluginHost({
     builtinDir: null,
     installedDir,
@@ -44,8 +45,21 @@ function setup(options: SetupOptions = {}) {
     log: (message) => logs.push(message),
     extension: {
       create: (plugin) => ({
+        dataDir: root,
+        home: root,
+        pty: {} as never,
+        launch: {} as never,
+        createFileResource: unavailable,
+        notify: unavailable,
+        emit: unavailable,
+        subscribe: unavailable,
+        call: unavailable,
+        openStore: unavailable,
+        getSetting: unavailable,
+        error: unavailable,
         forward: (method, params, caller) => dispatcher.forward(plugin.id, method, params, caller)
-      })
+      }),
+      revoke: (pluginId) => { logs.push(`revoke ${pluginId}`) }
     }
   })
   const unanswered = new UnansweredHandlers({
