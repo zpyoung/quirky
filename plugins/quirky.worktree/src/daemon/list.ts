@@ -32,7 +32,7 @@ function rememberListing(env: ListEnv, repoId: string, facts: Map<string, Facts>
   for (const [id, cached] of env.listed) {
     if (cached.repoId === repoId) env.listed.delete(id)
   }
-  for (const [id, fact] of facts) env.listed.set(id, fact)
+  for (const [id, fact] of facts) env.listed.set(`${repoId}:${id}`, fact)
 }
 
 /** A folder's birth time in whole milliseconds, or null when it can't be read. */
@@ -234,9 +234,14 @@ export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] 
   return worktrees
 }
 
-/** The workspace from the latest completed listing, if its row and folder still exist; never runs git. */
+/** An unambiguous workspace from completed listings, if its row and folder still exist; never runs git. */
 export function knownWorktree(env: ListEnv, id: string): WorktreeControl | null {
-  const facts = env.listed.get(id)
+  let facts: Facts | undefined
+  for (const candidate of env.listed.values()) {
+    if (candidate.id !== id) continue
+    if (facts) return null
+    facts = candidate
+  }
   if (!facts) return null
   const row = rowOf(env.store, id)
   if (!row) return null

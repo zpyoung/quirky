@@ -286,3 +286,20 @@ describe('quirky.worktree/set by id without waiting for git', () => {
     gate.release()
   })
 })
+
+test('overlapping projects keep ambiguous id metadata updates as conflicts after a scoped refresh', async () => {
+  const { project, fix, path } = await startFix()
+  expect(fix).toBeDefined()
+  await call(project.client, 'quirky.repo/add', { path })
+  const all = await listWorktrees(project.client)
+  expect(all.filter((worktree) => worktree.id === fix!.id)).toHaveLength(2)
+  await listWorktrees(project.client, { repo: project.repo.id })
+  const selector = `id:${fix!.id}`
+  const refused = await failure(setById(project.client, fix!.id, { comment: 'must not save' }))
+  expect(refused).toMatchObject({
+    code: RpcErrorCode.Conflict,
+    message: `${selector} matches 2 worktrees: ${selector}, ${selector}`,
+    data: { matches: [selector, selector] }
+  })
+  expect(storedRows(project.t.h.home, 'id = ?', fix!.id)[0]?.comment).toBe('')
+})

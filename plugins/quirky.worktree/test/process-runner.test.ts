@@ -526,6 +526,7 @@ function createEnv(fixture: Fixture, process: ProcessRunner): CreateEnv {
     groups: async () => [],
     log: (message) => fixture.logs.push(message),
     removing: new Set(),
+    listed: new Map(),
     fail,
     changed: () => {},
     process,

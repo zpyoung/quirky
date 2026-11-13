@@ -278,7 +278,11 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     inflight: new Map<string, InFlightRemove>(),
     fail,
     changed: (data) => {
-      if (data.removed) listEnv.listed.delete(data.worktreeId)
+      if (data.removed) {
+        for (const [key, facts] of listEnv.listed) {
+          if (facts.id === data.worktreeId) listEnv.listed.delete(key)
+        }
+      }
       void context.emit('changed', data)
     },
     repos: listRepos,
@@ -323,10 +327,13 @@ export async function activate(context: PluginContext): Promise<PluginActivation
           }
           store.run('DELETE FROM worktrees WHERE repo_id = ?', repoId)
         })
-        for (const [id, facts] of listEnv.listed) {
-          if (facts.repoId === repoId) listEnv.listed.delete(id)
-        }
       }
+    }
+    for (const [key, facts] of listEnv.listed) {
+      const known = facts.repoId.startsWith('group:')
+        ? liveGroups === null || liveGroups.has(facts.repoId)
+        : live.has(facts.repoId)
+      if (!known) listEnv.listed.delete(key)
     }
   }
 
