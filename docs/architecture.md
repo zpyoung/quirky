@@ -137,6 +137,10 @@ Per session, `quirky-pty` keeps three things:
 1. **Raw output log on disk.** It is append-only and framed, with torn-tail detection like Orca's
    `output.log` (`src/main/daemon/terminal-history-log.ts`). It rotates at 16 MB per session and
    keeps two segments, so history survives restarts and crashes.
+   The writer keeps a compact in-memory index, grouping consecutive output records smaller than
+   4 KiB into roughly 64 KiB file spans. Live attach, history pages and reads use that index rather
+   than walking both segments. Reopened logs index the older segment once on first read; stored
+   sessions still scan from disk. Missing or truncated indexed files fall back to a disk scan.
 2. **Screen state in memory.** An emulator holds the visible screen and modes (alternate screen,
    cursor, bracketed paste, mouse) with no scrollback. That costs well under 1 MB per session, and
    it lets any client get an exact repaint without replaying bytes. A checkpoint (the serialized
