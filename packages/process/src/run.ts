@@ -1,5 +1,5 @@
 import type { RunOptions, RunResult, RunStopped } from '@quirky/protocol'
-import type { ChildExit, StartedChild, StartChild } from './child'
+import { killGroupUntilGone, type ChildExit, type StartedChild, type StartChild } from './child'
 import { ProcessStalledError } from './errors'
 import { PipeStalledError, readChunk } from './stall'
 
@@ -73,7 +73,8 @@ function resultFromBytes(
   exitCode: number | null,
   signal: string | null,
   startedAt: number,
-  stopped?: RunStopped
+  stopped?: RunStopped,
+  groupSurvived?: true,
 ): RunResult {
   let decodedStdout: string | undefined
   return {
@@ -86,6 +87,7 @@ function resultFromBytes(
     exitCode,
     signal,
     ...(stopped === undefined ? {} : { stopped }),
+    ...(groupSurvived === undefined ? {} : { groupSurvived }),
     durationMs: Date.now() - startedAt,
   }
 }
@@ -112,8 +114,15 @@ function spawnErrorResult(error: unknown, startedAt: number): RunResult {
   }
 }
 
-function makeStoppedResult(stdout: Uint8Array, stderr: Uint8Array, exit: ChildExit, startedAt: number, stopped: RunStopped): RunResult {
-  return resultFromBytes(stdout, stderr, null, exit.signal, startedAt, stopped)
+function makeStoppedResult(
+  stdout: Uint8Array,
+  stderr: Uint8Array,
+  exit: ChildExit,
+  startedAt: number,
+  stopped: RunStopped,
+  groupSurvived?: true,
+): RunResult {
+  return resultFromBytes(stdout, stderr, null, exit.signal, startedAt, stopped, groupSurvived)
 }
 
 
@@ -144,6 +153,8 @@ async function runAttempt({
   const stderrCapture = capture()
   let exit: ChildExit | undefined
   let stopped: RunStopped | undefined
+  let groupSurvived = false
+  let groupCleanupComplete = false
   let attemptFinished = false
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined
   let graceTimer: ReturnType<typeof setTimeout> | undefined
@@ -193,7 +204,7 @@ async function runAttempt({
   }
   const stopForDisposal = () => {
     if (attemptFinished) return
-    stopped = 'aborted'
+    stopped ??= 'aborted'
     clearStopTimers()
     if (!exit) killGroup('SIGKILL')
     resolveStopRequested()
@@ -201,23 +212,35 @@ async function runAttempt({
 
   unregister = config.onStart(child, stopForDisposal)
 
-  const exited = child.exited.then(
-    (childExit) => {
-      exit = childExit
-      clearStopTimers()
-      // a one-shot command must not leave descendants alive or holding its output pipes open
-      killGroup('SIGKILL')
-      unregister()
-      return childExit
-    },
-    (error) => {
-      unregister()
-      throw error
-    }
-  )
-
   const stdoutReader = child.stdout.getReader()
   const stderrReader = child.stderr.getReader()
+  const exited = child.exited.then(
+    async childExit => {
+      exit = childExit
+      clearStopTimers()
+      try {
+        groupSurvived = await killGroupUntilGone(child)
+        if (groupSurvived) {
+          stdoutReader.cancel().catch(() => {})
+          stderrReader.cancel().catch(() => {})
+        }
+      } finally {
+        groupCleanupComplete = true
+        unregister()
+      }
+      return childExit
+    },
+    async error => {
+      clearStopTimers()
+      try {
+        await killGroupUntilGone(child)
+      } finally {
+        groupCleanupComplete = true
+        unregister()
+      }
+      throw error
+    },
+  )
 
   const drain = async (reader: ReadableStreamDefaultReader<Uint8Array>, output: OutputCapture): Promise<void> => {
     try {
@@ -262,7 +285,14 @@ async function runAttempt({
       attemptFinished = true
       return {
         kind: 'result',
-        result: makeStoppedResult(stdoutCapture.bytes(), stderrCapture.bytes(), exit ?? { exitCode: null, signal: null }, startedAt, stopped),
+        result: makeStoppedResult(
+          stdoutCapture.bytes(),
+          stderrCapture.bytes(),
+          exit ?? { exitCode: null, signal: null },
+          startedAt,
+          stopped,
+          groupSurvived ? true : undefined,
+        ),
       }
     }
     if (didStall) {
@@ -273,7 +303,30 @@ async function runAttempt({
         attemptFinished = true
         return {
           kind: 'result',
-          result: makeStoppedResult(stdoutCapture.bytes(), stderrCapture.bytes(), exit ?? { exitCode: null, signal: null }, startedAt, stopped),
+          result: makeStoppedResult(
+            stdoutCapture.bytes(),
+            stderrCapture.bytes(),
+            exit ?? { exitCode: null, signal: null },
+            startedAt,
+            stopped,
+            groupSurvived ? true : undefined,
+          ),
+        }
+      }
+      if (groupSurvived) {
+        attemptFinished = true
+        const completedExit = exit ?? { exitCode: null, signal: null }
+        return {
+          kind: 'result',
+          result: resultFromBytes(
+            stdoutCapture.bytes(),
+            stderrCapture.bytes(),
+            completedExit.exitCode,
+            completedExit.signal,
+            startedAt,
+            undefined,
+            true,
+          ),
         }
       }
       attemptFinished = true
@@ -286,9 +339,20 @@ async function runAttempt({
     }
     attemptFinished = true
     const completedExit = exit ?? { exitCode: null, signal: null }
-    return { kind: 'result', result: resultFromBytes(stdoutCapture.bytes(), stderrCapture.bytes(), completedExit.exitCode, completedExit.signal, startedAt) }
+    return {
+      kind: 'result',
+      result: resultFromBytes(
+        stdoutCapture.bytes(),
+        stderrCapture.bytes(),
+        completedExit.exitCode,
+        completedExit.signal,
+        startedAt,
+        undefined,
+        groupSurvived ? true : undefined,
+      ),
+    }
   } catch (error) {
-    if (!exit) killGroup('SIGKILL')
+    if (!groupCleanupComplete) killGroup('SIGKILL')
     void stdoutReader.cancel().catch(() => {})
     void stderrReader.cancel().catch(() => {})
     await Promise.allSettled([exited, stdoutDone, stderrDone])

@@ -66,7 +66,9 @@ export function createProcessRunner({ owner, start = startChild, stallMs }: Proc
       const stdout = options.stdout ?? 'pipe'
       if (stdout !== 'pipe' && stdout !== 'ignore') throw new TypeError('stdout must be \"pipe\" or \"ignore\"')
       const stderr = options.stderr ?? 'tail'
-      if (stderr !== 'tail' && stderr !== 'ignore') throw new TypeError('stderr must be \"tail\" or \"ignore\"')
+      if (stderr !== 'tail' && stderr !== 'ignore' && stderr !== 'pipe') {
+        throw new TypeError('stderr must be "tail", "ignore" or "pipe"')
+      }
 
       const cwd = options.cwd ?? process.cwd()
       const env = { ...(options.env ?? process.env) }
