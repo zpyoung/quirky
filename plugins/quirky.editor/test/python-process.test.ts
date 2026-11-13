@@ -57,6 +57,16 @@ function makeExecutable(path: string): string {
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void } {
   return Promise.withResolvers<T>()
 }
+async function withProcessPlatform<T>(platform: 'darwin' | 'linux', run: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+  if (!descriptor || !('value' in descriptor)) throw new Error('process.platform must be a data property')
+  try {
+    Object.defineProperty(process, 'platform', { ...descriptor, value: platform })
+    return await run()
+  } finally {
+    Object.defineProperty(process, 'platform', descriptor)
+  }
+}
 
 function streamFrom(chunks: Array<string | Uint8Array> = []): ReadableStream<Uint8Array> {
   return new ReadableStream({
@@ -244,6 +254,21 @@ describe('Python process runner integration', () => {
     expect(result.stdout).toBe('🙂Z')
     expect(result.stderr).toBe('🙂Z')
     assertPythonSpawn(calls[0], ['python-fixture', '-c', 'probe'], '/fixture', 50, 3)
+  })
+
+  test('flushes an incomplete UTF-8 sequence at EOF as a replacement character', async () => {
+    const fake = fakeHandle({
+      chunks: [new TextEncoder().encode('tail'), new Uint8Array([0xe2, 0x82])]
+    })
+    const calls: SpawnCall[] = []
+    const spawner = recordingSpawner(() => fake.handle, calls)
+    const result = await runCommand(spawner.process, 'python-fixture', ['-c', 'probe'], {
+      cwd: '/fixture', timeoutMs: 50, tailCharacters: 32
+    })
+
+    expect(result).toEqual({ code: 0, stdout: 'tail\uFFFD', stderr: '' })
+    assertPythonSpawn(calls[0], ['python-fixture', '-c', 'probe'], '/fixture', 50, 32)
+    expect(fake.stopCalls()).toBe(0)
   })
 
   test('waits for exit after stdout ends and drains stdout after exit', async () => {
@@ -538,7 +563,6 @@ describe('Python discovery and notebook setup', () => {
     expect(managedCalls).toHaveLength(1)
     assertPythonSpawn(managedCalls[0], [pythonPath, '-c', pythonProbe], process.cwd(), 10_000)
 
-
     const selected = { ...managed, externallyManaged: false }
     const installFailureCalls: SpawnCall[] = []
     const installFailure = recordingSpawner((argv) => {
@@ -563,17 +587,30 @@ describe('Python discovery and notebook setup', () => {
     assertPythonSpawn(verifyCalls[1], [pythonPath, '-c', pythonProbe], process.cwd(), 10_000)
   })
 
-  test('creates a venv at the workspace root, then verifies it through the same spawner', async () => {
+  test('creates a venv, installs missing ipykernel, and reports the joined UI command', async () => {
     const root = temporaryRoot()
     const selectedPath = makeExecutable(join(root, 'selected-python'))
     const venvPath = join(root, '.venv')
     const venvPython = join(venvPath, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
+    let installed = false
     const calls: SpawnCall[] = []
     const spawner = recordingSpawner((argv) => {
-      if (argv[1] === '-c') return pythonResult(argv[0]!)
+      if (argv[1] === '-c') {
+        if (argv[0] === venvPython) {
+          return pythonResult(venvPython, installed ? {} : { ipykernel: false, pip: false })
+        }
+        return pythonResult(argv[0]!)
+      }
       if (argv[1] === '-m' && argv[2] === 'venv') {
         makeExecutable(venvPython)
         return fakeHandle({ chunks: ['created'] }).handle
+      }
+      if (argv[1] === '-m' && argv[2] === 'ensurepip') {
+        return fakeHandle({ chunks: ['ensured'] }).handle
+      }
+      if (argv[1] === '-m' && argv[2] === 'pip') {
+        installed = true
+        return fakeHandle({ chunks: ['installed'] }).handle
       }
       throw new Error(`unexpected command: ${argv.join(' ')}`)
     }, calls)
@@ -583,12 +620,54 @@ describe('Python discovery and notebook setup', () => {
       status: string; path: string; environment: PythonEnvironment; command: string
     }
 
-    expect(result).toMatchObject({ status: 'created', path: venvPath, environment: { path: venvPython } })
-    expect(result.command).toBe(`'${selectedPath}' -m venv '${venvPath}'`)
-    expect(calls).toHaveLength(3)
+    expect(result).toMatchObject({
+      status: 'created',
+      path: venvPath,
+      environment: { path: venvPython, hasIpykernel: true, hasPip: true }
+    })
+    expect(result.command).toBe(
+      `'${selectedPath}' -m venv '${venvPath}' && '${venvPython}' -m pip install -U ipykernel`
+    )
+    expect(calls).toHaveLength(6)
     assertPythonSpawn(calls[0], [selectedPath, '-c', pythonProbe], process.cwd(), 10_000)
     assertPythonSpawn(calls[1], [selectedPath, '-m', 'venv', venvPath], root, 120_000)
     assertPythonSpawn(calls[2], [venvPython, '-c', pythonProbe], process.cwd(), 10_000)
+    assertPythonSpawn(calls[3], [venvPython, '-m', 'ensurepip'], root, 600_000)
+    assertPythonSpawn(calls[4], [venvPython, '-m', 'pip', 'install', '-U', 'ipykernel'], root, 600_000)
+    assertPythonSpawn(calls[5], [venvPython, '-c', pythonProbe], process.cwd(), 10_000)
+  })
+
+  test('preserves venv creation stderr and stdout failures without describing or installing', async () => {
+    const failures = [
+      { stdout: 'creation stdout', stderr: ' creation stderr \n', detail: 'creation stderr' },
+      { stdout: ' creation stdout \n', stderr: '   ', detail: 'creation stdout' }
+    ]
+    for (const failure of failures) {
+      const root = temporaryRoot()
+      const selectedPath = makeExecutable(join(root, 'selected-python'))
+      const venvPath = join(root, '.venv')
+      const calls: SpawnCall[] = []
+      const spawner = recordingSpawner((argv) => {
+        if (argv[1] === '-c') return pythonResult(argv[0]!)
+        if (argv[1] === '-m' && argv[2] === 'venv') {
+          return fakeHandle({
+            chunks: [failure.stdout],
+            stderr: failure.stderr,
+            exit: { exitCode: 1, signal: null, durationMs: 1 }
+          }).handle
+        }
+        throw new Error(`unexpected command: ${argv.join(' ')}`)
+      }, calls)
+      const feature = featureHost(spawner.process, root)
+      await notebookCall(feature.methods, { action: 'trust', bufferId: 'fixture-buffer', granted: true })
+
+      await expect(notebookCall(feature.methods, {
+        action: 'venv', bufferId: 'fixture-buffer', python: selectedPath
+      })).rejects.toThrow(`virtual environment creation failed: ${failure.detail}`)
+      expect(calls).toHaveLength(2)
+      assertPythonSpawn(calls[0], [selectedPath, '-c', pythonProbe], process.cwd(), 10_000)
+      assertPythonSpawn(calls[1], [selectedPath, '-m', 'venv', venvPath], root, 120_000)
+    }
   })
 })
 
@@ -601,26 +680,36 @@ describe('Python interpreter chooser', () => {
       ? fakeHandle({ chunks: [` ${python}\n`] }).handle
       : pythonResult(argv[0]!), calls)
     const feature = featureHost(spawner.process)
-    if (process.platform !== 'darwin') {
+
+    await withProcessPlatform('darwin', async () => {
+      const result = await notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }) as {
+        selected: boolean; environment: PythonEnvironment
+      }
+      expect(result.selected).toBe(true)
+      expect(result.environment.path).toBe(python)
+      expect(calls).toHaveLength(2)
+      expect(calls[0]?.argv).toEqual(['osascript', '-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'])
+      expect(calls[0]?.options).toMatchObject({
+        cwd: dirname(feature.notebookPath), timeoutMs: 300_000, env: process.env,
+        stdin: 'ignore', stdout: 'pipe', stderr: 'tail', stderrTailBytes: 32_768, killGraceMs: 0
+      })
+      expect(calls[0]?.options.env).toBe(process.env)
+      assertPythonSpawn(calls[1], [python, '-c', pythonProbe], process.cwd(), 10_000)
+    })
+  })
+
+  test('refuses Python browsing on Linux without invoking the runner', async () => {
+    const calls: SpawnCall[] = []
+    const spawner = recordingSpawner(() => {
+      throw new Error('Linux chooser refusal must not spawn a child')
+    }, calls)
+    const feature = featureHost(spawner.process)
+
+    await withProcessPlatform('linux', async () => {
       await expect(notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }))
         .rejects.toThrow('Browse for Python is supported on macOS; pass an explicit interpreter path on this host.')
       expect(calls).toHaveLength(0)
-      return
-    }
-
-    const result = await notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }) as {
-      selected: boolean; environment: PythonEnvironment
-    }
-    expect(result.selected).toBe(true)
-    expect(result.environment.path).toBe(python)
-    expect(calls).toHaveLength(2)
-    expect(calls[0]?.argv).toEqual(['osascript', '-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'])
-    expect(calls[0]?.options).toMatchObject({
-      cwd: dirname(feature.notebookPath), timeoutMs: 300_000, env: process.env,
-      stdin: 'ignore', stdout: 'pipe', stderr: 'tail', stderrTailBytes: 32_768, killGraceMs: 0
     })
-    expect(calls[0]?.options.env).toBe(process.env)
-    assertPythonSpawn(calls[1], [python, '-c', pythonProbe], process.cwd(), 10_000)
   })
 
   test('preserves the previous selection on cancellation and maps other chooser failures', async () => {
@@ -635,36 +724,39 @@ describe('Python interpreter chooser', () => {
       return pythonResult(argv[0]!)
     }, calls)
     const feature = featureHost(spawner.process)
-    if (process.platform !== 'darwin') {
+
+    await withProcessPlatform('darwin', async () => {
+      const previous = await notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', python }) as { environment: PythonEnvironment }
+      const cancelled = await notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true })
+      expect(cancelled).toEqual({ cancelled: true, selected: previous.environment })
+      expect(calls[1]?.argv).toEqual(['osascript', '-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'])
+      expect(calls[1]?.options.timeoutMs).toBe(300_000)
+      expect(calls[1]?.options.stderrTailBytes).toBe(32_768)
+
+      chooserStderr = '  chooser is unavailable  \n'
       await expect(notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }))
-        .rejects.toThrow('Browse for Python is supported on macOS; pass an explicit interpreter path on this host.')
-      expect(calls).toHaveLength(0)
-      return
-    }
+        .rejects.toThrow('chooser is unavailable')
+      expect(calls[2]?.argv[0]).toBe('osascript')
 
-    const previous = await notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', python }) as { environment: PythonEnvironment }
-    const cancelled = await notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true })
-    expect(cancelled).toEqual({ cancelled: true, selected: previous.environment })
-    expect(calls[1]?.argv).toEqual(['osascript', '-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'])
-    expect(calls[1]?.options.timeoutMs).toBe(300_000)
-    expect(calls[1]?.options.stderrTailBytes).toBe(32_768)
+      chooserStderr = ''
+      chooserStdout = ''
+      await expect(notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }))
+        .rejects.toThrow('The Python file chooser failed.')
+      expect(calls[3]?.argv[0]).toBe('osascript')
 
-    chooserStderr = '  chooser is unavailable  \n'
-    await expect(notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }))
-      .rejects.toThrow('chooser is unavailable')
-    expect(calls[2]?.argv[0]).toBe('osascript')
+      chooserExit = { exitCode: 0, signal: null, stopped: 'timeout', durationMs: 1 }
+      chooserStderr = 'cancelled'
+      await expect(notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }))
+        .rejects.toThrow('command timed out after 300000 ms')
+      expect(calls[4]?.options.timeoutMs).toBe(300_000)
 
-    chooserStderr = ''
-    chooserStdout = ''
-    await expect(notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }))
-      .rejects.toThrow('The Python file chooser failed.')
-    expect(calls[3]?.argv[0]).toBe('osascript')
-
-    chooserExit = { exitCode: 0, signal: null, stopped: 'timeout', durationMs: 1 }
-    chooserStderr = 'cancelled'
-    await expect(notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true }))
-      .rejects.toThrow('command timed out after 300000 ms')
-    expect(calls[4]?.options.timeoutMs).toBe(300_000)
+      chooserExit = { exitCode: 1, signal: null, durationMs: 1 }
+      chooserStderr = ' User CANCELLED \n'
+      const uppercaseCancelled = await notebookCall(feature.methods, { action: 'select', bufferId: 'fixture-buffer', browse: true })
+      expect(uppercaseCancelled).toEqual({ cancelled: true, selected: previous.environment })
+      expect(calls[5]?.argv).toEqual(['osascript', '-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'])
+      expect(calls[5]?.options.timeoutMs).toBe(300_000)
+    })
   })
 })
 
