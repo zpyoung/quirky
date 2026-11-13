@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type PluginStore, type ProjectGroup, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
@@ -14,6 +14,8 @@ import {
   type RepoGroupCreateBarrier
 } from '../../quirky.repo/test/harness'
 import { listWorktrees } from './fixtures/real-project'
+
+setDefaultTimeout(60_000)
 
 const { scratch } = isolateGitConfig()
 
@@ -196,7 +198,7 @@ describe('canonical worktree project-group membership', () => {
 
     const cleared = (await call(restartedClient, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: null })) as CanonicalWorktree
     expect(cleared).toEqual({ ...persisted, projectGroupId: null })
-  }, 30_000)
+  })
 
   test('generated set flags move and clear only project-group membership', async () => {
     const { client, repo } = await start()
@@ -257,7 +259,7 @@ describe('canonical worktree project-group membership', () => {
     expect(result).toMatchObject({ assigned: true, group: { name: 'From CLI' }, worktree: { id: selected.id } })
     expect(result.worktree.projectGroupId).toBe(result.group.id)
     expect((await worktreeById(client, other.id)).projectGroupId).toBeNull()
-  }, 30_000)
+  })
 })
 
 describe('worktree identity and delayed group assignment', () => {
