@@ -140,7 +140,8 @@ function ownImplicitProcessCalls(env: Record<string, string>): () => void {
       if (!Array.isArray(command)) throw new Error('owned process calls must use executable argv')
       const supplied = options && typeof options === 'object' ? options : {}
       const childEnv = 'env' in supplied ? supplied.env : env
-      return Reflect.apply(target, receiver, [command, { timeout: PROCESS_CHECK_TIMEOUT_MS, ...supplied, env: childEnv }])
+      const timeout = command[0] === 'ps' ? PROCESS_CHECK_TIMEOUT_MS : COMMAND_TIMEOUT_MS
+      return Reflect.apply(target, receiver, [command, { timeout, ...supplied, env: childEnv }])
     }
   })
   return () => { Bun.spawnSync = original }
@@ -346,7 +347,7 @@ function readPtyHostIdentity(pid: number, entry: string, env: Record<string, str
 
 async function waitForPtyExit(
   pid: number,
-  expected: PtyHostIdentity,
+  expected: PtyHostIdentity | undefined,
   entry: string,
   env: Record<string, string>,
   deadline: number,
@@ -354,7 +355,7 @@ async function waitForPtyExit(
 ): Promise<boolean> {
   while (!signal?.aborted && Date.now() < deadline) {
     const current = readPtyHostIdentity(pid, entry, env, Math.min(PROCESS_CHECK_TIMEOUT_MS, deadline - Date.now()))
-    if (!current || current.started !== expected.started || current.command !== expected.command) return true
+    if (!current || (expected !== undefined && (current.started !== expected.started || current.command !== expected.command))) return true
     const remaining = deadline - Date.now()
     if (remaining > 0) await Bun.sleep(Math.min(25, remaining))
   }
@@ -508,8 +509,19 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
       const signal = cleanupOptions.signal
       const cleanupErrors: string[] = []
       const ptyPid = readPtyPid(root)
-      const ptyIdentity = ptyPid ? readPtyHostIdentity(ptyPid, paths.ptyBootstrapEntry, env) : undefined
-      if (ptyPid && ptyIdentity) scope.track(ptyPid)
+      let ptyIdentity: PtyHostIdentity | undefined
+      try {
+        ptyIdentity = ptyPid ? readPtyHostIdentity(ptyPid, paths.ptyBootstrapEntry, env) : undefined
+      } catch (error) {
+        cleanupErrors.push(`initial owned PTY inspection failed: ${errorText(error)}`)
+      }
+      if (ptyPid && ptyIdentity) {
+        try {
+          scope.track(ptyPid)
+        } catch (error) {
+          cleanupErrors.push(`initial owned PTY tracking failed: ${errorText(error)}`)
+        }
+      }
       const forcePtyHost = () => {
         if (!ptyPid || !ptyIdentity) return
         let current: PtyHostIdentity | undefined
@@ -566,7 +578,7 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
         const daemonExited = daemon
           ? daemon.exited.then(() => true, () => false)
           : Promise.resolve(true)
-        const ptyExited = ptyPid && ptyIdentity
+        const ptyExited = ptyPid
           ? waitForPtyExit(ptyPid, ptyIdentity, paths.ptyBootstrapEntry, env, deadline, signal)
               .catch((error) => {
                 cleanupErrors.push(`owned PTY reaping failed: ${errorText(error)}`)

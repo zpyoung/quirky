@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { captureCliChild, type CliBoundedChild } from './cli-world'
 import { createGoalLoopWorld, type GoalLoopWorld } from './goal-loop-world'
@@ -7,6 +7,47 @@ import type { GoalLoopFixtureFaults } from './goal-loop-fixtures'
 import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
 
 type World = GoalLoopWorld
+
+test('a slow guardian bootstrap still supports real CLI operations and owned teardown', async () => {
+  const directory = mkdtempSync('/tmp/quirky-guardian-delay-')
+  const preload = join(directory, 'delay.cjs')
+  // the injected delay must happen in the real bootstrap process, not the test clock
+  writeFileSync(preload, 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400)\n', { mode: 0o600 })
+  const originalSpawn = Bun.spawnSync
+  let delayed = false
+  let world: GoalLoopWorld | undefined
+  let daemonPid: number | undefined
+  try {
+    Bun.spawnSync = new Proxy(originalSpawn, {
+      apply(target, receiver, args: unknown[]) {
+        const [command, options] = args
+        if (Array.isArray(command) && command[2] === '--bootstrap') {
+          delayed = true
+          return Reflect.apply(target, receiver, [[command[0], `--preload=${preload}`, ...command.slice(1)], options])
+        }
+        return Reflect.apply(target, receiver, args)
+      }
+    })
+    world = await createGoalLoopWorld({ deadline: Date.now() + 120_000 })
+    await world.start()
+    daemonPid = world.daemonPid
+    const receipt = await world.cli(['repo', 'add', world.repoPath])
+    expect(receipt.exitCode, receipt.stderr + receipt.stdout).toBe(0)
+    expect(JSON.parse(receipt.stdout)).toMatchObject({ kind: 'git', path: world.repoPath })
+    expect(delayed).toBe(true)
+  } finally {
+    Bun.spawnSync = originalSpawn
+    if (world) {
+      await world.cleanup()
+      expect(existsSync(world.root)).toBe(false)
+    }
+    if (daemonPid) {
+      const pid = daemonPid
+      expect(() => process.kill(pid, 0)).toThrow()
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+}, 45_000)
 
 test('owned provider and OMP fixtures enforce their exact contracts', async () => {
   const world = await createGoalLoopWorld()

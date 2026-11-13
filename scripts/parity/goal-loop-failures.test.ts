@@ -7,6 +7,75 @@ import { createGoalLoopWorld, type GoalLoopWorld } from './goal-loop-world'
 
 const faults = ['missing-agent', 'malformed-cli-json', 'cli-nonzero', 'missing-terminal-ack', 'provider-malformed', 'daemon-exited', 'deadline'] as const
 
+for (const fault of ['inspection', 'tracking'] as const) {
+  test(`teardown still reaps the real daemon and PTY after initial ${fault} fails`, async () => {
+    const originalSpawn = Bun.spawnSync
+    let world: GoalLoopWorld | undefined
+    let daemonPid = 0
+    let ptyPid = 0
+    let injected = false
+    try {
+      const report = await runGoalLoop({
+        createWorld: async (options) => {
+          const created = await createGoalLoopWorld(options)
+          world = created
+          const cleanup = created.cleanup.bind(created)
+          created.cleanup = async (cleanupOptions) => {
+            daemonPid = created.daemonPid
+            ptyPid = created.ptyPid ?? 0
+            const track = created.scope.track.bind(created.scope)
+            try {
+              if (fault === 'inspection') {
+                Bun.spawnSync = new Proxy(originalSpawn, {
+                  apply(target, receiver, args: unknown[]) {
+                    const command = args[0]
+                    if (!injected && Array.isArray(command) && command[0] === 'ps' &&
+                        command[1] === '-p' && command[2] === String(ptyPid)) {
+                      injected = true
+                      return { exitCode: 143, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), signalCode: 'SIGTERM', success: false }
+                    }
+                    return Reflect.apply(target, receiver, args)
+                  }
+                })
+              } else {
+                created.scope.track = (pid) => {
+                  if (!injected && pid === ptyPid) {
+                    injected = true
+                    throw new Error('controlled PTY tracking failure')
+                  }
+                  track(pid)
+                }
+              }
+              await cleanup(cleanupOptions)
+            } finally {
+              Bun.spawnSync = originalSpawn
+              created.scope.track = track
+            }
+          }
+          return created
+        }
+      })
+      expect(injected, JSON.stringify(report)).toBe(true)
+      expect(report.steps.every((step) => step.status === 'passed'), JSON.stringify(report)).toBe(true)
+      expect(report.ok).toBe(false)
+      expect(report.cleanup.ok).toBe(false)
+      expect(report.cleanup.error).toContain(fault === 'inspection' ? 'PTY inspection' : 'controlled PTY tracking failure')
+      expect(daemonPid).toBeGreaterThan(0)
+      expect(ptyPid).toBeGreaterThan(0)
+      expect(() => process.kill(daemonPid, 0), 'owned daemon must exit before the report returns').toThrow()
+      expect(() => process.kill(ptyPid, 0), 'owned PTY must exit before the report returns').toThrow()
+    } finally {
+      Bun.spawnSync = originalSpawn
+      if (world) {
+        await world.scope.cleanup()
+        if (daemonPid) expect(() => process.kill(daemonPid, 0)).toThrow()
+        if (ptyPid) expect(() => process.kill(ptyPid, 0)).toThrow()
+        rmSync(world.root, { recursive: true, force: true })
+      }
+    }
+  }, 150_000)
+}
+
 test('agent launch waits for delayed OMP argv and terminal observations exactly once', async () => {
   let ownedRoot = ''
   let argvReleaseSent = false
