@@ -141,6 +141,12 @@ describe('runModelProbe', () => {
       }
     }])
   })
+  test('returns nonzero-exit when stdout closes after a failed process exit', async () => {
+    const fixture = makeHandle({ chunks: [plainOutput], exit: { exitCode: 1, signal: null, durationMs: 4 } })
+    const { spawner } = recordingSpawner(fixture.handle)
+
+    expect(await runModelProbe(spawner, ['/opt/bin/claude', '--models'], 5_000)).toEqual({ ok: false, reason: 'nonzero-exit' })
+  })
 })
 
 describe('runCodexAppServerModelProbe', () => {
@@ -161,6 +167,26 @@ describe('runCodexAppServerModelProbe', () => {
     }])
     expect(fixture.stopCalls).toEqual([{ graceMs: KILL_GRACE_MS }])
     expect(fixture.closeInputCalls).toBeGreaterThan(0)
+  })
+  test('returns output-not-closed when stdin refuses the first request', async () => {
+    const fixture = makeHandle({ chunks: codexOutput, write: () => Promise.resolve(false) })
+    const { spawner } = recordingSpawner(fixture.handle)
+
+    expect(await runCodexAppServerModelProbe(spawner, codexArgv, 5_000, codexEnv, cwd)).toEqual({
+      ok: false,
+      reason: 'output-not-closed'
+    })
+    expect(fixture.writes).toHaveLength(1)
+  })
+
+  test('returns nonzero-exit when the process exits before answering', async () => {
+    const fixture = makeHandle({ terminal: 'open', exit: { exitCode: 3, signal: null, durationMs: 4 } })
+    const { spawner } = recordingSpawner(fixture.handle)
+
+    expect(await runCodexAppServerModelProbe(spawner, codexArgv, 5_000, codexEnv, cwd)).toEqual({
+      ok: false,
+      reason: 'nonzero-exit'
+    })
   })
 })
 
@@ -189,6 +215,29 @@ describe('runPiRpcModelProbe', () => {
     const { spawner } = recordingSpawner(fixture.handle)
 
     expect(await runPiRpcModelProbe(spawner, piArgv, 5_000, piEnv, cwd)).toEqual({ ok: false, reason: 'nonzero-exit' })
+  })
+  test('returns output-not-closed when stdin refuses the first request', async () => {
+    const fixture = makeHandle({ chunks: piOutput, exit: naturalExit, write: () => Promise.resolve(false) })
+    const { spawner } = recordingSpawner(fixture.handle)
+
+    expect(await runPiRpcModelProbe(spawner, piArgv, 5_000, piEnv, cwd)).toEqual({
+      ok: false,
+      reason: 'output-not-closed'
+    })
+    expect(fixture.writes).toHaveLength(1)
+  })
+
+  test('returns malformed-output for a failed get_available_models response', async () => {
+    const fixture = makeHandle({
+      chunks: ['{"type":"response","id":"quirky-model-discovery-0","command":"get_available_models","success":false,"error":"no models"}\n'],
+      exit: naturalExit
+    })
+    const { spawner } = recordingSpawner(fixture.handle)
+
+    expect(await runPiRpcModelProbe(spawner, piArgv, 5_000, piEnv, cwd)).toEqual({
+      ok: false,
+      reason: 'malformed-output'
+    })
   })
 })
 

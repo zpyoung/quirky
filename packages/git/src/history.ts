@@ -146,3 +146,53 @@ export async function listBranches(
   const current = head.exitCode === 0 ? decoder.decode(head.stdout).trim() || null : null
   return { refs: limited, current }
 }
+
+export type GitRefKind = 'branch' | 'tag' | 'remote-branch'
+export type GitRefMatch = { name: string; kind: GitRefKind; ref: string; target: string }
+const REF_KIND_ORDER: Record<GitRefKind, number> = { branch: 0, tag: 1, 'remote-branch': 2 }
+
+/** Branches, tags and remote branches whose short name contains `query`, with exact names first. */
+export async function searchRefs(
+  cwd: string,
+  query: string,
+  limit: number
+): Promise<{ refs: GitRefMatch[]; truncated: boolean }> {
+  const out = await git(
+    cwd,
+    ['for-each-ref', '--format=%(refname)%00%(objectname)%00%(*objectname)', 'refs/heads', 'refs/tags', 'refs/remotes'],
+    { readOnly: true }
+  )
+  const needle = query.toLowerCase()
+  const refs: GitRefMatch[] = []
+  for (const line of out.split('\n')) {
+    if (!line) continue
+    const [full, objectId, peeled] = line.split('\0')
+    if (!full || !objectId) continue
+    let name: string
+    let kind: GitRefKind
+    if (full.startsWith('refs/heads/')) {
+      name = full.slice('refs/heads/'.length)
+      kind = 'branch'
+    } else if (full.startsWith('refs/tags/')) {
+      name = full.slice('refs/tags/'.length)
+      kind = 'tag'
+    } else if (full.startsWith('refs/remotes/')) {
+      name = full.slice('refs/remotes/'.length)
+      if (name.endsWith('/HEAD')) continue
+      kind = 'remote-branch'
+    } else {
+      continue
+    }
+    if (name.toLowerCase().includes(needle)) refs.push({ name, kind, ref: full, target: peeled || objectId })
+  }
+
+  refs.sort((a, b) => {
+    const exact = Number(b.name === query) - Number(a.name === query)
+    if (exact !== 0) return exact
+    const kind = REF_KIND_ORDER[a.kind] - REF_KIND_ORDER[b.kind]
+    if (kind !== 0) return kind
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+  })
+
+  return { refs: refs.slice(0, limit), truncated: refs.length > limit }
+}
