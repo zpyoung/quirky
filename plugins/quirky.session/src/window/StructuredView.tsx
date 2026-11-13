@@ -1,11 +1,12 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react'
 import { RpcErrorCode, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
-import { Button, EmptyState, FormRow, SectionHeader } from '@quirky/ui'
+import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'
 import { MessageRow } from './MessageRow'
 import { mergeMessages, visibleMessages } from './transcript'
-import { rememberShowAllEvents, showAllEventsFor } from './model'
+import { rememberShowAllEvents, showAllEventsFor, subscribeShowAllEvents, SHOW_ALL_EVENTS_COMMAND } from './model'
 
 const NO_MESSAGES: StructuredMessage[] = []
+type MessagePhase = { status: 'loading' } | { status: 'ready' } | { status: 'off' } | { status: 'failed'; message: string }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -36,7 +37,7 @@ const form = {
   gap: 'var(--ui-space-8)',
   minWidth: 0,
   padding: 'var(--ui-space-8)',
-  paddingInlineEnd: 'calc(var(--compat-px-40) + var(--ui-space-16))',
+  paddingInlineEnd: 'calc(2.5rem + var(--ui-space-16))',
   borderTop: 'var(--ui-border-width) solid var(--ui-border)'
 } satisfies CSSProperties
 
@@ -47,32 +48,47 @@ const ended = { padding: 'var(--ui-space-8)', color: 'var(--ui-muted)', borderTo
 /** Transcript of a structured (no PTY) session with an input box for follow-up turns. */
 export function StructuredView({ context, session }: { context: UiPluginContext; session: Session }) {
   const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
-  const [off, setOff] = useState(false)
+  const [phase, setPhase] = useState<MessagePhase>({ status: 'loading' })
   const [text, setText] = useState('')
-  const [showAll, setShowAll] = useState(() => showAllEventsFor(session))
+  const showAll = useSyncExternalStore(
+    subscribeShowAllEvents,
+    () => showAllEventsFor(session),
+    () => showAllEventsFor(session)
+  )
   const scroller = useRef<HTMLDivElement>(null)
+  const latest = useRef(0)
+  const cancelled = useRef(false)
+  const loadedOnce = useRef(false)
   const showAllId = useId()
   const messageId = useId()
   const messages = visibleMessages(stored, showAll)
 
+  const add = (incoming: StructuredMessage[]) => setStored((current) => mergeMessages(current, incoming))
+
+  function load(): void {
+    const attempt = ++latest.current
+    if (!loadedOnce.current) setPhase({ status: 'loading' })
+    void context
+      .call('quirky.structured/messages', { session: session.id })
+      .then((loaded) => {
+        if (cancelled.current || attempt !== latest.current) return
+        loadedOnce.current = true
+        setPhase({ status: 'ready' })
+        add(loaded as StructuredMessage[])
+      })
+      .catch((error: { code?: unknown }) => {
+        if (cancelled.current || attempt !== latest.current) return
+        if (error?.code === RpcErrorCode.MethodNotFound) {
+          loadedOnce.current = false
+          setPhase({ status: 'off' })
+        } else if (!loadedOnce.current) {
+          setPhase({ status: 'failed', message: messageOf(error) })
+        }
+      })
+  }
+
   useEffect(() => {
-    let cancelled = false
-    let latest = 0
-    const add = (incoming: StructuredMessage[]) => setStored((current) => mergeMessages(current, incoming))
-    // the daemon answers MethodNotFound while quirky.structured is off, so each load re-derives `off`
-    const load = () => {
-      const attempt = ++latest
-      context
-        .call('quirky.structured/messages', { session: session.id })
-        .then((loaded) => {
-          if (cancelled || attempt !== latest) return
-          setOff(false)
-          add(loaded as StructuredMessage[])
-        })
-        .catch((error: { code?: unknown }) => {
-          if (!cancelled && attempt === latest && error?.code === RpcErrorCode.MethodNotFound) setOff(true)
-        })
-    }
+    cancelled.current = false
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'plugin.changed') {
         load()
@@ -80,14 +96,19 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
       }
       if (event.type !== 'quirky.structured/message') return
       const message = (event.data as { message?: StructuredMessage } | undefined)?.message
-      if (message && message.sessionId === session.id && !cancelled) add([message])
+      if (message && message.sessionId === session.id && !cancelled.current) {
+        loadedOnce.current = true
+        setPhase({ status: 'ready' })
+        add([message])
+      }
     })
     const unsubscribeConnection = context.onConnection((status) => {
       if (status === 'connected') load()
     })
     load()
     return () => {
-      cancelled = true
+      cancelled.current = true
+      latest.current++
       unsubscribe()
       unsubscribeConnection()
     }
@@ -110,7 +131,7 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
     }
   }
 
-  if (off) return <EmptyState message="Structured sessions are off" />
+  if (phase.status === 'off') return <EmptyState message="Structured sessions are off" />
 
   const exited = session.status === 'exited'
 
@@ -127,8 +148,8 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
               checked={showAll}
               onChange={(event) => {
                 const enabled = event.target.checked
-                setShowAll(enabled)
                 rememberShowAllEvents(session, enabled)
+                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled })
               }}
             />
             <span>Show all events</span>
@@ -136,7 +157,11 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
         }
       />
       <div style={transcript} ref={scroller} role="log" aria-live="polite">
-        {messages.length === 0 && <EmptyState message="No messages yet." />}
+        {phase.status === 'loading' && messages.length === 0 && <NoticeLine>Loading messages…</NoticeLine>}
+        {phase.status === 'failed' && (
+          <InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />
+        )}
+        {phase.status === 'ready' && messages.length === 0 && <EmptyState message="No messages yet." />}
         {messages.map((message) => (
           <MessageRow key={message.seq} message={message} />
         ))}

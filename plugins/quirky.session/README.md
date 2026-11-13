@@ -48,4 +48,8 @@ Session views use shared tabs, menus, prompt dialogs, status dots and controls i
 
 Background session transcripts hide hook system events, Claude informational and rate-limit diagnostics, and empty assistant turns by default. Check **Show all events** to include them; conversation messages and other system events remain visible either way. The filter stays inline with the Transcript heading, with both inset from the panel edges. The Show all events choice is remembered per session until unticked, including across tab and view switches.
 
+The `command:quirky.session/show-all-events` UI command sets this choice with `quirky ui run command:quirky.session/show-all-events --args '{"session":"<id>","enabled":true}'`.
+
+The `command:quirky.session/run-badge` UI command runs the session's current badge with `quirky ui run command:quirky.session/run-badge --args '{"session":"<id>","badge":"<key>"}'`.
+
 The new-session prompt dialog stays open with its draft until creation succeeds. A refused start shows a toast and lets you retry without retyping; Start and the submit shortcut are disabled while creation is pending.
