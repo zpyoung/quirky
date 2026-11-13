@@ -1,11 +1,12 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test'
-import { chromium, type Browser } from 'playwright'
+import { beforeAll, expect, test } from 'bun:test'
+import { existsSync } from 'node:fs'
+import { chromium } from 'playwright'
 import { DARK_THEME, LIGHT_THEME } from '@quirky/protocol'
 import { collectInventory } from '../../../scripts/ui-scoreboard/inventory'
 import { checkHostTokens, sharedTokenEvidence } from '../../../scripts/ui-scoreboard/tokens'
 
 const repoRoot = new URL('../../../', import.meta.url).pathname
-let browser: Browser
+const browserAvailable = existsSync(chromium.executablePath())
 let styles: string
 
 beforeAll(async () => {
@@ -16,12 +17,8 @@ beforeAll(async () => {
     '../src/shell/tool-shell.css'
   ].map((path) => Bun.file(new URL(path, import.meta.url)).text()))
   styles = sheets.map((sheet) => sheet.replace(/^@import ['"][^'"]+['"];\s*/gm, '')).join('\n')
-  browser = await chromium.launch({ headless: true })
 })
 
-afterAll(async () => {
-  await browser?.close()
-})
 
 test('the shared UI consumes only resolved semantic tokens', () => {
   const inventory = collectInventory(repoRoot)
@@ -29,9 +26,10 @@ test('the shared UI consumes only resolved semantic tokens', () => {
   expect(checkHostTokens(inventory).status).toBe('pass')
 }, 30_000)
 
-test('tool-shell chrome remains pixel-valued for numeric readers in both themes', async () => {
-  const page = await browser.newPage()
+test.skipIf(!browserAvailable)('tool-shell chrome remains pixel-valued for numeric readers in both themes', async () => {
+  const browser = await chromium.launch({ headless: true })
   try {
+    const page = await browser.newPage()
     await page.setContent(`<style>${styles}</style><div class="shell-workspace"><div id="length"></div></div>`)
     for (const theme of ['dark', 'light']) {
       const chrome = await page.evaluate((theme) => {
@@ -50,13 +48,14 @@ test('tool-shell chrome remains pixel-valued for numeric readers in both themes'
       expect(chrome).toEqual({ rail: 42, centerMinWidth: 320, centerMinHeight: 72, length: '42px' })
     }
   } finally {
-    await page.close()
+    await browser.close()
   }
 })
 
-test('stylesheet defaults follow the graphite palette before appearance initialization', async () => {
-  const page = await browser.newPage()
+test.skipIf(!browserAvailable)('stylesheet defaults follow the graphite palette before appearance initialization', async () => {
+  const browser = await chromium.launch({ headless: true })
   try {
+    const page = await browser.newPage()
     await page.setContent(`<style>${styles}</style><div id="probe"></div>`)
     for (const palette of [DARK_THEME, LIGHT_THEME]) {
       const colors = await page.evaluate(({ appearance }) => {
@@ -90,6 +89,6 @@ test('stylesheet defaults follow the graphite palette before appearance initiali
       expect(colors.unread).toEqual(['', '', '', '', ''])
     }
   } finally {
-    await page.close()
+    await browser.close()
   }
 })
