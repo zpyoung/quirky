@@ -518,3 +518,34 @@ test('choosing a profile folder uses the draft and does not reload status', asyn
   expect(view.calls.filter(({ method }) => method === 'quirky.cli/commandStatus')).toHaveLength(readsBeforePick)
   await dispose()
 })
+
+test.each(['profile launcher', 'paired runtime'] as const)('preserves a newer %s draft while the save refresh is pending', async (form) => {
+  const status: Status = { state: 'missing', path: '/tmp/quirky-cli/quirky', target: null, profileHome: '/tmp/quirky-profile' }
+  const pendingRefresh = Promise.withResolvers<Status>()
+  let reads = 0
+  const view = setup({
+    target: { available: true, executablePath: '/app/quirky', entrypointPath: '/app/cli.mjs' },
+    handlers: {
+      'quirky.cli/commandStatus': () => ++reads === 1 ? status : pendingRefresh.promise
+    }
+  })
+  const dispose = await view.mount()
+  const fields = form === 'profile launcher'
+    ? ['Profile launcher name', 'Launcher path (optional)']
+    : ['Runtime name', 'Pairing offer']
+  await type(input(fields[0]!), 'first')
+  await type(input(fields[1]!), form === 'profile launcher' ? '/tmp/first' : 'owner-cli://first')
+  await click(form === 'profile launcher' ? 'Create profile launcher' : 'Save paired runtime')
+  expect(reads).toBe(2)
+  await type(input(fields[0]!), 'next')
+  await type(input(fields[1]!), form === 'profile launcher' ? '/tmp/next' : 'owner-cli://next')
+
+  await act(async () => {
+    pendingRefresh.resolve(status)
+    await pendingRefresh.promise
+    await waitForNextTask()
+  })
+  expect(input(fields[0]!).value).toBe('next')
+  expect(input(fields[1]!).value).toBe(form === 'profile launcher' ? '/tmp/next' : 'owner-cli://next')
+  await dispose()
+})

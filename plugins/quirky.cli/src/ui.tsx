@@ -68,15 +68,15 @@ function CliSettings({ model }: { model: CliSettingsModel }) {
     event.preventDefault()
     const created = await model.createProfileLauncher({ name: profileName, profileHome, path: profilePath })
     if (!created) return
-    setProfileName('')
-    setProfilePath('')
+    setProfileName((current) => current === profileName ? '' : current)
+    setProfilePath((current) => current === profilePath ? '' : current)
   }
   const submitRuntime = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const saved = await model.saveRuntime({ name: runtimeName, pairingOffer })
     if (!saved) return
-    setPairingOffer('')
-    setRuntimeName('')
+    setPairingOffer((current) => current === pairingOffer ? '' : current)
+    setRuntimeName((current) => current === runtimeName ? '' : current)
   }
 
   return (
