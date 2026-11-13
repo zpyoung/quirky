@@ -116,7 +116,6 @@ async function closeBounded(close: () => Promise<unknown> | undefined, deadline:
   }
 }
 
-
 async function closeRendererHandles(
   context: BrowserContext | undefined,
   browser: Browser | undefined,
@@ -264,17 +263,21 @@ export async function openWatchRenderer(world: BrowserWorld, options: RendererOp
   }
 }
 
+function watchPaneSelector(paneId: string): string {
+  return `.qbp[data-browser-pane=${JSON.stringify(paneId)}]`
+}
+
 export async function sampleWatchMarker(
   uiPage: Page,
   pageCssSize: PageCssSize,
-  options: { signal?: AbortSignal; deadline?: number } = {}
+  options: { paneId: string; signal?: AbortSignal; deadline?: number }
 ): Promise<WatchPixelSample> {
   const deadline = options.deadline ?? Date.now() + 30_000
   if (!Number.isFinite(pageCssSize.width) || !Number.isFinite(pageCssSize.height) || pageCssSize.width <= 0 || pageCssSize.height <= 0) {
     throw new BrowserFailure('wrong-page', 'Watch page CSS dimensions are unavailable')
   }
   try {
-    return await awaitOperation(() => uiPage.locator('.qbp-watch-image').evaluate((node, size) => {
+    return await awaitOperation(() => uiPage.locator(`${watchPaneSelector(options.paneId)} .qbp-watch-image`).evaluate((node, size) => {
       const image = node as HTMLImageElement
       if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) throw new Error('Watch pane image has not rendered')
       const canvas = document.createElement('canvas')
@@ -313,7 +316,7 @@ export async function sampleWatchMarker(
     }, pageCssSize, { timeout: Math.min(5_000, remainingMs(deadline, options.signal, 'Watch frame sample deadline reached')) }), deadline, options.signal, 'Watch frame sample deadline reached')
   } catch (error) {
     if (error instanceof BrowserFailure) throw error
-    throw new BrowserFailure('wrong-page', 'Watch pane image failed to render a sample')
+    throw new BrowserFailure('wrong-page', `Watch pane image failed to render a sample: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -397,30 +400,90 @@ function paneRenderer(c: CheckContext): WatchRenderer | undefined {
     : undefined
 }
 
-async function waitForWatchSample(
+async function failWatchSample(
   uiPage: Page,
+  paneId: string,
+  description: string,
+  c: Pick<CheckContext, 'signal' | 'deadline'>,
+  latestSample?: WatchPixelSample,
+  latestError?: unknown
+): Promise<never> {
+  const renderer = await awaitOperation(() => uiPage.evaluate((expectedPane) => {
+    const roots = [...document.querySelectorAll<HTMLElement>('.qbp')]
+    const root = roots.find(node => node.dataset.browserPane === expectedPane)
+    return {
+      expectedPane,
+      renderedPanes: roots.map(node => node.dataset.browserPane),
+      panePresent: Boolean(root),
+      address: root?.querySelector<HTMLInputElement>('input[aria-label="Address and search"]')?.value ?? null,
+      pageLabel: root?.querySelector('.qbp-page')?.getAttribute('aria-label') ?? null,
+      imageCount: root?.querySelectorAll('.qbp-watch-image').length ?? 0,
+      images: [...(root?.querySelectorAll<HTMLImageElement>('.qbp-watch-image') ?? [])].map(image => ({
+        complete: image.complete, naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight,
+        width: image.clientWidth, height: image.clientHeight
+      })),
+      banners: [...document.querySelectorAll('.banner, [role="alert"]')].map(node => node.textContent?.slice(0, 200)),
+      visibleText: document.body.innerText.slice(0, 600)
+    }
+  }, paneId), Math.min(c.deadline, Date.now() + 1_000), c.signal, 'Watch failure diagnostics deadline reached')
+    .catch((error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }))
+  remainingMs(c.deadline, c.signal, 'Watch run deadline reached')
+  const detail = latestError instanceof Error ? latestError.message : latestError === undefined ? null : String(latestError)
+  throw new BrowserFailure('wrong-page', `${description} did not render before the Watch pane deadline; lastSample=${JSON.stringify(latestSample ?? null)}; lastError=${JSON.stringify(detail)}; renderer=${JSON.stringify(renderer)}`)
+}
+
+async function waitForWatchImage(uiPage: Page, paneId: string, c: Pick<CheckContext, 'signal' | 'deadline'>): Promise<void> {
+  const deadline = Math.min(c.deadline, Date.now() + RENDERER_STARTUP_MS)
+  const root = uiPage.locator(watchPaneSelector(paneId))
+  try {
+    await awaitOperation(() => root.waitFor({
+      state: 'visible', timeout: remainingMs(deadline, c.signal, 'Watch pane mount deadline reached')
+    }), deadline, c.signal, 'Watch pane mount deadline reached')
+    const image = root.locator('.qbp-watch-image')
+    await awaitOperation(() => image.waitFor({
+      state: 'visible', timeout: remainingMs(deadline, c.signal, 'Watch first image deadline reached')
+    }), deadline, c.signal, 'Watch first image deadline reached')
+    await awaitOperation(() => image.evaluate(async node => {
+      const image = node as HTMLImageElement
+      await image.decode()
+      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) throw new Error('Watch image decoded without pixels')
+    }, undefined, { timeout: remainingMs(deadline, c.signal, 'Watch image decode deadline reached') }),
+    deadline, c.signal, 'Watch image decode deadline reached')
+  } catch (error) {
+    if (c.signal.aborted) throw deadlineFailure(c.signal, 'Watch run interrupted')
+    remainingMs(c.deadline, c.signal, 'Watch run deadline reached')
+    await failWatchSample(uiPage, paneId, 'visible decoded Watch image', c, undefined, error)
+  }
+}
+
+export async function waitForWatchSample(
+  uiPage: Page,
+  paneId: string,
   pageCssSize: PageCssSize,
   accept: WatchSampleCheck,
   description: string,
-  c: CheckContext,
-  deadline = Math.min(c.deadline ?? Date.now() + SAMPLE_WINDOW_MS, Date.now() + SAMPLE_WINDOW_MS)
+  c: Pick<CheckContext, 'signal' | 'deadline'>,
+  deadline = Math.min(c.deadline, Date.now() + SAMPLE_WINDOW_MS)
 ): Promise<WatchPixelSample> {
+  let latestSample: WatchPixelSample | undefined
   let latestError: unknown
   while (Date.now() < deadline) {
-    const sample = await sampleWatchMarker(uiPage, pageCssSize, { signal: c.signal, deadline }).catch(error => {
-      if (error instanceof BrowserFailure && error.kind === 'wrong-page') {
-        latestError = error
-        return undefined
-      }
-      throw error
-    })
-    if (sample && accept(sample)) return sample
+    try {
+      latestSample = await sampleWatchMarker(uiPage, pageCssSize, { paneId, signal: c.signal, deadline })
+      if (accept(latestSample)) return latestSample
+    } catch (error) {
+      if (c.signal.aborted) throw deadlineFailure(c.signal, 'Watch run interrupted')
+      if (!(error instanceof BrowserFailure) ||
+          (error.kind !== 'wrong-page' && !(error.kind === 'deadline' && deadline < c.deadline))) throw error
+      latestError = error
+      if (error.kind === 'deadline') break
+    }
     const remaining = deadline - Date.now()
     if (remaining <= 0) break
-    await awaitOperation(() => Bun.sleep(Math.min(SAMPLE_POLL_MS, remaining)), deadline, c.signal, `waiting for ${description} exceeded its deadline`)
+    await awaitOperation(() => Bun.sleep(Math.min(SAMPLE_POLL_MS, remaining)), c.deadline, c.signal, 'Watch run interrupted')
   }
-  const detail = latestError instanceof Error ? `: ${latestError.message}` : ''
-  throw new BrowserFailure('wrong-page', `${description} did not render before the Watch pane deadline${detail}`)
+  remainingMs(c.deadline, c.signal, 'Watch run deadline reached')
+  return await failWatchSample(uiPage, paneId, description, c, latestSample, latestError)
 }
 
 async function waitForRendererAddress(renderer: WatchRenderer, url: string, c: CheckContext): Promise<void> {
@@ -474,7 +537,6 @@ async function activateNativeIdentity(c: CheckContext): Promise<{ identity: Watc
   return { identity, userAgent }
 }
 
-
 export const paneChecks: BrowserCheck[] = [
   {
     id: 'worktree-watch-page',
@@ -496,7 +558,8 @@ export const paneChecks: BrowserCheck[] = [
         const paneState = await c.call<{ tabs: PaneTab[]; active: string | null }>('pane state', { worktree: `id:${c.world.worktreeA}` }, '')
         c.assert(paneState.tabs.some(tab => tab.id === opened.id && tab.page === c.state.pageA && tab.profileId === c.state.profileA && tab.mode === 'watch'), 'Watch pane state is not bound to page A')
         c.equal(paneState.active, opened.id, 'Watch pane is not active')
-        const beforeSample = await waitForWatchSample(renderer.page, pageCssSize, isRedSample, 'red Watch marker', c)
+        await waitForWatchImage(renderer.page, opened.id, c)
+        const beforeSample = await waitForWatchSample(renderer.page, opened.id, pageCssSize, isRedSample, 'red Watch marker', c)
         const worktreeBBefore = await c.observe<{ title: string; field: string | null; result: string | null }>(
           '({ title: document.title, field: document.querySelector("#text")?.value ?? null, result: document.querySelector("#result")?.textContent ?? null })',
           c.state.pageB
@@ -508,7 +571,7 @@ export const paneChecks: BrowserCheck[] = [
           c.state.pageA
         )
         c.equal(afterClick, { title: 'CLI changed', state: 'green' }, 'CLI click did not change the watched page')
-        const afterSample = await waitForWatchSample(renderer.page, pageCssSize,
+        const afterSample = await waitForWatchSample(renderer.page, opened.id, pageCssSize,
           sample => isGreenSample(sample) && sample.digest !== beforeSample.digest,
           'new green Watch frame after CLI click', c)
         verifyWatchAndRestartOutcome({ watch: { beforeSample, afterSample } })
@@ -577,11 +640,12 @@ export const paneChecks: BrowserCheck[] = [
         c.equal(connected.port, runtimeAfter.port, 'Watch renderer did not connect to the restarted daemon runtime')
         await openWorktreeA(c)
         const paneTabId = c.state.paneTabId
-        c.assert(typeof paneTabId === 'string' && paneTabId.length > 0, 'Watch pane identity is missing after daemon restart')
+        if (typeof paneTabId !== 'string' || !paneTabId) throw new BrowserFailure('wrong-page', 'Watch pane identity is missing after daemon restart')
         const paneState = await c.call<{ tabs: PaneTab[] }>('pane state', { worktree: `id:${c.world.worktreeA}` }, '')
         c.assert(paneState.tabs.some(tab => tab.id === paneTabId && tab.page === c.state.pageA && tab.profileId === c.state.profileA && tab.mode === 'watch'), 'Watch pane did not reconnect to page A after daemon restart')
         const pageCssSize = await c.observe<PageCssSize>('({ width: window.innerWidth, height: window.innerHeight })', c.state.pageA)
-        const postRestartBefore = await waitForWatchSample(renderer.page, pageCssSize, isRedSample, 'red Watch marker after daemon restart', c)
+        await waitForWatchImage(renderer.page, paneTabId, c)
+        const postRestartBefore = await waitForWatchSample(renderer.page, paneTabId, pageCssSize, isRedSample, 'red Watch marker after daemon restart', c)
         const identityAfterRestart = await c.call<WatchState>('identity get', {}, '')
         c.assert(identityAfterRestart.mode === 'native' && identityAfterRestart.active === 'native' && !identityAfterRestart.restartRequired, 'native browser identity did not activate after daemon restart')
         const userAgentAfterRestart = await c.observe<string>('navigator.userAgent', c.state.pageA)
@@ -594,7 +658,7 @@ export const paneChecks: BrowserCheck[] = [
         c.equal(afterClick, { title: 'CLI changed', state: 'green' }, 'CLI click did not change page A after daemon restart')
         const worktreeBMarkerAfter = await c.observe<string | null>('document.querySelector("#watch-marker")?.getAttribute("data-state") ?? null', c.state.pageB)
         c.equal(worktreeBMarkerAfter, 'red', 'CLI click in worktree A changed worktree B marker')
-        const postRestartAfter = await waitForWatchSample(renderer.page, pageCssSize,
+        const postRestartAfter = await waitForWatchSample(renderer.page, paneTabId, pageCssSize,
           sample => isGreenSample(sample) && sample.digest !== postRestartBefore.digest,
           'new green Watch frame after daemon restart', c)
         await waitForRendererAddress(renderer, `${c.world.fixture.origin}/watch-page`, c)

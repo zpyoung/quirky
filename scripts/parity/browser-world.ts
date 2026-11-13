@@ -107,7 +107,6 @@ export function decodeCliReceipt(
   return receipt
 }
 
-
 export function parseBrowserArgs(args: readonly string[]): BrowserArguments {
   let json = false
   let help = false
@@ -410,7 +409,6 @@ function processSnapshot(env: Record<string, string>): Map<number, ProcessIdenti
   if (result.exitCode !== 0) throw new Error('could not inspect process identities')
   return parseProcessTable(Buffer.from(result.stdout).toString('utf8'))
 }
-
 
 function descendants(snapshot: Map<number, ProcessIdentity>, rootPid: number): ProcessIdentity[] {
   const children = new Map<number, ProcessIdentity[]>()
@@ -789,7 +787,6 @@ function makeHeadCapture(stream: ReadableStream<Uint8Array> | null, limit: numbe
   })()
   return { done, text: () => Buffer.concat(chunks, size).toString('utf8'), truncated: () => overflow }
 }
-
 
 export async function startBrowserWorld(options: {
   signal?: AbortSignal

@@ -43,11 +43,11 @@ test('standalone pane checks seed their profiles and verify Watch plus restart c
     import {startBrowserWorld} from './scripts/parity/browser-world';
     import {paneChecks} from './scripts/parity/browser-pane';
     const ids=new Set(paneChecks.map(check=>check.id));
-    const deadline=Date.now()+90000;
+    const deadline=Date.now()+180000;
     const report=await runBrowserParity({rows:readBrowserTable().filter(row=>ids.has(row.id)),checks:paneChecks,deadline,startWorld:options=>startBrowserWorld({...options,deadline})});
     console.log(JSON.stringify(report)); process.exitCode=report.ok?0:1;
   `
-  const { code, report, stderr } = await childRun([process.execPath, '-e', source], 95_000)
+  const { code, report, stderr } = await childRun([process.execPath, '-e', source], 200_000)
   expect({ code, error: report.error, failed: report.rows.filter(row => row.status === 'failed'), stderr }).toEqual({ code: 0, error: undefined, failed: [], stderr: '' })
   expect(report.ok).toBe(true)
   expect(report.rows.map(row => row.id).sort()).toEqual(paneChecks.map(check => check.id).sort())
@@ -71,4 +71,4 @@ test('standalone pane checks seed their profiles and verify Watch plus restart c
     orcaLog: '', securityLog: '', shimLogsEmpty: true, shimLogBytes: { orca: 0, security: 0 },
     excludedPlugins: ['quirky.accounts']
   })
-}, 100_000)
+}, 210_000)

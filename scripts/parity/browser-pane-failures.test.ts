@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chromium, type BrowserServer, type Page } from 'playwright'
 import { BrowserFailure, type BrowserWorld } from './browser-world'
-import { isGreenSample, isRedSample, openWatchRenderer, sampleWatchMarker, verifyWatchAndRestartOutcome, type WatchPixelSample } from './browser-pane'
+import { isGreenSample, isRedSample, openWatchRenderer, sampleWatchMarker, verifyWatchAndRestartOutcome, waitForWatchSample, type WatchPixelSample } from './browser-pane'
 
 type Outcome = {
   watch?: { beforeSample: WatchPixelSample | null; afterSample: WatchPixelSample | null }
@@ -70,7 +70,6 @@ function rendererWorld(track: (pid: number) => void): BrowserWorld {
   } as unknown as BrowserWorld
 }
 
-
 test('pixel predicates enforce the strict red and green channel thresholds', () => {
   expect(isRedSample({ ...red, r: 181, g: 79, b: 79 })).toBe(true)
   expect(isRedSample({ ...red, r: 180 })).toBe(false)
@@ -110,12 +109,12 @@ test('canvas samples the mapped 5 by 5 block and averages all pixels', async () 
   Object.defineProperty(globalThis, 'document', { configurable: true, value: { createElement: () => canvas } })
   const page = {
     locator: (selector: string) => {
-      expect(selector).toBe('.qbp-watch-image')
+      expect(selector).toBe('.qbp[data-browser-pane="pane-fixture"] .qbp-watch-image')
       return { evaluate: (operation: (element: HTMLImageElement, size: { width: number; height: number }) => unknown, size: { width: number; height: number }) => operation(image as unknown as HTMLImageElement, size) }
     }
   } as unknown as Page
   try {
-    const sample = await sampleWatchMarker(page, { width: 800, height: 600 })
+    const sample = await sampleWatchMarker(page, { width: 800, height: 600 }, { paneId: 'pane-fixture' })
     expect([canvasWidth, canvasHeight, ...sampleRect]).toEqual([1200, 900, 178, 118, 5, 5])
     expect(sample).toMatchObject({ r: 192, g: 22, b: 42, naturalWidth: 1200, naturalHeight: 900, sampleX: 180, sampleY: 120 })
     expect(sample.digest).toBeTruthy()
@@ -127,7 +126,61 @@ test('canvas samples the mapped 5 by 5 block and averages all pixels', async () 
 
 test('a missing Watch image is classified as wrong-page', async () => {
   const page = { locator: () => ({ evaluate: async () => { throw new Error('image did not render') } }) } as unknown as Page
-  await expect(sampleWatchMarker(page, { width: 800, height: 600 })).rejects.toMatchObject({ kind: 'wrong-page' })
+  await expect(sampleWatchMarker(page, { width: 800, height: 600 }, { paneId: 'pane-fixture' })).rejects.toMatchObject({ kind: 'wrong-page' })
+})
+
+test('a frame window reports its last observed color and image state', async () => {
+  const page = {
+    locator: () => ({ evaluate: async () => green }),
+    evaluate: async () => ({ imageCount: 1, pageLabel: 'Watched page: fixture' })
+  } as unknown as Page
+  const failure = await waitForWatchSample(page, 'pane-fixture', { width: 800, height: 600 }, isRedSample, 'red marker', {
+    signal: new AbortController().signal, deadline: Date.now() + 5_000
+  }, Date.now() + 20).catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(BrowserFailure)
+  if (!(failure instanceof BrowserFailure)) throw new Error('expected a Watch failure')
+  expect(failure.kind).toBe('wrong-page')
+  expect(failure.message).toContain('"digest":"green-frame"')
+  expect(failure.message).toContain('"g":210')
+  expect(failure.message).toContain('"imageCount":1')
+})
+
+test('an expired frame window preserves the missing-image error instead of escaping as deadline', async () => {
+  const page = {
+    locator: () => ({ evaluate: async () => { throw new BrowserFailure('deadline', 'Watch frame sample deadline reached: fixture image missing') } }),
+    evaluate: async () => ({ imageCount: 0, pageLabel: null })
+  } as unknown as Page
+  const failure = await waitForWatchSample(page, 'pane-fixture', { width: 800, height: 600 }, isRedSample, 'red marker', {
+    signal: new AbortController().signal, deadline: Date.now() + 5_000
+  }, Date.now() + 20).catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(BrowserFailure)
+  if (!(failure instanceof BrowserFailure)) throw new Error('expected a Watch failure')
+  expect(failure.kind).toBe('wrong-page')
+  expect(failure.message).toContain('fixture image missing')
+  expect(failure.message).toContain('"imageCount":0')
+})
+
+test('a frame probe preserves a page error that explains the missing sample', async () => {
+  const page = {
+    locator: () => ({ evaluate: async () => { throw new Error('fixture Watch image could not decode') } }),
+    evaluate: async () => ({ imageCount: 1, pageLabel: 'Watched page: fixture' })
+  } as unknown as Page
+  const failure = await waitForWatchSample(page, 'pane-fixture', { width: 800, height: 600 }, isRedSample, 'red marker', {
+    signal: new AbortController().signal, deadline: Date.now() + 5_000
+  }, Date.now() + 20).catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(BrowserFailure)
+  if (!(failure instanceof BrowserFailure)) throw new Error('expected a Watch failure')
+  expect(failure.kind).toBe('wrong-page')
+  expect(failure.message).toContain('fixture Watch image could not decode')
+})
+
+test('global cancellation remains a deadline rather than a frame-window failure', async () => {
+  const controller = new AbortController()
+  controller.abort(new BrowserFailure('deadline', 'fixture run interrupted'))
+  const page = { locator: () => ({ evaluate: async () => red }) } as unknown as Page
+  await expect(waitForWatchSample(page, 'pane-fixture', { width: 800, height: 600 }, isRedSample, 'red marker', {
+    signal: controller.signal, deadline: Date.now() + 5_000
+  }, Date.now() + 20)).rejects.toMatchObject({ kind: 'deadline', message: 'fixture run interrupted' })
 })
 
 test('a renderer connection failure still tracks its pid and closes the server', async () => {
@@ -186,7 +239,6 @@ test('a renderer launch resolving after cancellation is tracked and closed', asy
   expect(tracked).toEqual([7342])
 })
 
-
 test('Watch validation rejects an unrendered frame, an unchanged digest, or a non-green click', () => {
   expectFailure({ watch: { beforeSample: null, afterSample: green } }, 'wrong-page')
   const unchanged = validOutcome()
@@ -223,5 +275,4 @@ for (const [command, field] of [['orca', 'orcaLog'], ['security', 'securityLog']
     expectFailure(outcome, 'shim-invoked')
   })
 }
-
 

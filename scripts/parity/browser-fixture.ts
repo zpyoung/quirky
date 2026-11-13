@@ -151,7 +151,6 @@ const watchPageHtml = `<!doctype html>
 </body>
 </html>`
 
-
 const secondHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Second</title></head><body>Second</body></html>'
 
 function htmlResponse(body: string): Response {
