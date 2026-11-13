@@ -56,7 +56,7 @@ function stateFor(worktree: string | null): ReviewsState {
 }
 
 
-function fakeContext(worktree: string | null) {
+function fakeContext(worktree: string | null, respond?: (method: string, params?: unknown) => Promise<unknown>) {
   const calls: Call[] = []
   const subscriptions: Subscription[] = []
   const layoutListeners = new Set<(layout: UiLayout) => void>()
@@ -88,6 +88,7 @@ function fakeContext(worktree: string | null) {
       provide(id: string, implementation: unknown) { provided.set(id, implementation) },
       async call(method: string, params?: unknown) {
         calls.push({ method, params })
+        if (respond) return respond(method, params)
         if (method === 'quirky.reviews/state') {
           const requested = typeof params === 'object' && params !== null && 'worktree' in params && typeof params.worktree === 'string' ? params.worktree : null
           const selected = typeof layout.worktree === 'string' ? layout.worktree : null
@@ -253,5 +254,62 @@ for (const [name, view] of [
     await settle()
     expect(stateCalls(fake)).toHaveLength(initialStateCalls + 1)
     await surface.unmount()
+  })
+}
+
+function commentState(draft = '') {
+  const state = stateFor(WORKTREE_A)
+  state.checks.lookup = null
+  state.checks.generation = 1
+  state.checks.commentDraft = draft
+  state.checks.comments = { comments: [], threads: [] }
+  state.checks.checks = { checks: [] }
+  state.checks.review = {
+    provider: 'github', number: 12, url: 'https://github.com/test-owner/test-repo/pull/12',
+    title: 'Review 12', body: '', state: 'open', headRefName: 'feature', baseRefName: 'main',
+    headRefOid: 'a'.repeat(40), baseRefOid: 'b'.repeat(40), mergeable: 'MERGEABLE',
+    checksStatus: 'passing', reviewDecision: 'APPROVED', mergeStateStatus: 'CLEAN',
+    autoMergeRequest: null, stack: null, mergeMethods: null
+  }
+  return state
+}
+
+for (const eventBeforeReply of [false, true]) {
+  test(eventBeforeReply ? 'S1: a state reply requested before a draft settles cannot erase typing' : 'S2: a settled draft requests fresh state without a changed event', async () => {
+    const write = Promise.withResolvers<unknown>()
+    const states: { promise: Promise<ReviewsState>; resolve(value: ReviewsState): void }[] = []
+    let initial = true
+    const fake = fakeContext(WORKTREE_A, async (method) => {
+      if (method === 'quirky.reviews/state') {
+        if (initial) { initial = false; return commentState() }
+        const state = Promise.withResolvers<ReviewsState>()
+        states.push(state)
+        return state.promise
+      }
+      if (method === 'quirky.reviews/detailSetCommentDraft') return write.promise
+      if (method === 'quirky.worktree/list') return []
+      return {}
+    })
+    const { element } = await mountSurface(fake, CHECKS_PANEL)
+    const composer = element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add a comment"]')!
+    expect(composer).not.toBeNull()
+    await act(async () => {
+      composer.value = 'ab'
+      const key = Object.keys(composer).find((name) => name.startsWith('__reactProps$'))!
+      const props = (composer as unknown as Record<string, { onChange(event: unknown): void }>)[key]!
+      props.onChange({ currentTarget: composer, target: composer })
+    })
+    expect(fake.calls.filter(({ method }) => method === 'quirky.reviews/detailSetCommentDraft')).toHaveLength(1)
+    if (eventBeforeReply) await act(async () => fake.emit(changed(WORKTREE_A)))
+    const requestsBeforeReply = stateCalls(fake).length
+    await act(async () => write.resolve({ applied: true }))
+    await settle()
+    expect(stateCalls(fake)).toHaveLength(requestsBeforeReply + 1)
+    if (eventBeforeReply) {
+      await act(async () => states[0]!.resolve(commentState('a')))
+      expect(composer.value).toBe('ab')
+    }
+    await act(async () => states.at(-1)!.resolve(commentState('ab')))
+    expect(composer.value).toBe('ab')
   })
 }

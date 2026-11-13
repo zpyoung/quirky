@@ -3,6 +3,8 @@ import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, Menu, SectionHeader, StatusDot, TextField, ToolPanelFrame } from '@quirky/ui'
 import { CHECKS_PANEL, type JsonRecord, type ReviewData, type ReviewsSurfaceProps } from '../contracts'
 import { isRecord } from './data'
+import { reviewContext } from '../detail/data'
+import { useDraftField, type DraftAction } from '../draft-field'
 import { ReviewActions } from '../detail/Actions'
 import { ChecksList } from '../detail/ChecksList'
 import { Comments } from '../detail/Comments'
@@ -759,8 +761,6 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const [authDiagnostics, setAuthDiagnostics] = useState<JsonRecord | null>(null)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkNumber, setLinkNumber] = useState('')
-  const [titleEditing, setTitleEditing] = useState(false)
-  const [titleInput, setTitleInput] = useState('')
   const [dragHeight, setDragHeight] = useState<number | null>(null)
   const dragHeightRef = useRef<number | null>(null)
   const [countdownNow, setCountdownNow] = useState(Date.now())
@@ -778,15 +778,31 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   activeWorktreeRef.current = activeWorktree
   const active = state.checks.worktree === activeWorktree ? state.checks : null
   const currentReview = active?.review ?? null
-  useEffect(() => {
-    if (!currentReview) {
-      setTitleEditing(false)
-      setTitleInput('')
-      return
-    }
-    if (typeof active?.titleDraft === 'string') setTitleInput(active.titleDraft)
-    else if (!titleEditing) setTitleInput(currentReview.title)
-  }, [active?.titleDraft, currentReview?.headRefOid, currentReview?.number])
+  const titleOwner = active === null ? null : reviewContext(state, 'checks')
+  const titleIdentity = titleOwner === null
+    ? `checks|${activeWorktree ?? ''}|none`
+    : `${titleOwner.worktree}|${titleOwner.number}|${titleOwner.repo?.host ?? ''}/${titleOwner.repo?.owner ?? ''}/${titleOwner.repo?.repo ?? ''}`
+  const titleField = useDraftField<string | null>({
+    identity: titleIdentity,
+    remote: active?.titleDraft ?? null,
+    snapshot: props.snapshot,
+    write: async (title) => {
+      if (titleOwner === null) return false
+      const target = {
+        worktree: titleOwner.worktree,
+        number: titleOwner.number,
+        generation: titleOwner.generation,
+        ...(titleOwner.repo === null ? {} : { prRepo: titleOwner.repo }),
+      }
+      if (title === null) await context.call('quirky.reviews/checksCancelTitle', target)
+      else await context.call('quirky.reviews/checksSetTitleDraft', { ...target, title })
+    },
+    refresh,
+    resend: true,
+  })
+  const titleEditing = titleField.value !== null
+  const titleInput = titleField.value ?? ''
+  const titleSaveAction = useRef<DraftAction<string | null> | null>(null)
   const lookup = active && isRecord(active.lookup) ? active.lookup : null
   const missingOrigin = lookup?.kind === 'unsupported' && lookup.reason === 'missing_origin'
   const eligibility = active && isRecord(active.eligibility) ? active.eligibility : null
@@ -1012,29 +1028,50 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   }
 
   const startTitleEdit = () => {
-    if (!activeWorktree || !currentReview) return
-    setTitleEditing(true)
-    setTitleInput(currentReview.title)
-    void runReviewMethod('checksSetTitleDraft', { worktree: activeWorktree, number: currentReview.number, title: currentReview.title })
+    if (!titleOwner || !currentReview) return
+    setActionError(null)
+    titleField.edit(currentReview.title)
   }
   const saveTitle = async () => {
-    if (!activeWorktree || !currentReview || titleInput.trim() === '') return
-    const result = await runReviewMethod('checksSaveTitle', {
-      worktree: activeWorktree,
-      number: currentReview.number,
-      expectedHead: currentReview.headRefOid,
-      title: titleInput
-    })
-    if (isRecord(result) && result.updated === true) {
-      setTitleEditing(false)
-      setTitleInput('')
+    if (!titleOwner || !currentReview || titleField.value === null || titleInput.trim() === '') return
+    if (titleSaveAction.current !== null && titleSaveAction.current.status() !== 'gone') return
+    const action = titleField.begin()
+    titleSaveAction.current = action
+    setActionError(null)
+    try {
+      await titleField.settled()
+      if (action.status() === 'gone') return
+      const title = action.take()
+      if (title === null) {
+        action.fail()
+        return
+      }
+      const result = await context.call('quirky.reviews/checksSaveTitle', {
+        worktree: titleOwner.worktree,
+        number: titleOwner.number,
+        expectedHead: currentReview.headRefOid,
+        title,
+      })
+      if (action.status() === 'gone') return
+      if (isRecord(result) && result.updated === true) {
+        action.succeed(null)
+      } else {
+        action.fail()
+        setActionError(presentationError(result) ?? 'The pull request title could not be saved.')
+      }
+    } catch (error) {
+      if (action.status() !== 'gone') {
+        action.fail()
+        setActionError(messageOf(error))
+      }
+    } finally {
+      if (titleSaveAction.current === action) titleSaveAction.current = null
     }
   }
   const cancelTitle = () => {
-    if (!activeWorktree || !currentReview) return
-    setTitleEditing(false)
-    setTitleInput('')
-    void runReviewMethod('checksCancelTitle', { worktree: activeWorktree, number: currentReview.number })
+    if (!titleOwner || !currentReview) return
+    setActionError(null)
+    titleField.edit(null)
   }
 
   const setHeight = useCallback((height: number) => {
@@ -1150,7 +1187,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
 
   const stack = stackModel(currentReview.stack)
   const reviewRetrySeconds = retryDelay(active.lookup, countdownNow)
-  const editedTitle = titleEditing || typeof active.titleDraft === 'string'
+  const editedTitle = titleField.value !== null
   const checkRows = isRecord(active.checks) && Array.isArray(active.checks.checks) ? active.checks.checks : []
   const broken = checkRows.some((row) => isRecord(row) && (
     ['failure', 'error', 'startup_failure', 'timed_out', 'cancelled', 'action_required'].includes(String(row.conclusion ?? '').toLowerCase()) ||
@@ -1182,7 +1219,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     >
     <section className="ui-stack" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
       {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}{currentReview ? ' Showing the last known review status.' : ''}</p>}
-      {actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
+      {actionError ?? titleField.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError ?? titleField.error}</p> : null}
       <div className="ui-stack" style={{ padding: 'var(--ui-space-12)' }}>
         <div className="ui-cluster">
           <span aria-hidden="true">PR</span>
@@ -1203,9 +1240,8 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
                     void saveTitle()
                   }
                 }} onChange={(event) => {
-                  const title = event.target.value
-                  setTitleInput(title)
-                  void runReviewMethod('checksSetTitleDraft', { worktree: activeWorktree, number: currentReview.number, title }, false)
+                  titleField.edit(event.target.value)
+                  setActionError(null)
                 }} />
                 <IconButton label="Save pull request title" disabled={active.loading || titleInput.trim() === ''} onClick={() => void saveTitle()}>✓</IconButton>
                 <IconButton label="Cancel title edit" disabled={active.loading} onClick={cancelTitle}>×</IconButton>
@@ -1276,7 +1312,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       {isRecord(active.checks) && active.checks.truncated === true && <p className="ui-text-muted">Showing the first 100 checks.</p>}
       {isRecord(active.comments) && active.comments.truncated === true && <p className="ui-text-muted">Showing the first 100 comments.</p>}
       {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
-      {actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
+      {actionError ?? titleField.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError ?? titleField.error}</p> : null}
       <div role="separator" aria-orientation="horizontal" aria-label="Resize Checks panel" tabIndex={0}
         onMouseDown={beginResize}
         onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {

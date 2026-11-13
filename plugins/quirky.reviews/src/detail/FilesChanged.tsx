@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useDraftField } from '../draft-field'
 import { Badge, Button, FormRow, ListRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 import { Markdown, MarkdownComposer } from '@quirky/plugin-tasks/markdown'
 import type { ReviewsSurfaceProps } from '../contracts'
@@ -6,6 +7,23 @@ import { isRecord, parseCommentsResult, parseFilesResult, reviewContext, type Ch
 
 type DiffLine = { text: string; kind: 'context' | 'addition' | 'deletion' | 'meta'; leftLine: number | null; rightLine: number | null }
 type InlineAnchor = { path: string; line: number; startLine: number }
+
+type FilesView = {
+  fileFilter: string
+  diffMode: 'inline' | 'side-by-side'
+  selectedFile: string | null
+  collapsedFiles: string[]
+  treeVisible: boolean
+}
+
+function equalFilesView(left: FilesView, right: FilesView): boolean {
+  return left.fileFilter === right.fileFilter
+    && left.diffMode === right.diffMode
+    && left.selectedFile === right.selectedFile
+    && left.treeVisible === right.treeVisible
+    && left.collapsedFiles.length === right.collapsedFiles.length
+    && left.collapsedFiles.every((path, index) => path === right.collapsedFiles[index])
+}
 
 const MAX_PATCH_CHARS = 250_000
 
@@ -75,8 +93,38 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
   const filesUnavailable = isRecord(props.state.detail.files) && props.state.detail.files.filesUnavailable === true
   const comments = owner === null ? [] : commentLines(props.state.detail.comments, owner.number)
   const allFiles = files ?? []
-  const filteredFiles = useMemo(() => allFiles.filter((file) => file.path.toLowerCase().includes(props.state.detail.fileFilter.toLowerCase())), [allFiles, props.state.detail.fileFilter])
-  const treeVisible = (props.state.detail as typeof props.state.detail & { fileTreeVisible?: boolean }).fileTreeVisible !== false
+  const remoteView: FilesView = {
+    fileFilter: props.state.detail.fileFilter,
+    diffMode: props.state.detail.diffMode,
+    selectedFile: props.state.detail.selectedFile,
+    collapsedFiles: props.state.detail.collapsedFiles,
+    treeVisible: props.state.detail.fileTreeVisible,
+  }
+  const identity = owner === null
+    ? 'none'
+    : `${owner.worktree}|${owner.number}|${owner.repo?.host ?? ''}/${owner.repo?.owner ?? ''}/${owner.repo?.repo ?? ''}`
+  const filesView = useDraftField<FilesView>({
+    identity,
+    remote: remoteView,
+    snapshot: props.snapshot,
+    write: async (value) => {
+      if (owner === null || params === null) return false
+      await props.context.call('quirky.reviews/detailSetFilesView', {
+        ...params,
+        generation: owner.generation,
+        fileFilter: value.fileFilter,
+        diffMode: value.diffMode,
+        selectedFile: value.selectedFile,
+        collapsedFiles: value.collapsedFiles,
+        treeVisible: value.treeVisible,
+      })
+    },
+    refresh: props.refresh,
+    resend: true,
+    equal: equalFilesView,
+  })
+  const filteredFiles = useMemo(() => allFiles.filter((file) => file.path.toLowerCase().includes(filesView.value.fileFilter.toLowerCase())), [allFiles, filesView.value.fileFilter])
+  const treeVisible = filesView.value.treeVisible
   const [rangeStart, setRangeStart] = useState<{ path: string; line: number } | null>(null)
   const [inlineAnchor, setInlineAnchor] = useState<InlineAnchor | null>(null)
   const [inlineDraft, setInlineDraft] = useState('')
@@ -85,24 +133,12 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
   const [error, setError] = useState<string | null>(null)
   const viewedCount = allFiles.filter((file) => file.viewed === true).length
   const unknownViewedCount = allFiles.filter((file) => file.viewed === null).length
-  const collapsed = new Set(props.state.detail.collapsedFiles)
+  const collapsed = new Set(filesView.value.collapsedFiles)
   const head = props.state.detail.review?.headRefOid ?? null
   const headValid = typeof head === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(head)
 
-  const setFilesView = async (change: { fileFilter?: string; diffMode?: 'inline' | 'side-by-side'; selectedFile?: string | null; collapsedFiles?: string[]; treeVisible?: boolean }) => {
-    if (params === null || owner === null) return
-    const next = {
-      fileFilter: change.fileFilter ?? props.state.detail.fileFilter,
-      diffMode: change.diffMode ?? props.state.detail.diffMode,
-      selectedFile: change.selectedFile === undefined ? props.state.detail.selectedFile : change.selectedFile,
-      collapsedFiles: change.collapsedFiles ?? props.state.detail.collapsedFiles,
-      treeVisible: change.treeVisible ?? treeVisible,
-    }
-    try {
-      await props.context.call('quirky.reviews/detailSetFilesView', { ...params, ...next })
-    } catch (cause) {
-      setError(errorText(cause))
-    }
+  const setFilesView = (change: Partial<FilesView>) => {
+    filesView.edit({ ...filesView.value, ...change })
   }
 
   const refreshFiles = async () => {
@@ -176,11 +212,11 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
     <Button onClick={() => void refreshFiles()}>Refresh files</Button>
   </section>
 
-  const collapseAll = async () => setFilesView({ collapsedFiles: allFiles.map((file) => file.path) })
-  const expandAll = async () => setFilesView({ collapsedFiles: [] })
-  const selectedFiles = props.state.detail.selectedFile === null
+  const collapseAll = () => setFilesView({ collapsedFiles: allFiles.map((file) => file.path) })
+  const expandAll = () => setFilesView({ collapsedFiles: [] })
+  const selectedFiles = filesView.value.selectedFile === null
     ? filteredFiles
-    : filteredFiles.filter((file) => file.path === props.state.detail.selectedFile)
+    : filteredFiles.filter((file) => file.path === filesView.value.selectedFile)
 
   return <section className="ui-stack" aria-label="Files changed">
     <SectionHeader title="Files changed" actions={<div className="ui-cluster">
@@ -189,21 +225,22 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
       <Button onClick={() => void collapseAll()}>Collapse All</Button>
       <Button onClick={() => void expandAll()}>Expand All</Button>
       <FormRow label="Diff mode" htmlFor="review-diff-mode">
-        <select id="review-diff-mode" className="ui-text-field__input" value={props.state.detail.diffMode} onChange={(event) => void setFilesView({ diffMode: event.currentTarget.value as 'inline' | 'side-by-side' })}>
+        <select id="review-diff-mode" className="ui-text-field__input" value={filesView.value.diffMode} onChange={(event) => setFilesView({ diffMode: event.currentTarget.value as 'inline' | 'side-by-side' })}>
           <option value="inline">Inline</option>
           <option value="side-by-side">Side by Side</option>
         </select>
       </FormRow>
-      <TextField label="Filter files" value={props.state.detail.fileFilter} onChange={(event) => void setFilesView({ fileFilter: event.currentTarget.value })} />
+      <TextField label="Filter files" value={filesView.value.fileFilter} onChange={(event) => setFilesView({ fileFilter: event.currentTarget.value })} />
       <Button onClick={() => void refreshFiles()}>Refresh files</Button>
     </div>} />
     {props.state.detail.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {props.state.detail.error}</p> : null}
     {error ? <p role="alert"><StatusDot status="failing" label="Error" /> {error}</p> : null}
+    {filesView.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {filesView.error}</p> : null}
     {isRecord(props.state.detail.files) && props.state.detail.files.truncated === true ? <p role="status" className="ui-text-muted">Showing the bounded changed-file set returned by the hosting provider.</p> : null}
     {filteredFiles.length === 0 ? <p role="status" className="ui-text-muted">No files match this filter.</p> : <div className="ui-stack" style={{ minWidth: 0, marginTop: 'var(--ui-space-8)', display: 'grid', gridTemplateColumns: treeVisible ? 'minmax(0, 1fr) minmax(0, 3fr)' : 'minmax(0, 1fr)', gap: 'var(--ui-space-12)' }}>
       {treeVisible ? <aside className="ui-stack" aria-label="Changed files">
         <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>{filteredFiles.map((file) => <li key={file.path}>
-          <ListRow title={file.path} description={file.viewed === true ? 'Viewed' : file.viewed === false ? 'Unviewed' : 'Unknown'} selected={props.state.detail.selectedFile === file.path} onClick={() => void setFilesView({ selectedFile: file.path })} />
+          <ListRow title={file.path} description={file.viewed === true ? 'Viewed' : file.viewed === false ? 'Unviewed' : 'Unknown'} selected={filesView.value.selectedFile === file.path} onClick={() => setFilesView({ selectedFile: file.path })} />
         </li>)}</ul>
       </aside> : null}
       <div className="ui-stack" style={{ minWidth: 0 }}>
@@ -216,8 +253,8 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
           return <article className="ui-stack" key={file.path} style={{ minWidth: 0 }}>
             <header className="ui-cluster">
               <Button aria-expanded={!isCollapsed} onClick={() => {
-                const next = isCollapsed ? props.state.detail.collapsedFiles.filter((path) => path !== file.path) : [...props.state.detail.collapsedFiles, file.path]
-                void setFilesView({ collapsedFiles: next })
+                const next = isCollapsed ? filesView.value.collapsedFiles.filter((path) => path !== file.path) : [...filesView.value.collapsedFiles, file.path]
+                setFilesView({ collapsedFiles: next })
               }}>{isCollapsed ? 'Expand' : 'Collapse'} {file.path}</Button>
               <Badge tone={statusTone}>{file.status}</Badge>
               <Badge tone="working">+{file.additions}</Badge>
@@ -240,7 +277,7 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
                 : file.patchUnavailable || patch === null ? <p>Patch unavailable for this file.</p>
                   : <>
                     {patch.truncated ? <p role="status" className="ui-text-muted">This patch is truncated to a bounded preview.</p> : null}
-                    {props.state.detail.diffMode === 'side-by-side'
+                    {filesView.value.diffMode === 'side-by-side'
                       ? <div role="table" aria-label={`Side-by-side diff for ${file.path}`} className="ui-stack">
                         {patch.lines.map((line, index) => {
                           const tone = line.kind === 'addition' ? 'working' : line.kind === 'deletion' ? 'failing' : line.kind === 'meta' ? 'accent' : 'neutral'

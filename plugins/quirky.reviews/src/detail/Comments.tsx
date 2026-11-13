@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createDraftVersions, useDraftField, type DraftAction } from '../draft-field'
 import { Badge, Button, SectionHeader, StatusDot, Tabs, TextField } from '@quirky/ui'
 import { Markdown, MarkdownComposer } from '@quirky/plugin-tasks/markdown'
 import type { ReviewsSurfaceProps } from '../contracts'
@@ -7,6 +8,7 @@ import { isRecord, parseCommentsResult, reviewContext, safeHttpUrl, type ReviewC
 export type CommentsProps = ReviewsSurfaceProps & { surface: 'detail' | 'checks' }
 
 type CommentThread = { id: string; comments: ReviewComment[]; resolved: boolean | null; updatedAt: number }
+type CommentDraftAction = { identity: string; action: DraftAction<string> }
 type MentionOption = { login: string; avatarUrl: string | null }
 
 const reactionChoices = ['+1', '-1', 'laugh', 'confused', 'heart', 'hooray', 'rocket', 'eyes'] as const
@@ -109,27 +111,15 @@ export function Comments(props: CommentsProps) {
     number: owner.number,
     ...(owner.repo === null ? {} : { prRepo: owner.repo }),
   }
-  const ownerVersion = owner === null ? '' : `${owner.worktree}:${owner.number}:${owner.generation}:${owner.repo?.host ?? ''}/${owner.repo?.owner ?? ''}/${owner.repo?.repo ?? ''}`
+  const identity = owner === null
+    ? `${props.surface}|none`
+    : `${props.surface}|${owner.worktree}|${owner.number}|${owner.repo?.host ?? ''}/${owner.repo?.owner ?? ''}/${owner.repo?.repo ?? ''}`
   const data = surfaceData(props)
   const number = data.number
   const selectedReview = data.review
   const worktree = data.worktree
   const parsed = data.value === null || number === null ? null : parseCommentsResult(data.value, number)
   const comments = parsed?.comments as unknown as ReviewComment[] | undefined ?? []
-  const [draft, setDraft] = useState(data.draft)
-  const [replyTo, setReplyTo] = useState<number | null>(null)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editDraft, setEditDraft] = useState('')
-  const [pending, setPending] = useState(false)
-  const pendingRef = useRef(false)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([])
-  const [mentionError, setMentionError] = useState<string | null>(null)
-  const [imageUrl, setImageUrl] = useState('')
-  const [imageInsertOpen, setImageInsertOpen] = useState(false)
-  const [imageError, setImageError] = useState<string | null>(null)
-  const suggestionRequest = useRef(0)
-  const draftRevision = useRef(Date.now() * 1000 + Math.floor(Math.random() * 1000))
   const filtered = useMemo(() => {
     const isBot = (comment: ReviewComment) => isBotAuthor(comment, props.state.botOverrides)
     if (data.audience === 'bots') return comments.filter(isBot)
@@ -141,18 +131,55 @@ export function Comments(props: CommentsProps) {
   const resolvedThreads = useMemo(() => allThreads.filter((thread) => thread.resolved === true), [allThreads])
   const timeline = useMemo(() => [...filtered].sort((left, right) =>
     (Date.parse(left.createdAt ?? '') || 0) - (Date.parse(right.createdAt ?? '') || 0)), [filtered])
+  const [replyTo, setReplyTo] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [pendingAction, setPendingAction] = useState<CommentDraftAction | null>(null)
+  const pendingRef = useRef<CommentDraftAction | null>(null)
+  const [pendingOther, setPendingOther] = useState(false)
+  const pendingOtherRef = useRef(false)
+  const pending = pendingOther || (pendingAction !== null && pendingAction.identity === identity && pendingAction.action.status() !== 'gone')
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([])
+  const [mentionError, setMentionError] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState('')
+  const [imageInsertOpen, setImageInsertOpen] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const suggestionRequest = useRef(0)
+  const [draftVersions] = useState(() => createDraftVersions())
+  const draftField = useDraftField<string>({
+    identity,
+    remote: data.draft,
+    snapshot: props.snapshot,
+    write: async (value) => {
+      if (owner === null || targetParams === null) return false
+      const base = { ...targetParams, generation: owner.generation, body: value }
+      const first = await props.context.call('quirky.reviews/detailSetCommentDraft', {
+        ...base,
+        draftVersion: draftVersions.next(),
+      })
+      if (isRecord(first) && first.applied === false) {
+        draftVersions.rebase()
+        const retry = await props.context.call('quirky.reviews/detailSetCommentDraft', {
+          ...base,
+          draftVersion: draftVersions.next(),
+        })
+        return isRecord(retry) && typeof retry.applied === 'boolean' ? retry.applied : undefined
+      }
+      return isRecord(first) && typeof first.applied === 'boolean' ? first.applied : undefined
+    },
+    refresh: props.refresh,
+    resend: true,
+  })
+  const draft = draftField.value
+
+  useEffect(() => {
+    setActionError(null)
+  }, [identity])
+
   const mentionMatch = /(?:^|\s)@([A-Za-z0-9-]*)$/.exec(draft)
   const mentionPrefix = mentionMatch?.[1]?.toLowerCase() ?? null
   const localParticipants = useMemo(() => participants(data.details), [data.details])
-
-  useEffect(() => {
-    setDraft(data.draft)
-  }, [data.draft, props.surface, worktree, number])
-
-  useEffect(() => {
-    draftRevision.current = Date.now() * 1000 + Math.floor(Math.random() * 1000)
-  }, [ownerVersion])
-
   useEffect(() => {
     if (mentionPrefix === null || !worktree) {
       setMentionOptions([])
@@ -189,38 +216,48 @@ export function Comments(props: CommentsProps) {
   }, [mentionPrefix, worktree, props.context, localParticipants])
 
   const setSharedDraft = (value: string) => {
-    setDraft(value)
-    if (targetParams === null || owner === null) return
-    draftRevision.current += 1
-    void props.context.call('quirky.reviews/detailSetCommentDraft', {
-      ...targetParams,
-      generation: owner.generation,
-      body: value,
-      draftVersion: draftRevision.current,
-    }).catch((error: unknown) => setActionError(errorText(error)))
+    draftField.edit(value)
+    setActionError(null)
   }
 
   const submit = async () => {
-    if (pendingRef.current || targetParams === null || draft.trim() === '') return
-    pendingRef.current = true
-    setPending(true)
+    if (pendingRef.current?.identity === identity && pendingRef.current.action.status() !== 'gone') return
+    if (targetParams === null || draft.trim() === '') return
+    const action = draftField.begin()
+    const token = { identity, action }
+    pendingRef.current = token
+    setPendingAction(token)
     setActionError(null)
     try {
+      await draftField.settled()
+      if (action.status() === 'gone') return
+      const body = action.take()
+      if (body.trim() === '') {
+        action.fail()
+        return
+      }
       await props.context.call('quirky.reviews/detailPostComment', {
         ...targetParams,
-        body: draft,
+        body,
         ...(replyTo === null ? {} : { replyToId: replyTo }),
       })
-      setDraft('')
+      if (action.status() === 'gone') return
+      action.succeed('', { send: true })
       setReplyTo(null)
       props.context.toast('Comment posted', 'The comment was confirmed by the hosting provider.')
     } catch (error) {
-      setActionError(errorText(error))
+      if (action.status() !== 'gone') {
+        action.fail()
+        setActionError(errorText(error))
+      }
     } finally {
-      pendingRef.current = false
-      setPending(false)
+      if (pendingRef.current === token) {
+        pendingRef.current = null
+        setPendingAction(null)
+      }
     }
   }
+
 
   const selectMention = (login: string) => {
     setSharedDraft(draft.replace(/@[A-Za-z0-9-]*$/, `@${login} `))
@@ -243,9 +280,9 @@ export function Comments(props: CommentsProps) {
   }
 
   const editComment = async (commentId: number) => {
-    if (pendingRef.current || targetParams === null || editDraft.trim() === '') return
-    pendingRef.current = true
-    setPending(true)
+    if (pending || targetParams === null || editDraft.trim() === '') return
+    pendingOtherRef.current = true
+    setPendingOther(true)
     setActionError(null)
     try {
       await props.context.call('quirky.reviews/detailEditComment', { ...targetParams, commentId, body: editDraft })
@@ -254,29 +291,29 @@ export function Comments(props: CommentsProps) {
     } catch (error) {
       setActionError(errorText(error))
     } finally {
-      pendingRef.current = false
-      setPending(false)
+      pendingOtherRef.current = false
+      setPendingOther(false)
     }
   }
 
   const deleteComment = async (commentId: number) => {
-    if (targetParams === null || pendingRef.current) return
+    if (targetParams === null || pending || pendingOtherRef.current) return
     const confirmed = await props.context.confirm({
       title: 'Delete comment?',
       body: `This will permanently remove comment #${commentId} from pull request #${number}.`,
       confirmLabel: 'Delete comment',
     })
     if (!confirmed) return
-    pendingRef.current = true
-    setPending(true)
+    pendingOtherRef.current = true
+    setPendingOther(true)
     setActionError(null)
     try {
       await props.context.call('quirky.reviews/detailDeleteComment', { ...targetParams, commentId, yes: true })
     } catch (error) {
       setActionError(errorText(error))
     } finally {
-      pendingRef.current = false
-      setPending(false)
+      pendingOtherRef.current = false
+      setPendingOther(false)
     }
   }
 
@@ -369,7 +406,7 @@ export function Comments(props: CommentsProps) {
       </div> : <div><Markdown source={comment.body} /></div>}
       <div className="ui-cluster">
         {comment.threadId ? <Button onClick={() => void resolveThread(comment.threadId as string, comment.isResolved !== true)}>{comment.isResolved === true ? 'Unresolve' : 'Resolve'}</Button> : null}
-        {comment.kind === 'review_comment' && numericId !== null ? <Button onClick={() => { setReplyTo(numericId); setDraft(data.draft) }}>Reply</Button> : null}
+        {comment.kind === 'review_comment' && numericId !== null ? <Button onClick={() => { setReplyTo(numericId) }}>Reply</Button> : null}
         {safeUrl && data.worktree ? <Button onClick={() => {
           const worktree = data.worktree
           if (worktree === null) return
@@ -433,7 +470,7 @@ export function Comments(props: CommentsProps) {
     />
 
     {data.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {data.error} Showing the last available comments where present.</p> : null}
-    {actionError ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p> : null}
+    {actionError ?? draftField.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError ?? draftField.error}</p> : null}
     {parsed?.partial === true ? <p role="status" className="ui-text-muted">Showing the first 100 comments per source{Array.isArray(parsed.partialFailures) && parsed.partialFailures.length > 0 ? `; ${parsed.partialFailures.join(' ')}` : '.'}</p> : null}
 
     {content}

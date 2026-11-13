@@ -473,7 +473,7 @@ test('D17 treats a snapshot without a tick as newer than every settle', async ()
 })
 
 test('D17 does not treat an unchanged unticked remote as a fresh snapshot', async () => {
-  const field = harness('old', {
+  const field: DraftFieldHarness<string> = harness('old', {
     resend: true,
     write: (value) => {
       field.writes.push(value)
@@ -629,7 +629,7 @@ test('D22 keeps an action edit held when its in-flight write fails afterward', a
 })
 
 test('D6 retries a failed write on an explicit fresh tick with the same remote value', async () => {
-  const field = harness('abc', {
+  const field: DraftFieldHarness<string> = harness('abc', {
     resend: true,
     write: (value) => {
       field.writes.push(value)
