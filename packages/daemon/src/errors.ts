@@ -21,3 +21,17 @@ export const unauthorized = () => new DaemonError(RpcErrorCode.Unauthorized, 'no
 /** The destructive call needs an answered confirm ask; `data` names the ask and what it confirms. */
 export const confirmationRequired = (data: { askId: string; action: string }) =>
   new DaemonError(RpcErrorCode.ConfirmationRequired, `confirmation required: ${data.action}`, data)
+
+export const timedOut = (method: string, timeoutMs: number) =>
+  new DaemonError(RpcErrorCode.Timeout, `${method} did not answer within ${timeoutMs} ms`, {
+    reason: 'timeout',
+    method,
+    timeoutMs
+  })
+
+export const notAnswering = (method: string, unanswered: number) =>
+  new DaemonError(
+    RpcErrorCode.Timeout,
+    `${method} is not answering: ${unanswered} calls are still running past their deadline`,
+    { reason: 'stalled', method, unanswered }
+  )

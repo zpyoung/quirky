@@ -109,7 +109,8 @@ const jobInfo = object(
     timeoutMs: { type: 'number' },
     state: { type: 'string', enum: ['idle', 'running'] },
     nextRunAt: { description: 'The next run time, or null while running.' },
-    lastRun: { description: 'The last run, or null.' }
+    lastRun: { description: 'The last run, or null.' },
+    stalled: object({ handlers: integer(0) }, ['handlers'])
   },
   ['id', 'plugin', 'intervalMs', 'timeoutMs', 'state', 'nextRunAt', 'lastRun']
 )

@@ -433,6 +433,8 @@ export type JobInfo = {
   /** Null while running. */
   nextRunAt: number | null
   lastRun: JobRun | null
+  /** Present while handlers that ignored their abort hold the job back; `handlers` counts those still running. */
+  stalled?: { handlers: number }
 }
 
 /**
@@ -452,6 +454,7 @@ export function isReservedLaunchEnv(name: string): boolean {
 export const MIN_JOB_INTERVAL_MS = 1000
 export const MAX_JOB_DURATION_MS = 86_400_000
 export const DEFAULT_JOB_TIMEOUT_MS = 300_000
+export const DEFAULT_READ_METHOD_TIMEOUT_MS = 300_000
 
 const DURATION_RE = /^(\d+)(ms|s|m|h|d)$/
 const DURATION_UNIT_MS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const
