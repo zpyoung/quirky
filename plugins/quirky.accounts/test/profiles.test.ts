@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { Database } from 'bun:sqlite'
 import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,6 +9,7 @@ import { AccountProfiles } from '../src/profiles'
 import type { LoginCompletion } from '../src/login'
 import type { AccountPrepareResult, ManagedProvider, PendingLogin } from '../src/types'
 import { AccountService } from '../src/service'
+import { migrations } from '../src/store'
 import type { AccountsHarness } from './support/index'
 import { spawnNativePty } from './support/native-pty'
 import { cleanupAll, defaultHome, startAccounts, waitForAsync } from './support/index'
@@ -58,6 +60,50 @@ function directFixture(runner: ProcessRunner) {
   }
 }
 
+function sqliteStore(): { database: Database; store: PluginStore } {
+  const database = new Database(':memory:')
+  const store: PluginStore = {
+    version: migrations.length,
+    run(sql, ...params) {
+      const result = database.query(sql).run(...params as never[])
+      return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
+    },
+    get: <T>(sql: string, ...params: unknown[]) => (database.query(sql).get(...params as never[]) ?? null) as T | null,
+    all: <T>(sql: string, ...params: unknown[]) => database.query(sql).all(...params as never[]) as T[],
+    exec: (sql) => database.exec(sql),
+    transaction: (work) => database.transaction(work)()
+  }
+  for (const migration of migrations) {
+    if (typeof migration === 'string') database.exec(migration)
+    else migration(store)
+  }
+  return { database, store }
+}
+
+function insertManagedAccount(
+  store: PluginStore,
+  provider: ManagedProvider,
+  id: string,
+  home: string,
+  label: string,
+  identityKey: string
+): void {
+  const now = Date.now()
+  store.run(
+    `INSERT INTO accounts (id, provider, label, email, organization, created_at, updated_at, last_authenticated_at, needs_sign_in, home, identity_key, auth_kind)
+     VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 0, ?, ?, 'oauth')`,
+    id,
+    provider,
+    label,
+    label,
+    now,
+    now,
+    now,
+    home,
+    identityKey
+  )
+}
+
 function prepareIdentityHome(path: string): void {
   mkdirSync(path, { recursive: true })
   writeFileSync(join(path, '.claude.json'), '{}')
@@ -77,6 +123,11 @@ function memoryStore(rows: Record<string, unknown>[] = []): PluginStore {
   }
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  const { promise, resolve } = Promise.withResolvers<T>()
+  return { promise, resolve }
+}
+
 function installSecurityScript(h: AccountsHarness, script: string): void {
   const path = join(h.fakeBin, 'security')
   writeFileSync(path, script, { mode: 0o700 })
@@ -94,13 +145,6 @@ async function securityLogCount(h: AccountsHarness, count: number): Promise<void
   })
 }
 
-async function expectPending(promise: Promise<unknown>): Promise<void> {
-  let settled = false
-  void promise.then(() => { settled = true }, () => { settled = true })
-  await Promise.resolve()
-  await Promise.resolve()
-  expect(settled).toBe(false)
-}
 
 afterEach(cleanupAll)
 
@@ -147,6 +191,10 @@ describe('async profile Keychain access', () => {
       { name: 'other failure', result: { exitCode: 7 }, authKind: 'unknown' },
       { name: 'spawn error', result: { exitCode: null, spawnError: { code: 'ENOENT', message: 'secret spawn output' } }, authKind: 'unknown' },
       { name: 'signal', result: { exitCode: null, signal: 'SIGTERM' }, authKind: 'unknown' },
+      { name: 'signal with exit 44', result: { exitCode: 44, signal: 'SIGTERM' }, authKind: 'unknown' },
+      { name: 'signal with not-found output', result: { exitCode: 7, signal: 'SIGTERM', stderr: 'The item could not be found.' }, authKind: 'unknown' },
+      { name: 'spawn error with exit 44', result: { exitCode: 44, spawnError: { code: 'ENOENT', message: 'secret spawn output' } }, authKind: 'unknown' },
+      { name: 'spawn error with not-found output', result: { exitCode: 7, spawnError: { code: 'ENOENT', message: 'secret spawn output' }, stderr: 'The item could not be found.' }, authKind: 'unknown' },
       { name: 'timeout despite missing message', result: { stopped: 'timeout', stderr: 'could not be found' }, authKind: 'unknown' },
       { name: 'abort', result: { stopped: 'aborted' }, authKind: 'unknown' },
       { name: 'overflow', result: { stopped: 'overflow', stderr: 'could not be found' }, authKind: 'unknown' },
@@ -242,6 +290,10 @@ describe('async profile Keychain access', () => {
       { result: { exitCode: 5, stdoutText: 'secret stdout', stderr: 'secret stderr' } },
       { result: { exitCode: null, spawnError: { code: 'EACCES', message: 'secret spawn message' } } },
       { result: { exitCode: null, signal: 'SIGKILL' } },
+      { result: { exitCode: 44, signal: 'SIGTERM' } },
+      { result: { exitCode: 7, signal: 'SIGTERM', stderr: 'The item could not be found.' } },
+      { result: { exitCode: 44, spawnError: { code: 'EACCES', message: 'secret spawn message' } } },
+      { result: { exitCode: 7, spawnError: { code: 'EACCES', message: 'secret spawn message' }, stderr: 'The item could not be found.' } },
       { result: { stopped: 'timeout', stderr: 'could not be found' } },
       { result: { stopped: 'aborted' } },
       { result: { stopped: 'overflow' } },
@@ -464,14 +516,12 @@ exit 44
     }
     const prepared = call<AccountPrepareResult>(h, 'quirky.accounts/prepareProviderEnv', params)
     await securityLogCount(h, 1)
-    await expectPending(prepared)
     writeFileSync(`${join(h.home, 'security.log')}.release`, 'released')
     expect((await prepared).account?.authKind).toBe('oauth')
 
     rmSync(`${join(h.home, 'security.log')}.release`, { force: true })
     const listed = call<{ systemDefault: { claude: { authKind: string } } }>(h, 'quirky.accounts/list')
     await securityLogCount(h, 2)
-    await expectPending(listed)
     writeFileSync(`${join(h.home, 'security.log')}.release`, 'released')
     expect((await listed).systemDefault.claude.authKind).toBe('oauth')
   })
@@ -517,9 +567,6 @@ exit 2
       customHome
     ))
     await securityLogCount(h, 2)
-    await expectPending(selecting)
-    await expectPending(removing)
-    await expectPending(preparing)
     expect(readFileSync(join(h.home, 'security.log'), 'utf8')).not.toContain('delete-generic-password')
     writeFileSync(`${join(h.home, 'security.log')}.release`, 'released')
     const [, , prepared] = await Promise.all([selecting, removing, preparing])
@@ -580,8 +627,6 @@ exit 2
     let removing: Promise<{ succeeded: true } | { succeeded: false; error: unknown }> | null = null
     try {
       await securityLogCount(h, 2)
-      await expectPending(preparing)
-      await expectPending(providerPreparing)
       removing = call(h, 'quirky.accounts/remove', { provider: 'claude', accountId: id, confirmation: askId }).then(
         () => ({ succeeded: true as const }),
         (error: unknown) => ({ succeeded: false as const, error })
@@ -602,6 +647,145 @@ exit 2
     expect(await call<{ provider: ManagedProvider | null; home: string | null }>(h, 'quirky.accounts/sessionHome', { session: sessionId })).toEqual({ provider: null, home: null })
   })
 
+
+  test('rechecks the selected managed Codex account after resume preparation before saving a session', async () => {
+    const { runner } = recordingRunner()
+    const fixture = directFixture(runner)
+    const { database, store } = sqliteStore()
+    const historyStarted = deferred<void>()
+    const historyGate = deferred<string>()
+    const id = randomUUID()
+    let service: AccountService | null = null
+    let preparing: Promise<{ result: AccountPrepareResult } | { error: unknown }> | null = null
+    try {
+      const home = await fixture.profiles.create('codex', id)
+      writeFileSync(join(home, 'auth.json'), '{"tokens":{"access_token":"fixture-codex-token","account_id":"resume-account"}}')
+      insertManagedAccount(store, 'codex', id, home, 'resume@example.test', 'codex:resume-account')
+      store.run('INSERT INTO active_accounts (provider, account_id) VALUES (?, ?)', 'codex', id)
+      service = new AccountService({
+        dataDir: fixture.dataDir,
+        process: runner,
+        call: async () => [],
+        emit: () => {},
+        log: () => {},
+        error: (kind: string, message: string) => Object.assign(new Error(message), { kind })
+      } as unknown as PluginContext, store)
+      service.start()
+      const historyBoundary = service as unknown as {
+        bridgeCodexResume(...args: unknown[]): Promise<string>
+      }
+      historyBoundary.bridgeCodexResume = async () => {
+        historyStarted.resolve(undefined)
+        return historyGate.promise
+      }
+
+      const sessionId = 'resume-after-managed-removal'
+      preparing = service.prepare({
+        agent: 'codex',
+        sessionId,
+        worktreeId: 'test-worktree',
+        cwd: fixture.root,
+        homeOverrides: {
+          claude: { value: null, source: 'inherited' },
+          codex: { value: null, source: 'inherited' }
+        },
+        resume: {
+          sourceSessionId: 'missing-source-session',
+          providerSession: { id: 'codex-conversation', transcriptPath: null }
+        }
+      }).then(
+        (result) => ({ result }),
+        (error: unknown) => ({ error })
+      )
+
+      await historyStarted.promise
+      await service.remove({ provider: 'codex', accountId: id })
+      expect(existsSync(home)).toBe(false)
+      expect(store.get<{ id: string }>('SELECT id FROM accounts WHERE id = ?', id)).toBeNull()
+
+      historyGate.resolve(join(fixture.root, 'prepared-rollout.jsonl'))
+      const prepared = await preparing
+      expect('error' in prepared).toBe(true)
+      if ('error' in prepared) {
+        expect(prepared.error).toBeInstanceOf(Error)
+        expect(prepared.error).toMatchObject({ kind: 'conflict' })
+        expect((prepared.error as Error).message).toContain('The selected codex account changed')
+      }
+      expect(store.get('SELECT session_id FROM account_sessions WHERE session_id = ?', sessionId)).toBeNull()
+      expect(existsSync(home)).toBe(false)
+    } finally {
+      historyGate.resolve(join(fixture.root, 'released-rollout.jsonl'))
+      if (preparing) await preparing
+      if (service) await service.shutdown()
+      database.close()
+      fixture.dispose()
+    }
+  })
+
+  test('select waits for managed identity and refuses a no-auth account without changing the prior selection', async () => {
+    const identityReadStarted = deferred<void>()
+    const identityReadGate = deferred<RunResult>()
+    const previousId = randomUUID()
+    const targetId = randomUUID()
+    let targetHomeService = ''
+    const { runner } = recordingRunner(async (argv) => {
+      if (argv[1] === 'find-generic-password' && targetHomeService !== '' && argv.includes(targetHomeService)) {
+        identityReadStarted.resolve(undefined)
+        return identityReadGate.promise
+      }
+      return runResult({ exitCode: 44 })
+    })
+    const fixture = directFixture(runner)
+    const { database, store } = sqliteStore()
+    const previousEmail = 'previous-selection@example.test'
+    const targetEmail = 'no-auth-target@example.test'
+    let service: AccountService | null = null
+    let selecting: Promise<{ selected: true } | { selected: false; error: unknown }> | null = null
+    try {
+      const previousHome = await fixture.profiles.create('claude', previousId)
+      const targetHome = await fixture.profiles.create('claude', targetId)
+      writeFileSync(join(previousHome, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: previousEmail } }))
+      targetHomeService = `Claude Code-credentials-${createHash('sha256').update(targetHome.normalize('NFC')).digest('hex').slice(0, 8)}`
+      writeFileSync(join(previousHome, '.credentials.json'), '{"claudeAiOauth":{"accessToken":"previous-token"}}')
+      writeFileSync(join(targetHome, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: targetEmail } }))
+      insertManagedAccount(store, 'claude', previousId, previousHome, previousEmail, `claude:${previousEmail}:`)
+      insertManagedAccount(store, 'claude', targetId, targetHome, targetEmail, `claude:${targetEmail}:`)
+      store.run('INSERT INTO active_accounts (provider, account_id) VALUES (?, ?)', 'claude', previousId)
+      service = new AccountService({
+        dataDir: fixture.dataDir,
+        process: runner,
+        call: async () => [],
+        emit: () => {},
+        log: () => {},
+        error: (kind: string, message: string) => Object.assign(new Error(message), { kind })
+      } as unknown as PluginContext, store)
+      service.start()
+
+      selecting = service.select({ provider: 'claude', accountId: targetId }).then(
+        () => ({ selected: true as const }),
+        (error: unknown) => ({ selected: false as const, error })
+      )
+      await identityReadStarted.promise
+      expect(store.get<{ account_id: string }>('SELECT account_id FROM active_accounts WHERE provider = ?', 'claude')?.account_id).toBe(previousId)
+
+      identityReadGate.resolve(runResult({ exitCode: 44 }))
+      const outcome = await selecting
+      expect(outcome.selected).toBe(false)
+      if (!outcome.selected) {
+        expect(outcome.error).toBeInstanceOf(Error)
+        expect(outcome.error).toMatchObject({ kind: 'conflict' })
+        expect((outcome.error as Error).message).toContain('Sign in to this claude account again before selecting it.')
+      }
+      expect(store.get<{ account_id: string }>('SELECT account_id FROM active_accounts WHERE provider = ?', 'claude')?.account_id).toBe(previousId)
+      expect(store.get<{ needs_sign_in: number }>('SELECT needs_sign_in FROM accounts WHERE id = ?', targetId)?.needs_sign_in).toBe(1)
+    } finally {
+      identityReadGate.resolve(runResult({ exitCode: 44 }))
+      if (selecting) await selecting
+      if (service) await service.shutdown()
+      database.close()
+      fixture.dispose()
+    }
+  })
 
   test('keeps account and profile intact on Keychain deletion failure without leaking output', async () => {
     const h = await startAccounts()

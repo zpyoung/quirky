@@ -46,6 +46,7 @@ export type LoginTask = {
   pollTimer: ReturnType<typeof setInterval> | null
   linkTimeout: ReturnType<typeof setTimeout> | null
 }
+
 const MAX_LOGIN_TASKS = 32
 const MAX_OUTPUT_CHARS = 8192
 const LOGIN_TIMEOUT_MS: Record<ManagedProvider, number> = { claude: 600_000, codex: 180_000 }
@@ -333,6 +334,7 @@ export class AccountLoginManager {
     task.pollTimer = null
     task.linkTimeout = null
   }
+
   private removeBrowserCapture(task: LoginTask): void {
     for (const path of [task.browserScript, task.browserUrlFile]) {
       if (path !== null) rmSync(path, { force: true })
@@ -380,7 +382,7 @@ function trustedClaudeUrl(text: string): string | null {
     const url = new URL(text)
     if (
       url.protocol !== 'https:' ||
-      !['claude.ai', 'console.anthropic.com', 'platform.claude.com'].includes(url.hostname) ||
+      !['claude.ai', 'claude.com', 'console.anthropic.com', 'platform.claude.com'].includes(url.hostname) ||
       url.pathname !== '/oauth/authorize'
     ) return null
     const redirectText = url.searchParams.get('redirect_uri')

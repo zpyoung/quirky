@@ -188,7 +188,9 @@ type CodexTestProcess = {
   writes: string[]
   stopCalls: Array<{ graceMs?: number }>
   closeInputCalls: number
+  bufferedStdoutBytes: number
   enqueue(bytes: Uint8Array): void
+  deliverBufferedStdout(): void
   error(error: Error): void
   complete(exit?: Partial<SpawnExit>): SpawnExit
   exitWithoutClosing(exit?: Partial<SpawnExit>): SpawnExit
@@ -198,6 +200,7 @@ function codexTestProcess(options: {
   onWrite?: (line: string) => void
   writeResult?: Promise<boolean>
   closeInputResult?: Promise<void>
+  holdStdout?: boolean
 } = {}): CodexTestProcess {
   let stdoutController!: ReadableStreamDefaultController<Uint8Array>
   let stdoutEnded = false
@@ -205,6 +208,16 @@ function codexTestProcess(options: {
   const { promise: exited, resolve: resolveExited } = Promise.withResolvers<SpawnExit>()
   const writes: string[] = []
   const stopCalls: Array<{ graceMs?: number }> = []
+  const bufferedStdout: Uint8Array[] = []
+  const enqueue = (bytes: Uint8Array): void => {
+    if (options.holdStdout) bufferedStdout.push(bytes)
+    else stdoutController.enqueue(bytes)
+  }
+  const deliverBufferedStdout = (): void => {
+    for (const bytes of bufferedStdout.splice(0)) {
+      if (!stdoutEnded) stdoutController.enqueue(bytes)
+    }
+  }
   let closeInputCalls = 0
   const stdout = new ReadableStream<Uint8Array>({
     start(controller) { stdoutController = controller }
@@ -247,7 +260,9 @@ function codexTestProcess(options: {
     writes,
     stopCalls,
     get closeInputCalls() { return closeInputCalls },
-    enqueue: (bytes) => stdoutController.enqueue(bytes),
+    enqueue,
+    get bufferedStdoutBytes() { return bufferedStdout.reduce((total, bytes) => total + bytes.byteLength, 0) },
+    deliverBufferedStdout,
     error: (error) => {
       stdoutEnded = true
       stdoutController.error(error)
@@ -436,15 +451,20 @@ describe('Codex App Server usage', () => {
     }
   })
 
-  test('processes quota buffered before ordinary exit handling', async () => {
+  test('processes quota buffered when a successful exit arrives before stdout is drained', async () => {
     const fixture = codexFixture()
-    const process = codexTestProcess()
+    const process = codexTestProcess({ holdStdout: true })
     const { runtime, calls } = codexRuntime(process)
     try {
       const resultPromise = fetchCodexUsage(runtime, fixture.target)
       await waitUntil(() => calls.length === 1)
+      const quota = rateLimitsResponse()
+      process.enqueue(quota)
+      expect(process.bufferedStdoutBytes).toBe(quota.byteLength)
       process.exitWithoutClosing({ exitCode: 0, signal: null })
-      process.enqueue(rateLimitsResponse())
+      await yieldToEventLoop()
+      expect(process.bufferedStdoutBytes).toBe(quota.byteLength)
+      process.deliverBufferedStdout()
       process.complete()
 
       const snapshot = await resultPromise

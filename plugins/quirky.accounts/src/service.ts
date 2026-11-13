@@ -638,6 +638,7 @@ export class AccountService {
       ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
     }
   }
+
   private requireSelectedManagedAccount(provider: ManagedProvider, accountId: string, preparedHome: string): AccountRecord {
     const account = getAccount(this.store, accountId)
     if (getActiveAccountId(this.store, provider) !== accountId || !account || account.provider !== provider) {
@@ -654,7 +655,6 @@ export class AccountService {
     }
     return account
   }
-
 
   async restart(params: Record<string, unknown>): Promise<AccountState> {
     return this.serialize(async () => {

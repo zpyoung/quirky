@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises'
 import { join, dirname } from 'node:path'
-import type { PluginContext } from '@quirky/protocol'
+import type { PluginContext, PluginStore } from '@quirky/protocol'
 import { createProcessRunner, type OwnedProcessRunner, type ProcessSpawner, type SpawnExit, type SpawnOptions, type SpawnedProcess, type StopOptions } from '../../../packages/process/src/api'
+import { AccountService } from '../src/service'
 import { ProviderProcessOwner } from '../src/usage/process'
 import { UsageService, type UsageTarget } from '../src/usage'
 import './usage/providers.test'
@@ -23,6 +25,7 @@ type SpawnCompletion = (exit?: Partial<SpawnExit>, closeOutput?: boolean) => Spa
 type ControlledProcess = {
   handle: SpawnedProcess
   stopCalls: StopOptions[]
+  stopSettled: Promise<void>
   enqueueStdout(bytes: Uint8Array): void
   enqueueStderr(bytes: Uint8Array): void
   errorStdout(error: Error): void
@@ -41,6 +44,7 @@ function controlledProcess(options: {
   let stderrEnded = false
   let exit: SpawnExit | undefined
   const { promise: exited, resolve: resolveExited } = Promise.withResolvers<SpawnExit>()
+  const { promise: stopSettled, resolve: resolveStopSettled } = Promise.withResolvers<void>()
   const stopCalls: StopOptions[] = []
   const stdout = new ReadableStream<Uint8Array>({
     start(controller) { stdoutController = controller }
@@ -78,12 +82,15 @@ function controlledProcess(options: {
       stopCalls.push(stopOptions ?? {})
       if (options.onStop) options.onStop(complete, stopOptions)
       else complete({ exitCode: null, signal: 'SIGTERM', stopped: 'stop' }, true)
-      return exited
+      const result = await exited
+      resolveStopSettled()
+      return result
     }
   }
   return {
     handle,
     stopCalls,
+    stopSettled,
     enqueueStdout: (bytes) => stdoutController.enqueue(bytes),
     enqueueStderr: (bytes) => stderrController.enqueue(bytes),
     errorStdout: (error) => {
@@ -99,12 +106,13 @@ function controlledProcess(options: {
   }
 }
 
-function processSpawner(handle: SpawnedProcess): { spawner: ProcessSpawner; calls: Array<{ argv: readonly string[]; options: SpawnOptions }> } {
+function processSpawner(handle: SpawnedProcess, onSpawn?: () => void): { spawner: ProcessSpawner; calls: Array<{ argv: readonly string[]; options: SpawnOptions }> } {
   const calls: Array<{ argv: readonly string[]; options: SpawnOptions }> = []
   return {
     spawner: {
       spawn(argv, options) {
         calls.push({ argv: [...argv], options })
+        onSpawn?.()
         return handle
       }
     },
@@ -153,20 +161,39 @@ function fixtureRoot(): string {
   return root
 }
 
-function createService(root: string, targets: () => Promise<UsageTarget[]>, settings: Record<string, unknown> = {}): UsageService {
-  const runner = createProcessRunner({ owner: 'quirky.accounts' })
-  runners.push(runner)
-  const context = {
+function usageContext(root: string, process: unknown, settings: Record<string, unknown> = {}): PluginContext {
+  return {
     dataDir: join(root, 'quirky-home', 'plugin-data', 'quirky.accounts'),
     home: join(root, 'quirky-home'),
-    process: runner,
+    process,
+    call: async () => [],
     emit: () => true,
     log: () => undefined,
     getSetting: (name: string) => settings[name]
   } as unknown as PluginContext
-  const service = new UsageService(context, targets)
+}
+
+function createUsageService(root: string, targets: () => Promise<UsageTarget[]>, process: unknown, settings: Record<string, unknown> = {}): UsageService {
+  const service = new UsageService(usageContext(root, process, settings), targets)
   services.push(service)
   return service
+}
+
+function emptyStore(): PluginStore {
+  return {
+    version: 1,
+    run: () => ({ changes: 0, lastInsertRowid: 0 }),
+    get: () => null,
+    all: () => [],
+    exec: () => {},
+    transaction: (work: () => unknown) => work()
+  } as unknown as PluginStore
+}
+
+function createService(root: string, targets: () => Promise<UsageTarget[]>, settings: Record<string, unknown> = {}): UsageService {
+  const runner = createProcessRunner({ owner: 'quirky.accounts' })
+  runners.push(runner)
+  return createUsageService(root, targets, runner, settings)
 }
 
 function accountTargets(root: string, accountId = 'claude-a', revision = 1): UsageTarget[] {
@@ -251,7 +278,78 @@ afterEach(async () => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
+
 describe('UsageService', () => {
+
+  test('waits for provider process settlement before UsageService.shutdown resolves', async () => {
+    const root = fixtureRoot()
+    const process = controlledProcess({
+      closeOutputOnExit: false,
+      onStop: (complete) => { complete({ exitCode: 0 }, false) }
+    })
+    process.enqueueStdout(new TextEncoder().encode('1.2.0\n'))
+    const spawned = Promise.withResolvers<void>()
+    const { spawner } = processSpawner(process.handle, () => spawned.resolve())
+    const service = createUsageService(root, async () => accountTargets(root), spawner)
+    const refreshPromise = service.refresh({ provider: 'antigravity', force: true })
+    let shutdownPromise: Promise<void> | undefined
+    try {
+      await spawned.promise
+      shutdownPromise = service.shutdown()
+      await process.stopSettled
+      const shutdownResolvedBeforeReaders = await Promise.race([
+        shutdownPromise.then(() => true),
+        yieldToEventLoop().then(() => false)
+      ])
+      expect(shutdownResolvedBeforeReaders).toBe(false)
+      expect(process.stopCalls).toEqual([{ graceMs: 1_000 }])
+      process.closeOutput()
+      await shutdownPromise
+      await refreshPromise
+    } finally {
+      process.closeOutput()
+      shutdownPromise ??= service.shutdown()
+      await shutdownPromise
+      await refreshPromise
+    }
+  })
+
+  test('AccountService shutdown waits for attached UsageService provider work', async () => {
+    const root = fixtureRoot()
+    const process = controlledProcess({
+      closeOutputOnExit: false,
+      onStop: (complete) => { complete({ exitCode: 0 }, false) }
+    })
+    process.enqueueStdout(new TextEncoder().encode('1.2.0\n'))
+    const spawned = Promise.withResolvers<void>()
+    const { spawner } = processSpawner(process.handle, () => spawned.resolve())
+    const context = usageContext(root, spawner)
+    const usage = new UsageService(context, async () => accountTargets(root))
+    services.push(usage)
+    const accounts = new AccountService(context, emptyStore())
+    accounts.attachUsageService(usage)
+    const refreshPromise = usage.refresh({ provider: 'antigravity', force: true })
+    let shutdownPromise: Promise<void> | undefined
+    try {
+      await spawned.promise
+      shutdownPromise = accounts.shutdown()
+      await process.stopSettled
+      const shutdownResolvedBeforeReaders = await Promise.race([
+        shutdownPromise.then(() => true),
+        yieldToEventLoop().then(() => false)
+      ])
+      expect(shutdownResolvedBeforeReaders).toBe(false)
+      expect(process.stopCalls).toEqual([{ graceMs: 1_000 }])
+      process.closeOutput()
+      await shutdownPromise
+      await refreshPromise
+    } finally {
+      process.closeOutput()
+      shutdownPromise ??= accounts.shutdown()
+      await shutdownPromise
+      await refreshPromise
+    }
+  })
   test('coalesces refreshes for the same provider and account', async () => {
     const root = fixtureRoot()
     const target = accountTargets(root)
@@ -659,7 +757,35 @@ describe('ProviderProcessOwner', () => {
     expect(owner.spawn('codex', ['app-server'], options)).toBe(process.handle)
     expect(calls).toEqual([{ argv: ['codex', 'app-server'], options }])
     await owner.shutdown()
-    expect(process.stopCalls).toEqual([{ graceMs: 1_000 }])
+  })
+  test('waits for run readers after stop and exit have settled during shutdown', async () => {
+    const process = controlledProcess({ closeOutputOnExit: false, onStop: () => {} })
+    const { spawner, calls } = processSpawner(process.handle)
+    const owner = new ProviderProcessOwner(spawner)
+    const runPromise = owner.run('probe', [], { timeoutMs: 1_000 })
+    process.complete({ exitCode: 0 }, false)
+    const shutdownPromise = owner.shutdown()
+    try {
+      await process.stopSettled
+      const shutdownResolvedBeforeReaders = await Promise.race([
+        shutdownPromise.then(() => true),
+        yieldToEventLoop().then(() => false)
+      ])
+      expect(process.stopCalls).toEqual([{ graceMs: 1_000 }])
+      expect(shutdownResolvedBeforeReaders).toBe(false)
+      process.closeOutput()
+      expect(await runPromise).toMatchObject({ code: null, stdout: '', stderr: '' })
+      await shutdownPromise
+      expect(await owner.run('later', [], { timeoutMs: 1_000 })).toEqual({
+        code: null, signal: null, stdout: '', stderr: '', timedOut: false, outputLimitExceeded: false
+      })
+      expect(() => owner.spawn('later', [], { timeoutMs: null })).toThrow()
+      expect(calls).toHaveLength(1)
+    } finally {
+      process.closeOutput()
+      await runPromise
+      await shutdownPromise
+    }
   })
   test('forwards run options with the fixed process policy', async () => {
     const process = controlledProcess()
@@ -776,12 +902,12 @@ describe('ProviderProcessOwner', () => {
     await owner.shutdown()
   })
 
-  test('maps timeout and caller abort without spawning calls already aborted', async () => {
+  test('maps timeout to a null code even when the leader exits zero, and does not spawn after abort', async () => {
     const timedOut = controlledProcess()
     const timedOutSpawner = processSpawner(timedOut.handle)
     const timeoutOwner = new ProviderProcessOwner(timedOutSpawner.spawner)
     const timeoutPromise = timeoutOwner.run('probe', [], { timeoutMs: 1_000 })
-    timedOut.complete({ exitCode: null, signal: 'SIGTERM', stopped: 'timeout' })
+    timedOut.complete({ exitCode: 0, signal: 'SIGTERM', stopped: 'timeout' })
     expect(await timeoutPromise).toMatchObject({ code: null, signal: 'SIGTERM', timedOut: true })
     await timeoutOwner.shutdown()
 

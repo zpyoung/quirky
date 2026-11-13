@@ -254,6 +254,58 @@ describe('AccountLoginManager process spawning', () => {
     }
   })
 
+  test('accepts all four trusted Claude OAuth hosts and rejects malicious hosts', async () => {
+    const fixture = createLoginFixture('claude')
+    const processes = createLoginSpawner()
+    const login = createLoginManager(fixture, processes.spawner)
+    const trustedHosts = ['claude.ai', 'claude.com', 'console.anthropic.com', 'platform.claude.com']
+    const maliciousHosts = [
+      'evil.example',
+      'claude.ai.evil.example',
+      'claude.com.evil.example',
+      'console.anthropic.com.evil.example',
+      'platform.claude.com.evil.example'
+    ]
+    try {
+      for (const host of [...trustedHosts, ...maliciousHosts]) {
+        const url = `https://${host}/oauth/authorize?redirect_uri=${encodeURIComponent('http://localhost:54545/callback')}&state=fixture`
+        const pending = login.manager.begin(fixture.request)
+        const process = processes.calls[processes.calls.length - 1]!
+        process.push(`Open this URL: ${url}\n`)
+        process.exit(1)
+        const final = await login.waitForChange((value) => value.id === pending.id && value.status === 'error')
+        expect(final.url).toBe(trustedHosts.includes(host) ? new URL(url).toString() : null)
+      }
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  test('does not complete Claude login when stdout rejects after a successful exit', async () => {
+    const fixture = createLoginFixture('claude')
+    const processes = createLoginSpawner()
+    const login = createLoginManager(fixture, processes.spawner)
+    try {
+      writeFileSync(join(fixture.home, '.credentials.json'), JSON.stringify({
+        claudeAiOauth: { accessToken: 'fixture-oauth-token' }
+      }))
+      const pending = login.manager.begin(fixture.request)
+      const process = processes.calls[0]!
+      process.exitWithoutClosingStdout(0)
+      await process.handle.exited
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      const finishedBeforeStreamFailure = login.finishedCount()
+      process.failStdout(new Error('fixture stdout failure'))
+      const final = await login.waitForChange((value) => value.id === pending.id && value.status !== 'pending')
+      const completion = await login.completion
+      expect(finishedBeforeStreamFailure).toBe(0)
+      expect(completion.status).toBe('error')
+      expect(final.status).toBe('error')
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
   test('extracts only trusted OAuth URLs from streamed provider output across chunks', async () => {
     const claude = createLoginFixture('claude')
     const claudeProcesses = createLoginSpawner()
@@ -451,6 +503,7 @@ type FakeLoginProcess = {
   stopCalls: StopOptions[]
   push(chunk: string | Uint8Array): void
   failStdout(error: unknown): void
+  exitWithoutClosingStdout(code: number, extra?: Partial<SpawnExit>): void
   exit(code: number | null, extra?: Partial<SpawnExit>): void
 }
 
@@ -467,10 +520,10 @@ function createLoginSpawner(): {
       let stdoutEnded = false
       let settled = false
       let process!: FakeLoginProcess
-      const settle = (result: SpawnExit): void => {
+      const settle = (result: SpawnExit, closeStdout = true): void => {
         if (settled) return
         settled = true
-        if (!stdoutEnded) {
+        if (closeStdout && !stdoutEnded) {
           stdoutEnded = true
           stdoutController.close()
         }
@@ -514,6 +567,9 @@ function createLoginSpawner(): {
           if (stdoutEnded) return
           stdoutEnded = true
           stdoutController.error(error)
+        },
+        exitWithoutClosingStdout(code, extra = {}) {
+          settle({ exitCode: code, signal: null, durationMs: 0, ...extra }, false)
         },
         exit(code, extra = {}) {
           settle({ exitCode: code, signal: null, durationMs: 0, ...extra })
