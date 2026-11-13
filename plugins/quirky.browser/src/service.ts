@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { validateValue, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
-import { BrowserActions } from './runtime/actions'
+import { BrowserActions, spansNavigation } from './runtime/actions'
 import { BROWSER_METHODS, READ_ONLY_METHODS, type BrowserMethod } from './runtime/catalog'
 import { BrowserRuntime } from './runtime/driver'
 import { asPluginError, BrowserFault, fault } from './runtime/errors'
@@ -483,7 +483,9 @@ export class BrowserService {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }
-    return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution))
+    return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution), {
+      spansNavigation: spansNavigation(method, params)
+    })
   }
 
 
@@ -501,7 +503,9 @@ export class BrowserService {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }
-    const result = await this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution))
+    const result = await this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution), {
+      spansNavigation: spansNavigation(plan.method, plan.params)
+    })
     return { command: plan.command, result }
   }
 
