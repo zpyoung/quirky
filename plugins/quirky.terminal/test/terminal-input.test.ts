@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { PluginCaller, PluginContext } from '@quirky/protocol'
+import { checkSchemaDeclaration, type PluginCaller, type PluginContext } from '@quirky/protocol'
 import { InputTracker } from '../src/input-tracker'
 import { TerminalService } from '../src/terminal'
 
@@ -111,11 +111,19 @@ describe('TerminalService guarded input', () => {
     expect(rig.inputs.has('s')).toBe(true)
 
     const manifest = JSON.parse(await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).text()) as {
-      contributes: { method: { id: string; params?: { properties?: Record<string, unknown>; required?: string[] } }[] }
+      contributes: {
+        method: {
+          id: string
+          params?: { properties?: Record<string, unknown>; required?: string[] }
+        }[]
+      }
     }
-    const writeMethod = manifest.contributes.method.find((method) => method.id === 'write')
-    expect(writeMethod?.params?.properties?.expectedIncarnation).toMatchObject({ type: 'string', minLength: 1 })
-    expect(writeMethod?.params?.required).toEqual(['session', 'data'])
+    const writeMethod = manifest.contributes.method.find((method) => method.id === 'write')!
+    const userInputMethod = manifest.contributes.method.find((method) => method.id === 'userInput')!
+    expect(checkSchemaDeclaration(writeMethod.params, 'write.params', { object: true })).toEqual([])
+    expect(checkSchemaDeclaration(userInputMethod.params, 'userInput.params', { object: true })).toEqual([])
+    expect(writeMethod.params?.properties?.expectedIncarnation).toMatchObject({ type: 'string' })
+    expect(writeMethod.params?.required).toEqual(['session', 'data'])
   })
 
   test('keeps omitted-incarnation writes legacy and standalone userInput reports without writing', async () => {
