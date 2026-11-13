@@ -181,7 +181,6 @@ function assertUniqueJsonKeys(text: string): void {
   } catch {
     invalidCoverage('malformed JSON')
   }
-  if (source.parseDiagnostics.length > 0) invalidCoverage('malformed JSON')
 
   const visit = (node: ts.Node): void => {
     if (ts.isObjectLiteralExpression(node)) {

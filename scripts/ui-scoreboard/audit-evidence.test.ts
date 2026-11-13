@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import * as ts from 'typescript'
-import type { Candidate, Evidence, PluginInventory, Ref, SourceFile } from './contracts'
+import type { Candidate, CoverageFile, Evidence, PluginInventory, Ref, SourceFile } from './contracts'
 import { parseCoverage, resolveRef, resolveTarget, resolveVia, selectCandidate } from './audit-evidence'
 
 const file = 'plugins/acme.app/src/ui.tsx'
@@ -43,7 +43,7 @@ const coverage = {
     render: { component: 'EmptyState', element: { file, quote: '<EmptyState />' }, import: { file, quote: "import { EmptyState } from '@quirky/ui'" } } }],
   notState: [{ site: { file, quote: 'const x = 1' }, reason: 'Not a user state' }],
   actions: [{ site: { file, quote: 'onClick' }, route: { invoke: { file, quote: 'context.call(API)' }, target: 'acme.app/save' } }]
-}
+} satisfies CoverageFile
 
 describe('coverage file parsing', () => {
   test('accepts a complete coverage file with each supported entry shape', () => {
