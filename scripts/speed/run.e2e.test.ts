@@ -26,15 +26,36 @@ test.skipIf(executable === null)('runs the unqualified real-daemon smoke with te
       status: string
       qualified: boolean
       cleanup: string
-      profile: { worktrees: number; terminals: number }
+      profile: { workloadVersion: number; compositor: string; worktrees: number; terminals: number }
+      evidence: { diagnostics: string[] }
       metrics: Record<string, { samplesMs: number[] }>
     }
     expect(report).toMatchObject({ status: 'complete', qualified: false, cleanup: 'complete' })
-    expect(report.profile).toMatchObject({ worktrees: 10, terminals: 20 })
+    expect(report.profile).toMatchObject({ workloadVersion: 2, compositor: 'software', worktrees: 10, terminals: 20 })
+    expect(report.evidence.diagnostics).toContain('diagnostics/frame-pacing.json')
+    const pacing = JSON.parse(readFileSync(join(out, 'diagnostics/frame-pacing.json'), 'utf8'))
+    expect(pacing).toEqual({
+      version: 1, frames: 60, gpuCompositing: 'disabled_software',
+      medianIntervalMs: expect.any(Number), p90IntervalMs: expect.any(Number), maxIntervalMs: expect.any(Number)
+    })
+    for (const interval of [pacing.medianIntervalMs, pacing.p90IntervalMs, pacing.maxIntervalMs]) {
+      expect(Number.isFinite(interval)).toBe(true)
+      expect(interval).toBeGreaterThan(0)
+    }
     expect(Object.values(report.metrics).map((metric) => metric.samplesMs.length)).toEqual([1, 1, 1, 1, 1])
 
     const attempts = readFileSync(join(out, 'samples.jsonl'), 'utf8').trim().split('\n')
-      .filter(Boolean).map((line) => JSON.parse(line) as { metric?: string; phase?: string; fixture?: { worktrees?: number; sessions?: string[] }; ownedPids?: number[] })
+      .filter(Boolean).map((line) => JSON.parse(line) as { metric?: string; phase?: string; phases?: Record<string, number>; fixture?: { worktrees?: number; sessions?: string[] }; ownedPids?: number[] })
+    const echoes = attempts.filter((attempt) => (attempt.metric === 'echo' || attempt.metric === 'floodEcho') && attempt.phase === 'sample')
+    expect(echoes).toHaveLength(2)
+    for (const echo of echoes) {
+      const phases = echo.phases!
+      expect(Number.isFinite(phases.eventToDomMs)).toBe(true)
+      expect(Number.isFinite(phases.domToPaintMs)).toBe(true)
+      expect(phases.eventToDomMs).toBeGreaterThanOrEqual(0)
+      expect(phases.domToPaintMs).toBeGreaterThanOrEqual(0)
+      expect(phases.eventToDomMs! + phases.domToPaintMs!).toBeCloseTo(phases.browserEventToPaintMs!, 3)
+    }
     const startup = attempts.filter((attempt) => attempt.metric === 'startup' && attempt.phase === 'sample')
     expect(attempts.filter((attempt) => attempt.metric === 'startup' && attempt.phase === 'warmup')).toHaveLength(0)
     expect(startup).toHaveLength(1)
