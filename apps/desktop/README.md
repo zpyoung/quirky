@@ -276,6 +276,8 @@ arbitrary data flow or dependency-injected CSS. Semantic hue/tile templates and 
 imported literal `uiTokens` catalog paths are supported. Escaped, incomplete and unsupported
 dynamic custom-property names fail rather than being guessed. Tests, fixtures, build output,
 comments and the legacy compatibility definition sheet are excluded from consumption checks.
+A dynamic custom-property prefix starts at an identifier boundary. BEM modifier class names
+such as `ui-button--${variant}` are not custom-property evidence.
 
 `scripts/ui-scoreboard-ratchet.json` initially enrolls nothing. A repair worker enrolls newly
 passing plugin/static-check pairs in the same PR; reviewers reject deleting enrollment to hide

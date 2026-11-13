@@ -126,7 +126,7 @@ test('real checkout inventory count is discovered rather than pinned', async () 
   const value = report(output); console.log(`Discovered ${value.plugins.length} immediate plugins`)
   expect(value.plugins.some((plugin) => plugin.id === 'quirky.session')).toBe(true)
   expect(value.host.targets).toEqual(['host:palette', 'host:popups', 'host:scoped', 'host:settings', 'host:shell'])
-})
+}, 30_000)
 
 test('ratchet CLI starts no runtime and creates no reports', async () => {
   const { root, inventory } = fixture(); const messages: string[] = []

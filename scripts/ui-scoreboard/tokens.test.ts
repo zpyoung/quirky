@@ -268,10 +268,20 @@ describe('compatibility token scanning', () => {
   })
 
   test('rejects visible dynamic custom-property prefixes but accepts numeric interpolation', () => {
-    expect(scanTokens(source('plugins/acme.app/src/dynamic-property.ts', 'const property = `--${prefix}`'))).toContainEqual(
-      expect.objectContaining({ code: 'unresolved-style-token' })
-    )
+    for (const content of ['const property = `--${prefix}`', 'const property = ` --${x}`', 'const style = `{--${x}: 1}`']) {
+      expect(scanTokens(source('plugins/acme.app/src/dynamic-property.ts', content))).toContainEqual(
+        expect.objectContaining({ code: 'unresolved-style-token' })
+      )
+    }
     expect(scanTokens(source('plugins/acme.app/src/numeric-property.ts', 'const width = `${size}px`'))).toEqual([])
+  })
+
+  test('accepts a BEM modifier in a plain template literal', () => {
+    expect(scanTokens(source('plugins/acme.app/src/bem.ts', 'const c = `ui-button--${variant}`'))).toEqual([])
+  })
+
+  test('accepts BEM modifier templates in JSX className', () => {
+    expect(scanTokens(source('plugins/acme.app/src/bem.tsx', 'const View = () => <span className={`git-row__status git-row__status--${tone}`} />'))).toEqual([])
   })
 
   test('treats arbitrary JavaScript escape spellings as unresolved', () => {

@@ -301,6 +301,7 @@ function dynamicCustomPropertyExpressions(node: ts.TemplateExpression): ts.Expre
     const before = parts[index] ?? ''
     const span = node.templateSpans[index]
     if (!span || !before.endsWith('--')) continue
+    if (/[A-Za-z0-9_-]/.test(before.at(-3) ?? '')) continue
     const open = before.lastIndexOf('var(')
     if (open >= 0 && before.indexOf(')', open + 4) < 0) continue
     expressions.push(span.expression)
