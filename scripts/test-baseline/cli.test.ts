@@ -838,13 +838,19 @@ describe('advisory speed evidence', () => {
         version: 1, commit: sha(9), runId: '123', createdAt: NOW.toISOString(), status: 'complete', qualified: true,
         profile: { workloadVersion: 1, worktrees: 10, terminals: 20, diffAddedLines: 5000, renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context', floodChunkBytes: 65536, floodIntervalMs: 16, runner: 'macos-15', os: 'darwin', arch: 'arm64', cpuModel: 'CPU', cpuCount: 4, bun: '1.4.0', chromium: 'test', imageVersion: 'test' },
         metrics: Object.fromEntries(METRICS.map(metric => [metric, { samplesMs: Array(20).fill(50.001), medianMs: 50.001, budgetMs: BUDGETS[metric], budgetMiss: 50.001 > BUDGETS[metric] }])) as SpeedReport['metrics'],
-        failures: [], cleanup: 'complete', evidence: { samples: 'samples.jsonl', diagnostics: [], misses: 'misses.json' },
+        failures: [], cleanup: 'complete', evidence: { samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json'], misses: 'misses.json' },
       }
+      const finding = 'Observed echo acknowledgement delay in the diagnostic trial.'
       const baseline = structuredClone(current)
       baseline.commit = sha(1)
       for (const metric of METRICS) baseline.metrics[metric] = { samplesMs: Array(20).fill(40), medianMs: 40, budgetMs: BUDGETS[metric], budgetMiss: 40 > BUDGETS[metric] }
       const comparison = { ...compareReports(current, baseline), provenance: { repository: 'acme/quirky', commit: baseline.commit, artifactId: 3, event: 'push', workflowPath: '.github/workflows/tests.yml' } }
+      const miss = {
+        metric: 'echo', budgetMs: BUDGETS.echo, medianMs: 50.001, commit: current.commit, runId: current.runId,
+        samples: current.evidence.samples, diagnostics: ['diagnostics/echo.json'], finding,
+      }
       for (const [name, value] of Object.entries({ report: current, baseline, comparison })) writeFileSync(join(speed, `${name}.json`), JSON.stringify(value))
+      writeFileSync(join(speed, 'misses.json'), JSON.stringify([miss]))
       const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], harness(dirOf('cwd'), { env: { SPEED_HEAD: sha(9) } }).ctx)
       expect(code).toBe(fails ? 1 : 0)
       expect(readJson<Verdict>(join(outDir, 'verdict.json')).runBroken).toBe(false)
@@ -852,6 +858,7 @@ describe('advisory speed evidence', () => {
       expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
       expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
       expect(comment).toContain('REGRESSION')
+      expect(comment).toContain(finding)
       expect(comment).toContain(fails ? '## Tests failed' : '## Tests passed')
     })
   }

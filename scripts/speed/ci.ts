@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { defaultGh, fetchBaseline, findBaselines, parseArtifactJson, type BaselineArtifact } from '../test-baseline/baseline'
 import type { GhRunner } from '../test-baseline/types'
-import { METRICS, type Comparison, type SpeedReport } from './contracts'
-import { compareReports, compatibleProfiles, renderSpeed, validateReport } from './report'
+import { METRICS, type Comparison, type SpeedMiss, type SpeedReport } from './contracts'
+import { compareReports, compatibleProfiles, renderSpeed, validateMisses, validateReport } from './report'
 
 const MAX_JSON_BYTES = 5 * 1024 * 1024
 const SHA = /^[0-9a-f]{40}$/
@@ -26,6 +26,14 @@ function readJson(path: string): unknown {
   return parseArtifactJson(readFileSync(path, 'utf8'))
 }
 
+function readMisses(directory: string, current: SpeedReport): SpeedMiss[] | undefined {
+  try {
+    return validateMisses(readJson(join(directory, current.evidence.misses)), current) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
 function state(status: 'unavailable' | 'error', current: SpeedReport | null, reason: string): EvidenceComparison {
   return {
     status, head: current ? { commit: current.commit, runId: current.runId, createdAt: current.createdAt } : null,
@@ -41,11 +49,13 @@ function safeReason(error: unknown): string {
 /** Reads advisory evidence without allowing broken speed data to break the unit verdict. */
 export function readSpeedEvidence(directory: string, head: string): string {
   let current: SpeedReport | null = null
+  let misses: SpeedMiss[] | undefined
   try {
     current = validateReport(readJson(join(directory, 'report.json')))
     if (!current) throw new Error('invalid speed report')
     if (current.commit !== head) throw new Error('speed report HEAD does not match the unit plan')
-    if (current.status !== 'complete') return renderSpeed(current)
+    misses = readMisses(directory, current)
+    if (current.status !== 'complete') return renderSpeed(current, undefined, misses)
     if (!current.qualified) throw new Error('smoke report is not a qualifying measurement')
     const value = readJson(join(directory, 'comparison.json'))
     if (!value || typeof value !== 'object') throw new Error('invalid speed comparison')
@@ -53,11 +63,11 @@ export function readSpeedEvidence(directory: string, head: string): string {
     if (comparison.head?.commit !== head) throw new Error('comparison HEAD mismatch')
     if (comparison.status === 'error') {
       if (typeof comparison.reason !== 'string' || !comparison.reason) throw new Error('invalid comparison error')
-      return renderSpeed(current, state('error', current, safeReason(comparison.reason)))
+      return renderSpeed(current, state('error', current, safeReason(comparison.reason)), misses)
     }
     if (comparison.status === 'unavailable') {
       if (typeof comparison.reason !== 'string' || !comparison.reason || comparison.baseline !== null) throw new Error('invalid unavailable comparison')
-      return renderSpeed(current, state('unavailable', current, safeReason(comparison.reason)))
+      return renderSpeed(current, state('unavailable', current, safeReason(comparison.reason)), misses)
     }
     if (comparison.status !== 'compared') throw new Error('invalid comparison status')
     const baseline = SPEED_ARTIFACT.validate(readJson(join(directory, 'baseline.json')))
@@ -65,9 +75,9 @@ export function readSpeedEvidence(directory: string, head: string): string {
     if (!baseline || !provenance || provenance.commit !== baseline.commit || provenance.event !== 'push' || provenance.workflowPath !== '.github/workflows/tests.yml' || !Number.isSafeInteger(provenance.artifactId) || provenance.artifactId <= 0 || !/^[\w.-]+\/[\w.-]+$/.test(provenance.repository)) throw new Error('invalid baseline provenance')
     const recomputed = compareReports(current, baseline)
     if (recomputed.status !== 'compared' || comparison.baseline?.commit !== baseline.commit || JSON.stringify(comparison.metrics) !== JSON.stringify(recomputed.metrics)) throw new Error('comparison disagrees with validated samples or profile')
-    return renderSpeed(current, recomputed)
+    return renderSpeed(current, recomputed, misses)
   } catch (error) {
-    return renderSpeed(null, state('error', current, `speed evidence: ${safeReason(error)}`))
+    return renderSpeed(null, state('error', current, `speed evidence: ${safeReason(error)}`), misses)
   }
 }
 
@@ -86,13 +96,23 @@ export async function runCi(argv: string[], ctx: Context = { cwd: process.cwd(),
   const out = resolve(ctx.cwd, values.out)
   mkdirSync(out, { recursive: true })
   let current: SpeedReport | null = null
+  let misses: SpeedMiss[] | undefined
   let comparison: EvidenceComparison
   let code = 0
   try {
-    current = validateReport(readJson(resolve(ctx.cwd, values.current)))
+    const currentPath = resolve(ctx.cwd, values.current)
+    current = validateReport(readJson(currentPath))
     if (!current) throw new Error('current report is malformed')
     if (current.commit !== values.head) throw new Error('current report HEAD mismatch')
     if (current.status !== 'complete' || !current.qualified || current.cleanup !== 'complete') throw new Error('current report is incomplete or unqualified')
+    misses = readMisses(dirname(currentPath), current)
+    const outMissesPath = join(out, current.evidence.misses)
+    if (misses === undefined) {
+      rmSync(outMissesPath, { force: true, recursive: true })
+    } else {
+      mkdirSync(dirname(outMissesPath), { recursive: true })
+      writeFileSync(outMissesPath, JSON.stringify(misses, null, 2) + '\n')
+    }
     writeFileSync(join(out, 'report.json'), JSON.stringify(current, null, 2) + '\n')
     const repo = ctx.env.GITHUB_REPOSITORY
     if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('GITHUB_REPOSITORY is missing or invalid')
@@ -111,7 +131,7 @@ export async function runCi(argv: string[], ctx: Context = { cwd: process.cwd(),
     comparison = state('error', current, `speed comparison: ${safeReason(error)}`)
   }
   writeFileSync(join(out, 'comparison.json'), JSON.stringify(comparison, null, 2) + '\n')
-  writeFileSync(join(out, 'summary.md'), renderSpeed(current, comparison))
+  writeFileSync(join(out, 'summary.md'), renderSpeed(current, comparison, misses))
   return code
 }
 

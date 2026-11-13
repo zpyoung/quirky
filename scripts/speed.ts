@@ -140,7 +140,6 @@ export async function main(args: string[]): Promise<number> {
   }
   const misses = createMisses(report)
   for (const miss of misses) {
-    miss.diagnostics = report.evidence.diagnostics.filter(path => path.endsWith(`/${miss.metric}.json`))
     try {
       const diagnostic: unknown = JSON.parse(readFileSync(join(out, `diagnostics/${miss.metric}.json`), 'utf8'))
       if (!diagnostic || typeof diagnostic !== 'object' || !('metric' in diagnostic) || diagnostic.metric !== miss.metric
@@ -156,7 +155,7 @@ export async function main(args: string[]): Promise<number> {
   writeFileSync(join(out, 'samples.jsonl'), (result?.attempts ?? []).map(row => JSON.stringify(row)).join('\n') + '\n')
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n')
   writeFileSync(join(out, 'misses.json'), JSON.stringify(misses, null, 2) + '\n')
-  writeFileSync(join(out, 'summary.md'), renderSpeed(report))
+  writeFileSync(join(out, 'summary.md'), renderSpeed(report, undefined, misses))
   try {
     scrubArtifacts(out, redactions)
     if (!validateReport(JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')))) throw new Error('written report failed schema validation')

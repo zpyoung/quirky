@@ -137,3 +137,53 @@ test('an incompatible nearest main profile falls back to the older compatible an
   expect(JSON.parse(readFileSync(join(out, 'baseline.json'), 'utf8')).commit).toBe(base)
   expect(readSpeedEvidence(out, newHead)).not.toContain('not measured:')
 })
+test('runCi carries a report-correlated miss from an external current directory through the Tests evidence reader', async () => {
+  const { cwd, head } = repo()
+  const current = report(head, 51)
+  current.evidence.diagnostics = ['diagnostics/echo.json']
+  const input = stage(current)
+  const out = temp()
+  const finding = 'Observed echo acknowledgement delay in the diagnostic trial.'
+  const misses = [{
+    metric: 'echo',
+    budgetMs: BUDGETS.echo,
+    medianMs: 51,
+    commit: current.commit,
+    runId: current.runId,
+    samples: current.evidence.samples,
+    diagnostics: ['diagnostics/echo.json'],
+    finding,
+  }]
+  writeFileSync(join(input, 'misses.json'), JSON.stringify(misses))
+
+  expect(await runCi(['compare', '--current', join(input, 'report.json'), '--out', out, '--event', 'pull_request', '--head', head], {
+    cwd, env: { GITHUB_REPOSITORY: 'acme/quirky' }, gh: async () => '', err: () => {},
+  })).toBe(0)
+  expect(JSON.parse(readFileSync(join(out, 'misses.json'), 'utf8'))).toEqual(misses)
+  expect(readFileSync(join(out, 'summary.md'), 'utf8')).toContain(finding)
+  expect(readSpeedEvidence(out, head)).toContain(finding)
+})
+
+test('missing, malformed, and report-mismatched misses use report-derived unavailable diagnoses', async () => {
+  for (const evidence of ['missing', 'malformed', 'mismatched']) {
+    const { cwd, head } = repo()
+    const current = report(head, 51)
+    current.evidence.diagnostics = ['diagnostics/echo.json']
+    const input = stage(current)
+    const out = temp()
+    const forged = 'FORGED finding must not be rendered.'
+    if (evidence === 'malformed') writeFileSync(join(input, 'misses.json'), '{')
+    if (evidence === 'mismatched') writeFileSync(join(input, 'misses.json'), JSON.stringify([{
+      metric: 'echo', budgetMs: BUDGETS.echo, medianMs: 51, commit: sha(2), runId: current.runId,
+      samples: current.evidence.samples, diagnostics: ['diagnostics/echo.json'], finding: forged,
+    }]))
+
+    expect(await runCi(['compare', '--current', join(input, 'report.json'), '--out', out, '--event', 'pull_request', '--head', head], {
+      cwd, env: { GITHUB_REPOSITORY: 'acme/quirky' }, gh: async () => '', err: () => {},
+    })).toBe(0)
+    const summary = readFileSync(join(out, 'summary.md'), 'utf8')
+    expect(summary).toContain('not compared:')
+    expect(summary).toContain('Diagnosis unavailable')
+    expect(summary).not.toContain(forged)
+  }
+})
