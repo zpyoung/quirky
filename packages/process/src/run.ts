@@ -18,13 +18,14 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647
 
 type OutputCapture = {
   byteLength: number
+  readonly truncated: boolean
   append(chunk: Uint8Array, maxBytes: number): boolean
   bytes(): Uint8Array
 }
 
 type AttemptResult =
   | { kind: 'result'; result: RunResult }
-  | { kind: 'stalled'; stdout: Uint8Array; stderr: Uint8Array; exit: ChildExit }
+  | { kind: 'stalled'; stdout: Uint8Array; stderr: Uint8Array; truncated?: RunResult['truncated']; exit: ChildExit }
 
 type AttemptConfig = {
   argv: readonly string[]
@@ -33,6 +34,8 @@ type AttemptConfig = {
   deadlineMs: number
   killGraceMs: number
   maxOutputBytes: number
+  outputMode: 'separate' | 'combined'
+  overflow: 'stop' | 'truncate'
   stallMs: number
   config: {
     start: StartChild
@@ -40,20 +43,25 @@ type AttemptConfig = {
     onStart: (child: StartedChild, stop: () => void) => () => void
   }
 }
-
 function capture(): OutputCapture {
   const chunks: Uint8Array[] = []
   let byteLength = 0
+  let truncated = false
   return {
     get byteLength() {
       return byteLength
     },
+    get truncated() {
+      return truncated
+    },
     append(chunk, maxBytes) {
       const remaining = maxBytes - byteLength
       const length = Math.min(chunk.byteLength, remaining)
-      if (length > 0) chunks.push(length === chunk.byteLength ? chunk : chunk.subarray(0, length))
+      if (length > 0) chunks.push(length === chunk.byteLength ? chunk : chunk.slice(0, length))
       byteLength += length
-      return chunk.byteLength > remaining
+      const discarded = chunk.byteLength > remaining
+      truncated ||= discarded
+      return discarded
     },
     bytes() {
       const result = new Uint8Array(byteLength)
@@ -67,13 +75,19 @@ function capture(): OutputCapture {
   }
 }
 
+function captureTruncation(stdout: OutputCapture, stderr: OutputCapture): RunResult['truncated'] {
+  if (!stdout.truncated && !stderr.truncated) return undefined
+  return { stdout: stdout.truncated, stderr: stderr.truncated }
+}
+
 function resultFromBytes(
   stdout: Uint8Array,
   stderr: Uint8Array,
   exitCode: number | null,
   signal: string | null,
   startedAt: number,
-  stopped?: RunStopped
+  stopped?: RunStopped,
+  truncated?: RunResult['truncated']
 ): RunResult {
   let decodedStdout: string | undefined
   return {
@@ -86,6 +100,7 @@ function resultFromBytes(
     exitCode,
     signal,
     ...(stopped === undefined ? {} : { stopped }),
+    ...(truncated === undefined ? {} : { truncated }),
     durationMs: Date.now() - startedAt,
   }
 }
@@ -112,8 +127,15 @@ function spawnErrorResult(error: unknown, startedAt: number): RunResult {
   }
 }
 
-function makeStoppedResult(stdout: Uint8Array, stderr: Uint8Array, exit: ChildExit, startedAt: number, stopped: RunStopped): RunResult {
-  return resultFromBytes(stdout, stderr, null, exit.signal, startedAt, stopped)
+function makeStoppedResult(
+  stdout: Uint8Array,
+  stderr: Uint8Array,
+  exit: ChildExit,
+  startedAt: number,
+  stopped: RunStopped,
+  truncated?: RunResult['truncated']
+): RunResult {
+  return resultFromBytes(stdout, stderr, null, exit.signal, startedAt, stopped, truncated)
 }
 
 
@@ -128,6 +150,8 @@ async function runAttempt({
   deadlineMs,
   killGraceMs,
   maxOutputBytes,
+  outputMode,
+  overflow,
   stallMs,
   config,
 }: AttemptConfig): Promise<AttemptResult> {
@@ -142,6 +166,7 @@ async function runAttempt({
 
   const stdoutCapture = capture()
   const stderrCapture = capture()
+  const stderrOutput = outputMode === 'combined' ? stdoutCapture : stderrCapture
   let exit: ChildExit | undefined
   let stopped: RunStopped | undefined
   let attemptFinished = false
@@ -224,7 +249,7 @@ async function runAttempt({
       for (;;) {
         const { done, value } = await readChunk(reader, exited, stallMs)
         if (done) return
-        if (output.append(value, maxOutputBytes)) {
+        if (output.append(value, maxOutputBytes) && overflow === 'stop') {
           requestStop('overflow')
           return
         }
@@ -236,7 +261,7 @@ async function runAttempt({
     }
   }
   const stdoutDone = drain(stdoutReader, stdoutCapture)
-  const stderrDone = drain(stderrReader, stderrCapture)
+  const stderrDone = drain(stderrReader, stderrOutput)
   const allDone = Promise.all([exited, stdoutDone, stderrDone]).then(() => undefined)
   void allDone.catch(() => {})
 
@@ -262,7 +287,14 @@ async function runAttempt({
       attemptFinished = true
       return {
         kind: 'result',
-        result: makeStoppedResult(stdoutCapture.bytes(), stderrCapture.bytes(), exit ?? { exitCode: null, signal: null }, startedAt, stopped),
+        result: makeStoppedResult(
+          stdoutCapture.bytes(),
+          stderrCapture.bytes(),
+          exit ?? { exitCode: null, signal: null },
+          startedAt,
+          stopped,
+          captureTruncation(stdoutCapture, stderrCapture)
+        ),
       }
     }
     if (didStall) {
@@ -273,7 +305,14 @@ async function runAttempt({
         attemptFinished = true
         return {
           kind: 'result',
-          result: makeStoppedResult(stdoutCapture.bytes(), stderrCapture.bytes(), exit ?? { exitCode: null, signal: null }, startedAt, stopped),
+          result: makeStoppedResult(
+            stdoutCapture.bytes(),
+            stderrCapture.bytes(),
+            exit ?? { exitCode: null, signal: null },
+            startedAt,
+            stopped,
+            captureTruncation(stdoutCapture, stderrCapture)
+          ),
         }
       }
       attemptFinished = true
@@ -281,12 +320,24 @@ async function runAttempt({
         kind: 'stalled',
         stdout: stdoutCapture.bytes(),
         stderr: stderrCapture.bytes(),
+        truncated: captureTruncation(stdoutCapture, stderrCapture),
         exit: exit ?? { exitCode: null, signal: null },
       }
     }
     attemptFinished = true
     const completedExit = exit ?? { exitCode: null, signal: null }
-    return { kind: 'result', result: resultFromBytes(stdoutCapture.bytes(), stderrCapture.bytes(), completedExit.exitCode, completedExit.signal, startedAt) }
+    return {
+      kind: 'result',
+      result: resultFromBytes(
+        stdoutCapture.bytes(),
+        stderrCapture.bytes(),
+        completedExit.exitCode,
+        completedExit.signal,
+        startedAt,
+        undefined,
+        captureTruncation(stdoutCapture, stderrCapture)
+      ),
+    }
   } catch (error) {
     if (!exit) killGroup('SIGKILL')
     void stdoutReader.cancel().catch(() => {})
@@ -319,6 +370,8 @@ export async function executeRun(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES
+  const outputMode = options.outputMode ?? 'separate'
+  const overflow = options.overflow ?? 'stop'
   const deadlineMs = startedAt + timeoutMs
   const stallMs = config.stallMs ?? (options.rerunnable ? DEFAULT_RERUNNABLE_STALL_MS : DEFAULT_STALL_MS)
   let attempts = 0
@@ -336,11 +389,12 @@ export async function executeRun(
 
   for (;;) {
     if (config.isDisposed() || stoppedByRunner || options.signal?.aborted) {
-      if (lastStall) return makeStoppedResult(lastStall.stdout, lastStall.stderr, lastStall.exit, startedAt, 'aborted')
+      if (lastStall) {
+        return makeStoppedResult(lastStall.stdout, lastStall.stderr, lastStall.exit, startedAt, 'aborted', lastStall.truncated)
+      }
       return emptyResult('aborted', Date.now() - startedAt)
     }
 
-    attempts++
     const outcome = await runAttempt({
       argv,
       options,
@@ -348,13 +402,15 @@ export async function executeRun(
       deadlineMs,
       killGraceMs,
       maxOutputBytes,
+      outputMode,
+      overflow,
       stallMs,
       config: attemptConfig,
     })
     if (outcome.kind === 'result') return outcome.result
     lastStall = outcome
     if (config.isDisposed() || stoppedByRunner || options.signal?.aborted) {
-      return makeStoppedResult(outcome.stdout, outcome.stderr, outcome.exit, startedAt, 'aborted')
+      return makeStoppedResult(outcome.stdout, outcome.stderr, outcome.exit, startedAt, 'aborted', outcome.truncated)
     }
     if (!options.rerunnable || attempts >= MAX_STALL_ATTEMPTS || Date.now() >= deadlineMs) {
       throw new ProcessStalledError(argv[0] ?? '', attempts)

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { mkdtempSync, realpathSync, rmdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createProcessRunner, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, liveProcesses } from '../src/api'
@@ -518,3 +518,371 @@ test('overflow escalates an already-aborted group immediately without replacing 
   expect(result.signal).toBe('SIGKILL')
   expect(result.stdout.byteLength).toBe(1)
 }, 15_000)
+test('truncate preserves exact-cap separate output and flags each discarded stream independently', async () => {
+  let stdoutText = 'abcd'
+  let stderrText = 'UVWX'
+  const runner = makeRunner({
+    start: () => completedChild(stdoutText, stderrText),
+  })
+  const exact = await runner.run(['/fake/truncate'], { maxOutputBytes: 4, overflow: 'truncate' })
+  expect(exact.stdoutText).toBe('abcd')
+  expect(exact.stderr).toBe('UVWX')
+  expect(exact.truncated).toBeUndefined()
+
+  stdoutText = 'abcde'
+  stderrText = 'UVWXY'
+  const over = await runner.run(['/fake/truncate'], { maxOutputBytes: 4, overflow: 'truncate' })
+  expect(over.stdoutText).toBe('abcd')
+  expect(over.stderr).toBe('UVWX')
+  expect(over.exitCode).toBe(0)
+  expect(over.stopped).toBeUndefined()
+  expect(over.truncated).toEqual({ stdout: true, stderr: true })
+})
+
+test('combined output drains ordered streams under one exact byte cap', async () => {
+  async function runCombined(lastChunk: string) {
+    const stdout = controlledOutput()
+    const stderr = controlledOutput()
+    const runner = makeRunner({
+      start: () => ({
+        pid: 910_001,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        exited: Promise.resolve({ exitCode: 0, signal: null }),
+        killGroup() {},
+      }),
+    })
+    const pending = runner.run(['/fake/combined'], {
+      maxOutputBytes: 5,
+      outputMode: 'combined',
+      overflow: 'truncate',
+    })
+    await withTimeout(Promise.all([stdout.waitForRead(), stderr.waitForRead()]), 1_000, 'initial combined reads')
+    await withTimeout(stdout.push('ab'), 1_000, 'first stdout chunk')
+    await withTimeout(stderr.push('CD'), 1_000, 'stderr chunk')
+    await withTimeout(stdout.push(lastChunk), 1_000, 'final stdout chunk')
+    stdout.close()
+    stderr.close()
+    return withTimeout(pending, 1_000, 'combined truncation')
+  }
+
+  const exact = await runCombined('e')
+  expect(exact.stdoutText).toBe('abCDe')
+  expect(exact.stdout).toEqual(new TextEncoder().encode('abCDe'))
+  expect(exact.stderr).toBe('')
+  expect(exact.exitCode).toBe(0)
+  expect(exact.stopped).toBeUndefined()
+  expect(exact.truncated).toBeUndefined()
+
+  const over = await runCombined('ef')
+  expect(over.stdoutText).toBe('abCDe')
+  expect(over.stderr).toBe('')
+  expect(over.exitCode).toBe(0)
+  expect(over.stopped).toBeUndefined()
+  expect(over.truncated).toEqual({ stdout: true, stderr: false })
+})
+
+test('truncation copies only the bounded prefix of a much larger child chunk', async () => {
+  const oversized = new Uint8Array(1_048_576).fill(0x41)
+  const stdout = controlledOutput()
+  const runner = makeRunner({
+    start: () => ({
+      pid: 910_002,
+      stdout: stdout.stream,
+      stderr: outputStream([]),
+      exited: Promise.resolve({ exitCode: 0, signal: null }),
+      killGroup() {},
+    }),
+  })
+  const pending = runner.run(['/fake/large-chunk'], { maxOutputBytes: 4, overflow: 'truncate' })
+  await withTimeout(stdout.waitForRead(), 1_000, 'large chunk read')
+  await withTimeout(stdout.push(oversized), 1_000, 'large chunk consumption')
+  oversized.fill(0x42, 0, 4)
+  stdout.close()
+
+  const result = await withTimeout(pending, 1_000, 'large chunk completion')
+  expect(result.stdout).toEqual(new Uint8Array([0x41, 0x41, 0x41, 0x41]))
+  expect(result.stdout.buffer.byteLength).toBe(4)
+  expect(result.truncated).toEqual({ stdout: true, stderr: false })
+})
+
+test('truncation defaults to separate streams and stop-on-overflow remains the default', async () => {
+  const separateRunner = makeRunner({ start: () => completedChild('out', 'err') })
+  const separate = await separateRunner.run(['/fake/default-separate'])
+  expect(separate.stdoutText).toBe('out')
+  expect(separate.stderr).toBe('err')
+  expect(separate.truncated).toBeUndefined()
+
+  const stopped = await makeRunner({ start: () => completedChild('abcde', '') })
+    .run(['/fake/default-overflow'], { maxOutputBytes: 4 })
+  expect(stopped.stdoutText).toBe('abcd')
+  expect(stopped.stopped).toBe('overflow')
+  expect(stopped.truncated).toEqual({ stdout: true, stderr: false })
+})
+
+test('truncate continues draining a real noisy child through its final marker', async () => {
+  const marker = join(homeDir, 'completed')
+  const result = await makeRunner().run([
+    '/bin/sh',
+    '-c',
+    'i=0; while [ "$i" -lt 10000 ]; do printf 0123456789; i=$((i+1)); done; printf done > "$1"',
+    'sh',
+    marker,
+  ], {
+    timeoutMs: 10_000,
+    maxOutputBytes: 8,
+    overflow: 'truncate',
+  })
+  expect(result.stdoutText).toBe('01234567')
+  expect(result.exitCode).toBe(0)
+  expect(result.stopped).toBeUndefined()
+  expect(result.truncated).toEqual({ stdout: true, stderr: false })
+  expect(readFileSync(marker, 'utf8')).toBe('done')
+}, 15_000)
+
+test('truncate retains timeout, abort and owner-disposal containment', async () => {
+  const argv = ['/bin/sh', '-c', 'while :; do printf 0123456789; done'] as const
+  const outputOptions = { maxOutputBytes: 4, overflow: 'truncate' as const, killGraceMs: 0 }
+  // The real process deadline must fire while the child continuously floods its pipe.
+  const timeout = await makeRunner().run(['/bin/sh', '-c', 'while :; do printf 0123456789; done'], {
+    ...outputOptions,
+    timeoutMs: 100,
+  })
+  expect(timeout.stopped).toBe('timeout')
+  expect(timeout.stdout.byteLength).toBe(4)
+  expect(timeout.truncated).toEqual({ stdout: true, stderr: false })
+
+  const abort = new AbortController()
+  const abortRunner = makeRunner()
+  const aborting = abortRunner.run(argv, { ...outputOptions, signal: abort.signal, timeoutMs: 10_000 })
+  // Real child output has no runner-visible readiness event; allow the flood to begin before abort and disposal.
+  await Bun.sleep(50)
+  abort.abort()
+  const aborted = await withTimeout(aborting, 2_000, 'truncated process abort')
+  expect(aborted.stopped).toBe('aborted')
+  expect(aborted.stdout.byteLength).toBe(4)
+  expect(aborted.truncated).toEqual({ stdout: true, stderr: false })
+
+  const disposalRunner = makeRunner()
+  const disposing = disposalRunner.run(argv, { ...outputOptions, timeoutMs: 10_000 })
+  await Bun.sleep(50)
+  await disposalRunner.dispose()
+  const disposed = await withTimeout(disposing, 2_000, 'truncated process disposal')
+  expect(disposed.stopped).toBe('aborted')
+  expect(disposed.stdout.byteLength).toBe(4)
+  expect(disposed.truncated).toEqual({ stdout: true, stderr: false })
+}, 15_000)
+
+test('rejects invalid output policies before starting a child', async () => {
+  let starts = 0
+  const runner = makeRunner({
+    start: () => {
+      starts++
+      throw new Error('invalid output policy must not start a child')
+    },
+  })
+  const invalidOptions: RunOptions[] = [
+    { outputMode: 'merged' as RunOptions['outputMode'] },
+    { outputMode: null as unknown as RunOptions['outputMode'] },
+    { outputMode: 1 as unknown as RunOptions['outputMode'] },
+    { overflow: 'discard' as RunOptions['overflow'] },
+    { overflow: null as unknown as RunOptions['overflow'] },
+    { overflow: 1 as unknown as RunOptions['overflow'] },
+  ]
+  for (const options of invalidOptions) {
+    const error = await runner.run(['/fake/invalid-policy'], options).then(
+      () => undefined,
+      (reason: unknown) => reason
+    )
+    expect(error).toBeInstanceOf(TypeError)
+  }
+  expect(starts).toBe(0)
+}, 15_000)
+
+test('sharing keys distinguish output policies but normalize explicit defaults', async () => {
+  async function exerciseDifferentPolicies(firstOptions: RunOptions, secondOptions: RunOptions): Promise<void> {
+    let starts = 0
+    const finishes: Array<() => void> = []
+    const runner = makeRunner({
+      start: () => {
+        starts++
+        let stdout!: ReadableStreamDefaultController<Uint8Array>
+        let stderr!: ReadableStreamDefaultController<Uint8Array>
+        const exited = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+        finishes.push(() => {
+          stdout.close()
+          stderr.close()
+          exited.resolve({ exitCode: 0, signal: null })
+        })
+        return {
+          pid: 910_003 + starts,
+          stdout: new ReadableStream<Uint8Array>({ start(controller) { stdout = controller } }),
+          stderr: new ReadableStream<Uint8Array>({ start(controller) { stderr = controller } }),
+          exited: exited.promise,
+          killGroup() {},
+        }
+      },
+    })
+    const first = runner.run(['/fake/shared-policy'], { share: true, ...firstOptions })
+    const second = runner.run(['/fake/shared-policy'], { share: true, ...secondOptions })
+    const startCount = starts
+    for (const finish of finishes) finish()
+    await withTimeout(Promise.all([first, second]), 1_000, 'separate policy runs')
+    expect(startCount).toBe(2)
+  }
+
+  await exerciseDifferentPolicies({ outputMode: 'separate' }, { outputMode: 'combined' })
+  await exerciseDifferentPolicies({ overflow: 'stop' }, { overflow: 'truncate' })
+
+  let starts = 0
+  const finishes: Array<() => void> = []
+  const runner = makeRunner({
+    start: () => {
+      starts++
+      let stdout!: ReadableStreamDefaultController<Uint8Array>
+      let stderr!: ReadableStreamDefaultController<Uint8Array>
+      const exited = Promise.withResolvers<{ exitCode: number | null; signal: string | null }>()
+      finishes.push(() => {
+        stdout.close()
+        stderr.close()
+        exited.resolve({ exitCode: 0, signal: null })
+      })
+      return {
+        pid: 910_010,
+        stdout: new ReadableStream<Uint8Array>({ start(controller) { stdout = controller } }),
+        stderr: new ReadableStream<Uint8Array>({ start(controller) { stderr = controller } }),
+        exited: exited.promise,
+        killGroup() {},
+      }
+    },
+  })
+  const omitted = runner.run(['/fake/default-sharing'], { share: true })
+  const explicit = runner.run(['/fake/default-sharing'], {
+    share: true,
+    outputMode: 'separate',
+    overflow: 'stop',
+  })
+  const startCount = starts
+  for (const finish of finishes) finish()
+  await withTimeout(Promise.all([omitted, explicit]), 1_000, 'normalized default sharing')
+  expect(startCount).toBe(1)
+}, 15_000)
+
+test('retries a post-exit stalled truncated attempt without carrying capture forward', async () => {
+  let starts = 0
+  let firstOutput!: ControlledOutput
+  const runner = makeRunner({
+    stallMs: 10,
+    start: () => {
+      starts++
+      if (starts === 1) {
+        firstOutput = controlledOutput()
+        return {
+          pid: 910_020,
+          stdout: firstOutput.stream,
+          stderr: outputStream([]),
+          exited: Promise.resolve({ exitCode: 0, signal: null }),
+          killGroup() {},
+        }
+      }
+      return completedChild('z', '')
+    },
+  })
+  const pending = runner.run(['/fake/stalled-truncation'], {
+    maxOutputBytes: 1,
+    overflow: 'truncate',
+    rerunnable: true,
+    timeoutMs: 1_000,
+  })
+  await withTimeout(firstOutput.waitForRead(), 1_000, 'first attempt read')
+  await withTimeout(firstOutput.push('first'), 1_000, 'first attempt output')
+  const result = await withTimeout(pending, 1_000, 'post-exit stall retry')
+  expect(starts).toBe(2)
+  expect(result.stdoutText).toBe('z')
+  expect(result.exitCode).toBe(0)
+  expect(result.truncated).toBeUndefined()
+}, 15_000)
+
+test('preserves truncation flags when disposal follows a post-exit pipe stall', async () => {
+  const stdout = controlledOutput()
+  const exitedByRunner = Promise.withResolvers<void>()
+  const runner = makeRunner({
+    stallMs: 100,
+    start: () => ({
+      pid: 910_021,
+      stdout: stdout.stream,
+      stderr: outputStream([]),
+      exited: Promise.resolve({ exitCode: 0, signal: null }),
+      killGroup(signal) {
+        if (signal === 'SIGKILL') exitedByRunner.resolve()
+      },
+    }),
+  })
+  const pending = runner.run(['/fake/stalled-disposal'], {
+    maxOutputBytes: 1,
+    overflow: 'truncate',
+    rerunnable: true,
+    timeoutMs: 1_000,
+  })
+  await withTimeout(stdout.waitForRead(), 1_000, 'stalled attempt read')
+  await withTimeout(Promise.all([stdout.push('oversized'), exitedByRunner.promise]), 1_000, 'post-exit pipe setup')
+  await runner.dispose()
+  const result = await withTimeout(pending, 1_000, 'stalled truncation disposal')
+  expect(result.stopped).toBe('aborted')
+  expect(result.stdoutText).toBe('o')
+  expect(result.truncated).toEqual({ stdout: true, stderr: false })
+}, 15_000)
+
+function outputStream(chunks: readonly string[]): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk))
+      controller.close()
+    },
+  })
+}
+
+function completedChild(stdout: string, stderr: string) {
+  return {
+    pid: 910_000,
+    stdout: outputStream([stdout]),
+    stderr: outputStream([stderr]),
+    exited: Promise.resolve({ exitCode: 0, signal: null }),
+    killGroup() {},
+  }
+}
+type ControlledOutput = {
+  stream: ReadableStream<Uint8Array>
+  waitForRead(): Promise<void>
+  push(chunk: string | Uint8Array): Promise<void>
+  close(): void
+}
+
+function controlledOutput(): ControlledOutput {
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  let requested = Promise.withResolvers<void>()
+  const stream = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value
+    },
+    pull() {
+      requested.resolve()
+    },
+  }, { highWaterMark: 0 })
+  return {
+    stream,
+    async waitForRead() {
+      await requested.promise
+      requested = Promise.withResolvers<void>()
+    },
+    async push(chunk: string | Uint8Array) {
+      const consumed = Promise.withResolvers<void>()
+      requested = consumed
+      controller.enqueue(typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk)
+      await consumed.promise
+    },
+    close() {
+      controller.close()
+    },
+  }
+}

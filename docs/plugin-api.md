@@ -151,6 +151,24 @@ unawaited writes. Callers own their result/frame limits and must stop abandoned 
 There is no raw Bun subprocess, stderr stream, IPC, PTY, inherited stdio, arbitrary-signal API,
 sandbox or detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
 
+### API 1.7: One-shot output policies
+
+API 1.7 adds `outputMode` and `overflow` to `RunOptions`. Defaults remain `outputMode: 'separate'`
+and `overflow: 'stop'`. In separate mode, `maxOutputBytes` applies independently to stdout and
+stderr. In combined mode, both streams append to `stdout` and `stdoutText` under one shared cap;
+`stderr` is empty, and bytes are combined in the order the drains observe chunks.
+
+With `overflow: 'stop'`, exceeding the cap stops the process group as before. With
+`overflow: 'truncate'`, the runner retains only each bounded prefix and continues draining both
+streams so the command can finish. When any bytes are discarded, `RunResult.truncated` reports
+which captured streams were cut; in combined mode, discarded bytes are attributed to stdout.
+Exact-cap output is not marked truncated. Truncation does not disable deadlines, abort, activation
+disposal or the existing post-exit stall and rerun behavior. A plugin using either option declares
+`"apiVersion": "1.7.0"`.
+
+Use the [process declarations](../packages/protocol/src/process.ts) for the complete option and
+result types.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -263,6 +281,9 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.6.0** adds [`context.process.spawn`](#api-16-streaming-and-session-length-processes) for
   streaming and session-length daemon children under the same activation owner as `run`.
   A plugin that uses it declares `apiVersion` 1.6.0 or later.
+- **1.7.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
+  Separate capture and stop-on-overflow remain the defaults. A plugin using either option declares
+  `apiVersion` 1.7.0.
 
 ## Example
 

@@ -18,8 +18,8 @@ type ProcessCapabilityAssertions = [
 ]
 
 describe('stable plugin API floors', () => {
-  test('the host supports the release that introduced daemon plugin spawning', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.6.0')
+  test('the host supports the release that adds output policies to the daemon process runner', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.7.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
@@ -28,10 +28,11 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.5.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.5.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.6.1')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.7.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.6.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1')).not.toBeNull()
     expect(pluginApiCompatibilityError('2.0.0')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).not.toBeNull()
   })
 
   test.each([
