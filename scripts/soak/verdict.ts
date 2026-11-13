@@ -28,6 +28,7 @@ export type SoakEvidence = {
   daemonLog?: string
 }
 
+/** Counts caller and dispatcher timeouts across plugin namespaces for the soak's calls check. */
 export function countDaemonLog(text: string): {
   unanswered: number
   byMethod: { method: string; count: number }[]
@@ -36,7 +37,7 @@ export function countDaemonLog(text: string): {
   const counts = new Map<string, number>()
   let unanswered = 0
   let gitTimeouts = 0
-  const unansweredPattern = /\b(?:method\s+)?(quirky\.[\w.-]+\/[\w.-]+)(?:\s+in\s+[\w.-]+)? did not answer within \d+\s*ms\b/
+  const unansweredPattern = /\b(?:method\s+)?([\w.-]+\/[\w.-]+)(?:\s+in\s+[\w.-]+)? did not answer within \d+\s*ms\b/
   const gitTimeoutPattern = /\bgit \w+ timed out after \d+ms\b/
 
   for (const line of text.split(/\r?\n/)) {

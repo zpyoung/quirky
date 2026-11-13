@@ -808,3 +808,15 @@ test('scenario 16: loosening maxUnanswered disqualifies the run', () => {
 
   expect(result.disqualified).toContain('limit loosened: maxUnanswered 3 > 0')
 })
+
+test('unanswered calls from third-party plugins fail the calls check', () => {
+  const daemonLog = '[quirkyd] method acme.tools/read in acme.tools did not answer within 1000 ms (1 unanswered)'
+  const result = judge(evidence({ daemonLog }), config())
+  expect(result.checks.calls).toEqual({
+    ok: false,
+    unanswered: 1,
+    byMethod: [{ method: 'acme.tools/read', count: 1 }],
+    gitTimeouts: 0
+  })
+  expect(result.verdict).toBe('fail')
+})

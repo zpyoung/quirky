@@ -121,11 +121,11 @@ export async function main(argv: string[]): Promise<number> {
       windows: config.windows,
       slowGit: config.slowGitMs !== undefined || config.fault === 'slow-git',
     })
-    if (config.slowGitMs !== undefined) setGitDelay(world.home, config.slowGitMs)
     if (config.windows > 0) {
       windows = await openWindows({ world, count: config.windows, executable: executable!, out: config.out, signal: setupAbort.signal })
     }
     if (interrupted) return interrupted
+    if (config.slowGitMs !== undefined) setGitDelay(world.home, config.slowGitMs)
     const startedAt = performance.now()
     const startedIso = new Date().toISOString()
     let samplingStopped = false
