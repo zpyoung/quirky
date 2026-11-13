@@ -38,6 +38,7 @@ function ambiguous(connIds: number[]): never {
   throw fault('browser_client_ambiguous', `windows ${ids} are connected and none is identified as the caller's; pass client <id>`)
 }
 
+/** Accepts caller or a canonical positive safe-integer ID; rejects other values with invalid_argument. */
 export function parseClientSelector(value: unknown): ClientSelector {
   if (value === 'caller') return value
   if (typeof value === 'string' && /^[1-9][0-9]*$/.test(value)) {
@@ -47,6 +48,10 @@ export function parseClientSelector(value: unknown): ClientSelector {
   throw fault('invalid_argument', 'client must be caller or a live window connection ID')
 }
 
+/**
+ * Chooses an explicit live window, the caller's window/worktree, or the sole remaining window.
+ * Focus breaks ties only within the caller's worktree; unavailable or ambiguous targets fail without mutation.
+ */
 export async function selectClient(call: RoutingCall, selector: ClientSelector, caller: PluginCaller): Promise<number> {
   const windows = windowsOf(await call('ui.state'))
   const connIds = windows.map(({ connId }) => connId)
@@ -91,6 +96,7 @@ export async function selectClient(call: RoutingCall, selector: ClientSelector, 
   return ambiguous(available.map(({ connId }) => connId))
 }
 
+/** Shows one window's worktree or the shared floating workspace without OS focus; reports display failures as browser_client_unavailable. */
 export async function showWorktreeOnClient(call: RoutingCall, connId: number, worktreeId: string): Promise<void> {
   if (worktreeId === 'floating') {
     try {
@@ -112,6 +118,7 @@ export async function showWorktreeOnClient(call: RoutingCall, connId: number, wo
   }
 }
 
+/** Reveals an existing worktree page, preserving its pane and selection if display fails; rejects unscoped pages before mutation. */
 export async function revealOnClient(steps: RevealSteps, page: BrowserPage, connId: number): Promise<{ pane: string; paneOpened: boolean; client: number }> {
   if (page.worktreeId === null) {
     throw fault('invalid_argument', `page ${page.browserPageId} belongs to no worktree, so no browser pane can show it`)
@@ -121,6 +128,7 @@ export async function revealOnClient(steps: RevealSteps, page: BrowserPage, conn
   return { pane: result.pane, paneOpened: result.opened, client: connId }
 }
 
+/** Creates and reveals a routed page; on failure, attempts pane cleanup before page cleanup and preserves the original error. */
 export async function openUrlOnClient(steps: RevealSteps & {
   createPage(): Promise<BrowserPage>
   closePage(pageId: string): Promise<void>

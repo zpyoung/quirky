@@ -235,7 +235,11 @@ export const tabChecks: BrowserCheck[] = [
     try {
       observer = await connectClient(c, 'cli')
       c.equal((await uiState(observer)).windows, [])
+      const retained = c.state.disposable
+      if (typeof retained !== 'string' || retained === c.state.pageA) throw new BrowserFailure('wrong-page', 'focus preflight needs a different managed page')
+      await c.call('tab switch', {}, retained)
       const selectedBefore = await c.call<{ tab: Tab }>('tab current', { worktree: c.world.worktreeA }, '')
+      c.equal(selectedBefore.tab.browserPageId, retained)
       const panesBefore = await paneState(c, c.world.worktreeA)
       c.assert(paneForPage(panesBefore, c.state.pageA).length === 0, 'Page A already has a browser pane')
       baselinePanes = new Set(panesBefore.tabs.map((pane) => pane.id))
@@ -275,7 +279,7 @@ export const tabChecks: BrowserCheck[] = [
       const repeatedResult = repeated.result as { switched: number; browserPageId: string; focused?: boolean; pane?: string; paneOpened?: boolean; client?: number }
       c.equal(repeatedResult, { switched: current.tab.index, browserPageId: c.state.pageA, focused: true, pane, paneOpened: false, client: connId })
       c.equal(paneForPage(await paneState(c, c.world.worktreeA), c.state.pageA).map((tab) => tab.id), [pane])
-      return { noWindow: { error: refusal.result, selectionUnchanged: true, panesUnchanged: true }, first: result, repeated: repeatedResult, window: shown.layout, pane: matches[0] }
+      return { noWindow: { error: refusal.result, retainedPage: selectedBefore.tab.browserPageId, selectionUnchanged: true, panesUnchanged: true }, first: result, repeated: repeatedResult, window: shown.layout, pane: matches[0] }
     } finally {
       await finishProbe(c, observer, ui, c.world.worktreeA, baselinePanes, undefined, createdPanes, new Set())
     }

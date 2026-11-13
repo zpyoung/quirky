@@ -201,10 +201,14 @@ test('C2: API and CLI create, inspect, select, list, and close pages in explicit
     const unscopedFill = call(h.client, 'fill', { element: '#text', value: 'no-target' })
     await expect(unscopedFill).rejects.toBeInstanceOf(Error)
     expect(await call(h.client, 'eval', { page: first.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: 'seed' })
+    await call(h.client, 'tabSwitch', { page: second.browserPageId })
     const currentBeforeFocus = await call(h.client, 'tabCurrent', { worktree }) as { tab: { browserPageId: string } }
+    expect(currentBeforeFocus.tab.browserPageId).toBe(second.browserPageId)
     const panesBeforeFocus = await call(h.client, 'paneState', { worktree }) as BrowserPaneList
     const unsupportedFocus = call(h.client, 'tabSwitch', { page: first.browserPageId, focus: true })
     await expect(unsupportedFocus).rejects.toThrow('browser_client_unavailable: no Quirky window is connected to show the page')
+    expect(await call(h.client, 'tabCurrent', { worktree })).toEqual(currentBeforeFocus)
+    expect(await call(h.client, 'paneState', { worktree })).toEqual(panesBeforeFocus)
     const unsupportedFocusCli = await runBrowserCli(h, ['browser', 'tab', 'switch', '--page', first.browserPageId, '--focus', '--json'])
     expect(unsupportedFocusCli.code).not.toBe(0)
     expect(`${unsupportedFocusCli.stderr}${unsupportedFocusCli.stdout}`)
@@ -354,6 +358,26 @@ test('C8: reveal reuses the newest matching pane and keeps all existing duplicat
       .toEqual([firstPane.id, newestMatchingPane.id].sort())
     expect(panes.active).toBe(newestMatchingPane.id)
     expectHostedTab(await terminalWorkspace(h, worktree), newestMatchingPane)
+
+    // paneState refreshes Watch recency, so capture it before reporting the inactive duplicate.
+    const activeBefore = await call(h.client, 'paneState', { worktree: `id:${worktree}` }) as BrowserPaneList
+    expect(activeBefore.active).toBe(newestMatchingPane.id)
+    await call(h.client, 'paneReport', {
+      pane: firstPane.id,
+      tabId: firstPane.tabId,
+      title: 'Newer inactive matching pane'
+    })
+    await h.client.callAny('quirky.terminal/activateTab', { tab: unrelatedPane.tabId })
+    expect(activeTerminalTab(await terminalWorkspace(h, worktree))).toBe(unrelatedPane.tabId)
+
+    const activeMatch = await call(h.client, 'tabSwitch', { page: page.browserPageId, focus: true }) as {
+      pane: string; paneOpened: boolean; client: number
+    }
+    expect(activeMatch).toMatchObject({ pane: newestMatchingPane.id, paneOpened: false, client: window.connId })
+    const afterActiveMatch = await call(h.client, 'paneState', { worktree: `id:${worktree}` }) as BrowserPaneList
+    expect(afterActiveMatch.tabs).toEqual(activeBefore.tabs)
+    expect(afterActiveMatch.active).toBe(newestMatchingPane.id)
+    expectHostedTab(await terminalWorkspace(h, worktree), newestMatchingPane)
   } finally {
     window?.client.close()
     await h.cleanup()
@@ -425,9 +449,13 @@ test('C10: invalid focus routing and disconnected clients preserve pages and pan
       worktree: `id:${worktree}`
     }) as { browserPageId: string }
     const pageState = (await call(h.client, 'tabShow', { page: page.browserPageId }) as { tab: BrowserPageState }).tab
-    const selected = await call(h.client, 'tabSwitch', { page: page.browserPageId })
-    expect(selected).toEqual({ switched: pageState.index, browserPageId: page.browserPageId })
+    const retained = await call(h.client, 'tabCreate', {
+      url: `${h.fixtureUrl}first`,
+      worktree: `id:${worktree}`
+    }) as { browserPageId: string }
+    await call(h.client, 'tabSwitch', { page: retained.browserPageId })
     const selectionBefore = await call(h.client, 'tabCurrent', { worktree: `id:${worktree}` })
+    expect(selectionBefore).toMatchObject({ tab: { browserPageId: retained.browserPageId } })
     const panesBefore = await call(h.client, 'paneState', { worktree: `id:${worktree}` })
 
     await expect(call(h.client, 'tabSwitch', { page: page.browserPageId, focus: true }))
@@ -449,6 +477,8 @@ test('C10: invalid focus routing and disconnected clients preserve pages and pan
     const noFocus = await call(h.client, 'tabSwitch', { page: page.browserPageId })
     expect(noFocus).toEqual({ switched: pageState.index, browserPageId: page.browserPageId })
     expect(await call(h.client, 'paneState', { worktree: `id:${worktree}` })).toEqual(panesBefore)
+    await call(h.client, 'tabSwitch', { page: retained.browserPageId })
+    expect(await call(h.client, 'tabCurrent', { worktree: `id:${worktree}` })).toEqual(selectionBefore)
 
     const beforeNoWindowUrl = await call(h.client, 'tabList', { worktree: 'all' })
     await expect(call(h.client, 'openUrl', {
@@ -465,6 +495,7 @@ test('C10: invalid focus routing and disconnected clients preserve pages and pan
     const ids = [first.connId, second.connId].sort((a, b) => a - b)
     const ambiguous = `browser_client_ambiguous: windows ${ids[0]}, ${ids[1]} are connected and none is identified as the caller's; pass client <id>`
     const selectionBeforeAmbiguity = await call(h.client, 'tabCurrent', { worktree: `id:${worktree}` })
+    expect(selectionBeforeAmbiguity).toMatchObject({ tab: { browserPageId: retained.browserPageId } })
     const panesBeforeAmbiguity = await call(h.client, 'paneState', { worktree: `id:${worktree}` })
     await expect(call(h.client, 'tabSwitch', { page: page.browserPageId, focus: true, client: 'caller' }))
       .rejects.toThrow(ambiguous)
