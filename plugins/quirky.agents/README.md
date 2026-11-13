@@ -33,7 +33,9 @@ quirky agents configure claude --host 'runtime:dev-laptop' --command claude
 
 Custom agent declarations must include a prompt mode. Their `homepage` and `install` links accept only HTTP(S) URLs; invalid links exclude that declaration from the catalog and appear in `agents list --all`.
 
-Provider process creation remains owned by `quirky.session`. To launch remotely, call `quirky.cli/runtimeCall` for the saved target with `method: "quirky.session/create"`; do not return a target launch plan to a local session owner or relabel local execution as remote.
+Interactive provider process creation remains owned by `quirky.session`. To launch remotely, call `quirky.cli/runtimeCall` for the saved target with `method: "quirky.session/create"`; do not return a target launch plan to a local session owner or relabel local execution as remote.
+
+Model-probe and one-shot processes use the shared runner owned by `quirky.agents` (plugin API 1.11.0). Timeouts and disposal cannot turn partial probe output into success; Pi discovery also requires a natural exit with code zero. One-shot generation retains at most 4 MiB of stdout and the original first and last 16 KiB of stderr, separated by a newline when truncated. Cancellation and timeout give the entire process group two seconds after SIGTERM before forced cleanup.
 
 ## Desktop configuration
 
