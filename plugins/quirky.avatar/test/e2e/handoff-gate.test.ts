@@ -33,7 +33,7 @@ async function handedOff(options: Parameters<typeof startAvatar>[0] = {}) {
 }
 
 describe('bulk hand-off (SC-1, SC-3, SC-5)', () => {
-  test('hands off two worktrees at different levels, writes both markers and briefs each worker', async () => {
+  test('hands off two worktrees, proves the gate, then briefs each worker exactly once', async () => {
     const avatar = await startAvatar()
     const results = await avatar.handoff([
       { worktree: avatar.alpha, level: 'own-branch', goal: 'Fix the flaky checkout test' },
@@ -55,22 +55,47 @@ describe('bulk hand-off (SC-1, SC-3, SC-5)', () => {
     expect(readMarkerFile(avatar.harness.home, 'sess-beta')).toEqual({ worktreeId: avatar.beta.id, level: 'local' })
     expect(avatar.hasMarker('sess-gamma')).toBe(false)
 
+    const proof = 'The Avatar is checking its permission hook. Run only `pwd` once, then stop and wait for your mandate. Do not start work.'
     await waitFor(() => avatar.state.sent.length === 2)
-    const brief = (session: string) => avatar.state.sent.find((entry) => entry.session === session)?.text ?? ''
-    expect(brief('sess-alpha')).toContain('Fix the flaky checkout test')
-    expect(brief('sess-alpha')).toContain('Level: own-branch')
-    expect(brief('sess-beta')).toContain('Tidy the settings page')
-    expect(brief('sess-beta')).toContain('Level: local')
+    expect([...avatar.state.sent].sort((a, b) => a.session.localeCompare(b.session))).toEqual([
+      { session: 'sess-alpha', text: proof },
+      { session: 'sess-beta', text: proof }
+    ])
+    expect(avatar.store().handoffs.get(avatar.alpha.id)?.state).toBe('checking')
+    expect(avatar.store().handoffs.get(avatar.beta.id)?.state).toBe('checking')
+
+    await avatar.gate('sess-alpha', read(avatar.alpha))
+    await avatar.gate('sess-beta', read(avatar.beta))
+    await waitFor(() => [avatar.alpha, avatar.beta].every((worktree) => avatar.store().handoffs.get(worktree.id)?.state === 'working'))
+    const briefs = avatar.state.sent.filter((entry) => entry.text !== proof).sort((a, b) => a.session.localeCompare(b.session))
+    expect(briefs).toEqual([
+      { session: 'sess-alpha', text: expect.stringContaining('Goal: Fix the flaky checkout test') },
+      { session: 'sess-beta', text: expect.stringContaining('Goal: Tidy the settings page') }
+    ])
+    expect(briefs[0]?.text).toContain('Level: own-branch')
+    expect(briefs[1]?.text).toContain('Level: local')
+    for (const worktree of [avatar.alpha, avatar.beta]) {
+      const lifecycle = (await log(avatar, worktree.id)).reverse()
+        .filter((entry) => entry.data.type === 'gate-check' || entry.data.type === 'state')
+        .map((entry) => entry.data)
+      expect(lifecycle).toEqual([
+        { type: 'gate-check', ok: true, agent: 'claude' },
+        { type: 'state', from: 'checking', state: 'briefing', note: 'the gate check passed' },
+        { type: 'state', from: 'briefing', state: 'working', note: 'the mandate brief was sent' }
+      ])
+    }
+    await avatar.gate('sess-alpha', read(avatar.alpha))
+    expect(avatar.state.sent.filter((entry) => entry.text !== proof).sort((a, b) => a.session.localeCompare(b.session))).toEqual(briefs)
   })
 
-  test('the gate check passes on the first call that reaches the gate and moves the worktree to briefing', async () => {
+  test('a proven worktree reaches working without releasing an unproven neighbor', async () => {
     const avatar = await handedOff()
     const stateOf = async (id: string) => (await status(avatar)).handoffs.find((row) => row.worktreeId === id)?.state
     expect(await stateOf(avatar.alpha.id)).toBe('checking')
 
     expect((await avatar.gate('sess-alpha', read(avatar.alpha))).decision).toBe('allow')
-    await waitFor(() => avatar.store().handoffs.get(avatar.alpha.id)?.state === 'briefing')
-    expect(await stateOf(avatar.alpha.id)).toBe('briefing')
+    await waitFor(() => avatar.store().handoffs.get(avatar.alpha.id)?.state === 'working')
+    expect(await stateOf(avatar.alpha.id)).toBe('working')
     expect(await stateOf(avatar.beta.id)).toBe('checking')
   })
 })
@@ -217,13 +242,13 @@ describe('the brain is not ready (SC-12)', () => {
     } finally {
       releaseStaticCheck()
     }
-    await waitFor(() => avatar.store().handoffs.get(avatar.alpha.id)?.state === 'briefing')
+    await waitFor(() => avatar.store().handoffs.get(avatar.alpha.id)?.state === 'working')
 
     expect(decision.decision).toBe('deny')
     const journal = await log(avatar, avatar.alpha.id)
     expect(journal[0]).toMatchObject({
       kind: 'event',
-      data: { type: 'state', from: 'checking', state: 'briefing', note: 'the gate check passed' },
+      data: { type: 'state', from: 'briefing', state: 'working', note: 'the mandate brief was sent' },
     })
     const entries = journal.filter((entry) => entry.kind === 'gate')
     expect(entries).toHaveLength(1)
