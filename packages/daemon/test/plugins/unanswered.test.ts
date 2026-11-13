@@ -149,4 +149,24 @@ describe('UnansweredHandlers', () => {
     expect(activeWarnings.get('acme.override')?.size).toBe(0)
     expect(removed).toEqual(added)
   })
+
+  test('retires handler warnings without releasing counts or letting old releases clear new warnings', () => {
+    const { handlers, activeWarnings } = setup()
+    const id = 'job:acme.hang/tick'
+    const plugin = 'acme.hang'
+    const warning = 'a handler is still running'
+    const old = Array.from({ length: 4 }, () => handlers.add(id, plugin, warning))
+    handlers.clearHandlerWarnings(id)
+    expect(handlers.count(id)).toBe(4)
+    expect(activeWarnings.get(plugin)?.has(warning)).toBe(false)
+    expect(handlers.blocked(id, plugin)).toBe(true)
+    const current = handlers.add(id, plugin, warning)
+    for (const release of old) release()
+    expect(handlers.count(id)).toBe(1)
+    expect(activeWarnings.get(plugin)?.has(warning)).toBe(true)
+    expect(handlers.blocked(id, plugin)).toBe(false)
+    current()
+    expect(handlers.count(id)).toBe(0)
+    expect(activeWarnings.get(plugin)?.size).toBe(0)
+  })
 })

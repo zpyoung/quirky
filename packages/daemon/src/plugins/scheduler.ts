@@ -151,7 +151,7 @@ export class Scheduler {
     this.sync()
     const entry = this.jobs.get(id)
     if (!entry) return Promise.reject(notFound(`no job ${id} is in effect`))
-    if (entry.running?.counted || this.unanswered.blocked(id, entry.owner)) {
+    if (entry.running?.counted || this.lingering.get(id)?.counted || this.unanswered.blocked(id, entry.owner)) {
       return Promise.reject(this.stalledError(id))
     }
     if (entry.running || this.lingering.has(id)) return Promise.reject(conflict(`${id} is already running`))
@@ -187,6 +187,7 @@ export class Scheduler {
       if (this.jobs.get(entry.id) === entry) this.schedule(entry, this.now() + entry.intervalMs)
     }
     if (countUnanswered) this.markUnanswered(active)
+    this.unanswered.clearHandlerWarnings(entry.id)
   }
 
   /** Clears every timer and aborts running signals; outcomes that arrive later are not recorded. */

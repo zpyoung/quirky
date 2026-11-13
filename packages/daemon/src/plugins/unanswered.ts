@@ -12,10 +12,13 @@ function boundWarning(contributionId: string): string {
   return `${contributionId} has ${MAX_UNANSWERED_HANDLERS} or more handlers that never finished; it will not run again until fewer than ${MAX_UNANSWERED_HANDLERS} remain or the daemon restarts`
 }
 
+type HandlerWarning = { pluginId: string; message: string; active: boolean }
+
 export class UnansweredHandlers {
   private readonly counts = new Map<string, number>()
   private readonly warningReferences = new Map<string, Map<string, number>>()
   private readonly boundRecipients = new Map<string, Set<string>>()
+  private readonly handlerWarnings = new Map<string, Set<HandlerWarning>>()
 
   constructor(private readonly options?: UnansweredOptions) {}
 
@@ -32,6 +35,15 @@ export class UnansweredHandlers {
     return true
   }
 
+  /** Retires revoked handlers' warnings without releasing their unanswered counts or bound warnings. */
+  clearHandlerWarnings(contributionId: string): void {
+    const warnings = this.handlerWarnings.get(contributionId)
+    if (!warnings) return
+    const actions: WarningAction[] = []
+    for (const warning of warnings) this.releaseHandlerWarning(contributionId, warning, actions)
+    this.applyWarningActions(actions)
+  }
+
   /** Counts one handler and returns a release that is safe to call more than once. */
   add(contributionId: string, pluginId: string, warning?: string): () => void {
     const previous = this.count(contributionId)
@@ -39,7 +51,17 @@ export class UnansweredHandlers {
     this.counts.set(contributionId, current)
 
     const actions: WarningAction[] = []
-    if (warning !== undefined) this.adjustWarning(pluginId, warning, 1, actions)
+    let handlerWarning: HandlerWarning | undefined
+    if (warning !== undefined) {
+      handlerWarning = { pluginId, message: warning, active: true }
+      let warnings = this.handlerWarnings.get(contributionId)
+      if (!warnings) {
+        warnings = new Set()
+        this.handlerWarnings.set(contributionId, warnings)
+      }
+      warnings.add(handlerWarning)
+      this.adjustWarning(pluginId, warning, 1, actions)
+    }
     if (current >= MAX_UNANSWERED_HANDLERS) {
       this.ensureBoundWarning(contributionId, pluginId, actions)
     }
@@ -56,7 +78,7 @@ export class UnansweredHandlers {
       else this.counts.set(contributionId, currentCount)
 
       const releaseActions: WarningAction[] = []
-      if (warning !== undefined) this.adjustWarning(pluginId, warning, -1, releaseActions)
+      if (handlerWarning) this.releaseHandlerWarning(contributionId, handlerWarning, releaseActions)
       if (previousCount >= MAX_UNANSWERED_HANDLERS && currentCount < MAX_UNANSWERED_HANDLERS) {
         const recipients = this.boundRecipients.get(contributionId)
         this.boundRecipients.delete(contributionId)
@@ -66,6 +88,15 @@ export class UnansweredHandlers {
       }
       this.applyWarningActions(releaseActions)
     }
+  }
+
+  private releaseHandlerWarning(contributionId: string, warning: HandlerWarning, actions: WarningAction[]): void {
+    if (!warning.active) return
+    warning.active = false
+    const warnings = this.handlerWarnings.get(contributionId)
+    warnings?.delete(warning)
+    if (warnings?.size === 0) this.handlerWarnings.delete(contributionId)
+    this.adjustWarning(warning.pluginId, warning.message, -1, actions)
   }
 
   private ensureBoundWarning(contributionId: string, pluginId: string, actions: WarningAction[]): void {

@@ -396,4 +396,42 @@ context.provide(${JSON.stringify(JOB)}, async () => {
     expect(t.logs.some((line) => line === STALL_WARNING)).toBe(false)
   })
 
+
+  test('clears a recovered replacement warning while its revoked predecessor remains unanswered', async () => {
+    const t = setup({
+      activate: (gateDir) => `let runNumber = 0
+context.provide(${JSON.stringify(JOB)}, async () => {
+  const run = ++runNumber
+  record('start tick ' + run)
+  while (!existsSync(${JSON.stringify(gateDir)} + '/' + run)) await Bun.sleep(5)
+  record('end tick ' + run)
+})`
+    })
+    t.scheduler.start()
+    await until(() => t.unanswered.count(JOB) === 1)
+    t.scheduler.revokePlugin(PLUGIN)
+    t.clearWarning(STALL_WARNING)
+    await until(() => t.unanswered.count(JOB) === 2)
+    expect(t.warnings).toContain(STALL_WARNING)
+    t.release(join(t.gateDir, '2'))
+    await until(() => t.ends().length === 1 && t.info()?.state === 'idle')
+    expect(t.unanswered.count(JOB)).toBe(1)
+    expect(t.warnings).not.toContain(STALL_WARNING)
+    expect(t.info()?.nextRunAt).not.toBeNull()
+  }, 10_000)
+
+  test('reports a counted lingering run as stalled after its contribution is re-enabled', async () => {
+    const t = setup()
+    t.scheduler.start()
+    await until(() => t.unanswered.count(JOB) === 1)
+    await t.host.setEnabled(JOB, false)
+    await t.host.setEnabled(JOB, true)
+    expect(t.info()).toMatchObject({ state: 'running', stalled: { handlers: 1 } })
+    await expect(t.scheduler.run(JOB)).rejects.toMatchObject({
+      code: RpcErrorCode.Conflict,
+      message: `${JOB} is stalled: a run that timed out is still running`,
+      data: { reason: 'stalled' }
+    })
+    expect(t.starts()).toHaveLength(1)
+  })
 })
