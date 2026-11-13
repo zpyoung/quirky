@@ -2,7 +2,7 @@ import { statSync } from 'node:fs'
 import { OutputScanner } from '../scanner'
 import type { Screen } from '../screen'
 import { type Checkpoint, readCheckpoint, writeCheckpoint as writeCheckpointFile } from './checkpoint'
-import { newestClearOffset, readSegments } from './log'
+import { LogReader, newestClearOffset, type StoredLogIndex } from './log'
 
 const HISTORY_NOTE = '[history could not be read]\r\n'
 const MAX_CWD_CANDIDATES = 256
@@ -29,6 +29,9 @@ export const GROUND: Uint8Array = encoder.encode(`\x18\x1b7\x1b[?1049l${MODE_RES
 
 export type RestoreSource = 'checkpoint+log' | 'log' | 'checkpoint' | 'none'
 
+export const REBUILD_BLOCK_BYTES = 256 * 1024
+export const REBUILD_BLOCK_ENTRIES = 4096
+
 export type RestoredScreen = {
   source: RestoreSource
   cols: number
@@ -48,21 +51,23 @@ function isDirectory(path: string): boolean {
 }
 
 /**
- * Rebuilds a session's last screen into a fresh `screen` from `<dir>`: the checkpoint's screen
- * plus the log after it, else the whole readable log, else a note. Output before the newest
- * `clear` record never reaches the screen, and a checkpoint taken at or before that record is
- * not used; the cwd, title and size set earlier still count. Terminal queries inside the history
- * are answered by nobody: `screen.seeding` is true while the bytes are parsed, and the promise
- * resolves only once the screen has parsed all of them, so the caller can append the ground and
- * spawn the shell straight after. `screen.seeding` is put back to its prior value.
+ * Rebuilds a session's last screen into a fresh `screen` from the supplied history source: its
+ * checkpoint plus the log after it, else the whole readable log, else a note. Output before the
+ * newest `clear` record never reaches the screen, and a checkpoint taken at or before that record
+ * is not used; the cwd, title and size set earlier still count. Terminal queries inside the
+ * history are answered by nobody: `screen.seeding` is true while the bytes are parsed, and the
+ * promise resolves only once the screen has parsed all of them, so the caller can append the ground
+ * and spawn the shell straight after. `screen.seeding` is put back to its prior value.
  */
 export async function rebuildScreen(
-  dir: string,
+  source: string | StoredLogIndex,
   screen: Screen,
   fallback: { cols: number; rows: number; cwd: string }
 ): Promise<RestoredScreen> {
+  const dir = typeof source === 'string' ? source : source.dir
   const checkpoint = readCheckpoint(dir)
-  const { segments } = readSegments(dir)
+  const reader = typeof source === 'string' ? LogReader.open(source) : source.reader()
+  const { segments } = reader
   const clearedAt = newestClearOffset(segments)
   // a checkpoint at the clear offset was taken just before it, so only a later one shows the cleared screen
   const base = checkpoint?.offset ?? 0
@@ -85,7 +90,7 @@ export async function rebuildScreen(
     rows = Math.max(1, r)
     screen.resize(cols, rows)
   }
-  const replay = (bytes: Uint8Array, toScreenFrom: number): void => {
+  const replay = (bytes: Uint8Array, toScreenFrom: number): number => {
     for (const fact of scanner.push(bytes).facts) {
       if (fact.kind === 'title') title = fact.title
       else if (fact.kind === 'cwd') {
@@ -98,9 +103,14 @@ export async function rebuildScreen(
         }
       }
     }
-    if (toScreenFrom < bytes.length) screen.write(toScreenFrom > 0 ? bytes.subarray(toScreenFrom) : bytes)
+    if (toScreenFrom >= bytes.length) return 0
+    const from = Math.max(0, toScreenFrom)
+    screen.write(from > 0 ? bytes.subarray(from) : bytes)
+    return bytes.length - from
   }
 
+  let bytesSinceSettle = 0
+  let entriesSinceSettle = 0
   try {
     resize(cols, rows)
     if (checkpoint && checkpointScreen) screen.write(checkpoint.ansi)
@@ -110,14 +120,34 @@ export async function rebuildScreen(
         if (record.kind === 'resize') {
           if (record.offset >= base) {
             await screen.settled()
+            bytesSinceSettle = 0
             resize(record.cols!, record.rows!)
           }
         } else if (record.kind === 'output') {
-          const bytes = record.bytes!
-          const end = record.offset + bytes.length
-          if (end <= base) continue
-          const skip = Math.max(0, base - record.offset)
-          replay(skip > 0 ? bytes.subarray(skip) : bytes, Math.max(0, screenFrom - record.offset - skip))
+          const end = record.offset + record.length
+          if (end > base) {
+            let at = Math.max(0, base - record.offset)
+            while (at < record.length) {
+              const budget = REBUILD_BLOCK_BYTES - bytesSinceSettle
+              const to = Math.min(record.length, at + Math.min(REBUILD_BLOCK_BYTES, budget))
+              const bytes = reader.readOutput(segment, record, at, to)
+              if (bytes.length === 0) break
+              const writeFrom = Math.max(0, screenFrom - record.offset - at)
+              bytesSinceSettle += replay(bytes, writeFrom)
+              at += bytes.length
+              if (bytesSinceSettle >= REBUILD_BLOCK_BYTES) {
+                await screen.settled()
+                bytesSinceSettle = 0
+              }
+            }
+          }
+        }
+
+        entriesSinceSettle++
+        if (entriesSinceSettle >= REBUILD_BLOCK_ENTRIES) {
+          await screen.settled()
+          bytesSinceSettle = 0
+          entriesSinceSettle = 0
         }
       }
     }
@@ -126,13 +156,14 @@ export async function rebuildScreen(
     await screen.settled()
   } finally {
     screen.seeding = wasSeeding
+    reader.close()
   }
 
   const cwd =
     [...cwds.keys()].reverse().find(isDirectory) ?? evictedExisting ?? checkpoint?.cwd ?? fallback.cwd
-  const source: RestoreSource =
+  const sourceResult: RestoreSource =
     checkpointScreen && segments.length > 0 ? 'checkpoint+log' : checkpointScreen ? 'checkpoint' : segments.length > 0 ? 'log' : 'none'
-  return { source, cols, rows, cwd, title, offset: segments[segments.length - 1]?.endOffset ?? 0 }
+  return { source: sourceResult, cols, rows, cwd, title, offset: segments[segments.length - 1]?.endOffset ?? 0 }
 }
 
 const MAX_CONCURRENT_WRITES = 4
