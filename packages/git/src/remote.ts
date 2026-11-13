@@ -9,7 +9,7 @@ import { getConfig, checkRefFormatBranch, listRemotes, upstreamOf } from './ops'
 import { RemoteError, normalizeRemoteError, type RemoteAction } from './remote-error'
 import { runGit, type GitResult } from './run'
 
-const NETWORK_TIMEOUT_MS = 120_000
+export const NETWORK_TIMEOUT_MS = 120_000
 const NO_UPSTREAM = 'Branch has no upstream. Publish the branch first.'
 const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes)

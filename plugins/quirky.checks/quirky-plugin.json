@@ -1,6 +1,6 @@
 {
   "id": "quirky.checks",
-  "apiVersion": "1.11.0",
+  "apiVersion": "1.12.0",
   "name": "Checks",
   "version": "0.1.0",
   "description": "Runs bounded shell checks in a worktree or an explicit directory.",
@@ -13,6 +13,7 @@
     "method": [
       {
         "id": "run",
+        "timeout": "30m",
         "description": "Run a shell command in a worktree or explicit directory and return bounded output evidence. Checks started by a plugin are cancelled when that plugin becomes inactive.",
         "params": {
           "type": "object",

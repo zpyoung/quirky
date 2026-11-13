@@ -6,7 +6,7 @@ import type { OwnerHostIdentity, OwnerRuntimeCallResult, PluginContext, PluginSt
 import type { VmAttachmentRequest, VmBackendState, VmCheckoutMode, VmCreateOutput, VmEnvironment, VmEnvironmentRecipe, VmGuestCreateParams, VmLifecycleState, VmOperationKind, VmOperationState, VmRecipeSnapshot, VmRemoteWorkspace } from '../vm-types'
 import { isRecord } from '../loop-status'
 
-const VM_TIMEOUT_MS = 15 * 60_000
+export const VM_TIMEOUT_MS = 15 * 60_000
 const VM_DOCTOR_TIMEOUT_MS = 15_000
 const VM_KILL_GRACE_MS = 5_000
 const MAX_PROCESS_OUTPUT = 64 * 1024
