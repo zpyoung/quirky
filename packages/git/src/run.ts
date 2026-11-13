@@ -6,8 +6,18 @@ import {
   ProcessStalledError
 } from '@quirky/process'
 import type { OwnedProcessRunner, SpawnExit, SpawnedProcess } from '@quirky/process'
-import { GitError } from './index'
 import { createGitScheduler } from './scheduler'
+
+export class GitError extends Error {
+  constructor(
+    message: string,
+    readonly stderr: string,
+    readonly exitCode: number
+  ) {
+    super(message)
+    this.name = 'GitError'
+  }
+}
 
 export { createGitScheduler, DEFAULT_GIT_CONCURRENCY, type GitScheduler, type GitSchedulerOptions, type GitSlotResult } from './scheduler'
 
@@ -20,6 +30,18 @@ export const DEFAULT_GIT_MAX_OUTPUT_BYTES = DEFAULT_MAX_OUTPUT_BYTES
 
 /** Bounds git children and coalesces post-arrival reads across the package. */
 export const gitScheduler = createGitScheduler()
+
+const gitWriteListeners = new Set<() => void>()
+
+/** Registers a callback for the start and settlement of every package git mutation. */
+export function onGitWrite(listener: () => void): () => void {
+  gitWriteListeners.add(listener)
+  return () => gitWriteListeners.delete(listener)
+}
+
+function notifyGitWriteListeners(): void {
+  for (const listener of gitWriteListeners) listener()
+}
 
 /** Holds a read slot until a single leaf child has exited. */
 export async function withGitReadSlot<T>(work: () => Promise<T>): Promise<T> {
@@ -35,7 +57,8 @@ export function shareGitRead<T>(key: string, run: () => Promise<T>, clone: (valu
 
 /** Invalidates read cohorts on entry and settlement of a repository mutation. */
 export function withGitWrite<T>(work: () => Promise<T>): Promise<T> {
-  return gitScheduler.withWrite(work)
+  notifyGitWriteListeners()
+  return gitScheduler.withWrite(work).finally(notifyGitWriteListeners)
 }
 
 export type GitResult = {

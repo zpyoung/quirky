@@ -1,13 +1,14 @@
 /**
- * Git primitives for the worktree create/delete pipeline. Each spawns the `git` binary through
- * `runGit`/`git`; a function throws `GitError` on an unexpected git failure unless its doc says
- * it reports failure through its return value.
+ * Git primitives for the worktree create/delete pipeline. Operations use `runGit`/`git`; a function
+ * throws `GitError` on an unexpected git failure unless its doc says it reports failure through
+ * its return value.
  */
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { BranchCheckedOutError, GitError } from './index'
 import { git, readRunner, runGit } from './run'
+import { readWorktreeList } from './worktree-list'
 
 export type GitRegistration = {
   path: string
@@ -29,7 +30,7 @@ const nonEmpty = (lines: string[]): string[] => lines.filter((l) => l.length > 0
 
 /** Every `git worktree list --porcelain` entry (prunable and missing-folder ones included), main first, bare skipped. */
 export async function listRegistrations(repo: string): Promise<GitRegistration[]> {
-  const out = await git(repo, ['worktree', 'list', '--porcelain'], { readOnly: true })
+  const out = await readWorktreeList(repo)
   const result: GitRegistration[] = []
   let isFirst = true
   for (const block of out.split(/\n\n+/)) {

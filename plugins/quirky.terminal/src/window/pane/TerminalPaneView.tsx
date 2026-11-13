@@ -924,17 +924,18 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         handleLag(resynced.streamId)
       }
     }
-    void extrasReady.then(() => disposed ? null : context.call('quirky.terminal/attach', {
+    void context.call('quirky.terminal/attach', {
       session: sessionId, cols: term.cols, rows: term.rows, historyLines: initial.scrollback
-    }))
-      .then((value) => {
-        if (value === null) return
+    })
+      .then(async (value) => {
         const result = value as { streamId: number; replay: string; live?: boolean }
         if (disposed) {
           detach(result.streamId)
           return
         }
         streamId = result.streamId
+        await extrasReady
+        if (disposed) return
         writeReplay({ write: (bytes, done) => graphics.write(bytes, true, done) }, base64ToBytes(result.replay), gate)
         if (result.live === false) {
           readOnly = true

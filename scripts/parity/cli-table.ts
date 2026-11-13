@@ -108,7 +108,8 @@ const SCOPE_ROW_IDS: Record<string, true> = {
   'agent-native-chat': true,
   'account-newer-providers': true,
   'skills-catalog-extras': true,
-  'file-open-render': true
+  'file-open-render': true,
+  'worktree-ps-summary': true
 }
 const DISPOSITIONS: Record<CliDisposition, true> = {
   covered: true,
@@ -483,6 +484,7 @@ const pluginReferences: Array<{ rowId: string; plugin: string; commandId: string
   { rowId: 'worktree-ps', plugin: 'quirky.agent-status', commandId: 'dashboard' },
   { rowId: 'worktree-ps', plugin: 'quirky.orchestration', commandId: 'run-list' },
   { rowId: 'worktree-ps', plugin: 'quirky.orchestration', commandId: 'task-list' },
+  { rowId: 'worktree-ps', plugin: 'quirky.orchestration', commandId: 'worker-list' },
   { rowId: 'worktree-rm', plugin: 'quirky.worktree', commandId: 'rm' },
   { rowId: 'worktree-set', plugin: 'quirky.worktree', commandId: 'set' },
   { rowId: 'worktree-show', plugin: 'quirky.worktree', commandId: 'show' }

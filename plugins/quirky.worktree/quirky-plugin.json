@@ -3635,13 +3635,7 @@
           },
           "agent": {
             "type": "string",
-            "description": "start this agent in the new worktree",
-            "enum": [
-              "claude",
-              "codex",
-              "opencode",
-              "gemini"
-            ]
+            "description": "an agent ID, any but shell"
           },
           "prompt": {
             "type": "string",

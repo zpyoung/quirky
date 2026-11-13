@@ -251,12 +251,24 @@ function markdownFeatureFixture(root: string, runner: ProcessSpawner) {
   return createMarkdownMethods(host)
 }
 
-function deactivationTestScript(resultPath: string, pluginRoot: string): string {
+function deactivationTestScript(resultPath: string, pluginRoot: string, callMarkdown: boolean): string {
+  const markdownCall = callMarkdown
+    ? `  const markdown = handlers.get('method:quirky.editor/markdown')
+  await markdown({}, {})
+`
+    : ''
+  const expectedPrefix = callMarkdown
+    ? ['markdown-dispose', 'core-dispose-start']
+    : ['core-dispose-start']
+  const expectedOrder = callMarkdown
+    ? ['markdown-dispose', 'core-dispose-start', 'core-dispose-end', 'notebook-dispose', 'viewer-dispose']
+    : ['core-dispose-start', 'core-dispose-end', 'notebook-dispose', 'viewer-dispose']
   return `
 import { expect, mock, test } from 'bun:test'
 import { writeFileSync } from 'node:fs'
 const events = []
 const coreDisposal = Promise.withResolvers()
+const handlers = new Map()
 class FakeCore {
   services = {}
   methods = {}
@@ -270,7 +282,7 @@ class FakeCore {
 }
 mock.module(${JSON.stringify(join(pluginRoot, 'src/daemon/service.ts'))}, () => ({ EditorDaemon: FakeCore }))
 mock.module(${JSON.stringify(join(pluginRoot, 'src/markdown/service.ts'))}, () => ({
-  createMarkdownMethods: () => ({ methods: {}, dispose() { events.push('markdown-dispose') } })
+  createMarkdownMethods: () => ({ methods: { markdown: async () => null }, dispose() { events.push('markdown-dispose') } })
 }))
 mock.module(${JSON.stringify(join(pluginRoot, 'src/notebook/service.ts'))}, () => ({
   createNotebookMethods: () => ({ methods: {}, dispose() { events.push('notebook-dispose') } })
@@ -278,15 +290,19 @@ mock.module(${JSON.stringify(join(pluginRoot, 'src/notebook/service.ts'))}, () =
 mock.module(${JSON.stringify(join(pluginRoot, 'src/viewers/service.ts'))}, () => ({
   createViewerMethods: () => ({ methods: {}, dispose() { events.push('viewer-dispose') } })
 }))
-test('Markdown disposal begins before core cleanup is awaited', async () => {
-  // This subprocess isolates Bun module mocks and the plugin module's lifecycle state.
+test('deactivation preserves Markdown and core disposal order', async () => {
+  // Dynamic import must follow the mocks to exercise lifecycle state in this isolated process.
   const main = await import(${JSON.stringify(join(pluginRoot, 'main.ts'))})
-  await main.activate({ pluginId: 'quirky.editor', subscribe: () => () => {}, provide() {} })
-  const pending = main.deactivate()
-  expect(events.slice(0, 2)).toEqual(['markdown-dispose', 'core-dispose-start'])
+  await main.activate({
+    pluginId: 'quirky.editor',
+    subscribe: () => () => {},
+    provide(name, handler) { handlers.set(name, handler) }
+  })
+${markdownCall}  const pending = main.deactivate()
+  expect(events.slice(0, ${expectedPrefix.length})).toEqual(${JSON.stringify(expectedPrefix)})
   coreDisposal.resolve()
   await pending
-  expect(events.slice(0, 3)).toEqual(['markdown-dispose', 'core-dispose-start', 'core-dispose-end'])
+  expect(events).toEqual(${JSON.stringify(expectedOrder)})
   writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify(events))
 })
 `
@@ -883,11 +899,36 @@ describe('Markdown feature disposal and native dialogs', () => {
     const previousHome = process.env.QUIRKY_HOME
     process.env.QUIRKY_HOME = root
     try {
-      writeFileSync(scriptPath, deactivationTestScript(resultPath, resolve(REPO_ROOT, 'plugins/quirky.editor')))
+      writeFileSync(scriptPath, deactivationTestScript(resultPath, resolve(REPO_ROOT, 'plugins/quirky.editor'), true))
       const result = await runProcess(runner, process.execPath, ['test', scriptPath], { timeoutMs: 15_000, home: root })
       expect(result.code).toBe(0)
       expect(JSON.parse(readFileSync(resultPath, 'utf8'))).toEqual([
         'markdown-dispose',
+        'core-dispose-start',
+        'core-dispose-end',
+        'notebook-dispose',
+        'viewer-dispose'
+      ])
+    } finally {
+      rmSync(scriptPath, { force: true })
+      if (previousHome === undefined) delete process.env.QUIRKY_HOME
+      else process.env.QUIRKY_HOME = previousHome
+    }
+  })
+
+  test('main deactivation skips Markdown disposal when the service was never loaded', async () => {
+    const root = temporaryRoot()
+    const scriptPath = join(root, 'markdown-main-deactivation-unloaded.fixture.ts')
+    const resultPath = join(root, 'deactivation-unloaded-order.json')
+    const runner = createProcessRunner({ owner: 'markdown-deactivation-unloaded' })
+    runners.push(runner)
+    const previousHome = process.env.QUIRKY_HOME
+    process.env.QUIRKY_HOME = root
+    try {
+      writeFileSync(scriptPath, deactivationTestScript(resultPath, resolve(REPO_ROOT, 'plugins/quirky.editor'), false))
+      const result = await runProcess(runner, process.execPath, ['test', scriptPath], { timeoutMs: 15_000, home: root })
+      expect(result.code).toBe(0)
+      expect(JSON.parse(readFileSync(resultPath, 'utf8'))).toEqual([
         'core-dispose-start',
         'core-dispose-end',
         'notebook-dispose',

@@ -137,6 +137,12 @@ test('inventory validation rejects a missing captured command', () => {
   expect(codeOf(() => validateRows(inventory, rows))).toBe('missing-command')
 })
 
+test('inventory validation requires the compact worktree summary scope row', () => {
+  const inventory = loadCliInventory()
+  const rows = loadCliTable().filter((row) => row.id !== 'worktree-ps-summary')
+  expect(codeOf(() => validateRows(inventory, rows))).toBe('missing-command')
+})
+
 test('inventory validation rejects a duplicate command row', () => {
   const inventory = loadCliInventory()
   const rows = loadCliTable()
@@ -170,8 +176,10 @@ test('inventory validation requires a follow-up for mapped-only rows', () => {
   const inventory = loadCliInventory()
   const rows = loadCliTable()
   const row = rows.find((candidate) => candidate.id === 'orchestration-dispatch')!
+  row.disposition = 'mapped-only'
+  row.checks = []
   row.followUp = undefined
-  expect(codeOf(() => validateRows(inventory, rows))).toBe('missing-follow-up')
+  expect(codeOf(() => validateRows(inventory, rows, registeredChecks(rows)))).toBe('missing-follow-up')
 })
 
 test('inventory validation rejects captured commands added without a table row', () => {
