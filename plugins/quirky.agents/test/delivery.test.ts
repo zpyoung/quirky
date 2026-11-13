@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from 'bun:test'
-import type { PluginPty } from '@quirky/protocol'
+import type { PluginPty, PtySessionInfo } from '@quirky/protocol'
 import { DeliveryRunner } from '../src/delivery'
 import { validateEntry } from '../src/core/entry'
 import type { AgentEntry } from '../src/core/types'
@@ -15,6 +15,26 @@ function entry(id: string, data: Record<string, unknown> = {}): AgentEntry {
   const result = validateEntry('quirky.agents', id, { label: id, detect: id, prompt: 'stdin-after-start', ...data })
   if (!result.ok) throw new Error(result.error)
   return result.entry
+}
+
+function liveSessionInfo(sessionId: string): PtySessionInfo {
+  return {
+    sessionId,
+    state: 'running',
+    pid: 1,
+    alive: true,
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    cols: 80,
+    rows: 24,
+    argv: [],
+    cwd: '/isolated',
+    title: null,
+    shellState: 'unsupported',
+    createdAt: 0,
+    offset: 0
+  }
 }
 
 /** Ready the moment output shows the cursor under bracketed paste, so tests need no quiet window. */
@@ -623,11 +643,11 @@ describe('DeliveryRunner', () => {
 
   test('a liveness answer that arrives after settling writes nothing', async () => {
     const { pty, runner } = setup()
-    let answer: (value: Array<{ sessionId: string; alive: boolean }>) => void = () => {}
-    pty.api.list = () => new Promise((resolve) => (answer = resolve as typeof answer))
+    const answer = deferred<PtySessionInfo[]>()
+    pty.api.list = () => answer.promise
     pty.setReplay(`${PASTE_ON}${CURSOR}`)
     expect(await runner.deliver(SESSION, fast('goose'), 'hi', false)).toBe('not-delivered')
-    answer([{ sessionId: SESSION, alive: true }])
+    answer.resolve([liveSessionInfo(SESSION)])
     await Bun.sleep(20)
     expect(pty.writes).toEqual([])
   })
@@ -794,7 +814,7 @@ describe('DeliveryRunner', () => {
     expect(pty.unsubscribed).toEqual([SESSION])
   })
 
-  test('a local overflow releases its late subscribe hold after the deadline settles', async () => {
+  test('a local overflow releases its pending hold before a newer delivery completes', async () => {
     const { pty, runner } = setup({ timeScale: 1 })
     timers.useFakeTimers()
     const first = deferred<void>()
@@ -804,13 +824,43 @@ describe('DeliveryRunner', () => {
     pty.emit(new Uint8Array(4_194_305))
     await advanceClock(100)
     expect(await result).toBe('not-delivered')
-    expect(pty.unsubscribed).toEqual([])
+    expect(pty.unsubscribed).toEqual([SESSION])
 
+    const newer = runner.deliver(SESSION, fast('goose'), 'newer', false)
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
     first.resolve()
     await flushMicrotasks()
     expect(pty.unsubscribed).toEqual([SESSION])
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await newer).toBe('pasted')
+    expect(pty.unsubscribed).toEqual([SESSION, SESSION])
     await advanceClock(500)
-    expect(pty.subscribed).toHaveLength(1)
+    expect(pty.subscribed).toHaveLength(2)
+  })
+
+  test('one expired delivery cannot release a same-session hold owned by another delivery', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    const expired = runner.deliver(SESSION, entry('aider', { readyTimeoutMs: 100 }), 'old', false)
+    await flushMicrotasks()
+    pty.emit(new Uint8Array(4_194_305))
+    const active = runner.deliver(SESSION, fast('goose'), 'active', false)
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+
+    await advanceClock(100)
+    expect(await expired).toBe('not-delivered')
+    expect(pty.unsubscribed).toEqual([])
+    first.resolve()
+    await flushMicrotasks()
+    expect(pty.unsubscribed).toEqual([])
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await active).toBe('pasted')
+    expect(pty.paste).toEqual([frame('active')])
+    expect(pty.unsubscribed).toEqual([SESSION])
   })
 
   test('deadline during recovery is not delivered instead of blind-pasting across a gap', async () => {
@@ -835,7 +885,7 @@ describe('DeliveryRunner', () => {
   test('a lag after the blind deadline settles instead of stranding a pending liveness check', async () => {
     const { pty, runner } = setup({ timeScale: 1 })
     timers.useFakeTimers()
-    const liveness = deferred<Array<{ sessionId: string; alive: boolean }>>()
+    const liveness = deferred<PtySessionInfo[]>()
     let listCalls = 0
     pty.api.list = () => {
       listCalls++
@@ -857,7 +907,7 @@ describe('DeliveryRunner', () => {
     await flushMicrotasks()
     expect(outcome).toBe('not-delivered')
     expect(pty.writes).toEqual([])
-    liveness.resolve([{ sessionId: SESSION, alive: true }])
+    liveness.resolve([liveSessionInfo(SESSION)])
     await flushMicrotasks()
     await advanceClock(500)
     expect(pty.subscribed).toHaveLength(1)
@@ -915,13 +965,13 @@ describe('DeliveryRunner', () => {
   test('a gap during the liveness check invalidates that check before recovery', async () => {
     const { pty, runner } = setup({ timeScale: 1 })
     timers.useFakeTimers()
-    const firstList = deferred<Array<{ sessionId: string; alive: boolean }>>()
+    const firstList = deferred<PtySessionInfo[]>()
     let listCalls = 0
     pty.api.list = () => {
       listCalls++
       return listCalls === 1
         ? firstList.promise
-        : Promise.resolve([{ sessionId: SESSION, alive: true }])
+        : Promise.resolve([liveSessionInfo(SESSION)])
     }
     const result = runner.deliver(SESSION, fast('goose'), 'fresh', false)
     await flushMicrotasks()
@@ -929,7 +979,7 @@ describe('DeliveryRunner', () => {
     await flushMicrotasks()
     expect(listCalls).toBe(1)
     pty.lag(SESSION)
-    firstList.resolve([{ sessionId: SESSION, alive: true }])
+    firstList.resolve([liveSessionInfo(SESSION)])
     await flushMicrotasks()
     expect(pty.writes).toEqual([])
 
