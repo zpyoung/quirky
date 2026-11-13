@@ -26,6 +26,7 @@ export type CliWorldPaths = CliFixturePaths & {
   cliEntry: string
   daemonEntry: string
   actorCommand: string
+  coordinatorCommand: string
 }
 export type CliWorldResult = {
   stdout: string
@@ -709,10 +710,11 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
       repoRoot,
       cliEntry,
       daemonEntry,
-      actorCommand: buildCliActorCommand({ bunPath: process.execPath, actorEntry: fixtures.actorEntry })
+      actorCommand: buildCliActorCommand({ bunPath: process.execPath, actorEntry: fixtures.actorEntry }),
+      coordinatorCommand: `${buildCliActorCommand({ bunPath: process.execPath, actorEntry: fixtures.workerActorEntry })} coordinator`
     }
     if (!isAbsolute(process.execPath)) throw new CliWorldError('startup-failed', 'Bun executable path is not absolute')
-    if (!existsSync(cliEntry) || !existsSync(daemonEntry) || !existsSync(paths.actorEntry)) {
+    if (!existsSync(cliEntry) || !existsSync(daemonEntry) || !existsSync(paths.actorEntry) || !existsSync(paths.workerActorEntry)) {
       throw new CliWorldError('startup-failed', 'checkout CLI, daemon or actor entrypoint is missing')
     }
     await options.hooks?.beforeStart?.()
