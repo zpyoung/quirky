@@ -47,7 +47,7 @@ export type RunResult = {
   readonly signal: string | null
   /** Present when the runner stopped the command; output is then incomplete. */
   readonly stopped?: RunStopped
-  /** Present when members of the process group were still there one second after the command exited. */
+  /** Present when group members remain after the one-second cleanup bound following the leader's exit. */
   readonly groupSurvived?: true
   /** Present only when bytes were discarded from the captured output. */
   readonly truncated?: { readonly stdout: boolean; readonly stderr: boolean }
@@ -97,8 +97,8 @@ export type SpawnOptions = {
    * Gives the whole process group the grace period, not only the leader. After a stop request the
    * remaining members keep the rest of the grace once the leader has exited; when the leader exits
    * on its own they get SIGTERM and the grace. Piped output stays open until the group has ended,
-   * and a stop asked for during that time is recorded and can shorten the grace. A SIGKILL stop and
-   * disposal end everything at once. Default false.
+   * and a stop asked for during that time is recorded and can shorten the grace. SIGKILL and
+   * disposal end the grace and output immediately, then await bounded group cleanup. Default false.
    */
   groupGrace?: boolean
 }
@@ -111,13 +111,13 @@ export type SpawnExit = {
   /** Null when the child was killed by a signal or never started. */
   readonly exitCode: number | null
   readonly signal: string | null
-  /** Present when a stop was asked for before the child had exited. */
+  /** The first stop reason; with `groupGrace`, a request during cleanup can set it after the leader exits. */
   readonly stopped?: SpawnStopped
   /** Present when members of the process group were still there one second after the last kill began. */
   readonly groupSurvived?: true
   /** Present when the command could not be started. */
   readonly spawnError?: { readonly code: string; readonly message: string }
-  /** Whole milliseconds from the call to the child's exit. */
+  /** Whole milliseconds from the call to the leader's exit, excluding group cleanup. */
   readonly durationMs: number
 }
 
@@ -159,9 +159,12 @@ export type SpawnedProcess = {
   /** Resolves when the process group has ended or reached its cleanup bound. Never waits for a reader; never rejects. */
   readonly exited: Promise<SpawnExit>
   /**
-   * Closes stdin and signals the process group. With `groupGrace`, a graceful stop keeps output open
-   * through the grace; a SIGKILL stop and disposal end output at once. Resolves to what `exited`
-   * resolves to. Safe to call again, and a later call asking for SIGKILL sends it at once.
+   * Closes stdin and signals the process group. A default graceful stop ends piped output while
+   * the stderr tail keeps draining. With `groupGrace`, piped output stays open through the grace.
+   * A later graceful request can only shorten that grace; SIGKILL and disposal end it and all
+   * output immediately. The first stop reason wins, including requests after a natural leader
+   * exit while group grace remains. Resolves to the same result as `exited` after group cleanup.
+   * After completion the result stays unchanged; SIGKILL still closes unread output without signalling.
    */
   stop(options?: StopOptions): Promise<SpawnExit>
 }

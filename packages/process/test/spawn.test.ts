@@ -169,6 +169,23 @@ test('4: stderr tail is final when exited resolves', async () => {
   expect(result.exitCode).toBe(2)
   expect(child.stderrTail()).toBe('oops')
 }, 15_000)
+test('B1: default graceful stop retains stderrTail output from a TERM trap', async () => {
+  const value = runner()
+  const child = value.spawn(
+    ['/bin/sh', '-c', "trap 'echo bye-on-term >&2; exit 0' TERM; echo ready; sleep 30 & wait"],
+    { timeoutMs: 10_000, killGraceMs: 1_000 },
+  )
+  const output = child.stdout.getReader()
+  try {
+    expect(await output.read()).toEqual({ value: new TextEncoder().encode('ready\n'), done: false })
+    const result = await child.stop()
+    expect(result.stopped).toBe('stop')
+    expect(child.stderrTail()).toBe('bye-on-term\n')
+  } finally {
+    output.releaseLock()
+    await value.dispose()
+  }
+}, 5_000)
 
 test('5: stderr is drained into a bounded UTF-8-safe tail', async () => {
   const value = runner()

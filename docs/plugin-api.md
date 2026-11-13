@@ -117,11 +117,16 @@ These defaults apply:
 - Stdin is `'ignore'`, stdout is `'pipe'`, stderr is `'tail'`, the stderr tail is 16,384 bytes,
   and kill grace is 2,000 ms.
 
-`stop()` sends SIGTERM to the process group and escalates to SIGKILL after the grace period;
-`stop({ signal: 'SIGKILL' })` skips the grace. By default, stopping ends output immediately and
-discards unread output. With `groupGrace: true`, a graceful stop keeps piped output open for the
-remaining grace after the leader exits. `stop` resolves to the same exit object as `exited`.
-Cancelling stdout alone does not stop the child.
+`stop()` sends SIGTERM to the process group and escalates to SIGKILL after the grace period.
+By default, a graceful stop closes piped stdout/stderr and discards their unread bytes, while
+the automatic stderr tail continues draining through shutdown. With `groupGrace: true`, piped
+output stays open through the remaining group grace, even after the leader exits.
+A later graceful stop can only shorten that grace. `stop({ signal: 'SIGKILL' })` and disposal
+end it and close all output immediately, then wait for bounded group cleanup.
+The first stop reason wins. A stop during natural-exit group grace records its reason even though
+the leader already exited. After cleanup, the completed result stays unchanged; a hard stop still
+closes unread output without sending another signal. `stop` resolves to the same exit object as
+`exited`. Cancelling stdout alone does not request process termination.
 
 #### Start failures resolve; bad calls throw
 

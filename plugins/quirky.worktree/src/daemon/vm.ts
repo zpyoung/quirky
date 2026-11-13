@@ -375,6 +375,7 @@ async function runBounded(spawner: ProcessSpawner, executable: string, args: str
         }
       }
     } catch {
+      // capture failures must not replace the VM command's exit status
     } finally {
       reader.releaseLock()
     }

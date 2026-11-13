@@ -333,11 +333,14 @@ export function executeSpawn(
   const stderrForwarder = stderrPipeSource
     ? forwardOutput(stderrPipeSource, groupEndSignal, stallMs, argv[0] ?? '', () => stopped !== undefined)
     : undefined
-  const closeAllOutputsNow = () => {
+  const closeForwardedOutputsNow = () => {
     clearTimeout(gracefulOutputTimer)
     gracefulOutputTimer = undefined
     stdoutForwarder?.close()
     stderrForwarder?.close()
+  }
+  const closeAllOutputsNow = () => {
+    closeForwardedOutputsNow()
     stderrTailSource?.cancel()
   }
   const startGroupKill = (): Promise<boolean> => {
@@ -347,6 +350,7 @@ export function executeSpawn(
   const forceStopNow = (): Promise<boolean> => {
     clearTimeout(graceTimer)
     graceTimer = undefined
+    graceDeadlineAt = undefined
     closeAllOutputsNow()
     if (leaderDidExit) return startGroupKill()
     if (!preExitHardKillSent) {
@@ -421,7 +425,8 @@ export function executeSpawn(
         }
       } else {
         if (signal === 'SIGKILL' && !groupExitCompleted) void forceStopNow()
-        else if (signal === 'SIGKILL' || !options.groupGrace) closeAllOutputsNow()
+        else if (signal === 'SIGKILL') closeAllOutputsNow()
+        else if (!options.groupGrace) closeForwardedOutputsNow()
       }
     return
     }
@@ -447,7 +452,7 @@ export function executeSpawn(
 
     killGroup('SIGTERM')
     graceDeadlineAt = Date.now() + graceMs
-    if (!options.groupGrace) closeAllOutputsNow()
+    if (!options.groupGrace) closeForwardedOutputsNow()
     scheduleGraceKill()
   }
   const stopForDisposal = () => requestStop('aborted', 'SIGKILL', 0)
@@ -549,6 +554,7 @@ export function executeSpawn(
           await child.stdin!.flush()
           return !stopping
         } catch {
+          // A stopped child can reject a flush with EPIPE while a write is pending.
           return false
         }
       })

@@ -641,6 +641,43 @@ test.each(['timeout', 'aborted', 'disposal', 'overflow'] as const)('2a: a stoppe
   expect(runner.live()).toEqual([])
   expect(starts).toBe(1)
 }, 5_000)
+test('M8: disposal during timeout cleanup preserves timeout as the first stop reason', async () => {
+  let alive = true
+  let leaderExited = false
+  const timedOut = Promise.withResolvers<void>()
+  const cleanupStarted = Promise.withResolvers<void>()
+  const child = groupDouble({
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGTERM') timedOut.resolve()
+      if (signal === 'SIGKILL' && leaderExited) cleanupStarted.resolve()
+    },
+  })
+  const runner = makeRunner({ start: asStart(child) })
+  const pending = runner.run(['/fake/timeout-then-dispose'], {
+    timeoutMs: 20, killGraceMs: 0,
+  })
+  try {
+    await timedOut.promise
+    leaderExited = true
+    child.finish(7)
+    await cleanupStarted.promise
+    const disposal = runner.dispose()
+    alive = false
+    const result = await pending
+    await disposal
+    expect(result.stopped).toBe('timeout')
+    expect(result.exitCode).toBeNull()
+    expect(runner.live()).toEqual([])
+  } finally {
+    alive = false
+    leaderExited = true
+    child.finish(7)
+    const disposal = runner.dispose()
+    await pending
+    await disposal
+  }
+}, 5_000)
 
 test('2a: rerunnable held output on a surviving group returns captured bytes without retrying', async () => {
   let stdoutCancellations = 0

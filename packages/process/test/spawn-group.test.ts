@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createProcessRunner, type OwnedProcessRunner } from '../src/api'
+import { createProcessRunner, ProcessStalledError, type OwnedProcessRunner } from '../src/api'
 import { startChild, type StartedChild, type StartChild } from '../src/child'
 
 const runners: OwnedProcessRunner[] = []
@@ -106,6 +106,82 @@ async function readText(stream: ReadableStream<Uint8Array>): Promise<string> {
   return new TextDecoder().decode(Buffer.concat(chunks.map(chunk => Buffer.from(chunk))))
 }
 
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 32; index++) await Promise.resolve()
+}
+
+type ControlledTimer = { id: number; at: number; run(): void }
+
+type ControlledClock = {
+  advance(milliseconds: number): Promise<void>
+  restore(): void
+}
+
+let activeClock: ControlledClock | undefined
+
+function controlledClock(): ControlledClock {
+  const realNow = Date.now
+  const realSetTimeout = globalThis.setTimeout
+  const realClearTimeout = globalThis.clearTimeout
+  let now = 0
+  let nextId = 0
+  let restored = false
+  const timers = new Map<number, ControlledTimer>()
+  const handles = new Set<number>()
+
+  Date.now = () => now
+  globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+    if (typeof callback !== 'function') throw new TypeError('Expected a timer callback')
+    const id = --nextId
+    handles.add(id)
+    timers.set(id, { id, at: now + Math.max(0, delay ?? 0), run: () => callback() })
+    return id as unknown as ReturnType<typeof globalThis.setTimeout>
+  }) as unknown as typeof globalThis.setTimeout
+  globalThis.clearTimeout = ((handle: ReturnType<typeof globalThis.setTimeout> | undefined) => {
+    const id = Number(handle)
+    if (handles.has(id)) {
+      timers.delete(id)
+      return
+    }
+    if (handle !== undefined) realClearTimeout(handle)
+  }) as typeof globalThis.clearTimeout
+
+  const clock: ControlledClock = {
+    async advance(milliseconds) {
+      const target = now + milliseconds
+      for (;;) {
+        let next: ControlledTimer | undefined
+        for (const timer of timers.values()) {
+          if (timer.at <= target && (!next || timer.at < next.at)) next = timer
+        }
+        if (!next) break
+        timers.delete(next.id)
+        now = next.at
+        next.run()
+        await flushMicrotasks()
+      }
+      now = target
+      await flushMicrotasks()
+    },
+    restore() {
+      if (restored) return
+      restored = true
+      timers.clear()
+      globalThis.clearTimeout = realClearTimeout
+      globalThis.setTimeout = realSetTimeout
+      Date.now = realNow
+      if (activeClock === clock) activeClock = undefined
+    },
+  }
+  activeClock = clock
+  return clock
+}
+
+async function advanceClock(milliseconds: number): Promise<void> {
+  if (!activeClock) throw new Error('controlled clock is not active')
+  await activeClock.advance(milliseconds)
+}
+
 test.each(['spawn', 'run'] as const)('1: %s waits for repeated group kills before settling', async mode => {
   let aliveUntil = 0
   let aliveCalls = 0
@@ -192,6 +268,38 @@ test('4: disposal during spawn cleanup waits for the group and preserves the tim
   expect(result.groupSurvived).toBeUndefined()
   expect(value.live()).toEqual([])
 }, 5_000)
+test('M10: spawn disposal remains pending until group cleanup completes', async () => {
+  let alive = true
+  const cleanupStarted = Promise.withResolvers<void>()
+  const child = groupDouble({
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGKILL') cleanupStarted.resolve()
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild })
+  const processHandle = value.spawn(['/fake/dispose-waits-for-group'], { timeoutMs: 5_000 })
+  let disposed = false
+  try {
+    child.finish(0)
+    await cleanupStarted.promise
+    const disposal = value.dispose().then(() => { disposed = true })
+    await flushMicrotasks()
+    expect(disposed).toBe(false)
+    expect(value.live()).toHaveLength(1)
+    alive = false
+    await processHandle.exited
+    await disposal
+    expect(disposed).toBe(true)
+    expect(value.live()).toEqual([])
+  } finally {
+    alive = false
+    child.finish(0)
+    const disposal = value.dispose()
+    await processHandle.exited
+    await disposal
+  }
+}, 5_000)
 
 test('4: run disposal during cleanup returns aborted only after the group is gone', async () => {
   let aliveUntil: number | undefined
@@ -205,8 +313,12 @@ test('4: run disposal during cleanup returns aborted only after the group is gon
   const pending = value.run(['/fake/run-dispose-cleanup'], { timeoutMs: 5_000 })
   child.finish(0)
   while (child.signals.length === 0) await Bun.sleep(1)
-  const disposal = value.dispose()
-  const [result] = await Promise.all([pending, disposal])
+  let disposed = false
+  const disposal = value.dispose().then(() => { disposed = true })
+  await flushMicrotasks()
+  expect(disposed).toBe(false)
+  const result = await pending
+  await disposal
   expect(result.stopped).toBe('aborted')
   expect(result.groupSurvived).toBeUndefined()
   expect(value.live()).toEqual([])
@@ -649,9 +761,393 @@ test('22: a graceful stop shortens natural-exit grace from its request time', as
   expect(kill!.at - stoppedAt).toBeLessThan(150)
   expect(kill!.at - leaderExitedAt).toBeLessThan(200)
 }, 5_000)
-
-test('22: SIGKILL stop ends both streams during natural-exit grace', async () => {
+test('M5: a later stop cannot extend natural-exit grace', async () => {
+  const clock = controlledClock()
   let alive = true
+  const termSent = Promise.withResolvers<void>()
+  let firstKillAt: number | undefined
+  const child = groupDouble({
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGTERM') termSent.resolve()
+      if (signal === 'SIGKILL') {
+        firstKillAt ??= Date.now()
+        alive = false
+      }
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild })
+  const processHandle = value.spawn(['/fake/one-way-grace'], {
+    timeoutMs: 5_000, killGraceMs: 1_000, groupGrace: true,
+  })
+  try {
+    child.finish(0)
+    await termSent.promise
+    await advanceClock(200)
+    const stopped = processHandle.stop({ graceMs: 2_000 })
+    await advanceClock(799)
+    expect(firstKillAt).toBeUndefined()
+    await advanceClock(1)
+    expect(firstKillAt).toBe(1_000)
+    const result = await processHandle.exited
+    await stopped
+    expect(result.stopped).toBe('stop')
+  } finally {
+    alive = false
+    child.finish(0)
+    await advanceClock(20)
+    await processHandle.exited
+    await value.dispose()
+    clock.restore()
+  }
+}, 5_000)
+test('M6: graceful streams remain open for one stall window after exit', async () => {
+  const clock = controlledClock()
+  const stdout = openSource()
+  const stderr = openSource()
+  const child = groupDouble({
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    groupAlive: () => false,
+    onSignal(signal, finish) {
+      if (signal === 'SIGTERM') finish(null, 'SIGTERM')
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild, stallMs: 80 })
+  const processHandle = value.spawn(['/fake/grace-output-window'], {
+    timeoutMs: 5_000, stderr: 'pipe', groupGrace: true,
+  })
+  const output = readText(processHandle.stdout)
+  const errorOutput = readText(processHandle.stderr)
+  try {
+    const stopping = processHandle.stop()
+    const result = await processHandle.exited
+    expect(result.stopped).toBe('stop')
+    expect(stdout.cancellations()).toBe(0)
+    expect(stderr.cancellations()).toBe(0)
+    stdout.controller().enqueue(new TextEncoder().encode('late-out'))
+    stderr.controller().enqueue(new TextEncoder().encode('late-err'))
+    await advanceClock(79)
+    expect(stdout.cancellations()).toBe(0)
+    expect(stderr.cancellations()).toBe(0)
+    await advanceClock(1)
+    await stopping
+    expect(stdout.cancellations()).toBe(1)
+    expect(stderr.cancellations()).toBe(1)
+    expect(await Promise.all([output, errorOutput])).toEqual(['late-out', 'late-err'])
+    expect(stdout.stream.locked).toBe(false)
+    expect(stderr.stream.locked).toBe(false)
+  } finally {
+    try { stdout.controller().close() } catch {}
+    try { stderr.controller().close() } catch {}
+    child.finish(null, 'SIGTERM')
+    await advanceClock(100)
+    await processHandle.exited
+    await Promise.all([output, errorOutput].map(read => read.catch(() => '')))
+    await value.dispose()
+    clock.restore()
+  }
+}, 5_000)
+test('M2: output stall time starts only after process-group cleanup', async () => {
+  const clock = controlledClock()
+  let alive = true
+  const cleanupStarted = Promise.withResolvers<void>()
+  const stdout = openSource()
+  const child = groupDouble({
+    stdout: stdout.stream,
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGKILL') cleanupStarted.resolve()
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild, stallMs: 50 })
+  const processHandle = value.spawn(['/fake/stall-after-cleanup'], {
+    timeoutMs: 5_000,
+  })
+  const reader = processHandle.stdout.getReader()
+  let settled = false
+  const read = reader.read().then(
+    value => { settled = true; return { kind: 'read' as const, value } },
+    error => { settled = true; return { kind: 'error' as const, error } },
+  )
+  try {
+    child.finish(0)
+    await cleanupStarted.promise
+    await advanceClock(100)
+    expect(settled).toBe(false)
+    alive = false
+    await advanceClock(10)
+    await processHandle.exited
+    await advanceClock(49)
+    expect(settled).toBe(false)
+    await advanceClock(1)
+    expect(settled).toBe(true)
+    const outcome = await read
+    expect(outcome.kind).toBe('error')
+    if (outcome.kind === 'error') expect(outcome.error).toBeInstanceOf(ProcessStalledError)
+  } finally {
+    alive = false
+    child.finish(0)
+    try { stdout.controller().close() } catch {}
+    await advanceClock(100)
+    await processHandle.exited
+    await read
+    reader.releaseLock()
+    await value.dispose()
+    clock.restore()
+  }
+}, 5_000)
+test('M11: a surviving group cancels the tailed stderr source at its cleanup bound', async () => {
+  const clock = controlledClock()
+  const stderr = openSource()
+  stderr.controller().enqueue(new TextEncoder().encode('diagnostic'))
+  const cleanupStarted = Promise.withResolvers<void>()
+  const child = groupDouble({
+    stderr: stderr.stream,
+    groupAlive: () => true,
+    onSignal(signal) {
+      if (signal === 'SIGKILL') cleanupStarted.resolve()
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild, stallMs: 50 })
+  const processHandle = value.spawn(['/fake/surviving-tail'], { timeoutMs: 5_000 })
+  let settled = false
+  const pending = processHandle.exited.then(result => {
+    settled = true
+    return result
+  })
+  try {
+    child.finish(7)
+    await cleanupStarted.promise
+    await advanceClock(999)
+    expect(settled).toBe(false)
+    await advanceClock(1)
+    expect(settled).toBe(true)
+    const result = await pending
+    expect(result.groupSurvived).toBe(true)
+    expect(processHandle.stderrTail()).toBe('diagnostic')
+    expect(stderr.cancellations()).toBe(1)
+  } finally {
+    try { stderr.controller().close() } catch {}
+    child.finish(7)
+    await advanceClock(1_020)
+    await pending
+    await value.dispose()
+    clock.restore()
+  }
+}, 5_000)
+test('M14: a natural leader exit clears its deadline before cleanup', async () => {
+  const clock = controlledClock()
+  let alive = true
+  const cleanupStarted = Promise.withResolvers<void>()
+  const stdout = openSource()
+  const child = groupDouble({
+    stdout: stdout.stream,
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGKILL') cleanupStarted.resolve()
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild, stallMs: 500 })
+  const processHandle = value.spawn(['/fake/clear-deadline'], {
+    timeoutMs: 100,
+  })
+  let outputSettled = false
+  const output = readText(processHandle.stdout).then(text => {
+    outputSettled = true
+    return text
+  })
+  try {
+    child.finish(0)
+    await cleanupStarted.promise
+    await advanceClock(150)
+    expect(outputSettled).toBe(false)
+    stdout.controller().enqueue(new TextEncoder().encode('after-deadline'))
+    stdout.controller().close()
+    alive = false
+    await advanceClock(10)
+    const result = await processHandle.exited
+    expect(result.stopped).toBeUndefined()
+    expect(await output).toBe('after-deadline')
+  } finally {
+    alive = false
+    child.finish(0)
+    try { stdout.controller().close() } catch {}
+    await advanceClock(20)
+    await processHandle.exited
+    await output.catch(() => '')
+    await value.dispose()
+    clock.restore()
+  }
+}, 5_000)
+
+test('M15: abort after default-mode leader exit does not cut forwarded output', async () => {
+  const clock = controlledClock()
+  let alive = true
+  const cleanupStarted = Promise.withResolvers<void>()
+  const stdout = openSource()
+  const child = groupDouble({
+    stdout: stdout.stream,
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGKILL') cleanupStarted.resolve()
+    },
+  })
+  const abort = new AbortController()
+  const value = runner({ start: (() => child) as StartChild, stallMs: 500 })
+  const processHandle = value.spawn(['/fake/detached-abort-listener'], {
+    timeoutMs: null, signal: abort.signal,
+  })
+  const output = readText(processHandle.stdout)
+  let enqueueError: unknown
+  try {
+    child.finish(0)
+    await cleanupStarted.promise
+    abort.abort()
+    try {
+      stdout.controller().enqueue(new TextEncoder().encode('after-abort'))
+      stdout.controller().close()
+    } catch (error) {
+      enqueueError = error
+    }
+    alive = false
+    await advanceClock(10)
+    await processHandle.exited
+    expect(enqueueError).toBeUndefined()
+    expect(await output).toBe('after-abort')
+  } finally {
+    alive = false
+    child.finish(0)
+    try { stdout.controller().close() } catch {}
+    await advanceClock(20)
+    await processHandle.exited
+    await output.catch(() => '')
+    await value.dispose()
+    clock.restore()
+  }
+}, 5_000)
+test('M3: spawn treats a throwing groupAlive as a possibly live group', async () => {
+  let checks = 0
+  const child = groupDouble({
+    groupAlive() {
+      if (checks++ === 0) throw Object.assign(new Error('permission unknown'), { code: 'EPERM' })
+      return false
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild })
+  const processHandle = value.spawn(['/fake/throwing-spawn-group-check'], {
+    timeoutMs: 5_000, killGraceMs: 0, groupGrace: true,
+  })
+  try {
+    child.finish(0)
+    const result = await processHandle.exited
+    expect(child.signals.some(call => call.signal === 'SIGTERM')).toBe(true)
+    expect(result.groupSurvived).toBeUndefined()
+  } finally {
+    child.finish(0)
+    await processHandle.exited
+    await value.dispose()
+  }
+}, 5_000)
+
+test('M4: kill cleanup retries after groupAlive throws', async () => {
+  let checks = 0
+  const child = groupDouble({
+    groupAlive() {
+      if (checks++ === 0) throw new Error('group state unavailable')
+      return false
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild })
+  const processHandle = value.spawn(['/fake/throwing-kill-group-check'], { timeoutMs: 5_000 })
+  try {
+    child.finish(0)
+    const result = await processHandle.exited
+    expect(child.signals.filter(call => call.signal === 'SIGKILL').length).toBeGreaterThanOrEqual(2)
+    expect(result.groupSurvived).toBeUndefined()
+  } finally {
+    child.finish(0)
+    await processHandle.exited
+    await value.dispose()
+  }
+}, 5_000)
+test('M13: disposal during cleanup shares one kill loop and cleanup goes quiet', async () => {
+  const clock = controlledClock()
+  let alive = true
+  const firstKill = Promise.withResolvers<void>()
+  const child = groupDouble({
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGKILL') firstKill.resolve()
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild })
+  const processHandle = value.spawn(['/fake/shared-kill-loop'], { timeoutMs: 5_000 })
+  try {
+    child.finish(0)
+    await firstKill.promise
+    const disposal = value.dispose()
+    await flushMicrotasks()
+    expect(child.signals.filter(call => call.signal === 'SIGKILL')).toHaveLength(1)
+    alive = false
+    await advanceClock(10)
+    await processHandle.exited
+    await disposal
+    expect(value.live()).toEqual([])
+    const signalsAtSettle = child.signals.length
+    await advanceClock(50)
+    expect(child.signals).toHaveLength(signalsAtSettle)
+  } finally {
+    alive = false
+    child.finish(0)
+    const disposal = value.dispose()
+    await advanceClock(20)
+    await processHandle.exited
+    await disposal
+    clock.restore()
+  }
+}, 5_000)
+
+test.each(['spawn', 'run'] as const)('M17: %s reports a surviving group at the exact one-second bound', async mode => {
+  const clock = controlledClock()
+  let alive = true
+  const killStarted = Promise.withResolvers<void>()
+  const child = groupDouble({
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGKILL') killStarted.resolve()
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild })
+  const pending = mode === 'spawn'
+    ? value.spawn(['/fake/exact-cleanup-bound'], { timeoutMs: 5_000 }).exited
+    : value.run(['/fake/exact-cleanup-bound'], { timeoutMs: 5_000 })
+  let settled = false
+  void pending.then(() => { settled = true })
+  try {
+    child.finish(7)
+    await killStarted.promise
+    await advanceClock(999)
+    expect(settled).toBe(false)
+    await advanceClock(1)
+    expect(settled).toBe(true)
+    const result = await pending
+    expect(result.exitCode).toBe(7)
+    expect(result.groupSurvived).toBe(true)
+  } finally {
+    alive = false
+    child.finish(7)
+    const disposal = value.dispose()
+    await advanceClock(20)
+    await pending
+    await disposal
+    clock.restore()
+  }
+}, 5_000)
+
+test('22: SIGKILL stop ends both streams immediately during natural-exit grace', async () => {
+  let alive = true
+  const termSent = Promise.withResolvers<void>()
   const stdout = openSource()
   const stderr = openSource()
   const child = groupDouble({
@@ -659,26 +1155,83 @@ test('22: SIGKILL stop ends both streams during natural-exit grace', async () =>
     stderr: stderr.stream,
     groupAlive: () => alive,
     onSignal(signal) {
+      if (signal === 'SIGTERM') termSent.resolve()
       if (signal === 'SIGKILL') alive = false
     },
   })
-  const processHandle = runner({ start: (() => child) as StartChild }).spawn(['/fake/hard-stop-grace'], {
+  const value = runner({ start: (() => child) as StartChild })
+  const processHandle = value.spawn(['/fake/hard-stop-grace'], {
     timeoutMs: 5_000, killGraceMs: 400, groupGrace: true, stderr: 'pipe',
   })
   const out = processHandle.stdout.getReader()
   const err = processHandle.stderr.getReader()
   const outputRead = out.read()
   const errorRead = err.read()
-  child.finish(0)
-  while (child.signals.length === 0) await Bun.sleep(1)
-  const result = await processHandle.stop({ signal: 'SIGKILL' })
-  expect(result.stopped).toBe('stop')
-  expect(child.signals.map(call => call.signal)).toEqual(['SIGTERM', 'SIGKILL'])
-  expect(await outputRead).toEqual({ value: undefined, done: true })
-  expect(await errorRead).toEqual({ value: undefined, done: true })
-  out.releaseLock()
-  err.releaseLock()
+  let outputDone = false
+  let errorDone = false
+  void outputRead.then(() => { outputDone = true })
+  void errorRead.then(() => { errorDone = true })
+  try {
+    child.finish(0)
+    await termSent.promise
+    const stopping = processHandle.stop({ signal: 'SIGKILL' })
+    await flushMicrotasks()
+    expect(outputDone).toBe(true)
+    expect(errorDone).toBe(true)
+    const result = await stopping
+    expect(result.stopped).toBe('stop')
+    expect(child.signals.map(call => call.signal)).toEqual(['SIGTERM', 'SIGKILL'])
+    expect(await outputRead).toEqual({ value: undefined, done: true })
+    expect(await errorRead).toEqual({ value: undefined, done: true })
+  } finally {
+    alive = false
+    child.finish(0)
+    try { stdout.controller().close() } catch {}
+    try { stderr.controller().close() } catch {}
+    await processHandle.exited
+    await Promise.all([outputRead, errorRead].map(read => read.catch(() => undefined)))
+    out.releaseLock()
+    err.releaseLock()
+    await value.dispose()
+  }
 }, 5_000)
+test('B2: a pre-exit hard stop starts group cleanup without the prior grace deadline', async () => {
+  let alive = true
+  let leaderExited = false
+  let leaderExitedAt = 0
+  let firstKillAfterExitAt: number | undefined
+  const child = groupDouble({
+    groupAlive: () => alive,
+    onSignal(signal) {
+      if (signal === 'SIGKILL' && leaderExited) {
+        firstKillAfterExitAt ??= Date.now()
+        alive = false
+      }
+    },
+  })
+  const value = runner({ start: (() => child) as StartChild })
+  const processHandle = value.spawn(['/fake/pre-exit-hard-stop'], {
+    timeoutMs: 5_000, killGraceMs: 800, groupGrace: true,
+  })
+  try {
+    void processHandle.stop()
+    void processHandle.stop({ signal: 'SIGKILL' })
+    leaderExitedAt = Date.now()
+    leaderExited = true
+    child.finish(0)
+    const result = await processHandle.exited
+    expect(result).toMatchObject({ exitCode: 0, stopped: 'stop' })
+    expect(firstKillAfterExitAt).toBeDefined()
+    expect(firstKillAfterExitAt! - leaderExitedAt).toBeLessThan(250)
+  } finally {
+    leaderExited = true
+    alive = false
+    child.finish(0)
+    await processHandle.exited
+    await value.dispose()
+  }
+}, 5_000)
+
 
 test('22: disposal during natural-exit grace hard-kills and waits for the group', async () => {
   let alive = true
@@ -725,7 +1278,7 @@ test('24: abort during natural-exit grace stops an ignoring descendant without a
   const pidFile = join(homeDir, 'abort-descendant.pid')
   const abort = new AbortController()
   const processHandle = runner().spawn(
-    ['/bin/sh', '-c', `(trap '' TERM; : > "$R"; exec /bin/sleep 30) >/dev/null 2>&1 & echo $! > "$P"; while [ ! -e "$R" ]; do :; done; echo early; exit 0`],
+    ['/bin/sh', '-c', `(trap '' TERM; : > "$R"; exec /bin/sleep 30) & echo $! > "$P"; while [ ! -e "$R" ]; do :; done; echo early; exit 0`],
     { env: { R: ready, P: pidFile }, timeoutMs: 5_000, killGraceMs: 800, groupGrace: true, signal: abort.signal },
   )
   const startedAt = Date.now()

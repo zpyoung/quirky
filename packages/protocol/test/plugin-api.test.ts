@@ -23,7 +23,7 @@ type ProcessCapabilityAssertions = [
   Assert<{ run: ProcessRunner['run'] } extends ProcessRunner ? true : false>,
   Assert<ReturnType<PluginContext['process']['spawn']> extends SpawnedProcess ? true : false>,
   Assert<Extract<ReturnType<PluginContext['process']['spawn']>, Promise<unknown>> extends never ? true : false>,
-  Assert<Extract<SpawnOptions['stderr'], 'pipe'> extends 'pipe' ? true : false>,
+  Assert<'pipe' extends NonNullable<SpawnOptions['stderr']> ? true : false>,
   Assert<true extends SpawnOptions['groupGrace'] ? true : false>,
   Assert<SpawnedProcess['stderr'] extends ReadableStream<Uint8Array> ? true : false>,
   Assert<SpawnExit['groupSurvived'] extends true | undefined ? true : false>,
