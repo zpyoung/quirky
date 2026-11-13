@@ -36,6 +36,20 @@ export function birthtimeOf(path: string): number | null {
   }
 }
 
+function folderReplaced(row: WorktreeRow, birthtime: number | null, instanceId: string | null): boolean {
+  return (row.birthtime !== null && birthtime !== null && row.birthtime !== birthtime) ||
+    (instanceId !== null && row.instance_id !== '' && !row.instance_id.startsWith('unverified:') && row.instance_id !== instanceId)
+}
+
+/** Whether a stored row still names its original folder; reads identity without changing the row. */
+export function folderStateOf(row: WorktreeRow, path: string | null, identitySource: DirectoryIdentitySource): 'same' | 'replaced' | 'missing' {
+  if (path === null) return 'missing'
+  const identity = identitySource.stat(path)
+  const birthtime = identity === null ? birthtimeOf(path) : Math.round(identity.birthtimeMs)
+  if (birthtime === null) return 'missing'
+  return folderReplaced(row, birthtime, identity === null ? null : instanceIdFor(identity)) ? 'replaced' : 'same'
+}
+
 /**
  * The record for a workspace: its facts (git or folder) joined with its stored metadata.
  * `name` is the display name, else the branch for a primary checkout, the given name for a
@@ -81,12 +95,10 @@ function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path
   const instanceId = identity === null ? null : instanceIdFor(identity)
   const birthtime = identity === null ? birthtimeOf(path) : Math.round(identity.birthtimeMs)
   let row = rowOf(env.store, id)
-  const differentBirthtime = row && row.birthtime !== null && birthtime !== null && row.birthtime !== birthtime
-  const differentInstance =
-    row && instanceId !== null && row.instance_id !== '' && !row.instance_id.startsWith('unverified:') && row.instance_id !== instanceId
-  if (row && (differentBirthtime || differentInstance || row.repo_id !== repoId)) {
+  const differentFolder = row !== null && folderReplaced(row, birthtime, instanceId)
+  if (row && (differentFolder || row.repo_id !== repoId)) {
     // a row of a removed and re-added project is the same case: its metadata must not carry over
-    if (differentBirthtime || differentInstance) env.log(`discarded the metadata of ${id}: ${path} is a different folder than the one it was recorded for`)
+    if (differentFolder) env.log(`discarded the metadata of ${id}: ${path} is a different folder than the one it was recorded for`)
     forgetWorktreeOrigins(env.store, id)
     env.store.run('DELETE FROM worktrees WHERE id = ?', id)
     row = null
