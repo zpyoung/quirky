@@ -57,6 +57,7 @@ function appServerRateLimits(runtime: ProviderRuntime, home: string): Promise<Pr
   let settled = false
   let buffer = ''
   let outputBytes = 0
+  let stdoutPump = Promise.resolve()
   let currentTimeout: ReturnType<typeof setTimeout> | undefined
   const abort = (): void => finish(rpcFailure(runtime, 'Codex usage refresh was cancelled'))
   function cleanup(): void {
@@ -164,17 +165,24 @@ function appServerRateLimits(runtime: ProviderRuntime, home: string): Promise<Pr
       finish(rpcFailure(runtime, 'Codex CLI could not be started', 'cli-unavailable'))
       return
     }
-    finish(rpcFailure(
-      runtime,
-      exit.exitCode === 0 ? 'Codex App Server exited before returning quota' : 'Codex App Server exited unexpectedly'
-    ))
+    void stdoutPump.then(() => {
+      if (settled) return
+      finish(rpcFailure(
+        runtime,
+        exit.exitCode === 0 ? 'Codex App Server exited before returning quota' : 'Codex App Server exited unexpectedly'
+      ))
+    })
   }, () => {
-    if (!settled) finish(rpcFailure(runtime, 'Codex App Server exited unexpectedly'))
+    if (!settled) {
+      void stdoutPump.then(() => {
+        if (!settled) finish(rpcFailure(runtime, 'Codex App Server exited unexpectedly'))
+      })
+    }
   })
   if (runtime.signal.aborted) abort()
   if (!settled) {
     currentTimeout = setTimeout(() => finish(rpcFailure(runtime, 'Codex App Server initialization timed out')), RPC_INITIALIZE_TIMEOUT_MS)
-    void readStdout()
+    stdoutPump = readStdout()
     write(request(1, 'initialize', { clientInfo: { name: 'orca', version: '1.0.0' } }))
   }
   return promise

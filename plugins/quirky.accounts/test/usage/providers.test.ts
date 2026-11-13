@@ -191,6 +191,7 @@ type CodexTestProcess = {
   enqueue(bytes: Uint8Array): void
   error(error: Error): void
   complete(exit?: Partial<SpawnExit>): SpawnExit
+  exitWithoutClosing(exit?: Partial<SpawnExit>): SpawnExit
 }
 
 function codexTestProcess(options: {
@@ -251,6 +252,13 @@ function codexTestProcess(options: {
       stdoutEnded = true
       stdoutController.error(error)
     },
+    exitWithoutClosing: (result = {}) => {
+      if (!exit) {
+        exit = { exitCode: 0, signal: null, durationMs: 0, ...result }
+        resolveExited(exit)
+      }
+      return exit
+    },
     complete
   }
 }
@@ -283,7 +291,8 @@ function codexRuntime(process: CodexTestProcess, signal = new AbortController().
 }
 
 async function waitUntil(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 50 && !predicate(); attempt += 1) await yieldToEventLoop()
+  const deadline = performance.now() + 3_000
+  while (!predicate() && performance.now() < deadline) await yieldToEventLoop()
   if (!predicate()) throw new Error('The Codex fixture did not reach the expected state')
 }
 
@@ -424,6 +433,50 @@ describe('Codex App Server usage', () => {
       timerControls.useRealTimers()
       await runtime.processes.shutdown()
       rmSync(fixture.root, { recursive: true, force: true })
+    }
+  })
+
+  test('processes quota buffered before ordinary exit handling', async () => {
+    const fixture = codexFixture()
+    const process = codexTestProcess()
+    const { runtime, calls } = codexRuntime(process)
+    try {
+      const resultPromise = fetchCodexUsage(runtime, fixture.target)
+      await waitUntil(() => calls.length === 1)
+      process.exitWithoutClosing({ exitCode: 0, signal: null })
+      process.enqueue(rateLimitsResponse())
+      process.complete()
+
+      const snapshot = await resultPromise
+      expect(snapshot.status).toBe('ok')
+      expect(percent(snapshot.session)).toBe(31)
+      expect(process.stopCalls).toEqual([{ graceMs: 1_000 }])
+    } finally {
+      await runtime.processes.shutdown()
+      rmSync(fixture.root, { recursive: true, force: true })
+    }
+  })
+
+  test('maps ordinary exits without quota to their exit-specific errors', async () => {
+    for (const { exitCode, error } of [
+      { exitCode: 0, error: 'Codex App Server exited before returning quota' },
+      { exitCode: 1, error: 'Codex App Server exited unexpectedly' }
+    ]) {
+      const fixture = codexFixture()
+      const process = codexTestProcess()
+      const { runtime, calls } = codexRuntime(process)
+      try {
+        const resultPromise = fetchCodexUsage(runtime, fixture.target)
+        await waitUntil(() => calls.length === 1)
+        process.complete({ exitCode, signal: null })
+
+        const snapshot = await resultPromise
+        expect(snapshot.error).toBe(error)
+        expect(snapshot.status).toBe('error')
+      } finally {
+        await runtime.processes.shutdown()
+        rmSync(fixture.root, { recursive: true, force: true })
+      }
     }
   })
 
