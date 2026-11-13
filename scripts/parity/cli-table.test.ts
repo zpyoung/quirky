@@ -67,6 +67,7 @@ function syntheticCatalog(mappings: readonly CliCatalogMapping[] = CLI_MAPPINGS)
       uiCommands.set(mapping.uiCommand, { id: mapping.uiCommand, plugin: uiPlugin, title: mapping.uiCommand, args: { type: 'object' } })
     }
     if (mapping.kind === 'plugin') {
+      if (!mapping.plugin) throw new Error('plugin catalog mapping is missing its plugin ID')
       const commandKey = `${mapping.plugin}:${mapping.commandId}`
       if (!groups.has(mapping.plugin)) groups.set(mapping.plugin, { plugin: mapping.plugin, words: groupWord, aliases: [...mapping.groupAliases] })
       if (!pluginCommands.has(commandKey)) {
@@ -228,4 +229,11 @@ test('catalog validation resolves group and command aliases to the primary entry
   const mappings = CLI_MAPPINGS.map((candidate) => candidate === mapping ? alias : candidate)
   const checked = validateCatalog(syntheticCatalog(), rows, mappings)
   expect(checked.find((entry) => entry.rowId === 'loop-create')?.refs).toContain('command:loops create')
+})
+
+test('a new equivalent claim cannot bypass compiled catalog and behavior declarations', () => {
+  const inventory = loadCliInventory()
+  const rows = loadCliTable()
+  rows.find(row => row.id === 'repo-list')!.equivalent += '; `status`'
+  expect(codeOf(() => validateRows(inventory, rows))).toBe('missing-catalog-ref')
 })

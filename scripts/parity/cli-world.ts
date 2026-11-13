@@ -353,10 +353,10 @@ function parseProcessTable(text: string): Map<number, ProcessIdentity> {
   return rows
 }
 
-function processSnapshot(): Map<number, ProcessIdentity> {
+function processSnapshot(home: string): Map<number, ProcessIdentity> {
   const result = spawnSync('/bin/ps', ['-A', '-o', 'pid=,ppid=,pgid=,lstart=,stat=,command='], {
-    cwd: '/tmp',
-    env: { HOME: '/tmp', PATH: '/usr/bin:/bin:/usr/sbin:/sbin', TMPDIR: '/tmp', LANG: 'C' },
+    cwd: home,
+    env: { HOME: home, QUIRKY_HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', TMPDIR: join(home, 'tmp'), LANG: 'C', TZ: 'UTC' },
     encoding: 'utf8',
     timeout: PROCESS_TABLE_TIMEOUT_MS,
     maxBuffer: PROCESS_TABLE_LIMIT_BYTES,
@@ -442,15 +442,15 @@ function collectProcessIdentities(snapshot: Map<number, ProcessIdentity>, daemon
   return [...identities.values()]
 }
 
-async function waitForProcessExit(identities: readonly ProcessIdentity[]): Promise<ProcessIdentity[]> {
+async function waitForProcessExit(identities: readonly ProcessIdentity[], home: string): Promise<ProcessIdentity[]> {
   const deadline = Date.now() + 2_000
   while (Date.now() < deadline) {
-    const snapshot = processSnapshot()
+    const snapshot = processSnapshot(home)
     const remaining = identities.filter((identity) => sameProcess(identity, snapshot.get(identity.pid)))
     if (remaining.length === 0) return []
     await Bun.sleep(75)
   }
-  const finalSnapshot = processSnapshot()
+  const finalSnapshot = processSnapshot(home)
   return identities.filter((identity) => sameProcess(identity, finalSnapshot.get(identity.pid)))
 }
 
@@ -498,7 +498,7 @@ function makeWorld(options: {
   let world: CliWorld
   const captureProcesses = () => {
     try {
-      const snapshot = processSnapshot()
+      const snapshot = processSnapshot(options.home)
       const identities = collectProcessIdentities(snapshot, options.daemon.pid, options.home, options.daemonIdentity)
       for (const identity of identities) observed.set(processIdentityKey(identity), identity)
       const ptyPid = readPtyPid(options.home)
@@ -515,7 +515,7 @@ function makeWorld(options: {
     get ptyPid() {
       const pid = readPtyPid(options.home)
       if (!pid) return undefined
-      const snapshot = processSnapshot()
+      const snapshot = processSnapshot(options.home)
       const identity = snapshot.get(pid)
       if (!identity?.command.includes('pty-host')) return undefined
       options.scope.track(pid)
@@ -570,7 +570,7 @@ function makeWorld(options: {
         }
         let lingering: ProcessIdentity[] = []
         try {
-          lingering = await waitForProcessExit(beforeCleanup)
+          lingering = await waitForProcessExit(beforeCleanup, options.home)
         } catch (error) {
           cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ')
         }
@@ -660,7 +660,7 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
     let cleanupError: string | undefined
     let owned: ProcessIdentity[] = []
     if (daemon) {
-      try { owned = collectProcessIdentities(processSnapshot(), daemon.pid, home) } catch (error) { cleanupError = errorText(error) }
+      try { owned = collectProcessIdentities(processSnapshot(home), daemon.pid, home) } catch (error) { cleanupError = errorText(error) }
     }
     try {
       await scope.cleanup()
@@ -668,7 +668,7 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
       cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ')
     }
     let lingering: ProcessIdentity[] = []
-    try { lingering = await waitForProcessExit(owned) } catch (error) { cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ') }
+    try { lingering = await waitForProcessExit(owned, home) } catch (error) { cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ') }
     if (lingering.length > 0) cleanupError = [cleanupError, `owned processes remain: ${lingering.map((row) => row.pid).join(', ')}`].filter(Boolean).join('; ')
     if (lingering.length === 0) {
       try { rmSync(home, { recursive: true, force: true }) }
@@ -730,7 +730,7 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
       throw new CliWorldError('daemon-readiness-timeout', 'owned daemon did not become healthy within 30 seconds', diagnostics.map((capture) => capture.text()).join('\n'))
     }
     checkReadyRuntime(home, daemon.pid, expectedHash)
-    const initial = processSnapshot().get(daemon.pid)
+    const initial = processSnapshot(home).get(daemon.pid)
     if (!initial) throw new CliWorldError('daemon-readiness', 'spawned daemon process identity could not be captured')
     const world = makeWorld({
       home,

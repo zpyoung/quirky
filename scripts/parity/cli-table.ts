@@ -143,7 +143,7 @@ function parseInventory(value: unknown): CliInventory {
     !stringArray(value.rootWords) || !Array.isArray(value.rootAssignments) || !Array.isArray(value.commands)) {
     return fail('invalid-capture', 'capture is missing inventory metadata')
   }
-  const rootAssignments = value.rootAssignments.map((entry, index) => {
+  const rootAssignments = value.rootAssignments.map((entry, index): CliInventory['rootAssignments'][number] => {
     if (!isRecord(entry) || typeof entry.root !== 'string' || (entry.owner !== 'g10-1' && entry.owner !== 'g12-1')) {
       return fail('invalid-capture', `root assignment ${index} is invalid`)
     }
@@ -190,7 +190,9 @@ function splitTableRow(line: string): string[] | undefined {
 function parseCheckCell(cell: string, rowId: string): string[] {
   if (cell === 'none') return []
   if (!cell.startsWith('check:')) return fail('missing-check', `row ${rowId} must use check:<id,...> or none`)
-  const checks = cell.slice('check:'.length).split(',').map((check) => check.trim())
+  const acceptance = '; `bun test scripts/parity/cli.test.ts`'
+  if (!cell.endsWith(acceptance)) return fail('missing-check', `row ${rowId} must name its subprocess acceptance command`)
+  const checks = cell.slice('check:'.length, -acceptance.length).split(',').map((check) => check.trim())
   if (checks.length === 0 || checks.some((check) => check.length === 0) || new Set(checks).size !== checks.length) {
     return fail('missing-check', `row ${rowId} has an empty or duplicate check reference`)
   }
@@ -259,6 +261,24 @@ export function loadCliTable(): CliTableRow[] {
 
 function expectedRowIdsForCommand(command: string): string {
   return command.replaceAll(' ', '-')
+}
+
+function validateEquivalentClaims(row: CliTableRow): void {
+  if (!row.command || row.disposition === 'excluded') return
+  const declared = CLI_MAPPINGS.filter(mapping => mapping.rowId === row.id)
+  for (const [, snippet] of row.equivalent.matchAll(/`([^`]+)`/g)) {
+    if (snippet.startsWith('--')) continue
+    const candidates = CLI_MAPPINGS.filter(mapping => snippet === mapping.words || snippet.startsWith(`${mapping.words} `))
+    const longest = candidates.reduce((length, mapping) => Math.max(length, mapping.words.length), 0)
+    const binding = declared.find(mapping => mapping.words.length === longest && candidates.includes(mapping))
+    if (!binding) return fail('missing-catalog-ref', `${row.id} claims ${snippet} without a compiled catalog reference`)
+    const argument = snippet.slice(binding.words.length).trim().split(/\s+/)[0]
+    if ((binding.methodTarget && argument !== binding.methodTarget) ||
+        (binding.uiCommand && argument.replace(/^command:/, '') !== binding.uiCommand.replace(/^command:/, '')) ||
+        (argument && !argument.startsWith('--') && binding.positionals.length === 0)) {
+      return fail('missing-catalog-ref', `${row.id} claims an undeclared target for ${binding.words}`)
+    }
+  }
 }
 
 export function validateInventory(
@@ -360,6 +380,7 @@ export function validateInventory(
     if (row.command && row.disposition === 'covered' && !CLI_MAPPINGS.some((mapping) => mapping.rowId === row.id)) {
       return fail('missing-catalog-ref', `covered row ${row.id} has no compiled catalog mapping`)
     }
+    validateEquivalentClaims(row)
   }
 
   for (const command of capturedCommands.keys()) {
@@ -430,6 +451,7 @@ const pluginReferences: Array<{ rowId: string; plugin: string; commandId: string
   { rowId: 'project-list', plugin: 'quirky.repo', commandId: 'list' },
   { rowId: 'project-setup-clone', plugin: 'quirky.repo', commandId: 'clone' },
   { rowId: 'project-setup-create', plugin: 'quirky.repo', commandId: 'create' },
+  { rowId: 'project-setup-create', plugin: 'quirky.repo', commandId: 'add' },
   { rowId: 'project-setup-delete', plugin: 'quirky.repo', commandId: 'rm' },
   { rowId: 'project-setup-existing-folder', plugin: 'quirky.repo', commandId: 'add' },
   { rowId: 'project-setup-update', plugin: 'quirky.repo', commandId: 'set' },
@@ -647,7 +669,8 @@ const KERNEL_MAPPINGS: CliCatalogMapping[] = [
   kernelMapping('skills-update', 'skill status', ['api.describe'], [
     flagBinding('dir', 'string', 'the skills folder; the skill goes in <dir>/quirky/SKILL.md', true)
   ]),
-  kernelMapping('status', 'status', ['status.get'])
+  kernelMapping('status', 'status', ['status.get']),
+  kernelMapping('serve-service-status', 'status', ['status.get'])
 ]
 
 export const CLI_MAPPINGS: readonly CliCatalogMapping[] = [
