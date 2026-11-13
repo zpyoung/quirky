@@ -487,9 +487,10 @@ function corruptStore(
   const directory = pluginDataDir(home, pluginId)
   mkdirSync(directory, { recursive: true, mode: 0o700 })
   const file = join(directory, 'store.db')
+  let indexRootPage: number | undefined
   const db = new Database(file)
   try {
-    db.exec('PRAGMA page_size = 4096')
+    db.exec(`PRAGMA page_size = ${options.damage === 'index' ? 65536 : 4096}`)
     db.exec('PRAGMA journal_mode = WAL')
     db.exec('CREATE TABLE records (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, payload TEXT NOT NULL)')
     db.exec(`
@@ -497,6 +498,12 @@ function corruptStore(
       INSERT INTO records (name, payload)
       SELECT printf('row-%04d', value), printf('payload-%04d', value) FROM n
     `)
+    if (options.damage === 'index') {
+      indexRootPage = row<{ rootpage: number }>(
+        db,
+        "SELECT rootpage FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'records' AND sql IS NULL"
+      ).rootpage
+    }
     db.exec('CREATE TABLE discarded (payload BLOB NOT NULL)')
     db.exec(`
       WITH RECURSIVE n(value) AS (VALUES(1) UNION ALL SELECT value + 1 FROM n WHERE value < 96)
@@ -520,19 +527,30 @@ function corruptStore(
     if (trunkPage === 0) throw new Error('fixture database has no freelist trunk')
     bytes.writeUInt32BE(0x7fffffff, (trunkPage - 1) * pageSize + 4)
   } else {
+    if (indexRootPage === undefined) throw new Error('fixture database has no autoindex root page')
+    const rootPageStart = (indexRootPage - 1) * pageSize
+    const headerOffset = rootPageStart + (indexRootPage === 1 ? 100 : 0)
+    if (bytes[headerOffset] !== 0x0a) throw new Error('fixture autoindex root is not a leaf index page')
+    const cellCount = bytes.readUInt16BE(headerOffset + 3)
+    if (cellCount !== 2000) throw new Error(`fixture autoindex root has ${cellCount} entries, expected 2000`)
+    const cellOffsets = Array.from({ length: cellCount }, (_, index) =>
+      bytes.readUInt16BE(headerOffset + 8 + index * 2)
+    )
     const key = Buffer.from('row-0247')
-    let keyOffset = bytes.indexOf(key)
     let indexKeyOffset = -1
-    while (keyOffset >= 0) {
-      const pageStart = Math.floor(keyOffset / pageSize) * pageSize
-      const headerOffset = pageStart === 0 ? 100 : pageStart
-      if (bytes[headerOffset] === 0x0a) {
+    for (const cellOffset of cellOffsets) {
+      const cellStart = rootPageStart + cellOffset
+      const payloadSize = bytes[cellStart]!
+      if (payloadSize & 0x80) throw new Error('fixture autoindex cell payload uses a multi-byte length')
+      const payloadStart = cellStart + 1
+      const payloadEnd = payloadStart + payloadSize
+      const keyOffset = bytes.indexOf(key, payloadStart)
+      if (keyOffset >= payloadStart && keyOffset + key.length <= payloadEnd) {
         indexKeyOffset = keyOffset
         break
       }
-      keyOffset = bytes.indexOf(key, keyOffset + 1)
     }
-    if (indexKeyOffset < 0) throw new Error('fixture database has no matching index entry')
+    if (indexKeyOffset < 0) throw new Error('fixture autoindex has no matching live entry')
     bytes.write('row-9000', indexKeyOffset, 'utf8')
   }
   writeFileSync(file, bytes)

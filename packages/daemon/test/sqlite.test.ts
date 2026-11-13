@@ -408,8 +408,8 @@ describe('openSqliteOrRecover', () => {
   test('quarantines non-database bytes and sidecars under one shared suffix', () => {
     const file = join(makeTempDir(), 'garbage.db')
     const originalBytes = openGarbageDatabase(file)
-    writeFileSync(`${file}-wal`, Buffer.alloc(128, 0x57))
-    writeFileSync(`${file}-shm`, Buffer.alloc(128, 0x53))
+    writeFileSync(`${file}-wal`, Buffer.alloc(0))
+    writeFileSync(`${file}-shm`, Buffer.alloc(0))
     const renameCalls: string[] = []
     const opened = openSqliteOrRecover(file, {
       fs: {
@@ -699,8 +699,8 @@ describe('Store SQLite setup', () => {
   test('quarantines a garbage kernel store, creates kernel tables, and calls onRecover once', () => {
     const file = join(makeTempDir(), 'quirky.db')
     const originalBytes = openGarbageDatabase(file)
-    writeFileSync(`${file}-wal`, Buffer.alloc(128, 0x57))
-    writeFileSync(`${file}-shm`, Buffer.alloc(128, 0x53))
+    writeFileSync(`${file}-wal`, Buffer.alloc(0))
+    writeFileSync(`${file}-shm`, Buffer.alloc(0))
     const recoveries: SqliteRecovery[] = []
     const store = new Store(file, { onRecover: (recovery) => recoveries.push(recovery) })
     try {
