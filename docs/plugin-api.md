@@ -302,15 +302,12 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.6.0** adds [`context.process.spawn`](#api-16-streaming-and-session-length-processes) for
   streaming and session-length daemon children under the same activation owner as `run`.
   A plugin that uses it declares `apiVersion` 1.6.0 or later.
-<<<<<<< HEAD
-- **1.7.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
-  Separate capture and stop-on-overflow remain the defaults. A plugin using either option declares
-  `apiVersion` 1.7.0.
-=======
 - **1.7.0** adds [`MountCleanup.updateInput`](#api-17-in-place-view-input-updates) for mounted
   views that preserve their DOM and resources when accepting new input.
   A plugin that uses it declares `apiVersion` 1.7.0 or later.
->>>>>>> origin/main
+- **1.8.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
+  Separate capture and stop-on-overflow remain the defaults. A plugin using either option declares
+  `apiVersion` 1.8.0.
 
 ## Example
 

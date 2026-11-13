@@ -210,7 +210,7 @@ describe('hosting process runner boundaries', () => {
       { name: 'nonzero exit', respond: () => runResult('partial', { exitCode: 1 }) },
       { name: 'signal', respond: () => runResult('', { exitCode: null, signal: 'SIGTERM' }) },
       { name: 'timeout', respond: () => runResult('', { exitCode: null, stopped: 'timeout' }) },
-      { name: 'synthetic stopped exit zero', respond: () => runResult('', { exitCode: 0, stopped: 'overflow' }) },
+      { name: 'synthetic stopped exit zero', respond: () => runResult('https://github.com/owner/repo.git\n', { exitCode: 0, stopped: 'overflow' }) },
       { name: 'spawn failure', respond: () => runResult('', { exitCode: null, spawnError: { code: 'ENOENT', message: 'missing git' } }) },
       { name: 'rejected runner', respond: async () => { throw new Error('runner rejected') } },
       { name: 'empty output', respond: () => runResult('  \n') }
@@ -318,7 +318,7 @@ describe('hosting process runner boundaries', () => {
       { name: 'nonzero exit', response: () => () => runResult('hostname github.com\n', { exitCode: 1 }) },
       { name: 'signal', response: () => () => runResult('', { exitCode: null, signal: 'SIGTERM' }) },
       { name: 'stopped', response: () => () => runResult('', { exitCode: null, stopped: 'timeout' }) },
-      { name: 'stopped including overflow with synthetic exit zero', response: () => () => runResult('', { exitCode: 0, stopped: 'overflow' }) },
+      { name: 'stopped including overflow with synthetic exit zero', response: () => () => runResult('hostname github.com\n', { exitCode: 0, stopped: 'overflow' }) },
       { name: 'spawn failure', response: () => () => runResult('', { exitCode: null, spawnError: { code: 'ENOENT', message: 'missing ssh' } }) },
       { name: 'rejected runner', response: () => async () => { throw new Error('runner rejected') } },
       { name: 'malformed hostname', response: () => () => runResult('not a hostname\n') },
