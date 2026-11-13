@@ -2,6 +2,16 @@
 
 The Git plugin stores independent recipes for commit messages, fix/review actions, branch names, and conversation names. `aiRecipe` resolves each field from the repository recipe, then the global recipe, then the default, and reports each field's source. `setAiRecipe` saves or resets a recipe at repository or global scope.
 
+## Git command limits
+
+`packages/git` runs git and gh through `@quirky/process`, under owner `git`. Git keeps its global eight-child scheduler and post-arrival read sharing.
+
+Read-only git calls default to a 30-second deadline; writes, including hooks, default to 120 seconds. Queue time counts toward the deadline. Direct `runGit` and `git` callers can set `timeoutMs` and `maxOutputBytes`; the default output cap is 16 MiB per stream. Diff blobs and patches keep their smaller limits and report oversized content instead of truncated text.
+
+Every git child disables fsmonitor and detached automatic maintenance through environment overrides, preserving caller-supplied `GIT_CONFIG_*` entries. Child process groups are stopped on exit, timeout, abort, or an early end to a streamed listing.
+
+Mutations are never retried after a post-exit pipe stall: their exit status and already-drained stdout and stderr are retained. Read-only commands retry at most three times within the same deadline.
+
 ## Commit messages
 
 With staged changes and an empty commit message, the sparkle button's tooltip and accessible name both read “Generate commit message with AI” when an agent is available. Other states explain why generation is unavailable or direct you to the AI settings.
