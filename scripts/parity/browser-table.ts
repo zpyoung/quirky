@@ -51,7 +51,12 @@ const EXPECTED_EXTRA_IDS = new Set([
   'native-profile-clear',
   'browser-identity-set-activation-after-restart',
   'worktree-watch-page',
-  'daemon-restart-profile'
+  'daemon-restart-profile',
+  'wait-selector',
+  'wait-text',
+  'wait-js',
+  'wait-url',
+  'wait-load'
 ])
 const DEFERRED_IDS = new Set([
   'native-profile-persistence',
@@ -63,7 +68,9 @@ const DEFERRED_IDS = new Set([
 const DECLARED_FOLLOWUPS = {
   routing: 'Reveal the selected browser page and route browser URLs to the intended client',
   interception: 'Keep intercepted requests pending until explicitly released',
-  restart: 'Prove CLI page identity in a worktree Watch pane across daemon restart'
+  restart: 'Prove CLI page identity in a worktree Watch pane across daemon restart',
+  waitNavigation: 'Let a pending browser wait finish when the navigation it waits for lands',
+  waitNavigationCause: 'a wait fulfilled by a navigation is rejected with browser_tab_changed'
 }
 
 function fail(code: string, detail: string): never {
@@ -288,6 +295,15 @@ function executableExtraValid(row: BrowserRow): boolean {
     return row.check === 'tab-switch-focus' && !row.deferred && row.disposition === 'gap' &&
       row.reason.includes(DECLARED_FOLLOWUPS.routing)
   }
+  if (row.id === 'wait-selector' || row.id === 'wait-text' || row.id === 'wait-js') {
+    return row.check === row.id && !row.deferred && row.disposition === 'covered'
+  }
+  if (row.id === 'wait-url' || row.id === 'wait-load') {
+    return row.check === row.id && !row.deferred &&
+      (row.disposition === 'covered' || (row.disposition === 'gap' &&
+        row.reason.includes(DECLARED_FOLLOWUPS.waitNavigationCause) &&
+        row.reason.includes(DECLARED_FOLLOWUPS.waitNavigation)))
+  }
   return false
 }
 
@@ -341,7 +357,15 @@ export function validateBrowserTable(rows: BrowserRow[], checkIds?: Iterable<str
     if (!byId.has(extra)) fail('missing-command', `required goal-10 row ${extra} is missing`)
   }
 
-  const declaredCheckIds = new Set([...capture.commands.map((command) => command.words.replaceAll(' ', '-')), 'tab-switch-focus'])
+  const declaredCheckIds = new Set([
+    ...capture.commands.map((command) => command.words.replaceAll(' ', '-')),
+    'tab-switch-focus',
+    'wait-selector',
+    'wait-text',
+    'wait-js',
+    'wait-url',
+    'wait-load'
+  ])
   for (const check of tableCheckIds) {
     if (!declaredCheckIds.has(check)) fail('missing-check', `check ${check} is not declared for this inventory`)
   }
@@ -351,7 +375,7 @@ export function validateBrowserTable(rows: BrowserRow[], checkIds?: Iterable<str
     ['open-url', DECLARED_FOLLOWUPS.routing],
     ['intercept-enable', DECLARED_FOLLOWUPS.interception],
     ['intercept-disable', DECLARED_FOLLOWUPS.interception],
-    ['intercept-list', DECLARED_FOLLOWUPS.interception]
+    ['intercept-list', DECLARED_FOLLOWUPS.interception],
   ]
   for (const [id, followup] of followupRows) {
     const row = byId.get(id)

@@ -3,11 +3,13 @@ import { mkdtempSync, rmSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runBrowserParity, validateOutcomes, type BrowserCheck } from './browser-run'
-import { parseBrowserArgs, createBrowserEnvironment, boundedDiagnostic, decodeCliReceipt, BrowserFailure, type BrowserWorld } from './browser-world'
+import { parseBrowserArgs, createBrowserEnvironment, boundedDiagnostic, decodeCliReceipt, BrowserFailure, type BrowserWorld, type CliReceipt } from './browser-world'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
+import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
+import { networkChecks } from './browser-checks-network'
 
 const row = (id: string, disposition: BrowserRow['disposition'] = 'covered'): BrowserRow => ({
   id, command: id, equivalent: `quirky browser ${id}`, check: id, disposition, reason: disposition === 'gap' ? 'known capability gap' : '', primary: true, deferred: false
@@ -15,7 +17,7 @@ const row = (id: string, disposition: BrowserRow['disposition'] = 'covered'): Br
 const fakeWorld = (cleanup: BrowserWorld['cleanup'] = async () => ({ ok: true })): BrowserWorld => ({
   home: '/owned/home', env: {}, fixture: {
     origin: 'http://127.0.0.1:1234', startedAt: 0, requests: [], dialogCount: 0,
-    waitForDialog: async () => {}, stop: async () => {}
+    waitForDialog: async () => {}, waitForGate: async () => {}, releaseGate: () => {}, stop: async () => {}
   }, worktreeA: 'a', worktreeB: 'b', daemonPid: 1,
   cli: async () => ({ argv: [], result: {}, exitCode: 0, stderrTail: '' }), cleanup, processEvidence: async () => ({})
 })
@@ -188,15 +190,125 @@ test('fixture waits release on cancellation and server shutdown', async () => {
   const f = startBrowserFixture()
   const controller = new AbortController()
   const cancelled = f.waitForDialog(f.dialogCount, controller.signal).catch((error: unknown) => error)
+  const gateCancelled = f.waitForGate('cancelled', controller.signal).catch((error: unknown) => error)
   controller.abort(new Error('cancelled fixture wait'))
   const cancellation = await cancelled
   expect(cancellation).toBeInstanceOf(Error)
   if (cancellation instanceof Error) expect(cancellation.message).toBe('cancelled fixture wait')
+  const gateCancellation = await gateCancelled
+  expect(gateCancellation).toBeInstanceOf(Error)
+  if (gateCancellation instanceof Error) expect(gateCancellation.message).toBe('cancelled fixture wait')
+
+  const held = fetch(`${f.origin}/wait-gate?key=released`)
+  await f.waitForGate('released')
+  f.releaseGate('released')
+  const released = await held
+  expect(released.ok).toBe(true)
+  expect(await released.text()).toContain('__parityWaitGateReleased')
+
   const stopped = f.waitForDialog(f.dialogCount).catch((error: unknown) => error)
+  const stoppedGate = f.waitForGate('shutdown').catch((error: unknown) => error)
   await f.stop()
   const shutdown = await stopped
   expect(shutdown).toBeInstanceOf(Error)
   if (shutdown instanceof Error) expect(shutdown.message).toContain('stopped')
+  const gateShutdown = await stoppedGate
+  expect(gateShutdown).toBeInstanceOf(Error)
+  if (gateShutdown instanceof Error) expect(gateShutdown.message).toContain('stopped')
+})
+test('wait evidence rejects an immediate success while the fixture gate is held', async () => {
+  const world = fakeWorld()
+  let waitCalls = 0
+  world.cli = async argv => {
+    const flagIndex = argv.findIndex(argument => argument.startsWith('--'))
+    const command = argv.slice(0, flagIndex < 0 ? argv.length : flagIndex).join(' ')
+    if (command === 'browser goto') {
+      const url = String(argv[argv.indexOf('--url') + 1])
+      return { argv, result: { url, title: url.endsWith('/page') ? 'Parity fixture' : '' }, exitCode: 0, stderrTail: '' }
+    }
+    if (command === 'browser click') return { argv, result: { clicked: '#readyButton' }, exitCode: 0, stderrTail: '' }
+    if (command === 'browser wait') {
+      waitCalls += 1
+      return { argv, result: { waited: true }, exitCode: 0, stderrTail: '' }
+    }
+    if (command === 'browser eval') {
+      const expression = String(argv[argv.indexOf('--expression') + 1])
+      if (expression === 'location.href') return { argv, result: { value: `${world.fixture.origin}/page` }, exitCode: 0, stderrTail: '' }
+      if (expression === 'document.title') return { argv, result: { value: 'Parity fixture' }, exitCode: 0, stderrTail: '' }
+      return { argv, result: { value: false }, exitCode: 0, stderrTail: '' }
+    }
+    throw new Error(`unexpected wait evidence command ${command}`)
+  }
+  const source = actionChecks.find(check => check.id === 'wait-selector')
+  if (!source) throw new Error('missing wait-selector check')
+  const check: BrowserCheck = {
+    ...source,
+    async run(c) {
+      c.state.pageA = 'page-a'
+      c.state.pageB = 'page-b'
+      return await source.run(c)
+    }
+  }
+  const report = await runBrowserParity({ rows: [row(check.id)], checks: [check], startWorld: async () => world })
+  expect(waitCalls).toBe(1)
+  expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'wrong-page' } })
+  expect(report.rows[0].status).not.toBe('passed')
+})
+
+
+test('interception auto-delivery is recorded as a gap, not pending evidence', async () => {
+  const world = fakeWorld()
+  const key = '__g10_1_intercept_enable'
+  const pattern = '*g10-1-intercept-enable*'
+  const url = `${world.fixture.origin}/intercept?probe=g10-1-intercept-enable`
+  const expression = `window[${JSON.stringify(key)}]`
+  let stateReads = 0
+  world.cli = async argv => {
+    const flagIndex = argv.findIndex(argument => argument.startsWith('--'))
+    const command = argv.slice(0, flagIndex < 0 ? argv.length : flagIndex).join(' ')
+    if (command === 'browser intercept enable') return { argv, result: { enabled: true, patterns: [pattern] }, exitCode: 0, stderrTail: '' }
+    if (command === 'browser intercept list') return { argv, result: { patterns: [pattern], requests: [{ url, pending: false }] }, exitCode: 0, stderrTail: '' }
+    if (command === 'browser intercept disable') return { argv, result: { disabled: true }, exitCode: 0, stderrTail: '' }
+    if (command === 'browser eval') {
+      const source = String(argv[argv.indexOf('--expression') + 1])
+      if (source === expression) {
+        stateReads += 1
+        if (stateReads === 1) {
+          return { argv, result: { value: { status: 'pending' } }, exitCode: 0, stderrTail: '' }
+        }
+        if (stateReads === 2) {
+          world.fixture.requests.push({ path: '/intercept', method: 'GET', headers: {} })
+        }
+        return { argv, result: { value: { status: 'fulfilled', responseStatus: 200, body: 'intercept-proof' } }, exitCode: 0, stderrTail: '' }
+      }
+      return { argv, result: { value: true }, exitCode: 0, stderrTail: '' }
+    }
+    throw new Error(`unexpected interception command ${command}`)
+  }
+  const source = networkChecks.find(check => check.id === 'intercept-enable')
+  if (!source) throw new Error('missing intercept-enable check')
+  const check: BrowserCheck = {
+    ...source,
+    async run(c) {
+      c.state.pageA = 'page-a'
+      return await source.run(c)
+    }
+  }
+  const report = await runBrowserParity({ rows: [row(check.id, 'gap')], checks: [check], startWorld: async () => world })
+  expect(stateReads).toBeGreaterThanOrEqual(3)
+  expect(report.rows[0]).toMatchObject({
+    status: 'gap',
+    evidence: {
+      pendingBeforeDisable: false,
+      pageStatusBeforeDisable: 'fulfilled',
+      pageStatusAfterDisable: 'fulfilled',
+      serverRequestsBeforeDisable: 1,
+      serverRequestsAfterDisable: 1,
+      responseStatus: 200,
+      responseBody: 'intercept-proof'
+    }
+  })
+  expect(report.rows[0].status).not.toBe('passed')
 })
 
 test('cookie evidence rejects a successful setter whose independent read lost the cookie', async () => {
@@ -224,4 +336,77 @@ test('CLI decoding validates opaque object results without treating them as empt
   const receipt = decodeCliReceipt(['browser', 'exec'], JSON.stringify(result), '', 0, '/owned')
   expect(receipt.result).toEqual(result)
   expect(() => decodeCliReceipt(['browser', 'exec'], JSON.stringify({ ...result, command: 42 }), '', 0, '/owned')).toThrow('command must be an object')
+})
+
+for (const outcome of ['navigation-gap', 'fixed', 'timeout', 'other-fault', 'wrong-url'] as const) {
+  test(`pending URL wait classifies ${outcome} without hiding other failures`, async () => {
+    const world = fakeWorld()
+    const waiting = Promise.withResolvers<CliReceipt>()
+    let released = false
+    let waitCalls = 0
+    let waitArgv: string[] = []
+    const fault = outcome === 'timeout'
+      ? { code: 'conflict', message: 'browser_timeout: wait timed out' }
+      : outcome === 'other-fault'
+        ? { code: 'not-found', message: 'browser_tab_changed: browser page identity changed during the operation' }
+        : { code: 'conflict', message: 'browser_tab_changed: browser page identity changed during the operation' }
+    world.fixture.releaseGate = () => {
+      released = true
+      waiting.resolve({ argv: waitArgv, result: outcome === 'fixed' ? { waited: true } : { error: fault }, exitCode: outcome === 'fixed' ? 0 : 1, stderrTail: '' })
+    }
+    world.cli = async argv => {
+      const flagIndex = argv.findIndex(argument => argument.startsWith('--'))
+      const command = argv.slice(0, flagIndex < 0 ? argv.length : flagIndex).join(' ')
+      if (command === 'browser goto') {
+        const url = argv[argv.indexOf('--url') + 1]
+        return { argv, result: { url, title: url.endsWith('/page') ? 'Parity fixture' : '' }, exitCode: 0, stderrTail: '' }
+      }
+      if (command === 'browser get') return { argv, result: { value: `${world.fixture.origin}/${released && outcome !== 'wrong-url' ? 'second' : 'page'}` }, exitCode: 0, stderrTail: '' }
+      if (command === 'browser eval') {
+        const expression = argv[argv.indexOf('--expression') + 1]
+        const value = expression === 'location.href' ? `${world.fixture.origin}/page` : expression === 'document.title' ? 'Parity fixture' : true
+        return { argv, result: { value }, exitCode: 0, stderrTail: '' }
+      }
+      if (command === 'browser wait') {
+        waitCalls += 1
+        waitArgv = argv
+        return await waiting.promise
+      }
+      throw new Error(`unexpected URL wait command ${command}`)
+    }
+    const source = actionChecks.find(check => check.id === 'wait-url')!
+    const check: BrowserCheck = { ...source, async run(c) {
+      c.state.pageA = 'page-a'
+      c.state.pageB = 'page-b'
+      return await source.run(c)
+    } }
+    const report = await runBrowserParity({ rows: [row(check.id, 'gap')], checks: [check], startWorld: async () => world })
+    expect(waitCalls).toBe(1)
+    expect(released).toBe(true)
+    const status = outcome === 'navigation-gap' ? 'gap' : outcome === 'fixed' ? 'passed' : 'failed'
+    expect(report.rows[0].status).toBe(status)
+    expect(report.ok).toBe(status !== 'failed')
+    if (status !== 'failed') {
+      expect(report.rows[0].evidence).toMatchObject({ pendingBeforeRelease: true, url: `${world.fixture.origin}/second` })
+      if (status === 'gap') expect(report.rows[0].reason).toContain('Let a pending browser wait finish when the navigation it waits for lands')
+    } else expect(report.rows[0].error?.kind).toBe(outcome === 'wrong-url' ? 'wrong-page' : 'cli-nonzero')
+  })
+}
+
+test('a pending observer interrupted before completion cannot become a passing row', async () => {
+  const controller = new AbortController()
+  const entered = Promise.withResolvers<void>()
+  const held = Promise.withResolvers<Record<string, unknown>>()
+  const check: BrowserCheck = { id: 'pending', async run() {
+    entered.resolve()
+    return await held.promise
+  } }
+  const pending = runBrowserParity({ rows: [row(check.id)], checks: [check], signal: controller.signal, startWorld: async () => fakeWorld() })
+  await entered.promise
+  controller.abort(new BrowserFailure('deadline', 'work interrupted'))
+  held.resolve({ observed: true })
+  const report = await pending
+  expect(report.ok).toBe(false)
+  expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'deadline' } })
+  expect(report.cleanup.ok).toBe(true)
 })

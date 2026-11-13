@@ -108,7 +108,12 @@ export async function runBrowserParity(options: {
       receipts = []
       try {
         controller.signal.throwIfAborted()
-        const evidence = await check.run(c)
+        const cancelled = Promise.withResolvers<never>()
+        const interrupt = () => cancelled.reject(controller.signal.reason)
+        controller.signal.addEventListener('abort', interrupt, { once: true })
+        let evidence: Evidence
+        try { evidence = await Promise.race([check.run(c), cancelled.promise]) }
+        finally { controller.signal.removeEventListener('abort', interrupt) }
         const gap = typeof evidence.gap === 'string' ? evidence.gap : undefined
         if (gap && row.disposition !== 'gap') throw new BrowserFailure('invalid-report', `check ${row.id} returned undeclared gap`)
         results.set(row.id, { id: row.id, status: gap ? 'gap' : 'passed', executed: true, elapsedMs: Date.now() - time, evidence: { ...evidence, receipts }, ...(gap ? { reason: gap } : {}) })

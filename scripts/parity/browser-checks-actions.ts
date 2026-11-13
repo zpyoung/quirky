@@ -1,5 +1,5 @@
 import type { BrowserCheck, CheckContext } from './browser-run'
-import type { CliReceipt } from './browser-world'
+import { BrowserFailure, type CliReceipt } from './browser-world'
 
 type NavigationResult = { url: string; title: string }
 type SnapshotRef = { ref: string; role: string; name: string }
@@ -52,6 +52,80 @@ function assertRefused(c: CheckContext, receipt: CliReceipt, pattern: RegExp, me
 async function observeInput(c: CheckContext, page?: string): Promise<string> {
   return await c.observe<string>('document.querySelector("#text").value', page)
 }
+type WaitCondition = { selector: string } | { text: string } | { fn: string } | { url: string } | { load: 'load' }
+type SettledWait =
+  | { ok: true; receipt: CliReceipt }
+  | { ok: false; error: unknown }
+const NAVIGATION_WAIT_GAP = 'a wait fulfilled by a navigation is rejected with browser_tab_changed. Follow-up: Let a pending browser wait finish when the navigation it waits for lands'
+
+function requireWaitSuccess(receipt: CliReceipt): void {
+  if (receipt.exitCode !== 0) throw new BrowserFailure('cli-nonzero', `wait: ${JSON.stringify(receipt.result)}`, receipt.stderrTail)
+  const result = receipt.result
+  if (!result || typeof result !== 'object' || !('waited' in result) || result.waited !== true) throw new BrowserFailure('malformed-cli-json', 'wait returned no successful condition result')
+}
+
+function navigationWaitOutcome(receipt: CliReceipt): Record<string, unknown> {
+  if (receipt.exitCode === 0) {
+    requireWaitSuccess(receipt)
+    return { waitResult: receipt.result }
+  }
+  const result = receipt.result
+  if (receipt.exitCode === 1 && result && typeof result === 'object' && 'error' in result) {
+    const error = result.error
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'conflict' &&
+      'message' in error && error.message === 'browser_tab_changed: browser page identity changed during the operation') {
+      return { gap: NAVIGATION_WAIT_GAP, waitResult: result }
+    }
+  }
+  throw new BrowserFailure('cli-nonzero', `unexpected navigation wait failure: ${JSON.stringify(result)}`, receipt.stderrTail)
+}
+
+async function assertPageBUnchanged(c: CheckContext, message: string): Promise<void> {
+  c.equal(await c.observe<string>('location.href', c.state.pageB), fixtureUrl(c, '/page'), `${message}: B URL`)
+  c.equal(await c.observe<string>('document.title', c.state.pageB), 'Parity fixture', `${message}: B title`)
+}
+
+async function waitBehindGate(c: CheckContext, key: string, condition: WaitCondition, label: string): Promise<CliReceipt> {
+  await c.world.fixture.waitForGate(key)
+  let settled = false
+  const pending = c.probe('wait', { ...condition, timeout: 10_000 }, c.state.pageA).then(
+    receipt => {
+      settled = true
+      return { ok: true, receipt } as const
+    },
+    error => {
+      settled = true
+      return { ok: false, error } as const
+    }
+  )
+
+  let barrierFailed = false
+  let barrierError: unknown
+  try {
+    await assertPageBUnchanged(c, `${label} controller barrier`)
+    c.assert(!settled, `${label} wait completed while its fixture gate was held`)
+  } catch (error) {
+    barrierFailed = true
+    barrierError = error
+  } finally {
+    c.world.fixture.releaseGate(key)
+  }
+
+  const outcome: SettledWait = await pending
+  if (barrierFailed) throw barrierError
+  if (!outcome.ok) throw outcome.error
+  await assertPageBUnchanged(c, `${label} result`)
+  return outcome.receipt
+}
+
+async function startGatedEffect(c: CheckContext, key: string, effect: string): Promise<void> {
+  const gateUrl = new URL('/wait-gate', c.world.fixture.origin)
+  gateUrl.searchParams.set('key', key)
+  const expression = `(()=>{void fetch(${JSON.stringify(gateUrl.href)}).then(response=>{if(!response.ok)throw new Error('wait gate response failed');${effect}}).catch(error=>{window.__parityWaitEffectError=String(error)});return true})()`
+  const started = await c.call<ValueResult<boolean>>('eval', { expression }, c.state.pageA)
+  c.equal(started.value, true, `${key} fixture effect must be scheduled through the CLI`)
+}
+
 
 export const actionChecks: BrowserCheck[] = [
   {
@@ -137,35 +211,87 @@ export const actionChecks: BrowserCheck[] = [
     id: 'wait',
     async run(c) {
       await resetPage(c)
-      await c.call<{ clicked: string }>('click', { element: '#readyButton' })
-      const selectorWait = await c.call<{ waited: boolean }>('wait', { selector: '#ready', timeout: 10_000 })
-      c.equal(selectorWait.waited, true)
-      const readyText = await c.observe<string>('document.querySelector("#ready").textContent')
-      c.equal(readyText, 'Ready', 'selector wait must complete after the controlled response reveals Ready')
-      const footerWait = await c.call<{ waited: boolean }>('wait', { selector: '#footer', timeout: 10_000 })
-      c.equal(footerWait.waited, true)
-      const readyRequests = c.world.fixture.requests.filter(request => request.path === '/ready')
-      c.assert(readyRequests.length > 0, 'the wait fixture must serve the local controlled response')
-      const textWait = await c.call<{ waited: boolean }>('wait', { text: 'Ready', timeout: 10_000 })
-      c.equal(textWait.waited, true)
-      c.equal(await c.observe<boolean>('document.body.innerText.includes("Ready")'), true, 'text wait must match rendered page text')
-      const functionWait = await c.call<{ waited: boolean }>('wait', { fn: 'document.querySelector("#footer") !== null', timeout: 10_000 })
-      c.equal(functionWait.waited, true)
-      c.equal(await c.observe<boolean>('document.querySelector("#footer") !== null'), true, 'JS-condition wait must be true on the page')
-      const navigation = await c.call<NavigationResult>('goto', { url: fixtureUrl(c, '/second') })
-      const urlWait = await c.call<{ waited: boolean }>('wait', { url: navigation.url, timeout: 10_000 })
-      c.equal(urlWait.waited, true)
-      const currentUrl = await c.call<ValueResult<string>>('get', { what: 'url' })
-      c.equal(currentUrl.value, navigation.url, 'URL wait must match the navigated local URL')
-      const loadWait = await c.call<{ waited: boolean }>('wait', { load: 'load', timeout: 10_000 })
-      c.equal(loadWait.waited, true)
+      c.equal(await c.observe<boolean>('document.querySelector("#permanently-absent") !== null'), false, 'timeout condition must be absent')
+      const started = Date.now()
+      const receipt = await c.probe('wait', { selector: '#permanently-absent', timeout: 100 })
+      assertRefused(c, receipt, /browser_timeout|timed? ?out|timeout/i, 'absent-selector wait timeout')
+      return { absent: true, timeoutElapsedMs: Date.now() - started, timeoutExitCode: receipt.exitCode }
+    }
+  },
+  {
+    id: 'wait-selector',
+    async run(c) {
+      await resetPage(c)
+      c.equal(await c.observe<boolean>('document.querySelector("#selector-proof") !== null'), false, 'selector condition must start absent')
+      c.equal(await c.observe<boolean>('document.querySelector("#footer") !== null'), false, 'footer condition must start absent')
+      await c.call('click', { element: '#readyButton' })
+      requireWaitSuccess(await waitBehindGate(c, 'selector', { selector: '#selector-proof' }, 'selector'))
+      const selectorProof = await c.observe<string | null>('document.querySelector("#selector-proof")?.textContent ?? null')
+      c.equal(selectorProof, 'Selector gate proof')
+      c.equal(await c.observe<string>('document.querySelector("#ready").textContent'), 'Ready')
+      c.equal(await c.observe<boolean>('document.querySelector("#footer") !== null'), false, 'footer must remain absent before its gate')
+      requireWaitSuccess(await waitBehindGate(c, 'footer', { selector: '#footer' }, 'footer selector'))
+      c.equal(await c.observe<boolean>('document.querySelector("#footer") !== null'), true)
+      return { pendingBeforeRelease: true, selectorProof, footerPresentAfterRelease: true }
+    }
+  },
+  {
+    id: 'wait-text',
+    async run(c) {
+      await resetPage(c)
+      c.equal(await c.observe<boolean>('document.body.innerText.includes("Gate text proof")'), false, 'text condition must start absent')
+      await startGatedEffect(c, 'text', `const proof=document.createElement('output');proof.id='wait-text';proof.textContent='Gate text proof';document.querySelector('main').append(proof);`)
+      requireWaitSuccess(await waitBehindGate(c, 'text', { text: 'Gate text proof' }, 'text'))
+      const text = await c.observe<string | null>('document.querySelector("#wait-text")?.textContent ?? null')
+      c.equal(text, 'Gate text proof')
+      return { pendingBeforeRelease: true, text }
+    }
+  },
+  {
+    id: 'wait-js',
+    async run(c) {
+      await resetPage(c)
+      c.equal(await c.observe<boolean>('window.__parityWaitFnReady === true'), false, 'JS condition must start false')
+      await startGatedEffect(c, 'fn', 'window.__parityWaitFnReady=true;')
+      requireWaitSuccess(await waitBehindGate(c, 'fn', { fn: 'window.__parityWaitFnReady === true' }, 'JS condition'))
+      const ready = await c.observe<boolean>('window.__parityWaitFnReady === true')
+      c.equal(ready, true)
+      return { pendingBeforeRelease: true, ready }
+    }
+  },
+  {
+    id: 'wait-url',
+    async run(c) {
+      await resetPage(c)
+      const target = fixtureUrl(c, '/second')
+      const before = await c.call<ValueResult<string>>('get', { what: 'url' })
+      c.assert(before.value !== target, 'URL condition must start false')
+      await startGatedEffect(c, 'url', `location.assign(${JSON.stringify(target)});`)
+      const receipt = await waitBehindGate(c, 'url', { url: target }, 'URL')
+      const observed = await c.call<ValueResult<string>>('get', { what: 'url' })
+      c.equal(observed.value, target, 'navigation must satisfy the requested URL after release')
+      return { ...navigationWaitOutcome(receipt), pendingBeforeRelease: true, before: before.value, url: observed.value }
+    }
+  },
+  {
+    id: 'wait-load',
+    async run(c) {
+      await resetPage(c)
+      const target = new URL('/wait-load?key=load', c.world.fixture.origin).href
+      await startGatedEffect(c, 'load-navigation', `location.assign(${JSON.stringify(target)});`)
+      await c.world.fixture.waitForGate('load-navigation')
+      c.world.fixture.releaseGate('load-navigation')
+      await c.world.fixture.waitForGate('load')
+      const requestIndex = c.world.fixture.requests.findIndex(request => request.path === '/wait-load')
+      const gateIndex = c.world.fixture.requests.map(request => request.path).lastIndexOf('/wait-gate')
+      c.assert(requestIndex >= 0 && gateIndex > requestIndex, 'committed page must be blocked on its parser script')
+      c.equal(await c.observe<string>('document.readyState'), 'loading', 'load condition must start false')
+      const receipt = await waitBehindGate(c, 'load', { load: 'load' }, 'load')
       const readyState = await c.observe<string>('document.readyState')
-      c.equal(readyState, 'complete', 'load wait must observe a completed document')
-      const timeoutStarted = Date.now()
-      const timeoutReceipt = await c.probe('wait', { selector: '#permanently-absent', timeout: 100 })
-      const timeoutElapsedMs = Date.now() - timeoutStarted
-      assertRefused(c, timeoutReceipt, /browser_timeout|timed? ?out|timeout/i, 'absent-selector wait timeout')
-      return { selector: readyText, footerWait: footerWait.waited, localReadyRequests: readyRequests.length, textWait: textWait.waited, functionWait: functionWait.waited, url: currentUrl.value, loadState: readyState, timeoutElapsedMs, timeoutExitCode: timeoutReceipt.exitCode }
+      c.equal(readyState, 'complete')
+      c.equal(await c.observe<boolean>('window.__parityWaitGateReleased === true'), true)
+      c.equal((await c.call<ValueResult<string>>('get', { what: 'url' })).value, target)
+      return { ...navigationWaitOutcome(receipt), pendingBeforeRelease: true, readyState, url: target }
     }
   },
   {
@@ -332,9 +458,9 @@ export const actionChecks: BrowserCheck[] = [
     id: 'scrollintoview',
     async run(c) {
       await resetPage(c)
-      await c.call<{ clicked: string }>('click', { element: '#readyButton' })
-      const revealed = await c.call<{ waited: boolean }>('wait', { selector: '#footer', timeout: 10_000 })
-      c.equal(revealed.waited, true, 'the local response must reveal the footer before scrolling')
+      c.equal(await c.observe<boolean>('document.querySelector("#footer") !== null'), false, 'scroll footer must start absent')
+      await startGatedEffect(c, 'scroll-footer', `const footer=document.createElement('footer');footer.id='footer';footer.textContent='Fixture footer';document.body.append(footer);`)
+      requireWaitSuccess(await waitBehindGate(c, 'scroll-footer', { selector: '#footer' }, 'scroll footer'))
       const scrolled = await c.call<{ scrolledIntoView: string }>('scrollintoview', { element: '#footer' })
       c.equal(scrolled.scrolledIntoView, '#footer')
       const rect = await c.observe<{ top: number; bottom: number; viewportHeight: number; scrollY: number }>(

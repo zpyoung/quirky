@@ -86,7 +86,7 @@ async function observeIntercept(
   let listed = list.requests.find(request => request.url === url)
   let requests = interceptedRequestsSince(c, requestStart)
 
-  while (Date.now() < deadline && state.status === 'pending' && !listed && requests.length === 0) {
+  while (Date.now() < deadline && state.status === 'pending') {
     const { promise, resolve } = Promise.withResolvers<void>()
     setTimeout(resolve, INTERCEPT_POLL_MS)
     await promise

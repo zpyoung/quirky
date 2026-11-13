@@ -9,6 +9,7 @@ import type { BrowserParityReport } from './browser-run'
 const root = join(import.meta.dir, '../..')
 
 async function childRun(command: string[], timeout: number): Promise<{ code: number; report: BrowserParityReport; stderr: string }> {
+  const started = Date.now()
   const scope = createProcessScope()
   const env = createIsolatedRuntimeEnvironment(scope.home, { repoRoot: root })
   mkdirSync(env.TMPDIR, { recursive: true })
@@ -16,7 +17,8 @@ async function childRun(command: string[], timeout: number): Promise<{ code: num
   const child = scope.spawn(command, { cwd: root, env, stdout: 'pipe', stderr: 'pipe' })
   // These watchdogs bound real subprocess cleanup; fake time cannot terminate a stuck daemon.
   const deadline = Promise.withResolvers<never>()
-  const watchdog = setTimeout(() => { scope.killNow(); deadline.reject(new Error(`parity child exceeded ${timeout}ms watchdog`)) }, timeout)
+  const workMs = Math.max(1, timeout - (Date.now() - started) - 6_000)
+  const watchdog = setTimeout(() => { scope.killNow(); deadline.reject(new Error(`parity child exhausted its ${timeout}ms startup/work/cleanup budget`)) }, workMs)
   try {
     const stdout = new Response(child.stdout).text()
     const stderr = new Response(child.stderr).text()
@@ -74,7 +76,7 @@ for (const mode of ['daemon-exit', 'sigterm']) {
       const controller=new AbortController();
       const terminated=Promise.withResolvers<void>();
       process.on('SIGTERM',()=>{controller.abort(new BrowserFailure('deadline','SIGTERM'));terminated.resolve()});
-      const report=await runBrowserParity({signal:controller.signal,startWorld:options=>startBrowserWorld({...options,deadline:Date.now()+20000,afterReady:async world=>{
+      const report=await runBrowserParity({signal:controller.signal,startWorld:options=>startBrowserWorld({...options,deadline:Date.now()+19000,afterReady:async world=>{
         ${mode === 'daemon-exit' ? "process.kill(world.daemonPid,'SIGKILL'); await world.daemonExited; await world.cli(['status']);" : "process.kill(process.pid,'SIGTERM'); await terminated.promise; controller.signal.throwIfAborted();"}
       }})});
       console.log(JSON.stringify(report)); process.exitCode=report.ok?0:1;

@@ -93,6 +93,28 @@ test('an executable registry must match the table declared check IDs exactly', (
   expect(() => validateBrowserTable(rows, [...registered, 'unexpected-check'])).toThrow('missing-check')
 })
 
+test('wait subordinate rows have distinct checks and reuse the primary CLI metadata', () => {
+  const rows = readBrowserTable()
+  const primary = rows.find((row) => row.id === 'wait')
+  expect(primary).toBeDefined()
+  const ids = ['wait-selector', 'wait-text', 'wait-js', 'wait-url', 'wait-load']
+  const subordinates = ids.map((id) => rows.find((row) => row.id === id))
+
+  expect(rows).toHaveLength(93)
+  expect(subordinates.map((row) => row?.check)).toEqual(ids)
+  expect(subordinates.map((row) => row?.equivalent)).toEqual(ids.map(() => primary?.equivalent))
+  expect(subordinates.slice(0, 3).map((row) => row?.disposition)).toEqual(['covered', 'covered', 'covered'])
+  expect(subordinates[3]?.disposition).toBe('gap')
+  expect(subordinates[3]?.reason).toBe('a wait fulfilled by a navigation is rejected with browser_tab_changed. Follow-up: Let a pending browser wait finish when the navigation it waits for lands.')
+  expect(subordinates[4]?.disposition).toBe('covered')
+})
+
+test('browser table rejects a missing registered wait-url row', () => {
+  const rows = readBrowserTable()
+  const registered = rows.flatMap((row) => row.check ? [row.check] : [])
+  expect(() => validateBrowserTable(rows.filter((row) => row.id !== 'wait-url'), registered)).toThrow('missing-command')
+})
+
 test('compiled browser checks implement every declared executable row exactly once', () => {
   const rows = readBrowserTable()
   const ids = browserChecks.map(check => check.id)
