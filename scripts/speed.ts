@@ -113,6 +113,27 @@ export async function main(args: string[], measure: typeof measureSpeed = measur
     runner: process.env.QUIRKY_SPEED_RUNNER || 'local', os: platform(), arch: arch(), cpuModel: cpu[0]!.model, cpuCount: cpu.length,
     bun: Bun.version, chromium: chromiumVersion, imageVersion: process.env.QUIRKY_SPEED_IMAGE_VERSION || process.env.ImageVersion || 'local',
   }
+
+  const retireSoloResources = async () => {
+    const errors: string[] = []
+    const resources: { name: string; stop(): Promise<void>; clear(): void }[] = [
+      { name: 'solo-fixture', stop: async () => { await fixture?.stop() }, clear: () => { fixture = undefined } },
+      { name: 'solo-browser', stop: async () => { await windows?.stop() }, clear: () => { windows = undefined } },
+      { name: 'solo-process-scope', stop: async () => { await world?.stop() }, clear: () => { world = undefined } }
+    ]
+    for (const resource of resources) {
+      try {
+        await resource.stop()
+        resource.clear()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        cleanup = 'failed'
+        failures.push({ kind: 'cleanup-failed', message: `${resource.name}: ${message}` })
+        errors.push(`${resource.name}: ${message}`)
+      }
+    }
+    if (errors.length > 0) throw new Error(`could not retire solo measurement subject: ${errors.join('; ')}`)
+  }
   try {
     world = await startWorld({ out, repoRoot, windows: 1, workers: false, signal: controller.signal })
     redactions.push(world.home, ...Object.entries(world.runtime).flatMap(([key, value]) => /token/i.test(key) && typeof value === 'string' ? [value] : []))
@@ -129,20 +150,34 @@ export async function main(args: string[], measure: typeof measureSpeed = measur
       pair: baseRoot ? {
         async start(signal) {
           const setup = new AbortController()
-          const setupTimer = setTimeout(() => setup.abort(new Error('base setup exceeded five-minute deadline')), SETUP_MS)
+          const setupTimer = setTimeout(() => setup.abort(new Error('paired setup exceeded five-minute deadline')), SETUP_MS)
           const setupSignal = AbortSignal.any([signal, setup.signal])
           try {
+            await retireSoloResources()
+
+            const pairHeadOut = join(out, 'pair-head')
+            const pairedHeadWorld = await startWorld({ out: pairHeadOut, repoRoot, windows: 1, workers: false, signal: setupSignal })
+            world = pairedHeadWorld
+            redactions.push(pairedHeadWorld.home, ...Object.entries(pairedHeadWorld.runtime).flatMap(([key, value]) => /token/i.test(key) && typeof value === 'string' ? [value] : []))
+            const pairedHeadFixture = await prepareSpeedFixture(pairedHeadWorld, { signal: setupSignal, echoDelayMs })
+            fixture = pairedHeadFixture
+            const pairedHeadWindows = await openWindows({ world: pairedHeadWorld, count: 1, executable, out: pairHeadOut, signal: setupSignal, browserArgs: ['--disable-gpu'] })
+            windows = pairedHeadWindows
+
             const baseOut = join(out, 'base')
             baseWorld = await startWorld({ out: baseOut, repoRoot: baseRoot!, windows: 1, workers: false, signal: setupSignal })
             redactions.push(baseWorld.home, ...Object.entries(baseWorld.runtime).flatMap(([key, value]) => /token/i.test(key) && typeof value === 'string' ? [value] : []))
             baseFixture = await prepareSpeedFixture(baseWorld, { signal: setupSignal })
             baseWindows = await openWindows({ world: baseWorld, count: 1, executable, out: baseOut, signal: setupSignal, browserArgs: ['--disable-gpu'] })
-            return { world: baseWorld, fixture: baseFixture, windows: baseWindows }
+            return {
+              head: { world: pairedHeadWorld, fixture: pairedHeadFixture, windows: pairedHeadWindows },
+              base: { world: baseWorld, fixture: baseFixture, windows: baseWindows }
+            }
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             if (message.includes('; cleanup failed:')) {
               cleanup = 'failed'
-              failures.push({ kind: 'cleanup-failed', message: `base-setup: ${message}` })
+              failures.push({ kind: 'cleanup-failed', message: `paired-setup: ${message}` })
             }
             throw error
           } finally {
@@ -243,7 +278,7 @@ export async function main(args: string[], measure: typeof measureSpeed = measur
     report.qualified = false
     report.cleanup = 'failed'
     report.failures = [{ kind: 'evidence-cleanup-failed', message: 'evidence sanitization or report validation failed' }]
-    for (const name of ['daemon.log', 'ui-build.log', 'base', 'traces', 'diagnostics', 'samples.jsonl', 'pair.json', 'pair-samples.jsonl', 'misses.json']) rmSync(join(out, name), { force: true, recursive: true })
+    for (const name of ['daemon.log', 'ui-build.log', 'base', 'pair-head', 'traces', 'diagnostics', 'samples.jsonl', 'pair.json', 'pair-samples.jsonl', 'misses.json']) rmSync(join(out, name), { force: true, recursive: true })
     writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n')
     writeFileSync(join(out, 'samples.jsonl'), '')
     writeFileSync(join(out, 'misses.json'), '[]\n')

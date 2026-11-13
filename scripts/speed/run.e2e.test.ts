@@ -63,7 +63,7 @@ test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only
       expect(pair.metrics[metric].headSamplesMs[0]! - pair.metrics[metric].baseSamplesMs[0]!).toBeGreaterThanOrEqual(500)
     }
     const pairedAttempts = readFileSync(join(out, 'pair-samples.jsonl'), 'utf8').trim().split('\n')
-      .filter(Boolean).map(line => JSON.parse(line) as { metric: string; side: string; phase: string; ownedPids?: number[] })
+      .filter(Boolean).map(line => JSON.parse(line) as { metric: string; side: string; phase: string; phases?: Record<string, number>; fixture?: { sessions: string[]; worktreeIds: string[] }; ownedPids?: number[] })
     for (const metric of METRICS) {
       for (const side of ['head', 'base']) expect(pairedAttempts.some(row => row.metric === metric && row.side === side)).toBe(true)
     }
@@ -71,7 +71,7 @@ test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only
     expect(pairedAttempts.filter(row => row.metric === 'startup' && row.phase === 'warmup')).toHaveLength(0)
 
     const attempts = readFileSync(join(out, 'samples.jsonl'), 'utf8').trim().split('\n')
-      .filter(Boolean).map((line) => JSON.parse(line) as { metric?: string; phase?: string; phases?: Record<string, number>; fixture?: { worktrees?: number; sessions?: string[] }; ownedPids?: number[] })
+      .filter(Boolean).map((line) => JSON.parse(line) as { metric?: string; phase?: string; phases?: Record<string, number>; fixture?: { worktrees?: number; sessions: string[]; worktreeIds: string[] }; ownedPids?: number[] })
     const echoes = attempts.filter((attempt) => (attempt.metric === 'echo' || attempt.metric === 'floodEcho') && attempt.phase === 'sample')
     expect(echoes).toHaveLength(2)
     for (const echo of echoes) {
@@ -87,6 +87,21 @@ test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only
     expect(startup).toHaveLength(1)
     expect(startup[0]!.fixture).toMatchObject({ worktrees: 10 })
     expect(new Set(startup[0]!.fixture?.sessions).size).toBe(20)
+    const pairedHeadStartup = pairedAttempts.find((attempt) => attempt.metric === 'startup' && attempt.phase === 'sample' && attempt.side === 'head')
+    expect(pairedHeadStartup).toBeDefined()
+    const soloFixture = startup[0]!.fixture!
+    const pairedHeadFixture = pairedHeadStartup!.fixture!
+    expect(pairedHeadFixture.sessions).toHaveLength(20)
+    expect(pairedHeadFixture.worktreeIds).toHaveLength(10)
+    expect(pairedHeadFixture.sessions.some((id) => soloFixture.sessions.includes(id))).toBe(false)
+    expect(pairedHeadFixture.worktreeIds.some((id) => soloFixture.worktreeIds.includes(id))).toBe(false)
+    console.info(`Paired startup evidence: ${JSON.stringify({
+      seedEchoDelayMs: 1500,
+      headMs: pair.metrics.startup.headSamplesMs[0],
+      baseMs: pair.metrics.startup.baseSamplesMs[0],
+      headPhases: pairedHeadStartup!.phases,
+      basePhases: pairedAttempts.find(row => row.metric === 'startup' && row.phase === 'sample' && row.side === 'base')?.phases,
+    })}`)
     const ownedPids = [...new Set([...attempts, ...pairedAttempts].flatMap((attempt) => attempt.ownedPids ?? []))]
     expect(ownedPids.length).toBeGreaterThan(0)
     expect(ownedPids.every((pid) => Number.isSafeInteger(pid) && pid > 1 && !isAlive(pid))).toBe(true)
@@ -151,7 +166,11 @@ test.skipIf(executable === null)('scenario 10: keeps the solo smoke complete on 
       expect(phases.domToPaintMs).toBeGreaterThanOrEqual(0)
       expect(phases.eventToDomMs! + phases.domToPaintMs!).toBeCloseTo(phases.browserEventToPaintMs!, 3)
     }
-    const ownedPids = [...new Set(attempts.flatMap((attempt) => attempt.ownedPids ?? []))]
+    const pairedHeadPids = ['daemon.pid', 'browser.pid'].map((name) =>
+      Number(readFileSync(join(out, 'pair-head', name), 'utf8').trim())
+    )
+    expect(pairedHeadPids.every((pid) => Number.isSafeInteger(pid) && pid > 1 && !isAlive(pid))).toBe(true)
+    const ownedPids = [...new Set([...attempts.flatMap((attempt) => attempt.ownedPids ?? []), ...pairedHeadPids])]
     expect(ownedPids.length).toBeGreaterThan(0)
     expect(ownedPids.every((pid) => Number.isSafeInteger(pid) && pid > 1 && !isAlive(pid))).toBe(true)
   } finally {

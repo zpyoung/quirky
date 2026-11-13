@@ -158,7 +158,6 @@ type MetricContext = {
   side?: PairSide
 }
 
-
 /** Describes the measured operation and probe evidence without inferring a cause. */
 export function diagnosticFinding(metric: Metric, observationMs: number, phases: Record<string, number | null>, probes: readonly ProbeRecord[]): string {
   const durationMs = metric === 'startup' ? phases.controllerUntilFreshPaintMs : observationMs
@@ -179,6 +178,14 @@ export function diagnosticFinding(metric: Metric, observationMs: number, phases:
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+async function diffSetupRpc(world: RestartableWorld, method: string, params: Record<string, unknown>): Promise<unknown> {
+  try {
+    return await world.control.callAny(method, params, { timeoutMs: 5_000 })
+  } catch (error) {
+    throw new Error(`${method}: ${errorText(error)}`)
+  }
 }
 
 function sanitizeText(value: string, redactions: Iterable<string>): string {
@@ -222,7 +229,6 @@ function worktreeButtonSelector(worktreeId: string): string {
 function diffRowSelector(path: string): string {
   return `li.git-row[data-row-path="${cssValue(path)}"]`
 }
-
 
 /** Installs a browser-local event and DOM observer; Playwright serializes this self-contained function into the page. */
 export function installBrowserObserver(spec: BrowserObservationSpec): void {
@@ -610,7 +616,6 @@ async function routeLoopback(context: BrowserContext): Promise<void> {
   })
 }
 
-
 async function observeAction(
   page: Page,
   spec: BrowserObservationSpec,
@@ -686,8 +691,6 @@ async function echoTrial(
   return await observeAction(page, spec, () => page.keyboard.press(key), signal, timeoutMs)
 }
 
-
-
 async function switchTrial(
   page: Page,
   worktree: SpeedWorktree,
@@ -702,7 +705,7 @@ async function switchTrial(
 }
 
 async function reviewTabs(world: RestartableWorld, worktreeId: string): Promise<string[]> {
-  const response = record(await world.control.callAny('quirky.terminal/workspace', { workspace: `id:${worktreeId}` }, { timeoutMs: 5_000 }), 'quirky.terminal/workspace')
+  const response = record(await diffSetupRpc(world, 'quirky.terminal/workspace', { workspace: `id:${worktreeId}` }), 'quirky.terminal/workspace')
   const workspace = record(response.workspace, 'terminal workspace')
   const ids: string[] = []
   const visit = (node: unknown) => {
@@ -730,7 +733,7 @@ async function reviewTabs(world: RestartableWorld, worktreeId: string): Promise<
 
 async function closeHostedReview(page: Page, world: RestartableWorld, worktreeId: string): Promise<void> {
   for (const tab of await reviewTabs(world, worktreeId)) {
-    await world.control.callAny('quirky.terminal/closeTab', { tab }, { timeoutMs: 5_000 })
+    await diffSetupRpc(world, 'quirky.terminal/closeTab', { tab, yes: true })
   }
   await page.waitForFunction(() => !document.querySelector('[data-review-tab] [data-diff-editor]'), undefined, { timeout: DEADLINE_MS })
   if (await page.locator('[data-review-tab] [data-diff-editor]').count() !== 0) throw new Error('the prior Review editor remained mounted')
@@ -738,7 +741,7 @@ async function closeHostedReview(page: Page, world: RestartableWorld, worktreeId
 
 async function prepareDiffRow(context: MetricContext): Promise<void> {
   await closeHostedReview(context.page, context.world, context.fixture.target.id)
-  await context.world.control.callAny('ui.tool.open', { id: CHANGES_PANEL }, { timeoutMs: 5_000 })
+  await diffSetupRpc(context.world, 'ui.tool.open', { id: CHANGES_PANEL })
   await context.page.locator(diffRowSelector(context.fixture.diffPath)).waitFor({ state: 'visible', timeout: DEADLINE_MS })
 }
 
@@ -1029,7 +1032,6 @@ async function recordStartupAttempt(
   }
 }
 
-
 async function runEchoAttempt(context: MetricContext, phase: SpeedSample['phase'], sample: number, key: string, signal: AbortSignal): Promise<void> {
   const worktree = context.fixture.target
   const sequence = (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1
@@ -1250,7 +1252,6 @@ async function createMetricContext(options: {
   await routeLoopback(initialContext)
   return context
 }
-
 
 async function writeDiagnosticTrace(out: string, metric: Metric, page: Page, observation: BrowserObservationResult, phases: Record<string, number | null>, signal?: AbortSignal): Promise<string> {
   const timeline = await withDeadline(page.evaluate(({ metric, observation, phases }) => {
@@ -1857,7 +1858,10 @@ export async function measureSpeed(options: {
   signal: AbortSignal
   frameTimestamp?: number
   pair?: {
-    start(signal: AbortSignal): Promise<{ world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows }>
+    start(signal: AbortSignal): Promise<{
+      head: { world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows }
+      base: { world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows }
+    }>
   }
 }): Promise<SpeedMeasurementResult> {
   const { world, windows, fixture, samples: sampleCount, out, signal, frameTimestamp } = options
@@ -1938,16 +1942,31 @@ export async function measureSpeed(options: {
       if (signal.aborted) {
         recordPairFailure('pair-interrupted', new Error('speed measurement interrupted'))
       } else {
-        let pairedStart: { world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows } | undefined
+        for (const browserContext of contexts) {
+          try {
+            await withDeadline(browserContext.close(), OBSERVER_CLEANUP_MS, 'solo browser context cleanup')
+          } catch (error) {
+            failures.push({ kind: 'context-cleanup-failed', message: sanitizeText(errorText(error), redactions) })
+          }
+        }
+        contexts.clear()
+
+        let pairedStart: {
+          head: { world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows }
+          base: { world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows }
+        } | undefined
         try {
           pairedStart = await options.pair.start(signal)
-          redactions.add(pairedStart.world.home)
-          collectRuntimeSecrets(redactions, pairedStart.world.runtime)
-          pairOwnedPids.push(
-            pairedStart.world.daemonPid,
-            pairedStart.world.ptyHostPid() ?? -1,
-            pairedStart.windows.browserPid
-          )
+          for (const side of ['head', 'base'] as const) {
+            const subject = pairedStart[side]
+            redactions.add(subject.world.home)
+            collectRuntimeSecrets(redactions, subject.world.runtime)
+            pairOwnedPids.push(
+              subject.world.daemonPid,
+              subject.world.ptyHostPid() ?? -1,
+              subject.windows.browserPid
+            )
+          }
         } catch (error) {
           recordPairFailure(signal.aborted ? 'pair-interrupted' : 'pair-setup-failed', error)
         }
@@ -1955,12 +1974,25 @@ export async function measureSpeed(options: {
         if (pairedStart && signal.aborted) {
           recordPairFailure('pair-interrupted', new Error('speed measurement interrupted'))
         } else if (pairedStart) {
+          let headContext: MetricContext | undefined
           let baseContext: MetricContext | undefined
           try {
+            headContext = await createMetricContext({
+              world: pairedStart.head.world,
+              windows: pairedStart.head.windows,
+              fixture: pairedStart.head.fixture,
+              samples: pairResult.samples.head,
+              attempts: pairResult.attempts,
+              out,
+              signal,
+              redactions,
+              side: 'head',
+              pairOwnedPids
+            })
             baseContext = await createMetricContext({
-              world: pairedStart.world,
-              windows: pairedStart.windows,
-              fixture: pairedStart.fixture,
+              world: pairedStart.base.world,
+              windows: pairedStart.base.windows,
+              fixture: pairedStart.base.fixture,
               samples: pairResult.samples.base,
               attempts: pairResult.attempts,
               out,
@@ -1973,13 +2005,7 @@ export async function measureSpeed(options: {
             recordPairFailure(signal.aborted ? 'pair-interrupted' : 'pair-setup-failed', error)
           }
 
-          if (baseContext) {
-            const headContext: MetricContext = {
-              ...context,
-              samples: pairResult.samples.head,
-              attempts: pairResult.attempts,
-              side: 'head'
-            }
+          if (headContext && baseContext) {
             const pairCounts = sampleCount === 1
               ? { startup: 1, echo: 1, switch: 1, diff: 1, floodEcho: 1 }
               : PAIR_COUNTS

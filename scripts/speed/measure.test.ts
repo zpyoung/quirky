@@ -199,8 +199,6 @@ function fakePage() {
   } as never
 }
 
-
-
 test('uses one frame scheduler for the full measurement and cleans up its probe', async () => {
   environment()
   const probe = {
@@ -590,7 +588,6 @@ test('condition errors in a frame reject the observer and restore requestAnimati
   expect(observerIsPresent(id)).toBe(false)
   expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
 })
-
 
 test('bounds hung observer teardown on timeout and abort, closing the owned renderer context', async () => {
   for (const mode of ['timeout', 'abort'] as const) {
