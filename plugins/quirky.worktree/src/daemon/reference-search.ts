@@ -232,10 +232,10 @@ export function searchReferences(input: {
 
   const sessionsUnavailable = 'error' in input.sessions
   const processesUnavailable = 'error' in input.processes
-  const processRows = processesUnavailable ? null : input.processes.rows
+  const processRows = 'rows' in input.processes ? input.processes.rows : null
   const byWorktree = new Map<string, ReferenceSearchSession[]>()
   let skippedSessions = 0
-  if (!sessionsUnavailable) {
+  if ('rows' in input.sessions) {
     for (const value of input.sessions.rows) {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         skippedSessions++
@@ -287,9 +287,9 @@ export function searchReferences(input: {
     stale: matches.filter(({ worktree }) => worktree.state === 'stale').length,
     evidence: {
       sessions: sessionsUnavailable ? 'unavailable' : 'listed',
-      sessionsReason: sessionsUnavailable ? input.sessions.error : null,
+      sessionsReason: 'error' in input.sessions ? input.sessions.error : null,
       processes: processesUnavailable ? 'unavailable' : 'listed',
-      processesReason: processesUnavailable ? input.processes.error : null,
+      processesReason: 'error' in input.processes ? input.processes.error : null,
       skippedSessions
     }
   }

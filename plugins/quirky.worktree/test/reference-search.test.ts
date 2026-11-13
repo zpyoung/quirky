@@ -109,6 +109,8 @@ function pty(sessionId: string, overrides: Partial<PtySessionInfo> = {}): PtySes
     cwd: '/',
     title: null,
     shellState: {} as PtySessionInfo['shellState'],
+    createdAt: 0,
+    offset: 0,
     ...overrides
   }
 }
