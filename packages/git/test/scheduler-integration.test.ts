@@ -3,9 +3,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileS
 import { join } from 'node:path'
 import { git as fixtureGit, isolateGitConfig, makeRepo } from '../../../plugins/quirky.repo/test/git-fixtures'
 import { compare, worktreeChangeList } from '../src/compare'
-import { saveWorkingFile } from '../src/diffs'
+import { diffSource, saveWorkingFile, stagedPatch, workingPatch } from '../src/diffs'
 import { appendIgnore } from '../src/huge'
-import { GitError, listWorktrees, stage, status } from '../src/index'
+import { diff, GitError, listWorktrees, stage, status } from '../src/index'
 import { getConfig, hasCommits, listRegistrations, showFile } from '../src/ops'
 import * as runner from '../src/run'
 import { statusV2 } from '../src/status'
@@ -52,6 +52,17 @@ async function until(condition: () => boolean) {
   while (!condition()) {
     if (Date.now() >= deadline) throw new Error('git wrapper did not reach its gate')
     await Bun.sleep(5)
+  }
+}
+
+async function expectScheduledCalls<T>(expected: number, operation: () => Promise<T>): Promise<T> {
+  const slot = spyOn(runner.gitScheduler, 'withSlot')
+  try {
+    const result = await operation()
+    expect(slot).toHaveBeenCalledTimes(expected)
+    return result
+  } finally {
+    slot.mockRestore()
   }
 }
 
@@ -301,14 +312,63 @@ describe('git scheduler compatibility', () => {
     expect(runner.gitScheduler.active).toBe(0)
   })
 
-  test('one-shot reads keep the full 20 MiB stdout contract', async () => {
+  test('one-shot reads enforce the default 16 MiB output cap and allow explicit larger caps', async () => {
     const repo = makeRepo(scratch())
     wrapper(`if [ \"$1\" = show ]; then\n  head -c 20971520 /dev/zero | tr '\\\\000' a\n  exit 0\nfi\nexec \"$REAL_GIT\" \"$@\"`)
     const result = await runner.runGit(repo, ['show', 'HEAD:big.txt'], { readOnly: true })
-    expect(result.exitCode).toBe(0)
-    expect(result.stdout.byteLength).toBe(20971520)
-    expect((await runner.git(repo, ['show', 'HEAD:big.txt'], { readOnly: true })).length).toBe(20971520)
-    expect((await showFile(repo, 'HEAD', 'big.txt'))?.length).toBe(20971520)
+    expect(result).toMatchObject({ exitCode: 137, overflow: true })
+    expect(result.stdout.byteLength).toBe(16 * 1024 * 1024)
+    const cappedGitError = await runner.git(repo, ['show', 'HEAD:big.txt'], { readOnly: true }).catch((error: unknown) => error)
+    expect(cappedGitError).toBeInstanceOf(GitError)
+    expect(cappedGitError).toMatchObject({ exitCode: 137, message: 'git show output exceeded 16777216 bytes' })
+    expect(await showFile(repo, 'HEAD', 'big.txt')).toBeNull()
+
+    const largerCap = 25 * 1024 * 1024
+    const explicitRun = await runner.runGit(repo, ['show', 'HEAD:big.txt'], { readOnly: true, maxOutputBytes: largerCap })
+    expect(explicitRun.exitCode).toBe(0)
+    expect(explicitRun.overflow).toBeUndefined()
+    expect(explicitRun.stdout.byteLength).toBe(20_971_520)
+    const explicitText = await runner.git(repo, ['show', 'HEAD:big.txt'], { readOnly: true, maxOutputBytes: largerCap })
+    expect(explicitText.length).toBe(20_971_520)
+    expect(runner.gitScheduler.active).toBe(0)
+  }, 30000)
+
+  test('blob and patch diff readers use scheduler slots and text overflow is binary', async () => {
+    const repo = makeRepo(scratch())
+    writeFileSync(join(repo, 'diff.txt'), 'base\n')
+    fixtureGit(repo, 'add', 'diff.txt')
+    fixtureGit(repo, 'commit', '-qm', 'base')
+    writeFileSync(join(repo, 'diff.txt'), 'staged\n')
+    fixtureGit(repo, 'add', 'diff.txt')
+
+    runner.gitScheduler.resetPeakActive()
+    expect(await expectScheduledCalls(2, () => diffSource(repo, { path: 'diff.txt', source: 'staged' }))).toMatchObject({
+      original: 'base\n',
+      modified: 'staged\n'
+    })
+    expect(runner.gitScheduler.peakActive).toBeGreaterThan(0)
+
+    runner.gitScheduler.resetPeakActive()
+    expect(await expectScheduledCalls(1, () => stagedPatch(repo))).toMatchObject({ omitted: false })
+    expect(runner.gitScheduler.peakActive).toBeGreaterThan(0)
+
+    writeFileSync(join(repo, 'diff.txt'), 'working\n')
+    runner.gitScheduler.resetPeakActive()
+    expect(await expectScheduledCalls(3, () => workingPatch(repo))).toMatchObject({ omitted: false })
+    expect(runner.gitScheduler.peakActive).toBeGreaterThan(0)
+
+    const largeText = 'x'.repeat(2 * 1024 * 1024 + 1)
+    writeFileSync(join(repo, 'large-text.txt'), largeText)
+    fixtureGit(repo, 'add', 'large-text.txt')
+    runner.gitScheduler.resetPeakActive()
+    expect(await expectScheduledCalls(2, () => diff(repo, 'large-text.txt', true))).toEqual({
+      path: 'large-text.txt',
+      staged: true,
+      original: '',
+      modified: '',
+      binary: true
+    })
+    expect(runner.gitScheduler.peakActive).toBeGreaterThan(0)
     expect(runner.gitScheduler.active).toBe(0)
   }, 30000)
 })
