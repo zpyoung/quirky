@@ -100,8 +100,8 @@ export class Rig {
     public client: QuirkyClient
   ) {}
 
-  static async start(options: { home?: string; sessions?: Partial<Session>[]; builtinRules?: Record<string, unknown> } = {}): Promise<Rig> {
-    const h = await startHarness({ home: options.home ?? makeTempHome('qas-h-'), builtinPluginsDir: builtinDir(options.builtinRules) })
+  static async start(options: { home?: string; sessions?: Partial<Session>[]; builtinRules?: Record<string, unknown>; eventCoalesceMs?: number } = {}): Promise<Rig> {
+    const h = await startHarness({ home: options.home ?? makeTempHome('qas-h-'), builtinPluginsDir: builtinDir(options.builtinRules), eventCoalesceMs: options.eventCoalesceMs ?? 10 })
     const { client, events } = await h.connectWithEvents('cli')
     const rig = new Rig(h, client)
     rig.events = events
