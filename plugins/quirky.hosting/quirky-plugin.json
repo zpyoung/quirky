@@ -1,6 +1,6 @@
 {
   "id": "quirky.hosting",
-  "apiVersion": "1.9.0",
+  "apiVersion": "1.12.0",
   "name": "GitHub Hosting",
   "version": "0.1.0",
   "description": "GitHub hosting operations over the user's authenticated gh CLI.",
@@ -147,6 +147,7 @@
       },
       {
         "id": "merge",
+        "timeout": "30m",
         "description": "Merge one pull request with a fresh head/protection check and one shared execution path.",
         "destructive": true,
         "confirm": "Merge GitHub pull request #{number}?",
@@ -216,6 +217,7 @@
       },
       {
         "id": "rerunChecks",
+        "timeout": "30m",
         "description": "Rerun all or failed-only GitHub Actions checks, reporting partial starts honestly.",
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "failedOnly": {"type": "boolean"}}, "required": ["number", "failedOnly"]},
         "result": {"type": "object", "properties": {"started": {"type": "integer"}, "targetCount": {"type": "integer"}, "completedSteps": {"type": "array", "items": {"type": "string"}}}, "required": ["started", "targetCount", "completedSteps"]}
@@ -361,6 +363,7 @@
       },
       {
         "id": "projectItemMutation",
+        "timeout": "30m",
         "description": "Edit an issue or pull request, comment, or issue type from a GitHub Project.",
         "destructive": true,
         "confirm": "Delete this GitHub project item comment?",

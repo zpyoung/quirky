@@ -1,6 +1,6 @@
 {
   "id": "quirky.accounts",
-  "apiVersion": "1.11.0",
+  "apiVersion": "1.12.0",
   "name": "Accounts and Usage",
   "version": "0.1.0",
   "description": "Read provider usage and manage isolated Claude and Codex accounts.",
@@ -71,6 +71,7 @@
       },
       {
         "id": "select",
+        "timeout": "30m",
         "description": "Selects a saved account for future launches, or null for System default, committing its atomic home pointer with account state.",
         "params": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["claude", "codex"] }, "accountId": { "description": "Managed UUID or null for System default." } }, "required": ["provider", "accountId"] },
         "result": { "type": "object", "properties": { "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "active": { "type": "object", "properties": { "claude": {}, "codex": {} }, "required": ["claude", "codex"] }, "systemDefault": { "type": "object", "properties": { "claude": { "type": "object", "additionalProperties": true }, "codex": { "type": "object", "additionalProperties": true } }, "required": ["claude", "codex"] }, "pendingLogin": {}, "staleSessions": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } }, "preferences": { "type": "object", "additionalProperties": true }, "revision": { "type": "integer" } }, "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"] }
@@ -204,6 +205,7 @@
       },
       {
         "id": "restart",
+        "timeout": "30m",
         "description": "Restarts only stale recorded sessions at the given selection revision; busy Claude sessions queue against that exact target and revision.",
         "params": { "type": "object", "properties": { "sessions": { "type": "array", "items": { "type": "string" } }, "selectionRevision": { "type": "integer", "minimum": 0 }, "yes": { "type": "boolean" } }, "required": ["sessions", "selectionRevision"] },
         "result": { "type": "object", "properties": { "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "active": { "type": "object", "properties": { "claude": {}, "codex": {} }, "required": ["claude", "codex"] }, "systemDefault": { "type": "object", "additionalProperties": true }, "pendingLogin": {}, "staleSessions": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "configWarnings": { "type": "array", "items": { "type": "object", "properties": { "provider": { "type": "string", "enum": ["codex"] }, "accountId": { "description": "Managed UUID or null." }, "kind": { "type": "string", "enum": ["source-missing", "source-empty", "source-unreadable", "sync-failed"] }, "message": { "type": "string" } }, "required": ["provider", "accountId", "kind", "message"], "additionalProperties": false } }, "preferences": { "type": "object", "additionalProperties": true }, "revision": { "type": "integer" } }, "required": ["accounts", "active", "systemDefault", "pendingLogin", "staleSessions", "configWarnings", "preferences", "revision"] }

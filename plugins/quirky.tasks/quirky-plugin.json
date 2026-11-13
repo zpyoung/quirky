@@ -1,6 +1,6 @@
 {
   "id": "quirky.tasks",
-  "apiVersion": "1.3.0",
+  "apiVersion": "1.12.0",
   "name": "GitHub Tasks",
   "version": "0.1.0",
   "description": "Browse GitHub tasks, discuss issues and work with Projects v2.",
@@ -787,6 +787,7 @@
       },
       {
         "id": "row",
+        "timeout": "1h",
         "description": "Apply a validated issue or pull-request row mutation through the public GitHub hosting API.",
         "destructive": true,
         "confirm": "Apply the requested GitHub Tasks row mutation?",
@@ -1248,6 +1249,7 @@
       },
       {
         "id": "workspace",
+        "timeout": "24h",
         "description": "Resume, link, unlink, or start a real workspace for a GitHub task. Start returns a visible prefilled composer unless an explicit Project direct-start agent path is available.",
         "params": {
           "type": "object",
@@ -2776,6 +2778,7 @@
       },
       {
         "id": "projectEdit",
+        "timeout": "1h",
         "description": "Set/clear a typed project field, edit issue or pull-request fields, or change issue type through public hosting methods.",
         "params": {
           "type": "object",
