@@ -609,7 +609,7 @@ export class AccountService {
         ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
       }
     }
-    const account = getAccount(this.store, selectedId)
+    let account = getAccount(this.store, selectedId)
     if (!account || account.provider !== provider) this.fail('conflict', `The selected ${provider} account is unavailable; no fallback account was used.`)
     let home: string
     let identity: ProviderIdentity
@@ -619,6 +619,7 @@ export class AccountService {
     } catch {
       this.fail('conflict', `The selected ${provider} account home is unavailable or untrusted; no fallback account was used.`)
     }
+    account = this.requireSelectedManagedAccount(provider, selectedId, home)
     if (!isProviderAuth(identity) || !this.identityMatchesRecord(account, identity)) {
       this.markNeedsSignIn(account)
       this.fail('conflict', `Sign in to the selected ${provider} account again before launching it.`)
@@ -626,6 +627,7 @@ export class AccountService {
     const resumeTranscriptPath = provider === 'codex' && input.resume
       ? await this.prepareCodexResume(input.resume, home, selectedId)
       : undefined
+    account = this.requireSelectedManagedAccount(provider, selectedId, home)
     if (provider === 'codex') this.syncCodexConfigWarning(account.id)
     const accountIdentity = this.identityFor(provider, account.id, account.label, 'managed', identity.authKind)
     this.saveSessionIdentityIfPresent(input, accountIdentity, home)
@@ -636,6 +638,23 @@ export class AccountService {
       ...(resumeTranscriptPath === undefined ? {} : { resumeTranscriptPath })
     }
   }
+  private requireSelectedManagedAccount(provider: ManagedProvider, accountId: string, preparedHome: string): AccountRecord {
+    const account = getAccount(this.store, accountId)
+    if (getActiveAccountId(this.store, provider) !== accountId || !account || account.provider !== provider) {
+      this.fail('conflict', `The selected ${provider} account changed; no fallback account was used.`)
+    }
+    let home: string
+    try {
+      home = this.profiles.ensureOwned(provider, accountId)
+    } catch {
+      this.fail('conflict', `The selected ${provider} account home is unavailable or untrusted; no fallback account was used.`)
+    }
+    if (resolve(account.home) !== resolve(home) || resolve(preparedHome) !== resolve(home)) {
+      this.fail('conflict', `The selected ${provider} account changed; no fallback account was used.`)
+    }
+    return account
+  }
+
 
   async restart(params: Record<string, unknown>): Promise<AccountState> {
     return this.serialize(async () => {

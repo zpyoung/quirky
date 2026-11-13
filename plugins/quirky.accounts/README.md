@@ -18,6 +18,10 @@ Accounts requires plugin API `1.11.0`. Keychain reads and managed-credential del
 
 Usage probes and interactive sign-in use the host's streaming process handles. Usage output is capped at 512 KiB across raw stdout and stderr bytes unless a caller requests a smaller cap. Shutdown stops owned usage processes and awaits their completion. A failed sign-in output stream cannot complete a login unless its Codex credential commit was already latched.
 
+Codex usage drains buffered stdout before treating a normal process exit as a missing quota response.
+
+Managed preparation rechecks account selection and the owned home after asynchronous reads. Removing the account during preparation returns a conflict rather than a deleted home.
+
 ## Paired-owner Accounts
 
 When a window shows a registered remote workspace, Accounts and Usage read that workspace's full-owner host. The window keeps its last actual workspace owner when Accounts settings replaces the workspace view; settings itself is not a local workspace. An offline or replaced owner is unavailable, never a source of local fallback data.

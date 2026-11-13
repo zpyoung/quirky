@@ -527,6 +527,81 @@ exit 2
     expect(existsSync(h.managedHome('claude', secondId))).toBe(false)
     expect((await call<{ accounts: { id: string }[] }>(h, 'quirky.accounts/list')).accounts.map((account) => account.id)).not.toContain(secondId)
   })
+  test('rejects managed preparation after the selected account is removed during identity read', async () => {
+    const h = await startAccounts()
+    const login = await add(h, 'claude', 'removed-during-prepare@example.test')
+    const id = login.result?.id
+    if (!id) throw new Error('Completed Claude login did not return an account ID')
+    await call(h, 'quirky.accounts/select', { provider: 'claude', accountId: id })
+    const home = h.managedHome('claude', id)
+    rmSync(join(home, '.credentials.json'), { force: true })
+
+    const confirmation = await h.client.callAny('quirky.accounts/remove', { provider: 'claude', accountId: id })
+      .then(() => null, (error: unknown) => error as { data?: { askId?: string } })
+    const askId = confirmation?.data?.askId
+    if (!askId) throw new Error('Claude account removal did not request confirmation')
+    await call(h, 'quirky.ask/answer', { askId, answers: { confirm: { value: true, source: 'input' } } })
+
+    const securityLog = join(h.home, 'security.log')
+    const release = `${securityLog}.release`
+    const managedService = `Claude Code-credentials-${createHash('sha256').update(home.normalize('NFC')).digest('hex').slice(0, 8)}`
+    rmSync(securityLog, { force: true })
+    installSecurityScript(h, `#!/bin/sh
+printf '%s\\n' "$*" >> "$ACCOUNTS_SECURITY_LOG"
+case "$1" in
+  find-generic-password)
+    if [ "$3" = "${managedService}" ]; then
+      while [ ! -e "$ACCOUNTS_SECURITY_LOG.release" ]; do sleep 0.01; done
+      printf 'fixture-keychain-token'
+      exit 0
+    fi
+    exit 44
+    ;;
+  delete-generic-password) exit 44 ;;
+esac
+exit 2
+`)
+
+
+    const sessionId = 'removed-managed-prepare'
+    const params = prepareArgs(h, 'claude', sessionId)
+    const preparing = call<AccountPrepareResult>(h, 'quirky.accounts/prepare', params).then(
+      (result) => ({ result }),
+      (error: unknown) => ({ error })
+    )
+    const providerPreparing = call<AccountPrepareResult>(h, 'quirky.accounts/prepareProviderEnv', {
+      agent: 'claude',
+      cwd: h.userHome,
+      homeOverrides: params.homeOverrides
+    }).then(
+      (result) => ({ result }),
+      (error: unknown) => ({ error })
+    )
+    let removing: Promise<{ succeeded: true } | { succeeded: false; error: unknown }> | null = null
+    try {
+      await securityLogCount(h, 2)
+      await expectPending(preparing)
+      await expectPending(providerPreparing)
+      removing = call(h, 'quirky.accounts/remove', { provider: 'claude', accountId: id, confirmation: askId }).then(
+        () => ({ succeeded: true as const }),
+        (error: unknown) => ({ succeeded: false as const, error })
+      )
+      await securityLogCount(h, 3)
+      const removed = await removing
+      expect(removed.succeeded).toBe(true)
+      expect(existsSync(home)).toBe(false)
+      expect((await call<{ accounts: { id: string }[] }>(h, 'quirky.accounts/list')).accounts.map((account) => account.id)).not.toContain(id)
+    } finally {
+      writeFileSync(release, 'released')
+      if (removing) await removing
+    }
+
+    const [prepared, providerPrepared] = await Promise.all([preparing, providerPreparing])
+    expect('error' in prepared ? prepared.error : undefined).toBeInstanceOf(Error)
+    expect('error' in providerPrepared ? providerPrepared.error : undefined).toBeInstanceOf(Error)
+    expect(await call<{ provider: ManagedProvider | null; home: string | null }>(h, 'quirky.accounts/sessionHome', { session: sessionId })).toEqual({ provider: null, home: null })
+  })
+
 
   test('keeps account and profile intact on Keychain deletion failure without leaking output', async () => {
     const h = await startAccounts()
