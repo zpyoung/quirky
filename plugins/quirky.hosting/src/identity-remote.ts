@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import type { ProcessRunner } from '@quirky/protocol'
 import { matchEnterpriseHost, normalizeHost, type AuthAccount } from './auth-inventory'
 import type { Identity } from './env'
 
-const execFileAsync = promisify(execFile)
 const ALIAS_SUCCESS_TTL_MS = 60_000
 const ALIAS_FAILURE_TTL_MS = 5_000
 const ALIAS_CACHE_LIMIT = 256
@@ -55,12 +53,13 @@ export function parseRemoteIdentity(remote: string): RemoteIdentity | null {
 }
 
 export async function resolveTrustedIdentity(
+  processRunner: ProcessRunner,
   remote: RemoteIdentity,
   accountsForHost: (host: string) => Promise<readonly AuthAccount[]>
 ): Promise<Identity | null> {
   let host = remote.identity.host
   if (remote.requiresAliasResolution) {
-    const resolved = await resolveSshAlias(host)
+    const resolved = await resolveSshAlias(processRunner, host)
     if (resolved === null) return null
     host = resolved
   }
@@ -72,7 +71,7 @@ export async function resolveTrustedIdentity(
   return trustedHost === null ? null : { ...remote.identity, host: trustedHost }
 }
 
-async function resolveSshAlias(alias: string): Promise<string | null> {
+async function resolveSshAlias(processRunner: ProcessRunner, alias: string): Promise<string | null> {
   const cacheKey = `${process.env.HOME ?? ''}|${alias}`
   const cached = aliasCache.get(cacheKey)
   const now = Date.now()
@@ -83,17 +82,17 @@ async function resolveSshAlias(alias: string): Promise<string | null> {
 
   let host: string | null = null
   try {
-    const result = await execFileAsync('ssh', ['-G', '--', alias], {
-      timeout: 5000,
-      maxBuffer: 64 * 1024,
-      encoding: 'utf8',
-      windowsHide: true
+    const result = await processRunner.run(['ssh', '-G', '--', alias], {
+      timeoutMs: 5_000,
+      killGraceMs: 2_000,
+      maxOutputBytes: 64 * 1024
     })
-    const stdout = result.stdout
-    const hostname = /^hostname\s+(\S+)\s*$/im.exec(stdout)?.[1]
-    if (hostname && hostname.toLowerCase() !== alias.toLowerCase()) {
-      const normalized = normalizeHost(hostname)
-      if (validRemoteHost(normalized)) host = normalized
+    if (result.exitCode === 0 && result.signal === null && result.stopped === undefined && result.spawnError === undefined) {
+      const hostname = /^hostname\s+(\S+)\s*$/im.exec(result.stdoutText)?.[1]
+      if (hostname && hostname.toLowerCase() !== alias.toLowerCase()) {
+        const normalized = normalizeHost(hostname)
+        if (validRemoteHost(normalized)) host = normalized
+      }
     }
   } catch {
     host = null

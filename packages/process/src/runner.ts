@@ -95,16 +95,20 @@ export function createProcessRunner({ owner, start = startChild, stallMs }: Proc
       if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new RangeError('timeoutMs must be a positive finite number')
       if (!Number.isFinite(killGraceMs) || killGraceMs < 0) throw new RangeError('killGraceMs must be zero or a positive finite number')
       if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) throw new RangeError('maxOutputBytes must be a positive integer')
+      const outputMode = options.outputMode === undefined ? 'separate' : options.outputMode
+      if (outputMode !== 'separate' && outputMode !== 'combined') throw new TypeError('outputMode must be "separate" or "combined"')
+      const overflow = options.overflow === undefined ? 'stop' : options.overflow
+      if (overflow !== 'stop' && overflow !== 'truncate') throw new TypeError('overflow must be "stop" or "truncate"')
       if (options.share && (options.input !== undefined || options.signal !== undefined)) throw new TypeError('share cannot be combined with input or signal')
       const env = { ...(options.env ?? process.env) }
       let cwd = options.cwd
       if (cwd === undefined && !options.signal?.aborted) {
         try { cwd = process.cwd() } catch {}
       }
-      const normalized: RunOptions = { ...options, cwd, env, timeoutMs, killGraceMs, maxOutputBytes }
+      const normalized: RunOptions = { ...options, cwd, env, timeoutMs, killGraceMs, maxOutputBytes, outputMode, overflow }
       const key = options.share ? JSON.stringify([
         argv, cwd, Object.entries(env).filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b)),
-        timeoutMs, killGraceMs, maxOutputBytes, options.rerunnable ?? false
+        timeoutMs, killGraceMs, maxOutputBytes, outputMode, overflow, options.rerunnable ?? false
       ]) : undefined
       if (key !== undefined) {
         const existing = shared.get(key)

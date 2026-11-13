@@ -1,12 +1,11 @@
 import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { gitApi } from '@quirky/git'
+import type { ProcessRunner } from '@quirky/protocol'
 
 export const HOOK_TIMEOUT_MS = 2 * 60 * 1000
 export const HOOK_KILL_GRACE_MS = 5000
 export const HOOK_OUTPUT_LIMIT = 10 * 1024 * 1024
-/** How long to keep reading output after the script exits, for a background process that holds the pipe open. */
-const DRAIN_GRACE_MS = 1000
 
 export type HookKind = 'setup' | 'archive' | 'issue'
 
@@ -68,74 +67,30 @@ export async function writeRunner(runner: string, target: HookTarget, script: st
 export const runnerCommand = (runner: string): string => `/bin/bash ${shellQuote(runner)}`
 
 /**
- * Runs an existing runner in the daemon with the hook environment, no stdin and its own process
- * group. After `timeoutMs` the group gets SIGTERM and, `killGraceMs` later, SIGKILL (even if the script itself already exited); output past
- * `maxOutputBytes` is discarded. Resolves when the script has exited.
+ * Runs an existing runner through the activation-owned process runner with closed stdin and the
+ * hook environment. Shared containment stops descendants on timeout and normal exit; output past
+ * `maxOutputBytes` is discarded without interrupting the script.
  */
-export async function runHookInDaemon(runner: string, target: HookTarget, options: HookRunOptions = {}): Promise<HookRunResult> {
-  const limit = options.maxOutputBytes ?? HOOK_OUTPUT_LIMIT
-  const proc = Bun.spawn(['/bin/bash', runner], {
+export async function runHookInDaemon(processRunner: ProcessRunner, runner: string, target: HookTarget, options: HookRunOptions = {}): Promise<HookRunResult> {
+  const result = await processRunner.run(['/bin/bash', runner], {
     cwd: target.worktreePath,
     env: { ...process.env, ...hookEnvironment(target) },
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-    // the typed options omit `detached`; Bun starts the child in its own process group with it
-    ...({ detached: true } as object)
+    timeoutMs: options.timeoutMs ?? HOOK_TIMEOUT_MS,
+    killGraceMs: options.killGraceMs ?? HOOK_KILL_GRACE_MS,
+    maxOutputBytes: options.maxOutputBytes ?? HOOK_OUTPUT_LIMIT,
+    outputMode: 'combined',
+    overflow: 'truncate'
   })
-  const killGroup = (signal: NodeJS.Signals) => {
-    try {
-      process.kill(-proc.pid, signal)
-    } catch {
-      try {
-        proc.kill(signal)
-      } catch {
-        // already gone
-      }
-    }
+  if (result.spawnError) throw new Error(result.spawnError.message)
+  return {
+    exitCode: result.stopped || result.signal ? null : result.exitCode,
+    output: result.stdoutText,
+    timedOut: result.stopped === 'timeout'
   }
-
-  let timedOut = false
-  let hardKill: ReturnType<typeof setTimeout> | undefined
-  const timer = setTimeout(() => {
-    timedOut = true
-    killGroup('SIGTERM')
-    hardKill = setTimeout(() => killGroup('SIGKILL'), options.killGraceMs ?? HOOK_KILL_GRACE_MS)
-  }, options.timeoutMs ?? HOOK_TIMEOUT_MS)
-
-  const chunks: Uint8Array[] = []
-  let size = 0
-  const readers = [proc.stdout, proc.stderr].map((stream) => (stream as ReadableStream<Uint8Array>).getReader())
-  const drains = readers.map(async (reader) => {
-    try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) return
-        const room = limit - size
-        if (room > 0) {
-          const kept = value.length <= room ? value : value.subarray(0, room)
-          chunks.push(kept)
-          size += kept.length
-        }
-      }
-    } catch {
-      // the reader was cancelled
-    }
-  })
-
-  await proc.exited
-  clearTimeout(timer)
-  // after a timeout the group SIGKILL must still land: the parent may exit on TERM while a child ignores it
-  let settled: ReturnType<typeof setTimeout> | undefined
-  await Promise.race([Promise.all(drains), new Promise((resolve) => (settled = setTimeout(resolve, DRAIN_GRACE_MS)))])
-  clearTimeout(settled)
-  for (const reader of readers) reader.cancel().catch(() => {})
-
-  return { exitCode: proc.exitCode, output: Buffer.concat(chunks).toString('utf8'), timedOut }
 }
 
 /** Writes the runner for `script` and runs it in the daemon; the one call the archive hook needs too. */
-export async function runHookScript(runner: string, target: HookTarget, script: string, options: HookRunOptions = {}): Promise<HookRunResult> {
+export async function runHookScript(processRunner: ProcessRunner, runner: string, target: HookTarget, script: string, options: HookRunOptions = {}): Promise<HookRunResult> {
   await writeRunner(runner, target, script)
-  return runHookInDaemon(runner, target, options)
+  return runHookInDaemon(processRunner, runner, target, options)
 }
