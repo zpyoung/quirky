@@ -1,15 +1,41 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
+import { afterEach, describe, expect, jest, test } from 'bun:test'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { RpcErrorCode, type Session } from '@quirky/protocol'
-import type { AccountState, ManagedProvider } from '../src/types'
+import {
+  RpcErrorCode,
+  type ProcessRunner,
+  type ProcessSpawner,
+  type RunResult,
+  type Session,
+  type SpawnExit,
+  type SpawnOptions,
+  type SpawnedProcess,
+  type StopOptions
+} from '@quirky/protocol'
+import { AccountLoginManager, type LoginCompletion, type LoginRequest } from '../src/login'
+import { AccountProfiles } from '../src/profiles'
+import type { AccountState, ManagedProvider, PendingLogin } from '../src/types'
 import type { UsageState } from '../src/usage/types'
 import type { AccountsHarness } from './support/index'
 import { cleanupAll, startAccounts, waitForAsync } from './support/index'
 import { interceptProviderFetch, restoreProviderFetchFixtures } from './acceptance-fixtures'
 import { addManagedAccount, call, createClaudeSession, restartAndExit, sessionPlugins } from './remaining-support'
 
+const originalProviderPath = process.env.PATH
+let isolatedProviderPath: string | null = null
+const timerControls = jest as unknown as {
+  useFakeTimers(): void
+  advanceTimersByTime(milliseconds: number): void
+  useRealTimers(): void
+}
+
 afterEach(async () => {
+  if (isolatedProviderPath !== null) {
+    if (originalProviderPath === undefined) delete process.env.PATH
+    else process.env.PATH = originalProviderPath
+    isolatedProviderPath = null
+  }
   await cleanupAll()
   await restoreProviderFetchFixtures()
 })
@@ -194,3 +220,404 @@ describe('quirky.accounts remaining flow acceptance', () => {
     expect(h.harness.pty.sessions.get(future.id)?.env.CLAUDE_CONFIG_DIR).toBe(h.managedHome('claude', idC))
   })
 })
+describe('AccountLoginManager process spawning', () => {
+  test('spawns each provider with its isolated environment and bounded process options', async () => {
+    for (const provider of ['claude', 'codex'] as const) {
+      const fixture = createLoginFixture(provider)
+      const processes = createLoginSpawner()
+      const login = createLoginManager(fixture, processes.spawner)
+      try {
+        const pending = login.manager.begin(fixture.request)
+        const process = processes.calls[0]!
+        expect(process.argv).toEqual(provider === 'claude'
+          ? ['claude', 'auth', 'login', '--claudeai']
+          : ['codex', 'login'])
+        expect(process.options).toMatchObject({
+          cwd: fixture.home,
+          env: {
+            ...(provider === 'claude' ? { CLAUDE_CONFIG_DIR: fixture.home } : { CODEX_HOME: fixture.home })
+          },
+          stdin: 'pipe',
+          stdout: 'pipe',
+          stderr: 'ignore',
+          timeoutMs: provider === 'claude' ? 600_000 : 180_000,
+          killGraceMs: 2_000
+        })
+        expect(process.options.env).not.toBe(globalThis.process.env)
+        process.exit(1)
+        expect(await login.completion).toMatchObject({ status: 'error', request: fixture.request })
+        await login.waitForChange((state) => state.id === pending.id && state.status === 'error')
+        expect(login.manager.status(pending.id)?.status).toBe('error')
+      } finally {
+        fixture.cleanup()
+      }
+    }
+  })
+
+  test('extracts only trusted OAuth URLs from streamed provider output across chunks', async () => {
+    const claude = createLoginFixture('claude')
+    const claudeProcesses = createLoginSpawner()
+    const claudeLogin = createLoginManager(claude, claudeProcesses.spawner)
+    const codex = createLoginFixture('codex')
+    const codexProcesses = createLoginSpawner()
+    const codexLogin = createLoginManager(codex, codexProcesses.spawner)
+    try {
+      const claudeTask = claudeLogin.manager.begin(claude.request)
+      const claudeProcess = claudeProcesses.calls[0]!
+      const claudeUrl = 'https://platform.claude.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fixture'
+      const expectedClaudeUrl = new URL(claudeUrl).toString()
+      const claudeUrlChange = claudeLogin.waitForChange((value) => value.id === claudeTask.id && value.url === expectedClaudeUrl)
+      claudeProcess.push('https://evil.example/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%2Fcallback ')
+      claudeProcess.push('Please open https://platform.claude.com/oauth/')
+      claudeProcess.push('authorize?redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fixture\n')
+      await claudeUrlChange
+      expect(claudeLogin.manager.status(claudeTask.id)?.url).toBe(expectedClaudeUrl)
+      expect(claudeLogin.changes.some((value) => value.url?.includes('evil.example'))).toBe(false)
+      claudeProcess.exit(1)
+      await claudeLogin.completion
+
+      const codexTask = codexLogin.manager.begin(codex.request)
+      const codexProcess = codexProcesses.calls[0]!
+      const codexUrl = 'https://auth.openai.com/oauth/authorize?state=fixture'
+      const expectedCodexUrl = new URL(codexUrl).toString()
+      const codexUrlChange = codexLogin.waitForChange((value) => value.id === codexTask.id && value.url === expectedCodexUrl)
+      codexProcess.push('Navigate to this URL to authenticate: https://evil.example/oauth/authorize?state=bad\n')
+      const prefix = new TextEncoder().encode('🔐 Navigate to this URL to authenticate: https://auth.openai.com/oauth/')
+      const suffix = new TextEncoder().encode('authorize?state=fixture\n')
+      const emojiStart = prefix.indexOf(0xf0)
+      codexProcess.push(prefix.subarray(0, emojiStart + 2))
+      codexProcess.push(prefix.subarray(emojiStart + 2))
+      codexProcess.push(suffix)
+      await codexUrlChange
+      expect(codexLogin.manager.status(codexTask.id)?.url).toBe(expectedCodexUrl)
+      expect(codexLogin.changes.some((value) => value.url?.includes('evil.example'))).toBe(false)
+      codexProcess.exit(1)
+      await codexLogin.completion
+    } finally {
+      claude.cleanup()
+      codex.cleanup()
+    }
+  })
+
+  test('creates a private Claude browser helper and captures its trusted URL inside the copy-link window', async () => {
+    timerControls.useFakeTimers()
+    const fixture = createLoginFixture('claude', { copyLink: true })
+    const processes = createLoginSpawner()
+    const login = createLoginManager(fixture, processes.spawner)
+    try {
+      const pending = login.manager.begin(fixture.request)
+      const process = processes.calls[0]!
+      const script = process.options.env?.BROWSER
+      expect(script).toBeTruthy()
+      expect(existsSync(script!)).toBe(true)
+      expect(statSync(script!).mode & 0o777).toBe(0o700)
+      const scriptText = readFileSync(script!, 'utf8')
+      expect(scriptText).toContain('chmod 600 "$tmp"')
+      expect(scriptText).toContain('mv "$tmp" "$file"')
+      const browserFile = browserCaptureFile(scriptText)
+      const url = 'https://claude.ai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fixture'
+      writeFileSync(browserFile, url, { mode: 0o600 })
+      timerControls.advanceTimersByTime(200)
+      expect(login.manager.status(pending.id)?.url).toBe(new URL(url).toString())
+      process.exit(1)
+      await login.completion
+    } finally {
+      timerControls.useRealTimers()
+      fixture.cleanup()
+    }
+  })
+
+  test('stops watching for a Claude browser URL after the 60-second copy-link window', async () => {
+    timerControls.useFakeTimers()
+    const fixture = createLoginFixture('claude', { copyLink: true })
+    const processes = createLoginSpawner()
+    const login = createLoginManager(fixture, processes.spawner)
+    try {
+      const pending = login.manager.begin(fixture.request)
+      const script = processes.calls[0]!.options.env?.BROWSER
+      if (!script) throw new Error('Claude browser helper was not configured')
+      const browserFile = browserCaptureFile(readFileSync(script, 'utf8'))
+      timerControls.advanceTimersByTime(60_000)
+      writeFileSync(browserFile, 'https://claude.ai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%2Fcallback')
+      timerControls.advanceTimersByTime(200)
+      expect(login.manager.status(pending.id)?.url).toBeNull()
+      processes.calls[0]!.exit(1)
+      await login.completion
+    } finally {
+      timerControls.useRealTimers()
+      fixture.cleanup()
+    }
+  })
+
+  test('cancellation, supersession, and shutdown do not wait for a blocked stdin close', async () => {
+    for (const action of ['cancel', 'supersede', 'shutdown'] as const) {
+      const fixture = createLoginFixture('claude')
+      const processes = createLoginSpawner()
+      const login = createLoginManager(fixture, processes.spawner)
+      try {
+        const pending = login.manager.begin(fixture.request)
+        const process = processes.calls[0]!
+        const operation = action === 'cancel'
+          ? login.manager.cancel(pending.id)
+          : action === 'supersede'
+            ? login.manager.supersedePending()
+            : login.manager.shutdown()
+        expect(process.closeInputCalls).toBe(1)
+        expect(process.stopCalls).toEqual([{ graceMs: 2_000 }])
+        process.exit(null, { signal: 'SIGTERM', stopped: 'stop' })
+        await operation
+        expect(await login.completion).toMatchObject({
+          status: 'cancelled',
+          superseded: action === 'supersede'
+        })
+      } finally {
+        fixture.cleanup()
+      }
+    }
+  })
+
+  test('fails closed when stdout errors before a Codex auth change is latched', async () => {
+    const fixture = createLoginFixture('codex')
+    const processes = createLoginSpawner()
+    const login = createLoginManager(fixture, processes.spawner)
+    try {
+      login.manager.begin(fixture.request)
+      writeFileSync(join(fixture.home, 'auth.json'), JSON.stringify({ tokens: { access_token: 'fixture-token' } }))
+      processes.calls[0]!.failStdout(new Error('private stream failure'))
+      processes.calls[0]!.exit(0)
+      const completion = await login.completion
+      expect(completion).toMatchObject({ status: 'error', identity: null })
+      expect(processes.calls[0]!.stopCalls).toEqual([{ graceMs: 2_000 }])
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  test('keeps a Codex auth change already latched before stdout fails', async () => {
+    const fixture = createLoginFixture('codex')
+    const processes = createLoginSpawner()
+    const login = createLoginManager(fixture, processes.spawner)
+    try {
+      const pending = login.manager.begin(fixture.request)
+      writeFileSync(join(fixture.home, 'auth.json'), JSON.stringify({ tokens: { access_token: 'fixture-token' } }))
+      const cancelling = login.manager.cancel(pending.id)
+      expect(processes.calls[0]!.closeInputCalls).toBe(1)
+      processes.calls[0]!.failStdout(new Error('private stream failure'))
+      processes.calls[0]!.exit(0)
+      await cancelling
+      expect(await login.completion).toMatchObject({ status: 'complete', identity: { hasAuth: true } })
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  test('awaits asynchronous profile identity lookup before notifying the service', async () => {
+    const runStarted = Promise.withResolvers<void>()
+    const keychainResult = Promise.withResolvers<RunResult>()
+    const fixture = createLoginFixture('claude', {
+      run: () => {
+        runStarted.resolve()
+        return keychainResult.promise
+      }
+    })
+    const processes = createLoginSpawner()
+    const login = createLoginManager(fixture, processes.spawner)
+    try {
+      login.manager.begin(fixture.request)
+      processes.calls[0]!.exit(0)
+      await runStarted.promise
+      expect(login.finishedCount()).toBe(0)
+      keychainResult.resolve({
+        stdout: new Uint8Array(),
+        stdoutText: '',
+        stderr: '',
+        exitCode: 44,
+        signal: null,
+        durationMs: 0
+      })
+      expect(await login.completion).toMatchObject({ status: 'error', identity: null })
+      expect(login.finishedCount()).toBe(1)
+    } finally {
+      fixture.cleanup()
+    }
+  })
+})
+
+type FakeLoginProcess = {
+  argv: string[]
+  options: SpawnOptions
+  handle: SpawnedProcess
+  closeInputCalls: number
+  stopCalls: StopOptions[]
+  push(chunk: string | Uint8Array): void
+  failStdout(error: unknown): void
+  exit(code: number | null, extra?: Partial<SpawnExit>): void
+}
+
+function createLoginSpawner(): {
+  spawner: ProcessSpawner
+  calls: FakeLoginProcess[]
+} {
+  const calls: FakeLoginProcess[] = []
+  const spawner: ProcessSpawner = {
+    spawn(argv, options) {
+      const exited = Promise.withResolvers<SpawnExit>()
+      const blockedInputClose = Promise.withResolvers<void>().promise
+      let stdoutController!: ReadableStreamDefaultController<Uint8Array>
+      let stdoutEnded = false
+      let settled = false
+      let process!: FakeLoginProcess
+      const settle = (result: SpawnExit): void => {
+        if (settled) return
+        settled = true
+        if (!stdoutEnded) {
+          stdoutEnded = true
+          stdoutController.close()
+        }
+        exited.resolve(result)
+      }
+      const handle: SpawnedProcess = {
+        pid: null,
+        stdout: new ReadableStream<Uint8Array>({
+          start(controller) {
+            stdoutController = controller
+          }
+        }),
+        stderr: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close()
+          }
+        }),
+        stderrTail: () => '',
+        write: async () => true,
+        closeInput: () => {
+          process.closeInputCalls += 1
+          return blockedInputClose
+        },
+        exited: exited.promise,
+        stop: async (stopOptions) => {
+          process.stopCalls.push(stopOptions ?? {})
+          return exited.promise
+        }
+      }
+      process = {
+        argv: [...argv],
+        options,
+        handle,
+        closeInputCalls: 0,
+        stopCalls: [],
+        push(chunk) {
+          if (stdoutEnded) throw new Error('stdout is already closed')
+          stdoutController.enqueue(typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk)
+        },
+        failStdout(error) {
+          if (stdoutEnded) return
+          stdoutEnded = true
+          stdoutController.error(error)
+        },
+        exit(code, extra = {}) {
+          settle({ exitCode: code, signal: null, durationMs: 0, ...extra })
+        }
+      }
+      calls.push(process)
+      return handle
+    }
+  }
+  return { spawner, calls }
+}
+
+function createLoginFixture(
+  provider: ManagedProvider,
+  options: { copyLink?: boolean; run?: ProcessRunner['run'] } = {}
+): {
+  home: string
+  profiles: AccountProfiles
+  request: LoginRequest
+  cleanup(): void
+} {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-login-flow-'))
+  const home = join(root, 'home')
+  const bin = join(root, 'empty-bin')
+  mkdirSync(home, { recursive: true, mode: 0o700 })
+  mkdirSync(bin, { mode: 0o700 })
+  isolatedProviderPath = bin
+  process.env.PATH = bin
+  const runner: ProcessRunner = {
+    run: (argv, runOptions) => options.run
+      ? options.run(argv, runOptions)
+      : Promise.resolve({
+        stdout: new Uint8Array(),
+        stdoutText: '',
+        stderr: '',
+        exitCode: 44,
+        signal: null,
+        durationMs: 0
+      })
+  }
+  const profiles = new AccountProfiles(root, runner)
+  const request: LoginRequest = {
+    provider,
+    accountId: 'fixture-account',
+    home,
+    label: null,
+    copyLink: options.copyLink ?? false,
+    reauthenticating: false,
+    mutationGeneration: 0
+  }
+  return {
+    home,
+    profiles,
+    request,
+    cleanup: () => rmSync(root, { recursive: true, force: true })
+  }
+}
+
+function createLoginManager(
+  fixture: { profiles: AccountProfiles; request: LoginRequest },
+  spawner: ProcessSpawner
+): {
+  manager: AccountLoginManager
+  completion: Promise<LoginCompletion>
+  finishedCount(): number
+  changes: PendingLogin[]
+  waitForChange(predicate: (pending: PendingLogin) => boolean): Promise<PendingLogin>
+} {
+  const completion = Promise.withResolvers<LoginCompletion>()
+  let count = 0
+  const changes: PendingLogin[] = []
+  const waiters: { predicate: (pending: PendingLogin) => boolean; resolve: (pending: PendingLogin) => void }[] = []
+  const manager = new AccountLoginManager(
+    fixture.profiles,
+    spawner,
+    async (value) => {
+      count += 1
+      completion.resolve(value)
+      return null
+    },
+    (pending) => {
+      changes.push(pending)
+      for (let index = waiters.length - 1; index >= 0; index -= 1) {
+        const waiter = waiters[index]!
+        if (waiter.predicate(pending)) {
+          waiters.splice(index, 1)
+          waiter.resolve(pending)
+        }
+      }
+    }
+  )
+  const waitForChange = (predicate: (pending: PendingLogin) => boolean): Promise<PendingLogin> => {
+    const existing = changes.find(predicate)
+    if (existing) return Promise.resolve(existing)
+    const deferred = Promise.withResolvers<PendingLogin>()
+    waiters.push({ predicate, resolve: deferred.resolve })
+    return deferred.promise
+  }
+  return { manager, completion: completion.promise, finishedCount: () => count, changes, waitForChange }
+}
+
+
+function browserCaptureFile(script: string): string {
+  const match = /^file='([^']+)'$/m.exec(script)
+  if (!match?.[1]) throw new Error('Claude browser helper did not expose its capture file')
+  return match[1]
+}
