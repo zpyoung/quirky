@@ -293,5 +293,16 @@ describe('one-hop route target resolution', () => {
       parsed.expression
     )).toBeUndefined()
   })
+
+  test('resolves an unshadowed constant through empty loop initializers and unrelated nested bindings', () => {
+    const cases = [
+      "const API = 'acme.app/save'; for (;;) { context.call(API); break }",
+      "const API = 'acme.app/save'; function use() { { let API = 'other/save' } context.call(API) }"
+    ]
+    for (const content of cases) {
+      const parsed = routeArgument(content)
+      expect(resolveTarget(plugin([source(file, content)]), [file], parsed.source, parsed.expression)).toBe('acme.app/save')
+    }
+  })
 })
 

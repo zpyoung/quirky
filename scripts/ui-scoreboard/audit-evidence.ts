@@ -473,7 +473,7 @@ function functionHasVarBinding(scope: FunctionNode, name: string): boolean {
 function iterationBindsName(scope: ts.Node, name: string): boolean {
   if (!ts.isForStatement(scope) && !ts.isForInStatement(scope) && !ts.isForOfStatement(scope)) return false
   const initializer = scope.initializer
-  return ts.isVariableDeclarationList(initializer) && (initializer.flags & ts.NodeFlags.BlockScoped) !== 0 &&
+  return initializer !== undefined && ts.isVariableDeclarationList(initializer) && (initializer.flags & ts.NodeFlags.BlockScoped) !== 0 &&
     initializer.declarations.some((declaration) => bindingContainsName(declaration.name, name))
 }
 
