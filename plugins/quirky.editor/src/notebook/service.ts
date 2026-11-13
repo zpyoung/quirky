@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { realpathSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import type { MethodHandler, PluginCaller } from '@quirky/protocol'
@@ -25,6 +24,7 @@ import {
   describePython,
   discoverPythonCandidates,
   installIpykernel,
+  runCommand,
   type PythonCandidate,
   type PythonEnvironment
 } from './python'
@@ -424,13 +424,13 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
 
   const getEnvironment = async (state: RuntimeState, location: NotebookLocation, requested?: unknown): Promise<PythonEnvironment> => {
     if (typeof requested === 'string' && requested.trim()) {
-      const environment = await describePython(requested, 'selected')
+      const environment = await describePython(host.context.process, requested, 'selected')
       state.selected = environment
       return environment
     }
     if (state.selected) return state.selected
     const candidates = discoverPythonCandidates(location.directory, location.root)
-    const environments = await describeCandidates(candidates)
+    const environments = await describeCandidates(host.context.process, candidates)
     const chosen = environments.find((environment) => environment.source === 'venv' || environment.source === 'workspace') ?? environments[0]
     if (!chosen) error(host, 'not-found', 'Python was not found. Install Python, select an interpreter, then run the cell again.')
     state.selected = chosen
@@ -698,14 +698,14 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
     if (action === 'environments') {
       const location = await localLocation(host, bufferId, caller)
       const candidates = discoverPythonCandidates(location.directory, location.root)
-      const environments = params.runWorkspaceInterpreters === true ? await describeCandidates(candidates) : candidates
+      const environments = params.runWorkspaceInterpreters === true ? await describeCandidates(host.context.process, candidates) : candidates
       return { environments, probed: params.runWorkspaceInterpreters === true }
     }
     if (action === 'describe') {
       const location = await localLocation(host, bufferId, caller)
       const pythonPath = requiredString(host, params.path ?? params.python, 'path')
       try {
-        const environment = await describePython(pythonPath)
+        const environment = await describePython(host.context.process, pythonPath)
         return { environment }
       } catch (cause) {
         const detail = cause instanceof Error ? cause.message : String(cause)
@@ -718,17 +718,9 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       let pythonPath = params.python ?? params.path
       if (params.browse === true && (typeof pythonPath !== 'string' || !pythonPath.trim())) {
         if (process.platform !== 'darwin') error(host, 'invalid-params', 'Browse for Python is supported on macOS; pass an explicit interpreter path on this host.')
-        const chooser = spawn('osascript', ['-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'], {
-          cwd: location.directory, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true
-        })
-        const choice = Promise.withResolvers<{ code: number | null; stdout: string; stderr: string }>()
-        let stdout = ''
-        let stderr = ''
-        chooser.stdout?.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk.slice(0, 4096) })
-        chooser.stderr?.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk.slice(0, 4096) })
-        chooser.once('error', choice.reject)
-        chooser.once('close', (code) => choice.resolve({ code, stdout, stderr }))
-        const selected = await choice.promise
+        const selected = await runCommand(host.context.process, 'osascript', [
+          '-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'
+        ], { cwd: location.directory, timeoutMs: 300_000, tailCharacters: 8_192 })
         if (selected.code !== 0) {
           if (/cancel/i.test(selected.stderr)) return { cancelled: true, selected: state.selected }
           error(host, 'conflict', selected.stderr.trim() || 'The Python file chooser failed.')
@@ -738,7 +730,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       const selectedPath = requiredString(host, pythonPath, 'python')
       let environment: PythonEnvironment
       try {
-        environment = await describePython(selectedPath)
+        environment = await describePython(host.context.process, selectedPath)
       } catch (cause) {
         const detail = cause instanceof Error ? cause.message : String(cause)
         error(host, 'invalid-params', detail)
@@ -763,7 +755,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       const location = await localLocation(host, bufferId, caller)
       const environment = await getEnvironment(state, location, params.python ?? params.path)
       try {
-        const installed = await installIpykernel(environment, location.root)
+        const installed = await installIpykernel(host.context.process, environment, location.root)
         state.selected = installed.python
         state.lastSetupError = null
         return { status: 'installed', environment: installed.python, command: installed.command }
@@ -780,7 +772,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       const location = await localLocation(host, bufferId, caller)
       const environment = await getEnvironment(state, location, params.python ?? params.path)
       try {
-        const result = await createWorkspaceVenv(environment, location.directory, location.root)
+        const result = await createWorkspaceVenv(host.context.process, environment, location.directory, location.root)
         state.selected = result.python
         state.lastSetupError = null
         return { status: 'created', path: result.path, environment: result.python, command: result.command }
