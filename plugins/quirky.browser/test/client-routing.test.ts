@@ -50,7 +50,15 @@ function cliCaller(worktreeId?: string): PluginCaller {
 }
 
 function uiCaller(connId: number): PluginCaller {
-  return { role: 'ui', connection: { id: connId, transport: 'websocket' } }
+  return {
+    role: 'ui',
+    connection: {
+      id: connId,
+      transport: 'websocket',
+      onClose: () => { throw new Error('routing must not register connection cleanup') },
+      openStream: () => { throw new Error('routing must not open a connection stream') }
+    }
+  }
 }
 
 function rejected(error: unknown): Error {
