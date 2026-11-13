@@ -155,7 +155,7 @@ let focusOwner: object | null = null
  * addon for OSC 52. The workspace keys it by pane ID so a layout change never remounts it.
  */
 export function TerminalPaneView(props: TerminalPaneProps) {
-  const { context, sessionId, settings, active, dragging, suppressAutoFocus, autoFocus = true, themeSource, ref } = props
+  const { context, sessionId, settings, active, dragging, suppressAutoFocus, themeSource, ref } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const screenRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -941,9 +941,10 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     runtime.current?.syncOsc52()
   }, [settings['allow-osc52']])
 
+  // lifting selection suppression is not a focus request
   useEffect(() => {
-    if (active && autoFocus && !suppressAutoFocus) runtime.current?.term.focus()
-  }, [active, autoFocus, suppressAutoFocus])
+    if (active && latest.current.autoFocus !== false && !suppressAutoFocus) runtime.current?.term.focus()
+  }, [active, suppressAutoFocus])
 
   const wasDragging = useRef(dragging)
   useEffect(() => {

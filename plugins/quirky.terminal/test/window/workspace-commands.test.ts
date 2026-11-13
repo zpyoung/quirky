@@ -409,6 +409,27 @@ describe('worktree view input updates', () => {
     expect(view.q('.qt-workspace')).toBe(workspaceRoot)
   })
 
+  test.each(['inside', 'outside'] as const)('lifting selection suppression preserves a text field %s the workspace', async (location) => {
+    const view = await mount()
+    expect(await view.updateInput({ worktree: 'wt-main', session: 's-2' })).toBe(true)
+    await settleSeveral()
+
+    const field = document.createElement('input')
+    const parent = location === 'inside' ? view.element : document.body
+    parent.appendChild(field)
+    await run(() => field.focus())
+    expect(document.activeElement === field).toBe(true)
+    const focus = ['pane-2', 'pane-3', 'pane-4', 'pane-5'].map((id) => watchFocus(view, id))
+
+    const next = view.daemon.set(structuredClone(view.daemon.workspace))
+    await emitLayout(view, next)
+    await settleSeveral()
+
+    expect(view.last().layout.revision).toBe(next.revision)
+    expect(focus.map((terminal) => terminal.count())).toEqual([0, 0, 0, 0])
+    expect(document.activeElement === field).toBe(true)
+  })
+
   test('preserves unaffected groups and terminals when selecting a session on another tab', async () => {
     const workspace = conceptualWorkspace()
     const firstGroup = groupById(workspace.root, 'grp-1')
