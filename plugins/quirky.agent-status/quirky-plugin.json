@@ -1,6 +1,6 @@
 {
   "id": "quirky.agent-status",
-  "apiVersion": "1.4.0",
+  "apiVersion": "1.10.0",
   "name": "Agent status",
   "version": "0.1.0",
   "description": "Turns agent hooks into live status rows and durable per-session Activity threads.",
@@ -1211,6 +1211,7 @@
     "event": [
       {
         "id": "changed",
+        "coalesce": ["sessionId"],
         "worktree": "worktreeId",
         "description": "A session's agent status row changed or was removed.",
         "data": {

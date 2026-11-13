@@ -133,6 +133,47 @@ test('C2: API and CLI create, inspect, select, list, and close pages in explicit
   } finally { await h.cleanup() }
 }, 90_000)
 
+test('C2a: returned indices select and close interleaved worktree pages without crossing scope', async () => {
+  const h = await startBrowserHarness()
+  type Tab = { browserPageId: string; worktreeId: string; index: number; active: boolean }
+  try {
+    const worktreeA = await h.addFolderWorktree('IndexA')
+    const worktreeB = await h.addFolderWorktree('IndexB')
+    const first = await call(h.client, 'tabCreate', { worktree: worktreeA, url: `${h.fixtureUrl}events` }) as { browserPageId: string }
+    const other = await call(h.client, 'tabCreate', { worktree: worktreeB, url: `${h.fixtureUrl}events` }) as { browserPageId: string }
+    const last = await call(h.client, 'tabCreate', { worktree: worktreeA, url: `${h.fixtureUrl}events` }) as { browserPageId: string }
+    const listedA = await call(h.client, 'tabList', { worktree: worktreeA }) as { tabs: Tab[] }
+    const listedB = await call(h.client, 'tabList', { worktree: worktreeB }) as { tabs: Tab[] }
+    expect(listedA.tabs.map(tab => tab.browserPageId)).toEqual([first.browserPageId, last.browserPageId])
+    expect(listedB.tabs.map(tab => tab.browserPageId)).toEqual([other.browserPageId])
+
+    for (const tab of listedA.tabs) {
+      expect(await call(h.client, 'tabSwitch', { worktree: worktreeA, index: tab.index }))
+        .toEqual({ browserPageId: tab.browserPageId, switched: tab.index })
+      expect(await call(h.client, 'tabCurrent', { worktree: worktreeA }))
+        .toMatchObject({ tab: { browserPageId: tab.browserPageId } })
+    }
+
+    const beforeRefusal = await call(h.client, 'tabList', { worktree: 'all' })
+    for (const method of ['tabSwitch', 'tabClose']) {
+      const index = listedB.tabs[0]!.index
+      await expect(call(h.client, method, { worktree: worktreeA, index, ...(method === 'tabClose' ? { yes: true } : {}) }))
+        .rejects.toThrow(`browser_tab_not_found: tab index ${index} does not exist`)
+      expect(await call(h.client, 'tabList', { worktree: 'all' })).toEqual(beforeRefusal)
+    }
+
+    for (const tab of [...listedA.tabs].sort((left, right) => right.index - left.index)) {
+      expect(await call(h.client, 'tabClose', { worktree: worktreeA, index: tab.index, yes: true })).toEqual({ closed: true })
+      await expect(call(h.client, 'tabShow', { page: tab.browserPageId })).rejects.toThrow('browser_tab_not_found')
+      const remaining = await call(h.client, 'tabList', { worktree: 'all' }) as { tabs: Tab[] }
+      expect(remaining.tabs.some(candidate => candidate.browserPageId === tab.browserPageId)).toBe(false)
+      expect(remaining.tabs.some(candidate => candidate.browserPageId === other.browserPageId && candidate.worktreeId === worktreeB)).toBe(true)
+    }
+    expect(await call(h.client, 'tabList', { worktree: worktreeA })).toEqual({ tabs: [] })
+    expect(await call(h.client, 'eval', { page: other.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: 'seed' })
+  } finally { await h.cleanup() }
+}, 90_000)
+
 test('C3: real navigation, eval, snapshot refs, fill, click, and viewport screenshot affect the page', async () => {
   const h = await startBrowserHarness()
   try {
