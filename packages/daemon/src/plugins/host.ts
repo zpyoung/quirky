@@ -295,6 +295,18 @@ export class PluginHost {
     this.changed()
   }
 
+  /** Removes every warning with exactly this message; emits only if one was removed. */
+  removeWarning(pluginId: string, message: string): void {
+    if (!this.registry.plugins.has(pluginId)) return
+    const runtime = this.runtimeOf(pluginId)
+    const remaining = runtime.warnings.filter(
+      (diagnostic) => diagnostic.level !== 'warning' || diagnostic.message !== message
+    )
+    if (remaining.length === runtime.warnings.length) return
+    runtime.warnings = remaining
+    this.changed()
+  }
+
   /** Waits for in-flight activations, then deactivates every active plugin in reverse activation order. */
   async stop(): Promise<void> {
     this.stopped = true
