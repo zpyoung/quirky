@@ -156,7 +156,36 @@ describe('report validation', () => {
     const wrongCommit = { ...report(), commit: 'not-a-commit' }
     expect(validateReport(wrongCommit)).toBeNull()
   })
+
+  test('accepts software workload version 2 while rejecting mixed profile shapes', () => {
+    const v1 = report()
+    const v2 = {
+      ...v1,
+      profile: { ...v1.profile, workloadVersion: 2, compositor: 'software' },
+    }
+    expect(validateReport(v1)).toEqual(v1)
+    expect(validateReport(v2)).toEqual(v2)
+
+    const withoutCompositor = {
+      ...v2,
+      profile: Object.fromEntries(Object.entries(v2.profile).filter(([key]) => key !== 'compositor')),
+    }
+    const v1WithCompositor = {
+      ...v1,
+      profile: { ...v1.profile, compositor: 'software' },
+    }
+    expect(validateReport(withoutCompositor)).toBeNull()
+    expect(validateReport(v1WithCompositor)).toBeNull()
+    expect(compatibleProfiles(v1.profile, v2.profile as unknown as SpeedReport['profile'])).toBe(false)
+
+    const otherCompositor = { ...v2, profile: { ...v2.profile, compositor: 'gpu' } }
+    expect(compatibleProfiles(
+      v2.profile as unknown as SpeedReport['profile'],
+      otherCompositor.profile as unknown as SpeedReport['profile'],
+    )).toBe(false)
+  })
 })
+
 
 describe('profile compatibility and comparison', () => {
   test('ignores image version but compares Chromium and CPU profile fields', () => {
