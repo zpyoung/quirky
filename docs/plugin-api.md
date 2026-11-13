@@ -168,9 +168,29 @@ The terminal worktree view preserves mounted panes on same-worktree input update
 Selecting a session focuses its terminal; later background layout revisions leave
 focused text fields alone.
 
-### API 1.8: One-shot output policies
+### API 1.8: Terminal stream recovery
 
-API 1.8 adds `outputMode` and `overflow` to `RunOptions`. Defaults remain `outputMode: 'separate'`
+API 1.8 adds optional `ClientStream.lagged`, `lag()` and `onLag(callback)` hooks.
+`lag()` marks an open stream once, sends a binary `TerminalLagged` frame, and invokes its
+lag callbacks. Registering `onLag` after lag invokes the callback immediately.
+Daemon `send(bytes)` returns `false` once the stream is lagged or closed, and `true` when sent.
+The public return type remains `boolean | void` for existing stream implementations.
+
+`UiPluginContext.onStream(streamId, listener, { onLagged })` reports lost output once per
+registration and suppresses subsequent bytes from that stream. A gap detected before registration,
+including overflow of the client's 4 MiB early buffer, reports lag in a microtask unless disposed.
+Unsubscribe and replace the stream rather than continuing to consume incomplete output.
+Plugins using these hooks declare `"apiVersion": "1.8.0"`.
+
+`quirky.terminal/resync({ streamId, historyLines? })` replaces a stream owned by the calling
+connection and returns a fresh replay, offset, history cursor, dimensions, shell state and live
+status. It does not restore an ended process. Requests for one connection and session are spaced
+by two seconds. Desktop panes reset and replay under their input gate; phone viewers recover
+in-band with a screen snapshot and only the live bytes after its offset.
+
+### API 1.9: One-shot output policies
+
+API 1.9 adds `outputMode` and `overflow` to `RunOptions`. Defaults remain `outputMode: 'separate'`
 and `overflow: 'stop'`. In separate mode, `maxOutputBytes` applies independently to stdout and
 stderr. In combined mode, both streams append to `stdout` and `stdoutText` under one shared cap;
 `stderr` is empty, and bytes are combined in the order the drains observe chunks.
@@ -181,7 +201,7 @@ streams so the command can finish. When any bytes are discarded, `RunResult.trun
 which captured streams were cut; in combined mode, discarded bytes are attributed to stdout.
 Exact-cap output is not marked truncated. Truncation does not disable deadlines, abort, activation
 disposal or the existing post-exit stall and rerun behavior. A plugin using either option declares
-`"apiVersion": "1.8.0"`.
+`"apiVersion": "1.9.0"`.
 
 Captured partial results on post-exit stall errors retain the same truncation flags.
 
@@ -323,9 +343,10 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.7.0** adds [`MountCleanup.updateInput`](#api-17-in-place-view-input-updates) for mounted
   views that preserve their DOM and resources when accepting new input.
   A plugin that uses it declares `apiVersion` 1.7.0 or later.
-- **1.8.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
+- **1.8.0** adds [terminal stream lag hooks and recovery](#api-18-terminal-stream-recovery).
+- **1.9.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
   Separate capture and stop-on-overflow remain the defaults. A plugin using either option declares
-  `apiVersion` 1.8.0.
+  `apiVersion` 1.9.0.
 
 ## Example
 

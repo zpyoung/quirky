@@ -33,6 +33,7 @@ export async function activate(context: PluginContext): Promise<void> {
 
   const methods = {
     attach: terminal.attach,
+    resync: terminal.resync,
     detach: terminal.detach,
     write: terminal.write,
     userInput: terminal.userInput,

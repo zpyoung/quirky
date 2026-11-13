@@ -4,7 +4,7 @@ import { version as xtermVersion } from '@xterm/xterm/package.json'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
-import { answerXtversion, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
+import { answerXtversion, base64ToBytes, RpcErrorCode, type UiPluginContext } from '@quirky/protocol'
 import { createInputGate, writeReplay } from './replayGate'
 import { readTerminalTheme } from '@quirky/ui/terminal-theme'
 
@@ -19,6 +19,19 @@ type Props = {
 }
 
 const RESIZE_DEBOUNCE_MS = 50
+const RESYNC_RESET_PREFIX = new Uint8Array([0x18, 0x1b, 0x5c, 0x1b, 0x63, 0x1b, 0x5b, 0x33, 0x4a])
+const MAX_RESYNC_RETRIES = 3
+const RESYNC_INITIAL_WAIT_MS = 250
+const RESYNC_COOLDOWN_MS = 2_000
+
+type TerminalAttachResult = { streamId: number; replay: string; live?: boolean }
+
+function concatBytes(first: Uint8Array, second: Uint8Array): Uint8Array {
+  const combined = new Uint8Array(first.length + second.length)
+  combined.set(first)
+  combined.set(second, first.length)
+  return combined
+}
 
 /**
  * One xterm instance attached to one session's output. The parent mounts only the active tab,
@@ -69,6 +82,12 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
     let readOnly = false
     let streamId: number | null = null
     let unsubscribe: (() => void) | null = null
+    let resyncTargetStreamId: number | null = null
+    let lastResyncAt = -Infinity
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null
+    let resyncing = false
+    let pendingLag = false
+    let resyncFailures = 0
 
     const inputGate = createInputGate()
     term.onData((data) => {
@@ -80,10 +99,108 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
     })
 
     const detach = (id: number) => void context.call('quirky.terminal/detach', { streamId: id }).catch(() => {})
+    function handleLag(laggedStreamId: number): void {
+      if (disposed || readOnly || laggedStreamId !== streamId) return
+      unsubscribe?.()
+      unsubscribe = null
+      if (resyncing) {
+        pendingLag = true
+        return
+      }
+      if (resyncTimer !== null) return
+      resyncTimer = setTimeout(() => void runResync(), Math.max(RESYNC_INITIAL_WAIT_MS, lastResyncAt + RESYNC_COOLDOWN_MS - Date.now()))
+    }
+
+    function subscribe(id: number): () => void {
+      return context.onStream(id, (bytes) => term.write(bytes), { onLagged: () => handleLag(id) })
+    }
+
+    async function runResync(): Promise<void> {
+      resyncTimer = null
+      if (disposed || readOnly || streamId === null) return
+      const targetStreamId = streamId
+      streamId = null
+      resyncTargetStreamId = targetStreamId
+      resyncing = true
+      pendingLag = false
+      lastResyncAt = Date.now()
+      try {
+        const resynced = (await context.call('quirky.terminal/resync', { streamId: targetStreamId, historyLines: scrollbackRef.current })) as TerminalAttachResult
+        resyncTargetStreamId = null
+        resyncing = false
+        resyncFailures = 0
+        if (disposed) {
+          detach(resynced.streamId)
+          return
+        }
+        writeReplay(term, concatBytes(RESYNC_RESET_PREFIX, base64ToBytes(resynced.replay)), inputGate)
+        if (resynced.live === false) {
+          readOnly = true
+          streamId = null
+          detach(resynced.streamId)
+          return
+        }
+        streamId = resynced.streamId
+        unsubscribe = subscribe(resynced.streamId)
+        if (pendingLag) {
+          pendingLag = false
+          handleLag(resynced.streamId)
+        }
+      } catch (error) {
+        resyncing = false
+        const failedStreamId = resyncTargetStreamId
+        resyncTargetStreamId = null
+        if (disposed) {
+          if (failedStreamId !== null) detach(failedStreamId)
+          return
+        }
+        if (readOnly) return
+        const errorCode = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+        if (errorCode === RpcErrorCode.NotFound) {
+          resyncFailures = 0
+          streamId = null
+          try {
+            const attached = (await context.call('quirky.terminal/attach', {
+              session: sessionId,
+              cols: term.cols,
+              rows: term.rows,
+              historyLines: scrollbackRef.current
+            })) as TerminalAttachResult
+            if (disposed) {
+              detach(attached.streamId)
+              return
+            }
+            streamId = attached.streamId
+            writeReplay(term, concatBytes(RESYNC_RESET_PREFIX, base64ToBytes(attached.replay)), inputGate)
+            if (attached.live === false) {
+              readOnly = true
+              return
+            }
+            unsubscribe = subscribe(attached.streamId)
+          } catch (attachError) {
+            if (!disposed) {
+              const message = attachError instanceof Error ? attachError.message : String(attachError)
+              term.write(`\r\n\x1b[31mCould not attach: ${message}\x1b[0m\r\n`)
+            }
+          }
+          return
+        }
+        resyncFailures += 1
+        if (resyncFailures <= MAX_RESYNC_RETRIES) {
+          streamId = targetStreamId
+          handleLag(targetStreamId)
+          return
+        }
+        streamId = null
+        detach(targetStreamId)
+        const message = error instanceof Error ? error.message : String(error)
+        term.write(`\r\n\x1b[31mCould not resync: ${message}\x1b[0m\r\n`)
+      }
+    }
     context
       .call('quirky.terminal/attach', { session: sessionId, cols: term.cols, rows: term.rows, historyLines: scrollbackRef.current })
       .then((value) => {
-        const result = value as { streamId: number; replay: string; live?: boolean }
+        const result = value as TerminalAttachResult
         if (disposed) {
           detach(result.streamId)
           return
@@ -94,7 +211,7 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
           readOnly = true
           return
         }
-        unsubscribe = context.onStream(result.streamId, (bytes) => term.write(bytes))
+        unsubscribe = subscribe(result.streamId)
       })
       .catch((error: Error) => {
         if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${error.message}\x1b[0m\r\n`)
@@ -132,6 +249,10 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
       themeObserver.disconnect()
       observer.disconnect()
       unsubscribeEvents()
+      if (resyncTimer !== null) {
+        clearTimeout(resyncTimer)
+        resyncTimer = null
+      }
       unsubscribe?.()
       if (streamId !== null) detach(streamId)
       termRef.current = null

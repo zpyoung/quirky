@@ -187,6 +187,7 @@ function setup(
     return changeLayout({ tools: { ...current, open: { ...current.open, [slot]: null } } })
   }
   const streams = new Map<number, Set<(bytes: Uint8Array) => void>>()
+  const streamLagListeners = new Map<number, Set<() => void>>()
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   let confirmAnswer = true
@@ -280,11 +281,20 @@ function setup(
       if (!factory) throw new Error(`no module ${url}`)
       return factory()
     },
-    onStream: (streamId, listener) => {
+    onStream: (streamId, listener, options) => {
       const set = streams.get(streamId) ?? new Set()
       set.add(listener)
       streams.set(streamId, set)
-      return () => set.delete(listener)
+      const lag = options?.onLagged
+      if (lag) {
+        const callbacks = streamLagListeners.get(streamId) ?? new Set()
+        callbacks.add(lag)
+        streamLagListeners.set(streamId, callbacks)
+      }
+      return () => {
+        set.delete(listener)
+        if (lag) streamLagListeners.get(streamId)?.delete(lag)
+      }
     },
     onConnection: (listener) => {
       connectionListeners.add(listener)
@@ -312,6 +322,7 @@ function setup(
     confirms,
     answerConfirm: (answer: boolean) => (confirmAnswer = answer),
     pushStream: (streamId: number, bytes: Uint8Array) => streams.get(streamId)?.forEach((listener) => listener(bytes)),
+    lagStream: (streamId: number) => streamLagListeners.get(streamId)?.forEach((listener) => listener()),
     setConnection: (status: 'connected' | 'reconnecting') => connectionListeners.forEach((listener) => listener(status)),
     streamListeners: (streamId: number) => streams.get(streamId)?.size ?? 0,
     connectionListenerCount: () => connectionListeners.size,
@@ -2300,6 +2311,22 @@ test('D21: onStream hands a plugin its stream frames until it unsubscribes or th
   t.setModel(makeModel())
   await t.host.refresh()
   expect(t.streamListeners(8)).toBe(0)
+})
+
+test('onStream delivers lag callbacks until unsubscribe or plugin disposal', async () => {
+  const { t, context } = await booted()
+  let lagged = 0
+  const stop = context().onStream(7, () => {}, { onLagged: () => lagged++ })
+  context().onStream(8, () => {}, { onLagged: () => lagged++ })
+  t.lagStream(7)
+  expect(lagged).toBe(1)
+  stop()
+  t.lagStream(7)
+  expect(lagged).toBe(1)
+  t.setModel(makeModel())
+  await t.host.refresh()
+  t.lagStream(8)
+  expect(lagged).toBe(1)
 })
 
 test('D21: onConnection reports connected and reconnecting, and is removed with the plugin', async () => {

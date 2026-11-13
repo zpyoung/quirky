@@ -1031,7 +1031,7 @@ test('worktree scanner boundary is clear while long-lived vm allowance and API f
   for (const path of migratedFiles) expect(baseline[path]).toBeUndefined()
   expect(baseline['plugins/quirky.worktree/src/daemon/vm.ts']).toBeGreaterThan(0)
   const manifest = JSON.parse(readFileSync('plugins/quirky.worktree/quirky-plugin.json', 'utf8')) as { apiVersion: string }
-  expect(manifest.apiVersion).toBe('1.8.0')
-  expect(PLUGIN_API_VERSION).toBe('1.8.0')
+  expect(manifest.apiVersion).toBe('1.9.0')
+  expect(PLUGIN_API_VERSION).toBe('1.9.0')
   expect(pluginApiCompatibilityError(manifest.apiVersion)).toBeNull()
 })

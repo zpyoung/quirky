@@ -1,6 +1,6 @@
 {
   "id": "quirky.worktree",
-  "apiVersion": "1.8.0",
+  "apiVersion": "1.9.0",
   "name": "Worktrees",
   "version": "0.1.0",
   "description": "Git worktrees of the added repositories, and the selectors that name them.",

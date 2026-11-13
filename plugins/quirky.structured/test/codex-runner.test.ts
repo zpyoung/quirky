@@ -6,6 +6,13 @@ import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } 
 import { createCodexRunner } from '../codex-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { createCodexAppServerFixture, isolatedProviderEnvironment, type CodexAppServerFixture } from './fakes/codex-app-server'
+import {
+  createProcessRunner,
+  type OwnedProcessRunner,
+  type ProcessSpawner,
+  type SpawnOptions
+} from '../../../packages/process/src/api'
+import { CodexConnection } from '../codex-connection'
 
 async function until(check: () => boolean) {
   // The child has a real OS event loop; fake timers cannot advance its JSONL I/O.
@@ -24,6 +31,8 @@ type Setup = {
   runner: StructuredRunner
   session: Session
   context: StructuredContext
+  processRunner: OwnedProcessRunner
+  spawnCalls: { argv: readonly string[]; options: SpawnOptions }[]
 }
 
 let setup: Setup
@@ -31,11 +40,20 @@ let setup: Setup
 function makeSetup(): Setup {
   const home = mkdtempSync(join(tmpdir(), 'codex-runner-'))
   const fixture = createCodexAppServerFixture(home)
+  const processRunner = createProcessRunner({ owner: 'codex-runner-test' })
+  const spawnCalls: Setup['spawnCalls'] = []
+  const process: ProcessSpawner = {
+    spawn(argv, options) {
+      spawnCalls.push({ argv: [...argv], options })
+      return processRunner.spawn(argv, options)
+    }
+  }
   const messages: StructuredMessage[] = []
   const statuses: SessionStatus[] = []
   const asks: AskWaiter[] = []
   const storedProviderSessions: Setup['storedProviderSessions'] = []
   const context: StructuredContext = {
+    process,
     appendMessage(message: NewStructuredMessage) {
       const stored: StructuredMessage = {
         sessionId: message.sessionId,
@@ -82,7 +100,7 @@ function makeSetup(): Setup {
     restorable: false
   }
   const runner = createCodexRunner(context, { env: isolatedProviderEnvironment(home) })
-  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context }
+  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context, processRunner, spawnCalls }
 }
 
 beforeEach(() => {
@@ -91,10 +109,65 @@ beforeEach(() => {
 
 afterEach(async () => {
   await setup.runner.stop(setup.session.id)
+  await setup.processRunner.dispose()
   rmSync(setup.home, { recursive: true, force: true })
 })
 
 describe('Codex app-server runner', () => {
+  test('starts the app-server through the process spawner with the session environment and ownership', async () => {
+    await setup.runner.start(setup.session, '')
+
+    expect(setup.spawnCalls).toHaveLength(1)
+    expect(setup.spawnCalls[0]?.argv).toEqual([setup.fixture.executable, 'app-server'])
+    expect(setup.spawnCalls[0]?.options).toMatchObject({
+      timeoutMs: null,
+      stdin: 'pipe',
+      stderrTailBytes: 49_152,
+      killGraceMs: 2_000,
+      cwd: setup.session.cwd
+    })
+    expect(setup.spawnCalls[0]?.options.env).toEqual(isolatedProviderEnvironment(setup.home))
+    expect(setup.processRunner.live()).toHaveLength(1)
+    expect(setup.processRunner.live()[0]).toMatchObject({
+      owner: 'codex-runner-test',
+      command: setup.fixture.executable
+    })
+    const pid = setup.processRunner.live()[0]!.pid
+
+    await setup.runner.stop(setup.session.id)
+
+    expect(setup.processRunner.live()).toEqual([])
+    expect(() => process.kill(pid, 0)).toThrow()
+  })
+
+  test('reports an app-server spawn error when the executable is missing', async () => {
+    setup.context.resolveCodexPath = async () => '/nonexistent/codex'
+
+    await expect(setup.runner.start(setup.session)).rejects.toThrow(/^could not start Codex app-server: /)
+  })
+
+  test('fails a killed connection once and keeps the same error for later requests', async () => {
+    const failures: Error[] = []
+    const connection = new CodexConnection(setup.context.process, setup.fixture.executable, setup.home, isolatedProviderEnvironment(setup.home), {
+      notification() {},
+      serverRequest() {},
+      failure(error) {
+        failures.push(error)
+      }
+    })
+    await until(() => setup.processRunner.live().length === 1)
+    const pid = setup.processRunner.live()[0]!.pid
+
+    process.kill(pid, 'SIGKILL')
+    await until(() => failures.length === 1)
+
+    expect(failures[0]?.message).toBe('Codex app-server stdout closed')
+    await expect(connection.request('x', {})).rejects.toBe(failures[0])
+    expect(failures).toHaveLength(1)
+    await connection.close()
+  })
+
+ 
   test('native question frames preserve provider identity and receive the real typed answer instead of an approval decision', async () => {
     await setup.runner.start(setup.session, '[native question]')
     await until(() => setup.asks.length === 1)

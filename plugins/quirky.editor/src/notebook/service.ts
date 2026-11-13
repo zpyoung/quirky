@@ -475,9 +475,9 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
     if (currentKernel?.status === 'starting') return startSession(currentKernel)
     const bridgePath = join(host.context.dir, 'src/notebook/kernel-bridge.py')
     if (!python.hasIpykernel) {
-      return { state, location, result: { status: 'missing-ipykernel', externallyManaged: python.externallyManaged, session: new KernelSession(python, location.directory, bridgePath, host.context.dataDir) } }
+      return { state, location, result: { status: 'missing-ipykernel', externallyManaged: python.externallyManaged, session: new KernelSession(host.context.process, python, location.directory, bridgePath, host.context.dataDir) } }
     }
-    const kernel = new KernelSession(python, location.directory, bridgePath, host.context.dataDir, (session) => {
+    const kernel = new KernelSession(host.context.process, python, location.directory, bridgePath, host.context.dataDir, (session) => {
       if (state.kernel === session) publishRuntimeState(bufferId, state)
     }, host.context.home)
     state.kernel = kernel

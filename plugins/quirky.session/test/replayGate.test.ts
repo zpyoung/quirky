@@ -25,6 +25,20 @@ test('input is dropped from the replay write until xterm has parsed it', () => {
   expect(gate.allows()).toBe(true)
 })
 
+test('overlapping replay writes keep input muted until every callback finishes', () => {
+  for (const order of [[0, 1], [1, 0]] as const) {
+    const gate = createInputGate()
+    const term = fakeTerminal()
+    writeReplay(term, new Uint8Array([1]), gate)
+    writeReplay(term, new Uint8Array([2]), gate)
+    expect(gate.allows()).toBe(false)
+    term.writes[order[0]]!.done?.()
+    expect(gate.allows()).toBe(false)
+    term.writes[order[1]]!.done?.()
+    expect(gate.allows()).toBe(true)
+  }
+})
+
 test('an empty replay never closes the gate', () => {
   const gate = createInputGate()
   const term = fakeTerminal()
