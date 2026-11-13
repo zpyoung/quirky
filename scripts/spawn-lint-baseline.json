@@ -1,8 +1,4 @@
 {
-  "plugins/quirky.accounts/src/login.ts": 1,
-  "plugins/quirky.accounts/src/profiles.ts": 1,
-  "plugins/quirky.accounts/src/usage/codex-adapter.ts": 1,
-  "plugins/quirky.accounts/src/usage/process.ts": 1,
   "plugins/quirky.agent-status/src/rules/matcher.ts": 1,
   "plugins/quirky.automations/src/external/command.ts": 1,
   "plugins/quirky.browser/src/cookies/sources.ts": 1,
