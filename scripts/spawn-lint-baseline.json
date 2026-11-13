@@ -13,8 +13,6 @@
   "plugins/quirky.browser/src/runtime/driver.ts": 1,
   "plugins/quirky.checks/executor.ts": 2,
   "plugins/quirky.editor/src/markdown/pdf.ts": 1,
-  "plugins/quirky.editor/src/notebook/python.ts": 1,
-  "plugins/quirky.editor/src/notebook/service.ts": 1,
   "plugins/quirky.git/src/daemon/files.ts": 1,
   "plugins/quirky.hosting/src/runtime-runner.ts": 1,
   "plugins/quirky.loops/src/evaluator.ts": 1,
