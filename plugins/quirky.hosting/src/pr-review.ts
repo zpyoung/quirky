@@ -1081,7 +1081,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       return { ready: false, reason: 'unsupported_provider', message: 'The configured push URL is not a supported GitHub repository.' }
     }
     try {
-      const repository = await resolveTrustedIdentity(parsed, async () => await env.authAccounts(scope))
+      const repository = await resolveTrustedIdentity(env.context.process, parsed, async () => await env.authAccounts(scope))
       return repository
         ? { ready: true, repository, pushUrlFingerprint: createHash('sha256').update(urls[0]!).digest('hex') }
         : { ready: false, reason: 'unsupported_provider', message: 'The configured push URL is not a trusted GitHub repository.' }

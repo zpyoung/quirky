@@ -188,6 +188,26 @@ status. It does not restore an ended process. Requests for one connection and se
 by two seconds. Desktop panes reset and replay under their input gate; phone viewers recover
 in-band with a screen snapshot and only the live bytes after its offset.
 
+### API 1.9: One-shot output policies
+
+API 1.9 adds `outputMode` and `overflow` to `RunOptions`. Defaults remain `outputMode: 'separate'`
+and `overflow: 'stop'`. In separate mode, `maxOutputBytes` applies independently to stdout and
+stderr. In combined mode, both streams append to `stdout` and `stdoutText` under one shared cap;
+`stderr` is empty, and bytes are combined in the order the drains observe chunks.
+
+With `overflow: 'stop'`, exceeding the cap stops the process group as before. With
+`overflow: 'truncate'`, the runner retains only each bounded prefix and continues draining both
+streams so the command can finish. When any bytes are discarded, `RunResult.truncated` reports
+which captured streams were cut; in combined mode, discarded bytes are attributed to stdout.
+Exact-cap output is not marked truncated. Truncation does not disable deadlines, abort, activation
+disposal or the existing post-exit stall and rerun behavior. A plugin using either option declares
+`"apiVersion": "1.9.0"`.
+
+Captured partial results on post-exit stall errors retain the same truncation flags.
+
+Use the [process declarations](../packages/protocol/src/process.ts) for the complete option and
+result types.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -324,6 +344,9 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   views that preserve their DOM and resources when accepting new input.
   A plugin that uses it declares `apiVersion` 1.7.0 or later.
 - **1.8.0** adds [terminal stream lag hooks and recovery](#api-18-terminal-stream-recovery).
+- **1.9.0** adds opt-in combined capture and truncate-on-overflow policies to `context.process.run`.
+  Separate capture and stop-on-overflow remain the defaults. A plugin using either option declares
+  `apiVersion` 1.9.0.
 
 ## Example
 

@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readlinkSync, rmSync, unlinkSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { GitError, gitApi, type GitRegistration } from '@quirky/git'
-import type { EffectiveHooks, Repo, Worktree, WorktreeRemoveResult } from '@quirky/protocol'
+import type { EffectiveHooks, ProcessRunner, Repo, Worktree, WorktreeRemoveResult } from '@quirky/protocol'
 import { contains, resolveRealPath, worktreeIdForPath } from '../../paths'
 import { SelectorSyntaxError, matchWorktrees, type CallerIdentity } from '../../selector'
 import { sharedEntryProblem, symlinkedAncestor } from './carry'
@@ -40,6 +40,7 @@ export type InFlightRemove = { options: string; promise: Promise<WorktreeRemoveR
 
 /** What the pipeline needs from the plugin: the listing environment plus errors, sessions, hooks and branch cleanup. */
 export type RemoveEnv = ListEnv & {
+  process: ProcessRunner
   /** The IDs being removed; the same set the list reads. */
   removing: Set<string>
   inflight: Map<string, InFlightRemove>
@@ -505,7 +506,7 @@ async function runArchive(env: RemoveEnv, repo: Repo, target: Worktree, hooks: E
     )
   }
   const runner = await gitRunnerPath(target.path, 'archive')
-  const outcome = await runHookScript(runner, { rootPath: repo.path, worktreePath: target.path }, archive.text)
+  const outcome = await runHookScript(env.process, runner, { rootPath: repo.path, worktreePath: target.path }, archive.text)
   if (outcome.exitCode === 0 && !outcome.timedOut) return
   const what = outcome.timedOut ? 'timed out' : `exited with ${outcome.exitCode ?? 'a signal'}`
   if (options.allowFailedArchiveHook) {
