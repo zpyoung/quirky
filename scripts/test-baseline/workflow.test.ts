@@ -264,6 +264,9 @@ describe('speed evidence', () => {
   test('keeps speed downloads advisory and outside unit results, with main summaries', () => {
     const download = steps('tests').find(step => step.with?.pattern === 'speed-run')!
     expect(download.with?.path).toBe('speed')
+    expect(download.if).toBe('always()')
+    expect(steps('tests').find(step => step.id === 'verdict')?.if).toBe('always()')
+    expect(steps('tests').find(step => step.name === 'Ensure a comment exists')?.run).toContain('### Speed')
     expect((download as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBe(true)
     const summary = steps('tests').find(step => step.run?.includes('cat out/comment.md'))!
     expect(summary.if).toBe('always()')

@@ -93,6 +93,18 @@ describe('report validation', () => {
     expect(validateReport(value)).toBeNull()
   })
 
+  test('requires matching counts for complete reports but accepts uneven partial counts', () => {
+    const unevenComplete = report({ samples: { echo: Array(21).fill(2) } })
+    const unevenPartial = report({
+      status: 'incomplete',
+      qualified: false,
+      samples: { startup: [3], echo: [5, 6], switch: [], diff: [8], floodEcho: [] },
+      failures: [{ kind: 'timeout', metric: 'switch', sample: 1, message: 'switch timed out' }],
+    })
+    expect(validateReport(unevenComplete)).toBeNull()
+    expect(validateReport(unevenPartial)).toEqual(unevenPartial)
+  })
+
   test('accepts structurally valid partial and smoke reports without qualifying them', () => {
     const partial = report({
       status: 'incomplete',
@@ -228,7 +240,9 @@ describe('Speed markdown and misses', () => {
       { metric: 'echo', budgetMs: 50, medianMs: 50.001, samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json', 'diagnostics/diff.json'] },
       { metric: 'diff', budgetMs: 1000, medianMs: 1000.001, samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json', 'diagnostics/diff.json'] },
     ])
+    expect(misses[0]?.finding.toLowerCase()).toContain('diagnosis unavailable')
     expect(misses[0]?.finding).toContain('diagnostics/echo.json')
+    expect(misses[0]?.finding).toContain('diagnostics/diff.json')
   })
 
   test('states when diagnostic evidence is unavailable and bounds rendered failure text', () => {

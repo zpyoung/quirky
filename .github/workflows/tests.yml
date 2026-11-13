@@ -248,6 +248,7 @@ jobs:
           merge-multiple: true
 
       - uses: actions/download-artifact@v4
+        if: always()
         continue-on-error: true
         with:
           pattern: speed-run
@@ -256,6 +257,7 @@ jobs:
 
       - name: Judge the run
         id: verdict
+        if: always()
         continue-on-error: true
         env:
           JOBS_OK: ${{ needs.plan.result != 'failure' && needs.plan.result != 'cancelled' && needs.linux.result != 'failure' && needs.linux.result != 'cancelled' && needs.macos.result != 'failure' && needs.macos.result != 'cancelled' }}
@@ -269,7 +271,7 @@ jobs:
         run: |
           mkdir -p out
           if [ ! -f out/comment.md ]; then
-            printf '<!-- test-baseline-verdict -->\n## Tests\n\nThe verdict was not produced, so this run counts as failed.\n' > out/comment.md
+            printf '<!-- test-baseline-verdict -->\n## Tests\n\nThe verdict was not produced, so this run counts as failed.\n\n### Speed\n\nnot measured: verdict renderer failed\n' > out/comment.md
           fi
 
       - name: Write the step summary

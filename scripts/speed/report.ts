@@ -120,7 +120,11 @@ export function validateReport(value: unknown): SpeedReport | null {
   }
 
   const counts = METRICS.map((metric) => (value.metrics as Record<Metric, { samplesMs: unknown[] }>)[metric].samplesMs.length)
-  if (value.status === 'complete' && counts.some((count) => value.qualified ? count < 20 : count < 1)) return null
+  if (value.status === 'complete') {
+    const completeCount = counts[0]
+    if (completeCount === undefined || counts.some((count) => count !== completeCount)) return null
+    if (value.qualified && completeCount < 20) return null
+  }
   return value as unknown as SpeedReport
 }
 
@@ -388,7 +392,7 @@ export function createMisses(report: SpeedReport): SpeedMiss[] {
       samples: report.evidence.samples,
       diagnostics,
       finding: diagnostics.length > 0
-        ? `Diagnostic paths: ${diagnostics.join(', ')}.`
+        ? `Diagnosis unavailable; recorded diagnostic paths: ${diagnostics.join(', ')}.`
         : 'Diagnosis unavailable: no diagnostic paths were recorded.',
     })
   }
