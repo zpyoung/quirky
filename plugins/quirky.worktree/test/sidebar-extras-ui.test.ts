@@ -1832,6 +1832,53 @@ test('session changes skip the all-window projection but refresh an override for
   })
 })
 
+test('an all-window session change recovers an errored projection and resumes skipping after recovery', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
+  try {
+    await h.mount()
+    expect(h.world.active).toEqual({ worktreeId: 'w-main', instanceId: 'instance-w-main' })
+    expect(h.world.preferences.workspaceActivityWindow).toBe('all')
+    await openFilter(h)
+    expect(filterContent().querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')?.value).toBe('all')
+    expect(filterContent().textContent).not.toMatch(/workspace activity filters unavailable/i)
+
+    const activationCount = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/activate' && !call.fromBadge).length
+    const initialProjections = sectionProjections(h).length
+    h.world.extrasFailure = new Error('temporary sidebar projection failure')
+    await act(async () => {
+      await h.emit('quirky.hosting/reviewCacheChanged')
+    })
+    await h.flush()
+
+    expect(sectionProjections(h)).toHaveLength(initialProjections + 1)
+    expect(sectionProjections(h).at(-1)?.params.worktree).toBe('w-main')
+    expect(filterContent().textContent).toMatch(/workspace activity filters unavailable/i)
+
+    const failedProjections = sectionProjections(h).length
+    h.world.extrasFailure = null
+    await act(async () => {
+      await h.emit('quirky.session/changed')
+    })
+    await h.flush()
+
+    expect(sectionProjections(h)).toHaveLength(failedProjections + 1)
+    expect(sectionProjections(h).at(-1)?.params.worktree).toBe('w-main')
+    expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/activate' && !call.fromBadge)).toHaveLength(activationCount)
+    expect(filterContent().textContent).not.toMatch(/workspace activity filters unavailable/i)
+    expect(filterContent().querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')?.value).toBe('all')
+
+    const recoveredProjections = sectionProjections(h).length
+    await act(async () => {
+      await h.emit('quirky.session/changed')
+    })
+    await h.flush()
+    expect(sectionProjections(h)).toHaveLength(recoveredProjections)
+  } finally {
+    await currentCleanup?.()
+    currentCleanup = null
+  }
+})
+
 
 test('disabled extras falls back to the ordinary tree, while ordinary failures report unavailability', async () => {
   const disabled = setup({ view: null, panel: null, sidebar: true, focus: null }, { disabled: true })
