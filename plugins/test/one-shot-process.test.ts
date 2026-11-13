@@ -10,6 +10,9 @@ import { createErrors } from '../quirky.git/src/daemon/errors'
 import { VaultActions } from '../quirky.vault/src/actions'
 import type { VaultWorkerClient } from '../quirky.vault/src/worker-client'
 import { scanSourceContent } from '../../scripts/spawn-lint'
+import { playSound } from '../quirky.notifications/src/player'
+import { openExternal } from '../quirky.terminal/src/open-external'
+import { LayoutService } from '../quirky.terminal/src/layout/service'
 
 const roots: string[] = []
 const directory = () => { const path = mkdtempSync(join(tmpdir(), 'one-shot-')); roots.push(path); return path }
@@ -170,5 +173,109 @@ describe('awaited desktop actions use the activation runner', () => {
       expect(actual.stderr).toBe('d')
       expect(actual.truncated).toEqual({ stdout: true, stderr: true })
     } finally { await runner.dispose() }
+  })
+})
+
+describe('fire-and-forget effects keep immediate acknowledgements', () => {
+  test('sound submits bounded playback immediately with an environment snapshot', async () => {
+    const previous = process.env.QUIRKY_SOUND_PLAYER
+    delete process.env.QUIRKY_SOUND_PLAYER
+    try {
+      const done = Promise.withResolvers<RunResult>()
+      const { runner, calls } = recording(() => done.promise)
+      const logs: string[] = []
+      expect(playSound(runner, '/fixture/tone.wav', 60, message => logs.push(message))).toBeUndefined()
+      expect(calls).toHaveLength(1)
+      expect(calls[0]!.argv).toEqual(['afplay', '-v', '0.6', '/fixture/tone.wav'])
+      expect(calls[0]!.options).toEqual({ ...ignored(86400000), env: { ...process.env } })
+      expect(calls[0]!.options.env).not.toBe(process.env)
+      done.resolve(result({ truncated: { stdout: true, stderr: true } }))
+      await done.promise
+      expect(logs).toEqual([])
+      process.env.QUIRKY_SOUND_PLAYER = '/fixture/player with spaces'
+      expect(playSound(runner, '/fixture/tone.wav', 60, message => logs.push(message))).toBeUndefined()
+      expect(calls[1]!.argv).toEqual(['/fixture/player with spaces', '/fixture/tone.wav', '60'])
+      expect(calls[0]!.options.env!.QUIRKY_SOUND_PLAYER).toBeUndefined()
+      await Promise.resolve()
+    } finally {
+      if (previous === undefined) delete process.env.QUIRKY_SOUND_PLAYER
+      else process.env.QUIRKY_SOUND_PLAYER = previous
+    }
+  })
+  for (const failure of failures) test(`sound logs ${failure.name} exactly once`, async () => {
+    const previous = process.env.QUIRKY_SOUND_PLAYER
+    process.env.QUIRKY_SOUND_PLAYER = '/fixture/player'
+    try {
+      const { runner, calls } = recording(() => settle(failure.value))
+      const logs: string[] = []
+      expect(playSound(runner, '/fixture/tone.wav', 60, message => logs.push(message))).toBeUndefined()
+      await Promise.resolve(); await Promise.resolve()
+      const reasons: Record<string, string> = { signal: 'process terminated by SIGTERM', timeout: 'process stopped: timeout', aborted: 'process stopped: aborted', overflow: 'process stopped: overflow', spawn: 'fixture missing', rejection: 'fixture rejected' }
+      expect(logs).toEqual([failure.name === 'exit' ? '/fixture/player exited with 7 playing /fixture/tone.wav' : `could not play /fixture/tone.wav: ${reasons[failure.name]}`])
+      expect(calls).toHaveLength(1)
+    } finally {
+      if (previous === undefined) delete process.env.QUIRKY_SOUND_PLAYER
+      else process.env.QUIRKY_SOUND_PLAYER = previous
+    }
+  })
+  test('synchronous runner throws are contained for both detached effects', () => {
+    const runner: ProcessRunner = { run() { throw new Error('fixture threw') } }
+    const logs: string[] = []
+    expect(playSound(runner, '/fixture/tone.wav', 60, message => logs.push(message))).toBeUndefined()
+    expect(openExternal(runner, { target: 'https://example.test/a?b=1' }, message => logs.push(message), {})).toBeUndefined()
+    expect(logs).toEqual(['could not play /fixture/tone.wav: fixture threw', 'could not open external target: fixture threw'])
+  })
+  test('open submits URL/reveal argv without waiting or forwarding its test environment', async () => {
+    const done = Promise.withResolvers<RunResult>()
+    const { runner, calls } = recording(() => done.promise)
+    const logs: string[] = []
+    for (const request of [{ target: 'https://example.test/a?b=1' }, { target: '/fixture/a b.txt', reveal: true }, { target: 'mailto:fixture@example.test', reveal: true }]) {
+      expect(openExternal(runner, request, message => logs.push(message), { FIXTURE: 'not child env' })).toBeUndefined()
+    }
+    expect(calls.map(call => call.argv)).toEqual([['open', 'https://example.test/a?b=1'], ['open', '-R', '/fixture/a b.txt'], ['open', 'mailto:fixture@example.test']])
+    for (const call of calls) expect(call.options).toEqual(ignored(30000))
+    done.resolve(result({ truncated: { stdout: true, stderr: true } }))
+    await done.promise
+    expect(logs).toEqual([])
+  })
+  for (const failure of failures) test(`open logs ${failure.name} without later rejection`, async () => {
+    const { runner, calls } = recording(() => settle(failure.value))
+    const logs: string[] = []
+    expect(openExternal(runner, { target: 'https://example.test/private' }, message => logs.push(message), {})).toBeUndefined()
+    await Promise.resolve(); await Promise.resolve()
+    const reasons: Record<string, string> = { exit: 'open exited with 7', signal: 'open terminated by SIGTERM', timeout: 'open stopped: timeout', aborted: 'open stopped: aborted', overflow: 'open stopped: overflow', spawn: 'fixture missing', rejection: 'fixture rejected' }
+    expect(logs).toEqual([`could not open external target: ${reasons[failure.name]}`])
+    expect(calls).toHaveLength(1)
+  })
+  test('open validates synchronously and retains its log-only hook', () => {
+    const { runner, calls } = recording()
+    for (const target of ['file:///etc/passwd', 'relative/path', '/fixture/a\nfile']) expect(() => openExternal(runner, { target }, () => {}, {})).toThrow()
+    const log = join(directory(), 'open.log')
+    openExternal(runner, { target: '/fixture/a b.txt', reveal: true }, () => {}, { QUIRKY_TEST_OPEN_LOG: log })
+    expect(JSON.parse(readFileSync(log, 'utf8'))).toEqual({ target: '/fixture/a b.txt', reveal: true })
+    expect(() => openExternal(runner, { target: '/fixture/file' }, () => {}, { QUIRKY_TEST_OPEN_LOG: join(log, 'bad') })).toThrow()
+    expect(calls).toEqual([])
+  })
+  test('layout acknowledges before completion using its own activation runner and bound logger', async () => {
+    const done = Promise.withResolvers<RunResult>()
+    const { runner, calls } = recording(() => done.promise)
+    const logs: string[] = []
+    const context = { process: runner, error, log(message: string) { expect(this).toBe(context); logs.push(message) } }
+    const prototype = LayoutService.prototype as unknown as { openExternal(this: unknown, params: { target: string }): { ok: true } }
+    const invoke = prototype.openExternal
+    expect(invoke.call({ context }, { target: 'https://example.test' })).toEqual({ ok: true })
+    expect(calls).toHaveLength(1)
+    done.resolve(result({ stopped: 'timeout' }))
+    await done.promise
+    expect(logs).toEqual(['could not open external target: open stopped: timeout'])
+  })
+  test('both notification service branches bind the activation runner and preserve desktop delegation', () => {
+    const source = readFileSync('plugins/quirky.notifications/src/service.ts', 'utf8')
+    expect(source.match(/playSound\(this\.context\.process,/g)).toHaveLength(2)
+    expect(source).toContain('if (!(await this.hasDesktopClient())) playSound(this.context.process,')
+    expect(source).toContain('if (playHere) playSound(this.context.process,')
+  })
+  test('detached effects declare truncation support and remove direct acquisition allowances', () => {
+    boundary(['plugins/quirky.notifications/src/player.ts', 'plugins/quirky.terminal/src/open-external.ts'], { notifications: '1.9.0', terminal: '1.9.0' })
   })
 })

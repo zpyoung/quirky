@@ -1,5 +1,6 @@
 import { appendFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
+import type { ProcessRunner } from '@quirky/protocol'
 
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
@@ -29,17 +30,30 @@ export function checkExternalTarget(target: unknown): string | null {
  * that file instead and opens nothing. The target goes to `open` as one argument, never through a
  * shell. Throws on a target `checkExternalTarget` refuses.
  */
-export function openExternal(request: { target: string; reveal?: boolean }, env: Record<string, string | undefined> = process.env): void {
+export function openExternal(runner: ProcessRunner, request: { target: string; reveal?: boolean }, log: (message: string) => void, env: Record<string, string | undefined> = process.env): void {
   const problem = checkExternalTarget(request.target)
   if (problem) throw new Error(problem)
   const reveal = request.reveal === true
-  const log = env.QUIRKY_TEST_OPEN_LOG
-  if (log) {
-    appendFileSync(log, `${JSON.stringify({ target: request.target, reveal })}\n`)
+  const testLog = env.QUIRKY_TEST_OPEN_LOG
+  if (testLog) {
+    appendFileSync(testLog, `${JSON.stringify({ target: request.target, reveal })}\n`)
     return
   }
   const argv = reveal && !SCHEME.test(request.target) ? ['open', '-R', request.target] : ['open', request.target]
-  Bun.spawn(argv, { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }).unref()
+  const failed = (error: unknown) => log(`could not open external target: ${error instanceof Error ? error.message : String(error)}`)
+  try {
+    void runner.run(argv, {
+      timeoutMs: 30_000, maxOutputBytes: 1, overflow: 'truncate', killGraceMs: 2000
+    }).then((result) => {
+      const reason = result.spawnError?.message
+        ?? (result.stopped ? `open stopped: ${result.stopped}` : undefined)
+        ?? (result.signal ? `open terminated by ${result.signal}` : undefined)
+        ?? (result.exitCode !== 0 ? `open exited with ${result.exitCode}` : undefined)
+      if (reason !== undefined) log(`could not open external target: ${reason}`)
+    }, failed)
+  } catch (error) {
+    failed(error)
+  }
 }
 
 export { shellEscapePaths } from './shell-escape'
