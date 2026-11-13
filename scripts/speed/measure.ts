@@ -19,6 +19,23 @@ const CHANGES_PANEL = 'panel:quirky.git/source-control'
 const DIFF_VIEW = 'view:quirky.git/diff'
 const ECHO_KEYS = 'abcdefghijklmnopqrst'
 
+export type FramePacing = { frames: number; medianIntervalMs: number; p90IntervalMs: number; maxIntervalMs: number }
+
+/** Summarizes drawing-frame intervals; rejects missing or invalid pacing evidence. */
+export function summarizeFrameIntervals(intervalsMs: readonly number[]): FramePacing {
+  if (intervalsMs.length === 0 || intervalsMs.some(interval => !Number.isFinite(interval) || interval <= 0)) {
+    throw new Error('frame pacing needs positive finite intervals')
+  }
+  const sorted = [...intervalsMs].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+  return {
+    frames: sorted.length,
+    medianIntervalMs: sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2,
+    p90IntervalMs: sorted[Math.ceil(0.9 * sorted.length) - 1]!,
+    maxIntervalMs: sorted[sorted.length - 1]!
+  }
+}
+
 type SpeedWorktree = SpeedFixtureWorktree
 type RestartableWorld = SoakWorld
 
@@ -44,6 +61,20 @@ type BrowserObservationResult = {
   durationMs: number
   counter?: number
   trace: { event: string; at: number }[]
+}
+
+function echoTimingPhases(observation: BrowserObservationResult): { eventToDomMs: number; domToPaintMs: number } {
+  const eventAt = observation.trace.find(({ event }) => event === 'keydown')?.at
+  const domAt = observation.trace.find(({ event }) => event === 'dom')?.at
+  const paintAt = observation.trace.find(({ event }) => event === 'paint')?.at
+  const eventToDomMs = (domAt ?? Number.NaN) - (eventAt ?? Number.NaN)
+  const domToPaintMs = (paintAt ?? Number.NaN) - (domAt ?? Number.NaN)
+  if (![eventAt, domAt, paintAt, eventToDomMs, domToPaintMs].every(Number.isFinite)
+    || eventToDomMs < 0 || domToPaintMs < 0
+    || Math.abs(eventToDomMs + domToPaintMs - observation.durationMs) > 0.001) {
+    throw new Error('browser echo observer returned invalid event-to-paint timing phases')
+  }
+  return { eventToDomMs, domToPaintMs }
 }
 
 type ObserverEntry = {
@@ -169,7 +200,26 @@ function diffRowSelector(path: string): string {
 
 /** Installs a browser-local event and DOM observer; Playwright serializes this self-contained function into the page. */
 export function installBrowserObserver(spec: BrowserObservationSpec): void {
-  const root = globalThis as typeof globalThis & { __quirkySpeedObservers?: Map<string, ObserverEntry> }
+  type FrameObserver = {
+    afterFrame(frame: number): void
+    afterTask(frame: number): void
+  }
+  type FrameHook = {
+    originalRequestAnimationFrame: typeof globalThis.requestAnimationFrame
+    originalCancelAnimationFrame: typeof globalThis.cancelAnimationFrame
+    wrappedRequestAnimationFrame: typeof globalThis.requestAnimationFrame
+    observers: Set<FrameObserver>
+    channel: MessageChannel
+    frameId: number | null
+    frameSequence: number
+    inFrameCallbacks: boolean
+    active: boolean
+    ensureFrame(): void
+  }
+  const root = globalThis as typeof globalThis & {
+    __quirkySpeedObservers?: Map<string, ObserverEntry>
+    __quirkySpeedFrameHook?: FrameHook
+  }
   const document = root.document
   const paneSelector = spec.sessionId === undefined ? '' : `.qt-pane[data-session="${spec.sessionId.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"]`
   const actionSelector = spec.kind === 'echo'
@@ -193,9 +243,60 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
   root.__quirkySpeedObservers = state
   if (state.has(spec.id)) throw new Error(`duplicate browser observer ${spec.id}`)
 
+  let hook = root.__quirkySpeedFrameHook
+  if (!hook) {
+    const channel = new root.MessageChannel()
+    const created: FrameHook = {
+      originalRequestAnimationFrame: root.requestAnimationFrame,
+      originalCancelAnimationFrame: root.cancelAnimationFrame,
+      wrappedRequestAnimationFrame: root.requestAnimationFrame,
+      observers: new Set(),
+      channel,
+      frameId: null,
+      frameSequence: 0,
+      inFrameCallbacks: false,
+      active: true,
+      ensureFrame: () => undefined
+    }
+    hook = created
+    created.ensureFrame = () => {
+      if (!created.active || created.frameId !== null) return
+      created.frameId = created.originalRequestAnimationFrame.call(root, () => {
+        created.frameId = null
+        created.inFrameCallbacks = false
+        const frame = ++created.frameSequence
+        for (const observer of [...created.observers]) observer.afterFrame(frame)
+        if (!created.active) return
+        created.channel.port2.postMessage(frame)
+        created.ensureFrame()
+      })
+    }
+    channel.port1.onmessage = (event) => {
+      if (!created.active || typeof event.data !== 'number') return
+      for (const observer of [...created.observers]) observer.afterTask(event.data)
+    }
+    created.wrappedRequestAnimationFrame = (callback: FrameRequestCallback) => {
+      const id = created.originalRequestAnimationFrame.call(root, (time) => {
+        created.inFrameCallbacks = true
+        callback(time)
+      })
+      if (!created.inFrameCallbacks && created.frameId !== null) {
+        created.originalCancelAnimationFrame.call(root, created.frameId)
+        created.frameId = null
+      }
+      created.ensureFrame()
+      return id
+    }
+    root.__quirkySpeedFrameHook = created
+    root.requestAnimationFrame = created.wrappedRequestAnimationFrame
+    created.ensureFrame()
+  }
+
   let startAt: number | null = spec.kind === 'flood' ? root.performance.now() : null
-  let frame: number | null = null
   let finished = false
+  let readyFrame: number | null = null
+  let domAtFrame: number | null = null
+  let counterAtFrame: number | undefined
   const trace: BrowserObservationResult['trace'] = []
   const { promise, resolve: resolveResult, reject: rejectResult } = Promise.withResolvers<BrowserObservationResult>()
   void promise.catch(() => undefined)
@@ -254,11 +355,21 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     const counter = floodCounter()
     return { ready: counter !== null && counter > (spec.afterCounter ?? 0), ...(counter === null ? {} : { counter }) }
   }
+  const releaseHook = () => {
+    if (hook.observers.size > 0) return
+    hook.active = false
+    if (hook.frameId !== null) hook.originalCancelAnimationFrame.call(root, hook.frameId)
+    hook.frameId = null
+    hook.channel.port1.onmessage = null
+    hook.channel.port1.close()
+    hook.channel.port2.close()
+    root.requestAnimationFrame = hook.originalRequestAnimationFrame
+    delete root.__quirkySpeedFrameHook
+  }
   const cleanup = () => {
-    document.removeEventListener(spec.kind === 'echo' ? 'keydown' : 'click', onAction, true)
-    observer.disconnect()
-    if (frame !== null) root.cancelAnimationFrame(frame)
-    frame = null
+    if (spec.kind !== 'flood') document.removeEventListener(spec.kind === 'echo' ? 'keydown' : 'click', onAction, true)
+    hook.observers.delete(frameObserver)
+    releaseHook()
   }
   const finish = (error?: Error, counter?: number) => {
     if (finished) return
@@ -285,22 +396,39 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       trace
     })
   }
-  const check = () => {
-    if (finished || startAt === null || frame !== null) return
-    try {
-      const current = condition()
-      if (!current.ready) return
-      frame = root.requestAnimationFrame(() => {
-        frame = null
-        try {
-          const afterPaint = condition()
-          if (afterPaint.ready) finish(undefined, afterPaint.counter)
-        } catch (error) {
-          finish(error instanceof Error ? error : new Error(String(error)))
+  const frameObserver: FrameObserver = {
+    afterFrame(frame) {
+      if (finished || startAt === null) return
+      try {
+        const current = condition()
+        if (!current.ready) {
+          readyFrame = null
+          domAtFrame = null
+          counterAtFrame = undefined
+          return
         }
-      })
-    } catch (error) {
-      finish(error instanceof Error ? error : new Error(String(error)))
+        readyFrame = frame
+        domAtFrame = root.performance.now()
+        counterAtFrame = current.counter
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)))
+      }
+    },
+    afterTask(frame) {
+      if (finished || readyFrame !== frame || domAtFrame === null) return
+      const domAt = domAtFrame
+      const counter = counterAtFrame
+      readyFrame = null
+      domAtFrame = null
+      counterAtFrame = undefined
+      try {
+        const afterFrame = condition()
+        if (!afterFrame.ready) return
+        trace.push({ event: 'dom', at: domAt })
+        finish(undefined, counter ?? afterFrame.counter)
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)))
+      }
     }
   }
   const onAction = (event: Event & { key?: string }) => {
@@ -310,11 +438,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     if (startAt !== null) return
     startAt = root.performance.now()
     trace.push({ event: spec.kind === 'echo' ? 'keydown' : 'click', at: startAt })
-    check()
   }
-  const observer = new root.MutationObserver(check)
-  observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true })
-  if (spec.kind !== 'flood') document.addEventListener(spec.kind === 'echo' ? 'keydown' : 'click', onAction, true)
   const entry: ObserverEntry = {
     promise,
     dispose(error = new Error(`browser observer ${spec.id} was disposed`)) {
@@ -322,8 +446,10 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       finish(error)
     }
   }
+  if (spec.kind !== 'flood') document.addEventListener(spec.kind === 'echo' ? 'keydown' : 'click', onAction, true)
   state.set(spec.id, entry)
-  if (spec.kind === 'flood') check()
+  hook.observers.add(frameObserver)
+  hook.ensureFrame()
 }
 
 /** Waits on the in-page observer promise without polling, and always removes its listeners. */
@@ -885,9 +1011,12 @@ async function runEchoAttempt(context: MetricContext, phase: SpeedSample['phase'
     const result = await echoTrial(context.page, worktree, sequence, key, signal)
     const endedController = performance.now()
     context.sessionSequence.set(worktree.sessions[0], sequence)
+    const timing = echoTimingPhases(result.observation)
     recordTimed(context, row, result.observation.durationMs, result.observation.startedAt, result.observation.endedAt, {
       controllerActionMs: result.controllerActionMs,
       browserEventToPaintMs: result.observation.durationMs,
+      eventToDomMs: timing.eventToDomMs,
+      domToPaintMs: timing.domToPaintMs,
       controllerWholeTrialMs: endedController - startedController
     })
     row.worktreeId = worktree.id
@@ -1000,9 +1129,12 @@ async function runFloodEchoAttempt(context: MetricContext, phase: SpeedSample['p
     const result = await echoTrial(context.page, worktree, (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1, key, signal)
     const endedAt = performance.now()
     context.sessionSequence.set(worktree.sessions[0], (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1)
+    const timing = echoTimingPhases(result.observation)
     recordTimed(context, row, result.observation.durationMs, result.observation.startedAt, result.observation.endedAt, {
       controllerActionMs: result.controllerActionMs,
       browserEventToPaintMs: result.observation.durationMs,
+      eventToDomMs: timing.eventToDomMs,
+      domToPaintMs: timing.domToPaintMs,
       controllerWholeTrialMs: endedAt - beganAt
     })
     row.worktreeId = worktree.id
@@ -1250,7 +1382,14 @@ async function diagnosticTrial(
       const endAt = performance.now()
       context.sessionSequence.set(worktree.sessions[0], sequence)
       observation = trial.observation
-      phases = { controllerActionMs: trial.controllerActionMs, browserEventToPaintMs: trial.observation.durationMs, controllerWholeTrialMs: endAt - startAt }
+      const timing = echoTimingPhases(trial.observation)
+      phases = {
+        controllerActionMs: trial.controllerActionMs,
+        browserEventToPaintMs: trial.observation.durationMs,
+        eventToDomMs: timing.eventToDomMs,
+        domToPaintMs: timing.domToPaintMs,
+        controllerWholeTrialMs: endAt - startAt
+      }
     } else if (metric === 'switch') {
       await closeHostedReview(context.page, context.world, context.fixture.target.id)
       await ensureSelectedWorktree(context.page, context.fixture.target)
@@ -1296,10 +1435,13 @@ async function diagnosticTrial(
       floodStart = undefined
       validateFloodStats(stats, flood.start)
       observation = trial.observation
+      const timing = echoTimingPhases(trial.observation)
       floodRunId = stats.runId
       phases = {
         controllerActionMs: trial.controllerActionMs,
         browserEventToPaintMs: trial.observation.durationMs,
+        eventToDomMs: timing.eventToDomMs,
+        domToPaintMs: timing.domToPaintMs,
         controllerWholeTrialMs: endAt - startAt,
         offeredBytesPerSecond: stats.offeredBytesPerSecond,
         actualBytesPerSecond: stats.bytesWritten * 1000 / stats.elapsedMs,
@@ -1455,6 +1597,86 @@ function metricSampleCountsValid(samples: Record<Metric, number[]>, expectedCoun
   return METRICS.every((metric) => samples[metric].length === expectedCount)
 }
 
+async function readGpuCompositing(browser: Browser, signal: AbortSignal): Promise<string> {
+  const creation = browser.newBrowserCDPSession()
+  let session: CDPSession
+  try {
+    session = await withDeadline(creation, DEADLINE_MS, 'Chromium frame-pacing CDP session creation', signal)
+  } catch (error) {
+    void creation.then(
+      (late) => withDeadline(late.detach(), OBSERVER_CLEANUP_MS, 'late frame-pacing CDP detach').catch(() => undefined),
+      () => undefined
+    )
+    throw error
+  }
+
+  let status = ''
+  let failure: unknown
+  try {
+    const info = record(await withDeadline(session.send('SystemInfo.getInfo'), DEADLINE_MS, 'Chromium system information', signal), 'Chromium system information')
+    const gpu = record(info.gpu, 'Chromium GPU information')
+    const featureStatus = record(gpu.featureStatus, 'Chromium GPU feature status')
+    status = String(featureStatus.gpu_compositing)
+  } catch (error) {
+    failure = error
+  }
+  try {
+    await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'frame-pacing CDP detach')
+  } catch (error) {
+    failure = failure === undefined ? error : new Error(`${errorText(failure)}; ${errorText(error)}`)
+  }
+  if (failure !== undefined) throw failure
+  return status
+}
+
+async function measureBrowserFrameIntervals(page: Page, signal: AbortSignal): Promise<number[]> {
+  const elementId = `quirky-speed-frame-pacing-${randomUUID()}`
+  const measurement = page.evaluate(async (id) => {
+    const probe = document.createElement('div')
+    try {
+      probe.id = id
+      probe.setAttribute('aria-hidden', 'true')
+      probe.style.position = 'fixed'
+      probe.style.top = '0'
+      probe.style.left = '0'
+      probe.style.width = '1px'
+      probe.style.height = '1px'
+      probe.style.pointerEvents = 'none'
+      probe.style.zIndex = '2147483647'
+      probe.style.backgroundColor = 'rgb(0, 0, 0)'
+      document.documentElement.append(probe)
+      const waitForFrame = () => {
+        const { promise, resolve } = Promise.withResolvers<number>()
+        requestAnimationFrame(resolve)
+        return promise
+      }
+      let previous = await waitForFrame()
+      const intervals: number[] = []
+      for (let frame = 0; frame < 60; frame++) {
+        probe.style.backgroundColor = frame % 2 === 0 ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)'
+        const current = await waitForFrame()
+        intervals.push(current - previous)
+        previous = current
+      }
+      return intervals
+    } finally {
+      probe.remove()
+    }
+  }, elementId)
+  try {
+    return await withDeadline(measurement, DEADLINE_MS, 'browser frame-pacing measurement', signal)
+  } catch (error) {
+    try {
+      await withDeadline(page.evaluate((id) => {
+        document.getElementById(id)?.remove()
+      }, elementId), OBSERVER_CLEANUP_MS, 'frame-pacing probe cleanup')
+    } catch (cleanupError) {
+      throw new Error(`${errorText(error)}; frame-pacing probe cleanup failed: ${errorText(cleanupError)}`)
+    }
+    throw error
+  }
+}
+
 /** Runs warmups, renderer-bound trials, and post-run diagnostics against the owned daemon and browser. */
 export async function measureSpeed(options: {
   world: RestartableWorld
@@ -1499,6 +1721,18 @@ export async function measureSpeed(options: {
   }
   await routeLoopback(initialContext)
   try {
+    const gpuCompositing = await readGpuCompositing(browser, signal)
+    if (gpuCompositing !== 'disabled_software') {
+      throw new Error(`browser is not compositing in software: ${gpuCompositing}`)
+    }
+    const framePacing = {
+      version: 1,
+      ...summarizeFrameIntervals(await measureBrowserFrameIntervals(initialPage, signal)),
+      gpuCompositing
+    }
+    mkdirSync(join(out, 'diagnostics'), { recursive: true })
+    writeFileSync(join(out, 'diagnostics', 'frame-pacing.json'), `${JSON.stringify(framePacing, null, 2)}\n`)
+    diagnostics.push('diagnostics/frame-pacing.json')
     await runMeasuredSeries(context, sampleCount, signal, contexts)
     if (!metricSampleCountsValid(sampleValues, sampleCount)) {
       const missing = METRICS.find((metric) => sampleValues[metric].length !== sampleCount) ?? 'startup'

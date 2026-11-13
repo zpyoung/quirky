@@ -4,13 +4,15 @@ import {
   waitForBrowserObserver,
   waitForDiagnosticStatusProbe,
   waitForFloodProgressAfterSnapshot,
-  diagnosticFinding
+  diagnosticFinding,
+  summarizeFrameIntervals
 } from './measure.ts'
 
 type EventHandler = (event: { target: FakeElement; key?: string }) => void
 
 class FakeElement {
-  textContent = ''
+  private text = ''
+  readError: Error | null = null
   hidden = false
   disabled = false
   tabIndex = 0
@@ -19,6 +21,11 @@ class FakeElement {
   attributes = new Map<string, string>()
   children = new Map<string, FakeElement>()
   constructor(readonly selector: string) {}
+  get textContent(): string {
+    if (this.readError) throw this.readError
+    return this.text
+  }
+  set textContent(value: string) { this.text = value }
   getClientRects(): unknown[] { return this.visible && !this.hidden ? [{}] : [] }
   getAttribute(name: string): string | null { return this.attributes.get(name) ?? null }
   setAttribute(name: string, value: string): void { this.attributes.set(name, value) }
@@ -54,8 +61,40 @@ class FakeDocument {
   }
 }
 
+type FakePort = {
+  peer: FakePort
+  onmessage: ((event: { data: unknown }) => void) | null
+  postMessage(data?: unknown): void
+  close(): void
+}
+
+class ControlledMessagePort implements FakePort {
+  peer!: FakePort
+  onmessage: ((event: { data: unknown }) => void) | null = null
+  postMessage(data?: unknown): void {
+    const receiver = this.peer
+    clock.tasks.push(() => receiver.onmessage?.({ data }))
+  }
+  close(): void {}
+}
+
+class ControlledMessageChannel {
+  readonly port1 = new ControlledMessagePort()
+  readonly port2 = new ControlledMessagePort()
+  constructor() {
+    this.port1.peer = this.port2
+    this.port2.peer = this.port1
+  }
+}
+
 let document: FakeDocument
-let clock: { now: number; frames: Array<(time: number) => void>; mutations: Array<() => void> }
+let clock: {
+  now: number
+  frames: Array<{ id: number; callback: (time: number) => void }>
+  tasks: Array<() => void>
+  mutations: Array<() => void>
+  nextFrameId: number
+}
 const savedGlobals = new Map<string, PropertyDescriptor | undefined>()
 
 function replaceGlobal(name: string, value: unknown): void {
@@ -65,14 +104,20 @@ function replaceGlobal(name: string, value: unknown): void {
 
 function environment(): void {
   document = new FakeDocument()
-  clock = { now: 10, frames: [], mutations: [] }
+  clock = { now: 10, frames: [], tasks: [], mutations: [], nextFrameId: 1 }
   replaceGlobal('document', document)
   replaceGlobal('performance', { now: () => clock.now })
-  replaceGlobal('requestAnimationFrame', (callback: (time: number) => void) => {
-    clock.frames.push(callback)
-    return clock.frames.length
+  replaceGlobal('requestAnimationFrame', function (this: unknown, callback: (time: number) => void) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation')
+    const id = clock.nextFrameId++
+    clock.frames.push({ id, callback })
+    return id
   })
-  replaceGlobal('cancelAnimationFrame', () => undefined)
+  replaceGlobal('cancelAnimationFrame', function (this: unknown, id: number) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation')
+    clock.frames = clock.frames.filter((frame) => frame.id !== id)
+  })
+  replaceGlobal('MessageChannel', ControlledMessageChannel)
   replaceGlobal('MutationObserver', class {
     constructor(private readonly callback: () => void) {}
     observe(): void { clock.mutations.push(this.callback) }
@@ -81,6 +126,17 @@ function environment(): void {
 }
 
 afterEach(() => {
+  const observerState = Reflect.get(globalThis, '__quirkySpeedObservers')
+  if (observerState instanceof Map) {
+    for (const entry of observerState.values()) {
+      if (entry && typeof entry === 'object' && 'dispose' in entry && typeof entry.dispose === 'function') {
+        entry.dispose(new Error('test cleanup'))
+      }
+    }
+    observerState.clear()
+  }
+  Reflect.deleteProperty(globalThis, '__quirkySpeedObservers')
+  Reflect.deleteProperty(globalThis, '__quirkySpeedFrameHook')
   for (const [name, descriptor] of savedGlobals) {
     if (descriptor) Object.defineProperty(globalThis, name, descriptor)
     else Reflect.deleteProperty(globalThis, name)
@@ -88,11 +144,33 @@ afterEach(() => {
   savedGlobals.clear()
 })
 
+function observerIsPresent(id: string): boolean {
+  const state = Reflect.get(globalThis, '__quirkySpeedObservers')
+  return state instanceof Map && state.has(id)
+}
+
+function watchObserverSettlement(id: string): () => boolean {
+  const state = Reflect.get(globalThis, '__quirkySpeedObservers')
+  if (!(state instanceof Map)) throw new Error('observer state is missing')
+  const entry = state.get(id)
+  if (!entry || typeof entry !== 'object' || !('promise' in entry) || !(entry.promise instanceof Promise)) {
+    throw new Error(`observer ${id} has no promise`)
+  }
+  let settled = false
+  void entry.promise.then(() => { settled = true }, () => { settled = true })
+  return () => settled
+}
+
 function mutate(): void { for (const observer of [...clock.mutations]) observer() }
-function paint(): void {
+function runFrameCallbacks(): void {
   clock.now += 16
   const frames = clock.frames.splice(0)
-  for (const frame of frames) frame(clock.now)
+  for (const frame of frames) frame.callback(clock.now)
+}
+function runPostFrameTask(): void { clock.tasks.shift()?.() }
+function paint(): void {
+  runFrameCallbacks()
+  runPostFrameTask()
 }
 function pane(sessionId: string, rowsText = ''): { pane: FakeElement; rows: FakeElement; input: FakeElement } {
   const pane = new FakeElement(`.qt-pane[data-session="${sessionId}"]`)
@@ -113,46 +191,112 @@ function fakePage() {
   } as never
 }
 
+
 test('echo waits for its fresh worker/session/sequence/key acknowledgement, not stale replay', async () => {
   environment()
   const { rows, input } = pane('session-a', 'SPEED_ECHO worker-a session-a 4 a')
   const id = 'echo-1'
   installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-a', sequence: 5, key: 'b' })
-  let settled = false
-  const result = waitForBrowserObserver(fakePage(), id, 50).then((value) => { settled = true; return value })
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
   document.dispatch('keydown', input, 'b')
   mutate()
-  paint()
+  runFrameCallbacks()
+  runPostFrameTask()
   await Promise.resolve()
-  expect(settled).toBe(false)
+  expect(observerSettled()).toBe(false)
   rows.textContent += ' SPEED_ECHO worker-a session-a 5 b'
   mutate()
-  paint()
-  expect(await result).toMatchObject({ startedAt: 10, endedAt: 42, durationMs: 32 })
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runPostFrameTask()
+  const observation = await result
+  expect(observation).toMatchObject({ startedAt: 10, endedAt: 42, durationMs: 32 })
+  expect(observation.trace.map(({ event }) => event)).toEqual(['keydown', 'dom', 'paint'])
 })
 
-test('switch does not complete on premature sidebar selection while the old terminal remains', async () => {
+test('echo written in a frame callback stops after that frame and splits event-to-paint phases', async () => {
+  environment()
+  const { rows, input } = pane('session-a')
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+  const id = 'echo-same-frame'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-a', sequence: 5, key: 'b' })
+  const wrappedRequestAnimationFrame = globalThis.requestAnimationFrame
+  expect(wrappedRequestAnimationFrame).not.toBe(originalRequestAnimationFrame)
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'b')
+  globalThis.requestAnimationFrame(() => {
+    rows.textContent += ' SPEED_ECHO worker-a session-a 5 b'
+    mutate()
+  })
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  expect(clock.now).toBe(26)
+  runPostFrameTask()
+  const observation = await result
+  expect(observation).toMatchObject({ startedAt: 10, endedAt: 26, durationMs: 16 })
+  expect(observation.trace).toEqual([
+    { event: 'keydown', at: 10 },
+    { event: 'dom', at: 26 },
+    { event: 'paint', at: 26 }
+  ])
+  const eventToDomMs = observation.trace[1]!.at - observation.trace[0]!.at
+  const domToPaintMs = observation.trace[2]!.at - observation.trace[1]!.at
+  expect(Number.isFinite(eventToDomMs)).toBe(true)
+  expect(Number.isFinite(domToPaintMs)).toBe(true)
+  expect(eventToDomMs).toBeGreaterThanOrEqual(0)
+  expect(domToPaintMs).toBeGreaterThanOrEqual(0)
+  expect(Math.abs(eventToDomMs + domToPaintMs - observation.durationMs)).toBeLessThanOrEqual(0.001)
+  expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
+})
+
+test('switch waits for the next frame and its post-frame task after ordinary-task readiness', async () => {
   environment()
   const button = new FakeElement('.worktree-row__main')
   button.setAttribute('matches', '[data-worktree-id="worktree-b"] .worktree-row__main')
   button.setAttribute('aria-pressed', 'true')
   document.elements.set('[data-worktree-id="worktree-b"] .worktree-row__main', button)
   const { pane: oldPane } = pane('session-old')
-  const id = 'switch-1'
+  const id = 'switch-ready-before-frame'
   installBrowserObserver({ id, kind: 'switch', targetId: 'worktree-b', sessionId: 'session-b' })
-  let settled = false
-  const result = waitForBrowserObserver(fakePage(), id, 50).then((value) => { settled = true; return value })
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
   document.dispatch('click', button)
-  mutate()
-  paint()
-  await Promise.resolve()
-  expect(settled).toBe(false)
   document.elements.delete('.qt-pane[data-session="session-old"]')
   pane('session-b')
   mutate()
-  paint()
-  expect(await result).toMatchObject({ durationMs: 32 })
+  expect(observerSettled()).toBe(false)
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  expect(clock.now).toBe(26)
+  runPostFrameTask()
+  expect(await result).toMatchObject({ startedAt: 10, endedAt: 26, durationMs: 16 })
   expect(oldPane.getClientRects()).toHaveLength(1)
+})
+
+test('an acknowledgement in an ordinary task cannot use the previous frame task', async () => {
+  environment()
+  const { rows, input } = pane('session-a')
+  const id = 'echo-between-frames'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-a', sequence: 5, key: 'b' })
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'b')
+  runFrameCallbacks()
+  rows.textContent = 'SPEED_ECHO worker-a session-a 5 b'
+  mutate()
+  runPostFrameTask()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runPostFrameTask()
+  expect(await result).toMatchObject({ startedAt: 10, endedAt: 42, durationMs: 32 })
 })
 
 test('diff waits for visible CodeMirror content containing the fixture line', async () => {
@@ -168,16 +312,20 @@ test('diff waits for visible CodeMirror content containing the fixture line', as
   document.elements.set('.git-review__card[data-path="speed-diff.txt"]', card)
   const id = 'diff-1'
   installBrowserObserver({ id, kind: 'diff', diffPath: 'speed-diff.txt', firstLine: 'SPEED FIXTURE LINE 0001' })
-  let settled = false
-  const result = waitForBrowserObserver(fakePage(), id, 50).then((value) => { settled = true; return value })
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
   document.dispatch('click', row)
   mutate()
-  paint()
+  runFrameCallbacks()
+  runPostFrameTask()
   await Promise.resolve()
-  expect(settled).toBe(false)
+  expect(observerSettled()).toBe(false)
   editor.textContent = 'SPEED FIXTURE LINE 0001'
   mutate()
-  paint()
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runPostFrameTask()
   expect(await result).toMatchObject({ durationMs: 32 })
 })
 
@@ -186,33 +334,131 @@ test('flood progress requires a newer rendered counter from the expected visible
   const { rows } = pane('flood-session', 'SPEED_FLOOD other-worker flood-session 90 65536')
   const id = 'flood-1'
   installBrowserObserver({ id, kind: 'flood', workerId: 'flood-worker', sessionId: 'flood-session', afterCounter: 8, offeredBytes: 65536 })
-  let settled = false
-  const result = waitForBrowserObserver(fakePage(), id, 50).then((value) => { settled = true; return value })
-  mutate()
-  paint()
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  runFrameCallbacks()
+  runPostFrameTask()
   await Promise.resolve()
-  expect(settled).toBe(false)
+  expect(observerSettled()).toBe(false)
   rows.textContent = 'SPEED_FLOOD flood-worker flood-session 8 65536'
   mutate()
-  paint()
+  runFrameCallbacks()
+  runPostFrameTask()
   await Promise.resolve()
-  expect(settled).toBe(false)
+  expect(observerSettled()).toBe(false)
   rows.textContent += ' SPEED_FLOOD flood-worker flood-session 9 65536'
   mutate()
-  paint()
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runPostFrameTask()
   expect(await result).toMatchObject({ counter: 9, durationMs: 48 })
 })
 
-test('observer deadline rejects and removes observers when no rendered acknowledgement arrives', async () => {
+test('flood checks the final DOM after every frame callback before accepting a counter', async () => {
+  environment()
+  const { rows } = pane('flood-session', 'SPEED_FLOOD flood-worker flood-session 8 65536')
+  const id = 'flood-last-callback'
+  installBrowserObserver({ id, kind: 'flood', workerId: 'flood-worker', sessionId: 'flood-session', afterCounter: 8, offeredBytes: 65536 })
+  const observerSettled = watchObserverSettlement(id)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  globalThis.requestAnimationFrame(() => {
+    rows.textContent = 'SPEED_FLOOD flood-worker flood-session 9 65536'
+    mutate()
+  })
+  globalThis.requestAnimationFrame(() => {
+    rows.textContent = ''
+    mutate()
+  })
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runPostFrameTask()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  globalThis.requestAnimationFrame(() => {
+    rows.textContent = 'SPEED_FLOOD flood-worker flood-session 10 65536'
+    mutate()
+  })
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(observerSettled()).toBe(false)
+  runPostFrameTask()
+  expect(await result).toMatchObject({ counter: 10, startedAt: 10, endedAt: 42, durationMs: 32 })
+})
+
+test('observers share one frame hook and restore requestAnimationFrame after the last result', async () => {
+  environment()
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+  const { rows: echoRows, input } = pane('echo-session')
+  const { rows: floodRows } = pane('flood-session', 'SPEED_FLOOD flood-worker flood-session 8 65536')
+  installBrowserObserver({ id: 'shared-flood', kind: 'flood', workerId: 'flood-worker', sessionId: 'flood-session', afterCounter: 8, offeredBytes: 65536 })
+  const sharedRequestAnimationFrame = globalThis.requestAnimationFrame
+  expect(sharedRequestAnimationFrame).not.toBe(originalRequestAnimationFrame)
+  const floodSettled = watchObserverSettlement('shared-flood')
+  const floodResult = waitForBrowserObserver(fakePage(), 'shared-flood', 50)
+  installBrowserObserver({ id: 'shared-echo', kind: 'echo', workerId: 'worker-a', sessionId: 'echo-session', sequence: 1, key: 'a' })
+  expect(globalThis.requestAnimationFrame).toBe(sharedRequestAnimationFrame)
+  const echoSettled = watchObserverSettlement('shared-echo')
+  const echoResult = waitForBrowserObserver(fakePage(), 'shared-echo', 50)
+  document.dispatch('keydown', input, 'a')
+  globalThis.requestAnimationFrame(() => {
+    echoRows.textContent = 'SPEED_ECHO worker-a echo-session 1 a'
+    mutate()
+  })
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(echoSettled()).toBe(false)
+  runPostFrameTask()
+  expect(await echoResult).toMatchObject({ durationMs: 16 })
+  expect(floodSettled()).toBe(false)
+  expect(globalThis.requestAnimationFrame).toBe(sharedRequestAnimationFrame)
+  globalThis.requestAnimationFrame(() => {
+    floodRows.textContent += ' SPEED_FLOOD flood-worker flood-session 9 65536'
+    mutate()
+  })
+  runFrameCallbacks()
+  await Promise.resolve()
+  expect(floodSettled()).toBe(false)
+  runPostFrameTask()
+  expect(await floodResult).toMatchObject({ counter: 9, durationMs: 32 })
+  expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
+})
+
+test('observer deadline removes observers and restores requestAnimationFrame without an acknowledgement', async () => {
   environment()
   const { input } = pane('session-timeout')
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame
   const id = 'timeout-1'
   installBrowserObserver({ id, kind: 'echo', workerId: 'worker', sessionId: 'session-timeout', sequence: 1, key: 'z' })
+  expect(globalThis.requestAnimationFrame).not.toBe(originalRequestAnimationFrame)
   const result = waitForBrowserObserver(fakePage(), id, 5)
   document.dispatch('keydown', input, 'z')
   await expect(result).rejects.toThrow('timed out after 5ms')
-  expect((globalThis as unknown as { __quirkySpeedObservers?: Map<string, unknown> }).__quirkySpeedObservers?.has(id)).toBe(false)
+  expect(observerIsPresent(id)).toBe(false)
+  expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
 })
+
+test('condition errors in a frame reject the observer and restore requestAnimationFrame', async () => {
+  environment()
+  const { rows, input } = pane('session-error')
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+  const id = 'error-1'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker', sessionId: 'session-error', sequence: 1, key: 'z' })
+  expect(globalThis.requestAnimationFrame).not.toBe(originalRequestAnimationFrame)
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'z')
+  globalThis.requestAnimationFrame(() => {
+    document.elements.delete('.qt-pane[data-session="session-error"]')
+    rows.readError = new Error('pane removed while reading rows')
+    mutate()
+  })
+  runFrameCallbacks()
+  await expect(result).rejects.toThrow('pane removed while reading rows')
+  expect(observerIsPresent(id)).toBe(false)
+  expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
+})
+
 
 test('bounds hung observer teardown on timeout and abort, closing the owned renderer context', async () => {
   for (const mode of ['timeout', 'abort'] as const) {
@@ -338,4 +584,19 @@ test('findings distinguish timed phases from flood counters and do not fabricate
   expect(finding).toContain('maxLatencyMs=unavailable')
   expect(finding).toContain('maxOwnLagMs=unavailable')
   expect(() => diagnosticFinding('startup', 7, {}, [])).toThrow('startup duration')
+})
+
+test('summarizes actual frame intervals with median, p90, and maximum', () => {
+  expect(summarizeFrameIntervals([16, 16, 16, 16, 16, 16, 17, 18, 20, 100])).toEqual({
+    frames: 10,
+    medianIntervalMs: 16,
+    p90IntervalMs: 20,
+    maxIntervalMs: 100
+  })
+})
+
+test('rejects empty and non-positive or non-finite frame intervals', () => {
+  for (const intervals of [[], [0], [-1], [Number.NaN], [Number.POSITIVE_INFINITY]]) {
+    expect(() => summarizeFrameIntervals(intervals)).toThrow('frame pacing needs positive finite intervals')
+  }
 })
