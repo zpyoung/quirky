@@ -13,6 +13,7 @@ import {
   rmSync,
   writeSync
 } from 'node:fs'
+import { open as openAsync, type FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export const DEFAULT_SEGMENT_BYTES = 16 * 1024 * 1024
@@ -35,6 +36,9 @@ const INDEX_MAX_READ_BYTES = 4096
 export const INDEX_SOLO_BYTES = 4096
 /** A joined entry is closed once its file bytes reach this. */
 export const INDEX_GROUP_BYTES = 64 * 1024
+
+export const STORED_INDEX_SLICE_BYTES = 1024 * 1024
+export const STORED_INDEX_MAX_ENTRIES = 65_536
 
 export type HistoryLogOptions = {
   cols: number
@@ -423,6 +427,328 @@ function closeQuietly(fd: number): void {
     closeSync(fd)
   } catch {
     // already closed
+  }
+}
+
+export type StoredIndexOptions = {
+  sliceBytes?: number
+  /** Awaited before each read of at most `sliceBytes` at `position` of the segment at `path`. */
+  beforeSlice?: (path: string, position: number) => void | Promise<void>
+}
+
+/** The record index of a stored session's retained segments, held in memory with no open files. */
+export type StoredLogIndex = {
+  /** The session folder: where the checkpoint and the segments live. */
+  readonly dir: string
+  /** First retained output position; 0 when nothing is readable. */
+  readonly startOffset: number
+  /** Output position after the last retained byte; 0 when nothing is readable. */
+  readonly endOffset: number
+  readonly unreadable: readonly string[]
+  /** Entries held across all segments. */
+  readonly entries: number
+  /** False when `entries` is over `STORED_INDEX_MAX_ENTRIES`: use it and let it go. */
+  readonly retain: boolean
+  /** True once `reader()` found a segment that no longer matches. */
+  readonly stale: boolean
+  /**
+   * Opens the segments for payload reads; the caller closes it. A segment whose inode, size,
+   * modification time or change time differs from the load's, or that cannot be opened, is listed
+   * in the reader's `unreadable`.
+   * Parses nothing and never calls `LogReader.open`.
+   */
+  reader(): LogReader
+}
+
+type StoredFileIdentity = {
+  ino: bigint
+  size: bigint
+  mtimeNs: bigint
+  ctimeNs: bigint
+}
+
+type StoredFileIndex = {
+  path: string
+  identity: StoredFileIdentity | null
+  segment: SegmentIndex | null
+}
+
+function identityOf(stat: StoredFileIdentity): StoredFileIdentity {
+  return { ino: stat.ino, size: stat.size, mtimeNs: stat.mtimeNs, ctimeNs: stat.ctimeNs }
+}
+
+function identityMatches(stat: StoredFileIdentity, expected: StoredFileIdentity): boolean {
+  return stat.ino === expected.ino &&
+    stat.size === expected.size &&
+    stat.mtimeNs === expected.mtimeNs &&
+    stat.ctimeNs === expected.ctimeNs
+}
+
+function addStoredOutput(
+  records: WriterRecord[],
+  group: { value: WriterGroup | null },
+  offset: number,
+  length: number,
+  at: number
+): void {
+  if (length >= INDEX_SOLO_BYTES) {
+    group.value = null
+    records.push({ kind: 'output', offset, length, at })
+    return
+  }
+
+  if (group.value === null) {
+    const record: WriterRecord = {
+      kind: 'output',
+      offset,
+      length,
+      at,
+      fileStart: at - RECORD_HEAD_BYTES,
+      recordCount: 1
+    }
+    records.push(record)
+    group.value = { record, fileBytes: length + RECORD_HEAD_BYTES }
+  } else {
+    group.value.record.length += length
+    group.value.record.recordCount = group.value.record.recordCount! + 1
+    group.value.record.joined = true
+    group.value.fileBytes += length + RECORD_HEAD_BYTES
+  }
+
+  if (group.value.fileBytes >= INDEX_GROUP_BYTES) group.value = null
+}
+
+async function scanStoredSegment(
+  handle: FileHandle,
+  path: string,
+  sliceBytes: number,
+  beforeSlice?: StoredIndexOptions['beforeSlice']
+): Promise<StoredFileIndex> {
+  let identity: StoredFileIdentity | null = null
+  try {
+    let position = 0
+    let carry = 0
+    let firstRead = true
+    let size = 0
+    let startOffset = 0
+    let offset = 0
+    let headerRead = false
+    let tornTail = false
+    let records: WriterRecord[] = []
+    let lastClear: WriterRecord | null = null
+    const group: { value: WriterGroup | null } = { value: null }
+    const buffer = Buffer.alloc(sliceBytes + HEADER_BYTES)
+
+    while (firstRead || position < size) {
+      if (firstRead) {
+        await beforeSlice?.(path, position)
+        const stat = await handle.stat({ bigint: true })
+        identity = identityOf(stat)
+        size = Number(stat.size)
+        firstRead = false
+        if (!Number.isSafeInteger(size) || size < HEADER_BYTES) return { path, identity, segment: null }
+      } else {
+        const { promise, resolve } = Promise.withResolvers<void>()
+        setImmediate(resolve)
+        await promise
+        await beforeSlice?.(path, position)
+      }
+
+      if (position >= size) break
+      const requested = Math.min(sliceBytes, size - position)
+      const { bytesRead } = await handle.read(buffer, carry, requested, position)
+      if (bytesRead === 0) break
+
+      const dataEnd = carry + bytesRead
+      const base = position - carry
+      let cursor = 0
+      let skipTo: number | null = null
+      if (!headerRead) {
+        if (dataEnd >= HEADER_BYTES) {
+          if (
+            buffer.toString('latin1', 0, MAGIC.length) !== MAGIC ||
+            buffer[4] !== FORMAT
+          ) {
+            return { path, identity, segment: null }
+          }
+          startOffset = Number(buffer.readBigUInt64LE(8))
+          offset = startOffset
+          headerRead = true
+          cursor = HEADER_BYTES
+        }
+      }
+
+      while (headerRead && cursor < dataEnd) {
+        const recordAt = base + cursor
+        if (dataEnd - cursor < RECORD_HEAD_BYTES) break
+        const kind = buffer[cursor]
+        const length = buffer.readUInt32LE(cursor + 1)
+        const recordEnd = recordAt + RECORD_HEAD_BYTES + length
+        if (recordEnd > size) {
+          tornTail = true
+          break
+        }
+        const payloadAt = recordAt + RECORD_HEAD_BYTES
+        const dataFileEnd = base + dataEnd
+
+        if (kind === KIND_OUTPUT) {
+          addStoredOutput(records, group, offset, length, payloadAt)
+          offset += length
+          if (recordEnd > dataFileEnd) {
+            skipTo = recordEnd
+            break
+          }
+        } else if (kind === KIND_RESIZE) {
+          if (length !== 4) return { path, identity, segment: null }
+          if (recordEnd > dataFileEnd) break
+          group.value = null
+          records.push({
+            kind: 'resize',
+            offset,
+            length,
+            at: payloadAt,
+            cols: buffer.readUInt16LE(cursor + RECORD_HEAD_BYTES),
+            rows: buffer.readUInt16LE(cursor + RECORD_HEAD_BYTES + 2)
+          })
+        } else if (kind === KIND_RESTORE) {
+          group.value = null
+          if (recordEnd > dataFileEnd) {
+            skipTo = recordEnd
+            break
+          }
+        } else if (kind === KIND_CLEAR) {
+          group.value = null
+          lastClear = { kind: 'clear', offset, length, at: payloadAt }
+          if (recordEnd > dataFileEnd) {
+            skipTo = recordEnd
+            break
+          }
+        } else {
+          return { path, identity, segment: null }
+        }
+
+        cursor += RECORD_HEAD_BYTES + length
+      }
+
+      if (skipTo !== null) {
+        position = skipTo
+        carry = 0
+        continue
+      }
+      if (tornTail) break
+
+      const remaining = dataEnd - cursor
+      if (remaining > 0) buffer.copy(buffer, 0, cursor, dataEnd)
+      carry = remaining
+      position += bytesRead
+    }
+
+    if (!headerRead) return { path, identity, segment: null }
+    if (lastClear !== null) records.push(lastClear)
+    return {
+      path,
+      identity,
+      segment: { path, startOffset, endOffset: offset, records }
+    }
+  } catch {
+    return { path, identity, segment: null }
+  }
+}
+
+/** Never rejects. Holds at most one slice of file bytes at a time and yields a loop turn between slices. */
+export async function loadStoredLogIndex(dir: string, options?: StoredIndexOptions): Promise<StoredLogIndex> {
+  const requestedSliceBytes = options?.sliceBytes ?? STORED_INDEX_SLICE_BYTES
+  const sliceBytes = Number.isSafeInteger(requestedSliceBytes) && requestedSliceBytes > 0
+    ? requestedSliceBytes
+    : STORED_INDEX_SLICE_BYTES
+  const files: StoredFileIndex[] = []
+  const unreadable: string[] = []
+
+  for (const name of [PREVIOUS_NAME, CURRENT_NAME]) {
+    const path = join(dir, name)
+    let handle: FileHandle
+    try {
+      handle = await openAsync(path, 'r')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') unreadable.push(path)
+      continue
+    }
+
+    const file = await scanStoredSegment(handle, path, sliceBytes, options?.beforeSlice)
+    try {
+      await handle.close()
+    } catch {
+    }
+    files.push(file)
+    if (file.segment === null) unreadable.push(path)
+  }
+
+  const segments = files.flatMap((file) => file.segment === null ? [] : [file.segment])
+  const entries = segments.reduce((count, segment) => count + segment.records.length, 0)
+  let stale = false
+
+  return {
+    dir,
+    startOffset: segments[0]?.startOffset ?? 0,
+    endOffset: segments.at(-1)?.endOffset ?? 0,
+    unreadable,
+    entries,
+    retain: entries <= STORED_INDEX_MAX_ENTRIES,
+    get stale() {
+      return stale
+    },
+    reader() {
+      const unavailable = new Set(unreadable)
+      const readerSegments: IndexedSegment[] = []
+      const joinedRanges = new WeakMap<IndexedRecord, JoinedRange>()
+
+      for (const file of files) {
+        if (file.identity === null) {
+          stale = true
+          unavailable.add(file.path)
+          continue
+        }
+
+        let fd: number | null = null
+        try {
+          fd = openSync(file.path, 'r')
+          if (!identityMatches(fstatSync(fd, { bigint: true }), file.identity)) {
+            stale = true
+            unavailable.add(file.path)
+            closeQuietly(fd)
+            fd = null
+            continue
+          }
+          if (file.segment === null) {
+            closeQuietly(fd)
+            fd = null
+            continue
+          }
+
+          const records = file.segment.records.map((source) => {
+            const { fileStart, recordCount, ...record } = source
+            const copy: IndexedRecord = { ...record }
+            if (source.joined) joinedRanges.set(copy, { fileStart: fileStart!, recordCount: recordCount! })
+            return copy
+          })
+          readerSegments.push({
+            path: file.segment.path,
+            startOffset: file.segment.startOffset,
+            endOffset: file.segment.endOffset,
+            records,
+            fd
+          })
+          fd = null
+        } catch {
+          stale = true
+          unavailable.add(file.path)
+        } finally {
+          if (fd !== null) closeQuietly(fd)
+        }
+      }
+
+      return LogReader.fromWriterIndex(readerSegments, [...unavailable], joinedRanges)
+    }
   }
 }
 

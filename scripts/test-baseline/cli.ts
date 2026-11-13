@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { bunTestFile } from '../suite'
+import { readSpeedEvidence } from '../speed/ci'
 import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline, findBaselines } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
@@ -14,7 +15,7 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 
   plan       --event <pull_request|push|workflow_dispatch> [--full <true|false>] --out <dir>
   run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
-  verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
+  verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false> [--speed <dir>]
   issues     --plan <dir> --baseline <file> --only <open|close>
   affected   [--json]
 `
@@ -321,7 +322,7 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
 }
 
 async function verdictCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' }, 'jobs-ok': { type: 'string' } })
+  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' }, 'jobs-ok': { type: 'string' }, speed: { type: 'string' } })
   const planDir = need(values.plan, 'plan')
   const inDir = need(values.in, 'in')
   const outDir = need(values.out, 'out')
@@ -374,7 +375,15 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
     runBroken: problems.length > 0,
   })
 
-  writeText(join(outDir, 'comment.md'), renderComment(verdict, ctx.now()))
+  let comment = renderComment(verdict, ctx.now())
+  if (values.speed !== undefined) {
+    try {
+      comment += '\n' + readSpeedEvidence(values.speed, ctx.env.SPEED_HEAD || plan.head)
+    } catch {
+      comment += '\n### Speed\n\nnot measured: speed evidence reader failed\n'
+    }
+  }
+  writeText(join(outDir, 'comment.md'), comment)
   writeJson(join(outDir, 'verdict.json'), verdict)
   const baselinePath = join(outDir, 'baseline.json')
   rmSync(baselinePath, { force: true })

@@ -654,6 +654,7 @@
       {
         "id": "changed",
         "description": "Mobile pairing or safe settings changed; reload state to see current values.",
+        "coalesce": [],
         "data": { "type": "object", "properties": {}, "additionalProperties": false }
       }
     ],
