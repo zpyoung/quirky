@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import type { PluginPty } from '@quirky/protocol'
+import { afterEach, describe, expect, jest, test } from 'bun:test'
+import type { PluginPty, PtySessionInfo } from '@quirky/protocol'
 import { DeliveryRunner } from '../src/delivery'
 import { validateEntry } from '../src/core/entry'
 import type { AgentEntry } from '../src/core/types'
@@ -9,10 +9,32 @@ const PASTE_ON = '\x1b[?2004h'
 const CURSOR = '\x1b[?25h'
 const SCALE = 0.05
 
+const timers = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
+
 function entry(id: string, data: Record<string, unknown> = {}): AgentEntry {
   const result = validateEntry('quirky.agents', id, { label: id, detect: id, prompt: 'stdin-after-start', ...data })
   if (!result.ok) throw new Error(result.error)
   return result.entry
+}
+
+function liveSessionInfo(sessionId: string): PtySessionInfo {
+  return {
+    sessionId,
+    state: 'running',
+    pid: 1,
+    alive: true,
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    cols: 80,
+    rows: 24,
+    argv: [],
+    cwd: '/isolated',
+    title: null,
+    shellState: 'unsupported',
+    createdAt: 0,
+    offset: 0
+  }
 }
 
 /** Ready the moment output shows the cursor under bracketed paste, so tests need no quiet window. */
@@ -34,19 +56,38 @@ class FakePty {
   listStalls = false
   /** Holds every subscribe until released; null lets it return at once. */
   subscribeGate: Promise<void> | null = null
+  subscribeGates: Array<Promise<void> | null> = []
+  subscribeErrors: Array<Error | null> = []
+  replays: Array<string | undefined> = []
+  activeSubscriptions = 0
+  maxConcurrentSubscriptions = 0
   private data = new Set<(sessionId: string, bytes: Uint8Array) => void>()
   private exits = new Set<(sessionId: string, exitCode: number | null) => void>()
   private reconnects = new Set<() => void>()
+  private lagged = new Set<(sessionId: string) => void>()
 
-  listenerCount = () => this.data.size + this.exits.size + this.reconnects.size
+  listenerCount = () => this.data.size + this.exits.size + this.reconnects.size + this.lagged.size
 
   readonly api = {
     connected: true,
     subscribe: async (sessionId: string) => {
+      const index = this.subscribed.length
       this.subscribed.push(sessionId)
-      if (this.subscribeGate) await this.subscribeGate
-      if (this.subscribeError) throw this.subscribeError
-      return { replay: this.replay, offset: 0 }
+      this.activeSubscriptions++
+      this.maxConcurrentSubscriptions = Math.max(this.maxConcurrentSubscriptions, this.activeSubscriptions)
+      try {
+        const gate = this.subscribeGates[index] ?? this.subscribeGate
+        if (gate) await gate
+        const error = this.subscribeErrors[index] ?? this.subscribeError
+        if (error) throw error
+        return { replay: this.replays[index] ?? this.replay, offset: 0 }
+      } finally {
+        this.activeSubscriptions--
+      }
+    },
+    onLagged: (listener: (sessionId: string) => void) => {
+      this.lagged.add(listener)
+      return () => this.lagged.delete(listener)
     },
     list: async () => {
       if (this.listStalls) await new Promise(() => {})
@@ -77,14 +118,18 @@ class FakePty {
   setReplay(text: string) {
     this.replay = Buffer.from(text).toString('base64')
   }
-  emit(text: string, sessionId = SESSION) {
-    for (const listener of [...this.data]) listener(sessionId, new TextEncoder().encode(text))
+  emit(text: string | Uint8Array, sessionId = SESSION) {
+    const bytes = typeof text === 'string' ? new TextEncoder().encode(text) : text
+    for (const listener of [...this.data]) listener(sessionId, bytes)
   }
   exit(sessionId = SESSION) {
     for (const listener of [...this.exits]) listener(sessionId, 0)
   }
   reconnect() {
     for (const listener of [...this.reconnects]) listener()
+  }
+  lag(sessionId = SESSION) {
+    for (const listener of [...this.lagged]) listener(sessionId)
   }
   get paste() {
     return this.writes.map((w) => w.data)
@@ -105,7 +150,8 @@ function setup(options: { timeScale?: number } = {}) {
       return () => goneListeners.delete(listener)
     },
     timeScale: options.timeScale ?? SCALE,
-    log: (message) => logs.push(message)
+    log: (message) => logs.push(message),
+    now: () => Date.now(),
   })
   return { pty, runner }
 }
@@ -124,8 +170,23 @@ const until = async (condition: () => boolean, ms = 2000) => {
 
 const frame = (text: string) => `\x1b[200~${text}\x1b[201~`
 
+const flushMicrotasks = async () => {
+  for (let index = 0; index < 8; index++) await Promise.resolve()
+}
+
+const advanceClock = async (milliseconds: number) => {
+  timers.advanceTimersByTime(milliseconds)
+  await flushMicrotasks()
+}
+
+function deferred<T = void>() {
+  const { promise, resolve, reject } = Promise.withResolvers<T>()
+  return { promise, resolve, reject }
+}
+
 afterEach(() => {
   goneListeners = new Set()
+  timers.useRealTimers()
 })
 
 describe('DeliveryRunner', () => {
@@ -582,12 +643,353 @@ describe('DeliveryRunner', () => {
 
   test('a liveness answer that arrives after settling writes nothing', async () => {
     const { pty, runner } = setup()
-    let answer: (value: Array<{ sessionId: string; alive: boolean }>) => void = () => {}
-    pty.api.list = () => new Promise((resolve) => (answer = resolve as typeof answer))
+    const answer = deferred<PtySessionInfo[]>()
+    pty.api.list = () => answer.promise
     pty.setReplay(`${PASTE_ON}${CURSOR}`)
     expect(await runner.deliver(SESSION, fast('goose'), 'hi', false)).toBe('not-delivered')
-    answer([{ sessionId: SESSION, alive: true }])
+    answer.resolve([liveSessionInfo(SESSION)])
     await Bun.sleep(20)
     expect(pty.writes).toEqual([])
   })
+  test('a lag resets readiness and retries once after the cooldown without stitching bytes across the gap', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const result = runner.deliver(SESSION, fast('goose', { lineSettleMs: 1 }), 'recovered', true)
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION])
+
+    pty.emit(PASTE_ON)
+    pty.lag('other')
+    pty.lag(SESSION)
+    pty.emit(`${PASTE_ON}${CURSOR}`, 'other')
+    pty.lag(SESSION)
+    pty.emit(CURSOR)
+    await advanceClock(499)
+    expect(pty.subscribed).toHaveLength(1)
+    await advanceClock(1)
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+
+    pty.emit(CURSOR)
+    await flushMicrotasks()
+    expect(pty.writes).toEqual([])
+    pty.emit(PASTE_ON)
+    pty.emit(CURSOR)
+    await flushMicrotasks()
+    expect(pty.writes.map((write) => write.data)).toEqual([frame('recovered')])
+    pty.lag(SESSION)
+    await advanceClock(502)
+    expect(await result).toBe('pasted')
+    expect(pty.paste).toEqual([frame('recovered'), '\r'])
+    expect(pty.subscribed).toHaveLength(2)
+    expect(pty.listenerCount()).toBe(0)
+    expect(goneListeners.size).toBe(0)
+  })
+
+  test('a gap during subscribe ignores the old successful replay and waits for a fresh subscription', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    pty.replays[0] = Buffer.from(`${PASTE_ON}${CURSOR}`).toString('base64')
+    const result = runner.deliver(SESSION, fast('goose'), 'fresh', false)
+    await flushMicrotasks()
+    pty.lag(SESSION)
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(1)
+
+    first.resolve()
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+    expect(pty.maxConcurrentSubscriptions).toBe(1)
+    expect(pty.unsubscribed).toEqual([])
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await result).toBe('pasted')
+    expect(pty.paste).toEqual([frame('fresh')])
+  })
+
+  test('a late failed subscribe cannot fail the recovery attempt', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    pty.subscribeErrors[0] = new Error('stale subscribe failed')
+    const result = runner.deliver(SESSION, fast('goose'), 'fresh', false)
+    await flushMicrotasks()
+    pty.lag(SESSION)
+    await advanceClock(500)
+
+    first.reject(new Error('request ended'))
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+    expect(pty.maxConcurrentSubscriptions).toBe(1)
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await result).toBe('pasted')
+    expect(pty.paste).toEqual([frame('fresh')])
+  })
+
+  test('a second gap during recovery coalesces one later retry and never overlaps subscriptions', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const second = deferred<void>()
+    pty.subscribeGates[1] = second.promise
+    pty.replays[1] = Buffer.from(`${PASTE_ON}${CURSOR}`).toString('base64')
+    const result = runner.deliver(SESSION, fast('goose'), 'fresh', false)
+    await flushMicrotasks()
+    pty.lag(SESSION)
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(2)
+
+    pty.lag(SESSION)
+    pty.lag(SESSION)
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(2)
+    second.resolve()
+    await flushMicrotasks()
+    expect(pty.subscribed).toHaveLength(3)
+    expect(pty.maxConcurrentSubscriptions).toBe(1)
+    expect(pty.writes).toEqual([])
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await result).toBe('pasted')
+    expect(pty.paste).toEqual([frame('fresh')])
+  })
+
+  test('the early queue accepts exactly four MiB without invalidating its subscribe', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    pty.replays[0] = Buffer.from(`${PASTE_ON}${CURSOR}`).toString('base64')
+    const result = runner.deliver(SESSION, fast('goose'), 'bounded', false)
+    await flushMicrotasks()
+    pty.emit(new Uint8Array(4_194_304))
+    first.resolve()
+
+    expect(await result).toBe('pasted')
+    expect(pty.subscribed).toHaveLength(1)
+    expect(pty.paste).toEqual([frame('bounded')])
+    expect(pty.listenerCount()).toBe(0)
+  })
+
+  test('the early queue permits exactly four MiB and overflow enters the same recovery path', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    const result = runner.deliver(SESSION, fast('goose'), 'bounded', false)
+    await flushMicrotasks()
+
+    pty.emit(new Uint8Array(4_194_304))
+    expect(pty.subscribed).toHaveLength(1)
+    pty.emit(new Uint8Array(1))
+    await advanceClock(499)
+    expect(pty.subscribed).toHaveLength(1)
+    await advanceClock(1)
+    expect(pty.subscribed).toHaveLength(1)
+    first.resolve()
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+    expect(pty.maxConcurrentSubscriptions).toBe(1)
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await result).toBe('pasted')
+    expect(pty.paste).toEqual([frame('bounded')])
+  })
+
+  test('a local overflow keeps its live hold through retry and releases it when delivery settles', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    const result = runner.deliver(SESSION, fast('goose'), 'bounded', false)
+    await flushMicrotasks()
+    pty.emit(new Uint8Array(4_194_305))
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(1)
+
+    first.resolve()
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+    expect(pty.unsubscribed).toEqual([])
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await result).toBe('pasted')
+    expect(pty.unsubscribed).toEqual([SESSION])
+  })
+
+  test('a local overflow releases its pending hold before a newer delivery completes', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    const result = runner.deliver(SESSION, entry('aider', { readyTimeoutMs: 100 }), 'bounded', false)
+    await flushMicrotasks()
+    pty.emit(new Uint8Array(4_194_305))
+    await advanceClock(100)
+    expect(await result).toBe('not-delivered')
+    expect(pty.unsubscribed).toEqual([SESSION])
+
+    const newer = runner.deliver(SESSION, fast('goose'), 'newer', false)
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+    first.resolve()
+    await flushMicrotasks()
+    expect(pty.unsubscribed).toEqual([SESSION])
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await newer).toBe('pasted')
+    expect(pty.unsubscribed).toEqual([SESSION, SESSION])
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(2)
+  })
+
+  test('one expired delivery cannot release a same-session hold owned by another delivery', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const first = deferred<void>()
+    pty.subscribeGates[0] = first.promise
+    const expired = runner.deliver(SESSION, entry('aider', { readyTimeoutMs: 100 }), 'old', false)
+    await flushMicrotasks()
+    pty.emit(new Uint8Array(4_194_305))
+    const active = runner.deliver(SESSION, fast('goose'), 'active', false)
+    await flushMicrotasks()
+    expect(pty.subscribed).toEqual([SESSION, SESSION])
+
+    await advanceClock(100)
+    expect(await expired).toBe('not-delivered')
+    expect(pty.unsubscribed).toEqual([])
+    first.resolve()
+    await flushMicrotasks()
+    expect(pty.unsubscribed).toEqual([])
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    expect(await active).toBe('pasted')
+    expect(pty.paste).toEqual([frame('active')])
+    expect(pty.unsubscribed).toEqual([SESSION])
+  })
+
+  test('deadline during recovery is not delivered instead of blind-pasting across a gap', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const retry = deferred<void>()
+    pty.subscribeGates[1] = retry.promise
+    const result = runner.deliver(SESSION, entry('aider', { readyTimeoutMs: 600, blindPaste: true }), 'unsafe', true)
+    await flushMicrotasks()
+    pty.lag(SESSION)
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(2)
+    await advanceClock(100)
+    expect(await result).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    retry.resolve()
+    await flushMicrotasks()
+    expect(pty.writes).toEqual([])
+    expect(pty.listenerCount()).toBe(0)
+  })
+
+  test('a lag after the blind deadline settles instead of stranding a pending liveness check', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const liveness = deferred<PtySessionInfo[]>()
+    let listCalls = 0
+    pty.api.list = () => {
+      listCalls++
+      return liveness.promise
+    }
+    const result = runner.deliver(
+      SESSION,
+      entry('aider', { readyTimeoutMs: 100, blindPaste: true }),
+      'unsafe',
+      true
+    )
+    await flushMicrotasks()
+    let outcome: string | undefined
+    void result.then((value) => (outcome = value))
+    await advanceClock(100)
+    expect(listCalls).toBe(1)
+
+    pty.lag(SESSION)
+    await flushMicrotasks()
+    expect(outcome).toBe('not-delivered')
+    expect(pty.writes).toEqual([])
+    liveness.resolve([liveSessionInfo(SESSION)])
+    await flushMicrotasks()
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(1)
+    expect(pty.listenerCount()).toBe(0)
+  })
+
+  test('a retry is not started at the original deadline and a failed recovery subscribe is not delivered', async () => {
+    const first = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const firstResult = first.runner.deliver(
+      SESSION,
+      entry('aider', { readyTimeoutMs: 500, blindPaste: true }),
+      'unsafe',
+      true
+    )
+    await flushMicrotasks()
+    first.pty.lag(SESSION)
+    await advanceClock(500)
+    expect(await firstResult).toBe('not-delivered')
+    expect(first.pty.subscribed).toHaveLength(1)
+    expect(first.pty.writes).toEqual([])
+
+    timers.useRealTimers()
+    const second = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    second.pty.subscribeErrors[1] = new Error('recovery subscribe failed')
+    const secondResult = second.runner.deliver(SESSION, fast('goose'), 'unsafe', false)
+    await flushMicrotasks()
+    second.pty.lag(SESSION)
+    await advanceClock(500)
+    expect(await secondResult).toBe('not-delivered')
+    expect(second.pty.subscribed).toHaveLength(2)
+    expect(second.pty.writes).toEqual([])
+  })
+
+  test('exit, removal, and reconnect cancel a pending recovery retry and its listeners', async () => {
+    for (const end of ['exit', 'remove', 'reconnect'] as const) {
+      timers.useRealTimers()
+      timers.useFakeTimers()
+      const { pty, runner } = setup({ timeScale: 1 })
+      const result = runner.deliver(SESSION, fast('goose'), 'unsafe', false)
+      await flushMicrotasks()
+      pty.lag(SESSION)
+      if (end === 'exit') pty.exit()
+      if (end === 'remove') sessionGone()
+      if (end === 'reconnect') pty.reconnect()
+      expect(await result).toBe('not-delivered')
+      await advanceClock(1000)
+      expect(pty.subscribed).toHaveLength(1)
+      expect(pty.listenerCount()).toBe(0)
+      expect(goneListeners.size).toBe(0)
+    }
+  })
+
+  test('a gap during the liveness check invalidates that check before recovery', async () => {
+    const { pty, runner } = setup({ timeScale: 1 })
+    timers.useFakeTimers()
+    const firstList = deferred<PtySessionInfo[]>()
+    let listCalls = 0
+    pty.api.list = () => {
+      listCalls++
+      return listCalls === 1
+        ? firstList.promise
+        : Promise.resolve([liveSessionInfo(SESSION)])
+    }
+    const result = runner.deliver(SESSION, fast('goose'), 'fresh', false)
+    await flushMicrotasks()
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    await flushMicrotasks()
+    expect(listCalls).toBe(1)
+    pty.lag(SESSION)
+    firstList.resolve([liveSessionInfo(SESSION)])
+    await flushMicrotasks()
+    expect(pty.writes).toEqual([])
+
+    await advanceClock(500)
+    expect(pty.subscribed).toHaveLength(2)
+    pty.emit(`${PASTE_ON}${CURSOR}`)
+    await flushMicrotasks()
+    expect(await result).toBe('pasted')
+    expect(pty.paste).toEqual([frame('fresh')])
+    expect(listCalls).toBe(2)
+  })
+
 })
