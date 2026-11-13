@@ -1514,8 +1514,10 @@ describe('stored session index', () => {
       })
       expect(measured.calls).toBe(0)
       if (withCheckpoint) {
-        expect(measured.value.first.lines).toContain('checkpoint-screen')
+        expect(measured.value.first.lines).toEqual(['checkpoint-screen'])
         expect(measured.value.second.lines.at(-1)).toBe('checkpoint-screen')
+        const aboveCheckpoint = measured.value.second.lines.slice(0, -1)
+        expect(aboveCheckpoint.every((line) => /^line-\d+$/.test(line) && Number(line.slice(5)) < 200)).toBe(true)
       } else {
         expect(measured.value.first.lines).toContain('[history could not be read]')
         const retainedLines = measured.value.second.lines.filter((line) => /^line-\d+$/.test(line))

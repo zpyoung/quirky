@@ -125,37 +125,27 @@ function replaceReaderOpen<T>(run: (calls: () => number) => T): T {
   }
 }
 
-function makeManyRecordsFile(size: number): Buffer {
+function makeUniformRecordsFile(
+  size: number,
+  kind: number,
+  startOffset = 0
+): { file: Buffer; completeRecordCount: number } {
+  const recordBytes = kind === 0x02 ? 9 : 5
+  const payloadLength = recordBytes - 5
   const file = Buffer.alloc(size)
   file.write('QPTL', 0, 'latin1')
   file[4] = 1
-  let position = 16
-  let outputCount = 0
-  let resizeCount = 0
-  let lastResizeAt = -1
-  let lastClearAt = -1
-  while (position + 5 <= file.length) {
-    if (position + 9 <= file.length && outputCount > 0 && outputCount % 10_000 === 0 && lastResizeAt !== outputCount) {
-      file[position] = 0x02
-      file.writeUInt32LE(4, position + 1)
-      file.writeUInt16LE(80 + (resizeCount % 20), position + 5)
-      file.writeUInt16LE(24 + (resizeCount % 10), position + 7)
-      position += 9
-      resizeCount++
-      lastResizeAt = outputCount
-    } else if (outputCount > 0 && outputCount % 20_000 === 0 && lastClearAt !== outputCount) {
-      file[position] = 0x04
-      file.writeUInt32LE(0, position + 1)
-      position += 5
-      lastClearAt = outputCount
-    } else {
-      file[position] = 0x01
-      file.writeUInt32LE(0, position + 1)
-      position += 5
-      outputCount++
+  file.writeBigUInt64LE(BigInt(startOffset), 8)
+  const completeRecordCount = Math.floor((size - 16) / recordBytes)
+  for (let index = 0, position = 16; index < completeRecordCount; index++, position += recordBytes) {
+    file[position] = kind
+    file.writeUInt32LE(payloadLength, position + 1)
+    if (kind === 0x02) {
+      file.writeUInt16LE(80 + (index % 20), position + 5)
+      file.writeUInt16LE(24 + (index % 10), position + 7)
     }
   }
-  return file
+  return { file, completeRecordCount }
 }
 
 function rotatedFixture(): string {
@@ -168,7 +158,7 @@ function rotatedFixture(): string {
 }
 
 describe('loadStoredLogIndex', () => {
-  test('loads a 1 MiB file in awaited bounded slices and never opens LogReader', async () => {
+  test('loads a 1 MiB file in bounded slices, yields between them, and never opens LogReader', async () => {
     const dir = freshDir()
     const records = Array.from({ length: MiB / 128 }, () => rawRecord(0x01, Buffer.alloc(123, 0x61)))
     writeSegment(dir, 'output.log', 0, records)
@@ -179,30 +169,28 @@ describe('loadStoredLogIndex', () => {
       ...real,
       open: async (...args: Parameters<typeof fsp.open>) => {
         const handle = await real.open(...args)
-        const read = handle.read.bind(handle)
         handle.read = ((buffer: Buffer, offset: number, length: number, position: number | null) => {
           readSizes.push(length)
-          return read(buffer, offset, length, position)
+          const bytesRead = fs.readSync(handle.fd, buffer, offset, length, position)
+          return Promise.resolve({ bytesRead, buffer })
         }) as typeof handle.read
         return handle
       }
     }))
 
+    let beforeSliceCalls = 0
     let yielded = 0
     try {
       await replaceReaderOpen(async (calls) => {
         const index = await loadStoredLogIndex(dir, {
           sliceBytes: 65_536,
           beforeSlice: () => {
-            const callback = Promise.withResolvers<void>()
-            setImmediate(() => {
-              yielded++
-              callback.resolve()
-            })
-            return callback.promise
+            beforeSliceCalls++
+            setImmediate(() => { yielded++ })
           }
         })
         expect(index.endOffset).toBe(MiB / 128 * 123)
+        expect(beforeSliceCalls).toBeGreaterThanOrEqual(16)
         expect(yielded).toBeGreaterThanOrEqual(15)
         expect(readSizes.length).toBeGreaterThanOrEqual(16)
         expect(Math.max(...readSizes)).toBeLessThanOrEqual(65_536)
@@ -213,29 +201,78 @@ describe('loadStoredLogIndex', () => {
     }
   })
 
-  test('slices a control-only file by file bytes and retains joined outputs, newest clears, and every resize', async () => {
+  test('slices a 2 MiB file of zero-length outputs and joins them into fewer than 100 entries', async () => {
     const dir = freshDir()
     const path = join(dir, 'output.log')
-    fs.mkdirSync(dir, { recursive: true })
-    writeFileSync(path, makeManyRecordsFile(2 * MiB))
+    const { file } = makeUniformRecordsFile(2 * MiB, 0x01)
+    expect(file.byteLength).toBe(2 * MiB)
+    writeFileSync(path, file)
+
     let slices = 0
     const index = await loadStoredLogIndex(dir, {
       sliceBytes: 65_536,
       beforeSlice: () => { slices++ }
     })
+    expect(slices).toBeGreaterThanOrEqual(32)
+    expect(index.entries).toBeLessThan(100)
+  })
+
+  test('slices a 2 MiB file of clear records and retains only the newest clear', async () => {
+    const dir = freshDir()
+    const path = join(dir, 'output.log')
+    const { file } = makeUniformRecordsFile(2 * MiB, 0x04)
+    expect(file.byteLength).toBe(2 * MiB)
+    writeFileSync(path, file)
+
+    let slices = 0
+    const index = await loadStoredLogIndex(dir, {
+      sliceBytes: 65_536,
+      beforeSlice: () => { slices++ }
+    })
+    expect(slices).toBeGreaterThanOrEqual(32)
+    expect(index.entries).toBe(1)
+
     const reader = index.reader()
     try {
       const records = reader.segments[0]!.records
-      expect(slices).toBeGreaterThanOrEqual(32)
-      expect(records.filter((record) => record.kind === 'output').length).toBeLessThan(100)
-      expect(records.filter((record) => record.kind === 'clear')).toHaveLength(1)
-      expect(records.filter((record) => record.kind === 'resize')).toHaveLength(
-        readSegments(dir).segments[0]!.records.filter((record) => record.kind === 'resize').length
-      )
+      expect(records).toHaveLength(1)
+      expect(records[0]!.kind).toBe('clear')
     } finally {
       reader.close()
     }
   })
+
+  test('slices 2 MiB of resize records and preserves every complete record across boundaries', async () => {
+    const dir = freshDir()
+    const path = join(dir, 'output.log')
+    const startOffset = 37
+    const { file, completeRecordCount } = makeUniformRecordsFile(2 * MiB, 0x02, startOffset)
+    expect(file.byteLength).toBe(2 * MiB)
+    writeFileSync(path, file)
+
+    let slices = 0
+    const index = await loadStoredLogIndex(dir, {
+      sliceBytes: 65_536,
+      beforeSlice: () => { slices++ }
+    })
+    expect(slices).toBeGreaterThanOrEqual(32)
+    expect(index.entries).toBe(completeRecordCount)
+
+    const reader = index.reader()
+    try {
+      const records = reader.segments[0]!.records
+      expect(records).toHaveLength(completeRecordCount)
+      expect(records.every((record, index) =>
+        record.kind === 'resize' &&
+        record.offset === startOffset &&
+        record.cols === 80 + (index % 20) &&
+        record.rows === 24 + (index % 10)
+      )).toBe(true)
+    } finally {
+      reader.close()
+    }
+  })
+
 
   test('agrees with LogReader across rotations, torn tails, malformed segments and record sizes', async () => {
     const rotated = rotatedFixture()

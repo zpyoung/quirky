@@ -548,6 +548,9 @@ async function scanStoredSegment(
         firstRead = false
         if (!Number.isSafeInteger(size) || size < HEADER_BYTES) return { path, identity, segment: null }
       } else {
+        const { promise, resolve } = Promise.withResolvers<void>()
+        setImmediate(resolve)
+        await promise
         await beforeSlice?.(path, position)
       }
 
@@ -675,7 +678,6 @@ export async function loadStoredLogIndex(dir: string, options?: StoredIndexOptio
     try {
       await handle.close()
     } catch {
-      // The segment index owns no descriptors after its awaited scan.
     }
     files.push(file)
     if (file.segment === null) unreadable.push(path)

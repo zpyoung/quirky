@@ -349,7 +349,6 @@ describe('awaited process tree operations', () => {
 
       let shutdownSettled = false
       const shutdown = manager.shutdown().then(() => { shutdownSettled = true })
-      // S10 measures that shutdown remains pending for the specified 150 ms platform interval.
       await Bun.sleep(150)
       expect(shutdownSettled).toBe(false)
       expectAlive(rootPid)

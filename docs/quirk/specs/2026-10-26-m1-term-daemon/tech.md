@@ -72,24 +72,6 @@ bun add --cwd packages/pty-host @xterm/addon-serialize@0.13.0 @xterm/addon-unico
 | `pty-process.ts` | Unchanged. |
 | `main.ts` | Unchanged. |
 
-#### Host responsiveness (g2-59)
-
-`SessionManager.kill`, `forget` and `list` return promises. The socket replies to a kill or forget
-only after signalling finishes; forget also removes the folder before replying. Tree operations
-scan before signalling so background jobs in separate process groups remain discoverable.
-Shutdown drains accepted tree operations before sending its own signals.
-
-The host owns an `@quirky/process` runner for process-table scans. `fresh()` shares a queued scan
-but never joins one already running; stop polling uses `recent(STOP_POLL_MS)`. A deadline gives
-waiters an empty table, aborts the scan and prevents another run until that runner call settles.
-
-Stored history uses an entry-local, in-memory index loaded in awaited
-`STORED_INDEX_SLICE_BYTES` reads, with at most four loads running per host. Readers validate each
-segment's identity and timestamps; changed segments are unreadable for that request and reload on
-the next one. Screen reconstruction replays bounded blocks and yields on index entries too.
-Stored files and wire frames are unchanged. Restore's open-for-append scan and live-log fallback
-remain synchronous.
-
 ### Kernel (`packages/daemon/src`)
 
 | File | Change |

@@ -422,14 +422,27 @@ describe('rebuildScreen from a stored index', () => {
     expect(text(emptyScreen)[0]).toBe('empty checkpoint')
 
     const bad = freshDir()
-    saveCheckpoint(bad, 5, { ansi: 'bad-magic checkpoint\r\n' })
+    saveCheckpoint(bad, 5, {
+      cols: 101,
+      rows: 31,
+      ansi: 'bad-magic checkpoint\r\n',
+      cwd: '/bad',
+      title: 'bad checkpoint title'
+    })
     writeFileSync(join(bad, 'output.1.log'), Buffer.from('not a segment'))
     writeFileSync(join(bad, 'output.log'), Buffer.from('also not a segment'))
     const badIndex = await loadStoredLogIndex(bad)
     const badScreen = track(new Screen({ cols: 80, rows: 24 }))
     const badResult = await rebuildScreen(badIndex, badScreen, FALLBACK)
     await badScreen.settled()
-    expect(badResult).toMatchObject({ source: 'checkpoint', offset: 0, cwd: '/checkpoint', title: 'checkpoint title' })
+    expect(badResult).toMatchObject({
+      source: 'checkpoint',
+      offset: 0,
+      cols: 101,
+      rows: 31,
+      cwd: '/bad',
+      title: 'bad checkpoint title'
+    })
     expect(text(badScreen)[0]).toBe('bad-magic checkpoint')
 
     const removed = freshDir()
@@ -438,14 +451,27 @@ describe('rebuildScreen from a stored index', () => {
     log.appendOutput(enc('last'))
     const removedAt = log.offset
     log.close()
-    saveCheckpoint(removed, removedAt, { ansi: 'removed-log checkpoint\r\n' })
+    saveCheckpoint(removed, removedAt, {
+      cols: 102,
+      rows: 32,
+      ansi: 'removed-log checkpoint\r\n',
+      cwd: '/removed',
+      title: 'removed checkpoint title'
+    })
     const removedIndex = await loadStoredLogIndex(removed)
     rmSync(join(removed, 'output.1.log'), { force: true })
     rmSync(join(removed, 'output.log'), { force: true })
     const removedScreen = track(new Screen({ cols: 80, rows: 24 }))
     const removedResult = await rebuildScreen(removedIndex, removedScreen, FALLBACK)
     await removedScreen.settled()
-    expect(removedResult).toMatchObject({ source: 'checkpoint', offset: 0 })
+    expect(removedResult).toMatchObject({
+      source: 'checkpoint',
+      offset: 0,
+      cols: 102,
+      rows: 32,
+      cwd: '/removed',
+      title: 'removed checkpoint title'
+    })
     expect(removedIndex.stale).toBe(true)
     expect(text(removedScreen)[0]).toBe('removed-log checkpoint')
 
@@ -591,6 +617,52 @@ describe('rebuildScreen after a clear (SC-34)', () => {
     expect([result.cols, result.rows]).toEqual([60, 20])
     expect(screen.snapshot().cols).toBe(60)
   })
+
+  test('bounds scanned bytes between settles when a clear skips large pre-clear output', async () => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    const preClear = Buffer.concat([
+      enc(`${ESC}]7;file://localhost/tmp${BEL}${ESC}]0;pre-clear title${BEL}`),
+      Buffer.alloc(REBUILD_BLOCK_BYTES * 8, 0x78),
+      enc('\r\npre-clear sentinel\r\n')
+    ])
+    log.appendOutput(preClear)
+    log.appendClear()
+    log.appendOutput(enc('post-clear output\r\n'))
+    const end = log.offset
+    log.close()
+
+    const index = await loadStoredLogIndex(dir)
+    const screen = track(new Screen({ cols: 80, rows: 24 }))
+    let scannedSinceSettle = 0
+    let largestScannedBetweenSettles = 0
+    const openReader = index.reader.bind(index)
+    index.reader = () => {
+      const reader = openReader()
+      const readOutput = reader.readOutput.bind(reader)
+      reader.readOutput = (segment, record, from, to) => {
+        const bytes = readOutput(segment, record, from, to)
+        scannedSinceSettle += bytes.length
+        return bytes
+      }
+      return reader
+    }
+    const settled = screen.settled.bind(screen)
+    screen.settled = () => {
+      largestScannedBetweenSettles = Math.max(largestScannedBetweenSettles, scannedSinceSettle)
+      scannedSinceSettle = 0
+      return settled()
+    }
+
+    const result = await rebuildScreen(index, screen, FALLBACK)
+    await screen.settled()
+
+    expect(largestScannedBetweenSettles).toBeLessThanOrEqual(REBUILD_BLOCK_BYTES)
+    expect(result).toMatchObject({ source: 'log', offset: end, cwd: '/tmp', title: 'pre-clear title' })
+    expect(text(screen)[0]).toBe('post-clear output')
+    expect(text(screen).join('\n')).not.toContain('pre-clear sentinel')
+  })
+
 })
 
 describe('MODE_RESET', () => {

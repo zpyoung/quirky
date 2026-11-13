@@ -90,7 +90,7 @@ export async function rebuildScreen(
     rows = Math.max(1, r)
     screen.resize(cols, rows)
   }
-  const replay = (bytes: Uint8Array, toScreenFrom: number): number => {
+  const replay = (bytes: Uint8Array, toScreenFrom: number): void => {
     for (const fact of scanner.push(bytes).facts) {
       if (fact.kind === 'title') title = fact.title
       else if (fact.kind === 'cwd') {
@@ -103,10 +103,9 @@ export async function rebuildScreen(
         }
       }
     }
-    if (toScreenFrom >= bytes.length) return 0
+    if (toScreenFrom >= bytes.length) return
     const from = Math.max(0, toScreenFrom)
     screen.write(from > 0 ? bytes.subarray(from) : bytes)
-    return bytes.length - from
   }
 
   let bytesSinceSettle = 0
@@ -133,7 +132,8 @@ export async function rebuildScreen(
               const bytes = reader.readOutput(segment, record, at, to)
               if (bytes.length === 0) break
               const writeFrom = Math.max(0, screenFrom - record.offset - at)
-              bytesSinceSettle += replay(bytes, writeFrom)
+              replay(bytes, writeFrom)
+              bytesSinceSettle += bytes.length
               at += bytes.length
               if (bytesSinceSettle >= REBUILD_BLOCK_BYTES) {
                 await screen.settled()
