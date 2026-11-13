@@ -742,14 +742,30 @@ test('daemon envelopes scope Checks drafts but broadcast shared preferences', as
     const events: QuirkyEvent[] = []
     host.client.onEvent((event) => { if (event.type === 'quirky.reviews/changed') events.push(event) })
     await host.client.callAny('events.subscribe', {})
+    const waitForChange = async () => {
+      const { revision } = await host.call('state', { worktree: host.worktree }) as { revision: number }
+      const matches = (event: QuirkyEvent) => event.type === 'quirky.reviews/changed' &&
+        ((event as PluginEvent).data as JsonRecord).revision === revision
+      if (events.some(matches)) return
+      const { promise, resolve, reject } = Promise.withResolvers<void>()
+      const timeout = setTimeout(() => reject(new Error(`No changed event carried revision ${revision}.`)), 2_000)
+      host.client.onEvent((event) => { if (matches(event)) resolve() })
+      try {
+        await promise
+      } finally {
+        clearTimeout(timeout)
+      }
+    }
 
     await host.call('detailSetCommentDraft', { surface: 'checks', worktree: host.worktree, number: 12, generation: state.checks.generation, body: 'draft', draftVersion: 1 })
+    await waitForChange()
 
     expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({ type: 'quirky.reviews/changed', worktreeId: host.worktree, data: { worktree: host.worktree, revision: expect.any(Number) } })
     events.length = 0
 
     await host.call('detailSetAudience', { surface: 'checks', worktree: host.worktree, number: 12, audience: 'bots' })
+    await waitForChange()
 
     expect(events).toHaveLength(1)
     expect(events[0]).not.toHaveProperty('worktreeId')
