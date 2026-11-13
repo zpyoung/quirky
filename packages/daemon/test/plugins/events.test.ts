@@ -49,12 +49,12 @@ describe('plugin events', () => {
     expect(event).toEqual({ type: 'acme.tools/refreshed', data: { count: 2 } })
   })
 
-  test('API 1.9.0: immediate emits reach subscribed clients through the runtime context', async () => {
+  test('API 1.10.0: immediate emits reach subscribed clients through the runtime context', async () => {
     const s = await boot([
       {
         manifest: {
           id: 'acme.tools',
-          apiVersion: '1.9.0',
+          apiVersion: '1.10.0',
           contributes: { method: [{ id: 'emit' }], event: [{ id: 'tick', coalesce: [] }] }
         },
         behavior: {
