@@ -434,4 +434,37 @@ context.provide(${JSON.stringify(JOB)}, async () => {
     })
     expect(t.starts()).toHaveLength(1)
   })
+
+  test('counts each pre-timeout revocation and blocks another scheduled run', async () => {
+    const t = setup({
+      timeout: '1h',
+      activate: (gateDir) => `let runNumber = 0
+context.provide(${JSON.stringify(JOB)}, async () => {
+  const run = ++runNumber
+  record('start tick ' + run)
+  while (!existsSync(${JSON.stringify(gateDir)} + '/' + run)) await Bun.sleep(5)
+  record('end tick ' + run)
+})`
+    })
+    t.scheduler.start()
+
+    for (let run = 1; run <= 4; run += 1) {
+      await until(() => t.starts().length === run)
+      expect(t.unanswered.count(JOB)).toBe(run - 1)
+      t.scheduler.revokePlugin(PLUGIN)
+      expect(t.unanswered.count(JOB)).toBe(run)
+    }
+
+    expect(t.warnings).toEqual([BOUND_WARNING])
+    await Bun.sleep(1300)
+    expect(t.starts()).toHaveLength(4)
+    expect(t.ends()).toHaveLength(0)
+    expect(t.scheduler.list()[0]).toMatchObject({
+      state: 'running',
+      nextRunAt: null,
+      stalled: { handlers: 4 }
+    })
+  }, 15_000)
+
 })
+
