@@ -1058,6 +1058,29 @@ function currentReview(env: ReviewsEnv, worktree: string, number?: number): { ch
   return { checks, review: checks.review, prRepo: repoIdentity(env, checks.review.prRepo) }
 }
 
+function sameRepoIdentity(left: RepoIdentity, right: RepoIdentity): boolean {
+  return left.host.toLowerCase() === right.host.toLowerCase()
+    && left.owner.toLowerCase() === right.owner.toLowerCase()
+    && left.repo.toLowerCase() === right.repo.toLowerCase()
+}
+
+function assertTitleDraftFence(env: ReviewsEnv, checks: ChecksEntry, currentRepo: RepoIdentity, params: Record<string, unknown>): void {
+  if (params.generation !== undefined) {
+    if (typeof params.generation !== 'number' || !Number.isSafeInteger(params.generation) || params.generation < 0) {
+      throw env.invalid('invalid_input', 'generation must be a non-negative integer.')
+    }
+    if (checks.generation !== params.generation) {
+      throw env.invalid('stale_review_target', 'The selected review changed before this title draft was updated.')
+    }
+  }
+  if (params.prRepo !== undefined) {
+    const requestedRepo = repoIdentity(env, params.prRepo)
+    if (!sameRepoIdentity(currentRepo, requestedRepo)) {
+      throw env.invalid('stale_review_target', 'The selected review repository changed before this title draft was updated.')
+    }
+  }
+}
+
 async function linkReview(env: ReviewsEnv, worktree: Worktree, number: number, suppliedRepo: RepoIdentity | undefined, caller: PluginCaller): Promise<JsonRecord> {
   const lookup = await callLookup(env, 'review', {
     worktree: worktree.id,
@@ -1663,13 +1686,20 @@ export const checksSpecs: MethodSpec[] = [
   {
     id: 'checksSetTitleDraft',
     description: 'Set the bounded inline pull request title draft for an exact review target.',
-    params: objectSchema({ worktree: worktreeProperty, number: { type: 'integer', minimum: 1 }, title: { type: 'string', description: `At most ${MAX_TITLE_LENGTH} characters.` } }, ['worktree', 'number', 'title']),
+    params: objectSchema({
+      worktree: worktreeProperty, number: { type: 'integer', minimum: 1 },
+      title: { type: 'string', description: `At most ${MAX_TITLE_LENGTH} characters.` },
+      prRepo: repoSchema, generation: { type: 'integer', minimum: 0 }
+    }, ['worktree', 'number', 'title']),
     result: objectSchema({ titleDraft: stringSchema }, ['titleDraft'])
   },
   {
     id: 'checksCancelTitle',
     description: 'Discard the inline title draft for the exact review target without changing the hosted review.',
-    params: objectSchema({ worktree: worktreeProperty, number: { type: 'integer', minimum: 1 } }, ['worktree', 'number']),
+    params: objectSchema({
+      worktree: worktreeProperty, number: { type: 'integer', minimum: 1 },
+      prRepo: repoSchema, generation: { type: 'integer', minimum: 0 }
+    }, ['worktree', 'number']),
     result: objectSchema({ titleDraft: { type: 'null' } }, ['titleDraft'])
   },
   {
@@ -1759,7 +1789,8 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
       const worktree = await resolveWorktree(env, params, caller)
       if (!positiveInteger(params.number)) throw env.invalid('invalid_input', 'number must be a positive pull request number.')
       const title = textField(env, params, 'title', MAX_TITLE_LENGTH)
-      currentReview(env, worktree.id, params.number)
+      const { checks, prRepo } = currentReview(env, worktree.id, params.number)
+      assertTitleDraftFence(env, checks, prRepo, params)
       env.update((state) => {
         const entry = state.checksByWorktree[worktree.id]
         if (entry?.review?.number === params.number) entry.titleDraft = title
@@ -1769,7 +1800,8 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
     checksCancelTitle: async (params, caller) => {
       const worktree = await resolveWorktree(env, params, caller)
       if (!positiveInteger(params.number)) throw env.invalid('invalid_input', 'number must be a positive pull request number.')
-      currentReview(env, worktree.id, params.number)
+      const { checks, prRepo } = currentReview(env, worktree.id, params.number)
+      assertTitleDraftFence(env, checks, prRepo, params)
       env.update((state) => {
         const entry = state.checksByWorktree[worktree.id]
         if (entry?.review?.number === params.number) entry.titleDraft = null
