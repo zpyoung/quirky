@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { Ask, AskAnswer, AskEnvelope, QuirkyEvent, Repo, Session, Worktree } from '@quirky/protocol'
-import type { Connection } from '../connection'
+import { UI_READ_TIMEOUT_MS, type Connection } from '../connection'
 import { useConnection, usePluginHost } from '../context'
 import type { WindowPluginHost } from '../plugins/host'
 
@@ -89,7 +89,7 @@ const sameIdentities = (left: Record<string, ProjectIdentity>, right: Record<str
   JSON.stringify(left) === JSON.stringify(right)
 
 async function windowIdOf(connection: Pick<Connection, 'callAny'>): Promise<number> {
-  const self = await connection.callAny('ui.window.self', {})
+  const self = await connection.callAny('ui.window.self', {}, { timeoutMs: UI_READ_TIMEOUT_MS })
   if (typeof self !== 'object' || self === null || !('connId' in self) ||
     typeof self.connId !== 'number' || !Number.isSafeInteger(self.connId) || self.connId < 1) {
     throw new Error('The daemon did not identify this window.')
@@ -138,6 +138,7 @@ export function createAttentionStore(
   let unsubscribeEvents: (() => void) | undefined
   let unsubscribeConnected: (() => void) | undefined
   let unsubscribeHost: (() => void) | undefined
+  let sessionListCallsInFlight = 0
 
   const publish = (patch: Partial<AttentionSnapshot>) => {
     state = { ...state, ...patch }
@@ -154,7 +155,7 @@ export function createAttentionStore(
   const fetchList = async <T,>(key: SnapshotError, method: string, params: Record<string, unknown> = {}): Promise<T[] | null> => {
     const version = ++versions[key]
     try {
-      const value = await connection.callAny(method, params)
+      const value = await connection.callAny(method, params, { timeoutMs: UI_READ_TIMEOUT_MS })
       if (!Array.isArray(value)) throw new Error(`${method} returned an invalid list`)
       if (!active || version !== versions[key]) return null
       setError(key)
@@ -186,7 +187,7 @@ export function createAttentionStore(
   const refreshScope = async () => {
     const version = ++scopeVersion
     try {
-      const ids = filterIdsOf(await connection.callAny('quirky.worktree/options', {}))
+      const ids = filterIdsOf(await connection.callAny('quirky.worktree/options', {}, { timeoutMs: UI_READ_TIMEOUT_MS }))
       if (active && version === scopeVersion && ids !== null) setFilter(ids)
     } catch {
       // the worktree plugin may be absent; the scope then stays All projects
@@ -195,7 +196,7 @@ export function createAttentionStore(
 
   const refreshIdentities = async () => {
     try {
-      const identities = identitiesOf(await connection.callAny('quirky.worktree/projectMetadataList', {}))
+      const identities = identitiesOf(await connection.callAny('quirky.worktree/projectMetadataList', {}, { timeoutMs: UI_READ_TIMEOUT_MS }))
       if (active && identities !== null && !sameIdentities(state.projectIdentities, identities)) publish({ projectIdentities: identities })
     } catch {
       // identities only decorate the switcher; the repo name and a generated tile stand in
@@ -203,8 +204,56 @@ export function createAttentionStore(
   }
 
   const refreshSessions = async () => {
-    const sessions = await fetchList<Session>('sessions', 'quirky.session/list', {})
-    if (active && sessions !== null) publish({ sessions })
+    sessionListCallsInFlight += 1
+    try {
+      const sessions = await fetchList<Session>('sessions', 'quirky.session/list', {})
+      if (active && sessions !== null) publish({ sessions })
+    } finally {
+      sessionListCallsInFlight -= 1
+    }
+  }
+
+  const applySessionEvent = (event: QuirkyEvent) => {
+    const current = state.sessions
+    if (current === null || state.errors.sessions !== undefined || sessionListCallsInFlight > 0) {
+      void refreshSessions()
+      return
+    }
+    if (!('data' in event) || typeof event.data !== 'object' || event.data === null || Array.isArray(event.data)) {
+      void refreshSessions()
+      return
+    }
+    const data = event.data
+    if (event.type === 'quirky.session/changed') {
+      if (!('session' in data)) {
+        void refreshSessions()
+        return
+      }
+      const session = data.session
+      if (typeof session !== 'object' || session === null || Array.isArray(session) ||
+        !('id' in session) || typeof session.id !== 'string') {
+        void refreshSessions()
+        return
+      }
+      const sessionId = session.id
+      const updated = [...current]
+      const index = updated.findIndex((candidate) => candidate.id === sessionId)
+      if (index === -1) updated.push(session as Session)
+      else updated[index] = session as Session
+      publish({ sessions: updated })
+      return
+    }
+    if (!('sessionId' in data)) {
+      void refreshSessions()
+      return
+    }
+    const sessionId = data.sessionId
+    if (typeof sessionId !== 'string') {
+      void refreshSessions()
+      return
+    }
+    if (!current.some((session) => session.id === sessionId)) return
+    publish({ sessions: current.filter((session) => session.id !== sessionId) })
   }
 
   const clearToastTimer = (askId: string) => {
@@ -290,7 +339,7 @@ export function createAttentionStore(
       }
       case 'quirky.session/changed':
       case 'quirky.session/removed':
-        void refreshSessions()
+        applySessionEvent(event)
         break
       case 'quirky.ask/created':
       case 'quirky.ask/surfaced':
@@ -355,7 +404,7 @@ export function createAttentionStore(
     let worktreeId = ask.worktreeId
     if (!worktreeId) {
       try {
-        const session = await connection.callAny('quirky.session/get', { session: ask.sessionId })
+        const session = await connection.callAny('quirky.session/get', { session: ask.sessionId }, { timeoutMs: UI_READ_TIMEOUT_MS })
         if (typeof session !== 'object' || session === null || !('worktreeId' in session) || typeof session.worktreeId !== 'string') {
           throw new Error('The delegated session has no worktree view.')
         }

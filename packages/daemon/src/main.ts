@@ -1,6 +1,8 @@
 import { inspect } from 'node:util'
+import { stopAllProcesses } from '@quirky/process'
 import { daemonEntryHash, ensureHome, installProcessErrorGuards, isDaemonAlive, quirkyHome, readRuntime, runtimeFilePath } from '@quirky/protocol/node'
 import { startDaemon } from './daemon'
+import { createShutdown } from './shutdown'
 import { acquireDaemonLock, type DaemonLock } from './lock'
 
 installProcessErrorGuards({ label: 'quirkyd' })
@@ -31,12 +33,13 @@ try {
   })
   console.log(`quirkyd listening on http://127.0.0.1:${daemon.port}; connection details are in ${runtimeFilePath(home)}`)
 
-  const shutdown = () => {
-    void daemon.stop().finally(() => {
-      ownedLock.release()
-      process.exit(0)
-    })
-  }
+  const shutdown = createShutdown({
+    stop: () => daemon.stop(),
+    release: () => ownedLock.release(),
+    exit: (code) => process.exit(code),
+    onDeadline: () => { void stopAllProcesses() },
+    log: (message) => console.error(`[quirkyd] ${message}`)
+  })
   process.on('SIGTERM', shutdown)
   process.on('SIGINT', shutdown)
 } catch (error) {
