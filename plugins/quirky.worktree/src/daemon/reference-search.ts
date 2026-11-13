@@ -1,4 +1,9 @@
-import type { GitHubWorktreeLink, PtySessionInfo } from '@quirky/protocol'
+import { basename } from 'node:path'
+import type { GitHubWorktreeLink, PluginStore, PtySessionInfo, Repo } from '@quirky/protocol'
+import { SelectorSyntaxError, matchWorktrees, type CallerIdentity, type SelectableWorktree } from '../../selector'
+import type { DirectoryIdentitySource } from './identity'
+import { folderStateOf } from './list'
+import { metadataOf, type WorktreeRow } from './store'
 import type {
   ReferenceItem,
   ReferenceSearchLink,
@@ -288,4 +293,137 @@ export function searchReferences(input: {
       skippedSessions
     }
   }
+}
+export type ReferenceSearchEnv = {
+  store: Pick<PluginStore, 'all' | 'get'>
+  identitySource: DirectoryIdentitySource
+  repoIds(): Promise<string[]>
+  resolveRepo(selector: string): Promise<Repo>
+  sessions(): Promise<unknown>
+  processes(): Promise<PtySessionInfo[]>
+  fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
+}
+
+/** Reads every stored worktree and marks stale folders or projects without writing to the store. */
+export function readStoredWorktrees(
+  env: Pick<ReferenceSearchEnv, 'store' | 'identitySource'>,
+  liveRepoIds: ReadonlySet<string>
+): StoredWorktree[] {
+  return env.store.all<WorktreeRow>('SELECT * FROM worktrees ORDER BY id').map((row): StoredWorktree => {
+    const metadata = metadataOf(row)
+    let staleReason: StoredWorktree['staleReason'] = null
+    if (!liveRepoIds.has(row.repo_id) && !row.repo_id.startsWith('group:')) {
+      staleReason = 'project-unregistered'
+    } else {
+      const folderState = folderStateOf(row, row.path, env.identitySource)
+      if (folderState === 'missing') staleReason = 'folder-missing'
+      else if (folderState === 'replaced') staleReason = 'folder-replaced'
+    }
+    return {
+      id: row.id,
+      repoId: row.repo_id,
+      name: row.display_name || row.name || (row.path === null ? row.id : basename(row.path)),
+      path: row.path,
+      kind: row.kind,
+      archivedAt: metadata.archivedAt,
+      lastActivityAt: row.last_activity_at,
+      state: staleReason === null ? 'present' : 'stale',
+      staleReason,
+      references: metadata.references,
+      linkedPR: metadata.linkedPR ?? null,
+      linkedIssue: metadata.linkedIssue ?? null
+    }
+  })
+}
+
+function failureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** Resolves selectors and evidence from stored rows only; repo resolution failures pass through unchanged. */
+export async function findReferences(
+  env: ReferenceSearchEnv,
+  params: Record<string, unknown>,
+  identity: CallerIdentity
+): Promise<ReferenceSearchResult> {
+  let query: ReferenceSearchQuery
+  try {
+    query = parseReferenceQuery(params.query)
+  } catch (error) {
+    if (error instanceof ReferenceQueryError) throw env.fail('invalid-params', error.message)
+    throw error
+  }
+
+  if (params.includeArchived !== undefined && typeof params.includeArchived !== 'boolean') {
+    throw env.fail('invalid-params', 'includeArchived must be a boolean')
+  }
+  const includeArchived = params.includeArchived === true
+  if (params.limit !== undefined && (typeof params.limit !== 'number' || !Number.isInteger(params.limit) || params.limit < 1 || params.limit > 200)) {
+    throw env.fail('invalid-params', 'limit must be an integer from 1 to 200')
+  }
+  const limit = typeof params.limit === 'number' ? params.limit : 50
+  if (params.worktree !== undefined && typeof params.worktree !== 'string') {
+    throw env.fail('invalid-params', 'worktree must be a selector string')
+  }
+  if (params.repo !== undefined && typeof params.repo !== 'string') {
+    throw env.fail('invalid-params', 'repo must be a selector string')
+  }
+  if (params.worktree !== undefined && params.repo !== undefined) {
+    throw env.fail('invalid-params', 'worktree and repo cannot be used together')
+  }
+
+  const worktreeSelector = params.worktree as string | undefined
+  if (worktreeSelector?.trim().startsWith('branch:')) {
+    throw env.fail('invalid-params', 'branch selectors require git; use id:, name:, path: or current')
+  }
+  const repoSelector = params.repo as string | undefined
+  const repo = repoSelector === undefined ? undefined : await env.resolveRepo(repoSelector)
+  const liveRepoIds = new Set(await env.repoIds())
+  let worktrees = readStoredWorktrees(env, liveRepoIds)
+
+  if (repo !== undefined) {
+    worktrees = worktrees.filter((worktree) => worktree.repoId === repo.id)
+  } else if (worktreeSelector !== undefined) {
+    const selectable = worktrees.map((stored): SelectableWorktree & { stored: StoredWorktree } => ({
+      id: stored.id,
+      name: stored.name,
+      path: stored.path,
+      branch: null,
+      stored
+    }))
+    let matches: (typeof selectable)[number][]
+    try {
+      matches = matchWorktrees(selectable, worktreeSelector, identity)
+    } catch (error) {
+      if (error instanceof SelectorSyntaxError) throw env.fail('invalid-params', error.message)
+      throw error
+    }
+    if (matches.length === 0) {
+      throw env.fail('not-found', `no worktree matches ${worktreeSelector}; use id:, name:, branch:, path: or current`)
+    }
+    if (matches.length > 1) {
+      const ids = matches.map(({ id }) => `id:${id}`)
+      throw env.fail('conflict', `${worktreeSelector} matches ${ids.length} worktrees: ${ids.join(', ')}`, { matches: ids })
+    }
+    worktrees = matches.map(({ stored }) => stored)
+  }
+
+  const sessionResult = (async () => {
+    try {
+      const rows = await env.sessions()
+      return Array.isArray(rows) ? { rows } : { error: 'quirky.session/list returned a non-array value' }
+    } catch (error) {
+      return { error: failureMessage(error) }
+    }
+  })()
+  const processResult = (async () => {
+    try {
+      const rows = await env.processes()
+      return Array.isArray(rows) ? { rows } : { error: 'PTY process list returned a non-array value' }
+    } catch (error) {
+      return { error: failureMessage(error) }
+    }
+  })()
+  const [sessions, processes] = await Promise.all([sessionResult, processResult])
+  return searchReferences({ query, worktrees, includeArchived, limit, sessions, processes })
 }

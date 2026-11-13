@@ -1,18 +1,27 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { Database } from 'bun:sqlite'
+import { realpathSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { RpcErrorCode, type PluginStore, type QuirkyClient, type Repo, type RpcError, type Worktree } from '@quirky/protocol'
+import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { waitFor } from '../../../packages/daemon/test/helpers'
 import type { CallerIdentity } from '../selector'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
 import { listReferences, unlinkReference, type RecordEnv } from '../src/daemon/records'
 import type { WorktreeControl } from '../src/control-types'
+import { filesystemIdentitySource } from '../src/daemon/identity'
+import type { WorktreeRow } from '../src/daemon/store'
 import type { GitHubWorktreeLink, PtySessionInfo } from '@quirky/protocol'
-import type { WorktreeReference } from '../src/parity-types'
+import type { ReferenceSearchResult, WorktreeReference } from '../src/parity-types'
 import {
+  findReferences,
   parseReferenceQuery,
+  readStoredWorktrees,
   referenceItemOf,
   searchReferences,
   sessionLiveness,
+  type ReferenceSearchEnv,
   type StoredWorktree
 } from '../src/daemon/reference-search'
 
@@ -510,6 +519,7 @@ describe('reference unlinking', () => {
       { worktree: worktree.id, reference: pull.id, url: tracker.url },
       { worktree: worktree.id, reference: '' },
       { worktree: worktree.id, reference: 5 },
+      { worktree: worktree.id, url: 5 },
       { worktree: worktree.id, url: 'javascript:alert(1)' },
       { worktree: worktree.id, url: 'https://tracker.example/' + 'x'.repeat(2_049) }
     ]
@@ -541,5 +551,378 @@ describe('reference search boundary regressions', () => {
     expect(sessionLiveness(malformed, null)).toBe('unverifiable')
     const result = search('acme/api#5123', world, { sessions: { rows: [malformed] } })
     expect(result.matches[0]!.sessions).toMatchObject([{ id: 'malformed', status: '', liveness: 'unverifiable', linked: false }])
+  })
+})
+let searchHarness: PluginHarness | undefined
+afterEach(async () => {
+  await searchHarness?.cleanup()
+  searchHarness = undefined
+})
+
+async function searchWorld(options: { realSession?: boolean } = {}) {
+  const t = await startPluginHarness(options.realSession
+    ? { plugins: ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session'], fakeSession: false }
+    : {})
+  searchHarness = t
+  const root = realpathSync(makeTempDir('qrs-root-'))
+  await daemonCall(t.client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
+  fakeRegistrations(t.git!)
+
+  const alphaPath = addFakeRepo(t.git!, 'alpha')
+  const alphaRepo = await daemonCall(t.client, 'quirky.repo/add', { path: alphaPath }) as Repo
+  const alphaWorktrees = await daemonCall(t.client, 'quirky.worktree/list', { repo: alphaRepo.id }) as Worktree[]
+  const worktreeA = alphaWorktrees.find((worktree) => worktree.isMain)!
+  const createdB = await daemonCall(t.client, 'quirky.worktree/create', { repo: alphaRepo.id, name: 'fix-login' }) as { worktree: Worktree }
+  const worktreeB = createdB.worktree
+
+  const betaPath = addFakeRepo(t.git!, 'beta')
+  const betaRepo = await daemonCall(t.client, 'quirky.repo/add', { path: betaPath }) as Repo
+  const betaWorktrees = await daemonCall(t.client, 'quirky.worktree/list', { repo: betaRepo.id }) as Worktree[]
+  const betaWorktree = betaWorktrees.find((worktree) => worktree.isMain)!
+
+  await daemonCall(t.client, 'quirky.worktree/linkReference', {
+    worktree: worktreeA.id,
+    url: 'https://github.com/acme/api/pull/5123',
+    label: 'PR 5123'
+  })
+  await daemonCall(t.client, 'quirky.worktree/linkReference', {
+    worktree: worktreeA.id,
+    url: 'https://tracker.example/issues/42',
+    label: 'APP-42'
+  })
+  await daemonCall(t.client, 'quirky.worktree/linkReference', {
+    worktree: worktreeB.id,
+    url: 'https://gitlab.com/acme/api/-/issues/5123',
+    label: 'GitLab 5123'
+  })
+  await daemonCall(t.client, 'quirky.worktree/linkReference', {
+    worktree: betaWorktree.id,
+    url: 'https://github.com/acme/api/pull/5123',
+    label: 'Beta PR 5123'
+  })
+  return { t, root, alphaRepo, betaRepo, worktreeA, worktreeB, betaWorktree }
+}
+
+function worktreeStoreFile(home: string): string {
+  return join(home, 'plugin-data', 'quirky.worktree', 'store.db')
+}
+
+function rawStoreSnapshot(home: string): { worktrees: unknown[]; origins: unknown[] } {
+  const db = new Database(worktreeStoreFile(home), { readonly: true })
+  try {
+    return {
+      worktrees: db.query('SELECT * FROM worktrees ORDER BY id').all(),
+      origins: db.query('SELECT * FROM worktree_origins ORDER BY worktree_id').all()
+    }
+  } finally {
+    db.close()
+  }
+}
+
+function worktreeRows(home: string): WorktreeRow[] {
+  const db = new Database(worktreeStoreFile(home), { readonly: true })
+  try {
+    return db.query('SELECT * FROM worktrees ORDER BY id').all() as WorktreeRow[]
+  } finally {
+    db.close()
+  }
+}
+
+function runPluginSql(home: string, plugin: string, sql: string, ...params: (string | number | null)[]): void {
+  const db = new Database(join(home, 'plugin-data', plugin, 'store.db'))
+  try {
+    db.query(sql).run(...params)
+  } finally {
+    db.close()
+  }
+}
+
+function storeForRows(rows: WorktreeRow[]): Pick<PluginStore, 'all' | 'get'> {
+  return {
+    all<T>(sql: string): T[] {
+      expect(sql).toContain('worktrees')
+      return rows as T[]
+    },
+    get<T>(): T | null {
+      return null
+    }
+  }
+}
+
+function searchEnv(rows: WorktreeRow[], overrides: Partial<ReferenceSearchEnv> = {}): ReferenceSearchEnv {
+  return {
+    store: storeForRows(rows),
+    identitySource: filesystemIdentitySource,
+    repoIds: async () => [...new Set(rows.map((row) => row.repo_id))],
+    resolveRepo: async () => { throw new Error('unexpected repo resolution') },
+    sessions: async () => [],
+    processes: async () => [],
+    fail: (kind, message, data) => Object.assign(new Error(message), { kind, data }),
+    ...overrides
+  }
+}
+
+describe('stored reference search', () => {
+  test('validates method options and preserves selector error classes and data', async () => {
+    const { t, alphaRepo, worktreeA, betaWorktree } = await searchWorld()
+    const invalidQueries = ['', ' '.repeat(2), 'x'.repeat(2_049), '5', 'ftp://x/y']
+    for (const query of invalidQueries) {
+      expect((await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', { query }))).code).toBe(RpcErrorCode.InvalidParams)
+    }
+    const invalidOptions = [
+      { limit: 0 },
+      { limit: 201 },
+      { limit: 1.5 },
+      { limit: '5' },
+      { includeArchived: 'yes' },
+      { worktree: worktreeA.id, repo: alphaRepo.id }
+    ]
+    for (const options of invalidOptions) {
+      expect((await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+        query: 'acme/api#5123',
+        ...options
+      }))).code).toBe(RpcErrorCode.InvalidParams)
+    }
+    expect((await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123',
+      unexpected: true
+    }))).code).toBe(RpcErrorCode.InvalidParams)
+
+    const missing = await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', worktree: 'name:missing'
+    }))
+    expect(missing.code).toBe(RpcErrorCode.NotFound)
+
+    const branch = await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', worktree: 'branch:main'
+    }))
+    expect(branch.code).toBe(RpcErrorCode.InvalidParams)
+    expect(branch.message).toContain('id:, name:, path: or current')
+
+    runPluginSql(t.h.home, 'quirky.worktree',
+      'UPDATE worktrees SET display_name = ? WHERE id IN (?, ?)',
+      'shared', worktreeA.id, betaWorktree.id)
+    const conflict = await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', worktree: 'name:shared'
+    }))
+    expect(conflict.code).toBe(RpcErrorCode.Conflict)
+    expect(conflict.message).toContain('matches 2 worktrees')
+    expect(conflict.data).toEqual(expect.objectContaining({
+      matches: expect.arrayContaining([`id:${worktreeA.id}`, `id:${betaWorktree.id}`])
+    }))
+
+    const resolveFailure = await rpcFailure(daemonCall(t.client, 'quirky.repo/resolve', { selector: 'name:absent' }))
+    const searchFailure = await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', repo: 'name:absent'
+    }))
+    expect(searchFailure.code).toBe(resolveFailure.code)
+    expect(searchFailure.message).toBe(resolveFailure.message)
+  })
+
+  test('narrows by worktree or resolved repository', async () => {
+    const { t, alphaRepo, betaRepo, worktreeA, worktreeB, betaWorktree } = await searchWorld()
+    const worktreeResult = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', worktree: `id:${worktreeB.id}`
+    }) as ReferenceSearchResult
+    expect(worktreeResult.matches.map(({ worktree }) => worktree.id)).toEqual([worktreeB.id])
+    expect(worktreeResult.ambiguous).toBe(false)
+
+    const alphaResult = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', repo: alphaRepo.id
+    }) as ReferenceSearchResult
+    const betaResult = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', repo: betaRepo.id
+    }) as ReferenceSearchResult
+    expect(alphaResult.matches.map(({ worktree }) => worktree.id).sort()).toEqual([worktreeA.id, worktreeB.id].sort())
+    expect(betaResult.matches.map(({ worktree }) => worktree.id)).toEqual([betaWorktree.id])
+  })
+
+  test('supports identity selectors for a pathless row and skips it for path-based selection', async () => {
+    const { t, root, worktreeA, worktreeB } = await searchWorld()
+    runPluginSql(t.h.home, 'quirky.worktree',
+      'UPDATE worktrees SET path = NULL, name = ?, display_name = NULL WHERE id = ?',
+      'legacy', worktreeA.id)
+    const query = 'https://github.com/acme/api/pull/5123'
+    for (const selector of [`id:${worktreeA.id}`, worktreeA.id, 'name:legacy', 'legacy']) {
+      const result = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+        query, worktree: selector
+      }) as ReferenceSearchResult
+      expect(result.matches).toMatchObject([{
+        worktree: { id: worktreeA.id, name: 'legacy', path: null, state: 'stale', staleReason: 'folder-missing' }
+      }])
+    }
+
+    const currentById = await t.connectAs({ worktreeId: worktreeA.id })
+    const currentResult = await daemonCall(currentById, 'quirky.worktree/findReferences', { query, worktree: 'current' }) as ReferenceSearchResult
+    expect(currentResult.matches.map(({ worktree }) => worktree.id)).toEqual([worktreeA.id])
+
+    const currentByCwd = await t.connectAs({ cwd: worktreeB.path })
+    const cwdResult = await daemonCall(currentByCwd, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', worktree: 'current'
+    }) as ReferenceSearchResult
+    expect(cwdResult.matches.map(({ worktree }) => worktree.id)).toEqual([worktreeB.id])
+
+    const noPath = join(root, 'not-a-worktree')
+    for (const selector of [`path:${noPath}`, 'current']) {
+      const client = selector === 'current' ? await t.connectAs({ cwd: noPath }) : t.client
+      expect((await rpcFailure(daemonCall(client, 'quirky.worktree/findReferences', {
+        query, worktree: selector
+      }))).code).toBe(RpcErrorCode.NotFound)
+    }
+    for (const selector of ['name:nothing', 'nothing', 'name:api']) {
+      expect((await rpcFailure(daemonCall(t.client, 'quirky.worktree/findReferences', {
+        query, worktree: selector
+      }))).code).toBe(RpcErrorCode.NotFound)
+    }
+  })
+
+  test('keeps stored rows unchanged and performs no git or event work while searching', async () => {
+    const { t, alphaRepo } = await searchWorld()
+    const watcher = await t.h.connectWithEvents('ui')
+    const before = rawStoreSnapshot(t.h.home)
+    const gitCallCount = t.git!.calls.length
+    const result = await daemonCall(watcher.client, 'quirky.worktree/findReferences', {
+      query: 'https://github.com/acme/api/pull/5123'
+    }) as ReferenceSearchResult
+
+    expect(result.matches).toHaveLength(2)
+    expect(result.matches.some(({ worktree }) => worktree.repoId === alphaRepo.id)).toBe(true)
+    expect(rawStoreSnapshot(t.h.home)).toEqual(before)
+    expect(t.git!.calls.slice(gitCallCount)).toEqual([])
+    expect(watcher.events.filter((event) => event.type.startsWith('quirky.worktree/'))).toEqual([])
+
+    const rows = worktreeRows(t.h.home)
+    let allCalls = 0
+    let getCalls = 0
+    const store = new Proxy<Pick<PluginStore, 'all' | 'get'>>({
+      all<T>(sql: string): T[] {
+        allCalls++
+        expect(sql).toContain('worktrees')
+        return rows as T[]
+      },
+      get<T>(): T | null {
+        getCalls++
+        return null
+      }
+    }, {
+      get(target, property, receiver) {
+        if (property !== 'all' && property !== 'get') throw new Error(`store.${String(property)} is unavailable`)
+        return Reflect.get(target, property, receiver)
+      }
+    })
+    const env = searchEnv(rows, { store, repoIds: async () => [alphaRepo.id] })
+    const readOnlyResult = await findReferences(env, { query: 'https://github.com/acme/api/pull/5123' }, {})
+    const stored = readStoredWorktrees({ store, identitySource: filesystemIdentitySource }, new Set([alphaRepo.id]))
+    expect(readOnlyResult.matches.length).toBeGreaterThan(0)
+    expect(stored.length).toBe(rows.length)
+    expect(allCalls).toBe(2)
+    expect(getCalls).toBe(0)
+  })
+
+  test('reports missing and replaced folders as stale without deleting their rows', async () => {
+    const { t, alphaRepo, worktreeB } = await searchWorld()
+    const registrations = t.git!.worktreesByRepo.get(alphaRepo.path)!
+    t.git!.worktreesByRepo.set(alphaRepo.path, registrations.filter(({ path }) => path !== worktreeB.path))
+    rmSync(worktreeB.path, { recursive: true, force: true })
+    const before = rawStoreSnapshot(t.h.home)
+    const found = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', worktree: `id:${worktreeB.id}`
+    }) as ReferenceSearchResult
+    expect(found.matches[0]?.worktree).toMatchObject({ id: worktreeB.id, state: 'stale', staleReason: 'folder-missing' })
+    expect(rawStoreSnapshot(t.h.home)).toEqual(before)
+
+    const other = await daemonCall(t.client, 'quirky.worktree/create', { repo: alphaRepo.id, name: 'replacement-check' }) as { worktree: Worktree }
+    await daemonCall(t.client, 'quirky.worktree/linkReference', {
+      worktree: other.worktree.id, url: 'https://github.com/acme/api/issues/5123', label: 'replacement'
+    })
+    const row = worktreeRows(t.h.home).find(({ id }) => id === other.worktree.id)!
+    runPluginSql(t.h.home, 'quirky.worktree', 'UPDATE worktrees SET birthtime = ? WHERE id = ?', (row.birthtime ?? 0) + 1_000_000, row.id)
+    const replacedBefore = rawStoreSnapshot(t.h.home)
+    const replaced = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', worktree: `id:${other.worktree.id}`
+    }) as ReferenceSearchResult
+    expect(replaced.matches[0]?.worktree).toMatchObject({ id: other.worktree.id, state: 'stale', staleReason: 'folder-replaced' })
+    expect(rawStoreSnapshot(t.h.home)).toEqual(replacedBefore)
+  })
+
+  test('marks unregistered projects stale and propagates project-list failures', async () => {
+    const { t } = await searchWorld()
+    const rows = worktreeRows(t.h.home)
+    const unregistered = await findReferences(searchEnv(rows, { repoIds: async () => [] }), {
+      query: 'https://github.com/acme/api/pull/5123'
+    }, {})
+    expect(unregistered.matches.every(({ worktree }) =>
+      worktree.state === 'stale' && worktree.staleReason === 'project-unregistered'
+    )).toBe(true)
+
+    const failure = new Error('project list failed')
+    await expect(findReferences(searchEnv(rows, { repoIds: async () => { throw failure } }), {
+      query: 'https://github.com/acme/api/pull/5123'
+    }, {})).rejects.toBe(failure)
+  })
+
+  test('does not depend on git listings and leaves deleted-group membership untouched', async () => {
+    const { t, alphaRepo, worktreeA, worktreeB } = await searchWorld()
+    let listCalled = false
+    t.git!.listRegistrations = async () => {
+      listCalled = true
+      throw new Error('git unavailable')
+    }
+    const beforeGit = t.git!.calls.length
+    const result = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'acme/api#5123', repo: alphaRepo.id
+    }) as ReferenceSearchResult
+    expect(result.matches.map(({ worktree }) => worktree.id).sort()).toEqual([worktreeA.id, worktreeB.id].sort())
+    expect(result.items.map(({ id }) => id).sort()).toEqual([
+      'github.com/acme/api#5123', 'gitlab.com/acme/api#5123'
+    ].sort())
+    expect(result.matches.some(({ worktree }) => worktree.state === 'present')).toBe(true)
+    expect(listCalled).toBe(false)
+    expect(t.git!.calls.length).toBe(beforeGit)
+
+    const deletedGroupId = 'group-deleted-search-test'
+    runPluginSql(t.h.home, 'quirky.repo',
+      'INSERT OR REPLACE INTO deleted_groups (id, deleted_at) VALUES (?, ?)', deletedGroupId, Date.now())
+    runPluginSql(t.h.home, 'quirky.worktree',
+      'UPDATE worktrees SET project_group_id = ? WHERE id = ?', deletedGroupId, worktreeA.id)
+    expect(await daemonCall(t.client, 'quirky.repo/groupDeletedIds')).toContain(deletedGroupId)
+    const watcher = await t.h.connectWithEvents('ui')
+    const before = rawStoreSnapshot(t.h.home)
+    const found = await daemonCall(watcher.client, 'quirky.worktree/findReferences', {
+      query: 'https://github.com/acme/api/pull/5123'
+    }) as ReferenceSearchResult
+    expect(found.matches.some(({ worktree }) => worktree.id === worktreeA.id)).toBe(true)
+    expect(rawStoreSnapshot(t.h.home)).toEqual(before)
+    expect(watcher.events.filter((event) => event.type.startsWith('quirky.worktree/'))).toEqual([])
+  })
+
+  test('returns matches when the session list is unavailable or not an array', async () => {
+    const { t } = await searchWorld()
+    const rows = worktreeRows(t.h.home)
+    for (const sessions of [
+      async () => { throw new Error('unknown method: quirky.session/list') },
+      async () => ({ sessions: [] })
+    ]) {
+      const result = await findReferences(searchEnv(rows, { sessions }), {
+        query: 'https://github.com/acme/api/pull/5123'
+      }, {})
+      expect(result.matches.length).toBeGreaterThan(0)
+      expect(result.matches.every((match) => match.sessions === null && match.sessionTotal === null)).toBe(true)
+      expect(result.evidence.sessions).toBe('unavailable')
+      expect(result.evidence.sessionsReason).toBeTruthy()
+    }
+  })
+
+  test('uses the real session and PTY listing for terminal liveness', async () => {
+    const { t, worktreeA } = await searchWorld({ realSession: true })
+    const session = await daemonCall(t.client, 'quirky.session/create', {
+      worktree: worktreeA.id,
+      agent: 'shell'
+    }) as { id: string }
+    const result = await daemonCall(t.client, 'quirky.worktree/findReferences', {
+      query: 'https://github.com/acme/api/pull/5123'
+    }) as ReferenceSearchResult
+    expect(result.matches[0]?.sessions).toMatchObject([{ id: session.id, kind: 'terminal', liveness: 'live', linked: false }])
+    expect(result.evidence).toMatchObject({ sessions: 'listed', processes: 'listed' })
   })
 })

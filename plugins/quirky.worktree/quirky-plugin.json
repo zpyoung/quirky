@@ -2191,6 +2191,117 @@
         "result": { "type": "object", "properties": { "ok": { "type": "boolean" }, "removed": { "type": "boolean" } }, "required": ["ok", "removed"], "additionalProperties": false }
       },
       {
+        "id": "findReferences",
+        "description": "Find stored worktree links to a review or issue, with listed sessions and checked liveness; never reconcile or write worktree records.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "HTTP or HTTPS URL or project key, from 1 to 2048 characters." },
+            "worktree": { "type": "string" },
+            "repo": { "type": "string" },
+            "includeArchived": { "type": "boolean" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "object",
+              "properties": {
+                "kind": { "type": "string", "enum": ["url", "key"] },
+                "url": { "type": "string" },
+                "key": { "type": "string" },
+                "item": { "description": "Canonical item ID, or null for a plain URL." }
+              },
+              "required": ["kind"],
+              "additionalProperties": false
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "host": { "type": "string" },
+                  "project": { "type": "string" },
+                  "sigil": { "type": "string", "enum": ["#", "!"] },
+                  "number": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["id", "host", "project", "sigil", "number"],
+                "additionalProperties": false
+              }
+            },
+            "ambiguous": { "type": "boolean" },
+            "matches": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktree": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "repoId": { "type": "string" },
+                      "name": { "type": "string" },
+                      "path": { "description": "Stored absolute path, or null for a pathless row." },
+                      "kind": { "type": "string" },
+                      "archivedAt": { "description": "Archive timestamp, or null for an active worktree." },
+                      "lastActivityAt": { "type": "number" },
+                      "state": { "type": "string", "enum": ["present", "stale"] },
+                      "staleReason": { "description": "folder-missing, folder-replaced or project-unregistered; null when present." }
+                    },
+                    "required": ["id", "repoId", "name", "path", "kind", "archivedAt", "lastActivityAt", "state", "staleReason"],
+                    "additionalProperties": false
+                  },
+                  "links": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "source": { "type": "string", "enum": ["reference", "linkedPR", "linkedIssue"] },
+                        "referenceId": { "description": "Manual reference ID, or null for a structured link." },
+                        "url": { "type": "string" },
+                        "label": { "type": "string" },
+                        "item": { "description": "Canonical item ID, or null for a plain URL." }
+                      },
+                      "required": ["source", "referenceId", "url", "label", "item"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "linkTotal": { "type": "integer" },
+                  "sessions": { "description": "Up to 20 listed sessions with id, name, title, agent, kind, record status, lastActivityAt, live/unverifiable/exited liveness and linked:false; null when unavailable. Membership never implies a stored reference link." },
+                  "sessionTotal": { "description": "Total listed sessions in this worktree, or null when unavailable." }
+                },
+                "required": ["worktree", "links", "linkTotal", "sessions", "sessionTotal"],
+                "additionalProperties": false
+              }
+            },
+            "total": { "type": "integer" },
+            "truncated": { "type": "boolean" },
+            "archivedOmitted": { "type": "integer" },
+            "stale": { "type": "integer" },
+            "evidence": {
+              "type": "object",
+              "properties": {
+                "sessions": { "type": "string", "enum": ["listed", "unavailable"] },
+                "sessionsReason": { "description": "Session listing error, or null when listed." },
+                "processes": { "type": "string", "enum": ["listed", "unavailable"] },
+                "processesReason": { "description": "PTY listing error, or null when listed." },
+                "skippedSessions": { "type": "integer" }
+              },
+              "required": ["sessions", "sessionsReason", "processes", "processesReason", "skippedSessions"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["query", "items", "ambiguous", "matches", "total", "truncated", "archivedOmitted", "stale", "evidence"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "navigate",
         "description": "Open one exact worktree in the terminal workspace or Git changes view and record it in navigation history.",
         "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] }, "window": { "type": "integer", "minimum": 1 } }, "required": ["worktree"], "additionalProperties": false },
@@ -3854,8 +3965,20 @@
       {
         "id": "unlink-reference",
         "summary": "unlink one manual reference",
-        "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }, { "name": "reference", "description": "reference ID", "required": true }],
+        "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }, { "name": "reference", "description": "reference ID or exact URL", "required": true }],
         "methods": ["quirky.worktree/unlinkReference"]
+      },
+      {
+        "id": "find-reference",
+        "summary": "find worktrees and listed sessions linked to a review or issue",
+        "positionals": [{ "name": "query", "description": "HTTP or HTTPS URL, owner/repo#123 or group/project!123", "required": true }],
+        "flags": {
+          "worktree": { "type": "string", "description": "narrow to one stored worktree" },
+          "repo": { "type": "string", "description": "narrow to one project" },
+          "include-archived": { "type": "boolean", "description": "include archived worktrees" },
+          "limit": { "type": "integer", "description": "maximum worktrees, from 1 to 200 (default 50)" }
+        },
+        "methods": ["quirky.worktree/findReferences"]
       },
       {
         "id": "archive",
