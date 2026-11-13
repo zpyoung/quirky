@@ -118,6 +118,13 @@ resolves. With `stderr: 'pipe'`, read raw bytes from `stderr` instead.
 `write` preserves call order and resolves whether bytes reached the pipe, not whether the child
 consumed them. `write` and `closeInput` do not reject for a dead or closed pipe.
 
+For a combined stdout/stderr cap, drain both concurrently and count each raw `chunk.byteLength`
+before decoding. On overflow, cancel both readers and stop the child. Keep any call-level deadline
+and abort listener active until `exited` and both drains settle; the leader can exit before output
+finishes. Stream errors and `groupSurvived: true` must not turn a zero exit into success.
+Start stdin writes without awaiting them before draining output or handling cancellation, because
+a child may never read its input.
+
 These defaults apply:
 
 - `timeoutMs` is required: a positive finite number, or `null` for no deadline. Spawn has no
