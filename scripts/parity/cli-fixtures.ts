@@ -5,6 +5,7 @@ import { createCodexAppServerFixture } from '../../plugins/quirky.structured/tes
 export type CliFixtureTools = {
   fixtureBin: string
   ompWrapper: string
+  claudeWrapper: string
   codexWrapper: string
   codexExecutable: string
   shell: string
@@ -14,6 +15,8 @@ export type CliFixtureTools = {
   ompInputLog: string
   codexLog: string
   codexEnvironmentLog: string
+  claudeLoginLog: string
+  codexLoginLog: string
   orcaLog: string
   securityLog: string
   egressLog: string
@@ -31,6 +34,8 @@ export type CliFixturePaths = CliFixtureTools & {
   actorReceiptManifest: string
   actorIdentity: string
   actorInputLog: string
+  codexHooksFile: string
+  userHookDocument: string
 }
 
 export type FixtureCommandResult = { stdout: string; stderr: string; exitCode: number }
@@ -63,11 +68,12 @@ export function installCliFixtureTools(home: string): CliFixtureTools {
   const codex = createCodexAppServerFixture(codexHome, { uniqueThreads: true })
   const ompLog = join(logs, 'omp-argv.log')
   const ompInputLog = join(logs, 'omp-stdin.log')
+  const claudeLoginLog = join(logs, 'claude-login.log')
+  const codexLoginLog = join(logs, 'codex-login.log')
   const orcaLog = join(logs, 'orca.log')
   const securityLog = join(logs, 'security.log')
   const egressLog = join(logs, 'egress.log')
-  for (const path of [ompLog, ompInputLog, orcaLog, securityLog, egressLog]) privateEmptyFile(path)
-
+  for (const path of [ompLog, ompInputLog, claudeLoginLog, codexLoginLog, orcaLog, securityLog, egressLog]) privateEmptyFile(path)
   const ompWrapper = join(fixtureBin, 'omp')
   executable(ompWrapper, `#!/bin/sh
 set -eu
@@ -85,6 +91,26 @@ fi
 printf 'PROMPT:%s\\n' "$prompt"
 `)
 
+  const claudeWrapper = join(fixtureBin, 'claude')
+  executable(claudeWrapper, `#!/bin/sh
+set -eu
+if [ "$#" -eq 1 ] && [ "$1" = '--version' ]; then
+  printf '2.1.80 (Claude Code)\\n'
+  exit 0
+fi
+if [ "$#" -eq 3 ] && [ "$1" = 'auth' ] && [ "$2" = 'login' ] && [ "$3" = '--claudeai' ]; then
+  mkdir -p "$CLAUDE_CONFIG_DIR"
+  umask 077
+  printf '%s\\n' '{"oauthAccount":{"emailAddress":"claude-parity@example.invalid","organizationName":"CLI parity fixture"}}' > "$CLAUDE_CONFIG_DIR/.claude.json"
+  printf '%s\\n' '{"claudeAiOauth":{"refreshToken":"cli-parity-fixture-refresh"}}' > "$CLAUDE_CONFIG_DIR/.credentials.json"
+  chmod 600 "$CLAUDE_CONFIG_DIR/.claude.json" "$CLAUDE_CONFIG_DIR/.credentials.json"
+  printf 'login\\n' >> "$QUIRKY_HOME/fixtures/logs/claude-login.log"
+  exit 0
+fi
+printf '%s\\n' 'claude fixture refuses unsupported arguments' >&2
+exit 64
+`)
+
   const codexWrapper = join(fixtureBin, 'codex')
   executable(codexWrapper, `#!/bin/sh
 set -eu
@@ -94,6 +120,16 @@ if [ "$#" -eq 1 ] && [ "$1" = '--version' ]; then
 fi
 if [ "$#" -eq 1 ] && [ "$1" = 'app-server' ]; then
   exec "$CLI_PARITY_CODEX_FIXTURE" app-server
+fi
+if [ "$#" -eq 1 ] && [ "$1" = 'login' ]; then
+  if ! grep -Fqx 'cli_auth_credentials_store = "file"' "$CODEX_HOME/config.toml" 2>/dev/null; then
+    exit 8
+  fi
+  umask 077
+  printf '%s\\n' '{"auth_mode":"chatgpt","tokens":{"id_token":"header.eyJlbWFpbCI6ImNvZGV4LXBhcml0eUBleGFtcGxlLmludmFsaWQifQ.signature","account_id":"cli-parity-codex-workspace"}}' > "$CODEX_HOME/auth.json"
+  chmod 600 "$CODEX_HOME/auth.json"
+  printf 'login\\n' >> "$QUIRKY_HOME/fixtures/logs/codex-login.log"
+  exit 0
 fi
 printf '%s\\n' 'codex fixture refuses unsupported arguments' >&2
 exit 64
@@ -142,6 +178,7 @@ if (!globalThis[marker]) {
   return {
     fixtureBin,
     ompWrapper,
+    claudeWrapper,
     codexWrapper,
     codexExecutable: codex.executable,
     shell,
@@ -151,6 +188,8 @@ if (!globalThis[marker]) {
     ompInputLog,
     codexLog: codex.logPath,
     codexEnvironmentLog: codex.environmentLogPath,
+    claudeLoginLog,
+    codexLoginLog,
     orcaLog,
     securityLog,
     egressLog,
@@ -181,11 +220,14 @@ export async function createCliFixtures(options: {
   const askSpec = join(actorRoot, 'confirm-spec.json')
   const actorEntry = join(repoRoot, 'scripts/parity/cli-actor.ts')
 
-  for (const directory of [repositories, repository, folder, worktreesRoot, actorReceipts]) makeDirectory(directory)
+  const codexHooksFile = join(home, 'codex', 'hooks.json')
+  const userHookDocument = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo user-owned-hook' }] }] } })
+  for (const directory of [repositories, repository, folder, worktreesRoot, actorReceipts, join(home, 'codex')]) makeDirectory(directory)
   writeFileSync(fixtureFile, 'first\nsecond λ\n', { mode: 0o600 })
-  writeFileSync(askSpec, JSON.stringify({ questions: [{ id: 'continue', type: 'confirm', question: 'Continue CLI fixture?' }] }), { mode: 0o600 })
+  writeFileSync(codexHooksFile, userHookDocument, { mode: 0o600 })
   privateEmptyFile(actorInputLog)
   writeFileSync(actorReceiptManifest, '[]\n', { mode: 0o600 })
+  writeFileSync(askSpec, JSON.stringify({ questions: [{ id: 'continue', type: 'confirm', question: 'Continue CLI fixture?' }] }) + '\n', { mode: 0o600 })
 
   const git = async (...args: string[]) => options.run(['git', ...args], repository)
   const init = await git('init', '--initial-branch=main')
@@ -205,6 +247,14 @@ export async function createCliFixtures(options: {
   const commit = await git('commit', '--no-gpg-sign', '-m', 'CLI parity fixture')
   if (commit.exitCode !== 0) throw new Error(`fixture git commit failed: ${commit.stderr || commit.stdout}`)
   const remotes = await git('remote')
+  for (const branch of ['cli-parity-topic', 'cli-parity-both']) {
+    const created = await git('branch', branch)
+    if (created.exitCode !== 0) throw new Error(`fixture Git branch ${branch} failed: ${created.stderr || created.stdout}`)
+  }
+  for (const tag of ['cli-parity-v1', 'cli-parity-both']) {
+    const created = await git('tag', tag)
+    if (created.exitCode !== 0) throw new Error(`fixture Git tag ${tag} failed: ${created.stderr || created.stdout}`)
+  }
   if (remotes.exitCode !== 0 || remotes.stdout.trim() !== '') throw new Error('fixture Git repository unexpectedly has a remote')
 
   return {
@@ -218,6 +268,8 @@ export async function createCliFixtures(options: {
     actorReceipts,
     actorReceiptManifest,
     actorIdentity,
-    actorInputLog
+    actorInputLog,
+    codexHooksFile,
+    userHookDocument
   }
 }
