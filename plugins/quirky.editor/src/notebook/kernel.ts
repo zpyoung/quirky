@@ -56,7 +56,7 @@ export class KernelSession {
   #ready = Promise.withResolvers<ReadyFrame>()
   #readySettled = false
   #exit = Promise.withResolvers<void>()
-  #invalidated = Promise.withResolvers<void>()
+  #invalidationWaiter: (() => void) | null = null
   #deliveryInvalidated = false
   #stdoutLoop: Promise<void> | null = null
   #executionCount: number | null = null
@@ -257,7 +257,23 @@ export class KernelSession {
     if (this.#deliveryInvalidated) return
     this.#deliveryInvalidated = true
     this.#stdout = ''
-    this.#invalidated.resolve()
+    const waiter = this.#invalidationWaiter
+    this.#invalidationWaiter = null
+    waiter?.()
+  }
+
+  #raceWithInvalidation<T>(operation: Promise<T>): Promise<{ kind: 'invalidated' } | { kind: 'completed'; value: T }> {
+    if (this.#deliveryInvalidated) {
+      void operation.catch(() => {})
+      return Promise.resolve({ kind: 'invalidated' as const })
+    }
+    const { promise, resolve } = Promise.withResolvers<{ kind: 'invalidated' }>()
+    const waiter = () => resolve({ kind: 'invalidated' })
+    this.#invalidationWaiter = waiter
+    const completed = operation.then((value) => ({ kind: 'completed' as const, value }))
+    return Promise.race([completed, promise]).finally(() => {
+      if (this.#invalidationWaiter === waiter) this.#invalidationWaiter = null
+    })
   }
 
   #markDead(detail: string): void {
@@ -289,12 +305,11 @@ export class KernelSession {
     try {
       for (;;) {
         if (this.#deliveryInvalidated) return
-        let result: { kind: 'invalidated' } | { kind: 'read'; done: boolean; value: Uint8Array | undefined }
+        let result: { done: boolean; value?: Uint8Array } | null = null
         try {
-          result = await Promise.race([
-            reader.read().then(({ done, value }) => ({ kind: 'read' as const, done, value })),
-            this.#invalidated.promise.then(() => ({ kind: 'invalidated' as const }))
-          ])
+          const outcome = await this.#raceWithInvalidation(reader.read())
+          if (outcome.kind === 'invalidated') return
+          result = { done: outcome.value.done, value: outcome.value.value }
         } catch (error) {
           if (!this.#deliveryInvalidated) {
             const detail = error instanceof Error ? error.message : String(error)
@@ -302,7 +317,7 @@ export class KernelSession {
           }
           return
         }
-        if (result.kind === 'invalidated') return
+        if (!result) return
         if (result.done) {
           const finalChunk = decoder.decode()
           if (finalChunk && !this.#deliveryInvalidated) {
@@ -350,11 +365,8 @@ export class KernelSession {
       let parsed: unknown
       try { parsed = JSON.parse(line) } catch { throw new Error('kernel bridge sent malformed NDJSON') }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('kernel bridge frame must be an object')
-      await Promise.race([
-        this.#handleFrame(parsed as KernelFrame),
-        this.#invalidated.promise
-      ])
-      if (this.#deliveryInvalidated) {
+      const outcome = await this.#raceWithInvalidation(this.#handleFrame(parsed as KernelFrame))
+      if (outcome.kind === 'invalidated' || this.#deliveryInvalidated) {
         this.#stdout = ''
         return
       }

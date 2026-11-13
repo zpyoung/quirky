@@ -1,5 +1,4 @@
 import { afterEach, expect, test } from 'bun:test'
-import { setImmediate as nextTurn } from 'node:timers/promises'
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -277,69 +276,75 @@ async function startHand(handle: HandMade, timing?: { shutdownGraceMs?: number; 
   return session
 }
 
-test('23a: shutdown drops buffered frames and ignores a late callback rejection', async () => {
-  const callback = deferred<void>()
-  const called = deferred<void>()
-  let frameCalls = 0
-  const hand = handMade({
-    write: async () => {
-      hand.push('{"type":"stream","content":{"text":"held"}}\n{"type":"done","status":"ok","execution_count":9}\n{"type":"missing"}\n')
-      return true
-    }
+for (const callbackOutcome of ['resolve', 'reject'] as const) {
+  test(`23a: shutdown drops buffered frames after a late callback ${callbackOutcome}`, async () => {
+    const callback = deferred<void>()
+    const called = deferred<void>()
+    let frameCalls = 0
+    const hand = handMade({
+      write: async () => {
+        hand.push('{"type":"stream","content":{"text":"held"}}\n{"type":"done","status":"ok","execution_count":9}\n{"type":"missing"}\n')
+        return true
+      }
+    })
+    const statuses: string[] = []
+    const session = await startHand(hand, { shutdownGraceMs: 10 }, (value) => statuses.push(value.status))
+    const first = session.execute('first', () => {
+      frameCalls++
+      called.resolve()
+      return callback.promise
+    })
+    const second = session.execute('second', async () => {})
+    await called.promise
+    await session.shutdown()
+    expect(await first).toMatchObject({ status: 'dead', executionCount: null })
+    expect(await second).toMatchObject({ status: 'dead', executionCount: null })
+    expect(session.status).toBe('stopped')
+    const statusesAtStop = [...statuses]
+    if (callbackOutcome === 'resolve') callback.resolve()
+    else callback.reject(new Error('late callback failure'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(session.status).toBe('stopped')
+    expect(session.executionCount).toBeNull()
+    expect(frameCalls).toBe(1)
+    expect(statuses).toEqual(statusesAtStop)
   })
-  const statuses: string[] = []
-  const session = await startHand(hand, { shutdownGraceMs: 10 }, (value) => statuses.push(value.status))
-  const first = session.execute('first', () => {
-    frameCalls++
-    called.resolve()
-    return callback.promise
-  })
-  const second = session.execute('second', async () => {})
-  await called.promise
-  await session.shutdown()
-  expect(await first).toMatchObject({ status: 'dead', executionCount: null })
-  expect(await second).toMatchObject({ status: 'dead', executionCount: null })
-  expect(session.status).toBe('stopped')
-  const statusesAtStop = [...statuses]
-  callback.reject(new Error('late callback failure'))
-  await nextTurn()
-  expect(session.status).toBe('stopped')
-  expect(session.executionCount).toBeNull()
-  expect(frameCalls).toBe(1)
-  expect(statuses).toEqual(statusesAtStop)
-})
+}
 
-test('23a: bridge exit drains only for its configured bound and ignores late frames', async () => {
-  const callback = deferred<void>()
-  const called = deferred<void>()
-  let frameCalls = 0
-  const hand = handMade({
-    write: async () => {
-      hand.push('{"type":"stream","content":{"text":"held"}}\n{"type":"done","status":"ok","execution_count":9}\n{"type":"missing"}\n')
-      return true
-    }
+for (const callbackOutcome of ['resolve', 'reject'] as const) {
+  test(`23a: bridge exit drains only for its bound after callback ${callbackOutcome}`, async () => {
+    const callback = deferred<void>()
+    const called = deferred<void>()
+    let frameCalls = 0
+    const hand = handMade({
+      write: async () => {
+        hand.push('{"type":"stream","content":{"text":"held"}}\n{"type":"done","status":"ok","execution_count":9}\n{"type":"missing"}\n')
+        return true
+      }
+    })
+    const statuses: string[] = []
+    const session = await startHand(hand, { exitDrainMs: 50 }, (value) => statuses.push(value.status))
+    const first = session.execute('first', () => {
+      frameCalls++
+      called.resolve()
+      return callback.promise
+    })
+    const second = session.execute('second', async () => {})
+    await called.promise
+    hand.exit({ exitCode: 3 })
+    expect(await first).toMatchObject({ status: 'dead', executionCount: null })
+    expect(await second).toMatchObject({ status: 'dead', executionCount: null })
+    expect(session.status).toBe('dead')
+    const statusesAtDeath = [...statuses]
+    if (callbackOutcome === 'resolve') callback.resolve()
+    else callback.reject(new Error('late callback failure'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(session.status).toBe('dead')
+    expect(session.executionCount).toBeNull()
+    expect(frameCalls).toBe(1)
+    expect(statuses).toEqual(statusesAtDeath)
   })
-  const statuses: string[] = []
-  const session = await startHand(hand, { exitDrainMs: 50 }, (value) => statuses.push(value.status))
-  const first = session.execute('first', () => {
-    frameCalls++
-    called.resolve()
-    return callback.promise
-  })
-  const second = session.execute('second', async () => {})
-  await called.promise
-  hand.exit({ exitCode: 3 })
-  expect(await first).toMatchObject({ status: 'dead', executionCount: null })
-  expect(await second).toMatchObject({ status: 'dead', executionCount: null })
-  expect(session.status).toBe('dead')
-  const statusesAtDeath = [...statuses]
-  callback.reject(new Error('late callback failure'))
-  await nextTurn()
-  expect(session.status).toBe('dead')
-  expect(session.executionCount).toBeNull()
-  expect(frameCalls).toBe(1)
-  expect(statuses).toEqual(statusesAtDeath)
-})
+}
 
 test('24: shutdown does not wait for writes or closeInput before SIGKILL', async () => {
   const never = new Promise<boolean>(() => {})
