@@ -312,7 +312,10 @@ export type PluginLaunch = {
 /** A binary stream to one client connection, opened by a `connection: true` method. */
 export type ClientStream = {
   readonly streamId: number
-  send(bytes: Uint8Array): void
+  readonly lagged?: boolean
+  send(bytes: Uint8Array): boolean | void
+  lag?(): void
+  onLag?(callback: () => void): void
   onClose(callback: () => void): void
   close(): void
 }

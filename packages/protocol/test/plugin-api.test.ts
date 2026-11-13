@@ -2,10 +2,13 @@ import { describe, expect, test } from 'bun:test'
 import {
   PLUGIN_API_VERSION,
   pluginApiCompatibilityError,
+  type ClientStream,
   type PluginContext,
   type ProcessRunner,
   type ProcessSpawner,
   type SpawnedProcess,
+  type TerminalStreamOptions,
+  type UiPluginContext
 } from '@quirky/protocol'
 
 type Assert<T extends true> = T
@@ -16,10 +19,23 @@ type ProcessCapabilityAssertions = [
   Assert<ReturnType<PluginContext['process']['spawn']> extends SpawnedProcess ? true : false>,
   Assert<Extract<ReturnType<PluginContext['process']['spawn']>, Promise<unknown>> extends never ? true : false>,
 ]
+type StreamCapabilityAssertions = [
+  Assert<ClientStream['send'] extends (bytes: Uint8Array) => boolean | void ? true : false>,
+  Assert<ClientStream['lagged'] extends boolean | undefined ? true : false>,
+  Assert<ClientStream['lag'] extends (() => void) | undefined ? true : false>,
+  Assert<ClientStream['onLag'] extends ((callback: () => void) => void) | undefined ? true : false>,
+  Assert<Parameters<UiPluginContext['onStream']>[2] extends TerminalStreamOptions | undefined ? true : false>,
+  Assert<
+    { streamId: number; send(bytes: Uint8Array): void; onClose(callback: () => void): void; close(): void } extends ClientStream
+      ? true
+      : false
+  >,
+]
+
 
 describe('stable plugin API floors', () => {
-  test('the host supports the release that introduced daemon plugin spawning', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.6.0')
+  test('the host supports the 1.7.0 release and earlier API floors', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.7.0')
     expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
@@ -28,10 +44,12 @@ describe('stable plugin API floors', () => {
     expect(pluginApiCompatibilityError('1.5.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.5.1')).toBeNull()
     expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.6.1')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.7.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.6.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0')).not.toBeNull()
     expect(pluginApiCompatibilityError('2.0.0')).not.toBeNull()
-    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).not.toBeNull()
   })
 
   test.each([

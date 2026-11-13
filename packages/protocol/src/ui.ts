@@ -1,3 +1,4 @@
+import type { TerminalStreamOptions } from './client'
 import type { NativeBrowserCapability } from './native-browser'
 import type { QuirkyEvent } from './rpc'
 import type { UiToolEntry, UiToolLayout, UiToolSlot } from './tool-slots'
@@ -359,7 +360,11 @@ export type UiPluginContext = {
   /** Listens to layout changes; the returned function unsubscribes. */
   onLayout(listener: (layout: UiLayout) => void): () => void
   /** Listens to binary stream frames tagged `streamId`; the returned function unsubscribes. */
-  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void
+  onStream(
+    streamId: number,
+    listener: (bytes: Uint8Array) => void,
+    options?: TerminalStreamOptions
+  ): () => void
   /** Listens to connection status changes; the returned function unsubscribes. */
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** Shows a confirm dialog; resolves true when the person confirms. */
