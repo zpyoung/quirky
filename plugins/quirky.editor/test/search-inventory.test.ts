@@ -86,6 +86,7 @@ function fakeHandle(options: FakeHandleOptions = {}): { handle: SpawnedProcess; 
     handle: {
       pid: 123,
       stdout,
+      stderr: new ReadableStream<Uint8Array>({ start(controller) { controller.close() } }),
       stderrTail: () => options.stderr ?? '',
       write: async () => true,
       closeInput: async () => {},

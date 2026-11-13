@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { QuirkyClient, RpcErrorCode } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { runCommand } from '../executor'
+import { createProcessRunner, type OwnedProcessRunner, type ProcessSpawner } from '../../../packages/process/src/api'
 import { builtinsDir, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 
 type CheckResult = {
@@ -29,6 +30,7 @@ let harness: Harness | undefined
 let tempRoot: string | undefined
 let savedEnv: Map<string, string | undefined> | undefined
 let daemonStopped = false
+let checkRunner: OwnedProcessRunner | undefined
 const trackedPids = new Set<number>()
 const ISOLATED_ENV_KEYS = ['HOME', 'QUIRKY_HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'CLAUDE_HOME', 'OPENAI_HOME']
 
@@ -112,6 +114,7 @@ function cleanupEnvironment(): void {
 
 afterEach(async () => {
   try {
+    await checkRunner?.dispose()
     if (harness) {
       if (daemonStopped) {
         for (const client of harness.clients) client.close()
@@ -121,6 +124,7 @@ afterEach(async () => {
       }
     }
   } finally {
+    checkRunner = undefined
     harness = undefined
     for (const pid of trackedPids) {
       try { process.kill(pid, 'SIGKILL') } catch { /* the process has already exited */ }
@@ -300,14 +304,13 @@ describe('quirky.checks daemon API', () => {
     await expectProcessGone(pid)
   })
 
-  test('a cancellation racing a successful shell exit cannot return pass true', async () => {
+  test('cancels a descendant after the shell exits and kills its process group', async () => {
     const { client, home } = await start()
     const shellPidFile = join(home, 'exit-race-shell-pid')
     const pidFile = join(home, 'exit-race-pid')
-    // Its real timer keeps stdout open after the direct shell exits, leaving a cancellable drain window.
-    const source = `require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setTimeout(()=>process.stdout.write('late'),5000)`
+    const source = `process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setInterval(()=>{},1000)`
     const running = call<CheckResult>(client, 'quirky.checks/run', {
-      command: `echo $$ > ${quoteShell(shellPidFile)}; ${nodeCommand(source)} & exit 0`,
+      command: `echo $$ > ${quoteShell(shellPidFile)}; ${nodeCommand(source)} & while [ ! -e ${quoteShell(pidFile)} ]; do sleep 0.05; done; exit 0`,
       cwd: home,
       checkId: 'exit-race-check'
     })
@@ -339,19 +342,26 @@ describe('quirky.checks daemon API', () => {
     await expectProcessGone(pid)
   })
 
-  test('times out when the shell exits but a descendant keeps its pipes open', async () => {
+  test('returns success when the shell exits and a descendant holds its pipes', async () => {
     const { client, home } = await start()
     const pidFile = join(home, 'held-pipe-pid')
-    // A real child timer keeps inherited output pipes open after the direct shell exits.
     const source = `require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setTimeout(()=>{},10000)`
     const result = await call<CheckResult>(client, 'quirky.checks/run', {
-      command: `${nodeCommand(source)} & exit 0`,
+      command: `${nodeCommand(source)} & while [ ! -e ${quoteShell(pidFile)} ]; do sleep 0.05; done; echo early; exit 0`,
       cwd: home,
-      timeoutSeconds: 1
+      timeoutSeconds: 10
     })
     const pid = Number(readFileSync(pidFile, 'utf8'))
     trackedPids.add(pid)
-    expect(result).toMatchObject({ ran: true, pass: false, timedOut: true, aborted: false })
+    expect(result).toMatchObject({
+      ran: true,
+      pass: true,
+      exitCode: 0,
+      timedOut: false,
+      aborted: false,
+      stdoutTail: 'early\n'
+    })
+    expect(result.durationMs).toBeLessThan(5000)
     await expectProcessGone(pid)
   })
 
@@ -376,28 +386,210 @@ describe('quirky.checks daemon API', () => {
   })
 })
 
+type RecordedExit = {
+  exitCode: number | null
+  signal?: string | null
+  stopped?: 'stop' | 'timeout' | 'aborted'
+  spawnError?: { code: string; message: string }
+  durationMs?: number
+  groupSurvived?: true
+}
+
+type SpawnCall = { argv: readonly string[]; options: Record<string, unknown> }
+
+type RecorderOptions = {
+  stdout?: ReadableStream<Uint8Array>
+  stderr?: ReadableStream<Uint8Array>
+  exit?: RecordedExit
+  throwOnSpawn?: Error
+}
+
+function byteStream(...chunks: Uint8Array[]): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk)
+      controller.close()
+    }
+  })
+}
+
+function errorStream(chunk: Uint8Array, error: Error): ReadableStream<Uint8Array> {
+  let delivered = false
+  return new ReadableStream({
+    pull(controller) {
+      if (delivered) controller.error(error)
+      else {
+        delivered = true
+        controller.enqueue(chunk)
+      }
+    }
+  })
+}
+
+function createRecorder(config: RecorderOptions = {}): { spawner: ProcessSpawner; calls: SpawnCall[] } {
+  const calls: SpawnCall[] = []
+  const exit = config.exit ?? { exitCode: 0, signal: null, durationMs: 0 }
+  const spawner = {
+    spawn(argv: readonly string[], options: object) {
+      calls.push({ argv, options: options as Record<string, unknown> })
+      if (config.throwOnSpawn) throw config.throwOnSpawn
+      return {
+        pid: exit.spawnError ? null : 123,
+        stdout: config.stdout ?? byteStream(),
+        stderr: config.stderr ?? byteStream(),
+        stderrTail: () => 'unused tail',
+        exited: Promise.resolve(exit),
+        stop: async () => exit
+      }
+    }
+  } as unknown as ProcessSpawner
+  return { spawner, calls }
+}
+
+function encoded(value: string): Uint8Array {
+  return new TextEncoder().encode(value)
+}
+
 describe('internal checks process executor', () => {
-  test('an already-aborted signal never spawns the command', async () => {
-    const { home } = await start()
-    const marker = join(home, 'pre-aborted-ran')
-    const controller = new AbortController()
-    controller.abort()
-    const result = await runCommand({ command: `touch ${quoteShell(marker)}`, cwd: home, timeoutSeconds: 1, signal: controller.signal })
-    expect(result).toMatchObject({ ran: false, pass: false, exitCode: null, aborted: true })
-    expect(existsSync(marker)).toBe(false)
+  test('starts the shell through the shared runner with bounded checks options', async () => {
+    const signal = new AbortController().signal
+    const recorder = createRecorder({ exit: { exitCode: 0, signal: null, durationMs: 12345 } })
+    const result = await runCommand(recorder.spawner, {
+      command: 'echo hi',
+      cwd: '/w',
+      timeoutSeconds: 7,
+      signal
+    })
+
+    expect(recorder.calls).toEqual([{
+      argv: ['/bin/sh', '-c', 'echo hi'],
+      options: {
+        cwd: '/w',
+        timeoutMs: 7000,
+        killGraceMs: 2000,
+        stderr: 'pipe',
+        groupGrace: true,
+        signal
+      }
+    }])
+    expect(result).toMatchObject({ ran: true, pass: true, exitCode: 0 })
+    expect(result.durationMs).not.toBe(12345)
   })
 
-  test('a subprocess spawn failure is reported as a failed result, not an exit code', async () => {
+  test('maps timeout, abort, and spawn error into failed check results', async () => {
+    const timeout = createRecorder({ exit: { exitCode: null, signal: 'SIGKILL', stopped: 'timeout', durationMs: 42 } })
+    expect(await runCommand(timeout.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })).toMatchObject({
+      ran: true, pass: false, timedOut: true, aborted: false, exitCode: null
+    })
+
+    const aborted = createRecorder({ exit: { exitCode: 0, signal: null, stopped: 'aborted', durationMs: 42 } })
+    expect(await runCommand(aborted.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })).toMatchObject({
+      ran: true, pass: false, timedOut: false, aborted: true, exitCode: 0
+    })
+
+    const failedStart = createRecorder({ exit: { exitCode: null, signal: null, spawnError: { code: 'ENOENT', message: 'missing' } } })
+    expect(await runCommand(failedStart.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })).toMatchObject({
+      ran: false, pass: false, exitCode: null, error: 'missing'
+    })
+  })
+
+  test('retains only the last 4000 decoded Unicode code points from each stream', async () => {
+    const recorder = createRecorder({
+      stdout: byteStream(encoded('🙂'.repeat(4001) + '尾')),
+      stderr: byteStream(encoded('e'.repeat(4002)))
+    })
+    const result = await runCommand(recorder.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })
+    expect(result.stdoutTail).toBe('🙂'.repeat(3999) + '尾')
+    expect(result.stderrTail).toBe('e'.repeat(4000))
+    expect(result.stdoutTruncated).toBe(true)
+    expect(result.stderrTruncated).toBe(true)
+  })
+
+  test('decodes BOM and malformed UTF-8 from the raw streams with StringDecoder behavior', async () => {
+    const recorder = createRecorder({
+      stdout: byteStream(Uint8Array.from([0xef, 0xbb, 0xbf, 0x61, 0xff, 0x62])),
+      stderr: byteStream(Uint8Array.from([0xef, 0xbb, 0xbf, 0x65, 0xff]))
+    })
+    const result = await runCommand(recorder.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })
+    expect(result).toMatchObject({ stdoutTail: '\ufeffa�b', stderrTail: '\ufeffe�', pass: true })
+  })
+
+  for (const streamName of ['stdout', 'stderr'] as const) {
+    for (const failure of [
+      Object.assign(new Error(`${streamName} stalled`), { name: 'ProcessStalledError' }),
+      new Error('boom')
+    ]) {
+      test(`fails incomplete ${streamName} capture when it errors with ${failure.message}`, async () => {
+        const captured = errorStream(encoded('early\n'), failure)
+        const recorder = createRecorder({ [streamName]: captured })
+        const result = await runCommand(recorder.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })
+        expect(result[streamName === 'stdout' ? 'stdoutTail' : 'stderrTail']).toBe('early\n')
+        expect(result).toMatchObject({ error: failure.message, pass: false })
+      })
+    }
+  }
+
+  test('fails a check if the runner reports a surviving process group', async () => {
+    const recorder = createRecorder({ exit: { exitCode: 0, signal: null, groupSurvived: true } })
+    expect(await runCommand(recorder.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })).toMatchObject({
+      ran: true, exitCode: 0, error: 'process group could not be stopped', pass: false
+    })
+  })
+
+  test('maps a recorder exit after the leader exits as an abort without main.ts', async () => {
+    const recorder = createRecorder({ exit: { exitCode: 0, signal: null, stopped: 'aborted' } })
+    expect(await runCommand(recorder.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })).toMatchObject({
+      ran: true, pass: false, aborted: true, timedOut: false
+    })
+  })
+
+  test('an already-aborted signal does not call the recorder', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const recorder = createRecorder()
+    const result = await runCommand(recorder.spawner, {
+      command: 's',
+      cwd: '/w',
+      timeoutSeconds: 1,
+      signal: controller.signal
+    })
+    expect(recorder.calls).toHaveLength(0)
+    expect(result).toMatchObject({ ran: false, pass: false, exitCode: null, aborted: true })
+  })
+
+  test('converts a thrown runner start failure into a failed result', async () => {
+    const recorder = createRecorder({ throwOnSpawn: new Error('runner is disposed') })
+    await expect(runCommand(recorder.spawner, { command: 's', cwd: '/w', timeoutSeconds: 1 })).resolves.toMatchObject({
+      ran: false, pass: false, exitCode: null, error: 'runner is disposed'
+    })
+  })
+
+  test('runs an already-aborted command through a real process runner without spawning', async () => {
     const { home } = await start()
-    const result = await runCommand({
+    checkRunner = createProcessRunner({ owner: 'quirky.checks.test' })
+    const controller = new AbortController()
+    controller.abort()
+    const aborted = await runCommand(checkRunner, {
+      command: `touch ${quoteShell(join(home, 'pre-aborted-ran'))}`,
+      cwd: home,
+      timeoutSeconds: 1,
+      signal: controller.signal
+    })
+    expect(aborted).toMatchObject({ ran: false, pass: false, exitCode: null, aborted: true })
+    expect(existsSync(join(home, 'pre-aborted-ran'))).toBe(false)
+  })
+
+  test('reports a missing shell through a real process runner', async () => {
+    const { home } = await start()
+    checkRunner = createProcessRunner({ owner: 'quirky.checks.test' })
+    const result = await runCommand(checkRunner, {
       command: 'true',
       cwd: home,
       timeoutSeconds: 1,
       shell: join(home, 'missing-shell')
     })
-    expect(result.ran).toBe(false)
-    expect(result.pass).toBe(false)
-    expect(result.exitCode).toBeNull()
+    expect(result).toMatchObject({ ran: false, pass: false, exitCode: null })
     expect(result.error).toContain('ENOENT')
   })
 })
+
