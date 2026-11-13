@@ -24,6 +24,7 @@ The gate and session-record checks share the same worktree, branch and user-home
 | `quirky avatar handoff <worktree> --goal <text> --done-when <command or sentence>` | Hands a worktree off. Without `--level`, the default level from settings applies; each unnamed switch keeps its default. Optional: `--level`, `--agent`, `--guideline` (repeatable), `--notes`, `--shared-goal`, `--allow-split`, `--allow-messaging`, `--allow-history-rewrite`, `--allow-deploys`, `--switch name[=false]`. |
 | `quirky avatar status` | Handed-off worktrees with state and level, and how many items wait on you. |
 | `quirky avatar report` | The needs-you-first report: decisions, guesses, sleeps and what was handed back. |
+| `quirky avatar resolve-need <need> <action> [--text <text>]` | Resolves a need using the id and action names shown by `report`. Optional text replaces the default reason. |
 | `quirky avatar log [--worktree <w>] [--limit <n>] [--before <seq>]` | The journal, newest first. |
 | `quirky avatar take-back <worktree>` or `--all` | Takes a worktree, or every worktree, back. |
 
@@ -32,6 +33,8 @@ The same operations are plugin methods under `quirky.avatar/`: `eligibility`, `h
 The Report tab shows a guess's chosen answer and each proposed mandate field's current and new values. Question needs show every question in the batch with its typed controls and optional markers. Each need's action buttons stay disabled until its own request settles.
 
 For question needs, `resolveNeed` accepts `answers`, keyed by question ID, containing the typed `AskAnswer` values that `quirky.ask/answer` validates. Legacy question needs still accept `text`. Answer validation failures keep the need open to retry; already-finished or missing asks close their stale needs.
+
+When messaging is off, a human review thread the avatar would dismiss waits in Report. **Dismiss and resolve thread** (`finding-dismiss`) resolves it on GitHub and records your dismissal without posting a reply. **Send to worker** (`finding-valid`) records the finding as valid and sends it to the worker, leaving the thread unresolved. If resolving fails, the need stays open to retry. The avatar cannot send a finding you dismissed back to the worker.
 
 ## Settings
 

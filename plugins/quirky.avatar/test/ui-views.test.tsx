@@ -757,6 +757,38 @@ describe('AvatarView', () => {
     expect(root.textContent).toContain('Nothing needs you')
   })
 
+  test('offers finding verdicts with dismissal first and sends the selected action', async () => {
+    const held = need({
+      kind: 'merge-blocked',
+      title: 'A human review thread needs you: Please rename this',
+      detail: { findingId: 'F', threadId: 'T1', reason: 'the name is fine' },
+      actions: ['finding-dismiss', 'finding-valid', 'take-back']
+    })
+    const fake = makeContext({
+      status: status(two, 1),
+      report: () => report({ needsYou: [held] }),
+      resolveNeed: () => ({ ok: true })
+    })
+    const root = await mount(AvatarView, fake, { tab: 'report' })
+    const dismiss = button(root, 'Dismiss and resolve thread')
+    const send = button(root, 'Send to worker')
+    const takeBack = button(root, 'Take back')
+    const buttons = [...root.querySelectorAll('button')]
+    expect(buttons.indexOf(dismiss)).toBeLessThan(buttons.indexOf(send))
+    expect(buttons.indexOf(send)).toBeLessThan(buttons.indexOf(takeBack))
+    expect(dismiss.className).toContain('primary')
+    expect(root.textContent).toContain('the name is fine')
+    expect(root.textContent).not.toContain('Accept edit')
+    expect(root.textContent).not.toContain('Reject edit')
+
+    await click(root, 'Dismiss and resolve thread')
+    await click(root, 'Send to worker')
+    expect(fake.calls.filter((call) => call.method.endsWith('resolveNeed'))).toEqual([
+      { method: 'quirky.avatar/resolveNeed', params: { needId: 'need-1', action: 'finding-dismiss' } },
+      { method: 'quirky.avatar/resolveNeed', params: { needId: 'need-1', action: 'finding-valid' } }
+    ])
+  })
+
   test('sends the typed text with an Answer action', async () => {
     const question = need({ id: 'need-q', kind: 'question', title: 'Keep v1?', detail: {}, actions: ['answer'] })
     const fake = makeContext({ status: status(two, 1), report: () => report({ needsYou: [question] }), log: () => [], resolveNeed: () => ({ ok: true }) })

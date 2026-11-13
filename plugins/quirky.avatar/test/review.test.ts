@@ -526,6 +526,12 @@ describe('judgeFinding', () => {
     await t.review.intakeComments('wt-1')
     return t.app.store.findings.list()[0]!
   }
+  async function withHeldHumanFinding(t: ReturnType<typeof setup>, reason = 'the name is fine') {
+    const row = await withFinding(t, [comment({ isBot: false, author: 'sam' })])
+    await t.review.judgeFinding('wt-1', row.id, false, reason)
+    const need = t.app.needs.list({ worktreeId: 'wt-1', open: true })[0]!
+    return { row, need }
+  }
 
   test('a valid finding goes to the worker as quoted data', async () => {
     const t = setup()
@@ -614,7 +620,17 @@ describe('judgeFinding', () => {
     expect(t.app.store.findings.get(row.id)?.valid).toBeNull()
     const needs = t.app.needs.list({ worktreeId: 'wt-1', open: true })
     expect(needs).toHaveLength(1)
-    expect(needs[0]).toMatchObject({ kind: 'merge-blocked' })
+    expect(needs[0]).toMatchObject({
+      kind: 'merge-blocked',
+      title: 'A human review thread needs you: rename `tmp` to `pending`',
+      detail: { findingId: row.id, threadId: 'T1', reason: 'not an issue' },
+      actions: ['finding-dismiss', 'finding-valid', 'take-back']
+    })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.judged === true)
+      .map((entry) => entry.data)).toEqual([
+      { judged: true, findingId: row.id, valid: false, held: 'messaging switch is off', source: 'reviewer' }
+    ])
     expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/reviewComment')
     expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/resolveThread')
   })
@@ -628,6 +644,311 @@ describe('judgeFinding', () => {
     expect(t.calls.map((call) => call.method)).toContain('quirky.hosting/resolveThread')
     expect(t.app.needs.list({ open: true })).toHaveLength(0)
   })
+  test('a person dismisses a held human finding by resolving its thread without a reply', async () => {
+    const t = setup()
+    const { row } = await withHeldHumanFinding(t)
+
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'the name is fine')).toEqual({ ok: true })
+    expect(t.calls.filter((call) => call.method === 'quirky.hosting/resolveThread').map((call) => call.params)).toEqual([
+      { worktree: 'wt-1', number: 7, threadId: 'T1', action: 'resolve' }
+    ])
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/reviewComment')
+    expect(t.app.store.outbox.list({ kind: 'thread-reply' })).toEqual([])
+    expect(t.app.store.findings.get(row.id)).toMatchObject({
+      valid: false,
+      reason: 'the name is fine',
+      detail: { verdictBy: 'person' }
+    })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')
+      .map((entry) => entry.data)).toEqual([
+      { judged: true, findingId: row.id, valid: false, source: 'reviewer', reason: 'the name is fine', by: 'person', threadResolved: true }
+    ])
+  })
+
+  test('a failed thread resolve leaves the finding and need untouched and can be retried', async () => {
+    let failResolve = true
+    const t = setup({
+      calls: {
+        'quirky.hosting/resolveThread': () => {
+          if (failResolve) throw new Error('boom')
+          return { threadId: 'T1', action: 'resolve', resolved: true }
+        }
+      }
+    })
+    const { row, need } = await withHeldHumanFinding(t)
+
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'the name is fine')).toEqual({
+      ok: false,
+      error: 'could not resolve the thread: boom'
+    })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: null, reason: null })
+    expect(t.app.store.findings.get(row.id)?.detail.verdictBy).toBeUndefined()
+    expect(t.app.store.needs.get(need.id)?.resolvedAt).toBeNull()
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')
+      .map((entry) => entry.data)).toEqual([
+      { resolveFailed: true, findingId: row.id, error: 'boom', by: 'person' }
+    ])
+
+    failResolve = false
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'the name is fine')).toEqual({ ok: true })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({
+      valid: false,
+      reason: 'the name is fine',
+      detail: { verdictBy: 'person' }
+    })
+    expect(t.calls.filter((call) => call.method === 'quirky.hosting/resolveThread')).toHaveLength(2)
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/reviewComment')
+  })
+
+  test('take-back during a thread resolve prevents the person verdict from being written', async () => {
+    let release!: (value: unknown) => void
+    let entered!: () => void
+    const answer = new Promise<unknown>((resolve) => (release = resolve))
+    const started = new Promise<void>((resolve) => (entered = resolve))
+    const t = setup({
+      calls: {
+        'quirky.hosting/resolveThread': () => {
+          entered()
+          return answer
+        }
+      }
+    })
+    const { row } = await withHeldHumanFinding(t)
+    const pending = t.review.personVerdict('wt-1', row.id, false, 'the name is fine')
+    await started
+
+    expect(takeBack(t.app)).toBe(0)
+    release({ threadId: 'T1', action: 'resolve', resolved: true })
+    expect(await pending).toEqual({ ok: false, error: 'this worktree was taken back' })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: null, reason: null })
+    expect(t.app.store.findings.get(row.id)?.detail.verdictBy).toBeUndefined()
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')).toEqual([])
+  })
+
+  test('personVerdict refuses a worktree without an active hand-off before contacting hosting', async () => {
+    const t = setup()
+    const { row } = await withHeldHumanFinding(t)
+    takeBack(t.app)
+
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'x')).toEqual({
+      ok: false,
+      error: 'this worktree is not handed off'
+    })
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/resolveThread')
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/reviewComment')
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: null })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')).toEqual([])
+  })
+
+  test('personVerdict rejects a missing finding or one owned by another worktree', async () => {
+    const t = setup()
+    const row = await withFinding(t, [comment({ isBot: false, author: 'sam' })])
+
+    expect(await t.review.personVerdict('wt-1', 'missing', false, 'x')).toEqual({ ok: false, error: 'unknown finding' })
+    handOff(t.app, 'wt-2')
+    expect(await t.review.personVerdict('wt-2', row.id, false, 'x')).toEqual({ ok: false, error: 'unknown finding' })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: null })
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/resolveThread')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')).toEqual([])
+  })
+
+  test('personVerdict refuses a finding that is not from a human review thread', async () => {
+    const t = setup()
+    const row = await withFinding(t)
+
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'x')).toEqual({
+      ok: false,
+      error: 'the finding is not a human review thread'
+    })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: null })
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/resolveThread')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')).toEqual([])
+  })
+
+  test('personVerdict refuses a human finding without a thread id', async () => {
+    const t = setup()
+    const row = await withFinding(t, [comment({ isBot: false, author: 'sam' })])
+    t.app.store.findings.put({ ...row, threadId: null })
+
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'x')).toEqual({
+      ok: false,
+      error: 'the finding has no review thread to resolve'
+    })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: null, threadId: null })
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/resolveThread')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')).toEqual([])
+  })
+
+  test('personVerdict refuses a human finding without a numeric review number', async () => {
+    const t = setup()
+    const row = await withFinding(t, [comment({ isBot: false, author: 'sam' })])
+    t.app.store.findings.put({ ...row, detail: { ...row.detail, number: null } })
+
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'x')).toEqual({
+      ok: false,
+      error: 'the finding has no review thread to resolve'
+    })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: null, detail: { number: null } })
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/resolveThread')
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')).toEqual([])
+  })
+
+  test('the avatar does not send a human finding that the person dismissed', async () => {
+    const t = setup()
+    const { row, need } = await withHeldHumanFinding(t)
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'the name is fine')).toEqual({ ok: true })
+    t.app.needs.close(need.id, 'dismissed')
+
+    await t.review.judgeFinding('wt-1', row.id, true, 'actually real')
+
+    expect(t.sent).toEqual([])
+    expect(t.app.store.findings.get(row.id)).toMatchObject({
+      valid: false,
+      reason: 'the name is fine',
+      detail: { verdictBy: 'person' }
+    })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding')
+      [0]?.data).toEqual({ kept: true, findingId: row.id, valid: false, by: 'person' })
+  })
+
+  test('an invalid judgment after a person dismissal raises a fresh need for a reopened thread', async () => {
+    const t = setup()
+    const { row, need } = await withHeldHumanFinding(t)
+    expect(await t.review.personVerdict('wt-1', row.id, false, 'the name is fine')).toEqual({ ok: true })
+    t.app.needs.close(need.id, 'dismissed')
+
+    await t.review.judgeFinding('wt-1', row.id, false, 'reopened, still fine')
+
+    expect(t.app.store.needs.get(need.id)).toMatchObject({ resolution: 'dismissed' })
+    const open = t.app.needs.list({ worktreeId: 'wt-1', open: true })
+    expect(open).toHaveLength(1)
+    expect(open[0]).toMatchObject({
+      kind: 'merge-blocked',
+      detail: { findingId: row.id, threadId: 'T1', reason: 'reopened, still fine' },
+      actions: ['finding-dismiss', 'finding-valid', 'take-back']
+    })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({
+      valid: false,
+      reason: 'the name is fine',
+      detail: { verdictBy: 'person' }
+    })
+  })
+
+  test('an avatar verdict closes the open held need as judged', async () => {
+    const t = setup()
+    const { row, need } = await withHeldHumanFinding(t)
+
+    await t.review.judgeFinding('wt-1', row.id, true, 'on reflection it is real')
+
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+    expect(t.app.store.needs.get(need.id)).toMatchObject({ resolution: 'judged' })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({
+      valid: true,
+      reason: 'on reflection it is real',
+      detail: { sends: 1 }
+    })
+  })
+
+  test('an invalid avatar verdict with messaging on closes a held need as judged', async () => {
+    const t = setup()
+    const { row, need } = await withHeldHumanFinding(t)
+    const mandate = t.app.store.mandates.get('wt-1')!
+    t.app.store.mandates.put({ ...mandate, switches: { ...mandate.switches, messaging: true } })
+
+    await t.review.judgeFinding('wt-1', row.id, false, 'the name is fine')
+
+    expect(t.app.store.findings.get(row.id)).toMatchObject({ valid: false, reason: 'the name is fine' })
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toEqual([])
+    expect(t.app.store.needs.get(need.id)).toMatchObject({ resolution: 'judged' })
+    expect(t.calls.map((call) => call.method)).toContain('quirky.hosting/reviewComment')
+    expect(t.calls.map((call) => call.method)).toContain('quirky.hosting/resolveThread')
+  })
+
+  test('the avatar may replace a person valid verdict and clears its attribution', async () => {
+    const t = setup()
+    const row = await withFinding(t, [comment({ isBot: false, author: 'sam' })])
+    const message = 'A review finding was judged valid. Fix it and say when it is done.\n<data source="review finding (reviewer)">\nsrc/a.ts:3\nrename `tmp` to `pending`\n</data>'
+
+    expect(await t.review.personVerdict('wt-1', row.id, true, 'judged valid by you')).toEqual({ ok: true })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({
+      valid: true,
+      reason: 'judged valid by you',
+      detail: { sends: 1, verdictBy: 'person' }
+    })
+    expect(t.sent).toEqual([message])
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'finding' && entry.data.by === 'person')
+      .map((entry) => entry.data)).toEqual([
+      { judged: true, findingId: row.id, valid: true, source: 'reviewer', reason: 'judged valid by you', sends: 1, by: 'person' }
+    ])
+
+    await t.review.judgeFinding('wt-1', row.id, true, 'resend')
+
+    const verdict = t.app.store.findings.get(row.id)!
+    expect(verdict).toMatchObject({ valid: true, reason: 'resend', detail: { sends: 2 } })
+    expect(verdict.detail.verdictBy).toBeUndefined()
+    expect(t.sent).toEqual([message, message])
+  })
+
+  test('a valid person verdict stays recorded when the worker cannot be reached', async () => {
+    const t = setup()
+    const row = await withFinding(t, [comment({ isBot: false, author: 'sam' })])
+    const wokeBefore = t.woke()
+    t.app.services.supervisor.send = async () => ({ sent: false, reason: 'agent-blocked' })
+
+    expect(await t.review.personVerdict('wt-1', row.id, true, 'judged valid by you')).toEqual({ ok: true })
+    expect(t.app.store.findings.get(row.id)).toMatchObject({
+      valid: true,
+      reason: 'judged valid by you',
+      detail: { sends: 1, verdictBy: 'person' }
+    })
+    expect(t.app.store.journalPage({ worktreeId: 'wt-1' })
+      .filter((entry) => entry.kind === 'event' && entry.data.type === 'send-failed')
+      .map((entry) => entry.data)).toEqual([
+      { type: 'send-failed', reason: 'agent-blocked', findingId: row.id }
+    ])
+    expect(t.woke()).toBe(wokeBefore + 1)
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/reviewComment')
+    expect(t.calls.map((call) => call.method)).not.toContain('quirky.hosting/resolveThread')
+  })
+
+  test('a legacy held need is superseded by a new finding-action need on judgment', async () => {
+    const t = setup()
+    const row = await withFinding(t, [comment({ isBot: false, author: 'sam' })])
+    const legacy = t.app.needs.add({
+      worktreeId: 'wt-1',
+      kind: 'merge-blocked',
+      title: 'A human review thread needs you: rename `tmp` to `pending`',
+      detail: { findingId: row.id, threadId: 'T1', reason: 'old reason' },
+      actions: ['review-accept', 'review-reject', 'take-back']
+    })
+    expect(t.app.needs.list({ worktreeId: 'wt-1', open: true })).toContainEqual(legacy)
+
+    await t.review.judgeFinding('wt-1', row.id, false, 'still fine')
+
+    expect(t.app.store.needs.get(legacy.id)).toMatchObject({
+      actions: ['review-accept', 'review-reject', 'take-back'],
+      resolution: 'superseded'
+    })
+    const open = t.app.needs.list({ worktreeId: 'wt-1', open: true })
+    expect(open).toHaveLength(1)
+    expect(open[0]).toMatchObject({
+      kind: 'merge-blocked',
+      title: 'A human review thread needs you: rename `tmp` to `pending`',
+      detail: { findingId: row.id, threadId: 'T1', reason: 'still fine' },
+      actions: ['finding-dismiss', 'finding-valid', 'take-back']
+    })
+  })
+
 
   test('an invalid finding from the reviewer has no thread and is only dismissed with a reason', async () => {
     const t = setup()
