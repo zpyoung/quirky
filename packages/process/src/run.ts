@@ -395,6 +395,7 @@ export async function executeRun(
       return emptyResult('aborted', Date.now() - startedAt)
     }
 
+    attempts++
     const outcome = await runAttempt({
       argv,
       options,

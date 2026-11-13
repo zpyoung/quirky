@@ -833,6 +833,31 @@ test('preserves truncation flags when disposal follows a post-exit pipe stall', 
   expect(result.truncated).toEqual({ stdout: true, stderr: false })
 }, 15_000)
 
+test('post-exit stalls stop after three starts with accurate attempt accounting', async () => {
+  for (const overflow of ['stop', 'truncate'] as const) {
+    let starts = 0
+    const runner = makeRunner({
+      stallMs: 1,
+      start: () => {
+        starts++
+        if (starts > 3) return completedChild('unexpected fourth start', '')
+        return {
+          pid: 910_030 + starts,
+          stdout: new ReadableStream<Uint8Array>(),
+          stderr: outputStream([]),
+          exited: Promise.resolve({ exitCode: 0, signal: null }),
+          killGroup() {},
+        }
+      },
+    })
+    const failure = await runner.run(['/fake/repeated-stall'], {
+      rerunnable: true, overflow, timeoutMs: 1_000,
+    }).then(() => undefined, (error: unknown) => error)
+    expect(failure).toMatchObject({ name: 'ProcessStalledError', command: '/fake/repeated-stall', attempts: 3 })
+    expect(starts).toBe(3)
+  }
+})
+
 function outputStream(chunks: readonly string[]): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
