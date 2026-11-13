@@ -819,7 +819,14 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     setView((now) => ({ ...now, fontSize: effectiveFontSize() }))
     sentSize.current = { cols: term.cols, rows: term.rows }
 
-    const detach = (id: number) => void context.call('quirky.terminal/detach', { streamId: id }).catch(() => {})
+    const detach = (id: number) => {
+      void context.call('quirky.terminal/detach', { streamId: id })
+        .finally(() => {
+          // unsubscribe also releases bytes buffered before a stream had a listener
+          context.onStream(id, () => {})()
+        })
+        .catch(() => {})
+    }
     const writeResetReplay = (replay: string) => {
       const combined = concatBytes(RESYNC_RESET_PREFIX, base64ToBytes(replay))
       writeReplay({ write: (bytes, done) => graphics.write(bytes, true, done) }, combined, gate)

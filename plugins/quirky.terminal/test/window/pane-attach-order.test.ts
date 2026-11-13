@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { bytesToBase64 } from '@quirky/protocol'
+import { bytesToBase64, encodeTerminalOutput, QuirkyClient } from '@quirky/protocol'
 import type { Terminal } from '@xterm/xterm'
 import { fakeContext, loadPane, mountPane, paneHandlers, settings, settle, startRecording, stopRecording, unloadPane, type MountedPane } from './pane-support'
 
@@ -62,6 +62,15 @@ describe('pane attach and image addon ordering', () => {
     const rejectedFake = fakeContext(paneHandlers({}, {
       'quirky.terminal/attach': () => Promise.reject(new Error('gone'))
     }))
+    // constructor and buffer access mirror the protocol's frame fixtures without opening a socket
+    const client = new (QuirkyClient as unknown as new (
+      transport: { send(text: string): void; close(): void }
+    ) => QuirkyClient)({ send() {}, close() {} })
+    const bufferedClient = client as unknown as {
+      handleMessage(data: unknown): void
+      streamBuffers: Map<number, Uint8Array[]>
+    }
+    detachedFake.context.onStream = (id, handler, options) => client.onTerminalOutput(id, handler, options)
 
     try {
       const attachedPane = await mountPane(attachedFake, { settings: settings({ 'inline-images': true, scrollback: 4000 }) })
@@ -86,6 +95,8 @@ describe('pane attach and image addon ordering', () => {
       })
 
       expect(detachedFake.callsTo('quirky.terminal/attach')).toHaveLength(1)
+      bufferedClient.handleMessage(encodeTerminalOutput(7, new TextEncoder().encode('output while addon loads')))
+      expect(bufferedClient.streamBuffers.has(7)).toBe(true)
       const detachedIndex = mountedPanes.indexOf(detachedPane)
       if (detachedIndex >= 0) mountedPanes.splice(detachedIndex, 1)
       await detachedPane.unmount()
@@ -105,9 +116,11 @@ describe('pane attach and image addon ordering', () => {
 
       expect(detachedFake.callsTo('quirky.terminal/detach').map((call) => call.params)).toEqual([{ streamId: 7 }])
       expect(detachedFake.streams.has(7)).toBe(false)
+      expect(bufferedClient.streamBuffers.has(7)).toBe(false)
       expect(terminalText(detachedTerminal)).not.toContain('unmounted-replay')
       expect(terminalText(rejectedPane.term())).toBe(rejectedTextBeforeAddon)
     } finally {
+      client.close()
       releaseImageModule()
       await settle()
     }
