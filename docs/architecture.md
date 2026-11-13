@@ -60,6 +60,16 @@ sends SIGKILL after 10 s and allows another 2 s for exit. `quirky daemon restart
 connection, handshake and stop request together at 5 s, closes its link before signalling, and
 reports whether the old process stopped cleanly, was terminated, was killed, or was not running.
 
+The daemon sends its supported protocol range in `hello`; the host chooses the highest version
+both speak. A host built before negotiation is adopted with an exact-version hello when its
+version is in range. A host below the daemon's minimum is shut down and replaced; an incompatible
+newer host is refused without starting another one.
+
+Each daemon and PTY host holds its own kernel lock on the home until it exits. A slow or paused
+holder keeps ownership. During an upgrade from a build without these locks, an accepting PTY
+socket or a live pid in the old pid file also keeps the home. The only live-pid exception is a
+matching last-holder record from the now-free kernel lock, which proves that pid has been reused.
+
 Orca by comparison runs Electron main (runtime, RPC, a second headless emulator per PTY), the
 terminal daemon, several renderers, one Chromium process per browser tab, and forked helpers for
 plugins, vault scanning, file watching and computer use

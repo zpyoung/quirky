@@ -85,6 +85,24 @@ describe('authentication', () => {
     const result = await client.hello(host.server.token)
     expect(result).toEqual({ version: PTY_PROTOCOL_VERSION, pid: process.pid })
   })
+
+  test('accepts a newer protocol client within its range and keeps the negotiated version', async () => {
+    const host = startHost()
+    const client = await PtyClient.connect(host.server.socketPath)
+    const hello = {
+      token: host.server.token,
+      version: PTY_PROTOCOL_VERSION + 1,
+      minVersion: PTY_PROTOCOL_VERSION
+    }
+
+    try {
+      expect(await client.request('hello', hello)).toEqual({ version: PTY_PROTOCOL_VERSION, pid: process.pid })
+      expect(await client.request('hello', hello)).toEqual({ version: PTY_PROTOCOL_VERSION, pid: process.pid })
+      expect(await client.request('list', {})).toEqual([])
+    } finally {
+      client.close()
+    }
+  })
 })
 
 describe('sessions', () => {

@@ -7,7 +7,14 @@
  * `<QUIRKY_HOME>/pty.token`; anything else closes the connection.
  */
 
+/**
+ * An additive change bumps PTY_PROTOCOL_VERSION and leaves PTY_PROTOCOL_MIN_VERSION in place.
+ * The daemon sends a request added in version N only when the negotiated version is at least N;
+ * the host sends an event or frame added in version N only on connections negotiated at least N.
+ * Raise PTY_PROTOCOL_MIN_VERSION only when a version can no longer be driven.
+ */
 export const PTY_PROTOCOL_VERSION = 4
+export const PTY_PROTOCOL_MIN_VERSION = 4
 
 /** Whether the shell has printed Quirky's ready marker; `unsupported` when the shell gets no wrapper. */
 export type ShellState = 'pending' | 'ready' | 'timed_out' | 'unsupported'
@@ -91,7 +98,7 @@ export type PtyHistoryPage = {
 export type PtyWriteErrorCode = 'PTY_WRITE_REJECTED' | 'PTY_WRITE_UNCERTAIN'
 
 export type PtyRequest =
-  | { id: number; type: 'hello'; token: string; version: number }
+  | { id: number; type: 'hello'; token: string; version: number; minVersion?: number }
   | {
       id: number
       type: 'create'
@@ -177,3 +184,39 @@ export type PtyResponse =
 export type PtyEvent =
   | { type: 'exit'; sessionId: string; exitCode: number | null; exitSignal: string | null; exitCause: ExitCause }
   | { type: 'fact'; sessionId: string; fact: PtyFact }
+
+export function negotiatePtyVersion(
+  client: { version: number; minVersion?: number },
+  host: { min: number; max: number }
+): number | null {
+  if (
+    !isPositiveInteger(client.version) ||
+    (client.minVersion !== undefined && !isPositiveInteger(client.minVersion)) ||
+    !isPositiveInteger(host.min) ||
+    !isPositiveInteger(host.max) ||
+    host.min > host.max
+  ) {
+    return null
+  }
+
+  const minimum = Math.max(client.minVersion ?? client.version, host.min)
+  const maximum = Math.min(client.version, host.max)
+  return minimum <= maximum ? maximum : null
+}
+
+export function ptyVersionRejection(requested: number, hostVersion: number): string {
+  return `unsupported protocol version ${requested}, host speaks ${hostVersion}`
+}
+
+export function parsePtyVersionRejection(message: string): { requested: number; host: number } | null {
+  const match = /^unsupported protocol version (\d+), host speaks (\d+)$/.exec(message)
+  if (!match) return null
+
+  const requested = Number(match[1])
+  const host = Number(match[2])
+  return isPositiveInteger(requested) && isPositiveInteger(host) ? { requested, host } : null
+}
+
+function isPositiveInteger(value: number): boolean {
+  return Number.isInteger(value) && value > 0
+}

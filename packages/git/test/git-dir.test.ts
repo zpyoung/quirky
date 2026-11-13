@@ -87,11 +87,12 @@ describe('git output that never ends after git exited', () => {
     expect(fake.log()).toHaveLength(2)
   })
 
-  test('a command that may write is never run twice', async () => {
+  test('a command that may write keeps its result without retrying', async () => {
     const dir = makeRepo(scratch())
     const fake = fakeGit(heldOpen)
-    const failure = await runGit(dir, ['tag', 'x'], { stallMs: 100 }).catch((err: unknown) => err)
-    expect(failure).toBeInstanceOf(GitError)
+    const result = await runGit(dir, ['tag', 'x'], { stallMs: 100 })
+    expect(result.exitCode).toBe(0)
+    expect(new TextDecoder().decode(result.stdout)).toBe('hello\n')
     expect(fake.log()).toHaveLength(1)
   })
 
