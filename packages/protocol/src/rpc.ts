@@ -285,7 +285,8 @@ export const RpcErrorCode = {
   Unauthorized: -32001,
   NotFound: -32004,
   Conflict: -32009,
-  ConfirmationRequired: -32010
+  ConfirmationRequired: -32010,
+  Timeout: -32011
 } as const
 
 /** WebSocket path on the daemon's loopback port; auth is `?token=<runtime token>`. */
