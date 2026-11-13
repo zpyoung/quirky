@@ -195,6 +195,10 @@ require(${JSON.stringify(world.paths.networkPreload)})
     expect(external.stdout).toBe('blocked')
     expect(await world.readLog('egress')).toBe('https://example.invalid/path\n')
 
+    const lookalike = await run(`fetch('http://127.example.invalid/path').then(() => process.exit(9), error => { if (!String(error).includes('non-loopback fetch refused')) process.exit(8); process.stdout.write('blocked') })`, directEnv, [`--preload=${upstreamStub}`])
+    expect(lookalike.exitCode).toBe(0)
+    expect(lookalike.stdout).toBe('blocked')
+    expect(await world.readLog('egress')).toBe('https://example.invalid/path\nhttp://127.example.invalid/path\n')
     const preload = await run(`if (!globalThis[Symbol.for('quirky.goal-loop.fetch-guard')]) process.exit(8); process.stdout.write('preloaded')`)
     expect(preload.exitCode).toBe(0)
     expect(preload.stdout).toBe('preloaded')
@@ -202,9 +206,53 @@ require(${JSON.stringify(world.paths.networkPreload)})
     const local = await run(`fetch('http://127.0.0.1:${server.port}/').then(async response => process.stdout.write(await response.text()), () => process.exit(7))`)
     expect(local.exitCode).toBe(0)
     expect(local.stdout).toBe('loopback-ok')
-    expect(await world.readLog('egress')).toBe('https://example.invalid/path\n')
+    expect(await world.readLog('egress')).toBe('https://example.invalid/path\nhttp://127.example.invalid/path\n')
   } finally {
     server.stop(true)
+    await world.cleanup()
+  }
+})
+
+test('network preload never follows a native loopback redirect', async () => {
+  const world = await createGoalLoopWorld()
+  let targetRequests = 0
+  const target = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => {
+      targetRequests += 1
+      return new Response('redirect-target')
+    }
+  })
+  const source = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => Response.redirect(`http://127.0.0.1:${target.port}/target`, 302)
+  })
+  try {
+    const run = async (script: string) => {
+      const child = world.scope.spawn([process.execPath, '-e', script], {
+        cwd: world.root,
+        env: world.env,
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe'
+      })
+      return captureCliChild(child as unknown as CliBoundedChild, { timeoutMs: 3_000 })
+    }
+    const sourceUrl = `http://127.0.0.1:${source.port}/redirect`
+    const guarded = await run(`fetch(${JSON.stringify(sourceUrl)}).then(response => process.stdout.write(String(response.status)), () => process.exit(7))`)
+    expect(guarded.exitCode).toBe(0)
+    expect(guarded.stdout).toBe('302')
+    expect(targetRequests).toBe(0)
+
+    const explicitFollow = await run(`fetch(${JSON.stringify(sourceUrl)}, { redirect: 'follow' }).then(response => process.stdout.write(String(response.status)), () => process.exit(7))`)
+    expect(explicitFollow.exitCode).toBe(0)
+    expect(explicitFollow.stdout).toBe('302')
+    expect(targetRequests).toBe(0)
+  } finally {
+    source.stop(true)
+    target.stop(true)
     await world.cleanup()
   }
 })
