@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { BUDGETS, METRICS, type Metric, type MetricResult, type SpeedReport } from './contracts'
-import { compareReports, compatibleProfiles, createMisses, median, renderSpeed, validateMisses, validateReport } from './report'
+import { BUDGETS, METRICS, PAIR_COUNTS, type Comparison, type Failure, type Metric, type MetricResult, type PairBasis, type SpeedPair, type SpeedReport } from './contracts'
+import { comparePair, createMisses, median, pairedLowerBoundPercent, pairedRegression, renderSpeed, validateMisses, validatePair, validateReport } from './report'
 
 const SHA_A = 'a'.repeat(40)
 const SHA_B = 'b'.repeat(40)
@@ -63,6 +63,85 @@ function report(options: {
   }
 }
 
+function pair(options: {
+  status?: SpeedPair['status']
+  qualified?: boolean
+  runId?: string
+  headCommit?: string
+  baseCommit?: string
+  basis?: PairBasis
+  scale?: number
+  counts?: Partial<Record<Metric, number>>
+  metrics?: Partial<Record<Metric, { headSamplesMs?: number[]; baseSamplesMs?: number[] }>>
+  failures?: Failure[]
+} = {}): SpeedPair {
+  const metrics = Object.fromEntries(METRICS.map((metric) => {
+    const count = options.counts?.[metric] ?? PAIR_COUNTS[metric]
+    const baseSamplesMs = options.metrics?.[metric]?.baseSamplesMs ?? Array.from({ length: count }, (_, index) => 100 + index % 20)
+    const headSamplesMs = options.metrics?.[metric]?.headSamplesMs ?? baseSamplesMs.map((sample) => sample * (options.scale ?? 1))
+    return [metric, { headSamplesMs, baseSamplesMs }]
+  })) as SpeedPair['metrics']
+  const status = options.status ?? 'complete'
+  const qualified = options.qualified ?? (
+    status === 'complete' && METRICS.every((metric) => metrics[metric].headSamplesMs.length >= PAIR_COUNTS[metric])
+  )
+  return {
+    version: 1,
+    runId: options.runId ?? 'run-123',
+    createdAt: '2026-11-12T12:00:00.000Z',
+    status,
+    qualified,
+    head: { commit: options.headCommit ?? SHA_A },
+    base: { commit: options.baseCommit ?? SHA_B, basis: options.basis ?? 'merge-base' },
+    metrics,
+    failures: options.failures ?? (status === 'complete' ? [] : [{ kind: 'pair-setup-failed', message: 'base failed' }]),
+    evidence: { samples: 'pair-samples.jsonl' },
+  }
+}
+
+function emptyComparison(status: 'error' | 'unavailable', reason: string): Comparison {
+  return {
+    status,
+    head: null,
+    baseline: null,
+    reason,
+    reasons: [reason],
+    metrics: Object.fromEntries(METRICS.map((metric) => [metric, null])) as Record<Metric, null>,
+  }
+}
+
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0
+    seed = seed + 0x6D2B79F5 | 0
+    let value = Math.imul(seed ^ seed >>> 15, 1 | seed)
+    value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value
+    return ((value ^ value >>> 14) >>> 0) / 4294967296
+  }
+}
+
+function replayCounts(runs: { samplesMs: Record<Metric, number[]> }[], scale: number) {
+  const rand = mulberry32(1)
+  const flagged = { startup: 0, echo: 0, switch: 0, diff: 0, floodEcho: 0, any: 0 }
+  for (const run of runs) {
+    for (let trial = 0; trial < 50; trial += 1) {
+      let any = false
+      for (const metric of METRICS) {
+        const samples = run.samplesMs[metric]
+        const count = PAIR_COUNTS[metric]
+        const baseSamples = Array.from({ length: count }, () => samples[Math.floor(rand() * samples.length)]!)
+        const headSamples = Array.from({ length: count }, () => samples[Math.floor(rand() * samples.length)]! * scale)
+        if (pairedRegression(headSamples, baseSamples)?.regression) {
+          flagged[metric] += 1
+          any = true
+        }
+      }
+      if (any) flagged.any += 1
+    }
+  }
+  return flagged
+}
+
 describe('median', () => {
   test('averages the middle pair of all twenty samples without rounding', () => {
     expect(median(Array.from({ length: 20 }, (_, index) => index + 1))).toBe(10.5)
@@ -122,8 +201,6 @@ describe('report validation', () => {
     const smoke = report({ qualified: false, samples: Object.fromEntries(METRIC_LIST.map((metric) => [metric, [5]])) })
     expect(validateReport(partial)).toEqual(partial)
     expect(validateReport(smoke)).toEqual(smoke)
-    expect(compareReports(smoke, report({ commit: SHA_B })).status).toBe('error')
-    expect(compareReports(partial, report({ commit: SHA_B })).status).toBe('error')
   })
 
   test('rejects invalid durations, tampered medians, and inconsistent budget flags', () => {
@@ -176,83 +253,178 @@ describe('report validation', () => {
     }
     expect(validateReport(withoutCompositor)).toBeNull()
     expect(validateReport(v1WithCompositor)).toBeNull()
-    expect(compatibleProfiles(v1.profile, v2.profile as unknown as SpeedReport['profile'])).toBe(false)
-
-    const otherCompositor = { ...v2, profile: { ...v2.profile, compositor: 'gpu' } }
-    expect(compatibleProfiles(
-      v2.profile as unknown as SpeedReport['profile'],
-      otherCompositor.profile as unknown as SpeedReport['profile'],
-    )).toBe(false)
   })
 })
 
 
-describe('profile compatibility and comparison', () => {
-  test('ignores image version but compares Chromium and CPU profile fields', () => {
-    const main = report({ commit: SHA_A })
-    const head = report({ commit: SHA_B })
-    head.profile.imageVersion = '20261102.1'
-    expect(compatibleProfiles(main.profile, head.profile)).toBe(true)
-    expect(compareReports(head, main).status).toBe('compared')
-
-    const chromiumChanged = report({ commit: SHA_B })
-    chromiumChanged.profile.chromium = 'Chromium 141.0'
-    expect(compatibleProfiles(main.profile, chromiumChanged.profile)).toBe(false)
-    expect(compareReports(chromiumChanged, main).status).toBe('unavailable')
-
-    const cpuChanged = report({ commit: SHA_B })
-    cpuChanged.profile.cpuModel = 'Apple M4'
-    expect(compatibleProfiles(main.profile, cpuChanged.profile)).toBe(false)
-    expect(compareReports(cpuChanged, main).status).toBe('unavailable')
-
-    const cpuCountChanged = report({ commit: SHA_B })
-    cpuCountChanged.profile.cpuCount = 10
-    expect(compatibleProfiles(main.profile, cpuCountChanged.profile)).toBe(false)
-    expect(compareReports(cpuCountChanged, main).status).toBe('unavailable')
+describe('paired regression rule', () => {
+  test('scenario 1: flags a clean 30% slowdown in every metric', () => {
+    const comparison = comparePair(report(), pair({ scale: 1.3 }))
+    expect(comparison.status).toBe('compared')
+    for (const metric of METRICS) {
+      const row = comparison.metrics[metric]!
+      expect(row.baselineMedianMs).toBe(109.5)
+      expect(row.changePercent.toFixed(1)).toBe('30.0')
+      expect(row.lowerBoundPercent.toFixed(1)).toBe('30.0')
+      expect(row.regression).toBe(true)
+    }
   })
 
-  test('uses the strict unrounded greater-than-25-percent rule', () => {
-    const main = report({ commit: SHA_A, createdAt: '2026-11-12T10:00:00.000Z', samples: { echo: Array(20).fill(40) } })
-    const atBoundary = report({ commit: SHA_B, samples: { echo: Array(20).fill(50) } })
-    const aboveBoundary = report({ commit: SHA_B, samples: { echo: Array(20).fill(50.001) } })
-    const boundaryComparison = compareReports(atBoundary, main)
-    const regressionComparison = compareReports(aboveBoundary, main)
-    expect(boundaryComparison.status).toBe('compared')
-    expect(boundaryComparison.metrics.echo?.regression).toBe(false)
-    expect(boundaryComparison.metrics.echo?.changePercent).toBe(25)
-    expect(regressionComparison.metrics.echo?.regression).toBe(true)
-    expect(regressionComparison.metrics.echo?.changePercent).toBeCloseTo(25.0025)
-    expect(regressionComparison.baseline?.ageMs).toBe(2 * 60 * 60 * 1000)
+  test('scenario 2: does not flag exactly 25%', () => {
+    const comparison = comparePair(report(), pair({ scale: 1.25 }))
+    expect(comparison.status).toBe('compared')
+    for (const metric of METRICS) {
+      const row = comparison.metrics[metric]!
+      expect(row.headMedianMs).toBe(136.875)
+      expect(row.baselineMedianMs).toBe(109.5)
+      expect(row.lowerBoundPercent.toFixed(1)).toBe('25.0')
+      expect(row.regression).toBe(false)
+    }
   })
 
-  test('flags a relative regression independently of the absolute metric budget', () => {
-    const main = report({ commit: SHA_A, samples: { echo: Array(20).fill(80) } })
-    const head = report({ commit: SHA_B, samples: { echo: Array(20).fill(101) } })
-    const comparison = compareReports(head, main)
-    expect(comparison.metrics.echo?.regression).toBe(true)
-    expect(comparison.metrics.echo?.budgetMiss).toBe(true)
-    expect(comparison.metrics.echo?.baselineBudgetMiss).toBe(true)
+  test('scenario 3: does not flag a median slowdown unsupported by paired samples', () => {
+    const baseSamplesMs = Array(20).fill(100)
+    const headSamplesMs = [...Array(11).fill(140), ...Array(9).fill(60)]
+    const comparison = comparePair(report(), pair({ metrics: { startup: { baseSamplesMs, headSamplesMs } } }))
+    expect(comparison.status).toBe('compared')
+    const row = comparison.metrics.startup!
+    expect(row.headMedianMs).toBe(140)
+    expect(row.changePercent.toFixed(1)).toBe('40.0')
+    expect(row.lowerBoundPercent.toFixed(1)).toBe('-8.3')
+    expect(row.regression).toBe(false)
+    expect(pairedLowerBoundPercent(headSamplesMs, baseSamplesMs)?.toFixed(1)).toBe('-8.3')
+  })
+
+  test('scenario 4: reproduces the exact recorded-noise regression counts', async () => {
+    const fixture = await Bun.file(new URL('./testdata/main-runs.json', import.meta.url)).json() as {
+      runs: { samplesMs: Record<Metric, number[]> }[]
+    }
+    const actual = [1, 1.3, 1.5].map((scale) => ({ scale, ...replayCounts(fixture.runs, scale) }))
+    const expected = [
+      { scale: 1, startup: 0, echo: 0, switch: 1, diff: 2, floodEcho: 2, any: 5 },
+      { scale: 1.3, startup: 413, echo: 410, switch: 426, diff: 417, floodEcho: 416, any: 550 },
+      { scale: 1.5, startup: 540, echo: 540, switch: 539, diff: 537, floodEcho: 539, any: 550 },
+    ]
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new Error(`Recorded-noise regression counts differ: ${JSON.stringify(actual)}`)
+    }
+    expect(actual).toEqual(expected)
+  })
+
+  test('scenario 5: validates qualification, durations, side lengths, and failures', () => {
+    const complete = pair()
+    expect(validatePair(complete)).toEqual(complete)
+
+    const smoke = pair({ counts: Object.fromEntries(METRICS.map((metric) => [metric, 1])) as Record<Metric, number> })
+    expect(smoke.qualified).toBe(false)
+    expect(validatePair(smoke)).toEqual(smoke)
+
+    const incomplete = pair({
+      status: 'incomplete',
+      failures: [{ kind: 'pair-setup-failed', message: 'could not start base' }],
+    })
+    expect(incomplete.qualified).toBe(false)
+    expect(validatePair(incomplete)).toEqual(incomplete)
+
+
+    const failedSetup = pair({
+      status: 'incomplete',
+      counts: Object.fromEntries(METRICS.map((metric) => [metric, 0])) as Record<Metric, number>,
+      failures: [{ kind: 'pair-setup-failed', message: 'could not start base' }],
+    })
+    expect(METRICS.every((metric) => failedSetup.metrics[metric].headSamplesMs.length === 0 && failedSetup.metrics[metric].baseSamplesMs.length === 0)).toBe(true)
+    expect(validatePair(failedSetup)).toEqual(failedSetup)
+
+    const interruptedSide = pair({
+      status: 'incomplete',
+      metrics: { startup: { headSamplesMs: [101, 102], baseSamplesMs: [99] } },
+    })
+    expect(validatePair(interruptedSide)).toEqual(interruptedSide)
+
+    const shortQualified = pair({ counts: { echo: 59 } })
+    expect(shortQualified.qualified).toBe(false)
+    expect(validatePair(shortQualified)).toEqual(shortQualified)
+
+    const mismatchedLengths = structuredClone(complete)
+    mismatchedLengths.metrics.echo.headSamplesMs.pop()
+    const zeroDuration = structuredClone(complete)
+    zeroDuration.metrics.startup.baseSamplesMs[0] = 0
+    const nonFiniteDuration = structuredClone(complete)
+    nonFiniteDuration.metrics.switch.headSamplesMs[0] = Number.POSITIVE_INFINITY
+    const inconsistentQualification = structuredClone(complete)
+    inconsistentQualification.qualified = false
+    const failedComplete = structuredClone(complete)
+    failedComplete.failures = [{ kind: 'pair-interrupted', message: 'unexpected failure' }]
+    const failurelessIncomplete = structuredClone(incomplete)
+    failurelessIncomplete.failures = []
+    for (const malformed of [mismatchedLengths, zeroDuration, nonFiniteDuration, inconsistentQualification, failedComplete, failurelessIncomplete]) {
+      expect(validatePair(malformed)).toBeNull()
+    }
+  })
+
+  test('scenario 5: distinguishes absent, smoke, incomplete, mismatched, and malformed pairs', () => {
+    expect(comparePair(report(), null)).toMatchObject({
+      status: 'unavailable',
+      reason: 'no paired base measurement',
+    })
+    expect(comparePair(report(), pair({ counts: Object.fromEntries(METRICS.map((metric) => [metric, 1])) as Record<Metric, number> }))).toMatchObject({
+      status: 'unavailable',
+      reason: 'smoke pair is not a qualifying comparison',
+    })
+    expect(comparePair(report(), pair({
+      status: 'incomplete',
+      baseCommit: SHA_B,
+      failures: [{ kind: 'pair-setup-failed', message: 'could not start base' }],
+    }))).toMatchObject({
+      status: 'unavailable',
+      reason: `base ${SHA_B.slice(0, 8)} could not be measured: pair-setup-failed could not start base`,
+    })
+    expect(comparePair(report(), pair({ headCommit: SHA_B }))).toMatchObject({
+      status: 'error',
+      reason: 'pair HEAD does not match the report',
+    })
+    const malformed = { ...pair(), head: { commit: 'invalid' } } as unknown as SpeedPair
+    expect(comparePair(report(), malformed)).toMatchObject({
+      status: 'error',
+      reason: 'pair report is malformed',
+    })
   })
 })
 
 describe('Speed markdown and misses', () => {
-  test('renders every metric, both identities, counts, age and relative result', () => {
-    const main = report({ commit: SHA_A, createdAt: '2026-11-12T10:00:00.000Z', samples: { echo: Array(20).fill(40) } })
-    const head = report({ commit: SHA_B, samples: { echo: Array(20).fill(50.001) } })
-    const markdown = renderSpeed(head, compareReports(head, main))
-    expect(markdown.startsWith('### Speed')).toBe(true)
-    expect(markdown).toContain(SHA_A.slice(0, 7))
-    expect(markdown).toContain(SHA_B.slice(0, 7))
-    expect(markdown).toContain('2 hours')
-    for (const metric of METRICS) expect(markdown).toContain(metric)
-    expect(markdown).toContain('20')
-    expect(markdown).toContain('REGRESSION')
+  test('scenario 6: renders parent and merge-base comparisons with absolute results', () => {
+    const head = report({ commit: SHA_B, samples: { echo: Array(20).fill(51) } })
+    const parentComparison = comparePair(head, pair({ headCommit: SHA_B, baseCommit: SHA_A, basis: 'parent', scale: 1.3 }))
+    const parentMarkdown = renderSpeed(head, parentComparison)
+    expect(parentMarkdown.split('\n')[2]).toBe(`Compared main \`${SHA_B}\` with its parent \`${SHA_A}\`, interleaved on one runner (run \`run-123\`).`)
+    expect(parentMarkdown).toContain('| Metric | Pairs | Parent median (ms) | This commit median (ms) | Change | Lower bound (95%) | Result |')
+    expect(parentMarkdown).toContain('| startup | 20 |')
+    expect(parentMarkdown).toContain('| echo | 60 |')
+    expect(parentMarkdown).toContain('REGRESSION means the median is more than 25% slower and the lower end of the 95% confidence interval is above zero.')
+    expect(parentMarkdown).toContain('Absolute results for this commit:')
+    expect(parentMarkdown).toContain('| Metric | Median (ms) | Samples | Budget (ms) | Budget result |')
+    expect(parentMarkdown).not.toContain('with PR')
+
+    const mergeBaseComparison = comparePair(head, pair({ headCommit: SHA_B, baseCommit: SHA_A, basis: 'merge-base', scale: 1.3 }))
+    const mergeBaseMarkdown = renderSpeed(head, mergeBaseComparison)
+    expect(mergeBaseMarkdown.split('\n')[2]).toBe(`Compared PR \`${SHA_B}\` with main at its merge base \`${SHA_A}\`, interleaved on one runner (run \`run-123\`).`)
+    expect(mergeBaseMarkdown).toContain('| Metric | Pairs | Main median (ms) | PR median (ms) | Change | Lower bound (95%) | Result |')
+
+    const notCompared = renderSpeed(head, comparePair(head, null))
+    expect(notCompared).toContain('not compared: no paired base measurement')
+    expect(notCompared).toContain(`Commit \`${SHA_B}\` (run \`run-123\`).`)
+    expect(notCompared).not.toContain('PR commit')
+
+    if (parentComparison.status === 'compared') {
+      parentComparison.metrics.startup!.lowerBoundPercent = Number.POSITIVE_INFINITY
+      expect(renderSpeed(head, parentComparison)).toContain('not measured: comparison data is malformed')
+    }
   })
 
-  test('shows current values and misses when no compatible baseline exists', () => {
+  test('shows current values and misses when no paired base measurement exists', () => {
     const head = report({ commit: SHA_B, samples: { echo: Array(20).fill(51) } })
     const markdown = renderSpeed(head, null)
-    expect(markdown).toContain('not compared: no compatible baseline')
+    expect(markdown).toContain('not compared: no paired base measurement')
     expect(markdown).toContain('echo')
     expect(markdown).toContain('51')
     expect(markdown.toLowerCase()).toContain('budget miss')
@@ -267,10 +439,7 @@ describe('Speed markdown and misses', () => {
       failures: [{ kind: 'selector-mismatch', metric: 'echo', sample: 3, message: 'primary terminal was not visible' }],
     })
     expect(renderSpeed(incomplete)).toContain('not measured: selector-mismatch echo sample 3: primary terminal was not visible')
-    expect(renderSpeed(null, {
-      status: 'error', head: null, baseline: null, reason: 'baseline download failed',
-      reasons: ['baseline download failed'], metrics: Object.fromEntries(METRIC_LIST.map((metric) => [metric, null])) as Record<Metric, null>,
-    })).toContain('not measured: baseline download failed')
+    expect(renderSpeed(null, emptyComparison('error', 'baseline download failed'))).toContain('not measured: baseline download failed')
   })
 
   test('creates one evidence entry per missed metric and no entry at budget', () => {
@@ -311,11 +480,8 @@ describe('Speed markdown and misses', () => {
 
     expect(validateMisses([observed], value)).toEqual([observed])
     expect(renderSpeed(value, null, [observed])).toContain(observed.finding)
-    expect(renderSpeed(value, compareReports(value, report({ commit: SHA_A })), [observed])).toContain(observed.finding)
-    expect(renderSpeed(value, {
-      status: 'error', head: null, baseline: null, reason: 'baseline download failed',
-      reasons: ['baseline download failed'], metrics: Object.fromEntries(METRIC_LIST.map((metric) => [metric, null])) as Record<Metric, null>,
-    }, [observed])).toContain(observed.finding)
+    expect(renderSpeed(value, comparePair(value, pair({ headCommit: SHA_B, baseCommit: SHA_A })), [observed])).toContain(observed.finding)
+    expect(renderSpeed(value, emptyComparison('error', 'baseline download failed'), [observed])).toContain(observed.finding)
   })
 
   test('rejects forged miss identity, measurements, and unsafe or cross-metric paths', () => {

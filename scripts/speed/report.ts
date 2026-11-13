@@ -1,21 +1,18 @@
-import { BUDGETS, METRICS, type Comparison, type Failure, type Metric, type MetricComparison, type SpeedMiss, type SpeedProfile, type SpeedReport } from './contracts'
+import { BUDGETS, CONFIDENCE_Z, METRICS, PAIR_COUNTS, REGRESSION_RATIO, type Comparison, type Failure, type Metric, type MetricComparison, type PairBasis, type SpeedMiss, type SpeedPair, type SpeedProfile, type SpeedReport } from './contracts'
 
 const REPORT_KEYS = ['version', 'commit', 'runId', 'createdAt', 'status', 'qualified', 'profile', 'metrics', 'failures', 'cleanup', 'evidence']
 const PROFILE_KEYS = ['workloadVersion', 'worktrees', 'terminals', 'diffAddedLines', 'renderer', 'viewport', 'startup', 'floodChunkBytes', 'floodIntervalMs', 'runner', 'os', 'arch', 'cpuModel', 'cpuCount', 'bun', 'chromium', 'imageVersion']
 const PROFILE_V2_KEYS = [...PROFILE_KEYS, 'compositor']
 const METRIC_RESULT_KEYS = ['samplesMs', 'medianMs', 'budgetMs', 'budgetMiss']
 const EVIDENCE_KEYS = ['samples', 'diagnostics', 'misses']
-const PROFILE_FIELDS: readonly (keyof SpeedProfile | 'compositor')[] = [
-  'workloadVersion', 'worktrees', 'terminals', 'diffAddedLines', 'renderer', 'startup',
-  'floodChunkBytes', 'floodIntervalMs', 'runner', 'os', 'arch', 'cpuModel', 'cpuCount',
-  'bun', 'chromium', 'compositor',
-]
+const PAIR_KEYS = ['version', 'runId', 'createdAt', 'status', 'qualified', 'head', 'base', 'metrics', 'failures', 'evidence']
+const PAIR_EVIDENCE_KEYS = ['samples']
 const MAX_FAILURES = 100
 const MAX_EVIDENCE_PATHS = 100
 const MAX_MARKDOWN_CHARS = 16_000
 const MAX_CELL_CHARS = 300
 
-export function median(samples: number[]): number | null {
+export function median(samples: readonly number[]): number | null {
   if (samples.length === 0 || samples.some((sample) => !Number.isFinite(sample) || sample <= 0)) return null
   const sorted = [...samples].sort((left, right) => left - right)
   const middle = Math.floor(sorted.length / 2)
@@ -94,6 +91,45 @@ function validFailure(value: unknown): value is Failure {
   return true
 }
 
+function validDurationSamples(value: unknown): value is number[] {
+  if (!Array.isArray(value)) return false
+  for (let index = 0; index < value.length; index += 1) {
+    const sample = value[index]
+    if (typeof sample !== 'number' || !Number.isFinite(sample) || sample <= 0) return false
+  }
+  return true
+}
+
+export function validatePair(value: unknown): SpeedPair | null {
+  if (!isRecord(value) || !hasExactKeys(value, PAIR_KEYS)) return null
+  if (value.version !== 1 || !isBoundedText(value.runId, 128) || !isIsoTimestamp(value.createdAt)) return null
+  if (value.status !== 'complete' && value.status !== 'incomplete') return null
+  if (typeof value.qualified !== 'boolean') return null
+  if (!isRecord(value.head) || !hasExactKeys(value.head, ['commit']) || typeof value.head.commit !== 'string' || !/^[0-9a-f]{40}$/i.test(value.head.commit)) return null
+  if (!isRecord(value.base) || !hasExactKeys(value.base, ['commit', 'basis'])) return null
+  if (typeof value.base.commit !== 'string' || !/^[0-9a-f]{40}$/i.test(value.base.commit)) return null
+  if (value.base.basis !== 'merge-base' && value.base.basis !== 'parent') return null
+  if (!isRecord(value.metrics) || !hasExactKeys(value.metrics, METRICS)) return null
+  const counts = {} as Record<Metric, number>
+  for (const metric of METRICS) {
+    const result = value.metrics[metric]
+    if (!isRecord(result) || !hasExactKeys(result, ['headSamplesMs', 'baseSamplesMs'])) return null
+    if (!validDurationSamples(result.headSamplesMs) || !validDurationSamples(result.baseSamplesMs)) return null
+    if (value.status === 'complete' && result.headSamplesMs.length !== result.baseSamplesMs.length) return null
+    counts[metric] = result.headSamplesMs.length
+  }
+  if (!Array.isArray(value.failures) || value.failures.length > MAX_FAILURES) return null
+  for (let index = 0; index < value.failures.length; index += 1) {
+    if (!validFailure(value.failures[index])) return null
+  }
+  if (value.status === 'complete' && value.failures.length !== 0) return null
+  if (value.status === 'incomplete' && value.failures.length === 0) return null
+  if (!isRecord(value.evidence) || !hasExactKeys(value.evidence, PAIR_EVIDENCE_KEYS) || !isSafeEvidencePath(value.evidence.samples)) return null
+  const expectedQualified = value.status === 'complete' && METRICS.every((metric) => counts[metric] >= PAIR_COUNTS[metric])
+  if (value.qualified !== expectedQualified) return null
+  return value as unknown as SpeedPair
+}
+
 function validMetricResult(value: unknown, metric: Metric): boolean {
   if (!isRecord(value) || !hasExactKeys(value, METRIC_RESULT_KEYS)) return false
   if (value.budgetMs !== BUDGETS[metric] || !Array.isArray(value.samplesMs)) return false
@@ -141,91 +177,112 @@ function metricNulls(): Record<Metric, null> {
   return { startup: null, echo: null, switch: null, diff: null, floodEcho: null }
 }
 
-function profileDifferences(left: SpeedProfile, right: SpeedProfile): string[] {
-  const leftFields: SpeedProfile & { compositor?: 'software' } = left
-  const rightFields: SpeedProfile & { compositor?: 'software' } = right
-  const changed = PROFILE_FIELDS.filter((field) => leftFields[field] !== rightFields[field])
-  if (left.viewport.width !== right.viewport.width || left.viewport.height !== right.viewport.height) changed.push('viewport')
-  return changed.map((field) => String(field))
-}
-
-export function compatibleProfiles(a: SpeedProfile, b: SpeedProfile): boolean {
-  return profileDifferences(a, b).length === 0
-}
-
-function failureReason(report: SpeedReport, name: 'current' | 'baseline'): string {
-  const failure = report.failures[0]
-  if (failure) {
-    const where = failure.metric ? `${failure.metric}${failure.sample === undefined ? '' : ` sample ${failure.sample}`}: ` : ''
-    return `${name} report is incomplete (${where}${failure.message})`
-  }
-  return `${name} report is not qualified`
-}
-
-function invalidComparison(current: SpeedReport, baseline: SpeedReport, reason: string): Comparison {
+function comparisonStatus(
+  current: SpeedReport,
+  status: 'unavailable' | 'error',
+  reason: string,
+  baseline: Comparison['baseline'] = null,
+): Comparison {
   return {
-    status: 'error',
+    status,
     head: metadata(current),
-    baseline: { ...metadata(baseline)!, ageMs: Date.parse(current.createdAt) - Date.parse(baseline.createdAt) },
+    baseline,
     reason,
     reasons: [reason],
     metrics: metricNulls(),
   }
 }
 
-function percentageChange(current: number, baseline: number): number {
-  const ratio = current / baseline
-  return Number.isFinite(ratio) ? (ratio - 1) * 100 : Number.MAX_VALUE
+function percentageChange(head: number, base: number): number | null {
+  const change = (head / base - 1) * 100
+  return Number.isFinite(change) ? change : null
 }
 
-export function compareReports(current: SpeedReport, baseline: SpeedReport): Comparison {
-  const currentValid = validateReport(current)
-  const baselineValid = validateReport(baseline)
-  if (!currentValid || !baselineValid) {
-    const reason = !currentValid ? 'current report is malformed' : 'baseline report is malformed'
-    return invalidComparison(current, baseline, reason)
+export function pairedLowerBoundPercent(head: readonly number[], base: readonly number[]): number | null {
+  const count = head.length
+  if (count === 0 || count !== base.length) return null
+  const differences = new Array<number>(count)
+  for (let index = 0; index < count; index += 1) {
+    const headSample = head[index]
+    const baseSample = base[index]
+    if (headSample === undefined || baseSample === undefined
+      || !Number.isFinite(headSample) || headSample <= 0
+      || !Number.isFinite(baseSample) || baseSample <= 0) return null
+    const difference = Math.log(headSample / baseSample)
+    if (!Number.isFinite(difference)) return null
+    differences[index] = difference
   }
-  if (current.status !== 'complete' || !current.qualified) return invalidComparison(current, baseline, failureReason(current, 'current'))
-  if (baseline.status !== 'complete' || !baseline.qualified) return invalidComparison(current, baseline, failureReason(baseline, 'baseline'))
-
-  const differences = profileDifferences(current.profile, baseline.profile)
-  if (differences.length > 0) {
-    const reason = `measurement profiles differ: ${differences.join(', ')}`
-    return {
-      status: 'unavailable',
-      head: metadata(current),
-      baseline: { ...metadata(baseline)!, ageMs: Date.parse(current.createdAt) - Date.parse(baseline.createdAt) },
-      reason,
-      reasons: [reason],
-      metrics: metricNulls(),
+  const criticalIndex = Math.floor(
+    count * (count + 1) / 4
+      - CONFIDENCE_Z * Math.sqrt(count * (count + 1) * (2 * count + 1) / 24),
+  )
+  if (criticalIndex < 0) return null
+  const walshAverages: number[] = []
+  for (let left = 0; left < count; left += 1) {
+    for (let right = left; right < count; right += 1) {
+      const average = ((differences[left] ?? Number.NaN) + (differences[right] ?? Number.NaN)) / 2
+      if (!Number.isFinite(average)) return null
+      walshAverages.push(average)
     }
+  }
+  walshAverages.sort((left, right) => left - right)
+  const lowerLogRatio = walshAverages[criticalIndex]
+  if (lowerLogRatio === undefined) return null
+  const lowerBoundPercent = (Math.exp(lowerLogRatio) - 1) * 100
+  return Number.isFinite(lowerBoundPercent) ? lowerBoundPercent : null
+}
+
+export function pairedRegression(head: readonly number[], base: readonly number[]): MetricComparison | null {
+  const headMedianMs = median(head)
+  const baselineMedianMs = median(base)
+  if (headMedianMs === null || baselineMedianMs === null || head.length !== base.length) return null
+  const lowerBoundPercent = pairedLowerBoundPercent(head, base)
+  const changePercent = percentageChange(headMedianMs, baselineMedianMs)
+  if (lowerBoundPercent === null || changePercent === null) return null
+  return {
+    headMedianMs,
+    baselineMedianMs,
+    pairs: head.length,
+    changePercent,
+    lowerBoundPercent,
+    regression: headMedianMs > baselineMedianMs * REGRESSION_RATIO && lowerBoundPercent > 0,
+  }
+}
+
+export function comparePair(current: SpeedReport, pair: SpeedPair | null): Comparison {
+  if (!validateReport(current)) {
+    const reason = 'current report is malformed'
+    return { status: 'error', head: null, baseline: null, reason, reasons: [reason], metrics: metricNulls() }
+  }
+  if (pair === null) return comparisonStatus(current, 'unavailable', 'no paired base measurement')
+  const validPair = validatePair(pair)
+  if (!validPair) return comparisonStatus(current, 'error', 'pair report is malformed')
+  const baseline = { commit: validPair.base.commit, basis: validPair.base.basis }
+  if (validPair.head.commit !== current.commit) {
+    return comparisonStatus(current, 'error', 'pair HEAD does not match the report', baseline)
+  }
+  if (validPair.runId !== current.runId) {
+    return comparisonStatus(current, 'error', 'pair run does not match the report', baseline)
+  }
+  if (validPair.status === 'incomplete') {
+    const failure = validPair.failures[0]!
+    return comparisonStatus(current, 'unavailable', `base ${validPair.base.commit.slice(0, 8)} could not be measured: ${failureText(failure)}`, baseline)
+  }
+  if (!validPair.qualified) {
+    return comparisonStatus(current, 'unavailable', 'smoke pair is not a qualifying comparison', baseline)
   }
 
   const rows = {} as Record<Metric, MetricComparison>
   for (const metric of METRICS) {
-    const headResult = current.metrics[metric]
-    const baselineResult = baseline.metrics[metric]
-    const headMedianMs = median(headResult.samplesMs)
-    const baselineMedianMs = median(baselineResult.samplesMs)
-    if (headMedianMs === null || baselineMedianMs === null) return invalidComparison(current, baseline, `${metric} has no usable samples`)
-    rows[metric] = {
-      headMedianMs,
-      baselineMedianMs,
-      headSamples: headResult.samplesMs.length,
-      baselineSamples: baselineResult.samplesMs.length,
-      changePercent: percentageChange(headMedianMs, baselineMedianMs),
-      budgetMs: BUDGETS[metric],
-      budgetMiss: headMedianMs > BUDGETS[metric],
-      baselineBudgetMiss: baselineMedianMs > BUDGETS[metric],
-      regression: headMedianMs > baselineMedianMs * 1.25,
-    }
+    const result = validPair.metrics[metric]
+    const row = pairedRegression(result.headSamplesMs, result.baseSamplesMs)
+    if (row === null) return comparisonStatus(current, 'error', 'pair report is malformed', baseline)
+    rows[metric] = row
   }
-
-  const baselineMetadata = metadata(baseline)!
   return {
     status: 'compared',
     head: metadata(current),
-    baseline: { ...baselineMetadata, ageMs: Date.parse(current.createdAt) - Date.parse(baseline.createdAt) },
+    baseline,
     reason: null,
     reasons: [],
     metrics: rows,
@@ -233,22 +290,25 @@ export function compareReports(current: SpeedReport, baseline: SpeedReport): Com
 }
 
 function isSafeComparison(value: Comparison, current: SpeedReport): boolean {
-  if (value.status !== 'compared' || value.head === null || value.baseline === null) return false
+  if (!isRecord(value) || !hasExactKeys(value, ['status', 'head', 'baseline', 'reason', 'reasons', 'metrics'])) return false
+  if (value.status !== 'compared' || !isRecord(value.head) || !hasExactKeys(value.head, ['commit', 'runId', 'createdAt'])) return false
+  if (!isRecord(value.baseline) || !hasExactKeys(value.baseline, ['commit', 'basis'])) return false
   if (value.head.commit !== current.commit || value.head.runId !== current.runId || value.head.createdAt !== current.createdAt) return false
-  if (!/^[0-9a-f]{40}$/i.test(value.baseline.commit) || !isBoundedText(value.baseline.runId, 128) || !isIsoTimestamp(value.baseline.createdAt)) return false
-  const expectedAge = Date.parse(current.createdAt) - Date.parse(value.baseline.createdAt)
-  if (value.baseline.ageMs !== expectedAge || !Number.isFinite(value.baseline.ageMs)) return false
-  if (value.reason !== null || value.reasons.length !== 0) return false
+  if (typeof value.baseline.commit !== 'string' || !/^[0-9a-f]{40}$/i.test(value.baseline.commit)) return false
+  if (value.baseline.basis !== 'merge-base' && value.baseline.basis !== 'parent') return false
+  if (value.reason !== null || !Array.isArray(value.reasons) || value.reasons.length !== 0) return false
+  if (!isRecord(value.metrics) || !hasExactKeys(value.metrics, METRICS)) return false
   for (const metric of METRICS) {
     const row = value.metrics[metric]
-    const currentMedian = median(current.metrics[metric].samplesMs)
-    if (!row || currentMedian === null || row.headMedianMs !== currentMedian) return false
-    if (!Number.isFinite(row.baselineMedianMs) || row.baselineMedianMs <= 0) return false
-    if (row.headSamples !== current.metrics[metric].samplesMs.length || !Number.isSafeInteger(row.baselineSamples) || row.baselineSamples < 20) return false
-    if (row.budgetMs !== BUDGETS[metric] || row.budgetMiss !== (currentMedian > BUDGETS[metric])) return false
-    if (row.baselineBudgetMiss !== (row.baselineMedianMs > BUDGETS[metric])) return false
-    if (row.changePercent !== percentageChange(currentMedian, row.baselineMedianMs)) return false
-    if (row.regression !== (currentMedian > row.baselineMedianMs * 1.25)) return false
+    if (!isRecord(row) || !hasExactKeys(row, ['headMedianMs', 'baselineMedianMs', 'pairs', 'changePercent', 'lowerBoundPercent', 'regression'])) return false
+    if (![row.headMedianMs, row.baselineMedianMs, row.changePercent, row.lowerBoundPercent].every((number) => typeof number === 'number' && Number.isFinite(number))) return false
+    if ((row.headMedianMs as number) <= 0 || (row.baselineMedianMs as number) <= 0) return false
+    if (!Number.isSafeInteger(row.pairs) || (row.pairs as number) < 20 || typeof row.regression !== 'boolean') return false
+    const expectedChange = percentageChange(row.headMedianMs as number, row.baselineMedianMs as number)
+    if (expectedChange === null || row.changePercent !== expectedChange) return false
+    const expectedRegression = (row.headMedianMs as number) > (row.baselineMedianMs as number) * REGRESSION_RATIO
+      && (row.lowerBoundPercent as number) > 0
+    if (row.regression !== expectedRegression) return false
   }
   return true
 }
@@ -264,14 +324,6 @@ function displayNumber(value: number | null): string {
   return value === null || !Number.isFinite(value) ? 'not available' : String(value)
 }
 
-function ageText(ageMs: number): string {
-  if (!Number.isFinite(ageMs)) return 'unknown age'
-  if (ageMs < 0) return `baseline timestamp is ${ageText(-ageMs)} newer`
-  if (ageMs < 60_000) return 'less than a minute old'
-  if (ageMs < 3_600_000) return `${Math.floor(ageMs / 60_000)} ${Math.floor(ageMs / 60_000) === 1 ? 'minute' : 'minutes'} old`
-  if (ageMs < 86_400_000) return `${Math.floor(ageMs / 3_600_000)} ${Math.floor(ageMs / 3_600_000) === 1 ? 'hour' : 'hours'} old`
-  return `${Math.floor(ageMs / 86_400_000)} ${Math.floor(ageMs / 86_400_000) === 1 ? 'day' : 'days'} old`
-}
 
 function currentRows(report: SpeedReport): string[] {
   const lines = [
@@ -288,15 +340,19 @@ function currentRows(report: SpeedReport): string[] {
 }
 
 function comparedRows(comparison: Comparison): string[] {
+  const isParent = comparison.baseline!.basis === 'parent'
   const lines = [
-    '| Metric | Main median (n) | PR median (n) | Change | Main budget | PR budget | Relative result |',
-    '| --- | ---: | ---: | ---: | --- | --- | --- |',
+    isParent
+      ? '| Metric | Pairs | Parent median (ms) | This commit median (ms) | Change | Lower bound (95%) | Result |'
+      : '| Metric | Pairs | Main median (ms) | PR median (ms) | Change | Lower bound (95%) | Result |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | --- |',
   ]
   for (const metric of METRICS) {
     const row = comparison.metrics[metric]!
     const relative = row.regression ? 'REGRESSION' : 'no regression'
     const change = `${row.changePercent >= 0 ? '+' : ''}${row.changePercent.toFixed(1)}%`
-    lines.push(`| ${metric} | ${row.baselineMedianMs} (${row.baselineSamples}) | ${row.headMedianMs} (${row.headSamples}) | ${change} | ${row.baselineBudgetMiss ? 'BUDGET MISS' : 'pass'} | ${row.budgetMiss ? 'BUDGET MISS' : 'pass'} | ${relative} |`)
+    const lowerBound = `${row.lowerBoundPercent >= 0 ? '+' : ''}${row.lowerBoundPercent.toFixed(1)}%`
+    lines.push(`| ${metric} | ${row.pairs} | ${row.baselineMedianMs} | ${row.headMedianMs} | ${change} | ${lowerBound} | ${relative} |`)
   }
   return lines
 }
@@ -372,13 +428,25 @@ export function renderSpeed(current: SpeedReport | null, comparison?: Comparison
       lines.push(...currentRows(current), ...missLines(current, selectedMisses))
       return boundedMarkdown(lines)
     }
-    lines.push(`Compared main \`${comparison.baseline!.commit}\` (${escaped(ageText(comparison.baseline!.ageMs))}, run \`${escaped(comparison.baseline!.runId)}\`) with PR \`${comparison.head!.commit}\` (run \`${escaped(comparison.head!.runId)}\`).`, '')
-    lines.push(...comparedRows(comparison), ...missLines(current, selectedMisses))
+    const head = comparison.head!
+    const baseline = comparison.baseline!
+    const comparedLine = baseline.basis === 'parent'
+      ? `Compared main \`${head.commit}\` with its parent \`${baseline.commit}\`, interleaved on one runner (run \`${escaped(head.runId)}\`).`
+      : `Compared PR \`${head.commit}\` with main at its merge base \`${baseline.commit}\`, interleaved on one runner (run \`${escaped(head.runId)}\`).`
+    lines.push(comparedLine, '', ...comparedRows(comparison))
+    lines.push(
+      'REGRESSION means the median is more than 25% slower and the lower end of the 95% confidence interval is above zero.',
+      '',
+      'Absolute results for this commit:',
+      '',
+      ...currentRows(current),
+      ...missLines(current, selectedMisses),
+    )
     return boundedMarkdown(lines)
   }
 
-  const reason = comparisonReason ?? 'no compatible baseline'
-  lines.push(`not compared: ${escaped(reason)}`, `PR commit \`${current.commit}\` (run \`${escaped(current.runId)}\`).`, '')
+  const reason = comparisonReason ?? 'no paired base measurement'
+  lines.push(`not compared: ${escaped(reason)}`, `Commit \`${current.commit}\` (run \`${escaped(current.runId)}\`).`, '')
   lines.push(...currentRows(current), ...missLines(current, selectedMisses))
   return boundedMarkdown(lines)
 }
