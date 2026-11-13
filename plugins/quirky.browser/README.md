@@ -28,13 +28,15 @@ quirky browser exec --page <page-id> --command 'fill "#email" "agent@example.tes
 quirky browser tab close --page <page-id> --yes --json
 ```
 
-Page operations accept an explicit `--page` or use the existing worktree/current-directory scope rules. `--worktree all` is for read-only page listings. `tab switch --focus` fails explicitly because native window focus is unsupported in this headless feature.
+Page operations accept an explicit `--page` or use the existing worktree/current-directory scope rules. `--worktree all` is for read-only page listings. `tab switch --focus` reveals the selected page in a Watch pane in its worktree and switches one Quirky window to that worktree, reusing an existing Watch pane. `open-url --client caller` creates and reveals a Default-profile page in its worktree; routing chooses the caller's matching window (the focused one if several match), a sole connected window if none match, or an explicit `--client <connection-id>` when ambiguous, and neither command raises or activates an OS window.
 
 CLI values are literal data. In particular, a string beginning with `@file:` is passed unchanged; the CLI does not read files or stdin implicitly.
 
 Bulk input is explicit: `fill --value-file <path>`, `eval --expression-file <path>`, or an operation's `--text-file <path>` reads only that named field. Corresponding `--value-stdin`, `--expression-stdin` and `--text-stdin` read stdin only when requested. Inline/file/stdin choices are mutually exclusive; a literal `@file:` value never opts into reading.
 
 Advanced automation adds history, semantic locators, keyboard/mouse and form operations, uploads/downloads, full-page screenshots/PDF, console/network/HAR, interception and page emulation. `exec` remains a closed typed command parser: it cannot launch or retarget the helper, close its session, change transport, or bypass ordinary page scoping.
+
+`intercept enable` holds matching requests on the selected managed page until `intercept disable` releases them. `intercept list` shows only pending requests, each with `pending: true`. List and disable remain available while a held navigation blocks another command. Re-enabling replaces the patterns without releasing requests already held. Each page holds at most 1,000 requests; further matches pass through. Watch uses the same queue, which survives stopping Watch. Closing a page, changing its profile or losing its browser discards held requests; patterns survive profile changes and browser loss.
 
 ```sh
 quirky browser full-screenshot --page <page-id> --format png --json

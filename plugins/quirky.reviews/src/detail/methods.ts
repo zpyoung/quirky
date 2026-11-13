@@ -123,7 +123,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
   {
     id: 'detailSetFilesView',
     description: 'Set file selection, filtering, collapse, and diff mode.',
-    params: strictObject({ ...targetIdentity,
+    params: strictObject({ ...targetIdentity, generation: { type: 'integer', minimum: 0 },
       fileFilter: stringShape,
       diffMode: { type: 'string', enum: ['inline', 'side-by-side'] },
       selectedFile: { description: 'String or null.' },

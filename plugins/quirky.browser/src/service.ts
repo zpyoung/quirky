@@ -4,7 +4,7 @@ import { validateValue, type PluginCaller, type PluginContext, type Schema } fro
 import { BrowserActions, spansNavigation } from './runtime/actions'
 import { BROWSER_METHODS, READ_ONLY_METHODS, type BrowserMethod } from './runtime/catalog'
 import { BrowserRuntime } from './runtime/driver'
-import { asPluginError, fault } from './runtime/errors'
+import { asPluginError, BrowserFault, fault } from './runtime/errors'
 import { parseExec } from './runtime/exec'
 import type { BrowserDependencies } from './runtime/dependencies'
 import { CookieImporter } from './cookies/importer'
@@ -19,6 +19,7 @@ import { identityModeFromSetting } from './preferences/identity'
 import type { PreferencesController } from './preferences/contract'
 import { PANE_METHODS, type PaneMethod, type PaneTab } from './pane-contract'
 import { PaneService } from './pane-service'
+import { openUrlOnClient, parseClientSelector, revealOnClient, selectClient, type RevealSteps } from './client-routing'
 
 export type BrowserPlugin = {
   deactivate(): Promise<void>
@@ -265,7 +266,7 @@ export class BrowserService {
         await this.context.call('setting.set', { id: IDENTITY_SETTING_ID, value: mode })
         return identityState(mode, this.activeIdentityMode)
       }
-      case 'openUrl': return await this.profileLifecycle.withProfileAdmission('default', () => this.createPage({ ...params, profile: 'default' }, caller))
+      case 'openUrl': return await this.openUrl(params, caller)
       case 'dialogAccept': return await this.dialog(params, caller, true)
       case 'dialogDismiss': return await this.dialog(params, caller, false)
       case 'exec': return await this.exec(params, caller)
@@ -377,11 +378,57 @@ export class BrowserService {
     }
   }
 
+  private revealSteps(caller: PluginCaller): RevealSteps {
+    return {
+      call: (method, params) => this.context.call(method, params),
+      revealPage: (page) => this.profileLifecycle.withProfileAdmission(page.profileId, async () => {
+        const result = await this.panes.revealPage(page, caller)
+        if (result.opened) this.context.emit('preferencesChanged', {})
+        return result
+      }),
+      closePane: async (pane) => { await this.panes.call('paneClose', { pane }, caller) }
+    }
+  }
+
+  private async openUrl(params: Record<string, unknown>, caller: PluginCaller) {
+    if (params.client === undefined) {
+      return await this.profileLifecycle.withProfileAdmission('default', () => this.createPage({ ...params, profile: 'default' }, caller))
+    }
+    const url = stringParam(params, 'url')
+    validateNavigationUrl(url)
+    const selector = parseClientSelector(params.client)
+    const worktree = optionalString(params, 'worktree')
+    let worktreeId: string | undefined
+    try {
+      worktreeId = await this.resolveWorktreeTarget(worktree, optionalString(params, 'cwd'), caller, false)
+    } catch (error) {
+      if (!(worktree === undefined && error instanceof BrowserFault && error.reason === 'browser_tab_not_found')) throw error
+    }
+    if (worktreeId === undefined) throw fault('invalid_argument', 'open-url with client needs a worktree; pass worktree or run inside one')
+    const connId = await selectClient((method, args) => this.context.call(method, args), selector, caller)
+    const previousPage = this.store.listPages().find((page) => page.worktreeId === worktreeId && page.active)?.browserPageId
+    const previousPane = (await this.panes.call('paneState', { worktree: `id:${worktreeId}` }, caller) as { active: string | null }).active
+    const steps = this.revealSteps(caller)
+    return await this.profileLifecycle.withProfileAdmission('default', () => openUrlOnClient({
+      ...steps,
+      createPage: async () => {
+        const created = await this.createPage({ url, worktree: `id:${worktreeId}`, profile: 'default' }, caller)
+        return this.store.getPage(created.browserPageId)
+      },
+      closePage: async (page) => {
+        await this.tabClose({ page }, caller)
+        this.panes.restoreActivePane(previousPane)
+        if (previousPage && this.store.listPages().some((candidate) => candidate.browserPageId === previousPage)) this.store.switchPage(previousPage)
+      }
+    }, connId))
+  }
+
   private async tabSwitch(params: Record<string, unknown>, caller: PluginCaller) {
     const pageParam = optionalString(params, 'page')
     const indexParam = params.index
     if ((pageParam === undefined) === (indexParam === undefined)) throw fault('invalid_argument', 'tab switch requires exactly one of page or index')
-    if (params.focus === true) throw fault('invalid_argument', 'Visible pane focus belongs to browser UI; automation is headless.')
+    if (params.client !== undefined && params.focus !== true) throw fault('invalid_argument', 'client requires focus')
+    const selector = params.focus === true ? parseClientSelector(params.client ?? 'caller') : undefined
     let page: BrowserPage
     if (pageParam !== undefined) {
       page = this.store.getPage(pageParam)
@@ -391,10 +438,19 @@ export class BrowserService {
       const candidates = this.store.listPages().filter((item) => item.worktreeId === worktreeId)
       page = candidates.find((item) => item.index === indexParam) ?? (() => { throw fault('browser_tab_not_found', `tab index ${indexParam} does not exist`) })()
     }
+    if (selector !== undefined && page.worktreeId === null) {
+      throw fault('invalid_argument', `page ${page.browserPageId} belongs to no worktree, so no browser pane can show it`)
+    }
+    const steps = selector === undefined ? undefined : this.revealSteps(caller)
+    const connId = steps && selector !== undefined ? await selectClient(steps.call, selector, caller) : undefined
     await this.runtime.withPage(page, 'tabSwitch', async () => {
       this.store.switchPage(page.browserPageId)
       return undefined
     })
+    if (steps && connId !== undefined) {
+      const revealed = await revealOnClient(steps, page, connId)
+      return { switched: page.index, browserPageId: page.browserPageId, focused: true, ...revealed }
+    }
     return { switched: page.index, browserPageId: page.browserPageId }
   }
 
@@ -427,6 +483,13 @@ export class BrowserService {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }
+    if (method === 'interceptList') return this.runtime.interceptSnapshot(page.browserPageId)
+    if (method === 'interceptDisable') {
+      return await this.runtime.withInterceptsReleased(page.browserPageId, () =>
+        this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution), {
+          spansNavigation: spansNavigation(method, params)
+        }))
+    }
     return await this.runtime.withPage(page, method, (execution) => this.actions.run(method, params, execution), {
       spansNavigation: spansNavigation(method, params)
     })
@@ -447,9 +510,12 @@ export class BrowserService {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }
-    const result = await this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution), {
+    if (plan.method === 'interceptList') return { command: plan.command, result: this.runtime.interceptSnapshot(page.browserPageId) }
+    const execute = () => this.runtime.withPage(page, 'exec', (execution) => this.actions.run(plan.method, plan.params, execution), {
       spansNavigation: spansNavigation(plan.method, plan.params)
     })
+    const result = await (plan.method === 'interceptDisable'
+      ? this.runtime.withInterceptsReleased(page.browserPageId, execute) : execute())
     return { command: plan.command, result }
   }
 
