@@ -72,7 +72,7 @@ test('feature table exports the complete required inventory in document order wi
   const result = parseFeatureTable(markdown, repositoryRoot, notOnCi)
 
   expect(result.errors).toEqual([])
-  expect(result.rows.map((row) => row.id)).toEqual(REQUIRED_FEATURE_IDS)
+  expect(result.rows.map((row) => row.id)).toEqual([...REQUIRED_FEATURE_IDS])
   expect(new Set(result.rows.map((row) => row.id)).size).toBe(REQUIRED_FEATURE_IDS.length)
 
   for (const row of result.rows) {
@@ -249,7 +249,7 @@ test('the real CLI reads its fixed inventory and emits one JSON document without
   expect(result.stdout).toBe(`${JSON.stringify(exported)}\n`)
   expect(exported.schemaVersion).toBe(1)
   expect(exported.errors).toEqual([])
-  expect(exported.rows.map((row) => row.id)).toEqual(REQUIRED_FEATURE_IDS)
+  expect(exported.rows.map((row) => row.id)).toEqual([...REQUIRED_FEATURE_IDS])
 })
 
 test('the real CLI accepts only help or JSON and exits with the documented codes', () => {
