@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isDaemonAlive, readRuntime } from '@quirky/protocol/node'
+import { isDaemonAlive, readRuntime, tryHomeLock } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
-import { acquireDaemonLock } from '../src/lock'
-import { makeTempHome, waitFor } from './helpers'
+import { acquireDaemonLock, DaemonLockHeldError } from '../src/lock'
+import { makeHomeWithoutAutoHooks, makeTempHome, waitFor } from './helpers'
 
 const MAIN = join(import.meta.dir, '..', 'src', 'main.ts')
 const FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'fake-pty-host.ts')
 
+const LOCK_HOLDER_MAIN = join(import.meta.dir, 'fixtures', 'hold-daemon-lock.ts')
+
 const cleanups: (() => Promise<void> | void)[] = []
+
 const scopes = new Map<string, ProcessScope>()
 afterEach(async () => {
   let failed = false
@@ -31,6 +34,12 @@ function homeDir() {
   return home
 }
 
+function daemonHomeDir() {
+  const home = makeHomeWithoutAutoHooks('qd-lock-')
+  cleanups.push(() => rmSync(home, { recursive: true, force: true }))
+  return home
+}
+
 function scopeFor(home: string): ProcessScope {
   let scope = scopes.get(home)
   if (!scope) {
@@ -48,6 +57,50 @@ async function deadPid(): Promise<number> {
   const proc = Bun.spawn(['true'])
   await proc.exited
   return proc.pid
+}
+
+async function settleWithin<T>(
+  promise: Promise<T>,
+  timeoutMs = 2000
+): Promise<{ value: T } | { error: unknown }> {
+  let result: { value: T } | { error: unknown } | undefined
+  void promise.then(
+    (value) => {
+      result = { value }
+    },
+    (error: unknown) => {
+      result = { error }
+    }
+  )
+  return waitFor(() => result, timeoutMs)
+}
+
+async function lockPassesAfterHolderSignal(signal: 'SIGTERM' | 'SIGKILL'): Promise<void> {
+  const home = homeDir()
+  const holder = scopeFor(home).spawn([process.execPath, LOCK_HOLDER_MAIN], {
+    stdout: 'ignore',
+    stderr: 'ignore'
+  })
+  await waitFor(
+    () =>
+      existsSync(join(home, 'daemon.lock')) &&
+      readFileSync(join(home, 'daemon.lock'), 'utf8').trim() === String(holder.pid)
+        ? holder.pid
+        : undefined,
+    2000
+  )
+
+  const started = Date.now()
+  const acquisition = acquireDaemonLock(home, { waitMs: 5000 })
+  // Fake timers cannot release the kernel lock held by this child process.
+  await Bun.sleep(200)
+  holder.kill(signal)
+  const result = await settleWithin(acquisition, 1800)
+  if ('error' in result) throw result.error
+  expect(Date.now() - started).toBeLessThan(2000)
+  expect(result.value).not.toBeNull()
+  expect(readFileSync(join(home, 'daemon.lock'), 'utf8').trim()).toBe(String(process.pid))
+  result.value!.release()
 }
 
 describe('acquireDaemonLock', () => {
@@ -72,17 +125,94 @@ describe('acquireDaemonLock', () => {
   test('takes over an empty lock file', async () => {
     const home = homeDir()
     writeFileSync(join(home, 'daemon.lock'), '')
-    expect(await acquireDaemonLock(home, { graceMs: 100 })).not.toBeNull()
+    const lock = await acquireDaemonLock(home, { graceMs: 100 })
+    expect(lock).not.toBeNull()
+    lock!.release()
   })
 
-  test('takes over a live pid that never answers health once the wait runs out', async () => {
+  test('refuses to take a live legacy pid that never answers health', async () => {
     const home = homeDir()
     const sleeper = scopeFor(home).spawn(['sleep', '30'])
     writeFileSync(join(home, 'daemon.lock'), String(sleeper.pid))
     const started = Date.now()
-    const lock = await acquireDaemonLock(home, { waitMs: 400 })
-    expect(lock).not.toBeNull()
+    const result = await settleWithin(acquireDaemonLock(home, { waitMs: 400 }))
     expect(Date.now() - started).toBeGreaterThanOrEqual(350)
+    if (!('error' in result)) throw new Error('expected acquireDaemonLock to reject')
+    expect(result.error).toBeInstanceOf(DaemonLockHeldError)
+    expect((result.error as DaemonLockHeldError).holderPid).toBe(sleeper.pid)
+    expect((result.error as Error).message).toContain('did not answer')
+    expect(readFileSync(join(home, 'daemon.lock'), 'utf8').trim()).toBe(String(sleeper.pid))
+    const kernelLock = tryHomeLock(home, 'daemon')
+    expect(kernelLock).not.toBeNull()
+    kernelLock!.release()
+  })
+
+  test('keeps a live unhealthy daemon that holds the kernel lock', async () => {
+    const home = homeDir()
+    const holder = scopeFor(home).spawn([process.execPath, LOCK_HOLDER_MAIN], {
+      stdout: 'ignore',
+      stderr: 'ignore'
+    })
+    await waitFor(
+      () =>
+        existsSync(join(home, 'daemon.lock')) &&
+        readFileSync(join(home, 'daemon.lock'), 'utf8').trim() === String(holder.pid)
+          ? holder.pid
+          : undefined,
+      2000
+    )
+
+    const started = Date.now()
+    const result = await settleWithin(acquireDaemonLock(home, { waitMs: 400 }))
+    expect(Date.now() - started).toBeGreaterThanOrEqual(350)
+    if (!('error' in result)) throw new Error('expected acquireDaemonLock to reject')
+    expect(result.error).toBeInstanceOf(DaemonLockHeldError)
+    expect((result.error as DaemonLockHeldError).holderPid).toBe(holder.pid)
+    expect((result.error as Error).message).toContain('did not answer')
+    expect(readFileSync(join(home, 'daemon.lock'), 'utf8').trim()).toBe(String(holder.pid))
+  })
+
+  test('passes the lock to a waiter after SIGTERM releases the holder', async () => {
+    await lockPassesAfterHolderSignal('SIGTERM')
+  })
+
+  test('passes the lock to a waiter after SIGKILL ends the holder', async () => {
+    await lockPassesAfterHolderSignal('SIGKILL')
+  })
+
+  test('takes a live pid reused by the last kernel-lock holder', async () => {
+    const home = homeDir()
+    const sleeper = scopeFor(home).spawn(['sleep', '30'])
+    writeFileSync(join(home, 'daemon.lock'), String(sleeper.pid))
+    writeFileSync(join(home, 'daemon.oslock.pid'), String(sleeper.pid))
+
+    const started = Date.now()
+    const acquired = await settleWithin(acquireDaemonLock(home, { waitMs: 5000 }), 2000)
+    if ('error' in acquired) throw acquired.error
+    const lock = acquired.value
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(lock).not.toBeNull()
+    expect(readFileSync(join(home, 'daemon.lock'), 'utf8').trim()).toBe(String(process.pid))
+    expect(readFileSync(join(home, 'daemon.oslock.pid'), 'utf8').trim()).toBe(String(process.pid))
+    lock!.release()
+  })
+
+  test('refuses a live pid when the last kernel-lock holder was different', async () => {
+    const home = homeDir()
+    const sleeper = scopeFor(home).spawn(['sleep', '30'])
+    writeFileSync(join(home, 'daemon.lock'), String(sleeper.pid))
+    writeFileSync(join(home, 'daemon.oslock.pid'), String(await deadPid()))
+
+    const started = Date.now()
+    const result = await settleWithin(acquireDaemonLock(home, { waitMs: 400 }))
+    expect(Date.now() - started).toBeGreaterThanOrEqual(350)
+    if (!('error' in result)) throw new Error('expected acquireDaemonLock to reject')
+    expect(result.error).toBeInstanceOf(DaemonLockHeldError)
+    expect((result.error as DaemonLockHeldError).holderPid).toBe(sleeper.pid)
+    expect(readFileSync(join(home, 'daemon.lock'), 'utf8').trim()).toBe(String(sleeper.pid))
+    const kernelLock = tryHomeLock(home, 'daemon')
+    expect(kernelLock).not.toBeNull()
+    kernelLock!.release()
   })
 
   test('returns null while a healthy daemon holds it', async () => {
@@ -117,15 +247,18 @@ describe('acquireDaemonLock', () => {
     writeFileSync(join(home, 'daemon.lock'), String(await deadPid()))
     const results = await Promise.all(Array.from({ length: 6 }, () => acquireDaemonLock(home, { waitMs: 5000 })))
     expect(results.filter((r) => r !== null)).toHaveLength(1)
+    for (const result of results) result?.release()
   })
 })
 
 describe('two daemon processes started together', () => {
   test('exactly one keeps running and the other exits 0', async () => {
-    const home = homeDir()
+    const home = daemonHomeDir()
     const scope = scopeFor(home)
     const env = {
       ...process.env,
+      HOME: home,
+      XDG_CONFIG_HOME: join(home, 'xdg'),
       QUIRKY_HOME: home,
       QUIRKY_PORT: '0',
       QUIRKY_UI_DIR: join(home, 'none'),
@@ -159,12 +292,14 @@ describe('two daemon processes started together', () => {
   })
 
   test('scope kills a fake PTY host after its daemon is hard-killed', async () => {
-    const home = homeDir()
+    const home = daemonHomeDir()
     const scope = scopeFor(home)
     writeFileSync(join(home, 'daemon.lock'), String(await deadPid()))
     const proc = scope.spawn([process.execPath, MAIN], {
       env: {
         ...process.env,
+        HOME: home,
+        XDG_CONFIG_HOME: join(home, 'xdg'),
         QUIRKY_HOME: home,
         QUIRKY_PORT: '0',
         QUIRKY_UI_DIR: join(home, 'none'),

@@ -1,10 +1,54 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { base64ToBytes, encodePtyJson, PTY_PROTOCOL_VERSION, PtyFrameDecoder } from '@quirky/protocol'
 import { readSegments } from '../src/history/log'
 import type { PtyClient } from '../src/client'
-import { createScopedSession, ready, runCleanups, startProcess, tempHome, text, waitFor } from './helpers'
+import { createScopedSession, ready, runCleanups, scopeForHome, startProcess, tempHome, text, waitFor } from './helpers'
+
+const LEGACY_HOST = join(import.meta.dir, 'fixtures', 'legacy-host.ts')
+
+/** Process exit deadlines use the wall clock; fake time cannot bound a child process. */
+function within<T>(promise: Promise<T>, timeoutMs: number, what: string): Promise<T> {
+  const { promise: timeout, reject } = Promise.withResolvers<never>()
+  const timer = setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), timeoutMs)
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+async function processState(home: string, pid: number): Promise<string> {
+  const proc = scopeForHome(home).spawn(['ps', '-o', 'stat=', '-p', String(pid)], { stdout: 'pipe' })
+  const state = await within(new Response(proc.stdout).text(), 2000, 'process state')
+  await within(proc.exited, 2000, 'process-state command')
+  return state.trim()
+}
+
+function signalProcess(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(pid, signal)
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ESRCH') return
+    throw error
+  }
+}
+
+function startLegacyProcess(home: string) {
+  return scopeForHome(home).spawn([process.execPath, LEGACY_HOST], {
+    env: { ...process.env, QUIRKY_HOME: home },
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+}
+
+async function legacyReady(home: string) {
+  const proc = startLegacyProcess(home)
+  const { client, token } = await ready(home)
+  await waitFor(
+    () => existsSync(join(home, 'pty.pid')) && readFileSync(join(home, 'pty.pid'), 'utf8') === String(proc.pid),
+    10000,
+    'legacy host pid'
+  )
+  return { proc, client, token }
+}
 
 afterEach(runCleanups)
 
@@ -51,6 +95,98 @@ describe('quirky-pty process', () => {
     expect(readFileSync(join(home, 'pty.token'), 'utf8')).toBe(token)
     expect(Number(readFileSync(join(home, 'pty.pid'), 'utf8'))).toBe(first.pid)
     expect(await client.request('list', {})).toEqual([])
+  })
+
+  test('a paused host keeps the home while it holds the kernel lock', async () => {
+    const home = tempHome()
+    const first = startProcess(home)
+    const { client, token } = await within(ready(home), 10000, 'first host readiness')
+    let stopSent = false
+
+    try {
+      stopSent = true
+      signalProcess(first.pid, 'SIGSTOP')
+      await waitFor(async () => /^[Tt]/.test(await processState(home, first.pid)), 5000, 'first host to stop')
+
+      const second = startProcess(home)
+      expect(await within(second.exited, 2000, 'second host exit')).toBe(0)
+      expect(readFileSync(join(home, 'pty.token'), 'utf8')).toBe(token)
+      expect(readFileSync(join(home, 'pty.pid'), 'utf8')).toBe(String(first.pid))
+
+      signalProcess(first.pid, 'SIGCONT')
+      expect(await within(client.request('list', {}), 5000, 'list after resuming first host')).toEqual([])
+    } finally {
+      if (stopSent) signalProcess(first.pid, 'SIGCONT')
+      signalProcess(first.pid, 'SIGTERM')
+      await within(first.exited, 10000, 'first host shutdown')
+    }
+  })
+
+  test('a paused lockless host keeps the home while its socket accepts a connection', async () => {
+    const home = tempHome()
+    const { proc: first, client, token } = await within(legacyReady(home), 10000, 'legacy host readiness')
+    let stopSent = false
+
+    try {
+      stopSent = true
+      signalProcess(first.pid, 'SIGSTOP')
+      await waitFor(async () => /^[Tt]/.test(await processState(home, first.pid)), 5000, 'legacy host to stop')
+
+      const second = startProcess(home)
+      expect(await within(second.exited, 5000, 'second host exit')).toBe(0)
+      expect(readFileSync(join(home, 'pty.token'), 'utf8')).toBe(token)
+      expect(readFileSync(join(home, 'pty.pid'), 'utf8')).toBe(String(first.pid))
+
+      signalProcess(first.pid, 'SIGCONT')
+      expect(await within(client.request('list', {}), 5000, 'list after resuming legacy host')).toEqual([])
+    } finally {
+      if (stopSent) signalProcess(first.pid, 'SIGCONT')
+      signalProcess(first.pid, 'SIGTERM')
+      await within(first.exited, 10000, 'legacy host shutdown')
+    }
+  })
+
+  test('a paused lockless host with no socket keeps the home by pid', async () => {
+    const home = tempHome()
+    const { proc: first, client, token } = await within(legacyReady(home), 10000, 'legacy host readiness')
+    let stopSent = false
+
+    try {
+      stopSent = true
+      signalProcess(first.pid, 'SIGSTOP')
+      await waitFor(async () => /^[Tt]/.test(await processState(home, first.pid)), 5000, 'legacy host to stop')
+      rmSync(join(home, 'pty.sock'))
+
+      const second = startProcess(home)
+      expect(await within(second.exited, 5000, 'second host exit')).toBe(0)
+      const output = await within(new Response(second.stdout).text(), 2000, 'second host output')
+      expect(output).toContain('owns')
+      expect(output).toContain(String(first.pid))
+      expect(readFileSync(join(home, 'pty.token'), 'utf8')).toBe(token)
+      expect(readFileSync(join(home, 'pty.pid'), 'utf8')).toBe(String(first.pid))
+      expect(existsSync(join(home, 'pty.sock'))).toBe(false)
+
+      signalProcess(first.pid, 'SIGCONT')
+      expect(await within(client.request('list', {}), 5000, 'list after resuming legacy host')).toEqual([])
+    } finally {
+      if (stopSent) signalProcess(first.pid, 'SIGCONT')
+      signalProcess(first.pid, 'SIGTERM')
+      await within(first.exited, 10000, 'legacy host shutdown')
+    }
+  })
+
+  test('a live reused pid is free when the kernel lock pid file names it', async () => {
+    const home = tempHome()
+    const reusedPid = scopeForHome(home).spawn(['/bin/sleep', '30'], { stdout: 'ignore', stderr: 'ignore' }).pid
+    expect(() => process.kill(reusedPid, 0)).not.toThrow()
+    writeFileSync(join(home, 'pty.pid'), String(reusedPid))
+    writeFileSync(join(home, 'pty.oslock.pid'), String(reusedPid))
+
+    const host = startProcess(home)
+    const { client } = await within(ready(home), 10000, 'host readiness after reused pid')
+    expect(readFileSync(join(home, 'pty.pid'), 'utf8')).toBe(String(host.pid))
+    expect(readFileSync(join(home, 'pty.oslock.pid'), 'utf8')).toBe(String(host.pid))
+    expect(await within(client.request('list', {}), 5000, 'list after reused pid')).toEqual([])
   })
 
   test('replaces a stale socket and token left by a dead host', async () => {
