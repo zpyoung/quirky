@@ -1,0 +1,206 @@
+import { expect, test } from 'bun:test'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { createProcessScope } from '../test-support/process-scope'
+import { STEP_IDS, parseGoalLoopArgs, parseGoalLoopOutput, runGoalLoop } from './goal-loop-run'
+import { createGoalLoopWorld, type GoalLoopWorld } from './goal-loop-world'
+
+const faults = ['missing-agent', 'malformed-cli-json', 'cli-nonzero', 'missing-terminal-ack', 'provider-malformed', 'daemon-exited', 'deadline'] as const
+
+test('CLI output must be one valid JSON document and a successful exit', () => {
+  expect(parseGoalLoopOutput('{"id":"actual-receipt"}\n', 0)).toEqual({ id: 'actual-receipt' })
+  for (const stdout of ['', '{"truncated":', '{}\n{}', 'progress\n{}']) {
+    try {
+      parseGoalLoopOutput(stdout, 0)
+      throw new Error('accepted malformed output')
+    } catch (error) {
+      expect(error).toMatchObject({ kind: 'malformed-cli-json' })
+    }
+  }
+  try {
+    parseGoalLoopOutput('{"id":"not-success"}', 1, 'operation refused')
+    throw new Error('accepted nonzero exit')
+  } catch (error) {
+    expect(error).toMatchObject({ kind: 'cli-nonzero' })
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toContain('1')
+  }
+  expect(() => parseGoalLoopOutput('{"error":{"message":"exact owned failure"}}', 2)).toThrow('exact owned failure')
+})
+
+for (const fault of faults) {
+  test(`${fault} preserves failure, dependent not-run steps and cleanup`, async () => {
+    let cleaned = false
+    const world = {
+      root: '/owned/fixture', env: { QUIRKY_SESSION_TOKEN: 'private-fixture-session-token' },
+      start: async () => {}, cleanup: async () => { cleaned = true }
+    } as unknown as GoalLoopWorld
+    const report = await runGoalLoop({
+      createWorld: async () => world,
+      executeStep: async (id) => {
+        if (id === 'terminals-roundtrip') throw Object.assign(new Error(`${'x'.repeat(10_000)} /owned/fixture private-fixture-session-token ${fault}`), {
+          kind: fault, stderrTail: 'y'.repeat(10_000), evidence: { sendReceiptReceived: fault === 'missing-terminal-ack' }
+        })
+        return { observed: id }
+      }
+    })
+    expect(report.ok).toBe(false)
+    expect(cleaned).toBe(true)
+    expect(report.cleanup.ok).toBe(true)
+    expect(report.steps.map((step) => step.id)).toEqual([...STEP_IDS])
+    expect(report.steps.map((step) => step.status)).toEqual(['passed', 'passed', 'failed', 'not-run', 'not-run', 'not-run', 'not-run'])
+    const failed = report.steps[2]!
+    expect(failed.error?.kind).toBe(fault)
+    expect(Buffer.byteLength(failed.error?.message ?? '')).toBeLessThanOrEqual(8192)
+    expect(Buffer.byteLength(failed.error?.stderrTail ?? '')).toBeLessThanOrEqual(8192)
+    expect(JSON.stringify(report)).not.toContain('/owned/fixture')
+    expect(JSON.stringify(report)).not.toContain('private-fixture-session-token')
+    if (fault === 'missing-terminal-ack') expect(failed.evidence.sendReceiptReceived).toBe(true)
+  })
+}
+
+test('cleanup failure prevents a green report and preserves an earlier operation error', async () => {
+  for (const operationFails of [false, true]) {
+    const world = {
+      root: '/owned/fixture', env: {}, start: async () => {},
+      cleanup: async () => { throw new Error('owned process did not exit') }
+    } as unknown as GoalLoopWorld
+    const report = await runGoalLoop({
+      createWorld: async () => world,
+      executeStep: async () => {
+        if (operationFails) throw Object.assign(new Error('original operation failure'), { kind: 'cli-nonzero' })
+        return { observed: true }
+      }
+    })
+    expect(report.ok).toBe(false)
+    expect(report.cleanup).toEqual({ ok: false, error: 'owned process did not exit' })
+    if (operationFails) expect(report.steps[0]!.error?.message).toBe('original operation failure')
+    else expect(report.steps.every((step) => step.status === 'passed')).toBe(true)
+  }
+})
+
+test('the owned deadline aborts a blocked operation and still awaits cleanup', async () => {
+  let signal: AbortSignal
+  let cleaned = false
+  const world = {
+    root: '/owned/fixture', env: {}, start: async () => {},
+    cleanup: async () => { cleaned = true }
+  } as unknown as GoalLoopWorld
+  const report = await runGoalLoop({
+    deadlineMs: 20,
+    createWorld: async (options) => { signal = options!.signal!; return world },
+    executeStep: async () => {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      if (!signal.aborted) {
+        signal.addEventListener('abort', () => resolve(), { once: true })
+        await promise
+      }
+      throw Object.assign(new Error('deadline expired during operation'), { kind: 'deadline' })
+    }
+  })
+  expect(cleaned).toBe(true)
+  expect(report.ok).toBe(false)
+  expect(report.cleanup.ok).toBe(true)
+  expect(report.steps[0]!.status).toBe('failed')
+  expect(report.steps[0]!.error?.kind).toBe('deadline')
+  expect(report.steps.slice(1).every((step) => step.status === 'not-run')).toBe(true)
+})
+
+test('public arguments cannot select a home, runtime, repository, command or executable', () => {
+  for (const args of [['--home', '/tmp/unsafe'], ['--runtime', 'owner'], ['--repo', '/tmp/unsafe'], ['--command', 'true'], ['--agent-bin', '/usr/bin/true'], ['--unknown'], ['--json', '--help'], ['--json', '--json']]) {
+    expect(() => parseGoalLoopArgs(args)).toThrow()
+  }
+  expect(parseGoalLoopArgs([])).toEqual({ json: false, help: false })
+  expect(parseGoalLoopArgs(['--json'])).toEqual({ json: true, help: false })
+  expect(parseGoalLoopArgs(['--help'])).toEqual({ json: false, help: true })
+})
+
+test('invalid public CLI arguments exit 2 without allocating runtime state', async () => {
+  const home = mkdtempSync('/tmp/quirky-goal-invalid-')
+  try {
+    for (const flag of ['--home', '--runtime', '--repo', '--command', '--agent-bin', '--unknown']) {
+      const child = Bun.spawn([process.execPath, join(import.meta.dir, 'goal-loop.ts'), flag], {
+        env: { PATH: '/usr/bin:/bin', HOME: home, QUIRKY_HOME: home, TMPDIR: home, BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0' },
+        stdout: 'pipe', stderr: 'pipe'
+      })
+      const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+      expect(exit, stderr).toBe(2)
+      expect(stdout).toBe('')
+      expect(stderr.length).toBeGreaterThan(0)
+      expect(readdirSync(home)).toEqual([])
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+for (const fault of ['missing-agent', 'provider-malformed', 'daemon-exited', 'startup'] as const) {
+  test(`real isolated ${fault} cannot become passing evidence`, async () => {
+    let ownedRoot = ''
+    let daemonPid = 0
+    const report = await runGoalLoop({
+      createWorld: async (options) => {
+        const world = await createGoalLoopWorld({ ...options, faults: {
+          missingAgent: fault === 'missing-agent', malformedProvider: fault === 'provider-malformed', failedStartup: fault === 'startup'
+        } })
+        ownedRoot = world.root
+        return world
+      },
+      beforeStep: async (id, world) => {
+        daemonPid = world.daemonPid
+        if (fault === 'daemon-exited' && id === 'agents-launch') {
+          process.kill(daemonPid, 'SIGTERM')
+          const until = Date.now() + 5000
+          // process exit is an OS event; fake timers cannot drive the real daemon
+          while (Date.now() < until) {
+            try { process.kill(daemonPid, 0) } catch { break }
+            await Bun.sleep(20)
+          }
+        }
+      }
+    })
+    expect(report.ok).toBe(false)
+    expect(report.steps.some((step) => step.status === 'failed')).toBe(true)
+    expect(report.steps.some((step) => step.status === 'not-run')).toBe(true)
+    expect(report.cleanup.ok).toBe(true)
+    expect(ownedRoot).not.toBe('')
+    expect(existsSync(ownedRoot)).toBe(false)
+    if (daemonPid) expect(() => process.kill(daemonPid, 0)).toThrow()
+    if (fault === 'provider-malformed') expect(report.steps.find((step) => step.id === 'accounts-usage')?.status, JSON.stringify(report)).toBe('failed')
+  }, 150_000)
+}
+
+test('SIGTERM during a real active turn reaps the owned tree without killing an unrelated process', async () => {
+  const temporary = mkdtempSync('/tmp/quirky-goal-signal-')
+  const home = join(temporary, 'controller-home')
+  const scope = createProcessScope(home)
+  const code = `import {runGoalLoop} from ${JSON.stringify(join(import.meta.dir, 'goal-loop-run.ts'))};
+const controller = new AbortController();
+process.on('SIGTERM', () => controller.abort(new Error('SIGTERM')));
+const report = await runGoalLoop({signal:controller.signal, onActiveTurn:async () => {const {promise,resolve}=Promise.withResolvers<void>();controller.signal.addEventListener('abort',()=>resolve(),{once:true});process.kill(process.pid,'SIGTERM');await promise}});
+console.log(JSON.stringify(report));process.exitCode=report.ok?0:1;`
+  const entry = join(temporary, 'signal-fixture.ts')
+  writeFileSync(entry, code)
+  const environment = { PATH: '/usr/bin:/bin', HOME: home, QUIRKY_HOME: home, TMPDIR: temporary, BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0' }
+  const sentinel = Bun.spawn(['/bin/sleep', '180'], { env: environment, stdout: 'ignore', stderr: 'ignore' })
+  const child = scope.spawn([process.execPath, entry], { env: environment, stdout: 'pipe', stderr: 'pipe' })
+  // a real subprocess deadline must keep running if the fixture's event loop stalls
+  const timeout = setTimeout(() => scope.killNow(), 140_000)
+  try {
+    const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+    expect(exit, stderr).toBe(1)
+    const report = JSON.parse(stdout)
+    expect(report.ok).toBe(false)
+    expect(report.cleanup.ok).toBe(true)
+    expect(report.steps.find((step: { id: string }) => step.id === 'loop-run-stop').status).toBe('failed')
+    expect(sentinel.exitCode).toBeNull()
+    process.kill(sentinel.pid, 0)
+  } finally {
+    clearTimeout(timeout)
+    await scope.cleanup()
+    await child.exited
+    sentinel.kill('SIGTERM')
+    await sentinel.exited
+    rmSync(temporary, { recursive: true, force: true })
+  }
+}, 150_000)
