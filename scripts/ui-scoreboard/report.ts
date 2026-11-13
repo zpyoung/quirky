@@ -2,6 +2,12 @@ import type { Inventory, ScoreboardReport, VisualResult, CheckResult, VisualCell
 import { CHECK_IDS } from './contracts'
 import { checkPlugin, checkHostTokens, sharedTokenEvidence } from './tokens'
 
+const sourceAuditChecks: Record<string, true> = { loading: true, empty: true, error: true, commands: true }
+const passingSourceAuditCodes: Record<string, true> = {
+  'state-covered': true, 'state-not-applicable': true, 'not-state': true,
+  'action-routed': true, 'action-transient': true, 'action-not-user': true,
+}
+
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
@@ -32,7 +38,7 @@ export function buildReport(inventory: Inventory, visuals: VisualResult, mode: S
 
 /** Expose missing and failed evidence without hiding cells behind percentages. */
 export function formatMarkdown(report: ScoreboardReport): string {
-  const escape = (value: string) => value.replaceAll('|', '\\|').replaceAll('\n', ' ')
+  const escape = (value: string) => value.replaceAll('|', '\\|').replaceAll(/[\r\n]+/g, ' ')
   const rows = report.plugins.map((plugin) => ({ id: plugin.id, checks: plugin.checks }))
   rows.push({ id: 'host', checks: report.host.checks })
   const lines = ['# UI scoreboard', '', `Mode: ${report.mode}. Status: ${report.status}. Goal passed: ${report.goalPassed}.`, `Commit: ${report.commit}. Source digest: ${report.sourceDigest}. Threshold: 85 per image.`, '', '| Plugin | ' + CHECK_IDS.join(' | ') + ' |', '| --- | ' + CHECK_IDS.map(() => '---').join(' | ') + ' |']
@@ -40,7 +46,11 @@ export function formatMarkdown(report: ScoreboardReport): string {
   lines.push('', '## Failed-check evidence', '')
   for (const row of rows) for (const check of row.checks.filter((check) => check.status === 'fail')) {
     lines.push(`### ${row.id}: ${check.id}`, '', check.reason)
-    for (const evidence of check.evidence) lines.push(`- ${evidence.code}: ${escape(evidence.message)}${evidence.source ? ` (${evidence.source.file}:${evidence.source.line}:${evidence.source.column})` : ''}`)
+    const audit = Object.prototype.hasOwnProperty.call(sourceAuditChecks, check.id)
+    const evidence = audit ? check.evidence.filter((item) => !Object.prototype.hasOwnProperty.call(passingSourceAuditCodes, item.code)) : check.evidence
+    const shown = audit ? evidence.slice(0, 25) : evidence
+    for (const item of shown) lines.push(`- ${item.code}: ${escape(item.message)}${item.source ? ` (${item.source.file}:${item.source.line}:${item.source.column})` : ''}`)
+    if (audit && evidence.length > shown.length) lines.push(`… and ${evidence.length - shown.length} more in scoreboard.json`)
     lines.push('')
   }
   for (const evidence of report.sharedTokenEvidence) lines.push(`- Shared ${evidence.code}: ${escape(evidence.message)}${evidence.source ? ` (${evidence.source.file}:${evidence.source.line}:${evidence.source.column})` : ''}`)
@@ -49,6 +59,6 @@ export function formatMarkdown(report: ScoreboardReport): string {
   for (const cell of report.cells) lines.push(`| ${escape(cell.targetId)} | ${cell.theme} | ${cell.status} | ${cell.score ?? 'unmeasured'} | ${escape(`${cell.code}: ${cell.reasons.join('; ')}`)} |`)
   lines.push('', '## Exclusions', '')
   for (const exclusion of report.exclusions) lines.push(`- ${exclusion.plugin}: ${exclusion.reason}; ${exclusion.branch}, PR ${exclusion.pr}, steer ${exclusion.steerDate}.`)
-  lines.push('', 'Loading, empty, error and command checks await the ordered source-audit follow-up. This tool cannot yet certify goal 3.', '')
+  lines.push('', 'Loading, empty, error and command checks are a syntactic source audit. See the UI scoreboard section of apps/desktop/README.md for its limits.', '')
   return lines.join('\n')
 }

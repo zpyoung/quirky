@@ -1,6 +1,6 @@
 {
   "id": "quirky.editor",
-  "apiVersion": "1.6.0",
+  "apiVersion": "1.12.0",
   "name": "Editor",
   "version": "0.1.0",
   "description": "Worktree-scoped file editing, recovery, search and explorer services.",
@@ -525,6 +525,7 @@
       {"id":"documentRoot","description":"Resolve an authorized document root. Explicit floating selects only the editor-owned profile notes directory, never HOME or another workspace.","readOnly":true,"params":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"id":{"type":"string"},"path":{"type":"string"}},"required":["id","path"],"additionalProperties":false}},
       {
         "id": "markdown",
+        "timeout": "30m",
         "description": "Source-preserving Markdown capabilities, edits, links, templates, search, TOC, safe detached rendering and export.",
         "params": {
           "type": "object",
@@ -665,6 +666,7 @@
       },
       {
         "id": "notebook",
+        "timeout": "24h",
         "description": "Parse and edit notebook cells, inspect environments, manage trust and run the local kernel. Install/venv actions use a conditional setup confirmation.",
         "destructive": true,
         "confirm": "Set up the requested local notebook environment?",

@@ -96,7 +96,7 @@ describe('reviews Checks refresh event scope', () => {
     expect(changed?.coalesce).toEqual([])
 
     const plugins = await host.client.callAny('plugin.list', {}) as { id: string; apiVersion?: string }[]
-    expect(plugins.find((plugin) => plugin.id === 'quirky.reviews')?.apiVersion).toBe('1.5.0')
+    expect(plugins.find((plugin) => plugin.id === 'quirky.reviews')?.apiVersion).toBe('1.12.0')
   })
 
   test('coalesces a burst while delivering the final revision', async () => {
