@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import type { JsonRecord, ReviewData, ReviewsEnv, ReviewsStore } from '../src/contracts'
+import type { JsonRecord, ReviewData, ReviewMethodTable, ReviewsEnv, ReviewsStore } from '../src/contracts'
 import { newChecksEntry, createReviewsEnv } from '../src/env'
 import { detailMethods } from '../src/detail/methods'
 import { checksMethods } from '../src/checks/methods'
+import type { PluginEvent, QuirkyEvent } from '@quirky/protocol'
+import { bootReviews } from './support'
+import { checksFixtureState, checksGhSource, checksReview } from './checks-fixture'
 
 type EmittedChange = { type: string; data: unknown }
 type CallStub = (method: string, params?: JsonRecord) => Promise<unknown>
@@ -241,7 +244,7 @@ function unitEnv(call: CallStub = defaultContextCall) {
   return { env, events, methods: detailMethods(env) }
 }
 
-function invoke(methods: ReturnType<typeof detailMethods>, method: string, params: Record<string, unknown>): Promise<unknown> {
+async function invoke(methods: ReviewMethodTable, method: string, params: Record<string, unknown>): Promise<unknown> {
   return methods[method]!(params as never, {} as never)
 }
 
@@ -619,9 +622,10 @@ describe('review agent launch event scope', () => {
     await checks.checksSetAgentDialog!({ ...conflictsDialog, action: 'comments' }, {} as never)
     events.length = 0
 
-    expect(await checks.checksLaunchAgent!({ worktree: 'w1' }, {} as never)).toMatchObject({ delivered: true, resolved: ['T1'] })
+    expect(await checks.checksLaunchAgent!({ worktree: 'w1' }, {} as never)).toMatchObject({ delivered: true, resolved: ['T1'], unresolved: [] })
 
     expect(env.read().checksByWorktree.w1!.queuedComments).toEqual([])
+    expect(env.read().checksByWorktree.w1!.error).toBeNull()
     expect(storedComments(env).find((comment) => comment.threadId === 'T1')?.isResolved).toBe(true)
     expect(env.read().agentDialog).toBeNull()
     expect(events).toHaveLength(2)
@@ -722,8 +726,35 @@ describe('review agent dialog event scope', () => {
         expect(events).toHaveLength(1)
         if (initial === 'checks') expectTagged(events)
         else expectUntagged(events)
-        expect(env.read().agentDialog).toEqual(action === 'clear' ? null : initial === 'checks' ? { ...previous, visible: false } : previous)
+        expect(env.read().agentDialog).toEqual(action === 'clear' ? null : initial === 'checks' ? { ...previous!, visible: false } : previous)
       })
     }
   }
 })
+
+test('daemon envelopes scope Checks drafts but broadcast shared preferences', async () => {
+  const host = await bootReviews(checksGhSource, { branch: 'feature' })
+  try {
+    host.writeState(checksFixtureState([checksReview(12)]))
+    await host.call('checksLink', { worktree: host.worktree, number: 12 })
+    await host.call('checksRefresh', { worktree: host.worktree, force: true })
+    const state = await host.call('state', { worktree: host.worktree }) as { checks: { generation: number } }
+    const events: QuirkyEvent[] = []
+    host.client.onEvent((event) => { if (event.type === 'quirky.reviews/changed') events.push(event) })
+    await host.client.callAny('events.subscribe', {})
+
+    await host.call('detailSetCommentDraft', { surface: 'checks', worktree: host.worktree, number: 12, generation: state.checks.generation, body: 'draft', draftVersion: 1 })
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ type: 'quirky.reviews/changed', worktreeId: host.worktree, data: { worktree: host.worktree, revision: expect.any(Number) } })
+    events.length = 0
+
+    await host.call('detailSetAudience', { surface: 'checks', worktree: host.worktree, number: 12, audience: 'bots' })
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).not.toHaveProperty('worktreeId')
+    expect((events[0] as PluginEvent).data).toEqual({ revision: expect.any(Number) })
+  } finally {
+    await host.cleanup()
+  }
+}, 60_000)
