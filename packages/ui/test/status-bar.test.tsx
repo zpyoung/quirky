@@ -21,9 +21,15 @@ export function activate(context) {
     return sessions
   })
   context.provide('method:quirky.session/seed', (params) => {
+    const previous = sessions
     sessions = params.sessions
     failing = params.failing === true
-    context.emit('changed', { session: sessions[0] ?? null })
+    const ids = new Set(sessions.map((session) => session.id))
+    for (const session of previous) {
+      if (!ids.has(session.id)) context.emit('removed', { sessionId: session.id })
+    }
+    for (const session of sessions) context.emit('changed', { session })
+    if (failing) context.emit('changed', {})
     return { ok: true }
   })
 }
