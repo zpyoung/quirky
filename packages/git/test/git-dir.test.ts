@@ -10,9 +10,22 @@ import { gitDirOf, statusV2 } from '../src/status'
 const { scratch } = isolateGitConfig()
 const realGit = Bun.which('git')!
 const originalPath = process.env.PATH
+const detachedPids: string[] = []
 
 afterEach(() => {
   process.env.PATH = originalPath
+  for (const file of detachedPids.splice(0)) {
+    if (!existsSync(file)) continue
+    for (const line of readFileSync(file, 'utf8').trim().split('\n')) {
+      const pid = Number(line)
+      if (!Number.isInteger(pid) || pid <= 0) continue
+      try {
+        process.kill(-pid, 'SIGKILL')
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err
+      }
+    }
+  }
 })
 
 /** Puts a `git` that runs `script` first on PATH; `$REAL_GIT` and `$LOG` are available to it. */
@@ -20,8 +33,10 @@ function fakeGit(script: string): { log: () => string[] } {
   const bin = scratch()
   mkdirSync(bin, { recursive: true })
   const log = join(bin, 'calls.log')
+  const pids = join(bin, 'pids')
+  detachedPids.push(pids)
   const file = join(bin, 'git')
-  writeFileSync(file, `#!/bin/sh\nREAL_GIT=${realGit}\nLOG=${log}\necho "$@" >> "$LOG"\n${script}\n`)
+  writeFileSync(file, `#!/bin/sh\nREAL_GIT=${realGit}\nLOG=${log}\nPIDS=${pids}\necho "$@" >> "$LOG"\n${script}\n`)
   chmodSync(file, 0o755)
   process.env.PATH = `${bin}:${originalPath}`
   return { log: () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []) }
@@ -65,7 +80,7 @@ describe('gitDirOf', () => {
  * descendant that keeps the pipe open after git exits looks the same from here.
  */
 describe('git output that never ends after git exited', () => {
-  const heldOpen = 'sleep 4 &\necho hello\nexit 0'
+  const heldOpen = `${JSON.stringify(process.execPath)} -e 'const p = Bun.spawn(["sleep", "4"], { detached: true, stdout: "inherit", stderr: "inherit" }); require("node:fs").appendFileSync(process.argv[1], p.pid + "\\n"); p.unref()' "$PIDS"\necho hello\nexit 0`
 
   test('a read-only run retries and then fails instead of hanging', async () => {
     const dir = makeRepo(scratch())

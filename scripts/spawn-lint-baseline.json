@@ -1,9 +1,4 @@
 {
-  "packages/git/src/compare.ts": 1,
-  "packages/git/src/diffs.ts": 3,
-  "packages/git/src/ops.ts": 1,
-  "packages/git/src/run.ts": 1,
-  "packages/git/src/status.ts": 1,
   "plugins/quirky.accounts/src/login.ts": 1,
   "plugins/quirky.accounts/src/profiles.ts": 1,
   "plugins/quirky.accounts/src/usage/codex-adapter.ts": 1,
