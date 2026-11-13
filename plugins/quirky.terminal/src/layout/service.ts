@@ -1256,7 +1256,7 @@ export class LayoutService {
   private openExternal(params: Params): { ok: true } {
     const problem = checkExternalTarget(params.target)
     if (problem) throw this.context.error('invalid-params', problem)
-    openExternal({ target: params.target as string, reveal: params.reveal === true })
+    openExternal(this.context.process, { target: params.target as string, reveal: params.reveal === true }, (message) => this.context.log(message))
     return { ok: true }
   }
 

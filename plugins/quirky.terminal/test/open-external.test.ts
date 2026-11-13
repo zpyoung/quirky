@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkExternalTarget, openExternal, shellEscapePaths } from '../src/open-external'
 
+const runner = { run() { throw new Error('log mode must not run a process') } }
+const unexpectedLog = () => { throw new Error('log mode must not log process failure') }
+
 describe('checkExternalTarget', () => {
   test.each(['https://example.com/x?y=1#z', 'http://localhost:3000', 'mailto:me@example.com', '/tmp/w/api/src/app.ts', '/tmp/w/api/a b.txt'])('allows %p', (target) => {
     expect(checkExternalTarget(target)).toBeNull()
@@ -51,9 +54,9 @@ describe('openExternal in log mode', () => {
 
   test('SC-41: appends one JSON line per call instead of opening anything', () => {
     const env = { QUIRKY_TEST_OPEN_LOG: log }
-    openExternal({ target: 'https://example.com/docs' }, env)
-    openExternal({ target: '/tmp/w/api/src/app.ts', reveal: true }, env)
-    openExternal({ target: '/tmp/w/api/src/app.ts', reveal: false }, env)
+    openExternal(runner, { target: 'https://example.com/docs' }, unexpectedLog, env)
+    openExternal(runner, { target: '/tmp/w/api/src/app.ts', reveal: true }, unexpectedLog, env)
+    openExternal(runner, { target: '/tmp/w/api/src/app.ts', reveal: false }, unexpectedLog, env)
     expect(lines()).toEqual([
       { target: 'https://example.com/docs', reveal: false },
       { target: '/tmp/w/api/src/app.ts', reveal: true },
@@ -63,8 +66,8 @@ describe('openExternal in log mode', () => {
 
   test('a refused target throws and logs nothing', () => {
     const env = { QUIRKY_TEST_OPEN_LOG: log }
-    expect(() => openExternal({ target: 'file:///etc/passwd' }, env)).toThrow('only http, https and mailto links can be opened')
-    expect(() => openExternal({ target: 'relative/path' }, env)).toThrow()
+    expect(() => openExternal(runner, { target: 'file:///etc/passwd' }, unexpectedLog, env)).toThrow('only http, https and mailto links can be opened')
+    expect(() => openExternal(runner, { target: 'relative/path' }, unexpectedLog, env)).toThrow()
     expect(existsSync(log)).toBe(false)
   })
 })

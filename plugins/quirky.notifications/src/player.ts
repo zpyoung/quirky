@@ -1,3 +1,5 @@
+import type { ProcessRunner } from '@quirky/protocol'
+
 /**
  * The command that plays `file` at `volume` (0-100): the executable in `QUIRKY_SOUND_PLAYER`
  * called with the file and the volume, else macOS `afplay`.
@@ -9,15 +11,20 @@ export function playerArgv(file: string, volume: number, env: Record<string, str
 }
 
 /** Starts the player without waiting for it; a failure to start or a nonzero exit is logged, never thrown. */
-export function playSound(file: string, volume: number, log: (message: string) => void): void {
+export function playSound(runner: ProcessRunner, file: string, volume: number, log: (message: string) => void): void {
   const argv = playerArgv(file, volume)
+  const failed = (error: unknown) => log(`could not play ${file}: ${error instanceof Error ? error.message : String(error)}`)
   try {
-    const child = Bun.spawn(argv, { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore', env: { ...process.env } })
-    child.unref()
-    void child.exited.then((code) => {
-      if (code !== 0) log(`${argv[0]} exited with ${code} playing ${file}`)
-    })
+    void runner.run(argv, {
+      timeoutMs: 86_400_000, maxOutputBytes: 1, overflow: 'truncate', killGraceMs: 2000, env: { ...process.env }
+    }).then((result) => {
+      const reason = result.spawnError?.message
+        ?? (result.stopped ? `process stopped: ${result.stopped}` : undefined)
+        ?? (result.signal ? `process terminated by ${result.signal}` : undefined)
+      if (reason !== undefined) log(`could not play ${file}: ${reason}`)
+      else if (result.exitCode !== 0) log(`${argv[0]} exited with ${result.exitCode} playing ${file}`)
+    }, failed)
   } catch (error) {
-    log(`could not play ${file}: ${error instanceof Error ? error.message : String(error)}`)
+    failed(error)
   }
 }
