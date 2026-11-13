@@ -264,6 +264,10 @@ export async function waitForDaemonExit(
   return 'killed'
 }
 
+/**
+ * Waits for daemon exit, using SIGTERM then SIGKILL if the graceful wait expires.
+ * Rejects invalid or own-process pids, signalling errors, and a pid still alive after the kill wait.
+ */
 async function stopDaemon(
   info: RuntimeInfo,
   timeoutMs = 10000,

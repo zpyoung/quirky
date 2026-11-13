@@ -4,7 +4,7 @@ import { PROTOCOL_VERSION } from '@quirky/protocol'
 import { runtimeFilePath, socketPath, writePrivateJson, type RuntimeInfo } from '@quirky/protocol/node'
 
 type SocketState = { decoder: TextDecoder; pending: string }
-type Request = { id: number; method: string }
+type Request = { id: number; method: string; params: Record<string, unknown> }
 
 const home = process.env.QUIRKY_HOME
 if (!home) throw new Error('QUIRKY_HOME is required')
@@ -17,8 +17,8 @@ writeFileSync(callsPath, '[]', { mode: 0o600 })
 writeFileSync(signalsPath, '[]', { mode: 0o600 })
 rmSync(socket, { force: true })
 
-function record(path: string, value: string): void {
-  const values = JSON.parse(readFileSync(path, 'utf8')) as string[]
+function record(path: string, value: unknown): void {
+  const values = JSON.parse(readFileSync(path, 'utf8')) as unknown[]
   values.push(value)
   writeFileSync(path, JSON.stringify(values), { mode: 0o600 })
 }
@@ -81,7 +81,7 @@ function respond(client: Bun.Socket<SocketState>, id: number, result: unknown): 
 }
 
 function handle(client: Bun.Socket<SocketState>, request: Request): void {
-  record(callsPath, request.method)
+  record(callsPath, { method: request.method, params: request.params })
   if (request.method === 'client.hello') {
     if (mode !== 'silent-hello') {
       respond(client, request.id, { protocolVersion: PROTOCOL_VERSION, daemonVersion: '0.0.0-stand-in' })

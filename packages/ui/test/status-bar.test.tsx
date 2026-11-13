@@ -68,7 +68,7 @@ function builtinPlugins(): string {
       contributes: {
         view: [{ id: 'worktree', title: 'Session worktree' }],
         method: [{ id: 'list', readOnly: true, params: anyParams }, { id: 'seed', params: anyParams }],
-        event: [{ id: 'changed', data: anyParams }]
+        event: [{ id: 'changed', data: anyParams }, { id: 'removed', data: anyParams }]
       }
     },
     {

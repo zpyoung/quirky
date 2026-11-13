@@ -46,9 +46,13 @@ async function startStandIn(mode: string) {
   throw new Error(`stand-in daemon did not become healthy in ${scope.home}`)
 }
 
-function calls(): string[] {
+function requests(): { method: string; params: Record<string, unknown> }[] {
   const path = join(scope.home, 'calls.json')
-  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as string[]) : []
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : []
+}
+
+function calls(): string[] {
+  return requests().map((request) => request.method)
 }
 
 function signals(): string[] {
@@ -88,8 +92,9 @@ type RpcCall = (method: string, params: Record<string, unknown>, options?: CallO
 function makeContext(
   call: RpcCall,
   options: { json?: boolean; events?: string[]; onClose?: () => void } = {}
-): { ctx: Context; stdout(): string; events: string[] } {
+): { ctx: Context; stdout(): string; result(): unknown; events: string[] } {
   let output = ''
+  let resultData: unknown
   const events = options.events ?? []
   const rpc = {
     requestBase: 'restart-test',
@@ -102,10 +107,16 @@ function makeContext(
     }
   }
   const writer = { stdout: (text: string) => { output += text }, stderr: () => {} }
+  const out = new Printer(writer, options.json ?? false)
+  const printResult = out.result.bind(out)
+  out.result = (data, human) => {
+    resultData = data
+    printResult(data, human)
+  }
   const ctx: Context = {
     rpc: rpc as unknown as Context['rpc'],
     requestBase: 'restart-test',
-    out: new Printer(writer, options.json ?? false),
+    out,
     env: { QUIRKY_HOME: scope.home },
     cwd: scope.home,
     readFile: () => '',
@@ -113,7 +124,7 @@ function makeContext(
     now: () => Date.now(),
     openDesktopApp: async () => ({ ok: false, reason: 'not available in this test' })
   }
-  return { ctx, stdout: () => output, events }
+  return { ctx, stdout: () => output, result: () => resultData, events }
 }
 
 async function invokeRestart(
@@ -171,6 +182,8 @@ describe('daemon restart process boundaries', () => {
     expect(result.code).toBe(0)
     expect(result.stdout).toBe(`restarted quirkyd (pid ${started.pid})\n`)
     expect(calls()).toEqual(['client.hello', 'daemon.stop'])
+    expect(started.args).toEqual([])
+    expect(requests().filter((request) => request.method === 'daemon.stop').map((request) => request.params)).toEqual([{}])
     await waitForExit(old)
   }, 30_000)
 
@@ -185,26 +198,28 @@ describe('daemon restart process boundaries', () => {
     await waitForExit(old)
   }, 30_000)
 
-  test('K7: a silent handshake is bounded, then the old process is terminated', async () => {
+  test.each([false, true])('K7: a silent handshake is bounded, then the old process is terminated (json=%s)', async (json) => {
     const old = await startStandIn('silent-hello')
-    const result = await runCliRestart()
+    const result = await runCliRestart(json ? ['--json'] : [])
     const started = startedDaemon()
 
     expect(result.code).toBe(0)
-    expect(result.stdout).toBe(
+    if (json) expect(JSON.parse(result.stdout).stopped).toBe('terminated')
+    else expect(result.stdout).toBe(
       `restarted quirkyd (pid ${started.pid}); the old daemon (pid ${old.pid}) did not answer daemon.stop within 5s and was sent SIGTERM\n`
     )
     expect(calls()).toEqual(['client.hello'])
     await waitForExit(old)
   }, 30_000)
 
-  test('K8: an unanswered stop request is bounded, then the old process is terminated', async () => {
+  test.each([false, true])('K8: an unanswered stop request is bounded, then the old process is terminated (json=%s)', async (json) => {
     const old = await startStandIn('silent-stop')
-    const result = await runCliRestart()
+    const result = await runCliRestart(json ? ['--json'] : [])
     const started = startedDaemon()
 
     expect(result.code).toBe(0)
-    expect(result.stdout).toBe(
+    if (json) expect(JSON.parse(result.stdout).stopped).toBe('terminated')
+    else expect(result.stdout).toBe(
       `restarted quirkyd (pid ${started.pid}); the old daemon (pid ${old.pid}) did not answer daemon.stop within 5s and was sent SIGTERM\n`
     )
     expect(calls()).toEqual(['client.hello', 'daemon.stop'])
@@ -227,6 +242,8 @@ describe('daemon restart process boundaries', () => {
     }
 
     expect(callsMade).toEqual([{ method: 'daemon.stop', params: {}, options: { timeoutMs: REQUEST_MS } }])
+    expect(context.result()).toMatchObject({ stopped: 'terminated' })
+    expect(events).toContain('close')
     expect(events.indexOf('close')).toBeLessThan(events.indexOf('signal:SIGTERM'))
     expect(context.stdout()).toContain(`did not answer daemon.stop within 0.2s and was sent SIGTERM`)
     await waitForExit(old)
@@ -244,6 +261,8 @@ describe('daemon restart process boundaries', () => {
       restoreSignals()
     }
 
+    expect(context.result()).toMatchObject({ stopped: 'killed' })
+    expect(events).toContain('close')
     expect(context.stdout()).toContain(
       `the old daemon (pid ${old.pid}) did not stop within 0.3s and was killed`
     )
@@ -268,6 +287,7 @@ describe('daemon restart process boundaries', () => {
     }
 
     expect(JSON.parse(context.stdout()).stopped).toBe('clean')
+    expect(events).toContain('close')
     expect(events).not.toContain('signal:SIGTERM')
     expect(events).not.toContain('signal:SIGKILL')
     await waitForExit(old)
@@ -285,6 +305,8 @@ describe('daemon restart process boundaries', () => {
       restoreSignals()
     }
 
+    expect(context.result()).toMatchObject({ stopped: 'terminated' })
+    expect(events).toContain('close')
     expect(context.stdout()).toContain(`did not answer daemon.stop within 0.2s and was sent SIGTERM`)
     expect(signals()).toEqual(['SIGTERM'])
     expect(events.indexOf('close')).toBeLessThan(events.indexOf('signal:SIGTERM'))
@@ -302,6 +324,8 @@ describe('daemon restart process boundaries', () => {
       restoreSignals()
     }
 
+    expect(context.result()).toMatchObject({ stopped: 'killed' })
+    expect(events).toContain('close')
     expect(context.stdout()).toContain(
       `the old daemon (pid ${old.pid}) did not stop within 0.3s and was killed`
     )
@@ -322,6 +346,7 @@ describe('daemon restart process boundaries', () => {
       restoreSignals()
     }
 
+    expect(events).toContain('close')
     expect(events.indexOf('close')).toBeLessThan(events.indexOf('signal:SIGTERM'))
     expect(existsSync(join(scope.home, 'started.json'))).toBe(false)
     expect(processIsAlive(old.pid)).toBe(true)
@@ -346,6 +371,8 @@ describe('daemon restart process boundaries', () => {
     const context = makeContext(async (method) => { throw new Error(`unexpected RPC ${method}`) })
     await invokeRestart(context.ctx, [])
 
+    expect(context.result()).toMatchObject({ stopped: 'not-running' })
+    expect(context.events).toContain('close')
     expect(context.stdout()).toContain('the old daemon was not running')
     expect(startedDaemon().pid).toBeGreaterThan(0)
   })
@@ -364,6 +391,7 @@ describe('daemon restart process boundaries', () => {
       restoreSignals()
     }
 
+    expect(events).toContain('close')
     expect(events.indexOf('close')).toBeLessThan(events.indexOf('signal:SIGTERM'))
     expect(existsSync(join(scope.home, 'link-closed'))).toBe(true)
     expect(startedDaemon().pid).not.toBe(old.pid)
