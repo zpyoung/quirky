@@ -1185,7 +1185,10 @@ export class OrchestrationMessages implements MessageArrivalPort {
         code: 'submission_preflight_invalid_response',
         reason: 'Registered submission preflight returned an invalid verdict.',
       }
-    } catch {
+    } catch (error) {
+      try {
+        this.context.log(`Submission preflight ${registration.method} failed: ${error instanceof Error ? error.message : String(error)}`)
+      } catch {}
       return {
         kind: 'rejected',
         code: 'submission_preflight_unavailable',
