@@ -1656,6 +1656,26 @@ describe('TerminalService phone recovery lifecycle', () => {
     expect(stopped.snapshotCalls).toEqual([])
     expect(stopped.stream(stoppedAttach.streamId).closed).toBe(true)
   })
+  test('releases an in-flight mobile recovery after exit only when no owner remains', async () => {
+    const exited = createTerminalServiceRig()
+    const exitedCaller = exited.caller('mobile', 65)
+    const exitedAttach = await exited.service.attach({ session: 's1', cols: 80, rows: 24 }, exitedCaller)
+    const exitedSubscribe = Promise.withResolvers<PtySubscription>()
+    exited.setSubscribe((_sessionId, options) => options.mode === 'raw'
+      ? exitedSubscribe.promise
+      : Promise.resolve(testSubscription()))
+    exited.service.onLagged('s1')
+    await waitUntil(() => exited.subscribeCalls.some((call) => call.options.mode === 'raw'))
+    exited.service.onExit('s1')
+    expect(exited.stream(exitedAttach.streamId).closed).toBe(true)
+    expect(exited.unsubscribed).toEqual([])
+    exitedSubscribe.resolve(testSubscription({ offset: 10 }))
+    await flushMicrotasks()
+    expect(exited.unsubscribed).toEqual(['s1'])
+    exited.service.shutdown()
+
+  })
+
 
   test('coalesces host gaps and retries subscribe or snapshot failures at two-second intervals', async () => {
     const rig = createTerminalServiceRig()
@@ -2092,7 +2112,9 @@ describe('TerminalService.resync', () => {
     const original = await rig.service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
     const oldStream = rig.stream(original.streamId)
     oldStream.lag()
+    const unsubscriptionsBeforeExit = rig.unsubscribed.length
     rig.service.onExit('s1')
+    expect(rig.unsubscribed).toHaveLength(unsubscriptionsBeforeExit)
     expect(oldStream.closed).toBe(false)
     expect(terminalState(rig.service).byConnection.get(75)?.has(original.streamId)).toBe(true)
 

@@ -785,7 +785,6 @@ export class TerminalService {
         const subscription = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
         if (!this.isCurrentMobileRecovery(sessionId, generation, token, mobileHold)) {
           if (
-            this.sessionGeneration(sessionId) === generation &&
             (this.bySession.get(sessionId)?.size ?? 0) === 0 &&
             (this.attaching.get(sessionId) ?? 0) === 0
           ) this.context.pty.unsubscribe(sessionId).catch(() => {})
