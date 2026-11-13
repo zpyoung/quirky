@@ -79,7 +79,7 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
       .catch((error: { code?: unknown }) => {
         if (cancelled.current || attempt !== latest.current) return
         if (error?.code === RpcErrorCode.MethodNotFound) {
-          loadedOnce.current = true
+          loadedOnce.current = false
           setPhase({ status: 'off' })
         } else if (!loadedOnce.current) {
           setPhase({ status: 'failed', message: messageOf(error) })

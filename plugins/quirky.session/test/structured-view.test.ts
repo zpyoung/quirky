@@ -350,4 +350,28 @@ describe('the structured session view', () => {
     expect(fake.provided.has('command:quirky.session/new-shell')).toBe(true)
     expect(fake.provided.has('command:quirky.session/select-tab-9')).toBe(true)
   })
+
+  test('offers Retry when enabling structured sessions fails to read messages', async () => {
+    let phase: 'off' | 'failed' | 'ready' = 'off'
+    start({ session: bg }, {
+      'quirky.structured/messages': () => {
+        if (phase === 'off') throw new RpcError(RpcErrorCode.MethodNotFound, 'disabled')
+        if (phase === 'failed') throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return [message(1, 'user', 'recovered')]
+      }
+    })
+    const view = await mount({ session: 'bg' })
+    expect(view.textContent).toContain('Structured sessions are off')
+    phase = 'failed'
+    await fake.emit({ type: 'plugin.changed' })
+    await settle()
+    const alert = view.querySelector('[role="alert"]')!
+    expect(alert?.textContent).toContain('Could not load messages: boom')
+    expect(view.textContent).not.toContain('Structured sessions are off')
+    phase = 'ready'
+    await act(async () => alert.querySelector('button')!.click())
+    await settle()
+    expect(rows(view)).toEqual(['userrecovered'])
+    expect(view.querySelector('[role="alert"]')).toBeNull()
+  })
 })
