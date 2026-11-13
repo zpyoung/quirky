@@ -476,7 +476,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
   test('task and gate lists keep creation order when timestamps tie', async () => {
     const coordinator = await fixture.createParty('coordinator')
     const { run } = await createRun(coordinator, 'stable list ordering')
-    const taskIds: string[] = []
+    const taskIds: TaskRow['id'][] = []
     for (let index = 0; index < 8; index++) {
       const { task } = await createTask(coordinator, run.id, `task ${index}`)
       taskIds.push(task.id)
@@ -505,7 +505,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect(statusTasks.count).toBe(8)
     expect(statusTasks.tasks.map((task) => task.id)).toEqual(taskIds)
 
-    const gateIds: string[] = []
+    const gateIds: GateRow['id'][] = []
     for (const taskId of taskIds) {
       const { gate } = await call<GateMutation>(coordinator, GATE_CREATE, {
         ...mutation(),
