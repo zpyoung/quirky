@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { loadBrowserCapture, readBrowserTable, validateBrowserTable } from './browser-table'
+import { browserChecks } from './browser-run'
 
 test('browser table accounts for every frozen command and resolves the current public CLI', () => {
   const capture = loadBrowserCapture()
@@ -90,4 +91,11 @@ test('an executable registry must match the table declared check IDs exactly', (
   expect(() => validateBrowserTable(rows, registered)).not.toThrow()
   expect(() => validateBrowserTable(rows, registered.slice(1))).toThrow('missing-check')
   expect(() => validateBrowserTable(rows, [...registered, 'unexpected-check'])).toThrow('missing-check')
+})
+
+test('compiled browser checks implement every declared executable row exactly once', () => {
+  const rows = readBrowserTable()
+  const ids = browserChecks.map(check => check.id)
+  validateBrowserTable(rows, ids)
+  expect(() => validateBrowserTable(rows, ids.filter(id => id !== 'upload'))).toThrow('missing-check')
 })
