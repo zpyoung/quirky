@@ -9,6 +9,7 @@ import { ChecksPanel, ChecksAgentDialog } from './checks/ChecksPanel'
 import { CreateReview } from './create/CreateReview'
 import { HostingSettings } from './create/HostingSettings'
 import { ChecksSummary } from './StatusBarItem'
+import { nextDraftTick } from './draft-field'
 function record(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -64,7 +65,9 @@ function surfaceSummary(kind: SurfaceKind, state: ReviewsState, connectionError:
 }
 
 function Surface({ context, kind, report }: { context: UiPluginContext; kind: SurfaceKind; report?: (state: unknown) => void }) {
-  const [state, setState] = useState<ReviewsState | null>(null)
+  const [loaded, setLoaded] = useState<{ state: ReviewsState; snapshot: number } | null>(null)
+  const state = loaded?.state ?? null
+  const snapshot = loaded?.snapshot
   const [error, setError] = useState<string | null>(null)
   const request = useRef(0)
   const [layoutWorktree, setLayoutWorktree] = useState<string | null>(() => kind === 'checks' ? worktreeOf(context.getLayout()) : null)
@@ -79,9 +82,10 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
     const epoch = ++request.current
     try {
       const worktree = layoutWorktreeRef.current
+      const tick = nextDraftTick()
       const next = stateValue(await context.call('quirky.reviews/state', kind === 'checks' && worktree !== null ? { worktree } : undefined))
       if (epoch !== request.current) return
-      setState((old) => !old || next.revision >= old.revision ? next : old)
+      setLoaded((old) => old && next.revision < old.state.revision ? old : { state: next, snapshot: tick })
       setError(null)
     } catch (failure) { if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.') }
   }, [context, kind])
@@ -92,7 +96,7 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
       : { worktreeId: null }
     const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() }, options)
     const offConnection = context.onConnection((status) => {
-      if (status === 'connected') { request.current++; setState(null); void refresh() }
+      if (status === 'connected') { request.current++; setLoaded(null); void refresh() }
     })
     return () => { request.current++; offEvent(); offConnection() }
   }, [context, refresh, kind, layoutWorktree])
@@ -101,11 +105,11 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
   return <section className="ui-stack" data-review-surface={kind} style={{ height: '100%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}>
     {error && <div role="alert"><EmptyState message={error} icon={<StatusDot status="failing" label="Error" />} action={{ label: 'Retry', onAction: () => { void refresh() } }} /></div>}
     {!state ? <p role="status" className="ui-text-muted">Loading review…</p> : <>
-      {kind === 'detail' && <ReviewPage context={context} state={state} refresh={refresh} />}
-      {kind === 'checks' && <ChecksPanel context={context} state={state} refresh={refresh} />}
-      {kind === 'create' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><CreateReview context={context} state={state} refresh={refresh} /></>}
-      {kind === 'settings' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><HostingSettings context={context} state={state} refresh={refresh} /></>}
-      {(kind === 'detail' || kind === 'checks') && state.checks.agentDialog && state.checks.agentDialog.visible !== false && (state.checks.agentDialog.surface ?? 'checks') === kind && <ChecksAgentDialog context={context} state={state} refresh={refresh} />}
+      {kind === 'detail' && <ReviewPage context={context} state={state} snapshot={snapshot} refresh={refresh} />}
+      {kind === 'checks' && <ChecksPanel context={context} state={state} snapshot={snapshot} refresh={refresh} />}
+      {kind === 'create' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><CreateReview context={context} state={state} snapshot={snapshot} refresh={refresh} /></>}
+      {kind === 'settings' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><HostingSettings context={context} state={state} snapshot={snapshot} refresh={refresh} /></>}
+      {(kind === 'detail' || kind === 'checks') && state.checks.agentDialog && state.checks.agentDialog.visible !== false && (state.checks.agentDialog.surface ?? 'checks') === kind && <ChecksAgentDialog context={context} state={state} snapshot={snapshot} refresh={refresh} />}
     </>}
   </section>
 }

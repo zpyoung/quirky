@@ -63,9 +63,9 @@ const budgetSchema = objectSchema({
 export const createSpecs: MethodSpec[] = [
   { id: 'createOpen', description: 'open the create-review view after refreshing eligibility for this exact worktree', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ worktree: stringSchema, opened: { type: 'boolean' }, stale: { type: 'boolean' }, existingReview: reviewSchema }, ['worktree', 'opened']) },
   { id: 'settingsOpen', description: 'open hosting settings scoped to the caller worktree when available', params: objectSchema({ worktree: worktreeSchema }), result: objectSchema({ opened: { type: 'boolean' }, worktree: stringSchema, error: stringSchema }, ['opened']) },
-  { id: 'createDraft', description: 'update the session-owned create-review draft fields', params: objectSchema({ worktree: worktreeSchema, title: stringSchema, body: stringSchema, draft: { type: 'boolean' }, useTemplate: { type: 'boolean' } }, ['worktree']), result: objectSchema({ updated: { type: 'boolean' } }, ['updated']) },
+  { id: 'createDraft', description: 'update the session-owned create-review draft fields', params: objectSchema({ worktree: worktreeSchema, title: stringSchema, body: stringSchema, draft: { type: 'boolean' }, useTemplate: { type: 'boolean' }, generation: { type: 'integer', minimum: 0 } }, ['worktree']), result: objectSchema({ updated: { type: 'boolean' } }, ['updated']) },
   { id: 'createBases', readOnly: true, description: 'list remote Git branches available as review bases', params: objectSchema({ worktree: worktreeSchema, query: stringSchema }, ['worktree']), result: objectSchema({ bases: { type: 'array', items: stringSchema }, selected: stringSchema }, ['bases', 'selected']) },
-  { id: 'createBase', description: 'select a remote base and refresh exact-context eligibility and stack capability', params: objectSchema({ worktree: worktreeSchema, base: stringSchema, stack: { type: 'boolean' } }, ['worktree', 'base']), result: objectSchema({ base: stringSchema, eligible: { type: 'boolean' }, stackSupported: { type: 'boolean' }, stackParentNumber: { type: 'integer', minimum: 1 }, stackEnabled: { type: 'boolean' } }, ['base', 'eligible', 'stackSupported', 'stackEnabled']) },
+  { id: 'createBase', description: 'select a remote base and refresh exact-context eligibility and stack capability', params: objectSchema({ worktree: worktreeSchema, base: stringSchema, stack: { type: 'boolean' }, generation: { type: 'integer', minimum: 0 } }, ['worktree', 'base']), result: objectSchema({ base: stringSchema, eligible: { type: 'boolean' }, stackSupported: { type: 'boolean' }, stackParentNumber: { type: 'integer', minimum: 1 }, stackEnabled: { type: 'boolean' } }, ['base', 'eligible', 'stackSupported', 'stackEnabled']) },
   { id: 'createGenerate', description: 'generate title and body from the selected worktree branch diff using a public agent', params: objectSchema({ worktree: worktreeSchema, agent: stringSchema }, ['worktree']), result: objectSchema({ generated: { type: 'boolean' }, title: stringSchema, body: stringSchema }, ['generated', 'title', 'body']) },
   { id: 'createCancelGenerate', description: 'cancel only the active review-details generation request', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ cancelled: { type: 'boolean' } }, ['cancelled']) },
   { id: 'createSubmit', description: 'recheck eligibility, push if required, create once, and link confirmed results', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ status: { type: 'string', enum: ['created', 'already_exists', 'partial'] }, review: reviewSchema, error: stringSchema }, ['status', 'review']) },
@@ -364,6 +364,15 @@ function optionalBoolean(env: ReviewsEnv, params: Record<string, unknown>, key: 
   if (!Object.hasOwn(params, key)) return undefined
   if (typeof params[key] !== 'boolean') throw env.invalid('validation_error', `${key} must be a boolean.`)
   return params[key] as boolean
+}
+
+function optionalGeneration(env: ReviewsEnv, params: Record<string, unknown>): number | undefined {
+  const generation = params.generation
+  if (generation === undefined) return undefined
+  if (typeof generation !== 'number' || !Number.isSafeInteger(generation) || generation < 0) {
+    throw env.invalid('validation_error', 'generation must be a non-negative integer.')
+  }
+  return generation
 }
 function creationDefaultsScope(env: ReviewsEnv, params: Record<string, unknown>): { scope: 'global' | 'repository'; selector?: string } {
   const requested = optionalString(env, params, 'scope')
@@ -953,7 +962,7 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
 
   const createDraft = async (params: Record<string, unknown>, caller: PluginCaller) => {
     const worktree = await resolveContext(env, params, caller)
-    const creation = assertCurrent(env, worktree)
+    const creation = assertCurrent(env, worktree, optionalGeneration(env, params))
     if (creation.submitting || creation.generating) throw env.invalid('conflict', 'Review details cannot be edited while generation or submission is in progress.')
     const title = optionalString(env, params, 'title')
     const body = optionalString(env, params, 'body')
@@ -983,7 +992,7 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
 
   const createBase = async (params: Record<string, unknown>, caller: PluginCaller) => {
     const worktree = await resolveContext(env, params, caller)
-    const creation = assertCurrent(env, worktree)
+    const creation = assertCurrent(env, worktree, optionalGeneration(env, params))
     if (creation.submitting || creation.generating) throw env.invalid('conflict', 'Wait for the active review operation to finish before changing its base.')
     const base = requiredString(env, params.base, 'base')
     if (!creation.bases.includes(base)) throw env.invalid('invalid_base', 'Choose a base branch returned by the public Git branch list.')
