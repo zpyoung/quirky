@@ -1,4 +1,4 @@
-import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { checkSchemaDeclaration, validateValue, type Schema } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime } from '@quirky/protocol/node'
@@ -298,7 +298,15 @@ function schemaWithProfileLabel(schema: Schema): Schema {
 function validateCliResult(argv: readonly string[], result: unknown, schemas: CliSchemas): void {
   const expected = expectedCliResult(argv, schemas)
   if (!expected) return
-  const schema = expected.extraProfileLabel ? schemaWithProfileLabel(expected.schema) : expected.schema
+  const schema: Schema = expected.method === 'quirky.worktree/list' ? {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: { id: { type: 'string' }, repoId: { type: 'string' }, path: { type: 'string' }, kind: { type: 'string' } },
+      required: ['id', 'repoId', 'path', 'kind'],
+      additionalProperties: true
+    }
+  } : expected.extraProfileLabel ? schemaWithProfileLabel(expected.schema) : expected.schema
   const failure = validateValue(schema, result, `${expected.method} result`)
   if (failure) throw new BrowserFailure('malformed-cli-json', `CLI JSON does not match ${expected.method}: ${failure}`)
 }
@@ -863,9 +871,9 @@ export async function startBrowserWorld(options: {
     const worktreeRowsA: unknown[] = listA.result
     const worktreeRowsB: unknown[] = listB.result
     const worktreeA = worktreeRowsA.find((item) => item !== null && typeof item === 'object' && !Array.isArray(item) &&
-      'path' in item && item.path === repositoryA && 'repoId' in item && item.repoId === repoIdA)
+      'path' in item && item.path === realpathSync(repositoryA) && 'repoId' in item && item.repoId === repoIdA)
     const worktreeB = worktreeRowsB.find((item) => item !== null && typeof item === 'object' && !Array.isArray(item) &&
-      'path' in item && item.path === repositoryB && 'repoId' in item && item.repoId === repoIdB)
+      'path' in item && item.path === realpathSync(repositoryB) && 'repoId' in item && item.repoId === repoIdB)
     if (worktreeA === undefined || worktreeA === null || typeof worktreeA !== 'object' || Array.isArray(worktreeA) ||
       !('id' in worktreeA) || typeof worktreeA.id !== 'string' || !('kind' in worktreeA) || worktreeA.kind !== 'folder' ||
       worktreeB === undefined || worktreeB === null || typeof worktreeB !== 'object' || Array.isArray(worktreeB) ||

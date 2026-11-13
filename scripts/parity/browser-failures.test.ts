@@ -211,3 +211,10 @@ test('cookie evidence rejects a successful setter whose independent read lost th
   expect(report.ok).toBe(false)
   expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'lost-cookie' } })
 })
+
+test('worktree decoding accepts control metadata but rejects malformed ownership fields', () => {
+  const worktree = { id: 'owned-worktree', repoId: 'owned-repo', path: '/owned/repository', kind: 'folder', tagIds: [] }
+  const receipt = decodeCliReceipt(['worktree', 'list'], JSON.stringify([worktree]), '', 0, '/owned')
+  expect(receipt.result).toEqual([worktree])
+  expect(() => decodeCliReceipt(['worktree', 'list'], JSON.stringify([{ ...worktree, path: 42 }]), '', 0, '/owned')).toThrow('CLI JSON does not match')
+})
