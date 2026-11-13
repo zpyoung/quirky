@@ -218,3 +218,10 @@ test('worktree decoding accepts control metadata but rejects malformed ownership
   expect(receipt.result).toEqual([worktree])
   expect(() => decodeCliReceipt(['worktree', 'list'], JSON.stringify([{ ...worktree, path: 42 }]), '', 0, '/owned')).toThrow('CLI JSON does not match')
 })
+
+test('CLI decoding validates opaque object results without treating them as empty records', () => {
+  const result = { command: { path: ['fill'], positionals: ['#text', 'proof'], flags: {} }, result: { filled: '#text' } }
+  const receipt = decodeCliReceipt(['browser', 'exec'], JSON.stringify(result), '', 0, '/owned')
+  expect(receipt.result).toEqual(result)
+  expect(() => decodeCliReceipt(['browser', 'exec'], JSON.stringify({ ...result, command: 42 }), '', 0, '/owned')).toThrow('command must be an object')
+})

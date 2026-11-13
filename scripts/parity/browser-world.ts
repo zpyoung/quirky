@@ -238,12 +238,21 @@ function readPluginManifest(path: string, browserPlugin: boolean): PluginManifes
   return { id: manifest.id, methods, browserCommands }
 }
 
+function resultSchema(schema: Schema): Schema {
+  return {
+    ...schema,
+    ...(schema.type === 'object' && schema.properties === undefined && schema.additionalProperties === undefined ? { additionalProperties: true } : {}),
+    ...(schema.items ? { items: resultSchema(schema.items) } : {}),
+    ...(schema.properties ? { properties: Object.fromEntries(Object.entries(schema.properties).map(([key, value]) => [key, resultSchema(value)])) } : {})
+  }
+}
+
 function loadCliSchemas(repoRoot: string): CliSchemas {
   const methods = new Map<string, Schema>()
   const browser: BrowserCliRoute[] = []
   for (const plugin of ['quirky.browser', 'quirky.repo', 'quirky.worktree']) {
     const manifest = readPluginManifest(join(repoRoot, 'plugins', plugin, 'quirky-plugin.json'), plugin === 'quirky.browser')
-    for (const method of manifest.methods) methods.set(`${manifest.id}/${method.id}`, method.result)
+    for (const method of manifest.methods) methods.set(`${manifest.id}/${method.id}`, resultSchema(method.result))
     for (const command of manifest.browserCommands) {
       browser.push({ words: command.words.trim().split(/\s+/), method: command.methods[0]! })
     }

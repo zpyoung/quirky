@@ -75,12 +75,15 @@ export const tabChecks: BrowserCheck[] = [
   { id: 'tab-close', async run(c) {
     const disposable = c.state.disposable
     if (typeof disposable !== 'string') throw new BrowserFailure('wrong-page', 'disposable page was not created')
-    await c.call('tab close', { yes: true }, disposable)
+    const before = (await c.call<{ tabs: Tab[] }>('tab list', { worktree: c.world.worktreeA }, '')).tabs
+    const target = before.find(tab => tab.browserPageId === disposable)
+    c.assert(target, 'disposable page absent before indexed close')
+    await c.call('tab close', { index: target!.index, worktree: c.world.worktreeA, yes: true }, '')
     const tabs = (await c.call<{ tabs: Tab[] }>('tab list', { worktree: 'all' }, '')).tabs
     c.assert(!tabs.some(tab => tab.browserPageId === disposable), 'closed page remains listed')
     const show = await c.probe('tab show', {}, disposable)
     c.assert(show.exitCode !== 0, 'closed page remains addressable')
-    return { removedId: disposable, tabs, show: show.result }
+    return { removedId: disposable, closedReturnedIndex: target!.index, tabs, show: show.result }
   } },
   { id: 'tab-profile-list', async run(c) {
     const { profiles } = await c.call<Profiles>('tab profile list', {}, '')

@@ -153,7 +153,7 @@ export const actionChecks: BrowserCheck[] = [
       c.equal(functionWait.waited, true)
       c.equal(await c.observe<boolean>('document.querySelector("#footer") !== null'), true, 'JS-condition wait must be true on the page')
       const navigation = await c.call<NavigationResult>('goto', { url: fixtureUrl(c, '/second') })
-      const urlWait = await c.call<{ waited: boolean }>('wait', { url: '**/second', timeout: 10_000 })
+      const urlWait = await c.call<{ waited: boolean }>('wait', { url: navigation.url, timeout: 10_000 })
       c.equal(urlWait.waited, true)
       const currentUrl = await c.call<ValueResult<string>>('get', { what: 'url' })
       c.equal(currentUrl.value, navigation.url, 'URL wait must match the navigated local URL')
