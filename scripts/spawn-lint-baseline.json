@@ -18,7 +18,5 @@
   "plugins/quirky.editor/src/notebook/service.ts": 1,
   "plugins/quirky.hosting/src/runtime-runner.ts": 1,
   "plugins/quirky.loops/src/evaluator.ts": 1,
-  "plugins/quirky.mobile/src/daemon/notification-presence.ts": 1,
-  "plugins/quirky.terminal/src/emulator.ts": 1,
   "plugins/quirky.worktree/src/daemon/vm.ts": 1
 }
