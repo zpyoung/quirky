@@ -6,6 +6,7 @@ import type { Browser, BrowserContext, CDPSession, Page, Route } from 'playwrigh
 import { BUDGETS, METRICS, type Failure, type Metric } from './contracts.ts'
 import { median } from './report.ts'
 import { startProbe, type Probe } from '../soak/probe.ts'
+import type { ProbeRecord } from '../soak/contracts.ts'
 import type { SoakWindows } from '../soak/windows.ts'
 import type { SoakWorld } from '../soak/world.ts'
 import type { FloodStart, FloodStats, SpeedFixture, SpeedFixtureWorktree } from './fixtures.ts'
@@ -99,6 +100,24 @@ type MetricContext = {
   redactions: Set<string>
   sessionSequence: Map<string, number>
   currentWorktreeIndex: number
+}
+
+/** Describes the measured operation and probe evidence without inferring a cause. */
+export function diagnosticFinding(metric: Metric, observationMs: number, phases: Record<string, number | null>, probes: readonly ProbeRecord[]): string {
+  const durationMs = metric === 'startup' ? phases.controllerUntilFreshPaintMs : observationMs
+  if (durationMs === undefined || durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) throw new Error(`${metric} duration is unavailable`)
+  const phaseValues = Object.entries(phases).map(([key, value]) =>
+    `${key}=${value === null ? 'unavailable' : `${value}${key.endsWith('Ms') ? ' ms' : ''}`}`
+  )
+  let maxLatencyMs: number | null = null
+  let maxOwnLagMs: number | null = null
+  for (const probe of probes) {
+    maxLatencyMs = maxLatencyMs === null ? probe.ms : Math.max(maxLatencyMs, probe.ms)
+    maxOwnLagMs = maxOwnLagMs === null ? probe.ownLagMs : Math.max(maxOwnLagMs, probe.ownLagMs)
+  }
+  return `Observed ${metric} durationMs=${durationMs} ms. Phases: ${phaseValues.join(', ') || 'unavailable'}. ` +
+    `status.get probe count=${probes.length}, maxLatencyMs=${maxLatencyMs === null ? 'unavailable' : `${maxLatencyMs} ms`}, ` +
+    `maxOwnLagMs=${maxOwnLagMs === null ? 'unavailable' : `${maxOwnLagMs} ms`}. Timings do not establish a root cause.`
 }
 
 function errorText(error: unknown): string {
@@ -1316,7 +1335,7 @@ async function diagnosticTrial(
       phases,
       ...(floodRunId === undefined ? {} : { floodRunId }),
       probe: probeEvidence,
-      finding: `Observed ${metric} browser endpoint ${observation.durationMs.toFixed(3)}ms. Phase timings and status.get probe evidence are descriptive; they do not establish a root cause.`,
+      finding: diagnosticFinding(metric, observation.durationMs, phases, activeProbe.probes),
       trace: tracePath,
       timeline: timelinePath
     }

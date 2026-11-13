@@ -3,7 +3,8 @@ import {
   installBrowserObserver,
   waitForBrowserObserver,
   waitForDiagnosticStatusProbe,
-  waitForFloodProgressAfterSnapshot
+  waitForFloodProgressAfterSnapshot,
+  diagnosticFinding
 } from './measure.ts'
 
 type EventHandler = (event: { target: FakeElement; key?: string }) => void
@@ -303,4 +304,38 @@ test('diagnostic status evidence requires a successful status.get callback', asy
     recovered.ptyHostPid = 987
   })
   await expect(connected).resolves.toBe(987)
+})
+
+test('startup findings use spawn-to-paint duration and include every phase and probe statistic', () => {
+  const finding = diagnosticFinding('startup', 7, {
+    daemonHealthAndControlMs: 900,
+    rendererNavigationAndAttachMs: 2450,
+    readinessInputToPaintMs: 7,
+    controllerUntilFreshPaintMs: 3400
+  }, [
+    { at: 0, ms: 4, ownLagMs: 2, timedOut: false },
+    { at: 1, ms: 12, ownLagMs: 1, timedOut: false },
+    { at: 2, ms: 6, ownLagMs: 4, timedOut: false }
+  ])
+  expect(finding).toContain('startup durationMs=3400 ms')
+  expect(finding).not.toContain('startup durationMs=7 ms')
+  expect(finding).toContain('daemonHealthAndControlMs=900 ms')
+  expect(finding).toContain('rendererNavigationAndAttachMs=2450 ms')
+  expect(finding).toContain('readinessInputToPaintMs=7 ms')
+  expect(finding).toContain('controllerUntilFreshPaintMs=3400 ms')
+  expect(finding).toContain('status.get probe count=3')
+  expect(finding).toContain('maxLatencyMs=12 ms')
+  expect(finding).toContain('maxOwnLagMs=4 ms')
+  expect(finding).toContain('do not establish a root cause')
+})
+
+test('findings distinguish timed phases from flood counters and do not fabricate missing probe values', () => {
+  const finding = diagnosticFinding('floodEcho', 83, { browserEventToPaintMs: 83, renderedEndCounter: 42 }, [])
+  expect(finding).toContain('floodEcho durationMs=83 ms')
+  expect(finding).toContain('renderedEndCounter=42')
+  expect(finding).not.toContain('renderedEndCounter=42 ms')
+  expect(finding).toContain('status.get probe count=0')
+  expect(finding).toContain('maxLatencyMs=unavailable')
+  expect(finding).toContain('maxOwnLagMs=unavailable')
+  expect(() => diagnosticFinding('startup', 7, {}, [])).toThrow('startup duration')
 })
