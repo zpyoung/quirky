@@ -1,18 +1,22 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { watch } from 'node:fs/promises'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { RpcErrorCode, type PluginContext, type ProcessRunner, type RunOptions, type RunResult, type Worktree } from '@quirky/protocol'
 import { isRecord } from '../src/pr-data'
-import { createEnv, type HostingEnv } from '../src/env'
+import { createEnv, type HostingConfiguration, type HostingEnv } from '../src/env'
+import type { RateLimitSnapshot } from '../src/runtime-runner'
 import { createPRLookup, type PRLookup } from '../src/pr-review'
 import { bootHosting, type HostingTest } from './helpers'
 
 const hosts: HostingTest[] = []
 const cachedReviewEnvironments: HostingEnv[] = []
+const cachedReviewTempRoots: string[] = []
 afterEach(async () => {
   for (const environment of cachedReviewEnvironments.splice(0).reverse()) await environment.dispose()
   for (const host of hosts.splice(0).reverse()) await host.cleanup()
+  for (const root of cachedReviewTempRoots.splice(0).reverse()) rmSync(root, { recursive: true, force: true })
 })
 
 const ghFixture = String.raw`
@@ -208,16 +212,43 @@ function cachedWorktree(index: number, repoIndex: number, overrides: Partial<Wor
   } as unknown as Worktree
 }
 
-function cachedReviewFixture(worktrees: Worktree[], failGit = false) {
+type CachedReviewFixtureOptions = {
+  gitOutput?: (args: string[], cwd: string) => string | Promise<string>
+}
+
+function cachedReviewFixture(worktrees: Worktree[], failGit = false, options: CachedReviewFixtureOptions = {}) {
   const calls: FixtureCall[] = []
   const processCalls: Array<{ argv: string[]; options?: RunOptions }> = []
-  const store = { get: () => undefined, run: () => undefined, all: () => [] }
+  const execCalls: Array<{ file: 'git'; args: string[]; cwd: string }> = []
+  const configurations = new Map<string, HostingConfiguration>()
+  const store = {
+    get: (_query: string, repoId: string) => {
+      const configuration = configurations.get(repoId)
+      return configuration === undefined ? undefined : {
+        issue_source_preference: configuration.issueSourcePreference,
+        account_host: configuration.account?.host ?? null,
+        account_user: configuration.account?.user ?? null
+      }
+    },
+    run: (_query: string, repoId: string, preference: HostingConfiguration['issueSourcePreference'], host: string | null, user: string | null) => {
+      configurations.set(repoId, {
+        issueSourcePreference: preference,
+        account: host && user ? { host, user } : null
+      })
+    },
+    all: () => []
+  }
   const processRunner: ProcessRunner = {
-    run: async (argv, options): Promise<RunResult> => {
-      processCalls.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
+    run: async (argv, runOptions): Promise<RunResult> => {
+      if (argv[0] !== 'git') throw new Error(`Unexpected fixture process: ${argv.join(' ')}`)
+      const args = argv.slice(1)
+      const cwd = runOptions?.cwd ?? ''
+      processCalls.push({ argv: [...argv], ...(runOptions === undefined ? {} : { options: runOptions }) })
+      execCalls.push({ file: 'git', args, cwd })
+      const stdout = failGit ? '' : options.gitOutput ? await options.gitOutput(args, cwd) : ''
       return {
-        stdout: new TextEncoder().encode(''),
-        stdoutText: '',
+        stdout: new TextEncoder().encode(stdout),
+        stdoutText: stdout,
         stderr: failGit ? 'Git identity unavailable' : '',
         exitCode: failGit ? 1 : 0,
         signal: null,
@@ -245,7 +276,82 @@ function cachedReviewFixture(worktrees: Worktree[], failGit = false) {
   } as unknown as PluginContext
   const env = createEnv(context)
   cachedReviewEnvironments.push(env)
-  return { env, lookup: createPRLookup(env), calls, processCalls }
+  return {
+    env,
+    lookup: createPRLookup(env),
+    calls,
+    processCalls,
+    execCalls,
+    setConfiguration: (worktree: Worktree, configuration: HostingConfiguration) => {
+      configurations.set(worktree.repoId, configuration)
+    }
+  }
+}
+
+function cachedReviewIdentityFixture(count = 1) {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-cached-review-'))
+  cachedReviewTempRoots.push(root)
+  const identities = new Map<string, { branch: string; head: string; repoName: string }>()
+  const worktrees = Array.from({ length: count }, (_, index) => {
+    const repoIndex = Math.floor(index / 3)
+    const repoName = `test-repo-${repoIndex}`
+    const path = join(root, `worktree-${index + 1}`)
+    mkdirSync(join(path, '.git'), { recursive: true })
+    writeFileSync(join(path, '.git', 'config'),
+      `[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = https://github.com/test-owner/${repoName}.git\n`)
+    const head = String(index + 1).repeat(40)
+    identities.set(path, { branch: 'feature', head, repoName })
+    return cachedWorktree(index + 1, repoIndex, { path, branch: 'feature', head })
+  })
+  const fixture = cachedReviewFixture(worktrees, false, {
+    gitOutput: (args, cwd) => {
+      const identity = identities.get(cwd)
+      if (!identity) throw new Error(`Unexpected Git worktree: ${cwd}`)
+      if (args[0] === 'remote' && args[1] === 'get-url') {
+        if (args[2] === 'origin') return `https://github.com/test-owner/${identity.repoName}.git\n`
+        if (args[2] === 'upstream') return ''
+      }
+      if (args[0] === 'symbolic-ref') return `${identity.branch}\n`
+      if (args[0] === 'rev-parse') return `${identity.head}\n`
+      throw new Error(`Unexpected Git query: ${args.join(' ')}`)
+    }
+  })
+  fixture.env.run = async () => { throw new Error('Unexpected provider process') }
+  fixture.env.json = async (scope, args) => {
+    if (args[0] !== 'pr' || args[1] !== 'view' || args[2] !== '7') {
+      throw new Error(`Unexpected provider JSON query: ${args.join(' ')}`)
+    }
+    return {
+      ...review(7, scope.worktree.head),
+      url: `https://${scope.repository.host}/${scope.repository.owner}/${scope.repository.repo}/pull/7`,
+      headRefName: scope.worktree.branch ?? 'feature',
+      headRepositoryOwner: { login: scope.repository.owner },
+      headRepository: { name: scope.repository.repo, owner: { login: scope.repository.owner } }
+    }
+  }
+  fixture.env.rest = async () => { throw new Error('Unexpected provider REST request') }
+  fixture.env.graphql = async () => ({})
+  fixture.env.rateLimit = async () => ({} as RateLimitSnapshot)
+  return {
+    ...fixture,
+    worktrees,
+    setListedHead: (worktreeId: string, head: string) => {
+      const index = worktrees.findIndex((worktree) => worktree.id === worktreeId)
+      if (index < 0) throw new Error(`Unknown worktree: ${worktreeId}`)
+      worktrees[index] = { ...worktrees[index]!, head }
+    }
+  }
+}
+
+async function withFrozenDateNow(callback: () => Promise<void>): Promise<void> {
+  const originalDateNow = Date.now
+  const frozenNow = originalDateNow()
+  Date.now = () => frozenNow
+  try {
+    await callback()
+  } finally {
+    Date.now = originalDateNow
+  }
 }
 
 function cachedReviewRaceFixture(worktree: Worktree) {
@@ -340,6 +446,111 @@ function errorReason(error: unknown): unknown {
   return isRecord(error) && isRecord(error.data) ? error.data.reason : undefined
 }
 
+test('cachedReviews warm hits and listed HEAD changes do not spawn Git', async () => {
+  await withFrozenDateNow(async () => {
+    const fixture = cachedReviewIdentityFixture()
+    const worktree = fixture.worktrees[0]!
+    const seeded = await fixture.lookup.review({ worktree: worktree.id, number: 7 }, cachedReviewsCaller)
+    expect(seeded).toMatchObject({ kind: 'found', review: { number: 7 } })
+    const execCountAfterSeed = fixture.execCalls.length
+
+    const warm = await fixture.lookup.cachedReviews({ worktrees: [worktree.id] }, cachedReviewsCaller)
+    expect(warm.workspaces).toEqual([{
+      worktreeId: worktree.id,
+      instanceId: worktree.instanceId,
+      branch: 'feature',
+      headOid: worktree.head,
+      review: {
+        state: 'open',
+        checksStatus: 'success',
+        headRefOid: worktree.head,
+        number: 7,
+        url: 'https://github.com/test-owner/test-repo-0/pull/7'
+      },
+      stale: false
+    }])
+    expect(fixture.execCalls).toHaveLength(execCountAfterSeed)
+
+    const changedHead = 'a'.repeat(40)
+    fixture.setListedHead(worktree.id, changedHead)
+    const changed = await fixture.lookup.cachedReviews({ worktrees: [worktree.id] }, cachedReviewsCaller)
+    expect(changed.workspaces).toEqual([{
+      worktreeId: worktree.id,
+      instanceId: worktree.instanceId,
+      branch: 'feature',
+      headOid: changedHead,
+      review: null,
+      stale: true
+    }])
+    expect(fixture.execCalls).toHaveLength(execCountAfterSeed)
+  })
+})
+
+for (const [field, configuration] of [
+  ['preference', { issueSourcePreference: 'origin', account: null }],
+  ['account', { issueSourcePreference: 'auto', account: { host: 'github.com', user: 'fixture-user' } }]
+] satisfies [string, HostingConfiguration][]) {
+  test(`cachedReviews rejects ${field} changes before reusing a snapshot`, async () => {
+    await withFrozenDateNow(async () => {
+      const fixture = cachedReviewIdentityFixture()
+      const worktree = fixture.worktrees[0]!
+      expect(fixture.env.configuration(worktree)).toEqual({ issueSourcePreference: 'auto', account: null })
+      expect(await fixture.lookup.review({ worktree: worktree.id, number: 7 }, cachedReviewsCaller))
+        .toMatchObject({ kind: 'found', review: { number: 7 } })
+      expect((await fixture.lookup.cachedReviews({ worktrees: [worktree.id] }, cachedReviewsCaller)).workspaces)
+        .toMatchObject([{ worktreeId: worktree.id, review: { number: 7 }, stale: false }])
+      const execCountBeforeChange = fixture.execCalls.length
+
+      fixture.setConfiguration(worktree, configuration)
+      const changed = await fixture.lookup.cachedReviews({ worktrees: [worktree.id] }, cachedReviewsCaller)
+      expect(changed.workspaces).toEqual([{
+        worktreeId: worktree.id,
+        instanceId: worktree.instanceId,
+        branch: 'feature',
+        headOid: worktree.head,
+        review: null,
+        stale: true
+      }])
+      expect(fixture.execCalls).toHaveLength(execCountBeforeChange)
+    })
+  })
+}
+
+test('cachedReviews preserves invalidation staleness across cold shuffled batches', async () => {
+  await withFrozenDateNow(async () => {
+    const fixture = cachedReviewIdentityFixture(7)
+    const worktrees = fixture.worktrees
+    const invalidated = worktrees[4]!
+    expect(await fixture.lookup.review({ worktree: invalidated.id, number: 7 }, cachedReviewsCaller))
+      .toMatchObject({ kind: 'found', review: { number: 7 } })
+    expect((await fixture.lookup.cachedReviews({ worktrees: [invalidated.id] }, cachedReviewsCaller)).workspaces)
+      .toMatchObject([{ worktreeId: invalidated.id, review: { number: 7 }, stale: false }])
+    const scope = await fixture.env.resolve({ worktree: invalidated.id }, cachedReviewsCaller)
+    fixture.env.invalidate(scope)
+
+    const ordered = [worktrees[4]!, worktrees[1]!, worktrees[6]!, worktrees[0]!, worktrees[4]!, worktrees[2]!, worktrees[5]!, worktrees[3]!, worktrees[1]!]
+    const expectedOrder = [worktrees[4]!, worktrees[1]!, worktrees[6]!, worktrees[0]!, worktrees[2]!, worktrees[5]!, worktrees[3]!]
+    for (const prefix of ['', 'id:']) {
+      const callStart = fixture.calls.length
+      const execStart = fixture.execCalls.length
+      const result = await fixture.lookup.cachedReviews({
+        worktrees: ordered.map((worktree) => `${prefix}${worktree.id}`)
+      }, cachedReviewsCaller)
+
+      expect(result.workspaces).toEqual(expectedOrder.map((worktree) => ({
+        worktreeId: worktree.id,
+        instanceId: worktree.instanceId,
+        branch: worktree.branch,
+        headOid: worktree.head,
+        review: null,
+        stale: worktree.id === invalidated.id
+      })))
+      expect(fixture.calls.slice(callStart).map(({ method }) => method)).toEqual(['quirky.worktree/list'])
+      expect(fixture.execCalls.slice(execStart)).toEqual([])
+    }
+  })
+})
+
 
 test('cachedReviews resolves cold batches from one worktree list without Git spawns', async () => {
   const worktrees = Array.from({ length: 7 }, (_, index) => cachedWorktree(index + 1, Math.floor(index / 3)))
@@ -428,6 +639,40 @@ test('cachedReviews reports unverified HEAD fallback failures with the stable id
     ...Array.from({ length: worktrees.length }, () => 'rev-parse --verify HEAD'),
     ...Array.from({ length: worktrees.length }, () => 'symbolic-ref --quiet --short HEAD')
   ].sort())
+})
+
+test('cachedReviews rejects successful zero-OID HEAD fallback results', async () => {
+  const worktrees = ['', ''].map((head, index) => cachedWorktree(index + 1, 0, { head }))
+  const zeroOids = new Map<string, string>(worktrees.map((worktree, index) =>
+    [worktree.path, '0'.repeat(index === 0 ? 40 : 64)] as const
+  ))
+  const fixture = cachedReviewFixture(worktrees, false, {
+    gitOutput: (args, cwd) => {
+      if (args[0] === 'symbolic-ref') return 'feature\n'
+      if (args[0] === 'rev-parse') {
+        const zeroOid = zeroOids.get(cwd)
+        if (zeroOid) return `${zeroOid}\n`
+      }
+      throw new Error(`Unexpected Git query: ${args.join(' ')}`)
+    }
+  })
+
+  const result = await fixture.lookup.cachedReviews({ worktrees: worktrees.map(({ id }) => id) }, cachedReviewsCaller)
+
+  expect(result.workspaces).toEqual(worktrees.map((worktree) => ({
+    worktreeId: worktree.id,
+    instanceId: worktree.instanceId,
+    branch: null,
+    headOid: null,
+    review: null,
+    stale: true,
+    error: 'The current local worktree identity could not be verified.'
+  })))
+  expect(fixture.execCalls).toHaveLength(worktrees.length * 2)
+  for (const worktree of worktrees) {
+    expect(fixture.execCalls.filter(({ cwd }) => cwd === worktree.path).map(({ args }) => args.join(' ')).sort())
+      .toEqual(['rev-parse --verify HEAD', 'symbolic-ref --quiet --short HEAD'].sort())
+  }
 })
 
 test('cachedReviews returns folder workspaces without probing Git', async () => {
@@ -705,6 +950,42 @@ test('filesystem instance replacement invalidates a cached review snapshot', asy
   expect(after.instanceId).not.toBe(oldInstanceId)
   expect(after).toMatchObject({ review: null, stale: true })
 })
+
+test('cachedReviews invalidates a review when only the branch name changes', async () => {
+  const testHost = await host()
+  const headOid = outputOf(testHost, ['rev-parse', 'HEAD'])
+  testHost.writeState({ authenticated: true, prs: [review(7, headOid)] })
+  expect(await testHost.call('review', { worktree: testHost.worktree, number: 7 }))
+    .toMatchObject({ kind: 'found', review: { number: 7 } })
+
+  const before = await cached(testHost)
+  const worktreeId = before.worktreeId
+  const instanceId = before.instanceId
+  expect(before).toEqual({
+    worktreeId,
+    instanceId,
+    branch: 'feature',
+    headOid,
+    review: expect.objectContaining({ number: 7 }),
+    stale: false
+  })
+  const invocationCount = testHost.invocations().length
+
+  git(testHost, ['switch', '-c', 'feature-same-head'])
+  expect(outputOf(testHost, ['rev-parse', 'HEAD'])).toBe(headOid)
+  const expectedStaleEntry = {
+    worktreeId,
+    instanceId,
+    branch: 'feature-same-head',
+    headOid,
+    review: null,
+    stale: true
+  }
+  expect(await cached(testHost)).toEqual(expectedStaleEntry)
+  expect(testHost.invocations()).toHaveLength(invocationCount)
+  expect(await cached(testHost)).toEqual(expectedStaleEntry)
+  expect(testHost.invocations()).toHaveLength(invocationCount)
+}, 20_000)
 
 test('configuration invalidation and stale in-flight lookup cannot repopulate snapshots', async () => {
   const testHost = await host([], { pauseNextView: true })
