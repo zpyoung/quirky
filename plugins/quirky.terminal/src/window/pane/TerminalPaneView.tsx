@@ -121,6 +121,7 @@ type Runtime = {
   syncOsc52(): void
   syncExtras(settings: PaneSettings): void
   syncTheme(): void
+  syncPadding(): void
   palette(): TerminalPalette
 }
 
@@ -307,11 +308,12 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       'link-click': initial['link-click'],
       'link-middle-click': initial['link-middle-click']
     }
-    const colorSource = themeSource ?? host.ownerDocument.documentElement
+    let colorSource = latest.current.themeSource ?? host.ownerDocument.documentElement
     const systemTheme = host.ownerDocument.defaultView?.matchMedia?.('(prefers-color-scheme: light)')
     let warnedPalette: string | undefined
     const readColors = (settingsNow: PaneSettings) => {
-      const appearance = resolveTerminalAppearance(settingsNow, readTerminalTheme(colorSource), systemTheme?.matches ?? false)
+      const source = latest.current.themeSource ?? host.ownerDocument.documentElement
+      const appearance = resolveTerminalAppearance(settingsNow, readTerminalTheme(source), systemTheme?.matches ?? false)
       if (appearance.warning && appearance.warning !== warnedPalette) context.toast('Invalid custom terminal palette', appearance.warning)
       warnedPalette = appearance.warning
       return appearance.colors
@@ -814,6 +816,8 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     })
 
     const guard = new ContextLossGuard()
+    let appliedPaddingX = initial['padding-x']
+    let appliedPaddingY = initial['padding-y']
     const rt: Runtime = {
       term,
       fit,
@@ -825,11 +829,29 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       scheduleFit,
       syncOsc52,
       syncExtras(settingsNow) { graphics.sync(settingsNow['inline-images']); void extras.sync(settingsNow) },
-      syncTheme() { applyTheme(true) },
+      syncTheme() {
+        const nextSource = latest.current.themeSource ?? host.ownerDocument.documentElement
+        if (nextSource !== colorSource) {
+          colorSource = nextSource
+          themeObserver.disconnect()
+          themeObserver.observe(host.ownerDocument.documentElement, { attributes: true })
+          themeObserver.observe(colorSource, { attributes: true })
+        }
+        applyTheme()
+      },
+      syncPadding() {
+        const settingsNow = latest.current.settings
+        if (appliedPaddingX === settingsNow['padding-x'] && appliedPaddingY === settingsNow['padding-y']) return
+        appliedPaddingX = settingsNow['padding-x']
+        appliedPaddingY = settingsNow['padding-y']
+        scheduleFit()
+      },
       palette() { return appliedColors },
       setFont() {
-        term.options.fontSize = effectiveFontSize()
-        setView((now) => ({ ...now, fontSize: effectiveFontSize() }))
+        const size = effectiveFontSize()
+        if (term.options.fontSize === size) return
+        term.options.fontSize = size
+        setView((now) => ({ ...now, fontSize: size }))
         scheduleFit()
       },
       refreshWebgl() {
@@ -1005,14 +1027,18 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       })
 
     let appliedColors = colors
-    const applyTheme = (force = false) => {
+    let appliedOpacity = alpha(initial)
+    const applyTheme = () => {
       if (disposed) return
-      const next = readColors(latest.current.settings)
-      if (!force && JSON.stringify(next) === JSON.stringify(appliedColors)) return
+      const settingsNow = latest.current.settings
+      const next = readColors(settingsNow)
+      const opacity = alpha(settingsNow)
+      if (opacity === appliedOpacity && JSON.stringify(next) === JSON.stringify(appliedColors)) return
       appliedColors = next
-      if (alpha(latest.current.settings) < 1) term.options.allowTransparency = true
-      term.options.theme = theme(latest.current.settings, next)
-      host.style.background = withAlpha(next.background, alpha(latest.current.settings))
+      appliedOpacity = opacity
+      if (opacity < 1) term.options.allowTransparency = true
+      term.options.theme = theme(settingsNow, next)
+      host.style.background = withAlpha(next.background, opacity)
     }
     const systemChanged = () => applyTheme()
     systemTheme?.addEventListener('change', systemChanged)
@@ -1067,18 +1093,25 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       extras.dispose()
       guarded(() => term.dispose(), undefined)
     }
-  }, [context, sessionId, themeSource, sendResize])
+  }, [context, sessionId, sendResize])
 
   useEffect(() => {
     const rt = runtime.current
     if (!rt) return
     const { term } = rt
-    term.options.fontFamily = fontStack(settings['font-family'])
+    const family = fontStack(settings['font-family'])
+    const geometryChanged = term.options.fontFamily !== family ||
+      term.options.fontWeight !== settings['font-weight'] ||
+      term.options.fontWeightBold !== settings['font-weight-bold'] ||
+      term.options.lineHeight !== settings['line-height']
+    if (geometryChanged) {
+      term.options.fontFamily = family
+      term.options.fontWeight = settings['font-weight']
+      term.options.fontWeightBold = settings['font-weight-bold']
+      term.options.lineHeight = settings['line-height']
+      rt.scheduleFit()
+    }
     rt.syncExtras(settings)
-    term.options.fontWeight = settings['font-weight']
-    term.options.fontWeightBold = settings['font-weight-bold']
-    term.options.lineHeight = settings['line-height']
-    rt.scheduleFit()
   }, [settings['font-family'], settings['font-weight'], settings['font-weight-bold'], settings['line-height'], settings['inline-images'], settings.ligatures])
 
   useEffect(() => {
@@ -1116,7 +1149,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     settings['theme-custom-dark'], settings['theme-custom-light'], themeSource])
 
   useEffect(() => {
-    runtime.current?.scheduleFit()
+    runtime.current?.syncPadding()
   }, [settings['padding-x'], settings['padding-y']])
 
   useEffect(() => {
