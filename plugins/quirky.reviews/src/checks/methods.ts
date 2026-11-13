@@ -1254,25 +1254,34 @@ function updateAgentSurface(env: ReviewsEnv, context: AgentContext, change: (sur
     if (!agentSurfaceIsCurrent(state, context)) return
     change(context.surface === 'checks' ? state.checksByWorktree[context.worktree]! : state.detail)
     applied = true
-  })
+  }, context.surface === 'checks' ? context.worktree : undefined)
   return applied
+}
+
+/** The worktree a dialog write may be tagged with, or undefined when another surface could see the change. */
+function dialogScope(before: AgentDialog | null, after: AgentDialog | null): string | undefined {
+  const worktree = (after ?? before)?.target?.worktree
+  if (!worktree) return undefined
+  if (before && (before.surface === 'detail' || before.target?.worktree !== worktree)) return undefined
+  if (after && (after.surface === 'detail' || after.target?.worktree !== worktree)) return undefined
+  return worktree
 }
 
 async function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>, caller: PluginCaller): Promise<JsonRecord> {
   const action = params.action
   if (action === 'clear') {
-    env.update((state) => { state.agentDialog = null })
+    const previous = env.read().agentDialog
+    env.update((state) => { state.agentDialog = null }, dialogScope(previous, null))
     return { agentDialog: null }
   }
   const surface = params.surface === undefined ? 'checks' : params.surface
   if (surface !== 'checks' && surface !== 'detail') throw env.invalid('invalid_input', 'surface must be checks or detail.')
   if (action === 'hide') {
-    env.update((state) => {
-      const current = state.agentDialog
-      if (!current || !isRecord(current)) return
-      const currentSurface = current.surface === 'detail' ? 'detail' : 'checks'
-      if (currentSurface === surface) state.agentDialog = { ...current, visible: false }
-    })
+    const previous = env.read().agentDialog
+    const dialog = previous && (previous.surface === 'detail' ? 'detail' : 'checks') === surface
+      ? { ...previous, visible: false }
+      : previous
+    env.update((state) => { state.agentDialog = dialog }, dialogScope(previous, dialog))
     return { agentDialog: env.read().agentDialog }
   }
   if (action !== 'fix' && action !== 'conflicts' && action !== 'comments') {
@@ -1307,7 +1316,7 @@ async function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>, 
     ...(agent !== undefined && agent !== '' ? { agent } : {}),
     ...(args !== undefined ? { args } : {})
   }
-  env.update((state) => { state.agentDialog = dialog })
+  env.update((state) => { state.agentDialog = dialog }, dialogScope(previous, dialog))
   return { agentDialog: dialog }
 }
 
@@ -1478,7 +1487,7 @@ async function launchAgent(env: ReviewsEnv, params: Record<string, unknown>, cal
       if (sameAgentTarget(env, currentDialog, context, rawDialog.action)) state.agentDialog = null
       if (context.surface === 'checks') state.checksByWorktree[context.worktree]!.error = partialMessage
       else state.detail.error = partialMessage
-    })
+    }, context.surface === 'checks' ? context.worktree : undefined)
     return {
       delivered: true,
       sessionId: createdValue.id,

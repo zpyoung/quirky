@@ -427,13 +427,13 @@ function selectionMatches(state: ReviewsStore, selection: Selection): boolean {
   return selection.head === null || current === null || current.headRefOid.toLowerCase() === selection.head.toLowerCase()
 }
 
-function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsStore) => void): boolean {
+function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsStore) => void, scope?: 'shared'): boolean {
   let applied = false
   env.update((state) => {
     if (!ownerMatches(state, selection)) return
     change(state)
     applied = true
-  })
+  }, selection.surface === 'checks' && scope !== 'shared' ? selection.worktree : undefined)
   return applied
 }
 
@@ -1031,7 +1031,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.audience = audience
         else state.audience = audience
-      })
+      }, 'shared')
       return { surface: selectedSurface, audience }
     },
 
@@ -1043,7 +1043,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.grouping = grouping
         else state.grouping = grouping
-      })
+      }, 'shared')
       return { surface: selectedSurface, grouping }
     },
 
@@ -1163,7 +1163,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.checksCollapsed = collapsed
         else state.checksCollapsed = collapsed
-      })
+      }, 'shared')
       return { surface: selectedSurface, collapsed }
     },
 
