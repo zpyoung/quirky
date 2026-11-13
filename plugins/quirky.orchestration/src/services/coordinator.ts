@@ -12,6 +12,7 @@ import type { ServiceCoordinatorPort } from './handlers'
 import type { ServiceMethodResults, ServiceRunDetail, ServiceWorkerView } from './contracts'
 import type { DurableMutationOptions } from '../worker-integration'
 import { fail } from '../errors'
+import { CREATED_OLDEST_FIRST } from '../store'
 
 export interface OrchestrationServiceCoordinator extends ServiceCoordinatorPort, WorkerServiceCoordinatorPort {
   bindWorkers(workers: WorkerComponents): void
@@ -72,7 +73,7 @@ export function createServiceCoordinator(
 
   async function workersForRun(runId: RunId, caller: PluginCaller): Promise<readonly ServiceWorkerView[]> {
     const rows = core.store.all<{ id: DispatchId }>(
-      `SELECT id FROM dispatches WHERE run_id = ? AND supervised = 1 ORDER BY created_at, id`,
+      `SELECT id FROM dispatches WHERE run_id = ? AND supervised = 1 ORDER BY ${CREATED_OLDEST_FIRST}`,
       runId
     )
     const show = workers().methods.workerShow

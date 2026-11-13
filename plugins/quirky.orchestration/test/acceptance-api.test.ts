@@ -181,6 +181,18 @@ async function receiptCallerFingerprint(party: OrchestrationParty, requestId: st
     database.close()
   }
 }
+
+const SHARED_CREATED_AT = '2026-01-01T00:00:00.000Z'
+
+function shareCreatedAt(table: 'tasks' | 'gates' | 'dispatches'): void {
+  const database = new Database(join(fixture.home, 'plugin-data', 'quirky.orchestration', 'store.db'))
+  try {
+    database.exec('PRAGMA busy_timeout = 5000')
+    database.run(`UPDATE ${table} SET created_at = '${SHARED_CREATED_AT}'`)
+  } finally {
+    database.close()
+  }
+}
 describe('quirky.orchestration daemon API acceptance', () => {
   test('AC1 binds, transfers and inspects Runs without letting inspection change ownership', async () => {
     const coordinator = await fixture.createParty('coordinator-c')
@@ -460,6 +472,105 @@ describe('quirky.orchestration daemon API acceptance', () => {
       'nested_worker_depth_exceeded'
     )
   }, 30_000)
+
+  test('task and gate lists keep creation order when timestamps tie', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const { run } = await createRun(coordinator, 'stable list ordering')
+    const taskIds: TaskRow['id'][] = []
+    for (let index = 0; index < 8; index++) {
+      const { task } = await createTask(coordinator, run.id, `task ${index}`)
+      taskIds.push(task.id)
+    }
+
+    shareCreatedAt('tasks')
+    const allTasks = await call<{ count: number; tasks: TaskRow[] }>(coordinator, TASK_LIST, {
+      runId: run.id,
+      ready: false
+    })
+    expect(allTasks.count).toBe(8)
+    expect(allTasks.tasks.map((task) => task.id)).toEqual(taskIds)
+    expect(allTasks.tasks.map((task) => task.createdAt)).toEqual(Array(8).fill(SHARED_CREATED_AT))
+
+    const readyTasks = await call<{ count: number; tasks: TaskRow[] }>(coordinator, TASK_LIST, {
+      runId: run.id,
+      ready: true
+    })
+    expect(readyTasks.count).toBe(8)
+    expect(readyTasks.tasks.map((task) => task.id)).toEqual(taskIds)
+
+    const statusTasks = await call<{ count: number; tasks: TaskRow[] }>(coordinator, TASK_LIST, {
+      runId: run.id,
+      status: 'ready'
+    })
+    expect(statusTasks.count).toBe(8)
+    expect(statusTasks.tasks.map((task) => task.id)).toEqual(taskIds)
+
+    const gateIds: GateRow['id'][] = []
+    for (const taskId of taskIds) {
+      const { gate } = await call<GateMutation>(coordinator, GATE_CREATE, {
+        ...mutation(),
+        taskId,
+        question: 'Choose an option',
+        options: ['a', 'b']
+      })
+      gateIds.push(gate.id)
+    }
+
+    shareCreatedAt('gates')
+    const allGates = await call<{ count: number; gates: GateRow[] }>(coordinator, GATE_LIST, { runId: run.id })
+    expect(allGates.count).toBe(8)
+    expect(allGates.gates.map((gate) => gate.id)).toEqual(gateIds)
+
+    const pendingGates = await call<{ count: number; gates: GateRow[] }>(coordinator, GATE_LIST, {
+      runId: run.id,
+      status: 'pending'
+    })
+    expect(pendingGates.count).toBe(8)
+    expect(pendingGates.gates.map((gate) => gate.id)).toEqual(gateIds)
+
+    const blockedTasks = await call<{ count: number; tasks: TaskRow[] }>(coordinator, TASK_LIST, {
+      runId: run.id,
+      status: 'blocked'
+    })
+    expect(blockedTasks.count).toBe(8)
+    expect(blockedTasks.tasks.map((task) => task.id)).toEqual(taskIds)
+  }, 60_000)
+
+  test('dispatchShow selects the latest failed Dispatch when timestamps tie', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const worker = await fixture.createParty('worker')
+    const { run } = await createRun(coordinator, 'latest dispatch ordering')
+    const { task } = await createTask(coordinator, run.id, 'repeated attempts')
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { dispatch } = await createDispatch(coordinator, run.id, task.id, worker.id)
+      const report = await send(worker, {
+        to: { kind: 'run', runId: run.id },
+        type: 'worker_done',
+        taskId: task.id,
+        dispatchId: dispatch.id,
+        outcome: 'failed',
+        subject: 'attempt failed',
+        body: 'retry this task'
+      })
+      if (report.kind !== 'worker_report') throw new Error('expected a worker report result')
+      expect(report.report.status).toBe('accepted')
+
+      shareCreatedAt('dispatches')
+      const shown = await call<{ dispatch: DispatchRow | null; worker: unknown }>(coordinator, DISPATCH_SHOW, {
+        taskId: task.id
+      })
+      expect(shown.dispatch?.id).toBe(dispatch.id)
+
+      const updated = await call<TaskUpdateResult>(coordinator, TASK_UPDATE, {
+        ...mutation(),
+        runId: run.id,
+        taskId: task.id,
+        status: 'ready'
+      })
+      expect(updated.task.status).toBe('ready')
+    }
+  }, 60_000)
 
   test('AC5 context Dispatch reports require the exact assignee and do not disguise rejections', async () => {
     const coordinator = await fixture.createParty('coordinator')
