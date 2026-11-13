@@ -107,6 +107,7 @@ export class PtyClient {
   >()
   private readonly factHandlers = new Set<(sessionId: string, fact: PtyFact) => void>()
   private readonly reconnectHandlers = new Set<() => void>()
+  private readonly laggedHandlers = new Set<(sessionId: string) => void>()
   private readonly closeSignal = Promise.withResolvers<void>()
   private readonly closeWaiters = new Set<() => void>()
   private readonly protocol: { min: number; max: number }
@@ -145,6 +146,10 @@ export class PtyClient {
 
   onFact(handler: (sessionId: string, fact: PtyFact) => void): void {
     this.factHandlers.add(handler)
+  }
+
+  onLagged(handler: (sessionId: string) => void): void {
+    this.laggedHandlers.add(handler)
   }
 
   /** Called once when the client restores a connection after an outage. */
@@ -442,7 +447,7 @@ export class PtyClient {
       if (this.closing) throw new Error('pty client closed')
       const hello = (await this.rawRequest(
         'hello',
-        { token, version: this.protocol.max, minVersion: this.protocol.min },
+        { token, version: this.protocol.max, minVersion: this.protocol.min, sessionLagged: true },
         { timeoutMs: helloTimeoutMs(this.options.connectTimeoutMs) }
       )) as PtyResults['hello']
       if (this.closing) throw new Error('pty client closed')
@@ -488,7 +493,7 @@ export class PtyClient {
       if (this.closing) throw new Error('pty client closed')
       const hello = (await this.rawRequest(
         'hello',
-        { token, version },
+        { token, version, sessionLagged: true },
         { timeoutMs: helloTimeoutMs(this.options.connectTimeoutMs) }
       )) as PtyResults['hello']
       if (this.closing) throw new Error('pty client closed')
@@ -615,6 +620,8 @@ export class PtyClient {
       for (const handler of this.exitHandlers) handler(message.sessionId, message.exitCode ?? null, details)
     } else if (message.type === 'fact' && typeof message.sessionId === 'string' && message.fact) {
       for (const handler of this.factHandlers) handler(message.sessionId, message.fact)
+    } else if (message.type === 'lagged' && typeof message.sessionId === 'string') {
+      for (const handler of this.laggedHandlers) handler(message.sessionId)
     }
   }
 
