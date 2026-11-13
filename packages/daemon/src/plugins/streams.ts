@@ -1,4 +1,4 @@
-import { encodeTerminalOutput, type ClientStream } from '@quirky/protocol'
+import { encodeTerminalLagged, encodeTerminalOutput, type ClientStream } from '@quirky/protocol'
 import { invalidParams } from '../errors'
 import type { ClientConn } from '../types'
 
@@ -30,14 +30,17 @@ export function onConnectionClose(conn: ClientConn, callback: () => void): () =>
 /**
  * Opens a binary stream to `conn` for a `connection: true` method. The stream ends when the plugin
  * closes it or the connection goes away (`Core.removeClient` runs the registered closer); its
- * `onClose` callbacks run once either way. On a connection that is already closed the stream starts
- * closed: `onClose` callbacks run at once, `send` is a no-op and no closer is registered.
+ * `onClose` callbacks run once either way. `lag()` emits one terminal-lagged frame and runs any
+ * registered `onLag` callbacks. On an already closed connection the stream starts closed, `send`
+ * returns `false` and no closer is registered.
  */
 export function openStream(conn: ClientConn): ClientStream {
   if (conn.transport === 'socket') throw invalidParams('this method needs the WebSocket transport')
   const streamId = conn.nextStreamId++
   const callbacks: (() => void)[] = []
+  const lagCallbacks: (() => void)[] = []
   let closed = conn.closed
+  let lagged = false
 
   const runCallback = (callback: () => void) => {
     try {
@@ -50,15 +53,34 @@ export function openStream(conn: ClientConn): ClientStream {
     if (closed) return
     closed = true
     conn.streamClosers.delete(streamId)
+    lagCallbacks.length = 0
     for (const callback of callbacks.splice(0)) runCallback(callback)
   }
   if (!closed) conn.streamClosers.set(streamId, close)
 
   return {
     streamId,
+    get lagged() {
+      return lagged
+    },
     send(bytes) {
-      if (closed || conn.closed) return
+      if (closed || conn.closed || lagged) return false
       conn.sendBinary(encodeTerminalOutput(streamId, bytes))
+      return true
+    },
+    lag() {
+      if (closed || conn.closed || lagged) return
+      lagged = true
+      conn.sendBinary(encodeTerminalLagged(streamId))
+      for (const callback of lagCallbacks.splice(0)) runCallback(callback)
+    },
+    onLag(callback) {
+      if (closed) return
+      if (lagged) {
+        runCallback(callback)
+        return
+      }
+      lagCallbacks.push(callback)
     },
     onClose(callback) {
       if (closed) runCallback(callback)

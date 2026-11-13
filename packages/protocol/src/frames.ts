@@ -3,6 +3,7 @@
  *
  * Daemon to client, one WebSocket binary message per frame:
  *   [kind u8 = TERMINAL_OUTPUT][streamId u32 BE][bytes...]
+ *   [kind u8 = TERMINAL_LAGGED][streamId u32 BE]
  *
  * PTY host socket (a byte stream), both directions:
  *   [kind u8][length u32 BE][payload]
@@ -11,7 +12,11 @@
  *                  host to client is output; client to host is input
  */
 
-export const WsFrameKind = { TerminalOutput: 1 } as const
+export const WsFrameKind = { TerminalOutput: 1, TerminalLagged: 2 } as const
+
+export type TerminalFrame =
+  | { kind: 'output'; streamId: number; bytes: Uint8Array }
+  | { kind: 'lagged'; streamId: number }
 
 export function encodeTerminalOutput(streamId: number, bytes: Uint8Array): Uint8Array {
   const out = new Uint8Array(5 + bytes.length)
@@ -28,6 +33,25 @@ export function decodeTerminalOutput(
   if (view.length < 5 || view[0] !== WsFrameKind.TerminalOutput) return null
   const streamId = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(1, false)
   return { streamId, bytes: view.subarray(5) }
+}
+
+export function encodeTerminalLagged(streamId: number): Uint8Array {
+  const out = new Uint8Array(5)
+  out[0] = WsFrameKind.TerminalLagged
+  new DataView(out.buffer).setUint32(1, streamId >>> 0, false)
+  return out
+}
+
+export function decodeTerminalFrame(message: ArrayBuffer | Uint8Array): TerminalFrame | null {
+  const view = message instanceof Uint8Array ? message : new Uint8Array(message)
+  if (view.byteLength < 5) return null
+  if (view[0] === WsFrameKind.TerminalOutput) {
+    const streamId = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(1, false)
+    return { kind: 'output', streamId, bytes: view.subarray(5) }
+  }
+  if (view[0] !== WsFrameKind.TerminalLagged || view.byteLength !== 5) return null
+  const streamId = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(1, false)
+  return { kind: 'lagged', streamId }
 }
 
 export const PtyFrameKind = { Json: 0, Data: 1 } as const
