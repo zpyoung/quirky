@@ -1789,17 +1789,22 @@ export class BrowserRuntime {
     if (completed.has(loaderId) || state.mainFrameUrl === 'about:blank') return
     const eventName = loadState === 'load' ? 'load' : 'DOMContentLoaded'
     const arrived = Promise.withResolvers<void>()
-    const unsubscribe = execution.cdp.subscribe('Page.lifecycleEvent', (event) => {
-      if (event.sessionId === execution.binding.sessionId && event.params.frameId === frameId &&
-          event.params.loaderId === loaderId && event.params.name === eventName) {
-        completed.add(loaderId)
-        arrived.resolve()
-      }
-    })
-    if (completed.has(loaderId)) {
-      unsubscribe()
-      return
+    const checkCurrentDocument = () => {
+      if (state.mainFrameUrl === 'about:blank' ||
+          state.mainFrameLoaderId && completed.has(state.mainFrameLoaderId)) arrived.resolve()
     }
+    const unsubscribeLifecycle = execution.cdp.subscribe('Page.lifecycleEvent', (event) => {
+      if (event.sessionId !== execution.binding.sessionId) return
+      const loaderId = asString(event.params.loaderId)
+      if (event.params.frameId === state.mainFrameId && loaderId && event.params.name === eventName) {
+        completed.add(loaderId)
+      }
+      queueMicrotask(checkCurrentDocument)
+    })
+    const unsubscribeNavigation = execution.cdp.subscribe('Page.frameNavigated', (event) => {
+      if (event.sessionId === execution.binding.sessionId) queueMicrotask(checkCurrentDocument)
+    })
+    checkCurrentDocument()
     const timeout = Promise.withResolvers<void>()
     const aborted = Promise.withResolvers<void>()
     const onAbort = () => aborted.resolve()
@@ -1820,7 +1825,8 @@ export class BrowserRuntime {
     } finally {
       clearTimeout(timer)
       execution.signal?.removeEventListener('abort', onAbort)
-      unsubscribe()
+      unsubscribeLifecycle()
+      unsubscribeNavigation()
     }
   }
 

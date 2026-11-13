@@ -6,7 +6,7 @@ import { BROWSER_METHODS } from '../src/runtime/catalog'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
 
 type Outcome<T> = { status: 'fulfilled'; value: T } | { status: 'rejected'; reason: unknown }
-type Fixture = { baseUrl: string; stop(): void }
+type Fixture = { baseUrl: string; gate(id: string): { requested: Promise<void>; release(): void }; stop(): void }
 type WaitSignal = { promise: Promise<void>; resolve(): void }
 
 const call = (h: BrowserTestHarness, method: string, params: Record<string, unknown> = {}) =>
@@ -14,28 +14,60 @@ const call = (h: BrowserTestHarness, method: string, params: Record<string, unkn
 
 function startNavigationFixture(): Fixture {
   const html = (body: string) => new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+  const gates = new Map<string, { requested: WaitSignal; released: WaitSignal }>()
+  const gate = (id: string) => {
+    let entry = gates.get(id)
+    if (!entry) {
+      entry = { requested: deferred(), released: deferred() }
+      gates.set(id, entry)
+    }
+    return entry
+  }
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
     fetch(request) {
-      const path = new URL(request.url).pathname
+      const url = new URL(request.url)
+      const path = url.pathname
       if (path === '/a') return html('<!doctype html><title>A</title><a id="go" href="/b">Go</a>')
       if (path === '/b') return html('<!doctype html><title>B</title><h1>Bee</h1><button id="late">Late</button>')
+      if (path === '/slowimg') {
+        const state = url.searchParams.get('state')
+        return html(`<!doctype html><title>Slow</title>
+          <script>setTimeout(() => { location.href = '/b' }, 1500)</script>
+          <img src="/gate/${state}-image">
+          ${state === 'domcontentloaded' ? '<script src="/gate/domcontentloaded-parser"></script>' : ''}`)
+      }
+      if (path.startsWith('/gate/')) {
+        const entry = gate(path.slice('/gate/'.length))
+        entry.requested.resolve()
+        return entry.released.promise.then(() => new Response(''))
+      }
       return new Response('not found', { status: 404 })
     }
   })
-  return { baseUrl: server.url.href, stop: () => server.stop(true) }
+  return {
+    baseUrl: server.url.href,
+    gate(id) {
+      const entry = gate(id)
+      return { requested: entry.requested.promise, release: () => entry.released.resolve() }
+    },
+    stop() {
+      for (const entry of gates.values()) entry.released.resolve()
+      server.stop(true)
+    }
+  }
 }
 
 async function withFixtureHarness(
-  operation: (h: BrowserTestHarness, baseUrl: string) => Promise<void>,
+  operation: (h: BrowserTestHarness, baseUrl: string, fixture: Fixture) => Promise<void>,
   overrides: Parameters<typeof startBrowserHarness>[0] = {}
 ): Promise<void> {
   const fixture = startNavigationFixture()
   let h: BrowserTestHarness | undefined
   try {
     h = await startBrowserHarness(overrides)
-    await operation(h, fixture.baseUrl)
+    await operation(h, fixture.baseUrl, fixture)
   } finally {
     try {
       if (h) await h.cleanup()
@@ -171,8 +203,8 @@ test('wait conditions survive cross-document and same-document navigation (scena
   })
 }, 90_000)
 
-test('CLI and exec wait forms survive navigation (scenario 8)', async () => {
-  await withFixtureHarness(async (h, baseUrl) => {
+test('CLI, exec and document load waits survive navigation (scenarios 8-9)', async () => {
+  await withFixtureHarness(async (h, baseUrl, fixture) => {
     const cliPage = (await newPage(h, baseUrl)).browserPageId
     await scheduleNavigation(h, cliPage)
     const cliResult = await runBrowserCli(h, [
@@ -189,6 +221,41 @@ test('CLI and exec wait forms survive navigation (scenario 8)', async () => {
       exec: { status: 'fulfilled', value: expect.objectContaining({ result: { waited: true } }) }
     })
     expect(JSON.parse(cliResult.stdout)).toEqual({ waited: true })
+
+    const loadOutcomes: Record<string, Outcome<unknown>> = {}
+    for (const load of ['load', 'domcontentloaded']) {
+      const pageId = (await newPage(h, baseUrl)).browserPageId
+      const image = fixture.gate(`${load}-image`)
+      const parser = load === 'domcontentloaded' ? fixture.gate('domcontentloaded-parser') : undefined
+      try {
+        await call(h, 'eval', {
+          page: pageId,
+          expression: `setTimeout(() => { location.href = '/slowimg?state=${load}' }, 50); 1`
+        })
+        expect(await signalBefore(image.requested, 3_000)).toBe(true)
+        if (parser) expect(await signalBefore(parser.requested, 3_000)).toBe(true)
+        const slowUrl = route(baseUrl, `/slowimg?state=${load}`)
+        const deadline = performance.now() + 3_000
+        let currentUrl: string
+        do {
+          const shown = await call(h, 'tabShow', { page: pageId }) as { tab: { url: string } }
+          currentUrl = shown.tab.url
+        } while (currentUrl !== slowUrl && performance.now() < deadline)
+        expect(currentUrl).toBe(slowUrl)
+        const started = performance.now()
+        loadOutcomes[load] = await settle(call(h, 'wait', { page: pageId, load, timeout: 5_000 }))
+        if (loadOutcomes[load]!.status === 'fulfilled') expect(performance.now() - started).toBeLessThan(5_000)
+        expect(await call(h, 'eval', { page: pageId, expression: 'location.pathname + "|" + document.readyState' }))
+          .toEqual({ value: '/b|complete' })
+      } finally {
+        image.release()
+        parser?.release()
+      }
+    }
+    expect(loadOutcomes).toEqual({
+      load: { status: 'fulfilled', value: { waited: true } },
+      domcontentloaded: { status: 'fulfilled', value: { waited: true } }
+    })
   })
 }, 90_000)
 
