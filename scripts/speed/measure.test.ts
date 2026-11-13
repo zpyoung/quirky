@@ -6,6 +6,7 @@ import {
   waitForFloodProgressAfterSnapshot,
   diagnosticFinding,
   summarizeFrameIntervals,
+  measureBrowserFrameIntervals,
   pairSides,
   floodBlocks
 } from './measure.ts'
@@ -198,6 +199,70 @@ function fakePage() {
   } as never
 }
 
+
+
+test('uses one frame scheduler for the full measurement and cleans up its probe', async () => {
+  environment()
+  const probe = {
+    id: '',
+    style: {} as Record<string, string>,
+    removed: false,
+    setAttribute(): void {},
+    remove(): void { this.removed = true }
+  }
+  replaceGlobal('document', {
+    createElement: () => probe,
+    documentElement: { append(): void {} }
+  })
+  let initialSchedulerCalls = 0
+  let replacementSchedulerCalls = 0
+  const replacementScheduler = (callback: (timestamp: number) => void) => {
+    replacementSchedulerCalls++
+    callback(1 + replacementSchedulerCalls * 16)
+    return replacementSchedulerCalls
+  }
+  replaceGlobal('requestAnimationFrame', (callback: (timestamp: number) => void) => {
+    initialSchedulerCalls++
+    callback(1)
+    if (initialSchedulerCalls === 2) replaceGlobal('requestAnimationFrame', replacementScheduler)
+    return initialSchedulerCalls
+  })
+  const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
+
+  const intervals = await measureBrowserFrameIntervals(page, new AbortController().signal)
+
+  expect(intervals).toEqual(Array<number>(60).fill(0))
+  expect(replacementSchedulerCalls).toBe(0)
+  expect(probe.removed).toBe(true)
+})
+
+test('uses a supplied fixed timestamp while scheduling every frame', async () => {
+  environment()
+  const probe = {
+    id: '',
+    style: {} as Record<string, string>,
+    removed: false,
+    setAttribute(): void {},
+    remove(): void { this.removed = true }
+  }
+  replaceGlobal('document', {
+    createElement: () => probe,
+    documentElement: { append(): void {} }
+  })
+  let schedulerCalls = 0
+  replaceGlobal('requestAnimationFrame', (callback: (timestamp: number) => void) => {
+    schedulerCalls++
+    callback(schedulerCalls * 16)
+    return schedulerCalls
+  })
+  const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
+
+  const intervals = await measureBrowserFrameIntervals(page, new AbortController().signal, 1)
+
+  expect(intervals).toEqual(Array<number>(60).fill(0))
+  expect(schedulerCalls).toBe(61)
+  expect(probe.removed).toBe(true)
+})
 
 test('echo waits for its fresh worker/session/sequence/key acknowledgement, not stale replay', async () => {
   environment()

@@ -1796,9 +1796,9 @@ async function readGpuCompositing(browser: Browser, signal: AbortSignal): Promis
   return status
 }
 
-async function measureBrowserFrameIntervals(page: Page, signal: AbortSignal): Promise<number[]> {
+export async function measureBrowserFrameIntervals(page: Page, signal: AbortSignal, frameTimestamp?: number): Promise<number[]> {
   const elementId = `quirky-speed-frame-pacing-${randomUUID()}`
-  const measurement = page.evaluate(async (id) => {
+  const measurement = page.evaluate(async ({ id, fixedTimestamp }) => {
     const probe = document.createElement('div')
     try {
       probe.id = id
@@ -1812,9 +1812,10 @@ async function measureBrowserFrameIntervals(page: Page, signal: AbortSignal): Pr
       probe.style.zIndex = '2147483647'
       probe.style.backgroundColor = 'rgb(0, 0, 0)'
       document.documentElement.append(probe)
+      const requestFrame = globalThis.requestAnimationFrame.bind(globalThis)
       const waitForFrame = () => {
         const { promise, resolve } = Promise.withResolvers<number>()
-        requestAnimationFrame(resolve)
+        requestFrame((time) => resolve(fixedTimestamp ?? time))
         return promise
       }
       let previous = await waitForFrame()
@@ -1829,7 +1830,7 @@ async function measureBrowserFrameIntervals(page: Page, signal: AbortSignal): Pr
     } finally {
       probe.remove()
     }
-  }, elementId)
+  }, { id: elementId, fixedTimestamp: frameTimestamp })
   try {
     return await withDeadline(measurement, DEADLINE_MS, 'browser frame-pacing measurement', signal)
   } catch (error) {
@@ -1852,11 +1853,12 @@ export async function measureSpeed(options: {
   samples: number
   out: string
   signal: AbortSignal
+  frameTimestamp?: number
   pair?: {
     start(signal: AbortSignal): Promise<{ world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows }>
   }
 }): Promise<SpeedMeasurementResult> {
-  const { world, windows, fixture, samples: sampleCount, out, signal } = options
+  const { world, windows, fixture, samples: sampleCount, out, signal, frameTimestamp } = options
   const sampleValues = emptyMetricSamples()
   const attempts: MeasurementAttempt[] = []
   const failures: Failure[] = []
@@ -1898,7 +1900,7 @@ export async function measureSpeed(options: {
       let intervalsMs: number[] = []
       let pacing: FramePacing | { frames: number; error: string }
       try {
-        intervalsMs = await measureBrowserFrameIntervals(context.page, signal)
+        intervalsMs = await measureBrowserFrameIntervals(context.page, signal, frameTimestamp)
         pacing = summarizeFrameIntervals(intervalsMs)
       } catch (error) {
         pacing = { frames: intervalsMs.length, error: errorText(error) }
