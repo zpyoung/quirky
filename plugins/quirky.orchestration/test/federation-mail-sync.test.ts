@@ -67,7 +67,7 @@ type Harness = {
   settleStartup(): Promise<void>
   setAssertBinding(handler: () => Promise<void>): void
   setGetDispatchHook(handler: () => void): void
-  onCleanup(handler: () => void): void
+  onCleanup(handler: () => void | Promise<void>): void
 }
 
 const bindingFor = (side: 'home' | 'host'): FederationBinding => ({
@@ -129,7 +129,7 @@ async function withHarness(options: HarnessOptions, run: (harness: Harness) => P
   const root = mkdtempSync(join(tmpdir(), 'quirky-federation-mail-sync-'))
   let handle: OpenedPluginStore | null = null
   let mail: FederationMailComponent | null = null
-  const cleanupHandlers: Array<() => void> = []
+  const cleanupHandlers: Array<() => void | Promise<void>> = []
   try {
     handle = openPluginStore({
       home: root,
@@ -250,7 +250,7 @@ async function withHarness(options: HarnessOptions, run: (harness: Harness) => P
       onCleanup(handler) { cleanupHandlers.push(handler) },
     })
   } finally {
-    for (const cleanup of cleanupHandlers) cleanup()
+    for (const cleanup of cleanupHandlers) await cleanup()
     await mail?.dispose()
     handle?.close()
     rmSync(root, { recursive: true, force: true })
@@ -405,7 +405,10 @@ test('6: a valid home acknowledgement stores the result before the host pass rea
     harness.setGetDispatchHook(() => queued.resolve())
     const beforeCall = harness.calls.length
     const preflight = harness.mail.submissionPreflight(submissionForHost())
-    harness.onCleanup(() => releaseAssert.resolve())
+    harness.onCleanup(async () => {
+      releaseAssert.resolve()
+      await preflight.catch(() => {})
+    })
     await queued.promise
     await assertStarted.promise
 

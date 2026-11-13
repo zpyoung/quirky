@@ -52,6 +52,7 @@ type MessageEnvelope = {
   deliveredAt: string | null
 }
 type ImportResult = { sequence: number; id: string; result: unknown; duplicate: boolean }
+type QueuedItem = { item: FederationRelayItem; priorSync: Promise<void> | undefined }
 type AppliedImport = { result: unknown; message: MessageRow | null; questionId: string | null }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
@@ -269,11 +270,22 @@ export function createFederationMail(
     })
   }
 
-  const queueItem = (binding: FederationBinding, direction: MailDirection, id: string, kind: FederationRelayItem['kind'], payload: Record<string, JsonValue>): FederationRelayItem => {
+  const queueItem = (binding: FederationBinding, direction: MailDirection, id: string, kind: FederationRelayItem['kind'], payload: Record<string, JsonValue>): QueuedItem => {
     if (fencedBindings.has(binding.id)) throw new Error(`Federation binding ${binding.id} was fenced by reset`)
+    const priorSync = syncPromises.get(binding.id)
     const item = store.enqueue(binding.id, direction, id, kind, payload)
     scheduleSync(binding)
-    return item
+    return { item, priorSync }
+  }
+
+  const waitForResult = async (binding: FederationBinding, { item, priorSync }: QueuedItem): Promise<unknown> => {
+    if (priorSync) await priorSync.catch(() => {})
+    const cached = store.result(binding.id, item.direction, item.id)
+    if (cached !== null) return cached
+    await sync(binding)
+    const result = store.result(binding.id, item.direction, item.id)
+    if (result === null) throw new Error(UNAVAILABLE)
+    return result
   }
 
   const payloadMessage = (message: MessageRow): Record<string, JsonValue> => ({
@@ -450,7 +462,7 @@ export function createFederationMail(
     queueItem(binding, 'to_worker', replyMessage.id, 'message', payloadMessage(replyMessage))
   }
 
-  const buildHostSubmissionItem = async (submission: OrchestrationSubmission): Promise<{ binding: FederationBinding; item: FederationRelayItem }> => {
+  const buildHostSubmissionItem = async (submission: OrchestrationSubmission): Promise<{ binding: FederationBinding; queued: QueuedItem }> => {
     const binding = engine.host(submission.dispatchId as DispatchId)
     if (!binding || binding.side !== 'host' || submission.runId !== binding.hostRunId ||
       submission.taskId !== binding.hostTaskId || submission.dispatchId !== binding.hostDispatchId ||
@@ -510,20 +522,13 @@ export function createFederationMail(
       }
       itemPayload.report = jsonValue(report)
     }
-    const item = queueItem(binding, 'to_home', messageId, 'lifecycle', itemPayload)
-    return { binding, item }
+    const queued = queueItem(binding, 'to_home', messageId, 'lifecycle', itemPayload)
+    return { binding, queued }
   }
 
   const submissionPreflight = async (submission: OrchestrationSubmission): Promise<OrchestrationSubmissionVerdict> => {
-    const { binding, item } = await buildHostSubmissionItem(submission)
-    const cached = store.result(binding.id, 'to_home', item.id)
-    if (cached !== null) return assertSubmissionResult(cached)
-    await sync(binding)
-    const result = store.result(binding.id, 'to_home', item.id)
-    if (result === null) {
-      throw new Error(UNAVAILABLE)
-    }
-    return assertSubmissionResult(result)
+    const { binding, queued } = await buildHostSubmissionItem(submission)
+    return assertSubmissionResult(await waitForResult(binding, queued))
   }
 
   const beforeHeartbeat = async (input: WorkerHeartbeatInput, caller: RuntimeCallerEvidence): Promise<HeartbeatResult | null> => {
@@ -552,11 +557,8 @@ export function createFederationMail(
         createdAt: dispatch.dispatchedAt ?? dispatch.createdAt,
       })) as Record<string, JsonValue>,
     }
-    queueItem(binding, 'to_home', messageId, 'lifecycle', payload)
-    await sync(binding)
-    const result = store.result(binding.id, 'to_home', messageId)
-    if (result === null) throw new Error(UNAVAILABLE)
-    return assertHeartbeatResult(result)
+    const queued = queueItem(binding, 'to_home', messageId, 'lifecycle', payload)
+    return assertHeartbeatResult(await waitForResult(binding, queued))
   }
 
   const applyLifecycle = async (binding: FederationBinding, item: FederationRelayItem): Promise<AppliedImport> => {
