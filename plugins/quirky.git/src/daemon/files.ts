@@ -1,5 +1,5 @@
 import { gitApi, type DiffRequest } from '@quirky/git'
-import type { GitDiffSource } from '@quirky/protocol'
+import type { GitDiffSource, ProcessRunner } from '@quirky/protocol'
 import { readCompare } from './compare'
 import type { DaemonEnv, Handler } from './env'
 import { containedPath } from './paths'
@@ -137,9 +137,15 @@ export function ignoreFolder(env: DaemonEnv): Handler {
   }
 }
 
-async function openInFinder(absolute: string): Promise<boolean> {
-  const proc = Bun.spawn(['open', '-R', absolute], { stdout: 'ignore', stderr: 'ignore' })
-  return (await proc.exited) === 0
+async function openInFinder(runner: ProcessRunner, absolute: string): Promise<boolean> {
+  try {
+    const result = await runner.run(['open', '-R', absolute], {
+      timeoutMs: 30_000, maxOutputBytes: 1, overflow: 'truncate', killGraceMs: 2000
+    })
+    return !result.spawnError && !result.stopped && !result.signal && result.exitCode === 0
+  } catch {
+    return false
+  }
 }
 
 /** Shows a file in Finder. */
@@ -149,7 +155,7 @@ export function reveal(env: DaemonEnv): Handler {
     const { absolute } = await containedPath(worktree.path, params.path)
     const hook = globalThis.__QUIRKY_TEST_REVEAL__
     if (hook) await hook(absolute)
-    else if (!(await openInFinder(absolute))) throw env.errors.reasoned('conflict', 'failed', `Could not reveal ${params.path} in Finder.`)
+    else if (!(await openInFinder(env.context.process, absolute))) throw env.errors.reasoned('conflict', 'failed', `Could not reveal ${params.path} in Finder.`)
     return { ok: true }
   }
 }
