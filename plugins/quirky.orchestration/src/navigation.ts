@@ -4,6 +4,7 @@ import type { FederationEngine } from './federation/contracts'
 import type { OrchestrationWorkerCore } from './worker-integration'
 import { fail } from './errors'
 import { targetIdentity } from './identity'
+import { CREATED_NEWEST_FIRST } from './store'
 import { createWorkerStore } from './workers/store'
 
 type AssignmentRecord = {
@@ -21,7 +22,7 @@ export function createTaskNavigation(
 ): MethodHandler {
   const workers = createWorkerStore(core.store)
   const latest = (taskId: TaskId): DispatchId | null => core.store.get<{ id: DispatchId }>(
-    'SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1', taskId
+    `SELECT id FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`, taskId
   )?.id ?? null
   const assignmentRecord = (dispatchId: DispatchId): AssignmentRecord => {
     const record = core.store.get<AssignmentRecord>(
@@ -65,7 +66,7 @@ export function createTaskNavigation(
     // Re-read after the public async identity lookup: retries, reuse and release may have committed meanwhile.
     const current = assignmentRecord(dispatchId)
     const assignment = core.store.get<{ id: string }>(
-      'SELECT id FROM dispatches WHERE assignee_session_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+      `SELECT id FROM dispatches WHERE assignee_session_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
       sessionId
     )
     if (latest(taskId) !== dispatchId || current.assignee_session_id !== sessionId ||
