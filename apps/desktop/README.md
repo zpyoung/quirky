@@ -244,6 +244,7 @@ The scoreboard discovers every immediate plugin manifest, including plugins with
 and the five host screenshot targets. It scans plugin production source and shared UI source
 for compatibility-token consumption; shared findings fail every UI-bearing plugin and the host.
 The absent, paused `quirky.avatar` branch is listed separately, not counted as a plugin.
+Plugins with declared render contributions count as UI-bearing even without a UI module.
 
 ```sh
 # Full, fresh two-theme capture and independent model review; every image must score 85.
@@ -262,6 +263,8 @@ and `--browser` as above, but no filters, threshold override, skip-build or hist
 Dirty production source blocks capture; source changes during measurement invalidate the run.
 Exit 0 certifies a complete passing full report (or passing ratchet), 1 means failed checks,
 2 means operational/inventory errors; cancellation awaits cleanup and exits 130/143.
+An omitted reviewer theme is an operational failure: measured cells are retained, and no
+further target reviews are requested.
 
 **This item cannot certify goal 3 yet.** Loading, empty, error and command checks report
 `fail: not-implemented` for UI plugins until the ordered source-audit follow-up lands.

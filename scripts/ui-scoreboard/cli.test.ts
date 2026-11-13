@@ -42,6 +42,45 @@ test('static-only writes complete honest reports and never starts runtime', asyn
   expect(messages.join('\n')).toContain(join(output, 'scoreboard.json'))
   expect(messages.join('\n')).toContain(join(output, 'scoreboard.md'))
 })
+
+test('render contributions keep screenshots applicable in static-only mode without a UI module', async () => {
+  const { inventory, output } = fixture()
+  inventory.plugins[0]!.hasUi = false
+
+  expect(await runUiScoreboard(['--static-only', '--output', output], { ...quiet, collectInventory: () => inventory })).toBe(1)
+  expect(report(output).plugins[0]!.checks.find((check) => check.id === 'screenshots'))
+    .toMatchObject({ applicable: true, status: 'fail', reason: 'image-checks-failed' })
+})
+
+test('render contributions keep failed full screenshot measurement applicable without a UI module', async () => {
+  const { inventory, output } = fixture()
+  inventory.plugins[0]!.hasUi = false
+  let captureStarted = false
+
+  expect(await runUiScoreboard(['--author-family', 'openai', '--output', output], {
+    ...quiet,
+    collectInventory: () => inventory,
+    captureApplication: async () => {
+      captureStarted = true
+      throw new Error('Chromium missing')
+    },
+  })).toBe(2)
+  expect(captureStarted).toBe(true)
+  expect(report(output).plugins[0]!.checks.find((check) => check.id === 'screenshots'))
+    .toMatchObject({ applicable: true, status: 'fail', reason: 'image-checks-failed' })
+})
+
+test('daemon-only plugins keep screenshot checks non-applicable', async () => {
+  const { inventory, output } = fixture()
+  inventory.plugins[0]!.hasUi = false
+  inventory.plugins[0]!.targets = []
+  inventory.targets = []
+
+  expect(await runUiScoreboard(['--static-only', '--output', output], { ...quiet, collectInventory: () => inventory })).toBe(1)
+  expect(report(output).plugins[0]!.checks.find((check) => check.id === 'screenshots'))
+    .toMatchObject({ applicable: false, status: 'pass', reason: 'no-ui-surface' })
+})
+
 test('existing output is never overwritten, including files', async () => {
   const { output, inventory } = fixture(); mkdirSync(output); writeFileSync(join(output, 'keep'), 'owner')
   expect(await runUiScoreboard(['--static-only', '--output', output], { ...quiet, collectInventory: () => inventory })).toBe(2)

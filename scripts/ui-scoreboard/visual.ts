@@ -304,7 +304,7 @@ function mapReviewReport(
     malformed ??= measured.malformed
   }
 
-  const operational = report.status === 'error' || malformed !== undefined
+  const operational = report.status === 'error' || malformed !== undefined || THEMES.some((theme) => !reviewedKeys.has(key(target.id, theme)))
   const reason = malformed ?? (report.status === 'error' ? report.failures.join(' ') || 'Reviewer could not complete this target.' : undefined)
   if (report.status === 'error') {
     for (const failure of report.failures) result.failures.push(evidence('review-error', failure, target.id))

@@ -11,6 +11,9 @@ import { SCORE_DIMENSIONS, THEMES, type CaptureOptions, type ReviewOptions } fro
 import type { VisualDependencies } from './contracts'
 
 const tempDirs: string[] = []
+afterEach(() => {
+  for (const directory of tempDirs.splice(0)) rmSync(directory, { recursive: true, force: true })
+})
 
 function outputDir(): string {
   const directory = mkdtempSync(join(tmpdir(), 'ui-scoreboard-visual-'))
@@ -341,6 +344,26 @@ describe('visual scoreboard measurement', () => {
     expect(result.failures.some((failure) => failure.message.includes('reviewer quota exceeded'))).toBe(true)
     expect(result.cells.filter((visual) => visual.targetId !== firstTarget.id || visual.theme !== 'dark')
       .every((visual) => visual.status === 'fail' && visual.reasons.length > 0)).toBe(true)
+  })
+
+  test('a passed review that omits a cell stops all later target reviews', async () => {
+    const source = inventory()
+    const calls: string[] = []
+    const firstTarget = [...source.targets].sort((left, right) => left.id.localeCompare(right.id))[0]!
+    const result = await measureVisuals(source, options(), dependencies(captureManifest(source), async (manifest) => {
+      calls.push(manifest.targets[0]!.id)
+      return completeAssessmentCapture(manifest, manifest.targets[0]!.id, 'dark', {
+        score: 95,
+        assessment: assessment({ palette: 95, typography: 95, spacing: 95, components: 95, hierarchy: 95 })
+      })
+    }))
+
+    expect(calls).toEqual([firstTarget.id])
+    expect(result.operationalError).toBe(true)
+    expect(cell(result, firstTarget.id, 'dark')).toMatchObject({ status: 'pass', score: 95 })
+    expect(cell(result, firstTarget.id, 'light')).toMatchObject({ status: 'fail', code: 'review-not-completed', score: null })
+    expect(result.cells.filter((visual) => visual.targetId !== firstTarget.id)
+      .every((visual) => visual.code === 'review-not-completed' && visual.score === null)).toBe(true)
   })
 
   test('rejects invisible, unread, malformed, unknown-dimension, and inconsistent assessments', async () => {

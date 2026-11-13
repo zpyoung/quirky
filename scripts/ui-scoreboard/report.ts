@@ -6,8 +6,8 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
-function screenshotCheck(hasUi: boolean, cells: VisualCell[]): CheckResult {
-  if (!hasUi) return { id: 'screenshots', status: 'pass', applicable: false, reason: 'no-ui-surface', evidence: [{ code: 'no-ui-surface', message: 'No UI entry or render contributions.' }] }
+function screenshotCheck(applicable: boolean, cells: VisualCell[]): CheckResult {
+  if (!applicable) return { id: 'screenshots', status: 'pass', applicable: false, reason: 'no-ui-surface', evidence: [{ code: 'no-ui-surface', message: 'No UI entry or render contributions.' }] }
   const passed = cells.length > 0 && cells.every((cell) => cell.status === 'pass')
   return {
     id: 'screenshots', status: passed ? 'pass' : 'fail', applicable: true,
@@ -21,7 +21,7 @@ export function buildReport(inventory: Inventory, visuals: VisualResult, mode: S
   const cells = [...visuals.cells].sort((a, b) => compareText(a.targetId, b.targetId) || compareText(a.theme, b.theme))
   const plugins = inventory.plugins.map((plugin) => ({
     id: plugin.id,
-    checks: [...checkPlugin(inventory, plugin.id), screenshotCheck(plugin.hasUi, cells.filter((cell) => cell.plugin === plugin.id))].sort((a, b) => CHECK_IDS.indexOf(a.id) - CHECK_IDS.indexOf(b.id)),
+    checks: [...checkPlugin(inventory, plugin.id), screenshotCheck(plugin.hasUi || plugin.targets.length > 0, cells.filter((cell) => cell.plugin === plugin.id))].sort((a, b) => CHECK_IDS.indexOf(a.id) - CHECK_IDS.indexOf(b.id)),
     targets: visuals.targets.filter((target) => target.plugin === plugin.id).map((target) => target.id).sort(),
   })).sort((a, b) => compareText(a.id, b.id))
   const host = { checks: [checkHostTokens(inventory), screenshotCheck(true, cells.filter((cell) => cell.plugin === null))], targets: visuals.targets.filter((target) => target.plugin === null).map((target) => target.id).sort() }
