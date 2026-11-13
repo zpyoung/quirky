@@ -1,8 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { HOOK_TOKEN_HEADER, RPC_PATH, PROTOCOL_VERSION, RpcErrorCode, RpcError } from '@quirky/protocol'
+import { encodeTerminalLagged, encodeTerminalOutput, HOOK_TOKEN_HEADER, PROTOCOL_VERSION, RPC_PATH, RpcError, RpcErrorCode } from '@quirky/protocol'
 import { readRuntime } from '@quirky/protocol/node'
+import { openStream } from '../src/plugins/streams'
+import type { FileResourceRegistry } from '../src/file-resources'
+import { startServer } from '../src/server'
+import type { Core } from '../src/service'
+import { WebSocketOutput, type WebSocketOutputSocket } from '../src/websocket-output'
+import type { ClientConn } from '../src/types'
 import { startHarness, writeUiFixture, type Harness } from './helpers'
 
 let harness: Harness
@@ -16,6 +22,477 @@ afterAll(async () => {
 function url(h: Harness, path: string) {
   return `http://127.0.0.1:${h.runtime.port}${path}`
 }
+const STREAM_LIMIT = 4 * 1024 * 1024
+const BINARY_LIMIT = 8 * 1024 * 1024
+const CONTROL_LIMIT = 16 * 1024 * 1024
+
+type OutputCall =
+  | { kind: 'text'; value: string; compress?: boolean }
+  | { kind: 'binary'; value: Uint8Array; compress?: boolean }
+
+function wireBytes(payloadBytes: number): number {
+  return payloadBytes + (payloadBytes < 126 ? 2 : payloadBytes < 65_536 ? 4 : 10)
+}
+function controlQueueStorageSlots(output: WebSocketOutput): number {
+  const controls: unknown = Reflect.get(output, 'controls')
+  if (Array.isArray(controls)) return controls.length
+  let current: unknown = Reflect.get(output, 'firstControl')
+  let slots = 0
+  while (current !== null && typeof current === 'object') {
+    if (!('next' in current)) throw new Error('invalid pending control queue node')
+    slots++
+    current = current.next
+  }
+  if (current !== null) throw new Error('invalid pending control queue head')
+  return slots
+}
+
+function deferredControlBytes(output: WebSocketOutput): number {
+  const bytes: unknown = Reflect.get(output, 'pendingControlBytes')
+  if (typeof bytes !== 'number') throw new Error('invalid pending control byte count')
+  return bytes
+}
+
+class FakeOutputSocket implements WebSocketOutputSocket {
+  readyState = 1
+  bufferedAmount = 0
+  readonly calls: OutputCall[] = []
+  readonly accepted: OutputCall[] = []
+  readonly wireFifo: number[] = []
+  readonly results: number[] = []
+  autoDrainTo: number | undefined
+  throwOnSend = false
+
+  getBufferedAmount(): number {
+    return this.bufferedAmount
+  }
+
+  send(text: string, compress?: boolean): number {
+    const call: OutputCall = { kind: 'text', value: text, compress }
+    this.calls.push(call)
+    return this.accept(call, wireBytes(Buffer.byteLength(text, 'utf8')))
+  }
+
+  sendBinary(bytes: Uint8Array, compress?: boolean): number {
+    const call: OutputCall = { kind: 'binary', value: bytes, compress }
+    this.calls.push(call)
+    return this.accept(call, wireBytes(bytes.byteLength))
+  }
+
+  drain(bytes = this.bufferedAmount): void {
+    let remaining = Math.min(bytes, this.bufferedAmount)
+    const drained = remaining
+    while (remaining > 0) {
+      const head = this.wireFifo[0]
+      if (head <= remaining) {
+        remaining -= head
+        this.wireFifo.shift()
+      } else {
+        this.wireFifo[0] = head - remaining
+        remaining = 0
+      }
+    }
+    this.bufferedAmount -= drained
+  }
+
+  private accept(call: OutputCall, wireLength: number): number {
+    if (this.throwOnSend) throw new Error('send failed')
+    const result = this.results.shift() ?? 1
+    if (result !== 0) {
+      this.accepted.push(call)
+      this.wireFifo.push(wireLength)
+      this.bufferedAmount += wireLength
+      if (this.autoDrainTo !== undefined && this.bufferedAmount > this.autoDrainTo) {
+        this.drain(this.bufferedAmount - this.autoDrainTo)
+      }
+    }
+    return result
+  }
+}
+
+type FakeNativeSocket = FakeOutputSocket & { data: unknown; close(code: number, reason?: string): void }
+type CapturedStartServerOptions = {
+  fetch(
+    request: Request,
+    server: { upgrade(request: Request, options: { data: unknown }): boolean }
+  ): Promise<Response | undefined>
+  websocket: {
+    backpressureLimit?: number
+    closeOnBackpressureLimit?: boolean
+    perMessageDeflate?: boolean
+    open(socket: FakeNativeSocket): void
+    message(socket: FakeNativeSocket, message: string): void
+    drain(socket: FakeNativeSocket): void
+    close(socket: FakeNativeSocket, code: number, reason: string): void
+  }
+}
+
+test('startServer wires native WebSocket sends, budgets, drain, and once-only cleanup', async () => {
+  let captured: CapturedStartServerOptions | undefined
+  const mutableBun = Bun as unknown as { serve: typeof Bun.serve }
+  const originalServe = mutableBun.serve
+  mutableBun.serve = ((serveOptions: unknown) => {
+    captured = serveOptions as CapturedStartServerOptions
+    return {} as never
+  }) as typeof Bun.serve
+
+  let connection: ClientConn | undefined
+  let socketData: unknown
+  let removed = 0
+  const handled: string[] = []
+  const core = {
+    addClient(conn: ClientConn) {
+      connection = conn
+    },
+    removeClient(conn: ClientConn) {
+      removed++
+      conn.closed = true
+      for (const close of [...conn.streamClosers.values()]) close()
+    }
+  } as unknown as Core
+
+  try {
+    startServer({
+      core,
+      handle: async (_conn, message) => { handled.push(message) },
+      port: 0,
+      rpcToken: 'token',
+      daemonVersion: 'test',
+      uiDir: '/no-ui',
+      pluginFile: () => null,
+      fileResources: { serve: () => new Response(null, { status: 404 }) } as unknown as FileResourceRegistry,
+      log: () => {}
+    })
+    if (!captured) throw new Error('startServer did not configure Bun.serve')
+
+    const dataOptions = await captured.fetch(
+      new Request('http://127.0.0.1/rpc?token=token'),
+      {
+        upgrade(_request: Request, upgradeOptions: { data: unknown }) {
+          socketData = upgradeOptions.data
+          return true
+        }
+      }
+    )
+    expect(dataOptions).toBeUndefined()
+    expect(captured.websocket.backpressureLimit).toBe(CONTROL_LIMIT)
+    expect(captured.websocket.closeOnBackpressureLimit).toBe(false)
+    expect(captured.websocket.perMessageDeflate).toBe(false)
+
+    const socket = new FakeOutputSocket()
+    const closed: number[] = []
+    const ws: FakeNativeSocket = Object.assign(socket, {
+      data: socketData,
+      close(code: number) {
+        closed.push(code)
+        socket.readyState = 3
+      }
+    })
+    captured.websocket.open(ws)
+    if (!connection) throw new Error('startServer did not attach the upgraded connection')
+    const stream = openStream(connection)
+    let streamLags = 0
+    stream.onLag?.(() => streamLags++)
+    expect(stream.send(new Uint8Array(STREAM_LIMIT - 15))).toBe(true)
+    expect(stream.send(new Uint8Array([1]))).toBe(false)
+    expect(stream.lagged).toBe(true)
+    expect(streamLags).toBe(1)
+    connection.sendText('hello')
+    expect(socket.calls.every((call) => call.compress === false)).toBe(true)
+    expect(typeof connection.closeStreamOutput).toBe('function')
+
+    socket.results.push(0)
+    connection.sendText('deferred control')
+    const callsBeforeDrain = socket.calls.length
+    captured.websocket.drain(ws)
+    captured.websocket.message(ws, 'late RPC')
+    socket.readyState = 3
+    connection.sendText('closed peer')
+    captured.websocket.close(ws, 1013, 'failed')
+    captured.websocket.close(ws, 1000, 'closed again')
+    await Promise.resolve()
+
+    expect(socket.calls).toHaveLength(callsBeforeDrain)
+    expect(handled).toEqual([])
+    expect(removed).toBe(1)
+    expect(closed).toEqual([1013])
+    expect(stream.send(new Uint8Array([2]))).toBe(false)
+  } finally {
+    mutableBun.serve = originalServe
+  }
+})
+
+describe('WebSocketOutput', () => {
+  test('reconciles continuous progress before admission and maintains a wire-byte FIFO', () => {
+    const socket = new FakeOutputSocket()
+    socket.autoDrainTo = 65_541
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    const payload = new Uint8Array(65_536)
+
+    for (let i = 0; i < 128; i++) {
+      expect(output.sendBinary(encodeTerminalOutput(1, payload))).toBe(true)
+    }
+
+    expect(socket.calls).toHaveLength(128)
+    expect(socket.bufferedAmount).toBe(65_541)
+    expect(socket.wireFifo).toEqual([65_541])
+
+    socket.autoDrainTo = undefined
+    const remaining = STREAM_LIMIT - socket.bufferedAmount
+    expect(output.sendBinary(encodeTerminalOutput(1, new Uint8Array(remaining - 15)))).toBe(true)
+    expect(socket.bufferedAmount).toBe(STREAM_LIMIT)
+    const before = socket.calls.length
+    expect(output.sendBinary(encodeTerminalOutput(1, new Uint8Array(1)))).toBe(false)
+    expect(socket.calls).toHaveLength(before)
+    expect(socket.wireFifo.reduce((total, bytes) => total + bytes, 0)).toBe(socket.bufferedAmount)
+  })
+
+  test('admits exact stream and connection limits but keeps accepted bytes after stream close', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    const fullStream = (streamId: number) => encodeTerminalOutput(streamId, new Uint8Array(STREAM_LIMIT - 15))
+
+    expect(output.sendBinary(fullStream(1))).toBe(true)
+    expect(socket.bufferedAmount).toBe(STREAM_LIMIT)
+    const submitted = socket.calls.length
+    expect(output.sendBinary(encodeTerminalOutput(1, new Uint8Array(1)))).toBe(false)
+    expect(socket.calls).toHaveLength(submitted)
+
+    output.closeStream(1)
+    expect(socket.bufferedAmount).toBe(STREAM_LIMIT)
+    expect(output.sendBinary(fullStream(2))).toBe(true)
+    expect(socket.bufferedAmount).toBe(BINARY_LIMIT)
+    const atConnectionLimit = socket.calls.length
+    expect(output.sendBinary(encodeTerminalOutput(3, new Uint8Array(1)))).toBe(false)
+    expect(socket.calls).toHaveLength(atConnectionLimit)
+    expect(socket.wireFifo.reduce((total, bytes) => total + bytes, 0)).toBe(BINARY_LIMIT)
+  })
+  test('rejects a single frame that exceeds the per-stream wire budget before sending', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+
+    expect(output.sendBinary(encodeTerminalOutput(9, new Uint8Array(STREAM_LIMIT - 14)))).toBe(false)
+    expect(socket.calls).toHaveLength(0)
+  })
+
+
+  test('reconciles partial drainage across UTF-8 text and alternating binary streams', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    const json = JSON.stringify({ output: 'é🚀' })
+    const textWire = wireBytes(Buffer.byteLength(json, 'utf8'))
+
+    expect(output.sendBinary(encodeTerminalOutput(11, new Uint8Array(STREAM_LIMIT - 19)))).toBe(true)
+    output.sendText(json)
+    expect(socket.bufferedAmount).toBe(STREAM_LIMIT - 4 + textWire)
+    expect(socket.wireFifo).toEqual([STREAM_LIMIT - 4, textWire])
+    expect(output.sendBinary(encodeTerminalOutput(11, new Uint8Array(1)))).toBe(false)
+
+    socket.drain(STREAM_LIMIT - 4)
+    output.drain()
+    expect(socket.bufferedAmount).toBe(textWire)
+    expect(socket.wireFifo).toEqual([textWire])
+    expect(output.sendBinary(encodeTerminalOutput(11, new Uint8Array(STREAM_LIMIT - 15)))).toBe(true)
+    expect(socket.bufferedAmount).toBe(STREAM_LIMIT + textWire)
+    expect(socket.wireFifo.at(-1)).toBe(STREAM_LIMIT)
+    expect(output.sendBinary(encodeTerminalOutput(12, new Uint8Array(1)))).toBe(true)
+    expect(socket.wireFifo.at(-1)).toBe(8)
+  })
+
+  test('treats positive and -1 as accepted exactly once and zero as rejected output', () => {
+    const socket = new FakeOutputSocket()
+    socket.results.push(15, -1, 0)
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    const frame = encodeTerminalOutput(1, new Uint8Array([1]))
+
+    expect(output.sendBinary(frame)).toBe(true)
+    expect(output.sendBinary(frame)).toBe(true)
+    expect(output.sendBinary(frame)).toBe(false)
+    expect(socket.calls).toHaveLength(3)
+    expect(socket.accepted).toHaveLength(2)
+    expect(socket.wireFifo).toEqual([wireBytes(frame.byteLength), wireBytes(frame.byteLength)])
+    output.drain()
+    expect(socket.calls).toHaveLength(3)
+  })
+
+  test('defers text and lag markers in FIFO order and rejects output behind them', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    output.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))
+    socket.results.push(0)
+    output.sendText('first')
+    expect(output.sendBinary(encodeTerminalLagged(1))).toBe(true)
+    output.sendText('second')
+    const callsBeforeReject = socket.calls.length
+    expect(output.sendBinary(encodeTerminalOutput(2, new Uint8Array([2])))).toBe(false)
+    expect(socket.calls).toHaveLength(callsBeforeReject)
+
+    socket.results.push(31, -1, 41)
+    output.drain()
+
+    expect(socket.accepted.map((call) => call.kind === 'text' ? call.value : call.value[0])).toEqual([
+      1,
+      'first',
+      2,
+      'second'
+    ])
+    expect(socket.accepted[1]).toMatchObject({ kind: 'text', value: 'first', compress: false })
+    expect(socket.accepted[2]).toMatchObject({ kind: 'binary', compress: false })
+    expect(socket.accepted[3]).toMatchObject({ kind: 'text', value: 'second', compress: false })
+  })
+
+  test('rejects controls beyond an exactly full deferred-control cap', () => {
+    const socket = new FakeOutputSocket()
+    let failures = 0
+    const output = new WebSocketOutput(socket, () => failures++)
+    output.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))
+    socket.results.push(0)
+    output.sendText('x'.repeat(CONTROL_LIMIT - 10))
+    expect(failures).toBe(0)
+    const callsAtCap = socket.calls.length
+
+    output.sendText('x')
+
+    expect(failures).toBe(1)
+    expect(socket.calls).toHaveLength(callsAtCap)
+  })
+  test('counts deferred lag markers toward the control cap', () => {
+    const socket = new FakeOutputSocket()
+    let failures = 0
+    const output = new WebSocketOutput(socket, () => failures++)
+    output.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))
+    socket.results.push(0)
+    output.sendText('x'.repeat(CONTROL_LIMIT - 16))
+
+    expect(output.sendBinary(encodeTerminalLagged(7))).toBe(false)
+    expect(failures).toBe(1)
+    expect(socket.calls).toHaveLength(2)
+  })
+
+  test('closes when a control frame can never fit or a zero send has no drain path', () => {
+    const impossibleSocket = new FakeOutputSocket()
+    let impossibleFailures = 0
+    const impossible = new WebSocketOutput(impossibleSocket, () => impossibleFailures++)
+    impossible.sendText('x'.repeat(CONTROL_LIMIT))
+    expect(impossibleSocket.calls).toHaveLength(0)
+    expect(impossibleFailures).toBe(1)
+
+    const stalledSocket = new FakeOutputSocket()
+    stalledSocket.results.push(0)
+    let stalledFailures = 0
+    const stalled = new WebSocketOutput(stalledSocket, () => stalledFailures++)
+    stalled.sendText('control')
+    expect(stalledFailures).toBe(1)
+    expect(stalledSocket.calls).toHaveLength(1)
+  })
+
+  test('cancels a deferred lag marker without removing already accepted stream bytes', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    const frame = encodeTerminalOutput(7, new Uint8Array([1]))
+    output.sendBinary(frame)
+    socket.results.push(0)
+    output.sendBinary(encodeTerminalLagged(7))
+    const acceptedBytes = socket.bufferedAmount
+    output.closeStream(7)
+    socket.results.push(2)
+    output.drain()
+
+    expect(socket.bufferedAmount).toBe(acceptedBytes)
+    expect(socket.accepted).toHaveLength(1)
+    expect(socket.calls.filter((call) => call.kind === 'binary')).toHaveLength(2)
+  })
+  test('bounds storage while drain alternates one accepted and one deferred control', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    output.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))
+    socket.results.push(0)
+    output.sendText('control-0')
+
+    for (let index = 0; index < 2_000; index++) {
+      output.sendText(`control-${index + 1}`)
+      socket.results.push(1, 0)
+      output.drain()
+    }
+
+    const acceptedTexts = socket.accepted.filter(
+      (call): call is Extract<OutputCall, { kind: 'text' }> => call.kind === 'text'
+    )
+    expect(acceptedTexts).toHaveLength(2_000)
+    expect(acceptedTexts[0]?.value).toBe('control-0')
+    expect(acceptedTexts.at(-1)?.value).toBe('control-1999')
+    expect(deferredControlBytes(output)).toBe(wireBytes(Buffer.byteLength('control-2000', 'utf8')))
+    expect(controlQueueStorageSlots(output)).toBeLessThanOrEqual(65)
+  })
+
+  test('reclaims canceled marker slots behind a blocked control without reordering survivors', () => {
+    const socket = new FakeOutputSocket()
+    const output = new WebSocketOutput(socket, () => {
+      throw new Error('unexpected output failure')
+    })
+    output.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))
+    socket.results.push(0)
+    output.sendText('first')
+
+    for (let streamId = 1; streamId <= 2_000; streamId++) {
+      output.sendBinary(encodeTerminalLagged(streamId))
+      output.closeStream(streamId)
+    }
+
+    expect(deferredControlBytes(output)).toBe(wireBytes(Buffer.byteLength('first', 'utf8')))
+    expect(controlQueueStorageSlots(output)).toBeLessThanOrEqual(65)
+
+    output.sendBinary(encodeTerminalLagged(2_001))
+    output.sendText('second')
+    socket.results.push(1, 1, 1)
+    output.drain()
+
+    expect(socket.accepted.map((call) => call.kind === 'text' ? call.value : call.value[0])).toEqual([
+      1,
+      'first',
+      2,
+      'second'
+    ])
+    expect(deferredControlBytes(output)).toBe(0)
+    expect(controlQueueStorageSlots(output)).toBe(0)
+  })
+
+  test('fails once on thrown sends and non-open peers', () => {
+    const throwingSocket = new FakeOutputSocket()
+    throwingSocket.throwOnSend = true
+    let throwingFailures = 0
+    const throwing = new WebSocketOutput(throwingSocket, () => throwingFailures++)
+    throwing.sendText('first')
+    throwing.sendText('second')
+    expect(throwingFailures).toBe(1)
+    expect(throwingSocket.calls).toHaveLength(1)
+
+    const closedSocket = new FakeOutputSocket()
+    closedSocket.readyState = 3
+    let closedFailures = 0
+    const closed = new WebSocketOutput(closedSocket, () => closedFailures++)
+    expect(closed.sendBinary(encodeTerminalOutput(1, new Uint8Array([1])))).toBe(false)
+    expect(closedFailures).toBe(1)
+    expect(closedSocket.calls).toHaveLength(0)
+  })
+})
+
 
 describe('runtime and health', () => {
   test('writes a private runtime.json and answers /health', async () => {

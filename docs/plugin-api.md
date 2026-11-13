@@ -269,6 +269,63 @@ Piped output stays open through a graceful group grace and closes quietly within
 after the group ends. A requested stop is not reported as an output stall. A natural-exit output
 stall still fails with `ProcessStalledError`, with its wait starting after group cleanup.
 
+### API 1.12: Method deadlines and stalled jobs
+
+Plugin methods may declare `timeout`, a duration string from `1s` through `24h`, including in
+method overrides. A plugin using this field declares `"apiVersion": "1.12.0"` or later.
+Read-only plugin methods without a declared timeout have a 300-second deadline, including
+plugins targeting older API releases. Mutating methods without a timeout keep waiting.
+The clock starts when the handler is called, after activation and authorization. Kernel methods
+are unchanged. The deadline applies to client, plugin and kernel-sourced calls to plugin methods.
+
+A deadline rejects the call with `RpcErrorCode.Timeout` (`-32011`) and data
+`{ reason: 'timeout', method, timeoutMs }`. The handler may still finish or change state:
+plugins run in process and cannot be forcibly stopped. Its late result or error is logged and
+dropped; it can no longer forward methods as the original caller.
+
+For a mutating call with a request ID, the recorded outcome is the Timeout, not the handler's
+eventual result. Repeating that request ID returns the same error without invoking the handler
+again. Read state to determine what the timed-out handler did.
+
+Unanswered handlers have passed their deadline or outlived their revoked activation without
+settling. Counts last for the daemon process and survive plugin reloads. Once a method has four
+or more unanswered handlers, new calls fail before activation with Timeout and data
+`{ reason: 'stalled', method, unanswered }`, reporting the real count. Calls already admitted may
+still time out and increase that count beyond four; there is no in-flight concurrency limit.
+The plugin carries one warning while the count is at least four. Finishing handlers clears it
+once fewer than four remain; a daemon restart also clears the count.
+In-flight admission limits are tracked separately in g2-77.
+
+A job that has not settled five seconds after its timeout remains `running`, with no next run.
+`JobInfo.stalled` reports `{ handlers }`, and the plugin carries a warning. `job.run` rejects
+Conflict with `{ reason: 'stalled' }`; the CLI shows `stalled` in the STATE column.
+No replacement starts in that activation until the old handler settles, then the next run is
+due one interval later. Reloading the plugin permits another run only below the shared bound
+of four. Revoked contexts cannot act through their former activation.
+
+### API 1.13: Host output-gap recovery
+
+`context.pty.onLagged(listener)` reports a session whose host output subscription was shed.
+Before calling any listener, the daemon invalidates that session's shared subscription holds
+and pending subscribe attempts. Other sessions are unchanged. Listeners can immediately
+`subscribe` again; an older promise cannot restore its hold or release a replacement.
+The registration returns a remover and is removed on plugin revocation. Listener failures
+are logged without stopping other plugins. Plugins using it declare `"apiVersion": "1.13.0"`.
+
+The host bounds each subscription at 4 MiB and each connection at 32 MiB, counting encoded
+queued and subscribe-held output, including the remainder of a started frame. Shedding drops
+unstarted output, not the process or durable history. Desktop terminal attachments report
+stream lag and recover through `quirky.terminal/resync`. Phone attachments keep their stream
+ids, reacquire the host subscription, and receive a reset/snapshot before live output resumes.
+Agent readiness resets its scanner and reacquires output within the original delivery deadline;
+a gap never retries a paste already committed.
+
+Daemon WebSocket output is limited to 4 MiB per stream and 8 MiB of binary output per
+connection, counting outstanding wire bytes. JSON and lag markers share a bounded 16 MiB
+FIFO when the native socket cannot accept them. Terminal output is not queued again:
+`send` returns `false` and lags the stream. Accepted bytes remain accounted until native
+drainage, even after their stream closes. Unrecoverable control backpressure closes with 1013.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -375,6 +432,12 @@ Plugin API **1.1.0** adds Native page requests to `UiPluginContext.nativeBrowser
 
 Use SemVer for future Plugin API releases: increment the **major** for incompatible author-contract changes, **minor** for backward-compatible author-facing additions, and **patch** for backward-compatible corrections. Set a plugin's `apiVersion` to the earliest stable release that supplies every API feature it uses. Hosts compare that minimum against their own `PLUGIN_API_VERSION`; they do not infer a floor from the package, application, daemon, wire or catalog version.
 
+The PTY wire protocol remains v4 for the opt-in `hello.sessionLagged === true` extension.
+Only clients advertising that exact boolean receive `{ type: 'lagged', sessionId }`.
+Older v4 clients still close and reconnect on subscription overflow; older hosts may ignore
+the capability. This explicit negotiation is the exception to bumping the PTY version for
+a new event, and does not change authentication or version refusal.
+
 ## Releases since 1.0.0
 
 - **1.1.0** adds `UiPluginContext.nativeDropPaths(files)`: the original absolute paths of an OS file
@@ -411,11 +474,14 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.10.0** adds [`context.emit` immediate delivery](#api-110-immediate-emits) and sends a plugin's
   held events before its next uncoalesced event. A plugin that passes the option declares
   `apiVersion` 1.10.0 or later.
-
 - **1.11.0** adds raw stderr piping and opt-in process-group grace to
   [`context.process.spawn`](#api-111-bounded-process-groups-and-raw-stderr). `run` and `spawn` wait
   for bounded process-group cleanup and report `groupSurvived: true` if members remain at the
   bound. A plugin using these additions declares `apiVersion` 1.11.0.
+- **1.12.0** adds [method deadlines and stalled-job diagnostics](#api-112-method-deadlines-and-stalled-jobs),
+  a 300-second read-only method default, and reload-safe refusal once four handlers are unanswered.
+- **1.13.0** adds [`PluginPty.onLagged`](#api-113-host-output-gap-recovery), invalidating
+  session subscriptions before notifying plugins and bounding host and daemon output queues.
 
 ## Example
 
