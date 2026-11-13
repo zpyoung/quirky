@@ -813,7 +813,7 @@ test('records a pending status watchdog at its exact deadline and ignores late s
       const client = fakeClient(() => status.promise)
       let connectionCalls = 0
       let lostCalls = 0
-      const pidCalls: number[] = []
+      const pidCalls: Array<number | null> = []
       const probe = launch({
         probeTimeoutMs: 40,
         connect: () => {
@@ -821,9 +821,7 @@ test('records a pending status watchdog at its exact deadline and ignores late s
           return Promise.resolve(client)
         },
         onDaemonLost: () => lostCalls++,
-        onPtyHostPid: (pid: number | null) => {
-          if (pid !== null) pidCalls.push(pid)
-        }
+        onPtyHostPid: (pid: number | null) => pidCalls.push(pid)
       })
       await drainUntil(() => client.calls.includes('status.get'))
       expect(connectionCalls).toBe(1)
@@ -863,7 +861,7 @@ test('classifies the exact RPC timeout error as a status timeout before the watc
     const client = fakeClient(() => status.promise)
     let connectionCalls = 0
     let lostCalls = 0
-    const pidCalls: number[] = []
+    const pidCalls: Array<number | null> = []
     const probe = launch({
       probeTimeoutMs: 40,
       connect: () => {
@@ -871,9 +869,7 @@ test('classifies the exact RPC timeout error as a status timeout before the watc
         return Promise.resolve(client)
       },
       onDaemonLost: () => lostCalls++,
-      onPtyHostPid: (pid: number | null) => {
-        if (pid !== null) pidCalls.push(pid)
-      }
+      onPtyHostPid: (pid: number | null) => pidCalls.push(pid)
     })
     await drainUntil(() => client.calls.includes('status.get'))
 
@@ -903,7 +899,7 @@ test('classifies an ordinary status rejection at the deadline by elapsed time', 
     const client = fakeClient(() => status.promise)
     let connectionCalls = 0
     let lostCalls = 0
-    const pidCalls: number[] = []
+    const pidCalls: Array<number | null> = []
     const probe = launch({
       probeTimeoutMs: 40,
       connect: () => {
@@ -911,9 +907,7 @@ test('classifies an ordinary status rejection at the deadline by elapsed time', 
         return Promise.resolve(client)
       },
       onDaemonLost: () => lostCalls++,
-      onPtyHostPid: (pid: number | null) => {
-        if (pid !== null) pidCalls.push(pid)
-      }
+      onPtyHostPid: (pid: number | null) => pidCalls.push(pid)
     })
     await drainUntil(() => client.calls.includes('status.get'))
 
@@ -997,7 +991,7 @@ test('does not accept successful status replies at or beyond the watchdog deadli
       const client = fakeClient(() => status.promise)
       let connectionCalls = 0
       let lostCalls = 0
-      const pidCalls: number[] = []
+      const pidCalls: Array<number | null> = []
       const probe = launch({
         probeTimeoutMs: 40,
         connect: () => {
@@ -1005,9 +999,7 @@ test('does not accept successful status replies at or beyond the watchdog deadli
           return Promise.resolve(client)
         },
         onDaemonLost: () => lostCalls++,
-        onPtyHostPid: (pid: number | null) => {
-          if (pid !== null) pidCalls.push(pid)
-        }
+        onPtyHostPid: (pid: number | null) => pidCalls.push(pid)
       })
       await drainUntil(() => client.calls.includes('status.get'))
       const beganAt = clock.now()
