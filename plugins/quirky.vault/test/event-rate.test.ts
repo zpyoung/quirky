@@ -153,7 +153,7 @@ test('a vault list keeps public scan progress within the coalescing rate bound',
   expect(progress.length).toBeLessThanOrEqual(limit)
 }, 60_000)
 
-test('the vault catalog coalesces searchStatus and scanProgress and requires API 1.3.0', async () => {
+test('the vault catalog coalesces searchStatus and scanProgress and requires API 1.9.0', async () => {
   const rig = await start()
   const description = await rig.client.callAny('api.describe', {}) as ApiDescription
   const vaultEvents = description.events.filter(event => event.plugin === 'quirky.vault')
@@ -182,5 +182,5 @@ test('the vault catalog coalesces searchStatus and scanProgress and requires API
   }
 
   const plugins = await rig.client.callAny('plugin.list', {}) as PluginInfo[]
-  expect(plugins.find(plugin => plugin.id === 'quirky.vault')?.apiVersion).toBe('1.3.0')
+  expect(plugins.find(plugin => plugin.id === 'quirky.vault')?.apiVersion).toBe('1.9.0')
 }, 30_000)

@@ -306,7 +306,7 @@ export class NotificationsService {
     })
     if (!choice.sound || typeof choice.sound.file !== 'string') return { played: false, reason: choice.problem ?? 'no sound to play' }
     this.context.emit('sound', { file: choice.sound.file, volume })
-    if (!(await this.hasDesktopClient())) playSound(choice.sound.file, volume, (message) => this.context.log(message))
+    if (!(await this.hasDesktopClient())) playSound(this.context.process, choice.sound.file, volume, (message) => this.context.log(message))
     return { played: true }
   }
 
@@ -803,7 +803,7 @@ export class NotificationsService {
       ...(sound !== undefined ? { sound } : {}),
       ...(pending.source === 'test' ? { toast: false } : {})
     })
-    if (playHere) playSound(sound!.file!, sound!.volume, (message) => this.context.log(message))
+    if (playHere) playSound(this.context.process, sound!.file!, sound!.volume, (message) => this.context.log(message))
     return this.decide(pending, 'delivered')
   }
 
