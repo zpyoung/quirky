@@ -1,11 +1,14 @@
 import { expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
+import { PassThrough } from 'node:stream'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { SUPPRESSION_PROMPT } from '../../plugins/quirky.ask/src/core/claude-flags'
 import { createCliEnvironment, createCliWorld } from './cli-world'
 import { createCliFixtures, installCliFixtureTools } from './cli-fixtures'
-import { parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
+import { createActorReceiptStore, parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
+import { collectBracketedPaste, parseWorkerPreamble } from './cli-worker-actor'
 import * as runner from './cli-run'
 import type { CliTableRow } from './cli-table'
 import * as probes from './cli-checks'
@@ -185,6 +188,207 @@ test('provider stand-ins enforce exact login argv and write token-free private c
     expect(readFileSync(codexAuth, 'utf8')).not.toMatch(/accessToken|access_token/)
   })
 }, 20_000)
+test('Claude worker mode accepts only the session-attested default launch argv', () => {
+  withHome((home) => {
+    const tools = installCliFixtureTools(home)
+    const env = createCliEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
+    const run = (argv: string[], childEnv = env) => spawnSync(tools.claudeWrapper, argv, {
+      env: childEnv, cwd: repoRoot, encoding: 'utf8', timeout: 5_000, input: ''
+    })
+    const json = '{"hooks":{}}'
+    const yolo = '--dangerously-skip-permissions'
+    const disallowed = '--disallowedTools'
+    const appendPrompt = '--append-system-prompt'
+    const settings = '--settings'
+    const valid = [yolo, disallowed, 'AskUserQuestion', appendPrompt, SUPPRESSION_PROMPT, settings, json]
+    const expectedLog = `7 ${yolo} ${disallowed} ${appendPrompt} ${settings}\n`
+    const log = tools.claudeWorkerLog
+    const refused = [
+      [],
+      [yolo],
+      [yolo, settings, json],
+      [...valid, 'extra'],
+      ...Array.from({ length: valid.length + 1 }, (_, index) => [...valid.slice(0, index), '--', ...valid.slice(index)]),
+      [yolo, appendPrompt, SUPPRESSION_PROMPT, disallowed, 'AskUserQuestion', settings, json],
+      [yolo, disallowed, 'Bash', appendPrompt, SUPPRESSION_PROMPT, settings, json],
+      [yolo, disallowed, 'AskUserQuestion', appendPrompt, `${SUPPRESSION_PROMPT}.`, settings, json],
+      [...valid.slice(0, -1), 'not-json']
+    ]
+
+    const noToken = run(valid)
+    expect(noToken.status).toBe(64)
+    expect(noToken.stderr).toBe('claude fixture refuses unsupported arguments\n')
+    expect(readFileSync(log, 'utf8')).toBe('')
+    const workerEnv = {
+      ...env,
+      QUIRKY_SESSION_ID: 'worker-session',
+      QUIRKY_SESSION_TOKEN: 'worker-session-token',
+      QUIRKY_WORKTREE_ID: 'worker-worktree'
+    }
+    for (const argv of refused) {
+      const result = run(argv, workerEnv)
+      expect(result.error).toBeUndefined()
+      expect(result.status).toBe(64)
+      expect(result.stderr).toBe('claude fixture refuses unsupported arguments\n')
+      expect(readFileSync(log, 'utf8')).toBe('')
+    }
+
+    const worker = run(valid, workerEnv)
+    expect(worker.error).toBeUndefined()
+    expect(worker.status).toBe(1)
+    expect(worker.stderr).toBe('fixture worker requires a terminal\n')
+    expect(worker.stdout).toBe(
+      '\x1b[?2004h' +
+      '\x1b]0;✳ Claude Code\x07\r\n● Ready.\r\n╭─────────────────────────────────────────────╮\r\n│ >                                           │\r\n╰─────────────────────────────────────────────╯\r\n  ? for shortcuts\r\n'
+    )
+    expect(readFileSync(log, 'utf8')).toBe(expectedLog)
+    expect(readFileSync(tools.egressLog, 'utf8')).toBe('')
+
+    const version = run(['--version'])
+    expect(version.status).toBe(0)
+    expect(version.stdout).toBe('2.1.80 (Claude Code)\n')
+    expect(readFileSync(log, 'utf8')).toBe(expectedLog)
+  })
+}, 20_000)
+
+test('worker preambles preserve identity across carriage-return terminal transport', () => {
+  const text = [
+    'Your own Quirky session ID is: session_fixture',
+    'Your workspace ID is: worktree_fixture',
+    'Your Run ID is: run_fixture',
+    'Your Task ID is: task_fixture',
+    'Your Dispatch ID is: ctx_fixture',
+    '=== TASK ===',
+    'cli-parity-worker-hold'
+  ].join('\r')
+  expect(parseWorkerPreamble(text)).toEqual({
+    sessionId: 'session_fixture', worktreeId: 'worktree_fixture', runId: 'run_fixture',
+    taskId: 'task_fixture', dispatchId: 'ctx_fixture', mode: 'hold'
+  })
+})
+
+test('worker paste waits for Enter and preserves delimiters split across stdin chunks', async () => {
+  const input = new PassThrough()
+  try {
+    const result = collectBracketedPaste(input)
+    let completed = false
+    void result.then(() => { completed = true })
+    for (const chunk of ['noise\x1b[20', '0~Your Task\rλ', '\x1b[2', '01', '~']) input.write(chunk)
+    await Promise.resolve()
+    expect(completed).toBe(false)
+    input.write('\r')
+    expect(await result).toBe('Your Task\rλ')
+  } finally {
+    input.destroy()
+  }
+})
+
+test('worker actor rejects every unsupported argv before creating its receipt root', () => {
+  withHome((home) => {
+    const tools = installCliFixtureTools(home)
+    const env = {
+      ...createCliEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload),
+      QUIRKY_SESSION_ID: 'worker-session',
+      QUIRKY_SESSION_TOKEN: 'worker-session-token',
+      QUIRKY_WORKTREE_ID: 'worker-worktree'
+    }
+    for (const args of [[], ['coordinator', 'extra'], ['other']]) {
+      const result = spawnSync(process.execPath, [tools.workerActorEntry, ...args], {
+        env, cwd: repoRoot, encoding: 'utf8', timeout: 5_000, input: ''
+      })
+      expect(result.error).toBeUndefined()
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toBe('')
+      expect(result.status).toBe(2)
+      expect(existsSync(tools.workerActorRoot)).toBe(false)
+    }
+  })
+}, 20_000)
+
+test('generic actor receipt stores preserve the private manifest format', () => {
+  withHome((home) => {
+    const receipt = {
+      id: 'workers-run-use',
+      argv: [process.execPath, join(repoRoot, 'packages/cli/src/main.ts'), 'orchestration', 'run-use', '--runtime', 'local', '--json'],
+      stdout: '{"run":{"id":"run_test"}}',
+      stderr: '',
+      exitCode: 0,
+      stdoutBytes: Buffer.byteLength('{"run":{"id":"run_test"}}'),
+      elapsedMs: 1,
+      format: 'json' as const
+    }
+    const directory = join(home, 'cli-worker-actor', 'coordinator')
+    const store = createActorReceiptStore(directory)
+    store.append(receipt)
+    expect(store.read()).toEqual([receipt])
+    expect(statSync(join(directory, 'receipt-index.json')).mode & 0o077).toBe(0)
+    expect(statSync(join(directory, 'receipts', `${receipt.id}.json`)).mode & 0o077).toBe(0)
+  })
+})
+
+test('importActorRefusal records refusal outcomes without allowing proof', async () => {
+  const outputs = [
+    { exitCode: 0, stdout: '{"ok":true}' },
+    { exitCode: 2, stdout: '{"error":{"code":"conflict","message":"wrong exit"}}' },
+    { exitCode: 1, stdout: 'not an error envelope' },
+    { exitCode: 1, stdout: '{"error":{"code":"conflict","message":"consumer_fenced","data":{"reason":"fenced"}}}' },
+    { exitCode: 1, stdout: '{"error":{"code":"conflict","message":"non-zero import"}}' }
+  ]
+  const ids = ['actor-refusal-zero', 'actor-refusal-exit-two', 'actor-refusal-malformed', 'actor-refusal-good', 'actor-import-nonzero']
+  const observed: string[] = []
+  const report = await runner.runCliParity({
+    createWorld: createCliWorld,
+    runChecks: async (context) => {
+      const entry = context.world.paths.cliEntry
+      const actorReceipt = (id: string, index: number) => {
+        const output = outputs[index]!
+        return {
+          id,
+          argv: [process.execPath, entry, 'orchestration', 'run-use', '--runtime', 'local', '--json'],
+          ...output,
+          stderr: '',
+          stdoutBytes: Buffer.byteLength(output.stdout),
+          elapsedMs: 1,
+          format: 'json' as const
+        }
+      }
+      for (const [index, kind] of ['unexpected-success', 'cli-exit', 'malformed-output'].entries()) {
+        try {
+          context.importActorRefusal(actorReceipt(ids[index]!, index))
+          observed.push('returned')
+        } catch (error) {
+          observed.push(error instanceof runner.CliRunFailure ? error.kind : String(error))
+        }
+        expect(kind).toBe(observed[index])
+      }
+
+      const refusal = context.importActorRefusal(actorReceipt(ids[3]!, 3))
+      observed.push(`${refusal.code}:${refusal.message}:${JSON.stringify(refusal.data)}`)
+      try {
+        context.prove(ids[3]!, {})
+      } catch (error) {
+        observed.push(error instanceof runner.CliRunFailure ? error.kind : String(error))
+      }
+      try {
+        context.importActor([actorReceipt(ids[4]!, 4)])
+      } catch (error) {
+        observed.push(error instanceof runner.CliRunFailure ? error.kind : String(error))
+      }
+    },
+    cleanupChecks: async () => {}
+  })
+
+  expect(observed).toEqual([
+    'unexpected-success',
+    'cli-exit',
+    'malformed-output',
+    'conflict:consumer_fenced:{"reason":"fenced"}',
+    'missing-receipt',
+    'cli-exit'
+  ])
+  expect(report.receipts.filter((receipt) => ids.includes(receipt.id)).map((receipt) => receipt.exitCode)).toEqual([0, 2, 1, 1, 1])
+}, 90_000)
+
 
 test('owned wrappers deny real providers and login profiles while preserving fixture behavior', () => {
   withHome((home) => {

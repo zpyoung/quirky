@@ -429,6 +429,7 @@ empty database and plugin migrations run again. The original file and any WAL/SH
 beside the store as `<file>.corrupt-<timestamp>-<8 hex>`, with one suffix shared by the three files.
 Quirky never deletes these originals. Lock, permission, migration and schema-version errors do
 not trigger recovery.
+Recovery runs inside `context.openStore`, so a plugin must not open its own `store.db` before calling it; use `{ newerVersion: 'read-only' }` to read a schema newer than the plugin's migrations.
 
 Kernel recoveries are logged. Plugin recoveries also appear as warning diagnostics in `plugin.list`,
 including when a later migration fails. `context.openStore` and the plugin API version are unchanged.

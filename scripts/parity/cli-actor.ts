@@ -17,10 +17,13 @@ export type CliActorReceipt = {
   elapsedMs: number
   format: 'json' | 'jsonl'
 }
+export type CliActorReceiptStore = {
+  append(receipt: CliActorReceipt): void
+  read(): CliActorReceipt[]
+}
 
 export type CliActorIdentity = { sessionId: string; worktreeId: string; pid: number }
 
-type CapturedOutput = { stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number }
 type HeadCapture = { done: Promise<void>; text(): string; bytes(): number; overflow(): boolean; cancel(): Promise<void> }
 type TailCapture = { done: Promise<void>; text(): string; cancel(): Promise<void> }
 
@@ -58,12 +61,12 @@ function actorDirectory(home: string): string {
   return join(resolve(home), 'cli-actor')
 }
 
-function receiptDirectory(home: string): string {
-  return join(actorDirectory(home), 'receipts')
+function receiptDirectory(directory: string): string {
+  return join(directory, 'receipts')
 }
 
-function receiptManifest(home: string): string {
-  return join(actorDirectory(home), 'receipt-index.json')
+function receiptManifest(directory: string): string {
+  return join(directory, 'receipt-index.json')
 }
 
 function atomicWrite(path: string, content: string): void {
@@ -74,11 +77,13 @@ function atomicWrite(path: string, content: string): void {
   renameSync(temporary, path)
 }
 
-function readManifest(home: string): string[] {
+function readManifest(directory: string, missingIsEmpty = false): string[] {
+  const path = receiptManifest(directory)
   let value: unknown
   try {
-    value = JSON.parse(readFileSync(receiptManifest(home), 'utf8'))
+    value = JSON.parse(readFileSync(path, 'utf8'))
   } catch (error) {
+    if (missingIsEmpty && !existsSync(path)) return []
     throw new Error(`actor receipt manifest is unavailable: ${error instanceof Error ? error.message : String(error)}`)
   }
   if (!Array.isArray(value) || !value.every((id) => typeof id === 'string' && /^[a-z][a-z0-9-]*$/.test(id))) {
@@ -88,20 +93,46 @@ function readManifest(home: string): string[] {
   return value
 }
 
-export function actorReceiptFiles(home: string): string[] {
-  return readManifest(home).map((id) => join(receiptDirectory(home), `${id}.json`))
-}
-
-export function readActorReceipts(home: string): CliActorReceipt[] {
-  const ids = readManifest(home)
+function readActorReceiptsAt(directory: string, missingIsEmpty = false): CliActorReceipt[] {
+  const ids = readManifest(directory, missingIsEmpty)
   return ids.map((id) => {
-    const path = join(receiptDirectory(home), `${id}.json`)
+    const path = join(receiptDirectory(directory), `${id}.json`)
     const mode = statSync(path).mode & 0o777
     if ((mode & 0o077) !== 0) throw new Error(`actor receipt ${id} is not private`)
     const receipt = parseActorReceipt(readFileSync(path, 'utf8'))
     if (receipt.id !== id) throw new Error(`actor receipt index does not match ${basename(path)}`)
     return receipt
   })
+}
+
+function appendActorReceipt(directory: string, receipt: CliActorReceipt): void {
+  const ids = readManifest(directory, true)
+  if (ids.includes(receipt.id)) throw new Error(`actor receipt ID already exists: ${receipt.id}`)
+  const receipts = receiptDirectory(directory)
+  mkdirSync(receipts, { recursive: true, mode: 0o700 })
+  atomicWrite(join(receipts, `${receipt.id}.json`), JSON.stringify(receipt))
+  atomicWrite(receiptManifest(directory), `${JSON.stringify([...ids, receipt.id])}\n`)
+}
+
+export function createActorReceiptStore(directory: string): CliActorReceiptStore {
+  const root = resolve(directory)
+  return {
+    append(receipt) {
+      appendActorReceipt(root, receipt)
+    },
+    read() {
+      return readActorReceiptsAt(root, true)
+    }
+  }
+}
+
+export function actorReceiptFiles(home: string): string[] {
+  const directory = actorDirectory(home)
+  return readManifest(directory).map((id) => join(receiptDirectory(directory), `${id}.json`))
+}
+
+export function readActorReceipts(home: string): CliActorReceipt[] {
+  return readActorReceiptsAt(actorDirectory(home))
 }
 
 export function readActorIdentity(home: string): CliActorIdentity {
@@ -232,7 +263,13 @@ async function drainCaptures(stdout: HeadCapture, stderr: TailCapture): Promise<
   await Promise.allSettled([stdout.done, stderr.done])
 }
 
-async function executeCli(argv: string[], timeoutMs = COMMAND_TIMEOUT_MS): Promise<CapturedOutput> {
+export async function executeCli(argv: string[], timeoutMs = COMMAND_TIMEOUT_MS): Promise<{
+  stdout: string
+  stderr: string
+  exitCode: number
+  stdoutBytes: number
+  elapsedMs: number
+}> {
   if (timeoutMs <= 0) throw new Error('actor CLI timeout must be positive')
   const home = process.env.QUIRKY_HOME
   if (!home || !isAbsolute(home)) throw new Error('actor did not inherit an owned QUIRKY_HOME')
@@ -276,13 +313,7 @@ async function executeCli(argv: string[], timeoutMs = COMMAND_TIMEOUT_MS): Promi
 }
 
 function atomicReceipt(home: string, receipt: CliActorReceipt): void {
-  const directory = receiptDirectory(home)
-  mkdirSync(directory, { recursive: true, mode: 0o700 })
-  const path = join(directory, `${receipt.id}.json`)
-  atomicWrite(path, JSON.stringify(receipt))
-  const ids = readManifest(home)
-  if (ids.includes(receipt.id)) throw new Error(`actor receipt ID already exists: ${receipt.id}`)
-  atomicWrite(receiptManifest(home), `${JSON.stringify([...ids, receipt.id])}\n`)
+  appendActorReceipt(actorDirectory(home), receipt)
 }
 
 function writeActorIdentity(home: string): CliActorIdentity {
