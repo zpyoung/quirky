@@ -292,7 +292,7 @@ settling. Counts last for the daemon process and survive plugin reloads. Once a 
 or more unanswered handlers, new calls fail before activation with Timeout and data
 `{ reason: 'stalled', method, unanswered }`, reporting the real count. Calls already admitted may
 still time out and increase that count beyond four. See
-[API 1.13 running-handler limit](#api-113-running-handler-limit).
+[API 1.14 running-handler limit](#api-114-running-handler-limit).
 The plugin carries one warning while the count is at least four. Finishing handlers clears it
 once fewer than four remain; a daemon restart also clears the count.
 
@@ -303,7 +303,30 @@ No replacement starts in that activation until the old handler settles, then the
 due one interval later. Reloading the plugin permits another run only below the shared bound
 of four. Revoked contexts cannot act through their former activation.
 
-### API 1.13: Running-handler limit
+### API 1.13: Host output-gap recovery
+
+`context.pty.onLagged(listener)` reports a session whose host output subscription was shed.
+Before calling any listener, the daemon invalidates that session's shared subscription holds
+and pending subscribe attempts. Other sessions are unchanged. Listeners can immediately
+`subscribe` again; an older promise cannot restore its hold or release a replacement.
+The registration returns a remover and is removed on plugin revocation. Listener failures
+are logged without stopping other plugins. Plugins using it declare `"apiVersion": "1.13.0"`.
+
+The host bounds each subscription at 4 MiB and each connection at 32 MiB, counting encoded
+queued and subscribe-held output, including the remainder of a started frame. Shedding drops
+unstarted output, not the process or durable history. Desktop terminal attachments report
+stream lag and recover through `quirky.terminal/resync`. Phone attachments keep their stream
+ids, reacquire the host subscription, and receive a reset/snapshot before live output resumes.
+Agent readiness resets its scanner and reacquires output within the original delivery deadline;
+a gap never retries a paste already committed.
+
+Daemon WebSocket output is limited to 4 MiB per stream and 8 MiB of binary output per
+connection, counting outstanding wire bytes. JSON and lag markers share a bounded 16 MiB
+FIFO when the native socket cannot accept them. Terminal output is not queued again:
+`send` returns `false` and lags the stream. Accepted bytes remain accounted until native
+drainage, even after their stream closes. Unrecoverable control backpressure closes with 1013.
+
+### API 1.14: Running-handler limit
 
 By default, a plugin method may have at most 1,024 running handlers. A handler is running from
 dispatcher admission until its promise settles, even if its caller has already received a timeout.
@@ -318,7 +341,7 @@ nested call, its error is recorded normally: retrying must not repeat the outer 
 
 A method's first refusal adds a warning to the plugin; later refusals do not duplicate it. The
 warning clears when that method's running count falls to half the limit. A plugin that depends on
-this error declares `"apiVersion": "1.13.0"`.
+this error declares `"apiVersion": "1.14.0"`.
 
 ## Manifest declaration
 
@@ -426,6 +449,12 @@ Plugin API **1.1.0** adds Native page requests to `UiPluginContext.nativeBrowser
 
 Use SemVer for future Plugin API releases: increment the **major** for incompatible author-contract changes, **minor** for backward-compatible author-facing additions, and **patch** for backward-compatible corrections. Set a plugin's `apiVersion` to the earliest stable release that supplies every API feature it uses. Hosts compare that minimum against their own `PLUGIN_API_VERSION`; they do not infer a floor from the package, application, daemon, wire or catalog version.
 
+The PTY wire protocol remains v4 for the opt-in `hello.sessionLagged === true` extension.
+Only clients advertising that exact boolean receive `{ type: 'lagged', sessionId }`.
+Older v4 clients still close and reconnect on subscription overflow; older hosts may ignore
+the capability. This explicit negotiation is the exception to bumping the PTY version for
+a new event, and does not change authentication or version refusal.
+
 ## Releases since 1.0.0
 
 - **1.1.0** adds `UiPluginContext.nativeDropPaths(files)`: the original absolute paths of an OS file
@@ -462,14 +491,15 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
 - **1.10.0** adds [`context.emit` immediate delivery](#api-110-immediate-emits) and sends a plugin's
   held events before its next uncoalesced event. A plugin that passes the option declares
   `apiVersion` 1.10.0 or later.
-
 - **1.11.0** adds raw stderr piping and opt-in process-group grace to
   [`context.process.spawn`](#api-111-bounded-process-groups-and-raw-stderr). `run` and `spawn` wait
   for bounded process-group cleanup and report `groupSurvived: true` if members remain at the
   bound. A plugin using these additions declares `apiVersion` 1.11.0.
 - **1.12.0** adds [method deadlines and stalled-job diagnostics](#api-112-method-deadlines-and-stalled-jobs),
   a 300-second read-only method default, and reload-safe refusal once four handlers are unanswered.
-- **1.13.0** adds the [per-method running-handler limit](#api-113-running-handler-limit): 1,024
+- **1.13.0** adds [`PluginPty.onLagged`](#api-113-host-output-gap-recovery), invalidating
+  session subscriptions before notifying plugins and bounding host and daemon output queues.
+- **1.14.0** adds the [per-method running-handler limit](#api-114-running-handler-limit): 1,024
   handlers per plugin method by default. Calls over the limit fail with Busy before plugin code
   runs; Busy and stalled refusals are not stored under request IDs.
 

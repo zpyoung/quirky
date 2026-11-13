@@ -6,8 +6,9 @@ import { nextConnId, type RpcHandler, tokensMatch } from './rpc-handler'
 import type { Core } from './service'
 import { serveStatic } from './static'
 import type { ClientConn } from './types'
+import { WebSocketOutput } from './websocket-output'
 
-type SocketData = { conn: ClientConn }
+type SocketData = { conn: ClientConn; output?: WebSocketOutput; cleaned?: boolean }
 
 export type ServerOptions = {
   core: Core
@@ -72,6 +73,13 @@ export function startServer(options: ServerOptions) {
     }
     return json({ ok: true })
   }
+  function removeSocketClient(data: SocketData): void {
+    if (data.cleaned) return
+    data.cleaned = true
+    data.output?.dispose()
+    core.removeClient(data.conn)
+  }
+
 
   const server = Bun.serve<SocketData>({
     hostname: '127.0.0.1',
@@ -117,18 +125,40 @@ export function startServer(options: ServerOptions) {
       return json({ error: 'method not allowed' }, 405)
     },
     websocket: {
+      backpressureLimit: 16 * 1024 * 1024,
+      closeOnBackpressureLimit: false,
+      perMessageDeflate: false,
       open(ws) {
-        const { conn } = ws.data
-        conn.sendText = (text) => ws.send(text)
-        conn.sendBinary = (bytes) => ws.sendBinary(bytes)
+        const data = ws.data
+        const { conn } = data
+        const output = new WebSocketOutput(ws, () => {
+          try {
+            ws.close(1013, 'WebSocket output stalled')
+          } finally {
+            removeSocketClient(data)
+          }
+        })
+        data.output = output
+        conn.sendText = (text) => output.sendText(text)
+        conn.sendBinary = (bytes) => output.sendBinary(bytes)
+        conn.closeStreamOutput = (streamId) => output.closeStream(streamId)
         core.addClient(conn)
       },
       message(ws, message) {
         if (typeof message !== 'string') return
-        void handle(ws.data.conn, message)
+        const { conn } = ws.data
+        queueMicrotask(() => {
+          if (!conn.closed) void handle(conn, message)
+        })
+      },
+      drain(ws) {
+        const data = ws.data
+        queueMicrotask(() => {
+          if (!data.conn.closed) data.output?.drain()
+        })
       },
       close(ws) {
-        core.removeClient(ws.data.conn)
+        removeSocketClient(ws.data)
       }
     }
   })
