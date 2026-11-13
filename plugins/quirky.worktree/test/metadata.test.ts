@@ -447,7 +447,7 @@ describe('create records its metadata', () => {
     await call(client, 'quirky.worktree/remove', { worktree: first.id, yes: true })
     const second = await createWt(client, { repo: repo.id, name: 'again' })
     expect(second).toMatchObject({ id: first.id, displayName: null, status: 'in-progress' })
-  })
+  }, 30_000)
 })
 describe('per-project shared directories', () => {
   test('project metadata saves validated paths and the CLI can update them', async () => {

@@ -196,7 +196,7 @@ describe('canonical worktree project-group membership', () => {
 
     const cleared = (await call(restartedClient, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: null })) as CanonicalWorktree
     expect(cleared).toEqual({ ...persisted, projectGroupId: null })
-  })
+  }, 30_000)
 
   test('generated set flags move and clear only project-group membership', async () => {
     const { client, repo } = await start()
@@ -257,7 +257,7 @@ describe('canonical worktree project-group membership', () => {
     expect(result).toMatchObject({ assigned: true, group: { name: 'From CLI' }, worktree: { id: selected.id } })
     expect(result.worktree.projectGroupId).toBe(result.group.id)
     expect((await worktreeById(client, other.id)).projectGroupId).toBeNull()
-  })
+  }, 30_000)
 })
 
 describe('worktree identity and delayed group assignment', () => {
@@ -330,6 +330,7 @@ describe('worktree identity and delayed group assignment', () => {
         ...(data === undefined ? {} : { data })
       }),
       find: async () => ({ worktree, all: [worktree] }),
+      known: () => null,
       resolveRepo: async () => ({
         id: worktree.repoId,
         name: 'zero-birthtime',

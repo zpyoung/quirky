@@ -15,7 +15,7 @@ import { expandHome, resolveRealPath, worktreeIdForPath } from './paths'
 import { SelectorSyntaxError, matchWorktrees, selectedId, type CallerIdentity } from './selector'
 import { BranchCleaner } from './src/daemon/branches'
 import { createRemoteWorkspace, createWorkspace, prefetchWorktreeCreateBase, suggestName, type CreateEnv, type CreateParams, type PendingStart, type RemoteCreateParams } from './src/daemon/create'
-import { findOwned, groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
+import { findOwned, groupRepoId, knownWorktree, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
 import { KeyedQueue } from './src/daemon/queue'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
 import { createGroupForWorktree, setWorktree, showWorktree, type CreateGroupParams, type SetEnv, type SetParams } from './src/daemon/set'
@@ -171,7 +171,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
       start.dispose()
     }
   }
-  const listEnv: ListEnv = { store, groups: listGroups, log: context.log, removing, identitySource: filesystemIdentitySource }
+  const listEnv: ListEnv = { store, groups: listGroups, log: context.log, removing, listed: new Map(), identitySource: filesystemIdentitySource }
 
   /** The group with this ID or exact name; several of one name is a conflict. */
   async function resolveGroup(selector: string): Promise<ProjectGroup> {
@@ -277,7 +277,10 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     removing,
     inflight: new Map<string, InFlightRemove>(),
     fail,
-    changed: (data) => void context.emit('changed', data),
+    changed: (data) => {
+      if (data.removed) listEnv.listed.delete(data.worktreeId)
+      void context.emit('changed', data)
+    },
     repos: listRepos,
     resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
     hooksAt: async (repo, ref) => (await context.call('quirky.repo/hooks', { repo: repo.id, ref })) as EffectiveHooks,
@@ -320,6 +323,9 @@ export async function activate(context: PluginContext): Promise<PluginActivation
           }
           store.run('DELETE FROM worktrees WHERE repo_id = ?', repoId)
         })
+        for (const [id, facts] of listEnv.listed) {
+          if (facts.repoId === repoId) listEnv.listed.delete(id)
+        }
       }
     }
   }
@@ -367,6 +373,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     },
     resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
     groups: listGroups,
+    known: (id) => knownWorktree(listEnv, id),
     call: (method, params) => context.call(method, params),
     identitySource: filesystemIdentitySource,
     changed: (data) => void context.emit('changed', data)

@@ -20,12 +20,20 @@ export type ListEnv = {
   identitySource?: DirectoryIdentitySource
   /** IDs whose remove is in flight in this daemon. */
   removing: ReadonlySet<string>
+  listed: Map<string, Facts>
 }
 
 /** The `repoId` of a workspace that belongs to a group's parent folder rather than a project. */
 export const groupRepoId = (groupId: string): string => `group:${groupId}`
 
 type Facts = Pick<Worktree, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'kind' | 'groupId'>
+
+function rememberListing(env: ListEnv, repoId: string, facts: Map<string, Facts>): void {
+  for (const [id, cached] of env.listed) {
+    if (cached.repoId === repoId) env.listed.delete(id)
+  }
+  for (const [id, fact] of facts) env.listed.set(id, fact)
+}
 
 /** A folder's birth time in whole milliseconds, or null when it can't be read. */
 export function birthtimeOf(path: string): number | null {
@@ -133,7 +141,8 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
       preparations.add(worktreeIdForPath(registration.path))
     }
   }
-  return env.store.transaction(() => {
+  const listed = new Map<string, Facts>()
+  const worktrees = env.store.transaction(() => {
     const result: WorktreeControl[] = []
     for (const registration of registrations) {
       if (registration.prunable || !registration.exists) continue
@@ -151,6 +160,7 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
         kind: 'git',
         groupId: null
       }
+      listed.set(id, facts)
       result.push(joinMetadata(facts, row, env.removing.has(id), env.store))
     }
     if (prune) {
@@ -162,25 +172,33 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
     }
     return result.sort(compare)
   })
+  rememberListing(env, repo.id, listed)
+  return worktrees
 }
 
 /** A folder project's workspaces: the synthesised primary plus its folder-workspace rows. */
 function listFolderProject(env: ListEnv, repo: Repo): WorktreeControl[] {
-  return env.store.transaction(() => {
+  const listed = new Map<string, Facts>()
+  const worktrees = env.store.transaction(() => {
     const path = resolveRealPath(repo.path)
     const primaryId = worktreeIdForPath(repo.path)
     const primary = rowForFolder(env, repo.id, 'folder', path, primaryId, repo.addedAt)
+    const primaryFacts: Facts = { id: primaryId, repoId: repo.id, path, branch: null, head: '', isMain: true, kind: 'folder', groupId: null }
+    listed.set(primaryId, primaryFacts)
     const result = [
-      joinMetadata({ id: primaryId, repoId: repo.id, path, branch: null, head: '', isMain: true, kind: 'folder', groupId: null }, primary, env.removing.has(primaryId), env.store)
+      joinMetadata(primaryFacts, primary, env.removing.has(primaryId), env.store)
     ]
     for (const row of env.store.all<WorktreeRow>("SELECT * FROM worktrees WHERE repo_id = ? AND kind = 'folder' AND id != ?", repo.id, primaryId)) {
       const rowPath = row.path ?? path
       const metadata = rowForFolder(env, repo.id, 'folder', rowPath, row.id, row.created_at ?? repo.addedAt)
       const facts: Facts = { id: row.id, repoId: repo.id, path: rowPath, branch: null, head: '', isMain: false, kind: 'folder', groupId: null }
+      listed.set(row.id, facts)
       result.push(joinMetadata(facts, metadata, env.removing.has(row.id), env.store))
     }
     return result.sort(compare)
   })
+  rememberListing(env, repo.id, listed)
+  return worktrees
 }
 
 /**
@@ -193,14 +211,18 @@ export async function listProject(env: ListEnv, repo: Repo, options: { prune?: b
 
 /** The folder workspaces on a group's parent folder. */
 export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] {
+  const repoId = groupRepoId(group.id)
+  const listed = new Map<string, Facts>()
   const rows = env.store.all<WorktreeRow>('SELECT * FROM worktrees WHERE group_id = ?', group.id)
-  return env.store.transaction(() =>
+  const worktrees = env.store.transaction(() =>
     rows
       .map((row) => {
         const path = row.path ?? group.parentPath ?? ''
         const metadata = rowForFolder(env, row.repo_id, 'folder', path, row.id, row.created_at ?? Date.now())
+        const facts: Facts = { id: row.id, repoId, path, branch: null, head: '', isMain: false, kind: 'folder', groupId: group.id }
+        listed.set(row.id, facts)
         return joinMetadata(
-          { id: row.id, repoId: groupRepoId(group.id), path, branch: null, head: '', isMain: false, kind: 'folder', groupId: group.id },
+          facts,
           metadata,
           env.removing.has(row.id),
           env.store
@@ -208,6 +230,22 @@ export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] 
       })
       .sort(compare)
   )
+  rememberListing(env, repoId, listed)
+  return worktrees
+}
+
+/** The workspace from the latest completed listing, if its row and folder still exist; never runs git. */
+export function knownWorktree(env: ListEnv, id: string): WorktreeControl | null {
+  const facts = env.listed.get(id)
+  if (!facts) return null
+  const row = rowOf(env.store, id)
+  if (!row) return null
+  try {
+    if (!statSync(facts.path).isDirectory()) return null
+  } catch {
+    return null
+  }
+  return joinMetadata(facts, row, env.removing.has(id), env.store)
 }
 
 /** The workspace from its recorded owner, or null when a miss, ambiguity or failure needs the full search; never throws. */

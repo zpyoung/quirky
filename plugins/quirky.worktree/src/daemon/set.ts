@@ -14,6 +14,8 @@ export type SetEnv = {
   fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
   /** The one workspace a selector names, with every listed workspace for reading relations. */
   find(selector: string, identity: CallerIdentity): Promise<{ worktree: Worktree; all: Worktree[] }>
+  /** The workspace from its latest listing for a metadata-only set by id, or null to take the full lookup. */
+  known(id: string): Worktree | null
   resolveRepo(selector: string): Promise<Repo>
   groups(): Promise<ProjectGroup[]>
   call(method: string, params: Record<string, unknown>): Promise<unknown>
@@ -79,6 +81,7 @@ function assertExpected(env: SetEnv, worktree: Worktree, params: SetParams): voi
  * workspace itself or one of its descendants is refused as `parent-cycle`. `baseRef` sets the
  * workspace's own compare and rebase target; null or a blank string clears it.
  * `references` replaces the manual links atomically with the other metadata; omitting it keeps them.
+ * For a metadata-only `id:` update, `branch`, `head` and `isMain` reflect the latest completed listing.
  */
 export async function setWorktree(
   env: SetEnv,
@@ -115,7 +118,18 @@ export async function setWorktree(
     throw env.fail('invalid-params', 'expectedProjectGroupId must be a group ID or null')
   }
 
-  let worktree = (await env.find(params.worktree, identity)).worktree
+  const canUseKnown = params.worktree.startsWith('id:') &&
+    params.parent === undefined &&
+    params.projectGroupId === undefined &&
+    params.expectedInstanceId === undefined &&
+    params.expectedProjectGroupId === undefined &&
+    guard === undefined
+  let worktree: Worktree
+  if (canUseKnown) {
+    worktree = env.known(params.worktree.slice(3)) ?? (await env.find(params.worktree, identity)).worktree
+  } else {
+    worktree = (await env.find(params.worktree, identity)).worktree
+  }
   assertExpected(env, worktree, params)
 
   const assignments: string[] = []
