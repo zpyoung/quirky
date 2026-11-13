@@ -36,6 +36,7 @@ class Child implements SpawnedProcess {
     start: (controller) => { this.controller = controller },
     cancel: () => { this.cancellations++; this.ended = true }
   })
+  readonly stderr = new ReadableStream<Uint8Array>({ start: controller => controller.close() })
   stderrTail() { return '' }
   write(data: string | Uint8Array) {
     const text = typeof data === 'string' ? data : new TextDecoder().decode(data)
