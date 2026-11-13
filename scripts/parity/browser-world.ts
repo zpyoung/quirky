@@ -1,9 +1,10 @@
 import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { checkSchemaDeclaration, validateValue, type Schema } from '@quirky/protocol'
-import { isDaemonAlive, readRuntime } from '@quirky/protocol/node'
+import { isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { resolveHelperBinary } from '../../plugins/quirky.browser/src/runtime/native'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
+import { startWorld, type SoakWorld } from '../soak/world'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { startBrowserFixture, type BrowserFixture } from './browser-fixture'
 
@@ -22,9 +23,11 @@ export type BrowserWorld = {
   fixture: BrowserFixture
   worktreeA: string
   worktreeB: string
-  daemonPid: number
-  daemonExited?: Promise<number>
+  readonly daemonPid: number
+  readonly daemonExited?: Promise<number>
   cli(argv: string[], options?: { allowFailure?: boolean; timeoutMs?: number }): Promise<CliReceipt>
+  restartDaemon?(signal?: AbortSignal): Promise<{ previousPid: number; daemonPid: number; spawnedAt: number }>
+  track?(pid: number): void
   cleanup(): Promise<BrowserCleanup>
   processEvidence(): Promise<Record<string, unknown>>
 }
@@ -43,7 +46,12 @@ export class BrowserFailure extends Error {
 }
 
 type ProcessIdentity = { pid: number; ppid: number; pgid: number; started: string; command: string }
-type ExpectedCliResult = { method: string; schema: Schema; extraProfileLabel?: boolean }
+type ExpectedCliResult = {
+  method: string
+  schema: Schema
+  extraProfileLabel?: boolean
+  shape?: 'worktree-open-in' | 'pane-open' | 'pane-state'
+}
 type BrowserCliRoute = { words: string[]; method: string }
 type CliSchemas = { methods: Map<string, Schema>; browser: BrowserCliRoute[] }
 type PipeChild = Bun.Subprocess<'ignore', 'pipe', 'pipe'>
@@ -271,18 +279,22 @@ function expectedCliResult(argv: readonly string[], schemas: CliSchemas): Expect
     return {
       method: route.method,
       schema,
-      ...(route.words.join(' ') === 'tab list' && argv.includes('--show-profile') ? { extraProfileLabel: true } : {})
+      ...(route.words.join(' ') === 'tab list' && argv.includes('--show-profile') ? { extraProfileLabel: true } : {}),
+      ...(route.words.join(' ') === 'pane open' ? { shape: 'pane-open' as const } : {}),
+      ...(route.words.join(' ') === 'pane state' ? { shape: 'pane-state' as const } : {})
     }
   }
   const method = argv[0] === 'repo' && argv[1] === 'add'
     ? 'quirky.repo/add'
     : argv[0] === 'worktree' && argv[1] === 'list'
       ? 'quirky.worktree/list'
-      : undefined
+      : argv[0] === 'worktree' && argv[1] === 'open-in'
+        ? 'quirky.worktree/openIn'
+        : undefined
   if (!method) return undefined
   const schema = schemas.methods.get(method)
   if (!schema) throw new BrowserFailure('invalid-cli-contract', `public method schema is missing: ${method}`)
-  return { method, schema }
+  return { method, schema, ...(argv[1] === 'open-in' ? { shape: 'worktree-open-in' } : {}) }
 }
 
 function schemaWithProfileLabel(schema: Schema): Schema {
@@ -318,6 +330,17 @@ function validateCliResult(argv: readonly string[], result: unknown, schemas: Cl
   } : expected.extraProfileLabel ? schemaWithProfileLabel(expected.schema) : expected.schema
   const failure = validateValue(schema, result, `${expected.method} result`)
   if (failure) throw new BrowserFailure('malformed-cli-json', `CLI JSON does not match ${expected.method}: ${failure}`)
+  if (!expected.shape) return
+  const record = result !== null && typeof result === 'object' && !Array.isArray(result)
+    ? result as Record<string, unknown>
+    : undefined
+  const validShape = expected.shape === 'worktree-open-in'
+    ? record !== undefined && typeof record.worktreeId === 'string' && typeof record.target === 'string'
+    : expected.shape === 'pane-open'
+      ? record !== undefined && typeof record.id === 'string' && record.mode === 'watch' &&
+        typeof record.page === 'string' && typeof record.profileId === 'string'
+      : record !== undefined && Array.isArray(record.tabs) && Array.isArray(record.history)
+  if (!validShape) throw new BrowserFailure('malformed-cli-json', `CLI JSON does not match ${expected.method} ownership shape`)
 }
 
 function parseProcessTable(text: string): Map<number, ProcessIdentity> {
@@ -376,9 +399,9 @@ function sameProcess(left: ProcessIdentity, right: ProcessIdentity | undefined):
     (left.command === right.command || (left.ppid === right.ppid && left.pgid === right.pgid))
 }
 
-type ShimLogState = { empty: boolean; bytes: Record<string, number>; orcaLog: string; securityLog: string }
+export type ShimLogState = { empty: boolean; bytes: Record<string, number>; orcaLog: string; securityLog: string }
 
-function readShimLogs(home: string): ShimLogState {
+export function readShimLogs(home: string): ShimLogState {
   const bytes: Record<string, number> = {}
   const logs: { orca: string; security: string } = { orca: '', security: '' }
   let empty = true
@@ -401,28 +424,30 @@ function createCleanup(
   getEnv: () => Record<string, string>,
   getFixture: () => BrowserFixture | undefined,
   getDaemonPid: () => number | undefined,
-  getDaemonIdentity: () => ProcessIdentity | undefined
+  getDaemonIdentity: () => ProcessIdentity | undefined,
+  retainedIdentities: Map<number, ProcessIdentity>
 ): { cleanup(): Promise<BrowserCleanup>; processEvidence(): Promise<Record<string, unknown>> } {
   let cleanupPromise: Promise<BrowserCleanup> | undefined
   let savedEvidence: Record<string, unknown> | undefined
   const capture = (): ProcessIdentity[] => {
-    const daemonPid = getDaemonPid()
-    if (daemonPid === undefined) return []
     const snapshot = processSnapshot({ ...getEnv(), ...scope.env, HOME: home, QUIRKY_HOME: home })
-    const originalDaemon = getDaemonIdentity()
-    const currentDaemon = snapshot.get(daemonPid)
-    const daemonMatches = currentDaemon !== undefined && (!originalDaemon || sameProcess(originalDaemon, currentDaemon))
-    const tracked = new Map<number, ProcessIdentity>()
-    if (currentDaemon && daemonMatches) tracked.set(daemonPid, currentDaemon)
-    else if (originalDaemon) tracked.set(daemonPid, originalDaemon)
-    if (daemonMatches) {
-      for (const row of descendants(snapshot, daemonPid)) {
-        const command = row.command.toLowerCase()
-        if (row.command.includes(home) || command.includes('chrome') || command.includes('chromium') ||
-          command.includes('agent-browser') || command.includes('pty-host')) tracked.set(row.pid, row)
+    const daemonPid = getDaemonPid()
+    if (daemonPid !== undefined) {
+      const daemonIdentity = getDaemonIdentity()
+      const currentDaemon = snapshot.get(daemonPid)
+      const daemonMatches = currentDaemon !== undefined && (!daemonIdentity || sameProcess(daemonIdentity, currentDaemon))
+      if (currentDaemon && daemonMatches) {
+        retainedIdentities.set(daemonPid, currentDaemon)
+        for (const row of descendants(snapshot, daemonPid)) {
+          const command = row.command.toLowerCase()
+          if (row.command.includes(home) || command.includes('chrome') || command.includes('chromium') ||
+            command.includes('agent-browser') || command.includes('pty-host')) retainedIdentities.set(row.pid, row)
+        }
+      } else if (daemonIdentity) {
+        retainedIdentities.set(daemonPid, daemonIdentity)
       }
     }
-    return [...tracked.values()]
+    return [...retainedIdentities.values()]
   }
   const evidenceNow = async (): Promise<Record<string, unknown>> => {
     let tracked: ProcessIdentity[] = []
@@ -579,15 +604,18 @@ function withinDeadline<T>(operation: Promise<T>, signal: AbortSignal | undefine
   return promise
 }
 
-async function daemonStatus(home: string, daemonPid: number, deadline: number): Promise<boolean> {
+async function daemonStatus(home: string, daemon: Pick<PipeChild, 'pid' | 'exited'>, deadline: number): Promise<boolean> {
   const runtime = readRuntime(home)
-  if (!runtime || runtime.pid !== daemonPid || Date.now() >= deadline) return false
-  return await isDaemonAlive(runtime, Math.max(1, Math.min(300, deadline - Date.now())))
+  if (!runtime || runtime.pid !== daemon.pid || Date.now() >= deadline) return false
+  return await Promise.race([
+    isDaemonAlive(runtime, Math.max(1, Math.min(300, deadline - Date.now()))),
+    daemon.exited.then(() => false)
+  ])
 }
 
 async function waitForDaemon(
   home: string,
-  daemon: PipeChild,
+  daemon: Pick<PipeChild, 'pid' | 'exited' | 'kill'> & { exitCode?: number | null },
   deadline: number,
   signal?: AbortSignal,
   diagnostics?: () => string
@@ -595,7 +623,7 @@ async function waitForDaemon(
   const readinessDeadline = Math.min(deadline, Date.now() + OPERATION_TIMEOUT_MS)
   while (Date.now() < readinessDeadline) {
     ensureWorkTime(signal, readinessDeadline)
-    if (daemon.exitCode !== null) {
+    if (daemon.exitCode !== undefined && daemon.exitCode !== null) {
       const output = diagnostics?.() ?? ''
       throw new BrowserFailure(
         'daemon-exited',
@@ -719,9 +747,6 @@ function makeHeadCapture(stream: ReadableStream<Uint8Array> | null, limit: numbe
   return { done, text: () => Buffer.concat(chunks, size).toString('utf8'), truncated: () => overflow }
 }
 
-function currentDiagnostics(home: string, scope: ProcessScope, captures: TailCapture[]): string {
-  return boundedDiagnostic(captures.map((capture) => capture.text()).filter(Boolean).join('\n'), home, diagnosticTokens(scope, home))
-}
 
 export async function startBrowserWorld(options: {
   signal?: AbortSignal
@@ -743,14 +768,47 @@ export async function startBrowserWorld(options: {
   }
   const home = scope.home
   const repoRoot = resolve(import.meta.dir, '../..')
+  const soakOut = join(home, 'soak-out')
+  const repositoriesRoot = join(home, 'repositories')
+  const repositoryA = join(repositoriesRoot, "repo A ' ; $")
+  const repositoryB = join(repositoriesRoot, 'repo B')
   let env: Record<string, string> = {}
   let fixture: BrowserFixture | undefined
-  let daemon: PipeChild | undefined
+  let currentDaemon: (Pick<PipeChild, 'pid' | 'exited' | 'kill'> & { exitCode?: number | null }) | undefined
   let daemonIdentity: ProcessIdentity | undefined
-  const cleanupTools = createCleanup(scope, home, () => env, () => fixture, () => daemon?.pid, () => daemonIdentity)
+  let startupFailure: BrowserFailure | undefined
+  let soakWorld: SoakWorld | undefined
+  const retainedIdentities = new Map<number, ProcessIdentity>()
+  const cleanupTools = createCleanup(
+    scope,
+    home,
+    () => env,
+    () => fixture,
+    () => currentDaemon?.pid,
+    () => daemonIdentity,
+    retainedIdentities
+  )
+  const daemonDiagnostics = (): string => {
+    try {
+      const log = readFileSync(join(soakOut, 'daemon.log'))
+      return boundedDiagnostic(
+        log.subarray(Math.max(0, log.byteLength - MAX_DIAGNOSTIC_BYTES)).toString('utf8'),
+        home,
+        diagnosticTokens(scope, home)
+      )
+    } catch {
+      return ''
+    }
+  }
+  const closeControl = (): void => {
+    try {
+      soakWorld?.control.close()
+    } catch {}
+  }
   const abortInFlight = async (error: unknown): Promise<never> => {
+    closeControl()
     const cleanup = await cleanupTools.cleanup()
-    const failure = normalizeFailure(error, home, diagnosticTokens(scope, home))
+    const failure = normalizeFailure(startupFailure ?? error, home, diagnosticTokens(scope, home))
     failure.cleanup = cleanup
     if (!cleanup.ok && cleanup.error) failure.message = boundedDiagnostic(`${failure.message}; cleanup failed: ${cleanup.error}`, home, diagnosticTokens(scope, home))
     throw failure
@@ -758,30 +816,80 @@ export async function startBrowserWorld(options: {
 
   try {
     ensureWorkTime(options.signal, deadline)
-    env = createBrowserEnvironment(home, repoRoot)
-    env.QUIRKY_BROWSER_CHROME = requireInstalledChrome()
+    const browserChrome = requireInstalledChrome()
     requirePinnedHelper(repoRoot)
     const schemas = loadCliSchemas(repoRoot)
     fixture = startBrowserFixture()
-
-    const daemonOut: TailCapture[] = []
-    try {
-      daemon = scope.spawn([process.execPath, join(repoRoot, 'packages/daemon/src/main.ts')], {
-        cwd: repoRoot,
-        env,
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe'
-      })
-    } catch (error) {
-      throw new BrowserFailure('daemon-start-failed', error instanceof Error ? error.message : String(error))
-    }
-    daemonOut.push(makeTailCapture(daemon.stdout, MAX_DIAGNOSTIC_BYTES), makeTailCapture(daemon.stderr, MAX_DIAGNOSTIC_BYTES))
-    const daemonExited = daemon.exited
-    const daemonDiagnostics = () => currentDiagnostics(home, scope, daemonOut)
-    await waitForDaemon(home, daemon, deadline, options.signal, daemonDiagnostics)
-    daemonIdentity = processSnapshot({ ...env, ...scope.env, HOME: home, QUIRKY_HOME: home }).get(daemon.pid)
-    if (!daemonIdentity) throw new BrowserFailure('daemon-start-failed', 'ready daemon process identity could not be captured')
+    mkdirSync(repositoryA, { recursive: true, mode: 0o700 })
+    mkdirSync(repositoryB, { recursive: true, mode: 0o700 })
+    soakWorld = await startWorld(
+      {
+        out: soakOut,
+        repoRoot,
+        signal: options.signal,
+        windows: !options.beforeBrowser && !options.afterReady ? 1 : 0,
+        workers: false
+      },
+      {
+        createScope: () => scope,
+        prepareCaptureFixtureHome: async (_home, preparation) => {
+          const browserEnv = createBrowserEnvironment(home, repoRoot)
+          browserEnv.QUIRKY_BROWSER_CHROME = browserChrome
+          Object.assign(preparation.env, browserEnv)
+          env = preparation.env
+          return {
+            home,
+            repoPath: repositoryA,
+            projects: [
+              { name: 'repo-a', path: repositoryA },
+              { name: 'repo-b', path: repositoryB }
+            ],
+            worktreesRoot: repositoriesRoot,
+            files: { source: '', markdown: '', notebook: '', svg: '', csv: '' },
+            tasks: {
+              owner: '',
+              repo: '',
+              originUrl: '',
+              issue: {} as never,
+              pullRequest: {} as never,
+              sshCommand: ''
+            },
+            cleanup() {}
+          }
+        },
+        registerCaptureFixtures: async (_control, prepared) => ({
+          ...prepared,
+          repo: { id: '' },
+          primaryWorktree: { id: '', path: repositoryA, repoId: '', name: 'repo-a' },
+          worktrees: []
+        }),
+        waitForDaemon: async (_daemonHome, spawnedDaemon, waitSignal) => {
+          currentDaemon = spawnedDaemon
+          daemonIdentity = undefined
+          try {
+            await waitForDaemon(home, spawnedDaemon, deadline, waitSignal ?? options.signal, daemonDiagnostics)
+          } catch (error) {
+            if (error instanceof BrowserFailure) startupFailure = error
+            throw error
+          }
+          const runtime: RuntimeInfo | null = readRuntime(home)
+          if (!runtime || runtime.pid !== spawnedDaemon.pid) {
+            const failure = new BrowserFailure('daemon-start-failed', 'ready daemon runtime did not match the spawned daemon')
+            startupFailure = failure
+            throw failure
+          }
+          daemonIdentity = processSnapshot({ ...env, ...scope.env, HOME: home, QUIRKY_HOME: home }).get(spawnedDaemon.pid)
+          if (!daemonIdentity) {
+            const failure = new BrowserFailure('daemon-start-failed', 'ready daemon process identity could not be captured')
+            startupFailure = failure
+            throw failure
+          }
+          retainedIdentities.set(daemonIdentity.pid, daemonIdentity)
+          return runtime
+        }
+      }
+    )
+    env = soakWorld.env
 
     const cli = async (argv: string[], cliOptions: { allowFailure?: boolean; timeoutMs?: number } = {}): Promise<CliReceipt> => {
       ensureWorkTime(options.signal, deadline)
@@ -791,7 +899,10 @@ export async function startBrowserWorld(options: {
       if (argv.some((argument) => argument === '--runtime' || argument.startsWith('--runtime=') || argument === '--pairing-code' || argument.startsWith('--pairing-code='))) {
         throw new BrowserFailure('invalid-cli-arguments', 'runtime selection is fixed to the owned local daemon')
       }
-      if (!(await daemonStatus(home, daemon!.pid, deadline))) throw new BrowserFailure('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
+      const activeDaemon = currentDaemon
+      if (!activeDaemon || !(await daemonStatus(home, activeDaemon, deadline))) {
+        throw new BrowserFailure('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start', daemonDiagnostics() || undefined)
+      }
 
       const limit = Math.min(
         OPERATION_TIMEOUT_MS,
@@ -810,58 +921,101 @@ export async function startBrowserWorld(options: {
           stderr: 'pipe'
         })
       } catch (error) {
-        throw new BrowserFailure('cli-start-failed', error instanceof Error ? error.message : String(error))
+        throw new BrowserFailure(
+          'cli-start-failed',
+          error instanceof Error ? error.message : String(error),
+          daemonDiagnostics() || undefined
+        )
       }
       const stdout = makeHeadCapture(child.stdout, MAX_CLI_OUTPUT_BYTES)
       const stderr = makeTailCapture(child.stderr, MAX_DIAGNOSTIC_BYTES)
       let exitCode: number
       try {
-        exitCode = await waitForChild(child, limit, options.signal, deadline)
+        const daemonExit = activeDaemon.exited.then(() => {
+          throw new BrowserFailure('daemon-exited', 'owned daemon exited during the CLI operation', daemonDiagnostics() || undefined)
+        })
+        exitCode = await Promise.race([
+          waitForChild(child, limit, options.signal, deadline),
+          daemonExit
+        ])
       } catch (error) {
         await stopChild(child)
         await Promise.all([stdout.done, stderr.done])
-        const tail = boundedDiagnostic(stderr.text(), home, diagnosticTokens(scope, home))
+        const tail = boundedDiagnostic(stderr.text(), home, diagnosticTokens(scope, home)) || daemonDiagnostics()
         const failure = normalizeFailure(error, home, diagnosticTokens(scope, home))
-        failure.stderrTail = tail
+        failure.stderrTail = tail || undefined
         throw failure
       }
       await Promise.all([stdout.done, stderr.done])
       const stdoutText = stdout.text()
       const stderrText = stderr.text()
-      if (stdout.truncated()) throw new BrowserFailure('cli-output-too-large', 'CLI output exceeded the bounded capture limit', boundedDiagnostic(stderrText, home, diagnosticTokens(scope, home)))
-      const decoded = decodeCliReceipt(argv, stdoutText, stderrText, exitCode, home, true, {
-        schemas,
-        tokens: diagnosticTokens(scope, home)
-      })
-      const receipt: CliReceipt = { ...decoded, argv: [...command] }
+      if (stdout.truncated()) {
+        throw new BrowserFailure(
+          'cli-output-too-large',
+          'CLI output exceeded the bounded capture limit',
+          boundedDiagnostic(stderrText, home, diagnosticTokens(scope, home)) || daemonDiagnostics() || undefined
+        )
+      }
+      let decoded: CliReceipt
+      try {
+        decoded = decodeCliReceipt(argv, stdoutText, stderrText, exitCode, home, true, {
+          schemas,
+          tokens: diagnosticTokens(scope, home)
+        })
+      } catch (error) {
+        const failure = normalizeFailure(error, home, diagnosticTokens(scope, home))
+        if (!failure.stderrTail) failure.stderrTail = daemonDiagnostics() || undefined
+        throw failure
+      }
+      const receipt: CliReceipt = {
+        ...decoded,
+        argv: [...command],
+        stderrTail: decoded.stderrTail || (exitCode !== 0 ? daemonDiagnostics() : '')
+      }
       if (exitCode !== 0 && !(cliOptions.allowFailure ?? false)) {
         const after = readRuntime(home)
-        if (!after || after.pid !== daemon!.pid || !(await isDaemonAlive(after, Math.max(1, Math.min(300, deadline - Date.now()))))) {
-          throw new BrowserFailure('daemon-exited', 'owned daemon exited during the CLI operation', receipt.stderrTail)
+        if (!after || after.pid !== activeDaemon.pid || !(await daemonStatus(home, activeDaemon, deadline))) {
+          throw new BrowserFailure('daemon-exited', 'owned daemon exited during the CLI operation', receipt.stderrTail || undefined)
         }
-        throw new BrowserFailure('cli-nonzero', `CLI command exited with code ${exitCode}`, receipt.stderrTail)
+        throw new BrowserFailure('cli-nonzero', `CLI command exited with code ${exitCode}`, receipt.stderrTail || undefined)
       }
       return receipt
     }
 
     const world: BrowserWorld = {
       home,
-      env,
+      env: soakWorld.env,
       fixture,
       worktreeA: '',
       worktreeB: '',
-      daemonPid: daemon.pid,
-      daemonExited,
+      get daemonPid() { return currentDaemon!.pid },
+      get daemonExited() { return currentDaemon?.exited },
       cli,
-      cleanup: cleanupTools.cleanup,
+      restartDaemon: async (signal) => {
+        const restartSignal = signal ?? options.signal
+        ensureWorkTime(restartSignal, deadline)
+        const previousPid = soakWorld!.daemonPid
+        await cleanupTools.processEvidence()
+        const restarted = await withinDeadline(soakWorld!.restartDaemon(restartSignal), restartSignal, deadline)
+        const daemonPid = soakWorld!.daemonPid
+        await cleanupTools.processEvidence()
+        if (daemonPid === previousPid) throw new BrowserFailure('daemon-start-failed', 'daemon restart did not replace the owned daemon')
+        return { previousPid, daemonPid, spawnedAt: restarted.spawnedAt }
+      },
+      track: (pid) => {
+        soakWorld!.track(pid)
+        const snapshot = processSnapshot({ ...env, ...scope.env, HOME: home, QUIRKY_HOME: home })
+        const tracked = snapshot.get(pid)
+        if (tracked) retainedIdentities.set(pid, tracked)
+        for (const child of descendants(snapshot, pid)) retainedIdentities.set(child.pid, child)
+      },
+      cleanup: async () => {
+        closeControl()
+        return await cleanupTools.cleanup()
+      },
       processEvidence: cleanupTools.processEvidence
     }
 
-    const repositoriesRoot = join(home, 'repositories')
-    const repositoryA = join(repositoriesRoot, "repo A ' ; $")
-    const repositoryB = join(repositoriesRoot, 'repo B')
-    mkdirSync(repositoryA, { recursive: true, mode: 0o700 })
-    mkdirSync(repositoryB, { recursive: true, mode: 0o700 })
     const addedA = await cli(['repo', 'add', repositoryA, '--folder'])
     const addedB = await cli(['repo', 'add', repositoryB, '--folder'])
     const repoResultA = addedA.result
@@ -895,7 +1049,7 @@ export async function startBrowserWorld(options: {
     ensureWorkTime(options.signal, deadline)
     if (options.afterReady) await withinDeadline(options.afterReady(world), options.signal, deadline)
     ensureWorkTime(options.signal, deadline)
-    if (!(await daemonStatus(home, daemon.pid, deadline))) throw new BrowserFailure('daemon-exited', 'owned daemon exited after readiness')
+    if (!(await daemonStatus(home, world.daemonPid, deadline))) throw new BrowserFailure('daemon-exited', 'owned daemon exited after readiness', daemonDiagnostics() || undefined)
     return world
   } catch (error) {
     return await abortInFlight(error)
