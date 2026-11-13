@@ -12,7 +12,38 @@ export type Evidence = {
 }
 export type CheckResult = { id: CheckId; status: 'pass' | 'fail'; applicable: boolean; reason: string; evidence: Evidence[] }
 export type SourceFile = { file: string; content: string }
-export type PluginInventory = { id: string; directory: string; hasUi: boolean; targets: string[]; sources: SourceFile[] }
+export type Ref = { file: string; quote: string }
+export type StateKind = 'loading' | 'empty' | 'error'
+export type Decision = { applicable: true } | { applicable: false; reason: string; evidence: Ref[] }
+export type Render =
+  | { component: 'EmptyState' | 'NoticeLine' | 'InlineError' | 'FormRow'; element: Ref; import: Ref; via?: Ref[] }
+  | { component: 'toast'; call: Ref; via?: Ref[] }
+export type StateEntry = { surface: string; state: StateKind; site: Ref; anchor?: string; render: Render }
+export type NotStateEntry = { site: Ref; anchor?: string; reason: string }
+export type Route = { invoke: Ref; target: string; via?: Ref[] }
+export type ActionEntry =
+  | { site: Ref; anchor?: string; route: Route }
+  | { site: Ref; anchor?: string; transient: 'caret' | 'hover' | 'draft'; reason: string }
+  | { site: Ref; anchor?: string; notAction: 'lifecycle' | 'subscription' | 'forwarded'; reason: string }
+export type CoverageFile = {
+  schemaVersion: 1
+  surfaces: Record<string, { loading: Decision; empty: Decision; error: Decision }>
+  states: StateEntry[]
+  notState: NotStateEntry[]
+  actions: ActionEntry[]
+}
+export type CandidateCategory = 'state' | 'action'
+export type Candidate = {
+  category: CandidateCategory; kind: string; file: string
+  anchorStart: number; anchorEnd: number; anchorText: string
+}
+export type CliCommandDeclaration = { id: string; words?: string; methods: string[] }
+export type PluginContributions = { methods: string[]; commands: string[]; cliCommands: CliCommandDeclaration[] }
+export type PluginInventory = {
+  id: string; directory: string; hasUi: boolean; targets: string[]; sources: SourceFile[]
+  contributions?: PluginContributions
+  coverage?: SourceFile
+}
 export type Exclusion = { plugin: string; reason: 'paused-unmerged'; branch: string; pr: 305; steerDate: '2026-11-13' }
 export type Inventory = {
   repoRoot: string; commit: string; sourceDigest: string; dirty: boolean

@@ -5,7 +5,6 @@ import { checkHostTokens, checkPlugin, sharedTokenEvidence } from './tokens'
 const staticChecks: Record<StaticCheckId, true> = {
   'compatibility-tokens': true, loading: true, empty: true, error: true, commands: true,
 }
-const enrolledChecks: Partial<Record<StaticCheckId, true>> = { 'compatibility-tokens': true }
 
 type Validation = { errors: Evidence[]; entries: Array<[string, StaticCheckId[]]> }
 
@@ -88,10 +87,6 @@ function validateEnrollment(inventory: Inventory, enrollment: unknown): Validati
         continue
       }
       seen.add(rawCheck)
-      if (!Object.prototype.hasOwnProperty.call(enrolledChecks, rawCheck)) {
-        errors.push(configError('unsupported-ratchet-check', `Ratchet check ${rawCheck} for ${pluginId} is not implemented`))
-        continue
-      }
       checks.push(rawCheck as StaticCheckId)
     }
     entries.push([pluginId, checks])

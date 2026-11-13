@@ -1,6 +1,7 @@
 import * as ts from 'typescript'
 import { uiTokens } from '../../packages/ui/src/design-system/tokens'
 import { CHECK_IDS, type CheckResult, type Evidence, type Inventory, type PluginInventory, type SourceFile } from './contracts'
+import { auditPlugin } from './audit'
 
 const SOURCE_EXTENSIONS: Record<string, true> = {
   '.ts': true, '.tsx': true, '.js': true, '.jsx': true, '.mts': true, '.cts': true, '.mjs': true, '.cjs': true,
@@ -18,8 +19,6 @@ const COMPLETE_COMPAT_TOKEN = /--compat-[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*/g
 const CSS_ESCAPED_COMPAT_PREFIX = /\\0*2d\s*\\0*2d\s*compat-/gi
 const CSS_VAR_ARGUMENT = /var\(\s*([^,)]*)/gi
 const CSS_ESCAPED_PROPERTY = /--[^\s:;,(){}]*\\[^\s:;,(){}]*/g
-const PLACEHOLDER_IDS = ['loading', 'empty', 'error', 'commands'] as const
-const PLACEHOLDER_MESSAGE = 'This check is not implemented; the ordered source-audit follow-up owns its evidence and semantics.'
 
 function normalizedPath(file: string): string {
   return file.replace(/\\/g, '/')
@@ -525,24 +524,17 @@ function pluginTokenCheck(inventory: Inventory, plugin: PluginInventory): CheckR
   return tokenCheck(evidence)
 }
 
-function placeholderCheck(id: typeof PLACEHOLDER_IDS[number], applicable: boolean): CheckResult {
-  return applicable
-    ? { id, status: 'fail', applicable: true, reason: 'not-implemented', evidence: [{ code: 'not-implemented', message: PLACEHOLDER_MESSAGE }] }
-    : { id, status: 'pass', applicable: false, reason: 'no-ui-surface', evidence: [] }
-}
-
-/** Returns the five static plugin checks, including explicit state/action placeholders. */
+/** Returns the five static plugin checks from one inventory snapshot. */
 export function checkPlugin(inventory: Inventory, pluginId: string): CheckResult[] {
   const plugin = inventory.plugins.find((candidate) => candidate.id === pluginId)
   if (!plugin) throw new Error(`Unknown plugin: ${pluginId}`)
 
-  const applicable = isUiBearing(plugin)
+  const audit = isUiBearing(plugin) ? auditPlugin(inventory, plugin) : (['loading', 'empty', 'error', 'commands'] as const).map((id): CheckResult => ({
+    id, status: 'pass', applicable: false, reason: 'no-ui-surface', evidence: []
+  }))
   const results: Record<string, CheckResult> = {
     'compatibility-tokens': pluginTokenCheck(inventory, plugin),
-    loading: placeholderCheck('loading', applicable),
-    empty: placeholderCheck('empty', applicable),
-    error: placeholderCheck('error', applicable),
-    commands: placeholderCheck('commands', applicable)
+    ...Object.fromEntries(audit.map((check) => [check.id, check]))
   }
   return CHECK_IDS.filter((id) => id !== 'screenshots').map((id) => results[id]!)
 }
