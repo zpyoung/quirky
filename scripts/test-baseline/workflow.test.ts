@@ -28,7 +28,7 @@ const needsOf = (name: string): string[] => [jobs[name]!.needs ?? []].flat()
 const effectivePermissions = (name: string): Record<string, string> => jobs[name]!.permissions ?? workflow.permissions ?? {}
 const norm = (expr: unknown): string => String(expr).replace(/\$\{\{|\}\}/g, '').replace(/\s+/g, ' ').trim()
 
-const JOBS_OK = "${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}"
+const JOBS_OK = "${{ needs.plan.result != 'failure' && needs.plan.result != 'cancelled' && needs.linux.result != 'failure' && needs.linux.result != 'cancelled' && needs.macos.result != 'failure' && needs.macos.result != 'cancelled' }}"
 
 describe('tests.yml triggers and defaults', () => {
   test('runs on pull requests, pushes to main and manual dispatch', () => {
@@ -58,15 +58,16 @@ describe('tests.yml triggers and defaults', () => {
 })
 
 describe('job graph', () => {
-  test('defines exactly the four jobs', () => {
-    expect(Object.keys(jobs).sort()).toEqual(['linux', 'macos', 'plan', 'tests'])
+  test('defines the unit jobs and independent speed evidence job', () => {
+    expect(Object.keys(jobs).sort()).toEqual(['linux', 'macos', 'plan', 'speed', 'tests'])
   })
 
   test('needs match the job table', () => {
     expect(needsOf('plan')).toEqual([])
     expect(needsOf('linux')).toEqual(['plan'])
     expect(needsOf('macos')).toEqual(['plan'])
-    expect([...needsOf('tests')].sort()).toEqual(['linux', 'macos', 'plan'])
+    expect([...needsOf('tests')].sort()).toEqual(['linux', 'macos', 'plan', 'speed'])
+    expect(needsOf('speed')).toEqual([])
   })
 
   test('the Tests job is named Tests and always runs', () => {
@@ -101,7 +102,7 @@ describe('job graph', () => {
 
 describe('token scope', () => {
   test('no write permission on plan, linux or macos', () => {
-    for (const name of ['plan', 'linux', 'macos']) {
+    for (const name of ['plan', 'linux', 'macos', 'speed']) {
       expect(Object.values(effectivePermissions(name)).filter(level => level === 'write')).toEqual([])
     }
   })
@@ -140,7 +141,8 @@ describe('the Tests job', () => {
 
   test('passes the jobs-ok expression to verdict and keeps its exit code for last', () => {
     const verdict = steps('tests').find(step => step.run?.includes('cli.ts verdict'))!
-    expect(verdict.run).toContain(`--jobs-ok ${JOBS_OK}`)
+    expect(verdict.env?.JOBS_OK).toBe(JOBS_OK)
+    expect(verdict.run).toContain('--jobs-ok "$JOBS_OK" --speed speed')
     expect((verdict as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBe(true)
 
     const verdictIndex = steps('tests').indexOf(verdict)
@@ -222,13 +224,51 @@ describe('artifacts', () => {
     expect(named('linux')).toEqual(['test-results-linux-${{ matrix.shard }}'])
     expect(named('macos')).toEqual(['test-results-macos'])
     expect(named('tests')).toEqual(['test-baseline-${{ github.sha }}'])
+    expect(named('speed')).toEqual(['speed-run', 'speed-baseline-${{ github.sha }}'])
   })
 
   test('everything but the baseline keeps one day', () => {
     for (const { step } of uploads) {
-      const baseline = String(step.with?.name).startsWith('test-baseline-')
-      expect(step.with?.['retention-days']).toBe(baseline ? 14 : 1)
+      const retained = /^(test-baseline-|speed-)/.test(String(step.with?.name))
+      expect(step.with?.['retention-days']).toBe(retained ? 14 : 1)
     }
+  })
+})
+
+describe('speed evidence', () => {
+  test('uses a dedicated macOS runner and sequential smoke then benchmark', () => {
+    expect(jobs.speed).toMatchObject({ 'runs-on': 'macos-15', 'timeout-minutes': 30 })
+    expect(jobs.speed!.if).toBeUndefined()
+    const commands = runs('speed').join('\n')
+    expect(commands).toContain('bun install --frozen-lockfile')
+    expect(commands).toContain('bun node_modules/playwright/cli.js install chromium')
+    expect(commands).toContain('bun test scripts/speed/run.e2e.test.ts')
+    expect(commands).toContain('bun scripts/speed.ts --out speed --samples 20')
+    expect(commands.indexOf('bun test scripts/speed/run.e2e.test.ts')).toBeLessThan(commands.indexOf('bun scripts/speed.ts --out speed --samples 20'))
+    expect(commands).not.toContain('run-shard')
+    expect(effectivePermissions('speed')).toEqual({ contents: 'read', actions: 'read' })
+  })
+
+  test('always retains partial evidence and publishes only qualified main evidence', () => {
+    const evidence = steps('speed').find(step => step.with?.name === 'speed-run')!
+    expect(evidence.if).toBe('always()')
+    const baseline = steps('speed').find(step => String(step.with?.name).startsWith('speed-baseline-'))!
+    expect(String(baseline.if)).toContain("github.event_name == 'push'")
+    expect(String(baseline.if)).toContain("steps.qualify.outputs.qualified == 'true'")
+    expect(baseline.with?.path).toBe('speed/report.json')
+    const qualify = steps('speed').find(step => step.id === 'qualify')!
+    expect(qualify.run).toContain('validateReport')
+    expect(qualify.run).toContain('qualified')
+  })
+
+  test('keeps speed downloads advisory and outside unit results, with main summaries', () => {
+    const download = steps('tests').find(step => step.with?.pattern === 'speed-run')!
+    expect(download.with?.path).toBe('speed')
+    expect((download as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBe(true)
+    const summary = steps('tests').find(step => step.run?.includes('cat out/comment.md'))!
+    expect(summary.if).toBe('always()')
+    expect(steps('speed').some(step => step.run?.includes('scripts/speed/ci.ts compare'))).toBe(true)
+    expect(allRuns.filter(script => script.includes('gh api --method POST'))).toHaveLength(1)
   })
 })
 

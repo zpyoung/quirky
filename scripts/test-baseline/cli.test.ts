@@ -3,6 +3,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { bunTestFile } from '../suite'
+import { BUDGETS, METRICS, type SpeedReport } from '../speed/contracts'
+import { compareReports } from '../speed/report'
 import { type Context, runCli } from './cli'
 import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, Selection, TestStatus, Verdict } from './types'
 
@@ -800,6 +802,61 @@ describe('verdict', () => {
   })
 })
 
+describe('advisory speed evidence', () => {
+  for (const fails of [false, true]) {
+    for (const evidence of ['missing', 'malformed', 'failed', 'cancelled']) {
+      test(`${evidence} speed does not change ${fails ? 'failing' : 'passing'} unit verdict`, async () => {
+        const planDir = dirOf('plan')
+        const inDir = dirOf('results')
+        const outDir = dirOf('out')
+        const speed = dirOf('speed')
+        writePlan(planDir, planOf())
+        writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+        if (evidence === 'malformed') writeFileSync(join(speed, 'report.json'), '{')
+        if (evidence === 'failed' || evidence === 'cancelled') writeFileSync(join(speed, 'comparison.json'), JSON.stringify({ status: 'error', reason: evidence }))
+        const h = harness(dirOf('cwd'))
+        const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], h.ctx)
+        expect(code).toBe(fails ? 1 : 0)
+        const verdict = readJson<Verdict>(join(outDir, 'verdict.json'))
+        expect(verdict.runBroken).toBe(false)
+        const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+        expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+        expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+        expect(comment).toContain('not measured:')
+      })
+    }
+  }
+  for (const fails of [false, true]) {
+    test(`a valid speed regression remains advisory with ${fails ? 'failing' : 'passing'} units`, async () => {
+      const planDir = dirOf('plan')
+      const inDir = dirOf('results')
+      const outDir = dirOf('out')
+      const speed = dirOf('speed')
+      writePlan(planDir, planOf({ head: sha(8) }))
+      writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+      const current: SpeedReport = {
+        version: 1, commit: sha(9), runId: '123', createdAt: NOW.toISOString(), status: 'complete', qualified: true,
+        profile: { workloadVersion: 1, worktrees: 10, terminals: 20, diffAddedLines: 5000, renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context', floodChunkBytes: 65536, floodIntervalMs: 16, runner: 'macos-15', os: 'darwin', arch: 'arm64', cpuModel: 'CPU', cpuCount: 4, bun: '1.4.0', chromium: 'test', imageVersion: 'test' },
+        metrics: Object.fromEntries(METRICS.map(metric => [metric, { samplesMs: Array(20).fill(50.001), medianMs: 50.001, budgetMs: BUDGETS[metric], budgetMiss: 50.001 > BUDGETS[metric] }])) as SpeedReport['metrics'],
+        failures: [], cleanup: 'complete', evidence: { samples: 'samples.jsonl', diagnostics: [], misses: 'misses.json' },
+      }
+      const baseline = structuredClone(current)
+      baseline.commit = sha(1)
+      for (const metric of METRICS) baseline.metrics[metric] = { samplesMs: Array(20).fill(40), medianMs: 40, budgetMs: BUDGETS[metric], budgetMiss: 40 > BUDGETS[metric] }
+      const comparison = { ...compareReports(current, baseline), provenance: { repository: 'acme/quirky', commit: baseline.commit, artifactId: 3, event: 'push', workflowPath: '.github/workflows/tests.yml' } }
+      for (const [name, value] of Object.entries({ report: current, baseline, comparison })) writeFileSync(join(speed, `${name}.json`), JSON.stringify(value))
+      const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], harness(dirOf('cwd'), { env: { SPEED_HEAD: sha(9) } }).ctx)
+      expect(code).toBe(fails ? 1 : 0)
+      expect(readJson<Verdict>(join(outDir, 'verdict.json')).runBroken).toBe(false)
+      const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+      expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+      expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+      expect(comment).toContain('REGRESSION')
+      expect(comment).toContain(fails ? '## Tests failed' : '## Tests passed')
+    })
+  }
+})
+
 describe('verdict without bun install', () => {
   const HERE = import.meta.dir
   const staticImports = (source: string) =>
@@ -807,8 +864,8 @@ describe('verdict without bun install', () => {
 
   test('cli.ts statically imports only node built-ins and dependency-free modules', () => {
     const specs = staticImports(readFileSync(join(HERE, 'cli.ts'), 'utf8'))
-    const allowed = new Set(['./baseline', './compare', './issues', './report', './select', './shards'])
-    for (const spec of specs) expect(spec.startsWith('node:') || allowed.has(spec)).toBe(true)
+    const allowed: Record<string, true> = { './baseline': true, './compare': true, './issues': true, './report': true, './select': true, './shards': true, '../speed/ci': true }
+    for (const spec of specs) expect(spec.startsWith('node:') || allowed[spec] === true).toBe(true)
     expect(specs).not.toContain('./runner')
     expect(specs).not.toContain('./graph')
     expect(specs.some((spec) => spec.includes('suite'))).toBe(false)
@@ -827,6 +884,9 @@ describe('verdict without bun install', () => {
     const lib = join(dirOf('lib'), 'scripts', 'test-baseline')
     mkdirSync(lib, { recursive: true })
     for (const name of ['cli', 'baseline', 'compare', 'issues', 'report', 'select', 'shards', 'types']) copyFileSync(join(HERE, `${name}.ts`), join(lib, `${name}.ts`))
+    const speedLib = join(lib, '..', 'speed')
+    mkdirSync(speedLib)
+    for (const name of ['ci', 'contracts', 'report']) copyFileSync(join(HERE, '..', 'speed', `${name}.ts`), join(speedLib, `${name}.ts`))
     const planDir = dirOf('plan')
     const inDir = dirOf('in')
     const outDir = join(dirOf('o'), 'verdict')

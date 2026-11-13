@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BaselineUnavailable, buildBaseline, fetchBaseline, findBaseline, findBaselines } from './baseline'
+import type { BaselineArtifact } from './baseline'
 import type { Attempt, Baseline, FileResult, GhRunner } from './types'
 
 const REPO = 'acme/quirky'
@@ -19,16 +20,41 @@ function commit(cwd: string, message: string): string {
   return git(cwd, 'rev-parse', 'HEAD')
 }
 
-type WorkflowRun = { id: number; repository_id: number; head_repository_id: number; head_branch: string; head_sha: string }
+type WorkflowRun = {
+  id: number
+  repository_id: number
+  head_repository_id: number
+  head_branch: string
+  head_sha: string
+  event?: string
+  path?: string
+}
 type Artifact = { id: number; name: string; expired?: boolean; created_at?: string; workflow_run?: Partial<WorkflowRun> | null }
 
 function legitRun(name: string): WorkflowRun {
-  return { id: 1, repository_id: 10, head_repository_id: 10, head_branch: 'main', head_sha: name.replace(/^test-baseline-/, '') }
+  const commit = /-([0-9a-f]{40})$/.exec(name)?.[1] ?? ''
+  return { id: 1, repository_id: 10, head_repository_id: 10, head_branch: 'main', head_sha: commit }
 }
 
 function fakeGh(artifacts: Artifact[], calls: string[][] = []): GhRunner {
   return async (args) => {
     calls.push(args)
+    const runPath = args.find((arg) => /\/actions\/runs\/\d+$/.test(arg))
+    if (runPath) {
+      const runId = Number(runPath.slice(runPath.lastIndexOf('/') + 1))
+      const artifact = artifacts.find((candidate) => candidate.workflow_run?.id === runId)
+      if (!artifact) throw new Error(`unexpected run metadata request: ${runPath}`)
+      const run = { ...legitRun(artifact.name), ...artifact.workflow_run }
+      return JSON.stringify({
+        id: run.id,
+        event: run.event,
+        path: run.path,
+        head_branch: run.head_branch,
+        head_sha: run.head_sha,
+        repository: { id: run.repository_id },
+        head_repository: { id: run.head_repository_id },
+      })
+    }
     return artifacts
       .map((a) => {
         const entry: Record<string, unknown> = { id: a.id, name: a.name, expired: a.expired ?? false, created_at: a.created_at ?? '2026-10-01T00:00:00Z' }
@@ -36,6 +62,24 @@ function fakeGh(artifacts: Artifact[], calls: string[][] = []): GhRunner {
         return JSON.stringify(entry)
       })
       .join('\n')
+  }
+}
+
+type SpeedEvidence = { commit: string; marker: string }
+const TESTS_WORKFLOW = '.github/workflows/tests.yml'
+
+function speedArtifact(maxJsonBytes?: number): BaselineArtifact<SpeedEvidence> {
+  return {
+    name: /^speed-baseline-([0-9a-f]{40})$/,
+    entry: 'report.json',
+    cacheNamespace: 'speed-baseline',
+    validate(value): SpeedEvidence | null {
+      if (!value || typeof value !== 'object') return null
+      const record = value as Record<string, unknown>
+      return typeof record.commit === 'string' && typeof record.marker === 'string' ? { commit: record.commit, marker: record.marker } : null
+    },
+    ...(maxJsonBytes === undefined ? {} : { maxJsonBytes }),
+    source: { event: 'push', workflowPath: TESTS_WORKFLOW },
   }
 }
 
@@ -249,6 +293,141 @@ describe('findBaselines', () => {
   test('is empty when nothing matches', async () => {
     const { dir, branch } = makeRepo()
     expect(await findBaselines({ cwd: dir, head: branch[1], repo: REPO, gh: fakeGh([]) }, 5)).toEqual([])
+  })
+})
+
+describe('artifact descriptors', () => {
+  test('filters source provenance before selecting the newest artifact for a commit', async () => {
+    const { dir, main, branch } = makeRepo()
+    const descriptor = speedArtifact()
+    const calls: string[][] = []
+    const gh = fakeGh([
+      { id: 11, name: `speed-baseline-${main[2]}`, created_at: '2026-10-01T00:00:00Z', workflow_run: { id: 101, event: 'push', path: TESTS_WORKFLOW } },
+      { id: 12, name: `speed-baseline-${main[2]}`, created_at: '2026-10-03T00:00:00Z', workflow_run: { id: 102, event: 'push', path: TESTS_WORKFLOW } },
+      { id: 13, name: `speed-baseline-${main[2]}`, created_at: '2026-10-04T00:00:00Z', workflow_run: { id: 103, event: 'push', path: '.github/workflows/other.yml' } },
+      { id: 14, name: `speed-baseline-${main[2]}`, created_at: '2026-10-05T00:00:00Z', workflow_run: { id: 104, event: 'pull_request', path: TESTS_WORKFLOW } },
+      { id: 15, name: `speed-baseline-${main[2]}`, created_at: '2026-10-06T00:00:00Z', workflow_run: { id: 105, event: 'push', path: TESTS_WORKFLOW, head_repository_id: 99 } },
+    ], calls)
+
+    expect(await findBaseline({
+      cwd: dir,
+      head: branch[1],
+      repo: REPO,
+      gh,
+      artifact: { name: descriptor.name, source: descriptor.source },
+    })).toEqual({ commit: main[2], artifactId: 12 })
+    expect(calls.filter((args) => args.some((arg) => arg.includes('/actions/runs/')))).toHaveLength(5)
+    expect(calls.some((args) => args.some((arg) => arg === `repos/${REPO}/actions/runs/102`))).toBe(true)
+  })
+  test('checks each named SHA even when artifacts share a workflow run ID', async () => {
+    const { dir, main, branch } = makeRepo()
+    const calls: string[][] = []
+    const descriptor = speedArtifact()
+    const gh = fakeGh([
+      { id: 21, name: `speed-baseline-${main[2]}`, workflow_run: { id: 201, event: 'push', path: TESTS_WORKFLOW } },
+      { id: 22, name: `speed-baseline-${main[1]}`, workflow_run: { id: 201, event: 'push', path: TESTS_WORKFLOW } },
+    ], calls)
+
+    expect(await findBaselines({
+      cwd: dir,
+      head: branch[1],
+      repo: REPO,
+      gh,
+      artifact: { name: descriptor.name, source: descriptor.source },
+    }, 10)).toEqual([{ commit: main[2], artifactId: 21 }])
+    expect(calls.filter((args) => args.some((arg) => arg.includes('/actions/runs/')))).toHaveLength(2)
+  })
+
+})
+
+describe('fetchBaseline with artifact descriptors', () => {
+  let dir: string
+  let scratch: string
+  beforeAll(() => {
+    dir = makeRepo().dir
+    scratch = mkdtempSync(join(root, 'descriptor-fetch-'))
+  })
+
+  function downloader(zip: string, seen: string[] = []) {
+    return async (_args: string[], dest: string) => {
+      seen.push(dest)
+      writeFileSync(dest, readFileSync(zip))
+    }
+  }
+
+  test('reads the descriptor entry and keeps speed and unit caches separate', async () => {
+    const found = { commit: sha(23), artifactId: 87 }
+    const speed = { commit: found.commit, marker: 'speed' }
+    const speedZip = zipOf(scratch, JSON.stringify(speed), 'report.json')
+    const speedCalls: string[] = []
+    expect(await fetchBaseline(found, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(speedZip, speedCalls),
+    })).toEqual(speed)
+
+    const unit = sampleBaseline(found.commit)
+    const unitZip = zipOf(scratch, JSON.stringify(unit))
+    expect(await fetchBaseline(found, { cwd: dir, repo: REPO, download: downloader(unitZip) })).toEqual(unit)
+
+    const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    expect(JSON.parse(readFileSync(join(common, 'speed-baseline', `${found.commit}.json`), 'utf8'))).toEqual(speed)
+    expect(JSON.parse(readFileSync(join(common, 'test-baseline', `${found.commit}.json`), 'utf8'))).toEqual(unit)
+    await expect(fetchBaseline(found, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: async () => { throw new Error('valid descriptor cache should be reused') },
+    })).resolves.toEqual(speed)
+  })
+
+  test('revalidates descriptor caches and rejects downloaded values with a different SHA', async () => {
+    const found = { commit: sha(24), artifactId: 88 }
+    const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    const cacheDir = join(common, 'speed-baseline')
+    mkdirSync(cacheDir, { recursive: true })
+    writeFileSync(join(cacheDir, `${found.commit}.json`), JSON.stringify({ commit: found.commit, marker: 12 }))
+    const speed = { commit: found.commit, marker: 'refetched' }
+    const downloads: string[] = []
+    expect(await fetchBaseline(found, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(zipOf(scratch, JSON.stringify(speed), 'report.json'), downloads),
+    })).toEqual(speed)
+    expect(downloads).toHaveLength(1)
+
+    const foundWithWrongCachedSha = { commit: sha(30), artifactId: 91 }
+    writeFileSync(join(cacheDir, `${foundWithWrongCachedSha.commit}.json`), JSON.stringify({ commit: sha(31), marker: 'stale' }))
+    const refetched = { commit: foundWithWrongCachedSha.commit, marker: 'sha-agreed' }
+    expect(await fetchBaseline(foundWithWrongCachedSha, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(zipOf(scratch, JSON.stringify(refetched), 'report.json')),
+    })).toEqual(refetched)
+
+    const wrongSha = { commit: sha(25), marker: 'wrong' }
+    await expect(fetchBaseline({ commit: sha(26), artifactId: 89 }, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(),
+      download: downloader(zipOf(scratch, JSON.stringify(wrongSha), 'report.json')),
+    })).rejects.toBeInstanceOf(BaselineUnavailable)
+  })
+
+  test('stops reading descriptor JSON as soon as the decompressed size limit is exceeded', async () => {
+    const found = { commit: sha(27), artifactId: 90 }
+    const zip = zipOf(scratch, JSON.stringify({ commit: found.commit, marker: 'x'.repeat(2048) }), 'report.json')
+    await expect(fetchBaseline(found, {
+      cwd: dir,
+      repo: REPO,
+      artifact: speedArtifact(128),
+      download: downloader(zip),
+    })).rejects.toBeInstanceOf(BaselineUnavailable)
+    const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    expect(existsSync(join(common, 'speed-baseline', `${found.commit}.json`))).toBe(false)
   })
 })
 

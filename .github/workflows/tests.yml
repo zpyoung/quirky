@@ -154,9 +154,73 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  speed:
+    name: Speed
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    env:
+      QUIRKY_SPEED_RUNNER: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+      - run: bun node_modules/playwright/cli.js install chromium
+
+      - name: Isolate speed checks
+        run: echo "QUIRKY_HOME=$(mktemp -d)" >> "$GITHUB_ENV"
+
+      - name: Check real-daemon smoke
+        run: bun test scripts/speed/run.e2e.test.ts
+
+      - name: Measure speed
+        run: bun scripts/speed.ts --out speed --samples 20
+
+      - name: Compare speed
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bun scripts/speed/ci.ts compare --current speed/report.json --out speed --event "$EVENT_NAME" --head "$HEAD_SHA"
+
+      - name: Qualify speed baseline
+        id: qualify
+        if: always()
+        env:
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          bun -e 'import { validateReport } from "./scripts/speed/report.ts"; let r = null; try { r = validateReport(await Bun.file("speed/report.json").json()) } catch {} console.log(`qualified=${r?.qualified === true && r.status === "complete" && r.cleanup === "complete" && r.commit === process.env.HEAD_SHA}`)' >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: speed-run
+          path: speed/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.qualify.outputs.qualified == 'true'
+        with:
+          name: speed-baseline-${{ github.sha }}
+          path: speed/report.json
+          retention-days: 14
+          if-no-files-found: error
+
   tests:
     name: Tests
-    needs: [plan, linux, macos]
+    needs: [plan, linux, macos, speed]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -183,12 +247,22 @@ jobs:
           path: results
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: speed-run
+          path: speed
+          merge-multiple: true
+
       - name: Judge the run
         id: verdict
         continue-on-error: true
+        env:
+          JOBS_OK: ${{ needs.plan.result != 'failure' && needs.plan.result != 'cancelled' && needs.linux.result != 'failure' && needs.linux.result != 'cancelled' && needs.macos.result != 'failure' && needs.macos.result != 'cancelled' }}
+          SPEED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           mkdir -p plan results out
-          bun scripts/test-baseline/cli.ts verdict --plan plan --in results --out out --jobs-ok ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+          bun scripts/test-baseline/cli.ts verdict --plan plan --in results --out out --jobs-ok "$JOBS_OK" --speed speed
 
       - name: Ensure a comment exists
         if: always()
@@ -199,7 +273,7 @@ jobs:
           fi
 
       - name: Write the step summary
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         run: cat out/comment.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Update the pull request comment
