@@ -11,6 +11,9 @@ import { installGoalLoopNetworkGuard } from './goal-loop-network'
 const COMMAND_TIMEOUT_MS = 15_000
 const STARTUP_TIMEOUT_MS = 30_000
 const PROCESS_CHECK_TIMEOUT_MS = 250
+const CLEANUP_DEFAULT_TIMEOUT_MS = 10_000
+const PROCESS_REAP_TIMEOUT_MS = 2_000
+const STREAM_DRAIN_TIMEOUT_MS = 500
 const MAX_DIAGNOSTIC_BYTES = 8 * 1024
 const PLUGIN_IDS = [
   'quirky.repo', 'quirky.cli', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal',
@@ -21,6 +24,7 @@ const ISOLATED_PATH_DIRECTORIES = ['/usr/bin', '/bin', '/usr/sbin', '/sbin']
 export type GoalLoopLogName = 'omp' | 'omp-input' | 'codex' | 'agy' | 'security' | 'orca' | 'egress'
 export type GoalLoopCliResult = { exitCode: number; stdout: string; stderr: string }
 export type GoalLoopCliOptions = { signal?: AbortSignal; timeoutMs?: number }
+export type GoalLoopWorldCleanupOptions = { signal?: AbortSignal; deadline?: number }
 export type GoalLoopWorldHooks = {
   beforeStart?: (world: GoalLoopWorld) => Promise<void> | void
   afterReady?: (world: GoalLoopWorld) => Promise<void> | void
@@ -53,10 +57,10 @@ export type GoalLoopWorld = {
   start(): Promise<void>
   cli(args: string[], options?: GoalLoopCliOptions): Promise<GoalLoopCliResult>
   readLog(name: GoalLoopLogName): Promise<string>
-  cleanup(): Promise<void>
+  cleanup(options?: GoalLoopWorldCleanupOptions): Promise<void>
 }
 
-type DiagnosticCapture = { done: Promise<void>; text(): string }
+type DiagnosticCapture = { done: Promise<void>; cancel(): Promise<void>; text(): string }
 type OwnedProcess = Bun.Subprocess<'ignore', 'pipe', 'pipe'>
 
 function errorText(error: unknown): string {
@@ -80,9 +84,10 @@ function tailDiagnostic(current: string, added: string): string {
 
 function captureTail(stream: ReadableStream<Uint8Array> | null): DiagnosticCapture {
   let value = ''
+  let settled = false
+  const reader = stream?.getReader()
   const done = (async () => {
-    if (!stream) return
-    const reader = stream.getReader()
+    if (!reader) return
     const decoder = new TextDecoder()
     try {
       for (;;) {
@@ -92,10 +97,39 @@ function captureTail(stream: ReadableStream<Uint8Array> | null): DiagnosticCaptu
       }
       value = tailDiagnostic(value, decoder.decode())
     } finally {
+      settled = true
       reader.releaseLock()
     }
   })()
-  return { done, text: () => value }
+  void done.catch(() => undefined)
+  return {
+    done,
+    async cancel() {
+      if (!reader || settled) return
+      await reader.cancel()
+    },
+    text: () => value
+  }
+}
+
+async function settlesBeforeDeadline(promise: Promise<unknown>, deadline: number, signal?: AbortSignal): Promise<boolean> {
+  const settled = promise.then(() => true, () => true)
+  const remaining = deadline - Date.now()
+  if (remaining <= 0 || signal?.aborted) return false
+  const { promise: timeout, resolve: resolveTimeout } = Promise.withResolvers<void>()
+  const timer = setTimeout(resolveTimeout, remaining)
+  const abortWait = Promise.withResolvers<void>()
+  const onAbort = () => abortWait.resolve()
+  signal?.addEventListener('abort', onAbort, { once: true })
+  if (signal?.aborted) onAbort()
+  try {
+    const waits = [settled, timeout.then(() => false)]
+    if (signal) waits.push(abortWait.promise.then(() => false))
+    return await Promise.race(waits)
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onAbort)
+  }
 }
 
 function ownImplicitProcessCalls(env: Record<string, string>): () => void {
@@ -106,7 +140,7 @@ function ownImplicitProcessCalls(env: Record<string, string>): () => void {
       if (!Array.isArray(command)) throw new Error('owned process calls must use executable argv')
       const supplied = options && typeof options === 'object' ? options : {}
       const childEnv = 'env' in supplied ? supplied.env : env
-      return Reflect.apply(target, receiver, [command, { ...supplied, env: childEnv }])
+      return Reflect.apply(target, receiver, [command, { timeout: PROCESS_CHECK_TIMEOUT_MS, ...supplied, env: childEnv }])
     }
   })
   return () => { Bun.spawnSync = original }
@@ -296,14 +330,35 @@ function readPtyPid(home: string): number | undefined {
 
 type PtyHostIdentity = { started: string; command: string }
 
-function readPtyHostIdentity(pid: number, entry: string, env: Record<string, string>): PtyHostIdentity | undefined {
-  const result = Bun.spawnSync(['ps', '-p', String(pid), '-o', 'lstart=,command='], { env, stdout: 'pipe', stderr: 'ignore' })
-  if (result.exitCode !== 0) return undefined
+function readPtyHostIdentity(pid: number, entry: string, env: Record<string, string>, timeoutMs = PROCESS_CHECK_TIMEOUT_MS): PtyHostIdentity | undefined {
+  if (timeoutMs <= 0) throw new CliWorldError('deadline', 'owned PTY inspection exceeded its deadline')
+  const result = Bun.spawnSync(['ps', '-p', String(pid), '-o', 'lstart=,command='], {
+    env, stdout: 'pipe', stderr: 'ignore', timeout: Math.max(1, Math.floor(timeoutMs))
+  })
+  if (result.exitCode === 1 && result.stdout.length === 0) return undefined
+  if (result.exitCode !== 0) throw new CliWorldError('process-inspection', 'owned PTY inspection failed or timed out')
   const columns = result.stdout.toString().trim().split(/\s+/)
-  if (columns.length < 6) return undefined
+  if (columns.length < 6) throw new CliWorldError('process-inspection', 'owned PTY inspection returned incomplete identity')
   const started = columns.slice(0, 5).join(' ')
   const command = columns.slice(5).join(' ')
   return command.includes(entry) ? { started, command } : undefined
+}
+
+async function waitForPtyExit(
+  pid: number,
+  expected: PtyHostIdentity,
+  entry: string,
+  env: Record<string, string>,
+  deadline: number,
+  signal?: AbortSignal
+): Promise<boolean> {
+  while (!signal?.aborted && Date.now() < deadline) {
+    const current = readPtyHostIdentity(pid, entry, env, Math.min(PROCESS_CHECK_TIMEOUT_MS, deadline - Date.now()))
+    if (!current || current.started !== expected.started || current.command !== expected.command) return true
+    const remaining = deadline - Date.now()
+    if (remaining > 0) await Bun.sleep(Math.min(25, remaining))
+  }
+  return false
 }
 
 function redactDiagnostic(text: string, root: string, tokens: readonly string[]): string {
@@ -443,40 +498,140 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
     return promise
   }
 
-  const cleanupResources = (): Promise<void> => {
+  const cleanupResources = (cleanupOptions: GoalLoopWorldCleanupOptions = {}): Promise<void> => {
     if (cleanupPromise) return cleanupPromise
     closed = true
     if (activeTurnTimer) clearInterval(activeTurnTimer)
     activeTurnTimer = undefined
     cleanupPromise = (async () => {
-      let cleanupError: string | undefined
+      const deadline = cleanupOptions.deadline ?? options.deadline ?? Date.now() + CLEANUP_DEFAULT_TIMEOUT_MS
+      const signal = cleanupOptions.signal
+      const cleanupErrors: string[] = []
       const ptyPid = readPtyPid(root)
       const ptyIdentity = ptyPid ? readPtyHostIdentity(ptyPid, paths.ptyBootstrapEntry, env) : undefined
       if (ptyPid && ptyIdentity) scope.track(ptyPid)
-      try {
-        await scope.cleanup()
-      } catch (error) {
-        cleanupError = errorText(error)
-        try { scope.killNow() } catch (killError) { cleanupError += `; force cleanup failed: ${errorText(killError)}` }
-      }
-      if (daemon && daemon.exitCode === null) {
-        const exited = await Promise.race([daemon.exited.then(() => true), Bun.sleep(2_000).then(() => false)])
-        if (!exited) cleanupError = [cleanupError, 'owned daemon did not exit after process-scope cleanup'].filter(Boolean).join('; ')
-      }
-      const remainingPty = ptyPid && ptyIdentity ? readPtyHostIdentity(ptyPid, paths.ptyBootstrapEntry, env) : undefined
-      if (ptyIdentity && remainingPty?.started === ptyIdentity.started && remainingPty.command === ptyIdentity.command) {
-        cleanupError = [cleanupError, `owned PTY host ${ptyPid} did not exit after process-scope cleanup`].filter(Boolean).join('; ')
-      }
-      await Promise.allSettled([daemonStdout?.done, daemonStderr?.done].filter((promise): promise is Promise<void> => !!promise))
-      if (!cleanupError) {
+      const forcePtyHost = () => {
+        if (!ptyPid || !ptyIdentity) return
+        let current: PtyHostIdentity | undefined
         try {
-          rmSync(root, { recursive: true, force: true })
-          if (existsSync(root)) cleanupError = 'owned root remains after removal'
+          current = readPtyHostIdentity(ptyPid, paths.ptyBootstrapEntry, env)
         } catch (error) {
-          cleanupError = errorText(error)
+          cleanupErrors.push(`owned PTY identity check failed: ${errorText(error)}`)
+          return
         }
+        if (!current || current.started !== ptyIdentity.started || current.command !== ptyIdentity.command) return
+        try {
+          process.kill(ptyPid, 'SIGKILL')
+        } catch {}
       }
-      if (cleanupError) throw new CliWorldError('cleanup-failed', redactDiagnostic(cleanupError, root, tokens))
+      let forceRequested = false
+      const forceOwnedScope = () => {
+        if (forceRequested) return
+        forceRequested = true
+        try {
+          scope.killNow()
+        } catch (error) {
+          cleanupErrors.push(`force process-scope cleanup failed: ${errorText(error)}`)
+        }
+        if (daemon && daemon.exitCode === null) {
+          try {
+            daemon.kill('SIGKILL')
+          } catch (error) {
+            cleanupErrors.push(`force owned daemon cleanup failed: ${errorText(error)}`)
+          }
+        }
+        forcePtyHost()
+      }
+      const onAbort = () => forceOwnedScope()
+      signal?.addEventListener('abort', onAbort, { once: true })
+      // leave time to observe exits after forced termination
+      const deadlineTimer = setTimeout(forceOwnedScope, Math.max(0, deadline - Date.now() - PROCESS_REAP_TIMEOUT_MS))
+      let scopeReaped = false
+      try {
+        if (signal?.aborted || Date.now() >= deadline) forceOwnedScope()
+        try {
+          const scopeCleanup = scope.cleanup()
+          if (!(await settlesBeforeDeadline(scopeCleanup, deadline, signal))) {
+            cleanupErrors.push('process-scope cleanup exceeded the final teardown deadline')
+            forceOwnedScope()
+          } else {
+            await scopeCleanup
+            scopeReaped = true
+          }
+        } catch (error) {
+          cleanupErrors.push(`process-scope cleanup failed: ${errorText(error)}`)
+          forceOwnedScope()
+        }
+
+        const daemonExited = daemon
+          ? daemon.exited.then(() => true, () => false)
+          : Promise.resolve(true)
+        const ptyExited = ptyPid && ptyIdentity
+          ? waitForPtyExit(ptyPid, ptyIdentity, paths.ptyBootstrapEntry, env, deadline, signal)
+              .catch((error) => {
+                cleanupErrors.push(`owned PTY reaping failed: ${errorText(error)}`)
+                return false
+              })
+          : Promise.resolve(true)
+        let daemonReaped = false
+        let ptyReaped = false
+        const reaping = Promise.all([daemonExited, ptyExited]).then(([daemonDone, ptyDone]) => {
+          daemonReaped = daemonDone
+          ptyReaped = ptyDone
+        })
+        const reapGraceDeadline = Math.min(deadline, Date.now() + PROCESS_REAP_TIMEOUT_MS)
+        if (!(await settlesBeforeDeadline(reaping, reapGraceDeadline, signal))) {
+          forceOwnedScope()
+          if (!(await settlesBeforeDeadline(reaping, deadline, signal))) {
+            cleanupErrors.push('owned daemon or PTY host did not finish reaping before the hard deadline')
+            forceOwnedScope()
+          }
+        }
+        if (!daemonReaped || !ptyReaped) forceOwnedScope()
+        if (!daemonReaped) cleanupErrors.push('owned daemon did not exit')
+        if (!ptyReaped) cleanupErrors.push(`owned PTY host ${ptyPid} did not exit`)
+
+        const captures = [daemonStdout, daemonStderr].filter((capture): capture is DiagnosticCapture => !!capture)
+        let drainResults: PromiseSettledResult<void>[] | undefined
+        const drains = Promise.allSettled(captures.map((capture) => capture.done)).then((results) => { drainResults = results })
+        const drainDeadline = Math.min(deadline, Date.now() + STREAM_DRAIN_TIMEOUT_MS)
+        if (!(await settlesBeforeDeadline(drains, drainDeadline, signal))) {
+          forceOwnedScope()
+          let cancellations: PromiseSettledResult<void>[] | undefined
+          const cancelling = Promise.allSettled(captures.map((capture) => capture.cancel())).then((results) => { cancellations = results })
+          if (!(await settlesBeforeDeadline(cancelling, deadline, signal))) {
+            cleanupErrors.push('daemon output cancellation was not confirmed before the hard deadline')
+          }
+          for (const cancellation of cancellations ?? []) {
+            if (cancellation.status === 'rejected') cleanupErrors.push(`daemon output cancellation failed: ${errorText(cancellation.reason)}`)
+          }
+        }
+        if (!(await settlesBeforeDeadline(drains, deadline, signal))) {
+          cleanupErrors.push('daemon output drain was not confirmed before the hard deadline')
+        }
+        for (const result of drainResults ?? []) {
+          if (result.status === 'rejected') cleanupErrors.push(`daemon output drain failed: ${errorText(result.reason)}`)
+        }
+        if (signal?.aborted || Date.now() >= deadline) cleanupErrors.push('owned world cleanup exceeded the hard deadline')
+
+        const resourcesReaped = scopeReaped && daemonReaped && ptyReaped && drainResults !== undefined && drainResults.every((result) => result.status === 'fulfilled')
+        if (resourcesReaped) {
+          try {
+            rmSync(root, { recursive: true, force: true })
+            if (existsSync(root)) cleanupErrors.push('owned root remains after removal')
+          } catch (error) {
+            cleanupErrors.push(errorText(error))
+          }
+        } else {
+          cleanupErrors.push('owned root retained because process teardown was not confirmed')
+        }
+        if (cleanupErrors.length > 0) {
+          throw new CliWorldError('cleanup-failed', redactDiagnostic(cleanupErrors.join('; '), root, tokens))
+        }
+      } finally {
+        clearTimeout(deadlineTimer)
+        signal?.removeEventListener('abort', onAbort)
+      }
     })()
     return cleanupPromise
   }

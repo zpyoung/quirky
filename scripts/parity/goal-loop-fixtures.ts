@@ -6,6 +6,7 @@ export type GoalLoopFixtureFaults = {
   missingAgent?: boolean
   malformedProvider?: boolean
   failedStartup?: boolean
+  delayedPrompt?: boolean
 }
 
 export type GoalLoopFixturePaths = {
@@ -20,6 +21,8 @@ export type GoalLoopFixturePaths = {
   codexLog: string
   codexEnvironmentLog: string
   ompLog: string
+  ompPromptArgvRelease: string
+  ompPromptTerminalRelease: string
   ompInputLog: string
   agyLog: string
   securityLog: string
@@ -78,6 +81,8 @@ export function installGoalLoopFixtures(home: string, faults: GoalLoopFixtureFau
   const codexEnvironmentLog = join(logs, 'codex-app-server-environments.jsonl')
   const ompLog = join(logs, 'omp-argv.jsonl')
   const ompInputLog = join(logs, 'omp-input.jsonl')
+  const ompPromptArgvRelease = join(logs, 'omp-prompt-argv.release')
+  const ompPromptTerminalRelease = join(logs, 'omp-prompt-terminal.release')
   const agyLog = join(logs, 'agy-argv.jsonl')
   const securityLog = join(logs, 'security.log')
   const orcaLog = join(logs, 'orca.log')
@@ -105,8 +110,23 @@ const argv = process.argv.slice(2)
 const sessionId = process.env.QUIRKY_SESSION_ID || ''
 const promptIndex = argv.indexOf('--prompt')
 const prompt = promptIndex >= 0 ? (argv[promptIndex + 1] || '') : [...argv].reverse().find((argument) => !argument.startsWith('-')) || ''
-fs.appendFileSync(argvLog, JSON.stringify({ sessionId, argv, prompt }) + '\\n')
-process.stdout.write('PROMPT:' + prompt + ':' + sessionId + '\\n')
+const delayedPrompt = ${JSON.stringify(faults.delayedPrompt === true)}
+function waitForRelease(path, action) {
+  const interval = setInterval(() => {
+    if (!fs.existsSync(path)) return
+    clearInterval(interval)
+    action()
+  }, 10)
+}
+function recordPrompt() {
+  if (delayedPrompt) {
+    waitForRelease(${JSON.stringify(ompPromptArgvRelease)}, () => fs.appendFileSync(argvLog, JSON.stringify({ sessionId, argv, prompt }) + '\\n'))
+    waitForRelease(${JSON.stringify(ompPromptTerminalRelease)}, () => process.stdout.write('PROMPT:' + prompt + ':' + sessionId + '\\n'))
+  } else {
+    fs.appendFileSync(argvLog, JSON.stringify({ sessionId, argv, prompt }) + '\\n')
+    process.stdout.write('PROMPT:' + prompt + ':' + sessionId + '\\n')
+  }
+}
 let input = ''
 function accept(rawLine) {
   const pasteStart = '\\x1b[200~'
@@ -130,6 +150,7 @@ function receive() {
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (chunk) => { input += chunk; receive() })
 process.stdin.on('end', () => { if (input) accept(input); process.exit(0) })
+recordPrompt()
 `)
   }
 
@@ -212,6 +233,8 @@ exit 44
     networkPreload,
     askSpec,
     worktreesRoot,
-    failedDaemonEntry
+    failedDaemonEntry,
+    ompPromptArgvRelease,
+    ompPromptTerminalRelease
   }
 }

@@ -38,6 +38,8 @@ export type GoalLoopRunOptions = {
 }
 
 const DEFAULT_DEADLINE_MS = 120_000
+const PRODUCT_CLEANUP_RESERVE_MAX_MS = 5_000
+const FINAL_TEARDOWN_RESERVE_MAX_MS = 10_000
 const CLI_TIMEOUT_MS = 15_000
 const STDERR_LIMIT_BYTES = 8 * 1024
 const STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
@@ -514,9 +516,20 @@ async function launchAgents(ctx: RunContext): Promise<Record<string, unknown>> {
     equal(snapshot.id, session.id, `${session.worktreeName} session ID`)
     equal(snapshot.kind, 'terminal', `${session.worktreeName} session kind`)
     equal(snapshot.worktreeId, worktree.id, `${session.worktreeName} session worktree`)
-    const argvPromptCount = promptRecords(await ctx.world.readLog('omp'), session.prompt!, session.id)
     const marker = `PROMPT:${session.prompt}:${session.id}`
-    const terminal = textFromTerminal(await cliJson(ctx, ['terminal', 'read', session.id, '--lines', '100']), `${session.worktreeName} prompt terminal`)
+    const argvLog = await poll(
+      ctx,
+      `${session.worktreeName} OMP argv prompt`,
+      () => ctx.world.readLog('omp'),
+      text => parseJsonLines(text, 'OMP argv log').some(record => record.sessionId === session.id && record.prompt === session.prompt)
+    )
+    const argvPromptCount = promptRecords(argvLog, session.prompt!, session.id)
+    const terminal = await poll(
+      ctx,
+      `${session.worktreeName} terminal prompt`,
+      async () => textFromTerminal(await cliJson(ctx, ['terminal', 'read', session.id, '--lines', '100']), `${session.worktreeName} prompt terminal`),
+      text => occurrences(text, marker) > 0
+    )
     const terminalCount = occurrences(terminal, marker)
     ensure(terminalCount === 1, `${session.worktreeName} terminal did not show its prompt marker exactly once`, 'missing-agent')
     evidence.push({
@@ -1004,15 +1017,15 @@ async function defaultStep(id: StepId, ctx: RunContext): Promise<Record<string, 
   }
 }
 
-async function cleanupProducts(ctx: RunContext, cleanupSignal: AbortSignal, cleanupDeadline: number): Promise<void> {
-  if (ctx.state.productsRemoved) return
-  if (!ctx.state.repoId && ctx.state.worktrees.length === 0 && ctx.state.sessions.length === 0 && ctx.state.tabs.length === 0 && ctx.state.loops.length === 0 && ctx.state.loopSessionIds.length === 0) return
+async function cleanupProducts(ctx: RunContext, cleanupSignal: AbortSignal, cleanupDeadline: number): Promise<boolean> {
+  if (ctx.state.productsRemoved) return false
+  if (!ctx.state.repoId && ctx.state.worktrees.length === 0 && ctx.state.sessions.length === 0 && ctx.state.tabs.length === 0 && ctx.state.loops.length === 0 && ctx.state.loopSessionIds.length === 0) return false
   const daemonPid = ctx.world.daemonPid
-  if (!Number.isSafeInteger(daemonPid) || daemonPid <= 0) return
+  if (!Number.isSafeInteger(daemonPid) || daemonPid <= 0) return false
   try {
     process.kill(daemonPid, 0)
   } catch {
-    return
+    return false
   }
   const errors: string[] = []
   const attempt = async (args: string[]): Promise<unknown | undefined> => {
@@ -1069,6 +1082,7 @@ async function cleanupProducts(ctx: RunContext, cleanupSignal: AbortSignal, clea
     }
   }
   if (errors.length > 0) throw new GoalLoopFailure('product-cleanup', errors.join('; '))
+  return true
 }
 
 function newStepResults(): StepResult[] {
@@ -1090,8 +1104,10 @@ export async function runGoalLoop(options: GoalLoopRunOptions = {}): Promise<Goa
   const startedAt = Date.now()
   const totalMs = options.deadlineMs ?? DEFAULT_DEADLINE_MS
   const deadlineAt = startedAt + Math.max(1, totalMs)
-  const cleanupReserve = Math.min(15_000, Math.max(1, Math.floor(totalMs * 0.15)))
-  const workDeadlineAt = deadlineAt - cleanupReserve
+  const productCleanupReserve = Math.min(PRODUCT_CLEANUP_RESERVE_MAX_MS, Math.max(1, Math.floor(totalMs * 0.1)))
+  const finalTeardownReserve = Math.min(FINAL_TEARDOWN_RESERVE_MAX_MS, Math.max(1, Math.floor(totalMs * 0.4)))
+  const productCleanupDeadline = deadlineAt - finalTeardownReserve
+  const workDeadlineAt = productCleanupDeadline - productCleanupReserve
   const controller = new AbortController()
   const forwardAbort = () => controller.abort(options.signal?.reason ?? new GoalLoopFailure('interrupted', 'Goal loop rehearsal interrupted'))
   options.signal?.addEventListener('abort', forwardAbort, { once: true })
@@ -1154,26 +1170,48 @@ export async function runGoalLoop(options: GoalLoopRunOptions = {}): Promise<Goa
     if (isObject(error) && typeof error.cleanupError === 'string') cleanupFailure = diagnostic(error.cleanupError, ctx)
   } finally {
     clearTimeout(workTimer)
-    const cleanupDeadline = deadlineAt
-    const cleanupController = new AbortController()
-    const cleanupTimer = setTimeout(() => cleanupController.abort(new GoalLoopFailure('deadline', 'Goal loop cleanup deadline exceeded')), Math.max(0, cleanupDeadline - Date.now()))
+    const recordCleanupFailure = (message: string) => {
+      cleanupFailure = cleanupFailure ? `${cleanupFailure}; ${message}` : message
+    }
+    const teardownController = new AbortController()
+    const teardownTimer = setTimeout(
+      () => teardownController.abort(new GoalLoopFailure('deadline', 'Goal loop final teardown deadline exceeded')),
+      Math.max(0, deadlineAt - Date.now())
+    )
     if (ctx && worldStarted) {
+      const productController = new AbortController()
+      const productTimer = setTimeout(
+        () => productController.abort(new GoalLoopFailure('deadline', 'Goal loop product cleanup deadline exceeded')),
+        Math.max(0, productCleanupDeadline - Date.now())
+      )
+      let productCleanupRan = false
       try {
-        await cleanupProducts(ctx, cleanupController.signal, cleanupDeadline)
+        productCleanupRan = await cleanupProducts(ctx, productController.signal, productCleanupDeadline)
       } catch (error) {
         const details = errorDetails(error, ctx)
-        cleanupFailure = details.message
+        recordCleanupFailure(details.message)
+      } finally {
+        clearTimeout(productTimer)
+      }
+      if (productCleanupRan && (productController.signal.aborted || Date.now() >= productCleanupDeadline) &&
+          !cleanupFailure?.includes('product cleanup deadline exceeded')) {
+        recordCleanupFailure('Goal loop product cleanup deadline exceeded')
       }
     }
     if (world) {
       try {
-        await world.cleanup()
+        await world.cleanup({ signal: teardownController.signal, deadline: deadlineAt })
       } catch (error) {
         const details = errorDetails(error, ctx)
-        cleanupFailure = cleanupFailure ? `${cleanupFailure}; ${details.message}` : details.message
+        recordCleanupFailure(details.message)
       }
     }
-    clearTimeout(cleanupTimer)
+    if (teardownController.signal.aborted || Date.now() >= deadlineAt) {
+      if (!cleanupFailure?.includes('final teardown deadline exceeded')) {
+        recordCleanupFailure('Goal loop final teardown deadline exceeded')
+      }
+    }
+    clearTimeout(teardownTimer)
     options.signal?.removeEventListener('abort', forwardAbort)
   }
   if (failedIndex >= 0) {

@@ -7,6 +7,144 @@ import { createGoalLoopWorld, type GoalLoopWorld } from './goal-loop-world'
 
 const faults = ['missing-agent', 'malformed-cli-json', 'cli-nonzero', 'missing-terminal-ack', 'provider-malformed', 'daemon-exited', 'deadline'] as const
 
+test('agent launch waits for delayed OMP argv and terminal observations exactly once', async () => {
+  let ownedRoot = ''
+  let argvReleaseSent = false
+  let terminalReleaseSent = false
+  const report = await runGoalLoop({
+    createWorld: async (options) => {
+      const world = await createGoalLoopWorld({ ...options, faults: { delayedPrompt: true } })
+      ownedRoot = world.root
+      const readLog = world.readLog.bind(world)
+      world.readLog = async (name) => {
+        const text = await readLog(name)
+        if (name === 'omp' && !argvReleaseSent) {
+          argvReleaseSent = true
+          writeFileSync(world.paths.ompPromptArgvRelease, 'release\\n', { mode: 0o600 })
+        }
+        return text
+      }
+      const cli = world.cli.bind(world)
+      world.cli = async (args, cliOptions) => {
+        const result = await cli(args, cliOptions)
+        if (args[0] === 'terminal' && args[1] === 'read' && !terminalReleaseSent) {
+          terminalReleaseSent = true
+          writeFileSync(world.paths.ompPromptTerminalRelease, 'release\\n', { mode: 0o600 })
+        }
+        return result
+      }
+      return world
+    }
+  })
+  expect(report.ok).toBe(true)
+  const launch = report.steps.find((step) => step.id === 'agents-launch')!
+  expect(launch.status).toBe('passed')
+  expect(argvReleaseSent).toBe(true)
+  expect(terminalReleaseSent).toBe(true)
+  const sessions = launch.evidence.sessions
+  expect(Array.isArray(sessions)).toBe(true)
+  expect(sessions).toHaveLength(2)
+  for (const session of sessions as Record<string, unknown>[]) {
+    expect(session.argvPromptCount).toBe(1)
+    expect(session.terminalPromptCount).toBe(1)
+  }
+  expect(ownedRoot).not.toBe('')
+  expect(existsSync(ownedRoot)).toBe(false)
+}, 150_000)
+
+test('product cleanup stall leaves the reserved hard-deadline window for real teardown', async () => {
+  type CleanupOptions = { signal?: AbortSignal; deadline?: number }
+  const world = await createGoalLoopWorld()
+  await world.start()
+  const daemonPid = world.daemonPid
+  const originalCli = world.cli.bind(world)
+  let productCleanupStarted = false
+  let productDeadlineExpired = false
+  world.cli = async (args, options) => {
+    if (!productCleanupStarted && args[0] === 'worktree' && args[1] === 'list') {
+      productCleanupStarted = true
+      const signal = options?.signal
+      if (!signal) throw new Error('product cleanup did not receive its bounded signal')
+      const { promise, resolve } = Promise.withResolvers<void>()
+      if (signal.aborted) {
+        productDeadlineExpired = true
+        resolve()
+      } else {
+        signal.addEventListener('abort', () => {
+          productDeadlineExpired = true
+          resolve()
+        }, { once: true })
+      }
+      await promise
+      throw new Error('controlled product cleanup stall ended at its phase deadline')
+    }
+    return originalCli(args, options)
+  }
+  let teardownRemainingMs = -1
+  let teardownSignalAborted = true
+  const originalCleanup = world.cleanup.bind(world) as (options?: CleanupOptions) => Promise<void>
+  world.cleanup = async (options?: CleanupOptions) => {
+    teardownRemainingMs = (options?.deadline ?? Date.now()) - Date.now()
+    teardownSignalAborted = options?.signal?.aborted ?? true
+    await originalCleanup(options)
+  }
+  try {
+    const report = await runGoalLoop({
+      deadlineMs: 20_000,
+      createWorld: async () => world,
+      beforeStep: async (id) => {
+        if (id === 'agents-launch') throw new Error('controlled operation failure')
+      }
+    })
+    expect(report.ok).toBe(false)
+    expect(report.steps[0]!.status).toBe('passed')
+    expect(report.steps[1]!.error?.message).toBe('controlled operation failure')
+    expect(productCleanupStarted).toBe(true)
+    expect(productDeadlineExpired).toBe(true)
+    expect(teardownRemainingMs).toBeGreaterThan(6_000)
+    expect(teardownSignalAborted).toBe(false)
+    expect(report.elapsedMs).toBeLessThan(20_000)
+    expect(report.cleanup.ok).toBe(false)
+    expect(report.cleanup.error).toContain('product cleanup deadline exceeded')
+    expect(existsSync(world.root)).toBe(false)
+    expect(() => process.kill(daemonPid, 0)).toThrow()
+  } finally {
+    if (existsSync(world.root)) await world.cleanup()
+  }
+}, 30_000)
+
+test('a timed-out process scope cannot keep world cleanup waiting or claim confirmed reaping', async () => {
+  const world = await createGoalLoopWorld()
+  await world.start()
+  const daemonPid = world.daemonPid
+  const originalCleanup = world.scope.cleanup.bind(world.scope)
+  const stalled = Promise.withResolvers<void>()
+  const timeout = Promise.withResolvers<'timeout'>()
+  const controller = new AbortController()
+  let cleanup: Promise<void> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    world.scope.cleanup = () => {
+      controller.abort(new Error('controlled process-scope deadline'))
+      return stalled.promise
+    }
+    cleanup = world.cleanup({ deadline: Date.now() + 1_000, signal: controller.signal })
+    // real process exit and pipe cancellation cannot be driven by fake timers
+    timer = setTimeout(() => timeout.resolve('timeout'), 1_000)
+    const outcome = await Promise.race([cleanup.then(() => null, error => error), timeout.promise])
+    expect(outcome).toMatchObject({ kind: 'cleanup-failed' })
+    expect(existsSync(world.root)).toBe(true)
+  } finally {
+    clearTimeout(timer)
+    world.scope.cleanup = originalCleanup
+    await originalCleanup()
+    stalled.resolve()
+    await cleanup?.catch(() => undefined)
+    expect(() => process.kill(daemonPid, 0)).toThrow()
+    rmSync(world.root, { recursive: true, force: true })
+  }
+}, 30_000)
+
 test('CLI output must be one valid JSON document and a successful exit', () => {
   expect(parseGoalLoopOutput('{"id":"actual-receipt"}\n', 0)).toEqual({ id: 'actual-receipt' })
   for (const stdout of ['', '{"truncated":', '{}\n{}', 'progress\n{}']) {
