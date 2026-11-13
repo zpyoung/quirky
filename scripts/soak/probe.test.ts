@@ -1113,3 +1113,285 @@ test('uses the default 30,000 ms connection deadline', async () => {
     expect(client.closeCalls).toBe(1)
   })
 })
+test('keeps status records stable after finish or stop when the request settles late', async () => {
+  await withProbeClock(async (clock) => {
+    for (const terminalMethod of ['finish', 'stop'] as const) {
+      for (const lateSettlement of ['resolve', 'reject'] as const) {
+        const status = deferred<unknown>()
+        const client = fakeClient(() => status.promise)
+        let connectionCalls = 0
+        let lostCalls = 0
+        const pidCalls: Array<number | null> = []
+        const probe = launch({
+          maxStallMs: 10,
+          probeTimeoutMs: 100,
+          connect: () => {
+            connectionCalls++
+            return Promise.resolve(client)
+          },
+          onDaemonLost: () => lostCalls++,
+          onPtyHostPid: (pid: number | null) => pidCalls.push(pid)
+        })
+        await drainUntil(() => client.calls.includes('status.get'))
+        expect(connectionCalls).toBe(1)
+
+        clock.advanceBy(20)
+        if (terminalMethod === 'finish') probe.finish()
+        else probe.stop()
+        const expected = terminalMethod === 'finish'
+          ? [{ at: 0, ms: 20, ownLagMs: 0, timedOut: false }]
+          : []
+        const expectStableResult = () => {
+          expect(probe.probes).toEqual(expected)
+          expect(client.closeCalls).toBe(1)
+          expect(client.calls).toEqual(['status.get'])
+          expect(connectionCalls).toBe(1)
+          expect(lostCalls).toBe(0)
+          expect(pidCalls).toEqual([])
+          expect(probe.daemonExited()).toBe(false)
+        }
+        expectStableResult()
+
+        probe.finish()
+        probe.finish()
+        probe.stop()
+        probe.stop()
+        expectStableResult()
+        await drainMicrotasks()
+        expectStableResult()
+
+        if (lateSettlement === 'resolve') status.resolve({ ptyHost: { pid: 99 } })
+        else status.reject(new Error('late status failure'))
+        await drainMicrotasks()
+        expectStableResult()
+
+        clock.advanceBy(1000)
+        await drainMicrotasks()
+        expectStableResult()
+      }
+    }
+  })
+})
+
+test('bounds connection retries from settlement and uses the default when omitted', async () => {
+  await withProbeClock(async (clock) => {
+    for (const retryDelayMs of [undefined, 40] as const) {
+      const firstConnection = deferred<QuirkyClient>()
+      const secondConnection = deferred<QuirkyClient>()
+      const secondClient = fakeClient()
+      let connectionCalls = 0
+      let lostCalls = 0
+      const retryOption = retryDelayMs === undefined ? {} : { retryDelayMs }
+      const probe = launch({
+        ...retryOption,
+        connect: () => {
+          connectionCalls++
+          return connectionCalls === 1 ? firstConnection.promise : secondConnection.promise
+        },
+        onDaemonLost: () => lostCalls++
+      })
+      await drainUntil(() => connectionCalls === 1)
+
+      clock.advanceBy(15)
+      firstConnection.reject(new Error('ordinary connection failure'))
+      await drainMicrotasks()
+      const expected = [{ at: 0, ms: 15, ownLagMs: 0, timedOut: true }]
+      const expectRetryState = (expectedCalls: number) => {
+        expect(probe.probes).toEqual(expected)
+        expect(connectionCalls).toBe(expectedCalls)
+        expect(lostCalls).toBe(0)
+        expect(probe.daemonExited()).toBe(false)
+        expect(secondClient.calls).toEqual([])
+      }
+      expectRetryState(1)
+
+      const retryWaitMs = retryDelayMs ?? 250
+      clock.advanceBy(retryWaitMs - 1)
+      await drainMicrotasks()
+      expectRetryState(1)
+
+      clock.advanceBy(1)
+      await drainUntil(() => connectionCalls === 2)
+      expectRetryState(2)
+
+      probe.stop()
+      await drainMicrotasks()
+      expectRetryState(2)
+      secondConnection.resolve(secondClient)
+      await drainMicrotasks()
+      expect(secondClient.closeCalls).toBe(1)
+      expectRetryState(2)
+
+      clock.advanceBy(1000)
+      await drainMicrotasks()
+      expect(secondClient.closeCalls).toBe(1)
+      expectRetryState(2)
+    }
+  })
+})
+
+test('records finish only strictly beyond the stall boundary for connections and status', async () => {
+  await withProbeClock(async (clock) => {
+    for (const attemptKind of ['connect', 'status'] as const) {
+      for (const elapsedMs of [10, 11] as const) {
+        const connecting = deferred<QuirkyClient>()
+        const status = deferred<unknown>()
+        const client = fakeClient(() => status.promise)
+        let connectionCalls = 0
+        let lostCalls = 0
+        const pidCalls: Array<number | null> = []
+        const probe = launch({
+          maxStallMs: 10,
+          connectTimeoutMs: 40,
+          probeTimeoutMs: 40,
+          connect: () => {
+            connectionCalls++
+            return attemptKind === 'connect' ? connecting.promise : Promise.resolve(client)
+          },
+          onDaemonLost: () => lostCalls++,
+          onPtyHostPid: (pid: number | null) => pidCalls.push(pid)
+        })
+        if (attemptKind === 'connect') await drainUntil(() => connectionCalls === 1)
+        else await drainUntil(() => client.calls.includes('status.get'))
+        expect(connectionCalls).toBe(1)
+
+        clock.advanceBy(elapsedMs)
+        probe.finish()
+        const expected = elapsedMs === 10
+          ? []
+          : [{ at: 0, ms: 11, ownLagMs: 0, timedOut: attemptKind === 'connect' }]
+        const expectBoundaryResult = (closeCalls: number) => {
+          expect(probe.probes).toEqual(expected)
+          expect(connectionCalls).toBe(1)
+          expect(client.calls).toEqual(attemptKind === 'status' ? ['status.get'] : [])
+          expect(lostCalls).toBe(0)
+          expect(pidCalls).toEqual([])
+          expect(probe.daemonExited()).toBe(false)
+          expect(client.closeCalls).toBe(closeCalls)
+        }
+        expectBoundaryResult(attemptKind === 'status' ? 1 : 0)
+        await drainMicrotasks()
+        expectBoundaryResult(attemptKind === 'status' ? 1 : 0)
+
+        if (attemptKind === 'connect') connecting.resolve(client)
+        else status.resolve({ ptyHost: { pid: 99 } })
+        await drainMicrotasks()
+        expectBoundaryResult(1)
+
+        clock.advanceBy(1000)
+        await drainMicrotasks()
+        expectBoundaryResult(1)
+      }
+    }
+  })
+})
+
+test('external abort discards stalled connection and status attempts after late settlement', async () => {
+  await withProbeClock(async (clock) => {
+    for (const attemptKind of ['connect', 'status'] as const) {
+      for (const lateSettlement of ['resolve', 'reject'] as const) {
+        const controller = new AbortController()
+        const connecting = deferred<QuirkyClient>()
+        const status = deferred<unknown>()
+        const client = fakeClient(() => status.promise)
+        let connectionCalls = 0
+        let lostCalls = 0
+        const pidCalls: Array<number | null> = []
+        const probe = launch({
+          maxStallMs: 10,
+          connectTimeoutMs: 100,
+          probeTimeoutMs: 100,
+          signal: controller.signal,
+          connect: () => {
+            connectionCalls++
+            return attemptKind === 'connect' ? connecting.promise : Promise.resolve(client)
+          },
+          onDaemonLost: () => lostCalls++,
+          onPtyHostPid: (pid: number | null) => pidCalls.push(pid)
+        })
+        if (attemptKind === 'connect') await drainUntil(() => connectionCalls === 1)
+        else await drainUntil(() => client.calls.includes('status.get'))
+        expect(connectionCalls).toBe(1)
+
+        clock.advanceBy(20)
+        controller.abort()
+        const expectAbortedResult = (expectedCloseCalls: number) => {
+          expect(probe.probes).toEqual([])
+          expect(connectionCalls).toBe(1)
+          expect(client.calls).toEqual(attemptKind === 'status' ? ['status.get'] : [])
+          expect(client.closeCalls).toBe(expectedCloseCalls)
+          expect(lostCalls).toBe(0)
+          expect(pidCalls).toEqual([])
+          expect(probe.daemonExited()).toBe(false)
+        }
+        expectAbortedResult(attemptKind === 'status' ? 1 : 0)
+        await drainMicrotasks()
+        expectAbortedResult(attemptKind === 'status' ? 1 : 0)
+
+        if (attemptKind === 'connect') {
+          if (lateSettlement === 'resolve') connecting.resolve(client)
+          else connecting.reject(new Error('late connection failure'))
+        } else if (lateSettlement === 'resolve') {
+          status.resolve({ ptyHost: { pid: 99 } })
+        } else {
+          status.reject(new Error('late status failure'))
+        }
+        await drainMicrotasks()
+        const expectedCloseCalls = attemptKind === 'status' || lateSettlement === 'resolve' ? 1 : 0
+        expectAbortedResult(expectedCloseCalls)
+
+        clock.advanceBy(1000)
+        await drainMicrotasks()
+        expectAbortedResult(expectedCloseCalls)
+      }
+    }
+  })
+})
+
+test('finish caps stalled connections by the connection deadline and preserves host lag', async () => {
+  await withProbeClock(async (clock) => {
+    for (const deadlines of [
+      { connectTimeoutMs: 40, probeTimeoutMs: 100, expectedMs: 40 },
+      { connectTimeoutMs: 100, probeTimeoutMs: 40, expectedMs: 60 }
+    ]) {
+      const connecting = deferred<QuirkyClient>()
+      const client = fakeClient()
+      let connectionCalls = 0
+      let lostCalls = 0
+      const probe = launch({
+        maxStallMs: 10,
+        connectTimeoutMs: deadlines.connectTimeoutMs,
+        probeTimeoutMs: deadlines.probeTimeoutMs,
+        connect: () => {
+          connectionCalls++
+          return connecting.promise
+        },
+        onDaemonLost: () => lostCalls++
+      })
+      await drainUntil(() => connectionCalls === 1)
+      const beganAt = clock.now()
+      clock.jumpTo(beganAt + 60)
+      probe.finish()
+      const expected = [{ at: 0, ms: deadlines.expectedMs, ownLagMs: 10, timedOut: true }]
+      const expectCappedResult = (expectedCloseCalls: number) => {
+        expect(probe.probes).toEqual(expected)
+        expect(connectionCalls).toBe(1)
+        expect(client.calls).toEqual([])
+        expect(client.closeCalls).toBe(expectedCloseCalls)
+        expect(lostCalls).toBe(0)
+        expect(probe.daemonExited()).toBe(false)
+      }
+      expectCappedResult(0)
+      await drainMicrotasks()
+      expectCappedResult(0)
+
+      connecting.resolve(client)
+      await drainMicrotasks()
+      expectCappedResult(1)
+
+      clock.advanceBy(1000)
+      await drainMicrotasks()
+      expectCappedResult(1)
+    }
+  }, true)
+})
