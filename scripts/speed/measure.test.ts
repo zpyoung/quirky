@@ -5,7 +5,9 @@ import {
   waitForDiagnosticStatusProbe,
   waitForFloodProgressAfterSnapshot,
   diagnosticFinding,
-  summarizeFrameIntervals
+  summarizeFrameIntervals,
+  pairSides,
+  floodBlocks
 } from './measure.ts'
 
 type EventHandler = (event: { target: FakeElement; key?: string }) => void
@@ -670,4 +672,33 @@ test('invalid pacing errors retain all sixty raw intervals', () => {
   const intervals = Array<number>(60).fill(16)
   intervals[17] = 0
   expect(() => summarizeFrameIntervals(intervals)).toThrow(JSON.stringify(intervals))
+})
+
+test('paired measurements alternate which side runs first', () => {
+  expect([1, 2, 3, 4].map(pairSides)).toEqual([
+    ['head', 'base'],
+    ['base', 'head'],
+    ['head', 'base'],
+    ['base', 'head']
+  ])
+})
+
+test('flood pairs run in four balanced head-base-base-head blocks', () => {
+  expect(floodBlocks(60)).toEqual([
+    { side: 'head', first: 1, count: 30 },
+    { side: 'base', first: 1, count: 30 },
+    { side: 'base', first: 31, count: 30 },
+    { side: 'head', first: 31, count: 30 }
+  ])
+  expect(floodBlocks(20)).toEqual([
+    { side: 'head', first: 1, count: 10 },
+    { side: 'base', first: 1, count: 10 },
+    { side: 'base', first: 11, count: 10 },
+    { side: 'head', first: 11, count: 10 }
+  ])
+  expect(floodBlocks(1)).toEqual([
+    { side: 'head', first: 1, count: 1 },
+    { side: 'base', first: 1, count: 1 }
+  ])
+  expect(floodBlocks(0)).toEqual([])
 })

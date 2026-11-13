@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Browser, BrowserContext, CDPSession, Page, Route } from 'playwright'
-import { BUDGETS, METRICS, type Failure, type Metric } from './contracts.ts'
+import { BUDGETS, METRICS, PAIR_COUNTS, type Failure, type Metric, type PairSide } from './contracts.ts'
 import { median } from './report.ts'
 import { startProbe, type Probe } from '../soak/probe.ts'
 import type { ProbeRecord } from '../soak/contracts.ts'
@@ -18,6 +18,21 @@ const VIEWPORT = { width: 1400, height: 880 } as const
 const CHANGES_PANEL = 'panel:quirky.git/source-control'
 const DIFF_VIEW = 'view:quirky.git/diff'
 const ECHO_KEYS = 'abcdefghijklmnopqrst'
+
+export function pairSides(index: number): readonly [PairSide, PairSide] {
+  return index % 2 === 1 ? ['head', 'base'] : ['base', 'head']
+}
+
+export function floodBlocks(count: number): { side: PairSide; first: number; count: number }[] {
+  const firstHalf = Math.ceil(count / 2)
+  const secondHalf = Math.floor(count / 2)
+  const blocks: { side: PairSide; first: number; count: number }[] = []
+  if (firstHalf > 0) blocks.push({ side: 'head', first: 1, count: firstHalf })
+  if (firstHalf > 0) blocks.push({ side: 'base', first: 1, count: firstHalf })
+  if (secondHalf > 0) blocks.push({ side: 'base', first: firstHalf + 1, count: secondHalf })
+  if (secondHalf > 0) blocks.push({ side: 'head', first: firstHalf + 1, count: secondHalf })
+  return blocks
+}
 
 export type FramePacing = { frames: number; medianIntervalMs: number; p90IntervalMs: number; maxIntervalMs: number }
 
@@ -104,6 +119,9 @@ type SpeedSample = {
   flood?: Record<string, number | string | null>
 }
 
+type MeasurementAttempt = SpeedSample & { side?: PairSide }
+type PairAttempt = SpeedSample & { side: PairSide }
+
 export type SpeedMeasurementResult = {
   samples: Record<Metric, number[]>
   attempts: SpeedSample[]
@@ -112,6 +130,11 @@ export type SpeedMeasurementResult = {
   diagnosticErrors: string[]
   ownedPids: number[]
   redactions: string[]
+  pair: {
+    samples: Record<PairSide, Record<Metric, number[]>>
+    attempts: PairAttempt[]
+    failures: Failure[]
+  } | null
 }
 
 type SessionSnapshot = { pids: Map<string, number>; ownedPids: number[] }
@@ -125,14 +148,16 @@ type MetricContext = {
   signal: AbortSignal
   out: string
   samples: Record<Metric, number[]>
-  attempts: SpeedSample[]
+  attempts: MeasurementAttempt[]
   sessionPids: Map<string, number>
   ptyHostPid: number
   browserPid: number
   redactions: Set<string>
   sessionSequence: Map<string, number>
   currentWorktreeIndex: number
+  side?: PairSide
 }
+
 
 /** Describes the measured operation and probe evidence without inferring a cause. */
 export function diagnosticFinding(metric: Metric, observationMs: number, phases: Record<string, number | null>, probes: readonly ProbeRecord[]): string {
@@ -953,13 +978,14 @@ function attempt(
   phase: SpeedSample['phase'],
   sample: number,
   details: Partial<Pick<SpeedSample, 'worktreeId' | 'sessionId' | 'destinationWorktreeId' | 'destinationSessionId'>> = {}
-): SpeedSample {
+): MeasurementAttempt {
   return {
     metric, phase, sample, durationMs: null, startedAt: null, endedAt: null,
     worktreeId: null, sessionId: null, destinationWorktreeId: null, destinationSessionId: null,
     phases: {}, fixture: fixtureDescriptor(context.fixture), daemonPid: context.world.daemonPid,
     ptyHostPid: context.world.ptyHostPid(), ownedPids: [...new Set([context.world.daemonPid, context.world.ptyHostPid() ?? -1, context.browserPid, ...context.sessionPids.values()])].filter((pid) => pid > 1),
-    ...details
+    ...details,
+    ...(context.side === undefined ? {} : { side: context.side })
   }
 }
 
@@ -1067,7 +1093,8 @@ async function runDiffAttempt(context: MetricContext, phase: SpeedSample['phase'
   }
 }
 
-async function runFloodEchoSeries(context: MetricContext, sampleCount: number, signal: AbortSignal): Promise<void> {
+async function runFloodEchoSeries(context: MetricContext, sampleCount: number, signal: AbortSignal, firstSample = 1): Promise<void> {
+  const firstAttemptIndex = context.attempts.length
   await closeHostedReview(context.page, context.world, context.fixture.target.id)
   await ensureSelectedWorktree(context.page, context.fixture.target)
   context.currentWorktreeIndex = 0
@@ -1075,7 +1102,7 @@ async function runFloodEchoSeries(context: MetricContext, sampleCount: number, s
   let finalRenderedCounter = flood.renderedCounter
   let failure: unknown
   let failurePhase: SpeedSample['phase'] = 'warmup'
-  let failureSample = 1
+  let failureSample = firstSample
   let stats: FloodStats | undefined
   try {
     for (let warmup = 1; warmup <= 2; warmup++) {
@@ -1083,13 +1110,14 @@ async function runFloodEchoSeries(context: MetricContext, sampleCount: number, s
       failureSample = warmup
       await runFloodEchoAttempt(context, 'warmup', warmup, ECHO_KEYS[warmup - 1]!, signal)
     }
-    for (let sample = 1; sample <= sampleCount; sample++) {
+    for (let offset = 0; offset < sampleCount; offset++) {
+      const sample = firstSample + offset
       failurePhase = 'sample'
       failureSample = sample
       await runFloodEchoAttempt(context, 'sample', sample, ECHO_KEYS[(sample + 1) % ECHO_KEYS.length]!, signal)
     }
     failurePhase = 'sample'
-    failureSample = sampleCount
+    failureSample = firstSample + sampleCount - 1
     const progress = await waitForFloodProgressAfterSnapshot(
       context.page,
       context.fixture.target,
@@ -1110,7 +1138,7 @@ async function runFloodEchoSeries(context: MetricContext, sampleCount: number, s
     }
   }
   if (failure !== undefined) throw new MeasurementFailure('floodEcho', failureSample, failurePhase, failure)
-  if (!stats) throw new MeasurementFailure('floodEcho', sampleCount, 'sample', new Error('flood cleanup returned no statistics'))
+  if (!stats) throw new MeasurementFailure('floodEcho', firstSample + sampleCount - 1, 'sample', new Error('flood cleanup returned no statistics'))
   validateFloodStats(stats, flood.start)
   const actualBytesPerSecond = stats.bytesWritten * 1000 / stats.elapsedMs
   const floodEvidence: Record<string, number | string | null> = {
@@ -1120,7 +1148,9 @@ async function runFloodEchoSeries(context: MetricContext, sampleCount: number, s
     actualBytesPerSecond, firstCounter: stats.firstCounter, lastCounter: stats.lastCounter,
     elapsedMs: stats.elapsedMs, renderedStartCounter: flood.renderedCounter, renderedEndCounter: finalRenderedCounter
   }
-  for (const row of context.attempts) if (row.metric === 'floodEcho' && row.phase !== 'diagnostic') row.flood = floodEvidence
+  for (const row of context.attempts.slice(firstAttemptIndex)) {
+    if (row.metric === 'floodEcho' && row.phase !== 'diagnostic') row.flood = floodEvidence
+  }
 }
 
 async function runFloodEchoAttempt(context: MetricContext, phase: SpeedSample['phase'], sample: number, key: string, signal: AbortSignal): Promise<void> {
@@ -1176,6 +1206,49 @@ async function openContext(browser: Browser, contextSet: Set<BrowserContext>, si
     await withDeadline(context.close(), OBSERVER_CLEANUP_MS, 'partial browser context close').catch(() => undefined)
     throw error
   }
+}
+
+async function createMetricContext(options: {
+  world: RestartableWorld
+  windows: SoakWindows
+  fixture: SpeedFixture
+  samples: Record<Metric, number[]>
+  attempts: MeasurementAttempt[]
+  out: string
+  signal: AbortSignal
+  redactions: Set<string>
+  side?: PairSide
+  pairOwnedPids?: number[]
+}): Promise<MetricContext> {
+  const { world, windows, fixture, samples, attempts, out, signal, redactions, side, pairOwnedPids } = options
+  redactions.add(world.home)
+  collectRuntimeSecrets(redactions, world.runtime)
+  const initialPage = windows.pages[0]
+  if (!initialPage) throw new Error('openWindows returned no browser page')
+  const initialContext = initialPage.context()
+  const browser = initialContext.browser()
+  if (!browser || !browser.isConnected()) throw new Error('openWindows did not expose its connected Chromium browser')
+  const fixtureSessions = fixture.worktrees.flatMap((worktree) => [...worktree.sessions])
+  if (fixture.worktrees.length !== 10 || fixtureSessions.length !== 20 || new Set(fixtureSessions).size !== 20) {
+    throw new Error('speed fixture must contain ten worktrees and twenty unique terminal sessions')
+  }
+  if (fixture.target.id !== fixture.worktrees[0]?.id || fixture.target.sessions.length !== 2) {
+    throw new Error('speed fixture target does not match its first two-pane worktree')
+  }
+  const initialSnapshot = await sessionSnapshot(world, fixtureSessions)
+  const ptyHostPid = world.ptyHostPid()
+  if (ptyHostPid === null) throw new Error('speed fixture PTY host is unavailable')
+  const browserPid = windows.browserPid
+  pairOwnedPids?.push(world.daemonPid, ptyHostPid, browserPid, ...initialSnapshot.ownedPids)
+  world.preserveSessions(fixtureSessions)
+  const context: MetricContext = {
+    world, windows, fixture, browser, page: initialPage, context: initialContext, signal, out,
+    samples, attempts, sessionPids: initialSnapshot.pids, ptyHostPid, browserPid,
+    redactions, sessionSequence: new Map(), currentWorktreeIndex: 0,
+    ...(side === undefined ? {} : { side })
+  }
+  await routeLoopback(initialContext)
+  return context
 }
 
 
@@ -1597,6 +1670,96 @@ async function runMeasuredSeries(context: MetricContext, count: number, signal: 
   }
 }
 
+function emptyMetricSamples(): Record<Metric, number[]> {
+  return { startup: [], echo: [], switch: [], diff: [], floodEcho: [] }
+}
+
+async function runPairedSeries(
+  contexts: Record<PairSide, MetricContext>,
+  pairCounts: Readonly<Record<Metric, number>>,
+  signal: AbortSignal,
+  contextSet: Set<BrowserContext>
+): Promise<void> {
+  const runSide = async (
+    side: PairSide,
+    metric: Metric,
+    phase: SpeedSample['phase'],
+    sample: number,
+    action: (context: MetricContext, phase: SpeedSample['phase'], sample: number) => Promise<void>
+  ): Promise<void> => {
+    try {
+      await action(contexts[side], phase, sample)
+    } catch (error) {
+      const marker = error instanceof MeasurementFailure ? error : undefined
+      throw new MeasurementFailure(
+        marker?.metric ?? metric,
+        marker?.sample ?? sample,
+        marker?.phase ?? phase,
+        new Error(`${side}: ${errorText(marker?.causeValue ?? error)}`)
+      )
+    }
+  }
+  const runSides = async (
+    sides: readonly PairSide[],
+    metric: Metric,
+    phase: SpeedSample['phase'],
+    sample: number,
+    action: (context: MetricContext, phase: SpeedSample['phase'], sample: number) => Promise<void>
+  ): Promise<void> => {
+    for (const side of sides) await runSide(side, metric, phase, sample, action)
+  }
+  const runMetric = async (
+    metric: Metric,
+    count: number,
+    action: (context: MetricContext, phase: SpeedSample['phase'], sample: number) => Promise<void>
+  ): Promise<void> => {
+    for (let warmup = 1; warmup <= 2; warmup++) {
+      await runSides(pairSides(warmup), metric, 'warmup', warmup, action)
+    }
+    for (let sample = 1; sample <= count; sample++) {
+      await runSides(pairSides(sample), metric, 'sample', sample, action)
+    }
+  }
+
+  await runMetric('startup', pairCounts.startup, (context, phase, sample) =>
+    recordStartupAttempt(context, phase, sample, signal, contextSet))
+
+  for (const side of ['head', 'base'] as const) {
+    await runSide(side, 'echo', 'warmup', 1, async (context) => {
+      await ensureSelectedWorktree(context.page, context.fixture.target)
+      context.currentWorktreeIndex = 0
+    })
+  }
+  await runMetric('echo', pairCounts.echo, (context, phase, sample) =>
+    runEchoAttempt(
+      context,
+      phase,
+      sample,
+      phase === 'warmup' ? ECHO_KEYS[sample - 1]! : ECHO_KEYS[(sample + 1) % ECHO_KEYS.length]!,
+      signal
+    ))
+
+  await runMetric('switch', pairCounts.switch, (context, phase, sample) => {
+    const next = (context.currentWorktreeIndex + 1) % context.fixture.worktrees.length
+    return runSwitchAttempt(context, phase, sample, context.fixture.worktrees[next]!, signal)
+  })
+
+  for (const side of ['head', 'base'] as const) {
+    await runSide(side, 'diff', 'warmup', 1, async (context) => {
+      await ensureSelectedWorktree(context.page, context.fixture.target)
+      context.currentWorktreeIndex = 0
+      await verifyPublicDiff(context)
+    })
+  }
+  await runMetric('diff', pairCounts.diff, (context, phase, sample) =>
+    runDiffAttempt(context, phase, sample, signal))
+
+  for (const block of floodBlocks(pairCounts.floodEcho)) {
+    await runSide(block.side, 'floodEcho', 'sample', block.first, async (context) =>
+      runFloodEchoSeries(context, block.count, signal, block.first))
+  }
+}
+
 function metricSampleCountsValid(samples: Record<Metric, number[]>, expectedCount: number): boolean {
   return METRICS.every((metric) => samples[metric].length === expectedCount)
 }
@@ -1689,79 +1852,147 @@ export async function measureSpeed(options: {
   samples: number
   out: string
   signal: AbortSignal
+  pair?: {
+    start(signal: AbortSignal): Promise<{ world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows }>
+  }
 }): Promise<SpeedMeasurementResult> {
   const { world, windows, fixture, samples: sampleCount, out, signal } = options
-  const sampleValues: Record<Metric, number[]> = { startup: [], echo: [], switch: [], diff: [], floodEcho: [] }
-  const attempts: SpeedSample[] = []
+  const sampleValues = emptyMetricSamples()
+  const attempts: MeasurementAttempt[] = []
   const failures: Failure[] = []
   const diagnostics: string[] = []
   const diagnosticErrors: string[] = []
-  const redactions = new Set<string>([world.home])
-  collectRuntimeSecrets(redactions, world.runtime)
+  const redactions = new Set<string>()
   const contexts = new Set<BrowserContext>()
-  const initialPage = windows.pages[0]
-  if (!initialPage) throw new Error('openWindows returned no browser page')
-  const initialContext = initialPage.context()
-  const browser = initialContext.browser()
-  if (!browser || !browser.isConnected()) throw new Error('openWindows did not expose its connected Chromium browser')
-  const fixtureSessions = fixture.worktrees.flatMap((worktree) => [...worktree.sessions])
-  if (fixture.worktrees.length !== 10 || fixtureSessions.length !== 20 || new Set(fixtureSessions).size !== 20) {
-    throw new Error('speed fixture must contain ten worktrees and twenty unique terminal sessions')
-  }
-  if (fixture.target.id !== fixture.worktrees[0]?.id || fixture.target.sessions.length !== 2) throw new Error('speed fixture target does not match its first two-pane worktree')
   if (sampleCount < 1 || !Number.isSafeInteger(sampleCount)) throw new Error('speed sample count must be a positive integer')
   if (signal.aborted) throw new Error('speed measurement interrupted')
 
-  const initialSnapshot = await sessionSnapshot(world, fixtureSessions)
-  const ptyHostPid = world.ptyHostPid()
-  if (ptyHostPid === null) throw new Error('speed fixture PTY host is unavailable')
-  world.preserveSessions(fixtureSessions)
-  const browserPid = windows.browserPid
-  const initialWorktreeIndex = 0
-  const context: MetricContext = {
-    world, windows, fixture, browser, page: initialPage, context: initialContext, signal, out,
-    samples: sampleValues, attempts, sessionPids: initialSnapshot.pids, ptyHostPid, browserPid,
-    redactions, sessionSequence: new Map(), currentWorktreeIndex: initialWorktreeIndex
+  const context = await createMetricContext({
+    world, windows, fixture, samples: sampleValues, attempts, out, signal, redactions
+  })
+  const pairResult: SpeedMeasurementResult['pair'] = options.pair ? {
+    samples: { head: emptyMetricSamples(), base: emptyMetricSamples() },
+    attempts: [],
+    failures: []
+  } : null
+  const pairOwnedPids: number[] = []
+  const recordPairFailure = (kind: string, error: unknown) => {
+    if (!pairResult) return
+    const marker = error instanceof MeasurementFailure ? error : undefined
+    pairResult.failures.push({
+      kind,
+      ...(marker ? { metric: marker.metric, sample: marker.sample } : {}),
+      message: sanitizeText(
+        marker ? `${marker.phase} ${errorText(marker.causeValue)}` : errorText(error),
+        redactions
+      )
+    })
   }
-  await routeLoopback(initialContext)
+
   try {
-    const gpuCompositing = await readGpuCompositing(browser, signal)
-    if (gpuCompositing !== 'disabled_software') {
-      throw new Error(`browser is not compositing in software: ${gpuCompositing}`)
-    }
-    let intervalsMs: number[] = []
-    let pacing: FramePacing | { frames: number; error: string }
     try {
-      intervalsMs = await measureBrowserFrameIntervals(initialPage, signal)
-      pacing = summarizeFrameIntervals(intervalsMs)
+      const gpuCompositing = await readGpuCompositing(context.browser, signal)
+      if (gpuCompositing !== 'disabled_software') {
+        throw new Error(`browser is not compositing in software: ${gpuCompositing}`)
+      }
+      let intervalsMs: number[] = []
+      let pacing: FramePacing | { frames: number; error: string }
+      try {
+        intervalsMs = await measureBrowserFrameIntervals(context.page, signal)
+        pacing = summarizeFrameIntervals(intervalsMs)
+      } catch (error) {
+        pacing = { frames: intervalsMs.length, error: errorText(error) }
+      }
+      const framePacing = { version: 1, ...pacing, gpuCompositing, intervalsMs }
+      mkdirSync(join(out, 'diagnostics'), { recursive: true })
+      const pacingJson = JSON.stringify(framePacing, (_key, value: unknown) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
+      writeFileSync(join(out, 'diagnostics', 'frame-pacing.json'), `${pacingJson}\n`)
+      diagnostics.push('diagnostics/frame-pacing.json')
+      await runMeasuredSeries(context, sampleCount, signal, contexts)
+      if (!metricSampleCountsValid(sampleValues, sampleCount)) {
+        const missing = METRICS.find((metric) => sampleValues[metric].length !== sampleCount) ?? 'startup'
+        throw new MeasurementFailure(missing, sampleValues[missing].length + 1, 'sample', new Error('metric did not produce the requested successful sample count'))
+      }
+
+      for (const metric of METRICS) {
+        const value = median(sampleValues[metric])
+        if (value !== null && value > BUDGETS[metric]) {
+          await diagnosticTrial(context, metric, contexts, signal, diagnostics, diagnosticErrors)
+        }
+      }
     } catch (error) {
-      pacing = { frames: intervalsMs.length, error: errorText(error) }
-    }
-    const framePacing = { version: 1, ...pacing, gpuCompositing, intervalsMs }
-    mkdirSync(join(out, 'diagnostics'), { recursive: true })
-    const pacingJson = JSON.stringify(framePacing, (_key, value: unknown) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
-    writeFileSync(join(out, 'diagnostics', 'frame-pacing.json'), `${pacingJson}\n`)
-    diagnostics.push('diagnostics/frame-pacing.json')
-    await runMeasuredSeries(context, sampleCount, signal, contexts)
-    if (!metricSampleCountsValid(sampleValues, sampleCount)) {
-      const missing = METRICS.find((metric) => sampleValues[metric].length !== sampleCount) ?? 'startup'
-      throw new MeasurementFailure(missing, sampleValues[missing].length + 1, 'sample', new Error('metric did not produce the requested successful sample count'))
+      const marker = error instanceof MeasurementFailure ? error : undefined
+      const message = marker ? errorText(marker.causeValue) : errorText(error)
+      failures.push({
+        kind: marker?.phase === 'warmup' ? 'warmup-failed' : 'measurement-failed',
+        ...(marker ? { metric: marker.metric, sample: marker.sample } : {}),
+        message: sanitizeText(`${marker ? `${marker.phase} ` : ''}${message}`, redactions)
+      })
     }
 
-    for (const metric of METRICS) {
-      const value = median(sampleValues[metric])
-      if (value !== null && value > BUDGETS[metric]) {
-        await diagnosticTrial(context, metric, contexts, signal, diagnostics, diagnosticErrors)
+    if (options.pair && pairResult) {
+      if (signal.aborted) {
+        recordPairFailure('pair-interrupted', new Error('speed measurement interrupted'))
+      } else {
+        let pairedStart: { world: RestartableWorld; fixture: SpeedFixture; windows: SoakWindows } | undefined
+        try {
+          pairedStart = await options.pair.start(signal)
+          redactions.add(pairedStart.world.home)
+          collectRuntimeSecrets(redactions, pairedStart.world.runtime)
+          pairOwnedPids.push(
+            pairedStart.world.daemonPid,
+            pairedStart.world.ptyHostPid() ?? -1,
+            pairedStart.windows.browserPid
+          )
+        } catch (error) {
+          recordPairFailure(signal.aborted ? 'pair-interrupted' : 'pair-setup-failed', error)
+        }
+
+        if (pairedStart && signal.aborted) {
+          recordPairFailure('pair-interrupted', new Error('speed measurement interrupted'))
+        } else if (pairedStart) {
+          let baseContext: MetricContext | undefined
+          try {
+            baseContext = await createMetricContext({
+              world: pairedStart.world,
+              windows: pairedStart.windows,
+              fixture: pairedStart.fixture,
+              samples: pairResult.samples.base,
+              attempts: pairResult.attempts,
+              out,
+              signal,
+              redactions,
+              side: 'base',
+              pairOwnedPids
+            })
+          } catch (error) {
+            recordPairFailure(signal.aborted ? 'pair-interrupted' : 'pair-setup-failed', error)
+          }
+
+          if (baseContext) {
+            const headContext: MetricContext = {
+              ...context,
+              samples: pairResult.samples.head,
+              attempts: pairResult.attempts,
+              side: 'head'
+            }
+            const pairCounts = sampleCount === 1
+              ? { startup: 1, echo: 1, switch: 1, diff: 1, floodEcho: 1 }
+              : PAIR_COUNTS
+            try {
+              await runPairedSeries(
+                { head: headContext, base: baseContext },
+                pairCounts,
+                signal,
+                contexts
+              )
+            } catch (error) {
+              recordPairFailure(signal.aborted ? 'pair-interrupted' : 'pair-measurement-failed', error)
+            }
+          }
+        }
       }
     }
-  } catch (error) {
-    const marker = error instanceof MeasurementFailure ? error : undefined
-    const message = marker ? errorText(marker.causeValue) : errorText(error)
-    failures.push({
-      kind: marker?.phase === 'warmup' ? 'warmup-failed' : 'measurement-failed',
-      ...(marker ? { metric: marker.metric, sample: marker.sample } : {}),
-      message: sanitizeText(`${marker ? `${marker.phase} ` : ''}${message}`, redactions)
-    })
   } finally {
     for (const browserContext of contexts) {
       try { await withDeadline(browserContext.close(), OBSERVER_CLEANUP_MS, 'browser context cleanup') } catch (error) {
@@ -1770,8 +2001,22 @@ export async function measureSpeed(options: {
     }
   }
 
-  const ownedPids = [...new Set(attempts.flatMap((sample) => sample.ownedPids))].filter((pid) => pid > 1)
-  return { samples: sampleValues, attempts, failures, diagnostics, diagnosticErrors, ownedPids, redactions: [...redactions] }
+  const pairAttempts = pairResult?.attempts ?? []
+  const ownedPids = [...new Set([
+    ...attempts.flatMap((sample) => sample.ownedPids),
+    ...pairAttempts.flatMap((sample) => sample.ownedPids),
+    ...pairOwnedPids
+  ])].filter((pid) => pid > 1)
+  return {
+    samples: sampleValues,
+    attempts,
+    failures,
+    diagnostics,
+    diagnosticErrors,
+    ownedPids,
+    redactions: [...redactions],
+    pair: pairResult
+  }
 }
 
 class MeasurementFailure extends Error {
