@@ -881,6 +881,7 @@ export async function startBrowserWorld(options: {
         prepareCaptureFixtureHome: async (_home, preparation) => {
           const browserEnv = createBrowserEnvironment(home, repoRoot)
           browserEnv.QUIRKY_BROWSER_CHROME = browserChrome
+          delete browserEnv.QUIRKY_UI_DIR
           if (bootsUi) {
             const pluginFixture = createBuiltinPluginsDirectory(home, repoRoot)
             browserEnv.QUIRKY_BUILTIN_PLUGINS_DIR = pluginFixture.directory
