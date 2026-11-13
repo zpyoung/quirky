@@ -10,6 +10,8 @@
 
 The Native Browser view embeds a sandboxed system webview without starting automation Chrome. Watch explicitly shows an existing managed agent page through its CDP screencast. Disabling the plugin closes only helper and Chrome processes it owns. macOS is the exercised platform; other platforms are not claimed as supported.
 
+Chrome, the native helper, Safe Storage lookups and user-approved `open` commands use the plugin's shared process runner. Shutdown awaits owned children and bounded process-group cleanup; `groupSurvived` reports descendants that remain after that bound, rather than guaranteeing the whole group is gone. Download opening and external-app approval return immediately; failed launches log a reason with paths and URLs redacted. Safe Storage reads stop after five seconds or more than 4,096 stdout bytes and never log credentials.
+
 ## CLI
 
 ```sh

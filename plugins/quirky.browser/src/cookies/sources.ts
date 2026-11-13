@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite'
 import { chmodSync, copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { validateValue, type Schema } from '@quirky/protocol'
+import { validateValue, type ProcessSpawner, type Schema, type SpawnedProcess } from '@quirky/protocol'
 import { BrowserFault, fault } from '../runtime/errors'
 import type { BrowserDependencies } from '../runtime/dependencies'
 import { decryptChromiumValue, parseCookieJson, parseCookieRows, parseSafariBinaryCookies, registrableFamily, validateSourceProfile } from './policy'
@@ -423,7 +423,7 @@ function readDatabaseRows(database: Database, table: string): unknown[] {
 
 async function keyFor(family: BrowserFamily, dependencies: BrowserDependencies): Promise<Buffer | null> {
   if (dependencies.keyProvider) return await dependencies.keyProvider(family)
-  return await productionKeyProvider(family)
+  return await readKeychainKey(family, dependencies.process)
 }
 
 function partitionKeyFor(row: Record<string, unknown>, domain: string): { partitionKey?: Cookie['partitionKey']; unreadable: boolean } {
@@ -663,55 +663,104 @@ export async function readCookieSource(
   return await parseChromium(profile.path, source.family, dataDir, dependencies)
 }
 
-export async function productionKeyProvider(family: BrowserFamily): Promise<Buffer | null> {
-  const service: Partial<Record<BrowserFamily, string>> = {
-    chrome: 'Chrome Safe Storage',
-    edge: 'Microsoft Edge Safe Storage',
-    arc: 'Arc Safe Storage',
-    chromium: 'Brave Safe Storage',
-    comet: 'Comet Safe Storage',
-    helium: 'Helium Safe Storage'
-  }
-  const item = service[family]
+const KEYCHAIN_ITEMS: Partial<Record<BrowserFamily, string>> = {
+  chrome: 'Chrome Safe Storage',
+  edge: 'Microsoft Edge Safe Storage',
+  arc: 'Arc Safe Storage',
+  chromium: 'Brave Safe Storage',
+  comet: 'Comet Safe Storage',
+  helium: 'Helium Safe Storage'
+}
+
+export async function readKeychainKey(
+  family: BrowserFamily,
+  processRunner: Pick<ProcessSpawner, 'spawn'>
+): Promise<Buffer | null> {
+  const item = KEYCHAIN_ITEMS[family]
   if (!item || process.platform !== 'darwin' || !existsSync('/usr/bin/security')) return null
-  const child = Bun.spawn(['/usr/bin/security', 'find-generic-password', '-w', '-s', item], {
-    stdin: 'ignore', stdout: 'pipe', stderr: 'ignore', env: { ...process.env }
-  })
+
   const timeout = Promise.withResolvers<null>()
   const timer = setTimeout(() => timeout.resolve(null), 5_000)
+  let child: SpawnedProcess
   try {
-    const output = async (): Promise<string | null> => {
-      const reader = child.stdout.getReader()
-      const chunks: Buffer[] = []
-      let totalBytes = 0
-      try {
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) return Buffer.concat(chunks, totalBytes).toString('utf8')
-          totalBytes += value.byteLength
-          if (totalBytes > 4_096) {
-            child.kill('SIGKILL')
-            await reader.cancel()
-            return null
-          }
-          chunks.push(Buffer.from(value))
-        }
-      } finally {
-        reader.releaseLock()
+    child = processRunner.spawn(
+      ['/usr/bin/security', 'find-generic-password', '-w', '-s', item],
+      {
+        timeoutMs: 5_000,
+        killGraceMs: 0,
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'ignore',
+        env: { ...process.env }
       }
+    )
+  } catch {
+    clearTimeout(timer)
+    return null
+  }
+  if (child.pid === null) {
+    clearTimeout(timer)
+    return null
+  }
+
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let stopPromise: Promise<void> | undefined
+  const stopChild = (): Promise<void> => {
+    if (!stopPromise) {
+      stopPromise = Promise.resolve()
+        .then(async () => { await child.stop({ signal: 'SIGKILL' }) })
+        .catch(() => undefined)
     }
+    return stopPromise
+  }
+  const cancelReader = async (): Promise<void> => {
+    try { await reader?.cancel() } catch {}
+  }
+
+  const output = async (): Promise<string | null> => {
+    const activeReader = child.stdout.getReader()
+    reader = activeReader
+    const chunks: Buffer[] = []
+    let totalBytes = 0
+    try {
+      for (;;) {
+        const { done, value } = await activeReader.read()
+        if (done) return Buffer.concat(chunks, totalBytes).toString('utf8')
+        totalBytes += value.byteLength
+        if (totalBytes > 4_096) {
+          await stopChild()
+          await cancelReader()
+          return null
+        }
+        chunks.push(Buffer.from(value))
+      }
+    } finally {
+      activeReader.releaseLock()
+      if (reader === activeReader) reader = undefined
+    }
+  }
+
+  try {
     const result = await Promise.race([Promise.all([output(), child.exited]), timeout.promise])
     if (result === null) {
-      child.kill('SIGKILL')
-      await child.exited
+      await stopChild()
+      await cancelReader()
       return null
     }
-    const [text, code] = result
-    if (code !== 0 || text === null || text.trim() === '') return null
-    return Buffer.from(text.trim())
+    const [text, exit] = result
+    const key = text?.trim()
+    if (
+      exit.exitCode !== 0 ||
+      exit.signal !== null ||
+      exit.stopped !== undefined ||
+      exit.spawnError !== undefined ||
+      key === undefined ||
+      key === ''
+    ) return null
+    return Buffer.from(key)
   } catch {
-    child.kill('SIGKILL')
-    await child.exited
+    await stopChild()
+    await cancelReader()
     return null
   } finally {
     clearTimeout(timer)
