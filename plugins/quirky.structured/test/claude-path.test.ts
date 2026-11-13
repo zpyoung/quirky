@@ -5,6 +5,8 @@ import type { ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { resolveClaudeThroughLoginShell } from '../claude-path'
 
+const clock = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
+
 const dirs: string[] = []
 const ownedRunners: OwnedProcessRunner[] = []
 let nextOwner = 0
@@ -117,9 +119,9 @@ describe('resolveClaudeThroughLoginShell', () => {
     const { runner, calls } = abortingRunner()
     try {
       const lookup = resolveClaudeThroughLoginShell(runner, '/bin/zsh')
-      jest.advanceTimersByTime(29999)
+      clock.advanceTimersByTime(29999)
       expect(calls[0]?.options?.signal?.aborted).toBe(false)
-      jest.advanceTimersByTime(1)
+      clock.advanceTimersByTime(1)
       jest.useRealTimers()
       await expect(lookup).rejects.toThrow('could not find the claude executable on the login shell PATH')
       expect(calls).toHaveLength(1)
