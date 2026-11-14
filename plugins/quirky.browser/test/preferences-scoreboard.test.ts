@@ -1,10 +1,10 @@
-import { expect, test } from 'bun:test'
+import { beforeAll, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { auditPlugin } from '../../../scripts/ui-scoreboard/audit'
 import { parseCoverage } from '../../../scripts/ui-scoreboard/audit-evidence'
 import { collectInventory } from '../../../scripts/ui-scoreboard/inventory'
-import type { Evidence, Inventory, PluginInventory } from '../../../scripts/ui-scoreboard/contracts'
+import type { CheckResult, Evidence, Inventory, PluginInventory } from '../../../scripts/ui-scoreboard/contracts'
 import { checkPlugin } from '../../../scripts/ui-scoreboard/tokens'
 
 const repoRoot = resolve(import.meta.dir, '../../..')
@@ -40,6 +40,7 @@ const passingAuditCodes: Record<string, true> = {
 }
 
 let cachedSnapshot: { inventory: Inventory; plugin: PluginInventory } | undefined
+let cachedAudit: CheckResult[] | undefined
 function snapshot() {
   if (cachedSnapshot) return cachedSnapshot
   const inventory = collectInventory(repoRoot)
@@ -49,12 +50,16 @@ function snapshot() {
   return cachedSnapshot
 }
 
+beforeAll(() => { snapshot() })
+
 function failures(evidence: Evidence[]): Evidence[] {
   return evidence.filter(({ code }) => passingAuditCodes[code] === undefined)
 }
 
 function auditFailures(plugin: PluginInventory = snapshot().plugin): Evidence[] {
-  return failures(auditPlugin(snapshot().inventory, plugin).flatMap(({ evidence }) => evidence))
+  const { inventory, plugin: original } = snapshot()
+  const results = plugin === original ? (cachedAudit ??= auditPlugin(inventory, plugin)) : auditPlugin(inventory, plugin)
+  return failures(results.flatMap(({ evidence }) => evidence))
 }
 
 function withFragmentContent(plugin: PluginInventory, file: string, content: string): PluginInventory {
@@ -106,24 +111,16 @@ test('Browser compatibility tokens pass and the plugin is not enrolled in the ra
   expect(Object.hasOwn(ratchet, 'quirky.browser')).toBe(false)
 })
 
-test('removing the first state or action entry in memory exposes its source file', () => {
-  const { inventory, plugin } = snapshot()
+test.each(['states', 'actions'] as const)('removing the first %s entry exposes its source file', (kind) => {
+  const { plugin } = snapshot()
   const fragment = plugin.coverageFragments?.find(({ file }) => file === fragmentPath)
   if (!fragment) throw new Error('Browser preferences scoreboard fragment was not collected')
   const coverage = parseCoverage(fragment.content)
-  const firstState = coverage.states[0]
-  const firstAction = coverage.actions[0]
-  if (!firstState || !firstAction) throw new Error('Browser preferences fragment needs state and action entries')
-
-  const withoutFirstState = withFragmentContent(plugin, fragment.file, JSON.stringify({
+  const first = coverage[kind][0]
+  if (!first) throw new Error(`Browser preferences fragment needs ${kind} entries`)
+  const withoutFirst = withFragmentContent(plugin, fragment.file, JSON.stringify({
     ...coverage,
-    states: coverage.states.slice(1),
+    [kind]: coverage[kind].slice(1),
   }))
-  expect(auditFailures(withoutFirstState).some(({ source }) => source?.file === firstState.site.file)).toBe(true)
-
-  const withoutFirstAction = withFragmentContent(plugin, fragment.file, JSON.stringify({
-    ...coverage,
-    actions: coverage.actions.slice(1),
-  }))
-  expect(auditFailures(withoutFirstAction).some(({ source }) => source?.file === firstAction.site.file)).toBe(true)
+  expect(auditFailures(withoutFirst).some(({ source }) => source?.file === first.site.file)).toBe(true)
 })
