@@ -344,8 +344,10 @@ function isResolvedIdentityHeader(line: string): boolean {
 function assessmentResponse(stdout: string): string {
   const lines = stdout.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '').split(/\r?\n/)
   const body = lines.filter((line) => !isResolvedIdentityHeader(line)).join('\n').trim()
-  if (!body.startsWith('{') || !body.endsWith('}')) fail('Reviewer response must contain only one strict VisualAssessment JSON object.')
-  return body
+  const fence = /^```(?:json)?[ \t]*\n([\s\S]*?)\n[ \t]*```$/.exec(body)
+  const response = fence ? fence[1]!.trim() : body
+  if (!response.startsWith('{') || !response.endsWith('}')) fail('Reviewer response must contain only one strict VisualAssessment JSON object.')
+  return response
 }
 
 function validateAssessment(value: unknown): VisualAssessment {

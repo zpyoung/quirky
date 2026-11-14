@@ -230,6 +230,9 @@ theme metadata, PNGs, per-image reviewer responses/logs, `review-report.json` an
 Filtered runs identify their exact scope and do not certify the whole application. The command
 builds UI assets unless `--skip-build` is supplied; missing assets still fail.
 
+Reviewer output may contain one outer plain or `json` Markdown code fence. Assessment fields
+remain strictly validated; surrounding prose, nested fences and other non-JSON replies fail.
+
 Exit 0 means a complete requested capture-only inventory (**not reviewed**) or all requested
 reviews passed; exit 1 means capture/coverage/mount or score failure; exit 2 means invalid
 arguments, missing prerequisites, invalid evidence or reviewer/runtime failure. Signals await
