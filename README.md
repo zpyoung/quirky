@@ -29,6 +29,11 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 `quirky://pair` link, or pasting the code. Pairing pins the desktop key; bearer credentials stay
 in the phone's secure store. No relay or cloud account is used.
 
+The desktop Mobile page and Settings > Mobile offer **Try again** when settings fail to load.
+**Copy pairing code** is also available as
+`quirky ui run command:quirky.mobile/copy-pairing-code` while a pairing panel is open.
+The command never includes the pairing URL in its result.
+
 Build the desktop normally to include its verified workspace/session page bundle. For an iOS
 development build, run `bun run --filter '@quirky/mobile' ios` with Xcode configured. The custom
 page-origin module requires a native development build, not Expo Go. To check the portable
