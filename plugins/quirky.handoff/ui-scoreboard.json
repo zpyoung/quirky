@@ -1,0 +1,1080 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "overlay:quirky.handoff/dialog": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.handoff/settings": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/ui.tsx",
+        "quote": "context.toast('Could not resend the brief', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/ui.tsx",
+          "quote": "context.toast('Could not resend the brief', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/ui.tsx",
+        "quote": "context.toast(messageOf(error), '')"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/ui.tsx",
+          "quote": "context.toast(messageOf(error), '')"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "shown.length === 0 ? (\n              <EmptyState message=\"No matching worktrees.\" />\n            ) : (\n              shown.map((candidate) => (\n                <Button\n                  key={candidate.id}\n                  type=\"button\"\n                  role=\"option\"\n                  aria-selected={candidate.id === snapshot.worktree}\n                  disabled={disabled}\n                  onClick={() => {\n                    void context.executeCommand(COMMAND_SET, { field: 'worktree', value: candidate.id })\n                    onCloseWorktree()\n                  }}\n                >\n                  <span>{candidate.id === snapshot.worktree ? '✓ ' : ''}{candidate.remote ? `${candidate.hostName ?? candidate.remote.owner.hostId} · ` : ''}{candidate.name}</span>\n                  <span className=\"ui-text-muted\">{candidate.path}{candidate.connected === false ? ' · Unavailable' : ''}</span>\n                </Button>\n              ))\n            )"
+      },
+      "anchor": "shown.length === 0 ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "<EmptyState message=\"No matching worktrees.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "import {\n  Button,\n  Dialog as SharedDialog,\n  EmptyState,\n  InlineError,\n  ListRow,\n  NoticeLine,\n  SectionHeader,\n  SelectField,\n  TextArea,\n  TextField\n} from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.agents.state === 'loading' && <NoticeLine>{AGENTS_LOADING}</NoticeLine>"
+      },
+      "anchor": "snapshot.agents.state === 'loading' &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "<NoticeLine>{AGENTS_LOADING}</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "import {\n  Button,\n  Dialog as SharedDialog,\n  EmptyState,\n  InlineError,\n  ListRow,\n  NoticeLine,\n  SectionHeader,\n  SelectField,\n  TextArea,\n  TextField\n} from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.agents.state === 'failed' && <InlineError message={AGENTS_FAILED} />"
+      },
+      "anchor": "snapshot.agents.state === 'failed' &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "<InlineError message={AGENTS_FAILED} />"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "import {\n  Button,\n  Dialog as SharedDialog,\n  EmptyState,\n  InlineError,\n  ListRow,\n  NoticeLine,\n  SectionHeader,\n  SelectField,\n  TextArea,\n  TextField\n} from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.agents.state === 'ready' && snapshot.agents.list.length === 0 && <EmptyState message={AGENTS_EMPTY} />"
+      },
+      "anchor": "snapshot.agents.state === 'ready' && snapshot.agents.list.length === 0 &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "<EmptyState message={AGENTS_EMPTY} />"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "import {\n  Button,\n  Dialog as SharedDialog,\n  EmptyState,\n  InlineError,\n  ListRow,\n  NoticeLine,\n  SectionHeader,\n  SelectField,\n  TextArea,\n  TextField\n} from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.analysis === null && snapshot.previewing && <NoticeLine>Composing handoff preview…</NoticeLine>"
+      },
+      "anchor": "snapshot.analysis === null && snapshot.previewing &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "<NoticeLine>Composing handoff preview…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "import {\n  Button,\n  Dialog as SharedDialog,\n  EmptyState,\n  InlineError,\n  ListRow,\n  NoticeLine,\n  SectionHeader,\n  SelectField,\n  TextArea,\n  TextField\n} from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.error !== null && <InlineError message={snapshot.error} />"
+      },
+      "anchor": "snapshot.error !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "<InlineError message={snapshot.error} />"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "import {\n  Button,\n  Dialog as SharedDialog,\n  EmptyState,\n  InlineError,\n  ListRow,\n  NoticeLine,\n  SectionHeader,\n  SelectField,\n  TextArea,\n  TextField\n} from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.handoff/settings",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "phase === 'loading' && <EmptyState message=\"Loading handoff templates…\" />"
+      },
+      "anchor": "phase === 'loading' &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "<EmptyState message=\"Loading handoff templates…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "import { Button, Dialog as SharedDialog, EmptyState, InlineError, ListRow, SectionHeader, TextArea, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.handoff/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "phase === 'failed' && (\n        <InlineError\n          message={`Could not load handoff templates: ${loadError ?? ''}`}\n          action={{ label: 'Retry', onAction: () => { void store.load() } }}\n        />\n      )"
+      },
+      "anchor": "phase === 'failed' &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "<InlineError\n          message={`Could not load handoff templates: ${loadError ?? ''}`}\n          action={{ label: 'Retry', onAction: () => { void store.load() } }}\n        />"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "import { Button, Dialog as SharedDialog, EmptyState, InlineError, ListRow, SectionHeader, TextArea, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.handoff/settings",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "phase === 'ready' && templates.length === 0 && <EmptyState message=\"No handoff templates yet.\" />"
+      },
+      "anchor": "phase === 'ready' && templates.length === 0 &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "<EmptyState message=\"No handoff templates yet.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "import { Button, Dialog as SharedDialog, EmptyState, InlineError, ListRow, SectionHeader, TextArea, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/model.ts",
+        "quote": "this.context.toast(NO_CONTEXT_MESSAGE, '')"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/window/model.ts",
+          "quote": "this.context.toast(NO_CONTEXT_MESSAGE, '')"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/model.ts",
+        "quote": "this.context.toast('Could not open the handoff dialog', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/window/model.ts",
+          "quote": "this.context.toast('Could not open the handoff dialog', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.handoff/dialog",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/model.ts",
+        "quote": "this.context.toast('Could not save the template', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/window/model.ts",
+          "quote": "this.context.toast('Could not save the template', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.handoff/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/templates.ts",
+        "quote": "this.context.toast('Could not read the handoff templates', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/window/templates.ts",
+          "quote": "this.context.toast('Could not read the handoff templates', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.handoff/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/templates.ts",
+        "quote": "this.context.toast('Could not save the template', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/window/templates.ts",
+          "quote": "this.context.toast('Could not save the template', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.handoff/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/templates.ts",
+        "quote": "this.context.toast('Could not remove the template', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/window/templates.ts",
+          "quote": "this.context.toast('Could not remove the template', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.handoff/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/templates.ts",
+        "quote": "this.context.toast('Could not reset the templates', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.handoff/src/window/templates.ts",
+          "quote": "this.context.toast('Could not reset the templates', messageOf(error))"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "selectedLabel ?? 'Select a worktree'"
+      },
+      "anchor": "selectedLabel ??",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "selected && <ListRow title={<span className=\"ui-text-muted\">{selected.path}{selected.connected === false ? ' · Unavailable' : ''}</span>} />"
+      },
+      "anchor": "selected &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "selected.connected === false ? ' · Unavailable' : ''"
+      },
+      "anchor": "selected.connected === false ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "open && (\n        <div className=\"ui-stack\">\n          <TextField\n            label=\"Search worktrees\"\n            aria-label=\"Search worktrees\"\n            placeholder=\"Search worktrees…\"\n            autoFocus\n            value={snapshot.search}\n            disabled={disabled}\n            onChange={(event) => dialog.search(event.target.value)}\n          />\n          <div id={listboxId} role=\"listbox\" aria-label=\"Worktrees\" className=\"ui-option-list ui-stack\">\n            {shown.length === 0 ? (\n              <EmptyState message=\"No matching worktrees.\" />\n            ) : (\n              shown.map((candidate) => (\n                <Button\n                  key={candidate.id}\n                  type=\"button\"\n                  role=\"option\"\n                  aria-selected={candidate.id === snapshot.worktree}\n                  disabled={disabled}\n                  onClick={() => {\n                    void context.executeCommand(COMMAND_SET, { field: 'worktree', value: candidate.id })\n                    onCloseWorktree()\n                  }}\n                >\n                  <span>{candidate.id === snapshot.worktree ? '✓ ' : ''}{candidate.remote ? `${candidate.hostName ?? candidate.remote.owner.hostId} · ` : ''}{candidate.name}</span>\n                  <span className=\"ui-text-muted\">{candidate.path}{candidate.connected === false ? ' · Unavailable' : ''}</span>\n                </Button>\n              ))\n            )}\n          </div>\n        </div>\n      )"
+      },
+      "anchor": "open &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "candidate.id === snapshot.worktree ? '✓ ' : ''"
+      },
+      "anchor": "candidate.id === snapshot.worktree ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "candidate.remote ? `${candidate.hostName ?? candidate.remote.owner.hostId} · ` : ''"
+      },
+      "anchor": "candidate.remote ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "candidate.connected === false ? ' · Unavailable' : ''"
+      },
+      "anchor": "candidate.connected === false ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "creating ? (\n        <div className=\"ui-stack\">\n          <TextField\n            label=\"Worktree name\"\n            aria-label=\"Worktree name\"\n            type=\"text\"\n            placeholder=\"handoff-follow-up\"\n            value={snapshot.createName}\n            disabled={disabled}\n            onChange={(event) => dialog.set('createName', event.target.value)}\n          />\n          <TextField\n            label=\"Base branch (optional)\"\n            aria-label=\"Base branch (optional)\"\n            type=\"text\"\n            placeholder=\"Current branch\"\n            value={snapshot.createBase}\n            disabled={disabled}\n            onChange={(event) => dialog.set('createBase', event.target.value)}\n          />\n        </div>\n      ) : (\n        <WorktreeCombobox dialog={dialog} snapshot={snapshot} context={context} disabled={disabled} open={worktreeOpen} onToggleWorktree={onToggleWorktree} onCloseWorktree={onCloseWorktree} />\n      )"
+      },
+      "anchor": "creating ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.source?.canCreateWorktree && (\n        <Button type=\"button\" disabled={disabled} onClick={() => void context.executeCommand(COMMAND_SET, { field: 'create', value: !creating })}>\n          {creating ? 'Use an existing worktree' : 'Create a new worktree'}\n        </Button>\n      )"
+      },
+      "anchor": "snapshot.source?.canCreateWorktree &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "creating ? 'Use an existing worktree' : 'Create a new worktree'"
+      },
+      "anchor": "creating ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "!usable && snapshot.analysis !== null && <small className=\"ui-text-muted\">{reason}</small>"
+      },
+      "anchor": "!usable && snapshot.analysis !== null &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "editor && (\n        <div className=\"ui-stack\">\n          <TextField\n            label=\"Template name\"\n            aria-label=\"Template name\"\n            type=\"text\"\n            maxLength={TEMPLATE_NAME_MAX}\n            value={name}\n            disabled={disabled}\n            onChange={(event) => dialog.set('templateName', event.target.value)}\n          />\n          <Button type=\"button\" disabled={disabled || !dialog.canSaveTemplate()} onClick={() => void context.executeCommand(COMMAND_SAVE_TEMPLATE)}>\n            Save template\n          </Button>\n          {snapshot.note.length > TEMPLATE_BODY_MAX && <small className=\"ui-text-muted\">The note is over {TEMPLATE_BODY_MAX.toLocaleString('en-US')} characters.</small>}\n        </div>\n      )"
+      },
+      "anchor": "editor &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.note.length > TEMPLATE_BODY_MAX && <small className=\"ui-text-muted\">The note is over {TEMPLATE_BODY_MAX.toLocaleString('en-US')} characters.</small>"
+      },
+      "anchor": "snapshot.note.length > TEMPLATE_BODY_MAX &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "analysis ? `${analysis.characters} characters · about ${analysis.tokens} tokens` : ' '"
+      },
+      "anchor": "analysis ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "secrets.length > 0 && <ListRow title={secretsMarkerLine(secrets.length)} status=\"failing\" />"
+      },
+      "anchor": "secrets.length > 0 &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.detached && (\n        <ListRow\n          title={DETACHED_NOTICE}\n          status=\"needs-you\"\n          trailing={<Button type=\"button\" onClick={() => void context.executeCommand(COMMAND_REGENERATE)}>Regenerate from controls</Button>}\n        />\n      )"
+      },
+      "anchor": "snapshot.detached &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "analysis?.notice ?? ''"
+      },
+      "anchor": "analysis?.notice ??",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.working && (\n        <div data-busy>\n          <ListRow\n            title={snapshot.waiting ? WAITING_MESSAGE : BUSY_MESSAGE}\n            status=\"working\"\n            trailing={(\n              <div className=\"ui-cluster\">\n                <Button type=\"button\" disabled={snapshot.waiting} onClick={() => void context.executeCommand(COMMAND_WAIT_IDLE)}>Wait for idle</Button>\n                <Button type=\"button\" onClick={() => void context.executeCommand(COMMAND_CAPTURE)}>Capture anyway</Button>\n              </div>\n            )}\n          />\n        </div>\n      )"
+      },
+      "anchor": "snapshot.working &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.starting ? 'Starting…' : 'Start New Session'"
+      },
+      "anchor": "snapshot.starting ?",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "snapshot.source && (\n          <div data-source>\n            <ListRow\n              title={snapshot.source.title ?? snapshot.source.session ?? 'Archived session'}\n              description={`Original Agent: ${snapshot.source.agent}`}\n            />\n          </div>\n        )"
+      },
+      "anchor": "snapshot.source &&",
+      "reason": "Destination metadata, draft controls, preview analysis and source activity describe dialog content, not loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "editor && (\n        <div className=\"ui-stack\">\n          <TextField\n            label=\"Name\"\n            aria-label=\"Name\"\n            type=\"text\"\n            maxLength={TEMPLATE_NAME_MAX}\n            value={editor.name}\n            onChange={(event) => store.setEditor({ name: event.target.value })}\n          />\n          <TextArea\n            label=\"Instructions\"\n            aria-label=\"Instructions\"\n            rows={8}\n            maxLength={TEMPLATE_BODY_MAX}\n            value={editor.body}\n            onChange={(event) => store.setEditor({ body: event.target.value })}\n          />\n          <small className=\"ui-text-muted\">{BODY_COUNTER(editor.body.length, TEMPLATE_BODY_MAX)}</small>\n          <small className=\"ui-text-muted\">{VARIABLES_HINT}</small>\n        </div>\n      )"
+      },
+      "anchor": "editor &&",
+      "reason": "Template editor, ready count and duplicate-name feedback describe local editing state, not catalog loading, empty or load failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "warning !== null && (\n        <div role=\"status\">\n          <ListRow title={warning} status=\"needs-you\" />\n        </div>\n      )"
+      },
+      "anchor": "warning !== null &&",
+      "reason": "Template editor, ready count and duplicate-name feedback describe local editing state, not catalog loading, empty or load failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "role=\"status\""
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Template editor, ready count and duplicate-name feedback describe local editing state, not catalog loading, empty or load failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "phase === 'ready' && <span className=\"ui-text-muted\">{`${templates.length} of ${limit} templates`}</span>"
+      },
+      "anchor": "phase === 'ready' &&",
+      "reason": "Template editor, ready count and duplicate-name feedback describe local editing state, not catalog loading, empty or load failure."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={onToggleWorktree}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned draft toggle or dismissal without adding an action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => dialog.search(event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => {\n                    void context.executeCommand(COMMAND_SET, { field: 'worktree', value: candidate.id })\n                    onCloseWorktree()\n                  }}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'worktree', value: candidate.id })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => dialog.set('createName', event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => dialog.set('createBase', event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onToggleWorktree={onToggleWorktree}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned draft toggle or dismissal without adding an action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onCloseWorktree={onCloseWorktree}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned draft toggle or dismissal without adding an action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_SET, { field: 'create', value: !creating })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'create', value: !creating })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => void context.executeCommand(COMMAND_SET, { field: 'agent', value: event.target.value })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'agent', value: event.target.value })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => void context.executeCommand(COMMAND_SET, { field: 'relationship', value: event.target.value })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'relationship', value: event.target.value })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={() => void context.executeCommand(COMMAND_SET, { field: 'context', value: 'focused' })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'context', value: 'focused' })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={() => void context.executeCommand(COMMAND_SET, { field: 'context', value: 'full' })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'context', value: 'full' })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => void context.executeCommand(COMMAND_SET, { field: 'repoState', value: event.target.checked })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'repoState', value: event.target.checked })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => void context.executeCommand(COMMAND_SET, { field: 'diffBodies', value: event.target.checked })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'diffBodies', value: event.target.checked })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => void context.executeCommand(COMMAND_SET, { field: 'openEditorTabs', value: event.target.checked })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'openEditorTabs', value: event.target.checked })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => {\n          const value = event.target.value\n          void context.executeCommand(COMMAND_SET, { field: 'template', value: value === NEW_TEMPLATE ? 'new' : value === '' ? null : value })\n        }}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "command:quirky.handoff/set",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SET, { field: 'template', value: value === NEW_TEMPLATE ? 'new' : value === '' ? null : value })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => dialog.set('note', event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onChange={(event) => dialog.set('templateName', event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_SAVE_TEMPLATE)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/save-template",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_SAVE_TEMPLATE)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onEdit={(text) => dialog.edit(text)}"
+      },
+      "anchor": "onEdit",
+      "route": {
+        "target": "quirky.handoff/preview",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/model.ts",
+          "quote": "this.context.call('quirky.handoff/preview', {\n        source: ref,\n        controls,\n        ...(recapture ? { recapture: true } : {}),\n        ...(s.detached ? { body: s.text } : {})\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.handoff/src/window/model.ts",
+            "quote": "edit(text: string): CommandResult {\n    const s = this.snapshot\n    if (!s.shown) return refused('not-open')\n    if (s.detached && text === s.text) return ok()\n    this.commit({ text, detached: true, error: null })\n    void this.schedule()\n    return ok()\n  }"
+          },
+          {
+            "file": "plugins/quirky.handoff/src/window/model.ts",
+            "quote": "private schedule(options: { immediately?: boolean; recapture?: boolean } = {}): Promise<void> {\n    this.clearTimer()\n    this.sequence += 1\n    if (options.recapture) this.recapture = true\n    if (options.immediately) return this.refresh()\n    this.commit({ previewing: true })\n    this.timer = setTimeout(() => void this.refresh(), DEBOUNCE_MS)\n    return Promise.resolve()\n  }"
+          },
+          {
+            "file": "plugins/quirky.handoff/src/window/model.ts",
+            "quote": "private async refresh(): Promise<void> {\n    this.clearTimer()\n    const attempt = ++this.sequence\n    const s = this.snapshot\n    const ref = this.ref\n    if (!s.shown || ref === null) return\n    const recapture = this.recapture\n    this.recapture = false\n    const controls = controlsOf(s)\n    if (s.mode === 'create' && s.createName.trim() === '') delete controls.target\n    this.commit({ previewing: true })\n    try {\n      const result = (await this.context.call('quirky.handoff/preview', {\n        source: ref,\n        controls,\n        ...(recapture ? { recapture: true } : {}),\n        ...(s.detached ? { body: s.text } : {})\n      })) as Preview\n      if (attempt !== this.sequence) return\n      this.applyPreview(result, !s.detached)\n    } catch (error) {\n      if (attempt !== this.sequence) return\n      this.commit({ previewing: false, error: messageOf(error) })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_REGENERATE)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/regenerate",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_REGENERATE)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_WAIT_IDLE)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/wait-idle",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_WAIT_IDLE)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_CAPTURE)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/capture",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_CAPTURE)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "window.addEventListener('keydown', onKey, true)"
+      },
+      "anchor": "window.addEventListener('keydown'",
+      "transient": "draft",
+      "reason": "Escape dismisses the local picker or editor draft before dialog cancellation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClose={() => void context.executeCommand(COMMAND_CANCEL)}"
+      },
+      "anchor": "onClose",
+      "route": {
+        "target": "command:quirky.handoff/cancel",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "onClose={() => void context.executeCommand(COMMAND_CANCEL)}"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_CANCEL, { via: 'button' })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/cancel",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_CANCEL, { via: 'button' })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_START)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/start",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+          "quote": "context.executeCommand(COMMAND_START)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onToggleWorktree={() => setWorktreeOpen(!worktreeOpen)}"
+      },
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
+        "quote": "onCloseWorktree={() => {\n              setWorktreeOpen(false)\n              dialog.search('')\n            }}"
+      },
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "window.addEventListener('keydown', onKey, true)"
+      },
+      "anchor": "window.addEventListener('keydown'",
+      "transient": "draft",
+      "reason": "Escape dismisses the local picker or editor draft before dialog cancellation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onClose={onCancelEditor}"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned draft toggle or dismissal without adding an action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onClick={onCancelEditor}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned draft toggle or dismissal without adding an action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onClick={() => void store.saveEditor()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.handoff/templateMutate",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/templates.ts",
+          "quote": "this.context.call('quirky.handoff/templateMutate', {\n        op: editor.id === null ? 'add' : 'update',\n        template: { ...(editor.id === null ? {} : { id: editor.id }), name, body: editor.body }\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.handoff/src/window/templates.ts",
+            "quote": "async saveEditor(): Promise<CommandResult> {\n    const { editor } = this.snapshot\n    if (!editor) return refused('no-editor')\n    if (!canSaveEditor(editor)) return refused('cannot-save')\n    const name = editor.name.trim()\n    try {\n      const result = (await this.context.call('quirky.handoff/templateMutate', {\n        op: editor.id === null ? 'add' : 'update',\n        template: { ...(editor.id === null ? {} : { id: editor.id }), name, body: editor.body }\n      })) as CatalogResult\n      this.adopt(result)\n      this.commit({ editor: null, warning: result.warnings?.includes('duplicate-name') ? `Another template is already named “${name}”. Both were kept.` : null })\n      return ok()\n    } catch (error) {\n      this.context.toast('Could not save the template', messageOf(error))\n      return refused(reasonOf(error) ?? 'save-failed')\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onChange={(event) => store.setEditor({ name: event.target.value })}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onChange={(event) => store.setEditor({ body: event.target.value })}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onAction: () => { void store.load() }"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.handoff/templates",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/templates.ts",
+          "quote": "this.context.call('quirky.handoff/templates')"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.handoff/src/window/templates.ts",
+            "quote": "async load(): Promise<void> {\n    try {\n      this.adopt((await this.context.call('quirky.handoff/templates')) as CatalogResult)\n      this.hasLoaded = true\n      this.commit({ phase: 'ready', loadError: null })\n    } catch (error) {\n      if (!this.hasLoaded) {\n        this.commit({ phase: 'failed', loadError: messageOf(error) })\n        return\n      }\n      this.context.toast('Could not read the handoff templates', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_TEMPLATE_EDIT, { id: template.id })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/template-edit",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "context.executeCommand(COMMAND_TEMPLATE_EDIT, { id: template.id })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_TEMPLATE_REMOVE, { id: template.id })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/template-remove",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "context.executeCommand(COMMAND_TEMPLATE_REMOVE, { id: template.id })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_TEMPLATES_RESET)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/templates-reset",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "context.executeCommand(COMMAND_TEMPLATES_RESET)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onClick={() => void context.executeCommand(COMMAND_TEMPLATE_ADD)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.handoff/template-add",
+        "invoke": {
+          "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+          "quote": "context.executeCommand(COMMAND_TEMPLATE_ADD)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.handoff/src/window/SettingsView.tsx",
+        "quote": "onCancelEditor={onCancelEditor}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned draft toggle or dismissal without adding an action."
+    }
+  ]
+}
