@@ -476,6 +476,7 @@ test('the window layout keeps the remote workspace owner through Accounts settin
   const selectRemote = buttonByLabel(container, `Select Claude account ${accounts.remoteNext.label}`)
   await act(async () => { selectRemote.click() })
   await settle()
+  expect(container.textContent).not.toContain('Local Claude account')
   expect(fixture.calls).toContainEqual(expect.objectContaining({
     method: 'quirky.accounts/ownerCall',
     params: expect.objectContaining({
@@ -513,6 +514,8 @@ test('the window layout keeps the remote workspace owner through Accounts settin
   if (typeof copyCommand !== 'function') throw new Error('Missing copy-login-link command')
   expect(await (copyCommand as (args?: unknown) => unknown)({ id: 'login-a', provider: 'codex', url: 'https://auth.openai.com/oauth/authorize?login=a' }))
     .toEqual({ ok: false, reason: 'remote-owner' })
+  expect(container.textContent).not.toContain('Local Claude account')
+  expect(container.textContent).toContain('Remote Claude active')
 
   await act(async () => { fixture.emitLayout(localLayout(world.localWorktree.id)) })
   await waitUntil(() => container.textContent?.includes('Local Claude account') === true, 'Switching to a local workspace view did not restore local Accounts state.')
