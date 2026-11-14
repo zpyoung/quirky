@@ -9,6 +9,10 @@ export const BUDGETS = {
   floodEcho: 100,
 } as const satisfies Readonly<Record<Metric, number>>
 
+export const REGRESSION_RATIO = 1.25
+export const CONFIDENCE_Z = 1.96
+export const PAIR_COUNTS = { startup: 20, echo: 60, switch: 60, diff: 20, floodEcho: 60 } as const satisfies Readonly<Record<Metric, number>>
+
 export type Failure = {
   kind: string
   metric?: Metric
@@ -60,22 +64,35 @@ export type SpeedReport = {
   evidence: { samples: string; diagnostics: string[]; misses: string }
 }
 
+export type PairSide = 'head' | 'base'
+export type PairBasis = 'merge-base' | 'parent'
+
+export type SpeedPair = {
+  version: 1
+  runId: string
+  createdAt: string
+  status: 'complete' | 'incomplete'
+  qualified: boolean
+  head: { commit: string }
+  base: { commit: string; basis: PairBasis }
+  metrics: Record<Metric, { headSamplesMs: number[]; baseSamplesMs: number[] }>
+  failures: Failure[]
+  evidence: { samples: string }
+}
+
 export type MetricComparison = {
   headMedianMs: number
   baselineMedianMs: number
-  headSamples: number
-  baselineSamples: number
+  pairs: number
   changePercent: number
-  budgetMs: number
-  budgetMiss: boolean
-  baselineBudgetMiss: boolean
+  lowerBoundPercent: number
   regression: boolean
 }
 
 export type Comparison = {
   status: 'compared' | 'unavailable' | 'error'
   head: { commit: string; runId: string; createdAt: string } | null
-  baseline: { commit: string; runId: string; createdAt: string; ageMs: number } | null
+  baseline: { commit: string; basis: PairBasis } | null
   reason: string | null
   reasons: string[]
   metrics: Record<Metric, MetricComparison | null>
