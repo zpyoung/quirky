@@ -4,6 +4,9 @@ const REPORT_KEYS = ['version', 'commit', 'runId', 'createdAt', 'status', 'quali
 const PROFILE_KEYS = ['workloadVersion', 'worktrees', 'terminals', 'diffAddedLines', 'renderer', 'viewport', 'startup', 'floodChunkBytes', 'floodIntervalMs', 'runner', 'os', 'arch', 'cpuModel', 'cpuCount', 'bun', 'chromium', 'imageVersion']
 const PROFILE_V2_KEYS = [...PROFILE_KEYS, 'compositor']
 const METRIC_RESULT_KEYS = ['samplesMs', 'medianMs', 'budgetMs', 'budgetMiss']
+const PROFILE_V3_KEYS = [...PROFILE_V2_KEYS, 'frameTiming']
+const METRIC_RESULT_V3_KEYS = [...METRIC_RESULT_KEYS, 'wallSamplesMs', 'unavailableSamples']
+const FRAME_TIMING_MODE = 'native-final-frame-idle-cap-60hz'
 const EVIDENCE_KEYS = ['samples', 'diagnostics', 'misses']
 const PAIR_KEYS = ['version', 'runId', 'createdAt', 'status', 'qualified', 'head', 'base', 'metrics', 'failures', 'evidence']
 const PAIR_EVIDENCE_KEYS = ['samples']
@@ -55,7 +58,8 @@ function validProfile(value: unknown): value is SpeedProfile {
   if (!isRecord(value)) return false
   const keys = value.workloadVersion === 1
     ? PROFILE_KEYS
-    : value.workloadVersion === 2 ? PROFILE_V2_KEYS : null
+    : value.workloadVersion === 2 ? PROFILE_V2_KEYS
+      : value.workloadVersion === 3 ? PROFILE_V3_KEYS : null
   if (!keys || !hasExactKeys(value, keys)) return false
   const viewport = value.viewport
   const validBase = value.worktrees === 10
@@ -78,8 +82,12 @@ function validProfile(value: unknown): value is SpeedProfile {
     && isBoundedText(value.bun)
     && isBoundedText(value.chromium)
     && isBoundedText(value.imageVersion)
-  return validBase && (value.workloadVersion === 1 || value.compositor === 'software')
+  if (!validBase) return false
+  if (value.workloadVersion === 1) return true
+  if (value.compositor !== 'software') return false
+  return value.workloadVersion === 2 || value.frameTiming === FRAME_TIMING_MODE
 }
+
 
 function validFailure(value: unknown): value is Failure {
   if (!isRecord(value)) return false
@@ -131,15 +139,33 @@ export function validatePair(value: unknown): SpeedPair | null {
   return value as unknown as SpeedPair
 }
 
-function validMetricResult(value: unknown, metric: Metric): boolean {
-  if (!isRecord(value) || !hasExactKeys(value, METRIC_RESULT_KEYS)) return false
-  if (value.budgetMs !== BUDGETS[metric] || !Array.isArray(value.samplesMs)) return false
-  if (!value.samplesMs.every((sample) => typeof sample === 'number' && Number.isFinite(sample) && sample > 0)) return false
-  const expectedMedian = median(value.samplesMs as number[])
-  if (value.medianMs !== expectedMedian) return false
-  if (expectedMedian === null) return value.budgetMiss === null
-  return value.budgetMiss === (expectedMedian > BUDGETS[metric])
+function validReportSamples(value: unknown): value is number[] {
+  if (!Array.isArray(value)) return false
+  for (let index = 0; index < value.length; index += 1) {
+    const sample = value[index]
+    if (typeof sample !== 'number' || !Number.isFinite(sample) || sample <= 0) return false
+  }
+  return true
 }
+
+function validMetricResult(value: unknown, metric: Metric, version3: boolean): boolean {
+  if (!isRecord(value) || !hasExactKeys(value, version3 ? METRIC_RESULT_V3_KEYS : METRIC_RESULT_KEYS)) return false
+  if (value.budgetMs !== BUDGETS[metric] || !validReportSamples(value.samplesMs)) return false
+  const expectedMedian = median(value.samplesMs)
+  if (value.medianMs !== expectedMedian) return false
+  if (expectedMedian === null ? value.budgetMiss !== null : value.budgetMiss !== (expectedMedian > BUDGETS[metric])) return false
+  if (!version3) return true
+  if (!validReportSamples(value.wallSamplesMs) || value.wallSamplesMs.length !== value.samplesMs.length) return false
+  if (typeof value.unavailableSamples !== 'number' || !Number.isSafeInteger(value.unavailableSamples) || value.unavailableSamples < 0 || value.unavailableSamples > value.samplesMs.length) return false
+  for (let index = 0; index < value.samplesMs.length; index += 1) {
+    const sample = value.samplesMs[index]
+    const wallSample = value.wallSamplesMs[index]
+    if (sample === undefined || wallSample === undefined || sample > wallSample) return false
+    if ((metric === 'startup' || metric === 'diff') && sample !== wallSample) return false
+  }
+  return (metric !== 'startup' && metric !== 'diff') || value.unavailableSamples === 0
+}
+
 
 /** Validates the report shape and all aggregates without discarding partial or smoke evidence. */
 export function validateReport(value: unknown): SpeedReport | null {
@@ -157,9 +183,11 @@ export function validateReport(value: unknown): SpeedReport | null {
   if (!isSafeEvidencePath(value.evidence.samples) || !isSafeEvidencePath(value.evidence.misses)) return null
   if (!Array.isArray(value.evidence.diagnostics) || value.evidence.diagnostics.length > MAX_EVIDENCE_PATHS || !value.evidence.diagnostics.every(isSafeEvidencePath)) return null
   if (!isRecord(value.metrics) || !hasExactKeys(value.metrics, METRICS)) return null
+  const version3 = value.profile.workloadVersion === 3
   for (const metric of METRICS) {
-    if (!validMetricResult(value.metrics[metric], metric)) return null
+    if (!validMetricResult(value.metrics[metric], metric, version3)) return null
   }
+
 
   const counts = METRICS.map((metric) => (value.metrics as Record<Metric, { samplesMs: unknown[] }>)[metric].samplesMs.length)
   if (value.status === 'complete') {
@@ -330,15 +358,32 @@ function displayNumber(value: number | null): string {
 }
 
 function currentRows(report: SpeedReport): string[] {
-  const lines = [
-    '| Metric | Median (ms) | Samples | Budget (ms) | Budget result |',
-    '| --- | ---: | ---: | ---: | --- |',
-  ]
+  const version3 = report.profile.workloadVersion === 3
+  const lines = version3
+    ? [
+        '| Metric | Raw wall median (ms) | Budget median (ms) | Unavailable accounting samples | Samples | Budget (ms) | Budget result |',
+        '| --- | ---: | ---: | ---: | ---: | ---: | --- |',
+      ]
+    : [
+        '| Metric | Median (ms) | Samples | Budget (ms) | Budget result |',
+        '| --- | ---: | ---: | ---: | --- |',
+      ]
   for (const metric of METRICS) {
     const result = report.metrics[metric]
     const value = median(result.samplesMs)
     const budgetMiss = value !== null && value > BUDGETS[metric]
-    lines.push(`| ${metric} | ${displayNumber(value)} | ${result.samplesMs.length} | ${BUDGETS[metric]} | ${budgetMiss ? 'BUDGET MISS' : value === null ? 'not measured' : 'pass'} |`)
+    if (version3) {
+      const wallMedian = median(result.wallSamplesMs ?? [])
+      lines.push(`| ${metric} | ${displayNumber(wallMedian)} | ${displayNumber(value)} | ${result.unavailableSamples ?? 0} | ${result.samplesMs.length} | ${BUDGETS[metric]} | ${budgetMiss ? 'BUDGET MISS' : value === null ? 'not measured' : 'pass'} |`)
+    } else {
+      lines.push(`| ${metric} | ${displayNumber(value)} | ${result.samplesMs.length} | ${BUDGETS[metric]} | ${budgetMiss ? 'BUDGET MISS' : value === null ? 'not measured' : 'pass'} |`)
+    }
+  }
+  if (version3) {
+    lines.push(
+      '',
+      'Echo, switch and floodEcho budget values cap only demonstrated final-frame idle wait at 16.667 ms; native wall latency is shown separately. Startup and diff use wall time. Unavailable accounting uses wall time without a deduction.',
+    )
   }
   return lines
 }
