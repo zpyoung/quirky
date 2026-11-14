@@ -85,6 +85,7 @@ function contractProblem(code: string, detail: string): string {
 
 export function objectivePayload(input: unknown, worktreeSelector: string): ObjectivePayload {
   return {
+    objectiveText: '',
     tier: 'standard',
     landingBar: 'files-on-disk',
     lanesEnabled: true,

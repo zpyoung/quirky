@@ -161,7 +161,7 @@ test('refuses each invalid contract with its code', () => {
 })
 
 test('resolves active to the single window\'s selected worktree and refuses otherwise', async () => {
-  const resolved = { id: 'wt1', repoId: 'repo1', path: '/repo', kind: 'git', branch: 'main' }
+  const resolved = { id: 'wt1', repoId: 'repo1', path: '/repo', kind: 'git' as const, branch: 'main' }
   const activeCalls: Array<[string, Record<string, unknown>]> = []
   const active = await resolveWorkspace(async (method, params) => {
     activeCalls.push([method, params])
