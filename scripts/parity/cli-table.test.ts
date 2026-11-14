@@ -65,6 +65,18 @@ function registeredChecks(rows: CliTableRow[]): Set<string> {
   return new Set(rows.flatMap((row) => row.checks))
 }
 
+const exactWindowMethodParams: Record<string, Record<string, unknown>> = {
+  'ui.window.command.run': {
+    type: 'object',
+    properties: {
+      connId: { type: 'integer', description: 'A live kernel UI connection ID.' },
+      id: { type: 'string' },
+      args: { description: "Checked against the command's args schema." }
+    },
+    required: ['connId', 'id']
+  }
+}
+
 function syntheticCatalog(mappings: readonly CliCatalogMapping[] = CLI_MAPPINGS): SyntheticCatalog {
   const methods = new Map<string, SyntheticCatalog['methods'][number]>()
   const uiCommands = new Map<string, SyntheticCatalog['uiCommands'][number]>()
@@ -73,7 +85,14 @@ function syntheticCatalog(mappings: readonly CliCatalogMapping[] = CLI_MAPPINGS)
   const commands = new Map<string, Record<string, unknown>>()
 
   const addMethod = (name: string, plugin: string | null): void => {
-    if (!methods.has(name)) methods.set(name, { name, plugin, params: { type: 'object', properties: {} }, result: { type: 'object' } })
+    if (!methods.has(name)) {
+      methods.set(name, {
+        name,
+        plugin,
+        params: cloned(exactWindowMethodParams[name] ?? { type: 'object', properties: {} }),
+        result: { type: 'object' }
+      })
+    }
   }
   for (const mapping of mappings) {
     const plugin = mapping.plugin ?? null
@@ -320,6 +339,32 @@ test('catalog validation rejects a missing or malformed exact-window method sche
   }
   Object.assign(target, { params: null })
   expect(() => validateCatalog(malformed, rows)).toThrow(expect.objectContaining({ code: 'catalog-mismatch' }))
+
+  const corruptions = [
+    { property: 'connId', kind: 'missing' },
+    { property: 'connId', kind: 'type' },
+    { property: 'connId', kind: 'required' },
+    { property: 'id', kind: 'missing' },
+    { property: 'id', kind: 'type' },
+    { property: 'id', kind: 'required' },
+    { property: 'args', kind: 'missing' },
+    { property: 'args', kind: 'required-extra' }
+  ] as const
+  for (const corruption of corruptions) {
+    const catalog = syntheticCatalog()
+    const params = catalog.methods.find(method => method.name === 'ui.window.command.run')!.params
+    const properties = params.properties as Record<string, Record<string, unknown>>
+    if (corruption.kind === 'missing') {
+      delete properties[corruption.property]
+    } else if (corruption.kind === 'type') {
+      properties[corruption.property]!.type = corruption.property === 'connId' ? 'string' : 'integer'
+    } else if (corruption.kind === 'required') {
+      params.required = (params.required as string[]).filter(name => name !== corruption.property)
+    } else {
+      params.required = [...params.required as string[], corruption.property]
+    }
+    expect(codeOf(() => validateCatalog(catalog, rows))).toBe('catalog-mismatch')
+  }
 })
 
 test('inventory rejects unknown, duplicate and misbound observation IDs', () => {

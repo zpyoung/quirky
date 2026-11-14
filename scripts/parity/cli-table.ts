@@ -855,12 +855,28 @@ function resolvePluginCommand(catalog: ApiCatalog, mapping: CliCatalogMapping): 
   return entry
 }
 
+function verifyWindowCommandRunSchema(params: Record<string, unknown>): void {
+  const properties = params.properties
+  const required = params.required
+  if (params.type !== 'object' || !isRecord(properties) || !Array.isArray(required)) {
+    return fail('invalid-method-schema', 'ui.window.command.run has an invalid parameter object schema')
+  }
+  if (!isRecord(properties.connId) || properties.connId.type !== 'integer' ||
+    !isRecord(properties.id) || properties.id.type !== 'string' || !isRecord(properties.args)) {
+    return fail('invalid-method-schema', 'ui.window.command.run must declare integer connId, string id and args parameters')
+  }
+  if (required.length !== 2 || !required.includes('connId') || !required.includes('id')) {
+    return fail('invalid-method-schema', 'ui.window.command.run must require only connId and id')
+  }
+}
+
 function verifyMethod(catalog: ApiCatalog, methodName: string): ApiMethodEntry {
   const method = catalog.methods.find((entry) => entry.name === methodName)
   if (!method) return fail('missing-method', `catalog has no method ${methodName}`)
   if (!isRecord(method.params) || !isRecord(method.result)) {
     return fail('invalid-method-schema', `${methodName} is missing parameter or result schema`)
   }
+  if (methodName === 'ui.window.command.run') verifyWindowCommandRunSchema(method.params)
   return method
 }
 
