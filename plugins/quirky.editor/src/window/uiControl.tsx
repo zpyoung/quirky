@@ -18,7 +18,7 @@ export type EditorUiControlAddress = {
 
 export type EditorUiControlResult = { delivered: boolean }
 export type EditorUiControlHandler = (control: EditorUiControl) => Promise<EditorUiControlResult>
-export const EDITOR_UI_CONTROL_COMMAND = 'command:quirky.editor/ui-control' as const
+export const EDITOR_UI_CONTROL_COMMAND = 'command:quirky.editor/ui-control'
 
 export type EditorUiControlReportScope = {
   readonly surface: string
@@ -332,7 +332,7 @@ export function useEditorUiControl({
     }
   }, [scope, key, actionsKey, token, isCurrent])
 
-  const run = useCallback(async (action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> => {
+  async function run(action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> {
     const current = addressRef.current
     if (!current || !current.actions.includes(action) || !isCurrent()) return { delivered: false }
     const args: EditorUiControl = {
@@ -350,7 +350,8 @@ export function useEditorUiControl({
       if (isCurrent()) onErrorRef.current?.(errorOf(reason))
       return { delivered: false }
     }
-  }, [context, isCurrent])
+  }
+  const stableRun = useCallback(run, [context, isCurrent])
 
-  return { run, isCurrent }
+  return { run: stableRun, isCurrent }
 }
