@@ -63,21 +63,28 @@ function stateWith(overrides: { review?: ReviewData; mergeable?: string; queued?
 type ContextOptions = {
   agentList?: unknown | Promise<unknown>
   launchResult?: unknown | ((params: Record<string, unknown>) => unknown)
+  windowConnId?: number
+  confirm?: (input: { title: string; body: string; confirmLabel: string }) => boolean | Promise<boolean>
+  toast?: (title: string, body: string) => void
+  windowCommandRun?: (params: Record<string, unknown>, invoke: () => Promise<unknown>) => unknown | Promise<unknown>
   onCall?: (method: string, params: Record<string, unknown>) => unknown | Promise<unknown>
 }
 
 function fakeContext(calls: Call[], layout?: UiLayout, options: ContextOptions = {}): UiPluginContext {
   const provided = new Map<string, (...args: unknown[]) => unknown>()
+  const connId = options.windowConnId ?? 42
   const context = {
     pluginId: 'quirky.reviews',
     provide: (id: string, handler: (...args: unknown[]) => unknown) => { provided.set(id, handler) },
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
-      if (method === 'ui.window.self') return { connId: 42 }
+      if (method === 'ui.window.self') return { connId }
       if (method === 'ui.window.command.run') {
+        if (params.connId !== connId) throw new Error(`Unexpected window connection: ${String(params.connId)}`)
         const handler = provided.get(String(params.id))
         if (!handler) throw new Error(`No provided UI command: ${String(params.id)}`)
-        return { result: await handler(params.args) }
+        const invoke = async () => ({ result: await handler(params.args) })
+        return options.windowCommandRun ? options.windowCommandRun(params, invoke) : invoke()
       }
       if (method === 'quirky.agents/list') return options.agentList ?? { agents: [] }
       const result = await options.onCall?.(method, params)
@@ -94,8 +101,8 @@ function fakeContext(calls: Call[], layout?: UiLayout, options: ContextOptions =
     onConnection: () => () => {},
     subscribe: () => () => {},
     getSetting: () => undefined,
-    toast() {},
-    confirm: async () => false,
+    toast: (title: string, body: string) => options.toast?.(title, body),
+    confirm: async (input: { title: string; body: string; confirmLabel: string }) => options.confirm?.(input) ?? false,
     log() {}
   } as unknown as UiPluginContext
   activate(context)
@@ -557,4 +564,342 @@ test('a head change while Start settles keeps the draft editable after the stale
   expect(prompt.value).toBe('Investigate the failing build.')
   expect(prompt.disabled).toBe(false)
   expect(buttonByText(mounted.element, 'Cancel').disabled).toBe(false)
+})
+function mergedChecksState(): ReviewsState {
+  const state = stateWith()
+  state.checks.review = { ...review, state: 'merged' }
+  return state
+}
+
+function linkedWorkspace(worktree: string, name: string) {
+  return {
+    links: {
+      [review.url]: { worktree, name, url: review.url, repoId: 'fixture-repo' }
+    }
+  }
+}
+
+function reviewActionsDescriptor(context: UiPluginContext) {
+  return listReviewsUiControls(context, CHECKS_PANEL).find((item) => item.slot === 'review-actions')!
+}
+
+test('review-action lease renewal on owner generation invalidates old workspace lookups and unmount reads', async () => {
+  const state = mergedChecksState()
+  const oldLookup = deferred<unknown>()
+  const currentLookup = deferred<unknown>()
+  let lookupCount = 0
+  const mounted = mount((context) => <ReviewActions context={context} state={state} refresh={async () => {}} surface="checks" />, undefined, {
+    onCall(method) {
+      if (method === 'quirky.tasks/state') return lookupCount++ === 0 ? oldLookup.promise : currentLookup.promise
+      return undefined
+    }
+  })
+  await act(async () => {})
+  const initial = reviewActionsDescriptor(mounted.context)
+  expect(initial.target).toBe(JSON.stringify([
+    CHECKS_PANEL, 'review-actions', WORKTREE, 'github.com/test-owner/test-repo', 12, review.headRefOid, null
+  ]))
+
+  state.checks.generation += 1
+  mounted.rerender()
+  const replacement = reviewActionsDescriptor(mounted.context)
+  expect(replacement.target).toBe(initial.target)
+  expect(replacement.generation).not.toBe(initial.generation)
+  expect(lookupCount).toBe(2)
+
+  oldLookup.resolve(linkedWorkspace('/workspace/stale', 'Stale workspace'))
+  currentLookup.resolve({ links: {} })
+  await act(async () => {
+    await Promise.all([oldLookup.promise, currentLookup.promise])
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(mounted.element.querySelector('.ui-empty-state')?.textContent).toContain('No workspace is linked')
+  expect([...mounted.element.querySelectorAll('button')].some((button) => button.textContent?.includes('Stale workspace'))).toBe(false)
+  mounted.unmount()
+
+  const pendingUnmount = deferred<unknown>()
+  const unmounted = mount((context) => <ReviewActions context={context} state={state} refresh={async () => {}} surface="checks" />, undefined, {
+    onCall(method) {
+      return method === 'quirky.tasks/state' ? pendingUnmount.promise : undefined
+    }
+  })
+  await act(async () => {})
+  unmounted.unmount()
+  pendingUnmount.resolve(linkedWorkspace('/workspace/unmounted', 'Unmounted workspace'))
+  await act(async () => {
+    await pendingUnmount.promise
+    await Promise.resolve()
+  })
+  expect(unmounted.element.childElementCount).toBe(0)
+})
+
+test('stale merge confirmation cannot launch and its finally cannot unlock the replacement lease', async () => {
+  const state = stateWith()
+  state.checks.review = {
+    ...review,
+    mergeable: 'MERGEABLE',
+    mergeStateStatus: 'CLEAN',
+    mergeMethods: { allowed: ['squash'], default: 'squash' }
+  }
+  const confirmations = [deferred<boolean>(), deferred<boolean>()]
+  const confirmEntered = [deferred<void>(), deferred<void>()]
+  let confirmCount = 0
+  const mounted = mount((context) => <ReviewActions context={context} state={state} refresh={async () => {}} surface="checks" />, undefined, {
+    confirm() {
+      const index = confirmCount++
+      confirmEntered[index]?.resolve()
+      return confirmations[index]!.promise
+    },
+    onCall(method) {
+      if (method === 'quirky.reviews/detailMergeConfirmation') return 'Confirm merge.'
+      return undefined
+    }
+  })
+  await act(async () => {})
+  const original = reviewActionsDescriptor(mounted.context)
+  await act(async () => { await dispatchControl(mounted.context, 'review-actions', 'merge', { method: 'squash' }) })
+  await confirmEntered[0]!.promise
+
+  state.checks.generation += 1
+  mounted.rerender()
+  const replacement = reviewActionsDescriptor(mounted.context)
+  expect(replacement.target).toBe(original.target)
+  expect(replacement.generation).not.toBe(original.generation)
+  await act(async () => { await dispatchControl(mounted.context, 'review-actions', 'merge', { method: 'squash' }) })
+  await confirmEntered[1]!.promise
+
+  confirmations[0]!.resolve(true)
+  await act(async () => {
+    await confirmations[0]!.promise
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(mounted.calls.some((call) => call.method === 'quirky.reviews/detailMerge')).toBe(false)
+  expect(reviewActionsDescriptor(mounted.context).actions.find((action) => action.action === 'merge')?.enabled).toBe(false)
+
+  confirmations[1]!.resolve(false)
+  await act(async () => {
+    await confirmations[1]!.promise
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(mounted.calls.some((call) => call.method === 'quirky.reviews/detailMerge')).toBe(false)
+})
+
+test('old merge mutation completion cannot toast or clear busy state for a same-target replacement', async () => {
+  const state = stateWith()
+  state.checks.review = {
+    ...review,
+    mergeable: 'MERGEABLE',
+    mergeStateStatus: 'CLEAN',
+    mergeMethods: { allowed: ['squash'], default: 'squash' }
+  }
+  const oldMerge = deferred<unknown>()
+  const replacementMerge = deferred<unknown>()
+  const mergeEntered = [deferred<void>(), deferred<void>()]
+  const toasts: Array<{ title: string; body: string }> = []
+  let mergeCount = 0
+  const mounted = mount((context) => <ReviewActions context={context} state={state} refresh={async () => {}} surface="checks" />, undefined, {
+    confirm: async () => true,
+    toast: (title, body) => toasts.push({ title, body }),
+    onCall(method) {
+      if (method === 'quirky.reviews/detailMergeConfirmation') return 'Confirm merge.'
+      if (method === 'quirky.reviews/detailMerge') {
+        const index = mergeCount++
+        mergeEntered[index]?.resolve()
+        return index === 0 ? oldMerge.promise : replacementMerge.promise
+      }
+      return undefined
+    }
+  })
+  await act(async () => {})
+  await act(async () => { await dispatchControl(mounted.context, 'review-actions', 'merge', { method: 'squash' }) })
+  await mergeEntered[0]!.promise
+
+  state.checks.generation += 1
+  mounted.rerender()
+  await act(async () => { await dispatchControl(mounted.context, 'review-actions', 'merge', { method: 'squash' }) })
+  await mergeEntered[1]!.promise
+
+  oldMerge.resolve({ number: 12, state: 'merged' })
+  await act(async () => {
+    await oldMerge.promise
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(toasts).toEqual([])
+  expect(reviewActionsDescriptor(mounted.context).actions.find((action) => action.action === 'merge')?.enabled).toBe(false)
+
+  replacementMerge.resolve({ number: 12, state: 'merged' })
+  await act(async () => {
+    await replacementMerge.promise
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(toasts).toEqual([{ title: 'Pull request merged', body: 'PR #12 is merged.' }])
+})
+
+test('confirmed workspace removal unlinks its captured task target after selection changes without stale UI or toast writes', async () => {
+  const state = mergedChecksState()
+  const oldRemoval = deferred<unknown>()
+  const replacementRemoval = deferred<unknown>()
+  const oldRemovalEntered = deferred<void>()
+  const replacementRemovalEntered = deferred<void>()
+  const oldUnlinked = deferred<void>()
+  const replacementUnlinked = deferred<void>()
+  const unlinks: Record<string, unknown>[] = []
+  const toasts: Array<{ title: string; body: string }> = []
+  let stateReads = 0
+  const mounted = mount((context) => <ReviewActions context={context} state={state} refresh={async () => {}} surface="checks" />, undefined, {
+    confirm: async () => true,
+    toast: (title, body) => toasts.push({ title, body }),
+    onCall(method, params) {
+      if (method === 'quirky.tasks/state') {
+        return stateReads++ < 2
+          ? linkedWorkspace('/workspace/original', 'Original workspace')
+          : linkedWorkspace('/workspace/replacement', 'Replacement workspace')
+      }
+      if (method === 'quirky.worktree/remove') {
+        if (params.worktree === '/workspace/original') {
+          oldRemovalEntered.resolve()
+          return oldRemoval.promise
+        }
+        replacementRemovalEntered.resolve()
+        return replacementRemoval.promise
+      }
+      if (method === 'quirky.tasks/workspace') {
+        unlinks.push(params)
+        if (params.worktree === '/workspace/original') oldUnlinked.resolve()
+        else replacementUnlinked.resolve()
+        return { ok: true }
+      }
+      return undefined
+    }
+  })
+  await act(async () => {})
+  expect(buttonByText(mounted.element, 'Delete workspace · Original workspace')).toBeTruthy()
+  await act(async () => { await dispatchControl(mounted.context, 'review-actions', 'delete-workspace') })
+  await oldRemovalEntered.promise
+
+  state.checks.worktree = '/replacement/tree'
+  state.checks.generation += 1
+  mounted.rerender()
+  await act(async () => { await Promise.resolve(); await Promise.resolve() })
+  expect(buttonByText(mounted.element, 'Delete workspace · Replacement workspace')).toBeTruthy()
+  await act(async () => { await dispatchControl(mounted.context, 'review-actions', 'delete-workspace') })
+  await replacementRemovalEntered.promise
+
+  oldRemoval.resolve({ ok: true, removed: ['/workspace/original'] })
+  await oldUnlinked.promise
+  await act(async () => { await Promise.resolve(); await Promise.resolve() })
+  expect(unlinks).toHaveLength(1)
+  expect(unlinks[0]).toEqual({
+    action: 'unlink',
+    target: {
+      worktree: WORKTREE,
+      kind: 'pullRequest',
+      number: 12,
+      url: review.url,
+      host: 'github.com',
+      owner: 'test-owner',
+      repo: 'test-repo'
+    },
+    worktree: '/workspace/original'
+  })
+  expect(toasts).toEqual([])
+  expect(reviewActionsDescriptor(mounted.context).actions.find((action) => action.action === 'delete-workspace')?.enabled).toBe(false)
+
+  replacementRemoval.resolve({ ok: true, removed: ['/workspace/replacement'] })
+  await replacementUnlinked.promise
+  await act(async () => { await Promise.resolve(); await Promise.resolve() })
+  expect(unlinks).toHaveLength(2)
+  expect(toasts).toEqual([{
+    title: 'Workspace deleted',
+    body: 'Removed Replacement workspace from merged pull request #12.'
+  }])
+})
+
+test('workspace unlink is not attempted after unconfirmed removal and cleanup failure keeps its established toast', async () => {
+  const unconfirmed = mergedChecksState()
+  const unconfirmedToasts: Array<{ title: string; body: string }> = []
+  let unconfirmedUnlinks = 0
+  const failedRemovalDone = deferred<void>()
+  const failed = mount((context) => <ReviewActions context={context} state={unconfirmed} refresh={async () => {}} surface="checks" />, undefined, {
+    confirm: async () => true,
+    toast: (title, body) => {
+      unconfirmedToasts.push({ title, body })
+      if (title === 'Could not delete workspace') failedRemovalDone.resolve()
+    },
+    onCall(method) {
+      if (method === 'quirky.tasks/state') return linkedWorkspace('/workspace/failed', 'Failed workspace')
+      if (method === 'quirky.worktree/remove') return { ok: true, removed: [] }
+      if (method === 'quirky.tasks/workspace') unconfirmedUnlinks += 1
+      return undefined
+    }
+  })
+  await act(async () => {})
+  await act(async () => { await dispatchControl(failed.context, 'review-actions', 'delete-workspace') })
+  await failedRemovalDone.promise
+  expect(unconfirmedUnlinks).toBe(0)
+  expect(unconfirmedToasts[0]?.title).toBe('Could not delete workspace')
+  failed.unmount()
+
+  const cleanupFailure = mergedChecksState()
+  const cleanupToasts: Array<{ title: string; body: string }> = []
+  const cleanupDone = deferred<void>()
+  const removed = mount((context) => <ReviewActions context={context} state={cleanupFailure} refresh={async () => {}} surface="checks" />, undefined, {
+    confirm: async () => true,
+    toast: (title, body) => {
+      cleanupToasts.push({ title, body })
+      if (title === 'Workspace removed; link cleanup failed') cleanupDone.resolve()
+    },
+    onCall(method) {
+      if (method === 'quirky.tasks/state') return linkedWorkspace('/workspace/cleanup-failed', 'Cleanup failure workspace')
+      if (method === 'quirky.worktree/remove') return { ok: true, removed: ['/workspace/cleanup-failed'] }
+      if (method === 'quirky.tasks/workspace') throw new Error('task link cleanup rejected')
+      return undefined
+    }
+  })
+  await act(async () => {})
+  await act(async () => { await dispatchControl(removed.context, 'review-actions', 'delete-workspace') })
+  await cleanupDone.promise
+  expect(cleanupToasts).toEqual([{
+    title: 'Workspace removed; link cleanup failed',
+    body: 'Cleanup failure workspace: task link cleanup rejected'
+  }])
+})
+test('a delayed old-window delivery failure after owner generation replacement is ignored', async () => {
+  const state = stateWith()
+  const bridgeResponse = deferred<unknown>()
+  const bridgeEntered = deferred<void>()
+  const toasts: Array<{ title: string; body: string }> = []
+  let invokeBridge: (() => Promise<unknown>) | null = null
+  const mounted = mount((context) => <ReviewActions context={context} state={state} refresh={async () => {}} surface="checks" />, undefined, {
+    toast: (title, body) => toasts.push({ title, body }),
+    windowCommandRun(_params, invoke) {
+      invokeBridge = invoke
+      bridgeEntered.resolve()
+      return bridgeResponse.promise
+    }
+  })
+  await act(async () => {})
+  await act(async () => {
+    buttonByText(mounted.element, 'Fix broken checks').click()
+    await bridgeEntered.promise
+  })
+
+  state.checks.generation += 1
+  mounted.rerender()
+  const staleEnvelope = await invokeBridge!()
+  expect(staleEnvelope).toEqual({ result: { delivered: false, reason: 'target-unavailable' } })
+  bridgeResponse.resolve(staleEnvelope)
+  await act(async () => {
+    await bridgeResponse.promise
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+
+  expect(mounted.element.querySelector('.ui-inline-error')).toBeNull()
+  expect(toasts).toEqual([])
 })
