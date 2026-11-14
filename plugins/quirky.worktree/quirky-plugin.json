@@ -3561,7 +3561,8 @@
       {
         "id": "add-project",
         "title": "Add project"
-      }
+      },
+      {"id":"uiControl","title":"Worktree UI Control","description":"Open or close the row menu of a remote workspace or VM listed by quirky worktree remote-list or vm-list, or add or unlink a draft reference in the open Worktree details dialog of a worktree listed by quirky worktree list. Returns how many mounted targets received it.","palette":false,"args":{"type":"object","properties":{"action":{"type":"string","enum":["open-workspace-menu","close-workspace-menu","open-vm-menu","close-vm-menu","add-reference","unlink-reference"]},"workspace":{"type":"string"},"vm":{"type":"string"},"worktree":{"type":"string"},"url":{"type":"string"},"label":{"type":"string"}},"required":["action"],"additionalProperties":false}}
     ],
     "keybinding": [
       {

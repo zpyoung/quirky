@@ -3,7 +3,7 @@ import { git, isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { noteViewInput } from '../../src/notes/open-note'
 import { diffViewKey } from '../../src/shared/view-input'
 import { byLabel, click, messageBox, primary, primaryNow, q, qa, rowOf, text, type } from './dom'
-import { boot, openView, shutdown, startGitHubFixture, viewTabs, DIFF_VIEW, type GitHubFixture, type World } from './world'
+import { boot, openView, sc1, shutdown, startGitHubFixture, viewTabs, DIFF_VIEW, type GitHubFixture, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
@@ -28,6 +28,17 @@ async function expectOneReviewTab(w: World): Promise<string> {
   expect(reviewTitles()).toHaveLength(1)
   expect(qa('[data-review-tab]')).toHaveLength(1)
   return tabs[0]!.id
+}
+
+async function runOn<T>(world: World, id: string, args: Record<string, unknown> = {}): Promise<T> {
+  const connId = (await world.state()).windows[0]?.connId
+  if (typeof connId !== 'number') throw new Error('The headless window has no connection ID')
+  const response = await world.agent.callAny('ui.window.command.run', {
+    connId,
+    id: `command:quirky.git/${id}`,
+    args
+  }) as { result: T }
+  return response.result
 }
 
 test('criterion 2: a row, the palette, a commit and a note all land in the worktree\'s one Review tab', async () => {
@@ -84,6 +95,90 @@ test('criterion 2: a row, the palette, a commit and a note all land in the workt
   await w.run('open-changes')
   await w.win.waitFor(() => q('[data-git-view-root] .ui-scope-chip') === null)
   expect(await expectOneReviewTab(w)).toBe(review)
+  expect(w.problems()).toEqual([])
+}, SLOW)
+
+test('criterion 2: Review identity, notes and marks survive every command form', async () => {
+  const w = await boot(scratch, { published: false, noPanel: true })
+  sc1(w)
+  await w.agent.callAny('quirky.git/addNote', {
+    worktree: w.feat.id, path: 'math.ts', startLine: 3, line: 3, body: 'Check this edit'
+  })
+  await w.agent.callAny('quirky.git/setReviewMark', {
+    worktree: w.feat.id, path: 'README.md', reviewed: true
+  })
+
+  const first = await runOn<{ tabId: string; focused: boolean; source: string | null; reveal: string | null }>(
+    w,
+    'open-diff',
+    { path: 'math.ts' }
+  )
+  expect(first).toMatchObject({ focused: true, source: null, reveal: 'math.ts' })
+  await w.win.waitFor(() => q('[data-git-view-root] section[data-path="math.ts"][data-active]'))
+  const reviewId = first.tabId
+  const key = diffViewKey({ worktree: w.feat.id, mode: 'review' })
+  const expectIdentity = async () => {
+    const tabs = await viewTabs(w, DIFF_VIEW)
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]!.id).toBe(reviewId)
+    expect((tabs[0] as { key?: string }).key).toBe(key)
+  }
+  await expectIdentity()
+
+  const background = await runOn<{ tabId: string; focused: boolean; reveal: string | null }>(
+    w,
+    'open-diff',
+    { path: 'README.md', focus: false }
+  )
+  expect(background).toMatchObject({ tabId: reviewId, focused: false, reveal: 'README.md' })
+  await expectIdentity()
+
+  const both = await runOn<{ focused: boolean; review: { tabId: string; focused: boolean } | null }>(
+    w,
+    'open-changes',
+    { mode: 'both', focus: false }
+  )
+  expect(both).toMatchObject({ focused: false, review: { tabId: reviewId, focused: false } })
+  await expectIdentity()
+
+  const staged = await runOn<{ tabId: string; source: string | null }>(
+    w,
+    'open-diff',
+    { path: 'README.md', source: 'staged' }
+  )
+  expect(staged).toMatchObject({ tabId: reviewId, source: 'staged' })
+  await w.win.waitFor(() =>
+    q('[data-git-view-root] section[data-path="README.md"]') &&
+    text(q('[data-git-view-root] .ui-scope-chip')).includes('Staged changes')
+  )
+  expect(qa('.git-review__review button', q('[data-git-view-root] section[data-path="README.md"]')!)).toHaveLength(0)
+  await expectIdentity()
+
+  const unstaged = await runOn<{ review: { tabId: string }; source: string | null }>(
+    w,
+    'open-changes',
+    { area: 'unstaged' }
+  )
+  expect(unstaged).toMatchObject({ review: { tabId: reviewId }, source: 'unstaged' })
+  await w.win.waitFor(() =>
+    text(q('[data-git-view-root] section[data-path="math.ts"] header')).includes('✎ 1 note') &&
+    text(q('[data-git-view-root] .ui-scope-chip')).includes('Unstaged changes')
+  )
+  expect(text(q('[data-git-view-root] section[data-path="math.ts"] header'))).toContain('✎ 1 note')
+  await expectIdentity()
+
+  const all = await runOn<{ review: { tabId: string }; source: string | null }>(w, 'open-changes')
+  expect(all).toMatchObject({ review: { tabId: reviewId }, source: null })
+  await w.win.waitFor(() =>
+    q('[data-git-view-root] section[data-path="README.md"] button[aria-expanded="false"]') &&
+    q('[data-git-view-root] .ui-scope-chip') === null
+  )
+  const model = await w.agent.callAny('quirky.git/review', { worktree: w.feat.id }) as {
+    files: Array<{ path: string; mark: string }>
+  }
+  expect(model.files.find((file) => file.path === 'README.md')?.mark).toBe('reviewed')
+  expect(q('[data-git-view-root] section[data-path="README.md"] button[aria-expanded="false"]')).not.toBeNull()
+  await expectIdentity()
   expect(w.problems()).toEqual([])
 }, SLOW)
 

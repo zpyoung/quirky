@@ -1,9 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Badge, Button } from '@quirky/ui'
+import { Badge, Button, InlineError, NoticeLine } from '@quirky/ui'
+import type { UiPluginContext } from '@quirky/protocol'
 import type { BrowserProfile } from '../profiles/store'
 import type { BrowserPreferencesProps } from '../preferences/contract'
-import { BROWSER_SETTING_IDS, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
+import { browserPaneControlInstance } from '../ui-control'
+import { BROWSER_SETTING_IDS, PREFERENCES_CONTROL_COMMAND, ProfileCreator, errorMessage, profileSourceLabel, registerPreferencesController, useBrowserPreferenceData } from './shared'
+import type { PreferencesControlArgs } from './shared'
 import { CookieImportPanel } from './CookieImportPanel'
+
+async function requestPreferencesControl(context: UiPluginContext, args: PreferencesControlArgs): Promise<void> {
+  await context.executeCommand(PREFERENCES_CONTROL_COMMAND, args, { activateOwner: false })
+}
 
 const MENU_LAYOUT_STYLE = { display: 'grid', gap: 'var(--ui-space-12)', minWidth: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-body)' } as const
 const MENU_CONTENT_STYLE = { display: 'grid', gap: 'var(--ui-space-8)', minWidth: 0 } as const
@@ -22,6 +29,7 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
   const { context, pane, onError, inline = false } = props
   const { preferences, loading, stateError, refresh, saveSetting } = useBrowserPreferenceData(context, onError)
   const menuId = useId()
+  const controlInstance = pane ? browserPaneControlInstance(pane.id, 'profile-menu') : menuId
   const [menuOpen, setMenuOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
@@ -34,6 +42,13 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
   const paneIdentity = pane?.id
   const paneProfile = profileIdForPane(pane)
 
+
+  useEffect(() => registerPreferencesController(context, controlInstance, (args) => {
+    if (args.action === 'toggle-profile-menu') setMenuOpen((open) => !open)
+    else if (args.action === 'open-create-profile') setCreateOpen(true)
+    else if (args.action === 'close-create-profile') setCreateOpen(false)
+    else if (args.action === 'toggle-import') setImportOpen((open) => !open)
+  }), [context, controlInstance])
   useEffect(() => {
     profileSelectionRequest.current += 1
     profileSwitchingRef.current = false
@@ -45,6 +60,15 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
   const effectiveSelection = pane ? selectedProfile : (profiles.find((row) => row.active)?.profile.id ?? 'default')
   const currentProfile = profiles.find(({ profile }) => profile.id === effectiveSelection)?.profile
   const menuLabel = currentProfile?.label ?? (effectiveSelection === 'default' ? 'Default' : effectiveSelection)
+
+  const runPreferencesControl = (args: Omit<PreferencesControlArgs, 'instance'>) => {
+    setActionError(null)
+    void requestPreferencesControl(context, { ...args, instance: controlInstance }).catch((cause: unknown) => {
+      const message = errorMessage(cause)
+      setActionError(message)
+      onError(message)
+    })
+  }
 
   const selectProfile = async (profile: BrowserProfile) => {
     if (!pane || profile.id === selectedProfile || profileSwitchingRef.current) return
@@ -88,10 +112,11 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
   }
 
   return <div className="browser-profile-menu" style={MENU_LAYOUT_STYLE}>
-    {!inline && <Button type="button" className="ui-menu__trigger" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}>Profile: {menuLabel}</Button>}
+    {!inline && <Button type="button" className="ui-menu__trigger" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => runPreferencesControl({ action: 'toggle-profile-menu' })}>Profile: {menuLabel}</Button>}
+    {actionError && !inline && !menuOpen && <InlineError message={actionError} />}
     {(inline || menuOpen) && <div id={menuId} aria-label="Browser profile menu" style={MENU_CONTENT_STYLE}>
-      {loading && !preferences && <p role="status" style={MENU_MESSAGE_STYLE}>Loading browser profiles…</p>}
-      {stateError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{stateError}</p>}
+      {loading && !preferences && <div role="status" style={MENU_MESSAGE_STYLE}><NoticeLine>Loading browser profiles…</NoticeLine></div>}
+      {stateError && <InlineError message={stateError} />}
       {preferences && <fieldset style={PROFILE_ROWS_STYLE}>
         <legend style={{ color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', fontWeight: 600 }}>Browser profiles</legend>
         {profiles.map(({ profile }) => {
@@ -111,11 +136,11 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
           </label>
         })}
       </fieldset>}
-      {actionError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{actionError}</p>}
+      {actionError && <InlineError message={actionError} />}
       {successMessage && <p role="status" style={MENU_MESSAGE_STYLE}>{successMessage}</p>}
       <div style={MENU_ACTIONS_STYLE}>
-        <Button type="button" variant="primary" disabled={loading && !preferences} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>New Profile</Button>
-        <Button type="button" aria-expanded={importOpen} onClick={() => setImportOpen((open) => !open)}>Import Cookies</Button>
+        <Button type="button" variant="primary" disabled={loading && !preferences} onClick={() => { setSuccessMessage(null); runPreferencesControl({ action: 'open-create-profile' }) }}>New Profile</Button>
+        <Button type="button" aria-expanded={importOpen} onClick={() => runPreferencesControl({ action: 'toggle-import', profile: effectiveSelection })}>Import Cookies</Button>
         <Button type="button" onClick={() => void context.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
           const message = errorMessage(cause)
           setActionError(message)
@@ -123,7 +148,7 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
         })}>Browser Settings…</Button>
       </div>
       {importOpen && <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={{ id: effectiveSelection, label: menuLabel }} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
-      {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => setCreateOpen(false)} onError={onError} />}
+      {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => runPreferencesControl({ action: 'close-create-profile' })} onError={onError} />}
     </div>}
   </div>
 }
@@ -133,9 +158,23 @@ export function BrowserImportHint(props: BrowserPreferencesProps) {
   const { preferences, loading, stateError, settings, saveSetting, refresh } = useBrowserPreferenceData(context, onError)
   const [expanded, setExpanded] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const fallbackInstance = useId()
+  const controlInstance = pane ? browserPaneControlInstance(pane.id, 'import-hint') : fallbackInstance
+  useEffect(() => registerPreferencesController(context, controlInstance, (args) => {
+    if (args.action === 'toggle-import-hint') setExpanded((open) => !open)
+  }), [context, controlInstance])
   const hintProfileId = profileIdForPane(pane)
   const hintProfile = preferences?.profiles.find(({ profile }) => profile.id === hintProfileId)?.profile
   const hintDestination = { id: hintProfileId, label: hintProfile?.label ?? (hintProfileId === 'default' ? 'Default' : hintProfileId) }
+
+  const runPreferencesControl = () => {
+    setActionError(null)
+    void requestPreferencesControl(context, { action: 'toggle-import-hint', instance: controlInstance }).catch((cause: unknown) => {
+      const message = errorMessage(cause)
+      setActionError(message)
+      onError(message)
+    })
+  }
 
   const hideHint = async () => {
     setActionError(null)
@@ -150,11 +189,12 @@ export function BrowserImportHint(props: BrowserPreferencesProps) {
 
   if (settings.browserImportHintHidden) return null
   return <aside aria-label="Import browser data hint" style={{ ...MENU_CONTENT_STYLE, background: 'var(--ui-surface)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-8)' }}>
-    <Button type="button" className="ui-menu__trigger" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)}>Import browser data</Button>
+    <Button type="button" className="ui-menu__trigger" aria-expanded={expanded} onClick={runPreferencesControl}>Import browser data</Button>
+    {actionError && !expanded && <InlineError message={actionError} />}
     {expanded && <div style={MENU_CONTENT_STYLE}>
-      {stateError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{stateError}</p>}
-      {actionError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{actionError}</p>}
-      {loading && !preferences ? <p role="status" style={MENU_MESSAGE_STYLE}>Loading cookie import availability…</p> : <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={hintDestination} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
+      {stateError && <InlineError message={stateError} />}
+      {actionError && <InlineError message={actionError} />}
+      {loading && !preferences ? <div role="status" style={MENU_MESSAGE_STYLE}><NoticeLine>Loading cookie import availability…</NoticeLine></div> : <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={hintDestination} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
     </div>}
   </aside>
 }

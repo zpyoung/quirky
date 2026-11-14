@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { createElement } from 'react'
+import { createElement, useState } from 'react'
 import { $, $$, button, cleanup, click, command, fill, key, loadQuickCommands, qc, qcFake, quickCommandsChanged, render, unloadQuickCommands, type World } from './qc-support'
+import type { UiPluginContext } from '@quirky/protocol'
 import type { Group } from '../../src/layout/types'
 
 beforeAll(loadQuickCommands)
@@ -10,19 +11,27 @@ afterEach(cleanup)
 function group(over: Partial<Group> = {}): Group {
   return { kind: 'group', id: 'grp-1', tabs: [], activeTab: null, recent: [], lastQuickCommand: null, ...over }
 }
+type StripOwnerProps = {
+  context: UiPluginContext
+  workspace: string
+  group: Group
+  repo: string | null
+}
+
+function StripOwner({ context, workspace, group, repo }: StripOwnerProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  return createElement(qc().strip.QuickCommandsStripButton, { context, workspace, group, repo, menuOpen, onMenuOpenChange: setMenuOpen })
+}
+
+function stripOwner(context: UiPluginContext, workspace: string, g: Group, repo: string | null) {
+  return createElement(StripOwner, { context, workspace, group: g, repo })
+}
 
 async function mountStrip(init: Partial<World> = {}, props: { workspace?: string; group?: Group; repo?: string | null } = {}) {
-  const { fake, world } = qcFake(init)
+  const { fake, world, executed } = qcFake(init)
   const g = props.group ?? group()
-  const view = await render(
-    createElement(qc().strip.QuickCommandsStripButton, {
-      context: fake.context,
-      workspace: props.workspace ?? 'wt_main',
-      group: g,
-      repo: props.repo === undefined ? 'api' : props.repo
-    })
-  )
-  return { fake, world, view, g }
+  const view = await render(stripOwner(fake.context, props.workspace ?? 'wt_main', g, props.repo === undefined ? 'api' : props.repo))
+  return { fake, world, executed, view, g }
 }
 
 const label = () => $('[data-qc-run]')?.textContent?.trim()
@@ -32,6 +41,8 @@ const rows = () => $$('[role="menuitem"]').map((row) => row.getAttribute('data-c
 const hello = command({ id: 'hello', label: 'Hello', command: 'echo hello' })
 const draft = command({ id: 'draft', label: 'Draft', command: 'echo draft', appendEnter: false })
 const project = command({ id: 'test', label: 'Test', command: 'bun test', scope: 'repo', repo: 'api' })
+const QC_DIALOG = 'command:quirky.terminal/quick-command-dialog'
+const QC_COPY = 'command:quirky.terminal/copy-quick-command'
 
 describe('QuickCommandsStripButton', () => {
   test('SC-55: the floating workspace has no quick-command button', async () => {
@@ -108,7 +119,7 @@ describe('QuickCommandsStripButton', () => {
   test('it follows the group\'s last command when the group changes', async () => {
     const { view, fake } = await mountStrip({ commands: [hello, draft] })
     expect(label()).toBe('Hello')
-    await view.rerender(createElement(qc().strip.QuickCommandsStripButton, { context: fake.context, workspace: 'wt_main', group: group({ lastQuickCommand: 'draft' }), repo: 'api' }))
+    await view.rerender(stripOwner(fake.context, 'wt_main', group({ lastQuickCommand: 'draft' }), 'api'))
     expect(label()).toBe('Draft')
   })
 
@@ -291,5 +302,74 @@ describe('QuickCommandsStripButton', () => {
       await view.unmount()
       expect(changes).toEqual([false])
     })
+  })
+  test('28: Copy routes by ID, updates its title and leaves the menu open', async () => {
+    const written: string[] = []
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (text: string) => void written.push(text) }, configurable: true })
+    const { fake, executed } = await mountStrip({ commands: [hello] })
+    await click(button('More quick commands'))
+    const copy = button('Copy Hello')
+    await click(copy)
+    expect(executed).toEqual([{ id: QC_COPY, args: { command: 'hello' } }])
+    expect(written).toEqual(['echo hello'])
+    expect(copy.title).toBe('Copied')
+    expect(menu()).not.toBeNull()
+    expect(fake.toasts).toEqual([])
+  })
+
+  test('29: a rejected Copy route shows a toast and preserves the original title', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: async () => { throw new Error('clipboard unavailable') } },
+      configurable: true
+    })
+    const { fake, executed } = await mountStrip({ commands: [hello] })
+    await click(button('More quick commands'))
+    await click(button('Copy Hello'))
+    expect(executed).toEqual([{ id: QC_COPY, args: { command: 'hello' } }])
+    expect(fake.toasts.at(-1)).toEqual({ title: "Couldn't copy", body: 'Hello' })
+    expect(button('Copy Hello').title).toBe('Copy Hello')
+  })
+
+  test('30: copying a missing or empty command rejects with its reason', async () => {
+    const { fake } = qcFake({ commands: [command({ id: 'empty', command: '' })] })
+    await expect(qc().shared.copyQuickCommand(fake.context, { command: 'ghost' })).rejects.toThrow('no quick command ghost')
+    await expect(qc().shared.copyQuickCommand(fake.context, { command: 'empty' })).rejects.toThrow('quick command empty has no command text')
+  })
+
+  test('31: Edit and Add actions route through the dialog command with the current repo', async () => {
+    const edited = await mountStrip({ commands: [hello] })
+    await click(button('More quick commands'))
+    await click(button('Edit Hello'))
+    expect(edited.executed).toEqual([{ id: QC_DIALOG, args: { action: 'open', command: 'hello', repo: 'api' } }])
+    await cleanup()
+
+    const footerAdd = await mountStrip({ commands: [hello] })
+    await click(button('More quick commands'))
+    await click(button('+ Command'))
+    expect(footerAdd.executed).toEqual([{ id: QC_DIALOG, args: { action: 'open', repo: 'api' } }])
+    await cleanup()
+
+    const singleAdd = await mountStrip()
+    await click(button('Add quick command'))
+    expect(singleAdd.executed).toEqual([{ id: QC_DIALOG, args: { action: 'open', repo: 'api' } }])
+    await cleanup()
+
+    const noRepoAdd = await mountStrip({}, { repo: null })
+    await click(button('Add quick command'))
+    expect(noRepoAdd.executed).toEqual([{ id: QC_DIALOG, args: { action: 'open' } }])
+  })
+
+  test('32: a strip load failure shows a toast', async () => {
+    const { fake } = qcFake()
+    fake.context.call = async () => { throw new Error('store locked') }
+    await render(stripOwner(fake.context, 'wt_main', group(), 'api'))
+    expect(fake.toasts).toEqual([{ title: 'Could not load quick commands', body: 'store locked' }])
+  })
+
+  test('33: the menu search empty result uses EmptyState', async () => {
+    await mountStrip({ commands: [hello] })
+    await click(button('More quick commands'))
+    await fill($<HTMLInputElement>('input[type="search"]')!, 'qqq')
+    expect($('.ui-empty-state', menu()!)?.textContent).toBe('No commands match')
   })
 })
