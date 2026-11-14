@@ -1,4 +1,5 @@
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
@@ -10,14 +11,44 @@ type Call = (method: string, params: Record<string, unknown>) => Promise<unknown
 type Hook = (params: Record<string, unknown>, caller: PluginCaller) => unknown
 
 type CallRecord = { method: string; params: Record<string, unknown> }
+type ProcessCallRecord = { argv: string[]; cwd?: string }
+type ProcessResult = {
+  stdout: Uint8Array
+  stdoutText: string
+  stderr: string
+  exitCode: number | null
+  signal: string | null
+  durationMs: number
+}
+type ProcessRun = (argv: readonly string[], options?: { cwd?: string }) => Promise<ProcessResult>
 type Runtime = {
   calls: CallRecord[]
+  processCalls: ProcessCallRecord[]
   logs: string[]
   methods: Map<string, Hook>
   context: PluginContext
 }
 
-const HOOK_NAMES = ['authorize', 'read', 'decide', 'execute', 'resolveOutcome', 'pace', 'stop'] as const
+function processResult(stdoutText: string, exitCode = 0): ProcessResult {
+  return {
+    stdout: new TextEncoder().encode(stdoutText),
+    stdoutText,
+    stderr: '',
+    exitCode,
+    signal: null,
+    durationMs: 0
+  }
+}
+
+function defaultProcessRun(argv: readonly string[]): ProcessResult {
+  const args = argv.slice(1)
+  if (args[0] === 'rev-parse' && args.includes('HEAD')) return processResult(H1)
+  if (args[0] === 'rev-list' && args.includes('-n')) return processResult(`${H1} ${B1}`)
+  if (args[0] === 'log' && args.includes('%B')) return processResult('')
+  return processResult('')
+}
+
+const HOOK_NAMES = ['authorize', 'read', 'decide', 'execute', 'resolveOutcome', 'pace', 'stop', 'preflight'] as const
 const HEIMDALL_CALLER = { role: 'plugin', pluginId: 'quirky.heimdall' } as PluginCaller
 const REPOSITORY = { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
 const REVIEW_URL = 'https://github.com/test-owner/test-repo/pull/7'
@@ -25,8 +56,12 @@ const H1 = '1'.repeat(40)
 const H2 = '2'.repeat(40)
 const B1 = 'b'.repeat(40)
 
-function runtimeContext(respond: Call = async () => undefined): Runtime {
+function runtimeContext(
+  respond: Call = async () => undefined,
+  processRun: ProcessRun = async argv => defaultProcessRun(argv)
+): Runtime {
   const calls: CallRecord[] = []
+  const processCalls: ProcessCallRecord[] = []
   const logs: string[] = []
   const methods = new Map<string, Hook>()
   const context = {
@@ -35,20 +70,34 @@ function runtimeContext(respond: Call = async () => undefined): Runtime {
     },
     call: async (method: string, params: Record<string, unknown>) => {
       calls.push({ method, params })
+      if (method === 'quirky.worktree/resolve') {
+        return { id: 'w1', path: '/tmp/quirky-sitter-hooks-worktree', kind: 'git', branch: 'feature' }
+      }
       return respond(method, params)
+    },
+    process: {
+      run: async (argv: readonly string[], options?: { cwd?: string }) => {
+        processCalls.push({ argv: [...argv], ...(options?.cwd ? { cwd: options.cwd } : {}) })
+        return processRun(argv, options)
+      }
     },
     error: (_kind: string, message: string) => new RpcError(RpcErrorCode.InvalidParams, message),
     log: (message: string) => logs.push(message)
   } as unknown as PluginContext
-  return { calls, logs, methods, context }
+  return { calls, processCalls, logs, methods, context }
 }
 
-async function startRuntime(respond: Call = async () => undefined): Promise<Runtime> {
-  const runtime = runtimeContext(respond)
+async function startRuntime(
+  respond: Call = async () => undefined,
+  processRun: ProcessRun = async argv => defaultProcessRun(argv)
+): Promise<Runtime> {
+  const runtime = runtimeContext(respond, processRun)
   await activate(runtime.context)
   runtime.calls.length = 0
+  runtime.processCalls.length = 0
   return runtime
 }
+
 
 function githubReview(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -134,6 +183,116 @@ function sitterWorld(): Record<string, unknown> {
 function snapshot(): Record<string, unknown> {
   return { freshness: 'live', contentIdentity: JSON.stringify([H1, B1]), observedAtMs: 1, world: sitterWorld() }
 }
+async function observeChecks(checkRows: unknown[], detailResponse?: unknown): Promise<{ runtime: Runtime; current: Record<string, unknown> }> {
+  const runtime = await startRuntime(async method => {
+    if (method === 'quirky.hosting/review') return foundReview()
+    if (method === 'quirky.hosting/checks') {
+      return { number: 7, headSha: H1, checks: checkRows, partial: false, partialFailures: [] }
+    }
+    if (method === 'quirky.hosting/checkDetails') {
+      if (detailResponse instanceof Error) throw detailResponse
+      return detailResponse
+    }
+    throw new Error(`unexpected call: ${method}`)
+  })
+  const current = await runtime.methods.get('method:quirky.sitter/read')!(
+    { enrollment: enrollment(), options: { fresh: false } },
+    HEIMDALL_CALLER
+  ) as Record<string, unknown>
+  return { runtime, current }
+}
+test('read signs normalized check-run details and bounds the failure excerpt', async () => {
+  const check = { kind: 'check_run', name: 'build', status: 'completed', conclusion: 'failure', checkRunId: 9001, workflowRunId: 41 }
+  const timestamp1 = '2026-11-14T11:12:13Z'
+  const timestamp2 = '2026-11-15T20:21:22Z'
+  const sha1 = 'a'.repeat(40)
+  const sha2 = 'c'.repeat(64)
+  const uuid1 = '550e8400-e29b-41d4-a716-446655440000'
+  const uuid2 = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
+  const details = (timestamp: string, sha: string, uuid: string, message = 'module not found') => ({
+    annotations: [{
+      title: `Build failure ${uuid}`,
+      message: `\u001b[31m${timestamp} commit ${sha} ${uuid}: ${message}\u001b[0m`,
+      rawDetails: `raw evidence ${timestamp} ${sha} ${uuid}: ${message}`
+    }],
+    logTails: [{ jobId: 301, jobName: 'build', tail: `${timestamp} ${sha} ${uuid}: log output: ${message} in dependency graph` }]
+  })
+
+  const first = await observeChecks([check], details(timestamp1, sha1, uuid1))
+  const second = await observeChecks([{ ...check, checkRunId: 9002, workflowRunId: 42 }], details(timestamp2, sha2, uuid2))
+  const firstCheck = (first.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>
+  const secondCheck = (second.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>
+  expect(firstCheck[0].failureSignature).toMatch(/^sha256:[0-9a-f]{64}$/)
+  expect(firstCheck[0].failureSignature).toBe(secondCheck[0].failureSignature)
+  expect(first.runtime.calls.find(call => call.method === 'quirky.hosting/checkDetails')?.params).toMatchObject({
+    worktree: 'w1',
+    number: 7,
+    prRepo: REPOSITORY,
+    checkRunId: 9001,
+    workflowRunId: 41
+  })
+  const excerpt = firstCheck[0].failureExcerpt
+  expect(excerpt).toContain('Build failure')
+  expect(excerpt).toContain('module not found')
+  expect(excerpt).toContain('raw evidence')
+  expect(excerpt).toContain('log output')
+  expect(excerpt).not.toContain(timestamp1)
+  expect(excerpt).not.toContain(sha1)
+  expect(excerpt).not.toContain(uuid1)
+
+  const changed = await observeChecks([check], details(timestamp2, sha2, uuid2, 'permission denied'))
+  const changedCheck = ((changed.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>)[0]
+  expect(changedCheck.failureSignature).not.toBe(firstCheck[0].failureSignature)
+
+  const logLines = Array.from({ length: 420 }, (_, index) => `line-${index + 1} ${'x'.repeat(128)}`)
+  const longDetails = (lines: string[]) => ({ annotations: [], logTails: [{ jobId: 301, jobName: 'build', tail: lines.join('\n') }] })
+  const longFirst = await observeChecks([check], longDetails(logLines))
+  const priorOnly = [...logLines]
+  priorOnly[0] = 'different-early-line'
+  const longSecond = await observeChecks([check], longDetails(priorOnly))
+  const longChanged = [...logLines]
+  longChanged[419] = 'meaningful failure changed'
+  const longThird = await observeChecks([check], longDetails(longChanged))
+  const longCheck1 = ((longFirst.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>)[0]
+  const longCheck2 = ((longSecond.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>)[0]
+  const longCheck3 = ((longThird.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>)[0]
+  expect(longCheck1.failureSignature).toBe(longCheck2.failureSignature)
+  expect(longCheck1.failureSignature).not.toBe(longCheck3.failureSignature)
+  expect(new TextEncoder().encode(longCheck1.failureExcerpt as string).byteLength).toBeLessThanOrEqual(32 * 1024)
+  expect((longCheck1.failureExcerpt as string).split(/\r?\n/).filter(line => line.trim().length > 0).length).toBeLessThanOrEqual(400)
+  expect(longCheck1.failureExcerpt).not.toMatch(/(^|\n)line-1 /)
+})
+
+test('read marks empty or unreadable check details as unverifiable', async () => {
+  const check = { kind: 'check_run', name: 'build', status: 'completed', conclusion: 'failure', checkRunId: 9001, workflowRunId: 41 }
+  for (const details of [
+    { annotations: [], logTails: [], partialFailures: [] },
+    new Error('check details unavailable')
+  ]) {
+    const observed = await observeChecks([check], details)
+    const result = ((observed.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>)[0]
+    expect(result.failureSignature).toBeNull()
+    expect(result.failureExcerpt).toBeNull()
+  }
+})
+
+test('read signs legacy status failures from their status observation', async () => {
+  const observed = await observeChecks([{
+    kind: 'status',
+    name: 'lint',
+    status: 'failure',
+    conclusion: '',
+    checkRunId: null,
+    workflowRunId: null
+  }])
+  const status = ((observed.current.world as Record<string, unknown>).checks as Array<Record<string, unknown>>)[0]
+  const key = JSON.stringify(['status', 'lint'])
+  const text = `failure\u0000\u0000${String(status.observation)}`
+  const expected = `sha256:${createHash('sha256').update(`${key}\u0000${text}`).digest('hex')}`
+  expect(status.failureSignature).toBe(expected)
+  expect(status.failureExcerpt).toBe(status.observation)
+  expect(observed.runtime.calls.some(call => call.method === 'quirky.hosting/checkDetails')).toBe(false)
+})
 
 function methodParams(): Record<(typeof HOOK_NAMES)[number], Record<string, unknown>> {
   const enrolled = enrollment()
@@ -145,7 +304,8 @@ function methodParams(): Record<(typeof HOOK_NAMES)[number], Record<string, unkn
     execute: { action: { kind: 'unknown' }, enrollment: enrolled },
     resolveOutcome: { attempt: { action: { kind: 'unknown' } }, snapshot: current },
     pace: { snapshot: current, journal: [] },
-    stop: { snapshot: current, journal: [], enrollment: enrolled }
+    stop: { snapshot: current, journal: [], enrollment: enrolled },
+    preflight: { action: { kind: 'merge' }, snapshot: current, journal: [], enrollment: enrolled }
   }
 }
 
@@ -350,19 +510,29 @@ test('reads are live and pinned to the enrolled pull request', async () => {
   })
   const read = runtime.methods.get('method:quirky.sitter/read')!
   const current = await read({ enrollment: enrolled, options: { fresh: false } }, HEIMDALL_CALLER) as Record<string, unknown>
-  expect(runtime.calls).toEqual([
+  expect(runtime.calls.filter(call => call.method.startsWith('quirky.hosting/'))).toEqual([
     { method: 'quirky.hosting/review', params: { worktree: 'w1', number: 7, prRepo: REPOSITORY } },
     { method: 'quirky.hosting/checks', params: { worktree: 'w1', number: 7, prRepo: REPOSITORY, noCache: true } }
   ])
+  expect(runtime.calls.find(call => call.method === 'quirky.worktree/resolve')?.params).toEqual({ selector: 'id:w1' })
+  expect(runtime.processCalls.some(call => call.argv[0] === 'git' && call.cwd === '/tmp/quirky-sitter-hooks-worktree')).toBe(true)
   expect(current.freshness).toBe('live')
   expect(current.contentIdentity).toBe(JSON.stringify([H1, B1]))
+  const world = current.world as Record<string, unknown>
+  expect(world.localHeadSha).toBe(H1)
+  expect(world.localDirty).toBe(false)
+  expect(world.localPrepared).toMatchObject({ sha: H1, dirty: false, attemptTrailer: null })
 
   const mergedRuntime = await startRuntime(async method => {
     if (method === 'quirky.hosting/review') return foundReview(githubReview({ state: 'merged' }))
     throw new Error(`unexpected call: ${method}`)
   })
-  const merged = await mergedRuntime.methods.get('method:quirky.sitter/read')!({ enrollment: enrolled, options: { fresh: false } }, HEIMDALL_CALLER) as Record<string, unknown>
-  expect(mergedRuntime.calls.map(call => call.method)).toEqual(['quirky.hosting/review'])
+  const merged = await mergedRuntime.methods.get('method:quirky.sitter/read')!(
+    { enrollment: enrolled, options: { fresh: false } },
+    HEIMDALL_CALLER
+  ) as Record<string, unknown>
+  expect(mergedRuntime.calls.filter(call => call.method.startsWith('quirky.hosting/')).map(call => call.method)).toEqual(['quirky.hosting/review'])
+  expect(mergedRuntime.calls.some(call => call.method === 'quirky.hosting/checks' || call.method === 'quirky.hosting/checkDetails')).toBe(false)
   expect((merged.world as Record<string, unknown>).checks).toEqual([])
   expect((merged.world as Record<string, unknown>).checksComplete).toBe(true)
 
@@ -564,6 +734,142 @@ test('activation keeps the plugin up when Heimdall refuses the kind', async () =
   expect(registered.calls[0].method).toBe('quirky.heimdall/registerKind')
   const registration = registered.calls[0].params
   expect(registration.id).toBe('hosted-review')
+  expect(registration.enrollmentPayloadSchema).toMatchObject({ properties: { agent: { type: 'string' } } })
   expect(registration.hooks).toEqual(Object.fromEntries(HOOK_NAMES.map(name => [name, `quirky.sitter/${name}`])))
   expect(registered.logs).toEqual([])
+})
+
+test('authorization keeps an explicit enabled-agent preference and rejects empty preferences', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-sitter-agent-'))
+  try {
+    const input = enrollmentInput()
+    ;(input.kindPayload as Record<string, unknown>).agent = 'claude'
+    await expect(authorizationCalls(directory, input).result).resolves.toMatchObject({ kindPayload: { agent: 'claude' } })
+    for (const agent of ['', '   ', 42, null]) {
+      ;(input.kindPayload as Record<string, unknown>).agent = agent
+      await expect(authorizationCalls(directory, input).result).rejects.toThrow('agent')
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+test('prepare execution dispatches a worker prompt with Heimdall’s actual attempt fingerprint', async () => {
+  const fingerprint = 'actual-fingerprint-47'
+  const enrolled = enrollment()
+  ;(enrolled.kindPayload as Record<string, unknown>).agent = 'claude'
+  const runtime = await startRuntime(async method => {
+    if (method === 'quirky.agents/pick') return { agent: 'claude' }
+    throw new Error(`unexpected call: ${method}`)
+  })
+  const prepare = action('prepare-fix', {
+    capabilityKey: 'fixChecks',
+    visibility: 'local',
+    expectedHeadSha: H1,
+    failedChecks: [{
+      key: JSON.stringify(['check_run', 'build']),
+      name: 'build',
+      failureSignature: `sha256:${'a'.repeat(64)}`,
+      failureExcerpt: 'module not found'
+    }]
+  })
+  const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+    action: prepare,
+    enrollment: enrolled,
+    attemptId: 'attempt-47',
+    fingerprint
+  }, HEIMDALL_CALLER) as Record<string, unknown>
+  const worker = result.worker as Record<string, unknown>
+  expect(worker).toMatchObject({ worktree: 'id:w1', agent: 'claude', mode: 'structured' })
+  expect(worker.spec).toContain(`Orca-Heimdall-Attempt: ${fingerprint}`)
+  expect(runtime.calls.find(call => call.method === 'quirky.agents/pick')?.params).toEqual({
+    forAgentTab: true,
+    preferred: 'claude'
+  })
+})
+
+test('publish execution routes a verified prepared commit through the review push target', async () => {
+  const prepareFingerprint = 'prepare-fingerprint-82'
+  const runtime = await startRuntime(async method => {
+    if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1 }
+    if (method === 'quirky.git/forcePush') return { pushed: true }
+    throw new Error(`unexpected call: ${method}`)
+  }, async argv => {
+    const args = argv.slice(1)
+    if (args[0] === 'rev-parse' && args.includes('HEAD')) return processResult(H2)
+    if (args[0] === 'rev-list') return processResult(`${H2} ${H1}`)
+    if (args[0] === 'log' || args[0] === 'show') return processResult(`fix the checks\n\nOrca-Heimdall-Attempt: ${prepareFingerprint}`)
+    return processResult('')
+  })
+  const publish = action('publish-fix', {
+    capabilityKey: 'fixChecks',
+    preparedCommitSha: H2,
+    expectedHeadSha: H1,
+    prepareFingerprint
+  })
+  const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+    action: publish,
+    enrollment: enrollment(),
+    attemptId: 'attempt-83',
+    fingerprint: 'publish-fingerprint-83'
+  }, HEIMDALL_CALLER)
+  expect(result).toEqual({ effect: 'landed' })
+  expect(runtime.calls.find(call => call.method === 'quirky.git/pushTarget')?.params).toEqual({
+    worktree: 'id:w1',
+    purpose: 'review'
+  })
+  expect(runtime.calls.find(call => call.method === 'quirky.git/forcePush')?.params).toEqual({
+    worktree: 'id:w1',
+    purpose: 'review',
+    expected: H1,
+    yes: true
+  })
+})
+
+test('preflight holds prepare and publish actions for terminal and foreground-agent contention', async () => {
+  const enrolled = enrollment()
+  const actions = [
+    action('prepare-fix', { expectedHeadSha: H1 }),
+    action('publish-fix', { expectedHeadSha: H1, preparedCommitSha: H2, prepareFingerprint: 'prepare-fingerprint' })
+  ]
+  for (const currentAction of actions) {
+    for (const [method, response] of [
+      ['quirky.terminal/sessions', { sessions: [{ sessionId: 'shell-1', state: 'running', alive: true, worktreeId: 'w1' }] }],
+      ['quirky.agent-status/list', [{ state: 'blocked', worktreeId: 'w1' }]]
+    ] as Array<[string, unknown]>) {
+      const runtime = await startRuntime(async current => {
+        if (current === method) return response
+        if (current === 'quirky.terminal/sessions') return { sessions: [] }
+        if (current === 'quirky.agent-status/list') return []
+        throw new Error(`unexpected call: ${current}`)
+      })
+      const verdict = await runtime.methods.get('method:quirky.sitter/preflight')!({
+        action: currentAction,
+        snapshot: snapshot(),
+        journal: [],
+        enrollment: enrolled
+      }, HEIMDALL_CALLER)
+      expect(verdict).toMatchObject({ verdict: 'hold', reason: 'worktree-busy' })
+      expect(runtime.calls.some(call => call.method === method)).toBe(true)
+    }
+  }
+})
+test('manifest declares all runtime dependencies and a read-only preflight hook', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../quirky-plugin.json', import.meta.url), 'utf8')) as {
+    dependencies: string[]
+    contributes: { method: Array<Record<string, unknown>> }
+  }
+  expect(manifest.dependencies).toEqual([
+    'quirky.heimdall',
+    'quirky.hosting',
+    'quirky.git',
+    'quirky.worktree',
+    'quirky.agents',
+    'quirky.terminal',
+    'quirky.agent-status'
+  ])
+  expect(manifest.contributes.method.find(method => method.id === 'preflight')).toMatchObject({
+    readOnly: true,
+    params: { type: 'object' },
+    result: { type: 'object' }
+  })
 })

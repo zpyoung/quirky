@@ -13,6 +13,7 @@ import {
   type Snapshot
 } from './src/policy'
 import {
+  preflight,
   assertHeimdallCaller,
   authorize,
   execute,
@@ -28,12 +29,14 @@ const HOOKS = {
   execute: 'quirky.sitter/execute',
   resolveOutcome: 'quirky.sitter/resolveOutcome',
   pace: 'quirky.sitter/pace',
-  stop: 'quirky.sitter/stop'
+  stop: 'quirky.sitter/stop',
+  preflight: 'quirky.sitter/preflight'
 } as const
 
 type SitterEnrollment = { capabilities: Record<string, CapabilityMode>; kindPayload: SitterPayload }
 
 export async function activate(context: PluginContext): Promise<void> {
+  const processRun: PluginContext['process']['run'] = (argv, options) => context.process.run(argv, options)
   const call: Call = (method, params) => context.call(method, params)
   const assertCaller = (caller: PluginCaller) => {
     try {
@@ -49,7 +52,7 @@ export async function activate(context: PluginContext): Promise<void> {
   })
   context.provide('method:quirky.sitter/read', (params: Record<string, unknown>, caller: PluginCaller) => {
     assertCaller(caller)
-    return read(call, params.enrollment as Parameters<typeof read>[1])
+    return read(call, params.enrollment as Parameters<typeof read>[1], processRun)
   })
   context.provide('method:quirky.sitter/decide', (params: Record<string, unknown>, caller: PluginCaller) => {
     assertCaller(caller)
@@ -61,7 +64,20 @@ export async function activate(context: PluginContext): Promise<void> {
   })
   context.provide('method:quirky.sitter/execute', (params: Record<string, unknown>, caller: PluginCaller) => {
     assertCaller(caller)
-    return execute(call, params.action as SitterAction, params.enrollment as Parameters<typeof execute>[2])
+    return execute(
+      call,
+      params.action as SitterAction,
+      params.enrollment as Parameters<typeof execute>[2],
+      undefined,
+      {
+        processRun,
+        fingerprint: typeof params.fingerprint === 'string' ? params.fingerprint : ''
+      }
+    )
+  })
+  context.provide('method:quirky.sitter/preflight', (params: Record<string, unknown>, caller: PluginCaller) => {
+    assertCaller(caller)
+    return preflight(call, params as Parameters<typeof preflight>[1], processRun)
   })
   context.provide('method:quirky.sitter/resolveOutcome', (params: Record<string, unknown>, caller: PluginCaller) => {
     assertCaller(caller)
