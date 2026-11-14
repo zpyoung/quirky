@@ -323,6 +323,25 @@ test('Copy Markup preserves clipboard task ordering and writes one PNG item', as
   expect(button(ui, 'Copy Markup').disabled).toBe(false)
 })
 
+test('back-to-back copy deliveries start one write and keep history frozen until it settles', async () => {
+  const decode = Promise.withResolvers<void>()
+  const ui = mount({ decode: decode.promise })
+  await addTextMarkup(ui)
+  expect(button(ui, 'Undo').disabled).toBe(false)
+  act(() => {
+    dispatchDesignControl(ui.context, { action: 'markup-copy', pane: 'pane-1' })
+    dispatchDesignControl(ui.context, { action: 'markup-copy', pane: 'pane-1' })
+    dispatchDesignControl(ui.context, { action: 'markup-undo', pane: 'pane-1' })
+    dispatchDesignControl(ui.context, { action: 'markup-clear', pane: 'pane-1' })
+  })
+  expect(ui.writes).toHaveLength(1)
+  decode.resolve()
+  await act(async () => { await settleUntil(() => ui.log.includes('onCopied')) })
+  expect(ui.log.filter((entry) => entry === 'onCopied')).toHaveLength(1)
+  expect(button(ui, 'Undo').disabled).toBe(false)
+  expect(button(ui, 'Clear all').disabled).toBe(false)
+})
+
 test('Cancel before the PNG is ready rejects clipboard data without reporting an error', async () => {
   const decode = Promise.withResolvers<void>()
   const ui = mount({ decode: decode.promise })

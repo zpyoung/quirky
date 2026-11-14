@@ -281,6 +281,7 @@ export function MarkupOverlay({ context, pane, screenshot, onClose, onCopied, on
   const activeRef = useRef<ActivePointer | null>(null)
   const closedRef = useRef(false)
   const copyGenerationRef = useRef(0)
+  const copyInFlightRef = useRef(false)
   const rejectCopyDataRef = useRef<((error: Error) => void) | null>(null)
   const committingCopyRef = useRef(false)
   const onCloseRef = useRef(onClose)
@@ -547,19 +548,22 @@ export function MarkupOverlay({ context, pane, screenshot, onClose, onCopied, on
         if (args.tool) setTool(args.tool)
         break
       case 'markup-undo':
-        if (!copying && historyRef.current.undo.length > 0) updateHistory(undoMarkup(historyRef.current))
+        if (!copyInFlightRef.current && historyRef.current.undo.length > 0) updateHistory(undoMarkup(historyRef.current))
         break
       case 'markup-redo':
-        if (!copying && historyRef.current.redo.length > 0) updateHistory(redoMarkup(historyRef.current))
+        if (!copyInFlightRef.current && historyRef.current.redo.length > 0) updateHistory(redoMarkup(historyRef.current))
         break
       case 'markup-clear':
-        if (!copying && historyRef.current.shapes.length > 0) updateHistory(clearMarkup(historyRef.current))
+        if (!copyInFlightRef.current && historyRef.current.shapes.length > 0) updateHistory(clearMarkup(historyRef.current))
         break
       case 'markup-close':
         closeOverlay()
         break
       case 'markup-copy':
-        if (isValid && !copying) void copyMarkup()
+        if (isValid && !copyInFlightRef.current) {
+          copyInFlightRef.current = true
+          void copyMarkup().finally(() => { copyInFlightRef.current = false })
+        }
         break
     }
   }
