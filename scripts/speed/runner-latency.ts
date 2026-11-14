@@ -157,7 +157,16 @@ async function executeCommand(command: string, args: readonly string[], timeoutM
   const collect = async (stream: ReadableStream<Uint8Array>) => {
     let text = ''
     const decoder = new TextDecoder()
-    for await (const chunk of stream) if (text.length < MAX_TEXT) text += decoder.decode(chunk, { stream: true }).slice(0, MAX_TEXT - text.length)
+    const reader = stream.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (text.length < MAX_TEXT) text += decoder.decode(value, { stream: true }).slice(0, MAX_TEXT - text.length)
+      }
+    } finally {
+      reader.releaseLock()
+    }
     return text
   }
   try {

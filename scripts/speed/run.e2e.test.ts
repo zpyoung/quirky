@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { main } from '../speed.ts'
 import { chromiumPath } from '../soak/windows.ts'
-import { METRICS, type FrameTiming, type SpeedPair, type SpeedReport } from './contracts.ts'
+import { METRICS, type EchoTiming, type SampleScheduler, type FrameTiming, type SpeedPair, type SpeedReport } from './contracts.ts'
+import { summarizeScheduler, validateReport } from './report.ts'
 
 const executable = chromiumPath()
 if (executable === null) console.warn('Skipping speed smoke proof: Playwright Chromium is unavailable')
@@ -29,6 +30,8 @@ type Attempt = {
   endedAt?: number | null
   pacing: { intervalsMs: number[]; duplicateTimestamps: number; invalidTimestamps: number }
   frameTiming?: FrameTiming
+  echoTiming?: EchoTiming
+  scheduler?: SampleScheduler
   phases?: Record<string, number>
   fixture?: { worktrees?: number; sessions: string[]; worktreeIds: string[] }
   ownedPids?: number[]
@@ -42,6 +45,28 @@ function checkAttempt(row: Attempt): number {
   expect(row.durationMs).toBe(row.endedAt! - row.startedAt!)
   expect(row.pacing.intervalsMs.every(value => Number.isFinite(value) && value > 0)).toBe(true)
   expect(Number.isInteger(row.pacing.duplicateTimestamps)).toBe(true)
+  if (row.metric === 'echo' || row.metric === 'floodEcho') {
+    const echo = row.echoTiming!
+    expect(echo).toBeDefined()
+    if (echo.status === 'complete') {
+      const phases = [echo.keystrokeToWorkerMs, echo.workerToPageMs, echo.pageToPaintMs]
+      expect(phases.every(value => Number.isFinite(value) && value >= 0)).toBe(true)
+      expect(phases.reduce((sum, value) => sum + value, 0)).toBeCloseTo(row.durationMs!, 3)
+    } else {
+      expect(echo.status).toBe('unavailable')
+      expect(echo.reason).toBeTruthy()
+      expect([echo.keystrokeToWorkerMs, echo.workerToPageMs, echo.pageToPaintMs]).toEqual([null, null, null])
+    }
+    const scheduler = row.scheduler!
+    expect(scheduler).toBeDefined()
+    if (row.metric === 'echo') expect(scheduler.floodWorker).toBeNull()
+    else expect(scheduler.floodWorker).not.toBeNull()
+    for (const window of [scheduler.harness, scheduler.floodWorker].filter(value => value !== null)) {
+      expect(['complete', 'unavailable']).toContain(window.status)
+      if (window.status === 'unavailable') expect(window).toMatchObject({ intervals: [], pendingLateAtEndMs: null })
+      else expect(window.intervals.every(interval => Object.values(interval).every(Number.isFinite) && interval.lateMs >= 0)).toBe(true)
+    }
+  }
   expect(Number.isInteger(row.pacing.invalidTimestamps)).toBe(true)
   if (['echo', 'switch', 'floodEcho'].includes(row.metric)) {
     const timing = row.frameTiming!
@@ -87,6 +112,10 @@ function checkAttempt(row: Attempt): number {
 
 function checkEvidence(out: string, report: SpeedReport, paired?: SpeedPair): void {
   const attempts = readAttempts(out, 'samples.jsonl')
+  expect(validateReport(report)).toEqual(report)
+  expect(report.profile).toMatchObject({ workloadVersion: 4, runnerPolicy: 'ci-macos-timer-experiment-v1' })
+  expect(report.runnerLatency).toBeDefined()
+  expect(['attempted', 'skipped', 'unavailable']).toContain(report.runnerLatency!.status)
   const pairAttempts = paired ? readAttempts(out, 'pair-samples.jsonl') : []
   const pacing = JSON.parse(readFileSync(join(out, 'diagnostics/frame-pacing.json'), 'utf8'))
   expect(pacing).toMatchObject({ version: 2, gpuCompositing: 'disabled_software' })
@@ -107,6 +136,10 @@ function checkEvidence(out: string, report: SpeedReport, paired?: SpeedPair): vo
         expect(values).toEqual(report.metrics[metric].samplesMs)
         expect(successful.map(row => row.durationMs!)).toEqual(report.metrics[metric].wallSamplesMs!)
         expect(report.metrics[metric].unavailableSamples!).toBe(unavailable)
+        if (metric === 'echo' || metric === 'floodEcho') {
+          expect(report.metrics[metric].echoTiming!.samples).toEqual(successful.map(row => row.echoTiming!))
+          expect(report.metrics[metric].scheduler).toEqual(summarizeScheduler(successful.map(row => row.scheduler)))
+        }
       } else if (paired) expect(values).toEqual(paired.metrics[metric][side === 'head' ? 'headSamplesMs' : 'baseSamplesMs'])
     }
   }
@@ -128,7 +161,7 @@ test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only
     expect(exitCode).toBe(0)
     const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as SpeedReport
     expect(report).toMatchObject({ status: 'complete', qualified: false, cleanup: 'complete' })
-    expect(report.profile).toMatchObject({ workloadVersion: 3, compositor: 'software', frameTiming: 'native-final-frame-idle-cap-60hz', worktrees: 10, terminals: 20 })
+    expect(report.profile).toMatchObject({ workloadVersion: 4, compositor: 'software', frameTiming: 'native-final-frame-echo-arrival-cap-60hz', worktrees: 10, terminals: 20 })
     expect(report.evidence.diagnostics).toContain('diagnostics/frame-pacing.json')
     const pacing = JSON.parse(readFileSync(join(out, 'diagnostics/frame-pacing.json'), 'utf8'))
     expect(pacing.version).toBe(2)

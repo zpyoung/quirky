@@ -489,7 +489,7 @@ export function installSpeedSocketObserver(): void {
           const request = JSON.parse(data) as Record<string, unknown>
           const params = request.params
           const key = requestKey(request.id)
-          const existing = state.pending.has(key)
+          const existing = key !== null && state.pending.has(key)
           if (request.method === 'quirky.terminal/attach' && key !== null
             && params !== null && typeof params === 'object' && typeof (params as Record<string, unknown>).session === 'string'
             && (existing || pendingCount < 128)) {

@@ -246,7 +246,7 @@ class FakeWebSocket {
 }
 
 function newObservedSocket(url: string): FakeWebSocket {
-  const WebSocketConstructor = Reflect.get(globalThis, 'WebSocket') as typeof FakeWebSocket
+  const WebSocketConstructor = Reflect.get(globalThis, 'WebSocket') as unknown as typeof FakeWebSocket
   return new WebSocketConstructor(url)
 }
 
@@ -1540,7 +1540,7 @@ test('controller timer evidence is joined to the page-origin echo window, includ
 test('socket wrapper preserves native construction, statics, subclassing and borrowed sends', () => {
   environment()
   const first = observedSocket()
-  const Wrapped = Reflect.get(globalThis, 'WebSocket') as typeof FakeWebSocket
+  const Wrapped = Reflect.get(globalThis, 'WebSocket') as unknown as typeof FakeWebSocket
   expect(Wrapped.prototype).toBe(FakeWebSocket.prototype)
   expect(Wrapped.instances).toBe(FakeWebSocket.instances)
   class Derived extends Wrapped {}
@@ -1580,8 +1580,8 @@ test('simultaneous observers isolate partial markers by session and stream and d
     socket.emit('message', terminalFrame(stream, part))
   }
   await paintEcho()
-  expect((await first.result).echoTiming.status).toBe('complete')
-  expect((await second.result).echoTiming.status).toBe('complete')
+  expect((await first.result).echoTiming!.status).toBe('complete')
+  expect((await second.result).echoTiming!.status).toBe('complete')
   clock.now = 10
   const controller = new AbortController()
   const aborted = armSocketEcho(socket, { id: 'socket-abort', streamId: 17, sequence: 6, key: 'c', signal: controller.signal })

@@ -154,7 +154,9 @@ const TIMER_INTERVAL_KEYS = ['requestedEpochMs', 'dueEpochMs', 'wokeEpochMs', 'l
 function validTimerInterval(value: unknown): value is TimerInterval {
   if (!isRecord(value) || !hasExactKeys(value, TIMER_INTERVAL_KEYS)) return false
   const { requestedEpochMs, dueEpochMs, wokeEpochMs, lateMs } = value
-  return [requestedEpochMs, dueEpochMs, wokeEpochMs, lateMs].every((number) => typeof number === 'number' && Number.isFinite(number))
+  if (typeof requestedEpochMs !== 'number' || typeof dueEpochMs !== 'number'
+    || typeof wokeEpochMs !== 'number' || typeof lateMs !== 'number') return false
+  return [requestedEpochMs, dueEpochMs, wokeEpochMs, lateMs].every(Number.isFinite)
     && requestedEpochMs <= dueEpochMs
     && dueEpochMs <= wokeEpochMs
     && lateMs >= 0
@@ -183,7 +185,7 @@ function unavailableWindowSummary(reason = 'invalid-timer-window'): TimerWindowS
 
 function summarizeTimerWindow(value: unknown): TimerWindowSummary {
   if (!validTimerWindow(value)) return unavailableWindowSummary()
-  if (value.status === 'unavailable') return unavailableWindowSummary(value.reason)
+  if (value.status === 'unavailable') return unavailableWindowSummary(value.reason!)
   const lateValues = value.intervals.map((interval) => interval.lateMs)
   return {
     status: 'complete',

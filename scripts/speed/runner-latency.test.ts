@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { configureRunnerLatency, createTimerProbe, readRunnerLatency, timerWindow } from './runner-latency'
+import type { RunnerLatency } from './contracts'
 
 const CI_ENV = { GITHUB_ACTIONS: 'true', RUNNER_OS: 'macOS', GITHUB_RUN_ID: 'run-123' }
 const RUNNER = 'macos-15'
@@ -71,7 +72,7 @@ function makeClock(startEpochMs: number) {
   }
 }
 
-const APPLIED_EVIDENCE = {
+const APPLIED_EVIDENCE: RunnerLatency = {
   version: 1,
   runId: 'run-123',
   runner: RUNNER,

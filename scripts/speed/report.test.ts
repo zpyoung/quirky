@@ -967,7 +967,7 @@ describe('v4 report evidence', () => {
     expect(mutableV4(value).metrics.startup).toMatchObject({ echoTiming: null, scheduler: null })
 
     const tamperCases: Array<(candidate: SpeedReport) => void> = [
-      (candidate) => { delete mutableV4(candidate).runnerLatency },
+      (candidate) => { Reflect.deleteProperty(mutableV4(candidate), 'runnerLatency') },
       (candidate) => { mutateV4(candidate, 'echo', 'echoTiming').completeSamples = 19 },
       (candidate) => { (mutateV4(candidate, 'echo', 'echoTiming').medians as Record<string, unknown>).workerToPageMs = 7 },
       (candidate) => { (mutateV4(candidate, 'echo', 'echoTiming').samples as unknown[]).pop() },
