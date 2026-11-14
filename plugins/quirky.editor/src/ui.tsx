@@ -9,9 +9,12 @@ import { activeDocument, type ActiveDocumentCommand } from './window/activeDocum
 import { openExplorerSearch } from './window/explorerIntent'
 import { type EditorState, worktreeFromLayout } from './window/editorState'
 import { clearOverlayRequests, requestCloseAll, requestSingleClose, showMarkdownOpen, showNewMarkdown, showQuickOpen } from './window/overlayState'
+import { clearEditorUiControls, createEditorUiControlReportScope, EditorUiControlProvider, EDITOR_UI_CONTROL_COMMAND, runEditorUiControl } from './window/uiControl'
 import { QuickOpenOverlay } from './window/QuickOpenOverlay'
 
-type MountProps = { input?: unknown; report?(state: unknown): void }
+type MountReport = (state: unknown) => void
+type MountProps = { input?: unknown; report?: MountReport }
+type MountNode = (report: MountReport) => ReactNode
 type CommandArgs = Record<string, unknown>
 
 const DOCUMENT_VIEW = 'view:quirky.editor/document'
@@ -37,11 +40,21 @@ function worktreeFor(context: UiPluginContext, args: CommandArgs): string | unde
 }
 
 
-function mount(element: HTMLElement, node: ReactNode, report: MountProps['report'], state: unknown): () => void {
+function mount(
+  element: HTMLElement,
+  node: MountNode,
+  report: MountProps['report'],
+  state: unknown,
+  surface: string
+): () => void {
+  const scope = createEditorUiControlReportScope(report, { surface })
+  scope.report(state)
   const root = createRoot(element)
-  root.render(node)
-  report?.(state)
-  return () => root.unmount()
+  root.render(<EditorUiControlProvider scope={scope}>{node(scope.report)}</EditorUiControlProvider>)
+  return () => {
+    root.unmount()
+    scope.dispose()
+  }
 }
 
 function viewReport(input: unknown): Record<string, unknown> {
@@ -360,23 +373,31 @@ function configureExplorerPanel(context: UiPluginContext): void {
 export function activate(context: UiPluginContext): void {
   const uiContext = editorUiContext(context)
   deactivateCurrent?.()
+  clearEditorUiControls()
 
   context.provide(DOCUMENT_VIEW, (element: HTMLElement, props: MountProps) =>
-    mount(element, <DocumentSurface context={uiContext} input={props.input} />, props.report, viewReport(props.input))
+    mount(element, (_report) => <DocumentSurface context={uiContext} input={props.input} />, props.report, viewReport(props.input), DOCUMENT_VIEW)
   )
-  const mountExplorer = (element: HTMLElement, props: MountProps) =>
-    mount(element, <ExplorerPanel context={context} report={props.report} />, props.report, {
+  const mountExplorer = (surface: string) => (element: HTMLElement, props: MountProps) =>
+    mount(element, (report) => <ExplorerPanel context={context} report={report} />, props.report, {
       mounted: true,
       worktreeId: worktreeFor(context, {}) ?? null
-    })
-  context.provide(EXPLORER_SECTION, mountExplorer)
-  context.provide(EXPLORER_PANEL, mountExplorer)
+    }, surface)
+  context.provide(EXPLORER_SECTION, mountExplorer(EXPLORER_SECTION))
+  context.provide(EXPLORER_PANEL, mountExplorer(EXPLORER_PANEL))
   context.provide(QUICK_OPEN_OVERLAY, (element: HTMLElement, props: MountProps) =>
-    mount(element, <QuickOpenOverlay context={context} report={props.report} />, props.report, { open: false, requestId: null })
+    mount(element, (report) => <QuickOpenOverlay context={context} report={report} />, props.report, { open: false, requestId: null }, QUICK_OPEN_OVERLAY)
   )
   context.provide(CLOSE_OVERLAY, (element: HTMLElement, props: MountProps) =>
-    mount(element, <><CloseOverlay report={props.report} /><SaveAsOverlay /></>, props.report, { open: false, kind: null, targetCount: 0, dirtyCount: 0, error: null })
+    mount(element, (report) => <><CloseOverlay report={report} /><SaveAsOverlay /></>, props.report, {
+      open: false,
+      kind: null,
+      targetCount: 0,
+      dirtyCount: 0,
+      error: null
+    }, CLOSE_OVERLAY)
   )
+  context.provide(EDITOR_UI_CONTROL_COMMAND, runEditorUiControl)
 
   for (const [name, handler] of Object.entries(commandHandlers(uiContext))) {
     context.provide(`command:quirky.editor/${name}`, handler)
@@ -393,8 +414,10 @@ export function activate(context: UiPluginContext): void {
     unsubscribe()
     clearOverlayRequests()
     clearSaveAsRequest()
+    clearEditorUiControls()
   }
 }
+
 
 export function deactivate(): void {
   deactivateCurrent?.()
