@@ -157,6 +157,10 @@ test('worktree summary comparison rejects missing and corrupted independent evid
     value => { value.dashboard.cards[1]!.thread.worktreeId = 'wt-b' },
     value => { value.summary.scope = 'remote' },
     value => { value.summary.rows[0]!.runIds = ['run-other'] },
+    value => {
+      value.runList.runs.push({ id: 'run-b', coordinatorSessionId: 's-other' })
+      value.summary.rows[0]!.runIds.push('run-b')
+    },
     value => { value.runList.runs[0]!.coordinatorSessionId = 's-other' },
     value => { value.summary.rows[0]!.dispatches = value.summary.rows[0]!.dispatches.filter(row => row.id !== 'ctx-abandon') },
     value => { value.summary.rows[0]!.dispatches[0]!.id = 'ctx-wrong' },

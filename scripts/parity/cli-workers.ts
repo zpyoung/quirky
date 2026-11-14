@@ -542,6 +542,7 @@ export function assertWorktreeSummaryEvidence(value: {
     ensure(summaryRunIds.includes(runId), `worktree summary omitted associated Run ${runId}`)
   }
   for (const runId of summaryRunIds) {
+    ensure(associatedRunIds.has(runId), `worktree summary included unrelated Run ${runId}`)
     equal(runRows.filter(run => run.id === runId).length, 1, `run-list row count for ${runId}`)
   }
 
