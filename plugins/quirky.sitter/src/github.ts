@@ -476,6 +476,11 @@ async function rebaseBranch(
   const payload = enrollment.kindPayload
   const worktree = `id:${payload.worktreeId}`
   const worktreePath = await resolveWorktreePath(call, payload.worktreeId)
+  const onEnrolledBranch = async () => {
+    const result = await processRun(['git', 'symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd: worktreePath })
+    return result.exitCode === 0 && result.stdoutText.trim() === payload.branch
+  }
+  if (!await onEnrolledBranch()) return { effect: 'not-landed', reason: 'head-moved', detail: 'The enrolled branch is no longer checked out.' }
   const initial = await inspectWorktree(processRun, worktreePath)
   if (initial.localDirty) return { effect: 'not-landed', reason: 'worktree-busy', detail: 'uncommitted-changes' }
   if (initial.localHeadSha !== action.head) return { effect: 'not-landed', reason: 'head-moved', detail: 'local HEAD differs from the pull-request head' }
@@ -484,7 +489,7 @@ async function rebaseBranch(
     if (target.ready !== true || typeof target.headOid !== 'string') {
       return { effect: 'not-landed', reason: 'push-target-unavailable', detail: 'A validated review push target is required.' }
     }
-    if (target.headOid !== action.head || target.localHead !== action.head) {
+    if (target.headOid !== action.head || target.localHead !== action.head || target.localBranch !== payload.branch) {
       return { effect: 'not-landed', reason: 'head-moved', detail: 'The remote or local head changed during target lookup.' }
     }
     let base: string | undefined
@@ -511,7 +516,7 @@ async function rebaseBranch(
       base = `${remote}/${action.baseRefName}`
     }
     const current = await inspectWorktree(processRun, worktreePath)
-    if (current.localDirty || current.localHeadSha !== action.head) {
+    if (current.localDirty || current.localHeadSha !== action.head || !await onEnrolledBranch()) {
       return { effect: 'not-landed', reason: 'head-moved', detail: 'Local state changed during target lookup.' }
     }
     try {
@@ -530,9 +535,16 @@ async function rebaseBranch(
       return { effect: 'not-landed', reason: 'rebase-incomplete', detail: 'Rebase did not leave a clean committed HEAD.' }
     }
     if (rebased.localHeadSha === action.head) return { effect: 'landed', detail: 'already-up-to-date' }
-    const result = asRecord(await call('quirky.git/forcePush', {
-      worktree, purpose: 'review', expected: action.head, expectedLocalHead: rebased.localHeadSha, yes: true
-    }))
+    let pushed: unknown
+    try {
+      pushed = await call('quirky.git/forcePush', {
+        worktree, purpose: 'review', expected: action.head, expectedLocalHead: rebased.localHeadSha, yes: true
+      })
+    } catch (error) {
+      if (reasonOf(error) === 'stale-target' || reasonOf(error) === 'stale-lease') throw error
+      return { effect: 'indeterminate', reason: 'push-uncertain', detail: messageOf(error) }
+    }
+    const result = asRecord(pushed)
     if (result.pushed === true || (typeof result.remote === 'string' && typeof result.branch === 'string' && typeof result.upstream === 'string')) {
       return { effect: 'landed', expectedAfter: { head: rebased.localHeadSha } }
     }

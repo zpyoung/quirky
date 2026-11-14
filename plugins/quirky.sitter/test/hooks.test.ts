@@ -45,6 +45,7 @@ function defaultProcessRun(argv: readonly string[]): ProcessResult {
   if (args[0] === 'rev-parse' && args.includes('HEAD')) return processResult(H1)
   if (args[0] === 'rev-list' && args.includes('-n')) return processResult(`${H1} ${B1}`)
   if (args[0] === 'log' && args.includes('%B')) return processResult('')
+  if (args[0] === 'symbolic-ref') return processResult('feature')
   return processResult('')
 }
 
@@ -929,7 +930,7 @@ test('rebase updates check both heads, select the base remote, and lease-push on
   for (const changed of [true, false]) {
     let rebased = false
     const runtime = await startRuntime(async method => {
-      if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1, localHead: H1, remote: 'fork', repository: { ...REPOSITORY, owner: 'fork-owner' } }
+      if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1, localHead: H1, localBranch: 'feature', remote: 'fork', repository: { ...REPOSITORY, owner: 'fork-owner' } }
       if (method === 'quirky.git/rebaseFromBase') { rebased = true; return { ok: true, base: 'upstream/main' } }
       if (method === 'quirky.git/forcePush') return { remote: 'fork', branch: 'feature', upstream: 'fork/feature' }
       throw new Error(`unexpected call: ${method}`)
@@ -958,7 +959,7 @@ test('rebase conflicts are aborted and stale remote leases report head-moved', a
     const runtime = await startRuntime(async method => {
       if (method === 'quirky.git/pushTarget') {
         if (reason === 'stale-target') throw failure('remote changed', reason)
-        return { ready: true, headOid: H1, localHead: H1, remote: 'origin', repository: REPOSITORY }
+        return { ready: true, headOid: H1, localHead: H1, localBranch: 'feature', remote: 'origin', repository: REPOSITORY }
       }
       if (method === 'quirky.git/rebaseFromBase') {
         if (reason === 'conflicts') throw failure('conflicted', reason)
@@ -1013,7 +1014,7 @@ test('rebase refuses changed review heads and an unverifiable base remote before
     const runtime = await startRuntime(async method => {
       if (method === 'quirky.git/pushTarget') return {
         ready: true, headOid: blocker === 'remote-head' ? H2 : H1,
-        localHead: blocker === 'local-head' ? H2 : H1, remote: 'fork'
+        localHead: blocker === 'local-head' ? H2 : H1, localBranch: 'feature', remote: 'fork'
       }
       throw new Error(`unexpected mutation: ${method}`)
     }, async argv => {
@@ -1028,4 +1029,38 @@ test('rebase refuses changed review heads and an unverifiable base remote before
     expect(result).toMatchObject({ effect: 'not-landed', reason: blocker === 'base-remote' ? 'invalid-base' : 'head-moved' })
     expect(runtime.calls.some(call => call.method === 'quirky.git/rebaseFromBase' || call.method === 'quirky.git/forcePush')).toBe(false)
   }
+})
+
+test('rebase refuses a different local branch even when it points at the enrolled head', async () => {
+  const runtime = await startRuntime(async method => {
+    if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1, localHead: H1, localBranch: 'other', remote: 'origin' }
+    throw new Error(`unexpected mutation: ${method}`)
+  }, async argv => argv[1] === 'symbolic-ref' ? processResult('other') : defaultProcessRun(argv))
+  const enrolled = enrollment()
+  ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+  const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+    action: action('update-branch', { mode: 'rebase', base: B1 }), enrollment: enrolled
+  }, HEIMDALL_CALLER)
+  expect(result).toMatchObject({ effect: 'not-landed', reason: 'head-moved' })
+  expect(runtime.calls.some(call => call.method === 'quirky.git/rebaseFromBase')).toBe(false)
+})
+
+test('a force-push error after the remote may have changed remains indeterminate for live settlement', async () => {
+  let rebased = false
+  const runtime = await startRuntime(async method => {
+    if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1, localHead: H1, localBranch: 'feature', remote: 'origin' }
+    if (method === 'quirky.git/rebaseFromBase') { rebased = true; return { ok: true } }
+    if (method === 'quirky.git/forcePush') throw failure('Push succeeded, but the local upstream could not be recorded.', 'failed')
+    throw new Error(`unexpected call: ${method}`)
+  }, async argv => {
+    if (argv[1] === 'rev-parse' && argv.includes('HEAD')) return processResult(rebased ? H2 : H1)
+    if (argv[1] === 'rev-list') return processResult(`${argv.at(-1)} ${B1}`)
+    return defaultProcessRun(argv)
+  })
+  const enrolled = enrollment()
+  ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+  const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+    action: action('update-branch', { mode: 'rebase', base: B1 }), enrollment: enrolled
+  }, HEIMDALL_CALLER)
+  expect(result).toMatchObject({ effect: 'indeterminate', reason: 'push-uncertain' })
 })
