@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import type * as EmulatorModule from '../../src/window/EmulatorView'
 import type * as ShortcutsModule from '../../src/window/ShortcutSettings'
 import type * as SessionsModule from '../../src/window/SessionsPanel'
@@ -291,5 +291,50 @@ describe('Terminal panel and floating surface states', () => {
     await ui.setStripMenu(fake.context, source, 'grp-1', false)
     expect(closed).toEqual(['grp-1'])
     expect(executed).toHaveLength(1)
+  })
+
+  test('deactivation closes command-owned dialogs before a new activation can open another', async () => {
+    // The window module must load after the DOM has been installed.
+    const ui = await import('../../src/ui')
+    const first = qcFake()
+    ui.activate(first.fake.context)
+    await act(async () => {
+      await first.fake.provided.get(QC_DIALOG)!({ action: 'open', repo: 'api' })
+    })
+    await settle()
+    expect($$('[role="dialog"]')).toHaveLength(1)
+
+    await act(async () => ui.deactivate())
+    await settle()
+    expect($$('[role="dialog"]')).toHaveLength(0)
+
+    const second = qcFake()
+    ui.activate(second.fake.context)
+    await act(async () => {
+      await second.fake.provided.get(QC_DIALOG)!({ action: 'open' })
+    })
+    await settle()
+    expect($$('[role="dialog"]')).toHaveLength(1)
+    await act(async () => ui.deactivate())
+  })
+
+  test('an edit lookup that finishes after deactivation cannot reopen the dialog', async () => {
+    // The window module must load after the DOM has been installed.
+    const ui = await import('../../src/ui')
+    const hello = command({ id: 'hello', label: 'Hello' })
+    const { promise: pending, resolve: resolveCommands } = Promise.withResolvers<{ commands: typeof hello[] }>()
+    const fake = fakeContext({
+      'ui.contributions': () => ({ commands: [], keybindings: [] }),
+      'quirky.terminal/quickCommands': () => pending
+    })
+    ui.activate(fake.context)
+    const opening = fake.provided.get(QC_DIALOG)!({ action: 'open', command: 'hello' })
+    await act(async () => {
+      ui.deactivate()
+      resolveCommands({ commands: [hello] })
+      expect(await opening).toEqual({ ok: false, reason: 'Terminal is not active' })
+    })
+    await settle()
+    expect($$('[role="dialog"]')).toHaveLength(0)
   })
 })

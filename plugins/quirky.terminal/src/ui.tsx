@@ -5,7 +5,7 @@ import { SessionsPanel, type SessionsReport } from './window/SessionsPanel'
 import { paneMenuContributions, paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, tabMenuContributions, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
 import { mountFloatingOverlay } from './window/floating'
 import { QuickCommandsStripButton, mountQuickCommandsPanel } from './window/quick-commands'
-import { QUICK_COMMAND_DIALOG_COMMAND, quickCommandDialogCommand } from './window/quick-commands/QuickCommandDialog'
+import { QUICK_COMMAND_DIALOG_COMMAND, disposeQuickCommandDialog, quickCommandDialogCommand } from './window/quick-commands/QuickCommandDialog'
 import { COPY_QUICK_COMMAND_COMMAND, copyQuickCommand } from './window/quick-commands/shared'
 import { mountWorkspace, type WorkspaceOptions } from './window/workspace'
 import { terminalSettingName } from './window/workspace/model'
@@ -17,6 +17,7 @@ const PANEL_ID = 'panel:quirky.terminal/sessions'
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
 const QUICK_COMMANDS_PANEL = 'panel:quirky.terminal/quick-commands'
 const FLOATING_OVERLAY = 'overlay:quirky.terminal/floating'
+let dialogContext: UiPluginContext | null = null
 
 type MountProps = { input?: unknown; report?(state: unknown): void }
 
@@ -68,6 +69,8 @@ function worktreeOf(input: unknown): string | null {
  * this plugin overrides. Keeps the `terminalKeysFirst` context key in step with the shortcut policy.
  */
 export function activate(context: UiPluginContext): void {
+  deactivate()
+  dialogContext = context
   const menuContributions = watchMenuContributions(context)
   context.provide('settings-section:quirky.terminal/shortcuts', (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
@@ -126,4 +129,10 @@ export function activate(context: UiPluginContext): void {
   context.subscribe((event) => {
     if (event.type === 'setting.changed' && terminalSettingName(event.id) === 'shortcut-policy') keysFirst(event.value)
   })
+}
+
+/** Closes modal roots owned by this activation before the host revokes its context. */
+export function deactivate(): void {
+  if (dialogContext !== null) disposeQuickCommandDialog(dialogContext)
+  dialogContext = null
 }

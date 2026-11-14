@@ -43,7 +43,7 @@ Panes attach to their session as soon as they mount, without waiting for optiona
 
 ## Quick Commands
 
-Add and Edit share one dialog per window. Its public command accepts an optional saved command ID and repo; toggles act on the open dialog. Copy addresses a saved command by ID and reports clipboard failures.
+Add and Edit share one dialog per window. Its public command accepts an optional saved command ID and repo; toggles act on the open dialog. Disabling Terminal closes that dialog and prevents pending lookups from reopening it. Copy addresses a saved command by ID and reports clipboard failures.
 
 ```sh
 quirky terminal quick-command list --all

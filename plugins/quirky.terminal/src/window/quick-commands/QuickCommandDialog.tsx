@@ -48,6 +48,14 @@ type AgentListResult = { agents: AgentRow[] }
 type QuickCommandDialogInput = { action?: unknown; command?: unknown; repo?: unknown }
 
 const dialogControllers = new WeakMap<UiPluginContext, DialogController>()
+const retiredDialogContexts = new WeakSet<UiPluginContext>()
+
+/** Closes the activation's modal and refuses late results from its pending command lookups. */
+export function disposeQuickCommandDialog(context: UiPluginContext): void {
+  retiredDialogContexts.add(context)
+  dialogControllers.get(context)?.close()
+  dialogControllers.delete(context)
+}
 
 /** Runs the dialog command with a literal ID, so every caller in the window routes through it. */
 export function requestQuickCommandDialog(context: UiPluginContext, args: QuickCommandDialogArgs): Promise<void> {
@@ -333,6 +341,7 @@ export function QuickCommandDialog({ context, command, repo, onClose: onDialogCl
  */
 type OpenQuickCommandDialogProps = Omit<QuickCommandDialogProps, 'onClose'> & { onClose?(): void }
 export function openQuickCommandDialog(props: OpenQuickCommandDialogProps): () => void {
+  if (retiredDialogContexts.has(props.context)) throw new Error('Terminal is not active')
   const existing = dialogControllers.get(props.context)
   if (existing !== undefined) return existing.close
 
