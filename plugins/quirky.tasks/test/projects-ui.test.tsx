@@ -9,6 +9,7 @@ import { act } from 'react'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { TasksState } from '../src/contracts'
 import { ProjectsSurface } from '../src/projects/ProjectsSurface'
+import { PROJECTS_CONTROL_COMMAND, runProjectsControl } from '../src/projects/control'
 import { bootTasks, type TasksTest } from './helpers'
 import { PROJECTS_GH_FIXTURE, seedProjectsState, type ProjectFixtureState } from './fixtures/projects'
 
@@ -75,13 +76,17 @@ async function mountProjects(options: { state?: ProjectFixtureState; viewId?: st
   await host.call('projectSelect', { action: 'add', input: 'https://github.com/orgs/test-owner/projects/4' })
   await host.call('projectView', { action: 'select', viewId: initialViewId })
   const state = await host.call('state') as TasksState
-  const context = {
+  let context: UiPluginContext
+  context = {
     call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return Promise.resolve({ connId: 1 })
+      if (method === 'ui.window.command.run' && params.id === PROJECTS_CONTROL_COMMAND) return Promise.resolve(runProjectsControl(context, params.args))
       const forward = () => host.client.callAny(method, params)
       return options.intercept ? options.intercept(method, params, forward) : forward()
     },
     async executeCommand() { return undefined },
-    toast(title: string, message?: string) { mounted.toasts.push({ title, ...(message === undefined ? {} : { message }) }) }
+    toast(title: string, message?: string) { mounted.toasts.push({ title, ...(message === undefined ? {} : { message }) }) },
+    log() {}
   } as unknown as UiPluginContext
   await act(async () => mounted.root.render(<ProjectsSurface context={context} state={state} refresh={async () => {}} />))
   await waitFor(() => isBoard
@@ -415,7 +420,7 @@ test('restricted Project rows stay read-only, refresh errors retain rows, and un
 
   failRefresh = true
   await clickButton(mounted.container, 'Refresh')
-  await waitFor(() => mounted.container.querySelector('[role="alert"]')?.textContent?.includes('temporary Project refresh failure') === true, 'retained refresh error')
+  await waitFor(() => mounted.container.querySelector('[role="status"] .ui-notice-line__text')?.textContent?.includes('temporary Project refresh failure') === true, 'retained refresh error')
   expect(mounted.container.textContent).toContain('Improve project table')
   expect(mounted.container.textContent).toContain('Restricted item')
 
@@ -468,6 +473,7 @@ test('Escape closes the project picker and restores focus without selecting a di
       opener.focus()
       opener.click()
     })
+    await waitFor(() => mounted.container.querySelector('[role="dialog"]') !== null, 'project picker dialog')
     const dialog = mounted.container.querySelector<HTMLElement>('[role="dialog"]')
     if (!dialog) throw new Error('project picker dialog was not rendered')
     const closeButton = dialog.querySelector<HTMLElement>('[aria-label="Close dialog"]')
