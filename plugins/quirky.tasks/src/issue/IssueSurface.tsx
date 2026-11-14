@@ -1,6 +1,7 @@
-import { Badge, Button, EmptyState, TextField } from '@quirky/ui'
+import { Badge, Button, EmptyState, InlineError, NoticeLine, TextField } from '@quirky/ui'
 import { useEffect, useRef, useState } from 'react'
 import type { ItemTarget, TaskItem, TasksSurfaceProps } from '../contracts'
+import { dispatchIssueControl, registerIssueControl, type IssueControlAction, type IssueControlHandler } from './issue-control'
 import { Markdown, MarkdownComposer, safeHttpUrl } from './Markdown'
 
 type RecordValue = Record<string, unknown>
@@ -214,7 +215,6 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
   const [storedDetail, setStoredDetail] = useState<{ key: string; value: IssueDetail } | null>(null)
   const detail = storedDetail?.key === currentKey ? storedDetail.value : null
   const [loading, setLoading] = useState(true)
-  const [reloadToken, setReloadToken] = useState(0)
   const [loadError, setLoadError] = useState('')
   const [editError, setEditError] = useState('')
   const [linkError, setLinkError] = useState('')
@@ -233,17 +233,40 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
   const [busy, setBusy] = useState(false)
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const generation = useRef(0)
-  const refreshRequested = useRef(false)
   const choiceGeneration = useRef(0)
   const mutationPending = useRef(false)
   const workspacePending = useRef(false)
   const confirmedByTarget = useRef(new Map<string, IssueComment[]>())
   const lastTargetKey = useRef<string | null>(null)
 
-  useEffect(() => {
+  const loadDetail = async (force: boolean): Promise<IssueDetail | null> => {
     const request = ++generation.current
-    const forceRefresh = refreshRequested.current
-    refreshRequested.current = false
+    if (!target || !currentKey) {
+      setLoading(false)
+      return null
+    }
+    const key = currentKey
+    setLoading(force || storedDetail?.key !== key)
+    setLoadError('')
+    try {
+      const received = mapIssueDetail(await props.context.call('quirky.tasks/issue', force ? { refresh: true } : {}))
+      if (generation.current !== request) return null
+      if (!received) throw new Error('Issue detail response was not a normalized issue.')
+      const next = mergeConfirmedComments(received, confirmedByTarget.current.get(key) ?? [])
+      setStoredDetail({ key, value: next })
+      if (!bodyDraftDirty.current) setBodyDraft(next.item.body)
+      return next
+    } catch (error: unknown) {
+      if (generation.current === request) setLoadError(errorText(error))
+      return null
+    } finally {
+      if (generation.current === request) setLoading(false)
+    }
+  }
+  const loadDetailRef = useRef(loadDetail)
+  loadDetailRef.current = loadDetail
+
+  useEffect(() => {
     if (lastTargetKey.current !== currentKey) {
       lastTargetKey.current = currentKey
       bodyDraftDirty.current = false
@@ -258,28 +281,9 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
       setEditError('')
       setLinkError('')
     }
-    if (!target || !currentKey) {
-      setLoading(false)
-      setLoadError('Select a GitHub issue to view its details.')
-      return () => { generation.current += 1 }
-    }
-    setLoading(forceRefresh || storedDetail?.key !== currentKey)
-    setLoadError('')
-    void props.context.call('quirky.tasks/issue', forceRefresh ? { refresh: true } : {}).then((value) => {
-      if (generation.current !== request) return
-      const received = mapIssueDetail(value)
-      if (!received) throw new Error('Issue detail response was not a normalized issue.')
-      const confirmed = confirmedByTarget.current.get(currentKey) ?? []
-      const next = mergeConfirmedComments(received, confirmed)
-      setStoredDetail({ key: currentKey, value: next })
-      if (!bodyDraftDirty.current) setBodyDraft(next.item.body)
-    }).catch((error: unknown) => {
-      if (generation.current === request) setLoadError(errorText(error))
-    }).finally(() => {
-      if (generation.current === request) setLoading(false)
-    })
+    void loadDetailRef.current(false)
     return () => { generation.current += 1 }
-  }, [props.context, currentKey, reloadToken])
+  }, [props.context, currentKey])
 
   useEffect(() => {
     const request = ++choiceGeneration.current
@@ -329,18 +333,39 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
     : null
 
   const refreshDetails = () => {
-    refreshRequested.current = true
-    setLoading(true)
-    setReloadToken((value) => value + 1)
+    void loadDetail(true)
   }
   const navigateBack = async () => {
     try {
       await props.context.call('quirky.tasks/navigate', { detail: null })
       await props.refresh()
     } catch (error: unknown) {
-      setLoadError(errorText(error))
+      setLinkError(errorText(error))
     }
   }
+  const startEditing = () => {
+    if (!detail || detail.viewerCanUpdate !== true) {
+      setEditError(detail?.viewerCanUpdate === false ? 'This issue description is read-only.' : 'Editability could not be confirmed. Refresh issue details before editing.')
+      return
+    }
+    setBodyDraft(detail.item.body)
+    bodyDraftDirty.current = false
+    setBodyEditing(true)
+  }
+  const cancelEditing = () => {
+    if (detail) setBodyDraft(detail.item.body)
+    bodyDraftDirty.current = false
+    setBodyEditing(false)
+  }
+  const controlRef = useRef<IssueControlHandler>(() => false)
+  controlRef.current = (request) => {
+    if (!target || request.worktree !== target.worktree || request.number !== target.number) return false
+    if (request.action === 'edit-description') startEditing()
+    else if (request.action === 'cancel-description') cancelEditing()
+    else setDuplicateOpen(false)
+    return true
+  }
+  useEffect(() => registerIssueControl(props.context, (request) => controlRef.current(request)), [props.context])
 
   const updateIssue = async (changes: RecordValue, optimistic: Partial<TaskItem>) => {
     if (!target || !currentKey || !detail || mutationPending.current) return
@@ -404,10 +429,7 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
 
   const sendComment = async () => {
     if (!target || !currentKey || !detail || commentDraft.trim().length === 0 || mutationPending.current) return
-    if (commentTooLarge) {
-      setCommentError('Comments are limited to 65,536 UTF-8 bytes.')
-      return
-    }
+    if (commentTooLarge) return
     mutationPending.current = true
     setBusy(true)
     setCommentError('')
@@ -484,7 +506,8 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
     }
     setLinkError('')
     try {
-      await props.context.executeCommand(`command:quirky.tasks/${command}`, { url: safeUrl })
+      if (command === 'copy-link') await props.context.executeCommand('command:quirky.tasks/copy-link', { url: safeUrl })
+      else await props.context.executeCommand('command:quirky.tasks/open-link', { url: safeUrl })
     } catch (error: unknown) {
       setLinkError(errorText(error))
     }
@@ -505,6 +528,10 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
   const stateLabel = item?.state === 'open' ? 'Open' : item?.state === 'closed' ? 'Closed' : 'Unknown state'
   const workspaceLabel = linkedWorkspace?.name ?? null
 
+  const controlIssue = (action: IssueControlAction) => {
+    const request = { worktree: target.worktree, number: target.number, action }
+    void dispatchIssueControl(props.context, request).catch(() => controlRef.current(request))
+  }
   return <main className="quirky-tasks-issue">
     <header className="quirky-tasks-issue__toolbar">
       <Button type="button" className="quirky-tasks-issue__back" onClick={() => void navigateBack()}>{projectOrigin ? 'Back to Project' : 'Close'}</Button>
@@ -514,7 +541,7 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
       <Button type="button" onClick={() => void runLinkCommand('open-link')} disabled={!initialUrl}>Open on GitHub</Button>
     </header>
 
-    {linkError && <p className="quirky-tasks-issue__error" role="alert">{linkError}</p>}
+    {linkError && <InlineError message={linkError} />}
 
     <section className="quirky-tasks-issue__summary">
       <div className="quirky-tasks-issue__summary-heading">
@@ -546,10 +573,10 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
       </div>
     </section>
 
-    {loading && !detail && <p className="quirky-tasks-issue__status" role="status">Loading issue details…</p>}
-    {loadError && <div className="quirky-tasks-issue__error-panel" role="alert">
-      <span>{detail ? `Couldn't refresh issue details. Showing the last confirmed data: ${loadError}` : `Couldn't load issue details: ${loadError}`}</span>
-      <Button type="button" onClick={refreshDetails}>Retry</Button>
+    {loading && !detail && <div className="quirky-tasks-issue__status" role="status"><NoticeLine>Loading issue details…</NoticeLine></div>}
+    {loadError && !detail && <InlineError message={`Couldn't load issue details: ${loadError}`} action={{ label: 'Retry', onAction: refreshDetails }} />}
+    {loadError && detail && <div className="quirky-tasks-issue__error-panel" role="status">
+      <NoticeLine actions={[{ label: 'Retry', onAction: refreshDetails }]}>{`Couldn't refresh issue details. Showing the last confirmed data: ${loadError}`}</NoticeLine>
     </div>}
 
     {detail && <>
@@ -574,7 +601,7 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
           {duplicateOpen && <form onSubmit={(event) => { event.preventDefault(); void submitDuplicate() }} className="quirky-tasks-issue__inline-form">
             <TextField label="Duplicate issue number" inputMode="numeric" value={duplicateNumber} onChange={(event) => setDuplicateNumber(event.currentTarget.value)} />
             <Button type="submit" disabled={busy}>Close as duplicate</Button>
-            <Button type="button" onClick={() => setDuplicateOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={() => controlIssue('cancel-duplicate')}>Cancel</Button>
           </form>}
           <div className="quirky-tasks-issue__labels">
             <span className="ui-text-muted">Labels</span>
@@ -612,24 +639,24 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
               void updateIssue({ assignees }, { assignees })
             }}>Add</Button>
           </div>
-          {choices.message && <p className="quirky-tasks-issue__muted">{choices.message}</p>}
-          {choiceError && <p className="quirky-tasks-issue__error" role="alert">{choiceError}</p>}
+          {choices.message && <div role="status"><NoticeLine>{choices.message}</NoticeLine></div>}
+          {choiceError && <InlineError message={`Issue choices could not be loaded: ${choiceError}`} />}
         </div>
-        {editError && <p className="quirky-tasks-issue__error" role="alert">{editError}</p>}
+        {editError && <InlineError message={editError} />}
       </section>
 
       <section className="quirky-tasks-issue__section" aria-labelledby="issue-description-heading">
         <div className="quirky-tasks-issue__section-heading">
           <h2 id="issue-description-heading" className="quirky-tasks-issue__section-title">Description</h2>
-          {!bodyEditing && canEditDescription && <Button type="button" onClick={() => { setBodyDraft(detail.item.body); bodyDraftDirty.current = false; setBodyEditing(true) }} disabled={busy}>Edit description</Button>}
-          {descriptionPermissionMessage && <span role="status" className="ui-text-muted">{descriptionPermissionMessage}</span>}
+          {!bodyEditing && canEditDescription && <Button type="button" onClick={() => controlIssue('edit-description')} disabled={busy}>Edit description</Button>}
+          {descriptionPermissionMessage && <div role="status"><NoticeLine>{descriptionPermissionMessage}</NoticeLine></div>}
         </div>
         {bodyEditing
           ? <>
               <MarkdownComposer value={bodyDraft} onChange={(value) => { setBodyDraft(value); bodyDraftDirty.current = true }} label="Issue description" placeholder="Describe the issue…" disabled={busy || !canEditDescription} minRows={9} onSubmit={() => void updateIssue({ body: bodyDraft }, { body: bodyDraft })} />
               <div className="quirky-tasks-issue__edit-actions">
                 <Button type="button" variant="primary" onClick={() => void updateIssue({ body: bodyDraft }, { body: bodyDraft })} disabled={busy || !canEditDescription}>{busy ? 'Saving…' : 'Save description'}</Button>
-                <Button type="button" onClick={() => { setBodyDraft(detail.item.body); bodyDraftDirty.current = false; setBodyEditing(false) }} disabled={busy}>Cancel</Button>
+                <Button type="button" onClick={() => controlIssue('cancel-description')} disabled={busy}>Cancel</Button>
                 <span className="ui-text-muted">Cmd+Enter to save</span>
               </div>
             </>
@@ -638,34 +665,33 @@ export function IssueSurface(props: TasksSurfaceProps & { onEdited?: (item: Task
 
       <section className="quirky-tasks-issue__section" aria-labelledby="issue-activity-heading">
         <h2 id="issue-activity-heading" className="quirky-tasks-issue__section-title">Activity</h2>
-        {detail.timeline.length === 0 && <p className="quirky-tasks-issue__muted">No timeline events.</p>}
+        {detail.timeline.length === 0 && <div role="status"><EmptyState message="No timeline events." /></div>}
         {detail.timeline.map((event, index) => <article key={`${event.event}-${event.createdAt ?? ''}-${index}`} className="quirky-tasks-issue__activity-event">
           <p>{timelineLabel(event)}</p>
           <time className="ui-text-muted" title={event.createdAt ?? undefined}>{relativeTime(event.createdAt)}</time>
           {event.body && <div className="quirky-tasks-issue__markdown"><Markdown source={event.body} /></div>}
         </article>)}
-        {detail.truncated && <p className="quirky-tasks-issue__muted">Activity was truncated at the public API limit.</p>}
+        {detail.truncated && <div role="status"><NoticeLine>Activity was truncated at the public API limit.</NoticeLine></div>}
       </section>
 
       <section className="quirky-tasks-issue__section" aria-labelledby="issue-comments-heading">
         <h2 id="issue-comments-heading" className="quirky-tasks-issue__section-title">Comments ({detail.comments.length})</h2>
-        {detail.comments.length === 0 && <p className="quirky-tasks-issue__muted">No comments yet.</p>}
+        {detail.comments.length === 0 && <div role="status"><EmptyState message="No comments yet." /></div>}
         {detail.comments.map((comment) => <article key={commentKey(comment)} className="quirky-tasks-issue__comment">
           <div className="quirky-tasks-issue__comment-meta"><strong>{comment.author ?? 'unknown author'}</strong><time className="ui-text-muted" title={comment.createdAt ?? undefined}>{relativeTime(comment.createdAt)}</time></div>
           <Markdown source={comment.body} />
         </article>)}
         <MarkdownComposer value={commentDraft} onChange={setCommentDraft} label="Add a comment" placeholder="Add a comment…" disabled={busy} minRows={5} onSubmit={() => void sendComment()} />
-        {commentTooLarge && <p className="quirky-tasks-issue__muted" role="status">Comments are limited to 65,536 UTF-8 bytes.</p>}
+        {commentTooLarge && <InlineError message="Comments are limited to 65,536 UTF-8 bytes." />}
         <div className="quirky-tasks-issue__edit-actions">
           <Button type="button" variant="primary" onClick={() => void sendComment()} disabled={busy || commentDraft.trim().length === 0 || commentTooLarge}>{busy ? 'Posting…' : 'Comment'}</Button>
           <span className="ui-text-muted">Cmd+Enter to submit</span>
-          {commentError && <p className="quirky-tasks-issue__error" role="alert">{commentError}</p>}
+          {commentError && <InlineError message={commentError} />}
         </div>
       </section>
 
       {detail.partialFailures.length > 0 && <div className="quirky-tasks-issue__partial-failures" role="status">
-        {detail.partialFailures.map((failure, index) => <p key={`${index}-${failure}`} className="quirky-tasks-issue__muted">Some issue data is unavailable: {failure}</p>)}
-        <Button type="button" onClick={refreshDetails}>Retry unavailable sources</Button>
+        <NoticeLine actions={[{ label: 'Retry unavailable sources', onAction: refreshDetails }]}>{`Some issue data is unavailable: ${detail.partialFailures.join('; ')}`}</NoticeLine>
       </div>}
     </>}
   </main>
