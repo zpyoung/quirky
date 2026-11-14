@@ -116,6 +116,9 @@ function mount(
   act(() => root.render(node(context)))
   return {
     element, calls, context,
+    rerender(nextNode = node) {
+      act(() => root.render(nextNode(context)))
+    },
     unmount() {
       const index = roots.indexOf(root)
       if (index >= 0) roots.splice(index, 1)
@@ -190,6 +193,20 @@ const click = (button: HTMLButtonElement) => act(async () => {
 })
 const dialogCalls = (calls: Call[]) => calls.filter((call) => call.method === 'quirky.reviews/checksSetAgentDialog')
 
+function setControlValue(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, value: string) {
+  if (control instanceof HTMLSelectElement) {
+    control.value = value
+    control.dispatchEvent(new Event('change', { bubbles: true }))
+    return
+  }
+  const propsKey = Object.getOwnPropertyNames(control).find((key) => key.startsWith('__reactProps$'))
+  if (!propsKey) throw new Error('Missing React props for controlled field')
+  const props = (control as unknown as Record<string, { onChange?: (event: { target: typeof control }) => void }>)[propsKey]
+  if (typeof props?.onChange !== 'function') throw new Error('Missing React onChange handler')
+  control.value = value
+  props.onChange({ target: control })
+}
+
 test('Checks panel Fix opens the agent dialog for the Checks worktree', async () => {
   const state = stateWith()
   state.checks.checks = {
@@ -260,6 +277,14 @@ test('a checks-surface dialog call without a Checks worktree is not sent', async
 })
 const enabledAgentCatalog = {
   agents: [{ id: 'fixture', label: 'Fixture Agent', enabled: true, installed: true }],
+  defaultAgent: 'fixture'
+}
+
+const selectableAgentCatalog = {
+  agents: [
+    { id: 'fixture', label: 'Fixture Agent', enabled: true, installed: true },
+    { id: 'secondary', label: 'Secondary Agent', enabled: true, installed: true }
+  ],
   defaultAgent: 'fixture'
 }
 
@@ -428,4 +453,108 @@ test('agent Cancel persists the latest draft before hiding through agent-cancel'
   expect(writes[0]?.params).toMatchObject({ prompt: 'Use the newest prompt.', agent: 'fixture', args: '--safe' })
   expect(writes[1]?.params).toMatchObject({ action: 'hide', surface: 'checks' })
   expect(commandActions(mounted.calls)).toEqual(['agent-cancel'])
+})
+
+test('agent drafts survive a live head change while launch remains fenced to the pinned head', async () => {
+  const state = stateWithAgent()
+  const pinnedHead = state.checks.agentDialog!.headOid
+  const nextHead = 'c'.repeat(40)
+  const mounted = mountAgentDialog(state, { agentList: selectableAgentCatalog })
+  await act(async () => {})
+
+  const prompt = mounted.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Agent prompt"]')!
+  const agent = mounted.element.querySelector<HTMLSelectElement>('select[aria-label="Agent"]')!
+  const args = mounted.element.querySelector<HTMLInputElement>('input[aria-label="CLI arguments"]')!
+  await act(async () => {
+    setControlValue(prompt, 'Draft from the dialog before polling.')
+    setControlValue(agent, 'secondary')
+    setControlValue(args, '--use-latest')
+  })
+  state.checks.review = { ...state.checks.review!, headRefOid: nextHead }
+  mounted.rerender()
+
+  expect(state.checks.agentDialog?.headOid).toBe(pinnedHead)
+  expect(state.checks.review?.headRefOid).toBe(nextHead)
+  expect(prompt.value).toBe('Draft from the dialog before polling.')
+  expect(agent.value).toBe('secondary')
+  expect(args.value).toBe('--use-latest')
+  expect(buttonByText(mounted.element, 'Start agent').disabled).toBe(true)
+
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))
+    await Promise.resolve()
+  })
+  await act(async () => {})
+  expect(mounted.calls.some((call) => call.method === 'quirky.reviews/checksLaunchAgent')).toBe(false)
+  expect(await dispatchControl(mounted.context, 'agent', 'agent-start'))
+    .toEqual({ result: { delivered: false, reason: 'disabled' } })
+  expect(mounted.calls.some((call) => call.method === 'quirky.reviews/checksLaunchAgent')).toBe(false)
+})
+
+test('background refresh keeps CLI focus and keyboard start uses the latest draft through the exact-window handler', async () => {
+  const state = stateWithAgent()
+  const latestPrompt = 'Use the draft written before the background refresh.'
+  const latestArgs = '--fresh-args'
+  const mounted = mountAgentDialog(state, { agentList: selectableAgentCatalog })
+  await act(async () => {})
+
+  const prompt = mounted.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Agent prompt"]')!
+  const agent = mounted.element.querySelector<HTMLSelectElement>('select[aria-label="Agent"]')!
+  const args = mounted.element.querySelector<HTMLInputElement>('input[aria-label="CLI arguments"]')!
+  await act(async () => {
+    setControlValue(prompt, latestPrompt)
+    setControlValue(agent, 'secondary')
+    setControlValue(args, latestArgs)
+  })
+  args.focus()
+  expect(document.activeElement).toBe(args)
+
+  state.checks.review = { ...state.checks.review!, checksStatus: 'pending' }
+  mounted.rerender()
+
+  expect(document.activeElement).toBe(args)
+  expect(prompt.value).toBe(latestPrompt)
+  expect(agent.value).toBe('secondary')
+  expect(args.value).toBe(latestArgs)
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))
+    await Promise.resolve()
+  })
+  await act(async () => {})
+
+  expect(dialogCalls(mounted.calls)[0]?.params).toMatchObject({
+    surface: 'checks', worktree: WORKTREE, number: 12, action: 'fix',
+    prompt: latestPrompt, agent: 'secondary', args: latestArgs
+  })
+  expect(mounted.calls.find((call) => call.method === 'quirky.reviews/checksLaunchAgent')?.params)
+    .toMatchObject({ worktree: WORKTREE, agent: 'secondary', args: latestArgs })
+  expect(mounted.calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(1)
+  expect(mounted.calls.find((call) => call.method === 'ui.window.command.run')?.params).toMatchObject({
+    connId: 42,
+    id: REVIEWS_UI_CONTROL,
+    args: { action: 'agent-start' }
+  })
+})
+
+test('a head change while Start settles keeps the draft editable after the stale launch is stopped', async () => {
+  const state = stateWithAgent()
+  const draft = Promise.withResolvers<unknown>()
+  const mounted = mountAgentDialog(state, {
+    agentList: enabledAgentCatalog,
+    onCall(method) {
+      return method === 'quirky.reviews/checksSetAgentDialog' ? draft.promise : undefined
+    }
+  })
+  await act(async () => {})
+  await click(buttonByText(mounted.element, 'Start agent'))
+  const prompt = mounted.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Agent prompt"]')!
+  expect(prompt.disabled).toBe(true)
+  state.checks.review = { ...state.checks.review!, headRefOid: 'c'.repeat(40) }
+  mounted.rerender()
+  await act(async () => { draft.resolve({ ok: true }) })
+  await act(async () => {})
+  expect(mounted.calls.some((call) => call.method === 'quirky.reviews/checksLaunchAgent')).toBe(false)
+  expect(prompt.value).toBe('Investigate the failing build.')
+  expect(prompt.disabled).toBe(false)
+  expect(buttonByText(mounted.element, 'Cancel').disabled).toBe(false)
 })

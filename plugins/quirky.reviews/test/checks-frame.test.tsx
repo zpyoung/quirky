@@ -66,6 +66,8 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
   let beforeCommand: (() => Promise<void>) | null = null
   let onCommit: (() => void) | null = null
   let layoutListener: (layout: UiLayout) => void = () => {}
+  const methods = new Map<string, (params: Record<string, unknown>) => unknown>()
+  let refreshState = async () => {}
   const makeLayout = (worktree: string | null) => ({
     worktree, view: { id: 'view:x' }, panel: null, sidebar: true, focus: 'view',
     ...(panelOpen ? { tools: { open: { right: CHECKS_PANEL } } } : {})
@@ -76,6 +78,8 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
     provide: (id: string, handler: (...args: unknown[]) => unknown) => { provided.set(id, handler) },
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
+      const override = methods.get(method)
+      if (override) return override(params)
       if (method === 'ui.window.self') return beforeSelf ? beforeSelf() : { connId: connectionId }
       if (method === 'ui.window.command.run') {
         await beforeCommand?.()
@@ -106,7 +110,7 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
   let state = stateWith(null, stateWorktree)
   const render = () => act(() => root.render(
     <ToolPanelFrame title="Checks">
-      <ChecksPanel context={context} state={state} refresh={async () => {}} />
+      <ChecksPanel context={context} state={state} refresh={() => refreshState()} />
       <CommitProbe run={() => { const pending = onCommit; onCommit = null; pending?.() }} />
     </ToolPanelFrame>
   ))
@@ -118,6 +122,8 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
     setConnectionId(value: number) { connectionId = value },
     setBeforeSelf(value: (() => Promise<unknown>) | null) { beforeSelf = value },
     setBeforeCommand(value: (() => Promise<void>) | null) { beforeCommand = value },
+    respond(method: string, implementation: (params: Record<string, unknown>) => unknown) { methods.set(method, implementation) },
+    onRefresh(callback: () => Promise<void>) { refreshState = callback },
     onNextCommit(run: () => void) { onCommit = run },
     runControl(request: unknown) { return provided.get(REVIEWS_UI_CONTROL)!(request) },
     unmount() {
@@ -592,4 +598,91 @@ test('enabled stack member links remain usable while refresh retains the review'
   expect(member.disabled).toBe(false)
   await click(member)
   expect(panel.calls.find((call) => call.method === 'quirky.reviews/openLink')?.params).toMatchObject({ url: memberUrl, worktree: WORKTREE })
+})
+
+function pushRequiredState(): ReviewsState {
+  const state = stateWith()
+  state.checks.review = null
+  state.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: review.headRefOid } }
+  state.checks.eligibility = {
+    eligible: false, worktree: WORKTREE, head: 'feature', headOid: review.headRefOid, confirmedAt: Date.now(),
+    blockers: [{ reason: 'needs_push', message: 'Push this branch first.' }]
+  }
+  return state
+}
+
+test('a long push acknowledges delivery before completion and renders its late failure', async () => {
+  const panel = mountPanel()
+  panel.setState(pushRequiredState())
+  const operation = Promise.withResolvers<unknown>()
+  panel.respond('quirky.reviews/checksGitAction', () => operation.promise)
+  const reply = dispatchControl(panel.context, 'checks', 'blocker', { action: 'push' })
+  try {
+    const firstTurn = await Promise.race([reply, Bun.sleep(0).then(() => 'still waiting')])
+    expect(firstTurn).toEqual({ result: { delivered: true } })
+    expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksGitAction')).toHaveLength(1)
+    expect(panel.element.querySelector('.ui-inline-error')).toBeNull()
+  } finally {
+    await act(async () => { operation.reject(new Error('late push fixture failed')); await reply })
+  }
+  expect(panel.element.querySelector('.ui-inline-error')?.textContent).toContain('late push fixture failed')
+  expect(panel.element.textContent).not.toContain('the window did not answer')
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/createOpen')).toEqual([])
+})
+
+test('a push that completes after its acknowledged target is replaced cannot open the composer', async () => {
+  const panel = mountPanel()
+  panel.setState(pushRequiredState())
+  const operation = Promise.withResolvers<unknown>()
+  panel.respond('quirky.reviews/checksGitAction', () => operation.promise)
+  const reply = dispatchControl(panel.context, 'checks', 'blocker', { action: 'push' })
+  try {
+    expect(await Promise.race([reply, Bun.sleep(0).then(() => 'still waiting')]))
+      .toEqual({ result: { delivered: true } })
+    panel.switchWorktree('/replacement/tree')
+    panel.setState(stateWith(null, '/replacement/tree'))
+  } finally {
+    await act(async () => { operation.resolve({ ok: true }); await reply })
+  }
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/createOpen')).toEqual([])
+})
+
+test('authentication failure is a shared error rather than a neutral prerequisite', async () => {
+  const panel = mountPanel()
+  const state = stateWith()
+  state.checks.review = null
+  state.checks.lookup = { kind: 'no-review', reason: 'authentication_required' }
+  state.checks.eligibility = { eligible: false, reason: 'authentication_required' }
+  panel.setState(state)
+  expect(panel.element.querySelector('.ui-inline-error')?.textContent).toContain('GitHub authentication failed')
+  expect(panel.element.querySelector('.ui-section-header')?.textContent ?? '').not.toContain('GitHub authentication failed')
+})
+
+test('a refresh failure stays visible when that refresh brings the first review head', async () => {
+  const panel = mountPanel({ refreshResult: { ok: false, error: 'first head fixture failed' } })
+  const state = stateWith()
+  state.checks.review = null
+  state.checks.lookup = { kind: 'folder' }
+  panel.setState(state)
+  panel.onRefresh(async () => { panel.setState(stateWith()) })
+  await click(byText(panel.element, 'Retry')!)
+  expect(panel.element.textContent).toContain('Review 12')
+  expect(panel.element.querySelector('.ui-inline-error')?.textContent).toContain('first head fixture failed')
+})
+
+test('missing origin hides leftover local-action and retained provider errors', async () => {
+  const panel = mountPanel({ refreshResult: { ok: false, error: 'leftover action fixture' } })
+  const initial = stateWith()
+  initial.checks.review = null
+  initial.checks.lookup = { kind: 'folder' }
+  panel.setState(initial)
+  await click(byText(panel.element, 'Retry')!)
+  const missingOrigin = stateWith()
+  missingOrigin.checks.review = null
+  missingOrigin.checks.lookup = { kind: 'unsupported', reason: 'missing_origin' }
+  missingOrigin.checks.error = 'leftover provider fixture'
+  panel.setState(missingOrigin)
+  expect(panel.element.textContent).toContain('GitHub origin required')
+  expect(panel.element.textContent).not.toContain('leftover action fixture')
+  expect(panel.element.textContent).not.toContain('leftover provider fixture')
 })

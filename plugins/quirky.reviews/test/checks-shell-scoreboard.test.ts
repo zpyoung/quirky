@@ -219,3 +219,15 @@ test('replacing a witnessed shared loading render with raw markup invalidates it
   expect(check.status).toBe('fail')
   expect(check.evidence.some((entry) => entry.code === 'evidence-missing' && entry.coverageFile === FRAGMENT)).toBe(true)
 })
+
+test('authentication failure is covered as a shared Checks error', () => {
+  const entry = coverage.states.find((candidate) => candidate.surface === PANEL_SURFACE
+    && candidate.state === 'error'
+    && candidate.site.file === PANEL
+    && candidate.site.quote.includes('authenticationFailure'))
+  expect(entry).toBeDefined()
+  if (!entry || entry.render.component === 'toast') throw new Error('Expected a shared authentication error')
+  expect(entry.render.component).toBe('InlineError')
+  expect(withoutPassEvidence(plugin)).toEqual([])
+  expectRemovedStateToExposeCandidate(entry)
+})

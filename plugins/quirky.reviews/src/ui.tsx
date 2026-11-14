@@ -107,11 +107,10 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
       slot: 'shell',
       target,
       actions: () => [{ action: 'retry', enabled: errorRef.current !== null }],
-      run: async (control, isCurrent) => {
+      run: (control, isCurrent) => {
         if (control.value !== undefined) throw new Error('Retry does not accept command arguments.')
         if (!isCurrent() || errorRef.current === null) return undefined
-        await refreshRef.current()
-        if (!isCurrent()) return undefined
+        void refreshRef.current()
       }
     })
     registrationRef.current = { target, generation: registration.generation, changed: registration.changed, dispose: registration.dispose }

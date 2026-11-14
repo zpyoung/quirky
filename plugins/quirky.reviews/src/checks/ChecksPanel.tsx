@@ -369,7 +369,14 @@ function useReviewsUiControl(options: {
       slot: options.slot,
       target,
       actions: () => actionsRef.current(),
-      run: (request, isCurrent) => runRef.current(request, isCurrent),
+      run: (request, isCurrent) => {
+        const operation = runRef.current(request, isCurrent)
+        if (operation instanceof Promise) {
+          void operation.catch((failure) => {
+            if (isCurrent()) errorRef.current?.(messageOf(failure))
+          })
+        }
+      },
     })
     const lease = { target, generation: registration.generation, changed: registration.changed, dispose: registration.dispose }
     registrationRef.current = lease
@@ -778,7 +785,7 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
   const matchingTarget = worktree !== null && worktree === selectedWorktree
     && number !== null && selectedReview?.number === number
     && (dialogHead === null || dialogHead === selectedHead)
-  const targetKey = reviewsControlTarget(publicSurface, 'agent', worktree, selectedOwner?.repo ?? null, number, selectedHead, action)
+  const targetKey = reviewsControlTarget(publicSurface, 'agent', worktree, selectedOwner?.repo ?? null, number, dialogHead, action)
   const originalPrompt = dialogPrompt(dialog)
   const [prompt, setPrompt] = useState(originalPrompt)
   const [agent, setAgent] = useState(dialog && typeof dialog.agent === 'string' ? dialog.agent : '')
@@ -916,7 +923,7 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
       if (startingRef.current === token) {
         startingRef.current = null
         busyRef.current = false
-        if (isCurrent()) setBusy(false)
+        if (targetKeyRef.current === targetKey) setBusy(false)
       }
     }
   }
@@ -953,7 +960,7 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
       if (startingRef.current === token) {
         startingRef.current = null
         busyRef.current = false
-        if (isCurrent()) setBusy(false)
+        if (targetKeyRef.current === targetKey) setBusy(false)
       }
     }
   }
@@ -973,14 +980,16 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
       { action: 'agent-cancel', enabled: visible && dialog !== null && !busyRef.current },
     ],
     onError: setError,
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent) => {
       if (request.value !== undefined) throw new Error('Agent actions do not accept extra values.')
       if (request.action === 'agent-start') return runStart(isCurrent)
       if (request.action === 'agent-cancel') return runClose(isCurrent)
       throw new Error('Unknown agent dialog action.')
     },
   })
-  const requestAgentControl = (action: string) => agentControl.request(action)
+  const agentControlRef = useRef(agentControl)
+  useLayoutEffect(() => { agentControlRef.current = agentControl })
+  const requestAgentControl = (action: string) => agentControlRef.current.request(action)
 
   useEffect(() => {
     if (!visible) return
@@ -993,7 +1002,7 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
     document.addEventListener('keydown', onKeyDown)
     promptRef.current?.focus()
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [requestAgentControl, visible])
+  }, [targetKey, visible])
 
   if (!visible || !dialog) return null
   const title = action === 'conflicts' ? 'Resolve Review Conflicts With AI' : action === 'comments' ? 'Resolve Comments With AI' : 'Fix With AI'
@@ -1181,7 +1190,10 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   currentTargetRef.current = currentTarget
   const pending = currentTarget?.pending ?? false
   const isPanelVisible = Object.values(layout.tools?.open ?? {}).includes(CHECKS_PANEL) && windowVisible
-  useEffect(() => setAuthDiagnostics(null), [activeWorktree])
+  useEffect(() => {
+    setAuthDiagnostics(null)
+    setActionError(null)
+  }, [activeWorktree])
 
   useEffect(() => {
     mounted.current = true
@@ -1247,16 +1259,13 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
         : null
       const result = await context.call('quirky.reviews/checksRefresh', { worktree, force: true })
       if (!stillActive()) return false
+      const stale = isRecord(result) && result.stale === true
+      const failed = !stale && (!isRecord(result) || result.ok !== true)
+      if (failed) setActionError(presentationError(result) ?? queuedError ?? 'The review could not be refreshed.')
+      else if (queuedError) setActionError(queuedError)
       await refreshRef.current()
       if (!stillActive()) return false
-      if (queuedError) setActionError(queuedError)
-      if (isRecord(result) && result.stale === true) return queuedError === null
-      if (!isRecord(result) || result.ok !== true) {
-        const message = presentationError(result) ?? queuedError ?? 'The review could not be refreshed.'
-        setActionError(message)
-        return false
-      }
-      return queuedError === null
+      return !failed && queuedError === null
     } catch (error) {
       if (stillActive()) setActionError(messageOf(error))
       return false
@@ -1432,7 +1441,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     }
   }
 
-  const runBlocker = async (request: ReviewsUiControlRequest, isCurrent: () => boolean) => {
+  const runBlocker = (request: ReviewsUiControlRequest, isCurrent: () => boolean) => {
     const value = controlValue(request, ['action', 'number'])
     const action = value.action
     const allowed = ['publish', 'sync', 'push', 'open', 'auth', 'relink']
@@ -1445,29 +1454,27 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       throw new Error('This blocker action does not accept a pull request number.')
     }
     if (action === 'relink') {
-      await runReviewOperation(() => context.call('quirky.reviews/checksRelink', { worktree: activeWorktree }), isCurrent)
-      return
+      return runReviewOperation(() => context.call('quirky.reviews/checksRelink', { worktree: activeWorktree }), isCurrent)
     }
     if (action === 'open') {
       if (!existingNumber) return
-      await runReviewOperation(() => context.call('quirky.reviews/checksOpenReview', {
+      return runReviewOperation(() => context.call('quirky.reviews/checksOpenReview', {
         worktree: activeWorktree,
         number: existingNumber,
         tab: 'conversation',
       }), isCurrent)
-      return
     }
     if (action === 'auth') {
-      await runAuthDiagnosis(isCurrent)
-      return
+      return runAuthDiagnosis(isCurrent)
     }
-    const result = await runReviewOperation(() => context.call('quirky.reviews/checksGitAction', {
+    return runReviewOperation(() => context.call('quirky.reviews/checksGitAction', {
       worktree: activeWorktree,
       action,
-    }), isCurrent)
-    if (action === 'push' && isRecord(result) && result.ok === true && isCurrent()) {
-      await runReviewOperation(() => context.call('quirky.reviews/createOpen', { worktree: activeWorktree }), isCurrent, false)
-    }
+    }), isCurrent).then((result) => {
+      if (action === 'push' && isRecord(result) && result.ok === true && isCurrent()) {
+        return runReviewOperation(() => context.call('quirky.reviews/createOpen', { worktree: activeWorktree }), isCurrent, false)
+      }
+    })
   }
 
   const resolveOpenLink = (number: number | null): string | null => {
@@ -1479,22 +1486,21 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     return safeHttpUrl(entry?.url)
   }
 
-  const runChecksControl = async (request: ReviewsUiControlRequest, isCurrent: () => boolean) => {
+  const runChecksControl = (request: ReviewsUiControlRequest, isCurrent: () => boolean) => {
     if (!isCurrent()) return
     if (request.action === 'refresh') {
       controlValue(request, [])
-      await runRefresh('manual', activeWorktree, isCurrent)
-      return
+      return runRefresh('manual', activeWorktree, isCurrent)
     }
     if (request.action === 'unlink') {
       controlValue(request, [])
-      if (activeWorktree) await runReviewOperation(() => context.call('quirky.reviews/checksUnlink', { worktree: activeWorktree }), isCurrent)
+      if (activeWorktree) return runReviewOperation(() => context.call('quirky.reviews/checksUnlink', { worktree: activeWorktree }), isCurrent)
       return
     }
     if (request.action === 'relink') {
       controlValue(request, [])
       if (offeredBlockerAction === 'relink' && activeWorktree) {
-        await runReviewOperation(() => context.call('quirky.reviews/checksRelink', { worktree: activeWorktree }), isCurrent)
+        return runReviewOperation(() => context.call('quirky.reviews/checksRelink', { worktree: activeWorktree }), isCurrent)
       }
       return
     }
@@ -1518,13 +1524,12 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     if (request.action === 'create') {
       controlValue(request, [])
       if (activeWorktree && eligibilityIsCurrent(state, activeWorktree)) {
-        await runReviewOperation(() => context.call('quirky.reviews/createOpen', { worktree: activeWorktree }), isCurrent, false)
+        return runReviewOperation(() => context.call('quirky.reviews/createOpen', { worktree: activeWorktree }), isCurrent, false)
       }
       return
     }
     if (request.action === 'blocker') {
-      await runBlocker(request, isCurrent)
-      return
+      return runBlocker(request, isCurrent)
     }
     if (request.action === 'open-link') {
       const value = controlValue(request, ['number', 'invert'])
@@ -1533,12 +1538,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       if (value.invert !== undefined && typeof value.invert !== 'boolean') throw new Error('Invalid pull request link modifier.')
       const url = resolveOpenLink(number)
       if (!url || !activeWorktree) throw new Error('Select a current pull request or stack member link.')
-      await runReviewOperation(() => context.call('quirky.reviews/openLink', {
+      return runReviewOperation(() => context.call('quirky.reviews/openLink', {
         url,
         worktree: activeWorktree,
         ...(value.invert === true ? { invert: true } : {}),
       }), isCurrent, false)
-      return
     }
     if (request.action === 'copy-link') {
       const value = controlValue(request, ['source'])
@@ -1549,8 +1553,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
           ? 'gh auth status'
           : null
       if (typeof text !== 'string' || text === '') throw new Error('Select a current pull request link or GitHub auth status.')
-      await runReviewOperation(() => copyReviewsText(text), isCurrent, false)
-      return
+      return runReviewOperation(() => copyReviewsText(text), isCurrent, false)
     }
     if (request.action === 'agent-open') {
       const value = controlValue(request, ['action'])
@@ -1558,12 +1561,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
         throw new Error('Invalid agent action.')
       }
       if (value.action !== triageAction || !activeWorktree) return
-      await runReviewOperation(() => context.call('quirky.reviews/checksSetAgentDialog', {
+      return runReviewOperation(() => context.call('quirky.reviews/checksSetAgentDialog', {
         surface: 'checks',
         worktree: activeWorktree,
         action: value.action,
       }), isCurrent)
-      return
     }
     if (request.action === 'height-set') {
       const value = controlValue(request, ['height'])
@@ -1571,8 +1573,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       const height = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(value.height)))
       dragHeightRef.current = null
       setDragHeight(null)
-      await runReviewOperation(() => context.call('quirky.reviews/checksSetHeight', { height }), isCurrent)
-      return
+      return runReviewOperation(() => context.call('quirky.reviews/checksSetHeight', { height }), isCurrent)
     }
     throw new Error('Unknown Checks panel action.')
   }
@@ -1618,9 +1619,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       { action: 'title-save', enabled: canTitleEdit && titleInput.trim() !== '' },
       { action: 'title-cancel', enabled: canTitleEdit },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent) => {
       controlValue(request, [])
-      if (request.action === 'title-save') await saveTitle(isCurrent)
+      if (request.action === 'title-save') return saveTitle(isCurrent)
       else if (request.action === 'title-cancel') {
         if (titleOwner && currentReview && isCurrent()) {
           setActionError(null)
@@ -1685,7 +1686,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       { action: 'link-submit', enabled: linkOpen && activeWorktree !== null && active !== null && !active.loading },
       { action: 'link-cancel', enabled: linkOpen },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent) => {
       const value = controlValue(request, request.action === 'link-submit' ? ['number'] : [])
       if (request.action === 'link-cancel') {
         if (isCurrent()) {
@@ -1703,15 +1704,16 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
         if (isCurrent()) setActionError('Enter a positive pull request number.')
         return
       }
-      const result = await runReviewOperation(() => context.call('quirky.reviews/checksLink', {
+      return runReviewOperation(() => context.call('quirky.reviews/checksLink', {
         worktree: activeWorktree,
         number,
-      }), isCurrent)
-      if (isCurrent() && isRecord(result) && result.linked === true) {
-        linkNumberRef.current = ''
-        setLinkNumber('')
-        setLinkOpen(false)
-      }
+      }), isCurrent).then((result) => {
+        if (isCurrent() && isRecord(result) && result.linked === true) {
+          linkNumberRef.current = ''
+          setLinkNumber('')
+          setLinkOpen(false)
+        }
+      })
     },
   })
   const requestLinkControl = (action: string) => linkControl.request(action)
@@ -1749,7 +1751,6 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     linkNumberRef.current = ''
     setLinkNumber('')
     setLinkOpen(false)
-    setActionError(null)
   }, [panelTarget])
 
   const actionItems = useMemo(() => [
@@ -1801,19 +1802,22 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
         : null
     const genuineEmpty = lookup?.kind === 'no-review' && noReviewEligibility && active.error === null
     const createUnavailable = lookup?.kind === 'unavailable' || reason === 'lookup_unavailable'
+    const authenticationFailure = empty.action === 'auth'
     return (
       <section className="ui-stack" style={{ minHeight: 0, maxHeight: '100%', overflow: 'hidden' }} {...panelMetadata}>
         {sitterSafetyStrip}
         {sitterRow}
-        {actionError && <InlineError message={actionError} />}
-        {active.error && <InlineError message={active.error} />}
+        {!missingOrigin && actionError && <InlineError message={actionError} />}
+        {!missingOrigin && active.error && <InlineError message={active.error} />}
         {lookupFailure && <InlineError message={lookupFailure} />}
         {diagnosticError && <InlineError message={diagnosticError} />}
         <div className="ui-stack" style={{ padding: 'var(--ui-space-12)', overflow: 'auto' }}>
-          {genuineEmpty
-            ? <EmptyState message="No pull request found" />
-            : <SectionHeader title={empty.title} />}
-          {!lookupFailure && <p>{empty.message}</p>}
+          {authenticationFailure
+            ? <InlineError message={`${empty.title}: ${empty.message}`} />
+            : genuineEmpty
+              ? <EmptyState message="No pull request found" />
+              : <SectionHeader title={empty.title} />}
+          {!lookupFailure && !authenticationFailure && <p>{empty.message}</p>}
           {empty.action && <Button
             variant={empty.action === 'open' || empty.action === 'relink' ? 'primary' : 'secondary'}
             disabled={busy}
