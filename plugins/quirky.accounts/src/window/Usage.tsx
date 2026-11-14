@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ChangeEvent, MouseEvent } from 'react'
-import { AgentIcon, Badge, Button, Dialog, EmptyState, FormRow, IconButton, SectionHeader, Tabs } from '@quirky/ui'
+import { AgentIcon, Badge, Button, Dialog, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, Tabs } from '@quirky/ui'
 import { useStableReport, type UiReport } from './report'
 import {
   ageLabel, accountSort, AccountsUiStore, canShowProviderVisibility, compactWindow, displayIdentity, displayPercent, formatReset, isConfigured, isCurrentSnapshot, maxUsed, providerSource,
@@ -37,12 +37,17 @@ function Meter({ window, direction, label }: { window: WindowData; direction: Pr
   </div>
 }
 
-export function SnapshotLine({ snapshot }: { snapshot: ProviderSnapshot }) {
+export function SnapshotLine({ snapshot, onRetry }: { snapshot: ProviderSnapshot; onRetry?: () => void }) {
   const state = snapshotStatus(snapshot)
   const tone = state.kind === 'danger' ? 'status-danger' : state.kind === 'warning' ? 'status-error' : state.kind === 'ready' ? 'status-ready' : 'status-loading'
   const source = providerSource(snapshot)
+  const hasLastGood = windowEntries(snapshot).length > 0
   return <div className="info-line">
-    <span className={tone} aria-live="polite">{state.label}{snapshot.status === 'error' && (snapshot.session || snapshot.weekly || snapshot.monthly || snapshot.fableWeekly || snapshot.buckets?.length) ? ' — showing last good usage' : ''}</span>
+    {snapshot.status === 'error'
+      ? <InlineError message={`${state.label}${hasLastGood ? ' — showing last good usage' : ''}`} action={onRetry ? { label: 'Retry', onAction: onRetry } : undefined} />
+      : state.kind === 'loading'
+        ? <NoticeLine><span className="status-loading" role="status">{state.label}</span></NoticeLine>
+        : <span className={tone} aria-live="polite">{state.label}</span>}
     <small title={source ? `Source: ${source}. ${ageLabel(snapshot.updatedAt)}.` : `${ageLabel(snapshot.updatedAt)}.`}>{ageLabel(snapshot.updatedAt)}</small>
   </div>
 }
@@ -112,6 +117,7 @@ export function UsagePreferencesControls({ store, preferences }: { store: Accoun
   const visibilityProviders = PROVIDER_LABELS_LIST.filter(([provider]) => canShowProviderVisibility(provider, agentDetection))
   const changeHidden = (event: ChangeEvent<HTMLInputElement>) => void store.setPreferences({ hidden: event.currentTarget.checked })
   const changeDensity = (event: ChangeEvent<HTMLInputElement>) => void store.setPreferences({ density: event.currentTarget.checked ? 'icons' : 'normal' })
+  const refreshAll = () => void store.refreshCommand()
   return <div className="account-stack">
     <section className="section-card">
       <SectionHeader title="Usage display" />
@@ -127,7 +133,9 @@ export function UsagePreferencesControls({ store, preferences }: { store: Accoun
     <section className="section-card">
       <SectionHeader title="Status bar providers" />
       <p className="settings-description">Choose which configured provider meters are visible.</p>
-      {agentDetection.status !== 'ready' && <small role="status">{agentDetection.status === 'loading' ? 'Checking installed agent CLIs…' : 'Agent detection is unavailable; CLI-specific toggles are hidden. Refresh usage to retry.'}</small>}
+      {agentDetection.status === 'loading'
+        ? <NoticeLine><span role="status">Checking installed agent CLIs…</span></NoticeLine>
+        : agentDetection.status !== 'ready' && <InlineError message="Agent detection is unavailable; CLI-specific toggles are hidden." action={{ label: 'Retry', onAction: refreshAll }} />}
       {visibilityProviders.map(([provider, label]) => {
         const id = `accounts-provider-usage-${provider}`
         const changeVisibility = (event: ChangeEvent<HTMLInputElement>) => {
@@ -160,15 +168,19 @@ function EmptyUsage({ store }: { store: AccountsUiStore }) {
 }
 
 function ProviderRoster({ store, usage, accounts, preferences, credentials }: { store: AccountsUiStore; usage: UsageState | null; accounts: AccountState | null; preferences: Preferences; credentials: CredentialStatus[] }) {
+  const current = useStore(store)
+  const refreshAll = () => void store.refreshCommand()
   const configured = (usage?.providers ?? []).filter((snapshot) => isCurrentSnapshot(snapshot, accounts) && isConfigured(snapshot, accounts, credentials))
     .sort((a, b) => (maxUsed(b) ?? -1) - (maxUsed(a) ?? -1) || PROVIDER_LABELS[a.provider].localeCompare(PROVIDER_LABELS[b.provider]))
+  if (!configured.length && (current.error || current.scope.kind === 'remote' && current.scope.status !== 'ready')) return null
+  if (!accounts || !usage || current.loading && !configured.length) return <NoticeLine><span role="status">Loading usage…</span></NoticeLine>
   if (!configured.length) {
     const accountConfigured = Boolean(accounts && (
       accounts.accounts.some((account) => !account.needsSignIn) || accounts.systemDefault.claude.hasAuth || accounts.systemDefault.codex.hasAuth
     ))
     const credentialConfigured = credentials.some((credential) => credential.configured)
     return accountConfigured || credentialConfigured
-      ? <div role="status"><EmptyState message="Usage for the selected account is loading. Refresh if it does not appear." /></div>
+      ? <EmptyState message="Usage for the selected account is loading. Refresh if it does not appear." action={{ label: 'Refresh usage', onAction: refreshAll }} />
       : <EmptyUsage store={store} />
   }
   const staleCodex = accounts?.staleSessions.filter((session) => session.provider === 'codex').length ?? 0
@@ -193,7 +205,10 @@ function ProviderRoster({ store, usage, accounts, preferences, credentials }: { 
 function InactiveUsage({ snapshot, direction, active = false }: { snapshot: ProviderSnapshot | undefined; direction: Preferences['direction']; active?: boolean }) {
   if (!snapshot) return <small className="muted">{active ? 'Current account usage has not been read yet.' : 'Usage will load when this account is expanded.'}</small>
   const entries = windowEntries(snapshot)
-  if (!entries.length) return <small className={`status-${snapshotStatus(snapshot).kind}`}>{snapshotStatus(snapshot).label}</small>
+  const status = snapshotStatus(snapshot)
+  if (!entries.length && status.kind === 'loading') return <NoticeLine><span className="status-loading" role="status">{status.label}</span></NoticeLine>
+  if (!entries.length && snapshot.status === 'error') return <InlineError message={status.label} />
+  if (!entries.length) return <small className="muted">{status.label}</small>
   return <div className="usage-window-list">{entries.map(({ name, window }) => <Meter key={name} window={window} direction={direction} label={name} />)}</div>
 }
 
@@ -227,7 +242,7 @@ function AccountSwitcher({ store, provider, state, usage }: { store: AccountsUiS
           : usage?.inactive[`${provider}:${account.id}`]
         const selectManagedAccount = () => void store.selectAccountCommand(provider, account.id)
         return <div className="account-row" key={account.id}>
-          <div className="account-row-main"><div className="row-badges"><strong>{account.label}</strong>{active && <Badge tone="accent">Active</Badge>}{account.needsSignIn && <Badge tone="needs-you">Needs sign-in</Badge>}</div><small>{[account.email, account.organization, account.lastAuthenticatedAt ? `Signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account'}</small>{account.needsSignIn && <small className="status-error">Sign in again to use this account.</small>}<InactiveUsage snapshot={accountUsage} direction={state?.preferences.direction ?? 'used'} active={active} /></div>
+          <div className="account-row-main"><div className="row-badges"><strong>{account.label}</strong>{active && <Badge tone="accent">Active</Badge>}{account.needsSignIn && <Badge tone="needs-you">Needs sign-in</Badge>}</div><small>{[account.email, account.organization, account.lastAuthenticatedAt ? `Signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account'}</small>{account.needsSignIn && <InlineError message="Sign in again to use this account." />}<InactiveUsage snapshot={accountUsage} direction={state?.preferences.direction ?? 'used'} active={active} /></div>
           <div className="account-actions"><Button type="button" aria-label={`Select ${ProviderName} account ${account.label}`} disabled={!state || account.needsSignIn || active || scopeUnavailable} onClick={selectManagedAccount}>{active ? 'Active' : account.needsSignIn ? 'Needs sign-in' : 'Select'}</Button></div>
         </div>
       })}
@@ -267,12 +282,12 @@ function StaleSessionActions({ store, session, disabled = false }: { store: Acco
   const keepSession = () => void run('keep')
   const restartSession = () => void run('restart')
   return <div className="account-stack">
-    {session.provider === 'claude' && session.busy && session.queued && <small className="status-loading">Waiting for this Claude session to finish before restarting on {session.selectedLabel}.</small>}
+    {session.provider === 'claude' && session.busy && session.queued && <NoticeLine><span className="status-loading" role="status">Waiting for this Claude session to finish before restarting on {session.selectedLabel}.</span></NoticeLine>}
     {session.kept ? <small className="muted">Kept on {session.accountLabel}.</small> : <div className="details-actions">
       <Button type="button" disabled={disabled || submitting} onClick={keepSession}>{session.provider === 'codex' ? 'Keep old account' : 'Keep as is'}</Button>
       <Button type="button" disabled={disabled || submitting} onClick={restartSession}>{session.provider === 'codex' ? 'Restart' : 'Restart session'}</Button>
     </div>}
-    {failureMessage && <small className="status-error" role="alert">{failureMessage}</small>}
+    {failureMessage && <InlineError message={failureMessage} />}
   </div>
 }
 
@@ -301,7 +316,7 @@ function ResetConfirmDialog({ store, onCancel, onConfirm, onDontAsk, accountLabe
     <FormRow label="Don't ask again" htmlFor="codex-reset-dont-ask">
       <input id="codex-reset-dont-ask" type="checkbox" checked={dontAsk || remembered} disabled={disabled || remembered} onChange={onDontAsk} />
     </FormRow>
-    {outcomeMessage && <p className="status-error" role="alert">{outcomeMessage}</p>}
+    {outcomeMessage && <InlineError message={outcomeMessage} />}
   </Dialog>
 }
 
@@ -365,6 +380,7 @@ function ResetCredit({ store, snapshot, accounts, disabled = false }: { store: A
     if (pendingOffer) void submit(pendingOffer.expectedScope, pendingOffer.accountLabel, dontAsk || accounts?.preferences.skipCodexResetConfirm === true)
   }
   const changeDontAsk = (event: ChangeEvent<HTMLInputElement>) => setDontAsk(event.currentTarget.checked)
+  const refreshCodex = () => void store.refreshCommand('codex')
   return <section className="section-card" aria-label="Codex reset credits">
     {offer && <>
       <SectionHeader
@@ -375,10 +391,12 @@ function ResetCredit({ store, snapshot, accounts, disabled = false }: { store: A
       {availableCount > 0 && <>
         <p className="settings-description">Use a Codex reset credit for the active account's eligible usage windows.</p>
         <Button type="button" variant="primary" aria-label="Reset Codex limits" disabled={disabled || !expectedScope || submitting || Boolean(pendingOffer)} title={disabled ? 'Reset credits are not available for a remote owner.' : !expectedScope ? 'A verified offer scope is unavailable.' : undefined} onClick={requestReset}>{submitting && !pendingOffer ? 'Resetting…' : 'Reset now'}</Button>
-        {!expectedScope && <small className="status-error" role="status">Reset is unavailable because the displayed offer could not be bound to an account revision.</small>}
+        {!expectedScope && <InlineError message="Reset is unavailable because the displayed offer could not be bound to an account revision." />}
       </>}
     </>}
-    {outcomeMessage && !pendingOffer && <p className={outcome === 'reset' || outcome === 'alreadyRedeemed' ? 'status-ready' : 'status-error'} role={outcome === 'reset' || outcome === 'alreadyRedeemed' ? 'status' : 'alert'}>{outcomeMessage}</p>}
+    {outcomeMessage && !pendingOffer && (outcome === 'reset' || outcome === 'alreadyRedeemed'
+      ? <NoticeLine><span className="status-ready" role="status">{outcomeMessage}</span></NoticeLine>
+      : <InlineError message={outcomeMessage} action={refreshBeforeRetry ? { label: 'Refresh usage', onAction: refreshCodex } : undefined} />)}
     {pendingOffer && <ResetConfirmDialog store={store} onCancel={cancelReset} onConfirm={confirmReset} onDontAsk={changeDontAsk}
       accountLabel={pendingOffer.accountLabel} submitting={submitting} disabled={disabled} outcome={outcome} outcomeMessage={outcomeMessage}
       refreshBeforeRetry={refreshBeforeRetry} dontAsk={dontAsk} remembered={accounts?.preferences.skipCodexResetConfirm === true} />}
@@ -408,19 +426,26 @@ function ProviderDetails({ store, provider, usage, accounts }: { store: Accounts
       <IconButton label="Refresh rate limits" title="Refresh usage data" disabled={snapshot.refreshing || scopeLoading} onClick={refreshProvider}>↻</IconButton>
     </span>} />
     {providerSnapshot ? <>
-      <SnapshotLine snapshot={providerSnapshot} />
-      {windows.length ? <div className="usage-window-list">{windows.map(({ name, window }) => <Meter key={name} window={window} direction={preferences?.direction ?? 'used'} label={name} />)}</div> : <p className={`empty-note status-${status?.kind ?? 'muted'}`}>{status?.label ?? 'Usage has not been read yet.'}</p>}
+      <SnapshotLine snapshot={providerSnapshot} onRetry={refreshProvider} />
+      {windows.length ? <div className="usage-window-list">{windows.map(({ name, window }) => <Meter key={name} window={window} direction={preferences?.direction ?? 'used'} label={name} />)}</div>
+        : status?.kind === 'loading' || providerSnapshot.status === 'error' ? null
+          : status?.signedOut ? <EmptyState message={status.label} action={managed && !remoteOwner ? { label: 'Sign in', onAction: openSignIn } : undefined} />
+            : !providerSnapshot.extraUsage && <EmptyState message={status?.label ?? 'Usage has not been read yet.'} action={{ label: 'Refresh usage', onAction: refreshProvider }} />}
       {providerSnapshot.extraUsage && <ExtraUsageDetails snapshot={providerSnapshot} />}
       {providerSnapshot.planType && <div className="info-line"><span>Plan</span><span>{providerSnapshot.planType}</span></div>}
-    </> : <EmptyState message="Usage has not been read yet." />}
+    </> : snapshot.error
+      ? <InlineError message={snapshot.error} action={{ label: 'Retry', onAction: refreshProvider }} />
+      : snapshot.loading || !usage
+        ? <NoticeLine><span role="status">Loading {label} usage…</span></NoticeLine>
+        : <EmptyState message="Usage has not been read yet." action={{ label: 'Refresh usage', onAction: refreshProvider }} />}
     {managed && <AccountSwitcher store={store} provider={provider} state={accounts} usage={usage} />}
     {provider === 'codex' && <ResetCredit store={store} snapshot={providerSnapshot} accounts={accounts} disabled={remoteOwner} />}
     {stale.length > 0 && <section className="section-card" aria-label={`${label} sessions on a previous account`}>
       <SectionHeader title={`${stale.length} ${label} session${stale.length === 1 ? '' : 's'} still on the old account`} />
-      {remoteOwner && <small role="status">Restart and keep actions are available only on this device.</small>}
-      <div className="stale-list">{stale.map((session) => <div className="stale-row" key={session.sessionId}><span>{session.accountLabel} → {session.selectedLabel}{session.busy ? ' · Busy' : ''}</span><StaleSessionActions store={store} session={session} disabled={remoteOwner || scopeUnavailable} />{session.error && <small className="status-error" role="alert">Restart failed. Retry when the session is available.</small>}</div>)}</div>
+      {remoteOwner && <NoticeLine>Restart and keep actions are available only on this device.</NoticeLine>}
+      <div className="stale-list">{stale.map((session) => <div className="stale-row" key={session.sessionId}><span>{session.accountLabel} → {session.selectedLabel}{session.busy ? ' · Busy' : ''}</span><StaleSessionActions store={store} session={session} disabled={remoteOwner || scopeUnavailable} />{session.error && <InlineError message="Restart failed. Retry when the session is available." />}</div>)}</div>
     </section>}
-    {status?.signedOut && managed && <Button type="button" disabled={remoteOwner} onClick={openSignIn}>Sign in</Button>}
+    {windows.length > 0 && status?.signedOut && managed && <Button type="button" disabled={remoteOwner} onClick={openSignIn}>Sign in</Button>}
   </div>
 }
 
@@ -452,6 +477,7 @@ function UsagePopover({ store, accounts, usage, credentials }: { store: Accounts
   const current = useStore(store)
   const preferences = accounts?.preferences
   const scopeLoading = current.scope.kind === 'remote' && current.scope.status === 'loading'
+  const scopeUnavailable = current.scope.kind === 'remote' && current.scope.status === 'unavailable'
   const closeUsage = () => void store.setUiState({ open: false })
   const openAccounts = () => void store.openSettingsSection(current.ui.provider && isManaged(current.ui.provider) ? current.ui.provider : 'claude')
   const refreshAll = () => void store.refreshCommand()
@@ -462,17 +488,17 @@ function UsagePopover({ store, accounts, usage, credentials }: { store: Accounts
       <IconButton label="Refresh rate limits" title="Refresh usage data" disabled={current.refreshing || scopeLoading} onClick={refreshAll}>↻</IconButton>
       <IconButton label="Close Usage" onClick={closeUsage}>×</IconButton>
     </span>} />
-    {current.scope.kind === 'remote' && <p className={current.scope.status === 'unavailable' ? 'status-error' : ''} role="status">
-      {current.scope.status === 'loading'
-        ? `Loading Usage from ${current.scope.hostName ?? 'the remote owner'}…`
-        : current.scope.status === 'unavailable'
-          ? `${current.scope.hostName ?? 'Remote owner'} usage is unavailable.`
-          : `Usage on ${current.scope.hostName ?? 'the remote owner'}.`}
-    </p>}
+    {current.scope.kind === 'remote' && (scopeLoading
+      ? <NoticeLine><span role="status">Loading Usage from {current.scope.hostName ?? 'the remote owner'}…</span></NoticeLine>
+      : scopeUnavailable
+        ? <InlineError message={`${current.scope.hostName ?? 'Remote owner'} usage is unavailable.`} action={{ label: 'Retry', onAction: refreshAll }} />
+        : <p className="muted">Usage on {current.scope.hostName ?? 'the remote owner'}.</p>)}
+    {current.error && !scopeUnavailable && (!current.ui.provider || usage?.providers.some((provider) => provider.provider === current.ui.provider && isCurrentSnapshot(provider, accounts))) && <InlineError message={current.error} action={{ label: 'Retry', onAction: refreshAll }} />}
+    {current.refreshing && <NoticeLine><span role="status">Refreshing usage…</span></NoticeLine>}
     {preferences && <UsageControls store={store} preferences={preferences} />}
-    {current.ui.provider && isProvider(current.ui.provider)
+    {!scopeLoading && !scopeUnavailable && (current.ui.provider && isProvider(current.ui.provider)
       ? <ProviderDetails store={store} provider={current.ui.provider} usage={usage} accounts={accounts} />
-      : <ProviderRoster store={store} usage={usage} accounts={accounts} preferences={preferences ?? { ...DEFAULT_USAGE_PREFERENCES }} credentials={credentials} />}
+      : <ProviderRoster store={store} usage={usage} accounts={accounts} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} credentials={credentials} />)}
     <div className="usage-footer"><span className="muted">Usage updates from provider quota snapshots.</span><Button type="button" onClick={openAccounts}>{MANAGE_LABEL}</Button></div>
   </div>
 }
@@ -498,8 +524,11 @@ function UsageVisibilityMenu({ store, onClose }: { store: AccountsUiStore; onClo
   const snapshot = useStore(store)
   const preferences = snapshot.accounts?.preferences
   const visibilityProviders = PROVIDER_LABELS_LIST.filter(([provider]) => canShowProviderVisibility(provider, snapshot.agentDetection))
+  const refreshAll = () => void store.refreshCommand()
   return <div className="context-menu" role="menu" aria-label="Usage visibility">
-    {snapshot.agentDetection.status !== 'ready' && <small role="status">{snapshot.agentDetection.status === 'loading' ? 'Checking installed agent CLIs…' : 'Agent detection is unavailable; CLI-specific toggles are hidden. Refresh usage to retry.'}</small>}
+    {snapshot.agentDetection.status === 'loading'
+      ? <NoticeLine><span role="status">Checking installed agent CLIs…</span></NoticeLine>
+      : snapshot.agentDetection.status !== 'ready' && <InlineError message="Agent detection is unavailable; CLI-specific toggles are hidden." action={{ label: 'Retry', onAction: refreshAll }} />}
     {visibilityProviders.map(([provider, label]) => {
       const changeVisibility = (event: ChangeEvent<HTMLInputElement>) => {
         if (!preferences) return
@@ -692,7 +721,7 @@ export function SessionAccessory({ store, input, report }: { store: AccountsUiSt
     <SectionHeader title={`${providerName} account switched`} />
     <p>{sessionCopy}</p>
     <StaleSessionActions store={store} session={session} />
-    {session.error && <small className="status-error" role="alert">Restart failed. The session remains on its previous account; retry when available.</small>}
+    {session.error && <InlineError message="Restart failed. The session remains on its previous account; retry when available." />}
   </div>
 }
 
@@ -773,15 +802,15 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
         <p>{visible.length} Claude session{visible.length === 1 ? '' : 's'} {visible.length === 1 ? 'is' : 'are'} still running on {visible[0]?.accountLabel}. Restarting continues each conversation on {visible[0]?.selectedLabel}. Busy sessions wait for idle before restarting.</p>
         <div className="stale-list">{visible.map((session) => <div className="stale-row" key={session.sessionId}>
           <strong>{session.accountLabel} → {session.selectedLabel}</strong>
-          {session.queued ? <small className="status-loading">Restart queued; waiting for Claude to become idle.</small> : null}
+          {session.queued ? <NoticeLine><span className="status-loading" role="status">Restart queued; waiting for Claude to become idle.</span></NoticeLine> : null}
           {session.busy && <small>Busy now. Restart will wait until this turn finishes.</small>}
-          {session.error && <small className="status-error" role="alert">Restart failed. This session remains on its old account.</small>}
+          {session.error && <InlineError message="Restart failed. This session remains on its old account." />}
           <StaleSessionActions store={store} session={session} disabled={submitting} />
         </div>)}</div>
         <FormRow label="Don't ask again (restart automatically)" htmlFor="switch-dialog-dont-ask" help="You can turn this off in Settings → AI Provider Accounts.">
           <input id="switch-dialog-dont-ask" type="checkbox" checked={dontAskAgain} disabled={submitting} onChange={changeDontAsk} />
         </FormRow>
-        {failureMessage && <p className="status-error" role="alert">{failureMessage}</p>}
+        {failureMessage && <InlineError message={failureMessage} />}
         {revisions.size > 1 && <small className="muted">Sessions from different account selections are protected by their own selection revisions.</small>}
       </div>
     </Dialog>
