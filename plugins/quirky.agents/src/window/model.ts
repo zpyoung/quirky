@@ -4,6 +4,45 @@ import type { AgentInfo, AgentListing, PermissionMode } from '../core/types'
 export const SETTINGS_VIEW_ID = 'view:quirky.agents/settings'
 export const TRUST_SETTING_ID = 'setting:quirky.agents/workspace-trust'
 
+export const AGENT_DETAILS_COMMAND = 'command:quirky.agents/agent-details'
+
+export class AgentDetailsState {
+  private expanded = new Set<string>()
+  private listeners = new Set<() => void>()
+
+  snapshot(): ReadonlySet<string> {
+    return this.expanded
+  }
+
+  set(agent: string, expanded: boolean): void {
+    if (this.expanded.has(agent) === expanded) return
+    const next = new Set(this.expanded)
+    if (expanded) next.add(agent)
+    else next.delete(agent)
+    this.expanded = next
+    for (const listener of [...this.listeners]) listener()
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+}
+
+export async function setAgentDetails(context: UiPluginContext, details: AgentDetailsState, args: unknown): Promise<void> {
+  const input = typeof args === 'object' && args !== null && !Array.isArray(args) ? args as Record<string, unknown> : {}
+  const agent = input.agent
+  const expanded = input.expanded
+  if (typeof agent !== 'string' || agent.trim() === '') throw new Error('agent must be a non-empty string')
+  if (typeof expanded !== 'boolean') throw new Error('expanded must be a boolean')
+  const info = (await context.call('quirky.agents/get', { agent })) as AgentInfo
+  if (!info.installed) throw new Error(`agent ${agent} is not installed`)
+  details.set(agent, expanded)
+}
+
+
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export type ViewSnapshot = {
@@ -12,6 +51,7 @@ export type ViewSnapshot = {
   /** Why the first load failed; null otherwise. */
   error: string | null
   refreshing: boolean
+  expanded: ReadonlySet<string>
 }
 
 /** What a field edit changes on one agent; each key maps to a `configure` parameter. */
@@ -23,7 +63,7 @@ export type ConfigureChange = { command?: string; args?: string; env?: Record<st
  * ends it with `stop()`.
  */
 export class AgentsStore {
-  private snapshot: ViewSnapshot = { status: 'loading', listing: null, error: null, refreshing: false }
+  private snapshot: ViewSnapshot
   private listeners = new Set<() => void>()
   private unsubscribes: (() => void)[] = []
   private loading = false
@@ -31,10 +71,21 @@ export class AgentsStore {
   private stopped = false
   private wasReconnecting = false
 
-  constructor(private readonly context: UiPluginContext) {}
+  constructor(private readonly context: UiPluginContext, private readonly details = new AgentDetailsState()) {
+    this.snapshot = {
+      status: 'loading',
+      listing: null,
+      error: null,
+      refreshing: false,
+      expanded: details.snapshot()
+    }
+  }
 
   start(): void {
     this.unsubscribes.push(
+      this.details.subscribe(() => {
+        if (!this.stopped) this.commit({ expanded: this.details.snapshot() })
+      }),
       this.context.subscribe((event) => this.onEvent(event)),
       this.context.onConnection((status) => {
         if (status === 'reconnecting') this.wasReconnecting = true
@@ -115,6 +166,18 @@ export class AgentsStore {
     }
     void this.load()
     return null
+  }
+
+  async setExpanded(agent: string, expanded: boolean): Promise<void> {
+    this.details.set(agent, expanded)
+    if (this.snapshot.expanded.has(agent) !== expanded) {
+      this.commit({ expanded: this.details.snapshot() })
+    }
+    try {
+      await this.context.executeCommand(AGENT_DETAILS_COMMAND, { agent, expanded })
+    } catch (error) {
+      this.context.toast('Could not update agent details', messageOf(error))
+    }
   }
 
   private async act(title: string, call: () => Promise<unknown>): Promise<void> {

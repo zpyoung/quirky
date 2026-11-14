@@ -1,0 +1,723 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.agents/settings": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "installed.length === 0 ?"
+      },
+      "anchor": "installed.length === 0 ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+          "quote": "<EmptyState message=\"No agents detected. Install one below, then Refresh.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "status === 'loading' &&"
+      },
+      "anchor": "status === 'loading' &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+          "quote": "<NoticeLine>Loading agents…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "status === 'error' &&"
+      },
+      "anchor": "status === 'error' &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+          "quote": "<InlineError\n              message={error ?? 'Could not load agents'}\n              action={{ label: 'Try again', onAction: () => store.retry() }}\n            />"
+        },
+        "import": {
+          "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "<FormRow"
+      },
+      "anchor": "<FormRow",
+      "render": {
+        "component": "FormRow",
+        "element": {
+          "file": "plugins/quirky.agents/src/window/Field.tsx",
+          "quote": "<FormRow label={label} htmlFor={id} error={error ?? undefined}>\n            <textarea\n              id={id}\n              aria-label={label}\n              value={draft}\n              spellCheck={false}\n              rows={Math.max(2, draft.split('\\n').length)}\n              className=\"ui-text-field__input\"\n              style={s.mono}\n              onChange={onChange}\n              onBlur={onBlur}\n              onKeyDown={onKeyDown}\n            />\n          </FormRow>"
+        },
+        "import": {
+          "file": "plugins/quirky.agents/src/window/Field.tsx",
+          "quote": "import { Button, FormRow, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/agentTabs.ts",
+        "quote": "context.toast('Could not open agent tab', body)"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agents/src/window/agentTabs.ts",
+          "quote": "context.toast('Could not open agent tab', body)"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/model.ts",
+        "quote": "this.context.toast('Could not refresh agents', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.toast('Could not refresh agents', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/model.ts",
+        "quote": "this.context.toast('Could not update agent details', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.toast('Could not update agent details', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/model.ts",
+        "quote": "this.context.toast(title, messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.toast(title, messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.agents/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.agents/src/window/model.ts",
+        "quote": "this.context.toast('Could not load agents', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.toast('Could not load agents', messageOf(error))"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "if (mode === null)"
+      },
+      "anchor": "if (mode === null)",
+      "reason": "Agents without a permissions preset have no permissions selector."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "if (mode === 'custom')"
+      },
+      "anchor": "if (mode === 'custom')",
+      "reason": "Custom launch arguments show an explicit preset replacement control."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "info.showEnv &&"
+      },
+      "anchor": "info.showEnv &&",
+      "reason": "Shows the environment field only for agents supporting environment configuration."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "!info.enabled &&"
+      },
+      "anchor": "!info.enabled &&",
+      "reason": "Marks an agent disabled by configuration."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "isCustom(info) &&"
+      },
+      "anchor": "isCustom(info) &&",
+      "reason": "Marks an agent using custom launch arguments."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "canDefault &&"
+      },
+      "anchor": "canDefault &&",
+      "reason": "Offers the default-agent control only for installed and enabled agents."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "\n                {info.isDefault ? 'Default' : 'Set default'"
+      },
+      "anchor": "info.isDefault ?",
+      "reason": "Labels the default-agent selection button."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "link !== null &&"
+      },
+      "anchor": "link !== null &&",
+      "reason": "Shows documentation or installation links only when the catalog supplies a URL."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "\n                {info.installed ? 'Docs' : 'Install'"
+      },
+      "anchor": "info.installed ?",
+      "reason": "Labels the link according to whether installation is needed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "info.installed && (\n              <IconButton\n                label={expanded ? 'Collapse agent settings' : 'Expand agent settings'}\n                aria-expanded={expanded}\n                onClick={() => void store.setExpanded(info.id, !expanded)}\n              >\n                {expanded ? '▴' : '▾'}\n              </IconButton>\n            )"
+      },
+      "anchor": "info.installed &&",
+      "reason": "Offers configuration controls only for installed agents."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "expanded ? '▴' : '▾'"
+      },
+      "anchor": "expanded ?",
+      "reason": "Labels the disclosure control according to expansion state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "expanded && info.installed &&"
+      },
+      "anchor": "expanded && info.installed &&",
+      "reason": "Shows editable details only for an expanded installed agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "badge !== undefined || action !== undefined ?"
+      },
+      "anchor": "badge !== undefined || action !== undefined ?",
+      "reason": "Adds the section action row only when metadata or actions exist."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "badge !== undefined &&"
+      },
+      "anchor": "badge !== undefined &&",
+      "reason": "Shows a section count badge when supplied."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "hint !== undefined &&"
+      },
+      "anchor": "hint !== undefined &&",
+      "reason": "Shows optional section help text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "refreshing ?"
+      },
+      "anchor": "refreshing ?",
+      "reason": "Labels the existing refresh button while detection runs."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "available.length > 0 &&"
+      },
+      "anchor": "available.length > 0 &&",
+      "reason": "Shows the installable-agent section when the catalog has unavailable agents."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "listing &&"
+      },
+      "anchor": "listing &&",
+      "reason": "Shows configuration sections after the listing exists; loading and failure have dedicated shared notices."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "multiline ?"
+      },
+      "anchor": "multiline ?",
+      "reason": "Chooses a multiline editor instead of a single-line editor."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "overridden &&"
+      },
+      "anchor": "overridden &&",
+      "reason": "Offers Reset only for a saved override."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "onClick={() => void store.setPermissions(replacement, info.id, true)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agents/setPermissions",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/setPermissions', {\n        mode,\n        ...(agent === undefined ? {} : { agent }),\n        ...(replaceCustom ? { replaceCustom } : {})\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "setPermissions(mode: PermissionMode, agent?: string, replaceCustom?: boolean): Promise<void> {\n    return this.act('Could not change permissions', () =>\n      this.context.call('quirky.agents/setPermissions', {\n        mode,\n        ...(agent === undefined ? {} : { agent }),\n        ...(replaceCustom ? { replaceCustom } : {})\n      })\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "onChange={(next) => next !== mode && void store.setPermissions(next, info.id)}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "quirky.agents/setPermissions",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/setPermissions', {\n        mode,\n        ...(agent === undefined ? {} : { agent }),\n        ...(replaceCustom ? { replaceCustom } : {})\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "setPermissions(mode: PermissionMode, agent?: string, replaceCustom?: boolean): Promise<void> {\n    return this.act('Could not change permissions', () =>\n      this.context.call('quirky.agents/setPermissions', {\n        mode,\n        ...(agent === undefined ? {} : { agent }),\n        ...(replaceCustom ? { replaceCustom } : {})\n      })\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "onChange={(enabled) => void store.setEnabled(info.id, enabled)}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "quirky.agents/setEnabled",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/setEnabled', { agent, enabled })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "setEnabled(agent: string, enabled: boolean): Promise<void> {\n    return this.act('Could not change the agent', () => this.context.call('quirky.agents/setEnabled', { agent, enabled }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "onClick={() => void store.setDefault(info.isDefault ? 'auto' : info.id)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agents/setDefault",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/setDefault', { agent })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "setDefault(agent: string): Promise<void> {\n    return this.act('Could not set the default agent', () => this.context.call('quirky.agents/setDefault', { agent }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentRow.tsx",
+        "quote": "onClick={() => void store.setExpanded(info.id, !expanded)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.agents/agent-details",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.executeCommand(AGENT_DETAILS_COMMAND, { agent, expanded })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "async setExpanded(agent: string, expanded: boolean): Promise<void> {\n    this.details.set(agent, expanded)\n    if (this.snapshot.expanded.has(agent) !== expanded) {\n      this.commit({ expanded: this.details.snapshot() })\n    }\n    try {\n      await this.context.executeCommand(AGENT_DETAILS_COMMAND, { agent, expanded })\n    } catch (error) {\n      this.context.toast('Could not update agent details', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "onClick={() => void store.setDefault(value)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agents/setDefault",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/setDefault', { agent })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "setDefault(agent: string): Promise<void> {\n    return this.act('Could not set the default agent', () => this.context.call('quirky.agents/setDefault', { agent }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "onChange={(mode) => mode !== summary && void store.setPermissions(mode)}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "quirky.agents/setPermissions",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/setPermissions', {\n        mode,\n        ...(agent === undefined ? {} : { agent }),\n        ...(replaceCustom ? { replaceCustom } : {})\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "setPermissions(mode: PermissionMode, agent?: string, replaceCustom?: boolean): Promise<void> {\n    return this.act('Could not change permissions', () =>\n      this.context.call('quirky.agents/setPermissions', {\n        mode,\n        ...(agent === undefined ? {} : { agent }),\n        ...(replaceCustom ? { replaceCustom } : {})\n      })\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "onClick={() => void store.refresh()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agents/refresh",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/refresh', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "async refresh(): Promise<void> {\n    if (this.snapshot.refreshing) return\n    this.commit({ refreshing: true })\n    try {\n      const listing = (await this.context.call('quirky.agents/refresh', {})) as AgentListing\n      if (!this.stopped) this.commit({ status: 'ready', listing, error: null })\n    } catch (error) {\n      this.context.toast('Could not refresh agents', messageOf(error))\n    } finally {\n      if (!this.stopped) this.commit({ refreshing: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "onAction: () => store.retry()"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.agents/list",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/list', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "retry(): void {\n    this.commit({ status: 'loading', error: null })\n    void this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "private async load(): Promise<void> {\n    if (this.loading) {\n      this.reloadAfter = true\n      return\n    }\n    this.loading = true\n    try {\n      do {\n        this.reloadAfter = false\n        try {\n          const listing = (await this.context.call('quirky.agents/list', {})) as AgentListing\n          if (!this.stopped) this.commit({ status: 'ready', listing, error: null })\n        } catch (error) {\n          if (!this.stopped && this.snapshot.listing === null) this.commit({ status: 'error', error: messageOf(error) })\n          else if (!this.stopped) this.context.toast('Could not load agents', messageOf(error))\n        }\n      } while (this.reloadAfter && !this.stopped)\n    } finally {\n      this.loading = false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/AgentsView.tsx",
+        "quote": "onChange={(value) => void store.setTrust(value)}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('setting.set', { id: TRUST_SETTING_ID, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "setTrust(value: boolean): Promise<void> {\n    return this.act('Could not change the setting', () => this.context.call('setting.set', { id: TRUST_SETTING_ID, value }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "<textarea\n              id={id}\n              aria-label={label}\n              value={draft}\n              spellCheck={false}\n              rows={Math.max(2, draft.split('\\n').length)}\n              className=\"ui-text-field__input\"\n              style={s.mono}\n              onChange"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Changes only unsaved field text and clears its validation message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "<textarea\n              id={id}\n              aria-label={label}\n              value={draft}\n              spellCheck={false}\n              rows={Math.max(2, draft.split('\\n').length)}\n              className=\"ui-text-field__input\"\n              style={s.mono}\n              onChange={onChange}\n              onBlur"
+      },
+      "anchor": "onBlur",
+      "route": {
+        "target": "quirky.agents/configure",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/configure', { agent, ...change })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const onBlur = () => {\n    void save()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const save = async () => {\n    if (saving.current || draft === value) return\n    saving.current = true\n    try {\n      if (field === 'env') {\n        const parsed = parseEnv(draft)\n        if ('error' in parsed) {\n          setError(parsed.error)\n          return\n        }\n        setError(await store.configure(agentId, parsed))\n      } else if (field === 'command') {\n        setError(await store.configure(agentId, { command: draft }))\n      } else {\n        setError(await store.configure(agentId, { args: draft }))\n      }\n    } finally {\n      saving.current = false\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "async configure(agent: string, change: ConfigureChange): Promise<string | null> {\n    try {\n      await this.context.call('quirky.agents/configure', { agent, ...change })\n    } catch (error) {\n      return messageOf(error)\n    }\n    void this.load()\n    return null\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "<textarea\n              id={id}\n              aria-label={label}\n              value={draft}\n              spellCheck={false}\n              rows={Math.max(2, draft.split('\\n').length)}\n              className=\"ui-text-field__input\"\n              style={s.mono}\n              onChange={onChange}\n              onBlur={onBlur}\n              onKeyDown"
+      },
+      "anchor": "onKeyDown",
+      "route": {
+        "target": "quirky.agents/configure",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/configure', { agent, ...change })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const onKeyDown = (event: KeyboardEvent) => {\n    if (event.key !== 'Enter') return\n    if (multiline && !(event.metaKey || event.ctrlKey)) return\n    event.preventDefault()\n    void save()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const save = async () => {\n    if (saving.current || draft === value) return\n    saving.current = true\n    try {\n      if (field === 'env') {\n        const parsed = parseEnv(draft)\n        if ('error' in parsed) {\n          setError(parsed.error)\n          return\n        }\n        setError(await store.configure(agentId, parsed))\n      } else if (field === 'command') {\n        setError(await store.configure(agentId, { command: draft }))\n      } else {\n        setError(await store.configure(agentId, { args: draft }))\n      }\n    } finally {\n      saving.current = false\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "async configure(agent: string, change: ConfigureChange): Promise<string | null> {\n    try {\n      await this.context.call('quirky.agents/configure', { agent, ...change })\n    } catch (error) {\n      return messageOf(error)\n    }\n    void this.load()\n    return null\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "<TextField\n            id={id}\n            label={label}\n            aria-label={label}\n            value={draft}\n            error={error ?? undefined}\n            spellCheck={false}\n            style={s.mono}\n            onChange"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Changes only unsaved field text and clears its validation message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "<TextField\n            id={id}\n            label={label}\n            aria-label={label}\n            value={draft}\n            error={error ?? undefined}\n            spellCheck={false}\n            style={s.mono}\n            onChange={onChange}\n            onBlur"
+      },
+      "anchor": "onBlur",
+      "route": {
+        "target": "quirky.agents/configure",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/configure', { agent, ...change })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const onBlur = () => {\n    void save()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const save = async () => {\n    if (saving.current || draft === value) return\n    saving.current = true\n    try {\n      if (field === 'env') {\n        const parsed = parseEnv(draft)\n        if ('error' in parsed) {\n          setError(parsed.error)\n          return\n        }\n        setError(await store.configure(agentId, parsed))\n      } else if (field === 'command') {\n        setError(await store.configure(agentId, { command: draft }))\n      } else {\n        setError(await store.configure(agentId, { args: draft }))\n      }\n    } finally {\n      saving.current = false\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "async configure(agent: string, change: ConfigureChange): Promise<string | null> {\n    try {\n      await this.context.call('quirky.agents/configure', { agent, ...change })\n    } catch (error) {\n      return messageOf(error)\n    }\n    void this.load()\n    return null\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "<TextField\n            id={id}\n            label={label}\n            aria-label={label}\n            value={draft}\n            error={error ?? undefined}\n            spellCheck={false}\n            style={s.mono}\n            onChange={onChange}\n            onBlur={onBlur}\n            onKeyDown"
+      },
+      "anchor": "onKeyDown",
+      "route": {
+        "target": "quirky.agents/configure",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/configure', { agent, ...change })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const onKeyDown = (event: KeyboardEvent) => {\n    if (event.key !== 'Enter') return\n    if (multiline && !(event.metaKey || event.ctrlKey)) return\n    event.preventDefault()\n    void save()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/Field.tsx",
+            "quote": "const save = async () => {\n    if (saving.current || draft === value) return\n    saving.current = true\n    try {\n      if (field === 'env') {\n        const parsed = parseEnv(draft)\n        if ('error' in parsed) {\n          setError(parsed.error)\n          return\n        }\n        setError(await store.configure(agentId, parsed))\n      } else if (field === 'command') {\n        setError(await store.configure(agentId, { command: draft }))\n      } else {\n        setError(await store.configure(agentId, { args: draft }))\n      }\n    } finally {\n      saving.current = false\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "async configure(agent: string, change: ConfigureChange): Promise<string | null> {\n    try {\n      await this.context.call('quirky.agents/configure', { agent, ...change })\n    } catch (error) {\n      return messageOf(error)\n    }\n    void this.load()\n    return null\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/Field.tsx",
+        "quote": "onClick={() => void store.configure(agentId, { reset: [field] })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agents/configure",
+        "invoke": {
+          "file": "plugins/quirky.agents/src/window/model.ts",
+          "quote": "this.context.call('quirky.agents/configure', { agent, ...change })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agents/src/window/model.ts",
+            "quote": "async configure(agent: string, change: ConfigureChange): Promise<string | null> {\n    try {\n      await this.context.call('quirky.agents/configure', { agent, ...change })\n    } catch (error) {\n      return messageOf(error)\n    }\n    void this.load()\n    return null\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/controls.tsx",
+        "quote": "<input\n        id={id}\n        type=\"checkbox\"\n        role=\"switch\"\n        aria-label={ariaLabel}\n        aria-checked={checked}\n        checked={checked}\n        onChange"
+      },
+      "anchor": "onChange",
+      "notAction": "forwarded",
+      "reason": "Forwards selection changes to the owning agent configuration handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/controls.tsx",
+        "quote": "onClick={() => onChange(option.value)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards selection changes to the owning agent configuration handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agents/src/window/controls.tsx",
+        "quote": "<Button\n          key={option.value}\n          variant={option.value === value ? 'primary' : 'secondary'}\n          role=\"radio\"\n          aria-checked={option.value === value}\n          tabIndex={index === (selected === -1 ? 0 : selected) ? 0 : -1}\n          onClick={() => onChange(option.value)}\n          onKeyDown"
+      },
+      "anchor": "onKeyDown",
+      "notAction": "forwarded",
+      "reason": "Forwards selection changes to the owning agent configuration handler."
+    }
+  ]
+}
