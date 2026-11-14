@@ -133,7 +133,7 @@ test('raw markup cannot satisfy the floating EmptyState witness', () => {
   expect(emptyFailures.some((entry) => entry.coverageFile === FRAGMENT)).toBe(true)
 })
 
-test('workspace menu commands declare strict public argument schemas', async () => {
+test('workspace menu and tab rename commands declare strict public argument schemas', async () => {
   type PropertySchema = { type: unknown; enum?: string[]; additionalProperties?: unknown }
   type CommandSchema = {
     id: string
@@ -151,6 +151,7 @@ test('workspace menu commands declare strict public argument schemas', async () 
   }
   const menu = manifest.contributes.command.find((entry) => entry.id === 'run-menu-item')!
   const workspace = manifest.contributes.command.find((entry) => entry.id === 'workspace-menu-action')!
+  const renameTab = manifest.contributes.command.find((entry) => entry.id === 'rename-tab')!
   expect(menu.title).toBe('Run Terminal Menu Item')
   expect(workspace.title).toBe('Terminal Workspace Menu Action')
 
@@ -175,18 +176,25 @@ test('workspace menu commands declare strict public argument schemas', async () 
   expect(workspace.args.properties.args!.type).toBe('object')
   expect(workspace.args.properties.args!.additionalProperties).toBe(true)
   for (const property of Object.values(workspace.args.properties)) expect(typeof property.type).toBe('string')
+
+  expect(renameTab.args.type).toBe('object')
+  expect(renameTab.args.additionalProperties).toBe(false)
+  expect(Object.keys(renameTab.args.properties)).toEqual(['tab'])
+  expect(renameTab.args.properties.tab!.type).toBe('string')
 })
 
-test('close-menu accepts an explicit target or focused default and rejects invalid target arguments', async () => {
-  const manifest = await Bun.file(resolve(import.meta.dir, '../../quirky-plugin.json')).json() as {
-    contributes: { command: { id: string; args: Schema }[] }
-  }
-  const schema = manifest.contributes.command.find((entry) => entry.id === 'close-menu')!.args
-  expect(validateValue(schema, { target: 'grp-1' })).toBeNull()
-  expect(validateValue(schema, {})).toBeNull()
-  expect(validateValue(schema, { target: 41 })).not.toBeNull()
-  expect(validateValue(schema, { target: 'grp-1', fallback: true })).not.toBeNull()
-})
+for (const [command, key, target] of [['close-menu', 'target', 'grp-1'], ['rename-tab', 'tab', 'tab-1']] as const) {
+  test(`${command} accepts an explicit target or focused default and rejects invalid target arguments`, async () => {
+    const manifest = await Bun.file(resolve(import.meta.dir, '../../quirky-plugin.json')).json() as {
+      contributes: { command: { id: string; args: Schema }[] }
+    }
+    const schema = manifest.contributes.command.find((entry) => entry.id === command)!.args
+    expect(validateValue(schema, { [key]: target })).toBeNull()
+    expect(validateValue(schema, {})).toBeNull()
+    expect(validateValue(schema, { [key]: 41 })).not.toBeNull()
+    expect(validateValue(schema, { [key]: target, fallback: true })).not.toBeNull()
+  })
+}
 
 test('GroupView mousedown barriers only guard and stop their event', () => {
   const source = sourceFor(terminal, GROUP_VIEW)

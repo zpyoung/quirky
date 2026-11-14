@@ -1,12 +1,13 @@
 import { act } from 'react'
 import type { MountCleanup } from '@quirky/protocol'
-import { RpcError, RpcErrorCode, type Session } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, validateValue, type Schema, type Session } from '@quirky/protocol'
 import * as ops from '../../src/layout/ops'
 import { sequentialIds } from '../../src/layout/tree'
 import { isTerminalTab } from '../../src/layout/types'
 import type { Group, GroupNode, PaneLeaf, PaneNode, Tab, TerminalTab, Workspace } from '../../src/layout/types'
 import { fakeContext, paneHandlers, settle, type FakeContext } from '../ui-fake'
 import { loadPane, startRecording, stopRecording, terminals, unloadPane } from './pane-support'
+import terminalManifest from '../../quirky-plugin.json'
 
 type Handler = (params: Record<string, any>) => unknown
 type WorkspaceModule = typeof import('../../src/window/workspace')
@@ -42,6 +43,8 @@ export async function loadWorkspace(): Promise<WorkspaceModule> {
     Element.prototype.getBoundingClientRect = original
   }
   workspace = await import('../../src/window/workspace')
+  // commands.ts reaches xterm during evaluation, so import it only after happy-dom is registered.
+  await import('../../src/window/commands')
   return workspace
 }
 
@@ -260,6 +263,12 @@ export function installWindowCommands(fake: FakeContext): void {
     if (method === 'ui.window.self') return { connId: 41 }
     if (params.connId !== 41) throw new Error('unknown window connection')
     const id = String(params.id)
+    if (id.startsWith('command:quirky.terminal/')) {
+      const declaration = terminalManifest.contributes.command.find((entry) => id === `command:quirky.terminal/${entry.id}`)
+      if (!declaration) throw new Error(`unknown command: ${id}`)
+      const problem = validateValue((declaration.args ?? { type: 'object' }) as Schema, params.args ?? {}, 'args')
+      if (problem) throw new RpcError(RpcErrorCode.InvalidParams, problem)
+    }
     let handler = fake.provided.get(id)
     if (!handler) {
       // the workspace import reaches xterm, so handlers need happy-dom's window before evaluation

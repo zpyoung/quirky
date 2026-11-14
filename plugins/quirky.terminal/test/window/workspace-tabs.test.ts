@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { CONTROL_ICON_MARKUP } from '../../../../packages/ui/src/design-system/icons/generated-controls'
 import { TOOL_ICON_MARKUP } from '../../../../packages/ui/src/design-system/icons/generated-tools'
 import type { TabIcon, ViewTab } from '../../src/layout/types'
+import { waitFor } from '../e2e-support'
 import {
   callsTo,
   click,
@@ -139,6 +140,27 @@ async function flushResize(resize: ResizeHarness) {
 }
 const drag = (type: string, init: MouseEventInit = {}) => mouse(type, init)
 
+async function waitForOverflow(view: MountedWorkspace, open: boolean, moreVisible = true): Promise<void> {
+  await act(async () => {
+    await waitFor(
+      `hidden tabs menu to ${open ? 'open' : 'close'}`,
+      () => {
+        const more = view.q<HTMLButtonElement>('.qt-tab-more')
+        const popup = document.querySelector<HTMLElement>('.ui-popup')
+        const menu = popup?.querySelector('[role="menu"]')
+        const popupReady = open ? menu !== null && menu !== undefined : popup === null
+        const moreReady = moreVisible ? more !== null : more === null
+        const expanded = open ? more?.getAttribute('aria-expanded') === 'true' : more === null || more?.getAttribute('aria-expanded') === 'false'
+        return view.controller().getSnapshot().overflowGroup === (open ? 'grp-1' : null)
+          && popupReady
+          && moreReady
+          && expanded
+      },
+      2_000
+    )
+  })
+}
+
 
 describe('SC-11: clicking a tab activates it', () => {
   test('a click on an inactive tab activates it by ID', async () => {
@@ -190,14 +212,14 @@ describe('SC-11: clicking a tab activates it', () => {
       await flushResize(resize)
       expect(view.q('.qt-tab-more')).not.toBeNull()
       await click(view.q('.qt-tab-more'))
-      await settle()
+      await waitForOverflow(view, true)
       expect(view.controller().getSnapshot().overflowGroup).toBe('grp-1')
       expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action').map(({ args }) => args)).toEqual([
         { action: 'hidden-tabs', target: 'grp-1', open: true }
       ])
       layout.setWidth(320)
       await flushResize(resize)
-      await settle()
+      await waitForOverflow(view, false, false)
       expect(view.q('.qt-tab-more')).toBeNull()
       expect(view.controller().getSnapshot().overflowGroup).toBeNull()
       expect(document.querySelector('.ui-popup')).toBeNull()
@@ -213,14 +235,14 @@ describe('SC-11: clicking a tab activates it', () => {
       installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
       await flushResize(resize)
       await click(view.q('.qt-tab-more'))
-      await settle()
+      await waitForOverflow(view, true)
       await fire(document.body, mouse('mousedown'))
-      await settle()
+      await waitForOverflow(view, false)
       expect(view.controller().getSnapshot().overflowGroup).toBeNull()
       await click(view.q('.qt-tab-more'))
-      await settle()
+      await waitForOverflow(view, true)
       await key(document.querySelector('[role="menu"]')!, 'Escape')
-      await settle()
+      await waitForOverflow(view, false)
       expect(view.controller().getSnapshot().overflowGroup).toBeNull()
       expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action').map(({ args }) => args)).toEqual([
         { action: 'hidden-tabs', target: 'grp-1', open: true },

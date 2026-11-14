@@ -4450,7 +4450,17 @@
       },
       {
         "id": "rename-tab",
-        "title": "Rename Active Tab"
+        "title": "Rename Active Tab",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID to rename; default: the focused tab."
+            }
+          }
+        }
       },
       {
         "id": "reopen-tab",

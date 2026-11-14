@@ -30,11 +30,7 @@ let mounted: MountedWorkspace | null = null
 let copied: string[] = []
 let clipboardText = ''
 
-beforeAll(async () => {
-  await loadWorkspace()
-  // command handlers reach xterm, so warm their module only after happy-dom creates window
-  await import('../../src/window/commands')
-})
+beforeAll(loadWorkspace)
 afterAll(unloadWorkspace)
 beforeEach(() => {
   startRecording()
