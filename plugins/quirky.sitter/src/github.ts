@@ -557,6 +557,7 @@ export async function execute(
           expectedHeadSha: action.expectedHeadSha,
           preparedCommitSha: action.preparedCommitSha,
           expectedPrepareFingerprint: action.prepareFingerprint,
+          expectedBaseSha: action.kind === 'publish-conflict-resolution' ? action.baseSha : undefined,
           expectedKind: action.kind === 'publish-fix' ? 'fix' : 'conflict-resolution'
         })
       }

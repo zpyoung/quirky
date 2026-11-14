@@ -271,6 +271,27 @@ export function inspectDiffPolicy(diffText: string, numstatText: string): string
   return null
 }
 
+async function changedPaths(run: GitRun, cwd: string, parentSha: string, commitSha: string): Promise<string[]> {
+  const output = (await gitText(run, cwd, [
+    'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames', '--name-only', '-z',
+    parentSha, commitSha, '--'
+  ])).stdoutText
+  if (output === '') return []
+  if (!output.endsWith('\0')) throw new Error('git returned malformed NUL-delimited diff paths')
+  const paths = output.slice(0, -1).split('\0')
+  if (paths.some((path) => !validRepoPath(path))) throw new Error('git returned malformed diff paths')
+  return paths
+}
+
+async function pathsChangedFromBothParents(run: GitRun, cwd: string, firstParentSha: string, secondParentSha: string, commitSha: string): Promise<string[]> {
+  const [firstParentPaths, secondParentPaths] = await Promise.all([
+    changedPaths(run, cwd, firstParentSha, commitSha),
+    changedPaths(run, cwd, secondParentSha, commitSha)
+  ])
+  const secondParentPathSet = new Set(secondParentPaths)
+  return firstParentPaths.filter((path) => secondParentPathSet.has(path))
+}
+
 async function inspectWorktreeState(run: GitRun, worktreePath: string, expectedKind?: PreparedCommitKind) {
   const status = (await gitText(run, worktreePath, ['status', '--porcelain=v1', '--untracked-files=all'])).stdoutText
   const localDirty = status.length > 0
@@ -292,17 +313,35 @@ async function inspectWorktreeState(run: GitRun, worktreePath: string, expectedK
   if (parentLine[0] !== localHeadSha || parentLine.some((sha) => !isSha(sha))) throw new Error('git returned malformed commit parent data')
   const parents = parentLine.slice(1)
   const commitMessage = (await gitText(run, worktreePath, ['show', '-s', '--format=%B', localHeadSha])).stdoutText
-  const diffArgs = parents.length > 0
-    ? ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', parents[0]!, localHeadSha, '--']
-    : ['diff-tree', '--root', '--no-commit-id', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', '-p', '-r', localHeadSha]
-  const numstatArgs = parents.length > 0
-    ? ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', '--numstat', parents[0]!, localHeadSha, '--']
-    : ['diff-tree', '--root', '--no-commit-id', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', '--numstat', '-r', localHeadSha]
-  const [diff, numstat] = await Promise.all([
-    gitText(run, worktreePath, diffArgs),
-    gitText(run, worktreePath, numstatArgs)
-  ])
-  let policyViolation = inspectDiffPolicy(diff.stdoutText, numstat.stdoutText)
+  let diffText: string
+  let numstatText: string
+  if (parents.length === 2) {
+    const sharedPaths = await pathsChangedFromBothParents(run, worktreePath, parents[0]!, parents[1]!, localHeadSha)
+    if (sharedPaths.length === 0) {
+      diffText = ''
+      numstatText = ''
+    } else {
+      const pathspecs = sharedPaths.map((path) => `:(literal)${path}`)
+      diffText = (await gitText(run, worktreePath, [
+        'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames', parents[0]!, localHeadSha, '--', ...pathspecs
+      ])).stdoutText
+      numstatText = ''
+    }
+  } else {
+    const diffArgs = parents.length > 0
+      ? ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', parents[0]!, localHeadSha, '--']
+      : ['diff-tree', '--root', '--no-commit-id', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', '-p', '-r', localHeadSha]
+    const numstatArgs = parents.length > 0
+      ? ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', '--numstat', parents[0]!, localHeadSha, '--']
+      : ['diff-tree', '--root', '--no-commit-id', '--no-ext-diff', '--no-textconv', '--no-color', '--find-renames', '--numstat', '-r', localHeadSha]
+    const [diff, numstat] = await Promise.all([
+      gitText(run, worktreePath, diffArgs),
+      gitText(run, worktreePath, numstatArgs)
+    ])
+    diffText = diff.stdoutText
+    numstatText = numstat.stdoutText
+  }
+  let policyViolation = inspectDiffPolicy(diffText, numstatText)
   const validParents = expectedKind === 'fix' ? parents.length === 1 : expectedKind === 'conflict-resolution' ? parents.length === 1 || parents.length === 2 : true
   if (!policyViolation && !validParents) policyViolation = `unexpected parent count for ${expectedKind}`
   return {
@@ -312,6 +351,7 @@ async function inspectWorktreeState(run: GitRun, worktreePath: string, expectedK
       sha: localHeadSha,
       parentCount: parents.length,
       primaryParentSha: parents[0] ?? null,
+      secondaryParentSha: parents[1] ?? null,
       attemptTrailer: extractAttemptTrailer(commitMessage),
       dirty: localDirty,
       policyViolation
@@ -404,11 +444,16 @@ function reasonOf(error: unknown): string | null {
   return typeof data.reason === 'string' ? data.reason : null
 }
 
-function validCommitShape(info: PreparedCommitInfo, expectedKind: PreparedCommitKind, expectedHeadSha: string, fingerprint: string): string | null {
+function validCommitShape(info: PreparedCommitInfo, expectedKind: PreparedCommitKind, expectedHeadSha: string, fingerprint: string, expectedBaseSha?: string): string | null {
   if (!isSha(expectedHeadSha) || !isSha(info.sha)) return 'expected or prepared commit SHA is malformed'
   if (info.dirty) return 'the worktree has tracked or untracked changes'
   if (info.parentCount !== 1 && !(expectedKind === 'conflict-resolution' && info.parentCount === 2)) return `prepared commit has an invalid parent count: ${info.parentCount}`
   if (info.primaryParentSha !== expectedHeadSha) return `prepared commit first parent is ${info.primaryParentSha ?? '(none)'}, expected ${expectedHeadSha}`
+  if (info.parentCount === 2) {
+    if (!isSha(expectedBaseSha)) return 'expected base SHA is missing or malformed'
+    if (!isSha(info.secondaryParentSha)) return 'prepared commit second parent SHA is malformed'
+    if (info.secondaryParentSha !== expectedBaseSha) return `prepared commit second parent is ${info.secondaryParentSha}, expected ${expectedBaseSha}`
+  }
   if (info.attemptTrailer !== fingerprint) return `prepared commit attempt trailer does not match ${fingerprint}`
   if (info.policyViolation) return info.policyViolation
   return null
@@ -417,12 +462,12 @@ function validCommitShape(info: PreparedCommitInfo, expectedKind: PreparedCommit
 async function verifyPrepared(
   processRun: GitRun,
   worktreePath: string,
-  params: { expectedHeadSha: string; preparedCommitSha: string; expectedPrepareFingerprint: string; expectedKind: PreparedCommitKind }
+  params: { expectedHeadSha: string; preparedCommitSha: string; expectedPrepareFingerprint: string; expectedKind: PreparedCommitKind; expectedBaseSha?: string }
 ): Promise<string | null> {
   const state = await inspectWorktreeState(processRun, worktreePath, params.expectedKind)
   if (state.localHeadSha !== params.preparedCommitSha) return `local HEAD is ${state.localHeadSha ?? '(none)'}, not prepared commit ${params.preparedCommitSha}`
   if (!state.localPrepared) return 'prepared commit could not be inspected'
-  return validCommitShape(state.localPrepared, params.expectedKind, params.expectedHeadSha, params.expectedPrepareFingerprint)
+  return validCommitShape(state.localPrepared, params.expectedKind, params.expectedHeadSha, params.expectedPrepareFingerprint, params.expectedBaseSha)
 }
 
 export async function publishPreparedBranch(
@@ -435,6 +480,7 @@ export async function publishPreparedBranch(
     preparedCommitSha: string
     expectedPrepareFingerprint: string
     expectedKind: PreparedCommitKind
+    expectedBaseSha?: string
   }
 ): Promise<
   | { effect: 'landed'; detail?: string }

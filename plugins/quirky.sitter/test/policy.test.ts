@@ -42,6 +42,7 @@ type PreparedFixture = {
   sha: string
   parentCount: number
   primaryParentSha: string | null
+  secondaryParentSha: string | null
   attemptTrailer: string | null
   dirty: boolean
   policyViolation: string | null
@@ -102,6 +103,7 @@ function preparedCommit(overrides: Partial<PreparedFixture> = {}): PreparedFixtu
     sha: B2,
     parentCount: 1,
     primaryParentSha: H1,
+    secondaryParentSha: null,
     attemptTrailer: 'fp-fix',
     dirty: false,
     policyViolation: null,
@@ -167,7 +169,8 @@ function publishConflictAction(): SitterAction {
     preparedCommitSha: B2,
     expectedHeadSha: H1,
     expectedState: { target: `${REVIEW_URL}#head`, before: H1 },
-    prepareFingerprint: 'fp-conflict'
+    prepareFingerprint: 'fp-conflict',
+    baseSha: B1
   } as unknown as SitterAction
 }
 
@@ -230,6 +233,29 @@ function hostingChecks(checks: Record<string, unknown>[], overrides: Record<stri
 
 function actionFor(value: SitterWorld = world(), capabilities = caps(), journal: JournalEntry[] = []) {
   return decide(snapshot(value), journal, enrollment(capabilities)).action
+}
+
+function persistedFixFixture() {
+  const initial = check({
+    state: 'failed',
+    observation: 'check_run:9001:41:completed:failure',
+    failureSignature: 'sha256:first-failure',
+    failureExcerpt: 'initial compiler failure'
+  })
+  const rerun = actionFor(world({ checks: [initial] }))
+  if (!rerun || rerun.kind !== 'rerun-check') throw new Error('expected an initial check rerun')
+  return {
+    landedRerun: attempt(rerun, { effect: 'landed' }),
+    persisted: check({
+      state: 'failed',
+      observation: 'check_run:9002:42:completed:failure',
+      workflowRunId: 42,
+      rerunTarget: 'workflow:42',
+      checkRunId: 9002,
+      failureSignature: 'sha256:reproduced',
+      failureExcerpt: 'compiler failure after rerun'
+    })
+  }
 }
 
 function attempt(action: SitterAction, overrides: Partial<Attempt> = {}): Attempt {
@@ -949,6 +975,99 @@ test('enabled conflict resolution takes precedence over failed checks', () => {
   })
 })
 
+test('conflict preparation is blocked for draft reviews', () => {
+  const decision = decide(
+    snapshot(world({ mergeable: 'CONFLICTING', draft: true })),
+    [],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'conflicts-present' })
+})
+
+test('conflict preparation is blocked when merge metadata is unknown', () => {
+  const decision = decide(
+    snapshot(world({ mergeable: 'CONFLICTING', mergeMetadataKnown: false })),
+    [],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'conflicts-present' })
+})
+
+test('conflict preparation is blocked until approval is ready', () => {
+  const decision = decide(
+    snapshot(world({ mergeable: 'CONFLICTING', reviewDecision: 'CHANGES_REQUESTED' })),
+    [],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'conflicts-present' })
+})
+
+test('conflict preparation is blocked for cached snapshots', () => {
+  const value = world({ mergeable: 'CONFLICTING' })
+  const cached = { ...snapshot(value), freshness: 'cached' as const }
+  const decision = decide(cached, [], enrollment(caps({ resolveConflicts: 'on' })))
+  expect(decision).toMatchObject({ action: null, reason: 'conflicts-present' })
+})
+
+test('persisted-failure preparation is blocked for draft reviews after a changed rerun', () => {
+  const { landedRerun, persisted } = persistedFixFixture()
+  const decision = decide(
+    snapshot(world({ checks: [persisted], draft: true })),
+    [landedRerun],
+    enrollment(caps({ fixChecks: 'gated' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'failure-persisted-after-rerun' })
+})
+
+test('persisted-failure preparation is blocked when merge metadata is unknown after a changed rerun', () => {
+  const { landedRerun, persisted } = persistedFixFixture()
+  const decision = decide(
+    snapshot(world({ checks: [persisted], mergeMetadataKnown: false })),
+    [landedRerun],
+    enrollment(caps({ fixChecks: 'gated' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'failure-persisted-after-rerun' })
+})
+
+test('persisted-failure preparation is blocked until approval is ready after a changed rerun', () => {
+  const { landedRerun, persisted } = persistedFixFixture()
+  const decision = decide(
+    snapshot(world({ checks: [persisted], reviewDecision: 'CHANGES_REQUESTED' })),
+    [landedRerun],
+    enrollment(caps({ fixChecks: 'gated' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'failure-persisted-after-rerun' })
+})
+
+test('a persisted failure is prepared before a fresh lint failure with persisted-failure rationale', () => {
+  const { landedRerun, persisted } = persistedFixFixture()
+  const freshLint = check({
+    name: 'lint',
+    state: 'failed',
+    observation: 'check_run:9030:43:completed:failure',
+    workflowRunId: 43,
+    rerunTarget: 'workflow:43',
+    checkRunId: 9030,
+    failureSignature: 'sha256:fresh-lint-failure',
+    failureExcerpt: 'new lint violation'
+  })
+  const decision = decide(
+    snapshot(world({ checks: [persisted, freshLint] })),
+    [landedRerun],
+    enrollment()
+  )
+  expect(decision.action).toMatchObject({
+    kind: 'prepare-fix',
+    failedChecks: [{
+      key: BUILD_CHECK_KEY,
+      name: 'build',
+      failureSignature: 'sha256:reproduced'
+    }]
+  })
+  expect(decision.considered).toContain('fix-checks: failure-persisted-after-rerun')
+})
+
+
 test('persisted failures and conflicts park when their fix capabilities are off', () => {
   const initial = check({
     state: 'failed',
@@ -1037,7 +1156,7 @@ test('clean landed prepares publish only their verified commit SHA', () => {
   const conflictWorld = world({
     mergeable: 'CONFLICTING',
     localHeadSha: B2,
-    localPrepared: preparedCommit({ parentCount: 2, attemptTrailer: 'fp-conflict' })
+    localPrepared: preparedCommit({ parentCount: 2, secondaryParentSha: B1, attemptTrailer: 'fp-conflict' })
   })
   const conflictPublish = decide(
     snapshot(conflictWorld),
@@ -1054,7 +1173,8 @@ test('clean landed prepares publish only their verified commit SHA', () => {
     preparedCommitSha: B2,
     expectedHeadSha: H1,
     expectedState: { target: `${REVIEW_URL}#head`, before: H1 },
-    prepareFingerprint: 'fp-conflict'
+    prepareFingerprint: 'fp-conflict',
+    baseSha: B1
   })
   for (const unresolved of [
     attempt(conflictPrepare, { state: 'running', effect: undefined, resolved: false, fingerprint: 'fp-conflict' }),
@@ -1066,17 +1186,156 @@ test('clean landed prepares publish only their verified commit SHA', () => {
       enrollment(caps({ resolveConflicts: 'on' }))
     ).action?.kind).not.toBe('publish-conflict-resolution')
   }
-  expect(decide(
+  const changedBase = decide(
     snapshot(world({ ...conflictWorld, baseSha: B2 })),
     [conflictPrepared],
     enrollment(caps({ resolveConflicts: 'on' }))
-  ).action?.kind).not.toBe('publish-conflict-resolution')
+  )
+  expect(changedBase.action?.kind).not.toBe('publish-conflict-resolution')
+  expect(changedBase.action).toMatchObject({ kind: 'prepare-conflict-resolution', baseSha: B2 })
   expect(decide(
     snapshot(world({ ...conflictWorld, headSha: H2 })),
     [conflictPrepared],
     enrollment(caps({ resolveConflicts: 'on' }))
   ).action?.kind).not.toBe('publish-conflict-resolution')
 })
+
+test('two-parent conflict prepares publish only when their secondary parent matches the captured base', () => {
+  const conflictPrepare = prepareConflictAction()
+  const prepared = attempt(conflictPrepare, { fingerprint: 'fp-conflict' })
+  const conflictWorld = world({
+    mergeable: 'CONFLICTING',
+    localHeadSha: B2,
+    localPrepared: preparedCommit({
+      parentCount: 2,
+      secondaryParentSha: H2,
+      attemptTrailer: 'fp-conflict'
+    })
+  })
+  const decision = decide(
+    snapshot(conflictWorld),
+    [prepared],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'unverified-prepared-commit' })
+  expect(stop(snapshot(conflictWorld), [prepared], enrollment(caps({ resolveConflicts: 'on' }))))
+    .toMatchObject({ kind: 'park', detail: expect.stringContaining('unverified-prepared-commit') })
+
+  const badPolicyConflictWorld = world({
+    ...conflictWorld,
+    localPrepared: preparedCommit({
+      parentCount: 2,
+      secondaryParentSha: H2,
+      attemptTrailer: 'fp-conflict',
+      policyViolation: 'removed test assertions'
+    })
+  })
+  const policyDecision = decide(
+    snapshot(badPolicyConflictWorld),
+    [prepared],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  )
+  expect(policyDecision).toMatchObject({ action: null, reason: 'unverified-prepared-commit' })
+  expect(stop(snapshot(badPolicyConflictWorld), [prepared], enrollment(caps({ resolveConflicts: 'on' }))))
+    .toMatchObject({ kind: 'park', detail: expect.stringContaining('unverified-prepared-commit') })
+})
+
+test('conflict publish-in-flight prevents duplicate prepare and publish for pending, indeterminate, and landed attempts', () => {
+  const conflictWorld = world({
+    mergeable: 'CONFLICTING',
+    localHeadSha: B2,
+    localPrepared: preparedCommit({ parentCount: 2, secondaryParentSha: B1, attemptTrailer: 'fp-conflict' })
+  })
+  const prepared = attempt(prepareConflictAction(), { fingerprint: 'fp-conflict' })
+  const publish = decide(
+    snapshot(conflictWorld),
+    [prepared],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  ).action
+  expect(publish?.kind).toBe('publish-conflict-resolution')
+  if (!publish) return
+
+  for (const inFlight of [
+    attempt(publish, { seq: 2, state: 'running', effect: undefined, resolved: false }),
+    attempt(publish, { seq: 2, state: 'settled', effect: 'indeterminate', resolved: false }),
+    attempt(publish, { seq: 2, state: 'settled', effect: 'landed' })
+  ]) {
+    const decision = decide(
+      snapshot(conflictWorld),
+      [prepared, inFlight],
+      enrollment(caps({ resolveConflicts: 'on' }))
+    )
+    expect(decision).toMatchObject({ action: null, reason: 'publish-in-flight' })
+  }
+})
+
+test('all-runnable fix publish-in-flight prevents duplicate prepare and publish for pending, indeterminate, and landed attempts', () => {
+  const failure = check({
+    state: 'failed',
+    observation: 'check_run:9002:42:completed:failure',
+    workflowRunId: 42,
+    rerunTarget: 'workflow:42',
+    checkRunId: 9002,
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'compiler failure after rerun'
+  })
+  const current = world({
+    checks: [failure],
+    localHeadSha: B2,
+    localPrepared: preparedCommit({ attemptTrailer: 'fp-fix' })
+  })
+  const prepared = attempt(prepareFixAction('sha256:reproduced'), { fingerprint: 'fp-fix' })
+  const publish = decide(snapshot(current), [prepared], enrollment()).action
+  expect(publish?.kind).toBe('publish-fix')
+  if (!publish) return
+
+  for (const inFlight of [
+    attempt(publish, { seq: 2, state: 'running', effect: undefined, resolved: false }),
+    attempt(publish, { seq: 2, state: 'settled', effect: 'indeterminate', resolved: false }),
+    attempt(publish, { seq: 2, state: 'settled', effect: 'landed' })
+  ]) {
+    const decision = decide(snapshot(current), [prepared, inFlight], enrollment())
+    expect(decision).toMatchObject({ action: null, reason: 'publish-in-flight' })
+  }
+})
+
+test('persisted-subset publish-in-flight prevents duplicate prepare and publish beside fresh lint', () => {
+  const { landedRerun, persisted } = persistedFixFixture()
+  const freshLint = check({
+    name: 'lint',
+    state: 'failed',
+    observation: 'check_run:9030:43:completed:failure',
+    workflowRunId: 43,
+    rerunTarget: 'workflow:43',
+    checkRunId: 9030,
+    failureSignature: 'sha256:fresh-lint-failure',
+    failureExcerpt: 'new lint violation'
+  })
+  const readyWorld = world({
+    checks: [persisted, freshLint],
+    localHeadSha: B2,
+    localPrepared: preparedCommit({ attemptTrailer: 'fp-persisted' })
+  })
+  const initial = decide(snapshot(world({ checks: [persisted, freshLint] })), [landedRerun], enrollment())
+  expect(initial.action?.kind).toBe('prepare-fix')
+  if (!initial.action || initial.action.kind !== 'prepare-fix') return
+  expect(initial.action.failedChecks).toHaveLength(1)
+  expect(initial.action.failedChecks[0]?.key).toBe(BUILD_CHECK_KEY)
+
+  const prepared = attempt(initial.action, { seq: 2, fingerprint: 'fp-persisted' })
+  const publish = decide(snapshot(readyWorld), [landedRerun, prepared], enrollment()).action
+  expect(publish?.kind).toBe('publish-fix')
+  if (!publish) return
+  for (const inFlight of [
+    attempt(publish, { seq: 3, state: 'running', effect: undefined, resolved: false }),
+    attempt(publish, { seq: 3, state: 'settled', effect: 'indeterminate', resolved: false }),
+    attempt(publish, { seq: 3, state: 'settled', effect: 'landed' })
+  ]) {
+    const decision = decide(snapshot(readyWorld), [landedRerun, prepared, inFlight], enrollment())
+    expect(decision).toMatchObject({ action: null, reason: 'publish-in-flight' })
+  }
+})
+
 
 test('a prepared commit with a diff-policy violation parks for review', () => {
   const prepared = attempt(prepareFixAction(), { fingerprint: 'fp-fix' })
@@ -1099,6 +1358,31 @@ test('a prepared commit with a diff-policy violation parks for review', () => {
     `diff-policy-violation:${B2}`
   )
 })
+
+test('diff-policy park requires a landed prepare for the current head', () => {
+  const badCandidate = world({
+    localHeadSha: B2,
+    localPrepared: preparedCommit({ policyViolation: 'removed test assertions' })
+  })
+  expect(stop(snapshot(badCandidate), [], enrollment())).toBeNull()
+
+  const priorHeadPrepare = {
+    ...prepareFixAction(),
+    expectedHeadSha: H2
+  } as unknown as SitterAction
+  expect(stop(
+    snapshot(badCandidate),
+    [attempt(priorHeadPrepare)],
+    enrollment()
+  )).toBeNull()
+
+  expect(stop(
+    snapshot(badCandidate),
+    [attempt(prepareFixAction(), { effect: 'not-landed', reason: 'preflight-failed' })],
+    enrollment()
+  )).toBeNull()
+})
+
 
 test('broken prepare workers and commits park for review', () => {
   const fixPrepare = prepareFixAction()
@@ -1235,11 +1519,28 @@ test('indeterminate publish attempts resolve from live head observations', () =>
   for (const action of [publishFixAction(), publishConflictAction()]) {
     const indeterminate = attempt(action, { effect: 'indeterminate', resolved: false })
     expect(resolveOutcome(indeterminate, snapshot(world({ headSha: B2 })))).toEqual({ effect: 'landed' })
-    expect(resolveOutcome(indeterminate, snapshot(world({ headSha: H2 })))).toMatchObject({ effect: 'not-landed' })
+    expect(resolveOutcome(indeterminate, snapshot(world({ headSha: H2 })))).toEqual({ effect: 'not-landed', reason: 'head-moved' })
+    expect(resolveOutcome(
+      indeterminate,
+      snapshot(world({ headSha: H1 }), T + UNOBSERVED_EFFECT_MS - 1)
+    )).toBeNull()
     expect(resolveOutcome(
       indeterminate,
       snapshot(world({ headSha: H1 }), T + UNOBSERVED_EFFECT_MS)
-    )).toBeNull()
+    )).toEqual({ effect: 'not-landed', reason: 'no-publish-observed' })
+  }
+})
+
+test('cached publish snapshots never resolve from head observations or age', () => {
+  for (const action of [publishFixAction(), publishConflictAction()]) {
+    const indeterminate = attempt(action, { effect: 'indeterminate', resolved: false })
+    for (const headSha of [B2, H2, H1]) {
+      const cached = {
+        ...snapshot(world({ headSha }), T + UNOBSERVED_EFFECT_MS),
+        freshness: 'cached' as const
+      }
+      expect(resolveOutcome(indeterminate, cached)).toBeNull()
+    }
   }
 })
 

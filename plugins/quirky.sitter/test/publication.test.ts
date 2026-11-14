@@ -61,6 +61,42 @@ function makePreparedRepo(fingerprint = 'prepare-fix-1') {
   git(repo.path, 'commit', '-q', '-m', `Fix the failing check\n\n${buildAttemptTrailer(fingerprint)}`)
   return { ...repo, preparedSha: git(repo.path, 'rev-parse', 'HEAD'), fingerprint }
 }
+function makeConflictRepo(change: 'imported-base-policy' | 'worker-ratchet' | 'delete-test' | 'skip-test' = 'imported-base-policy') {
+  const repo = makeRepo()
+  mkdirSync(join(repo.path, 'policy'), { recursive: true })
+  mkdirSync(join(repo.path, '.github', 'workflows'), { recursive: true })
+  writeFileSync(join(repo.path, 'policy', 'ratchet.yml'), 'threshold: 1\n')
+  writeFileSync(join(repo.path, '.github', 'workflows', 'ci.yml'), 'steps:\n  - run: check\n')
+  git(repo.path, 'add', '-A')
+  git(repo.path, 'commit', '-q', '-m', 'Add base policy')
+  const commonSha = git(repo.path, 'rev-parse', 'HEAD')
+
+  git(repo.path, 'checkout', '-q', '-b', 'sitter-worker', commonSha)
+  writeFileSync(join(repo.path, 'src', 'feature.ts'), 'export const answer = 2\n')
+  git(repo.path, 'add', '-A')
+  git(repo.path, 'commit', '-q', '-m', 'Worker change')
+  const primarySha = git(repo.path, 'rev-parse', 'HEAD')
+
+  git(repo.path, 'checkout', '-q', '-b', 'sitter-base', commonSha)
+  writeFileSync(join(repo.path, 'policy', 'ratchet.yml'), 'threshold: 2\n')
+  writeFileSync(join(repo.path, '.github', 'workflows', 'ci.yml'), 'steps:\n  - run: base-check\n')
+  git(repo.path, 'add', '-A')
+  git(repo.path, 'commit', '-q', '-m', 'Base policy update')
+  const secondaryParentSha = git(repo.path, 'rev-parse', 'HEAD')
+
+  git(repo.path, 'checkout', '-q', 'sitter-worker')
+  git(repo.path, 'merge', '-q', '--no-commit', '--no-ff', 'sitter-base')
+  if (change === 'worker-ratchet') writeFileSync(join(repo.path, 'policy', 'ratchet.yml'), 'threshold: worker\n')
+  else if (change === 'delete-test') rmSync(join(repo.path, 'test', 'feature.test.ts'))
+  else if (change === 'skip-test') writeFileSync(join(repo.path, 'test', 'feature.test.ts'), 'test.skip("feature", () => expect(1).toBe(1))\n')
+  git(repo.path, 'add', '-A')
+  const fingerprint = `merge-${change}`
+  git(repo.path, 'commit', '-q', '-m', `Resolve conflict\n\n${buildAttemptTrailer(fingerprint)}`)
+  const mergeSha = git(repo.path, 'rev-parse', 'HEAD')
+  git(repo.path, 'checkout', '-q', '--detach', mergeSha)
+  return { ...repo, primarySha, secondaryParentSha, mergeSha, fingerprint }
+}
+
 
 const processRun: PluginContext['process']['run'] = async (argv, options) => {
   const result = spawnSync(argv[0] ?? '', argv.slice(1), { cwd: options?.cwd, encoding: 'utf8' })
@@ -298,8 +334,38 @@ test('inspectWorktree reports real git state, parents, attempt trailers, dirtine
 
   const conflict = await inspectWorktree(processRun, repo.path, 'conflict-resolution')
   expect(conflict.localPrepared).toMatchObject({
-    sha: merge, parentCount: 2, primaryParentSha: primary, attemptTrailer: 'inspection-merge'
+    sha: merge, parentCount: 2, primaryParentSha: primary, secondaryParentSha: secondParent, attemptTrailer: 'inspection-merge'
   })
+})
+
+test('merge inspection excludes base-only policy changes', async () => {
+  const importedBasePolicy = makeConflictRepo()
+  const imported = await inspectWorktree(processRun, importedBasePolicy.path)
+  expect(imported.localPrepared).toMatchObject({
+    sha: importedBasePolicy.mergeSha,
+    parentCount: 2,
+    primaryParentSha: importedBasePolicy.primarySha,
+    secondaryParentSha: importedBasePolicy.secondaryParentSha,
+    policyViolation: null
+  })
+})
+
+test('merge inspection blocks a ratchet edit made by the worker', async () => {
+
+  const workerRatchet = await inspectWorktree(processRun, makeConflictRepo('worker-ratchet').path)
+  expect(workerRatchet.localPrepared?.policyViolation).toContain('protected CI or baseline/ratchet path changed')
+})
+
+test('merge inspection blocks a test deletion made by the worker', async () => {
+
+  const deletedTest = await inspectWorktree(processRun, makeConflictRepo('delete-test').path)
+  expect(deletedTest.localPrepared?.policyViolation).toBe('test file deleted: test/feature.test.ts')
+})
+
+test('merge inspection blocks a test skip added by the worker', async () => {
+
+  const addedSkip = await inspectWorktree(processRun, makeConflictRepo('skip-test').path)
+  expect(addedSkip.localPrepared?.policyViolation).toBe('added test suppression, skip, or focus')
 })
 
 test('prepare preflight filters terminal sessions by worktree and ignores exited sessions', async () => {
@@ -392,6 +458,55 @@ test('publication re-verifies the prepared commit and pushes only with the expec
     { method: 'quirky.git/pushTarget', params: { worktree: `id:${WORKTREE_ID}`, purpose: 'review' } },
     { method: 'quirky.git/forcePush', params: { worktree: `id:${WORKTREE_ID}`, purpose: 'review', expected: repo.baseSha, expectedLocalHead: repo.preparedSha, yes: true } }
   ])
+})
+
+test('publication refuses an unavailable target even when its head matches the expected lease', async () => {
+  const repo = makePreparedRepo('unavailable-target')
+  const calls: RecordedCall[] = []
+  const call = recordCalls({
+    'quirky.git/pushTarget': { ready: false, headOid: repo.baseSha },
+    'quirky.git/forcePush': { pushed: true }
+  }, calls)
+
+  const result = await publishPreparedBranch(call, processRun, {
+    worktreePath: repo.path, worktreeId: WORKTREE_ID, expectedHeadSha: repo.baseSha,
+    preparedCommitSha: repo.preparedSha, expectedPrepareFingerprint: repo.fingerprint, expectedKind: 'fix'
+  })
+
+  expect(result).toMatchObject({ effect: 'not-landed', reason: 'push-target-unavailable' })
+  expect(calls.map(({ method }) => method)).toEqual(['quirky.git/pushTarget'])
+})
+
+test('two-parent conflict publication requires the prepared secondary parent to match its expected base', async () => {
+  const repo = makeConflictRepo()
+  const wrongBaseCalls: RecordedCall[] = []
+  const wrongBaseCall = recordCalls({
+    'quirky.git/pushTarget': { ready: true, headOid: repo.primarySha },
+    'quirky.git/forcePush': { pushed: true }
+  }, wrongBaseCalls)
+
+  const wrongBase = await publishPreparedBranch(wrongBaseCall, processRun, {
+    worktreePath: repo.path, worktreeId: WORKTREE_ID, expectedHeadSha: repo.primarySha,
+    preparedCommitSha: repo.mergeSha, expectedPrepareFingerprint: repo.fingerprint,
+    expectedKind: 'conflict-resolution', expectedBaseSha: BASE
+  })
+
+  expect(wrongBase).toMatchObject({ effect: 'not-landed', reason: 'prepared-commit-refused' })
+  expect(wrongBaseCalls).toEqual([])
+
+  const validBaseCalls: RecordedCall[] = []
+  const validBaseCall = recordCalls({
+    'quirky.git/pushTarget': { ready: true, headOid: repo.primarySha },
+    'quirky.git/forcePush': { pushed: true }
+  }, validBaseCalls)
+  const validBase = await publishPreparedBranch(validBaseCall, processRun, {
+    worktreePath: repo.path, worktreeId: WORKTREE_ID, expectedHeadSha: repo.primarySha,
+    preparedCommitSha: repo.mergeSha, expectedPrepareFingerprint: repo.fingerprint,
+    expectedKind: 'conflict-resolution', expectedBaseSha: repo.secondaryParentSha
+  })
+
+  expect(validBase).toMatchObject({ effect: 'landed' })
+  expect(validBaseCalls.map(({ method }) => method)).toEqual(['quirky.git/pushTarget', 'quirky.git/forcePush'])
 })
 
 test('publication maps stale targets, stale leases, and changed local commits to head-moved or refusal', async () => {

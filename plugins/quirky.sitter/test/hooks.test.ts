@@ -874,3 +874,28 @@ test('manifest declares all runtime dependencies and a read-only preflight hook'
     result: { type: 'object' }
   })
 })
+
+test('conflict publication verifies the selected base as its second parent', async () => {
+  const prepareFingerprint = 'conflict-base-fingerprint'
+  for (const secondParent of [B1, 'c'.repeat(40)]) {
+    const runtime = await startRuntime(async method => {
+      if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1 }
+      if (method === 'quirky.git/forcePush') return { pushed: true }
+      throw new Error(`unexpected call: ${method}`)
+    }, async argv => {
+      const args = argv.slice(1)
+      if (args[0] === 'rev-parse' && args.includes('HEAD')) return processResult(H2)
+      if (args[0] === 'rev-list') return processResult(`${H2} ${H1} ${secondParent}`)
+      if (args[0] === 'log' || args[0] === 'show') return processResult(`Resolve conflicts\n\nOrca-Heimdall-Attempt: ${prepareFingerprint}`)
+      return processResult('')
+    })
+    const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+      action: action('publish-conflict-resolution', {
+        expectedHeadSha: H1, preparedCommitSha: H2, prepareFingerprint, baseSha: B1
+      }),
+      enrollment: enrollment()
+    }, HEIMDALL_CALLER)
+    expect(result).toMatchObject({ effect: secondParent === B1 ? 'landed' : 'not-landed' })
+    expect(runtime.calls.some(call => call.method === 'quirky.git/forcePush')).toBe(secondParent === B1)
+  }
+})

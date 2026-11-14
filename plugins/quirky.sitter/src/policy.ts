@@ -104,6 +104,7 @@ export type PreparedCommitInfo = {
   sha: string
   parentCount: number
   primaryParentSha: string | null
+  secondaryParentSha: string | null
   attemptTrailer: string | null
   dirty: boolean
   policyViolation: string | null
@@ -142,7 +143,7 @@ type MergeAction = KernelAction & { kind: 'merge'; head: string; method: 'merge'
 type PrepareFixAction = KernelAction & { kind: 'prepare-fix'; expectedHeadSha: string; failedChecks: FailedCheckInfo[] }
 type PublishFixAction = KernelAction & { kind: 'publish-fix'; expectedHeadSha: string; preparedCommitSha: string; prepareFingerprint: string }
 type PrepareConflictAction = KernelAction & { kind: 'prepare-conflict-resolution'; expectedHeadSha: string; baseSha: string; baseRefName: string }
-type PublishConflictAction = KernelAction & { kind: 'publish-conflict-resolution'; expectedHeadSha: string; preparedCommitSha: string; prepareFingerprint: string }
+type PublishConflictAction = KernelAction & { kind: 'publish-conflict-resolution'; expectedHeadSha: string; preparedCommitSha: string; prepareFingerprint: string; baseSha: string }
 export type SitterAction =
   | RerunCheckAction | UpdateBranchAction | MergeAction
   | PrepareFixAction | PublishFixAction | PrepareConflictAction | PublishConflictAction
@@ -490,9 +491,24 @@ function newActionIdentity(action: KernelAction): string | null {
     const candidate = action as PrepareConflictAction
     return JSON.stringify([candidate.kind, candidate.expectedHeadSha, candidate.baseSha, candidate.baseRefName])
   }
-  if (action.kind === 'publish-fix' || action.kind === 'publish-conflict-resolution') {
-    const candidate = action as PublishFixAction | PublishConflictAction
-    return JSON.stringify([candidate.kind, candidate.expectedHeadSha, candidate.preparedCommitSha, candidate.prepareFingerprint])
+  if (action.kind === 'publish-fix') {
+    const candidate = action as PublishFixAction
+    return JSON.stringify([
+      candidate.kind,
+      candidate.expectedHeadSha,
+      candidate.preparedCommitSha,
+      candidate.prepareFingerprint
+    ])
+  }
+  if (action.kind === 'publish-conflict-resolution') {
+    const candidate = action as PublishConflictAction
+    return JSON.stringify([
+      candidate.kind,
+      candidate.expectedHeadSha,
+      candidate.preparedCommitSha,
+      candidate.prepareFingerprint,
+      candidate.baseSha
+    ])
   }
   return null
 }
@@ -532,13 +548,20 @@ function prepareConflictAction(world: SitterWorld): PrepareConflictAction {
   }
 }
 
+function hasValidSecondaryParent(prepared: PreparedCommitInfo, baseSha: string): boolean {
+  return prepared.parentCount !== 2 ||
+    (/^[0-9a-f]{40}$/i.test(baseSha) && prepared.secondaryParentSha === baseSha)
+}
+
 function validPreparedCommit(world: SitterWorld, attempt: Attempt, kind: PreparedCommitKind): boolean {
   const prepared = world.localPrepared
   if (!prepared || !attempt.fingerprint || prepared.attemptTrailer !== attempt.fingerprint ||
     prepared.sha === world.headSha || world.localHeadSha !== prepared.sha ||
     world.localDirty || prepared.dirty || prepared.primaryParentSha !== world.headSha ||
     prepared.policyViolation !== null) return false
-  return kind === 'fix' ? prepared.parentCount === 1 : prepared.parentCount === 1 || prepared.parentCount === 2
+  return kind === 'fix'
+    ? prepared.parentCount === 1
+    : prepared.parentCount === 1 || (prepared.parentCount === 2 && hasValidSecondaryParent(prepared, world.baseSha))
 }
 
 function publishAction(
@@ -549,11 +572,10 @@ function publishAction(
   const prepared = world.localPrepared
   if (!prepared || !validPreparedCommit(world, attempt, kind === 'publish-fix' ? 'fix' : 'conflict-resolution')) return null
   const capability = kind === 'publish-fix' ? 'fixChecks' : 'resolveConflicts'
-  return {
-    kind,
+  const common = {
     capability,
-    visibility: 'external',
-    recovery: 'replay-safe',
+    visibility: 'external' as const,
+    recovery: 'replay-safe' as const,
     contentIdentity: contentIdentity(world),
     evidenceKey: `${world.headSha}:${kind}:${prepared.sha}`,
     preparedCommitSha: prepared.sha,
@@ -561,6 +583,9 @@ function publishAction(
     expectedState: { target: `${world.reviewUrl}#head`, before: world.headSha },
     prepareFingerprint: attempt.fingerprint
   }
+  return kind === 'publish-fix'
+    ? { kind, ...common }
+    : { kind, ...common, baseSha: world.baseSha }
 }
 
 function persistedFailures(world: SitterWorld, journal: JournalEntry[], checks: SitterCheck[]): SitterCheck[] {
@@ -638,7 +663,12 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
     if (prepareIsBlocked(attempts)) return noAction('prepare-in-flight', considered)
     const previous = attempts.at(-1)
     if (previous?.state === 'settled' && previous.effect === 'landed') {
-      if (world.localPrepared?.policyViolation) return noAction('diff-policy-violation', considered)
+      if (world.localPrepared?.policyViolation) {
+        if (!hasValidSecondaryParent(world.localPrepared, world.baseSha)) {
+          return noAction('unverified-prepared-commit', considered)
+        }
+        return noAction('diff-policy-violation', considered)
+      }
       const publish = publishAction(world, 'publish-conflict-resolution', previous)
       if (!publish) return noAction('unverified-prepared-commit', considered)
       const held = newActionHoldReason(publish, journal)
@@ -797,6 +827,7 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
   }
   const attempts = latestAttempts(journal)
   if (world.localPrepared && world.localPrepared.sha !== world.headSha && world.localPrepared.policyViolation !== null &&
+    hasValidSecondaryParent(world.localPrepared, world.baseSha) &&
     attempts.some((attempt) => (attempt.action.kind === 'prepare-fix' || attempt.action.kind === 'prepare-conflict-resolution') &&
       attempt.action.expectedHeadSha === world.headSha && attempt.state === 'settled' && attempt.effect === 'landed')) {
     return park(
@@ -907,7 +938,7 @@ export function resolveOutcome(attempt: Attempt, snapshot: Snapshot<SitterWorld>
     const publish = action as PublishFixAction | PublishConflictAction
     if (world.headSha === publish.preparedCommitSha) return { effect: 'landed' }
     if (world.headSha !== publish.expectedHeadSha) return { effect: 'not-landed', reason: 'head-moved' }
-    return null
+    if (age >= UNOBSERVED_EFFECT_MS) return { effect: 'not-landed', reason: 'no-publish-observed' }
   }
   if (action.kind === 'merge') {
     const merge = action as MergeAction
