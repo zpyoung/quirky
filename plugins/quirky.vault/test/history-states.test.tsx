@@ -2,6 +2,7 @@ import { afterAll, afterEach, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
+import type { HostedSession, ViewState } from '../src/types'
 
 const actGlobal = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const previousActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT
@@ -17,33 +18,12 @@ type CallRecord = { method: string; params: Record<string, unknown> }
 type CommandRecord = { id: string; args: unknown }
 type Handler = (args?: unknown) => unknown
 
-type SessionFixture = {
-  id: string
-  sourceId: string
-  hostId: string
-  agent: string
-  sessionId: string
-  title: string
-  cwd: string | null
-  branch: string | null
-  model: string | null
-  createdAt: number
-  updatedAt: number
-  modifiedAt: number
-  messageCount: number
-  totalTokens: number | null
-  previewMessages: []
-  queuedMessageCount: number
-  subagentTranscriptCount: number
-  presence: 'present'
-  source: { presence: 'present'; filePath: string }
-}
 
-const rows: SessionFixture[] = [
+const rows: HostedSession[] = [
   {
     id: 'A', sourceId: 'source-A', hostId: 'local', agent: 'claude', sessionId: 'session-A', title: 'Session A',
     cwd: null, branch: null, model: null, createdAt: 1, updatedAt: 1, modifiedAt: 1, messageCount: 2, totalTokens: null,
-    previewMessages: [], queuedMessageCount: 0, subagentTranscriptCount: 0, presence: 'present',
+    previewMessages: [{ role: 'assistant', text: 'Latest turn A', timestamp: 1 }], queuedMessageCount: 0, subagentTranscriptCount: 0, presence: 'present',
     source: { presence: 'present', filePath: '/tmp/session-A.jsonl' }
   },
   {
@@ -54,7 +34,7 @@ const rows: SessionFixture[] = [
   }
 ]
 
-const initialView = {
+const initialView: ViewState = {
   disabledAgents: [], browseSort: 'updated', searchSort: 'relevance', group: 'project', hideEmptySessions: false,
   sessionLimit: 250, host: 'local', scope: 'all', query: '', selectedId: 'A', expandedIds: [], focusedSearch: false
 }
@@ -66,8 +46,8 @@ Object.defineProperty(navigator, 'clipboard', {
   value: { writeText: async (text: string) => { clipboardWrites.push(text) } }
 })
 
-function makeContext(options: { rows?: SessionFixture[]; firstPrompts?: Record<string, string | null> } = {}) {
-  const view = { ...initialView, disabledAgents: [...initialView.disabledAgents], expandedIds: [...initialView.expandedIds] }
+function makeContext(options: { rows?: HostedSession[]; firstPrompts?: Record<string, string | null>; view?: Partial<ViewState>; rpc?: Record<string, (params: Record<string, unknown>) => unknown> } = {}) {
+  const view: ViewState = { ...initialView, ...options.view, disabledAgents: [...(options.view?.disabledAgents ?? initialView.disabledAgents)], expandedIds: [...(options.view?.expandedIds ?? initialView.expandedIds)] }
   const sessions = options.rows ?? rows
   const calls: CallRecord[] = []
   const commands: CommandRecord[] = []
@@ -76,6 +56,7 @@ function makeContext(options: { rows?: SessionFixture[]; firstPrompts?: Record<s
   const host = {
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
+      if (options.rpc?.[method]) return await options.rpc[method](params)
       if (method === 'quirky.vault/getView') return { ...view, disabledAgents: [...view.disabledAgents], expandedIds: [...view.expandedIds] }
       if (method === 'quirky.vault/setView') {
         Object.assign(view, params)
@@ -274,7 +255,7 @@ test('set-options command toggles like the local View options click and honors e
   const clickResult = optionsState(panel.container)
   expect(clickResult.expanded).toBe('true')
   expect(clickResult.visible).toBe(true)
-  expect(commands).toHaveLength(0)
+  expect(commands).toEqual([{ id: 'command:quirky.vault/history-control', args: { instance: 'history-1', action: 'set-options' } }])
 
   await act(async () => button.click())
   expect(optionsState(panel.container).visible).toBe(false)
@@ -410,4 +391,150 @@ test('unmounting the older panel leaves the newer default and its click handler 
 
   await second.unmount()
   expect(await runCommand(host, { action: 'set-options' })).toEqual({ ok: false, reason: 'no-panel' })
+})
+
+async function click(element: HTMLElement) {
+  await act(async () => element.click())
+  await settle()
+}
+
+function namedButton(root: ParentNode, label: string): HTMLButtonElement {
+  return [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === label || button.getAttribute('aria-label') === label)!
+}
+
+function controlCalls(commands: CommandRecord[]) {
+  return commands.filter((command) => command.id === 'command:quirky.vault/history-control').map((command) => command.args)
+}
+
+async function expandedFixture() {
+  const fixture = makeContext()
+  const panel = await mountPanel(fixture.context)
+  await runCommand(fixture.host, { action: 'toggle-details', id: 'A' })
+  fixture.commands.length = 0
+  fixture.calls.length = 0
+  return { ...fixture, ...panel }
+}
+
+test('View options dispatches its own instance exactly once', async () => {
+  const { context, commands } = makeContext()
+  const panel = await mountPanel(context)
+  await click(namedButton(panel.container, 'View options'))
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'set-options' }])
+  expect(optionsState(panel.container).expanded).toBe('true')
+})
+
+test('group headings dispatch their group key exactly once', async () => {
+  const { context, commands } = makeContext()
+  const panel = await mountPanel(context)
+  const button = panel.container.querySelector<HTMLButtonElement>('.qvh-group-heading button')!
+  await click(button)
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'toggle-group', id: 'project:No project' }])
+  expect(button.getAttribute('aria-expanded')).toBe('false')
+})
+
+test('Session actions dispatch one toggle per click and command closes the same menu', async () => {
+  const { context, host, commands } = makeContext()
+  const panel = await mountPanel(context)
+  const button = panel.container.querySelector<HTMLButtonElement>('[data-vault-session-row="B"] [aria-label="Session actions"]')!
+  await click(button)
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'menu', id: 'B' }])
+  expect(document.querySelector('[data-vault-actions="B"]')).not.toBeNull()
+  await click(button)
+  expect(controlCalls(commands)).toHaveLength(2)
+  expect(document.querySelector('[data-vault-actions="B"]')).toBeNull()
+  await runCommand(host, { action: 'menu', id: 'B', open: true })
+  await runCommand(host, { action: 'menu', id: 'B', open: false })
+  expect(document.querySelector('[data-vault-actions="B"]')).toBeNull()
+})
+
+test('Retry source details dispatches once and reloads only that row', async () => {
+  const { container, commands, calls } = await expandedFixture()
+  await click(namedButton(container.querySelector('[data-vault-session-details="A"]')!, 'Retry source details'))
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'retry-details', id: 'A' }])
+  expect(calls.filter((call) => call.method === 'quirky.vault/get').map((call) => call.params.id)).toEqual(['A'])
+})
+
+test.each([['Copy Session ID', 'session-id', 'session-A'], ['Copy Log Path', 'log-path', '/tmp/session-A.jsonl'], ['Copy First Prompt', 'first-prompt', 'First prompt for session A']])('%s uses the public copy route', async (label, field, text) => {
+  const { context, host, commands } = makeContext()
+  await mountPanel(context)
+  await runCommand(host, { action: 'menu', id: 'A', open: true })
+  commands.length = 0
+  await click(namedButton(document.querySelector('[data-vault-actions="A"]')!, label))
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'copy', id: 'A', field }])
+  expect(clipboardWrites).toEqual([text])
+})
+
+test('detail Copy first prompt shares the command route', async () => {
+  const { container, commands } = await expandedFixture()
+  await click(namedButton(container.querySelector('[data-vault-session-details="A"]')!, 'Copy first prompt'))
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'copy', id: 'A', field: 'first-prompt' }])
+  expect(clipboardWrites).toEqual(['First prompt for session A'])
+})
+
+test('remote Cancel dispatches once and closes confirmation', async () => {
+  const { context, commands } = makeContext({ rows: [{ ...rows[0]!, hostId: 'owner-A' }] })
+  const panel = await mountPanel(context)
+  await click(namedButton(panel.container, 'Resume session'))
+  commands.length = 0
+  await click(namedButton(panel.container.querySelector('[data-vault-remote-resume]')!, 'Cancel'))
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'cancel-remote-resume' }])
+  expect(panel.container.querySelector('[data-vault-remote-resume]')).toBeNull()
+})
+
+test('details controls and turn bodies do not select their containing row', async () => {
+  const { container, commands } = await expandedFixture()
+  const detail = container.querySelector<HTMLElement>('[data-vault-session-details="A"]')!
+  await click(detail.querySelector<HTMLElement>('.qvh-turn')!)
+  expect(controlCalls(commands)).toEqual([])
+  expect(container.querySelector('[data-vault-session-details="A"]')).not.toBeNull()
+  await click(namedButton(detail, 'Hide details'))
+  expect(controlCalls(commands).filter((args) => args !== null && typeof args === 'object' && 'action' in args && args.action === 'select')).toEqual([])
+  expect(container.querySelector('[data-vault-session-row="A"]')?.getAttribute('aria-selected')).toBe('true')
+  expect(container.querySelector('[data-vault-session-row="B"]')?.getAttribute('aria-selected')).toBe('false')
+})
+
+test('detail toggle dispatches once without a separate select dispatch', async () => {
+  const { container, commands } = await expandedFixture()
+  await click(container.querySelector<HTMLButtonElement>('[data-vault-session-row="B"] [aria-label="Toggle session details"]')!)
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'toggle-details', id: 'B' }])
+  expect(container.querySelector('[data-vault-session-details="B"]')).not.toBeNull()
+})
+
+test.each(['.qvh-row-title-button', '.qvh-row-meta'])('%s dispatches exactly one select', async (target) => {
+  const { container, commands } = await expandedFixture()
+  await click(container.querySelector<HTMLElement>(`[data-vault-session-row="B"] ${target}`)!)
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'select', id: 'B' }])
+  expect(container.querySelector('[data-vault-session-row="B"]')?.getAttribute('aria-selected')).toBe('true')
+})
+
+test('portaled menu items do not select or resume the row', async () => {
+  const { container, commands, calls } = await expandedFixture()
+  await click(container.querySelector<HTMLButtonElement>('[data-vault-session-row="B"] [aria-label="Session actions"]')!)
+  const menu = document.querySelector<HTMLElement>('[data-vault-actions="B"]')!
+  expect(menu.closest('[data-vault-session-row]')).toBeNull()
+  commands.length = 0
+  await click(namedButton(menu, 'Copy Session ID'))
+  expect(controlCalls(commands).filter((args) => args !== null && typeof args === 'object' && 'action' in args && args.action === 'select')).toEqual([])
+  expect(calls.filter((call) => call.method === 'quirky.vault/resume')).toEqual([])
+})
+
+test('double-clicking detail actions never resumes a row', async () => {
+  const { container, calls } = await expandedFixture()
+  for (const element of [container.querySelector<HTMLElement>('[data-vault-session-row="B"] [aria-label="Toggle session details"]')!, namedButton(container.querySelector('[data-vault-session-details="A"]')!, 'Retry source details')]) {
+    await act(async () => { element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })) })
+    await settle()
+  }
+  expect(calls.filter((call) => call.method === 'quirky.vault/resume')).toEqual([])
+})
+
+test.each(['.qvh-row-meta', '.qvh-row-title-button'])('double-clicking %s still resumes once', async (target) => {
+  const { container, calls } = await expandedFixture()
+  await act(async () => { container.querySelector<HTMLElement>(`[data-vault-session-row="B"] ${target}`)!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })) })
+  await settle()
+  expect(calls.filter((call) => call.method === 'quirky.vault/resume').map((call) => call.params)).toEqual([{ id: 'B' }])
+})
+
+test('History has no unresolved spread, template operation, or propagation suppression', () => {
+  const source = readFileSync(new URL('../src/window/HistoryPanel.tsx', import.meta.url), 'utf8')
+  for (const unsupported of ['stopPropagation', '...(promoting ?', '`quirky.vault/${operation}`']) expect(source).not.toContain(unsupported)
 })

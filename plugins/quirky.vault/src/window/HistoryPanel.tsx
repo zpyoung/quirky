@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import type { OwnerSessionHostRef, OwnerSessionWorkspaceRef, Session, UiPluginContext } from '@quirky/protocol'
@@ -296,7 +296,7 @@ const SEARCH_PRIVACY_DISCLOSURE = 'It stores full, unredacted agent conversation
 function SearchDisclosure({ enabled, busy, onEnable, searchTip }: { enabled: boolean; busy: boolean; onEnable(): void; searchTip: VaultSnapshot['searchTip'] }) {
   if (enabled) return null
   const promoting = searchTip?.seen === false
-  return <div className="qvh-consent" data-vault-consent {...(promoting ? { 'data-vault-search-tip': '' } : {})}>
+  return <div className="qvh-consent" data-vault-consent data-vault-search-tip={promoting ? '' : undefined}>
     {promoting
       ? <>
         <p><strong>Search every agent session</strong> Find any past conversation by what was said in it, then pick up where the agent left off.</p>
@@ -352,7 +352,7 @@ function SearchEvidence({ row }: { row: VaultRow }) {
 }
 
 function ActionButton({ label, onClick, disabled = false }: { label: string; onClick(): void; disabled?: boolean }) {
-  return <Button className="qvh-action-button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onClick() }}>{label}</Button>
+  return <Button className="qvh-action-button" disabled={disabled} onClick={onClick}>{label}</Button>
 }
 function SessionDetails({
   context,
@@ -360,7 +360,7 @@ function SessionDetails({
   expanded,
   retryAttempt,
   onRetry,
-  onError,
+  reportError,
   onResume,
   onHandoff,
   onResumeWorktree,
@@ -373,12 +373,12 @@ function SessionDetails({
   expanded: boolean
   retryAttempt: number
   onRetry(): void
-  onError(error: string): void
+  reportError(error: string): void
   onResume(): void
   onResumeWorktree(): void
   onHandoff(): void
   onOpenSource(mode: 'view' | 'open' | 'reveal'): void
-  onCopy(text: string): Promise<void>
+  onCopy(): Promise<void>
   onClose(): void
 }) {
   const [detail, setDetail] = useState<DetailState>({
@@ -445,16 +445,7 @@ function SessionDetails({
 
   const previewMessages = detail.session?.previewMessages ?? row.previewMessages ?? []
   const available = isResumable(row)
-  const copyFirstPrompt = async () => {
-    if (detail.firstPrompt === null) return
-    try {
-      await onCopy(detail.firstPrompt)
-      context.toast('First prompt copied', 'The complete selected prompt is on the clipboard.')
-    } catch (error) {
-      onError(messageOf(error))
-    }
-  }
-  return <div className="qvh-row-details" data-vault-session-details={row.id} onClick={(event) => event.stopPropagation()}>
+  return <div className="qvh-row-details" data-vault-session-details={row.id}>
     <div className="qvh-action-row">
       <ActionButton label="Resume" disabled={!available} onClick={onResume} />
       <ActionButton label="Resume in Worktree" disabled={!available || (row.hostId === 'local' && !row.cwd)} onClick={onResumeWorktree} />
@@ -466,7 +457,7 @@ function SessionDetails({
           const reason = result && typeof result === 'object' && 'reason' in result && typeof result.reason === 'string' ? result.reason : 'The working directory could not be opened.'
           throw new Error(reason)
         }
-      }).catch((error: unknown) => onError(messageOf(error)))} />
+      }).catch((error: unknown) => reportError(messageOf(error)))} />
       <Button className="qvh-action-button" data-vault-retry-details onClick={onRetry}>Retry source details</Button>
       <Button className="qvh-action-button" onClick={onClose}>Hide details</Button>
     </div>
@@ -475,18 +466,19 @@ function SessionDetails({
     {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <div className="qvh-muted" role="status">Loading subagents…</div> : null}
     {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <Button className="qvh-action-button" onClick={onRetry}>Retry</Button></div> : null}
     {row.presence !== 'present' ? <div className="qvh-error" role="status">{row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.</div> : null}
-    {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><Button className="qvh-action-button" onClick={() => void copyFirstPrompt()}>Copy first prompt</Button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
+    {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><Button className="qvh-action-button" onClick={onCopy}>Copy first prompt</Button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
     <section className="qvh-detail-section"><span className="qvh-detail-label">Latest turns</span>
       {previewMessages.length ? previewMessages.slice(-5).map((message, index) => <div className="qvh-turn" key={`${message.timestamp ?? 'none'}:${index}`}><span className="qvh-role">{messageRole(message.role)}</span>{message.text}</div>) : detail.sessionLoaded ? <div className="qvh-muted">No conversation preview available.</div> : null}
     </section>
     {detail.subagents.length ? <section className="qvh-detail-section"><span className="qvh-detail-label">Subagents</span><div className="qvh-subagents">{detail.subagents.map((agent) => row.hostId === 'local'
-      ? <Button className="qvh-action-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => onError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</Button>
+      ? <Button className="qvh-action-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => reportError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</Button>
       : <div className="qvh-muted" key={agent.id}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</div>)}</div></section> : null}
   </div>
 }
 
 function SessionRow({
   context,
+  instance,
   row,
   hostLabel,
   view,
@@ -500,7 +492,7 @@ function SessionRow({
   onRetryDetails,
   onMenu,
   onCloseMenu,
-  onError,
+  reportError,
   onResume,
   onResumeWorktree,
   onHandoff,
@@ -509,6 +501,7 @@ function SessionRow({
   onDelete
 }: {
   context: UiPluginContext
+  instance: string
   row: VaultRow
   hostLabel?: string
   view: ViewState
@@ -522,7 +515,7 @@ function SessionRow({
   onRetryDetails(): void
   onMenu(): void
   onCloseMenu(): void
-  onError(error: string): void
+  reportError(error: string): void
   onResume(): void
   onResumeWorktree(): void
   onHandoff(): void
@@ -578,10 +571,6 @@ function SessionRow({
     }
   }, [menuOpen, row.id])
   const resumable = isResumable(row)
-  const handleMenu = (event: MouseEvent) => {
-    event.stopPropagation()
-    onMenu()
-  }
   const runMenuAction = (run: () => void) => {
     onCloseMenu()
     run()
@@ -595,26 +584,12 @@ function SessionRow({
       await onCopy(result)
       context.toast('Resume command copied', 'The provider-prepared command is on the clipboard.')
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
     }
   }
-  const copyFirstPrompt = async () => {
+  const action = async (run: () => Promise<unknown>) => {
     try {
-      const response = await context.call('quirky.vault/firstPrompt', { id: row.id })
-      if (!response || typeof response !== 'object' || Array.isArray(response) || !('prompt' in response)) {
-        throw new Error('The vault returned an invalid first-prompt response.')
-      }
-      if (response.prompt === null) throw new Error('This source does not contain a first prompt.')
-      if (typeof response.prompt !== 'string') throw new Error('The vault returned an invalid first-prompt response.')
-      await onCopy(response.prompt)
-      context.toast('First prompt copied', 'The complete selected prompt is on the clipboard.')
-    } catch (error) {
-      onError(messageOf(error))
-    }
-  }
-  const action = async (operation: string, params: Record<string, unknown> = {}) => {
-    try {
-      const result = await context.call(`quirky.vault/${operation}`, { id: row.id, ...params })
+      const result = await run()
       if (result === false) throw new Error('The requested session action was not completed.')
       if (result && typeof result === 'object' && 'kind' in result && result.kind === 'unavailable') {
         const reason = 'reason' in result && typeof result.reason === 'string' ? result.reason : 'This action is unavailable.'
@@ -626,16 +601,8 @@ function SessionRow({
       }
       return result
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
       return null
-    }
-  }
-  const copyText = async (text: string, title: string) => {
-    try {
-      await onCopy(text)
-      context.toast(title, '')
-    } catch (error) {
-      onError(messageOf(error))
     }
   }
   const deleteSession = async () => {
@@ -643,7 +610,7 @@ function SessionRow({
     try {
       accepted = await context.confirm({ title: 'Delete this agent session?', body: 'The supported local transcript will be moved to the operating system trash if present. An already-missing source counts as deleted.', confirmLabel: 'Delete' })
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
       return
     }
     if (!accepted) return
@@ -651,18 +618,18 @@ function SessionRow({
     try {
       result = await context.call('quirky.vault/deleteSession', { id: row.id, yes: true })
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
       return
     }
     const response = result && typeof result === 'object' && !Array.isArray(result) ? result as Record<string, unknown> : {}
     if (response.deleted !== true || typeof response.trashed !== 'number' || typeof response.alreadyMissing !== 'boolean') {
-      onError(typeof response.reason === 'string' ? response.reason : 'The vault did not confirm that the source was deleted.')
+      reportError(typeof response.reason === 'string' ? response.reason : 'The vault did not confirm that the source was deleted.')
       return
     }
     const deletion = response as { trashed: number; alreadyMissing: boolean }
     const { trashed, alreadyMissing } = deletion
     if (!Number.isInteger(trashed) || trashed < 0 || (trashed === 0 && !alreadyMissing)) {
-      onError('The vault did not confirm where the source was moved.')
+      reportError('The vault did not confirm where the source was moved.')
       return
     }
     if (trashed > 0) context.toast('Session moved to Trash', 'The operating system trash received the validated source.')
@@ -676,19 +643,19 @@ function SessionRow({
     { label: 'Resume in New Terminal', enabled: resumable, onSelect: () => runMenuAction(onResume) },
     { label: 'Copy Resume Command', enabled: resumable && row.hostId === 'local', onSelect: () => runMenuAction(() => void commandCopy()) },
     { label: 'Hand Off to Another Agent', enabled: resumable, onSelect: () => runMenuAction(onHandoff) },
-    { label: 'Jump to Original Pane', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'pane' })) },
-    { label: 'Jump to Worktree', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'worktree' })) },
-    { label: 'Jump to Folder', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'folder' })) },
+    { label: 'Jump to Original Pane', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/jump', { id: row.id, target: 'pane' }))) },
+    { label: 'Jump to Worktree', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/jump', { id: row.id, target: 'worktree' }))) },
+    { label: 'Jump to Folder', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/jump', { id: row.id, target: 'folder' }))) },
     { label: 'Open Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('open')) },
     { label: 'Reveal Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('reveal')) },
-    { label: 'Open Working Directory', enabled: row.hostId === 'local' && Boolean(row.cwd) && row.presence === 'present', onSelect: () => runMenuAction(() => void action('openWorkingDirectory')) },
-    { label: 'Copy Session ID', onSelect: () => runMenuAction(() => void copyText(row.sessionId, 'Session ID copied')) },
-    { label: 'Copy First Prompt', enabled: row.presence === 'present', onSelect: () => runMenuAction(() => void copyFirstPrompt()) },
-    { label: 'Copy Log Path', enabled: Boolean(row.filePath), onSelect: () => runMenuAction(() => void copyText(row.filePath!, 'Log path copied')) },
+    { label: 'Open Working Directory', enabled: row.hostId === 'local' && Boolean(row.cwd) && row.presence === 'present', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/openWorkingDirectory', { id: row.id }))) },
+    { label: 'Copy Session ID', onSelect: () => runMenuAction(() => void context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'session-id' })) },
+    { label: 'Copy First Prompt', enabled: row.presence === 'present', onSelect: () => runMenuAction(() => void context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'first-prompt' })) },
+    { label: 'Copy Log Path', enabled: Boolean(row.filePath), onSelect: () => runMenuAction(() => void context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'log-path' })) },
     { label: 'Show Details', onSelect: () => runMenuAction(onExpand) },
     { label: 'Delete', danger: true, enabled: deleteEnabled, onSelect: () => runMenuAction(() => void deleteSession()) }
   ]
-  return <article
+  return <><article
     ref={sessionRow}
     className={`qvh-session-row${expanded ? ' qvh-expanded' : ''}`}
     role="option"
@@ -697,8 +664,16 @@ function SessionRow({
     data-vault-session-row={row.id}
     draggable={resumable}
     onFocus={() => { if (!selected) onSelect() }}
-    onClick={onSelect}
-    onDoubleClick={() => { if (resumable) onResume() }}
+    onClick={(event) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-vault-session-details], .qvh-row-title-button, .qvh-row-action') : null
+      if (target && event.currentTarget.contains(target)) return
+      onSelect()
+    }}
+    onDoubleClick={(event) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-vault-session-details], .qvh-row-action') : null
+      if (target && event.currentTarget.contains(target)) return
+      if (resumable) onResume()
+    }}
     onContextMenu={(event) => { event.preventDefault(); onMenu() }}
     onDragStart={(event) => {
       cancelCommandDrag(context, commandDragToken)
@@ -725,12 +700,12 @@ function SessionRow({
   >
     <div className="qvh-row-top">
       <div className="qvh-row-title">
-        <Button className="qvh-row-title-button" onClick={(event) => { event.stopPropagation(); onSelect() }}>{row.title || row.sessionId}</Button>
+        <Button className="qvh-row-title-button" onClick={onSelect}>{row.title || row.sessionId}</Button>
       </div>
       <div className="qvh-inline-actions">
-        <IconButton className="qvh-row-action" label="Resume session" title="Resume" disabled={!resumable} onClick={(event) => { event.stopPropagation(); onResume() }}>↻</IconButton>
-        <IconButton className="qvh-row-action" label="Toggle session details" title={expanded ? 'Hide details' : 'Show details'} onClick={(event) => { event.stopPropagation(); onExpand() }}>{expanded ? '−' : '⌄'}</IconButton>
-        <span ref={menuAnchor} className="qvh-menu-anchor"><IconButton className="qvh-row-action" label="Session actions" title="Session actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={handleMenu}>⋯</IconButton></span>
+        <IconButton className="qvh-row-action" label="Resume session" title="Resume" disabled={!resumable} onClick={onResume}>↻</IconButton>
+        <IconButton className="qvh-row-action" label="Toggle session details" title={expanded ? 'Hide details' : 'Show details'} onClick={onExpand}>{expanded ? '−' : '⌄'}</IconButton>
+        <span ref={menuAnchor} className="qvh-menu-anchor"><IconButton className="qvh-row-action" label="Session actions" title="Session actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={onMenu}>⋯</IconButton></span>
       </div>
     </div>
     <div className="qvh-row-meta">
@@ -743,7 +718,22 @@ function SessionRow({
     </div>
     {row.evidence ? <SearchEvidence row={row} /> : row.previewMessages?.length ? <div className="qvh-row-snippet"><span className="qvh-role">{messageRole(row.previewMessages.at(-1)!.role)}</span>{row.previewMessages.at(-1)!.text}</div> : null}
     {row.presence !== 'present' ? <div className="qvh-muted">Transcript {row.presence === 'missing' ? 'no longer available' : 'availability could not be verified'}</div> : null}
-    {menuOpen && menuAnchor.current ? createPortal(<div ref={actionMenuRef} className="qvh-action-menu" data-vault-actions={row.id} style={{ top: menuPosition.top, left: menuPosition.left }} onClick={(event) => event.stopPropagation()} onKeyDownCapture={(event) => {
+    {expanded ? <SessionDetails
+      context={context}
+      row={row}
+      expanded={expanded}
+      retryAttempt={retryAttempt}
+      onRetry={onRetryDetails}
+      reportError={reportError}
+      onResume={onResume}
+      onResumeWorktree={onResumeWorktree}
+      onHandoff={onHandoff}
+      onOpenSource={onOpenSource}
+      onCopy={() => context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'first-prompt' })}
+      onClose={onExpand}
+    /> : null}
+  </article>
+    {menuOpen && menuAnchor.current ? createPortal(<div ref={actionMenuRef} className="qvh-action-menu" data-vault-actions={row.id} style={{ top: menuPosition.top, left: menuPosition.left }} onKeyDownCapture={(event) => {
       if (event.key === 'Escape') restoreFocusOnMenuClose.current = true
     }}>
       <ContextMenuList
@@ -751,24 +741,10 @@ function SessionRow({
         label="Session actions"
         autoFocus={false}
         onClose={onCloseMenu}
-        onChoose={(item) => { onCloseMenu(); item.onSelect?.() }}
+        onChoose={(item) => item.onSelect?.()}
       />
     </div>, menuAnchor.current.ownerDocument.body) : null}
-    {expanded ? <SessionDetails
-      context={context}
-      row={row}
-      expanded={expanded}
-      retryAttempt={retryAttempt}
-      onRetry={onRetryDetails}
-      onError={onError}
-      onResume={onResume}
-      onResumeWorktree={onResumeWorktree}
-      onHandoff={onHandoff}
-      onOpenSource={onOpenSource}
-      onCopy={onCopy}
-      onClose={onExpand}
-    /> : null}
-  </article>
+  </>
 }
 
 function rowHeight(entry: RenderEntry, view: ViewState): number {
@@ -1139,7 +1115,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       const next = event.key === 'ArrowDown' ? Math.min(selectedRows.length - 1, current + 1) : Math.max(0, current < 0 ? 0 : current - 1)
       const row = selectedRows[next]
       if (row) {
-        selectRow(row.id)
+        void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'select', id: row.id })
         const entryIndex = grouped.entries.findIndex((entry) => entry.kind === 'session' && entry.id === row.id)
         const top = grouped.offsets[entryIndex] ?? 0
         const bottom = top + (grouped.heights[entryIndex] ?? ROW_HEIGHT)
@@ -1184,7 +1160,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       />
     </ToolPanelTabs>
     <ToolPanelTools>
-      <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => setOptionsOpen((open) => !open)}>
+      <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'set-options' })}>
         <ControlIcon name="gear" />{adjustmentCount(snapshot.view) ? <Badge tone="accent">{adjustmentCount(snapshot.view)}</Badge> : null}
       </IconButton>
       <IconButton label="Refresh Session History" title="Refresh Session History" data-vault-refresh disabled={snapshot.list.loading || snapshot.search.loading} onClick={() => {
@@ -1211,7 +1187,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
         {searchMessage.retry && snapshot.view.query.trim() ? <Button data-vault-retry-search disabled={snapshot.search.loading} onClick={() => void model.runSearch({ freshness: 'wait-until-current' })}>Retry search</Button> : null}
       </div>
     </div>
-    {optionsOpen ? <ViewOptions model={model} snapshot={snapshot} onClose={() => setOptionsOpen(false)} /> : null}
+    {optionsOpen ? <ViewOptions model={model} snapshot={snapshot} onClose={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'set-options', open: false })} /> : null}
     {remoteResume ? <section className="qvh-view-options" role="dialog" aria-modal="true" aria-label="Choose a registered owner workspace" data-vault-remote-resume>
       <SectionHeader
         title={`Resume ${agentLabel(remoteResume.row.agent)} on ${snapshot.hostOutcomes.find((host) => host.hostId === remoteResume.row.hostId)?.label ?? remoteResume.row.hostId}`}
@@ -1232,7 +1208,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       </SelectField> : null}
       <p>The selected owner validates this exact workspace instance again before starting the session.</p>
       <div className="qvh-option-toolbar">
-        <Button disabled={remoteResume.loading} onClick={cancelRemoteResume}>Cancel</Button>
+        <Button disabled={remoteResume.loading} onClick={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'cancel-remote-resume' })}>Cancel</Button>
         <Button
           disabled={remoteResume.loading || remoteResume.choices.length === 0 || remoteResume.selectedMirrorId === ''}
           onClick={() => void confirmRemoteResume()}
@@ -1258,16 +1234,12 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       {grouped.entries.length ? <div className="qvh-list-spacer" style={{ height: grouped.totalHeight }}>
         {virtual.map(({ entry, top, height }) => {
           const style: CSSProperties = { transform: `translateY(${top}px)`, height }
-          if (entry.kind === 'group') return <div className="qvh-virtual-item" key={entry.id} style={style}><div className="qvh-group-heading"><IconButton className="qvh-group-toggle" label={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} aria-expanded={!entry.collapsed} title={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} onClick={() => setCollapsed((current) => {
-            const next = new Set(current)
-            if (next.has(entry.id)) next.delete(entry.id)
-            else next.add(entry.id)
-            return next
-          })}>{entry.collapsed ? '›' : '⌄'}</IconButton><strong>{entry.label}</strong><Badge>{entry.count}</Badge></div></div>
+          if (entry.kind === 'group') return <div className="qvh-virtual-item" key={entry.id} style={style}><div className="qvh-group-heading"><IconButton className="qvh-group-toggle" label={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} aria-expanded={!entry.collapsed} title={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} onClick={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'toggle-group', id: entry.id })}>{entry.collapsed ? '›' : '⌄'}</IconButton><strong>{entry.label}</strong><Badge>{entry.count}</Badge></div></div>
           const row = entry.row
           const expanded = snapshot.view.expandedIds.includes(row.id)
           return <div className="qvh-virtual-item" key={entry.id} style={style}><SessionRow
             context={context}
+            instance={controller.instance}
             row={row}
             hostLabel={snapshot.hostOutcomes.find((host) => host.hostId === row.hostId)?.label}
             view={snapshot.view}
@@ -1276,12 +1248,12 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
             expanded={expanded}
             retryAttempt={detailRetries[row.id] ?? 0}
             menuOpen={menuId === row.id}
-            onSelect={() => { selectRow(row.id); setMenuId(null) }}
-            onExpand={() => { selectRow(row.id); toggleExpanded(row.id) }}
-            onRetryDetails={() => setDetailRetries((current) => ({ ...current, [row.id]: (current[row.id] ?? 0) + 1 }))}
-            onMenu={() => { selectRow(row.id); setMenuId((current) => current === row.id ? null : row.id) }}
+            onSelect={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'select', id: row.id })}
+            onExpand={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'toggle-details', id: row.id })}
+            onRetryDetails={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'retry-details', id: row.id })}
+            onMenu={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'menu', id: row.id })}
             onCloseMenu={() => setMenuId(null)}
-            onError={setError}
+            reportError={setError}
             onResumeWorktree={() => { selectRow(row.id); void resumeInWorktree(row) }}
             onResume={() => { selectRow(row.id); void resume(row) }}
             onHandoff={() => { selectRow(row.id); void handoff(row) }}
