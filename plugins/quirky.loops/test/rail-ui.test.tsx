@@ -9,6 +9,7 @@ import { LoopView } from '../window/LoopView'
 let createRoot: typeof createRootFactory
 
 type Call = { method: string; params: Record<string, unknown> }
+type CommandCall = { id: string; args: unknown }
 type Listener = (event: QuirkyEvent) => void | Promise<void>
 type ConnectionListener = (status: 'connected' | 'reconnecting') => void
 
@@ -82,31 +83,111 @@ function iteration(overrides: Partial<IterationDetail> = {}): IterationDetail {
   }
 }
 
+
 function queueItem(id: string, position: number, state: QueueItem['state'], body = id): QueueItem {
   return { id, position, state, body }
 }
 
-function harness(initial = loop(), options: { history?: IterationDetail[]; messages?: unknown[]; failGet?: Error; failSteer?: Error; failQueue?: Error; queueConflictItem?: string } = {}) {
+function harness(initial = loop(), options: {
+  history?: IterationDetail[]
+  messages?: unknown[]
+  pendingGet?: Promise<unknown>
+  pendingRefreshGet?: Promise<unknown>
+  pendingMessages?: Promise<unknown>
+  pendingPause?: Promise<unknown>
+  failGet?: Error
+  failRefreshGet?: Error
+  malformedGet?: boolean
+  failHistory?: Error
+  failMessages?: Error
+  failPause?: Error
+  failSteer?: Error
+  failEdit?: Error
+  failQueue?: Error
+  failCommandAction?: string
+  commandGates?: Promise<void>[]
+  queueConflictItem?: string
+} = {}) {
   let current = initial
   let history = options.history ?? []
   let messages = options.messages ?? [{ sessionId: 'session-1', seq: 1, role: 'assistant', text: 'Working through the task.', at: 2_000 }]
   const calls: Call[] = []
+  const commandCalls: CommandCall[] = []
   const eventListeners = new Set<Listener>()
   const connectionListeners = new Set<ConnectionListener>()
   let handle: SurfaceHandle | null = null
+  let getCalls = 0
   let failSteer = options.failSteer
   let failQueue = options.failQueue
+  let commandGateIndex = 0
+  const pendingCommands = new Set<{ promise: Promise<void>; gatePending: boolean }>()
+  const flushCommands = async () => {
+    while (true) {
+      const ready = [...pendingCommands].filter((command) => !command.gatePending)
+      if (ready.length === 0) return
+      await Promise.allSettled(ready.map((command) => command.promise))
+    }
+  }
 
   const context = {
+    executeCommand(id: string, args?: unknown) {
+      const pendingCommand = { promise: Promise.resolve(), gatePending: false }
+      const commandTask = (async () => {
+        commandCalls.push({ id, args })
+        if (args === null || typeof args !== 'object' || Array.isArray(args)) {
+          throw new Error('Loop command arguments must be an object.')
+        }
+        const command = args as { action?: unknown; params?: unknown }
+        if (options.failCommandAction === command.action) throw new Error('bridge refused')
+        if (id !== 'command:quirky.loops/action' || typeof command.action !== 'string') {
+          throw new Error(`Unexpected UI command ${id}`)
+        }
+        const params = typeof command.params === 'object' && command.params !== null && !Array.isArray(command.params)
+          ? command.params as Record<string, unknown>
+          : {}
+        if (handle === null) throw new Error('Loop surface is unavailable.')
+        const commandGate = options.commandGates?.[commandGateIndex++]
+        if (commandGate) {
+          pendingCommand.gatePending = true
+          try {
+            await commandGate
+          } finally {
+            pendingCommand.gatePending = false
+          }
+        }
+        await handle.dispatch(command.action, params)
+      })()
+      pendingCommand.promise = commandTask
+      pendingCommands.add(pendingCommand)
+      void commandTask.then(
+        () => pendingCommands.delete(pendingCommand),
+        () => pendingCommands.delete(pendingCommand)
+      )
+      return commandTask
+    },
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       if (method === 'quirky.loops/get') {
-        if (options.failGet) throw options.failGet
+        getCalls++
+        if (getCalls === 1 && options.failGet) throw options.failGet
+        if (getCalls === 1 && options.pendingGet) return options.pendingGet
+        if (getCalls === 1 && options.malformedGet) return { id: initial.id }
+        if (getCalls > 1 && options.failRefreshGet) throw options.failRefreshGet
+        if (getCalls > 1 && options.pendingRefreshGet) return options.pendingRefreshGet
         return current
       }
-      if (method === 'quirky.loops/iterations') return history
-      if (method === 'quirky.structured/messages') return params.session === current.sessionId ? messages : []
+      if (method === 'quirky.loops/iterations') {
+        if (options.failHistory) throw options.failHistory
+        return history
+      }
+      if (method === 'quirky.structured/messages') {
+        if (options.failMessages) throw options.failMessages
+        if (options.pendingMessages) return options.pendingMessages
+        return params.session === current.sessionId ? messages : []
+      }
       if (method === 'quirky.loops/pause') {
+        if (options.failPause) throw options.failPause
+        if (options.pendingPause) return options.pendingPause
         current = { ...current, state: 'paused', pauseReason: 'user' }
         return current
       }
@@ -134,7 +215,10 @@ function harness(initial = loop(), options: { history?: IterationDetail[]; messa
         }
         return current
       }
-      if (method === 'quirky.loops/edit') return current
+      if (method === 'quirky.loops/edit') {
+        if (options.failEdit) throw options.failEdit
+        return current
+      }
       if (method === 'quirky.loops/queue') {
         if (failQueue !== undefined) {
           const error = failQueue
@@ -173,6 +257,8 @@ function harness(initial = loop(), options: { history?: IterationDetail[]; messa
   return {
     container,
     calls,
+    commandCalls,
+    flushCommands,
     get handle() { return handle },
     setLoop(value: LoopSnapshot) { current = value },
     setMessages(value: unknown[]) { messages = value },
@@ -199,11 +285,12 @@ function harness(initial = loop(), options: { history?: IterationDetail[]; messa
   }
 }
 
-async function settle() {
+async function settle(flushCommands?: () => Promise<void>) {
   await act(async () => {
     const { promise, resolve } = Promise.withResolvers<void>()
     setTimeout(resolve, 0)
     await promise
+    await flushCommands?.()
   })
 }
 
@@ -216,6 +303,16 @@ function button(container: HTMLElement, label: string): HTMLButtonElement {
 function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function typeAtCaret(element: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  const start = element.selectionStart ?? element.value.length
+  const end = element.selectionEnd ?? start
+  const next = `${element.value.slice(0, start)}${text}${element.value.slice(end)}`
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, next)
+  element.setSelectionRange(start + text.length, start + text.length)
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
@@ -260,8 +357,170 @@ test('renders an empty journal without synthetic transcript messages', async () 
   await h.mount()
 
   expect(h.container.querySelector('[aria-label="Structured session journal"]')?.querySelectorAll('pre')).toHaveLength(0)
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toContain('No messages recorded.')
+  expect(h.container.querySelector('section[aria-label="Iteration history"] .ui-empty-state')?.textContent)
+    .toContain('No finished iterations.')
   expect(h.container.textContent).toContain('No messages recorded.')
   expect(h.container.textContent).not.toContain('Working through the task.')
+})
+
+test('uses a shared notice while the initial loop snapshot is pending', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingGet: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  const notice = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(notice?.textContent).toContain('Loading loop…')
+  expect(notice?.querySelector('[role="status"]')?.textContent).toBe('Loading loop…')
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+
+  await act(async () => {
+    pending.resolve(loop())
+    await pending.promise
+  })
+})
+
+test('marks a failed snapshot read unverifiable with a shared error and no controls', async () => {
+  const h = harness(loop(), { failGet: new Error('snapshot unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.textContent).toContain('Unverifiable')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('snapshot unavailable')
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+})
+
+test('renders a malformed snapshot as a shared unverifiable error', async () => {
+  const h = harness(loop(), { malformedGet: true })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.textContent).toContain('Unverifiable')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe(
+    'The loop service returned an unverifiable snapshot.'
+  )
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+})
+
+test('a failed refresh preserves output and makes queue controls read-only', async () => {
+  const initial = loop({
+    preset: 'queue',
+    config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+    queueItems: [queueItem('q1', 0, 'pending', 'Next task')]
+  })
+  const h = harness(initial, { failRefreshGet: new Error('refresh unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await h.emit({ type: 'quirky.loops/changed', data: initial })
+
+  expect(h.container.textContent).toContain('Working through the task.')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('refresh unavailable')
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+  expect(h.container.querySelector('[aria-label="Loop queue history"] button')).toBeNull()
+})
+
+test('refreshing a loaded view does not replace it or discard an open draft', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingRefreshGet: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Steer').click())
+  const guidance = h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement
+  await act(async () => setValue(guidance, 'keep this guidance'))
+  await h.emit({ type: 'quirky.loops/changed', data: loop() })
+
+  expect(h.container.textContent).not.toContain('Loading loop…')
+  expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value)
+    .toBe('keep this guidance')
+
+  await act(async () => {
+    pending.resolve(loop())
+    await pending.promise
+  })
+})
+
+test('uses a shared notice while structured output is pending', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingMessages: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  const notice = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(notice?.textContent).toContain('Loading output…')
+  expect(notice?.querySelector('[role="status"]')?.textContent).toBe('Loading output…')
+  pending.resolve([])
+  await pending.promise
+  await settle()
+})
+
+test('renders history failures as shared errors in the history section', async () => {
+  const h = harness(loop(), { failHistory: new Error('history unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  const history = h.container.querySelector('section[aria-label="Iteration history"]')
+  expect(history?.querySelector('.ui-inline-error[role="alert"]')?.textContent)
+    .toBe('Iteration history unavailable: history unavailable')
+  expect(h.container.textContent).not.toContain('No finished iterations.')
+  expect([...h.container.querySelectorAll('.ui-inline-error')].filter((item) => item.textContent?.includes('history unavailable')))
+    .toHaveLength(1)
+})
+
+test('renders journal failures as shared errors instead of successful emptiness', async () => {
+  const h = harness(loop(), { failMessages: new Error('journal unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent)
+    .toBe('Output unavailable: journal unavailable')
+  expect(h.container.textContent).not.toContain('No messages recorded.')
+})
+
+test('keeps the empty state for a loop without a structured session', async () => {
+  const h = harness(loop({ sessionId: null }))
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toBe('No structured session is attached.')
+})
+
+test('renders saved iteration errors through InlineError and keeps missing output empty', async () => {
+  const saved = iteration({ error: 'saved output unavailable' })
+  const h = harness(loop({ state: 'completed', endedAt: 5_000, recentIterations: [saved] }))
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('saved output unavailable')
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toBe('No output recorded for this iteration.')
+})
+
+test('keeps the empty state when a completed loop has no saved iteration output', async () => {
+  const h = harness(loop({ state: 'completed', endedAt: 5_000 }))
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toBe('No output recorded for this iteration.')
+})
+
+test('uses shared notices for pending lifecycle work and reconnection', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingPause: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Pause after this iteration').click())
+
+  const working = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(working?.textContent).toContain('Working…')
+  expect(working?.querySelector('[role="status"]')?.textContent).toBe('Working…')
+  pending.resolve(loop({ state: 'paused', pauseReason: 'user' }))
+  await pending.promise
+  await settle()
+
+  await h.reconnect('reconnecting')
+  const reconnecting = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(reconnecting?.textContent).toContain('Reconnecting to loop state…')
+  expect(reconnecting?.querySelector('[role="status"]')?.textContent).toBe('Reconnecting to loop state…')
 })
 
 test('marks an unreachable loop unverifiable and omits controls', async () => {
@@ -270,10 +529,227 @@ test('marks an unreachable loop unverifiable and omits controls', async () => {
   await h.mount()
 
   expect(h.container.textContent).toContain('Unverifiable')
-  expect(h.container.textContent).toContain('daemon disconnected')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('daemon disconnected')
   expect(h.container.querySelector('button')).toBeNull()
 })
 
+test('routes DOM pause through the public command once while explicit dispatch stays internal', async () => {
+  const dom = harness()
+  unmountCurrent = dom.unmount
+  await dom.mount()
+  await act(async () => button(dom.container, 'Pause after this iteration').click())
+
+  expect(dom.commandCalls).toEqual([{
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'pause', params: {} }
+  }])
+  expect(dom.calls.filter(({ method }) => method === 'quirky.loops/pause'))
+    .toEqual([{ method: 'quirky.loops/pause', params: { loopId: 'loop-1', mode: 'after-iteration' } }])
+  expect(dom.handle!.read()).toMatchObject({ snapshot: { state: 'paused' } })
+
+  await dom.unmount()
+  unmountCurrent = null
+
+  const direct = harness()
+  unmountCurrent = direct.unmount
+  await direct.mount()
+  await act(async () => { await direct.handle!.dispatch('pause') })
+
+  expect(direct.commandCalls).toEqual([])
+  expect(direct.calls.filter(({ method }) => method === 'quirky.loops/pause'))
+    .toEqual([{ method: 'quirky.loops/pause', params: { loopId: 'loop-1', mode: 'after-iteration' } }])
+  expect(direct.handle!.read()).toMatchObject({ snapshot: { state: 'paused' } })
+})
+
+test('keeps the busy guard for rapid lifecycle commands instead of serializing them', async () => {
+  const pendingPause = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingPause: pendingPause.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+  const pause = button(h.container, 'Pause after this iteration')
+  await act(async () => {
+    pause.click()
+    pause.disabled = false
+    pause.click()
+  })
+  await settle()
+
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'pause', params: {} } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'pause', params: {} } }
+  ])
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/pause')).toEqual([{
+    method: 'quirky.loops/pause',
+    params: { loopId: 'loop-1', mode: 'after-iteration' }
+  }])
+  expect(h.handle!.read()).toMatchObject({ errors: { action: 'Another loop action is already in progress.' } })
+
+  pendingPause.resolve(loop({ state: 'paused', pauseReason: 'user' }))
+  await pendingPause.promise
+  await settle()
+})
+
+test('routes stop opening and cancellation through the public command', async () => {
+  const h = harness()
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Stop').click())
+  await act(async () => button(h.container, 'Cancel').click())
+
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'stop-open', params: {} } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'stop-cancel', params: {} } }
+  ])
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/stop')).toEqual([])
+})
+
+test('routes a stop choice through the public command with its selected mode', async () => {
+  const h = harness()
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Stop').click())
+  await act(async () => button(h.container, 'After this iteration').click())
+
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'stop-open', params: {} } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'stop', params: { mode: 'after-iteration' } } }
+  ])
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/stop')).toEqual([{
+    method: 'quirky.loops/stop',
+    params: { loopId: 'loop-1', mode: 'after-iteration' }
+  }])
+})
+
+test('a rejected bridge action shows a shared error without dispatching or losing guidance', async () => {
+  const h = harness(loop(), { failCommandAction: 'steer' })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Steer').click())
+  const note = h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement
+  await act(async () => setValue(note, 'keep this guidance'))
+  await act(async () => button(h.container, 'Send').click())
+  await settle()
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('bridge refused')
+  expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value)
+    .toBe('keep this guidance')
+  expect(h.handle!.read()).toMatchObject({ activeForm: 'steer', steerDraft: 'keep this guidance' })
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/steer')).toEqual([])
+  expect(h.commandCalls.at(-1)).toEqual({
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'steer', params: { text: 'keep this guidance' } }
+  })
+  await act(async () => button(h.container, 'Cancel').click())
+  expect(h.commandCalls.at(-1)).toEqual({
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'steer-cancel', params: {} }
+  })
+})
+
+test('keeps rail guidance caret stable while command acknowledgements are deferred', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const secondCommand = Promise.withResolvers<void>()
+  const h = harness(loop(), { commandGates: [firstCommand.promise, secondCommand.promise] })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => { await h.handle!.dispatch('steer-open') })
+  await settle()
+  await act(async () => { await h.handle!.dispatch('steer-update', { text: 'Do it' }) })
+  await settle()
+  const guidance = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Guidance for the next iteration"]')!
+  guidance.focus()
+  guidance.setSelectionRange(2, 2)
+
+  try {
+    await act(async () => typeAtCaret(guidance, 'X'))
+    await settle(h.flushCommands)
+    await act(async () => typeAtCaret(guidance, 'Y'))
+    await settle(h.flushCommands)
+
+    expect(guidance.value).toBe('DoXY it')
+    expect(guidance.selectionStart).toBe(4)
+    expect(h.commandCalls).toEqual([{
+      id: 'command:quirky.loops/action',
+      args: { loopId: 'loop-1', action: 'steer-update', params: { text: 'DoX it' } }
+    }])
+
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.commandCalls).toEqual([
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'steer-update', params: { text: 'DoX it' } } },
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'steer-update', params: { text: 'DoXY it' } } }
+    ])
+    expect(guidance.value).toBe('DoXY it')
+    expect(guidance.selectionStart).toBe(4)
+
+    await act(async () => {
+      secondCommand.resolve()
+      await secondCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.handle!.read()).toMatchObject({ steerDraft: 'DoXY it' })
+    expect(guidance.value).toBe('DoXY it')
+    expect(guidance.selectionStart).toBe(4)
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      secondCommand.resolve()
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+  }
+})
+
+test('does not send guidance after its form is canceled and reopened', async () => {
+  const draftCommand = Promise.withResolvers<void>()
+  const h = harness(loop(), { commandGates: [draftCommand.promise] })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => { await h.handle!.dispatch('steer-open') })
+  await settle()
+  await act(async () => { await h.handle!.dispatch('steer-update', { text: 'Keep this guidance' }) })
+  await settle()
+  const guidance = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Guidance for the next iteration"]')!
+
+  try {
+    await act(async () => typeAtCaret(guidance, 'X'))
+    await settle(h.flushCommands)
+    await act(async () => button(h.container, 'Send').click())
+    await act(async () => button(h.container, 'Cancel').click())
+    await settle(h.flushCommands)
+    await act(async () => button(h.container, 'Steer').click())
+    await settle(h.flushCommands)
+    const reopenedGuidance = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Guidance for the next iteration"]')!
+    await act(async () => setValue(reopenedGuidance, 'New guidance'))
+    await settle(h.flushCommands)
+
+    await act(async () => {
+      draftCommand.resolve()
+      await draftCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+
+    expect(h.calls.filter(({ method }) => method === 'quirky.loops/steer')).toHaveLength(0)
+    expect(reopenedGuidance.value).toBe('New guidance')
+  } finally {
+    await act(async () => {
+      draftCommand.resolve()
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+  }
+})
 test('resumes a capped paused loop with the positive requested iteration increase', async () => {
   const capped = loop({ state: 'paused', pauseReason: 'cap-iterations', iterationsCompleted: 10 })
   const h = harness(capped)
@@ -288,6 +764,10 @@ test('resumes a capped paused loop with the positive requested iteration increas
     snapshot: { state: 'running', config: { caps: { maxIterations: 11 } } }
   })
   expect(button(h.container, 'Pause after this iteration').disabled).toBe(false)
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'resume-update', params: { value: '1' } } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'resume', params: {} } }
+  ])
 })
 
 test('rejects an invalid resume increment before making a lifecycle request', async () => {
@@ -297,19 +777,66 @@ test('rejects an invalid resume increment before making a lifecycle request', as
   await act(async () => setValue(h.container.querySelector('[aria-label="Iterations to add"]') as HTMLInputElement, '0'))
   expect(button(h.container, 'Resume').disabled).toBe(true)
   expect(h.calls.some(({ method }) => method === 'quirky.loops/resume')).toBe(false)
+  expect(h.commandCalls).toEqual([{
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'resume-update', params: { value: '0' } }
+  }])
 })
-test('keeps steer guidance and displays the backend failure without a success message', async () => {
-  const h = harness(loop(), { failSteer: new Error('guidance was rejected') })
+test('keeps steer guidance and displays the backend failure through the shared error', async () => {
+  const h = harness(loop(), { failSteer: new Error('steer refused') })
   unmountCurrent = h.unmount
   await h.mount()
   await act(async () => button(h.container, 'Steer').click())
   const note = h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement
-  await act(async () => setValue(note, 'Keep the public API stable.'))
+  await act(async () => setValue(note, 'keep this guidance'))
   await act(async () => button(h.container, 'Send').click())
 
-  expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value).toBe('Keep the public API stable.')
-  expect(h.container.textContent).toContain('guidance was rejected')
-  expect(h.handle!.read()).toMatchObject({ activeForm: 'steer', errors: { action: 'guidance was rejected' } })
+  expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value)
+    .toBe('keep this guidance')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('steer refused')
+  expect(h.handle!.read()).toMatchObject({ activeForm: 'steer', errors: { action: 'steer refused' } })
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'steer-open', params: {} } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'steer-update', params: { text: 'keep this guidance' } } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'steer', params: { text: 'keep this guidance' } } }
+  ])
+})
+
+test('renders a failed lifecycle action through the shared error', async () => {
+  const h = harness(loop(), { failPause: new Error('pause refused') })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Pause after this iteration').click())
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('pause refused')
+  expect(h.handle!.read()).toMatchObject({ errors: { action: 'pause refused' } })
+  expect(h.commandCalls).toEqual([{
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'pause', params: {} }
+  }])
+})
+
+test('renders a failed configuration edit through the shared error', async () => {
+  const h = harness(loop(), { failEdit: new Error('edit refused') })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Edit configuration').click())
+  await act(async () => setValue(h.container.querySelector('[aria-label="Loop prompt"]') as HTMLTextAreaElement, 'Changed prompt'))
+  await act(async () => button(h.container, 'Save').click())
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('edit refused')
+  expect((h.container.querySelector('[aria-label="Loop prompt"]') as HTMLTextAreaElement).value).toBe('Changed prompt')
+  expect(h.handle!.read()).toMatchObject({ activeForm: 'edit', errors: { action: 'edit refused' } })
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'edit-open', params: {} } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'edit-update', params: { patch: { prompt: 'Changed prompt' } } } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'edit-save', params: {} } }
+  ])
+  await act(async () => button(h.container, 'Cancel').click())
+  expect(h.commandCalls.at(-1)).toEqual({
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'edit-cancel', params: {} }
+  })
 })
 
 test('shows retained attempts with honest missing evidence and opens their detail', async () => {
@@ -349,12 +876,20 @@ test('shows retained attempts with honest missing evidence and opens their detai
   expect(h.handle!.read().selectedDetail).toEqual(retained)
   expect([...h.container.querySelectorAll('section[aria-labelledby="loop-iteration-title"] dl dd')].map((item) => item.textContent)).toContain('Unavailable')
   expect(h.container.textContent).toContain('The attempt output.')
+  expect(h.container.querySelector('section[aria-label="Errors"] .ui-empty-state')?.textContent).toContain('None recorded.')
+  expect(h.container.querySelector('section[aria-label="Iteration output tail"] .ui-readout')?.textContent)
+    .toBe('The attempt output.')
   expect(h.container.textContent).not.toContain('$0.00')
   await act(async () => button(h.container, 'Back').click())
   expect(h.handle!.read().selectedDetail).toBeNull()
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'iteration', params: { n: 52, attempt: 2 } } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'back', params: {} } }
+  ])
 })
-test('omits empty check output while retaining the actual check error', async () => {
+test('deduplicates iteration and check errors through the shared error and marks an empty output tail', async () => {
   const detail = iteration({
+    error: 'Check runner failed.',
     check: {
       ran: true,
       pass: false,
@@ -372,7 +907,11 @@ test('omits empty check output while retaining the actual check error', async ()
   await act(async () => (h.container.querySelector('button[aria-label=\"Iteration 1\"]') as HTMLButtonElement).click())
 
   expect(h.container.querySelector('[aria-label=\"Check output\"]')).toBeNull()
-  expect(h.container.querySelector('[aria-label=\"Errors\"]')?.textContent).toContain('Check runner failed.')
+  const errors = h.container.querySelector('section[aria-label="Errors"]')
+  expect(errors?.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('Check runner failed.')
+  expect(errors?.querySelectorAll('.ui-inline-error')).toHaveLength(1)
+  expect(h.container.querySelector('section[aria-label="Iteration output tail"] .ui-empty-state')?.textContent)
+    .toContain('No output recorded.')
 })
 
 test('keeps queue identities and exposes no mutation controls for the in-flight item', async () => {
@@ -387,6 +926,240 @@ test('keeps queue identities and exposes no mutation controls for the in-flight 
   expect(running.querySelectorAll('button')).toHaveLength(0)
   expect(finished.textContent).toContain('Done')
   expect(finished.querySelector('button')).not.toBeNull()
+})
+
+test('shows an empty state for read-only queues without mutation controls', async () => {
+  const emptyQueue = loop({
+    state: 'completed',
+    endedAt: 5_000,
+    preset: 'queue',
+    config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+    queueItems: []
+  })
+  const h = harness(emptyQueue)
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('section[aria-label="Loop queue history"] .ui-empty-state')?.textContent)
+    .toBe('No prompts queued.')
+  expect(h.container.querySelector('section[aria-label="Loop queue history"] button')).toBeNull()
+})
+
+test('routes queue move through the public action command with its stable item identity', async () => {
+  const initial = loop({
+    preset: 'queue',
+    config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+    queueItems: [queueItem('q1', 0, 'pending'), queueItem('q2', 1, 'pending')]
+  })
+  const h = harness(initial)
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Move down q1').click())
+
+  expect(h.commandCalls).toEqual([{
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'queue-move', params: { id: 'q1', position: 1 } }
+  }])
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue')).toEqual([{
+    method: 'quirky.loops/queue',
+    params: { loopId: 'loop-1', op: { kind: 'move', id: 'q1', position: 1 } }
+  }])
+  h.commandCalls.length = 0
+  await act(async () => button(h.container, 'Remove q1').click())
+  expect(h.commandCalls).toEqual([{
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'queue-remove', params: { id: 'q1' } }
+  }])
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue').at(-1)).toEqual({
+    method: 'quirky.loops/queue',
+    params: { loopId: 'loop-1', op: { kind: 'remove', id: 'q1' } }
+  })
+})
+
+test('a rejected queue bridge action displays the error and retains the add draft', async () => {
+  const initial = loop({
+    preset: 'queue',
+    config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+    queueItems: []
+  })
+  const h = harness(initial, { failCommandAction: 'queue-add' })
+  unmountCurrent = h.unmount
+  await h.mount()
+  const draft = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Describe the next task"]')!
+  await act(async () => setValue(draft, 'keep this queue draft'))
+  await settle()
+  await act(async () => button(h.container, 'Add prompt').click())
+  await settle()
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('bridge refused')
+  expect(h.handle!.read()).toMatchObject({ queueDraft: { addDraft: 'keep this queue draft' } })
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue')).toEqual([])
+  expect(h.commandCalls.at(-1)).toEqual({
+    id: 'command:quirky.loops/action',
+    args: { loopId: 'loop-1', action: 'queue-add', params: { body: 'keep this queue draft' } }
+  })
+})
+
+
+test('keeps the queue composer caret stable while public draft commands are deferred', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const secondCommand = Promise.withResolvers<void>()
+  const initial = loop({
+    preset: 'queue',
+    config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+    queueItems: []
+  })
+  const h = harness(initial, { commandGates: [firstCommand.promise, secondCommand.promise] })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => { await h.handle!.dispatch('queue-draft', { body: 'Do it' }) })
+  const composer = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Describe the next task"]')!
+  composer.focus()
+  composer.setSelectionRange(2, 2)
+
+  try {
+    await act(async () => typeAtCaret(composer, 'X'))
+    await settle(h.flushCommands)
+    await act(async () => typeAtCaret(composer, 'Y'))
+    await settle(h.flushCommands)
+
+    expect(composer.value).toBe('DoXY it')
+    expect(composer.selectionStart).toBe(4)
+    expect(h.commandCalls).toEqual([{
+      id: 'command:quirky.loops/action',
+      args: { loopId: 'loop-1', action: 'queue-draft', params: { body: 'DoX it' } }
+    }])
+
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.commandCalls).toEqual([
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-draft', params: { body: 'DoX it' } } },
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-draft', params: { body: 'DoXY it' } } }
+    ])
+    expect(composer.value).toBe('DoXY it')
+    expect(composer.selectionStart).toBe(4)
+
+    await act(async () => {
+      secondCommand.resolve()
+      await secondCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.handle!.read()).toMatchObject({ queueDraft: { addDraft: 'DoXY it' } })
+    expect(composer.selectionStart).toBe(4)
+    expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue')).toEqual([])
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      secondCommand.resolve()
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+  }
+})
+test('queue add forms prevent native submission and route once for the button or Enter', async () => {
+  for (const submitMode of ['button', 'enter'] as const) {
+    const initial = loop({
+      preset: 'queue',
+      config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+      queueItems: []
+    })
+    const h = harness(initial)
+    unmountCurrent = h.unmount
+    await h.mount()
+    expect(h.container.querySelector('section[aria-label="Loop queue"] .ui-empty-state')?.textContent)
+      .toBe('No prompts queued.')
+    const draft = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Describe the next task"]')!
+    await act(async () => setValue(draft, 'Queue task'))
+    await settle()
+    expect(h.commandCalls).toEqual([{
+      id: 'command:quirky.loops/action',
+      args: { loopId: 'loop-1', action: 'queue-draft', params: { body: 'Queue task' } }
+    }])
+    h.commandCalls.length = 0
+
+    const form = draft.closest('form')!
+    const submitEvent = submitMode === 'enter' ? new Event('submit', { bubbles: true, cancelable: true }) : null
+    await act(async () => {
+      if (submitEvent === null) button(h.container, 'Add prompt').click()
+      else form.dispatchEvent(submitEvent)
+    })
+    await settle()
+
+    if (submitEvent !== null) expect(submitEvent.defaultPrevented).toBe(true)
+    expect(h.commandCalls).toEqual([{
+      id: 'command:quirky.loops/action',
+      args: { loopId: 'loop-1', action: 'queue-add', params: { body: 'Queue task' } }
+    }])
+    expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue')).toEqual([{
+      method: 'quirky.loops/queue',
+      params: { loopId: 'loop-1', op: { kind: 'add', body: 'Queue task' } }
+    }])
+    expect(h.handle!.read()).toMatchObject({ queueDraft: { addDraft: '' } })
+
+    await h.unmount()
+    unmountCurrent = null
+  }
+})
+
+test('queue edit forms prevent native submission and route once for the button or Enter', async () => {
+  for (const submitMode of ['button', 'enter'] as const) {
+    const initial = loop({
+      preset: 'queue',
+      config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+      queueItems: [queueItem('q1', 0, 'pending'), queueItem('q2', 1, 'pending')]
+    })
+    const h = harness(initial)
+    unmountCurrent = h.unmount
+    await h.mount()
+    const row = h.container.querySelector<HTMLElement>('[data-queue-id="q2"]')!
+    await act(async () => button(row, 'Edit q2').click())
+    const draft = row.querySelector<HTMLTextAreaElement>('[aria-label="Prompt for queue item 2"]')!
+    await act(async () => setValue(draft, 'Edited task'))
+    await settle()
+    expect(h.commandCalls).toEqual([
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-edit-open', params: { id: 'q2' } } },
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-edit-update', params: { body: 'Edited task' } } }
+    ])
+    h.commandCalls.length = 0
+
+    const form = draft.closest('form')!
+    const submitEvent = submitMode === 'enter' ? new Event('submit', { bubbles: true, cancelable: true }) : null
+    await act(async () => {
+      if (submitEvent === null) button(row, 'Save').click()
+      else form.dispatchEvent(submitEvent)
+    })
+    await settle()
+
+    if (submitEvent !== null) expect(submitEvent.defaultPrevented).toBe(true)
+    expect(h.commandCalls).toEqual([{
+      id: 'command:quirky.loops/action',
+      args: { loopId: 'loop-1', action: 'queue-edit', params: { id: 'q2', body: 'Edited task' } }
+    }])
+    expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue')).toEqual([{
+      method: 'quirky.loops/queue',
+      params: { loopId: 'loop-1', op: { kind: 'edit', id: 'q2', body: 'Edited task' } }
+    }])
+    expect(h.handle!.read()).toMatchObject({ queueDraft: { editingId: null, editingBody: '' } })
+
+    h.commandCalls.length = 0
+    const restoredRow = h.container.querySelector<HTMLElement>('[data-queue-id="q2"]')!
+    await act(async () => button(restoredRow, 'Edit q2').click())
+    await act(async () => button(restoredRow, 'Cancel').click())
+    expect(h.commandCalls).toEqual([
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-edit-open', params: { id: 'q2' } } },
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-edit-cancel', params: {} } }
+    ])
+    await h.unmount()
+    unmountCurrent = null
+  }
 })
 
 test('updates the visible configuration draft from typed inputs', async () => {
@@ -465,7 +1238,8 @@ test('refreshes a queue conflict without discarding its local edit draft', async
   await act(async () => (h.container.querySelector('[data-queue-id=\"q2\"] button[type=\"submit\"]') as HTMLButtonElement).click())
   await settle()
 
-  expect(h.container.textContent).toContain('queue item is already in progress')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent)
+    .toBe('queue item is already in progress')
   expect(h.container.querySelector('[data-queue-id=\"q2\"]')?.textContent).toContain('In progress')
   expect(h.container.querySelector('[data-queue-id=\"q2\"] textarea')).toBeNull()
   expect(h.handle!.read()).toMatchObject({

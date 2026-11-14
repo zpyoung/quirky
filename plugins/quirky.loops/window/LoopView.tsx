@@ -4,14 +4,15 @@ import type { IterationDetail, LoopConfig, LoopConfigPatch, LoopSnapshot, PauseR
 import { ConfigFields, draftFromLoop, validateDraft } from './config-form'
 import type { DraftValidation, LoopDraft, LoopViewProps, SurfaceHandle } from './contracts'
 import { LoopIterationDetail, formatDuration, iterationCheckLabel } from './LoopIterationDetail'
-import { LoopQueueEditor, type QueueEditorCommand, type QueueEditorState } from './LoopQueueEditor'
-import { Badge, Button, Dialog, EmptyState, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
+import { LoopQueueEditor, type QueueEditorState } from './LoopQueueEditor'
+import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
 
 type LoopState = LoopSnapshot['state']
 type EditPatch = LoopConfigPatch & { name?: string }
 type ParsedArgs = Record<string, unknown>
 
 type EditValidation = DraftValidation
+type DraftOverlay<T> = { version: object; value: T; acknowledged: boolean }
 
 const PAUSE_LABELS: Record<PauseReason, string> = {
   user: 'Paused by you',
@@ -211,16 +212,24 @@ function editPatchFromDraft(base: LoopSnapshot, latest: LoopSnapshot, draft: Loo
   }
   if (doneChanged) patch.done = done
 
-  const caps: LoopConfig['caps'] = { ...latest.config.caps }
-  let capsChanged = false
-  for (const key of ['maxIterations', 'maxActiveMinutes', 'maxCostUsd'] as const) {
-    if (base.config.caps[key] === next.caps[key]) continue
-    capsChanged = true
-    const value = next.caps[key]
-    if (value === undefined) delete caps[key]
-    else caps[key] = value
+  const changedCaps = (['maxIterations', 'maxActiveMinutes', 'maxCostUsd'] as const)
+    .filter((key) => base.config.caps[key] !== next.caps[key])
+  if (changedCaps.length > 0) {
+    const maxIterations = base.config.caps.maxIterations === next.caps.maxIterations
+      ? latest.config.caps.maxIterations
+      : next.caps.maxIterations
+    const maxActiveMinutes = base.config.caps.maxActiveMinutes === next.caps.maxActiveMinutes
+      ? latest.config.caps.maxActiveMinutes
+      : next.caps.maxActiveMinutes
+    const maxCostUsd = base.config.caps.maxCostUsd === next.caps.maxCostUsd
+      ? latest.config.caps.maxCostUsd
+      : next.caps.maxCostUsd
+    patch.caps = {
+      ...(maxIterations === undefined ? {} : { maxIterations }),
+      ...(maxActiveMinutes === undefined ? {} : { maxActiveMinutes }),
+      ...(maxCostUsd === undefined ? {} : { maxCostUsd })
+    }
   }
-  if (capsChanged) patch.caps = caps
 
   if (base.config.noProgress !== next.noProgress) patch.noProgress = next.noProgress
   if (!sameValue(base.config.protectedPaths ?? [], next.protectedPaths ?? [])) patch.protectedPaths = next.protectedPaths ?? []
@@ -309,6 +318,9 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
   const [resumeAdd, setResumeAdd] = useState('5')
   const [selectedDetail, setSelectedDetail] = useState<IterationDetail | null>(null)
   const [queueState, setQueueState] = useState<QueueEditorState>({ addDraft: '', editingId: null, editingBody: '' })
+  const [steerOverlay, setSteerOverlay] = useState<DraftOverlay<string> | null>(null)
+  const [editOverlay, setEditOverlay] = useState<DraftOverlay<LoopDraft> | null>(null)
+  const [resumeOverlay, setResumeOverlay] = useState<DraftOverlay<string> | null>(null)
 
   const loopRef = useRef<LoopSnapshot | null>(null)
   const busyRef = useRef<string | null>(null)
@@ -321,6 +333,76 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
   const loadMessagesRef = useRef<(sessionId: string | null, generation: number) => Promise<void>>(async () => {})
   const dispatchRef = useRef<SurfaceHandle['dispatch']>(async () => { throw new Error('Loop surface is unavailable.') })
   const surfaceStateRef = useRef<Record<string, unknown>>({})
+  const steerDraftRef = useRef(steerDraft)
+  const editDraftRef = useRef(editDraft)
+  const editBaseRef = useRef(editBase)
+  const resumeAddRef = useRef(resumeAdd)
+  const steerOverlayRef = useRef(steerOverlay)
+  const editOverlayRef = useRef(editOverlay)
+  const resumeOverlayRef = useRef(resumeOverlay)
+  const steerIntentRef = useRef(0)
+  const draftWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
+  steerDraftRef.current = steerDraft
+  editDraftRef.current = editDraft
+  editBaseRef.current = editBase
+  resumeAddRef.current = resumeAdd
+  steerOverlayRef.current = steerOverlay
+  editOverlayRef.current = editOverlay
+  resumeOverlayRef.current = resumeOverlay
+
+  const clearSteerOverlay = () => {
+    steerOverlayRef.current = null
+    setSteerOverlay(null)
+  }
+  const clearEditOverlay = () => {
+    editOverlayRef.current = null
+    setEditOverlay(null)
+  }
+  const clearResumeOverlay = () => {
+    resumeOverlayRef.current = null
+    setResumeOverlay(null)
+  }
+  const acknowledgeSteerOverlay = (version: object) => {
+    const current = steerOverlayRef.current
+    if (current?.version !== version) return
+    if (steerDraftRef.current === current.value) {
+      clearSteerOverlay()
+      return
+    }
+    const next = { ...current, acknowledged: true }
+    steerOverlayRef.current = next
+    setSteerOverlay(next)
+  }
+  const acknowledgeEditOverlay = (version: object) => {
+    const current = editOverlayRef.current
+    if (current?.version !== version) return
+    if (editDraftRef.current !== null && sameValue(editDraftRef.current, current.value)) {
+      clearEditOverlay()
+      return
+    }
+    const next = { ...current, acknowledged: true }
+    editOverlayRef.current = next
+    setEditOverlay(next)
+  }
+  const acknowledgeResumeOverlay = (version: object) => {
+    const current = resumeOverlayRef.current
+    if (current?.version !== version) return
+    if (resumeAddRef.current === current.value) {
+      clearResumeOverlay()
+      return
+    }
+    const next = { ...current, acknowledged: true }
+    resumeOverlayRef.current = next
+    setResumeOverlay(next)
+  }
+  const hasUnsyncedEditDraft = () => {
+    const current = editOverlayRef.current
+    return current !== null && (editDraftRef.current === null || !sameValue(editDraftRef.current, current.value))
+  }
+  const hasUnsyncedResumeDraft = () => {
+    const current = resumeOverlayRef.current
+    return current !== null && resumeAddRef.current !== current.value
+  }
 
   const setCurrentLoop = useCallback((value: LoopSnapshot) => {
     loopRef.current = value
@@ -412,6 +494,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
 
   useEffect(() => {
     const generation = ++viewGeneration.current
+    steerIntentRef.current += 1
     aliveRef.current = true
     busyRef.current = null
     setBusy(null)
@@ -435,6 +518,17 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
     setResumeAdd('5')
     setSelectedDetail(null)
     setQueueState({ addDraft: '', editingId: null, editingBody: '' })
+    steerDraftRef.current = ''
+    editDraftRef.current = null
+    editBaseRef.current = null
+    resumeAddRef.current = '5'
+    steerOverlayRef.current = null
+    editOverlayRef.current = null
+    resumeOverlayRef.current = null
+    draftWriteQueueRef.current = Promise.resolve()
+    setSteerOverlay(null)
+    setEditOverlay(null)
+    setResumeOverlay(null)
     setMessageLoading(true)
 
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
@@ -484,11 +578,23 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
       editing: true
     })
     : null
-  const editPatch = editDraft !== null && editBase !== null && loop !== null && editValidation !== null && editValidation.config !== null
-    ? editPatchFromDraft(editBase, loop, editDraft, editValidation.config)
-    : null
-  const hasEditChanges = editPatch !== null && Object.keys(editPatch).length > 0
   const validationErrors = editValidation?.errors ?? {}
+  const visibleSteerDraft = steerOverlay?.value ?? steerDraft
+  const visibleEditDraft = editOverlay?.value ?? editDraft
+  const visibleResumeAdd = resumeOverlay?.value ?? resumeAdd
+  const visibleEditValidation: EditValidation | null = visibleEditDraft !== null && loop !== null
+    ? validateDraft(visibleEditDraft, {
+      workspaceKind: loop.workspaceKind,
+      showCost: loop.costUsd !== null || loop.config.caps.maxCostUsd !== undefined,
+      editing: true
+    })
+    : null
+  const visibleEditPatch = visibleEditDraft !== null && editBase !== null && loop !== null &&
+    visibleEditValidation !== null && visibleEditValidation.config !== null
+    ? editPatchFromDraft(editBase, loop, visibleEditDraft, visibleEditValidation.config)
+    : null
+  const hasVisibleEditChanges = visibleEditPatch !== null && Object.keys(visibleEditPatch).length > 0
+  const visibleValidationErrors = visibleEditValidation?.errors ?? {}
 
   const mutate = useCallback(async (action: string, method: string, params: Record<string, unknown>, refreshOnFailure = false) => {
     const generation = viewGeneration.current
@@ -549,7 +655,8 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             if (snapshot.pauseReason !== 'cap-iterations') throw new Error('Additional iterations are only available at the iteration cap.')
             addIterations = params.addIterations
           } else if (isPausedCap(snapshot)) {
-            const requested = Number(resumeAdd)
+            if (hasUnsyncedResumeDraft()) throw new Error('Wait for iteration changes to finish before resuming.')
+            const requested = Number(resumeAddRef.current)
             if (!Number.isInteger(requested) || requested < 1) throw new Error('Iterations to add must be a positive whole number.')
             addIterations = requested
           }
@@ -557,7 +664,11 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             loopId,
             ...(addIterations === undefined ? {} : { addIterations })
           })
-          if (isPausedCap(snapshot) && aliveRef.current && generation === viewGeneration.current) setResumeAdd('5')
+          if (isPausedCap(snapshot) && aliveRef.current && generation === viewGeneration.current) {
+            resumeAddRef.current = '5'
+            setResumeAdd('5')
+            clearResumeOverlay()
+          }
           return result
         }
         case 'stop-open': {
@@ -586,7 +697,10 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
         case 'steer-open': {
           exactArgs(rawParams, [])
           requireMutable()
+          steerIntentRef.current += 1
+          steerDraftRef.current = ''
           setSteerDraft('')
+          clearSteerOverlay()
           setSteerOpen(true)
           setActionError(null)
           return { open: true }
@@ -597,19 +711,33 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
           if (typeof params.text !== 'string' || !params.text.trim()) throw new Error('Enter guidance for the next iteration.')
           const result = await mutate(action, 'quirky.loops/steer', { loopId, text: params.text })
           if (!aliveRef.current || generation !== viewGeneration.current) return result
-          setSteerOpen(false)
-          setSteerDraft('')
+          steerIntentRef.current += 1
+          const latestDraft = steerOverlayRef.current
+          if ((latestDraft === null && steerDraftRef.current === params.text) ||
+            (latestDraft !== null && latestDraft.value === params.text)) {
+            setSteerOpen(false)
+            steerDraftRef.current = ''
+            setSteerDraft('')
+            clearSteerOverlay()
+          }
           return result
         }
         case 'steer-cancel':
           exactArgs(rawParams, [])
+          steerIntentRef.current += 1
           setSteerOpen(false)
+          clearSteerOverlay()
           return { cancelled: true }
         case 'edit-open': {
           exactArgs(rawParams, [])
           const snapshot = requireMutable()
-          setEditBase(snapshot)
-          setEditDraft(draftFromLoop(snapshot))
+          const nextEditBase = snapshot
+          const nextEditDraft = draftFromLoop(snapshot)
+          editBaseRef.current = nextEditBase
+          setEditBase(nextEditBase)
+          editDraftRef.current = nextEditDraft
+          setEditDraft(nextEditDraft)
+          clearEditOverlay()
           setEditErrors({})
           setActionError(null)
           return { open: true }
@@ -617,13 +745,14 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
         case 'edit-update': {
           const params = exactArgs(rawParams, ['patch'], ['patch'])
           const snapshot = requireMutable()
-          if (editDraft === null) throw new Error('Open the edit form before changing its draft.')
+          const currentDraft = editDraftRef.current
+          if (currentDraft === null) throw new Error('Open the edit form before changing its draft.')
           if (!isRecord(params.patch) || Object.keys(params.patch).length === 0) throw new Error('Edit updates require at least one field.')
           const changes = params.patch
           const requestedPacingKind = changes.pacingKind === 'on-idle' || changes.pacingKind === 'interval'
             ? changes.pacingKind
-            : editDraft.pacingKind
-          const checkCommand = typeof changes.checkCommand === 'string' ? changes.checkCommand : editDraft.checkCommand
+            : currentDraft.pacingKind
+          const checkCommand = typeof changes.checkCommand === 'string' ? changes.checkCommand : currentDraft.checkCommand
           const patch: Partial<LoopDraft> = {}
           for (const [key, value] of Object.entries(changes)) {
             if (!EDITABLE_FIELDS.includes(key)) throw new Error(`Field cannot be edited: ${key}`)
@@ -649,7 +778,9 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             if (key === 'checkWhen' && value !== 'every-iteration' && value !== 'on-claim') throw new Error('Check timing is invalid.')
             Object.assign(patch, { [key]: value })
           }
-          setEditDraft((draft) => draft === null ? draft : { ...draft, ...patch })
+          const nextDraft = { ...currentDraft, ...patch }
+          editDraftRef.current = nextDraft
+          setEditDraft(nextDraft)
           setEditErrors({})
           setActionError(null)
           return { updated: true }
@@ -657,27 +788,36 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
         case 'edit-save': {
           exactArgs(rawParams, [])
           const snapshot = requireMutable()
-          if (editDraft === null || editBase === null) throw new Error('Open the edit form before saving.')
-          const validation = validateDraft(editDraft, {
+          const currentEditDraft = editDraftRef.current
+          const currentEditBase = editBaseRef.current
+          if (currentEditDraft === null || currentEditBase === null) throw new Error('Open the edit form before saving.')
+          if (hasUnsyncedEditDraft()) throw new Error('Wait for edit changes to finish before saving.')
+          const validation = validateDraft(currentEditDraft, {
             workspaceKind: snapshot.workspaceKind,
             showCost: snapshot.costUsd !== null || snapshot.config.caps.maxCostUsd !== undefined,
             editing: true
           })
           setEditErrors(validation.errors)
           if (validation.config === null || Object.keys(validation.errors).length > 0) throw new Error('Correct the invalid configuration before saving.')
-          const patch = editPatchFromDraft(editBase, snapshot, editDraft, validation.config)
+          const patch = editPatchFromDraft(currentEditBase, snapshot, currentEditDraft, validation.config)
           if (Object.keys(patch).length === 0) throw new Error('There are no configuration changes to save.')
           const result = await mutate(action, 'quirky.loops/edit', { loopId, patch })
           if (!aliveRef.current || generation !== viewGeneration.current) return result
+          editDraftRef.current = null
           setEditDraft(null)
+          editBaseRef.current = null
           setEditBase(null)
+          clearEditOverlay()
           setEditErrors({})
           return result
         }
         case 'edit-cancel':
           exactArgs(rawParams, [])
+          editDraftRef.current = null
           setEditDraft(null)
+          editBaseRef.current = null
           setEditBase(null)
+          clearEditOverlay()
           setEditErrors({})
           return { cancelled: true }
         case 'resume-update': {
@@ -685,6 +825,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
           const snapshot = requireSnapshot()
           if (!isPausedCap(snapshot)) throw new Error('Iteration additions are only editable at the iteration cap.')
           if (typeof params.value !== 'string') throw new Error('Iterations to add must be text.')
+          resumeAddRef.current = params.value
           setResumeAdd(params.value)
           setActionError(null)
           return { updated: true }
@@ -694,6 +835,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
           requireMutable()
           if (!steerOpen) throw new Error('Open the guidance form before editing its draft.')
           if (typeof params.text !== 'string') throw new Error('Guidance must be text.')
+          steerDraftRef.current = params.text
           setSteerDraft(params.text)
           setActionError(null)
           return { updated: true }
@@ -799,7 +941,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
       if (aliveRef.current && generation === viewGeneration.current) setActionError(errorMessage(error))
       throw error
     }
-  }, [connectionStatus, currentHistory, editBase, editDraft, loopId, mutate, queueState, resumeAdd, steerOpen, unverifiable])
+  }, [connectionStatus, currentHistory, loopId, mutate, queueState, steerOpen, unverifiable])
   dispatchRef.current = dispatch
 
   const visibleError = actionError ?? (loop === null ? null : viewError)
@@ -846,24 +988,101 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
     report?.(surfaceState)
   }, [report, surfaceState])
 
-  const runFromDom = useCallback((action: string, params: Record<string, unknown> = {}) => {
-    void dispatchRef.current(action, params).catch(() => {})
-  }, [])
-  const onQueueAction = useCallback((command: QueueEditorCommand) => {
-    switch (command.action) {
-      case 'queue-draft': return dispatchRef.current(command.action, { body: command.params.body })
-      case 'queue-edit-open': return dispatchRef.current(command.action, { id: command.params.id })
-      case 'queue-edit-update': return dispatchRef.current(command.action, { body: command.params.body })
-      case 'queue-edit-cancel': return dispatchRef.current(command.action, {})
-      case 'queue-add': return dispatchRef.current(command.action, { body: command.params.body })
-      case 'queue-edit': return dispatchRef.current(command.action, { id: command.params.id, body: command.params.body })
-      case 'queue-move': return dispatchRef.current(command.action, { id: command.params.id, position: command.params.position })
-      case 'queue-remove': return dispatchRef.current(command.action, { id: command.params.id })
+  useEffect(() => {
+    const current = steerOverlayRef.current
+    if (current?.acknowledged && steerDraft === current.value) clearSteerOverlay()
+  }, [steerDraft, steerOverlay])
+  useEffect(() => {
+    const current = editOverlayRef.current
+    if (current?.acknowledged && editDraft !== null && sameValue(editDraft, current.value)) clearEditOverlay()
+  }, [editDraft, editOverlay])
+  useEffect(() => {
+    const current = resumeOverlayRef.current
+    if (current?.acknowledged && resumeAdd === current.value) clearResumeOverlay()
+  }, [resumeAdd, resumeOverlay])
+
+  const runFromDom = async (
+    action: string,
+    params: Record<string, unknown> = {},
+    draftWrite = false,
+    onSuccess?: () => void
+  ): Promise<void> => {
+    const generation = viewGeneration.current
+    const execute = async () => {
+      if (!aliveRef.current || generation !== viewGeneration.current) return
+      try {
+        await context.executeCommand('command:quirky.loops/action', { loopId, action, params })
+        if (aliveRef.current && generation === viewGeneration.current) onSuccess?.()
+      } catch (error) {
+        if (aliveRef.current && generation === viewGeneration.current) setActionError(errorMessage(error))
+      }
     }
-  }, [])
+    if (draftWrite) {
+      const pending = draftWriteQueueRef.current.then(execute, execute)
+      draftWriteQueueRef.current = pending.then(() => undefined, () => undefined)
+      await pending
+      return
+    }
+    await execute()
+  }
+  const waitForDraftWrites = async (): Promise<void> => {
+    while (true) {
+      const pending = draftWriteQueueRef.current
+      await pending
+      if (pending === draftWriteQueueRef.current) return
+    }
+  }
+  const runAfterDraftWrites = async (
+    action: string,
+    params: Record<string, unknown> = {}
+  ): Promise<void> => {
+    const generation = viewGeneration.current
+    const steerIntent = action === 'steer' ? steerIntentRef.current : null
+    await waitForDraftWrites()
+    if (!aliveRef.current || generation !== viewGeneration.current) return
+    if (action === 'steer' && steerIntent !== steerIntentRef.current) return
+    if (action === 'edit-save' && hasUnsyncedEditDraft()) {
+      setActionError('Wait for edit changes to finish before saving.')
+      return
+    }
+    if (action === 'resume' && hasUnsyncedResumeDraft()) {
+      setActionError('Wait for iteration changes to finish before resuming.')
+      return
+    }
+    await runFromDom(action, params)
+  }
+
+  const updateSteerDraftFromDom = (text: string) => {
+    const overlay = { version: {}, value: text, acknowledged: false }
+    steerOverlayRef.current = overlay
+    setSteerOverlay(overlay)
+    void runFromDom('steer-update', { text }, true, () => acknowledgeSteerOverlay(overlay.version))
+  }
+  const updateEditDraftFromDom = (patch: Partial<LoopDraft>) => {
+    const current = editOverlayRef.current?.value ?? editDraftRef.current
+    if (current === null || current === undefined) return
+    const overlay = { version: {}, value: { ...current, ...patch }, acknowledged: false }
+    editOverlayRef.current = overlay
+    setEditOverlay(overlay)
+    setEditErrors({})
+    void runFromDom('edit-update', { patch }, true, () => acknowledgeEditOverlay(overlay.version))
+  }
+  const updateResumeDraftFromDom = (value: string) => {
+    const overlay = { version: {}, value, acknowledged: false }
+    resumeOverlayRef.current = overlay
+    setResumeOverlay(overlay)
+    void runFromDom('resume-update', { value }, true, () => acknowledgeResumeOverlay(overlay.version))
+  }
+
+  const onQueueError = (error: unknown) => {
+    if (aliveRef.current) setActionError(errorMessage(error))
+  }
+  const onDetailBack = () => {
+    void runFromDom('back')
+  }
 
   if (loading && loop === null) {
-    return <ToolPanelFrame title="Loop"><p role="status">Loading loop…</p></ToolPanelFrame>
+    return <ToolPanelFrame title="Loop"><NoticeLine><span role="status">Loading loop…</span></NoticeLine></ToolPanelFrame>
   }
 
   const currentLoop = loop
@@ -894,9 +1113,9 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
     : null
   const latestBlocked = evidenceDetail?.markers.blocked
   const latestDecision = evidenceDetail?.markers.decide
-  const formErrors = Object.keys(editErrors).length > 0 ? editErrors : validationErrors
-  const editSaveDisabled = busy !== null || editDraft === null || editBase === null || editValidation === null ||
-    editValidation.config === null || Object.keys(editValidation.errors).length > 0 || !hasEditChanges
+  const formErrors = Object.keys(editErrors).length > 0 ? editErrors : visibleValidationErrors
+  const editSaveDisabled = busy !== null || visibleEditDraft === null || editBase === null || visibleEditValidation === null ||
+    visibleEditValidation.config === null || Object.keys(visibleEditValidation.errors).length > 0 || !hasVisibleEditChanges
 
   return (
     <div className="ui-stack">
@@ -909,7 +1128,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
               <p className="ui-text-muted">
                 {savedOutput === null ? 'Saved iteration output' : `Saved iteration ${savedOutput.n}${savedOutput.attempt > 1 ? ` · attempt ${savedOutput.attempt}` : ''} output`}
               </p>
-              {savedOutput?.error && <p role="alert">{savedOutput.error}</p>}
+              {savedOutput?.error && <InlineError message={savedOutput.error} />}
               <div className="ui-stack" role="log" aria-label="Saved iteration output">
                 {savedOutput?.outputTail ? <pre className="ui-readout">{savedOutput.outputTail}</pre> : <EmptyState message="No output recorded for this iteration." />}
               </div>
@@ -919,8 +1138,8 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
           ) : (
             <>
               <p className="ui-text-muted">Session {currentLoop.sessionId}</p>
-              {messageError !== null && <p role="alert">Output unavailable: {messageError}</p>}
-              {messageLoading && <p role="status">Loading output…</p>}
+              {messageError !== null && <InlineError message={`Output unavailable: ${messageError}`} />}
+              {messageLoading && <NoticeLine><span role="status">Loading output…</span></NoticeLine>}
               {!messageLoading && messages.length === 0 && messageError === null && <EmptyState message="No messages recorded." />}
               <div className="ui-stack" role="log" aria-label="Structured session journal" aria-live="polite">
                 {messages.map((message) => {
@@ -958,8 +1177,8 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
       >
         <section className="ui-stack" aria-label="Loop controls and history">
           {currentLoop !== null && <p className="ui-text-muted">{currentLoop.sessionId === null ? 'No session' : `Session ${currentLoop.sessionId}`}</p>}
-          {connectionStatus === 'reconnecting' && <p role="status">Reconnecting to loop state…</p>}
-          {currentLoop === null && !loading && <p role="alert">{viewError ?? 'Loop state is unavailable.'}</p>}
+          {connectionStatus === 'reconnecting' && <NoticeLine><span role="status">Reconnecting to loop state…</span></NoticeLine>}
+          {currentLoop === null && !loading && <InlineError message={viewError ?? 'Loop state is unavailable.'} />}
           {currentLoop !== null && <>
             <p><strong>Phase:</strong> {currentLoop.phase === null ? 'No active phase' : PHASE_LABELS[currentLoop.phase]}</p>
             <div role="status">
@@ -993,8 +1212,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             {currentLoop.warnings.length > 0 && <ul aria-label="Warnings">{currentLoop.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul>}
           </>}
 
-          {visibleError !== null && <p role="alert">{visibleError}</p>}
-          {historyError !== null && <p role="alert">Iteration history unavailable: {historyError}</p>}
+          {visibleError !== null && <InlineError message={visibleError} />}
 
           {currentLoop !== null && !isReadOnly && <div className="ui-stack" role="group" aria-label="Loop lifecycle controls">
             {currentLoop.state === 'running' && <Button disabled={busy !== null} onClick={() => runFromDom('pause')}>Pause after this iteration</Button>}
@@ -1006,13 +1224,13 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
                   type="number"
                   min="1"
                   step="1"
-                  value={resumeAdd}
-                  help={`+ ${resumeAdd} iterations`}
-                  onChange={(event) => runFromDom('resume-update', { value: event.currentTarget.value })}
+                  value={visibleResumeAdd}
+                  help={`+ ${visibleResumeAdd} iterations`}
+                  onChange={(event) => updateResumeDraftFromDom(event.currentTarget.value)}
                   disabled={busy !== null}
                 />
               )}
-              <Button disabled={busy !== null || (isPausedCap(currentLoop) && (!Number.isInteger(Number(resumeAdd)) || Number(resumeAdd) < 1))} onClick={() => runFromDom('resume')}>Resume</Button>
+              <Button disabled={busy !== null || (isPausedCap(currentLoop) && (!Number.isInteger(Number(visibleResumeAdd)) || Number(visibleResumeAdd) < 1))} onClick={() => { void runAfterDraftWrites('resume') }}>Resume</Button>
             </div>}
             <Button variant="destructive" disabled={busy !== null} onClick={() => runFromDom('stop-open')}>Stop</Button>
             <Button disabled={busy !== null} onClick={() => runFromDom('steer-open')}>Steer</Button>
@@ -1039,15 +1257,15 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             onClose={() => runFromDom('steer-cancel')}
             closeOnBackdrop={false}
             actions={<>
-              <Button disabled={busy !== null || !steerDraft.trim()} onClick={() => runFromDom('steer', { text: steerDraft })}>Send</Button>
+              <Button disabled={busy !== null || !visibleSteerDraft.trim()} onClick={() => { void runAfterDraftWrites('steer', { text: visibleSteerDraft }) }}>Send</Button>
               <Button disabled={busy !== null} onClick={() => runFromDom('steer-cancel')}>Cancel</Button>
             </>}
           >
             <TextArea
               label="Guidance"
               aria-label="Guidance for the next iteration"
-              value={steerDraft}
-              onChange={(event) => runFromDom('steer-update', { text: event.currentTarget.value })}
+              value={visibleSteerDraft}
+              onChange={(event) => updateSteerDraftFromDom(event.currentTarget.value)}
               disabled={busy !== null}
             />
           </Dialog>
@@ -1058,32 +1276,32 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             onClose={() => runFromDom('edit-cancel')}
             closeOnBackdrop={false}
             actions={<>
-              <Button disabled={editSaveDisabled} onClick={() => runFromDom('edit-save')}>Save</Button>
+              <Button disabled={editSaveDisabled} onClick={() => { void runAfterDraftWrites('edit-save') }}>Save</Button>
               <Button disabled={busy !== null} onClick={() => runFromDom('edit-cancel')}>Cancel</Button>
             </>}
           >
-            {editDraft !== null && currentLoop !== null && (
+            {visibleEditDraft !== null && currentLoop !== null && (
               <div className="ui-stack">
                 <TextField
                   label="Name"
                   aria-label="Loop name"
                   type="text"
-                  value={editDraft.name}
-                  onChange={(event) => { void dispatchRef.current('edit-update', { patch: { name: event.currentTarget.value } }).catch(() => {}) }}
+                  value={visibleEditDraft.name}
+                  onChange={(event) => { updateEditDraftFromDom({ name: event.currentTarget.value }) }}
                   disabled={busy !== null}
                   error={formErrors.name}
                 />
                 {currentLoop.config.promptSource.kind === 'repeat' && <TextArea
                   label="Prompt"
                   aria-label="Loop prompt"
-                  value={editDraft.prompt}
-                  onChange={(event) => { void dispatchRef.current('edit-update', { patch: { prompt: event.currentTarget.value } }).catch(() => {}) }}
+                  value={visibleEditDraft.prompt}
+                  onChange={(event) => { updateEditDraftFromDom({ prompt: event.currentTarget.value }) }}
                   disabled={busy !== null}
                   error={formErrors.prompt}
                 />}
                 <ConfigFields
-                  draft={editDraft}
-                  onChange={(patch) => { void dispatchRef.current('edit-update', { patch }).catch(() => {}) }}
+                  draft={visibleEditDraft}
+                  onChange={(patch) => { updateEditDraftFromDom(patch) }}
                   errors={formErrors}
                   workspaceKind={currentLoop.workspaceKind}
                   showCost={currentLoop.costUsd !== null || currentLoop.config.caps.maxCostUsd !== undefined}
@@ -1099,23 +1317,27 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
               items={currentLoop.queueItems}
               state={queueState}
               disabled={busy !== null || isReadOnly}
-              onAction={onQueueAction}
+              context={context}
+              loopId={loopId}
+              onError={onQueueError}
             />
           </div>}
           {currentLoop?.preset === 'queue' && !selectedDetail && isReadOnly && <section className="ui-stack" aria-label="Loop queue history">
             <SectionHeader title="Queue" />
-            <ol className="ui-stack">{currentLoop.queueItems.map((item) => <li className="ui-stack" data-queue-id={item.id} key={item.id}>
-              <Badge tone={item.state === 'in-flight' ? 'working' : item.state === 'done' ? 'accent' : 'neutral'}>
-                {item.state === 'in-flight' ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'}
-              </Badge>
-              <p>{item.body}</p>
-            </li>)}</ol>
+            {currentLoop.queueItems.length === 0 ? <EmptyState message="No prompts queued." /> : (
+              <ol className="ui-stack">{currentLoop.queueItems.map((item) => <li className="ui-stack" data-queue-id={item.id} key={item.id}>
+                <Badge tone={item.state === 'in-flight' ? 'working' : item.state === 'done' ? 'accent' : 'neutral'}>
+                  {item.state === 'in-flight' ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'}
+                </Badge>
+                <p>{item.body}</p>
+              </li>)}</ol>
+            )}
           </section>}
 
-          {selectedDetail !== null ? <LoopIterationDetail detail={selectedDetail} onBack={() => runFromDom('back')} /> : (
+          {selectedDetail !== null ? <LoopIterationDetail detail={selectedDetail} onBack={onDetailBack} /> : (
             <section className="ui-stack" aria-label="Iteration history">
               <SectionHeader title="Iterations" />
-              {historyError !== null ? <EmptyState message="History could not be loaded." /> : currentHistory.length === 0
+              {historyError !== null ? <InlineError message={`Iteration history unavailable: ${historyError}`} /> : currentHistory.length === 0
                 ? <EmptyState message="No finished iterations." />
                 : <ol className="ui-stack">{currentHistory.slice().reverse().map((detail) => {
                   const duration = detail.endedAt === null ? null : detail.endedAt - detail.startedAt
@@ -1136,7 +1358,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
                 })}</ol>}
             </section>
           )}
-          {busy !== null && <p role="status">Working…</p>}
+          {busy !== null && <NoticeLine><span role="status">Working…</span></NoticeLine>}
         </section>
       </ToolPanelFrame>
     </div>

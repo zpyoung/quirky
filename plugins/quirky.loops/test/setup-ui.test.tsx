@@ -16,6 +16,7 @@ type FormSurface = {
   ConfigFields: typeof ConfigFields
 }
 type Call = { method: string; params: Record<string, unknown> }
+type CommandCall = { id: string; args: unknown }
 type DraftView = Pick<LoopDraft, 'prompt' | 'sessionPolicy' | 'preset' | 'queueItems' | 'repeatQueue'> & {
   pacingKind?: 'on-idle' | 'interval'
 }
@@ -24,6 +25,7 @@ type ReadView = {
   workspaceKind: 'git' | 'folder' | null
   showCost: boolean
   warning: string | null
+  loadError: string | null
   alreadyCreated: boolean
 }
 
@@ -44,13 +46,21 @@ function isReadView(value: unknown): value is ReadView {
   if (!isRecord(value) || !isDraftView(value.draft)) return false
   return (value.workspaceKind === null || value.workspaceKind === 'git' || value.workspaceKind === 'folder') &&
     typeof value.showCost === 'boolean' && (value.warning === null || typeof value.warning === 'string') &&
-    typeof value.alreadyCreated === 'boolean'
+    (value.loadError === null || typeof value.loadError === 'string') && typeof value.alreadyCreated === 'boolean'
 }
 
 function readSetup(handle: SurfaceHandle): ReadView {
   const result = handle.read()
   if (!isReadView(result)) throw new Error('The setup surface returned an invalid read state.')
   return result
+}
+
+function button(container: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label
+  )
+  if (!found) throw new Error(`Button not found: ${label}`)
+  return found
 }
 
 let SetupDialog: typeof SetupDialogType | undefined
@@ -88,6 +98,26 @@ async function unmount() {
   document.body.innerHTML = ''
 }
 
+function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+function typeAtCaret(element: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  const start = element.selectionStart ?? element.value.length
+  const end = element.selectionEnd ?? start
+  const next = `${element.value.slice(0, start)}${text}${element.value.slice(end)}`
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, next)
+  element.setSelectionRange(start + text.length, start + text.length)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function setSelectValue(element: HTMLSelectElement, value: string) {
+  element.value = value
+  element.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
 function requireSurface() {
   if (!form || !SetupDialog) throw new Error('setup surface is unavailable')
   return { form, SetupDialog }
@@ -96,15 +126,66 @@ function requireSurface() {
 function setup(options: {
   failCreate?: boolean
   failHostedTab?: boolean
+  failWorkspace?: Error
+  failAgents?: Error
+  failLoops?: Error
+  failCommandAction?: string
+  commandGates?: Promise<void>[]
+  commandTarget?: { current: SurfaceHandle | null }
+  pendingWorkspace?: Promise<unknown>
+  pendingAgents?: Promise<unknown>
+  noAgents?: boolean
   runningLoops?: unknown[]
   workspaceKind?: 'git' | 'folder'
   onCreated?: (loop: LoopSnapshot) => Promise<void>
 } = {}) {
+  const commandCalls: CommandCall[] = []
+  let handle: SurfaceHandle | null = null
+  let commandGateIndex = 0
+  let failCommandAction = options.failCommandAction
+  const pendingCommands = new Set<{ promise: Promise<void>; gatePending: boolean }>()
+  const flushCommands = async () => {
+    while (true) {
+      const ready = [...pendingCommands].filter((command) => !command.gatePending)
+      if (ready.length === 0) return
+      await Promise.allSettled(ready.map((command) => command.promise))
+    }
+  }
   const calls: Call[] = []
   const toasts: { title: string; body: string }[] = []
   const reports: unknown[] = []
   const created = { id: 'loop-1', name: 'Do the work', worktreeId: 'wt-1', state: 'running' }
   const context = {
+    executeCommand(id: string, args?: unknown) {
+      const pendingCommand = { promise: Promise.resolve(), gatePending: false }
+      const commandTask = (async () => {
+        commandCalls.push({ id, args })
+        const command = isRecord(args) ? args : {}
+        if (failCommandAction === command.action) throw new Error('bridge refused')
+        if (id !== 'command:quirky.loops/setup-action' || typeof command.action !== 'string') {
+          throw new Error(`Unexpected UI command ${id}`)
+        }
+        const commandHandle = options.commandTarget === undefined ? handle : options.commandTarget.current
+        if (commandHandle === null) throw new Error('Setup surface is unavailable.')
+        const commandGate = options.commandGates?.[commandGateIndex++]
+        if (commandGate) {
+          pendingCommand.gatePending = true
+          try {
+            await commandGate
+          } finally {
+            pendingCommand.gatePending = false
+          }
+        }
+        await commandHandle.dispatch(command.action, isRecord(command.params) ? command.params : {})
+      })()
+      pendingCommand.promise = commandTask
+      pendingCommands.add(pendingCommand)
+      void commandTask.then(
+        () => pendingCommands.delete(pendingCommand),
+        () => pendingCommands.delete(pendingCommand)
+      )
+      return commandTask
+    },
     pluginId: 'quirky.loops',
     log() {},
     provide() {},
@@ -112,9 +193,11 @@ function setup(options: {
       calls.push({ method, params })
       switch (method) {
         case 'quirky.agents/list':
+          if (options.failAgents) throw options.failAgents
+          if (options.pendingAgents) return options.pendingAgents
           return {
-            defaultAgent: 'codex',
-            agents: [
+            defaultAgent: options.noAgents ? '' : 'codex',
+            agents: options.noAgents ? [] : [
               { id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: false },
               { id: 'gemini', label: 'Gemini', installed: true, enabled: true, isDefault: false },
               { id: 'codex', label: 'Codex', installed: true, enabled: true, isDefault: true },
@@ -123,8 +206,11 @@ function setup(options: {
             ]
           }
         case 'quirky.worktree/show':
+          if (options.failWorkspace) throw options.failWorkspace
+          if (options.pendingWorkspace) return options.pendingWorkspace
           return { id: 'wt-1', kind: options.workspaceKind ?? 'git', path: '/work/project', name: 'project' }
         case 'quirky.loops/list':
+          if (options.failLoops) throw options.failLoops
           return options.runningLoops ?? []
         case 'quirky.loops/create':
           if (options.failCreate) throw new Error('runner refused this loop')
@@ -139,7 +225,6 @@ function setup(options: {
     }
   } as unknown as UiPluginContext
 
-  let handle: SurfaceHandle | null = null
   let closes = 0
   let createdCalls = 0
   const props: SetupDialogProps = {
@@ -155,6 +240,7 @@ function setup(options: {
     },
     onHandle(value) {
       handle = value
+      if (options.commandTarget !== undefined) options.commandTarget.current = value
     },
     report(state) {
       reports.push(state)
@@ -167,12 +253,17 @@ function setup(options: {
   act(() => root?.render(createElement(SetupDialog!, props)))
 
   return {
+    commandCalls,
+    flushCommands,
     calls,
     toasts,
     reports,
     created,
     get handle() {
       return handle!
+    },
+    setFailCommandAction(action: string | undefined) {
+      failCommandAction = action
     },
     get closes() {
       return closes
@@ -420,9 +511,33 @@ test('blank queue bodies stay in the draft and show the queue error', () => {
   expect(validation.config).toBeNull()
 })
 
+test('preserves empty-queue guidance and blank-body field errors', async () => {
+  const view = setup()
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { preset: 'queue' } })
+  })
+
+  expect(host.querySelector('.ui-empty-state')?.textContent).toBe('Add at least one prompt to the queue.')
+  await act(async () => {
+    await view.handle.dispatch('queue-add', { body: '  ' })
+  })
+
+  const prompt = host.querySelector<HTMLTextAreaElement>('[aria-label="Queue item 1"]')
+  expect(prompt?.value).toBe('  ')
+  expect(prompt?.getAttribute('aria-invalid')).toBe('true')
+  expect(prompt?.parentElement?.querySelector('.ui-error-text[role="alert"]')?.textContent)
+    .toBe('Queue prompts cannot be blank.')
+  expect(readSetup(view.handle).draft.queueItems).toEqual(['  '])
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
+})
+
 test('setup loads only installed enabled native agents, selects the default, and warns for a running workspace loop', async () => {
   const view = setup({ runningLoops: [{ id: 'existing', worktreeId: 'wt-1', state: 'running' }] })
   await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { prompt: 'Start another loop' } })
+  })
 
   const read = readSetup(view.handle)
   const agent = host.querySelector<HTMLSelectElement>('[aria-label="Agent"]')
@@ -431,9 +546,11 @@ test('setup loads only installed enabled native agents, selects the default, and
   expect([...agent.options].map((option) => option.value)).toEqual(['codex', 'claude'])
   expect(read.workspaceKind).toBe('git')
   expect(read.showCost).toBe(true)
-  expect(read.warning).toBe('This workspace already has a running loop. A second loop edits the same files at the same time.')
-  expect(host.textContent).toContain('Enter a prompt to start the loop.')
-  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
+  const expectedWarning = 'This workspace already has a running loop. A second loop edits the same files at the same time.'
+  expect(read.warning).toBe(expectedWarning)
+  expect(host.querySelector('.ui-notice-line')?.textContent).toContain(expectedWarning)
+  expect(host.querySelector('.ui-notice-line [role="status"]')?.textContent).toContain(expectedWarning)
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false)
   expect(view.calls).toContainEqual({ method: 'quirky.worktree/show', params: { worktree: 'workspace-selector' } })
   expect(view.calls).toContainEqual({ method: 'quirky.loops/list', params: { worktreeId: 'wt-1' } })
 })
@@ -444,6 +561,63 @@ test('running loops in other workspaces do not trigger the warning', async () =>
 
   expect(readSetup(view.handle).warning).toBeNull()
   expect(host.textContent).not.toContain('This workspace already has a running loop.')
+})
+
+test('shows one shared workspace read error and retains its source in the report', async () => {
+  const view = setup({ failWorkspace: new Error('read refused') })
+  await view.ready()
+
+  expect([...host.querySelectorAll<HTMLElement>('.ui-inline-error[role="alert"]')].map((item) => item.textContent))
+    .toEqual(['Could not load the workspace: read refused'])
+  expect(readSetup(view.handle).loadError).toBe('workspace: read refused')
+})
+
+test('shows one shared agent read error and retains its source in the report', async () => {
+  const view = setup({ failAgents: new Error('read refused') })
+  await view.ready()
+
+  expect([...host.querySelectorAll<HTMLElement>('.ui-inline-error[role="alert"]')].map((item) => item.textContent))
+    .toEqual(['Could not load agents: read refused'])
+  expect(readSetup(view.handle).loadError).toBe('agents: read refused')
+})
+
+test('shows one shared existing-loop read error without prohibiting a second loop', async () => {
+  const view = setup({ failLoops: new Error('read refused') })
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { prompt: 'Start another loop' } })
+  })
+
+  expect([...host.querySelectorAll<HTMLElement>('.ui-inline-error[role="alert"]')].map((item) => item.textContent))
+    .toEqual(['Could not check for existing loops: read refused'])
+  expect(readSetup(view.handle).loadError).toBe('loops: read refused')
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false)
+})
+
+test('uses a shared notice while workspace and agent reads are pending', async () => {
+  const pendingWorkspace = Promise.withResolvers<unknown>()
+  const pendingAgents = Promise.withResolvers<unknown>()
+  const view = setup({ pendingWorkspace: pendingWorkspace.promise, pendingAgents: pendingAgents.promise })
+  await view.ready()
+
+  const notice = host.querySelector<HTMLElement>('.ui-notice-line')
+  expect(notice?.textContent).toContain('Loading workspace and agents…')
+  expect(notice?.querySelector('[role="status"]')?.textContent).toBe('Loading workspace and agents…')
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
+
+  pendingWorkspace.resolve({ id: 'wt-1', kind: 'git', path: '/work/project', name: 'project' })
+  pendingAgents.resolve({ defaultAgent: 'codex', agents: [{ id: 'codex', label: 'Codex', installed: true, enabled: true, isDefault: true }] })
+  await Promise.all([pendingWorkspace.promise, pendingAgents.promise])
+  await view.ready()
+})
+
+test('shows an empty state when no installed enabled Claude or Codex agent is available', async () => {
+  const view = setup({ noAgents: true })
+  await view.ready()
+
+  expect(host.querySelector('.ui-empty-state')?.textContent)
+    .toBe('No installed and enabled Claude or Codex agents are available.')
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
 })
 
 test('folder setup hides checkpoints and reveals check controls only after a command', async () => {
@@ -467,6 +641,230 @@ test('folder setup hides checkpoints and reveals check controls only after a com
   expect(host.querySelector('[aria-label="Check timeout (seconds)"]')).not.toBeNull()
   expect(host.textContent).toContain('Enter 1 to 600 seconds.')
   expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
+  expect(view.commandCalls).toEqual([{
+    id: 'command:quirky.loops/setup-action',
+    args: { action: 'advanced', params: { open: true } }
+  }])
+})
+
+test('submits setup through the public command once and prevents native navigation', async () => {
+  const view = setup()
+  await view.ready()
+  const name = host.querySelector<HTMLInputElement>('[aria-label="Loop name"]')!
+  const prompt = host.querySelector<HTMLTextAreaElement>('[aria-label="Prompt"]')!
+  await act(async () => setValue(name, 'Do it'))
+  await view.ready()
+  await act(async () => setValue(prompt, 'Do it'))
+  await view.ready()
+
+  const form = host.querySelector<HTMLFormElement>('form[aria-label="New loop"]')!
+  const submitEvent = new Event('submit', { bubbles: true, cancelable: true })
+  await act(async () => {
+    form.dispatchEvent(submitEvent)
+  })
+  await view.ready()
+
+  expect(submitEvent.defaultPrevented).toBe(true)
+  expect(view.commandCalls).toEqual([
+    { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { name: 'Do it' } } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { prompt: 'Do it' } } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'start', params: {} } }
+  ])
+  expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(1)
+  expect(view.calls.find((call) => call.method === 'quirky.loops/create')?.params)
+    .toMatchObject({ name: 'Do it', config: { promptSource: { kind: 'repeat', body: 'Do it' } } })
+  expect(view.createdCalls).toBe(1)
+  expect(view.closes).toBe(1)
+})
+
+test('keeps setup prompt caret stable while command acknowledgements are deferred', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const secondCommand = Promise.withResolvers<void>()
+  const view = setup({ commandGates: [firstCommand.promise, secondCommand.promise] })
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { prompt: 'Do it' } })
+  })
+  const prompt = host.querySelector<HTMLTextAreaElement>('[aria-label="Prompt"]')!
+  prompt.focus()
+  prompt.setSelectionRange(2, 2)
+
+  try {
+    await act(async () => typeAtCaret(prompt, 'X'))
+    await view.ready()
+    await act(async () => typeAtCaret(prompt, 'Y'))
+    await view.ready()
+
+    expect(prompt.value).toBe('DoXY it')
+    expect(prompt.selectionStart).toBe(4)
+    expect(view.commandCalls).toEqual([{
+      id: 'command:quirky.loops/setup-action',
+      args: { action: 'update', params: { patch: { prompt: 'DoX it' } } }
+    }])
+
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await view.ready()
+    expect(view.commandCalls).toEqual([
+      { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { prompt: 'DoX it' } } } },
+      { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { prompt: 'DoXY it' } } } }
+    ])
+    expect(prompt.value).toBe('DoXY it')
+    expect(prompt.selectionStart).toBe(4)
+
+    await act(async () => {
+      secondCommand.resolve()
+      await secondCommand.promise
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await view.ready()
+    expect(readSetup(view.handle).draft.prompt).toBe('DoXY it')
+    expect(prompt.value).toBe('DoXY it')
+    expect(prompt.selectionStart).toBe(4)
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      secondCommand.resolve()
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await view.ready()
+  }
+})
+
+test('does not run queued setup updates after the dialog unmounts', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const commandTarget: { current: SurfaceHandle | null } = { current: null }
+  const view = setup({ commandGates: [firstCommand.promise], commandTarget })
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { prompt: 'Do it' } })
+  })
+  const prompt = host.querySelector<HTMLTextAreaElement>('[aria-label="Prompt"]')!
+  prompt.focus()
+  prompt.setSelectionRange(2, 2)
+  await act(async () => typeAtCaret(prompt, 'X'))
+  await view.ready()
+  await act(async () => typeAtCaret(prompt, 'Y'))
+  await view.ready()
+  expect(view.commandCalls).toHaveLength(1)
+
+  await unmount()
+  const replacement = setup({ commandTarget })
+  await replacement.ready()
+
+  try {
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await replacement.ready()
+
+    expect(view.commandCalls).toHaveLength(1)
+    expect(readSetup(replacement.handle).draft.prompt).not.toBe('DoXY it')
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await replacement.ready()
+  }
+})
+
+test('reconciles an unsynced queue edit when an earlier item is removed', async () => {
+  const view = setup()
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { preset: 'queue' } })
+    await view.handle.dispatch('queue-add', { body: 'first' })
+    await view.handle.dispatch('queue-add', { body: 'second' })
+  })
+  await view.ready()
+  view.setFailCommandAction('queue-edit')
+  const edited = host.querySelector<HTMLTextAreaElement>('[aria-label="Queue item 2"]')!
+  await act(async () => setValue(edited, 'Edited second'))
+  await view.ready()
+  expect(edited.value).toBe('Edited second')
+  expect(readSetup(view.handle).draft.queueItems).toEqual(['first', 'second'])
+
+  view.setFailCommandAction(undefined)
+  await act(async () => button(host, 'Remove queue item 1').click())
+  await view.ready()
+
+  const remaining = host.querySelectorAll<HTMLTextAreaElement>('textarea[aria-label^="Queue item "]')
+  expect(remaining).toHaveLength(1)
+  expect(remaining[0]?.value).toBe('Edited second')
+  expect(button(host, 'Start loop').disabled).toBe(true)
+})
+
+test('a rejected queue-add bridge keeps the local composer draft visible', async () => {
+  const view = setup({ failCommandAction: 'queue-add' })
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { preset: 'queue' } })
+  })
+  const composer = host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!
+  await act(async () => setValue(composer, 'keep this queue draft'))
+  await view.ready()
+  await act(async () => button(host, 'Add to queue').click())
+  await view.ready()
+
+  expect(view.commandCalls).toEqual([{
+    id: 'command:quirky.loops/setup-action',
+    args: { action: 'queue-add', params: { body: 'keep this queue draft' } }
+  }])
+  expect((host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!).value)
+    .toBe('keep this queue draft')
+  expect(host.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('bridge refused')
+  expect(readSetup(view.handle).draft.queueItems).toEqual([])
+  expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(0)
+})
+
+test('routes setup queue edits through its public command boundary', async () => {
+  const view = setup()
+  await view.ready()
+  const run = host.querySelector<HTMLSelectElement>('[aria-label="Run"]')!
+  await act(async () => setSelectValue(run, 'queue'))
+  await view.ready()
+
+  const composer = host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!
+  await act(async () => setValue(composer, 'ONE'))
+  await view.ready()
+  await act(async () => button(host, 'Add to queue').click())
+  await view.ready()
+  expect((host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!).value).toBe('')
+
+  await act(async () => setValue(host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!, 'TWO'))
+  await view.ready()
+  await act(async () => button(host, 'Add to queue').click())
+  await view.ready()
+  await act(async () => setValue(host.querySelector<HTMLTextAreaElement>('[aria-label="Queue item 2"]')!, 'TWO edited'))
+  await view.ready()
+  await act(async () => button(host, 'Move queue item 2 up').click())
+  await view.ready()
+  await act(async () => button(host, 'Remove queue item 2').click())
+  await view.ready()
+  await act(async () => button(host, 'Cancel').click())
+
+  expect(view.commandCalls).toEqual([
+    { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { preset: 'queue' } } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-add', params: { body: 'ONE' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-add', params: { body: 'TWO' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-edit', params: { index: 1, body: 'TWO edited' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-move', params: { index: 1, position: 'up' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-remove', params: { index: 1 } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'cancel', params: {} } }
+  ])
+  expect(readSetup(view.handle).draft.queueItems).toEqual(['TWO edited'])
+  expect(view.closes).toBe(1)
 })
 
 test('preset changes reset session and the queue editor shares add, edit, move, and remove state', async () => {
@@ -514,6 +912,7 @@ test('a failed create retains the exact draft, shows and toasts the server messa
 
   expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(1)
   expect(readSetup(view.handle).draft.prompt).toBe('  preserve this prompt  ')
+  expect(host.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('runner refused this loop')
   expect(host.textContent).toContain('runner refused this loop')
   expect(view.toasts).toContainEqual({ title: 'Could not start the loop.', body: 'runner refused this loop' })
   expect(view.closes).toBe(0)
@@ -536,7 +935,8 @@ test('a hosted-tab failure after creation cannot resubmit a second loop', async 
   expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(1)
   expect(view.createdCalls).toBe(1)
   expect(readSetup(view.handle).alreadyCreated).toBe(true)
-  expect(host.textContent).toContain('host tab unavailable')
+  expect(host.querySelector('.ui-inline-error[role="alert"]')?.textContent)
+    .toBe('Loop started, but its tab could not be opened: host tab unavailable')
   expect(view.closes).toBe(0)
 })
 test('a successful start waits for the hosted tab before closing', async () => {
@@ -573,4 +973,5 @@ test('cancel closes the dialog without creating a loop and invalid surface actio
   })
   expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(0)
   expect(view.closes).toBe(1)
+  expect(view.commandCalls).toEqual([])
 })
