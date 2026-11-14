@@ -412,7 +412,7 @@ export const controlContributions = {
       worktree: flag('string', 'Filter by worktree ID, workspace name or path.')
     }),
     command('show', 'show a local or paired watcher and its live detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail'], [watcherId]),
-    command('objective', 'show the objective kind detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail', 'quirky.heimdall/objectiveDetail'], [watcherId]),
+    command('objective', 'show the objective kind detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail', 'quirky.objective/detail'], [watcherId]),
     command('create', 'enroll a registered watcher kind', ['quirky.heimdall/enroll'], [positional('kind', 'A registered Heimdall kind.')], {
       worktree: flag('string', 'Worktree selector; defaults to active.'),
       spec: flag('string', 'JSON or @file with the supported create-spec root keys.'),
