@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, ContextMenu, ControlIcon, EmptyState, IconButton, ListRow, Tabs, ToolPanelFrame } from '@quirky/ui'
+import { ContextMenu, ControlIcon, EmptyState, IconButton, InlineError, ListRow, NoticeLine, Tabs, ToolPanelFrame } from '@quirky/ui'
 import { TASKS_VIEW, type ItemKind, type TaskNavigation, type TasksState } from '../contracts'
 import { countFilters, errorMessage, filtersFromQuery, normalizedPreset, object, parseSource, parseTasksState, presetQuery, rowKey, rowTarget, tokenize, type ListItem } from './model'
 import { place } from './place'
 import { rowDescription, rowStatus } from './row-status'
 import { queryForKind } from './search'
 import { useAgentActivity } from './useAgentActivity'
-import { ROW_KEY_ATTRIBUTE, effectiveList, useCompactList } from './useCompactList'
+import { effectiveList, useCompactList } from './useCompactList'
+import { ROW_MENU_COMMAND, registerRowMenu, type RowMenuRequest } from './row-menu'
 import { useReviewNavigation } from './useReviewNavigation'
 
-type RowAction = { id: string; label: string; run(): void }
 type FilterLine = { label: string; count: number }
 
 
@@ -67,29 +67,34 @@ function useTasksState(context: UiPluginContext) {
     setError(null)
   }, [])
 
-  const refresh = useCallback(async (method: 'quirky.tasks/prepare' | 'quirky.tasks/state') => {
+  const load = async (prepare: boolean) => {
     const request = ++generation.current
     try {
-      const next = parseTasksState(await context.call(method, {}))
+      const value = prepare
+        ? await context.call('quirky.tasks/prepare', {})
+        : await context.call('quirky.tasks/state', {})
+      const next = parseTasksState(value)
       if (!next) throw new Error('Invalid Tasks state from daemon')
       if (request === generation.current) adopt(next)
     } catch (cause) {
       if (request === generation.current) setError(errorMessage(cause))
     }
-  }, [context, adopt])
+  }
+  const loadRef = useRef(load)
+  loadRef.current = load
 
   useEffect(() => {
-    void refresh('quirky.tasks/prepare')
+    void loadRef.current(true)
     const off = context.subscribe((event) => {
-      if (event.type === 'quirky.tasks/changed' || event.type.startsWith('setting.')) void refresh('quirky.tasks/state')
+      if (event.type === 'quirky.tasks/changed' || event.type.startsWith('setting.')) void loadRef.current(false)
     })
     return () => {
       generation.current += 1
       off()
     }
-  }, [context, refresh])
+  }, [context])
 
-  const retry = useCallback(() => void refresh(state ? 'quirky.tasks/state' : 'quirky.tasks/prepare'), [refresh, state])
+  const retry = () => { void load(state === null) }
   return { state, error, adopt, retry }
 }
 
@@ -124,8 +129,8 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
-      const menuRoot = document.querySelector<HTMLElement>(`.qt-menu-anchor [role="menu"][aria-label="${menuLabel}"]`)
-      if (!trigger.contains(target) && !menuRoot?.contains(target)) setMenu(null)
+      const menuRoots = [...document.querySelectorAll<HTMLElement>(`.qt-menu-anchor [role="menu"][aria-label="${menuLabel}"]`)]
+      if (!trigger.contains(target) && !menuRoots.some((root) => root.contains(target))) setMenu(null)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Tab') setMenu(null)
@@ -141,6 +146,23 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
   const kind: ItemKind = list.view.mode === 'prs' ? 'pullRequest' : 'issue'
   const rows = list.result?.items.filter((item) => item.kind === kind) ?? []
   const filter = state ? filterLine(list.view.query, kind, state.preferences.defaultTaskViewPreset) : null
+  const visibleRows = useRef(rows)
+  visibleRows.current = rows
+  useEffect(() => registerRowMenu(context, (request: RowMenuRequest) => {
+    const item = visibleRows.current.find((row) => row.worktree === request.worktree && row.kind === request.kind && row.number === request.number)
+    if (!item) return false
+    const key = rowKey(item)
+    const renderedRow = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-row-key]') ?? [])].find((row) => row.getAttribute('data-row-key') === key)
+    const trigger = renderedRow?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')
+    if (!trigger) return false
+    if (request.x === undefined) {
+      const bounds = trigger.getBoundingClientRect()
+      setMenu({ x: bounds.right, y: bounds.bottom, item, returnFocusTo: trigger })
+    } else {
+      setMenu({ x: request.x, y: request.y!, item })
+    }
+    return true
+  }), [context])
 
   useEffect(() => {
     const element = scroller.current
@@ -207,17 +229,31 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
     }
   }
 
-  const actionsFor = (item: ListItem): RowAction[] => {
-    const target = rowTarget(item)
-    const linked = linkedWorktree(item) !== undefined
-    const run = (title: string, work: () => Promise<unknown>) => void work().catch((cause) => notify(title, cause))
-    return [
-      { id: linked ? 'resume' : 'start', label: linked ? 'Resume' : 'Start workspace', run: () => run(linked ? 'Could not resume the workspace' : 'Could not start a workspace', () => context.call('quirky.tasks/workspace', { target, action: linked ? 'resume' : 'start' })) },
-      ...(item.kind === 'pullRequest' ? [{ id: 'review', label: 'Review', run: () => void openReview(target, 'conversation') }] : []),
-      { id: 'open', label: 'Open on GitHub', run: () => run('Could not open the link', () => context.executeCommand('command:quirky.tasks/open-link', { url: item.url })) },
-      { id: 'copy', label: 'Copy link', run: () => run('Could not copy the link', () => context.executeCommand('command:quirky.tasks/copy-link', { url: item.url })) }
-    ]
+  const openRowActions = (item: ListItem, point?: { x: number; y: number }) => {
+    const address = { worktree: item.worktree, kind: item.kind, number: item.number }
+    const args = point ? { ...address, x: point.x, y: point.y } : address
+    void context.executeCommand(ROW_MENU_COMMAND, args)
   }
+
+  const startOrResume = (item: ListItem) => {
+    const resume = linkedWorktree(item) !== undefined
+    void context.call('quirky.tasks/workspace', { target: rowTarget(item), action: resume ? 'resume' : 'start' })
+      .catch((cause) => notify(resume ? 'Could not resume the workspace' : 'Could not start a workspace', cause))
+  }
+
+  const reviewRow = (item: ListItem) => { void openReview(rowTarget(item), 'conversation') }
+  const openOnGitHub = (item: ListItem) => {
+    void context.executeCommand('command:quirky.tasks/open-link', { url: item.url }).catch((cause) => notify('Could not open the link', cause))
+  }
+  const copyLink = (item: ListItem) => {
+    void context.executeCommand('command:quirky.tasks/copy-link', { url: item.url }).catch((cause) => notify('Could not copy the link', cause))
+  }
+  const menuItems = (item: ListItem) => [
+    { id: 'start', label: linkedWorktree(item) === undefined ? 'Start workspace' : 'Resume', onSelect: () => { menu?.returnFocusTo?.focus(); startOrResume(item) } },
+    ...(item.kind === 'pullRequest' ? [{ id: 'review', label: 'Review', onSelect: () => { menu?.returnFocusTo?.focus(); reviewRow(item) } }] : []),
+    { id: 'open', label: 'Open on GitHub', onSelect: () => { menu?.returnFocusTo?.focus(); openOnGitHub(item) } },
+    { id: 'copy', label: 'Copy link', onSelect: () => { menu?.returnFocusTo?.focus(); copyLink(item) } }
+  ]
 
   const changeMode = (id: string) => {
     const mode = id === 'issues' ? 'issues' : 'prs'
@@ -247,28 +283,43 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
 
   let body
   if (stateError && !state) {
-    body = <div role="alert" className="tasks-compact__problem"><EmptyState message={stateError} action={{ label: 'Retry', onAction: retry }} /></div>
+    body = <div className="tasks-compact__problem"><InlineError message={stateError} action={{ label: 'Retry', onAction: retry }} /></div>
   } else if (!state || (list.loading && !noRepositories)) {
-    body = <div role="status" aria-label="Loading tasks" className="tasks-compact__loading">{[0, 1, 2, 3].map((index) => <div key={index} className="tasks-compact__skeleton" aria-hidden="true" />)}</div>
+    body = <div role="status" aria-label="Loading tasks" className="tasks-compact__loading">
+      <NoticeLine>Loading tasks…</NoticeLine>
+      {[0, 1, 2, 3].map((index) => <div key={index} className="tasks-compact__skeleton" aria-hidden="true" />)}
+    </div>
   } else if (noRepositories) {
     body = <div role="status" className="tasks-compact__empty"><EmptyState message="No repositories selected." action={{ label: 'Expand to select projects', onAction: expand }} /></div>
   } else if (noGitHubRemote) {
     body = <div role="status" className="tasks-compact__empty"><EmptyState message={noGitHubRemoteMessage} /></div>
   } else if (problem) {
-    body = <div role="alert" className="tasks-compact__problem"><EmptyState message={problem} action={{ label: 'Open task sources', onAction: openTaskSources }} /></div>
+    body = <div className="tasks-compact__problem"><InlineError message={problem} action={{ label: 'Open task sources', onAction: openTaskSources }} /></div>
   } else if (rows.length === 0) {
-    body = <div role="status" className="tasks-compact__empty"><EmptyState message={`No ${filter ? 'matching' : 'open'} ${kind === 'issue' ? 'issues' : 'pull requests'}`} {...(staleNotice ? {} : { action: { label: 'Expand to change filters', onAction: expand } })} /></div>
+    body = <div role="status" className="tasks-compact__empty">
+      <EmptyState
+        message={`No ${filter ? 'matching' : 'open'} ${kind === 'issue' ? 'issues' : 'pull requests'}`}
+        action={staleNotice ? undefined : { label: 'Expand to change filters', onAction: expand }}
+      />
+    </div>
   } else {
     const hasMore = list.result!.page < list.result!.totalPages
     body = <>
-      {list.result!.failures.length > 0 && <p role="status" className="tasks-compact__notice">Some repositories could not be loaded.</p>}
+      {list.result!.failures.length > 0 && <div role="status" className="tasks-compact__notice"><NoticeLine>Some repositories could not be loaded.</NoticeLine></div>}
       {rows.map((item) => {
         const key = rowKey(item)
         const worktree = linkedWorktree(item)
         const resolved = rowStatus(item, { viewer: list.viewer, checks: list.checks[key], merge: list.merges[key], activity: worktree === undefined ? undefined : activity.get(worktree) })
-        const actions = actionsFor(item)
-        const primary = actions[0]!
-        return <div key={key} className="tasks-compact__row" {...{ [ROW_KEY_ATTRIBUTE]: key }} onContextMenu={(event) => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY, item }) }}>
+        const primaryLabel = worktree === undefined ? 'Start workspace' : 'Resume'
+        return <div
+          key={key}
+          className="tasks-compact__row"
+          data-row-key={key}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            openRowActions(item, { x: event.clientX, y: event.clientY })
+          }}
+        >
           <ListRow
             title={item.title}
             mainTitle={item.title}
@@ -277,15 +328,12 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
             selected={isOpenRow(item, navigation!.detail)}
             onClick={() => void openRow(item)}
             trailing={<>
-              <IconButton label={`${primary.label} for #${item.number}`} title={primary.label} onClick={primary.run}><ControlIcon name="play" /></IconButton>
+              <IconButton label={`${primaryLabel} for #${item.number}`} title={primaryLabel} onClick={() => startOrResume(item)}><ControlIcon name="play" /></IconButton>
               <IconButton
                 label={`More actions for #${item.number}`}
                 title="More actions"
                 aria-haspopup="menu"
-                onClick={(event) => {
-                  const bounds = event.currentTarget.getBoundingClientRect()
-                  setMenu({ x: bounds.right, y: bounds.bottom, item, returnFocusTo: event.currentTarget })
-                }}
+                onClick={() => openRowActions(item)}
               >
                 <ControlIcon name="dots-three" />
               </IconButton>
@@ -322,12 +370,10 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
         onScroll={(event) => { if (restoredKey.current === list.viewKey) place.setScrollTop('compact', list.viewKey, event.currentTarget.scrollTop) }}
       >
         {stateNotice && <div role="status" className="tasks-compact__notice">
-          Couldn't refresh Tasks. Showing the last loaded tasks.
-          <Button variant="secondary" onClick={retry}>Retry</Button>
+          <NoticeLine actions={[{ label: 'Retry', onAction: retry }]}>Couldn't refresh Tasks. Showing the last loaded tasks.</NoticeLine>
         </div>}
         {staleNotice && <div role="status" className="tasks-compact__notice">
-          Couldn't refresh. Showing the last loaded tasks.
-          <Button variant="secondary" onClick={list.retry}>Retry</Button>
+          <NoticeLine actions={[{ label: 'Retry', onAction: list.retry }]}>Couldn't refresh. Showing the last loaded tasks.</NoticeLine>
         </div>}
         {body}
       </div>
@@ -340,14 +386,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
       y={menu.y}
       onClose={() => setMenu(null)}
       highlightFirst={Boolean(menu.returnFocusTo)}
-      items={actionsFor(menu.item).map((action) => ({
-        id: action.id,
-        label: action.label,
-        onSelect: () => {
-          if (menu.returnFocusTo) menu.returnFocusTo.focus()
-          action.run()
-        }
-      }))}
+      items={menuItems(menu.item)}
     />}
   </div>
 }
