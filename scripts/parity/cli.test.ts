@@ -27,7 +27,7 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     for (const id of [
       'worktree-create', 'worktree-rm', 'agent-launch', 'terminal-send', 'terminal-wait', 'loop-edit', 'loop-resume',
       'ask', 'ask-cancel', 'ask-wait', 'automations-run', 'orchestration-task-update', 'orchestration-gate-resolve',
-      'orchestration-inbox', 'file-open', 'account-list', 'skills-update', 'status', 'agent-context',
+      'orchestration-inbox', 'file-open', 'account-list', 'skills-update', 'status', 'agent-context', 'serve',
       'account-add', 'account-rm', 'agent-hooks-on', 'agent-hooks-off', 'agent-hooks-status',
       'project-setup-clone', 'project-setup-create', 'project-setup-delete', 'project-setup-update',
       'repo-search-refs', 'terminal-list', 'terminal-rename', 'terminal-set-pane-title', 'terminal-show',
@@ -40,13 +40,13 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     ]) {
       expect(rows.get(id), id).toMatchObject({ status: 'passed', executed: true })
     }
-    for (const id of ['serve', 'serve-restore-resume', 'serve-service-install', 'serve-service-status', 'serve-service-uninstall', 'file-diff', 'file-open-changed', 'file-open-render', 'worktree-ps-summary', 'orchestration-worker-read']) {
+    for (const id of ['serve-restore-resume', 'serve-service-install', 'serve-service-status', 'serve-service-uninstall', 'file-diff', 'file-open-changed', 'file-open-render', 'worktree-ps-summary', 'orchestration-worker-read']) {
       expect(rows.get(id), id).toMatchObject({ status: 'gap', executed: false })
       expect(rows.get(id)!.reason).toBeTruthy()
     }
-    expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(89)
+    expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(90)
     expect(report.rows.filter(row => row.status === 'mapped-only')).toHaveLength(0)
-    expect(report.rows.filter(row => row.status === 'gap')).toHaveLength(10)
+    expect(report.rows.filter(row => row.status === 'gap')).toHaveLength(9)
     expect(report.rows.some(row => row.status === 'delegated')).toBe(true)
     expect(report.rows.filter(row => row.status === 'failed' || row.status === 'not-run')).toEqual([])
     for (const row of report.rows.filter(row => row.status === 'passed')) {
@@ -77,6 +77,11 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     expect(receipt('status')).toMatchObject({ owned: true })
     expect(receipt('local-search-refs')).toMatchObject({ names: ['cli-parity-both', 'cli-parity-topic', 'cli-parity-both', 'cli-parity-v1'], truncated: false, allTargetHead: true })
     expect(receipt('local-hooks-remove')).toMatchObject({ userHookPreserved: true, status: 'not-installed', pathsUnderHome: true })
+    expect(receipt('startup-ready')).toMatchObject({ owned: true, portHonored: true, secretsInOutput: false, runtimeRemoved: true, daemonGone: true })
+    expect(receipt('startup-already-running')).toMatchObject({ refusal: 'already-running' })
+    expect(receipt('startup-port-in-use')).toMatchObject({ refusal: 'port-in-use', started: false })
+    expect(receipt('startup-concurrent')).toMatchObject({ readyCount: 1, loserNamedWinner: true })
+    expect(receipt('startup-parent-loss')).toMatchObject({ orphanExited: true, restarted: true })
     expect(receipt('local-account-login-codex')).toMatchObject({ status: 'complete', label: 'CLI parity Codex', email: 'codex-parity@example.invalid', needsSignIn: false })
     expect(receipt('local-worktree-current')).toMatchObject({ nestedId: expect.any(String), mainIsMain: true, outside: 'not-found' })
     const takeover = receipt('workers-run-use')
