@@ -55,7 +55,32 @@ test('one isolated real CLI run records every browser command and removes its pr
       if (row.status === 'gap') expect(row.reason).toBeTruthy()
     }
   }
-  expect(report.cleanup.evidence).toMatchObject({ aliveAfter: [], orcaLog: '', securityLog: '', homeRemoved: true })
+  const watch = report.rows.find(row => row.id === 'worktree-watch-page')!
+  expect(watch).toMatchObject({ status: 'passed', executed: true })
+  const beforeSample = watch.evidence.beforeSample as { r: number; g: number; b: number; digest: string }
+  const afterSample = watch.evidence.afterSample as { r: number; g: number; b: number; digest: string }
+  expect(beforeSample.r).toBeGreaterThan(180)
+  expect(beforeSample.g).toBeLessThan(80)
+  expect(beforeSample.b).toBeLessThan(80)
+  expect(afterSample.g).toBeGreaterThan(180)
+  expect(afterSample.r).toBeLessThan(80)
+  expect(afterSample.b).toBeLessThan(80)
+  expect(afterSample.digest).not.toBe(beforeSample.digest)
+  expect(watch.evidence).toMatchObject({
+    worktreeBBefore: { title: 'Parity fixture', field: 'seed', result: '' },
+    worktreeBAfter: { title: 'Parity fixture', field: 'seed', result: '' }
+  })
+  const restart = report.rows.find(row => row.id === 'daemon-restart-profile')!
+  expect(restart).toMatchObject({ status: 'passed', executed: true, evidence: { localStorageA: 'local-restart', cookieA: 'cookie-restart', localStorageB: null, cookieCountB: 0 } })
+  expect(restart.evidence.previousPid).not.toBe(restart.evidence.daemonPid)
+  const identity = report.rows.find(row => row.id === 'browser-identity-set-activation-after-restart')!
+  expect(identity).toMatchObject({ status: 'passed', executed: true, evidence: { afterRestart: { mode: 'native', active: 'native', restartRequired: false } } })
+  expect(identity.evidence.userAgentBeforeRestart).not.toContain('HeadlessChrome/')
+  expect(identity.evidence.userAgentAfterRestart).toContain('HeadlessChrome/')
+  expect(report.cleanup.evidence).toMatchObject({
+    aliveAfter: [], orcaLog: '', securityLog: '', homeRemoved: true,
+    shimLogsEmpty: true, shimLogBytes: { orca: 0, security: 0 }, excludedPlugins: ['quirky.accounts']
+  })
   const identities: unknown = report.cleanup.evidence?.trackedIdentities
   if (!Array.isArray(identities)) throw new Error('cleanup did not record owned process identities')
   const commands = identities.map((identity: unknown) => {

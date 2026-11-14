@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { bunTestFile } from '../suite'
 import { BUDGETS, METRICS, type SpeedReport } from '../speed/contracts'
-import { compareReports } from '../speed/report'
+import { runCi } from '../speed/ci'
 import { type Context, runCli } from './cli'
 import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, Selection, TestStatus, Verdict } from './types'
 
@@ -827,7 +827,7 @@ describe('advisory speed evidence', () => {
     }
   }
   for (const fails of [false, true]) {
-    test(`a valid speed regression remains advisory with ${fails ? 'failing' : 'passing'} units`, async () => {
+    test(`a paired speed regression remains advisory with ${fails ? 'failing' : 'passing'} units`, async () => {
       const planDir = dirOf('plan')
       const inDir = dirOf('results')
       const outDir = dirOf('out')
@@ -840,17 +840,35 @@ describe('advisory speed evidence', () => {
         metrics: Object.fromEntries(METRICS.map(metric => [metric, { samplesMs: Array(20).fill(50.001), medianMs: 50.001, budgetMs: BUDGETS[metric], budgetMiss: 50.001 > BUDGETS[metric] }])) as SpeedReport['metrics'],
         failures: [], cleanup: 'complete', evidence: { samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json'], misses: 'misses.json' },
       }
+      const pair = {
+        version: 1,
+        runId: current.runId,
+        createdAt: current.createdAt,
+        status: 'complete',
+        qualified: true,
+        head: { commit: current.commit },
+        base: { commit: sha(1), basis: 'merge-base' },
+        metrics: Object.fromEntries(METRICS.map(metric => {
+          const pairs = metric === 'startup' || metric === 'diff' ? 20 : 60
+          return [metric, { headSamplesMs: Array(pairs).fill(52), baseSamplesMs: Array(pairs).fill(40) }]
+        })),
+        failures: [],
+        evidence: { samples: 'pair-samples.jsonl' },
+      }
       const finding = 'Observed echo acknowledgement delay in the diagnostic trial.'
-      const baseline = structuredClone(current)
-      baseline.commit = sha(1)
-      for (const metric of METRICS) baseline.metrics[metric] = { samplesMs: Array(20).fill(40), medianMs: 40, budgetMs: BUDGETS[metric], budgetMiss: 40 > BUDGETS[metric] }
-      const comparison = { ...compareReports(current, baseline), provenance: { repository: 'acme/quirky', commit: baseline.commit, artifactId: 3, event: 'push', workflowPath: '.github/workflows/tests.yml' } }
       const miss = {
         metric: 'echo', budgetMs: BUDGETS.echo, medianMs: 50.001, commit: current.commit, runId: current.runId,
         samples: current.evidence.samples, diagnostics: ['diagnostics/echo.json'], finding,
       }
-      for (const [name, value] of Object.entries({ report: current, baseline, comparison })) writeFileSync(join(speed, `${name}.json`), JSON.stringify(value))
+      writeFileSync(join(speed, 'report.json'), JSON.stringify(current))
+      writeFileSync(join(speed, 'pair.json'), JSON.stringify(pair))
       writeFileSync(join(speed, 'misses.json'), JSON.stringify([miss]))
+      expect(await runCi([
+        'compare', '--current', join(speed, 'report.json'), '--pair', join(speed, 'pair.json'),
+        '--out', speed, '--head', current.commit,
+      ], { cwd: dirOf('ci-cwd'), err: () => {} })).toBe(0)
+      expect(existsSync(join(speed, 'baseline.json'))).toBe(false)
+
       const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], harness(dirOf('cwd'), { env: { SPEED_HEAD: sha(9) } }).ctx)
       expect(code).toBe(fails ? 1 : 0)
       expect(readJson<Verdict>(join(outDir, 'verdict.json')).runBroken).toBe(false)

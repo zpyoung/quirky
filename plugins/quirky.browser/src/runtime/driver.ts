@@ -2862,12 +2862,20 @@ export class BrowserRuntime {
   private async teardownEpoch(epoch: RuntimeEpoch): Promise<void> {
     if (epoch.teardown) return await epoch.teardown
     epoch.stopping = true
-    epoch.cdp.close()
-    epoch.teardown = Promise.allSettled([epoch.helper.asyncClose(), epoch.chrome.asyncClose()]).then(() => {
+    epoch.teardown = (async () => {
+      if (!epoch.invalid) {
+        await epoch.cdp.send('Browser.close', {}, undefined, 1_500).catch(() => {})
+        await Promise.race([
+          epoch.chrome.child.exited.then(() => undefined).catch(() => undefined),
+          Bun.sleep(1_500)
+        ])
+      }
+      epoch.cdp.close()
+      await Promise.allSettled([epoch.helper.asyncClose(), epoch.chrome.asyncClose()])
       rmSync(epoch.helper.socketDir, { recursive: true, force: true })
       rmSync(epoch.helper.socketAliasRoot, { recursive: true, force: true })
       rmSync(join(epoch.chrome.profileRoot, 'helper-home'), { recursive: true, force: true })
-    }).then(() => undefined)
+    })()
     await epoch.teardown
   }
 }

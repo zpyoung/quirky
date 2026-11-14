@@ -5,7 +5,10 @@ import {
   waitForDiagnosticStatusProbe,
   waitForFloodProgressAfterSnapshot,
   diagnosticFinding,
-  summarizeFrameIntervals
+  summarizeFrameIntervals,
+  measureBrowserFrameIntervals,
+  pairSides,
+  floodBlocks
 } from './measure.ts'
 
 type EventHandler = (event: { target: FakeElement; key?: string }) => void
@@ -196,6 +199,68 @@ function fakePage() {
   } as never
 }
 
+test('uses one frame scheduler for the full measurement and cleans up its probe', async () => {
+  environment()
+  const probe = {
+    id: '',
+    style: {} as Record<string, string>,
+    removed: false,
+    setAttribute(): void {},
+    remove(): void { this.removed = true }
+  }
+  replaceGlobal('document', {
+    createElement: () => probe,
+    documentElement: { append(): void {} }
+  })
+  let initialSchedulerCalls = 0
+  let replacementSchedulerCalls = 0
+  const replacementScheduler = (callback: (timestamp: number) => void) => {
+    replacementSchedulerCalls++
+    callback(1 + replacementSchedulerCalls * 16)
+    return replacementSchedulerCalls
+  }
+  replaceGlobal('requestAnimationFrame', (callback: (timestamp: number) => void) => {
+    initialSchedulerCalls++
+    callback(1)
+    if (initialSchedulerCalls === 2) replaceGlobal('requestAnimationFrame', replacementScheduler)
+    return initialSchedulerCalls
+  })
+  const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
+
+  const intervals = await measureBrowserFrameIntervals(page, new AbortController().signal)
+
+  expect(intervals).toEqual(Array<number>(60).fill(0))
+  expect(replacementSchedulerCalls).toBe(0)
+  expect(probe.removed).toBe(true)
+})
+
+test('uses a supplied fixed timestamp while scheduling every frame', async () => {
+  environment()
+  const probe = {
+    id: '',
+    style: {} as Record<string, string>,
+    removed: false,
+    setAttribute(): void {},
+    remove(): void { this.removed = true }
+  }
+  replaceGlobal('document', {
+    createElement: () => probe,
+    documentElement: { append(): void {} }
+  })
+  let schedulerCalls = 0
+  replaceGlobal('requestAnimationFrame', (callback: (timestamp: number) => void) => {
+    schedulerCalls++
+    callback(schedulerCalls * 16)
+    return schedulerCalls
+  })
+  const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
+
+  const intervals = await measureBrowserFrameIntervals(page, new AbortController().signal, 1)
+
+  expect(intervals).toEqual(Array<number>(60).fill(0))
+  expect(schedulerCalls).toBe(61)
+  expect(probe.removed).toBe(true)
+})
 
 test('echo waits for its fresh worker/session/sequence/key acknowledgement, not stale replay', async () => {
   environment()
@@ -524,7 +589,6 @@ test('condition errors in a frame reject the observer and restore requestAnimati
   expect(globalThis.requestAnimationFrame).toBe(originalRequestAnimationFrame)
 })
 
-
 test('bounds hung observer teardown on timeout and abort, closing the owned renderer context', async () => {
   for (const mode of ['timeout', 'abort'] as const) {
     let evaluations = 0
@@ -670,4 +734,33 @@ test('invalid pacing errors retain all sixty raw intervals', () => {
   const intervals = Array<number>(60).fill(16)
   intervals[17] = 0
   expect(() => summarizeFrameIntervals(intervals)).toThrow(JSON.stringify(intervals))
+})
+
+test('paired measurements alternate which side runs first', () => {
+  expect([1, 2, 3, 4].map(pairSides)).toEqual([
+    ['head', 'base'],
+    ['base', 'head'],
+    ['head', 'base'],
+    ['base', 'head']
+  ])
+})
+
+test('flood pairs run in four balanced head-base-base-head blocks', () => {
+  expect(floodBlocks(60)).toEqual([
+    { side: 'head', first: 1, count: 30 },
+    { side: 'base', first: 1, count: 30 },
+    { side: 'base', first: 31, count: 30 },
+    { side: 'head', first: 31, count: 30 }
+  ])
+  expect(floodBlocks(20)).toEqual([
+    { side: 'head', first: 1, count: 10 },
+    { side: 'base', first: 1, count: 10 },
+    { side: 'base', first: 11, count: 10 },
+    { side: 'head', first: 11, count: 10 }
+  ])
+  expect(floodBlocks(1)).toEqual([
+    { side: 'head', first: 1, count: 1 },
+    { side: 'base', first: 1, count: 1 }
+  ])
+  expect(floodBlocks(0)).toEqual([])
 })

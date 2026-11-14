@@ -175,9 +175,10 @@ describe('the structured session view', () => {
     const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
 
     await act(async () => checkbox.click())
-    expect(fake.executed.at(-1)).toEqual({
+    expect(fake.executed.at(-1)).toStrictEqual({
       id: 'command:quirky.session/show-all-events',
-      args: { session: 'bg', enabled: true }
+      args: { session: 'bg', enabled: true },
+      options: { activateOwner: false }
     })
     expect(checkbox.checked).toBe(true)
     expect(view.textContent).toContain('hook_pre: diagnostic')
