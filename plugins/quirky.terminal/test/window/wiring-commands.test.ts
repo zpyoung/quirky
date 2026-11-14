@@ -291,8 +291,8 @@ describe('window commands route to the focused workspace', () => {
     clipboardText = 'from clipboard'
     await wired.run('paste')
     expect(wired.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
-      { session: 's-3', data: 'abc' },
-      { session: 's-2', data: 'def' },
+      { session: 's-3', data: 'abc', expectedIncarnation: 'fixture-s-3' },
+      { session: 's-2', data: 'def', expectedIncarnation: 'fixture-s-2' },
       { session: 's-3', data: 'from clipboard' }
     ])
   })

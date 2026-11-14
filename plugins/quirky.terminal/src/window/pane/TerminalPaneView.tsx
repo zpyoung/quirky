@@ -121,6 +121,7 @@ type Runtime = {
   syncOsc52(): void
   syncExtras(settings: PaneSettings): void
   syncTheme(): void
+  syncPadding(): void
   palette(): TerminalPalette
 }
 
@@ -307,11 +308,12 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       'link-click': initial['link-click'],
       'link-middle-click': initial['link-middle-click']
     }
-    const colorSource = themeSource ?? host.ownerDocument.documentElement
+    let colorSource = latest.current.themeSource ?? host.ownerDocument.documentElement
     const systemTheme = host.ownerDocument.defaultView?.matchMedia?.('(prefers-color-scheme: light)')
     let warnedPalette: string | undefined
     const readColors = (settingsNow: PaneSettings) => {
-      const appearance = resolveTerminalAppearance(settingsNow, readTerminalTheme(colorSource), systemTheme?.matches ?? false)
+      const source = latest.current.themeSource ?? host.ownerDocument.documentElement
+      const appearance = resolveTerminalAppearance(settingsNow, readTerminalTheme(source), systemTheme?.matches ?? false)
       if (appearance.warning && appearance.warning !== warnedPalette) context.toast('Invalid custom terminal palette', appearance.warning)
       warnedPalette = appearance.warning
       return appearance.colors
@@ -539,40 +541,94 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     let resyncing = false
     let pendingLag = false
     let resyncFailures = 0
-    const canSend = () => !readOnly && latest.current.interactive
-    let inputClaim: Promise<void> | null = null
-    let inputClaimAt = 0
-    const claimUserInput = (): Promise<void> | null => {
-      if (!canSend() || !gate.allows()) return null
-      if (inputClaim) return inputClaim
-      if (Date.now() - inputClaimAt < 30_000) return null
-      const claim = (async () => {
-        const identity = await context.call('quirky.session/identity', { session: sessionId }) as { processIncarnation: string; live: boolean }
-        if (!identity.live || !identity.processIncarnation) throw new Error('Terminal process is no longer attached.')
-        await context.call('quirky.terminal/userInput', { session: sessionId, expectedIncarnation: identity.processIncarnation })
-        inputClaimAt = Date.now()
-      })()
-      inputClaim = claim
-      void claim.then(
-        () => { if (inputClaim === claim) inputClaim = null },
-        (error: unknown) => {
-          if (inputClaim === claim) inputClaim = null
-          if (!disposed) context.toast('Input blocked', error instanceof Error ? error.message : String(error))
+    const canSend = () => !disposed && !readOnly && latest.current.interactive
+    let attachedIncarnation: string | null = null
+    let identityReady: Promise<string> | null = null
+    let attachment = 0
+    let inputEpoch = 0
+    let inputClaim: Promise<boolean> | null = null
+    let inputClaimAt: number | null = null
+    let inputBlocked = false
+    let inputIntent = false
+    let compositionStartLength: number | null = null
+    let compositionPending = false
+    const resetInput = () => {
+      inputEpoch += 1
+      inputClaim = null
+      inputClaimAt = null
+      inputIntent = false
+      compositionStartLength = null
+      compositionPending = false
+    }
+    const prepareIdentity = (live: boolean) => {
+      resetInput()
+      inputBlocked = false
+      const currentAttachment = ++attachment
+      attachedIncarnation = null
+      identityReady = null
+      if (!live) return
+      identityReady = context.call('quirky.session/identity', { session: sessionId }).then((value) => {
+        const identity = value as { sessionId?: unknown; processIncarnation?: unknown; live?: unknown } | null
+        if (!identity || identity.sessionId !== sessionId || identity.live !== true ||
+            typeof identity.processIncarnation !== 'string' || identity.processIncarnation.length === 0) {
+          throw new Error('Terminal process is no longer attached.')
         }
-      )
+        if (!disposed && attachment === currentAttachment) attachedIncarnation = identity.processIncarnation
+        return identity.processIncarnation
+      })
+      void identityReady.catch(() => {})
+    }
+    const onInputIntent = () => {
+      inputIntent = true
+      queueMicrotask(() => { inputIntent = false })
+    }
+    const onDomInputIntent = (event: Event) => {
+      if (event.type === 'input' && (event as InputEvent).inputType === 'insertCompositionText') return
+      onInputIntent()
+    }
+    const onCompositionStart = () => {
+      compositionStartLength = term.textarea?.value.length ?? 0
+      compositionPending = false
+    }
+    const onCompositionEnd = () => {
+      compositionPending = true
+    }
+    const sendInput = (data: string, human = false, wanted = () => true, ignoreReplayGate = false): Promise<boolean> => {
+      if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted()) return Promise.resolve(false)
+      const epoch = inputEpoch
+      const write = () => {
+        if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted() || epoch !== inputEpoch || inputBlocked) return Promise.resolve(false)
+        return context.call('quirky.terminal/write', { session: sessionId, data }).then(() => true)
+      }
+      if (inputClaim) return inputClaim.then((accepted) => accepted ? write() : false)
+      if (!human) return inputBlocked ? Promise.resolve(false) : write()
+      inputBlocked = false
+      if (inputClaimAt !== null && Date.now() - inputClaimAt < 30_000) return write()
+      const guardedWrite = () => {
+        if (!canSend() || !gate.allows() || !wanted() || epoch !== inputEpoch) return Promise.resolve(false)
+        if (!attachedIncarnation) throw new Error('Terminal process is no longer attached.')
+        return context.call('quirky.terminal/write', { session: sessionId, data, expectedIncarnation: attachedIncarnation }).then(() => {
+          if (disposed || epoch !== inputEpoch) return false
+          inputClaimAt = Date.now()
+          return true
+        })
+      }
+      const claim = (attachedIncarnation ? guardedWrite() : identityReady
+        ? identityReady.then(guardedWrite)
+        : Promise.reject(new Error('Terminal process is not attached.'))).catch((error: unknown) => {
+        if (!disposed && epoch === inputEpoch) {
+          inputBlocked = true
+          inputEpoch += 1
+          context.toast('Input blocked', messageOf(error))
+        }
+        return false
+      })
+      inputClaim = claim
+      void claim.then(() => { if (inputClaim === claim) inputClaim = null })
       return claim
     }
-    const onInputIntent = () => { void claimUserInput()?.catch(() => {}) }
-    const sendInput = (data: string) => {
-      if (!canSend() || !gate.allows()) return
-      const write = () => {
-        if (!disposed && canSend() && gate.allows()) return context.call('quirky.terminal/write', { session: sessionId, data })
-      }
-      // onKey precedes xterm's corresponding onData synchronously. Query replies
-      // emit only onData and never create human input evidence.
-      if (inputClaim) void inputClaim.then(write).catch(() => {})
-      else void write()?.catch(() => {})
-    }
+    const sendHuman = (data: string) => { void sendInput(data, true).catch(() => {}) }
+    const sendGenerated = (data: string) => { void sendInput(data).catch(() => {}) }
 
     term.attachCustomKeyEventHandler((event) => {
       if (event.key === 'Alt') optionSide = event.type === 'keydown' ? (event.location === 1 ? 'left' : event.location === 2 ? 'right' : null) : null
@@ -580,8 +636,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (!action) return true
       event.preventDefault()
       if (action.type === 'send') {
-        onInputIntent()
-        sendInput(action.data)
+        sendHuman(action.data)
       }
       else if (action.position === 'top') term.scrollToTop()
       else term.scrollToBottom()
@@ -589,26 +644,54 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     })
     term.onKey(onInputIntent)
 
-    term.onData((data) => sendInput(latest.current.settings['jis-yen-backslash'] && data === '¥' ? '\\' : data))
-    const graphics = createKittyGraphics(term, sendInput, initial['inline-images'])
+    term.onData((data) => {
+      const compositionCommit = compositionPending && compositionStartLength !== null && data.length > 0 &&
+        (term.textarea?.value.slice(compositionStartLength) ?? '') === data
+      const human = inputIntent || compositionCommit
+      inputIntent = false
+      if (compositionCommit) {
+        compositionPending = false
+        compositionStartLength = null
+      }
+      void sendInput(latest.current.settings['jis-yen-backslash'] && data === '¥' ? '\\' : data, human).catch(() => {})
+    })
+    const graphics = createKittyGraphics(term, sendGenerated, initial['inline-images'])
 
     let pasteQueue: Promise<void> = Promise.resolve()
-    const pasteNow = async (text: string) => {
-      if (!canSend()) return
+    const pasteNow = async (text: string, epoch: number) => {
+      if (epoch !== inputEpoch || !canSend() || !gate.allows()) return
+      const pasteAttachment = attachment
       const plan = planPaste(text, term.modes.bracketedPasteMode)
       if (plan.kind === 'refused') {
         context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')
         return
       }
       if (plan.chunks.length === 0) return
-      await claimUserInput()
-      if (disposed || !canSend()) return
-      const outcome = await runPaste(plan.chunks, (data) => context.call('quirky.terminal/write', { session: sessionId, data }), { closer: plan.closer })
+      let first = true
+      let blocked = false
+      let cancelled = false
+      let bracketOpen = false
+      const outcome = await runPaste(plan.chunks, async (data) => {
+        const cleanupCloser = blocked && bracketOpen && data === plan.closer
+        if ((blocked && !cleanupCloser) || cancelled) throw new Error('Paste input was cancelled.')
+        const wanted = () => !cancelled && attachment === pasteAttachment && (cleanupCloser || inputEpoch === epoch)
+        const openingBracket = first && plan.closer !== null
+        const accepted = await sendInput(data, first, wanted, cleanupCloser)
+        first = false
+        if (!accepted) {
+          blocked = true
+          throw new Error('Paste input was blocked.')
+        }
+        if (openingBracket) bracketOpen = true
+      }, { closer: plan.closer })
+      cancelled = true
+      if (blocked) return
       if (outcome === 'timeout') context.toast('Paste timed out', 'Only part of the text was pasted.')
       else if (outcome === 'failed') context.toast('Paste failed', 'The terminal stopped accepting input.')
     }
     const paste = (text: string) => {
-      pasteQueue = pasteQueue.then(() => pasteNow(text), () => pasteNow(text))
+      const epoch = inputEpoch
+      pasteQueue = pasteQueue.then(() => pasteNow(text, epoch), () => pasteNow(text, epoch))
       return pasteQueue
     }
 
@@ -665,6 +748,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       event.preventDefault()
     }
     const onDrop = (event: DragEvent) => {
+      const epoch = inputEpoch
       const transfer = event.dataTransfer
       if (!transfer) return
       const worktreeDrop = readWorktreePathsDrop(transfer)
@@ -689,7 +773,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
               context.toast('Could not use dropped files', 'The dragged path escapes its worktree.')
               return
             }
-            sendInput(shellEscapePaths(paths))
+            if (epoch === inputEpoch) sendHuman(shellEscapePaths(paths))
           } catch (error) {
             context.toast('Could not use dropped files', messageOf(error))
           }
@@ -700,8 +784,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (paths.length === 0) return
       event.preventDefault()
       event.stopPropagation()
-      onInputIntent()
-      sendInput(shellEscapePaths(paths))
+      sendHuman(shellEscapePaths(paths))
     }
     host.addEventListener('mousedown', onMouseDown, true)
     host.addEventListener('mouseup', onMouseUp)
@@ -726,8 +809,9 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     // IME and virtual keyboards can commit text without onKey. Their real DOM
     // input intent is guarded before xterm's data callback; parser replies do
     // not dispatch these events.
-    textarea?.addEventListener('compositionstart', onInputIntent, true)
-    textarea?.addEventListener('input', onInputIntent, true)
+    host.addEventListener('compositionstart', onCompositionStart, true)
+    host.addEventListener('compositionend', onCompositionEnd, true)
+    host.addEventListener('input', onDomInputIntent, true)
     textarea?.addEventListener('blur', releaseFocusContext)
 
     let fitFrame = 0
@@ -760,6 +844,8 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     })
 
     const guard = new ContextLossGuard()
+    let appliedPaddingX = initial['padding-x']
+    let appliedPaddingY = initial['padding-y']
     const rt: Runtime = {
       term,
       fit,
@@ -771,11 +857,29 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       scheduleFit,
       syncOsc52,
       syncExtras(settingsNow) { graphics.sync(settingsNow['inline-images']); void extras.sync(settingsNow) },
-      syncTheme() { applyTheme(true) },
+      syncTheme() {
+        const nextSource = latest.current.themeSource ?? host.ownerDocument.documentElement
+        if (nextSource !== colorSource) {
+          colorSource = nextSource
+          themeObserver.disconnect()
+          themeObserver.observe(host.ownerDocument.documentElement, { attributes: true })
+          themeObserver.observe(colorSource, { attributes: true })
+        }
+        applyTheme()
+      },
+      syncPadding() {
+        const settingsNow = latest.current.settings
+        if (appliedPaddingX === settingsNow['padding-x'] && appliedPaddingY === settingsNow['padding-y']) return
+        appliedPaddingX = settingsNow['padding-x']
+        appliedPaddingY = settingsNow['padding-y']
+        scheduleFit()
+      },
       palette() { return appliedColors },
       setFont() {
-        term.options.fontSize = effectiveFontSize()
-        setView((now) => ({ ...now, fontSize: effectiveFontSize() }))
+        const size = effectiveFontSize()
+        if (term.options.fontSize === size) return
+        term.options.fontSize = size
+        setView((now) => ({ ...now, fontSize: size }))
         scheduleFit()
       },
       refreshWebgl() {
@@ -841,6 +945,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     async function runResync(): Promise<void> {
       resyncTimer = null
       if (disposed || readOnly || streamId === null) return
+      resetInput()
       const targetStreamId = streamId
       resyncingStreamId = targetStreamId
       streamId = null
@@ -881,6 +986,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
               return
             }
             streamId = attached.streamId
+            prepareIdentity(attached.live !== false)
             writeResetReplay(attached.replay)
             if (attached.live === false) {
               readOnly = true
@@ -934,6 +1040,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
           return
         }
         streamId = result.streamId
+        prepareIdentity(result.live !== false)
         await extrasReady
         if (disposed) return
         writeReplay({ write: (bytes, done) => graphics.write(bytes, true, done) }, base64ToBytes(result.replay), gate)
@@ -948,14 +1055,18 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       })
 
     let appliedColors = colors
-    const applyTheme = (force = false) => {
+    let appliedOpacity = alpha(initial)
+    const applyTheme = () => {
       if (disposed) return
-      const next = readColors(latest.current.settings)
-      if (!force && JSON.stringify(next) === JSON.stringify(appliedColors)) return
+      const settingsNow = latest.current.settings
+      const next = readColors(settingsNow)
+      const opacity = alpha(settingsNow)
+      if (opacity === appliedOpacity && JSON.stringify(next) === JSON.stringify(appliedColors)) return
       appliedColors = next
-      if (alpha(latest.current.settings) < 1) term.options.allowTransparency = true
-      term.options.theme = theme(latest.current.settings, next)
-      host.style.background = withAlpha(next.background, alpha(latest.current.settings))
+      appliedOpacity = opacity
+      if (opacity < 1) term.options.allowTransparency = true
+      term.options.theme = theme(settingsNow, next)
+      host.style.background = withAlpha(next.background, opacity)
     }
     const systemChanged = () => applyTheme()
     systemTheme?.addEventListener('change', systemChanged)
@@ -972,6 +1083,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
 
     return () => {
       disposed = true
+      resetInput()
       runtime.current = null
       if (fitFrame) cancelAnimationFrame(fitFrame)
       themeObserver.disconnect()
@@ -991,8 +1103,9 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       releaseFocusContext()
       textarea?.removeEventListener('focus', onTextareaFocus)
       textarea?.removeEventListener('blur', releaseFocusContext)
-      textarea?.removeEventListener('compositionstart', onInputIntent, true)
-      textarea?.removeEventListener('input', onInputIntent, true)
+      host.removeEventListener('compositionstart', onCompositionStart, true)
+      host.removeEventListener('compositionend', onCompositionEnd, true)
+      host.removeEventListener('input', onDomInputIntent, true)
       element.removeEventListener('paste', onPaste, true)
       element.removeEventListener('copy', onCopy, true)
       host.removeEventListener('mousedown', onMouseDown, true)
@@ -1009,18 +1122,25 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       extras.dispose()
       guarded(() => term.dispose(), undefined)
     }
-  }, [context, sessionId, themeSource, sendResize])
+  }, [context, sessionId, sendResize])
 
   useEffect(() => {
     const rt = runtime.current
     if (!rt) return
     const { term } = rt
-    term.options.fontFamily = fontStack(settings['font-family'])
+    const family = fontStack(settings['font-family'])
+    const geometryChanged = term.options.fontFamily !== family ||
+      term.options.fontWeight !== settings['font-weight'] ||
+      term.options.fontWeightBold !== settings['font-weight-bold'] ||
+      term.options.lineHeight !== settings['line-height']
+    if (geometryChanged) {
+      term.options.fontFamily = family
+      term.options.fontWeight = settings['font-weight']
+      term.options.fontWeightBold = settings['font-weight-bold']
+      term.options.lineHeight = settings['line-height']
+      rt.scheduleFit()
+    }
     rt.syncExtras(settings)
-    term.options.fontWeight = settings['font-weight']
-    term.options.fontWeightBold = settings['font-weight-bold']
-    term.options.lineHeight = settings['line-height']
-    rt.scheduleFit()
   }, [settings['font-family'], settings['font-weight'], settings['font-weight-bold'], settings['line-height'], settings['inline-images'], settings.ligatures])
 
   useEffect(() => {
@@ -1058,7 +1178,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     settings['theme-custom-dark'], settings['theme-custom-light'], themeSource])
 
   useEffect(() => {
-    runtime.current?.scheduleFit()
+    runtime.current?.syncPadding()
   }, [settings['padding-x'], settings['padding-y']])
 
   useEffect(() => {

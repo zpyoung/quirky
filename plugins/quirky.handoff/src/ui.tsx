@@ -7,7 +7,6 @@ import { HandoffDialog, reportOf, type CommandResult } from './window/model'
 import { SettingsView } from './window/SettingsView'
 import { templatesReport, TemplatesStore } from './window/templates'
 
-const METHOD = (name: string) => `${PLUGIN_ID}/${name}`
 const COMMAND = (name: string) => `command:${PLUGIN_ID}/${name}`
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -44,7 +43,7 @@ export function activate(context: UiPluginContext): void {
     }
     const unsubscribe = dialog.subscribe(send)
     send()
-    root.render(<Dialog dialog={dialog} />)
+    root.render(<Dialog dialog={dialog} context={context} />)
     return () => {
       unsubscribe()
       root.unmount()
@@ -58,7 +57,7 @@ export function activate(context: UiPluginContext): void {
     const unsubscribe = templates.subscribe(send)
     send()
     void templates.load()
-    root.render(<SettingsView store={templates} />)
+    root.render(<SettingsView store={templates} context={context} />)
     return () => {
       unsubscribe()
       root.unmount()
@@ -123,7 +122,7 @@ export function activate(context: UiPluginContext): void {
     const lineage = text(args.lineage)
     if (!(await context.confirm({ title: RESEND_CONFIRM_TITLE, confirmLabel: 'Send again' }))) return refused('cancelled')
     try {
-      await context.call(METHOD('resend'), { session, ...(lineage === undefined ? {} : { lineage }) })
+      await context.call('quirky.handoff/resend', { session, ...(lineage === undefined ? {} : { lineage }) })
       return ok()
     } catch (error) {
       context.toast('Could not resend the brief', messageOf(error))
@@ -136,7 +135,7 @@ export function activate(context: UiPluginContext): void {
     if (!session) return refused('session-required')
     const lineage = text(args.lineage)
     try {
-      await context.call(METHOD('discard'), { session, ...(lineage === undefined ? {} : { lineage }) })
+      await context.call('quirky.handoff/discard', { session, ...(lineage === undefined ? {} : { lineage }) })
     } catch (error) {
       context.log(`could not discard the handoff brief: ${messageOf(error)}`)
     }
@@ -148,7 +147,7 @@ export function activate(context: UiPluginContext): void {
     if (!session) return refused('session-required')
     const lineage = text(args.lineage)
     try {
-      await context.call(METHOD('jump'), { session, ...(lineage === undefined ? {} : { lineage }) })
+      await context.call('quirky.handoff/jump', { session, ...(lineage === undefined ? {} : { lineage }) })
       return ok()
     } catch (error) {
       context.toast(messageOf(error), '')
