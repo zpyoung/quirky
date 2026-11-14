@@ -4,7 +4,6 @@ import {
   implementerReportProblems,
   plannerReportProblems,
   reportDigest,
-  type Assumption,
   type ImplementerReport,
   type PlanTask,
   type PlannerReport
