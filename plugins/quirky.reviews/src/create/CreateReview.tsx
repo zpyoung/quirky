@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import { isRecord, safeHttpUrl } from './guards'
-import type { ReviewsSurfaceProps } from '../contracts'
+import { CREATE_VIEW, type ReviewsSurfaceProps } from '../contracts'
+import {
+  registerReviewsUiControl,
+  requestReviewsUiControl,
+  type ReviewsUiControlRegistration,
+  type ReviewsUiControlRequest,
+  type ReviewsUiControlResult
+} from '../checks/data'
 import { useDraftField, useTargetGuard } from '../draft-field'
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : 'The operation failed.'
@@ -12,29 +19,157 @@ function selectedWorktree(props: ReviewsSurfaceProps): string | null {
   return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
 }
 
+type CreationControlAction =
+  | 'submit'
+  | 'refresh-eligibility'
+  | 'open-result'
+  | 'generate'
+  | 'stop-generation'
+  | 'base-set'
+  | 'stack-set'
+
+type CreationOperation = { identity: string; isCurrent: () => boolean }
+
+type CreationControlSnapshot = {
+  worktree: string | null
+  currentTarget: boolean
+  creation: ReviewsSurfaceProps['state']['creation']
+  title: string
+  base: string
+  generationRunning: boolean
+  saving: boolean
+  stackSaving: boolean
+  resultReview: Record<string, unknown> | null
+  stackSupported: boolean
+  stackParentNumber: number | null
+}
+
+type CreationControlBusy = {
+  submit: boolean
+  refresh: boolean
+  openResult: boolean
+  generate: boolean
+  stop: boolean
+  stack: boolean
+}
+
+type CreationControlLease = {
+  target: string
+  session: string
+  lease: { generation: number; changed(): void; dispose(): void }
+}
+
+function creationControlActions(
+  state: CreationControlSnapshot,
+  busy: CreationControlBusy
+): Array<{ action: CreationControlAction; enabled: boolean }> {
+  const { creation } = state
+  const eligibility = creation.eligibility
+  const blockers = eligibility && Array.isArray(eligibility.blockers) ? eligibility.blockers : []
+  const firstBlocker = blockers.find(isRecord)
+  const blockerReason = firstBlocker && typeof firstBlocker.reason === 'string' ? firstBlocker.reason : null
+  const needsPush = blockerReason === 'branch_ahead' || blockerReason === 'no_upstream'
+  const confirmedAt = eligibility && typeof eligibility.confirmedAt === 'number' ? eligibility.confirmedAt : Number.NaN
+  const eligibilityStale = !Number.isFinite(confirmedAt) || Date.now() - confirmedAt > 5 * 60_000
+  const baseAvailable = creation.bases.includes(state.base)
+  const baseIsHead = state.base.trim() !== '' && creation.head.trim() !== '' &&
+    state.base.toLowerCase() === creation.head.toLowerCase()
+  const busyEditing = creation.loading || creation.submitting || state.saving || state.stackSaving ||
+    state.generationRunning || busy.submit || busy.stack
+  const resultAvailable = state.resultReview !== null
+
+  return [
+    {
+      action: 'submit',
+      enabled: state.currentTarget && !busyEditing &&
+        state.title.trim() !== '' && state.base.trim() !== '' && baseAvailable && !baseIsHead &&
+        !eligibilityStale && (eligibility?.eligible === true || needsPush)
+    },
+    {
+      action: 'refresh-eligibility',
+      enabled: state.worktree !== null && !creation.loading && !creation.submitting && !state.saving &&
+        !state.stackSaving && !state.generationRunning && !busy.refresh && !busy.submit && !busy.stack && !busy.openResult
+    },
+    ...(resultAvailable ? [{
+      action: 'open-result' as const,
+      enabled: state.currentTarget && !busyEditing && !busy.openResult && !busy.refresh
+    }] : []),
+    {
+      action: 'generate',
+      enabled: state.currentTarget && !busyEditing && !busy.generate
+    },
+    {
+      action: 'stop-generation',
+      enabled: state.worktree !== null && state.currentTarget && state.generationRunning && !busy.stop
+    },
+    {
+      action: 'base-set',
+      enabled: state.worktree !== null && state.currentTarget && !busyEditing
+    },
+    {
+      action: 'stack-set',
+      enabled: state.worktree !== null && state.currentTarget && !busyEditing &&
+        state.stackSupported && state.stackParentNumber !== null && !busy.stack
+    }
+  ]
+}
+
+function requireNoCreationControlValue(request: ReviewsUiControlRequest): void {
+  if (Object.hasOwn(request, 'value')) throw new Error('This creation action does not accept a value.')
+}
+
+function requireCreationControlValue(request: ReviewsUiControlRequest, key: string): Record<string, unknown> {
+  const value = request.value
+  if (!isRecord(value) || Object.keys(value).length !== 1 || !Object.hasOwn(value, key)) {
+    throw new Error('Invalid creation action value.')
+  }
+  return value
+}
+
 export function CreateReview(props: ReviewsSurfaceProps) {
   const creation = props.state.creation
   const selectedWorktreeId = selectedWorktree(props)
   const worktree = creation.worktree ?? selectedWorktreeId
-  const currentTarget = worktree !== null && creation.worktree === worktree
-  const identity = worktree ?? ''
-  const targetGuard = useTargetGuard(identity)
-  const targetEpoch = useRef({ identity, value: 0 })
-  if (targetEpoch.current.identity !== identity) targetEpoch.current = { identity, value: targetEpoch.current.value + 1 }
+  const controlWorktree = worktree !== null && worktree.trim() !== '' ? worktree : null
+  const currentTarget = controlWorktree !== null && creation.worktree === controlWorktree
+  const identity = controlWorktree ?? ''
+  const eligibility = creation.eligibility
+  const headIdentity = eligibility && typeof eligibility.headOid === 'string' && eligibility.headOid.trim() !== ''
+    ? eligibility.headOid
+    : creation.head || null
+  const sessionIdentity = JSON.stringify([controlWorktree, creation.generation, headIdentity, creation.head])
+  const controlTarget = JSON.stringify([CREATE_VIEW, 'creation', controlWorktree, null, null, controlWorktree ? headIdentity : null, null])
+  const targetGuard = useTargetGuard(sessionIdentity)
+  const targetEpoch = useRef({ identity: sessionIdentity, value: 0 })
+  if (targetEpoch.current.identity !== sessionIdentity) {
+    targetEpoch.current = { identity: sessionIdentity, value: targetEpoch.current.value + 1 }
+  }
   const epoch = targetEpoch.current.value
   const latestCreation = useRef(creation)
   latestCreation.current = creation
-  const [savingOperation, setSavingOperation] = useState<{ identity: string; isCurrent: () => boolean } | null>(null)
+  const [savingOperation, setSavingOperation] = useState<CreationOperation | null>(null)
+  const [stackOperation, setStackOperation] = useState<CreationOperation | null>(null)
   const [generationEpoch, setGenerationEpoch] = useState<number | null>(null)
   const [errorState, setErrorState] = useState<{ epoch: number; message: string } | null>(null)
-  const saving = savingOperation?.identity === identity && savingOperation.isCurrent()
+  const saving = savingOperation?.identity === sessionIdentity && savingOperation.isCurrent()
+  const stackSaving = stackOperation?.identity === sessionIdentity && stackOperation.isCurrent()
   const generationRunning = creation.generating || generationEpoch === epoch
   const localError = errorState?.epoch === epoch ? errorState.message : null
-  const [confirmationPending, setConfirmationPending] = useState(false)
-  const confirmationLock = useRef<string | null>(null)
+  const [confirmationOperation, setConfirmationOperation] = useState<CreationOperation | null>(null)
+  const confirmationPending = confirmationOperation?.identity === sessionIdentity && confirmationOperation.isCurrent()
+  const [controlLeaseState, setControlLeaseState] = useState<{ target: string; generation: number } | null>(null)
+  const controlRegistration = useRef<CreationControlLease | null>(null)
+  const controlSession = useRef(sessionIdentity)
+  controlSession.current = sessionIdentity
+  const actionSignature = useRef<string | null>(null)
+  const publishActionSignature = useRef<() => void>(() => {})
+  const confirmationLock = useRef<CreationOperation | null>(null)
   const confirmationAttempted = useRef<string | null>(null)
-  const eligibilityLock = useRef<string | null>(null)
-  const submitLock = useRef<{ identity: string; isCurrent: () => boolean } | null>(null)
+  const eligibilityLock = useRef<CreationOperation | null>(null)
+  const submitLock = useRef<CreationOperation | null>(null)
+  const openResultLock = useRef<CreationOperation | null>(null)
+  const stackLock = useRef<CreationOperation | null>(null)
+  const stopLock = useRef<CreationOperation | null>(null)
   const generationLock = useRef<number | null>(null)
   const draftWrites = useRef<Promise<void>>(Promise.resolve())
   const mounted = useRef(false)
@@ -56,29 +191,37 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const sendDraft = async (fields: Record<string, unknown>) => {
     if (!worktree || !currentTarget) return false
     const isCurrent = targetGuard()
-    await enqueue(
-      () => props.context.call('quirky.reviews/createDraft', { worktree, ...fields, generation: creation.generation }),
-      isCurrent,
-    )
+    try {
+      await enqueue(
+        () => props.context.call('quirky.reviews/createDraft', { worktree, ...fields, generation: creation.generation }),
+        isCurrent,
+      )
+    } catch (error) {
+      if (isCurrent()) throw error
+    }
   }
   const sendBase = async (base: string, stack?: boolean) => {
     if (!worktree || !currentTarget) return false
     const isCurrent = targetGuard()
-    await enqueue(
-      () => props.context.call('quirky.reviews/createBase', {
-        worktree,
-        base,
-        ...(stack === undefined ? {} : { stack }),
-        generation: creation.generation,
-      }),
-      isCurrent,
-    )
+    try {
+      await enqueue(
+        () => props.context.call('quirky.reviews/createBase', {
+          worktree,
+          base,
+          ...(stack === undefined ? {} : { stack }),
+          generation: creation.generation,
+        }),
+        isCurrent,
+      )
+    } catch (error) {
+      if (isCurrent()) throw error
+    }
   }
   const titleField = useDraftField<string>({
     identity,
     remote: creation.title,
     snapshot: props.snapshot,
-    write: (value) => sendDraft({ title: value }),
+    write(value) { return sendDraft({ title: value }) },
     refresh: props.refresh,
     resend: true,
   })
@@ -86,7 +229,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     identity,
     remote: creation.body,
     snapshot: props.snapshot,
-    write: (value) => sendDraft({ body: value }),
+    write(value) { return sendDraft({ body: value }) },
     refresh: props.refresh,
     resend: true,
   })
@@ -94,7 +237,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     identity,
     remote: creation.base,
     snapshot: props.snapshot,
-    write: (value) => sendBase(value),
+    write(value) { return sendBase(value) },
     refresh: props.refresh,
     resend: false,
   })
@@ -102,7 +245,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     identity,
     remote: creation.draft,
     snapshot: props.snapshot,
-    write: (value) => sendDraft({ draft: value }),
+    write(value) { return sendDraft({ draft: value }) },
     refresh: props.refresh,
     resend: true,
   })
@@ -110,7 +253,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     identity,
     remote: creation.useTemplate,
     snapshot: props.snapshot,
-    write: (value) => sendDraft({ useTemplate: value }),
+    write(value) { return sendDraft({ useTemplate: value }) },
     refresh: props.refresh,
     resend: true,
   })
@@ -135,12 +278,14 @@ export function CreateReview(props: ReviewsSurfaceProps) {
 
   useEffect(() => {
     if (creation.worktree !== null || !selectedWorktreeId || creation.loading) return
-    const confirmationKey = `${selectedWorktreeId}:${creation.generation}:${creation.head}`
-    if (confirmationAttempted.current === confirmationKey || confirmationLock.current === confirmationKey) return
+    const confirmationKey = JSON.stringify([selectedWorktreeId, epoch])
+    if (confirmationAttempted.current === confirmationKey || confirmationLock.current?.isCurrent()) return
     confirmationAttempted.current = confirmationKey
     const isCurrent = targetGuard()
-    confirmationLock.current = confirmationKey
-    setConfirmationPending(true)
+    const operation = { identity: sessionIdentity, isCurrent }
+    confirmationLock.current = operation
+    publishActionSignature.current()
+    setConfirmationOperation(operation)
     setLocalError(null)
     void props.context.call('quirky.reviews/createOpen', { worktree: selectedWorktreeId })
       .then(async () => {
@@ -151,29 +296,34 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         if (isCurrent()) setLocalError(errorText(error))
       })
       .finally(() => {
-        if (!isCurrent()) return
-        if (confirmationLock.current === confirmationKey) confirmationLock.current = null
-        setConfirmationPending(false)
+        if (confirmationLock.current === operation) {
+          confirmationLock.current = null
+          publishActionSignature.current()
+        }
+        if (mounted.current) setConfirmationOperation((current) => current === operation ? null : current)
       })
-  }, [selectedWorktreeId, creation.worktree, creation.loading, creation.generation, creation.head, props.context, props.refresh])
-  const setBaseValue = (value: string) => {
+  }, [selectedWorktreeId, creation.worktree, creation.loading, sessionIdentity, props.context, props.refresh])
+  const setBaseValue = (value: string, isCurrent: () => boolean) => {
+    if (!isCurrent() || !worktree || !currentTarget) return
+    if (value !== '' && !creation.bases.includes(value)) {
+      setLocalError('Choose a remote base branch from the available refs.')
+      return
+    }
     if (value === creation.base) {
       baseField.reset(value)
       setLocalError(null)
       return
     }
-    if (!worktree || !currentTarget || value === '') return
-    if (!creation.bases.includes(value)) {
-      setLocalError('Choose a remote base branch from the available refs.')
-      return
-    }
+    if (value === '') return
     setLocalError(null)
     baseField.edit(value)
   }
 
-  const openResult = async () => {
-    if (!worktree) return
-    const isCurrent = targetGuard()
+  const openResult = async (isCurrent: () => boolean) => {
+    if (!worktree || !currentTarget || openResultLock.current?.isCurrent()) return
+    const operation = { identity: sessionIdentity, isCurrent }
+    openResultLock.current = operation
+    publishActionSignature.current()
     setLocalError(null)
     try {
       if (!await settleDrafts(isCurrent)) return
@@ -182,18 +332,23 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       await props.refresh()
     } catch (error) {
       if (isCurrent()) setLocalError(errorText(error))
+    } finally {
+      if (openResultLock.current === operation) {
+        openResultLock.current = null
+        publishActionSignature.current()
+      }
     }
   }
 
-  const refreshEligibility = async () => {
-    if (!worktree) return
+  const refreshEligibility = async (isCurrent: () => boolean) => {
+    if (!worktree || !isCurrent()) return
     const isConfirmation = !currentTarget
-    const lockKey = isConfirmation ? `${identity}:confirmation` : `${identity}:eligibility`
-    if ((isConfirmation && confirmationLock.current !== null) || (!isConfirmation && eligibilityLock.current !== null)) return
-    const isCurrent = targetGuard()
-    if (isConfirmation) confirmationLock.current = lockKey
-    else eligibilityLock.current = lockKey
-    if (isConfirmation) setConfirmationPending(true)
+    const lock = isConfirmation ? confirmationLock : eligibilityLock
+    if (lock.current?.isCurrent()) return
+    const operation = { identity: sessionIdentity, isCurrent }
+    lock.current = operation
+    publishActionSignature.current()
+    if (isConfirmation) setConfirmationOperation(operation)
     setLocalError(null)
     try {
       if (!isConfirmation && !await settleDrafts(isCurrent)) return
@@ -203,18 +358,21 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     } catch (error) {
       if (isCurrent()) setLocalError(errorText(error))
     } finally {
-      if (isConfirmation && confirmationLock.current === lockKey) confirmationLock.current = null
-      if (!isConfirmation && eligibilityLock.current === lockKey) eligibilityLock.current = null
-      if (isConfirmation && isCurrent()) setConfirmationPending(false)
+      if (lock.current === operation) {
+        lock.current = null
+        publishActionSignature.current()
+      }
+      if (isConfirmation && mounted.current) {
+        setConfirmationOperation((current) => current === operation ? null : current)
+      }
     }
   }
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!canSubmit || !worktree || submitLock.current?.isCurrent()) return
-    const isCurrent = targetGuard()
-    const operation = { identity, isCurrent }
+  const submit = async (isCurrent: () => boolean) => {
+    if (!worktree || !isCurrent() || submitLock.current?.isCurrent()) return
+    const operation = { identity: sessionIdentity, isCurrent }
     submitLock.current = operation
+    publishActionSignature.current()
     setLocalError(null)
     setSavingOperation(operation)
     try {
@@ -249,7 +407,10 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       setLocalError(errorText(error))
       await props.refresh().catch(() => undefined)
     } finally {
-      if (submitLock.current === operation) submitLock.current = null
+      if (submitLock.current === operation) {
+        submitLock.current = null
+        publishActionSignature.current()
+      }
       if (isCurrent()) setSavingOperation((current) => current === operation ? null : current)
     }
   }
@@ -257,14 +418,15 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const onBodyKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault()
-      const form = event.currentTarget.form
-      if (form) form.requestSubmit()
+      requestCreationControl('submit')
     }
   }
 
-  const createStack = async (enabled: boolean) => {
-    if (!worktree || !currentTarget) return
-    const isCurrent = targetGuard()
+  const createStack = async (enabled: boolean, isCurrent: () => boolean) => {
+    if (!worktree || !currentTarget || stackLock.current?.isCurrent()) return
+    const operation = { identity: sessionIdentity, isCurrent }
+    stackLock.current = operation
+    setStackOperation(operation)
     setLocalError(null)
     try {
       if (!await settleDrafts(isCurrent)) return
@@ -278,15 +440,21 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       await props.refresh()
     } catch (error) {
       if (isCurrent()) setLocalError(errorText(error))
+    } finally {
+      if (stackLock.current === operation) {
+        stackLock.current = null
+        publishActionSignature.current()
+      }
+      if (mounted.current) setStackOperation((current) => current === operation ? null : current)
     }
   }
 
-  const generateDetails = async () => {
+  const generateDetails = async (isCurrent: () => boolean) => {
     if (!worktree || !currentTarget || generationRunning || generationLock.current === epoch) return
-    const isCurrent = targetGuard()
     const titleAction = titleField.begin()
     const bodyAction = bodyField.begin()
     generationLock.current = epoch
+    publishActionSignature.current()
     setGenerationEpoch(epoch)
     setLocalError(null)
     try {
@@ -312,14 +480,19 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         setLocalError(errorText(error))
       }
     } finally {
-      if (generationLock.current === epoch) generationLock.current = null
+      if (generationLock.current === epoch) {
+        generationLock.current = null
+        publishActionSignature.current()
+      }
       if (isCurrent()) setGenerationEpoch((current) => current === epoch ? null : current)
     }
   }
 
-  const stopGeneration = async () => {
-    if (!worktree) return
-    const isCurrent = targetGuard()
+  const stopGeneration = async (isCurrent: () => boolean) => {
+    if (!worktree || !currentTarget || !generationRunning || stopLock.current?.isCurrent()) return
+    const operation = { identity: sessionIdentity, isCurrent }
+    stopLock.current = operation
+    publishActionSignature.current()
     try {
       if (!await settleDrafts(isCurrent)) return
       const value = await props.context.call('quirky.reviews/createCancelGenerate', { worktree })
@@ -330,10 +503,14 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       await props.refresh()
     } catch (error) {
       if (isCurrent()) setLocalError(errorText(error))
+    } finally {
+      if (stopLock.current === operation) {
+        stopLock.current = null
+        publishActionSignature.current()
+      }
     }
   }
 
-  const eligibility = creation.eligibility
   const blockers = eligibility && Array.isArray(eligibility.blockers) ? eligibility.blockers : []
   const firstBlocker = blockers.find(isRecord)
   const blockerReason = firstBlocker && typeof firstBlocker.reason === 'string' ? firstBlocker.reason : null
@@ -349,7 +526,8 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const confirmedAt = eligibility && typeof eligibility.confirmedAt === 'number' ? eligibility.confirmedAt : Number.NaN
   const eligibilityStale = !Number.isFinite(confirmedAt) || Date.now() - confirmedAt > 5 * 60_000
   const canSubmit = currentTarget && !creation.loading && !creation.submitting && !generationRunning && !saving &&
-    !titleMissing && !baseMissing && baseAvailable && !baseIsHead && !eligibilityStale && (eligibility?.eligible === true || needsPush)
+    !submitLock.current?.isCurrent() && !titleMissing && !baseMissing && baseAvailable && !baseIsHead &&
+    !eligibilityStale && (eligibility?.eligible === true || needsPush)
   const disabledReason = generationRunning ? 'Wait for AI generation to finish.'
     : titleMissing ? 'Enter a pull request title.'
       : baseMissing ? 'Choose a base branch.'
@@ -371,8 +549,146 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const stateErrors = [creation.error, localError, fieldError, partialError && creation.error !== partialError ? partialError : null]
     .filter((message): message is string => typeof message === 'string' && message !== '')
 
+  const controlSnapshot: CreationControlSnapshot = {
+    worktree: controlWorktree,
+    currentTarget,
+    creation,
+    title,
+    base,
+    generationRunning,
+    saving,
+    stackSaving,
+    resultReview,
+    stackSupported,
+    stackParentNumber
+  }
+  const controlSnapshotRef = useRef(controlSnapshot)
+  controlSnapshotRef.current = controlSnapshot
+  const controlRunner = useRef<(request: ReviewsUiControlRequest, isCurrent: () => boolean) => void>(() => {})
+  const getControlActions = () => {
+    const snapshot = controlSnapshotRef.current
+    snapshot.title = titleField.value
+    snapshot.base = baseField.value
+    snapshot.generationRunning = snapshot.creation.generating || generationLock.current === epoch
+    return creationControlActions(snapshot, {
+      submit: Boolean(submitLock.current?.isCurrent()),
+      refresh: Boolean(confirmationLock.current?.isCurrent() || eligibilityLock.current?.isCurrent()),
+      openResult: Boolean(openResultLock.current?.isCurrent()),
+      generate: generationLock.current === epoch,
+      stop: Boolean(stopLock.current?.isCurrent()),
+      stack: Boolean(stackLock.current?.isCurrent())
+    })
+  }
+  const getActionSignature = () => JSON.stringify(getControlActions().map(({ action, enabled }) => [action, enabled]))
+  const controlActionSignature = getActionSignature()
+  publishActionSignature.current = () => {
+    const nextSignature = getActionSignature()
+    if (actionSignature.current === nextSignature) return
+    actionSignature.current = nextSignature
+    controlRegistration.current?.lease.changed()
+  }
+  controlRunner.current = (request, isCurrent) => {
+    if (!isCurrent()) return
+    switch (request.action) {
+      case 'submit':
+        requireNoCreationControlValue(request)
+        void submit(isCurrent)
+        return
+      case 'refresh-eligibility':
+        requireNoCreationControlValue(request)
+        void refreshEligibility(isCurrent)
+        return
+      case 'open-result':
+        requireNoCreationControlValue(request)
+        void openResult(isCurrent)
+        return
+      case 'generate':
+        requireNoCreationControlValue(request)
+        void generateDetails(isCurrent)
+        return
+      case 'stop-generation':
+        requireNoCreationControlValue(request)
+        void stopGeneration(isCurrent)
+        return
+      case 'base-set': {
+        const value = requireCreationControlValue(request, 'base')
+        if (typeof value.base !== 'string') throw new Error('Invalid creation action value.')
+        setBaseValue(value.base, isCurrent)
+        return
+      }
+      case 'stack-set': {
+        const value = requireCreationControlValue(request, 'enabled')
+        if (typeof value.enabled !== 'boolean') throw new Error('Invalid creation action value.')
+        void createStack(value.enabled, isCurrent)
+        return
+      }
+      default:
+        throw new Error('Unknown creation action.')
+    }
+  }
+  useLayoutEffect(() => {
+    const registration: ReviewsUiControlRegistration = {
+      surface: CREATE_VIEW,
+      slot: 'creation',
+      target: controlTarget,
+      actions: () => getControlActions(),
+      run: (request, isCurrent) => {
+        if (!isCurrent() || controlSession.current !== sessionIdentity) return
+        controlRunner.current(request, () => isCurrent() && controlSession.current === sessionIdentity)
+      }
+    }
+    const lease = registerReviewsUiControl(props.context, registration)
+    const currentLease = { target: controlTarget, session: sessionIdentity, lease }
+    controlRegistration.current = currentLease
+    actionSignature.current = getActionSignature()
+    setControlLeaseState({ target: controlTarget, generation: lease.generation })
+    return () => {
+      if (controlRegistration.current === currentLease) controlRegistration.current = null
+      lease.dispose()
+      setControlLeaseState((current) => current?.target === controlTarget && current.generation === lease.generation ? null : current)
+    }
+  }, [props.context, controlTarget, sessionIdentity])
+  useEffect(() => {
+    publishActionSignature.current()
+  }, [controlActionSignature])
+  const requestCreationControl = (action: CreationControlAction, value?: Record<string, unknown>) => {
+    const lease = controlRegistration.current
+    const targetIsCurrent = targetGuard()
+    const isCurrent = () => targetIsCurrent() && lease !== null &&
+      controlRegistration.current === lease && lease.target === controlTarget && lease.session === sessionIdentity
+    if (!lease || !isCurrent()) return
+    const request: ReviewsUiControlRequest = {
+      target: lease.target,
+      generation: lease.lease.generation,
+      action,
+      ...(value === undefined ? {} : { value })
+    }
+    void requestReviewsUiControl(props.context, request)
+      .then((result: ReviewsUiControlResult) => {
+        if (!isCurrent()) return
+        if (!result.delivered && result.reason === 'target-unavailable') {
+          setLocalError('The creation control is no longer available.')
+        }
+      })
+      .catch((error: unknown) => {
+        if (isCurrent()) setLocalError(errorText(error))
+      })
+  }
+  const controlMetadata = controlLeaseState?.target === controlTarget
+    ? {
+      'data-review-control-target': controlLeaseState.target,
+      'data-review-control-generation': String(controlLeaseState.generation)
+    }
+    : {}
+  const isControlEnabled = (action: CreationControlAction) =>
+    getControlActions().find((item) => item.action === action)?.enabled === true
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    requestCreationControl('submit')
+  }
+
   if (!worktree) {
-    return <section className="ui-stack" aria-label="Create pull request">
+    return <section className="ui-stack" aria-label="Create pull request" {...controlMetadata}>
       <SectionHeader title="Create pull request" />
       <EmptyState message="Select a Git worktree before creating a pull request." />
     </section>
@@ -381,15 +697,15 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   if (!currentTarget || creation.loading) {
     const confirming = creation.loading || confirmationPending
     const confirmationError = localError ?? creation.error ?? (!confirming ? 'The current worktree and branch could not be confirmed.' : null)
-    return <section className="ui-stack" aria-label="Create pull request" aria-busy={confirming}>
+    return <section className="ui-stack" aria-label="Create pull request" aria-busy={confirming} {...controlMetadata}>
       <SectionHeader title="Create pull request" />
       {confirmationError
-        ? <InlineError message={confirmationError} action={!currentTarget ? { label: 'Retry confirmation', onAction: () => { void refreshEligibility() } } : undefined} />
+        ? <InlineError message={confirmationError} action={!currentTarget ? { label: 'Retry confirmation', onAction: () => requestCreationControl('refresh-eligibility') } : undefined} />
         : <NoticeLine>Confirming this worktree and its current branch…</NoticeLine>}
     </section>
   }
 
-  return <main className="ui-stack" aria-label="Create pull request" aria-busy={creation.submitting || generationRunning || saving}>
+  return <main className="ui-stack" aria-label="Create pull request" aria-busy={creation.submitting || generationRunning || saving || stackSaving} {...controlMetadata}>
     <header className="ui-stack">
       <SectionHeader title="Create pull request" />
       <p>Worktree <strong>{worktree}</strong> · <code>{creation.head || 'No current branch'}</code></p>
@@ -398,12 +714,12 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     {stateErrors.map((message) => <InlineError key={message} message={message} />)}
     {stackLookupError && <InlineError message={`Stack capability could not be confirmed: ${stackLookupError}`} />}
     {resultReview && <section className="ui-stack" aria-live="polite">
-      <strong>{result?.status === 'partial' ? 'Pull request created; stack registration was incomplete.' : result?.status === 'already_exists' ? 'Pull request already exists.' : 'Pull request created.'}</strong>
+      <strong>{result?.status === 'already_exists' ? 'Pull request already exists.' : 'Pull request created.'}</strong>
       <p>{resultNumber === null ? 'The review identity could not be shown.' : `Pull request #${resultNumber}`}{resultUrl ? ` · ${resultUrl}` : ''}</p>
-      <Button variant="primary" onClick={() => void openResult()}>Open review</Button>
+      <Button variant="primary" disabled={!isControlEnabled('open-result')} onClick={() => requestCreationControl('open-result')}>Open review</Button>
     </section>}
 
-    <form className="ui-stack" onSubmit={(event) => void submit(event)}>
+    <form className="ui-stack" onSubmit={onSubmit}>
       <div className="ui-stack">
         <TextField
           id="review-base"
@@ -414,9 +730,9 @@ export function CreateReview(props: ReviewsSurfaceProps) {
           aria-label="Search remote base branches"
           help={`Choose a remote branch different from ${creation.head || 'the current branch'}.`}
           error={baseField.error ?? undefined}
-          disabled={creation.submitting || saving || generationRunning}
+          disabled={creation.submitting || saving || stackSaving || generationRunning || submitLock.current?.isCurrent()}
           onChange={(event) => { baseField.hold(event.target.value); setLocalError(null) }}
-          onBlur={() => setBaseValue(baseField.value)}
+          onBlur={() => requestCreationControl('base-set', { base: baseField.value })}
         />
         <datalist id="review-base-options">
           {creation.bases.map((branch) => <option key={branch} value={branch} />)}
@@ -431,7 +747,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         value={title}
         placeholder="Short summary"
         error={titleField.error ?? undefined}
-        disabled={creation.submitting || saving || generationRunning}
+        disabled={creation.submitting || saving || stackSaving || generationRunning || submitLock.current?.isCurrent()}
         onChange={(event) => {
           titleField.edit(event.target.value)
           setLocalError(null)
@@ -445,7 +761,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
           value={body}
           rows={10}
           placeholder="What changed and why?"
-          disabled={creation.submitting || saving || generationRunning}
+          disabled={creation.submitting || saving || stackSaving || generationRunning || submitLock.current?.isCurrent()}
           onChange={(event) => {
             bodyField.edit(event.target.value)
             setLocalError(null)
@@ -455,7 +771,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       </FormRow>
       <small className="ui-text-muted">Use Cmd+Enter (macOS) or Ctrl+Enter to submit.</small>
 
-      <fieldset className="ui-stack" disabled={creation.submitting || saving || generationRunning}>
+      <fieldset className="ui-stack" disabled={creation.submitting || saving || stackSaving || generationRunning || submitLock.current?.isCurrent()}>
         <legend>Creation options</legend>
         <FormRow label="Create as draft" htmlFor="review-create-draft" error={draftField.error ?? undefined}>
           <input id="review-create-draft" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={draft} onChange={(event) => {
@@ -470,16 +786,16 @@ export function CreateReview(props: ReviewsSurfaceProps) {
           }} />
         </FormRow>
         {stackSupported && stackParentNumber !== null && <FormRow label={`Create pull request in stack with #${stackParentNumber}`} htmlFor="review-create-stack">
-          <input id="review-create-stack" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={stackEnabled} onChange={(event) => void createStack(event.target.checked)} />
+          <input id="review-create-stack" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={stackEnabled} disabled={!isControlEnabled('stack-set')} onChange={(event) => requestCreationControl('stack-set', { enabled: event.target.checked })} />
         </FormRow>}
         {!stackSupported && <small>Stacked pull requests are available only for supported GitHub.com repositories.</small>}
       </fieldset>
 
       <div className="ui-cluster">
-        <Button disabled={creation.submitting || saving || generationRunning} onClick={() => void generateDetails()}>{generationRunning ? 'Generating…' : 'Generate PR details with AI'}</Button>
-        {generationRunning && <Button variant="destructive" aria-label="Stop generating pull-request details" onClick={() => void stopGeneration()}>Stop</Button>}
-        <Button disabled={creation.submitting || saving || generationRunning} onClick={() => void refreshEligibility()}>Refresh eligibility</Button>
-        <Button variant="primary" type="submit" disabled={!canSubmit} title={disabledReason ?? undefined}>
+        <Button disabled={!isControlEnabled('generate')} onClick={() => requestCreationControl('generate')}>{generationRunning ? 'Generating…' : 'Generate PR details with AI'}</Button>
+        {generationRunning && <Button variant="destructive" aria-label="Stop generating pull-request details" disabled={!isControlEnabled('stop-generation')} onClick={() => requestCreationControl('stop-generation')}>Stop</Button>}
+        <Button disabled={!isControlEnabled('refresh-eligibility')} onClick={() => requestCreationControl('refresh-eligibility')}>Refresh eligibility</Button>
+        <Button variant="primary" type="submit" disabled={!canSubmit || !isControlEnabled('submit')} title={disabledReason ?? undefined}>
           {creation.submitting || saving ? 'Creating…' : stackEnabled ? `${draft ? 'Create draft' : 'Create'} PR in stack` : needsPush ? 'Push & Create PR' : 'Create PR'}
         </Button>
       </div>
