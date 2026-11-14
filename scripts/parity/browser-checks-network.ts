@@ -36,7 +36,6 @@ type InterceptObservation = {
   pending: boolean
 }
 
-const INTERCEPT_GAP = 'Matching requests are logged and immediately continued rather than held pending; follow-up: Keep intercepted requests pending until explicitly released.'
 const INTERCEPT_OBSERVE_MS = 750
 const INTERCEPT_POLL_MS = 25
 
@@ -97,7 +96,7 @@ async function observeIntercept(
   }
 
   assertInterceptResponse(c, state)
-  const pending = state.status === 'pending' && listed !== undefined && requests.length === 0
+  const pending = state.status === 'pending' && listed?.pending === true && requests.length === 0
   return { url, pattern, listed, list, state, requests, pending }
 }
 
@@ -194,10 +193,7 @@ async function runInterceptProbe(
     responseBody: afterDisable.state.body
   }
 
-  if (!beforeDisable.pending && (beforeDisable.state.status !== 'fulfilled' || beforeDisable.requests.length === 0)) {
-    throw new Error('intercept probe was neither pending nor observed as auto-continued')
-  }
-  if (!beforeDisable.pending) return { gap: INTERCEPT_GAP, ...evidence }
+  c.assert(beforeDisable.pending, 'matching request was not held before interception was disabled')
   return evidence
 }
 
