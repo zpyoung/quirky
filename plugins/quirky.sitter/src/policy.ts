@@ -49,6 +49,7 @@ export interface JournalEntry {
 export type ExecuteResult = {
   effect: 'landed' | 'not-landed' | 'indeterminate'
   reason?: string
+  detail?: string
   expectedAfter?: Json
   failureClass?: string
 }
@@ -74,6 +75,9 @@ export type StopResult =
   | { kind: 'park'; reason: ParkReason; detail: string; deviation?: OwnerDeviation }
   | null
 
+export type BranchUpdateMode = 'merge-base-update' | 'rebase'
+export type MergeCheckScope = 'all' | 'required'
+
 export type SitterPayload = {
   worktreeId: string
   branch: string
@@ -82,9 +86,9 @@ export type SitterPayload = {
   reviewNumber: number
   reviewUrl: string
   repository: { host: string; owner: string; repo: string }
-  branchUpdateMode: 'merge-base-update'
+  branchUpdateMode?: BranchUpdateMode
   mergeMethod: 'merge' | 'squash' | 'rebase' | null
-  mergeCheckScope: 'all'
+  mergeCheckScope?: MergeCheckScope
   agent?: string
 }
 export type CheckState = 'passed' | 'pending' | 'failed' | 'unknown'
@@ -96,6 +100,7 @@ export type SitterCheck = {
   rerunTarget: string | null
   workflowRunId: number | null
   checkRunId: number | null
+  required: boolean | null
   failureSignature: string | null
   failureExcerpt: string | null
 }
@@ -123,9 +128,14 @@ export type SitterWorld = {
   reviewDecision: string
   mergeQueueRequired: boolean | null
   mergeMetadataKnown: boolean
+  inMergeQueue: boolean
+  mergeQueueEntry: { id: string | null; state: string | null; position: number | null } | null
+  mergeQueueKnown: boolean
   defaultMergeMethod: 'merge' | 'squash' | 'rebase' | null
   allowedMergeMethods: string[]
   checksComplete: boolean
+  checkScope: MergeCheckScope
+  requiredMetadataComplete: boolean
   checks: SitterCheck[]
   localHeadSha: string | null
   localDirty: boolean
@@ -138,14 +148,22 @@ export type FailedCheckInfo = {
   failureExcerpt: string
 }
 type RerunCheckAction = KernelAction & { kind: 'rerun-check'; head: string; observations: string[]; checkNames: string[]; ordinal: number }
-type UpdateBranchAction = KernelAction & { kind: 'update-branch'; head: string; base: string; ordinal: number }
+type UpdateBranchAction = KernelAction & {
+  kind: 'update-branch'
+  head: string
+  base: string
+  ordinal: number
+  mode?: BranchUpdateMode
+  baseRefName?: string
+}
 type MergeAction = KernelAction & { kind: 'merge'; head: string; method: 'merge' | 'squash' | 'rebase'; ordinal: number }
+type EnqueueAction = KernelAction & { kind: 'enqueue'; head: string; method: 'merge' | 'squash' | 'rebase'; ordinal: number }
 type PrepareFixAction = KernelAction & { kind: 'prepare-fix'; expectedHeadSha: string; failedChecks: FailedCheckInfo[] }
 type PublishFixAction = KernelAction & { kind: 'publish-fix'; expectedHeadSha: string; preparedCommitSha: string; prepareFingerprint: string }
 type PrepareConflictAction = KernelAction & { kind: 'prepare-conflict-resolution'; expectedHeadSha: string; baseSha: string; baseRefName: string }
 type PublishConflictAction = KernelAction & { kind: 'publish-conflict-resolution'; expectedHeadSha: string; preparedCommitSha: string; prepareFingerprint: string; baseSha: string }
 export type SitterAction =
-  | RerunCheckAction | UpdateBranchAction | MergeAction
+  | RerunCheckAction | UpdateBranchAction | MergeAction | EnqueueAction
   | PrepareFixAction | PublishFixAction | PrepareConflictAction | PublishConflictAction
 export type SitterEnrollment = { capabilities: Record<string, CapabilityMode>; kindPayload: SitterPayload }
 
@@ -219,6 +237,7 @@ function mapCheck(value: unknown): SitterCheck | null {
     rerunTarget,
     workflowRunId,
     checkRunId,
+    required: typeof value.required === 'boolean' ? value.required : null,
     failureSignature: null,
     failureExcerpt: null
   }
@@ -244,12 +263,24 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
     rawChecks.partial !== true &&
     rawChecks.headSha === headRefOid
   )
+  const requiredMetadataComplete = checks === null || (
+    checksComplete && mappedChecks.every((check) => check.required !== null)
+  )
+  const checkScope: MergeCheckScope = payload.mergeCheckScope === 'required' && requiredMetadataComplete
+    ? 'required'
+    : 'all'
   const mergeable = rawReview.mergeable === 'MERGEABLE' || rawReview.mergeable === 'CONFLICTING' || rawReview.mergeable === 'UNKNOWN'
     ? rawReview.mergeable
     : 'UNKNOWN'
   const mergeQueueRequired = typeof rawReview.mergeQueueRequired === 'boolean' || rawReview.mergeQueueRequired === null
     ? rawReview.mergeQueueRequired
     : null
+  const rawMergeQueueEntry = isRecord(rawReview.mergeQueueEntry) ? rawReview.mergeQueueEntry : null
+  const mergeQueueEntry = rawMergeQueueEntry === null ? null : {
+    id: typeof rawMergeQueueEntry.id === 'string' ? rawMergeQueueEntry.id : null,
+    state: typeof rawMergeQueueEntry.state === 'string' ? rawMergeQueueEntry.state : null,
+    position: nullableNumber(rawMergeQueueEntry.position)
+  }
   return {
     reviewNumber: asNumber(rawReview.number, payload.reviewNumber),
     reviewUrl: asString(rawReview.url, payload.reviewUrl),
@@ -264,14 +295,24 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
     reviewDecision: asString(rawReview.reviewDecision, 'UNKNOWN'),
     mergeQueueRequired,
     mergeMetadataKnown: rawReview.mergeMetadataKnown === true,
+    inMergeQueue: rawReview.inMergeQueue === true,
+    mergeQueueEntry,
+    mergeQueueKnown: rawReview.mergeQueueKnown === true,
     defaultMergeMethod,
     allowedMergeMethods,
     checksComplete,
+    checkScope,
+    requiredMetadataComplete,
     checks: mappedChecks,
     localHeadSha: null,
     localDirty: false,
     localPrepared: null
   }
+}
+function scopedChecks(world: SitterWorld): SitterCheck[] {
+  return world.checkScope === 'required'
+    ? world.checks.filter((check) => check.required === true)
+    : world.checks
 }
 
 export function contentIdentity(world: SitterWorld): string {
@@ -290,6 +331,10 @@ function actionIdentity(action: KernelAction): string | null {
   if (action.kind === 'merge') {
     const candidate = action as MergeAction
     return JSON.stringify(['merge', candidate.head, candidate.method])
+  }
+  if (action.kind === 'enqueue') {
+    const candidate = action as EnqueueAction
+    return JSON.stringify(['enqueue', candidate.head, candidate.method])
   }
   return null
 }
@@ -359,6 +404,7 @@ function withOrdinal(action: SitterAction, ordinal: number): SitterAction {
   if (action.kind === 'rerun-check') evidenceKey = JSON.stringify(['rerun-check', action.head, action.checkNames, ordinal])
   else if (action.kind === 'update-branch') evidenceKey = JSON.stringify(['update-branch', action.head, action.base, ordinal])
   else if (action.kind === 'merge') evidenceKey = JSON.stringify(['merge', action.head, action.method, ordinal])
+  else if (action.kind === 'enqueue') evidenceKey = JSON.stringify(['enqueue', action.head, action.method, ordinal])
   else return action
   return { ...action, ordinal, evidenceKey }
 }
@@ -376,11 +422,16 @@ function buildRerunAction(world: SitterWorld, checks: SitterCheck[], journal: Jo
   return withOrdinal(action, retryState(action, journal).ordinal)
 }
 
-function buildUpdateAction(world: SitterWorld, journal: JournalEntry[]): SitterAction {
+function buildUpdateAction(
+  world: SitterWorld,
+  journal: JournalEntry[],
+  mode: BranchUpdateMode
+): SitterAction {
   const action = makeActionBase('update-branch', world, 'updateBranch', {
     head: world.headSha,
     base: world.baseSha,
     ordinal: 1,
+    ...(mode === 'rebase' ? { mode, baseRefName: world.baseRefName } : {}),
     expectedState: { target: `${world.reviewUrl}#head`, before: world.headSha }
   }) as SitterAction
   return withOrdinal(action, retryState(action, journal).ordinal)
@@ -395,6 +446,19 @@ function buildMergeAction(world: SitterWorld, method: 'merge' | 'squash' | 'reba
   }) as SitterAction
   return withOrdinal(action, retryState(action, journal).ordinal)
 }
+function buildEnqueueAction(
+  world: SitterWorld,
+  method: 'merge' | 'squash' | 'rebase',
+  journal: JournalEntry[]
+): SitterAction {
+  const action = makeActionBase('enqueue', world, 'merge', {
+    head: world.headSha,
+    method,
+    ordinal: 1,
+    expectedState: { target: world.reviewUrl, before: world.headSha }
+  }) as SitterAction
+  return withOrdinal(action, retryState(action, journal).ordinal)
+}
 
 function matchingAttempts(action: SitterAction, journal: JournalEntry[]): Attempt[] {
   const identity = actionIdentity(action)
@@ -402,6 +466,7 @@ function matchingAttempts(action: SitterAction, journal: JournalEntry[]): Attemp
 }
 
 function blockForRerun(world: SitterWorld, journal: JournalEntry[], candidateNames: string[]): string | null {
+  const checks = scopedChecks(world)
   const relevant = latestAttempts(journal).filter((attempt) => {
     if (attempt.action.kind !== 'rerun-check') return false
     const action = attempt.action as RerunCheckAction
@@ -410,7 +475,7 @@ function blockForRerun(world: SitterWorld, journal: JournalEntry[], candidateNam
   if (relevant.some((attempt) => attempt.state !== 'settled' || attempt.effect === 'indeterminate')) return 'rerun-in-flight'
   if (relevant.some((attempt) => attempt.effect === 'landed' &&
     (attempt.action as RerunCheckAction).observations
-      .some((observation) => world.checks.some((check) => check.state === 'failed' && check.observation === observation)))) {
+      .some((observation) => checks.some((check) => check.state === 'failed' && check.observation === observation)))) {
     return 'awaiting-rerun-result'
   }
   return null
@@ -428,6 +493,22 @@ function landedRerunNames(world: SitterWorld, journal: JournalEntry[]): Set<stri
 
 function latestAttemptFor(action: SitterAction, journal: JournalEntry[]): Attempt | null {
   return matchingAttempts(action, journal).at(-1) ?? null
+}
+function rebaseConflictAttempt(
+  world: SitterWorld,
+  journal: JournalEntry[],
+  enrollment: SitterEnrollment
+): Attempt | null {
+  if ((enrollment.kindPayload.branchUpdateMode ?? 'merge-base-update') !== 'rebase') return null
+  const matching = latestAttempts(journal).filter((attempt) => {
+    if (attempt.action.kind !== 'update-branch') return false
+    const update = attempt.action as UpdateBranchAction
+    return update.mode === 'rebase' && update.head === world.headSha && update.base === world.baseSha
+  })
+  const latest = matching.at(-1)
+  return latest?.state === 'settled' && latest.effect === 'not-landed' && latest.reason === 'rebase-conflicts'
+    ? latest
+    : null
 }
 
 export function checkKey(check: Pick<SitterCheck, 'kind' | 'name'>): string {
@@ -635,13 +716,18 @@ function newActionHoldReason(action: KernelAction, journal: JournalEntry[]): str
 
 function mergeGates(world: SitterWorld, enrollment: SitterEnrollment): string[] {
   const failed: string[] = []
+  const checks = scopedChecks(world)
   if (enrollment.capabilities.merge !== 'on' && enrollment.capabilities.merge !== 'gated') failed.push('capability')
   if (world.draft) failed.push('draft')
   if (world.mergeable !== 'MERGEABLE') failed.push('conflicts')
-  if (!world.checksComplete || world.checks.some((check) => check.state !== 'passed')) failed.push('checks')
+  if (!world.checksComplete || checks.some((check) => check.state !== 'passed')) failed.push('checks')
   if (world.reviewDecision !== 'APPROVED' && world.reviewDecision !== 'NONE') failed.push('approvals')
-  if (world.mergeStateStatus !== 'CLEAN') failed.push('readiness')
-  if (world.mergeQueueRequired !== false || world.mergeMetadataKnown !== true) failed.push('merge-queue')
+  if (world.mergeStateStatus !== 'CLEAN' &&
+    !(world.checkScope === 'required' && world.mergeStateStatus === 'UNSTABLE')) failed.push('readiness')
+  if (world.mergeMetadataKnown !== true ||
+    (world.mergeQueueRequired !== false && !(world.mergeQueueRequired === true && world.mergeQueueKnown))) {
+    failed.push('merge-queue')
+  }
   const method = enrollment.kindPayload.mergeMethod ?? world.defaultMergeMethod
   if (method === null || !world.allowedMergeMethods.includes(method)) failed.push('merge-method')
   return failed
@@ -649,14 +735,36 @@ function mergeGates(world: SitterWorld, enrollment: SitterEnrollment): string[] 
 
 function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollment: SitterEnrollment): Decision<SitterAction> {
   const world = snapshot.world
+  const checks = scopedChecks(world)
   const considered = ['lifecycle']
   if (world.lifecycle !== 'open') return noAction('review-not-open', considered)
 
+  const landedEnqueue = latestAttempts(journal).some((attempt) =>
+    attempt.action.kind === 'enqueue' && attempt.state === 'settled' && attempt.effect === 'landed' &&
+    (attempt.action as EnqueueAction).head === world.headSha
+  )
+  if (world.inMergeQueue) {
+    return noAction('awaiting-merge-queue', ['lifecycle', 'merge-queue'], 'the pull request is already in the merge queue')
+  }
+  if (world.mergeQueueRequired === true && landedEnqueue && !world.mergeQueueKnown) {
+    return noAction('awaiting-merge-queue', ['lifecycle', 'merge-queue'], 'waiting for live merge queue membership after enqueue')
+  }
+  if (world.mergeQueueRequired === true && world.mergeQueueKnown && landedEnqueue) {
+    return noAction('merge-queue-ejected', ['lifecycle', 'merge-queue'], 'the pull request left the merge queue without merging')
+  }
+
   considered.push('conflicts')
-  if (world.mergeable === 'CONFLICTING' || world.mergeStateStatus === 'DIRTY') {
-    if (world.mergeable !== 'CONFLICTING' || !enabled(enrollment.capabilities.resolveConflicts) ||
-      snapshot.freshness !== 'live' || world.draft || !world.mergeMetadataKnown || !isApprovalReady(world)) {
-      return noAction('conflicts-present', considered)
+  const rebaseConflict = rebaseConflictAttempt(world, journal, enrollment)
+  if (world.mergeable === 'CONFLICTING' || world.mergeStateStatus === 'DIRTY' || rebaseConflict !== null) {
+    const conflictReason = rebaseConflict === null ? 'conflicts-present' : 'rebase-conflicts'
+    if ((rebaseConflict === null && world.mergeable !== 'CONFLICTING') ||
+      !enabled(enrollment.capabilities.resolveConflicts) || snapshot.freshness !== 'live' ||
+      world.draft || !world.mergeMetadataKnown || !isApprovalReady(world)) {
+      return noAction(
+        conflictReason,
+        considered,
+        rebaseConflict === null ? undefined : asString(rebaseConflict.detail) || 'the local rebase conflicted'
+      )
     }
     const prepare = prepareConflictAction(world)
     const attempts = matchingNewAttempts(prepare, journal)
@@ -675,14 +783,12 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
       if (held !== null) return noAction('publish-in-flight', considered)
       return { action: publish, considered }
     }
-    if (previous?.reason === 'worker-failed') {
-      return noAction('conflicts-present', considered)
-    }
+    if (previous?.reason === 'worker-failed') return noAction(conflictReason, considered)
     return { action: prepare, considered }
   }
 
   considered.push('fix-checks')
-  const failedChecks = world.checks.filter((check) => check.state === 'failed')
+  const failedChecks = checks.filter((check) => check.state === 'failed')
   const runnableChecks = failedChecks.filter((check) => check.kind === 'check_run' && check.rerunTarget !== null)
   const rerunNames = [...new Set(runnableChecks.map((check) => check.name))].sort((left, right) => left.localeCompare(right))
   if (runnableChecks.length > 0 && !world.checksComplete) {
@@ -691,7 +797,7 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
   }
   if (runnableChecks.length > 0) {
     const workflows = new Set(runnableChecks.flatMap((check) => check.workflowRunId === null ? [] : [check.workflowRunId]))
-    if (world.checks.some((check) => check.state === 'pending' && check.workflowRunId !== null && workflows.has(check.workflowRunId))) {
+    if (checks.some((check) => check.state === 'pending' && check.workflowRunId !== null && workflows.has(check.workflowRunId))) {
       considered[considered.length - 1] = 'fix-checks: awaiting-workflow-run'
       return noAction('awaiting-workflow-run', considered)
     }
@@ -762,7 +868,7 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
   if (world.mergeStateStatus === 'BEHIND') {
     if (world.draft) {
       considered[considered.length - 1] = 'update-branch: draft'
-    } else if (world.checks.some((check) => check.state === 'pending')) {
+    } else if (checks.some((check) => check.state === 'pending')) {
       considered[considered.length - 1] = 'update-branch: awaiting-checks'
       return noAction('awaiting-checks', considered)
     } else if (!world.checksComplete) {
@@ -771,7 +877,11 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
     } else if (enrollment.capabilities.updateBranch === 'off') {
       considered[considered.length - 1] = 'update-branch: capability-off'
     } else {
-      const action = buildUpdateAction(world, journal)
+      const action = buildUpdateAction(
+        world,
+        journal,
+        enrollment.kindPayload.branchUpdateMode ?? 'merge-base-update'
+      )
       const previous = latestAttemptFor(action, journal)
       if (previous && (previous.state !== 'settled' || previous.effect === 'indeterminate' ||
         (previous.effect === 'landed' && previous.action.kind === 'update-branch' && previous.action.head === world.headSha))) {
@@ -788,9 +898,19 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
   const failedGates = mergeGates(world, enrollment)
   if (failedGates.length > 0) return noAction('merge-gates-unsatisfied', considered, failedGates.join(','))
 
-  considered.push('merge')
   const method = enrollment.kindPayload.mergeMethod ?? world.defaultMergeMethod
   if (method === null || !isMergeMethod(method)) return noAction('merge-gates-unsatisfied', considered, 'merge-method')
+  if (world.mergeQueueRequired === true) {
+    considered.push('enqueue')
+    const action = buildEnqueueAction(world, method, journal)
+    const previous = latestAttemptFor(action, journal)
+    if (previous && (previous.state !== 'settled' || previous.effect === 'indeterminate')) {
+      return noAction('awaiting-merge-queue', considered)
+    }
+    return { action, considered }
+  }
+
+  considered.push('merge')
   const action = buildMergeAction(world, method, journal)
   const previous = latestAttemptFor(action, journal)
   if (previous && (previous.state !== 'settled' || previous.effect === 'indeterminate' ||
@@ -802,7 +922,7 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
 
 export function decide(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollment: SitterEnrollment): Decision<SitterAction> {
   const planned = plan(snapshot, journal, enrollment)
-  if (planned.action === null || !['rerun-check', 'update-branch', 'merge'].includes(planned.action.kind)) return planned
+  if (planned.action === null || !['rerun-check', 'update-branch', 'merge', 'enqueue'].includes(planned.action.kind)) return planned
   const retry = retryState(planned.action, journal)
   if (retry.failuresAfterReset.length >= RETRY_LIMIT) {
     const lastFailure = retry.failuresAfterReset.at(-1)!
@@ -826,6 +946,27 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
     }
   }
   const attempts = latestAttempts(journal)
+  const rebaseConflict = rebaseConflictAttempt(world, journal, enrollment)
+  if (rebaseConflict !== null && !enabled(enrollment.capabilities.resolveConflicts)) {
+    return park(
+      asString(rebaseConflict.detail) || 'the local rebase conflicted',
+      'rebase-conflicts',
+      'landing-failed',
+      `rebase-conflicts:${world.headSha}`
+    )
+  }
+  if (world.mergeQueueRequired === true && world.mergeQueueKnown && !world.inMergeQueue &&
+    attempts.some((attempt) => attempt.action.kind === 'enqueue' &&
+      attempt.state === 'settled' && attempt.effect === 'landed' &&
+      (attempt.action as EnqueueAction).head === world.headSha)) {
+    return park(
+      'the pull request left the merge queue without merging',
+      'merge-queue-ejected',
+      'landing-failed',
+      `merge-queue-ejected:${world.headSha}`
+    )
+  }
+  const checks = scopedChecks(world)
   if (world.localPrepared && world.localPrepared.sha !== world.headSha && world.localPrepared.policyViolation !== null &&
     hasValidSecondaryParent(world.localPrepared, world.baseSha) &&
     attempts.some((attempt) => (attempt.action.kind === 'prepare-fix' || attempt.action.kind === 'prepare-conflict-resolution') &&
@@ -850,7 +991,7 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
     if (publish.preparedCommitSha !== world.headSha) continue
     const latestPublish = matchingNewAttempts(publish, journal).at(-1)
     if (!latestPublish || latestPublish.state !== 'settled' || latestPublish.effect !== 'landed') continue
-    const sameFailure = world.checks.some((check) =>
+    const sameFailure = checks.some((check) =>
       check.state === 'failed' && [...prepareByIdentity.values()].some((entry) => {
         if (entry.state !== 'settled' || entry.effect !== 'landed' || entry.fingerprint !== publish.prepareFingerprint) return false
         const prepare = entry.action as PrepareFixAction
@@ -896,7 +1037,7 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
   if (conflicting && !enabled(enrollment.capabilities.resolveConflicts)) {
     return park('merge conflicts are present', 'conflicts-present', 'landing-failed', `conflicts-present:${world.headSha}`)
   }
-  const runnable = world.checks.filter((check) =>
+  const runnable = checks.filter((check) =>
     check.state === 'failed' && check.kind === 'check_run' && check.rerunTarget !== null
   )
   const persisted = world.checksComplete ? persistedFailures(world, journal, runnable) : []
@@ -918,7 +1059,7 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
   }
 
   const planned = plan(snapshot, journal, enrollment)
-  if (planned.action === null || !['rerun-check', 'update-branch', 'merge'].includes(planned.action.kind)) return null
+  if (planned.action === null || !['rerun-check', 'update-branch', 'merge', 'enqueue'].includes(planned.action.kind)) return null
   const retry = retryState(planned.action, journal)
   if (retry.failuresAfterReset.length < RETRY_LIMIT) return null
   const lastFailure = retry.failuresAfterReset.at(-1)!
@@ -940,6 +1081,15 @@ export function resolveOutcome(attempt: Attempt, snapshot: Snapshot<SitterWorld>
     if (world.headSha !== publish.expectedHeadSha) return { effect: 'not-landed', reason: 'head-moved' }
     if (age >= UNOBSERVED_EFFECT_MS) return { effect: 'not-landed', reason: 'no-publish-observed' }
   }
+  if (action.kind === 'enqueue') {
+    const enqueue = action as EnqueueAction
+    if (snapshot.freshness !== 'live') return null
+    if (world.lifecycle === 'merged') return { effect: 'landed' }
+    if (world.headSha !== enqueue.head) return { effect: 'not-landed', reason: 'head-moved' }
+    if (world.inMergeQueue) return { effect: 'landed' }
+    if (age >= UNOBSERVED_EFFECT_MS) return { effect: 'not-landed', reason: 'no-enqueue-observed' }
+    return null
+  }
   if (action.kind === 'merge') {
     const merge = action as MergeAction
     if (world.lifecycle === 'merged') return { effect: 'landed' }
@@ -958,7 +1108,7 @@ export function resolveOutcome(attempt: Attempt, snapshot: Snapshot<SitterWorld>
   if (action.kind === 'rerun-check') {
     const rerun = action as RerunCheckAction
     if (world.headSha !== rerun.head) return { effect: 'not-landed', reason: 'head-moved' }
-    if (rerun.observations.some((observation) => !world.checks.some((check) => check.observation === observation))) {
+    if (rerun.observations.some((observation) => !scopedChecks(world).some((check) => check.observation === observation))) {
       return { effect: 'landed' }
     }
     if (age >= UNOBSERVED_EFFECT_MS) return { effect: 'not-landed', reason: 'no-rerun-observed' }
@@ -978,22 +1128,25 @@ function retryIsWaiting(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[]
 export function pace(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[]): PacingTier {
   const world = snapshot.world
   if (world.lifecycle !== 'open') return 'stopped'
+  if (world.inMergeQueue) return 'rapid'
   const attempts = latestAttempts(journal)
+  const checks = scopedChecks(world)
   if (attempts.some((attempt) => attempt.state !== 'settled' || attempt.effect === 'indeterminate')) return 'rapid'
-  if (world.checks.some((check) => check.state === 'pending')) return 'rapid'
+  if (checks.some((check) => check.state === 'pending')) return 'rapid'
   for (const attempt of attempts) {
     if (attempt.effect !== 'landed' || attempt.state !== 'settled') continue
     const action = attempt.action
     if (action.kind === 'rerun-check') {
       const rerun = action as RerunCheckAction
-      if (rerun.head === world.headSha && world.checks.some((check) =>
+      if (rerun.head === world.headSha && checks.some((check) =>
         check.state === 'failed' && rerun.observations.includes(check.observation))) return 'rapid'
     }
+    if (action.kind === 'enqueue' && action.head === world.headSha && !world.mergeQueueKnown) return 'rapid'
     if ((action.kind === 'update-branch' || action.kind === 'merge') &&
       (action as UpdateBranchAction | MergeAction).head === world.headSha) return 'rapid'
   }
   if (world.mergeable === 'CONFLICTING' || world.mergeStateStatus === 'DIRTY' ||
-    world.checks.some((check) => check.state === 'failed') || world.mergeStateStatus === 'BEHIND' ||
+    checks.some((check) => check.state === 'failed') || world.mergeStateStatus === 'BEHIND' ||
     retryIsWaiting(snapshot, journal)) return 'active'
   return 'idle'
 }
