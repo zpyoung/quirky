@@ -3,5 +3,6 @@
   "quirky.handoff": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.session": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.cli": ["commands", "compatibility-tokens", "empty", "error", "loading"],
-  "quirky.mobile": ["commands", "compatibility-tokens", "empty", "error", "loading"]
+  "quirky.mobile": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.terminal-dock": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }
