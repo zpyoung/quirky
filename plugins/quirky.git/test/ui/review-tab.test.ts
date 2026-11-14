@@ -1,18 +1,18 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { RpcErrorCode, type GitDiff, type ReviewFile, type ReviewModel } from '@quirky/protocol'
+import { RpcErrorCode, type GitDiff, type GitStatusEntry, type ReviewFile, type ReviewModel } from '@quirky/protocol'
 import { registerDom } from './register-dom'
 
 registerDom()
 const s = await import('./support')
 const { reviewViewFor } = await import('../../src/review/open')
 const { onSelectedPath, selectedPath, selectPath } = await import('../../src/review/selection')
-const { openDiffView } = await import('../../src/view/registry')
+const { deferReview, openDiffView, takeDeferredReview } = await import('../../src/view/registry')
 afterAll(() => GlobalRegistrator.unregister())
 
 const {
-  act, byLabel, byText, click, failure, fakeContext, layoutFor, modifiedEditor, mountView, numbered, reviewFile, reviewModel, settle,
-  stubIntersectionObserver, stubResizeObserver, textDiff
+  act, byLabel, byText, click, edit, failure, fakeContext, layoutFor, modifiedEditor, mountView, numbered, reviewFile, reviewModel, settle,
+  status, stubIntersectionObserver, stubResizeObserver, textDiff
 } = s
 
 const COMMIT = 'f5429a1'.padEnd(40, '0')
@@ -20,6 +20,15 @@ const README = 'README.md'
 const APP = 'src/app.ts'
 const ENABLED = 'src/feature/enabled.ts'
 const FLAGS = 'src/feature/flags.ts'
+
+const sourceEntry = (path: string, area: GitStatusEntry['area'], entryStatus: GitStatusEntry['status'] = 'modified'): GitStatusEntry => ({
+  path,
+  area,
+  status: entryStatus,
+  added: 1,
+  removed: 0,
+  binary: false
+})
 
 const initialFiles = (): ReviewFile[] => [
   reviewFile(README, { mark: 'reviewed' }),
@@ -62,6 +71,23 @@ const select = async (path: string | null, origin: 'panel' | 'review' = 'panel')
 const setMark = async (path: string, mark: ReviewFile['mark']) => {
   model = reviewModel(model.files.map((f) => (f.path === path ? { ...f, mark } : f)))
   await refreshModel()
+}
+
+const draftReview = async () => {
+  const element = await open()
+  act(() => card(element, APP).dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })))
+  edit(element, 'draft text\n')
+  await settle()
+  element.querySelector<HTMLElement>('[data-review-scroll]')!.scrollTop = 321
+  return element
+}
+
+const expectDraftPreserved = (element: HTMLElement) => {
+  expect(element.querySelector('.ui-scope-chip')).toBeNull()
+  expect(order(element)).toEqual([README, APP, ENABLED, FLAGS])
+  expect(card(element, APP).getAttribute('data-active')).toBe('')
+  expect(modifiedEditor(element).state.doc.toString()).toBe('draft text\n')
+  expect(element.querySelector<HTMLElement>('[data-review-scroll]')!.scrollTop).toBe(321)
 }
 
 beforeEach(() => {
@@ -553,6 +579,199 @@ describe('quirky.git review tab', () => {
     await select(ENABLED, 'review')
     await select('not-a-card.ts')
     expect(scrolled.length).toBe(1)
+  })
+
+  test('13: staged and unstaged scopes use status entries and refresh without review controls', async () => {
+    const entries = [
+      sourceEntry(README, 'staged'),
+      sourceEntry(APP, 'unstaged'),
+      sourceEntry('src/new.ts', 'staged', 'added'),
+      sourceEntry('notes.txt', 'untracked', 'untracked')
+    ]
+    let currentStatus = status(entries)
+    fake.handlers['quirky.git/status'] = () => currentStatus
+
+    let element = await open({ worktree: 'w1', mode: 'review', source: 'staged' })
+    expect(order(element)).toEqual([README, 'src/new.ts'])
+    expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Staged changes')
+    for (const path of order(element)) {
+      expect(byText(card(element, path!), 'Mark reviewed')).toBeNull()
+      expect(card(element, path!).querySelector('[contenteditable="true"]')).toBeNull()
+    }
+    expect(fake.callsTo('quirky.git/diff').map(({ params }) => params)).toEqual([
+      { worktree: 'w1', path: README, source: 'staged' },
+      { worktree: 'w1', path: 'src/new.ts', source: 'staged' }
+    ])
+    expect(mounted!.report()).toMatchObject({ source: 'staged', commit: null })
+
+    const reads = fake.callsTo('quirky.git/status').length
+    currentStatus = status([...entries, sourceEntry('z.ts', 'staged', 'added')])
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } } as never))
+    await settle()
+    expect(fake.callsTo('quirky.git/status').length).toBeGreaterThan(reads)
+    expect(order(element)).toEqual([README, 'src/new.ts', 'z.ts'])
+
+    mounted!.unmount()
+    mounted = null
+    element = await open({ worktree: 'w1', mode: 'review', source: 'unstaged' })
+    expect(order(element)).toEqual(['notes.txt', APP])
+    expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Unstaged changes')
+    for (const path of order(element)) expect(byText(card(element, path!), 'Mark reviewed')).toBeNull()
+    expect(card(element, APP).querySelector('[contenteditable="true"]')).not.toBeNull()
+    expect(fake.callsTo('quirky.git/diff').slice(-2).map(({ params }) => params)).toEqual([
+      { worktree: 'w1', path: 'notes.txt', source: 'unstaged' },
+      { worktree: 'w1', path: APP, source: 'unstaged' }
+    ])
+    expect(mounted!.report()).toMatchObject({ source: 'unstaged', commit: null })
+  })
+
+  test('13: empty and capped source scopes explain their completeness', async () => {
+    let currentStatus = status([sourceEntry(APP, 'unstaged')])
+    fake.handlers['quirky.git/status'] = () => currentStatus
+    const element = await open({ worktree: 'w1', mode: 'review', source: 'staged' })
+    expect(element.textContent).toContain('No staged changes')
+
+    currentStatus = { ...status([sourceEntry(README, 'staged')]), capped: true }
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } } as never))
+    await settle()
+    const notice = [...element.querySelectorAll<HTMLElement>('.git-review__notice')].find((node) =>
+      node.textContent?.includes('Git status stopped at its entry limit, so this list is incomplete.')
+    )!
+    expect(notice).not.toBeNull()
+    expect(notice.compareDocumentPosition(card(element, README)) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  test('13: a deferred review request is consumed before the stored input is applied', async () => {
+    fake.handlers['quirky.git/status'] = () => status([sourceEntry(APP, 'unstaged')])
+    deferReview('w1', { reveal: APP, source: 'unstaged' })
+    const element = await open()
+    expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Unstaged changes')
+    expect(card(element, APP).getAttribute('data-active')).toBe('')
+    expect(takeDeferredReview('w1')).toBeUndefined()
+  })
+
+  test('13: a deferred reveal-only request replaces stored staged and commit scopes', async () => {
+    const storedInputs = [
+      { source: 'staged' as const, reveal: README, noteId: 'stale-note' },
+      { commit: COMMIT, reveal: README, noteId: 'stale-note' }
+    ]
+    for (const stored of storedInputs) {
+      deferReview('w1', { reveal: APP })
+      const element = await open({ worktree: 'w1', mode: 'review', ...stored })
+      expect(element.querySelector('.ui-scope-chip')).toBeNull()
+      expect(order(element)).toEqual([README, APP, ENABLED, FLAGS])
+      expect(card(element, APP).getAttribute('data-active')).toBe('')
+      expect(card(element, README).getAttribute('data-active')).toBeNull()
+      expect(fake.callsTo('quirky.git/commitFiles')).toHaveLength(0)
+      mounted!.unmount()
+      mounted = null
+    }
+  })
+
+  test('13: an empty deferred request clears stored scope, reveal, and note target', async () => {
+    deferReview('w1', {})
+    const element = await open({ worktree: 'w1', mode: 'review', source: 'staged', reveal: APP, noteId: 'stale-note' })
+    expect(element.querySelector('.ui-scope-chip')).toBeNull()
+    expect(order(element)).toEqual([README, APP, ENABLED, FLAGS])
+    expect(element.querySelector('[data-active]')).toBeNull()
+    expect(takeDeferredReview('w1')).toBeUndefined()
+  })
+
+  test('13b: applyScope applies without a draft and reports an unchanged scope without asking', async () => {
+    const element = await open()
+    const handle = reviewViewFor('w1')!
+    expect(await handle.applyScope!({ source: 'staged' }, 'refuse')).toBe('applied')
+    await settle()
+    expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Staged changes')
+
+    let confirms = 0
+    fake.context.confirm = async () => {
+      confirms++
+      return true
+    }
+    expect(await handle.applyScope!({ source: 'staged' }, 'ask')).toBe('unchanged')
+    expect(confirms).toBe(0)
+  })
+
+  test('13b: refuse reports dirty and preserves the active draft and scroll without asking', async () => {
+    const element = await draftReview()
+    let confirms = 0
+    fake.context.confirm = async () => {
+      confirms++
+      return true
+    }
+    expect(await reviewViewFor('w1')!.applyScope!({ source: 'staged' }, 'refuse')).toBe('dirty')
+    expect(confirms).toBe(0)
+    expectDraftPreserved(element)
+  })
+
+  test('13b: a cancelled confirmation preserves the active draft and scroll', async () => {
+    const element = await draftReview()
+    let title = ''
+    fake.context.confirm = async (request) => {
+      title = request.title
+      return false
+    }
+    expect(await reviewViewFor('w1')!.applyScope!({ commit: COMMIT }, 'ask')).toBe('cancelled')
+    expect(title).toBe('Discard unsaved edits in 1 file?')
+    expectDraftPreserved(element)
+  })
+
+  test('13b: a pending confirmation makes a concurrent scope request busy', async () => {
+    const element = await draftReview()
+    let confirms = 0
+    const confirmation = Promise.withResolvers<boolean>()
+    fake.context.confirm = () => {
+      confirms++
+      return confirmation.promise
+    }
+    const handle = reviewViewFor('w1')!
+    const pending = handle.applyScope!({ commit: COMMIT }, 'ask')
+    await settle()
+    expect(await handle.applyScope!({ source: 'unstaged' }, 'ask')).toBe('busy')
+    expect(confirms).toBe(1)
+    expectDraftPreserved(element)
+    confirmation.resolve(false)
+    expect(await pending).toBe('cancelled')
+    expectDraftPreserved(element)
+  })
+
+  test('13b: a confirmation error propagates and releases the confirmation guard', async () => {
+    const element = await draftReview()
+    let confirms = 0
+    fake.context.confirm = async () => {
+      confirms++
+      if (confirms === 1) throw new Error('confirm failed')
+      return false
+    }
+    const handle = reviewViewFor('w1')!
+    await expect(handle.applyScope!({ source: 'staged' }, 'ask')).rejects.toThrow('confirm failed')
+    expectDraftPreserved(element)
+    expect(await handle.applyScope!({ source: 'staged' }, 'ask')).toBe('cancelled')
+    expect(confirms).toBe(2)
+    expectDraftPreserved(element)
+  })
+
+  test('13b: confirming a scope change applies it and drops the old draft', async () => {
+    const element = await draftReview()
+    fake.context.confirm = async () => true
+    expect(await reviewViewFor('w1')!.applyScope!({ source: 'staged' }, 'ask')).toBe('applied')
+    await settle()
+    expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Staged changes')
+    expect(order(element)).toEqual([])
+  })
+
+  test('13b: the legacy setScope path still asks and ignores a cancelled result', async () => {
+    const element = await draftReview()
+    let title = ''
+    fake.context.confirm = async (request) => {
+      title = request.title
+      return false
+    }
+    act(() => reviewViewFor('w1')!.setScope(COMMIT))
+    await settle()
+    expect(title).toBe('Discard unsaved edits in 1 file?')
+    expectDraftPreserved(element)
   })
 
   test('SC-33: a commit scope shows the commit chip and no review controls, and removing the chip returns', async () => {

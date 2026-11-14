@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, IconButton, Menu, ScopeChip, SectionHeader } from '@quirky/ui'
-import type { GitChange, GitDiff } from '@quirky/protocol'
+import type { GitChange, GitDiff, GitStatusEntry } from '@quirky/protocol'
 
 import { reuseGitDiff } from '../diffRefresh'
 import { useNotes } from '../notes/useNotes'
 import { useSettings } from '../panel/data'
 import { shortOid } from '../panel/format'
-import { registerReviewView } from '../review/open'
+import { registerReviewView, type ReviewSource } from '../review/open'
+import { takeDeferredReview, type ReviewScope, type ScopeOutcome } from './registry'
 import { reviewOrder, nextToReview } from '../review/order'
 import { onSelectedPath, selectPath } from '../review/selection'
 import { setReviewMark, useReview } from '../review/useReview'
+import { useSourceEntries } from '../review/useSourceEntries'
 import { fetchDiff, messageOf, useRefreshTriggers } from './data'
 import type { PaneHandle, PaneState } from './DiffPane'
 import { EAGER_SECTIONS } from './entries'
@@ -22,6 +24,7 @@ import {
   isCollapsed,
   itemFromChange,
   itemFromFile,
+  itemsFromEntries,
   layoutFor,
   loadModeOf,
   orderChanges,
@@ -34,6 +37,7 @@ import {
 import type { ModeProps } from './types'
 
 const IDLE: PaneState = { changes: 0, current: null, dirty: false, stale: false, tooLarge: false }
+const NO_STATUS_ENTRIES: readonly GitStatusEntry[] = []
 const NO_ITEMS: readonly ReviewItem[] = []
 
 type CommitFiles = { scope: string; commit: string; entries: GitChange[] }
@@ -54,19 +58,43 @@ const diskMoved = (held: GitDiff, fresh: GitDiff): boolean => held.modifiedHash 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /**
- * The worktree's one Review tab: a card per changed file, from the merge base to the disk, in the
- * panel's order, each with its review mark. A commit scope swaps the cards for that commit's files
- * and drops the review controls. The tab registers a `ReviewViewHandle` so `openReview` can steer a
- * mounted tab; it lays diffs out by its own width unless the header toggle says otherwise.
+ * The worktree's one Review tab: a card per base, staged, unstaged or commit change in the panel's
+ * order. Scope cards omit review marks; only cards with a disk-side diff can be edited or reverted.
+ * The tab registers a `ReviewViewHandle` so `openReview` can steer a mounted tab.
  */
 export function ReviewDiff({ context, input, settings, setSetting, report, bind }: ModeProps) {
   const worktree = input.worktree
+  const initial = useRef<{ request: ModeProps['input']; scope: ReviewScope } | null>(null)
+  if (initial.current === null) {
+    const deferred = takeDeferredReview(worktree)
+    let request: ModeProps['input']
+    let scope: ReviewScope = null
+    if (deferred === undefined) {
+      request = input
+      if (input.commit !== undefined) scope = { commit: input.commit }
+      else if (input.source === 'staged' || input.source === 'unstaged') scope = { source: input.source }
+    } else {
+      request = {
+        worktree: input.worktree,
+        mode: input.mode,
+        ...(input.tabId === undefined ? {} : { tabId: input.tabId }),
+        ...deferred
+      }
+      if (deferred.commit !== undefined) scope = { commit: deferred.commit }
+      else if (deferred.source !== undefined) scope = { source: deferred.source }
+    }
+    initial.current = { request, scope }
+  }
+  const mount = initial.current!
+  const mountInput = mount.request
   const { model, error, refresh } = useReview(context, worktree)
   const [panelSettings] = useSettings(context)
   const viewMode = panelSettings.viewMode
   const notes = useNotes(context, worktree)
 
-  const [scope, setScopeState] = useState<string | null>(input.commit ?? null)
+  const [scope, setScopeState] = useState<ReviewScope>(() => mount.scope)
+  const source = scope !== null && 'source' in scope ? scope.source : null
+  const sourceData = useSourceEntries(context, worktree, source !== null)
   const [commitData, setCommitData] = useState<CommitFiles | null>(null)
   const [commitError, setCommitError] = useState<string | null>(null)
   const [ui, setUi] = useState<Record<string, CardUi>>({})
@@ -78,7 +106,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const [override, setOverride] = useState<DiffLayout | null>(null)
   const [revealTick, setRevealTick] = useState(0)
   const [noteTarget, setNoteTarget] = useState<{ path: string; noteId: string } | null>(
-    input.reveal !== undefined && input.noteId !== undefined ? { path: input.reveal, noteId: input.noteId } : null
+    mountInput.reveal !== undefined && mountInput.noteId !== undefined ? { path: mountInput.reveal, noteId: mountInput.noteId } : null
   )
   const [marking, setMarking] = useState<ReadonlySet<string>>(new Set())
 
@@ -93,22 +121,24 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const loops = useRef(new Map<string, Promise<void>>())
   const forced = useRef(new Set<string>())
   const pendingNav = useRef<{ key: string; go: (pane: PaneHandle) => void } | null>(null)
-  const pendingReveal = useRef<string | null>(input.reveal ?? null)
+  const pendingReveal = useRef<string | null>(mountInput.reveal ?? null)
   const scrollRef = useRef<HTMLElement | null>(null)
   scrollRef.current = scrollEl
 
+  const commit = scope !== null && 'commit' in scope ? scope.commit : null
+
   useEffect(() => {
-    if (scope === null) {
+    if (commit === null) {
       setCommitData(null)
       setCommitError(null)
       return
     }
     let current = true
     setCommitError(null)
-    context.call('quirky.git/commitFiles', { worktree, commit: scope }).then(
+    context.call('quirky.git/commitFiles', { worktree, commit }).then(
       (result) => {
-        const { commit, entries } = result as { commit: string; entries: GitChange[] }
-        if (current) setCommitData({ scope, commit, entries })
+        const { commit: resolvedCommit, entries } = result as { commit: string; entries: GitChange[] }
+        if (current) setCommitData({ scope: commit, commit: resolvedCommit, entries })
       },
       (e: unknown) => {
         if (current) setCommitError(messageOf(e))
@@ -117,7 +147,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     return () => {
       current = false
     }
-  }, [context, worktree, scope])
+  }, [context, worktree, commit])
 
   const files = model?.files
   const noteCounts = useMemo(() => {
@@ -126,14 +156,17 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     return counts
   }, [notes])
   const modelItems = useMemo<readonly ReviewItem[]>(() => {
-    if (scope !== null) {
-      if (commitData?.scope !== scope) return NO_ITEMS
+    if (commit !== null) {
+      if (commitData?.scope !== commit) return NO_ITEMS
       return orderChanges(commitData.entries, viewMode).map((change) => itemFromChange(change, commitData.commit, noteCounts.get(change.path) ?? 0))
     }
+    if (source !== null) {
+      return itemsFromEntries(sourceData.status?.entries ?? NO_STATUS_ENTRIES, source, viewMode, noteCounts)
+    }
     return files === undefined ? NO_ITEMS : reviewOrder(files, viewMode).map(itemFromFile)
-  }, [scope, commitData, files, viewMode, noteCounts])
+  }, [commit, source, commitData, sourceData.status, files, viewMode, noteCounts])
   // a card with unsaved edits stays, from its last item and where it last sat, after its file leaves the model
-  const lastItems = useRef<{ scope: string | null; items: readonly ReviewItem[] }>({ scope, items: NO_ITEMS })
+  const lastItems = useRef<{ scope: ReviewScope; items: readonly ReviewItem[] }>({ scope, items: NO_ITEMS })
   const items = useMemo<readonly ReviewItem[]>(() => {
     const previous = lastItems.current
     let next = modelItems
@@ -146,6 +179,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     lastItems.current = { scope, items: next }
     return next
   }, [modelItems, scope, paneStates])
+
   const itemsRef = useRef(items)
   itemsRef.current = items
   const filesRef = useRef(files)
@@ -171,10 +205,15 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   commitRef.current = commitData
 
   const diffFor = (item: ReviewItem, against: 'base' | 'reviewed') => {
-    const commit = commitRef.current
-    return scopeRef.current !== null && commit
-      ? fetchDiff(context, worktree, { path: item.path, source: 'commit', oldPath: item.oldPath, commit: commit.commit })
-      : fetchDiff(context, worktree, { path: item.path, source: 'review', oldPath: item.oldPath, against })
+    const activeScope = scopeRef.current
+    const currentCommit = commitRef.current
+    if (activeScope !== null && 'commit' in activeScope && currentCommit) {
+      return fetchDiff(context, worktree, { path: item.path, source: 'commit', oldPath: item.oldPath, commit: currentCommit.commit })
+    }
+    if (activeScope !== null && 'source' in activeScope) {
+      return fetchDiff(context, worktree, { path: item.path, source: activeScope.source })
+    }
+    return fetchDiff(context, worktree, { path: item.path, source: 'review', oldPath: item.oldPath, against })
   }
 
   const versionOf = (item: ReviewItem): CardVersion => {
@@ -266,7 +305,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const catchUp = (key: string) => {
     const item = itemsRef.current.find((i) => i.key === key)
     const section = sectionsRef.current[key]
-    if (!item || !section || section.status === 'idle' || scopeRef.current !== null || isCollapsed(viewOfRef(item))) return
+    if (!item || !section || section.status === 'idle' || (scopeRef.current !== null && 'commit' in scopeRef.current) || isCollapsed(viewOfRef(item))) return
     const version = versionOf(item)
     if (section.status === 'loaded' && version.loaded >= version.wanted) return
     void readCard(key)
@@ -319,7 +358,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     for (const item of eager) {
       if (loadModeOf(item) === 'auto' && sectionsRef.current[item.key]?.status === 'idle') void loader.current?.request(item.key)
     }
-    if (scope !== null) return
+    if (commit !== null) return
     for (const item of items) {
       const version = versionOf(item)
       const stamp = `${item.signature}|${bodyAgainst(cardFor(ui[item.key], item.mark))}`
@@ -334,7 +373,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   useRefreshTriggers(
     context,
     () => {
-      if (scope !== null) return
+      if (commit !== null) return
       for (const item of itemsRef.current) {
         versionOf(item).wanted++
         catchUp(item.key)
@@ -429,11 +468,20 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   }, [revealTick, items, ui, writeCard, activate, loadCard])
 
   const askingScope = useRef(false)
-  /** Shows `commit`'s files (or the worktree review for null), first asking whether to discard the unsaved edits it would drop. */
-  const changeScope = async (commit: string | null): Promise<void> => {
-    if (commit === scopeRef.current || askingScope.current) return
+  const applyScope = async (nextScope: ReviewScope, ifDirty: 'ask' | 'refuse'): Promise<ScopeOutcome> => {
+    if (askingScope.current) return 'busy'
+    const currentScope = scopeRef.current
+    const unchanged =
+      nextScope === currentScope ||
+      (nextScope !== null &&
+        currentScope !== null &&
+        (('commit' in nextScope && 'commit' in currentScope && nextScope.commit === currentScope.commit) ||
+          ('source' in nextScope && 'source' in currentScope && nextScope.source === currentScope.source)))
+    if (unchanged) return 'unchanged'
+
     const edited = itemsRef.current.filter((item) => handles.current.get(item.key)?.isDirty()).length
     if (edited > 0) {
+      if (ifDirty === 'refuse') return 'dirty'
       askingScope.current = true
       let discard = false
       try {
@@ -445,28 +493,28 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       } finally {
         askingScope.current = false
       }
-      if (!discard) {
-        pendingReveal.current = null
-        return
-      }
+      if (!discard) return 'cancelled'
     }
-    setScopeState(commit)
+    setScopeState(nextScope)
+    return 'applied'
   }
-  const changeScopeRef = useRef(changeScope)
-  changeScopeRef.current = changeScope
+  const applyScopeRef = useRef(applyScope)
+  applyScopeRef.current = applyScope
 
   useEffect(() => {
     const scrollToTop = () => {
       if (scrollRef.current) scrollRef.current.scrollTop = 0
     }
-    const setScope = (commit: string | null) => void changeScopeRef.current(commit).catch(() => undefined)
+    const setScope = (commit: string | null) =>
+      void applyScopeRef.current(commit === null ? null : { commit }, 'ask').catch(() => undefined)
     const loadedHash = (path: string): string | null | undefined => {
       if (scopeRef.current !== null) return undefined
       const item = itemsRef.current.find((i) => i.path === path)
       const shown = item && sectionsRef.current[item.key]
       return shown && shown.status === 'loaded' && shown.diff ? diskHashOf(shown.diff) : undefined
     }
-    return registerReviewView({ worktree, reveal, scrollToTop, setScope, loadedHash })
+    const handleScope = (scope: ReviewScope, ifDirty: 'ask' | 'refuse') => applyScopeRef.current(scope, ifDirty)
+    return registerReviewView({ worktree, reveal, scrollToTop, setScope, applyScope: handleScope, loadedHash })
   }, [worktree, reveal])
 
   useEffect(
@@ -608,10 +656,10 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   useEffect(() => {
     report({
       mode: 'review',
-      source: null,
+      source,
       path: null,
       area: null,
-      commit: scope,
+      commit,
       changes: states.reduce((sum, s) => sum + s.changes, 0),
       currentChange: active?.current ?? null,
       dirty: states.some((s) => s.dirty),
@@ -626,16 +674,40 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const layout = layoutFor(width, override)
   const paneSettings = useMemo(() => ({ ...settings, sideBySide: layout === 'side-by-side' }), [settings, layout])
   const scoped = scope !== null
+  const diskSide = commit === null && (source === null || source === 'unstaged')
   const compared = model ? `${model.branch ?? 'HEAD'} vs ${model.base.name}` : null
   const sinceTitle = scoped
     ? [compared, plural(items.length, 'file')].filter(Boolean).join(' · ')
     : model
       ? `${compared} · ${plural(model.counts.files, 'file')} · ${model.counts.reviewed} reviewed`
       : 'Review'
-  const loadError = scoped ? commitError : model === null ? error : null
-  const loading = scoped ? commitData?.scope !== scope && commitError === null : model === null && error === null
-  const staleError = !scoped && model !== null ? error : null
-  const notReady = !scoped && model && model.compare.status !== 'ready' ? (model.compare.message ?? null) : null
+  const loadError =
+    commit !== null ? commitError : source !== null ? (sourceData.status === null ? sourceData.error : null) : model === null ? error : null
+  const loading =
+    commit !== null
+      ? commitData?.scope !== commit && commitError === null
+      : source !== null
+        ? sourceData.status === null && sourceData.error === null
+        : model === null && error === null
+  const staleError =
+    source !== null
+      ? sourceData.status !== null
+        ? sourceData.error
+        : null
+      : commit === null && model !== null
+        ? error
+        : null
+  const notReady = commit === null && source === null && model && model.compare.status !== 'ready' ? (model.compare.message ?? null) : null
+  const emptyMessage =
+    source === 'staged'
+      ? 'No staged changes'
+      : source === 'unstaged'
+        ? 'No unstaged changes'
+        : commit !== null
+          ? 'No files in this commit'
+          : `Nothing changed against ${model?.base.name ?? 'the base'}`
+  const retry = source !== null ? sourceData.refresh : refresh
+  const removeScope = () => void applyScopeRef.current(null, 'ask').catch(() => undefined)
 
   return (
     <div className="git-review" data-review-tab>
@@ -645,7 +717,13 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
             <span className="git-review__summary" data-review-summary title={sinceTitle}>
               {sinceTitle}
             </span>
-            {scope !== null && <ScopeChip label={`Commit ${shortOid(commitData?.scope === scope ? commitData.commit : scope)}`} onRemove={() => void changeScope(null)} />}
+            {commit !== null && (
+              <ScopeChip
+                label={`Commit ${shortOid(commitData?.scope === commit ? commitData.commit : commit)}`}
+                onRemove={removeScope}
+              />
+            )}
+            {source !== null && <ScopeChip label={source === 'staged' ? 'Staged changes' : 'Unstaged changes'} onRemove={removeScope} />}
           </span>
         }
         actions={
@@ -680,14 +758,15 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         {loadError !== null && items.length === 0 && <ErrorNotice message={loadError} subject="review" />}
         {staleError !== null && (
           <div role="alert" className="git-review__notice">
-            Review may be out of date: {staleError} <Button onClick={refresh}>Retry</Button>
+            Review may be out of date: {staleError} <Button onClick={retry}>Retry</Button>
           </div>
         )}
         {loading && <p className="ui-text-muted git-review__notice">Loading diff...</p>}
         {notReady && <p className="ui-text-muted git-review__notice">{notReady}</p>}
-        {!loading && loadError === null && items.length === 0 && (
-          <EmptyState message={scoped ? 'No files in this commit' : `Nothing changed against ${model?.base.name ?? 'the base'}`} />
+        {source !== null && sourceData.status?.capped === true && (
+          <p className="ui-text-muted git-review__notice">Git status stopped at its entry limit, so this list is incomplete.</p>
         )}
+        {!loading && loadError === null && items.length === 0 && <EmptyState message={emptyMessage} />}
         {items.map((item) => {
           const view = viewOf(item)
           return (
@@ -700,6 +779,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
               collapsed={isCollapsed(view)}
               full={view.full}
               scoped={scoped}
+              diskSide={diskSide}
               active={activeKey === item.key}
               marking={marking.has(item.path)}
               dirty={paneStates[item.key]?.dirty === true}
