@@ -14,9 +14,10 @@ beforeAll(async () => {
   mkdirSync(builtins)
   for (const item of readdirSync(builtinsDir(), { withFileTypes: true })) {
     const pluginDir = join(builtinsDir(), item.name)
-    if (!item.isDirectory() || !existsSync(join(pluginDir, 'quirky-plugin.json'))) continue
-    const manifest = JSON.parse(readFileSync(join(pluginDir, 'quirky-plugin.json'), 'utf8'))
-    if (Array.isArray(manifest.dependencies) && manifest.dependencies.includes('quirky.heimdall')) continue
+    const manifestPath = join(pluginDir, 'quirky-plugin.json')
+    if (!item.isDirectory() || !existsSync(manifestPath)) continue
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    if (manifest.dependencies?.includes('quirky.heimdall')) continue
     symlinkSync(pluginDir, join(builtins, item.name))
   }
   installControlFixture(builtins)

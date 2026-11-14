@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import {
@@ -270,6 +270,46 @@ test('prepares populated Tasks data behind an isolated local gh executable', asy
     expect(sshConfig.stdout.toString()).toContain(sshPath)
     expect(existsSync(sshPath)).toBe(true)
     expect(Bun.spawnSync([sshPath, '-T', 'git@github.com'], { env, stdin: 'ignore' }).exitCode).toBe(1)
+  } finally {
+    prepared.cleanup()
+  }
+})
+
+test('isolated provider logins write disposable credentials and guard the host Keychain', async () => {
+  const home = freshHome()
+  const env = createIsolatedRuntimeEnvironment(home)
+  const prepared = await prepareCaptureFixtureHome(home, { timeoutMs: 10_000, env })
+  try {
+    const bin = join(home, 'fakebin')
+    const browserLog = join(home, 'browser-url')
+    const browser = join(bin, 'fixture-browser')
+    writeFileSync(browser, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(browserLog)}, process.argv[2])\n`, { mode: 0o700 })
+    const providerEnv = { ...env, CLAUDE_CONFIG_DIR: join(home, 'claude-login'), CODEX_HOME: join(home, 'codex-login'), BROWSER: browser }
+    for (const [provider, version] of [['claude', 'Claude Code 2.1.80\n'], ['codex', 'codex 1.0.0\n']]) {
+      const executable = join(bin, provider!)
+      for (const flag of ['--version', '-v']) {
+        const result = Bun.spawnSync([executable, flag], { env: providerEnv })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString()).toBe(version!)
+      }
+      expect(Bun.spawnSync([executable, 'login'], { env: providerEnv }).exitCode).toBe(0)
+    }
+    expect(JSON.parse(readFileSync(join(providerEnv.CLAUDE_CONFIG_DIR, '.claude.json'), 'utf8')))
+      .toEqual({ oauthAccount: { emailAddress: 'claude@example.test', organizationUuid: 'fixture-org', organizationName: 'Fixture Org' } })
+    const claudeCredentials = join(providerEnv.CLAUDE_CONFIG_DIR, '.credentials.json')
+    expect(JSON.parse(readFileSync(claudeCredentials, 'utf8')).claudeAiOauth.accessToken).toBe('fixture-claude-token')
+    expect(statSync(claudeCredentials).mode & 0o777).toBe(0o600)
+    expect(readFileSync(browserLog, 'utf8')).toContain('https://claude.ai/oauth/authorize?client_id=fixture')
+    const codexCredentials = join(providerEnv.CODEX_HOME, 'auth.json')
+    const auth = JSON.parse(readFileSync(codexCredentials, 'utf8'))
+    expect(auth.auth_mode).toBe('chatgpt')
+    expect(auth.tokens.account_id).toBe('fixture-workspace')
+    expect(JSON.parse(Buffer.from(auth.tokens.id_token.split('.')[1], 'base64url').toString()).email).toBe('codex@example.test')
+    expect(statSync(codexCredentials).mode & 0o777).toBe(0o600)
+    for (const action of ['find-generic-password', 'delete-generic-password']) {
+      expect(Bun.spawnSync([join(bin, 'security'), action], { env }).exitCode).toBe(44)
+    }
+    expect(Bun.spawnSync([join(bin, 'security'), 'other'], { env }).exitCode).toBe(2)
   } finally {
     prepared.cleanup()
   }
