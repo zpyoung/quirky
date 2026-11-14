@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "ui": {
+      "loading": {
+        "applicable": false,
+        "reason": "This provider-only UI registers a palette command and renders no loading surface.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.palette/src/ui.tsx",
+            "quote": "export function activate(context: UiPluginContext): void {\n  context.provide('command:quirky.palette/toggle', () => context.setPalette())\n}"
+          }
+        ]
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "This provider-only UI registers a palette command and renders no empty surface.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.palette/src/ui.tsx",
+            "quote": "export function activate(context: UiPluginContext): void {\n  context.provide('command:quirky.palette/toggle', () => context.setPalette())\n}"
+          }
+        ]
+      },
+      "error": {
+        "applicable": false,
+        "reason": "This provider-only UI registers a palette command and renders no error surface.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.palette/src/ui.tsx",
+            "quote": "export function activate(context: UiPluginContext): void {\n  context.provide('command:quirky.palette/toggle', () => context.setPalette())\n}"
+          }
+        ]
+      }
+    }
+  },
+  "states": [],
+  "notState": [],
+  "actions": []
+}

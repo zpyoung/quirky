@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "activity-item:quirky.sidebar-extras/source-control": {
+      "loading": {
+        "applicable": false,
+        "reason": "The compact activity-stripe cell waits silently during its initial poll rather than replacing the button with a loading banner.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+            "quote": "const [status, setStatus] = useState<DirtyResult | null>(null)"
+          },
+          {
+            "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+            "quote": "<IconButton"
+          }
+        ]
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "A clean status omits the dirty-count badge and communicates cleanliness in the accessible label.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+            "quote": "const clean = status !== null && status.available && status.worktreeId !== null && !status.dirty"
+          },
+          {
+            "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+            "quote": "status?.available && status.dirty ? <Badge tone=\"needs-you\">{count}</Badge> : null"
+          }
+        ]
+      },
+      "error": {
+        "applicable": false,
+        "reason": "The compact cell cannot host a full InlineError banner; it exposes unavailable status through its accessible label and StatusDot.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+            "quote": "const label = unavailableStatus && status.error\n    ? `${title} — status unavailable: ${status.error}`\n    : clean\n      ? `${title} — no uncommitted changes`\n      : title"
+          },
+          {
+            "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+            "quote": "unavailableStatus ? <StatusDot status=\"failing\" label=\"Source Control status unavailable\" /> : null"
+          }
+        ]
+      }
+    }
+  },
+  "states": [],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+        "quote": "unavailableStatus ? <StatusDot status=\"failing\" label=\"Source Control status unavailable\" /> : null"
+      },
+      "anchor": "unavailableStatus ?",
+      "reason": "This conditional adds a compact status indicator for an unavailable check; it is not a loading, empty, or error banner."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+        "quote": "status?.available && status.dirty ? <Badge tone=\"needs-you\">{count}</Badge> : null"
+      },
+      "anchor": "status?.available && status.dirty ?",
+      "reason": "This conditional shows the dirty-count badge only when changes need attention; it is not a loading, empty, or error state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+        "quote": "onClick={() => context.togglePanel(PANEL_ID)}"
+      },
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.sidebar-extras/src/ui.tsx",
+          "quote": "context.togglePanel(PANEL_ID)"
+        },
+        "target": "panel:quirky.git/source-control"
+      }
+    }
+  ]
+}

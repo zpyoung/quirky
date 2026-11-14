@@ -244,6 +244,7 @@ export class WindowPluginHost {
   private readonly nativeBrowser: NativeBrowserCapability
 
   private refreshChain: Promise<unknown> = Promise.resolve()
+  private queuedRefresh: Promise<void> | null = null
   /** Events are newer than any `ui.state` snapshot whose request was already in flight. */
   private layoutEventVersion = 0
   /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
@@ -293,11 +294,16 @@ export class WindowPluginHost {
   /**
    * Fetches the UI model, settings and layout, then reconciles: mounted contributions that left or
    * changed owner are cleaned up, plugins that are no longer enabled are deactivated and newly
-   * enabled ones start loading in the background. Refreshes run one after another; the last one's
-   * data wins.
+   * enabled ones start loading in the background. Requests share one queued refresh.
    */
   refresh(): Promise<void> {
-    const run = this.refreshChain.then(() => this.fetchAndReconcile())
+    if (this.queuedRefresh) return this.queuedRefresh
+    let run!: Promise<void>
+    run = this.refreshChain.then(() => {
+      if (this.queuedRefresh === run) this.queuedRefresh = null
+      return this.fetchAndReconcile()
+    })
+    this.queuedRefresh = run
     this.refreshChain = run.catch(() => undefined)
     return run
   }
@@ -525,9 +531,12 @@ export class WindowPluginHost {
     }
     if (this.stopped) return
     const settings = snapshot.map((s) => (newer.has(s.id) ? { ...s, value: newer.get(s.id)! } : s))
-    // Tear down nested plugin roots before React sees slots whose containers are disappearing.
-    this.releaseStaleMounts(model)
-    this.commit({ model, settings, themeVariables: themeVariablesOf(model) })
+    const same = sameJson(model, this.state.model) && sameJson(settings, this.state.settings)
+    if (!same) {
+      // Tear down nested plugin roots before React sees slots whose containers are disappearing.
+      this.releaseStaleMounts(model)
+      this.commit({ model, settings, themeVariables: themeVariablesOf(model) })
+    }
     await this.reconcile(model)
   }
 

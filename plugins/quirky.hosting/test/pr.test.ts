@@ -244,6 +244,12 @@ if (command === 'auth' && args[1] === 'status') {
           (stateFilter === 'all' || stateFilter === itemState)
       })
       out(matches.map(restPull))
+    } else if (/\/pulls\/\d+\/update-branch$/.test(endpoint)) {
+      const item = byNumber(apiNumber)
+      if (!item || !belongsTo(item, apiOwnerRepo)) fail('HTTP 404: Not Found')
+      if (method !== 'PUT') fail('Expected PUT request')
+      if (state.updateBranchFailure) fail(String(state.updateBranchFailure))
+      out({ message: 'Branch was successfully updated' })
     } else if (/\/pulls\/\d+\/merge-async(?:\/|$)/.test(endpoint)) {
       const mergeNumber = Number(endpoint.match(/\/pulls\/(\d+)\/merge-async/)?.[1])
       const item = byNumber(mergeNumber)
@@ -1419,6 +1425,62 @@ describe('quirky.hosting PR creation', () => {
 })
 
 describe('quirky.hosting PR mutations', () => {
+  test('GH27 updateBranch requests a merge-base update pinned to the expected head and refuses a moved head or a closed pull request before any mutation', async () => {
+    const expectedHead = 'a'.repeat(40)
+    const testHost = await host(fixtureState({ prs: [pr()] }))
+    const result = recordOf(await testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead
+    }))
+    expect(result).toEqual({ state: 'requested', number: 7, head: expectedHead })
+
+    const updateCalls = () => invocationsFor(testHost, (args) => args[0] === 'api' &&
+      args.includes('repos/test-owner/test-repo/pulls/7/update-branch'))
+    expect(updateCalls()).toHaveLength(1)
+    const updateCall = updateCalls()[0]
+    if (!updateCall) throw new Error('expected update-branch API invocation')
+    expect(updateCall.args).toContain('PUT')
+    expect(requestBody(updateCall)).toEqual({ expected_head_sha: expectedHead })
+
+    const malformedHead = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'not-a-sha'
+    }))
+    expect(reasonOf(malformedHead)).toBe('validation_error')
+    expect(updateCalls()).toHaveLength(1)
+
+    const movedHead = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'c'.repeat(40)
+    }))
+    expect(reasonOf(movedHead)).toBe('head_changed')
+    expect(updateCalls()).toHaveLength(1)
+
+    testHost.writeState(fixtureState({ prs: [pr({ state: 'CLOSED' })] }))
+    const closedReview = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead
+    }))
+    expect(reasonOf(closedReview)).toBe('review_not_open')
+    expect(updateCalls()).toHaveLength(1)
+
+    testHost.writeState(fixtureState({
+      prs: [pr()],
+      updateBranchFailure: "HTTP 422: expected head sha didn't match current head ref"
+    }))
+    const beforeStaleRequest = updateCalls().length
+    const staleHead = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead
+    }))
+    expect(reasonOf(staleHead)).toBe('head_changed')
+    expect(updateCalls()).toHaveLength(beforeStaleRequest + 1)
+
+    testHost.writeState(fixtureState({ prs: [pr()] }))
+    const beforeCliRequest = updateCalls().length
+    const cliResult = await testHost.cli([
+      '--json', 'hosting', 'update-branch', '--worktree', testHost.worktree, '--number', '7', '--expected-head', expectedHead
+    ])
+    expect(cliResult).toMatchObject({ code: 0, stderr: '' })
+    expect(JSON.parse(cliResult.stdout)).toEqual(result)
+    expect(updateCalls()).toHaveLength(beforeCliRequest + 1)
+  }, 20_000)
+
   test('GH22 all direct merge methods carry the expected-head guard and never delete or bypass protections', async () => {
     const testHost = await host(fixtureState({ prs: [pr()] }))
     for (const method of ['squash', 'merge', 'rebase']) {

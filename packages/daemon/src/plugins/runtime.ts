@@ -65,6 +65,7 @@ type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
 
 export type PluginRuntime = {
   extension: ContextExtension
+  ui: UiService
   fileResources: FileResourceRegistry
   dispatcher: Dispatcher
   events: PluginEvents
@@ -464,5 +465,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, hostPower, scheduler, layout, distros, fileResources, prepareLaunch }
+  return { extension, dispatcher, events, hostPower, scheduler, layout, distros, ui, fileResources, prepareLaunch }
 }

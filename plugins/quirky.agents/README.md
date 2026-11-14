@@ -42,3 +42,11 @@ Model-probe and one-shot processes use the shared runner owned by `quirky.agents
 The Agents center view uses the shared graphite controls and theme tokens. Default agent, permissions, detection/refresh, enable switches, command/argument/environment overrides and workspace trust keep their existing public APIs. Fields save on Enter or blur (Cmd/Ctrl+Enter for multiline environment values); Reset removes that override. Appearance follows the host's dark/light choice.
 
 The settings frame fills the center panel's width. Default-agent choices wrap as the panel narrows; installed-agent names and commands stay readable, with Enabled, Set default, Docs, and the expansion control together on a separate row when needed.
+
+Agent details can also be expanded or collapsed through the active UI owner:
+
+```sh
+quirky ui run command:quirky.agents/agent-details --args '{"agent":"claude","expanded":true}'
+```
+
+The command accepts installed agents only. Disclosure state is shared by mounted Agents views for that plugin activation; it is not saved in daemon configuration.
