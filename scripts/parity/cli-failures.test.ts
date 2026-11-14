@@ -1717,6 +1717,171 @@ test('CLI files health stops after interruption while a daemon probe is pending'
   expect(existsSync(fixture.home)).toBe(false)
 })
 
+function fileRunnerControlFixture() {
+  const subject = new files.CliFilesRunner({})
+  const fixture = cliFilesStandIns()
+  const tools = installCliFixtureTools(fixture.home)
+  writeFileSync(tools.egressLog, 'https://cli-parity-guard.invalid/self-test\n')
+  const calls: string[][] = []
+  const state = { unavailable: false, closeRequested: false, publicReview: true, domReview: true }
+  const domChecked = Promise.withResolvers<void>()
+  const tabId = 'owned-review-tab'
+  const workspace = (id: string, review: boolean) => ({
+    workspace: { id, activeGroup: 'group', root: { kind: 'group', id: 'group', activeTab: review ? tabId : null, tabs: review ? [
+      { kind: 'view', id: tabId, viewId: 'view:quirky.git/diff', key: `git-diff:${JSON.stringify([id, 'review'])}`, title: 'Review', input: { mode: 'review', worktree: id } }
+    ] : [] } }
+  })
+  const pages = fixture.windows.pages.map(page => ({
+    isClosed: page.isClosed,
+    async evaluate(_read: unknown, argument?: unknown) {
+      if (argument === tabId) {
+        if (!state.publicReview) domChecked.resolve()
+        return !state.domReview
+      }
+      return true
+    }
+  }))
+  // recording pages implement only the DOM operations used by these daemon-free control cases.
+  const ownedPages = pages as unknown as CliFilesWorld['pages']
+  const world: CliFilesWorld = {
+    home: fixture.home, env: { QUIRKY_HOME: fixture.home }, daemonPid: 701,
+    cliEntry: join(repoRoot, 'packages/cli/src/main.ts'), pages: ownedPages, records: fixture.state.records,
+    worktrees: fixture.worktrees.map(worktree => ({ ...worktree, status: 'idle' as const })), tools, buildElapsedMs: 1,
+    async assertLive() {
+      if (state.unavailable || fixture.state.pageClosed.some(Boolean)) throw new files.CliFilesFailure('renderer-disconnected', 'owned renderer unavailable')
+    },
+    async execute(argv) {
+      calls.push(argv.slice(2))
+      if (state.unavailable) throw new files.CliFilesFailure('daemon-exited', 'owned daemon unavailable')
+      const args = argv.slice(2)
+      let result: unknown = {}
+      if (args[0] === 'api' && args[2] === 'ui.window.state') result = { connId: Number(args[args.indexOf('--conn-id') + 1]) }
+      else if (args[0] === 'api' && args[2] === 'quirky.terminal/workspace') {
+        const id = args[args.indexOf('--workspace') + 1]
+        result = workspace(id, state.closeRequested && state.publicReview)
+        if (state.closeRequested) state.publicReview = false
+      } else if (args[0] === 'api' && args[2] === 'ui.window.command.run') {
+        state.closeRequested = true
+      } else if (args[0] === 'editor' && args[1] === 'state') result = { buffers: [], tabs: [] }
+      else if (args[0] === 'editor' && args[1] === 'close') result = { closed: true }
+      const stdout = JSON.stringify(result)
+      return { stdout, stderr: '', exitCode: 0, stdoutBytes: Buffer.byteLength(stdout), elapsedMs: 1 }
+    },
+    async prepare() { throw new Error('control tests must not prepare Git fixtures') },
+    async cleanup() { rmSync(fixture.home, { recursive: true, force: true }) },
+    cleanupEvidence: {
+      processIdentitiesGone: true, homeRemoved: true, identities: [],
+      trackedIdentities: [
+        { kind: 'daemon', pid: 701, ppid: 1, pgid: 701, started: 'owned', command: '/fixture/packages/daemon/src/main.ts', gone: true },
+        { kind: 'browser', pid: 801, ppid: 1, pgid: 801, started: 'owned', command: '/fixture/Chrome', gone: true }
+      ]
+    }
+  }
+  subject.world = world
+  subject.home = fixture.home
+  subject.windows = world.worktrees.map((worktree, index) => ({ page: ownedPages[index], record: fixture.state.records[index], worktree, connId: fixture.state.records[index].connId }))
+  subject.assertRuntimeIdentity = async () => {
+    if (state.unavailable) throw new files.CliFilesFailure('daemon-exited', 'owned daemon unavailable')
+  }
+  subject.ensureWorld = async () => {
+    subject.sentinelHome = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-runner-control-sentinel-')))
+    const env = createIsolatedRuntimeEnvironment(subject.sentinelHome, { repoRoot })
+    subject.sentinelChild = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)'], {
+      cwd: subject.sentinelHome, env, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore'
+    })
+  }
+  subject.editorScenarios = async () => {}
+  subject.prepareRoutingAndReview = async () => {}
+  return {
+    subject, fixture, tools, calls, state, domChecked, tabId,
+    dispose() {
+      clearTimeout(subject.workTimer)
+      clearTimeout(subject.cleanupTimer)
+      rmSync(fixture.home, { recursive: true, force: true })
+    }
+  }
+}
+
+test('file runner mutation preflight checks the renderer without spawning window-state CLI reads', async () => {
+  const fixture = fileRunnerControlFixture()
+  try {
+    await fixture.subject.assertLive()
+    expect(fixture.calls).toEqual([])
+  } finally { fixture.dispose() }
+})
+
+for (const failure of ['daemon', 'renderer'] as const) {
+  test(`file runner preserves ${failure} loss as primary failure without tab-cleanup CLI errors`, async () => {
+    const fixture = fileRunnerControlFixture()
+    fixture.subject.editorScenarios = async () => {
+      if (failure === 'daemon') fixture.state.unavailable = true
+      else fixture.fixture.state.pageClosed[1] = true
+      throw new files.CliFilesFailure(`${failure}-lost`, `primary ${failure} loss`)
+    }
+    try {
+      const report = await fixture.subject.run()
+      expect(report.error).toMatchObject({ kind: `${failure}-lost`, message: `primary ${failure} loss` })
+      expect(report.cleanup).toMatchObject({ ok: true })
+      expect(report.cleanup.error).toBeUndefined()
+      expect(fixture.calls).toEqual([])
+    } finally { fixture.dispose() }
+  })
+}
+
+test('file runner reports a guard failure once without reclassifying it as failed cleanup', async () => {
+  const fixture = fileRunnerControlFixture()
+  writeFileSync(fixture.tools.orcaLog, 'unexpected command\n')
+  try {
+    const report = await fixture.subject.run()
+    expect(report.error).toMatchObject({ kind: 'guard-evidence' })
+    expect(report.cleanup).toMatchObject({ ok: true })
+    expect(report.cleanup.error).toBeUndefined()
+    expect(report.guards?.denied).toEqual(['unexpected command'])
+  } finally { fixture.dispose() }
+})
+
+test('file runner waits for Review workspace removal and DOM detachment before returning', async () => {
+  const fixture = fileRunnerControlFixture()
+  fixture.subject.reviewTabs.set('wt-b', { worktreeId: 'wt-b', tabId: fixture.tabId, connId: 42 })
+  const closing = fixture.subject.closeReview('wt-b', 'close-owned-review')
+  try {
+    const early = await Promise.race([fixture.domChecked.promise.then(() => false), closing.then(() => true)])
+    expect(early).toBe(false)
+    expect(fixture.subject.reviewTabs.has('wt-b')).toBe(true)
+    fixture.state.domReview = false
+    await closing
+    expect(fixture.state.publicReview).toBe(false)
+    expect(fixture.subject.reviewTabs.has('wt-b')).toBe(false)
+  } finally {
+    fixture.state.domReview = false
+    await closing.catch(() => {})
+    fixture.dispose()
+  }
+})
+
+test('file runner treats a newly lost teardown connection as a primary error while still stopping the world', async () => {
+  const fixture = fileRunnerControlFixture()
+  fixture.subject.world!.assertLive = async () => {
+    throw new files.CliFilesFailure('renderer-disconnected', 'connection lost before teardown')
+  }
+  try {
+    const report = await fixture.subject.run()
+    expect(report.error).toMatchObject({ kind: 'renderer-disconnected', message: 'connection lost before teardown' })
+    expect(report.cleanup).toMatchObject({ ok: true })
+    expect(fixture.calls).toEqual([])
+  } finally { fixture.dispose() }
+})
+
+test('file evidence accepts measured zero milliseconds but rejects invalid durations', () => {
+  const fixture = editorEvidenceFixture()
+  for (const receipt of fixture.receipts) receipt.elapsedMs = 0
+  expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).not.toThrow()
+  for (const duration of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    fixture.receipts[0].elapsedMs = duration
+    expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).toThrow()
+  }
+})
+
 test('CLI files health refuses a runtime that disappears during a successful probe', async () => {
   const fixture = cliFilesStandIns()
   const read = fixture.dependencies.readRuntime as () => unknown

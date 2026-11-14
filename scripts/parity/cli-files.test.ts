@@ -27,9 +27,27 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
     expect(report.error).toBeUndefined()
     expect(report.rows.map((row: { id: string }) => row.id)).toEqual(['file-diff', 'file-open', 'file-open-changed', 'file-open-render'])
     expect(report.rows.map((row: { disposition: string }) => row.disposition)).toEqual(['gap', 'covered', 'gap', 'gap'])
+    const expectedDifferences: Record<string, string[]> = {
+      'file-diff': [
+        'Review is one combined tab per worktree, not one diff tab per file.',
+        'open-diff automatically activates Review; it has no explicit background presentation option.',
+        'Review does not provide Orca edit/diff/both or staged/unstaged selection modes.'
+      ],
+      'file-open': [],
+      'file-open-changed': [
+        'open-changed uses one combined Review tab rather than per-file tabs.',
+        'Review is automatically activated rather than optionally presented in the background.',
+        'open-changed does not provide Orca edit/diff/both modes or staged/unstaged selection.'
+      ],
+      'file-open-render': [
+        'Focused editor open activates the destination worktree tab but does not navigate the current window to that worktree.',
+        'Headless DOM focus is not a native desktop foreground-window guarantee.'
+      ]
+    }
     for (const row of report.rows) {
       expect(row).toMatchObject({ status: 'observed', executed: true })
       expect(row.observations.length).toBeGreaterThan(0)
+      expect(row.differences).toEqual(expectedDifferences[row.id])
     }
     expect(report.observations.map((entry: { id: string }) => entry.id).sort()).toEqual([
       'files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path',

@@ -413,8 +413,8 @@ function assertObservationReceiptSet(observation: CliFileObservation, receipts: 
         receipt.format !== 'json' || !isObject(receipt.evidence)) {
       throw new CliFilesFailure('invalid-receipt', `receipt ${id} has invalid bounded CLI measurements`)
     }
-    if (receipt.stdoutBytes <= 0 || receipt.elapsedMs <= 0 || !Object.hasOwn(receipt.evidence, 'result')) {
-      throw new CliFilesFailure('invalid-receipt', `receipt ${id} has no successful parsed output or measured duration`)
+    if (receipt.stdoutBytes <= 0 || !Object.hasOwn(receipt.evidence, 'result')) {
+      throw new CliFilesFailure('invalid-receipt', `receipt ${id} has no parsed CLI output`)
     }
     if (receipt.exitCode === 0) {
       if (isObject(receipt.evidence.result) && receipt.evidence.result.error !== undefined && receipt.evidence.result.error !== null) {
@@ -1248,7 +1248,7 @@ function capturePageDom(): CliFileDomWindow {
   }
 }
 
-class CliFilesRunner {
+export class CliFilesRunner {
   readonly startedAt = Date.now()
   readonly workDeadline = this.startedAt + WORK_LIMIT_MS
   readonly workController = new AbortController()
@@ -1582,12 +1582,6 @@ class CliFilesRunner {
       if (entry.page.isClosed() || !entry.record.open) throw new CliFilesFailure('renderer-disconnected', `owned renderer ${entry.connId} is closed`)
       const alive = await this.readRenderer(() => entry.page.evaluate(() => document.readyState !== 'loading' && Boolean(document.querySelector('.shell-workspace'))), cleanup)
       if (!alive) throw new CliFilesFailure('renderer-disconnected', `owned renderer ${entry.connId} is not showing the Quirky shell`)
-    }
-    for (const entry of this.windows) {
-      const state = await this.requireSuccess(`guard-live-${this.receipts.length + 1}-${entry.connId}`,
-        ['api', 'call', 'ui.window.state', '--conn-id', String(entry.connId)], { cleanup })
-      const value = record(state, 'live window state')
-      if (value.connId !== entry.connId) throw new CliFilesFailure('renderer-disconnected', `connection ${entry.connId} returned another UI window`)
     }
   }
 
@@ -1975,7 +1969,21 @@ class CliFilesRunner {
     const current = this.reviewTabs.get(worktreeId)!
     const ownerConnId = this.windows.find((entry) => entry.worktree.id === worktreeId)?.connId ?? current.connId
     await this.runWindowCommand(id, ownerConnId, 'command:quirky.git/close-diff', { tabId: current.tabId })
-    this.reviewTabs.delete(worktreeId)
+    const until = Math.min(this.workDeadline, Date.now() + CHILD_LIMIT_MS)
+    let attempt = 0
+    while (Date.now() < until) {
+      this.failIfStopped()
+      const workspace = await this.api(`${id}-closed-${++attempt}`, 'quirky.terminal/workspace', { workspace: worktreeId })
+      const detached = await Promise.all(this.windows.map(entry => this.readRenderer(() =>
+        entry.page.evaluate(closedTabId => ![...document.querySelectorAll<HTMLElement>('.qt-hosted-view[data-hosted-view], .qt-tab[data-tab]')]
+          .some(element => element.dataset.hostedView === closedTabId || element.dataset.tab === closedTabId), current.tabId))))
+      if (!tabById(workspace, current.tabId) && detached.every(Boolean)) {
+        this.reviewTabs.delete(worktreeId)
+        return
+      }
+      await Bun.sleep(Math.min(50, Math.max(1, until - Date.now())))
+    }
+    throw new CliFilesFailure('review-close-timeout', `Review tab ${current.tabId} did not leave its workspace and renderers`)
   }
   async windowRouting(builder: ObservationBuilder): Promise<void> {
     const b = this.windows[1]!.worktree
@@ -2147,6 +2155,14 @@ class CliFilesRunner {
     const cleanupDeadline = Math.min(this.startedAt + WORK_LIMIT_MS + TEARDOWN_LIMIT_MS, Date.now() + TEARDOWN_LIMIT_MS)
     this.cleanupTimer = setTimeout(() => this.cleanupController.abort(new CliFilesFailure('cleanup-deadline', 'CLI file teardown exceeded its 30-second cleanup reserve')),
       Math.max(1, cleanupDeadline - Date.now()))
+    try {
+      await this.world.assertLive({ signal: this.cleanupController.signal, timeoutMs: Math.min(CHILD_LIMIT_MS, cleanupDeadline - Date.now()) })
+      await this.assertLive(true)
+    } catch (error) {
+      const failure = safeError(error)
+      this.primaryFailure ??= { stage: 'cleanup-liveness', kind: failure.kind, message: sanitizeText(failure.message, this.home, this.tokenValues) }
+      return
+    }
     try {
       const reviewToClose = new Map<string, { worktreeId: string; tabId: string; connId: number }>()
       for (const review of this.reviewTabs.values()) {
@@ -2322,7 +2338,7 @@ class CliFilesRunner {
       clearTimeout(this.workTimer)
       if (this.options.signal && this.signalListener) this.options.signal.removeEventListener('abort', this.signalListener)
       await this.cleanupOwnedTabs()
-      try { await this.captureGuards() }
+      try { if (!this.guardEvidence) await this.captureGuards() }
       catch (error) { this.cleanupFailure = [this.cleanupFailure, safeError(error).message].filter(Boolean).join('; ') }
       await this.cleanupWorld()
       clearTimeout(this.cleanupTimer)
