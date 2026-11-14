@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
 import { TAB_COLORS } from '../../src/layout/types'
+import { controllerFor, setFloatingFocus } from '../../src/window/workspace/registry'
 import {
   callsTo,
   click,
@@ -29,7 +30,11 @@ let mounted: MountedWorkspace | null = null
 let copied: string[] = []
 let clipboardText = ''
 
-beforeAll(loadWorkspace)
+beforeAll(async () => {
+  await loadWorkspace()
+  // command handlers reach xterm, so warm their module only after happy-dom creates window
+  await import('../../src/window/commands')
+})
 afterAll(unloadWorkspace)
 beforeEach(() => {
   startRecording()
@@ -431,9 +436,66 @@ describe('SC-20: the tab menu', () => {
         .map(({ id, args }) => ({ id, args }))
     ).toEqual([
       { id: 'command:quirky.terminal/open-menu', args: { kind: 'plus', target: 'grp-1' } },
-      { id: 'command:quirky.terminal/close-menu', args: undefined }
+      { id: 'command:quirky.terminal/close-menu', args: { target: 'grp-1' } }
     ])
   })
+
+  for (const removed of [false, true]) {
+    test(removed
+      ? 'a pending menu close refuses a vanished group instead of the focused workspace'
+      : 'a pending menu close keeps its original group when floating gains focus', async () => {
+      const view = await mount()
+      const floating = await mountFixture(
+        fakeDaemon(makeWorkspace(group('floating-group', []), { id: 'floating' })),
+        { input: { worktree: 'floating' } }
+      )
+      const mainController = controllerFor('wt-main')!
+      const floatingController = controllerFor('floating')!
+      view.fake.layout.view = { id: 'view:quirky.session/worktree', input: { worktree: 'wt-main' } }
+      const self = Promise.withResolvers<{ connId: number }>()
+      const entered = Promise.withResolvers<void>()
+      const call = view.fake.context.call.bind(view.fake.context)
+      try {
+        await act(async () => mainController.openMenu('plus', 'grp-1'))
+        await settle()
+        view.fake.context.call = async (method, params) => {
+          if (method === 'ui.window.self') {
+            entered.resolve()
+            return self.promise
+          }
+          return call(method, params)
+        }
+        await click(view.q('[data-plus="grp-1"]'))
+        await entered.promise
+        await act(async () => {
+          if (removed) {
+            view.daemon.set(makeWorkspace(group('replacement-group', [])))
+            await mainController.refresh()
+            mainController.openMenu('plus', 'replacement-group')
+          }
+          floatingController.openMenu('actions', 'floating-group')
+          setFloatingFocus(true)
+        })
+        self.resolve({ connId: 41 })
+        await settle()
+        await settle()
+
+        expect(floatingController.getSnapshot().menu).toMatchObject({ kind: 'actions', target: 'floating-group' })
+        if (removed) {
+          expect(mainController.getSnapshot().menu).toMatchObject({ kind: 'plus', target: 'replacement-group' })
+          expect(view.fake.toasts).toEqual([{ title: 'Could not close menu', body: 'no mounted terminal workspace holds grp-1' }])
+        } else {
+          expect(mainController.getSnapshot().menu).toBeNull()
+          expect(view.fake.toasts).toEqual([])
+        }
+      } finally {
+        self.resolve({ connId: 41 })
+        await settle()
+        setFloatingFocus(false)
+        await floating.unmount()
+      }
+    })
+  }
 })
 
 describe('SC-39: the pane menu', () => {

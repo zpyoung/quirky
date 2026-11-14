@@ -1,6 +1,7 @@
 import { beforeAll, expect, test } from 'bun:test'
 import { resolve } from 'node:path'
 import * as ts from 'typescript'
+import { validateValue, type Schema } from '../../../../packages/protocol/src/schema'
 import { auditPlugin } from '../../../../scripts/ui-scoreboard/audit'
 import { discoverCandidates, discoverUiFiles } from '../../../../scripts/ui-scoreboard/audit-discovery'
 import { parseCoverage } from '../../../../scripts/ui-scoreboard/audit-evidence'
@@ -174,6 +175,17 @@ test('workspace menu commands declare strict public argument schemas', async () 
   expect(workspace.args.properties.args!.type).toBe('object')
   expect(workspace.args.properties.args!.additionalProperties).toBe(true)
   for (const property of Object.values(workspace.args.properties)) expect(typeof property.type).toBe('string')
+})
+
+test('close-menu accepts an explicit target or focused default and rejects invalid target arguments', async () => {
+  const manifest = await Bun.file(resolve(import.meta.dir, '../../quirky-plugin.json')).json() as {
+    contributes: { command: { id: string; args: Schema }[] }
+  }
+  const schema = manifest.contributes.command.find((entry) => entry.id === 'close-menu')!.args
+  expect(validateValue(schema, { target: 'grp-1' })).toBeNull()
+  expect(validateValue(schema, {})).toBeNull()
+  expect(validateValue(schema, { target: 41 })).not.toBeNull()
+  expect(validateValue(schema, { target: 'grp-1', fallback: true })).not.toBeNull()
 })
 
 test('GroupView mousedown barriers only guard and stop their event', () => {

@@ -4513,7 +4513,17 @@
       },
       {
         "id": "close-menu",
-        "title": "Close Terminal Menu"
+        "title": "Close Terminal Menu",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "type": "string",
+              "description": "The tab, pane or group ID whose workspace menu to close; default: the focused workspace."
+            }
+          }
+        }
       },
       {
         "id": "toggle-floating",

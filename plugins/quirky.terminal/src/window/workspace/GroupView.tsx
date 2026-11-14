@@ -322,7 +322,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const toggle = (kind: string, event: ReactMouseEvent) => {
     event.stopPropagation()
     if (menu?.kind === kind && menu.target === group.id) {
-      void requestWorkspaceCommand(controller.context, { command: 'command:quirky.terminal/close-menu' }, 'Could not close menu')
+      void requestWorkspaceCommand(controller.context, { command: 'command:quirky.terminal/close-menu', args: { target: group.id } }, 'Could not close menu')
     } else {
       void requestWorkspaceCommand(controller.context, { command: 'command:quirky.terminal/open-menu', args: { kind, target: group.id } }, 'Could not open menu')
     }
