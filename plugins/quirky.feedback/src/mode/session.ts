@@ -58,7 +58,10 @@ function pluginsOf(value: unknown): PluginInfo[] {
   return value.filter((entry): entry is PluginInfo => typeof entry === 'object' && entry !== null && typeof (entry as PluginInfo).id === 'string')
 }
 
-/** Session state and actions for the tray; list failures preserve current rows for retry. */
+/**
+ * Session state and actions for the tray; nothing leaves the window except through an explicit copy or issue draft.
+ * List failures preserve current rows for retry.
+ */
 export function createSession(context: UiPluginContext, hooks: { suspend(suspended: boolean): void }) {
   let state: SessionState = { phase: 'loading', loadError: null, comments: [], recovered: false, owners: {}, card: null, target: null, collapsed: true, notice: null }
   let disposed = false
@@ -228,7 +231,7 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
     },
 
     async copy() {
-      await context.executeCommand(COMMAND_COPY)
+      try { await context.executeCommand(COMMAND_COPY) } catch (cause) { context.log(`feedback: copy failed: ${message(cause)}`) }
     },
 
     async fileIssue() {

@@ -125,6 +125,13 @@ describe('copy', () => {
     expect(fake.toasts).toHaveLength(0)
   })
 
+  test('handles a rejected Copy command without a duplicate toast or unhandled rejection', async () => {
+    const fake = await start([sample('a')])
+    fake.context.executeCommand = async () => { throw new Error('denied') }
+    await click(button('Copy'))
+    expect(fake.toasts).toEqual([])
+  })
+
   test('is disabled with no comments', async () => {
     await start()
     expect(button('Copy').disabled).toBe(true)

@@ -223,7 +223,7 @@
     {
       "site": {
         "file": "plugins/quirky.feedback/src/ui.tsx",
-        "quote": "context.toast('Copied', `${comments.length} comments copied as Markdown.`, { kind: 'success' })"
+        "quote": "context.toast('Copied', `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} copied as Markdown.`, { kind: 'success' })"
       },
       "anchor": "context.toast(",
       "reason": "Successful copying is confirmation, not a loading, empty, or error state."
@@ -565,7 +565,7 @@
         "via": [
           {
             "file": "plugins/quirky.feedback/src/mode/session.ts",
-            "quote": "async copy() {\n      await context.executeCommand(COMMAND_COPY)\n    }"
+            "quote": "async copy() {\n      try { await context.executeCommand(COMMAND_COPY) } catch (cause) { context.log(`feedback: copy failed: ${message(cause)}`) }\n    }"
           }
         ]
       }

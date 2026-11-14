@@ -216,6 +216,15 @@ describe('copy comments as markdown', () => {
     expect(h.toasts).toEqual([{ title: 'Copied', body: '2 comments copied as Markdown.', options: { kind: 'success' } }])
   })
 
+  test('uses the singular success message for one comment', async () => {
+    const h = harness()
+    h.handlers.list = async () => ({ comments: [comments[0]!], recovered: false })
+    setClipboard({ writeText: async () => {} })
+    const copy = h.provided.get('command:quirky.feedback/copy') as () => Promise<{ copied: number }>
+    await expect(copy()).resolves.toEqual({ copied: 1 })
+    expect(h.toasts).toEqual([{ title: 'Copied', body: '1 comment copied as Markdown.', options: { kind: 'success' } }])
+  })
+
   test('toasts and rejects when the clipboard write fails', async () => {
     const h = harness()
     h.handlers.list = async () => ({ comments, recovered: false })

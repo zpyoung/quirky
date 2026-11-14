@@ -138,10 +138,10 @@ export function activate(context: UiPluginContext): void {
       if (comments.length === 0) throw new Error('There are no feedback comments to copy')
       const clipboard = navigator.clipboard
       if (typeof clipboard?.writeText !== 'function') throw new Error('The clipboard is not available in this window')
-      // Keep formatting out of the window stub until someone uses Copy.
+      // keep formatting out of the window stub until someone uses copy
       const { formatCommentsAsMarkdown } = await import('./format')
       await clipboard.writeText(formatCommentsAsMarkdown(comments))
-      context.toast('Copied', `${comments.length} comments copied as Markdown.`, { kind: 'success' })
+      context.toast('Copied', `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} copied as Markdown.`, { kind: 'success' })
       return { copied: comments.length }
     } catch (cause) {
       context.toast('Could not copy the comments', message(cause), { kind: 'error' })
