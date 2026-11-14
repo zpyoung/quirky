@@ -102,6 +102,21 @@ export function registerDockCommands(context: UiPluginContext, handles: HandleMa
     handle.focus()
     return { ok: true }
   })
+  context.provide(`command:${PLUGIN_METHOD}attach`, async (raw?: unknown) => {
+    const target = await resolve(raw)
+    if ('ok' in target) return target
+    if (target.args.path !== undefined || target.args.base64 !== undefined) {
+      try {
+        return await context.call(`${PLUGIN_METHOD}attach`, { ...target.args, pane: target.pane })
+      } catch (error) {
+        return fail(errorText(error))
+      }
+    }
+    const handle = handles.get(target.pane)
+    if (!handle) return fail(`The composer is not mounted for pane ${target.pane}.`)
+    handle.openAttach()
+    return { ok: true }
+  })
   context.provide(`command:${PLUGIN_METHOD}toggle`, async (raw?: unknown) => {
     const target = await resolve(raw)
     if ('ok' in target) return target

@@ -11,14 +11,19 @@ const SETTLE_MS = 5
 
 type Call = { method: string; params: Record<string, unknown> }
 type Handler = (params: Record<string, unknown>) => unknown
+type PickerKind = 'slash' | 'file'
+type PendingPick = { resolve(value: unknown): void; reject(error: unknown): void }
 
 type FakeOptions = {
   state?: DockState
   history?: string[]
-  pickers?: Partial<Record<'slash' | 'file', PickerItem[]>>
+  pickers?: Partial<Record<PickerKind, PickerItem[]>>
   sendOutcome?: 'observed-cleared' | 'unobservable' | 'may-not-have-sent' | 'refused' | 'cancelled'
   settings?: Record<string, boolean>
   deferSend?: boolean
+  deferPick?: boolean
+  failPick?: number
+  failSettingSet?: number
   uiSlots?: unknown[]
   failGets?: number
   badGets?: unknown[]
@@ -28,6 +33,7 @@ type FakeOptions = {
 type Fake = {
   context: UiPluginContext
   calls: Call[]
+  executedCommands: { id: string; args?: unknown }[]
   provided: Map<string, unknown>
   opened: { id: string; input?: unknown }[]
   toasts: { title: string; body: string }[]
@@ -40,6 +46,8 @@ type Fake = {
   announceAgentStatus(row: { sessionId: string; state?: string } | null): void
   failNextGets(n: number): void
   rejectHeldGet(error: unknown): void
+  resolvePick(kind: PickerKind, items?: PickerItem[]): void
+  rejectPick(kind: PickerKind, error: unknown): void
   connection(status: 'connected' | 'reconnecting'): void
 }
 
@@ -86,6 +94,11 @@ function fakeContext(options: FakeOptions = {}): Fake {
   let historyCursor = -1
   let historyReturn = ''
   let fileOrdinal = 0
+  let failPicksRemaining = options.failPick ?? 0
+  let pickFailureOrdinal = 0
+  let failSettingSetsRemaining = options.failSettingSet ?? 0
+  const pendingPicks = new Map<PickerKind, PendingPick>()
+  const executedCommands: { id: string; args?: unknown }[] = []
   const sent: { id?: string; text: string; params: Record<string, unknown> }[] = []
   let completeDeferredSend: ((recoveredDraft: string, outcome: SendResult['outcome']) => void) | null = null
   let resolveDeferredSend: ((outcome: SendResult['outcome'], accepted: boolean) => void) | null = null
@@ -128,7 +141,27 @@ function fakeContext(options: FakeOptions = {}): Fake {
       const { revision: _revision, ...change } = params
       return commit(change as Partial<DockState>)
     },
-    [`${PLUGIN_METHOD}pick`]: (params) => ({ items: options.pickers?.[params.kind as 'slash' | 'file'] ?? [], truncated: false }),
+    [`${PLUGIN_METHOD}pick`]: (params) => {
+      const kind = params.kind as PickerKind
+      if (options.deferPick) {
+        const pending = Promise.withResolvers<unknown>()
+        const shouldFail = failPicksRemaining > 0
+        if (shouldFail) failPicksRemaining -= 1
+        pendingPicks.set(kind, {
+          resolve(value) {
+            if (shouldFail) pending.reject(new Error(`pick failed ${++pickFailureOrdinal}`))
+            else pending.resolve(value)
+          },
+          reject: pending.reject
+        })
+        return pending.promise
+      }
+      if (failPicksRemaining > 0) {
+        failPicksRemaining -= 1
+        throw new Error(`pick failed ${++pickFailureOrdinal}`)
+      }
+      return { items: options.pickers?.[kind] ?? [], truncated: false }
+    },
     [`${PLUGIN_METHOD}send`]: (params) => {
       const text = typeof params.text === 'string' ? params.text : current.draft
       const id = typeof params.id === 'string' ? params.id : 'send-a'
@@ -193,6 +226,10 @@ function fakeContext(options: FakeOptions = {}): Fake {
       slots: options.uiSlots ?? [{ id: 'view:quirky.terminal/workspace', kind: 'view', plugin: 'quirky.terminal', title: 'Terminal', shown: true, report: { focusedPane: current.pane, focused: true, focusSequence: 1, panes: [] } }]
     }),
     'setting.set': (params) => {
+      if (failSettingSetsRemaining > 0) {
+        failSettingSetsRemaining -= 1
+        throw new Error('setting write failed')
+      }
       const name = String(params.id).replace('setting:quirky.terminal-dock/', '')
       settings[name as 'enabled' | 'autoOpen'] = params.value as boolean
       return {}
@@ -214,7 +251,12 @@ function fakeContext(options: FakeOptions = {}): Fake {
       if (!(key in settings)) throw new Error(`unknown setting: ${name}`)
       return settings[key]
     },
-    async executeCommand() {},
+    async executeCommand(id: string, args?: unknown) {
+      executedCommands.push({ id, args })
+      const handler = provided.get(id) as CommandHandler | undefined
+      if (handler === undefined) throw new Error(`unknown command: ${id}`)
+      return handler(args)
+    },
     openView(id: string, input?: unknown) { opened.push({ id, input }) },
     closeView() {},
     togglePanel() {},
@@ -236,6 +278,7 @@ function fakeContext(options: FakeOptions = {}): Fake {
 
   return {
     context,
+    executedCommands,
     calls,
     provided,
     opened,
@@ -244,6 +287,18 @@ function fakeContext(options: FakeOptions = {}): Fake {
     get state() { return current },
     callsTo: (method: string) => calls.filter((call) => call.method === method),
     announce(change: Partial<DockState>) { commit(change) },
+    resolvePick(kind, items) {
+      const pending = pendingPicks.get(kind)
+      if (pending === undefined) throw new Error(`no deferred ${kind} pick is active`)
+      pendingPicks.delete(kind)
+      pending.resolve({ items: items ?? options.pickers?.[kind] ?? [], truncated: false })
+    },
+    rejectPick(kind, error) {
+      const pending = pendingPicks.get(kind)
+      if (pending === undefined) throw new Error(`no deferred ${kind} pick is active`)
+      pendingPicks.delete(kind)
+      pending.reject(error)
+    },
     failNextGets(n) { failGetsRemaining += n },
     rejectHeldGet(error) {
       if (rejectHeldGetCall === null) throw new Error('no held get is active')
@@ -314,13 +369,13 @@ async function waitFor(ms: number): Promise<void> {
   })
 }
 
-async function openComposer(fake: Fake, input: { pane?: string; session?: string } = {}) {
+async function openComposer(fake: Fake, input: unknown = { pane: 'pane-a', session: 'session-a' }) {
   activate(fake.context)
   element = document.createElement('div')
   document.body.appendChild(element)
   await act(async () => {
     const mount = fake.provided.get(COMPOSER_VIEW) as MountFunction
-    mounted = mount(element!, { input: { pane: input.pane ?? 'pane-a', session: input.session ?? 'session-a' } })
+    mounted = mount(element!, { input })
   })
   await settle()
   const root = element
@@ -339,8 +394,168 @@ async function openComposer(fake: Fake, input: { pane?: string; session?: string
     await act(async () => void editor().dispatchEvent(event))
     return event
   }
-  return { root: root!, editor, byLabel, button, click, type, key, text: () => root!.textContent ?? '' }
+  const selection = async (event: 'keyup' | 'mouseup', caret: number) => act(async () => {
+    const field = editor()
+    field.setSelectionRange(caret, caret)
+    const released = event === 'keyup'
+      ? new KeyboardEvent('keyup', { key: 'ArrowLeft', bubbles: true })
+      : new MouseEvent('mouseup', { bubbles: true })
+    field.dispatchEvent(released)
+  })
+  return { root: root!, editor, byLabel, button, click, type, key, selection, text: () => root!.textContent ?? '' }
+
 }
+
+describe('terminal dock shared states and attachment routing', () => {
+  test('renders a shared inline error for missing, empty, or non-string composer inputs', async () => {
+    const invalidInputs: unknown[] = [
+      {},
+      { session: 'session-a' },
+      { pane: 'pane-a' },
+      { pane: '', session: 'session-a' },
+      { pane: 'pane-a', session: '' },
+      { pane: 42, session: 'session-a' },
+      { pane: 'pane-a', session: 42 }
+    ]
+    for (const input of invalidInputs) {
+      const fake = fakeContext()
+      const view = await openComposer(fake, input)
+      const error = view.root.querySelector('.ui-inline-error[role="alert"]')
+      expect(error?.textContent).toBe('Terminal dock unavailable: the terminal dock requires a pane and session.')
+      expect(error?.parentElement).toBe(view.root)
+      expect(view.root.querySelectorAll('[role="alert"]')).toHaveLength(1)
+      expect(view.root.querySelector('.qtd-composer')).toBeNull()
+      expect(fake.callsTo(`${PLUGIN_METHOD}get`)).toHaveLength(0)
+
+      if (mounted) await act(async () => void (mounted as () => void)())
+      mounted = undefined
+      element?.remove()
+      element = null
+    }
+  })
+
+  test('shows initial loading, then an inline load error, and clears it after recovery', async () => {
+    const fake = fakeContext({ holdFirstGet: true })
+    const view = await openComposer(fake)
+
+    expect(view.root.querySelector('.qtd-status-row .ui-notice-line')?.textContent).toBe('Loading terminal dock state…')
+    expect(view.root.querySelector('.ui-inline-error')).toBeNull()
+
+    fake.rejectHeldGet(new Error('initial read failed'))
+    await settle()
+    expect(view.root.querySelector('.qtd-status-row .ui-inline-error[role="alert"]')?.textContent).toBe('initial read failed')
+    expect(view.root.querySelector('.qtd-notice.qtd-error')).toBeNull()
+    expect(view.root.querySelector('.ui-notice-line')).toBeNull()
+
+    await waitFor(650)
+    expect(fake.callsTo(`${PLUGIN_METHOD}get`).length).toBeGreaterThanOrEqual(2)
+    expect(view.root.querySelector('.ui-inline-error')).toBeNull()
+    expect(view.root.querySelector('.qtd-composer')).not.toBeNull()
+  })
+
+  test('renders picker loading, errors, empty states, and reopens from keyup and mouseup caret changes', async () => {
+    const fake = fakeContext({ deferPick: true, failPick: 1 })
+    const view = await openComposer(fake)
+    const pickMethod = `${PLUGIN_METHOD}pick`
+
+    const slashText = 'Draft /run trailing'
+    await view.type(slashText)
+    await view.selection('keyup', slashText.indexOf('/run') + '/run'.length)
+    await settle()
+    expect(fake.callsTo(pickMethod).at(-1)?.params).toEqual({ pane: 'pane-a', kind: 'slash', query: 'run' })
+    expect(view.root.querySelector('.qtd-picker__state')?.hasAttribute('role')).toBe(false)
+    expect(view.root.querySelector('.ui-notice-line')?.textContent).toBe('Loading commands and skills…')
+    fake.resolvePick('slash')
+    await settle()
+    expect(view.root.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('Could not load commands and skills: pick failed 1')
+    expect(view.root.querySelector('.qtd-picker__state')?.hasAttribute('role')).toBe(false)
+
+    const emptySlashText = 'Draft /empty trailing'
+    await view.type(emptySlashText)
+    await view.selection('keyup', emptySlashText.indexOf('/empty') + '/empty'.length)
+    await settle()
+    expect(view.root.querySelector('.ui-notice-line')?.textContent).toBe('Loading commands and skills…')
+    fake.resolvePick('slash')
+    await settle()
+    expect(view.root.querySelector('.ui-empty-state')?.textContent).toBe('No commands or skills found.')
+
+    const fileText = 'Draft @src/file trailing'
+    await view.type(fileText)
+    await view.selection('mouseup', fileText.indexOf('@src/file') + '@src/file'.length)
+    await settle()
+    expect(fake.callsTo(pickMethod).at(-1)?.params).toEqual({ pane: 'pane-a', kind: 'file', query: 'src/file' })
+    expect(view.root.querySelector('.qtd-picker__state')?.hasAttribute('role')).toBe(false)
+    expect(view.root.querySelector('.ui-notice-line')?.textContent).toBe('Loading workspace files…')
+    fake.rejectPick('file', new Error('workspace unavailable'))
+    await settle()
+    expect(view.root.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('Could not load workspace files: workspace unavailable')
+    expect(view.root.querySelector('.qtd-picker__state')?.hasAttribute('role')).toBe(false)
+
+    const emptyFileText = 'Draft @missing trailing'
+    await view.type(emptyFileText)
+    await view.selection('mouseup', emptyFileText.indexOf('@missing') + '@missing'.length)
+    await settle()
+    expect(view.root.querySelector('.ui-notice-line')?.textContent).toBe('Loading workspace files…')
+    fake.resolvePick('file')
+    await settle()
+    expect(view.root.querySelector('.ui-empty-state')?.textContent).toBe('No matching workspace files.')
+  })
+
+  test('renders a shared inline error when settings writes fail and clears it on success', async () => {
+    const fake = fakeContext({ failSettingSet: 1 })
+    const root = await openSettings(fake)
+    const enabled = root!.querySelector('input[aria-label="Terminal dock (Experimental)"]') as HTMLInputElement
+
+    await act(async () => void enabled.click())
+    await settle()
+    expect(fake.callsTo('setting.set')[0]?.params).toEqual({ id: 'setting:quirky.terminal-dock/enabled', value: false })
+    const error = root!.querySelector('.ui-inline-error[role="alert"]')
+    expect(error?.textContent).toBe('Could not save Terminal dock settings: setting write failed')
+    expect(error?.parentElement).toBe(root!.querySelector<HTMLElement>('.qtd-settings'))
+
+    await act(async () => void enabled.click())
+    await settle()
+    expect(fake.callsTo('setting.set')[1]?.params).toEqual({ id: 'setting:quirky.terminal-dock/enabled', value: false })
+    expect(root!.querySelector('.ui-inline-error')).toBeNull()
+  })
+
+  test('routes the Attach button through its command to click the mounted file input', async () => {
+    const fake = fakeContext()
+    const view = await openComposer(fake)
+    const input = view.byLabel('Attach files') as HTMLInputElement
+    let inputClicks = 0
+    input.addEventListener('click', () => { inputClicks += 1 })
+
+    await view.click(view.byLabel('Attach file')!)
+    await settle()
+
+    expect(fake.executedCommands).toEqual([{
+      id: 'command:quirky.terminal-dock/attach',
+      args: { pane: 'pane-a' }
+    }])
+    expect(inputClicks).toBe(1)
+  })
+
+  test('forwards headless path and base64 attachments and reports an unmounted interactive pane', async () => {
+    const fake = fakeContext()
+    activate(fake.context)
+    const attach = fake.provided.get('command:quirky.terminal-dock/attach') as CommandHandler
+    let result: unknown
+    await act(async () => {
+      await attach({ pane: 'pane-path', path: '/tmp/report.txt', name: 'report.txt', mime: 'text/plain' })
+      await attach({ pane: 'pane-base64', name: 'inline.txt', mime: 'text/plain', base64: 'aGVsbG8=' })
+      result = await attach({ pane: 'pane-b' })
+    })
+
+    expect(fake.callsTo(`${PLUGIN_METHOD}attach`).map((call) => call.params)).toEqual([
+      { pane: 'pane-path', path: '/tmp/report.txt', name: 'report.txt', mime: 'text/plain' },
+      { pane: 'pane-base64', name: 'inline.txt', mime: 'text/plain', base64: 'aGVsbG8=' }
+    ])
+    expect(result).toEqual({ ok: false, reason: 'The composer is not mounted for pane pane-b.' })
+  })
+
+})
+
 
 async function openSettings(fake: Fake) {
   activate(fake.context)

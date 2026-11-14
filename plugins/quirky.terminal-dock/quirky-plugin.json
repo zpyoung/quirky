@@ -1994,6 +1994,22 @@
         }
       },
       {
+        "id": "attach",
+        "title": "Attach File to Terminal Dock",
+        "description": "Open the composer file picker or attach a readable file to a pane draft.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "path": { "type": "string" },
+            "name": { "type": "string" },
+            "mime": { "type": "string" },
+            "base64": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "settings",
         "title": "Open Terminal Dock Settings",
         "description": "Open Terminal Dock settings."
