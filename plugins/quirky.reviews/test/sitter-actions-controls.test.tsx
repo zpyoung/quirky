@@ -314,7 +314,7 @@ for (const surface of ['checks', 'detail'] as const) {
     await act(async () => { held.resolve({ workspaces: [] }); await held.promise })
     expect(ui.element.querySelector('.ui-empty-state')?.textContent).toContain('No workspace is linked')
     h.methods.set('quirky.tasks/state', () => { throw new Error('link lookup failed') })
-    state[surface].generation += 1
+    state[surface].review = { ...state[surface].review!, headRefOid: 'c'.repeat(40) }
     await ui.update()
     expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('link lookup failed')
     state = model()
@@ -325,6 +325,24 @@ for (const surface of ['checks', 'detail'] as const) {
     expect(h.toasts.at(-1)?.[0]).toBe('Review action failed')
   })
 }
+
+test('invalid sitter payloads reject the routed caller before starting background operations', async () => {
+  const h = bridge()
+  await mount(() => <SitterSafetyStrip context={h.context} sitterState={{ ...sitterState(), activeCount: 1 }} onStoppedAll={() => {}} />)
+  await mount(() => <SitterRow context={h.context} activeWorktree={WORKTREE} review={review}
+    lookup={{ gitStatus: { branch: 'feature' } }} sitterState={sitterState()} loadingDetail={false} onRefreshSitter={async () => {}} />)
+  await expect(invoke(h, control(h, 'sitter-safety-strip'), 'stop-all', { unexpected: true })).rejects.toThrow()
+  await expect(invoke(h, control(h, 'sitter-row'), 'open-dialog', { unexpected: true })).rejects.toThrow()
+  expect(h.commands).toEqual([])
+  expect(control(h, 'sitter-safety-strip').actions.find((entry) => entry.action === 'stop-all')?.enabled).toBe(true)
+  await invoke(h, control(h, 'sitter-row'), 'open-dialog')
+  const dialog = control(h, 'sitter-dialog')
+  await expect(invoke(h, dialog, 'arm', { budgetHours: 0 })).rejects.toThrow()
+  expect(control(h, 'sitter-dialog').actions.find((entry) => entry.action === 'arm')?.enabled).toBe(true)
+  await expect(invoke(h, dialog, 'close-dialog', { unexpected: true })).rejects.toThrow()
+  expect(h.commands.map((command) => command.id)).toEqual(['command:quirky.reviews/open-sitter'])
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+})
 
 const SCOREBOARD_FRAGMENT = 'plugins/quirky.reviews/ui-scoreboard/sitter-and-actions.json'
 const SITTER_SOURCE = 'plugins/quirky.reviews/src/checks/SitterRow.tsx'

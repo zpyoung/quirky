@@ -106,7 +106,7 @@ function mount(options: Options = {}) {
   const registered = new Map<string, (args?: unknown) => unknown>()
   const events = new Set<(event: QuirkyEvent) => void>()
   const layouts = new Set<(layout: UiLayout) => void>()
-  const context = {
+  let context = {
     pluginId: 'quirky.reviews',
     provide(id: string, implementation: unknown) {
       if (typeof implementation === 'function') registered.set(id, implementation as (args?: unknown) => unknown)
@@ -148,7 +148,7 @@ function mount(options: Options = {}) {
   const render = () => act(() => root.render(<ChecksPanel context={context} state={state} refresh={async () => {}} />))
   if (!options.deferMount) render()
   return {
-    element, context, calls, executed,
+    element, get context() { return context }, calls, executed,
     showPanel: render,
     setResponse(next: unknown) { response = next },
     setState(next: ReviewsState) { state = next; render() },
@@ -163,12 +163,31 @@ function mount(options: Options = {}) {
       })
       await settle()
     },
+    replaceContext() {
+      context = { ...context } as UiPluginContext
+      activate(context)
+      render()
+    },
   }
 }
 function sitterDialogControl(ui: { context: UiPluginContext }) {
   const descriptor = listReviewsUiControls(ui.context, CHECKS_PANEL).find(({ slot }) => slot === 'sitter-dialog')
   if (!descriptor) throw new Error('The sitter dialog control is not registered.')
   return descriptor
+}
+function runControl(ui: { context: UiPluginContext }, slot: string, action: string, value?: Record<string, unknown>) {
+  const descriptor = listReviewsUiControls(ui.context, CHECKS_PANEL).find((candidate) => candidate.slot === slot)
+  if (!descriptor) throw new Error(`The ${slot} control is not registered.`)
+  return ui.context.call('ui.window.command.run', {
+    connId: 42,
+    id: REVIEWS_UI_CONTROL,
+    args: {
+      target: descriptor.target,
+      generation: descriptor.generation,
+      action,
+      ...(value === undefined ? {} : { value }),
+    },
+  })
 }
 
 
@@ -770,5 +789,208 @@ test('sitter dialog control renews for every approval scope field and escalation
     expect(current.target).toBe(prior.target)
     expect(current.generation).not.toBe(prior.generation)
     prior = current
+  }
+})
+
+test('stop-all control acknowledges before its command settles and suppresses duplicates while busy', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const row = sitter()
+  const ui = mount({
+    response: { ...sitterState(row), activeCount: 1 },
+    call: (method) => method === 'quirky.reviews/checksSitterStopAll' ? pending.promise : undefined,
+  })
+  await settle()
+
+  let deliveries: unknown[] = []
+  await act(async () => {
+    const first = runControl(ui, 'sitter-safety-strip', 'stop-all')
+    const duplicate = runControl(ui, 'sitter-safety-strip', 'stop-all')
+    deliveries = await Promise.all([first, duplicate])
+  })
+  expect(deliveries).toEqual([
+    { result: { delivered: true } },
+    { result: { delivered: true } },
+  ])
+  expect(ui.executed.filter(({ id }) => id === `${commandsPrefix}stop-all-sitters`)).toHaveLength(1)
+  expect(button('Stop all PR Sitters').disabled).toBe(true)
+
+  await act(async () => { pending.resolve({ ok: true }) })
+  await settle()
+  expect(button('Stop all PR Sitters').disabled).toBe(false)
+})
+
+test('dialog control acknowledges before its command settles and suppresses duplicates while busy', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const row = sitter()
+  const ui = mount({
+    response: { ...sitterState(row), detail: detailFor(row) },
+    call: (method) => method === 'quirky.reviews/checksSitterStop' ? pending.promise : undefined,
+  })
+  await settle()
+  await click('PR Sitter')
+
+  let deliveries: unknown[] = []
+  await act(async () => {
+    const first = runControl(ui, 'sitter-dialog', 'stop')
+    const duplicate = runControl(ui, 'sitter-dialog', 'stop')
+    deliveries = await Promise.all([first, duplicate])
+  })
+  expect(deliveries).toEqual([
+    { result: { delivered: true } },
+    { result: { delivered: true } },
+  ])
+  expect(ui.executed.filter(({ id }) => id === `${commandsPrefix}stop-sitter`)).toHaveLength(1)
+  expect(button('Stopping…').disabled).toBe(true)
+
+  await act(async () => { pending.resolve({ ok: true }) })
+  await settle()
+  expect(button('Stop this sitter').disabled).toBe(false)
+})
+
+test('row control acknowledges before its command settles and suppresses duplicates while busy', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const ui = mount()
+  ui.context.provide(`${commandsPrefix}open-sitter`, () => pending.promise)
+  await settle()
+
+  let deliveries: unknown[] = []
+  await act(async () => {
+    const first = runControl(ui, 'sitter-row', 'open-dialog')
+    const duplicate = runControl(ui, 'sitter-row', 'open-dialog')
+    deliveries = await Promise.all([first, duplicate])
+  })
+  expect(deliveries).toEqual([
+    { result: { delivered: true } },
+    { result: { delivered: true } },
+  ])
+  expect(ui.executed.filter(({ id }) => id === `${commandsPrefix}open-sitter`)).toHaveLength(1)
+  expect(document.querySelector('[data-review-control-target][aria-busy="true"]')).not.toBeNull()
+
+  await act(async () => { pending.resolve(undefined) })
+  await settle()
+  expect(document.querySelector('[data-review-control-target][aria-busy="true"]')).toBeNull()
+})
+
+test('approval scope is rechecked after completion when its source changes without a rerender', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const row = sitter('held')
+  const originalScope = { actionKind: 'merge' as const, contentIdentity: 'head', evidenceKey: 'merge/head' }
+  row.openEscalations = [{
+    escalationId: 'esc-mutated',
+    escalationKind: 'approval',
+    status: 'open',
+    foldCount: 0,
+    approvalScope: { ...originalScope },
+  }]
+  const sourceEscalation = row.openEscalations[0]!
+  const ui = mount({
+    response: { ...sitterState(row), detail: detailFor(row) },
+    call: (method) => method === 'quirky.reviews/checksSitterApprove' ? pending.promise : undefined,
+  })
+  await settle()
+  await click('PR Sitter')
+  await click('Approve this action')
+  const approval = ui.executed.find(({ id }) => id === `${commandsPrefix}approve-sitter`)
+  expect(approval?.args).toMatchObject({ expectedScope: originalScope })
+  const before = ui.calls.length
+
+  sourceEscalation.approvalScope = { ...originalScope, contentIdentity: 'changed-before-rerender' }
+  await act(async () => { pending.resolve({ ok: true, kind: 'applied' }) })
+  await settle()
+
+  expect(ui.calls.slice(before).filter(({ method, params }) =>
+    method === 'quirky.reviews/checksSitterGet' && params.includeDetail === true)).toHaveLength(0)
+  expect(approval?.args).toMatchObject({ expectedScope: originalScope })
+  expect(button('Approve this action').disabled).toBe(false)
+})
+
+test('safety-strip stale completion cannot clear a replacement stop on the same mounted strip', async () => {
+  const previous = Promise.withResolvers<unknown>()
+  const replacement = Promise.withResolvers<unknown>()
+  const row = sitter()
+  let stops = 0
+  const ui = mount({
+    response: { ...sitterState(row), activeCount: 1 },
+    call: (method) => {
+      if (method !== 'quirky.reviews/checksSitterStopAll') return undefined
+      stops += 1
+      return stops === 1 ? previous.promise : replacement.promise
+    },
+  })
+  await settle()
+
+  await act(async () => {
+    await Promise.all([
+      runControl(ui, 'sitter-safety-strip', 'stop-all'),
+      runControl(ui, 'sitter-safety-strip', 'stop-all'),
+    ])
+  })
+  expect(stops).toBe(1)
+  expect(button('Stop all PR Sitters').disabled).toBe(true)
+
+  ui.replaceContext()
+  await settle()
+  await act(async () => { await runControl(ui, 'sitter-safety-strip', 'stop-all') })
+  expect(stops).toBe(2)
+  expect(button('Stop all PR Sitters').disabled).toBe(true)
+
+  await act(async () => { previous.resolve({ ok: true }) })
+  await settle()
+  expect(button('Stop all PR Sitters').disabled).toBe(true)
+
+  await act(async () => { replacement.resolve({ ok: true }) })
+  await settle()
+  expect(button('Stop all PR Sitters').disabled).toBe(false)
+})
+
+test('sitter dialog lease rotates for close and external reopen in one React batch', async () => {
+  const row = sitter()
+  const ui = mount({ response: { ...sitterState(row), detail: detailFor(row) } })
+  await settle()
+  await click('PR Sitter')
+  const first = sitterDialogControl(ui)
+
+  let closed!: Promise<unknown>
+  await act(() => {
+    closed = runControl(ui, 'sitter-dialog', 'close-dialog')
+    void ui.context.executeCommand(`${commandsPrefix}open-sitter`, { worktree: WORKTREE })
+  })
+  await closed
+  await settle()
+
+  const reopened = sitterDialogControl(ui)
+  expect(reopened.target).toBe(first.target)
+  expect(reopened.generation).not.toBe(first.generation)
+})
+
+test('a current dialog keeps copy feedback after its asynchronous action resolves', async () => {
+  const report = Promise.withResolvers<unknown>()
+  const row = sitter()
+  const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const copied: string[] = []
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { async writeText(value: string) { copied.push(value) } },
+  })
+  try {
+    const ui = mount({
+      response: { ...sitterState(row), detail: detailFor(row) },
+      call: (method) => method === 'quirky.reviews/checksSitterDebugReport' ? report.promise : undefined,
+    })
+    await settle()
+    await click('PR Sitter')
+
+    let delivery: unknown
+    await act(async () => { delivery = await runControl(ui, 'sitter-dialog', 'copy-debug') })
+    expect(delivery).toEqual({ result: { delivered: true } })
+    expect(button('Copying debug report…').disabled).toBe(true)
+
+    await act(async () => { report.resolve({ report: { watcher: row.target.watcherId } }) })
+    await settle()
+    expect(document.body.textContent).toContain('Debug report copied')
+    expect(copied).toEqual([JSON.stringify({ watcher: row.target.watcherId }, null, 2)])
+  } finally {
+    if (original) Object.defineProperty(navigator, 'clipboard', original)
+    else Reflect.deleteProperty(navigator, 'clipboard')
   }
 })

@@ -95,6 +95,14 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function sameWorkspaceLink(left: WorkspaceLink, right: WorkspaceLink | null): boolean {
+  return right !== null
+    && left.worktree === right.worktree
+    && left.name === right.name
+    && left.url === right.url
+    && left.repoId === right.repoId
+}
+
 function sameWorkspaceRemovalTarget(left: WorkspaceRemovalTarget, right: WorkspaceRemovalTarget | null): boolean {
   return right !== null
     && left.surface === right.surface
@@ -103,10 +111,7 @@ function sameWorkspaceRemovalTarget(left: WorkspaceRemovalTarget, right: Workspa
     && sameRepo(left.repo, right.repo)
     && left.head.toLowerCase() === right.head.toLowerCase()
     && left.url === right.url
-    && left.link.worktree === right.link.worktree
-    && left.link.name === right.link.name
-    && left.link.url === right.link.url
-    && left.link.repoId === right.link.repoId
+    && sameWorkspaceLink(left.link, right.link)
 }
 
 function hasOnlyPayloadKeys(value: Record<string, unknown> | undefined, allowed: readonly string[]): boolean {
@@ -154,7 +159,7 @@ export function ReviewActions(props: ReviewActionsProps) {
     null
   ])
   const active = review !== null && owner !== null
-  const identity = JSON.stringify([target, owner?.generation ?? null])
+  const identity = target
   const identityRef = useRef(identity)
   identityRef.current = identity
 
@@ -180,9 +185,7 @@ export function ReviewActions(props: ReviewActionsProps) {
   [review, props.surface, props.state.detail.details, props.state.checks.conflicts])
   const included = useMemo(() => review === null ? [] : stackEntries(stack, review), [review, stack])
   const workspaceKey = JSON.stringify([
-    owner?.worktree ?? null,
-    owner?.generation ?? null,
-    review?.number ?? null,
+    target,
     review?.state ?? null,
     safeUrl
   ])
@@ -218,7 +221,7 @@ export function ReviewActions(props: ReviewActionsProps) {
     return () => {
       if (workspaceRequest.current === request) workspaceRequest.current += 1
     }
-  }, [props.context, owner?.worktree, owner?.generation, review?.number, review?.state, safeUrl, workspaceKey])
+  }, [props.context, review?.state, safeUrl, workspaceKey])
 
   const loadingWorkspaceRemoval: WorkspaceRemoval = { status: 'loading', link: null, error: null }
   const workspaceRemoval = workspaceLookup.key === workspaceKey ? workspaceLookup.removal : loadingWorkspaceRemoval
@@ -435,11 +438,11 @@ export function ReviewActions(props: ReviewActionsProps) {
         confirmLabel: 'Delete workspace'
       })
       if (!isCurrent() || !confirmed) return
-      if (!sameWorkspaceRemovalTarget(capturedTarget, workspaceRemovalTarget.current)) {
+      if (workspaceRemovalTarget.current?.url !== capturedTarget.url
+        || !sameWorkspaceLink(capturedTarget.link, workspaceRemovalTarget.current?.link ?? null)) {
         if (isCurrent()) setError('The selected pull request or linked workspace changed before deletion.')
         return
       }
-      if (!targetStillCurrent()) return
       const state = await props.context.call('quirky.tasks/state')
       if (!targetStillCurrent()) return
       if (!isRecord(state)) throw new Error('Tasks workspace link state is unavailable.')
@@ -647,7 +650,7 @@ export function ReviewActions(props: ReviewActionsProps) {
         setReported(null)
       }
     }
-  }, [active, props.context, surfaceId, target, owner?.generation, identity])
+  }, [active, props.context, surfaceId, target])
 
   const actionsKey = JSON.stringify(controlActions)
   useEffect(() => {
