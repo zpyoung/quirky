@@ -174,6 +174,8 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   const sessionAuthority = new RuntimeSessionAuthority(store, pty)
   const interactivePath = options.interactivePath ? new InteractivePath({ home, shell, log }) : undefined
   let port = 0
+  let stopped = false
+  let runtimeClosed = false
   // the core and the host are built before the runtime that serves them, so they reach it late-bound
   let lateRuntime: PluginRuntime | undefined
   const core = new Core({
@@ -189,7 +191,11 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     onRemoveClient: (conn) => lateRuntime?.layout.dropConnection(conn),
     onEvent: (event) => lateRuntime?.events.deliver(event)
   })
-  const pluginChanged = createPluginChangedBroadcast({ send: () => core.broadcast({ type: 'plugin.changed' }) })
+  const pluginChanged = createPluginChangedBroadcast({
+    send: () => {
+      if (!stopped) core.broadcast({ type: 'plugin.changed' })
+    }
+  })
 
   const plugins = new PluginHost({
     builtinDir: options.builtinPluginsDir === undefined ? defaultBuiltinPluginsDir() : options.builtinPluginsDir,
@@ -209,7 +215,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     distroDisabled: () => lateRuntime?.distros.active()?.disable ?? [],
     deriveDiagnostics: (view) => buildUiModel({ ...view, chosenTheme: 'default' }).warnings,
     extension: {
-      create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, () => stopped || isRevoked()),
+      create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, () => runtimeClosed || isRevoked()),
       revoke: (pluginId) => lateRuntime?.extension.revoke(pluginId)
     }
   })
@@ -307,7 +313,6 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   writePrivateJson(runtimeFilePath(home), runtime)
   const listenMs = Date.now() - startedAt
 
-  let stopped = false
   handle = {
     port,
     runtime,
@@ -333,6 +338,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
           if (timedOut) log(`plugins did not stop within ${pluginStopTimeoutMs} ms; continuing shutdown`)
         } finally {
           clearTimeout(timer)
+          runtimeClosed = true
         }
         pluginChanged.dispose()
       } finally {
