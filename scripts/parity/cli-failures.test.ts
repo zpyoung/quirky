@@ -589,6 +589,81 @@ test('only proven real receipts upgrade covered rows; declared gaps cannot hide 
     { status: 'failed', executed: true }
   ])
 })
+test('renderer-only covered rows are reported as a separate run without claiming parity', () => {
+  const observationOnly: CliTableRow = {
+    id: 'file-diff',
+    provenance: 'scope: file-parity',
+    equivalent: '',
+    checks: [],
+    observations: ['files-review-diff'],
+    disposition: 'covered',
+    reason: ''
+  }
+  const refs = new Map([['file-diff', ['ui.window.command.run']]])
+  const [separateRun] = runner.reduceCliRows([observationOnly], [], new Set(), refs)
+  expect(separateRun).toEqual({
+    id: 'file-diff',
+    status: 'separate-run',
+    executed: false,
+    checks: [],
+    catalogRefs: ['ui.window.command.run'],
+    observations: {
+      checks: ['files-review-diff'],
+      command: 'bun scripts/parity/cli-files.ts --json',
+      executed: false
+    },
+    reason: ''
+  })
+  const report = runner.buildCliReport({
+    rows: [observationOnly],
+    receipts: [],
+    proven: new Set(),
+    catalogRefs: refs,
+    elapsedMs: 1
+  })
+  expect(report).toMatchObject({ ok: true, parityComplete: false, cleanup: { ok: true } })
+  expect(report.error).toBeUndefined()
+
+  expect(runner.reduceCliRows([observationOnly], [], new Set(), new Map())[0]).toMatchObject({
+    status: 'not-run',
+    executed: false
+  })
+
+  const checked: CliTableRow = { ...observationOnly, checks: ['file-review-check'] }
+  const receipt: CliReceipt = {
+    id: 'file-review-check',
+    command: 'api call',
+    argv: ['api', 'call', 'quirky.git/status', '--runtime', 'local', '--json'],
+    exitCode: 0,
+    format: 'json',
+    stdoutBytes: 2,
+    elapsedMs: 1,
+    evidence: { result: {} }
+  }
+  expect(runner.reduceCliRows([checked], [receipt], new Set(['file-review-check']), refs)[0]).toMatchObject({
+    status: 'passed',
+    executed: true,
+    checks: ['file-review-check'],
+    observations: { checks: ['files-review-diff'], executed: false }
+  })
+  expect(runner.reduceCliRows([{ ...observationOnly, disposition: 'gap' }], [], new Set(), refs)[0]).toMatchObject({
+    status: 'gap',
+    executed: false,
+    observations: { checks: ['files-review-diff'], executed: false }
+  })
+})
+
+test('CLI refusal parsing accepts exit 2 only for an explicitly expected usage refusal', () => {
+  const usage = JSON.stringify({ error: { code: 'usage', message: 'invalid editor open arguments' } })
+  const conflict = JSON.stringify({ error: { code: 'conflict', message: 'window is not open' } })
+  expect(runner.parseCliRefusal(conflict, 1)).toEqual({ code: 'conflict', message: 'window is not open' })
+  expect(runner.parseCliRefusal(usage, 2, 2)).toEqual({ code: 'usage', message: 'invalid editor open arguments' })
+  expect(() => runner.parseCliRefusal(usage, 2)).toThrow()
+  expect(() => runner.parseCliRefusal(conflict, 2, 2)).toThrow()
+  expect(() => runner.parseCliRefusal(usage, 1, 2)).toThrow()
+  expect(() => runner.parseCliRefusal(conflict, 1, 2)).toThrow()
+  expect(() => runner.parseCliRefusal('{"error":{"code":"usage","message":"bad"},"other":true}', 2, 2)).toThrow()
+})
 
 test('the public rehearsal accepts no caller-selected runtime, command or filesystem paths', () => {
   expect(runner.parseCliArgs([])).toEqual({ json: false, help: false })

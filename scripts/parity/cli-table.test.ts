@@ -2,10 +2,12 @@ import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { checkIds } from './cli-checks'
-import { buildCliReport, reduceCliRows } from './cli-run'
+import { buildCliReport, parseCliRefusal, reduceCliRows } from './cli-run'
 import type { CliReceipt } from './cli-run'
+import { KERNEL_METHOD_SCHEMAS } from '../../packages/protocol/src/kernel-schemas'
 import {
   CLI_MAPPINGS,
+  CLI_SCHEMA_REQUIREMENTS,
   CliTableError,
   loadCliInventory,
   loadCliTable,
@@ -137,6 +139,22 @@ function syntheticCatalog(mappings: readonly CliCatalogMapping[] = CLI_MAPPINGS)
         positionals: positionals.map(({ name, description, required }) => ({ name, description, required })),
         flags: flags.map(({ name, type, description, required, repeatable, enum: values }) => ({ name, type, description, required, repeatable, ...(values ? { enum: values } : {}) }))
       })
+    }
+  }
+  for (const requirement of CLI_SCHEMA_REQUIREMENTS) {
+    const target = requirement.target
+    if (target.kind === 'cli-flag') continue
+    const container = target.kind === 'method-param'
+      ? methods.get(target.method)!.params
+      : uiCommands.get(target.command)!.args
+    const properties = (container.properties ??= {}) as Record<string, unknown>
+    properties[target.property] = {
+      type: requirement.schema.type,
+      description: requirement.id,
+      ...(requirement.schema.minimum !== undefined ? { minimum: requirement.schema.minimum } : {}),
+      ...((requirement.schema.enumEquals ?? requirement.schema.enumIncludes) ? {
+        enum: [...(requirement.schema.enumEquals ?? requirement.schema.enumIncludes)!]
+      } : {})
     }
   }
   return {
@@ -672,4 +690,102 @@ test('a new equivalent claim cannot bypass compiled catalog and behavior declara
   const rows = loadCliTable()
   rows.find(row => row.id === 'repo-list')!.equivalent += '; `status`'
   expect(codeOf(() => validateRows(inventory, rows))).toBe('missing-catalog-ref')
+})
+
+test('observation-only covered rows require compiled observation and schema contracts', () => {
+  const rows = loadCliTable()
+  for (const id of ['file-open-render', 'file-diff', 'file-open-changed']) {
+    rows.find(row => row.id === id)!.disposition = 'covered'
+  }
+  validateRows(loadCliInventory(), rows)
+  const missing = cloned(rows)
+  missing.find(row => row.id === 'repo-list')!.checks = []
+  expect(codeOf(() => validateRows(loadCliInventory(), missing, registeredChecks(missing)))).toBe('missing-check')
+  const unbound = cloned(rows)
+  delete unbound.find(row => row.id === 'file-diff')!.observations
+  expect(codeOf(() => validateRows(loadCliInventory(), unbound))).toBe('missing-check')
+  const bindings = CLI_SCHEMA_REQUIREMENTS.map(requirement => requirement.rowIds)
+  try {
+    for (const requirement of CLI_SCHEMA_REQUIREMENTS) {
+      requirement.rowIds = requirement.rowIds.filter(id => id !== 'file-diff')
+    }
+    expect(codeOf(() => validateRows(loadCliInventory(), rows))).toBe('missing-check')
+  } finally {
+    CLI_SCHEMA_REQUIREMENTS.forEach((requirement, index) => { requirement.rowIds = bindings[index]! })
+  }
+})
+
+test('catalog refuses each missing or weakened public file argument contract', () => {
+  const rows = loadCliTable()
+  expect(CLI_SCHEMA_REQUIREMENTS.map(requirement => requirement.id)).toEqual([
+    'editor-open-window', 'editor-open-window-flag', 'window-command-conn',
+    'open-diff-focus', 'open-diff-source', 'open-changes-focus', 'open-changes-mode', 'open-changes-area'
+  ])
+  const properties = (catalog: SyntheticCatalog, name: string, kind: 'method' | 'command') =>
+    (kind === 'method' ? catalog.methods.find(entry => entry.name === name)!.params
+      : catalog.uiCommands.find(entry => entry.id === name)!.args).properties as Record<string, Record<string, unknown>>
+  const mutations: Array<(catalog: SyntheticCatalog) => void> = [
+    catalog => { delete properties(catalog, 'quirky.editor/open', 'method').window },
+    catalog => { properties(catalog, 'quirky.editor/open', 'method').window = { type: 'integer' } },
+    catalog => {
+      for (const entry of [...catalog.commands, ...catalog.cli.commands]) {
+        if (entry.command === 'editor open' || entry.words === 'editor open') {
+          entry.flags = (entry.flags as Array<{ name: string }>).filter(flag => flag.name !== 'window')
+        }
+      }
+    },
+    catalog => { delete properties(catalog, 'command:quirky.git/open-diff', 'command').focus },
+    catalog => { properties(catalog, 'command:quirky.git/open-diff', 'command').source!.enum = ['unstaged'] },
+    catalog => { delete properties(catalog, 'command:quirky.git/open-changes', 'command').focus },
+    catalog => { properties(catalog, 'command:quirky.git/open-changes', 'command').mode!.enum = ['edit', 'diff'] },
+    catalog => { properties(catalog, 'command:quirky.git/open-changes', 'command').area!.enum = ['staged'] },
+    catalog => { delete properties(catalog, 'ui.window.command.run', 'method').connId }
+  ]
+  validateCatalog(syntheticCatalog(), rows)
+  for (const mutate of mutations) {
+    const catalog = syntheticCatalog()
+    mutate(catalog)
+    expect(codeOf(() => validateCatalog(catalog, rows))).toBe('catalog-mismatch')
+  }
+})
+
+test('checked-in manifests and kernel schemas satisfy every file argument requirement', () => {
+  const catalog = syntheticCatalog()
+  for (const name of ['quirky.editor', 'quirky.git']) {
+    const manifest = JSON.parse(readFileSync(resolve(import.meta.dir, `../../plugins/${name}/quirky-plugin.json`), 'utf8'))
+    for (const method of catalog.methods.filter(entry => entry.plugin === name)) {
+      method.params = manifest.contributes.method.find((entry: { id: string }) => `${name}/${entry.id}` === method.name).params
+    }
+    for (const command of catalog.uiCommands.filter(entry => entry.plugin === name)) {
+      command.args = manifest.contributes.command.find((entry: { id: string }) => `command:${name}/${entry.id}` === command.id).args
+    }
+  }
+  catalog.methods.find(entry => entry.name === 'ui.window.command.run')!.params = KERNEL_METHOD_SCHEMAS['ui.window.command.run'].params
+  validateCatalog(catalog, loadCliTable())
+})
+
+test('core observation-only coverage points to a separate run without claiming execution', () => {
+  const row = { ...loadCliTable().find(row => row.id === 'file-diff')!, disposition: 'covered' as const }
+  const refs = new Map([[row.id, ['uiCommand:command:quirky.git/open-diff']]])
+  const report = buildCliReport({ rows: [row], receipts: [], proven: new Set(), catalogRefs: refs, elapsedMs: 1 })
+  expect(report).toMatchObject({ ok: true, parityComplete: false })
+  expect(report).not.toHaveProperty('error')
+  expect(report.rows[0]).toMatchObject({
+    status: 'separate-run', executed: false, checks: [],
+    observations: { checks: row.observations, command: 'bun scripts/parity/cli-files.ts --json', executed: false }
+  })
+  expect(reduceCliRows([row], [], new Set(), new Map())[0]!.status).toBe('not-run')
+  expect(reduceCliRows([{ ...row, disposition: 'gap' }], [], new Set(), refs)[0]!.status).toBe('gap')
+  expect(reduceCliRows([{ ...row, checks: ['file-open'] }], [], new Set(), refs)[0]!.status).toBe('not-run')
+})
+
+test('refusal parsing accepts exit two only for an explicitly expected usage refusal', () => {
+  const usage = JSON.stringify({ error: { code: 'usage', message: 'window must be positive' } })
+  const conflict = JSON.stringify({ error: { code: 'conflict', message: 'window is not open' } })
+  expect(parseCliRefusal(usage, 2, 2)).toEqual({ code: 'usage', message: 'window must be positive' })
+  expect(parseCliRefusal(conflict, 1)).toEqual({ code: 'conflict', message: 'window is not open' })
+  expect(() => parseCliRefusal(conflict, 2, 2)).toThrow()
+  expect(() => parseCliRefusal(usage, 2)).toThrow()
+  expect(() => parseCliRefusal(usage, 1, 2)).toThrow()
+  expect(() => parseCliRefusal(usage, 0, 2)).toThrow()
 })
