@@ -209,8 +209,8 @@ async function mountDirect(element: ReactNode): Promise<void> {
 }
 
 async function click(target: Element | null | undefined): Promise<void> {
-  if (!target) throw new Error('The requested control was not found.')
-  await act(async () => { (target as HTMLElement).click() })
+  if (!(target instanceof HTMLElement)) throw new Error('The requested control was not found.')
+  await act(async () => { target.click() })
   await flush()
 }
 
@@ -274,9 +274,10 @@ async function escapeMenuItem(label: string): Promise<void> {
 }
 
 const project = { id: 'r1', name: 'api', path: '/r/api', addedAt: 1 } as Repo
+// the details fixture supplies only fields consumed by the dialog.
 const detailsWorktree = {
   id: 'w2', name: 'fix', path: '/w/fix', comment: '', displayName: null, references: []
-} as Worktree
+} as unknown as Worktree
 
 test('9 shows remote hosts loading instead of an empty state', async () => {
   harness.respond('quirky.worktree/remoteHostList', () => new Promise(() => {}))
