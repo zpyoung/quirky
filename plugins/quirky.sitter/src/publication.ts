@@ -359,7 +359,7 @@ export async function preflightContention(
     ])
     if (!isRecord(terminalResult) || !Array.isArray(terminalResult.sessions)) return hold('worktree-busy', 'terminal sessions returned a malformed response')
     for (const session of terminalResult.sessions) {
-      if (!isRecord(session) || typeof session.worktreeId !== 'string' || typeof session.state !== 'string' || typeof session.alive !== 'boolean') {
+      if (!isRecord(session) || (session.worktreeId !== null && typeof session.worktreeId !== 'string') || typeof session.state !== 'string' || typeof session.alive !== 'boolean') {
         return hold('worktree-busy', 'terminal sessions returned a malformed session')
       }
       if (session.worktreeId === worktreeId && session.alive !== false && session.state !== 'exited') {

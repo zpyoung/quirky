@@ -307,6 +307,7 @@ test('prepare preflight filters terminal sessions by worktree and ignores exited
   const routes = clearWorktreeRoutes(repo.path)
   routes['quirky.terminal/sessions'] = { sessions: [
     { sessionId: 'other-worktree', worktreeId: 'wt-other', state: 'running', alive: true },
+    { sessionId: 'unassociated-terminal', worktreeId: null, state: 'running', alive: true },
     { sessionId: 'exited-here', worktreeId: WORKTREE_ID, state: 'exited', alive: false }
   ] }
   expect(await preflightContention(recordCalls(routes), processRun, preflightParams(repo.baseSha))).toEqual({ verdict: 'allow' })
