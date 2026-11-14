@@ -368,10 +368,9 @@ export async function preflightContention(
     }
     if (!Array.isArray(agentResult)) return hold('worktree-busy', 'agent status returned a malformed response')
     for (const row of agentResult) {
-      if (!isRecord(row) || typeof row.worktreeId !== 'string' || typeof row.state !== 'string') {
+      if (!isRecord(row) || typeof row.sessionId !== 'string' || typeof row.state !== 'string') {
         return hold('worktree-busy', 'agent status returned a malformed row')
       }
-      if (row.worktreeId !== worktreeId) return hold('worktree-busy', 'agent status returned a row for an unexpected worktree')
       if (row.state !== 'done') return hold('worktree-busy', `foreground agent ${String(row.sessionId ?? 'unknown')} is ${row.state}`)
     }
     if (!isRecord(worktreeResult) || worktreeResult.id !== worktreeId || typeof worktreeResult.path !== 'string' || worktreeResult.path.length === 0) {
@@ -379,7 +378,7 @@ export async function preflightContention(
     }
     const expectedKind: PreparedCommitKind | undefined = kind.endsWith('fix') ? 'fix' : kind.endsWith('conflict-resolution') ? 'conflict-resolution' : undefined
     const state = await inspectWorktreeState(processRun, worktreeResult.path, expectedKind)
-    if (state.localDirty) return hold('uncommitted-changes', 'the worktree has tracked or untracked changes')
+    if (state.localDirty) return hold('worktree-busy', 'uncommitted-changes: the worktree has tracked or untracked changes')
     if (kind.startsWith('prepare-')) {
       const rawExpected = (params.action as SitterAction & { expectedHeadSha?: unknown }).expectedHeadSha
       const expected = typeof rawExpected === 'string' ? rawExpected : ''

@@ -511,8 +511,8 @@ function prepareFixAction(world: SitterWorld, checks: SitterCheck[]): PrepareFix
     capability: 'fixChecks',
     visibility: 'local',
     recovery: 'replay-safe',
-    contentIdentity: `fix-checks:${key}`,
-    evidenceKey: `${world.headSha}:${key}`,
+    contentIdentity: contentIdentity(world),
+    evidenceKey: `${world.headSha}:fix-checks:${key}`,
     expectedHeadSha: world.headSha,
     failedChecks
   }
@@ -524,8 +524,8 @@ function prepareConflictAction(world: SitterWorld): PrepareConflictAction {
     capability: 'resolveConflicts',
     visibility: 'local',
     recovery: 'replay-safe',
-    contentIdentity: `resolve-conflicts:${world.baseSha}`,
-    evidenceKey: `${world.headSha}:${world.baseSha}`,
+    contentIdentity: contentIdentity(world),
+    evidenceKey: `${world.headSha}:resolve-conflicts:${world.baseSha}`,
     expectedHeadSha: world.headSha,
     baseSha: world.baseSha,
     baseRefName: world.baseRefName
@@ -554,10 +554,11 @@ function publishAction(
     capability,
     visibility: 'external',
     recovery: 'replay-safe',
-    contentIdentity: `${kind}:${prepared.sha}`,
-    evidenceKey: world.headSha,
+    contentIdentity: contentIdentity(world),
+    evidenceKey: `${world.headSha}:${kind}:${prepared.sha}`,
     preparedCommitSha: prepared.sha,
     expectedHeadSha: world.headSha,
+    expectedState: { target: `${world.reviewUrl}#head`, before: world.headSha },
     prepareFingerprint: attempt.fingerprint
   }
 }
@@ -590,9 +591,6 @@ function isApprovalReady(world: SitterWorld): boolean {
   return world.reviewDecision === 'APPROVED' || world.reviewDecision === 'NONE'
 }
 
-function hasCleanPrepareWorkspace(world: SitterWorld): boolean {
-  return world.localHeadSha === world.headSha && !world.localDirty && world.localPrepared === null
-}
 
 
 function prepareIsBlocked(attempts: Attempt[]): boolean {
@@ -645,7 +643,7 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
       if (held !== null) return noAction('publish-in-flight', considered)
       return { action: publish, considered }
     }
-    if (previous?.reason === 'worker-failed' || !hasCleanPrepareWorkspace(world)) {
+    if (previous?.reason === 'worker-failed') {
       return noAction('conflicts-present', considered)
     }
     return { action: prepare, considered }
@@ -707,7 +705,7 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
           if (held !== null) return noAction('publish-in-flight', considered)
           return { action: publish, considered }
         }
-        if (previous?.reason === 'worker-failed' || !hasCleanPrepareWorkspace(world)) {
+        if (previous?.reason === 'worker-failed') {
           return noAction('failure-persisted-after-rerun', considered)
         }
         return { action: prepare, considered }

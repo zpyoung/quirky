@@ -115,8 +115,8 @@ function prepareFixAction(signature = 'sha256:reproduced'): SitterAction {
     capability: 'fixChecks',
     visibility: 'local',
     recovery: 'replay-safe',
-    contentIdentity: 'fix-checks:failure-set',
-    evidenceKey: `${H1}:failure-set`,
+    contentIdentity: contentIdentity(world()),
+    evidenceKey: `${H1}:fix-checks:failure-set`,
     expectedHeadSha: H1,
     failedChecks: [{
       key: BUILD_CHECK_KEY,
@@ -133,8 +133,8 @@ function prepareConflictAction(): SitterAction {
     capability: 'resolveConflicts',
     visibility: 'local',
     recovery: 'replay-safe',
-    contentIdentity: `resolve-conflicts:${B1}`,
-    evidenceKey: `${H1}:${B1}`,
+    contentIdentity: contentIdentity(world()),
+    evidenceKey: `${H1}:resolve-conflicts:${B1}`,
     expectedHeadSha: H1,
     baseSha: B1,
     baseRefName: 'main'
@@ -147,10 +147,11 @@ function publishFixAction(): SitterAction {
     capability: 'fixChecks',
     visibility: 'external',
     recovery: 'replay-safe',
-    contentIdentity: `publish-fix:${B2}`,
-    evidenceKey: H1,
+    contentIdentity: contentIdentity(world()),
+    evidenceKey: `${H1}:publish-fix:${B2}`,
     preparedCommitSha: B2,
     expectedHeadSha: H1,
+    expectedState: { target: `${REVIEW_URL}#head`, before: H1 },
     prepareFingerprint: 'fp-fix'
   } as unknown as SitterAction
 }
@@ -161,10 +162,11 @@ function publishConflictAction(): SitterAction {
     capability: 'resolveConflicts',
     visibility: 'external',
     recovery: 'replay-safe',
-    contentIdentity: `publish-conflict-resolution:${B2}`,
-    evidenceKey: H1,
+    contentIdentity: contentIdentity(world()),
+    evidenceKey: `${H1}:publish-conflict-resolution:${B2}`,
     preparedCommitSha: B2,
     expectedHeadSha: H1,
+    expectedState: { target: `${REVIEW_URL}#head`, before: H1 },
     prepareFingerprint: 'fp-conflict'
   } as unknown as SitterAction
 }
@@ -911,8 +913,8 @@ test('a settled rerun with changed observations prepares a fix exactly once', ()
   })
   if (!decision.action) return
   const action = decision.action as SitterAction & { contentIdentity: string; evidenceKey: string }
-  expect(action.contentIdentity.startsWith('fix-checks:')).toBe(true)
-  expect(action.evidenceKey).toBe(`${H1}:${action.contentIdentity.slice('fix-checks:'.length)}`)
+  expect(action.contentIdentity).toBe(current.contentIdentity)
+  expect(action.evidenceKey).toBe(`${H1}:fix-checks:${JSON.stringify([[BUILD_CHECK_KEY, 'sha256:reproduced']])}`)
 
   for (const unresolved of [
     attempt(action, { seq: 2, state: 'running', effect: undefined, resolved: false }),
@@ -939,8 +941,8 @@ test('enabled conflict resolution takes precedence over failed checks', () => {
     capability: 'resolveConflicts',
     visibility: 'local',
     recovery: 'replay-safe',
-    contentIdentity: `resolve-conflicts:${B1}`,
-    evidenceKey: `${H1}:${B1}`,
+    contentIdentity: contentIdentity(world()),
+    evidenceKey: `${H1}:resolve-conflicts:${B1}`,
     expectedHeadSha: H1,
     baseSha: B1,
     baseRefName: 'main'
@@ -1001,10 +1003,11 @@ test('clean landed prepares publish only their verified commit SHA', () => {
     capability: 'fixChecks',
     visibility: 'external',
     recovery: 'replay-safe',
-    contentIdentity: `publish-fix:${B2}`,
-    evidenceKey: H1,
+    contentIdentity: contentIdentity(fixWorld),
+    evidenceKey: `${H1}:publish-fix:${B2}`,
     preparedCommitSha: B2,
     expectedHeadSha: H1,
+    expectedState: { target: `${REVIEW_URL}#head`, before: H1 },
     prepareFingerprint: 'fp-fix'
   })
 
@@ -1046,10 +1049,11 @@ test('clean landed prepares publish only their verified commit SHA', () => {
     capability: 'resolveConflicts',
     visibility: 'external',
     recovery: 'replay-safe',
-    contentIdentity: `publish-conflict-resolution:${B2}`,
-    evidenceKey: H1,
+    contentIdentity: contentIdentity(conflictWorld),
+    evidenceKey: `${H1}:publish-conflict-resolution:${B2}`,
     preparedCommitSha: B2,
     expectedHeadSha: H1,
+    expectedState: { target: `${REVIEW_URL}#head`, before: H1 },
     prepareFingerprint: 'fp-conflict'
   })
   for (const unresolved of [
@@ -1237,4 +1241,14 @@ test('indeterminate publish attempts resolve from live head observations', () =>
       snapshot(world({ headSha: H1 }), T + UNOBSERVED_EFFECT_MS)
     )).toBeNull()
   }
+})
+
+test('dirty worktrees still select preparation so preflight can hold and retry', () => {
+  const failed = check({ state: 'failed', observation: 'original', failureSignature: 'sha256:failure', failureExcerpt: 'compiler error' })
+  const rerun = actionFor(world({ checks: [failed] }))!
+  const persisted = { ...failed, observation: 'rerun-completed' }
+  expect(decide(snapshot(world({ checks: [persisted], localDirty: true })), [attempt(rerun)], enrollment()).action?.kind)
+    .toBe('prepare-fix')
+  expect(decide(snapshot(world({ mergeable: 'CONFLICTING', localDirty: true })), [], enrollment(caps({ resolveConflicts: 'on' }))).action?.kind)
+    .toBe('prepare-conflict-resolution')
 })

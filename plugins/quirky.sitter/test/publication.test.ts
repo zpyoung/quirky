@@ -329,7 +329,7 @@ test('prepare preflight holds for working, waiting, or blocked agents but allows
     })
   }
   const completed = clearWorktreeRoutes(repo.path)
-  completed['quirky.agent-status/list'] = [{ sessionId: 'settled-worker', worktreeId: WORKTREE_ID, state: 'done' }]
+  completed['quirky.agent-status/list'] = [{ sessionId: 'settled-worker', state: 'done' }]
   expect(await preflightContention(recordCalls(completed), processRun, preflightParams(repo.baseSha))).toEqual({ verdict: 'allow' })
 })
 
@@ -343,7 +343,7 @@ test('prepare preflight holds when contention queries fail, the tree is dirty, o
 
   writeFileSync(join(repo.path, 'untracked.txt'), 'user work\n')
   expect(await preflightContention(recordCalls(clearWorktreeRoutes(repo.path)), processRun, preflightParams(repo.baseSha))).toMatchObject({
-    verdict: 'hold', reason: 'uncommitted-changes'
+    verdict: 'hold', reason: 'worktree-busy'
   })
   rmSync(join(repo.path, 'untracked.txt'))
 
