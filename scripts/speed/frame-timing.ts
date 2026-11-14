@@ -9,6 +9,7 @@ export type FrameTimingObservation = {
   marks: {
     action: string
     end: string
+    echoReceived?: string
     candidate?: {
       kind: 'application-raf' | 'ready-to-frame'
       requested: string
@@ -132,7 +133,8 @@ export function normalizeFrameTiming(input: {
     wallMs,
     effectiveMs,
     deductionMs,
-    candidate: { ...candidate, requestedAt, deliveredAt, busySpans },
+    candidate: { ...candidate, requestedAt, deliveredAt, busySpans,
+      receiveCapSource: candidate.kind === 'application-raf' ? candidate.receiveCapSource ?? 'latest-receive' : null },
     reason: null,
   }
 }
@@ -237,6 +239,7 @@ export function extractFrameTiming(trace: string, observation: FrameTimingObserv
     const deliveredTs = eventTimestamp(delivered)
     const kind = observation.marks.candidate.kind
     let receiveCapAt: number | null = null
+    let receiveCapSource: 'echo-arrival' | 'latest-receive' | null = null
     if (kind === 'application-raf') {
       let latestReceiveTs: number | null = null
       for (const event of events) {
@@ -246,11 +249,25 @@ export function extractFrameTiming(trace: string, observation: FrameTimingObserv
           latestReceiveTs = timestamp
         }
       }
-      if (latestReceiveTs === null) {
+      let ownArrivalTs: number | null = null
+      if (observation.marks.echoReceived) {
+        try {
+          const own = markEvent(events, observation.marks.echoReceived)
+          const timestamp = eventTimestamp(own)
+          if (own.pid === action.pid && own.tid === action.tid
+            && timestamp >= actionTs && timestamp <= Math.min(endTs, deliveredTs)
+            && tasks.some(task => task.start <= timestamp && timestamp <= task.end)) ownArrivalTs = timestamp
+        } catch (error) {
+          if (!(error instanceof EvidenceFault)) throw error
+        }
+      }
+      const selected = ownArrivalTs ?? latestReceiveTs
+      if (selected === null) {
         return normalizeFrameTiming({ startedAt: observation.startedAt, endedAt: observation.endedAt, candidate: null })
       }
-      if (!tasks.some((task) => task.start <= latestReceiveTs && latestReceiveTs <= task.end)) evidenceFault('missing-task-coverage')
-      receiveCapAt = mapTimestamp(latestReceiveTs)
+      if (!tasks.some(task => task.start <= selected && selected <= task.end)) evidenceFault('missing-task-coverage')
+      receiveCapAt = mapTimestamp(selected)
+      receiveCapSource = ownArrivalTs === null ? 'latest-receive' : 'echo-arrival'
     }
 
     const clippedRequestedAt = Math.max(observation.startedAt, mapTimestamp(requestedTs), receiveCapAt ?? Number.NEGATIVE_INFINITY)
@@ -272,6 +289,7 @@ export function extractFrameTiming(trace: string, observation: FrameTimingObserv
         requestedAt: clippedRequestedAt,
         deliveredAt: clippedDeliveredAt,
         receiveCapAt,
+        receiveCapSource,
         busySpans,
       },
     })

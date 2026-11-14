@@ -7,8 +7,9 @@ import { chromiumPath, openWindows, type SoakWindows } from './soak/windows.ts'
 import { startWorld, type SoakWorld } from './soak/world.ts'
 import { prepareSpeedFixture, type SpeedFixture } from './speed/fixtures.ts'
 import { measureSpeed, sanitizeSpeedArtifacts, type SpeedMeasurementResult } from './speed/measure.ts'
-import { BUDGETS, METRICS, PAIR_COUNTS, type PairBasis, type SpeedPair, type SpeedReport } from './speed/contracts.ts'
-import { createMisses, median, renderSpeed, validatePair, validateReport } from './speed/report.ts'
+import { BUDGETS, METRICS, PAIR_COUNTS, type PairBasis, type SpeedPair, type SpeedReport, type SpeedReportV4 } from './speed/contracts.ts'
+import { createMisses, median, renderSpeed, summarizeEchoTiming, summarizeScheduler, validatePair, validateReport } from './speed/report.ts'
+import { readRunnerLatency } from './speed/runner-latency.ts'
 
 const HELP = 'usage: bun scripts/speed.ts --out <directory> [--samples <integer >= 20> | --smoke] [--base-root <directory> --base-basis merge-base|parent] [--seed-echo-delay-ms <1..2000>]\n       bun scripts/speed.ts --help\n'
 const SETUP_MS = 5 * 60_000
@@ -106,13 +107,16 @@ export async function main(args: string[], measure: typeof measureSpeed = measur
   const failures: SpeedReport['failures'] = []
   let cleanup: SpeedReport['cleanup'] = 'complete'
   let chromiumVersion = 'unavailable'
-  const profile: SpeedReport['profile'] = {
-    workloadVersion: 3, compositor: 'software', frameTiming: 'native-final-frame-idle-cap-60hz', worktrees: 10, terminals: 20, diffAddedLines: 5000,
+  const runId = process.env.GITHUB_RUN_ID || `local-${randomUUID()}`
+  const profile: SpeedReportV4['profile'] = {
+    workloadVersion: 4, compositor: 'software', frameTiming: 'native-final-frame-echo-arrival-cap-60hz',
+    runnerPolicy: 'ci-macos-timer-experiment-v1', worktrees: 10, terminals: 20, diffAddedLines: 5000,
     renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context',
     floodChunkBytes: 65536, floodIntervalMs: 16,
     runner: process.env.QUIRKY_SPEED_RUNNER || 'local', os: platform(), arch: arch(), cpuModel: cpu[0]!.model, cpuCount: cpu.length,
     bun: Bun.version, chromium: chromiumVersion, imageVersion: process.env.QUIRKY_SPEED_IMAGE_VERSION || process.env.ImageVersion || 'local',
   }
+  const runnerLatency = await readRunnerLatency(process.env.QUIRKY_SPEED_RUNNER_LATENCY, { runId, runner: profile.runner })
 
   const retireSoloResources = async () => {
     const errors: string[] = []
@@ -227,10 +231,23 @@ export async function main(args: string[], measure: typeof measureSpeed = measur
     const wallSamplesMs = rows.map(row => row.durationMs!)
     const unavailableSamples = rows.filter(row => row.frameTiming?.status === 'unavailable').length
     const medianMs = median(samplesMs)
-    return [metric, { samplesMs, wallSamplesMs, unavailableSamples, medianMs, budgetMs: BUDGETS[metric], budgetMiss: medianMs === null ? null : medianMs > BUDGETS[metric] }]
-  })) as SpeedReport['metrics']
-  const report: SpeedReport = {
-    version: 1, commit, runId: process.env.GITHUB_RUN_ID || `local-${randomUUID()}`, createdAt: new Date().toISOString(),
+    const echoMetric = metric === 'echo' || metric === 'floodEcho'
+    const echoTiming = echoMetric ? summarizeEchoTiming(rows.map(row => {
+      const timing = row.echoTiming
+      if (timing?.status === 'complete'
+        && Math.abs(timing.keystrokeToWorkerMs + timing.workerToPageMs + timing.pageToPaintMs - row.durationMs!) > 0.001) return undefined
+      return timing
+    })) : null
+    const unavailableWindow = { status: 'unavailable', reason: 'sample-scheduler-missing', intervals: [], pendingLateAtEndMs: null }
+    const scheduler = echoMetric ? summarizeScheduler(rows.map(row => ({
+      harness: row.scheduler?.harness ?? unavailableWindow,
+      floodWorker: metric === 'floodEcho' ? row.scheduler?.floodWorker ?? unavailableWindow : null
+    }))) : null
+    return [metric, { samplesMs, wallSamplesMs, unavailableSamples, medianMs, echoTiming, scheduler,
+      budgetMs: BUDGETS[metric], budgetMiss: medianMs === null ? null : medianMs > BUDGETS[metric] }]
+  })) as SpeedReportV4['metrics']
+  const report: SpeedReportV4 = {
+    version: 1, commit, runId, createdAt: new Date().toISOString(), runnerLatency,
     status: failures.length === 0 ? 'complete' : 'incomplete', qualified: !smoke && failures.length === 0,
     profile, metrics, failures, cleanup,
     evidence: { samples: 'samples.jsonl', diagnostics: result?.diagnostics ?? [], misses: 'misses.json' },

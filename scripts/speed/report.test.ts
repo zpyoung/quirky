@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { BUDGETS, METRICS, PAIR_COUNTS, type Comparison, type Failure, type Metric, type MetricResult, type PairBasis, type SpeedPair, type SpeedReport } from './contracts'
-import { comparePair, createMisses, median, pairedLowerBoundPercent, pairedRegression, renderSpeed, validateMisses, validatePair, validateReport } from './report'
+import { comparePair, createMisses, median, pairedLowerBoundPercent, pairedRegression, renderSpeed, summarizeEchoTiming, summarizeScheduler, validateMisses, validatePair, validateReport } from './report'
 
 const SHA_A = 'a'.repeat(40)
 const SHA_B = 'b'.repeat(40)
@@ -82,6 +82,130 @@ function version3Report(options: {
     result.unavailableSamples = options.unavailableSamples?.[metric] ?? 0
   }
   return value as unknown as SpeedReport
+}
+type EchoTimingFixture = {
+  status: 'complete' | 'unavailable'
+  reason: string | null
+  workerReadEpochMs: number | null
+  pageTimeOriginMs: number | null
+  receivedAt: number | null
+  keystrokeToWorkerMs: number | null
+  workerToPageMs: number | null
+  pageToPaintMs: number | null
+}
+
+function echoTimingFixture(wallMs = 20): EchoTimingFixture {
+  return {
+    status: 'complete',
+    reason: null,
+    workerReadEpochMs: 100012,
+    pageTimeOriginMs: 100000,
+    receivedAt: 18,
+    keystrokeToWorkerMs: 2,
+    workerToPageMs: 6,
+    pageToPaintMs: wallMs - 8,
+  }
+}
+
+function unavailableEchoTiming(reason = 'missing-worker-timestamp'): EchoTimingFixture {
+  return {
+    status: 'unavailable',
+    reason,
+    workerReadEpochMs: null,
+    pageTimeOriginMs: 100000,
+    receivedAt: 18,
+    keystrokeToWorkerMs: null,
+    workerToPageMs: null,
+    pageToPaintMs: null,
+  }
+}
+
+function timerWindow(lateMs = 10) {
+  return {
+    status: 'complete' as const,
+    reason: null,
+    intervals: [{ requestedEpochMs: 100000, dueEpochMs: 100016, wokeEpochMs: 100016 + lateMs, lateMs }],
+    pendingLateAtEndMs: null,
+  }
+}
+
+function unavailableTimerWindow(reason = 'sidecar-unavailable') {
+  return { status: 'unavailable' as const, reason, intervals: [], pendingLateAtEndMs: null }
+}
+
+function appliedRunnerLatency() {
+  return {
+    version: 1,
+    runId: 'run-123',
+    runner: 'macos-15',
+    status: 'attempted',
+    reason: null,
+    coalescing: { requested: 0, before: 1, after: 0, status: 'applied', errors: [] },
+    appNap: { requested: 1, before: 0, after: 1, status: 'applied', errors: [] },
+    timerCoalesceBgNsMax: 100000000,
+  }
+}
+
+function version4Report(options: {
+  samples?: Partial<Record<Metric, number[]>>
+  wallSamples?: Partial<Record<Metric, number[]>>
+  echoTimings?: EchoTimingFixture[]
+  runnerLatency?: Record<string, unknown>
+  unavailableScheduler?: boolean
+} = {}): SpeedReport {
+  const defaultSamples = Object.fromEntries(METRICS.map((metric) => [
+    metric,
+    options.samples?.[metric] ?? Array(20).fill(metric === 'echo' || metric === 'floodEcho' ? 20 : 1),
+  ])) as Record<Metric, number[]>
+  const defaultWallSamples = Object.fromEntries(METRICS.map((metric) => [
+    metric,
+    options.wallSamples?.[metric] ?? defaultSamples[metric],
+  ])) as Record<Metric, number[]>
+  const value = version3Report({ samples: defaultSamples, wallSamples: defaultWallSamples }) as unknown as {
+    profile: Record<string, unknown>
+    metrics: Record<Metric, Record<string, unknown>>
+    runnerLatency?: Record<string, unknown>
+  }
+  Object.assign(value.profile, {
+    workloadVersion: 4,
+    frameTiming: 'native-final-frame-echo-arrival-cap-60hz',
+    runnerPolicy: 'ci-macos-timer-experiment-v1',
+  })
+  value.runnerLatency = options.runnerLatency ?? appliedRunnerLatency()
+  for (const metric of METRICS) {
+    if (metric !== 'echo' && metric !== 'floodEcho') {
+      value.metrics[metric]!.echoTiming = null
+      value.metrics[metric]!.scheduler = null
+      continue
+    }
+    const rawSamples = defaultWallSamples[metric]!
+    const echoSamples = options.echoTimings ?? rawSamples.map((wallMs) => echoTimingFixture(wallMs))
+    const schedulerSamples = rawSamples.map(() => ({
+      harness: options.unavailableScheduler ? unavailableTimerWindow('probe-unavailable') : timerWindow(),
+      floodWorker: metric === 'floodEcho'
+        ? options.unavailableScheduler ? unavailableTimerWindow('capture-unavailable') : timerWindow(36)
+        : null,
+    }))
+    value.metrics[metric]!.echoTiming = summarizeEchoTiming(echoSamples)
+    value.metrics[metric]!.scheduler = summarizeScheduler(schedulerSamples)
+  }
+  return value as unknown as SpeedReport
+}
+
+function mutableV4(value: SpeedReport): {
+  profile: Record<string, unknown>
+  metrics: Record<Metric, Record<string, unknown>>
+  runnerLatency: Record<string, unknown>
+} {
+  return value as unknown as {
+    profile: Record<string, unknown>
+    metrics: Record<Metric, Record<string, unknown>>
+    runnerLatency: Record<string, unknown>
+  }
+}
+
+function mutateV4(value: SpeedReport, metric: Metric, field: string): Record<string, unknown> {
+  return mutableV4(value).metrics[metric]![field] as Record<string, unknown>
 }
 
 function mutableProfile(value: SpeedReport): Record<string, unknown> {
@@ -776,4 +900,198 @@ describe('Speed markdown and misses', () => {
     expect(markdown).not.toContain('not measured:')
   })
 
+})
+
+describe('v4 report evidence', () => {
+  test('aggregates only complete echo splits and summarizes empty timer windows without inventing zeros', () => {
+    const complete = Array.from({ length: 20 }, () => echoTimingFixture())
+    const allComplete = summarizeEchoTiming(complete)
+    expect(allComplete).toMatchObject({
+      completeSamples: 20,
+      unavailableSamples: 0,
+      medians: { keystrokeToWorkerMs: 2, workerToPageMs: 6, pageToPaintMs: 12 },
+    })
+    expect(allComplete.samples).toHaveLength(20)
+
+    const oneUnavailable = summarizeEchoTiming([...complete.slice(0, 19), unavailableEchoTiming()])
+    expect(oneUnavailable).toMatchObject({
+      completeSamples: 19,
+      unavailableSamples: 1,
+      medians: { keystrokeToWorkerMs: 2, workerToPageMs: 6, pageToPaintMs: 12 },
+    })
+    const noCompleteSplits = summarizeEchoTiming(Array.from({ length: 20 }, () => unavailableEchoTiming()))
+    expect(noCompleteSplits).toMatchObject({
+      completeSamples: 0,
+      unavailableSamples: 20,
+      medians: { keystrokeToWorkerMs: null, workerToPageMs: null, pageToPaintMs: null },
+    })
+
+    const emptyWindow = { status: 'complete' as const, reason: null, intervals: [], pendingLateAtEndMs: null }
+    const scheduler = summarizeScheduler([
+      { harness: timerWindow(44), floodWorker: null },
+      { harness: emptyWindow, floodWorker: timerWindow(36) },
+    ])
+    expect(scheduler.samples[0]?.harness).toMatchObject({ intervals: 1, medianLateMs: 44, maxLateMs: 44 })
+    expect(scheduler.samples[1]?.harness).toMatchObject({ intervals: 0, medianLateMs: null, maxLateMs: null })
+    expect(scheduler.medians).toMatchObject({ harnessMaxLateMs: 44, floodWorkerMaxLateMs: 36 })
+    const zeroSplit = summarizeEchoTiming([{
+      status: 'complete', reason: null, workerReadEpochMs: 100018,
+      pageTimeOriginMs: 100000, receivedAt: 18,
+      keystrokeToWorkerMs: 0, workerToPageMs: 0, pageToPaintMs: 0,
+    }])
+    expect(zeroSplit.medians).toEqual({ keystrokeToWorkerMs: 0, workerToPageMs: 0, pageToPaintMs: 0 })
+    const onTimeScheduler = summarizeScheduler([{ harness: timerWindow(0), floodWorker: null }])
+    expect(onTimeScheduler.medians.harnessMaxLateMs).toBe(0)
+  })
+
+  test('validates the exact v4 profile, aligned sample aggregates, and global runner evidence', () => {
+    const value = version4Report()
+    expect(mutableV4(value).profile).toMatchObject({
+      workloadVersion: 4,
+      compositor: 'software',
+      frameTiming: 'native-final-frame-echo-arrival-cap-60hz',
+      runnerPolicy: 'ci-macos-timer-experiment-v1',
+    })
+    expect(validateReport(value)).toEqual(value)
+    expect(mutableV4(value).metrics.echo!.echoTiming).toMatchObject({
+      completeSamples: 20,
+      unavailableSamples: 0,
+      medians: { keystrokeToWorkerMs: 2, workerToPageMs: 6, pageToPaintMs: 12 },
+    })
+    const floodScheduler = mutableV4(value).metrics.floodEcho!.scheduler as {
+      samples: Array<{ harness: Record<string, unknown>; floodWorker: Record<string, unknown> }>
+      medians: Record<string, unknown>
+    }
+    expect(floodScheduler.samples[0]).toMatchObject({ harness: { intervals: 1 }, floodWorker: { intervals: 1 } })
+    expect(floodScheduler.medians).toMatchObject({ harnessMaxLateMs: 10, floodWorkerMaxLateMs: 36 })
+    expect(mutableV4(value).metrics.startup).toMatchObject({ echoTiming: null, scheduler: null })
+
+    const tamperCases: Array<(candidate: SpeedReport) => void> = [
+      (candidate) => { Reflect.deleteProperty(mutableV4(candidate), 'runnerLatency') },
+      (candidate) => { mutateV4(candidate, 'echo', 'echoTiming').completeSamples = 19 },
+      (candidate) => { (mutateV4(candidate, 'echo', 'echoTiming').medians as Record<string, unknown>).workerToPageMs = 7 },
+      (candidate) => { (mutateV4(candidate, 'echo', 'echoTiming').samples as unknown[]).pop() },
+      (candidate) => {
+        const samples = mutateV4(candidate, 'echo', 'echoTiming').samples as Array<Record<string, unknown>>
+        samples[0]!.pageToPaintMs = 13
+      },
+      (candidate) => {
+        const sample = (mutateV4(candidate, 'echo', 'echoTiming').samples as Array<Record<string, unknown>>)[0]!
+        sample.keystrokeToWorkerMs = 13
+        sample.pageToPaintMs = 1
+      },
+      (candidate) => {
+        const samples = mutateV4(candidate, 'echo', 'echoTiming').samples as Array<Record<string, unknown>>
+        samples[0]!.keystrokeToWorkerMs = -1
+      },
+      (candidate) => {
+        const samples = mutateV4(candidate, 'echo', 'echoTiming').samples as Array<Record<string, unknown>>
+        samples[0]!.workerToPageMs = Number.POSITIVE_INFINITY
+      },
+      (candidate) => { (mutateV4(candidate, 'floodEcho', 'scheduler').samples as unknown[]).pop() },
+      (candidate) => {
+        (mutateV4(candidate, 'echo', 'scheduler').medians as Record<string, unknown>).harnessMaxLateMs = 11
+      },
+      (candidate) => {
+        const runnerLatency = mutableV4(candidate).runnerLatency.coalescing as Record<string, unknown>
+        runnerLatency.status = 'unsupported'
+      },
+      (candidate) => {
+        const runnerLatency = mutableV4(candidate).runnerLatency.coalescing as Record<string, unknown>
+        runnerLatency.after = 1
+      },
+    ]
+    for (const tamper of tamperCases) {
+      const invalid = version4Report()
+      tamper(invalid)
+      expect(validateReport(invalid)).toBeNull()
+    }
+
+    const unavailableSamples = Array.from({ length: 20 }, () => unavailableEchoTiming())
+    const emptySplits = version4Report({ echoTimings: unavailableSamples })
+    expect(validateReport(emptySplits)).toEqual(emptySplits)
+    expect(mutableV4(emptySplits).metrics.echo!.echoTiming).toMatchObject({
+      completeSamples: 0,
+      unavailableSamples: 20,
+      medians: { keystrokeToWorkerMs: null, workerToPageMs: null, pageToPaintMs: null },
+    })
+  })
+
+  test('renders settings, raw and budget medians, phase attribution, scheduler summaries, and v4 misses', () => {
+    const runnerLatency = {
+      ...appliedRunnerLatency(),
+      coalescing: { requested: 0, before: 1, after: 1, status: 'set-failed', errors: ['permission denied'] },
+      appNap: { requested: 1, before: 0, after: 0, status: 'not-applied', errors: ['read-back stayed false'] },
+    }
+    const value = version4Report({
+      samples: { echo: Array(20).fill(51), floodEcho: Array(20).fill(101) },
+      wallSamples: { echo: Array(20).fill(60), floodEcho: Array(20).fill(110) },
+      runnerLatency,
+    })
+    expect(validateReport(value)).toEqual(value)
+    const misses = createMisses(value)
+    expect(misses.map((miss) => miss.metric)).toEqual(['echo', 'floodEcho'])
+    const echoMiss = misses[0] as unknown as Record<string, unknown>
+    expect(echoMiss.echoTiming).toEqual(mutableV4(value).metrics.echo!.echoTiming)
+    expect(echoMiss.scheduler).toEqual(mutableV4(value).metrics.echo!.scheduler)
+    expect(validateMisses(misses, value)).toEqual(misses)
+
+    const markdown = renderSpeed(value, null, misses)
+    expect(markdown).toContain('| Metric | Raw wall median (ms) | Budget median (ms) |')
+    expect(markdown).toContain('| echo | 60 | 51 |')
+    expect(markdown).toContain('Keystroke to worker')
+    expect(markdown).toContain('Worker to page')
+    expect(markdown).toContain('Page to paint')
+    expect(markdown).toContain('requested 0')
+    expect(markdown).toContain('before 1')
+    expect(markdown).toContain('after 1')
+    expect(markdown).toContain('permission denied')
+    expect(markdown).toContain('100000000')
+    expect(markdown).toContain('Controller timer')
+    expect(markdown).toContain('Flood worker sleep')
+    expect(markdown).toContain('first two include scheduling')
+    expect(markdown).toContain('last includes rendering and frame scheduling')
+    expect(markdown).toContain('not an exact measure of Quirky-only CPU')
+    expect(markdown).toContain('not a proven cause')
+    const missSection = markdown.slice(markdown.indexOf('Miss evidence:'))
+    expect(missSection).toContain('phase medians')
+    expect(missSection).toContain('20 complete / 0 unavailable')
+  })
+
+  test('keeps v1-v3 report and miss keys unchanged while accepting unavailable diagnostics and failed settings', () => {
+    const legacyReports: SpeedReport[] = [
+      report({ samples: { echo: Array(20).fill(51) } }),
+      {
+        ...report({ samples: { echo: Array(20).fill(51) } }),
+        profile: { ...report().profile, workloadVersion: 2, compositor: 'software' },
+      },
+      version3Report({ samples: { echo: Array(20).fill(51) }, wallSamples: { echo: Array(20).fill(60) } }),
+    ]
+    for (const legacy of legacyReports) {
+      expect(validateReport(legacy)).toEqual(legacy)
+      const misses = createMisses(legacy)
+      expect(Object.keys(misses[0]!)).toEqual(['metric', 'budgetMs', 'medianMs', 'commit', 'runId', 'samples', 'diagnostics', 'finding'])
+      expect(validateMisses(misses, legacy)).toEqual(misses)
+      expect(renderSpeed(legacy)).not.toContain('Keystroke to worker')
+      expect(renderSpeed(legacy)).not.toContain('Runner settings')
+    }
+
+    const budgets = { startup: 3001, echo: 51, switch: 201, diff: 1001, floodEcho: 101 }
+    const missesAll = Object.fromEntries(METRICS.map((metric) => [metric, Array(20).fill(budgets[metric])])) as Record<Metric, number[]>
+    const failedExperiment = {
+      ...appliedRunnerLatency(),
+      coalescing: { requested: 0, before: 1, after: 1, status: 'set-failed', errors: ['sysctl unavailable'] },
+      appNap: { requested: 1, before: 0, after: 0, status: 'not-applied', errors: [] },
+    }
+    const unavailableDiagnostics = version4Report({
+      samples: missesAll,
+      wallSamples: missesAll,
+      runnerLatency: failedExperiment,
+      unavailableScheduler: true,
+    })
+    expect(validateReport(unavailableDiagnostics)).toEqual(unavailableDiagnostics)
+    expect(unavailableDiagnostics.status).toBe('complete')
+    expect(unavailableDiagnostics.qualified).toBe(true)
+    expect(createMisses(unavailableDiagnostics)).toHaveLength(5)
+  })
 })

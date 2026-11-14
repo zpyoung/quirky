@@ -181,6 +181,10 @@ jobs:
         run: |
           echo "QUIRKY_HOME=$(mktemp -d)" >> "$GITHUB_ENV"
           echo "QUIRKY_SPEED_IMAGE_VERSION=${ImageVersion:?runner image version missing}" >> "$GITHUB_ENV"
+          echo "QUIRKY_SPEED_RUNNER_LATENCY=$RUNNER_TEMP/speed-runner-latency.json" >> "$GITHUB_ENV"
+
+      - name: Configure runner latency experiment
+        run: bun scripts/speed/runner-latency.ts --configure --out "$QUIRKY_SPEED_RUNNER_LATENCY"
 
       - name: Check real-daemon smoke
         run: bun test scripts/speed/run.e2e.test.ts
