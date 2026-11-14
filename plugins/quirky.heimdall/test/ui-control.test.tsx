@@ -184,18 +184,18 @@ describe('Heimdall command identity helpers', () => {
     expect(ownerEpochKey(detail({ ownerIncarnation: 'incarnation-2' }))).not.toBe(key)
   })
 
-  test('answer draft keys partition all six worker identity fields and the question', () => {
+  test('answer draft keys partition dispatch, session, process and question', () => {
     const key = answerDraftKey(workerIdentity, 'message-1')
     const changedIdentities: WorkerIdentity[] = [
       { ...workerIdentity, dispatchId: 'dispatch-2' },
       { ...workerIdentity, sessionId: 'session-2' },
-      { ...workerIdentity, processIncarnation: 'process-2' },
-      { ...workerIdentity, pid: 43 },
-      { ...workerIdentity, startTime: '2026-11-14T00:00:01.000Z' },
-      { ...workerIdentity, terminalHandle: 'terminal-2' }
+      { ...workerIdentity, processIncarnation: 'process-2' }
     ]
     for (const identity of changedIdentities) expect(answerDraftKey(identity, 'message-1')).not.toBe(key)
     expect(answerDraftKey(workerIdentity, 'message-2')).not.toBe(key)
+    expect(answerDraftKey({ ...workerIdentity, pid: 43 }, 'message-1')).toBe(key)
+    expect(answerDraftKey({ ...workerIdentity, startTime: '2026-11-14T00:00:01.000Z' }, 'message-1')).toBe(key)
+    expect(answerDraftKey({ ...workerIdentity, terminalHandle: 'terminal-2' }, 'message-1')).toBe(key)
     expect(answerDraftKey({ ...workerIdentity }, 'message-1')).toBe(key)
   })
 
@@ -246,6 +246,10 @@ describe('Heimdall command identity helpers', () => {
     expect(commandEligibility(command, receipt, current)).toBeNull()
     expect(commandEligibility(command, { kind: 'none' }, current)).toBe('The worker\'s question changed')
     expect(commandEligibility({ ...command, messageId: 'message-2' }, receipt, current)).toBe('The worker\'s question changed')
+
+    expect(commandEligibility(command, receipt, detail({
+      workers: [liveWorker({ ...workerIdentity, dispatchId: 'dispatch-2' }, { messageId: 'message-1', body: 'Question?' })]
+    }))).toBe('The worker\'s question changed')
 
     for (const identity of [
       { ...workerIdentity, sessionId: 'session-2' },

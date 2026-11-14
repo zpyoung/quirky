@@ -102,15 +102,7 @@ export function ownerEpochKey(detail: Pick<WatcherDetail, 'target' | 'ownerFence
 
 /** Partitions answer drafts by exact worker session, process and question (dispatchId, sessionId, processIncarnation, messageId). */
 export function answerDraftKey(identity: WorkerIdentity, messageId: string): string {
-  return canonical([
-    identity.dispatchId,
-    identity.sessionId,
-    identity.processIncarnation,
-    identity.pid,
-    identity.startTime,
-    identity.terminalHandle,
-    messageId
-  ])
+  return canonical([identity.dispatchId, identity.sessionId, identity.processIncarnation, messageId])
 }
 
 /** UI-private capture taken when the user acts; never sent to the daemon. */
