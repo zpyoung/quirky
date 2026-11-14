@@ -250,7 +250,7 @@ test('a GitHub pull request is rerun, brought up to date, held for merge approva
   await reconcile(host, watcherId)
   const held = await waitFor(
     () => detail(host, watcherId),
-    (value) => value.status?.state === 'held' && value.status.reason === 'awaiting-approval',
+    (value) => value.status?.state === 'held' && value.status?.reason === 'awaiting-approval',
     'the held merge approval',
   )
   expect(held.openEscalations).toHaveLength(1)
