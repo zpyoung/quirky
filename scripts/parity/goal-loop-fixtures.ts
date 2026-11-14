@@ -5,6 +5,7 @@ import { createCodexAppServerFixture } from '../../plugins/quirky.structured/tes
 export type GoalLoopFixtureFaults = {
   missingAgent?: boolean
   malformedProvider?: boolean
+  malformedClaudeUsage?: boolean
   failedStartup?: boolean
   delayedPrompt?: boolean
 }
@@ -13,6 +14,7 @@ export type GoalLoopFixturePaths = {
   bin: string
   omp: string
   codex: string
+  claude: string
   codexFixture: string
   agy: string
   security: string
@@ -24,6 +26,11 @@ export type GoalLoopFixturePaths = {
   ompPromptArgvRelease: string
   ompPromptTerminalRelease: string
   ompInputLog: string
+  ompSignalLog: string
+  claudeLog: string
+  claudeUsageLog: string
+  loopCheck: string
+  loopCheckLog: string
   agyLog: string
   securityLog: string
   orcaLog: string
@@ -55,6 +62,7 @@ const AGY_USAGE_RESPONSE = {
     }
   }
 }
+const CLAUDE_ACCESS_TOKEN = 'goal-loop-synthetic-access-token'
 
 function executable(path: string, content: string): void {
   writeFileSync(path, content, { mode: 0o700 })
@@ -77,7 +85,13 @@ export function installGoalLoopFixtures(home: string, faults: GoalLoopFixtureFau
   const security = join(bin, 'security')
   const orca = join(bin, 'orca')
   const shell = join(bin, 'goal-loop-login-shell')
+  const claude = join(bin, 'claude')
   const codexLog = join(logs, 'codex-app-server.jsonl')
+  const claudeLog = join(logs, 'claude.jsonl')
+  const claudeUsageLog = join(logs, 'claude-usage.jsonl')
+  const ompSignalLog = join(logs, 'omp-signal.jsonl')
+  const loopCheck = join(fixtures, 'loop-check.cjs')
+  const loopCheckLog = join(logs, 'loop-check.jsonl')
   const codexEnvironmentLog = join(logs, 'codex-app-server-environments.jsonl')
   const ompLog = join(logs, 'omp-argv.jsonl')
   const ompInputLog = join(logs, 'omp-input.jsonl')
@@ -95,10 +109,11 @@ export function installGoalLoopFixtures(home: string, faults: GoalLoopFixtureFau
   for (const directory of [bin, logs, codexHome, join(root, 'codex'), join(root, 'claude'), join(root, 'gemini'), join(root, 'agy'), worktreesRoot]) {
     mkdirSync(directory, { recursive: true, mode: 0o700 })
   }
-  for (const path of [codexLog, codexEnvironmentLog, ompLog, ompInputLog, agyLog, securityLog, orcaLog, egressLog]) privateEmptyFile(path)
+  for (const path of [codexLog, codexEnvironmentLog, ompLog, ompInputLog, ompSignalLog, claudeLog, claudeUsageLog, loopCheckLog, agyLog, securityLog, orcaLog, egressLog]) privateEmptyFile(path)
+  writeFileSync(join(root, 'claude', '.credentials.json'), `${JSON.stringify({ claudeAiOauth: { accessToken: CLAUDE_ACCESS_TOKEN } })}\n`, { mode: 0o600 })
   writeFileSync(askSpec, `${JSON.stringify({ questions: [{ id: 'continue', type: 'confirm', question: 'Continue fixture?' }] })}\n`, { mode: 0o600 })
-  writeFileSync(join(root, 'codex', 'auth.json'), '{"tokens":{"access_token":"fixture-token-not-a-credential","account_id":"fixture-account"}}\n', { mode: 0o600 })
   writeFileSync(failedDaemonEntry, "process.stderr.write('injected fixture daemon startup failure\\n')\nprocess.exit(78)\n", { mode: 0o600 })
+  writeFileSync(join(root, 'codex', 'auth.json'), '{"tokens":{"access_token":"fixture-token-not-a-credential","account_id":"fixture-account"}}\n', { mode: 0o600 })
 
   if (!faults.missingAgent) {
     executable(omp, `#!${process.execPath}
@@ -106,6 +121,7 @@ const fs = require('node:fs')
 require(${JSON.stringify(networkPreload)})
 const argvLog = ${JSON.stringify(ompLog)}
 const inputLog = ${JSON.stringify(ompInputLog)}
+const signalLog = ${JSON.stringify(ompSignalLog)}
 const argv = process.argv.slice(2)
 const sessionId = process.env.QUIRKY_SESSION_ID || ''
 const promptIndex = argv.indexOf('--prompt')
@@ -148,11 +164,143 @@ function receive() {
   }
 }
 process.stdin.setEncoding('utf8')
+process.on('SIGINT', () => {
+  fs.appendFileSync(signalLog, JSON.stringify({ sessionId, signal: 'SIGINT' }) + '\\n', { mode: 0o600 })
+  process.stdout.write('INTERRUPT:' + sessionId + '\\n')
+})
 process.stdin.on('data', (chunk) => { input += chunk; receive() })
 process.stdin.on('end', () => { if (input) accept(input); process.exit(0) })
 recordPrompt()
 `)
   }
+  executable(claude, `#!${process.execPath}
+const fs = require('node:fs')
+const { randomUUID } = require('node:crypto')
+const log = ${JSON.stringify(claudeLog)}
+const argv = process.argv.slice(2)
+function refuse(message) {
+  fs.writeSync(2, message + '\\n')
+  process.exit(64)
+}
+if (argv.length === 1 && argv[0] === '--version') {
+  fs.writeSync(1, '2.1.0\\n')
+  process.exit(0)
+}
+function optionValue(name) {
+  const index = argv.indexOf(name)
+  return index < 0 ? undefined : argv[index + 1]
+}
+if (argv.includes('--print') || argv.includes('-p') ||
+    optionValue('--input-format') !== 'stream-json' || optionValue('--output-format') !== 'stream-json') {
+  refuse('claude fixture only supports stream-json SDK mode')
+}
+const sessionId = 'fixture-claude-' + randomUUID()
+let initialized = false
+let userSeen = false
+let input = ''
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + '\\n')
+}
+function fail(message) {
+  fs.writeSync(2, message + '\\n')
+  process.exit(64)
+}
+function respond(message) {
+  if (!message || typeof message !== 'object' || typeof message.type !== 'string') {
+    fail('claude fixture received an invalid stream message')
+  }
+  if (message.type === 'control_request') {
+    const requestId = message.request_id
+    const subtype = message.request && message.request.subtype
+    if (typeof requestId !== 'string') fail('claude fixture received a control request without an id')
+    if (subtype === 'initialize' && !initialized) {
+      initialized = true
+      send({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: {} } })
+      send({ type: 'system', subtype: 'init', session_id: sessionId, model: 'fixture-claude' })
+      return
+    }
+    if (subtype === 'interrupt' && initialized) {
+      send({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: {} } })
+      return
+    }
+    fail('claude fixture refuses unsupported control request: ' + String(subtype))
+  }
+  if (message.type !== 'user' || !initialized || userSeen) {
+    fail('claude fixture refuses unsupported stream message: ' + message.type)
+  }
+  const content = message.message && message.message.content
+  const prompt = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.filter((block) => block && block.type === 'text').map((block) => block.text).join('\\n')
+      : null
+  if (typeof prompt !== 'string') fail('claude fixture received a user message without text')
+  userSeen = true
+  fs.appendFileSync(log, JSON.stringify({ type: 'user', prompt, sessionId }) + '\\n', { mode: 0o600 })
+  send({
+    type: 'assistant',
+    message: {
+      id: 'fixture-message-' + sessionId,
+      type: 'message',
+      role: 'assistant',
+      model: 'fixture-claude',
+      content: [{ type: 'text', text: 'CLAUDE_ACK:fixture-claude-loop-tick:' + sessionId }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 1, output_tokens: 1 }
+    },
+    parent_tool_use_id: null,
+    session_id: sessionId
+  })
+  send({
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    result: 'fixture result:' + sessionId,
+    session_id: sessionId,
+    duration_ms: 0,
+    duration_api_ms: 0,
+    num_turns: 1,
+    total_cost_usd: 0,
+    usage: { input_tokens: 1, output_tokens: 1 }
+  })
+}
+function receive() {
+  for (;;) {
+    const index = input.indexOf('\\n')
+    if (index < 0) return
+    const line = input.slice(0, index)
+    input = input.slice(index + 1)
+    if (!line) continue
+    try { respond(JSON.parse(line)) }
+    catch (error) {
+      fail(error instanceof Error ? error.message : 'claude fixture could not parse stream input')
+    }
+  }
+}
+process.stdin.setEncoding('utf8')
+process.stdin.on('data', (chunk) => { input += chunk; receive() })
+process.stdin.on('end', () => {
+  if (input.trim()) {
+    try { respond(JSON.parse(input)) }
+    catch (error) { fail(error instanceof Error ? error.message : 'claude fixture could not parse final input') }
+  }
+  process.stdout.end(() => process.exit(0))
+})
+`)
+
+  writeFileSync(loopCheck, `const fs = require('node:fs')
+const log = ${JSON.stringify(loopCheckLog)}
+const previous = fs.readFileSync(log, 'utf8').split('\\n').filter(Boolean)
+const invocation = previous.length + 1
+const exitCode = invocation === 1 ? 1 : invocation === 2 ? 0 : 2
+const stdout = invocation <= 2 ? 'fixture-check:' + invocation : 'fixture-check-error:' + invocation
+fs.appendFileSync(log, JSON.stringify({ invocation, exitCode, stdout }) + '\\n', { mode: 0o600 })
+if (invocation > 2) fs.writeSync(2, 'unexpected fixture invocation ' + invocation + '\\n')
+else fs.writeSync(1, stdout + '\\n')
+process.exit(exitCode)
+`, { mode: 0o600 })
+
 
   executable(codex, `#!/bin/sh
 set -eu
@@ -204,7 +352,7 @@ while [ "$#" -gt 0 ] && [ "$1" = '-l' ]; do shift; done
 exec /bin/sh "$@"
 `)
 
-  for (const name of ['claude', 'gemini', 'opencode', 'cursor-agent', 'amp', 'aider', 'copilot', 'goose', 'kiro', 'droid', 'kimi', 'gh', 'glab', 'curl', 'ssh']) {
+  for (const name of ['gemini', 'opencode', 'cursor-agent', 'amp', 'aider', 'copilot', 'goose', 'kiro', 'droid', 'kimi', 'gh', 'glab', 'curl', 'ssh']) {
     executable(join(bin, name), `#!/bin/sh
 printf '%s\\n' '${name} fixture refuses external provider or hook resolution' >&2
 exit 44
@@ -217,6 +365,7 @@ exit 44
     bin,
     omp,
     codex,
+    claude,
     codexFixture: codexFixture.executable,
     agy,
     security,
@@ -226,6 +375,11 @@ exit 44
     codexEnvironmentLog: codexFixture.environmentLogPath,
     ompLog,
     ompInputLog,
+    ompSignalLog,
+    claudeLog,
+    claudeUsageLog,
+    loopCheck,
+    loopCheckLog,
     agyLog,
     securityLog,
     orcaLog,
