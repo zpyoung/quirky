@@ -2,6 +2,7 @@ import type { ProbeRecord, RefreshExample, RefreshSummary } from './contracts'
 
 const DIAGNOSTIC_PREFIX = 'notification-worktree-refresh '
 const SLOW_THRESHOLD_MS = 2000
+const HARD_DEADLINE_MS = 30_000
 const RECORD_KEYS: Record<string, true> = {
   v: true,
   id: true,
@@ -97,6 +98,7 @@ function parseRecord(payload: string): RefreshRecord | null {
   }
 
   if (value.outcome !== 'ok' && value.outcome !== 'error' && value.outcome !== 'timeout') return null
+  if ((value.outcome === 'timeout') !== (value.elapsedMs >= HARD_DEADLINE_MS)) return null
   return {
     v: 1,
     id: value.id,

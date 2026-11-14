@@ -210,3 +210,18 @@ test('rejects forbidden slow outcomes, changed identities, and terminal data pre
 
   expect(summary.invalid).toBeGreaterThanOrEqual(4)
 })
+
+test('rejects terminal outcomes that contradict the hard deadline', () => {
+  for (const [outcome, elapsedMs] of [
+    ['ok', 30_000],
+    ['ok', 30_001],
+    ['error', 30_000],
+    ['timeout', 29_999]
+  ] as const) {
+    const text = [
+      diagnostic('slow'),
+      diagnostic('finished', { outcome, elapsedMs, at: '2026-11-14T00:00:31.000Z' })
+    ].join('\n')
+    expect(summarizeWorktreeRefreshes(text, RUN_STARTED_AT, []).invalid).toBeGreaterThanOrEqual(1)
+  }
+})
