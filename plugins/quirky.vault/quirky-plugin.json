@@ -1140,11 +1140,29 @@
           },
           "required": ["id"]
         }
+      },
+      {
+        "id": "history-control",
+        "title": "History Panel Control",
+        "palette": false,
+        "description": "Route Session History panel options, groups, menus, selection, details, retries and copies to a mounted History panel.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["set-options", "toggle-group", "menu", "select", "toggle-details", "retry-details", "cancel-remote-resume", "copy"] },
+            "instance": { "type": "string" },
+            "id": { "type": "string" },
+            "open": { "type": "boolean" },
+            "field": { "type": "string", "enum": ["session-id", "log-path", "first-prompt"] }
+          },
+          "required": ["action"]
+        }
       }
     ],
     "cli-command": [
       {
         "id": "list",
+        "methods": ["list"],
         "summary": "list agent sessions",
         "flags": {
           "agent": { "type": "string", "description": "Only these agent IDs.", "repeatable": true },
@@ -1159,6 +1177,7 @@
       },
       {
         "id": "search",
+        "methods": ["search"],
         "summary": "search agent transcripts",
         "positionals": [{ "name": "query", "description": "Words to search for.", "required": false }],
         "flags": {
@@ -1180,7 +1199,7 @@
       { "id": "enable", "summary": "enable transcript search on the local host, one registered owner, or all hosts", "flags": { "history-days": { "type": "integer", "description": "Retain this many days; omit for all history." }, "host": { "type": "string", "description": "local, all, or a registered host ID." } } },
       { "id": "clear", "summary": "turn off search and clear its disposable index" },
       { "id": "get", "summary": "inspect one agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }] },
-      { "id": "resume", "summary": "resume a local or registered owner agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }], "flags": { "group": { "type": "string", "description": "Explicit local terminal tab group." }, "worktree": { "type": "string", "description": "Local workspace selector." }, "remote": { "type": "string", "description": "OwnerSessionWorkspaceRef JSON; exclusive with --group and --worktree." }, "fork": { "type": "boolean", "description": "Fork the provider session." } } },
+      { "id": "resume", "methods": ["resume"], "summary": "resume a local or registered owner agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }], "flags": { "group": { "type": "string", "description": "Explicit local terminal tab group." }, "worktree": { "type": "string", "description": "Local workspace selector." }, "remote": { "type": "string", "description": "OwnerSessionWorkspaceRef JSON; exclusive with --group and --worktree." }, "fork": { "type": "boolean", "description": "Fork the provider session." } } },
       { "id": "delete", "summary": "move a local agent session to macOS Trash", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }] },
       { "id": "view", "summary": "read or update daemon-owned vault view preferences", "flags": { "group": { "type": "string", "description": "project, folder or agent." }, "browse-sort": { "type": "string", "description": "updated or created.", "enum": ["updated", "created"] }, "search-sort": { "type": "string", "description": "relevance or newest.", "enum": ["relevance", "newest"] }, "hide-empty-sessions": { "type": "boolean", "description": "Hide empty sessions." }, "session-limit": { "type": "integer", "description": "250, 500, 1000 or 0 for unlimited." }, "host": { "type": "string", "description": "local, all, or host ID." }, "scope": { "type": "string", "description": "workspace, project or all.", "enum": ["workspace", "project", "all"] }, "query": { "type": "string", "description": "Transient query." } } },
       { "id": "open", "summary": "open Agent Session History", "flags": { "agent": { "type": "string", "description": "Pre-filter by agent." }, "session": { "type": "string", "description": "Preselect a provider session ID." }, "query": { "type": "string", "description": "Focus with this query." } } },

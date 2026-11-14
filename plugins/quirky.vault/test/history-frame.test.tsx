@@ -12,9 +12,11 @@ actGlobal.IS_REACT_ACT_ENVIRONMENT = true
 const { act, createElement } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { ToolPanelFrame } = await import('@quirky/ui')
+const { activate } = await import('../src/ui')
 const { mountHistoryPanel } = await import('../src/window/HistoryPanel')
 
 type CallRecord = { method: string; params: Record<string, unknown> }
+type CommandRecord = { id: string; args: unknown }
 const view = {
   disabledAgents: [], browseSort: 'updated', searchSort: 'relevance', group: 'project', hideEmptySessions: false,
   sessionLimit: 250, host: 'local', scope: 'all', query: '', selectedId: null, expandedIds: [], focusedSearch: false
@@ -23,11 +25,22 @@ const cleanups: Array<() => void | Promise<void>> = []
 
 function makeContext() {
   const calls: CallRecord[] = []
+  const commands: CommandRecord[] = []
+  const handlers = new Map<string, (args?: unknown) => unknown>()
   const context = {
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
       if (method === 'quirky.vault/getView') return view
       throw new Error(`Unexpected UI call ${method}`)
+    },
+    provide: (id: string, implementation: unknown) => {
+      if (typeof implementation === 'function') handlers.set(id, implementation as (args?: unknown) => unknown)
+    },
+    executeCommand: (id: string, args?: unknown) => {
+      commands.push({ id, args })
+      const handler = handlers.get(id)
+      if (!handler) throw new Error(`Unknown command ${id}`)
+      return handler(args)
     },
     subscribe: () => () => {},
     onLayout: () => () => {},
@@ -35,8 +48,10 @@ function makeContext() {
     setPanelBadge: () => {},
     toast: () => {}
   } as unknown as UiPluginContext
-  return { context, calls }
+  activate(context)
+  return { context, calls, commands }
 }
+
 
 async function settle(): Promise<void> {
   for (let index = 0; index < 8; index += 1) await act(async () => { await Promise.resolve() })

@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import type { OwnerSessionHostRef, OwnerSessionWorkspaceRef, Session, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, SectionHeader, SelectField, Tabs, TextField, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, type ContextMenuItem } from '@quirky/ui'
+import { Badge, Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, SelectField, Tabs, TextField, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, type ContextMenuItem } from '@quirky/ui'
 import { HISTORY_AGENTS } from '../agents'
 import type { HostedSession, ViewState } from '../types'
 import { EvidenceText } from './evidence'
@@ -22,7 +22,7 @@ const GROUP_HEIGHT = 32
 const EXPANDED_HEIGHT = 360
 const OVERSCAN = 7
 
-type HistoryPanelProps = { context: UiPluginContext; report?(state: unknown): void }
+type HistoryPanelProps = { context: UiPluginContext; controller: HistoryPanelController; report?(state: unknown): void }
 type RenderEntry = { kind: 'group'; id: string; label: string; count: number; collapsed: boolean } | { kind: 'session'; id: string; row: VaultRow; group: string }
 type GroupedRows = {
   entries: RenderEntry[]
@@ -34,9 +34,93 @@ type GroupedRows = {
 type DetailState = { session: HostedSession | null; sessionLoaded: boolean; firstPrompt: string | null; firstPromptLoaded: boolean; subagents: HostedSession[]; subagentsLoaded: boolean; errors: string[] }
 type RemoteResumeChoice = { reference: OwnerSessionWorkspaceRef; label: string }
 type RemoteResumeState = { row: VaultRow; choices: RemoteResumeChoice[]; selectedMirrorId: string; loading: boolean; error: string | null }
+type HistoryControlField = 'session-id' | 'log-path' | 'first-prompt'
+type HistoryControlCommand =
+  | { action: 'set-options'; open?: boolean }
+  | { action: 'toggle-group'; id: string }
+  | { action: 'menu'; id: string; open?: boolean }
+  | { action: 'select'; id: string }
+  | { action: 'toggle-details'; id: string }
+  | { action: 'retry-details'; id: string }
+  | { action: 'cancel-remote-resume' }
+  | { action: 'copy'; id: string; field: HistoryControlField }
+export type HistoryControlResult =
+  | { ok: true }
+  | { ok: false; reason: 'no-panel' }
+  | { ok: false; reason: 'unknown-instance'; instance: string }
+  | { ok: false; reason: 'unknown-row' | 'unknown-group'; id: string }
+  | { ok: false; reason: 'field-unavailable'; field: 'first-prompt' }
+type HistoryPanelController = {
+  instance: string
+  handle: ((command: HistoryControlCommand) => Promise<HistoryControlResult>) | null
+}
+type HistoryControllerRegistry = { nextInstance: number; panels: Map<string, HistoryPanelController> }
+const historyControllerRegistries = new WeakMap<UiPluginContext, HistoryControllerRegistry>()
+
+function controllerRegistry(context: UiPluginContext): HistoryControllerRegistry {
+  let registry = historyControllerRegistries.get(context)
+  if (!registry) {
+    registry = { nextInstance: 0, panels: new Map() }
+    historyControllerRegistries.set(context, registry)
+  }
+  return registry
+}
 
 function recordOf(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+function parseHistoryControlCommand(value: unknown): HistoryControlCommand {
+  const args = recordOf(value) ?? {}
+  const requireSessionId = (action: 'select' | 'toggle-details' | 'retry-details' | 'menu' | 'copy'): string => {
+    if (typeof args.id !== 'string' || args.id.length === 0) throw new Error(`history-control ${action} requires a session id.`)
+    return args.id
+  }
+  const optionalOpen = (action: 'set-options' | 'menu'): { open?: boolean } => {
+    if (!Object.hasOwn(args, 'open')) return {}
+    if (typeof args.open !== 'boolean') throw new Error(`history-control ${action} open must be true or false.`)
+    return { open: args.open }
+  }
+  switch (args.action) {
+    case 'set-options':
+      return { action: 'set-options', ...optionalOpen('set-options') }
+    case 'toggle-group':
+      if (typeof args.id !== 'string' || args.id.length === 0) throw new Error('history-control toggle-group requires a group id.')
+      return { action: 'toggle-group', id: args.id }
+    case 'menu':
+      return { action: 'menu', id: requireSessionId('menu'), ...optionalOpen('menu') }
+    case 'select':
+      return { action: 'select', id: requireSessionId('select') }
+    case 'toggle-details':
+      return { action: 'toggle-details', id: requireSessionId('toggle-details') }
+    case 'retry-details':
+      return { action: 'retry-details', id: requireSessionId('retry-details') }
+    case 'cancel-remote-resume':
+      return { action: 'cancel-remote-resume' }
+    case 'copy': {
+      const id = requireSessionId('copy')
+      if (args.field !== 'session-id' && args.field !== 'log-path' && args.field !== 'first-prompt') {
+        throw new Error('history-control copy field must be session-id, log-path, or first-prompt.')
+      }
+      return { action: 'copy', id, field: args.field }
+    }
+    default:
+      throw new Error(`Unknown history-control action: ${JSON.stringify(args.action)}`)
+  }
+}
+
+/** Routes validated controls to a live History mount, reporting stale targets without throwing. */
+export async function runHistoryControl(context: UiPluginContext, value: unknown): Promise<HistoryControlResult> {
+  const args = recordOf(value)
+  const command = parseHistoryControlCommand(value)
+  const registry = historyControllerRegistries.get(context)
+  if (!registry || registry.panels.size === 0) return { ok: false, reason: 'no-panel' }
+  if (typeof args?.instance === 'string') {
+    const panel = registry.panels.get(args.instance)
+    if (!panel) return { ok: false, reason: 'unknown-instance', instance: args.instance }
+    return panel.handle ? panel.handle(command) : { ok: false, reason: 'no-panel' }
+  }
+  const panel = [...registry.panels.values()].at(-1)
+  return panel?.handle ? panel.handle(command) : { ok: false, reason: 'no-panel' }
 }
 
 function remoteResumeChoices(hostsValue: unknown, mirrorsValue: unknown, hostId: string): RemoteResumeChoice[] {
@@ -213,7 +297,7 @@ const SEARCH_PRIVACY_DISCLOSURE = 'It stores full, unredacted agent conversation
 function SearchDisclosure({ enabled, busy, onEnable, searchTip }: { enabled: boolean; busy: boolean; onEnable(): void; searchTip: VaultSnapshot['searchTip'] }) {
   if (enabled) return null
   const promoting = searchTip?.seen === false
-  return <div className="qvh-consent" data-vault-consent {...(promoting ? { 'data-vault-search-tip': '' } : {})}>
+  return <div className="qvh-consent" data-vault-consent data-vault-search-tip={promoting ? '' : undefined}>
     {promoting
       ? <>
         <p><strong>Search every agent session</strong> Find any past conversation by what was said in it, then pick up where the agent left off.</p>
@@ -269,13 +353,15 @@ function SearchEvidence({ row }: { row: VaultRow }) {
 }
 
 function ActionButton({ label, onClick, disabled = false }: { label: string; onClick(): void; disabled?: boolean }) {
-  return <Button className="qvh-action-button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onClick() }}>{label}</Button>
+  return <Button className="qvh-action-button" disabled={disabled} onClick={onClick}>{label}</Button>
 }
 function SessionDetails({
   context,
   row,
   expanded,
-  onError,
+  retryAttempt,
+  onRetry,
+  reportError,
   onResume,
   onHandoff,
   onResumeWorktree,
@@ -286,12 +372,14 @@ function SessionDetails({
   context: UiPluginContext
   row: VaultRow
   expanded: boolean
-  onError(error: string): void
+  retryAttempt: number
+  onRetry(): void
+  reportError(error: string): void
   onResume(): void
   onResumeWorktree(): void
   onHandoff(): void
   onOpenSource(mode: 'view' | 'open' | 'reveal'): void
-  onCopy(text: string): Promise<void>
+  onCopy(): Promise<void>
   onClose(): void
 }) {
   const [detail, setDetail] = useState<DetailState>({
@@ -303,7 +391,6 @@ function SessionDetails({
     subagentsLoaded: false,
     errors: []
   })
-  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (!expanded) return
     let active = true
@@ -355,20 +442,11 @@ function SessionDetails({
       }))
     }).catch((error: unknown) => failed('subagents', error))
     return () => { active = false }
-  }, [context, expanded, row.id, attempt])
+  }, [context, expanded, row.id, retryAttempt])
 
   const previewMessages = detail.session?.previewMessages ?? row.previewMessages ?? []
   const available = isResumable(row)
-  const copyFirstPrompt = async () => {
-    if (detail.firstPrompt === null) return
-    try {
-      await onCopy(detail.firstPrompt)
-      context.toast('First prompt copied', 'The complete selected prompt is on the clipboard.')
-    } catch (error) {
-      onError(messageOf(error))
-    }
-  }
-  return <div className="qvh-row-details" data-vault-session-details={row.id} onClick={(event) => event.stopPropagation()}>
+  return <div className="qvh-row-details" data-vault-session-details={row.id}>
     <div className="qvh-action-row">
       <ActionButton label="Resume" disabled={!available} onClick={onResume} />
       <ActionButton label="Resume in Worktree" disabled={!available || (row.hostId === 'local' && !row.cwd)} onClick={onResumeWorktree} />
@@ -380,39 +458,42 @@ function SessionDetails({
           const reason = result && typeof result === 'object' && 'reason' in result && typeof result.reason === 'string' ? result.reason : 'The working directory could not be opened.'
           throw new Error(reason)
         }
-      }).catch((error: unknown) => onError(messageOf(error)))} />
-      <Button className="qvh-action-button" data-vault-retry-details onClick={() => setAttempt((value) => value + 1)}>Retry source details</Button>
+      }).catch((error: unknown) => reportError(messageOf(error)))} />
+      <Button className="qvh-action-button" data-vault-retry-details onClick={onRetry}>Retry source details</Button>
       <Button className="qvh-action-button" onClick={onClose}>Hide details</Button>
     </div>
-    {!detail.firstPromptLoaded ? <div className="qvh-muted" role="status">Loading first prompt…</div> : null}
-    {!detail.sessionLoaded && previewMessages.length === 0 ? <div className="qvh-muted" role="status">Loading latest turns…</div> : null}
-    {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <div className="qvh-muted" role="status">Loading subagents…</div> : null}
-    {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <Button className="qvh-action-button" onClick={() => setAttempt((value) => value + 1)}>Retry</Button></div> : null}
-    {row.presence !== 'present' ? <div className="qvh-error" role="status">{row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.</div> : null}
-    {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><Button className="qvh-action-button" onClick={() => void copyFirstPrompt()}>Copy first prompt</Button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
+    {!detail.firstPromptLoaded ? <NoticeLine>Loading first prompt…</NoticeLine> : null}
+    {!detail.sessionLoaded && previewMessages.length === 0 ? <NoticeLine>Loading latest turns…</NoticeLine> : null}
+    {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <NoticeLine>Loading subagents…</NoticeLine> : null}
+    {detail.errors.length ? <InlineError message={`Could not inspect this source. ${detail.errors.join('; ')}`} action={{ label: 'Retry', onAction: onRetry }} /> : null}
+    {row.presence !== 'present' ? <InlineError message={`${row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.`} /> : null}
+    {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><Button className="qvh-action-button" onClick={onCopy}>Copy first prompt</Button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
     <section className="qvh-detail-section"><span className="qvh-detail-label">Latest turns</span>
       {previewMessages.length ? previewMessages.slice(-5).map((message, index) => <div className="qvh-turn" key={`${message.timestamp ?? 'none'}:${index}`}><span className="qvh-role">{messageRole(message.role)}</span>{message.text}</div>) : detail.sessionLoaded ? <div className="qvh-muted">No conversation preview available.</div> : null}
     </section>
     {detail.subagents.length ? <section className="qvh-detail-section"><span className="qvh-detail-label">Subagents</span><div className="qvh-subagents">{detail.subagents.map((agent) => row.hostId === 'local'
-      ? <Button className="qvh-action-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => onError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</Button>
+      ? <Button className="qvh-action-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => reportError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</Button>
       : <div className="qvh-muted" key={agent.id}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</div>)}</div></section> : null}
   </div>
 }
 
 function SessionRow({
   context,
+  instance,
   row,
   hostLabel,
   view,
   selected,
   expanded,
+  retryAttempt,
   menuOpen,
   tabStop,
   onSelect,
   onExpand,
+  onRetryDetails,
   onMenu,
   onCloseMenu,
-  onError,
+  reportError,
   onResume,
   onResumeWorktree,
   onHandoff,
@@ -421,18 +502,21 @@ function SessionRow({
   onDelete
 }: {
   context: UiPluginContext
+  instance: string
   row: VaultRow
   hostLabel?: string
   view: ViewState
   selected: boolean
   expanded: boolean
+  retryAttempt: number
   menuOpen: boolean
   tabStop: boolean
   onSelect(): void
   onExpand(): void
+  onRetryDetails(): void
   onMenu(): void
   onCloseMenu(): void
-  onError(error: string): void
+  reportError(error: string): void
   onResume(): void
   onResumeWorktree(): void
   onHandoff(): void
@@ -488,10 +572,6 @@ function SessionRow({
     }
   }, [menuOpen, row.id])
   const resumable = isResumable(row)
-  const handleMenu = (event: MouseEvent) => {
-    event.stopPropagation()
-    onMenu()
-  }
   const runMenuAction = (run: () => void) => {
     onCloseMenu()
     run()
@@ -505,26 +585,12 @@ function SessionRow({
       await onCopy(result)
       context.toast('Resume command copied', 'The provider-prepared command is on the clipboard.')
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
     }
   }
-  const copyFirstPrompt = async () => {
+  const action = async (run: () => Promise<unknown>) => {
     try {
-      const response = await context.call('quirky.vault/firstPrompt', { id: row.id })
-      if (!response || typeof response !== 'object' || Array.isArray(response) || !('prompt' in response)) {
-        throw new Error('The vault returned an invalid first-prompt response.')
-      }
-      if (response.prompt === null) throw new Error('This source does not contain a first prompt.')
-      if (typeof response.prompt !== 'string') throw new Error('The vault returned an invalid first-prompt response.')
-      await onCopy(response.prompt)
-      context.toast('First prompt copied', 'The complete selected prompt is on the clipboard.')
-    } catch (error) {
-      onError(messageOf(error))
-    }
-  }
-  const action = async (operation: string, params: Record<string, unknown> = {}) => {
-    try {
-      const result = await context.call(`quirky.vault/${operation}`, { id: row.id, ...params })
+      const result = await run()
       if (result === false) throw new Error('The requested session action was not completed.')
       if (result && typeof result === 'object' && 'kind' in result && result.kind === 'unavailable') {
         const reason = 'reason' in result && typeof result.reason === 'string' ? result.reason : 'This action is unavailable.'
@@ -536,16 +602,8 @@ function SessionRow({
       }
       return result
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
       return null
-    }
-  }
-  const copyText = async (text: string, title: string) => {
-    try {
-      await onCopy(text)
-      context.toast(title, '')
-    } catch (error) {
-      onError(messageOf(error))
     }
   }
   const deleteSession = async () => {
@@ -553,7 +611,7 @@ function SessionRow({
     try {
       accepted = await context.confirm({ title: 'Delete this agent session?', body: 'The supported local transcript will be moved to the operating system trash if present. An already-missing source counts as deleted.', confirmLabel: 'Delete' })
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
       return
     }
     if (!accepted) return
@@ -561,18 +619,18 @@ function SessionRow({
     try {
       result = await context.call('quirky.vault/deleteSession', { id: row.id, yes: true })
     } catch (error) {
-      onError(messageOf(error))
+      reportError(messageOf(error))
       return
     }
     const response = result && typeof result === 'object' && !Array.isArray(result) ? result as Record<string, unknown> : {}
     if (response.deleted !== true || typeof response.trashed !== 'number' || typeof response.alreadyMissing !== 'boolean') {
-      onError(typeof response.reason === 'string' ? response.reason : 'The vault did not confirm that the source was deleted.')
+      reportError(typeof response.reason === 'string' ? response.reason : 'The vault did not confirm that the source was deleted.')
       return
     }
     const deletion = response as { trashed: number; alreadyMissing: boolean }
     const { trashed, alreadyMissing } = deletion
     if (!Number.isInteger(trashed) || trashed < 0 || (trashed === 0 && !alreadyMissing)) {
-      onError('The vault did not confirm where the source was moved.')
+      reportError('The vault did not confirm where the source was moved.')
       return
     }
     if (trashed > 0) context.toast('Session moved to Trash', 'The operating system trash received the validated source.')
@@ -586,19 +644,19 @@ function SessionRow({
     { label: 'Resume in New Terminal', enabled: resumable, onSelect: () => runMenuAction(onResume) },
     { label: 'Copy Resume Command', enabled: resumable && row.hostId === 'local', onSelect: () => runMenuAction(() => void commandCopy()) },
     { label: 'Hand Off to Another Agent', enabled: resumable, onSelect: () => runMenuAction(onHandoff) },
-    { label: 'Jump to Original Pane', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'pane' })) },
-    { label: 'Jump to Worktree', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'worktree' })) },
-    { label: 'Jump to Folder', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'folder' })) },
+    { label: 'Jump to Original Pane', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/jump', { id: row.id, target: 'pane' }))) },
+    { label: 'Jump to Worktree', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/jump', { id: row.id, target: 'worktree' }))) },
+    { label: 'Jump to Folder', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/jump', { id: row.id, target: 'folder' }))) },
     { label: 'Open Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('open')) },
     { label: 'Reveal Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('reveal')) },
-    { label: 'Open Working Directory', enabled: row.hostId === 'local' && Boolean(row.cwd) && row.presence === 'present', onSelect: () => runMenuAction(() => void action('openWorkingDirectory')) },
-    { label: 'Copy Session ID', onSelect: () => runMenuAction(() => void copyText(row.sessionId, 'Session ID copied')) },
-    { label: 'Copy First Prompt', enabled: row.presence === 'present', onSelect: () => runMenuAction(() => void copyFirstPrompt()) },
-    { label: 'Copy Log Path', enabled: Boolean(row.filePath), onSelect: () => runMenuAction(() => void copyText(row.filePath!, 'Log path copied')) },
+    { label: 'Open Working Directory', enabled: row.hostId === 'local' && Boolean(row.cwd) && row.presence === 'present', onSelect: () => runMenuAction(() => void action(() => context.call('quirky.vault/openWorkingDirectory', { id: row.id }))) },
+    { label: 'Copy Session ID', onSelect: () => runMenuAction(() => void context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'session-id' })) },
+    { label: 'Copy First Prompt', enabled: row.presence === 'present', onSelect: () => runMenuAction(() => void context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'first-prompt' })) },
+    { label: 'Copy Log Path', enabled: Boolean(row.filePath), onSelect: () => runMenuAction(() => void context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'log-path' })) },
     { label: 'Show Details', onSelect: () => runMenuAction(onExpand) },
     { label: 'Delete', danger: true, enabled: deleteEnabled, onSelect: () => runMenuAction(() => void deleteSession()) }
   ]
-  return <article
+  return <><article
     ref={sessionRow}
     className={`qvh-session-row${expanded ? ' qvh-expanded' : ''}`}
     role="option"
@@ -607,8 +665,16 @@ function SessionRow({
     data-vault-session-row={row.id}
     draggable={resumable}
     onFocus={() => { if (!selected) onSelect() }}
-    onClick={onSelect}
-    onDoubleClick={() => { if (resumable) onResume() }}
+    onClick={(event) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-vault-session-details], .qvh-row-title-button, .qvh-row-action') : null
+      if (target && event.currentTarget.contains(target)) return
+      onSelect()
+    }}
+    onDoubleClick={(event) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-vault-session-details], .qvh-row-action') : null
+      if (target && event.currentTarget.contains(target)) return
+      if (resumable) onResume()
+    }}
     onContextMenu={(event) => { event.preventDefault(); onMenu() }}
     onDragStart={(event) => {
       cancelCommandDrag(context, commandDragToken)
@@ -635,12 +701,12 @@ function SessionRow({
   >
     <div className="qvh-row-top">
       <div className="qvh-row-title">
-        <Button className="qvh-row-title-button" onClick={(event) => { event.stopPropagation(); onSelect() }}>{row.title || row.sessionId}</Button>
+        <Button className="qvh-row-title-button" onClick={onSelect}>{row.title || row.sessionId}</Button>
       </div>
       <div className="qvh-inline-actions">
-        <IconButton className="qvh-row-action" label="Resume session" title="Resume" disabled={!resumable} onClick={(event) => { event.stopPropagation(); onResume() }}>↻</IconButton>
-        <IconButton className="qvh-row-action" label="Toggle session details" title={expanded ? 'Hide details' : 'Show details'} onClick={(event) => { event.stopPropagation(); onExpand() }}>{expanded ? '−' : '⌄'}</IconButton>
-        <span ref={menuAnchor} className="qvh-menu-anchor"><IconButton className="qvh-row-action" label="Session actions" title="Session actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={handleMenu}>⋯</IconButton></span>
+        <IconButton className="qvh-row-action" label="Resume session" title="Resume" disabled={!resumable} onClick={onResume}>↻</IconButton>
+        <IconButton className="qvh-row-action" label="Toggle session details" title={expanded ? 'Hide details' : 'Show details'} onClick={onExpand}>{expanded ? '−' : '⌄'}</IconButton>
+        <span ref={menuAnchor} className="qvh-menu-anchor"><IconButton className="qvh-row-action" label="Session actions" title="Session actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={onMenu}>⋯</IconButton></span>
       </div>
     </div>
     <div className="qvh-row-meta">
@@ -653,7 +719,22 @@ function SessionRow({
     </div>
     {row.evidence ? <SearchEvidence row={row} /> : row.previewMessages?.length ? <div className="qvh-row-snippet"><span className="qvh-role">{messageRole(row.previewMessages.at(-1)!.role)}</span>{row.previewMessages.at(-1)!.text}</div> : null}
     {row.presence !== 'present' ? <div className="qvh-muted">Transcript {row.presence === 'missing' ? 'no longer available' : 'availability could not be verified'}</div> : null}
-    {menuOpen && menuAnchor.current ? createPortal(<div ref={actionMenuRef} className="qvh-action-menu" data-vault-actions={row.id} style={{ top: menuPosition.top, left: menuPosition.left }} onClick={(event) => event.stopPropagation()} onKeyDownCapture={(event) => {
+    {expanded ? <SessionDetails
+      context={context}
+      row={row}
+      expanded={expanded}
+      retryAttempt={retryAttempt}
+      onRetry={onRetryDetails}
+      reportError={reportError}
+      onResume={onResume}
+      onResumeWorktree={onResumeWorktree}
+      onHandoff={onHandoff}
+      onOpenSource={onOpenSource}
+      onCopy={() => context.executeCommand('command:quirky.vault/history-control', { instance, action: 'copy', id: row.id, field: 'first-prompt' })}
+      onClose={onExpand}
+    /> : null}
+  </article>
+    {menuOpen && menuAnchor.current ? createPortal(<div ref={actionMenuRef} className="qvh-action-menu" data-vault-actions={row.id} style={{ top: menuPosition.top, left: menuPosition.left }} onKeyDownCapture={(event) => {
       if (event.key === 'Escape') restoreFocusOnMenuClose.current = true
     }}>
       <ContextMenuList
@@ -661,22 +742,10 @@ function SessionRow({
         label="Session actions"
         autoFocus={false}
         onClose={onCloseMenu}
-        onChoose={(item) => { onCloseMenu(); item.onSelect?.() }}
+        onChoose={(item) => item.onSelect?.()}
       />
     </div>, menuAnchor.current.ownerDocument.body) : null}
-    {expanded ? <SessionDetails
-      context={context}
-      row={row}
-      expanded={expanded}
-      onError={onError}
-      onResume={onResume}
-      onResumeWorktree={onResumeWorktree}
-      onHandoff={onHandoff}
-      onOpenSource={onOpenSource}
-      onCopy={onCopy}
-      onClose={onExpand}
-    /> : null}
-  </article>
+  </>
 }
 
 function rowHeight(entry: RenderEntry, view: ViewState): number {
@@ -707,10 +776,11 @@ function emptyListText(snapshot: VaultSnapshot, noAgents: boolean, rows: VaultRo
   return 'No sessions match the current filters.'
 }
 
-function HistoryPanel({ context, report }: HistoryPanelProps) {
+function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
   const model = useMemo(() => new VaultWindowModel(context), [context])
   const snapshot = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot)
   const [optionsOpen, setOptionsOpen] = useState(false)
+  const [detailRetries, setDetailRetries] = useState<Record<string, number>>({})
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [menuId, setMenuId] = useState<string | null>(null)
   const [remoteResume, setRemoteResume] = useState<RemoteResumeState | null>(null)
@@ -722,7 +792,8 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   const searchInput = useRef<HTMLInputElement>(null)
   const listRequestKey = useRef('')
   const noAgents = model.selectedAgents().length === 0
-  const allRows = model.rows().filter((row) => !snapshot.view.hideEmptySessions || row.messageCount > 0 || (row.queuedMessageCount ?? 0) > 0 || (row.subagentTranscriptCount ?? 0) > 0)
+  const loadedRows = model.rows()
+  const allRows = loadedRows.filter((row) => !snapshot.view.hideEmptySessions || row.messageCount > 0 || (row.queuedMessageCount ?? 0) > 0 || (row.subagentTranscriptCount ?? 0) > 0)
   const grouped = useMemo(() => groupedRows(model, snapshot.view, allRows, collapsed), [model, snapshot.view, allRows, collapsed])
 
   useEffect(() => { model.start(); return () => model.stop() }, [model])
@@ -929,9 +1000,111 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
     } catch (error) { setError(messageOf(error)) }
   }
 
-  const copy = async (text: string) => {
-    await localClipboard(text)
+  const onCopy = localClipboard
+  const copyHistoryField = async (row: VaultRow, field: HistoryControlField): Promise<HistoryControlResult> => {
+    setMenuId(null)
+    if (field === 'session-id') {
+      try {
+        await onCopy(row.sessionId)
+        context.toast('Session ID copied', '')
+      } catch (error) {
+        setError(messageOf(error))
+      }
+      return { ok: true }
+    }
+    if (field === 'log-path') {
+      if (!row.filePath) {
+        setError('This source file is not available for local file actions.')
+        return { ok: true }
+      }
+      try {
+        await onCopy(row.filePath)
+        context.toast('Log path copied', '')
+      } catch (error) {
+        setError(messageOf(error))
+      }
+      return { ok: true }
+    }
+    try {
+      const response = await context.call('quirky.vault/firstPrompt', { id: row.id })
+      if (!response || typeof response !== 'object' || Array.isArray(response) || !('prompt' in response)) {
+        throw new Error('The vault returned an invalid first-prompt response.')
+      }
+      if (response.prompt === null) {
+        setError('This source does not contain a first prompt.')
+        return { ok: false, reason: 'field-unavailable', field: 'first-prompt' }
+      }
+      if (typeof response.prompt !== 'string') throw new Error('The vault returned an invalid first-prompt response.')
+      await onCopy(response.prompt)
+      context.toast('First prompt copied', 'The complete selected prompt is on the clipboard.')
+    } catch (error) {
+      setError(messageOf(error))
+    }
+    return { ok: true }
   }
+
+  const handleHistoryControl = async (command: HistoryControlCommand): Promise<HistoryControlResult> => {
+    switch (command.action) {
+      case 'set-options':
+        setOptionsOpen((open) => command.open === undefined ? !open : command.open)
+        return { ok: true }
+      case 'toggle-group':
+        if (!grouped.entries.some((entry) => entry.kind === 'group' && entry.id === command.id)) {
+          return { ok: false, reason: 'unknown-group', id: command.id }
+        }
+        setCollapsed((current) => {
+          const next = new Set(current)
+          if (next.has(command.id)) next.delete(command.id)
+          else next.add(command.id)
+          return next
+        })
+        return { ok: true }
+      case 'menu': {
+        const row = loadedRows.find((candidate) => candidate.id === command.id)
+        if (!row) return { ok: false, reason: 'unknown-row', id: command.id }
+        selectRow(command.id)
+        setMenuId((current) => {
+          if (command.open === true) return command.id
+          if (command.open === false) return current === command.id ? null : current
+          return current === command.id ? null : command.id
+        })
+        return { ok: true }
+      }
+      case 'select': {
+        if (!loadedRows.some((row) => row.id === command.id)) return { ok: false, reason: 'unknown-row', id: command.id }
+        selectRow(command.id)
+        setMenuId(null)
+        return { ok: true }
+      }
+      case 'toggle-details': {
+        if (!loadedRows.some((row) => row.id === command.id)) return { ok: false, reason: 'unknown-row', id: command.id }
+        selectRow(command.id)
+        toggleExpanded(command.id)
+        return { ok: true }
+      }
+      case 'retry-details': {
+        if (!loadedRows.some((row) => row.id === command.id)) return { ok: false, reason: 'unknown-row', id: command.id }
+        setDetailRetries((current) => ({ ...current, [command.id]: (current[command.id] ?? 0) + 1 }))
+        return { ok: true }
+      }
+      case 'cancel-remote-resume':
+        cancelRemoteResume()
+        return { ok: true }
+      case 'copy': {
+        const row = loadedRows.find((candidate) => candidate.id === command.id)
+        if (!row) return { ok: false, reason: 'unknown-row', id: command.id }
+        return copyHistoryField(row, command.field)
+      }
+    }
+  }
+
+  useLayoutEffect(() => {
+    controller.handle = handleHistoryControl
+    return () => {
+      if (controller.handle === handleHistoryControl) controller.handle = null
+    }
+  })
+
 
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target instanceof HTMLElement && (event.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.target.closest('button, [role=\"menu\"]'))) return
@@ -941,7 +1114,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       const next = event.key === 'ArrowDown' ? Math.min(selectedRows.length - 1, current + 1) : Math.max(0, current < 0 ? 0 : current - 1)
       const row = selectedRows[next]
       if (row) {
-        selectRow(row.id)
+        void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'select', id: row.id })
         const entryIndex = grouped.entries.findIndex((entry) => entry.kind === 'session' && entry.id === row.id)
         const top = grouped.offsets[entryIndex] ?? 0
         const bottom = top + (grouped.heights[entryIndex] ?? ROW_HEIGHT)
@@ -972,7 +1145,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
     : snapshot.list.result?.hasMore === true
   const totalLimit = snapshot.view.sessionLimit
 
-  return <div className="qvh-root" data-vault-history onKeyDown={keyDown}>
+  return <div className="qvh-root" data-vault-history data-vault-history-instance={controller.instance} onKeyDown={keyDown}>
     <ToolPanelTabs>
       <Tabs
         label="History scope"
@@ -986,7 +1159,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       />
     </ToolPanelTabs>
     <ToolPanelTools>
-      <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => setOptionsOpen((open) => !open)}>
+      <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'set-options' })}>
         <ControlIcon name="gear" />{adjustmentCount(snapshot.view) ? <Badge tone="accent">{adjustmentCount(snapshot.view)}</Badge> : null}
       </IconButton>
       <IconButton label="Refresh Session History" title="Refresh Session History" data-vault-refresh disabled={snapshot.list.loading || snapshot.search.loading} onClick={() => {
@@ -1013,13 +1186,13 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
         {searchMessage.retry && snapshot.view.query.trim() ? <Button data-vault-retry-search disabled={snapshot.search.loading} onClick={() => void model.runSearch({ freshness: 'wait-until-current' })}>Retry search</Button> : null}
       </div>
     </div>
-    {optionsOpen ? <ViewOptions model={model} snapshot={snapshot} onClose={() => setOptionsOpen(false)} /> : null}
+    {optionsOpen ? <ViewOptions model={model} snapshot={snapshot} onClose={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'set-options', open: false })} /> : null}
     {remoteResume ? <section className="qvh-view-options" role="dialog" aria-modal="true" aria-label="Choose a registered owner workspace" data-vault-remote-resume>
       <SectionHeader
         title={`Resume ${agentLabel(remoteResume.row.agent)} on ${snapshot.hostOutcomes.find((host) => host.hostId === remoteResume.row.hostId)?.label ?? remoteResume.row.hostId}`}
       />
-      {remoteResume.loading ? <div role="status">Checking registered owner workspaces…</div> : null}
-      {remoteResume.error ? <div className="qvh-error-inline" role="alert">{remoteResume.error}</div> : null}
+      {remoteResume.loading ? <NoticeLine>Checking registered owner workspaces…</NoticeLine> : null}
+      {remoteResume.error ? <InlineError message={remoteResume.error} /> : null}
       {remoteResume.choices.length === 1 ? <p data-vault-remote-resume-target>{remoteResume.choices[0]!.label}</p> : null}
       {remoteResume.choices.length > 1 ? <SelectField
         label="Owner workspace"
@@ -1034,7 +1207,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       </SelectField> : null}
       <p>The selected owner validates this exact workspace instance again before starting the session.</p>
       <div className="qvh-option-toolbar">
-        <Button disabled={remoteResume.loading} onClick={cancelRemoteResume}>Cancel</Button>
+        <Button disabled={remoteResume.loading} onClick={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'cancel-remote-resume' })}>Cancel</Button>
         <Button
           disabled={remoteResume.loading || remoteResume.choices.length === 0 || remoteResume.selectedMirrorId === ''}
           onClick={() => void confirmRemoteResume()}
@@ -1042,11 +1215,11 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       </div>
     </section> : null}
     <div className="qvh-scan-strip" data-vault-scan-status={snapshot.list.loading ? 'scanning' : 'settled'}>
-      {snapshot.list.loading ? <><span>Scanning {snapshot.scanProgress?.scannedFiles ?? 0} files{snapshot.scanProgress?.current ? ` · ${snapshot.scanProgress.current}` : ''}</span><span className="qvh-progress"><span /></span><span>{model.scanElapsed(now)}</span></> : <><span>Scanned {snapshot.list.result?.scannedFiles ?? 0} files</span><span>{model.ageText(now)}</span><span>{snapshot.list.result?.total ?? 0} sessions</span></>}
+      {snapshot.list.loading ? <><NoticeLine>Scanning {snapshot.scanProgress?.scannedFiles ?? 0} files{snapshot.scanProgress?.current ? ` · ${snapshot.scanProgress.current}` : ''}</NoticeLine><span className="qvh-progress"><span /></span><span>{model.scanElapsed(now)}</span></> : <><span>Scanned {snapshot.list.result?.scannedFiles ?? 0} files</span><span>{model.ageText(now)}</span><span>{snapshot.list.result?.total ?? 0} sessions</span></>}
     </div>
     {snapshot.hostOutcomes.filter((host) => host.kind !== 'ok').map((host) => <div className="qvh-issue" role="status" key={host.hostId}>{host.label}: {host.reason ?? (host.kind === 'unavailable' ? 'This host does not provide history search.' : 'This host could not be reached.')}</div>)}
     {snapshot.list.result?.issues.map((issue, index) => <div className="qvh-issue" role="status" key={`${issue.hostId}:${issue.filePath ?? issue.root ?? index}`}>{issue.kind === 'notice' ? 'Notice: ' : 'History source issue: '}{issue.reason}</div>)}
-    {snapshot.list.error ? <div className="qvh-error" role="alert">{snapshot.list.error} <Button onClick={() => snapshot.viewReady ? void model.refreshList(true) : void model.retryView()}>Retry</Button></div> : null}
+    {snapshot.list.error ? <InlineError message={snapshot.list.error} action={{ label: 'Retry', onAction: () => snapshot.viewReady ? void model.refreshList(true) : void model.retryView() }} /> : null}
     <div className="qvh-sortbar">
       <strong>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? `${snapshot.search.response?.kind === 'results' ? snapshot.search.response.hits.length : 0} matches` : `${allRows.length} of ${snapshot.list.result?.total ?? 0} sessions`}</strong>
       <SelectField label="Sort" id="qvh-sort" aria-label="Sort sessions" value={snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? snapshot.view.searchSort : snapshot.view.browseSort} onChange={(event) => {
@@ -1060,33 +1233,39 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       {grouped.entries.length ? <div className="qvh-list-spacer" style={{ height: grouped.totalHeight }}>
         {virtual.map(({ entry, top, height }) => {
           const style: CSSProperties = { transform: `translateY(${top}px)`, height }
-          if (entry.kind === 'group') return <div className="qvh-virtual-item" key={entry.id} style={style}><div className="qvh-group-heading"><IconButton className="qvh-group-toggle" label={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} aria-expanded={!entry.collapsed} title={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} onClick={() => setCollapsed((current) => {
-            const next = new Set(current)
-            if (next.has(entry.id)) next.delete(entry.id)
-            else next.add(entry.id)
-            return next
-          })}>{entry.collapsed ? '›' : '⌄'}</IconButton><strong>{entry.label}</strong><Badge>{entry.count}</Badge></div></div>
+          if (entry.kind === 'group') return <div className="qvh-virtual-item" key={entry.id} style={style}><div className="qvh-group-heading"><IconButton className="qvh-group-toggle" label={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} aria-expanded={!entry.collapsed} title={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} onClick={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'toggle-group', id: entry.id })}>{entry.collapsed ? '›' : '⌄'}</IconButton><strong>{entry.label}</strong><Badge>{entry.count}</Badge></div></div>
           const row = entry.row
           const expanded = snapshot.view.expandedIds.includes(row.id)
+          const onSelect = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'select', id: row.id })
+          const onExpand = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'toggle-details', id: row.id })
+          const onRetryDetails = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'retry-details', id: row.id })
+          const onMenu = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'menu', id: row.id })
+          const onResumeWorktree = () => { selectRow(row.id); void resumeInWorktree(row) }
+          const onResume = () => { selectRow(row.id); void resume(row) }
+          const onHandoff = () => { selectRow(row.id); void handoff(row) }
+          const onOpenSource = (mode: 'view' | 'open' | 'reveal') => { selectRow(row.id); void openSource(row, mode) }
           return <div className="qvh-virtual-item" key={entry.id} style={style}><SessionRow
             context={context}
+            instance={controller.instance}
             row={row}
             hostLabel={snapshot.hostOutcomes.find((host) => host.hostId === row.hostId)?.label}
             view={snapshot.view}
             selected={snapshot.view.selectedId === row.id}
             tabStop={tabStopId === row.id}
             expanded={expanded}
+            retryAttempt={detailRetries[row.id] ?? 0}
             menuOpen={menuId === row.id}
-            onSelect={() => { selectRow(row.id); setMenuId(null) }}
-            onExpand={() => { selectRow(row.id); toggleExpanded(row.id) }}
-            onMenu={() => { selectRow(row.id); setMenuId((current) => current === row.id ? null : row.id) }}
+            onSelect={onSelect}
+            onExpand={onExpand}
+            onRetryDetails={onRetryDetails}
+            onMenu={onMenu}
             onCloseMenu={() => setMenuId(null)}
-            onError={setError}
-            onResumeWorktree={() => { selectRow(row.id); void resumeInWorktree(row) }}
-            onResume={() => { selectRow(row.id); void resume(row) }}
-            onHandoff={() => { selectRow(row.id); void handoff(row) }}
-            onOpenSource={(mode) => { selectRow(row.id); void openSource(row, mode) }}
-            onCopy={copy}
+            reportError={setError}
+            onResumeWorktree={onResumeWorktree}
+            onResume={onResume}
+            onHandoff={onHandoff}
+            onOpenSource={onOpenSource}
+            onCopy={onCopy}
             onDelete={() => {
               setMenuId(null)
               void model.setView({ selectedId: null, expandedIds: snapshot.view.expandedIds.filter((id) => id !== row.id) }).catch(() => {})
@@ -1095,8 +1274,8 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
           /></div>
         })}
       </div> : snapshot.list.error
-        ? <div className="qvh-error" role="alert">{emptyListText(snapshot, noAgents, allRows)}</div>
-        : <div className="qvh-empty" role="status"><EmptyState
+        ? <InlineError message={emptyListText(snapshot, noAgents, allRows)} />
+        : <div className="qvh-empty"><EmptyState
           message={emptyListText(snapshot, noAgents, allRows)}
           action={!noAgents && !snapshot.list.loading && allRows.length === 0 && snapshot.view.query.trim() ? { label: 'Clear search', onAction: () => setQuery('') } : undefined}
         /></div>}
@@ -1110,7 +1289,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       }} disabled={snapshot.list.loading || snapshot.search.loading}>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? 'Load more matches' : 'Show more sessions'}</Button> : null}
       {snapshot.view.sessionLimit === null ? <div className="qvh-footer-count">Unlimited history can take longer to scan and may slow the app.</div> : null}
     </div>
-    {snapshot.actionError ? <div className="qvh-error" role="alert">{snapshot.actionError}</div> : null}
+    {snapshot.actionError ? <InlineError message={snapshot.actionError} /> : null}
   </div>
 }
 
@@ -1153,10 +1332,19 @@ function ViewOptions({ model, snapshot, onClose }: { model: VaultWindowModel; sn
 
 export function mountHistoryPanel(context: UiPluginContext, element: HTMLElement, props: { report?(state: unknown): void }): () => void {
   Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', position: 'relative' })
+  const registry = controllerRegistry(context)
+  const controller: HistoryPanelController = { instance: `history-${++registry.nextInstance}`, handle: null }
+  registry.panels.set(controller.instance, controller)
   const root = createRoot(element)
-  const panel = <HistoryPanel context={context} report={props.report} />
+  const panel = <HistoryPanel context={context} controller={controller} report={props.report} />
   // a frame that finds a host above it after first paint would remount the panel and its model
   const hosted = element.closest('[data-ui-tool-panel-frame]') !== null
   root.render(hosted ? panel : <ToolPanelFrame title="Agent Session History">{panel}</ToolPanelFrame>)
-  return () => root.unmount()
+  return () => {
+    try {
+      root.unmount()
+    } finally {
+      registry.panels.delete(controller.instance)
+    }
+  }
 }
