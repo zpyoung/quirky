@@ -577,6 +577,13 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.sitter": {
+      "name": "@quirky/plugin-sitter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.structured": {
       "name": "@quirky/plugin-structured",
       "version": "0.1.0",
@@ -1178,6 +1185,8 @@
     "@quirky/plugin-session-info": ["@quirky/plugin-session-info@workspace:plugins/quirky.session-info"],
 
     "@quirky/plugin-sidebar-extras": ["@quirky/plugin-sidebar-extras@workspace:plugins/quirky.sidebar-extras"],
+
+    "@quirky/plugin-sitter": ["@quirky/plugin-sitter@workspace:plugins/quirky.sitter"],
 
     "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
 

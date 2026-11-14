@@ -1,0 +1,54 @@
+{
+  "id": "quirky.sitter",
+  "apiVersion": "1.12.0",
+  "name": "PR sitter",
+  "version": "0.1.0",
+  "description": "Keeps an enrolled GitHub pull request moving through checks, branch updates, and merge.",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": ["quirky.heimdall"],
+  "contributes": {
+    "method": [
+      {
+        "id": "authorize",
+        "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
+        "params": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "read",
+        "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "decide",
+        "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "execute",
+        "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
+        "params": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "resolveOutcome",
+        "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "pace",
+        "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "stop",
+        "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true }
+      }
+    ]
+  }
+}
