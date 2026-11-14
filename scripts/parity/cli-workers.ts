@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { createActorReceiptStore, readActorReceipts, type CliActorReceipt, type CliActorReceiptStore } from './cli-actor'
@@ -11,6 +12,7 @@ export const WORKER_CHECK_IDS = [
   'workers-start-complete', 'workers-start-stop', 'workers-start-abandon',
   'workers-ask', 'workers-reply', 'workers-reply-replay', 'workers-request-show', 'workers-done',
   'workers-show', 'workers-list',
+  'workers-read-live', 'workers-read-terminal', 'workers-read-archived',
   'workers-stop', 'workers-retain', 'workers-abandon', 'workers-release',
   'workers-reset-messages', 'workers-reset-all',
   'workers-ps-dashboard', 'workers-ps-runs', 'workers-ps-tasks', 'workers-ps-summary'
@@ -272,8 +274,52 @@ export function assertWorkerListEvidence(value: {
 export function assertWorkerReadArchived(value: unknown, dispatchId: string): void {
   const result = object(value, 'archived worker-read result')
   equal(result.archived, true, 'archived worker-read flag')
-  const content = text(result.content, 'archived worker-read content').replace(/\r?\n/g, '')
+  const content = text(result.content, 'archived worker-read content').replace(/[\r\n]/g, '')
   ensure(content.includes(`CLI-PARITY-WORKER-DONE:${dispatchId}`), 'archived worker-read omitted the completion marker')
+}
+
+export function assertWorkerReadLive(value: {
+  dispatchId: string
+  sessionId: string
+  viewport: unknown
+  history: unknown
+  automatic: unknown
+  terminal: unknown
+}): void {
+  const dispatchId = nonEmptyText(value.dispatchId, 'worker-read dispatch ID')
+  const sessionId = nonEmptyText(value.sessionId, 'worker-read session ID')
+  const marker = `CLI-PARITY-WORKER-DONE:${dispatchId}`
+  const viewport = object(value.viewport, 'worker-read viewport')
+  const viewportLines = array(viewport.lines, 'worker-read viewport.lines')
+    .map((line, index) => text(line, `worker-read viewport.lines[${index}]`))
+  ensure(typeof viewport.cols === 'number' && Number.isInteger(viewport.cols) && viewport.cols > 0, 'worker-read viewport.cols must be a positive integer')
+  ensure(typeof viewport.rows === 'number' && Number.isInteger(viewport.rows) && viewport.rows > 0, 'worker-read viewport.rows must be a positive integer')
+  ensure(typeof viewport.alt === 'boolean', 'worker-read viewport.alt must be a boolean')
+  ensure(viewportLines.join('\n').replace(/[\r\n]/g, '').includes(marker), 'worker-read viewport omitted the completion marker')
+
+  const history = object(value.history, 'worker-read newest history page')
+  const historyLines = array(history.lines, 'worker-read newest history page.lines')
+    .map((line, index) => text(line, `worker-read newest history page.lines[${index}]`))
+  ensure(history.cursor === null || (typeof history.cursor === 'string' && history.cursor.length > 0), 'worker-read newest history page.cursor must be a non-empty string or null')
+  ensure(!historyLines.join('\n').replace(/[\r\n]/g, '').includes(marker), 'worker-read newest history page unexpectedly contained the completion marker')
+
+  for (const [label, raw, fallbackReason, contentComplete] of [
+    ['automatic worker-read', value.automatic, 'session_not_reported', false],
+    ['explicit terminal worker-read', value.terminal, null, true]
+  ] as const) {
+    const result = object(raw, label)
+    equal(result.dispatchId, dispatchId, `${label} Dispatch ID`)
+    equal(result.sessionId, sessionId, `${label} session ID`)
+    equal(result.source, 'terminal', `${label} source`)
+    equal(result.archived, false, `${label} archived flag`)
+    equal(result.sourceExact, true, `${label} exact source`)
+    equal(result.fallbackReason, fallbackReason, `${label} fallback reason`)
+    ensure(text(result.content, `${label} content`).replace(/[\r\n]/g, '').includes(marker), `${label} omitted the completion marker`)
+    equal(result.contentComplete, contentComplete, `${label} content completeness`)
+    equal(result.clipping, { clipped: false, maxBytes: 524288 }, `${label} clipping`)
+    equal(result.nextCursor, null, `${label} continuation cursor`)
+    equal(result.warnings, [], `${label} warnings`)
+  }
 }
 
 export function assertWorkerReleaseEvidence(value: {
@@ -760,6 +806,21 @@ function terminalText(value: unknown, label: string): string {
   throw new Error(`${label} did not contain terminal text`)
 }
 
+async function waitForWorkerCompletionViewport(context: CliCheckContext, sessionId: string, dispatchId: string): Promise<unknown> {
+  const marker = `CLI-PARITY-WORKER-DONE:${dispatchId}`
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    context.check('workers-read-live')
+    const viewport = await productCall(context, `workers-read-viewport-poll-${randomUUID()}`, [
+      'api', 'call', 'quirky.terminal/read', '--session', sessionId, '--lines', '0'
+    ], 'workers-read-live')
+    if (terminalText(viewport, 'worker-read viewport').replace(/[\r\n]/g, '').includes(marker)) return viewport
+    const remaining = deadline - Date.now()
+    if (remaining > 0) await Bun.sleep(Math.min(100, remaining))
+  }
+  throw new Error(`Timed out waiting for visible worker completion marker ${marker}`)
+}
+
 function actorError(path: string, home: string, token: string): string | undefined {
   if (!existsSync(path)) return undefined
   let content: string
@@ -1012,6 +1073,9 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
 
   const doneReceipt = actorReceipt(questionWorkerReceipts, 'workers-done')
   assertWorkerCompletion({ receipt: doneReceipt, show: controllerShowComplete, dispatchId: completeDispatchId })
+  const completedTerminal = object(controllerShowComplete.terminal, 'completed worker public terminal')
+  equal(completedTerminal.id, completionSessionId, 'completed worker public terminal ID')
+  ensure(completedTerminal.providerSession === null || completedTerminal.providerSession === undefined, 'completed worker public terminal unexpectedly reported a provider session')
   context.check('workers-ask')
   context.check('workers-reply')
   context.check('workers-reply-replay')
@@ -1076,6 +1140,33 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
     workerTaskId: taskWorkerId, workerDispatchId: completeDispatchId
   })
   context.prove('workers-ps-tasks', correlation)
+  const viewport = await waitForWorkerCompletionViewport(context, completionSessionId, completeDispatchId)
+  const history = await productCall(context, 'workers-read-history', [
+    'terminal', 'history', completionSessionId, '--lines', '1024'
+  ], 'workers-read-live')
+  const automaticRead = await productCall(context, 'workers-read-live', [
+    'orchestration', 'worker-read', '--dispatch', completeDispatchId
+  ], 'workers-read-live')
+  const terminalRead = await productCall(context, 'workers-read-terminal', [
+    'orchestration', 'worker-read', '--dispatch', completeDispatchId, '--source', 'terminal'
+  ], 'workers-read-terminal')
+  assertWorkerReadLive({
+    dispatchId: completeDispatchId, sessionId: completionSessionId,
+    viewport, history, automatic: automaticRead, terminal: terminalRead
+  })
+  const liveReadIdentity = {
+    dispatchId: completeDispatchId, sessionId: completionSessionId,
+    source: 'terminal', archived: false, sourceExact: true,
+    completionMarker: true, viewportMarker: true, historyPageMarker: false
+  }
+  context.check('workers-read-live')
+  context.prove('workers-read-live', {
+    ...liveReadIdentity, fallbackReason: 'session_not_reported', contentComplete: false
+  })
+  context.check('workers-read-terminal')
+  context.prove('workers-read-terminal', {
+    ...liveReadIdentity, fallbackReason: null, contentComplete: true
+  })
 
   const summary = await productCall(context, 'workers-ps-summary', ['orchestration', 'ps', '--limit', '100'], 'workers-ps-summary')
   const worktrees = await context.call('workers-ps-worktrees', ['worktree', 'list'], 'json')
@@ -1112,6 +1203,15 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
   context.check('workers-release')
   const archivedRead = requiredActorResult(phaseTwoReceipts, 'workers-read-archived')
   assertWorkerReadArchived(archivedRead, completeDispatchId)
+  equal(archivedRead.dispatchId, completeDispatchId, 'archived worker-read Dispatch ID')
+  equal(archivedRead.sessionId, completionSessionId, 'archived worker-read session ID')
+  equal(archivedRead.source, 'terminal', 'archived worker-read source')
+  equal(archivedRead.sourceExact, true, 'archived worker-read exact source')
+  context.check('workers-read-archived')
+  context.prove('workers-read-archived', {
+    dispatchId: completeDispatchId, sessionId: completionSessionId,
+    source: 'terminal', archived: true, sourceExact: true, completionMarker: true
+  })
   const releaseSessions = await productCall(context, 'workers-release-pty', ['terminal', 'sessions'], 'workers-release')
   const releaseEvidence = assertWorkerReleaseEvidence({
     dispatchId: completeDispatchId, sessionId: completionSessionId, release: releaseResult,

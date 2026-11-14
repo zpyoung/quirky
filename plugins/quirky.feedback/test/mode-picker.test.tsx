@@ -59,13 +59,12 @@ function fakeContext(seed: Comment[] = []) {
 }
 
 let teardown: (() => void) | null = null
-let annotated: string[] = []
 
 async function start(seed: Comment[] = []) {
   const fake = fakeContext(seed)
   const previous = document.activeElement
   await act(async () => {
-    teardown = mountFeedbackMode(fake.context, { annotate: async (pane) => { annotated.push(pane) } })
+    teardown = mountFeedbackMode(fake.context)
   })
   await flush()
   return { ...fake, previous }
@@ -150,7 +149,6 @@ const label = () => shadowRoot!.querySelector<HTMLElement>('.label')!
 const highlight = () => shadowRoot!.querySelector<HTMLElement>('.highlight')!
 
 beforeEach(() => {
-  annotated = []
   shadowRoot = null
   attachShadow = Element.prototype.attachShadow
   const original = attachShadow

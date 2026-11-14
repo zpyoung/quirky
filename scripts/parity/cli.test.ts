@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { createProcessScope } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import type { CliParityReport, CliParityRow, CliReceipt } from './cli-run'
-import { loadCliTable } from './cli-table'
 
 const checkout = join(import.meta.dir, '../..')
 
@@ -35,7 +34,7 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
       'terminal-split', 'terminal-switch', 'worktree-current', 'worktree-ps', 'worktree-ps-summary',
       'orchestration-run-use', 'orchestration-dispatch', 'orchestration-dispatch-show',
       'orchestration-worker-start', 'orchestration-worker-show',
-      'orchestration-worker-list', 'orchestration-worker-stop', 'orchestration-worker-abandon',
+      'orchestration-worker-list', 'orchestration-worker-read', 'orchestration-worker-stop', 'orchestration-worker-abandon',
       'orchestration-worker-retain', 'orchestration-worker-release', 'orchestration-ask',
       'orchestration-reply', 'orchestration-request-show', 'orchestration-reset'
     ]) {
@@ -48,15 +47,12 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
       expect(rows.get(id)).not.toHaveProperty('followUp')
     }
     expect(report.receipts.filter(receipt => excludedIds.includes(receipt.id))).toEqual([])
-    const gapIds = ['file-diff', 'file-open-changed', 'file-open-render', 'orchestration-worker-read']
+    const gapIds = ['file-diff', 'file-open-changed', 'file-open-render']
     for (const id of gapIds) {
       expect(rows.get(id), id).toMatchObject({ status: 'gap', executed: false })
       expect(rows.get(id)!.reason).toBeTruthy()
     }
-    const predecessorCoveredCount = loadCliTable().filter(row =>
-      row.disposition === 'covered' && row.id !== 'worktree-ps-summary'
-    ).length
-    expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(predecessorCoveredCount + 1)
+    expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(92)
     expect(report.rows.filter(row => row.status === 'mapped-only')).toHaveLength(0)
     expect(report.rows.filter(row => row.status === 'gap').map(row => row.id).sort()).toEqual([...gapIds].sort())
     expect(report.rows.some(row => row.status === 'delegated')).toBe(true)
@@ -104,6 +100,19 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     expect(receipt('workers-stop')).toMatchObject({ state: 'stopped', processAction: 'closed_agent_terminal', ptyAlive: false, unauthorized: 'consumer_fenced' })
     expect(receipt('workers-abandon')).toMatchObject({ state: 'abandoned', processAction: 'none', ptyAlive: true, pidAlive: true })
     expect(receipt('workers-release')).toMatchObject({ state: 'released', archive: 'captured', ptyAlive: false })
+    const liveRead = receipt('workers-read-live')
+    expect(liveRead).toMatchObject({
+      dispatchId: expect.any(String), sessionId: expect.any(String), source: 'terminal',
+      archived: false, sourceExact: true, completionMarker: true, viewportMarker: true,
+      historyPageMarker: false, fallbackReason: 'session_not_reported', contentComplete: false
+    })
+    expect(receipt('workers-read-terminal')).toEqual({
+      ...liveRead, fallbackReason: null, contentComplete: true
+    })
+    expect(receipt('workers-read-archived')).toEqual({
+      dispatchId: liveRead.dispatchId, sessionId: liveRead.sessionId, source: 'terminal',
+      archived: true, sourceExact: true, completionMarker: true
+    })
     expect(receipt('workers-ps-tasks')).toMatchObject({
       correlation: { worktreeToSession: true, sessionToWorker: true, taskToDispatch: true, cardToTask: false, worktreePath: false, hostScope: false }
     })
@@ -131,7 +140,8 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
       status: 'passed', executed: true, checks: ['workers-ps-summary']
     })
     expect(rows.get('orchestration-worker-read')).toMatchObject({
-      status: 'gap', checks: [], followUp: 'Include the visible viewport in live worker-read output'
+      status: 'passed', executed: true,
+      checks: ['workers-read-live', 'workers-read-terminal', 'workers-read-archived']
     })
     const status = receipt('status')
     for (const pid of [status.pid, status.ptyHostPid]) {

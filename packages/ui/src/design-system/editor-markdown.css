@@ -1,5 +1,3 @@
-@import 'katex/dist/katex.min.css';
-
 .markdown-surface {
   background: var(--ui-surface);
   color: var(--ui-text);
