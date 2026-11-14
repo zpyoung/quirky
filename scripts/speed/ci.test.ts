@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BUDGETS, METRICS, type SpeedReport } from './contracts'
 import { readSpeedEvidence, runCi } from './ci'
+import { createMisses, renderSpeed, summarizeEchoTiming, summarizeScheduler, validateReport } from './report'
 
 const roots: string[] = []
 const temp = () => { const dir = mkdtempSync(join(tmpdir(), 'speed-ci-')); roots.push(dir); return dir }
@@ -263,3 +264,61 @@ test('missing, malformed, and report-mismatched misses use report-derived unavai
   }
 })
 
+
+test('v4 CI evidence retains attribution and failed runner experiments without changing qualification', async () => {
+  const current = report()
+  current.profile = { ...current.profile, workloadVersion: 4, compositor: 'software',
+    frameTiming: 'native-final-frame-echo-arrival-cap-60hz', runnerPolicy: 'ci-macos-timer-experiment-v1' }
+  current.runnerLatency = {
+    version: 1, runId: current.runId, runner: 'macos-15', status: 'attempted', reason: null,
+    coalescing: { requested: 0, before: 1, after: 1, status: 'set-failed', errors: ['sysctl unsupported'] },
+    appNap: { requested: 1, before: 0, after: null, status: 'readback-unavailable', errors: ['key missing'] },
+    timerCoalesceBgNsMax: 100000000
+  }
+  const unavailable = { status: 'unavailable', reason: 'probe-unavailable', intervals: [], pendingLateAtEndMs: null }
+  for (const metric of METRICS) {
+    const result = current.metrics[metric]
+    const raw = BUDGETS[metric] + 1
+    Object.assign(result, { samplesMs: Array(20).fill(raw), medianMs: raw, budgetMiss: true,
+      wallSamplesMs: Array(20).fill(raw), unavailableSamples: 0, echoTiming: null, scheduler: null })
+    if (metric !== 'echo' && metric !== 'floodEcho') continue
+    result.echoTiming = summarizeEchoTiming(Array.from({ length: 20 }, () => ({
+      status: 'complete', reason: null, workerReadEpochMs: 100012, pageTimeOriginMs: 100000,
+      receivedAt: 18, keystrokeToWorkerMs: 2, workerToPageMs: 6, pageToPaintMs: raw - 8
+    })))
+    result.scheduler = summarizeScheduler(Array.from({ length: 20 }, () => ({
+      harness: unavailable, floodWorker: metric === 'floodEcho' ? unavailable : null
+    })))
+  }
+  expect(validateReport(current)).toEqual(current)
+  const input = stage(current)
+  const misses = createMisses(current)
+  writeFileSync(join(input, 'misses.json'), JSON.stringify(misses))
+  const out = temp()
+  expect(await runCi(compareArgs(join(input, 'report.json'), join(input, 'pair.json'), out, current.commit),
+    { cwd: temp(), err: () => {} })).toBe(0)
+  const retained = JSON.parse(readFileSync(join(out, 'misses.json'), 'utf8'))
+  expect(retained).toEqual(misses)
+  expect(retained.find((miss: { metric: string }) => miss.metric === 'echo').echoTiming).toEqual(current.metrics.echo.echoTiming)
+  const text = readSpeedEvidence(out, current.commit)
+  for (const evidence of ['Keystroke to worker', 'Worker to page', 'Page to paint',
+    '20 complete / 0 unavailable', 'sysctl unsupported', 'Controller timer', 'Flood worker sleep']) {
+    expect(text).toContain(evidence)
+  }
+  expect(text).toContain('BUDGET MISS')
+  const published = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8'))
+  expect(published).toMatchObject({ status: 'complete', qualified: true, runnerLatency: current.runnerLatency })
+
+  for (const kind of ['smoke', 'incomplete'] as const) {
+    const partial = structuredClone(current)
+    partial.qualified = false
+    if (kind === 'incomplete') {
+      partial.status = 'incomplete'
+      partial.failures = [{ kind: 'measurement-failed', message: 'fixture interruption' }]
+    }
+    const partialText = kind === 'smoke' ? renderSpeed(partial) : readSpeedEvidence(stage(partial), partial.commit)
+    expect(partialText).toContain('not measured:')
+    expect(partialText).toContain('Keystroke to worker')
+    expect(partialText).toContain('sysctl unsupported')
+  }
+})
