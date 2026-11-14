@@ -1,0 +1,314 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.notifications/settings": {
+      "loading": {
+        "applicable": false,
+        "reason": "Settings are read synchronously; this view has no loading phase.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "this.context.getSetting(name)"
+          }
+        ]
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "The view always renders the fixed nine-setting control set; it has no empty collection state.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.notifications/src/window/copy.ts",
+            "quote": "export const SETTING_NAMES = [\n  'enabled',\n  'agentTaskComplete',\n  'terminalBell',\n  'terminalNotifications',\n  'sound',\n  'customSoundPath',\n  'volume',\n  'suppressWhenFocused',\n  'showMenuBarIcon'\n] as const"
+          }
+        ]
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "view:quirky.notifications/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/model.ts",
+        "quote": "this.context.toast('Could not change the setting', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.toast('Could not change the setting', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.notifications/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/model.ts",
+        "quote": "this.context.toast('Could not play the sound', result.reason)"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.toast('Could not play the sound', result.reason)"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.notifications/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/model.ts",
+        "quote": "this.context.toast('Could not play the sound', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.toast('Could not play the sound', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.notifications/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/model.ts",
+        "quote": "this.context.toast('Test notification was not delivered', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.toast('Test notification was not delivered', messageOf(error))"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "isCustom && ("
+      },
+      "reason": "This branch shows the selected custom sound and its Change control, not a whole-view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "!customOpen && ("
+      },
+      "reason": "This condition hides Change while the custom path editor is open; it is control presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "customOpen && <CustomPath"
+      },
+      "reason": "This condition shows the custom path editor, not a whole-view loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "values.sound !== 'system' &&"
+      },
+      "reason": "The selected sound determines whether its volume control is applicable."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/model.ts",
+        "quote": "this.context.toast('Test notification requested', 'If no macOS banner appeared, turn on Allow notifications for Quirky in System Settings.')"
+      },
+      "reason": "This toast reports a successfully requested test notification, not an error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/model.ts",
+        "quote": "this.context.toast('Notifications are disabled', '')"
+      },
+      "reason": "This toast reports the test result for disabled notifications, not an error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/model.ts",
+        "quote": "this.context.toast('Test notification was not delivered', '')"
+      },
+      "reason": "This toast reports a non-error test outcome when delivery did not occur."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onChange={(checked) => void store.set(row.name, checked)}"
+      },
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.call('setting.set', { id: settingId(name), value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "async set(name: SettingName, value: boolean | number | string): Promise<boolean> {\n    try {\n      await this.context.call('setting.set', { id: settingId(name), value })\n    } catch (error) {\n      this.context.toast('Could not change the setting', messageOf(error))\n      return false\n    }\n    this.refresh()\n    return true\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onChange={(event) => void store.chooseSound(event.target.value)}"
+      },
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.call('setting.set', { id: settingId(name), value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "async chooseSound(sound: string): Promise<void> {\n    if (sound === 'custom') {\n      this.commit({ customOpen: true, customError: null })\n      return\n    }\n    this.commit({ customOpen: false, customError: null })\n    if (!(await this.set('sound', sound)) || sound === 'system') return\n    try {\n      const result = (await this.context.call(PREVIEW, { sound })) as { played: boolean; reason?: string }\n      if (!result.played && result.reason) this.context.toast('Could not play the sound', result.reason)\n    } catch (error) {\n      this.context.toast('Could not play the sound', messageOf(error))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "async set(name: SettingName, value: boolean | number | string): Promise<boolean> {\n    try {\n      await this.context.call('setting.set', { id: settingId(name), value })\n    } catch (error) {\n      this.context.toast('Could not change the setting', messageOf(error))\n      return false\n    }\n    this.refresh()\n    return true\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onClick={() => store.editCustom()}"
+      },
+      "route": {
+        "target": "command:quirky.notifications/edit-custom-sound",
+        "invoke": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "editCustom(): void {\n    void this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onKeyDown={(event) => event.key === 'Enter' && path !== '' && void store.useCustom(path)}"
+      },
+      "route": {
+        "target": "quirky.notifications/preview",
+        "invoke": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.call(PREVIEW, { path, volume: this.snapshot.values.volume })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "async useCustom(path: string): Promise<void> {\n    if (this.snapshot.busy) return\n    this.commit({ busy: true })\n    try {\n      const result = (await this.context.call(PREVIEW, { path, volume: this.snapshot.values.volume })) as { played: boolean; reason?: string }\n      if (this.stopped) return\n      if (!result.played) {\n        this.commit({ customError: result.reason ?? 'The file could not be played' })\n        return\n      }\n      if (!(await this.set('customSoundPath', path)) || !(await this.set('sound', 'custom'))) return\n      this.commit({ customOpen: false, customError: null })\n    } catch (error) {\n      if (!this.stopped) this.commit({ customError: messageOf(error) })\n    } finally {\n      if (!this.stopped) this.commit({ busy: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onClick={() => void store.useCustom(path)}"
+      },
+      "route": {
+        "target": "quirky.notifications/preview",
+        "invoke": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.call(PREVIEW, { path, volume: this.snapshot.values.volume })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "async useCustom(path: string): Promise<void> {\n    if (this.snapshot.busy) return\n    this.commit({ busy: true })\n    try {\n      const result = (await this.context.call(PREVIEW, { path, volume: this.snapshot.values.volume })) as { played: boolean; reason?: string }\n      if (this.stopped) return\n      if (!result.played) {\n        this.commit({ customError: result.reason ?? 'The file could not be played' })\n        return\n      }\n      if (!(await this.set('customSoundPath', path)) || !(await this.set('sound', 'custom'))) return\n      this.commit({ customOpen: false, customError: null })\n    } catch (error) {\n      if (!this.stopped) this.commit({ customError: messageOf(error) })\n    } finally {\n      if (!this.stopped) this.commit({ busy: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "input.addEventListener('change', onChange)"
+      },
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.call('setting.set', { id: settingId(name), value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+            "quote": "const onChange = () => void store.set('volume', Number(input.value))"
+          },
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "async set(name: SettingName, value: boolean | number | string): Promise<boolean> {\n    try {\n      await this.context.call('setting.set', { id: settingId(name), value })\n    } catch (error) {\n      this.context.toast('Could not change the setting', messageOf(error))\n      return false\n    }\n    this.refresh()\n    return true\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onClick={() => void store.sendTest()}"
+      },
+      "route": {
+        "target": "quirky.notifications/test",
+        "invoke": {
+          "file": "plugins/quirky.notifications/src/window/model.ts",
+          "quote": "this.context.call(TEST)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.notifications/src/window/model.ts",
+            "quote": "async sendTest(): Promise<void> {\n    if (this.snapshot.busy) return\n    this.commit({ busy: true })\n    try {\n      const result = (await this.context.call(TEST)) as { delivered?: boolean; reason?: string }\n      if (result.delivered === true) {\n        this.context.toast('Test notification requested', 'If no macOS banner appeared, turn on Allow notifications for Quirky in System Settings.')\n      } else if (result.reason === 'disabled') {\n        this.context.toast('Notifications are disabled', '')\n      } else {\n        this.context.toast('Test notification was not delivered', '')\n      }\n    } catch (error) {\n      this.context.toast('Test notification was not delivered', messageOf(error))\n    } finally {\n      if (!this.stopped) this.commit({ busy: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onChange={(event) => setDraft(event.target.value)}"
+      },
+      "transient": "draft",
+      "reason": "The custom path draft is local until the user presses Use."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/NotificationsView.tsx",
+        "quote": "onChange={(event) => setDraft(Number(event.target.value))}"
+      },
+      "transient": "draft",
+      "reason": "The slider displays its local drag value and saves only on change."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.notifications/src/window/controls.tsx",
+        "quote": "onChange={(event) => onChange(event.currentTarget.checked)}"
+      },
+      "notAction": "forwarded",
+      "reason": "The native switch forwards its checked value to the owning settings handler."
+    }
+  ]
+}

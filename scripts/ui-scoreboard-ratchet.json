@@ -1,4 +1,6 @@
 {
   "host": ["compatibility-tokens"],
+  "quirky.ask": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.notifications": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.session": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }
