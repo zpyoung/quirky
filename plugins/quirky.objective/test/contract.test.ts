@@ -132,6 +132,8 @@ test('refuses each invalid contract with its code', () => {
     ...['[', ']', '{', '}', '(', ')', '!'].map((character): [string, string, (value: ObjectivePayload) => void] => [
       `forbidden ${character} in territory entry`, 'territory-invalid', (value) => { value.writeTerritory = [`src/${character}file`] }
     ]),
+    ['.git territory root', 'territory-invalid', (value) => { value.writeTerritory = ['.git/config'] }],
+    ['.quirky territory root', 'territory-invalid', (value) => { value.writeTerritory = ['.quirky/objective'] }],
     ['dot path segment in territory', 'territory-invalid', (value) => { value.writeTerritory = ['.'] }],
     ['leading dot path segment in territory', 'territory-invalid', (value) => { value.writeTerritory = ['./.git/**'] }],
     ['repeated leading dot path segments in territory', 'territory-invalid', (value) => { value.writeTerritory = ['././.git/**'] }],
