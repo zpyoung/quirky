@@ -190,7 +190,7 @@ rm -rf /tmp/qtest
 `bun run ui:review` starts the real daemon and desktop renderer against a fresh isolated
 home, registers a disposable local repository and two Git worktrees, and captures the live
 UI contribution inventory in dark and light. It does not open the foreground native window,
-load your profile, install hooks, or use provider accounts. Chromium and all app processes are
+load your profile, install hooks, or use your provider accounts. Chromium and all app processes are
 owned by the run and stopped before it returns.
 
 Install the development dependencies, then either install a Playwright browser with
@@ -253,18 +253,31 @@ bun run ui:scoreboard -- --author-family openai --output /tmp/quirky-ui-scoreboa
 # No browser, build, daemon or reviewer. Screenshots remain explicitly unmeasured.
 bun run ui:scoreboard -- --static-only --output /tmp/quirky-ui-static
 
+# Measure one plugin in both themes; this cannot certify the whole application's goal.
+bun run ui:scoreboard -- --plugin quirky.session --author-family openai \
+  --output /tmp/quirky-session-scoreboard
+
 # Enrolled static checks only; no runtime or artifact directory.
 bun run ui:scoreboard:check
 ```
 
-Both reporting modes write `scoreboard.json` and `scoreboard.md` to a fresh absolute directory,
-print their paths, and retain failures and non-applicable reasons. Full mode accepts `--reviewer`
-and `--browser` as above, but no filters, threshold override, skip-build or historical report.
+All reporting modes write `scoreboard.json` and `scoreboard.md` to a fresh absolute directory,
+print their paths, and retain failures and non-applicable reasons. Full and plugin modes accept
+`--reviewer` and `--browser` as above, but no threshold override, skip-build or historical report.
+`--plugin` requires a known plugin with declared capture targets. Its report contains only that
+plugin, omits host checks, and always records `goalPassed: false`; exit 0 means that plugin's
+checks passed. Plugins without declared capture targets receive `N/A` for screenshots even if
+they have a UI bundle; their source audits still run.
 Dirty production source blocks capture; source changes during measurement invalidate the run.
-Exit 0 certifies a complete passing full report (or passing ratchet), 1 means failed checks,
-2 means operational/inventory errors; cancellation awaits cleanup and exits 130/143.
+Exit 0 certifies a complete passing full report, passing plugin checks, or a passing ratchet;
+1 means failed checks, 2 means operational/inventory errors. Cancellation awaits cleanup and exits 130/143.
 An omitted reviewer theme is an operational failure: measured cells are retained, and no
 further target reviews are requested.
+
+Escaped compatibility tokens are checked in style contexts, including JSX style/class props,
+style objects, CSS templates and DOM style APIs. Escapes in CLI arguments or Markdown text do
+not count as styles. Browser page captures review the browser toolbar and view chrome, not
+native web content. Account captures use disposable provider executables and a local Keychain guard.
 
 ### State and action coverage
 

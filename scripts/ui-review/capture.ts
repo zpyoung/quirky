@@ -64,6 +64,7 @@ type CaptureRuntime = {
   fixtures: RegisteredCaptureFixtures
   editorBuffer: EditorFixtureBuffer | null
   terminalFixture: CaptureTerminalFixture | null
+  structuredSessionId: string | null
   pendingUiCommand: Promise<unknown> | null
   scene: SceneState
   manifest: CaptureManifest
@@ -134,12 +135,14 @@ function evidence(path: string, bytes: Uint8Array): ImageEvidence {
 }
 
 export function discoverCaptureTargets(model: UiModel): CaptureTarget[] {
-  const toTarget = (entry: UiSlotEntry, kind: CaptureTarget['kind']): CaptureTarget => ({
-    id: entry.id,
-    plugin: entry.plugin,
-    title: entry.title,
-    kind
-  })
+  const toTarget = (entry: UiSlotEntry, kind: CaptureTarget['kind']): CaptureTarget => {
+    const separator = entry.id.indexOf(':')
+    const slash = entry.id.indexOf('/', separator + 1)
+    const plugin = separator >= 0 && slash > separator
+      ? entry.id.slice(separator + 1, slash)
+      : entry.plugin
+    return { id: entry.id, plugin, title: entry.title, kind }
+  }
   const targets = [
     { id: 'host:shell', plugin: null, title: 'Quirky', kind: 'host' as const },
     { id: 'host:scoped', plugin: null, title: 'Quirky scoped to one project', kind: 'host' as const },
@@ -418,7 +421,77 @@ async function waitForRendererModel(runtime: CaptureRuntime): Promise<void> {
   await runtime.page.locator('.tool-shell__stripe').first().waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
 }
 
-function targetSlotSelector(target: CaptureTarget): string {
+async function prepareAccountsStaleSession(runtime: CaptureRuntime, provider: 'claude' | 'codex'): Promise<void> {
+  const terminal = runtime.terminalFixture
+  if (!terminal) throw new Error(`a terminal fixture is required to prepare the ${provider} account session`)
+  const { primaryWorktree } = runtime.fixtures
+  const { timeoutMs, signal } = runtime.options
+  const homeOverrides = {
+    claude: { value: null, source: 'absent' },
+    codex: { value: null, source: 'absent' }
+  }
+
+  await rpc(runtime.client, 'quirky.accounts/select', { provider, accountId: null }, timeoutMs, signal)
+  await rpc(runtime.client, 'quirky.accounts/prepare', {
+    agent: provider,
+    sessionId: terminal.sessionId,
+    worktreeId: primaryWorktree.id,
+    cwd: primaryWorktree.path,
+    homeOverrides
+  }, timeoutMs, signal)
+
+  const listed = record(await rpc(runtime.client, 'quirky.accounts/list', { provider }, timeoutMs, signal))
+  const findAccountId = (state: Record<string, unknown>): string | undefined => {
+    if (!Array.isArray(state.accounts)) return undefined
+    const account = state.accounts.map(record).find((entry) =>
+      entry.provider === provider && typeof entry.id === 'string' && entry.id.length > 0
+    )
+    return typeof account?.id === 'string' ? account.id : undefined
+  }
+  let accountId = findAccountId(listed)
+
+  if (!accountId) {
+    const pending = record(await rpc(runtime.client, 'quirky.accounts/beginLogin', {
+      provider,
+      label: provider === 'claude' ? 'Review Claude' : 'Review Codex'
+    }, timeoutMs, signal))
+    if (typeof pending.id !== 'string' || pending.id.length === 0) {
+      throw new Error(`${provider} account sign-in did not return a request ID`)
+    }
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) throw new Error(`timed out waiting for ${provider} account sign-in`)
+      const status = record(await rpc(
+        runtime.client,
+        'quirky.accounts/loginStatus',
+        { id: pending.id },
+        Math.min(timeoutMs, remaining),
+        signal
+      ))
+      if (status.status === 'complete') {
+        const result = record(status.result)
+        const completedId = typeof status.accountId === 'string' ? status.accountId : result.id
+        if (typeof completedId === 'string' && completedId.length > 0) accountId = completedId
+        break
+      }
+      if (status.status === 'error' || status.status === 'cancelled') {
+        throw new Error(`${provider} account sign-in ${status.status}: ${String(status.error ?? '')}`)
+      }
+      const waitMs = Math.min(100, Math.max(1, deadline - Date.now()))
+      await bounded(Bun.sleep(waitMs), waitMs, signal, `wait for ${provider} account sign-in`)
+    }
+    if (!accountId) {
+      accountId = findAccountId(record(await rpc(runtime.client, 'quirky.accounts/list', { provider }, timeoutMs, signal)))
+    }
+  }
+  if (!accountId) throw new Error(`completed ${provider} sign-in did not create a managed account`)
+  await rpc(runtime.client, 'quirky.accounts/select', { provider, accountId }, timeoutMs, signal)
+}
+
+export function targetSlotSelector(target: CaptureTarget): string {
+  if (target.kind === 'overlay' && target.id === 'overlay:quirky.feedback/mode') return '[data-quirky-feedback]'
+  if (target.kind === 'overlay' && target.id === 'overlay:quirky.terminal/floating') return '[data-floating-panel]'
   const attr = JSON.stringify(target.id)
   return target.kind === 'overlay' ? `[data-plugin-overlay=${attr}]` : `[data-plugin-slot=${attr}]`
 }
@@ -431,9 +504,62 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
     const cancel = settings.getByRole('button', { name: 'Cancel', exact: true })
     if (await cancel.count() > 0) await cancel.click({ timeout: runtime.options.timeoutMs })
   }
+
+  const accountSwitchDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.accounts/switch-dialog"] [role="dialog"]')
+  const hadAccountSwitchDialog = await accountSwitchDialog.count() > 0
+  const accountAccessory = runtime.page.locator('.accounts-ui.session-accessory')
+  const hadAccountAccessory = await accountAccessory.count() > 0
+  const feedbackSurface = runtime.page.locator('[data-quirky-feedback]:not([data-feedback-banner])')
+  const hadFeedback = await feedbackSurface.count() > 0
+  const floatingPanel = runtime.page.locator('[data-floating-panel]')
+  const orchestrationSetupSurface = runtime.page.locator('aside[aria-label="Enable orchestration"]')
+  const hadFloating = await floatingPanel.count() > 0 || await orchestrationSetupSurface.count() > 0
+  const composer = runtime.page.locator('.tasks-composer')
+  const hadComposer = await composer.count() > 0
+  const handoffDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.handoff/dialog"] [role="dialog"]')
+  const loopsDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.loops/dialogs"] [role="dialog"]')
+
   await bounded(runtime.page.keyboard.press('Escape'), runtime.options.timeoutMs, runtime.options.signal, 'close renderer overlay')
+  if (hadFeedback) {
+    await rpc(runtime.client, 'setting.set', { id: 'setting:quirky.feedback/active', value: false }, runtime.options.timeoutMs, runtime.options.signal)
+    await bounded(feedbackSurface.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Feedback mode')
+  }
+  if (await handoffDialog.count() > 0) {
+    await rpc(runtime.client, 'ui.command.run', { id: 'command:quirky.handoff/cancel' }, runtime.options.timeoutMs, runtime.options.signal)
+    await bounded(handoffDialog.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Handoff dialog')
+  }
+  if (await loopsDialog.count() > 0) {
+    await rpc(runtime.client, 'ui.command.run', {
+      id: 'command:quirky.loops/setup-action',
+      args: { action: 'cancel' }
+    }, runtime.options.timeoutMs, runtime.options.signal)
+    await bounded(loopsDialog.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Loops dialog')
+  }
+  if (hadAccountSwitchDialog) {
+    await rpc(runtime.client, 'quirky.accounts/select', { provider: 'claude', accountId: null }, runtime.options.timeoutMs, runtime.options.signal)
+    await bounded(accountSwitchDialog.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Accounts switch dialog')
+  }
+  if (hadComposer) {
+    const state = record(await rpc(runtime.client, 'quirky.tasks/workspaceComposerState', {}, runtime.options.timeoutMs, runtime.options.signal))
+    if (typeof state.requestId === 'string' && state.requestId.length > 0) {
+      await rpc(runtime.client, 'quirky.tasks/workspaceComposerCancel', { requestId: state.requestId }, runtime.options.timeoutMs, runtime.options.signal)
+      await bounded(composer.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Tasks workspace composer')
+    }
+  }
+  if (hadFloating) {
+    await rpc(runtime.client, 'quirky.terminal/setFloating', { open: false }, runtime.options.timeoutMs, runtime.options.signal)
+    await Promise.all([
+      bounded(floatingPanel.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close floating panel'),
+      bounded(orchestrationSetupSurface.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close orchestration setup')
+    ])
+  }
+
   await rpc(runtime.client, 'ui.palette.set', { open: false }, runtime.options.timeoutMs, runtime.options.signal)
   await rpc(runtime.client, 'ui.view.close', {}, runtime.options.timeoutMs, runtime.options.signal)
+  if (hadAccountAccessory) {
+    await rpc(runtime.client, 'quirky.accounts/select', { provider: 'codex', accountId: null }, runtime.options.timeoutMs, runtime.options.signal)
+    await bounded(accountAccessory.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Accounts session accessory')
+  }
   await rpc(runtime.client, 'ui.panel.close', {}, runtime.options.timeoutMs, runtime.options.signal)
   await rpc(runtime.client, 'ui.sidebar.set', { visible: true }, runtime.options.timeoutMs, runtime.options.signal)
 }
@@ -453,7 +579,8 @@ export function fixtureViewInput(
   fixtures: RegisteredCaptureFixtures,
   target: CaptureTarget,
   editorBuffer: EditorFixtureBuffer | null,
-  terminalFixture: CaptureTerminalFixture | null
+  terminalFixture: CaptureTerminalFixture | null,
+  structuredSessionId: string | null = null
 ): Record<string, unknown> {
   const worktree = fixtures.primaryWorktree
   const input: Record<string, unknown> = {
@@ -471,12 +598,19 @@ export function fixtureViewInput(
     input.tabId = editorBuffer.tabId
     input.mode = editorBuffer.mode
   }
-  if (terminalFixture && ['quirky.terminal', 'quirky.session', 'quirky.session-info', 'quirky.terminal-dock'].includes(target.plugin ?? '')) {
+  if (terminalFixture && (
+    ['quirky.terminal', 'quirky.session-info', 'quirky.terminal-dock', 'quirky.accounts'].includes(target.plugin ?? '') ||
+    target.id === 'view:quirky.session/worktree'
+  )) {
     input.session = terminalFixture.sessionId
     input.sessionId = terminalFixture.sessionId
     input.tabId = terminalFixture.tabId
     input.pane = terminalFixture.paneId
     input.paneId = terminalFixture.paneId
+  }
+  if (target.id === 'view:quirky.session/structured') {
+    if (!structuredSessionId) throw new Error('a structured session fixture is required for the structured view')
+    input.session = structuredSessionId
   }
   return input
 }
@@ -574,6 +708,57 @@ async function openPanel(runtime: CaptureRuntime, target: CaptureTarget): Promis
   await rpc(runtime.client, 'ui.panel.open', { id: target.id }, runtime.options.timeoutMs, runtime.options.signal)
 }
 
+export async function ensureHandoffTerminalContext(
+  runtime: Pick<CaptureRuntime, 'terminalFixture' | 'options' | 'client'>
+): Promise<void> {
+  const terminal = runtime.terminalFixture
+  if (!terminal) throw new Error('a terminal fixture is required to capture the Handoff dialog')
+  const { timeoutMs, signal } = runtime.options
+  const deadline = Date.now() + timeoutMs
+  const readHistory = async () => {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return false
+    const history = record(await rpc(runtime.client, 'quirky.terminal/history', {
+      session: terminal.sessionId,
+      lines: 100,
+      format: 'text'
+    }, Math.min(timeoutMs, remaining), signal))
+    return Array.isArray(history.lines) && history.lines.some((line) => typeof line === 'string' && line.trim().length > 0)
+  }
+  const readSnapshot = async () => {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return {}
+    return record(await rpc(runtime.client, 'quirky.terminal/snapshot', {
+      session: terminal.sessionId
+    }, Math.min(timeoutMs, remaining), signal))
+  }
+  const waitForNextPoll = async () => {
+    const waitMs = Math.min(100, Math.max(1, deadline - Date.now()))
+    await bounded(Bun.sleep(waitMs), waitMs, signal, 'wait for Handoff terminal output')
+  }
+
+  if (await readHistory()) return
+  let snapshot: Record<string, unknown> = {}
+  while (Date.now() < deadline) {
+    snapshot = await readSnapshot()
+    if (snapshot.shellState === 'ready') break
+    if (snapshot.shellState === 'timed_out') throw new Error('terminal fixture shell timed out before Handoff context was captured')
+    await waitForNextPoll()
+  }
+  if (snapshot.shellState !== 'ready') throw new Error('terminal fixture shell did not become ready for Handoff context')
+  const rows = typeof snapshot.rows === 'number' && Number.isFinite(snapshot.rows) ? Math.max(1, Math.ceil(snapshot.rows)) : 24
+  const lineCount = rows + 20
+  await rpc(runtime.client, 'quirky.terminal/write', {
+    session: terminal.sessionId,
+    data: `printf 'UI review handoff fixture\\n%.0s' {1..${lineCount}}\n`
+  }, timeoutMs, signal)
+  while (Date.now() < deadline) {
+    if (await readHistory()) return
+    await waitForNextPoll()
+  }
+  throw new Error('terminal fixture did not produce readable Handoff context')
+}
+
 async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
   await closeCurrentSurface(runtime)
   switch (target.kind) {
@@ -595,8 +780,19 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
       }
       throw new Error(`unsupported host target ${target.id}`)
     case 'view': {
-      const input = fixtureViewInput(runtime.fixtures, target, runtime.editorBuffer, runtime.terminalFixture)
-      await rpc(runtime.client, 'ui.view.open', { id: target.id, input }, runtime.options.timeoutMs, runtime.options.signal)
+      if (target.id === 'view:quirky.accounts/session-accessory') await prepareAccountsStaleSession(runtime, 'codex')
+      const input = fixtureViewInput(runtime.fixtures, target, runtime.editorBuffer, runtime.terminalFixture, runtime.structuredSessionId)
+      if (target.id === 'view:quirky.browser/page') {
+        const pane = record(await rpc(runtime.client, 'quirky.browser/paneOpen', {
+          worktree: runtime.fixtures.primaryWorktree.id,
+          url: 'http://localhost:5173',
+          mode: 'native'
+        }, runtime.options.timeoutMs, runtime.options.signal))
+        if (typeof pane.id !== 'string' || pane.id.length === 0) throw new Error('quirky.browser/paneOpen did not return a pane ID')
+        await rpc(runtime.client, 'ui.view.open', { id: target.id, input: { ...input, pane: pane.id } }, runtime.options.timeoutMs, runtime.options.signal)
+      } else {
+        await rpc(runtime.client, 'ui.view.open', { id: target.id, input }, runtime.options.timeoutMs, runtime.options.signal)
+      }
       return
     }
     case 'panel':
@@ -610,7 +806,11 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
       return
     }
     case 'overlay':
-      if (target.id === 'overlay:quirky.editor/quick-open') {
+      if (target.id === 'overlay:quirky.accounts/switch-dialog') {
+        await prepareAccountsStaleSession(runtime, 'claude')
+        await runtime.page.locator('[data-plugin-overlay="overlay:quirky.accounts/switch-dialog"] [role="dialog"]')
+          .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+      } else if (target.id === 'overlay:quirky.editor/quick-open') {
         await openWorktreeContext(runtime)
         await rpc(runtime.client, 'ui.command.run', { id: 'command:quirky.editor/quick-open' }, runtime.options.timeoutMs, runtime.options.signal)
         await runtime.page.locator('.qe-quick-open').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
@@ -618,6 +818,45 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
         await runtime.page.getByRole('option').filter({ hasText: 'src/app.ts' }).waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
       } else if (target.id === 'overlay:quirky.editor/close') {
         await openUnsavedCloseOverlay(runtime)
+      } else if (target.id === 'overlay:quirky.feedback/mode') {
+        await rpc(runtime.client, 'ui.command.run', { id: 'command:quirky.feedback/toggle' }, runtime.options.timeoutMs, runtime.options.signal)
+        await runtime.page.locator('[data-quirky-feedback]:not([data-feedback-banner])')
+          .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+      } else if (target.id === 'overlay:quirky.handoff/dialog') {
+        await ensureHandoffTerminalContext(runtime)
+        await rpc(runtime.client, 'ui.command.run', {
+          id: 'command:quirky.handoff/open',
+          args: { session: runtime.terminalFixture!.sessionId }
+        }, runtime.options.timeoutMs, runtime.options.signal)
+        await runtime.page.locator('[data-plugin-overlay="overlay:quirky.handoff/dialog"] [role="dialog"]')
+          .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+      } else if (target.id === 'overlay:quirky.loops/dialogs') {
+        await rpc(runtime.client, 'ui.command.run', {
+          id: 'command:quirky.loops/new',
+          args: { workspace: runtime.fixtures.primaryWorktree.id }
+        }, runtime.options.timeoutMs, runtime.options.signal)
+        const dialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.loops/dialogs"] [role="dialog"]')
+        await dialog.waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+        await dialog.getByLabel('Prompt', { exact: true }).fill('Review the current workspace and summarize the next useful task.')
+        await dialog.getByText('Enter a prompt to start the loop.', { exact: true })
+          .waitFor({ state: 'detached', timeout: runtime.options.timeoutMs })
+      } else if (target.id === 'overlay:quirky.orchestration/floating-setup') {
+        await rpc(runtime.client, 'quirky.terminal/setFloating', { open: true }, runtime.options.timeoutMs, runtime.options.signal)
+        await runtime.page.locator('[data-plugin-overlay="overlay:quirky.orchestration/floating-setup"]')
+          .locator('aside[aria-label="Enable orchestration"]').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+      } else if (target.id === 'overlay:quirky.tasks/workspace-composer') {
+        await rpc(runtime.client, 'quirky.tasks/workspace', {
+          target: {
+            worktree: runtime.fixtures.primaryWorktree.id,
+            kind: 'issue',
+            number: runtime.fixtures.tasks.issue.number
+          },
+          action: 'start'
+        }, runtime.options.timeoutMs, runtime.options.signal)
+        await runtime.page.locator('.tasks-composer').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+      } else if (target.id === 'overlay:quirky.terminal/floating') {
+        await rpc(runtime.client, 'quirky.terminal/setFloating', { open: true }, runtime.options.timeoutMs, runtime.options.signal)
+        await runtime.page.locator('[data-floating-panel]').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
       }
       return
     case 'sidebar-section':
@@ -672,6 +911,13 @@ export async function waitForStateShown(runtime: Pick<CaptureRuntime, 'client' |
 
 async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
   await waitForStateShown(runtime, target)
+  if (target.id === 'view:quirky.browser/page') {
+    await Promise.all([
+      bounded(runtime.page.locator('.qbp-toolbar').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'browser toolbar'),
+      bounded(runtime.page.locator('.qbp-page').getByText('Native browsing is unavailable here', { exact: true })
+        .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'settled browser pane')
+    ])
+  }
   if (target.kind === 'host') {
     const element = SHELL_TARGETS.has(target.id)
       ? runtime.page.locator('.shell-workspace')
@@ -689,12 +935,12 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
     }
     return
   }
-  if (target.plugin === 'quirky.browser' && target.id === 'view:quirky.browser/page') {
-    throw new Error('native browser panes are unavailable in the browser renderer; no Watch fixture session is available')
-  }
-
   const selector = targetSlotSelector(target)
-  const root = runtime.page.locator(selector)
+  const mountSelector = target.id === 'overlay:quirky.feedback/mode'
+    ? `${selector}:not([data-feedback-banner])`
+    : selector
+  const root = runtime.page.locator(mountSelector)
+
   await bounded(root.waitFor({ state: 'attached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, `slot ${target.id} mount`)
   if (await root.count() !== 1) throw new Error(`slot ${target.id} did not mount in the renderer DOM`)
   const readinessTimeout = Math.min(target.kind === 'overlay' ? 1_500 : 10_000, runtime.options.timeoutMs)
@@ -724,7 +970,7 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
     const text = (element.textContent ?? '').trim()
     if (/^loading\b/i.test(text)) return false
     return text.length > 0 || visibleChild
-  }, selector, { timeout: readinessTimeout }), readinessTimeout, runtime.options.signal, `slot ${target.id} content`)
+  }, mountSelector, { timeout: readinessTimeout }), readinessTimeout, runtime.options.signal, `slot ${target.id} content`)
   const details = await root.evaluate((node) => {
     const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
     const element = body ?? node
@@ -772,12 +1018,17 @@ async function screenshot(runtime: CaptureRuntime, path: string, diagnostic = fa
 }
 
 async function prepareTasksCapture(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
-  if (target.id !== 'sidebar-section:quirky.tasks/tasks' && target.id !== 'view:quirky.tasks/tasks') return
+  const sidebar = target.id === 'sidebar-section:quirky.tasks/tasks'
+  const view = target.id === 'view:quirky.tasks/tasks'
+  const composer = target.id === 'overlay:quirky.tasks/workspace-composer'
+  if (!sidebar && !view && !composer) return
   const { primaryWorktree, repo, tasks } = runtime.fixtures
-  const pullRequest = tasks.pullRequest
   await rpc(runtime.client, 'quirky.tasks/prepare', {
     worktree: primaryWorktree.id
   }, runtime.options.timeoutMs, runtime.options.signal)
+  if (composer) return
+
+  const pullRequest = tasks.pullRequest
   await rpc(runtime.client, 'quirky.tasks/navigate', {
     worktree: primaryWorktree.id,
     mode: 'prs',
@@ -961,6 +1212,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
   let fixtures: RegisteredCaptureFixtures | undefined
   let editorBuffer: EditorFixtureBuffer | null = null
   let terminalFixture: CaptureTerminalFixture | null = null
+  let structuredSessionId: string | null = null
   let daemon: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | undefined
   let daemonOutput = () => ''
   let daemonErrors = () => ''
@@ -1064,7 +1316,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
         persistProgress()
       }
     }
-    const terminalSurfacePlugins = ['quirky.terminal', 'quirky.session', 'quirky.session-info', 'quirky.agent-status', 'quirky.terminal-dock']
+    const terminalSurfacePlugins = ['quirky.terminal', 'quirky.session', 'quirky.session-info', 'quirky.agent-status', 'quirky.terminal-dock', 'quirky.accounts', 'quirky.handoff']
     const needsTerminalFixture = targets.some((target) =>
       target.id === 'view:quirky.session/worktree' || terminalSurfacePlugins.includes(target.plugin ?? '')
     )
@@ -1077,6 +1329,25 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       }
     }
 
+    if (targets.some((target) => target.id === 'view:quirky.session/structured')) {
+      try {
+        const session = record(await rpc(activeClient, 'quirky.session/register', {
+          worktree: activeFixtures.primaryWorktree.id,
+          agent: 'claude',
+          kind: 'structured',
+          title: 'UI Review Structured Session',
+          cwd: activeFixtures.primaryWorktree.path,
+          background: true
+        }, options.timeoutMs, options.signal))
+        if (typeof session.id !== 'string' || session.id.length === 0) {
+          throw new Error('quirky.session/register did not return a session ID')
+        }
+        structuredSessionId = session.id
+      } catch (error) {
+        manifest.failures.push(`fixture structured session: ${sanitizedError(error, secrets)}`)
+        persistProgress()
+      }
+    }
     const launch = chromium.launchServer({
       executablePath: executable,
       headless: true,
@@ -1118,6 +1389,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       fixtures: activeFixtures,
       editorBuffer,
       terminalFixture,
+      structuredSessionId,
       pendingUiCommand: null,
       scene: newSceneState(),
       manifest,
