@@ -1,12 +1,16 @@
-import { Badge, Button, Dialog, EmptyState, ListRow, TextField, ToolPanelFrame } from '@quirky/ui'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Badge, Button, Dialog, EmptyState, InlineError, ListRow, NoticeLine, TextField, ToolPanelFrame } from '@quirky/ui'
+import { useEffect, useMemo, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { OrchestrationPolicy, OrchestrationSkillAgent, OrchestrationSkillStatus } from '../ui-contracts'
-import { announceSetupStatusChanged, createLatestRequestGuard, ORCHESTRATION_EXAMPLES } from './setup-state'
+import { createLatestRequestGuard, ORCHESTRATION_EXAMPLES, ORCHESTRATION_INSTALL_COMMAND, type SetupSignals } from './setup-state'
 
-const INSTALL_COMMAND = 'quirky orchestration skill-install'
+const COPY_INSTALL_COMMAND_ID = 'command:quirky.orchestration/copy-install-command'
+const COPY_PROMPT_COMMAND_ID = 'command:quirky.orchestration/copy-prompt'
 const SKILL_STATES = ['missing', 'stale', 'ready', 'partial', 'error'] as const
 const AGENT_STATES = ['ready', 'missing', 'stale', 'unsupported', 'error'] as const
+
+type OrchestrationExample = (typeof ORCHESTRATION_EXAMPLES)[number]
+type CopyResult = { ok: true } | { ok: false; message: string }
 
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -50,7 +54,46 @@ function installAction(status: OrchestrationSkillStatus | null, busy: boolean): 
   return { label: 'Install', disabled: false }
 }
 
-export function OrchestrationSettings({ context }: { context: UiPluginContext }) {
+type InstallCommandControlProps = {
+  installCommand: string
+  open: boolean
+  copy: CopyResult | null
+  onOpen: () => void
+  onClose: () => void
+  onCopy: () => void
+}
+
+function InstallCommandControl({ installCommand, open, copy, onOpen, onClose, onCopy }: InstallCommandControlProps) {
+  return (
+    <>
+      <div className="ui-cluster">
+        <span>Prefer your own terminal?</span>
+        <Button onClick={onOpen}>Copy command</Button>
+      </div>
+      <Dialog
+        open={open}
+        title="Install orchestration skill"
+        closeOnBackdrop={false}
+        onClose={onClose}
+        actions={
+          <>
+            <Button aria-label="Copy command to clipboard" onClick={onCopy}>Copy command</Button>
+            <Button onClick={onClose}>Done</Button>
+          </>
+        }
+      >
+        <div className="ui-stack">
+          <p>Run this command in a terminal to install the orchestration skill for detected agents.</p>
+          <code className="ui-readout">{installCommand}</code>
+          {copy?.ok === true ? <p className="ui-text-muted" role="status" data-orchestration-copy-status>Copied install command.</p> : null}
+          {copy?.ok === false ? <InlineError message={copy.message} /> : null}
+        </div>
+      </Dialog>
+    </>
+  )
+}
+
+export function OrchestrationSettings({ context, signals }: { context: UiPluginContext; signals: SetupSignals }) {
   const guard = useMemo(() => createLatestRequestGuard(), [])
   const [status, setStatus] = useState<OrchestrationSkillStatus | null>(null)
   const [policy, setPolicy] = useState<OrchestrationPolicy | null>(null)
@@ -59,12 +102,13 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
   const [installing, setInstalling] = useState(false)
   const [savingPolicy, setSavingPolicy] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogCopy, setDialogCopy] = useState<CopyResult | null>(null)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
 
   const busy = checking || installing || savingPolicy
 
-  const refresh = useCallback(async () => {
+  async function refresh(): Promise<void> {
     const token = guard.next()
     setChecking(true)
     setError('')
@@ -83,17 +127,17 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
     } finally {
       if (guard.isCurrent(token)) setChecking(false)
     }
-  }, [context, guard])
+  }
 
   useEffect(() => {
     void refresh()
     return () => guard.stop()
-  }, [guard, refresh])
+  }, [context, guard])
 
   const recheck = async () => {
     if (busy) return
     await refresh()
-    announceSetupStatusChanged()
+    signals.statusChanged.emit()
   }
 
   const install = async () => {
@@ -110,7 +154,7 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
       if (!isSkillStatus(raw)) throw new Error('The install response did not include orchestration skill status.')
       setStatus(raw)
       setFeedback(raw.text)
-      announceSetupStatusChanged()
+      signals.statusChanged.emit()
     } catch (cause) {
       if (guard.isCurrent(token)) setError(errorText(cause))
     } finally {
@@ -142,22 +186,47 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
     }
   }
 
-  const copy = async (text: string, title: string, command = false) => {
+  const copyPrompt = async (example: OrchestrationExample) => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is not available in this window.')
-      await navigator.clipboard.writeText(text)
-      const message = command ? 'Copied install command.' : `Copied prompt: ${title}`
+      await context.executeCommand(COPY_PROMPT_COMMAND_ID, { example: example.id }, { activateOwner: false })
+      setError('')
+      const message = `Copied prompt: ${example.title}`
       setFeedback(message)
       context.toast(message, '')
     } catch (cause) {
-      const message = command ? 'Failed to copy install command.' : `Failed to copy prompt: ${title}`
-      setFeedback(`${message} ${errorText(cause)}`)
+      const message = `Failed to copy prompt: ${example.title}`
+      setFeedback('')
+      setError(`${message} ${errorText(cause)}`)
       context.toast(message, errorText(cause))
     }
   }
 
+  const copyInstallCommand = async () => {
+    try {
+      await context.executeCommand(COPY_INSTALL_COMMAND_ID, {}, { activateOwner: false })
+      const message = 'Copied install command.'
+      setDialogCopy({ ok: true })
+      context.toast(message, '')
+    } catch (cause) {
+      const message = 'Failed to copy install command.'
+      setDialogCopy({ ok: false, message: `${message} ${errorText(cause)}` })
+      context.toast(message, errorText(cause))
+    }
+  }
+
+  const openInstallDialog = () => {
+    setDialogCopy(null)
+    setDialogOpen(true)
+  }
+
+  const closeInstallDialog = () => {
+    setDialogOpen(false)
+    setDialogCopy(null)
+  }
+
   const action = installAction(status, installing)
-  const installCommand = status?.installCommand ?? INSTALL_COMMAND
+  const installCommand = status?.installCommand ?? ORCHESTRATION_INSTALL_COMMAND
+  const loadingSetup = checking && status === null
 
   return (
     <main className="ui-stack" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: 'var(--ui-space-16)' }} aria-label="Orchestration settings">
@@ -175,42 +244,52 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
         }
       >
         <p>Enables agents to coordinate supervised work through Quirky's durable Runs, Tasks, Dispatches, and mailbox.</p>
-        <p className="ui-text-muted" aria-live="polite">{checking && status === null ? 'Checking skill coverage…' : status?.text ?? 'Skill coverage is unavailable.'}</p>
-        <div className="ui-cluster">
-          <span>Prefer your own terminal?</span>
-          <Button onClick={() => { setDialogOpen(true); setFeedback('') }}>Copy command</Button>
+        <div aria-live="polite" data-orchestration-skill-summary>
+          {loadingSetup ? <NoticeLine>Checking skill coverage…</NoticeLine> : <p className="ui-text-muted">{status?.text ?? 'Skill coverage is unavailable.'}</p>}
         </div>
-        {error && <p className="ui-error-text" role="alert">{error}</p>}
-        {feedback && <p className="ui-text-muted" role="status">{feedback}</p>}
+        <InstallCommandControl
+          installCommand={installCommand}
+          open={dialogOpen}
+          copy={dialogCopy}
+          onOpen={openInstallDialog}
+          onClose={closeInstallDialog}
+          onCopy={() => void copyInstallCommand()}
+        />
+        {error ? <InlineError message={error} /> : null}
+        {feedback ? <p className="ui-text-muted" role="status" data-orchestration-feedback>{feedback}</p> : null}
       </ToolPanelFrame>
 
       <ToolPanelFrame title="Agent coverage">
-        {checking && status === null
+        {loadingSetup
           ? <EmptyState message="Checking detected agent CLIs…" />
           : status?.agents.length === 0
             ? <EmptyState message={status.text} />
             : status && status.agents.length > 0
               ? <div className="ui-stack">
                   {status.agents.map((agent) => (
-                    <ListRow
-                      key={agent.id}
-                      status={agent.state === 'ready' ? 'done' : agent.state === 'error' ? 'failing' : agent.state === 'unsupported' ? 'idle' : 'needs-you'}
-                      title={<><span data-agent-state={agent.state}>{agent.label}</span><Badge tone={agent.state === 'ready' ? 'accent' : agent.state === 'error' ? 'failing' : agent.state === 'unsupported' ? 'neutral' : 'needs-you'}>{labelState(agent.state)}</Badge></>}
-                      description={
-                        <span className="ui-stack">
-                          {agent.path && <code className="ui-text-muted" style={{ overflowWrap: 'anywhere' }}>{agent.path}</code>}
-                          {agent.detail && <span className={agent.state === 'error' ? 'ui-error-text' : 'ui-text-muted'}>{agent.detail}</span>}
-                        </span>
-                      }
-                    />
+                    <div key={agent.id} className="ui-stack" data-orchestration-agent={agent.id}>
+                      <ListRow
+                        status={agent.state === 'ready' ? 'done' : agent.state === 'error' ? 'failing' : agent.state === 'unsupported' ? 'idle' : 'needs-you'}
+                        title={<><span data-agent-state={agent.state}>{agent.label}</span><Badge tone={agent.state === 'ready' ? 'accent' : agent.state === 'error' ? 'failing' : agent.state === 'unsupported' ? 'neutral' : 'needs-you'}>{labelState(agent.state)}</Badge></>}
+                        description={
+                          <span className="ui-stack">
+                            {agent.path ? <code className="ui-text-muted" style={{ overflowWrap: 'anywhere' }}>{agent.path}</code> : null}
+                            {agent.detail && agent.state !== 'error' ? <span className="ui-text-muted">{agent.detail}</span> : null}
+                          </span>
+                        }
+                      />
+                      {agent.state === 'error' ? <InlineError message={agent.detail ?? 'This skill target needs attention.'} /> : null}
+                    </div>
                   ))}
                 </div>
-              : <EmptyState message="Agent coverage is unavailable." />}
+              : <p className="ui-text-muted">Agent coverage is unavailable.</p>}
       </ToolPanelFrame>
 
       <ToolPanelFrame title="Nested worker depth">
         <p className="ui-text-muted">Maximum worker generations allowed to dispatch another worker. The default is 1; a coordinator is depth 0.</p>
-        {policy?.canChange === true ? (
+        {policy === null ? (
+          checking ? <NoticeLine>Checking nested worker depth…</NoticeLine> : <p className="ui-text-muted">Nested worker depth is unavailable.</p>
+        ) : policy.canChange ? (
           <div className="ui-stack">
             <TextField
               id="nested-worker-depth"
@@ -228,7 +307,7 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
             </div>
           </div>
         ) : (
-          <p className="ui-text-muted">Current depth: {policy?.nestedWorkerMaxDepth ?? 'Checking…'}. This session or paired window is read-only.</p>
+          <p className="ui-text-muted">Current depth: {policy.nestedWorkerMaxDepth}. This session or paired window is read-only.</p>
         )}
         <p className="ui-text-muted">Changes affect future admission only; active workers are not stopped. This is an orchestration policy, not a hostile-token sandbox or global access-control rule.</p>
       </ToolPanelFrame>
@@ -237,33 +316,14 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
         <div className="ui-stack">
           {ORCHESTRATION_EXAMPLES.map((example) => (
             <ListRow
-              key={example.title}
+              key={example.id}
               title={example.title}
               description={example.prompt}
-              trailing={<Button aria-label={`Copy prompt: ${example.title}`} onClick={() => void copy(example.prompt, example.title)}>Copy prompt</Button>}
+              trailing={<Button aria-label={`Copy prompt: ${example.title}`} onClick={() => void copyPrompt(example)}>Copy prompt</Button>}
             />
           ))}
         </div>
       </ToolPanelFrame>
-
-      <Dialog
-        open={dialogOpen}
-        title="Install orchestration skill"
-        closeOnBackdrop={false}
-        onClose={() => { setDialogOpen(false); setFeedback('') }}
-        actions={
-          <>
-            <Button aria-label="Copy command to clipboard" onClick={() => void copy(installCommand, '', true)}>Copy command</Button>
-            <Button onClick={() => { setDialogOpen(false); setFeedback('') }}>Done</Button>
-          </>
-        }
-      >
-        <div className="ui-stack">
-          <p>Run this command in a terminal to install the orchestration skill for detected agents.</p>
-          <code className="ui-readout">{installCommand}</code>
-          {feedback && <p className={feedback.startsWith('Failed') ? 'ui-error-text' : 'ui-text-muted'} role="status">{feedback}</p>}
-        </div>
-      </Dialog>
     </main>
   )
 }
