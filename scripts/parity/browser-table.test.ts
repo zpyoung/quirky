@@ -59,29 +59,48 @@ test('browser table resolves actual CLI words, flags, and public methods from th
   expect(() => validateBrowserTable(wrongMethod)).toThrow('manifest-mismatch')
 })
 
-test('pane and restart evidence remains explicitly deferred and uncovered', () => {
+test('pane, restart, and identity rows are covered with manifest-resolved CLI metadata', () => {
   const rows = readBrowserTable()
-  const deferredIds = [
-    'native-profile-persistence',
-    'native-profile-clear',
-    'browser-identity-set-activation-after-restart',
-    'worktree-watch-page',
-    'daemon-restart-profile'
+  const coveredRows = [
+    {
+      id: 'browser-identity-set-activation-after-restart',
+      equivalent: 'CLI `quirky browser identity set`; flags: `--mode`, `--reset`; methods: `quirky.browser/identitySet`',
+      reason: 'Identity mode staged before daemon restart becomes active on the restarted daemon with zero security shim invocations.'
+    },
+    {
+      id: 'worktree-watch-page',
+      equivalent: 'CLI `quirky browser pane open`; flags: `--worktree`, `--group`, `--url`, `--page`, `--mode`, `--profile`; methods: `quirky.browser/paneOpen`',
+      reason: 'A browser Watch pane in a worktree renders the live screencast of the page and reflects CLI-driven DOM mutations in sampled canvas pixels.'
+    },
+    {
+      id: 'daemon-restart-profile',
+      equivalent: 'CLI `quirky browser tab list`; flags: `--worktree`, `--show-profile`; methods: `quirky.browser/tabList`, `quirky.browser/profileList`',
+      reason: 'Browser tabs, profiles, Watch pane state, localStorage, and persistent cookies survive a daemon restart without re-seeding while keeping worktree B isolated.'
+    }
   ]
-  const deferred = rows.filter((row) => row.deferred)
 
-  expect(deferred.map((row) => row.id).sort()).toEqual(deferredIds.sort())
-  for (const id of deferredIds) {
-    const row = deferred.find((candidate) => candidate.id === id)
-    expect(row?.disposition).toBe('gap')
-    expect(row?.check).toBeUndefined()
-    expect(row?.reason.length).toBeGreaterThan(0)
+  for (const expected of coveredRows) {
+    const row = rows.find((candidate) => candidate.id === expected.id)
+    expect(row).toMatchObject({
+      id: expected.id,
+      equivalent: expected.equivalent,
+      check: expected.id,
+      deferred: false,
+      disposition: 'covered',
+      reason: expected.reason
+    })
   }
-  for (const id of ['browser-identity-set-activation-after-restart', 'worktree-watch-page', 'daemon-restart-profile']) {
-    expect(deferred.find((row) => row.id === id)?.reason).toContain('Prove CLI page identity in a worktree Watch pane across daemon restart')
+
+  const deferred = rows.filter((row) => row.deferred)
+  expect(deferred.map((row) => row.id).sort()).toEqual([
+    'native-profile-clear',
+    'native-profile-persistence'
+  ])
+  for (const row of deferred) {
+    expect(row.disposition).toBe('gap')
+    expect(row.check).toBeUndefined()
+    expect(row.reason).toContain('WKWebView')
   }
-  expect(deferred.find((row) => row.id === 'native-profile-persistence')?.reason).toContain('WKWebView')
-  expect(deferred.find((row) => row.id === 'native-profile-clear')?.reason).toContain('WKWebView')
 })
 
 test('an executable registry must match the table declared check IDs exactly', () => {

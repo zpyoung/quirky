@@ -1,15 +1,131 @@
 import { expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, readdirSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { runBrowserParity, validateOutcomes, type BrowserCheck } from './browser-run'
-import { parseBrowserArgs, createBrowserEnvironment, boundedDiagnostic, decodeCliReceipt, BrowserFailure, type BrowserWorld, type CliReceipt } from './browser-world'
+import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, type BrowserWorld, type CliReceipt } from './browser-world'
+import type { RuntimeInfo } from '@quirky/protocol/node'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
 import { networkChecks } from './browser-checks-network'
+
+test('daemon status retries transient health misses while the owned daemon remains alive', async () => {
+  const runtime: RuntimeInfo = { pid: 37, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  let attempts = 0
+  let now = 0
+  const alive = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    now: () => now,
+    readRuntime: () => runtime,
+    isDaemonAlive: async () => ++attempts >= 3,
+    sleep: async (milliseconds) => { now += milliseconds }
+  })
+  expect(alive).toBe(true)
+  expect(attempts).toBe(3)
+})
+
+test('daemon status returns immediately when the owned daemon exits during a probe', async () => {
+  const runtime: RuntimeInfo = { pid: 38, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  const probe = Promise.withResolvers<boolean>()
+  const exited = Promise.withResolvers<number>()
+  const probeStarted = Promise.withResolvers<void>()
+  const status = daemonStatus('/owned/home', { pid: runtime.pid, exited: exited.promise }, 5_000, {
+    now: () => 0,
+    readRuntime: () => runtime,
+    isDaemonAlive: () => { probeStarted.resolve(); return probe.promise }
+  })
+  await probeStarted.promise
+  exited.resolve(0)
+  expect(await status).toBe(false)
+})
+
+test('daemon status stops a pending probe when the world is aborted', async () => {
+  const runtime: RuntimeInfo = { pid: 41, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  const controller = new AbortController()
+  const probe = Promise.withResolvers<boolean>()
+  const probeStarted = Promise.withResolvers<void>()
+  const status = daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    signal: controller.signal,
+    now: () => 0,
+    readRuntime: () => runtime,
+    isDaemonAlive: () => { probeStarted.resolve(); return probe.promise }
+  })
+  await probeStarted.promise
+  controller.abort()
+  expect(await status).toBe(false)
+})
+
+test('daemon status refuses missing or mismatched runtime ownership before probing', async () => {
+  const runtime: RuntimeInfo = { pid: 39, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  for (const current of [null, { ...runtime, pid: runtime.pid + 1 }]) {
+    let probes = 0
+    const status = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+      now: () => 0,
+      readRuntime: () => current,
+      isDaemonAlive: async () => { probes++; return true }
+    })
+    expect(status).toBe(false)
+    expect(probes).toBe(0)
+  }
+})
+
+test('daemon status rejects a successful probe after runtime ownership changes', async () => {
+  const runtime: RuntimeInfo = { pid: 40, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  let reads = 0
+  const status = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    now: () => 0,
+    readRuntime: () => ++reads === 1 ? runtime : { ...runtime, pid: runtime.pid + 1 },
+    isDaemonAlive: async () => true
+  })
+  expect(status).toBe(false)
+})
+
+test('daemon status refuses a health reply received after its retry budget', async () => {
+  const runtime: RuntimeInfo = { pid: 42, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
+  let now = 0
+  const status = await daemonStatus('/owned/home', { pid: runtime.pid, exited: Promise.withResolvers<number>().promise }, 5_000, {
+    now: () => now,
+    readRuntime: () => runtime,
+    isDaemonAlive: async () => { now = 5_001; return true }
+  })
+  expect(status).toBe(false)
+})
+
+test('builtin plugin fixture links every checkout plugin except Accounts', () => {
+  const repoRoot = resolve(import.meta.dir, '../..')
+  const checkout = realpathSync(repoRoot)
+  const pluginsRoot = join(checkout, 'plugins')
+  const home = mkdtempSync(join(tmpdir(), 'quirky-browser-plugins-'))
+  try {
+    const expected = readdirSync(pluginsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(pluginsRoot, entry.name, 'quirky-plugin.json')))
+      .map((entry) => {
+        const manifest: unknown = JSON.parse(readFileSync(join(pluginsRoot, entry.name, 'quirky-plugin.json'), 'utf8'))
+        if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest) ||
+          !('id' in manifest) || typeof manifest.id !== 'string') {
+          throw new Error(`plugin manifest is missing a string id: ${entry.name}`)
+        }
+        return { name: entry.name, id: manifest.id }
+      })
+    const included = expected.filter((plugin) => plugin.id !== 'quirky.accounts')
+    const fixture = createBuiltinPluginsDirectory(home, checkout)
+
+    expect(fixture.includedPlugins).toEqual(included.map(({ id }) => id).sort())
+    expect(fixture.excludedPlugins).toEqual(['quirky.accounts'])
+    expect(readdirSync(fixture.directory).sort()).toEqual(included.map(({ name }) => name).sort())
+    for (const plugin of included) {
+      const link = join(fixture.directory, plugin.name)
+      expect(lstatSync(link).isSymbolicLink()).toBe(true)
+      const target = realpathSync(link)
+      expect(target).toBe(realpathSync(join(pluginsRoot, plugin.name)))
+      expect(target.startsWith(`${checkout}${sep}`)).toBe(true)
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
 
 const row = (id: string, disposition: BrowserRow['disposition'] = 'covered'): BrowserRow => ({
   id, command: id, equivalent: `quirky browser ${id}`, check: id, disposition, reason: disposition === 'gap' ? 'known capability gap' : '', primary: true, deferred: false
@@ -409,4 +525,88 @@ test('a pending observer interrupted before completion cannot become a passing r
   expect(report.ok).toBe(false)
   expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'deadline' } })
   expect(report.cleanup.ok).toBe(true)
+})
+
+test('watch marker uses a dedicated route without changing the parity page', async () => {
+  const fixture = startBrowserFixture()
+  try {
+    const page = await (await fetch(`${fixture.origin}/page`)).text()
+    const watchResponse = await fetch(`${fixture.origin}/watch-page`)
+    const watchPage = await watchResponse.text()
+    expect(watchResponse.status).toBe(200)
+    expect(page).toContain('<title>Parity fixture</title>')
+    expect(page).not.toContain('watch-marker')
+    expect(watchPage).toContain('<title>Watch parity fixture</title>')
+    expect(watchPage).toContain('<button id="watch-marker" type="button" data-state="red" data-clicks="0"')
+    expect(watchPage).toContain('width:240px;height:160px')
+    expect(watchPage).toContain('background:rgb(225,30,30)')
+    expect(watchPage).toContain('Watch Marker: red (0)')
+  } finally {
+    await fixture.stop()
+  }
+})
+
+test('manifest CLI results enforce worktree and pane ownership shapes', () => {
+  const decode = (argv: string[], result: unknown) =>
+    decodeCliReceipt(argv, JSON.stringify(result), '', 0, '/owned/home').result
+  const worktreeArgs = ['worktree', 'open-in', 'id:worktree-a', '--target', 'terminal']
+  const worktreeResult = { worktreeId: 'worktree-a', target: 'terminal' }
+  expect(decode(worktreeArgs, worktreeResult)).toEqual(worktreeResult)
+  expect(() => decode(worktreeArgs, { target: 'terminal' })).toThrow('CLI JSON does not match')
+
+  const paneOpenArgs = ['browser', 'pane', 'open', '--mode', 'watch']
+  const paneOpenResult = {
+    id: 'pane-a',
+    worktreeId: 'worktree-a',
+    mode: 'watch',
+    page: 'page-a',
+    url: 'http://127.0.0.1/page',
+    title: 'Watch parity fixture',
+    loading: false,
+    error: null,
+    canGoBack: false,
+    canGoForward: false,
+    zoom: 1,
+    viewport: 'default',
+    command: null,
+    find: { text: '', current: 0, total: 0 },
+    prompts: [],
+    downloads: [],
+    profileId: 'profile-a',
+    partition: 'worktree-a:profile-a'
+  }
+  expect(decode(paneOpenArgs, paneOpenResult)).toEqual(paneOpenResult)
+  expect(() => decode(paneOpenArgs, { ...paneOpenResult, mode: 'native' })).toThrow('CLI JSON does not match')
+  expect(() => decode(paneOpenArgs, { ...paneOpenResult, page: null })).toThrow('CLI JSON does not match')
+
+  const paneStateArgs = ['browser', 'pane', 'state']
+  const paneStateResult = {
+    tabs: [{ id: 'pane-a', worktreeId: 'worktree-a', mode: 'watch', profileId: 'profile-a', partition: 'worktree-a:profile-a' }],
+    active: 'pane-a',
+    history: [{ url: 'http://127.0.0.1/page', title: 'Watch parity fixture', visitedAt: 1 }]
+  }
+  expect(decode(paneStateArgs, paneStateResult)).toEqual(paneStateResult)
+  expect(() => decode(paneStateArgs, { ...paneStateResult, tabs: null })).toThrow('CLI JSON does not match')
+})
+
+test('pane shim diagnostics retain the exact exported evidence shape', () => {
+  const home = mkdtempSync(join(tmpdir(), 'browser-shim-evidence-'))
+  try {
+    createBrowserEnvironment(home, join(import.meta.dir, '../..'))
+    expect(readShimLogs(home)).toEqual({
+      empty: true,
+      bytes: { orca: 0, security: 0 },
+      orcaLog: '',
+      securityLog: ''
+    })
+    writeFileSync(join(home, 'shim-logs', 'orca.log'), 'invoked\n')
+    expect(readShimLogs(home)).toEqual({
+      empty: false,
+      bytes: { orca: 8, security: 0 },
+      orcaLog: 'invoked\n',
+      securityLog: ''
+    })
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
 })

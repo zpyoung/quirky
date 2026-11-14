@@ -118,6 +118,39 @@ const pageHtml = `<!doctype html>
 </body>
 </html>`
 
+const watchPageHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Watch parity fixture</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #111827; }
+  </style>
+</head>
+<body>
+  <button id="watch-marker" type="button" data-state="red" data-clicks="0" style="position:fixed;left:0;top:0;width:240px;height:160px;margin:0;border:0;padding:6px 8px;box-sizing:border-box;display:flex;align-items:flex-start;justify-content:flex-start;background:rgb(225,30,30);color:#ffffff;font:16px sans-serif">Watch Marker: red (0)</button>
+  <script>
+    const marker = document.querySelector('#watch-marker');
+    marker.addEventListener('click', () => {
+      const clicks = Number(marker.getAttribute('data-clicks')) + 1;
+      marker.setAttribute('data-clicks', String(clicks));
+      if (clicks % 2 === 1) {
+        marker.setAttribute('data-state', 'green');
+        marker.style.background = 'rgb(20, 210, 50)';
+        document.title = clicks === 1 ? 'CLI changed' : 'CLI changed again';
+        marker.textContent = 'Watch Marker: green (' + clicks + ')';
+      } else {
+        marker.setAttribute('data-state', 'red');
+        marker.style.background = 'rgb(225, 30, 30)';
+        document.title = 'Watch parity fixture';
+        marker.textContent = 'Watch Marker: red (' + clicks + ')';
+      }
+    });
+  </script>
+</body>
+</html>`
+
 const secondHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Second</title></head><body>Second</body></html>'
 
 function htmlResponse(body: string): Response {
@@ -258,6 +291,8 @@ export function startBrowserFixture(): BrowserFixture {
       const path = url.pathname
       const headers = Object.fromEntries(request.headers.entries())
       requests.push({ path, method: request.method, headers })
+
+      if (path === '/watch-page') return htmlResponse(watchPageHtml)
 
       if (path === '/page' || path === '/') return htmlResponse(pageHtml)
       if (path === '/second') return htmlResponse(secondHtml)
