@@ -727,13 +727,13 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/StructuredView.tsx",
-        "quote": "onChange={(event) => {\n                const enabled = event.target.checked\n                rememberShowAllEvents(session, enabled)\n                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled })\n              }}"
+        "quote": "onChange={(event) => {\n                const enabled = event.target.checked\n                rememberShowAllEvents(session, enabled)\n                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })\n              }}"
       },
       "route": {
         "target": "command:quirky.session/show-all-events",
         "invoke": {
           "file": "plugins/quirky.session/src/window/StructuredView.tsx",
-          "quote": "context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled })"
+          "quote": "context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })"
         },
         "via": []
       }

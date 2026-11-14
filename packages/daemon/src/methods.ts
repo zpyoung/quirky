@@ -401,11 +401,15 @@ export function createHandlers(
         ...(title === undefined ? {} : { title })
       })
     },
-    'desktop.window.runOwnerCommand': (params, conn) => layout.runOwnerCommand(conn, {
-      windowId: str(params, 'windowId'),
-      id: str(params, 'id'),
-      ...(params.args === undefined ? {} : { args: params.args })
-    }),
+    'desktop.window.runOwnerCommand': (params, conn) => {
+      const activateOwner = optBool(params, 'activateOwner')
+      return layout.runOwnerCommand(conn, {
+        windowId: str(params, 'windowId'),
+        id: str(params, 'id'),
+        ...(params.args === undefined ? {} : { args: params.args }),
+        ...(activateOwner === undefined ? {} : { activateOwner })
+      })
+    },
     'desktop.window.closed': (params, conn) => {
       if (conn.role !== 'desktop') throw invalidParams('only the native desktop shell can close an auxiliary window')
       return layout.desktopWindowClosed(conn, {
