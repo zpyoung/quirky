@@ -112,7 +112,16 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
 
   const onBlur = () => setHeld(false)
 
-  for (const type of OBSERVED) win.addEventListener(type, onPointer, true)
+  win.addEventListener('pointerdown', onPointer, true)
+  win.addEventListener('pointerup', onPointer, true)
+  win.addEventListener('mousedown', onPointer, true)
+  win.addEventListener('mouseup', onPointer, true)
+  win.addEventListener('click', onPointer, true)
+  win.addEventListener('dblclick', onPointer, true)
+  win.addEventListener('auxclick', onPointer, true)
+  win.addEventListener('contextmenu', onPointer, true)
+  win.addEventListener('pointermove', onPointer, true)
+  win.addEventListener('mousemove', onPointer, true)
   win.addEventListener('keydown', onKey, true)
   win.addEventListener('keyup', onKey, true)
   win.addEventListener('blur', onBlur)
