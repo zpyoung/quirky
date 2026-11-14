@@ -296,7 +296,7 @@ describe('Session Info UI contributions', () => {
     expect(panel.element.textContent).not.toContain('0 tokens')
     panel.unmount()
   })
-  test('shows shared loading notices for initial load and refresh', async () => {
+  test('shows initial loading and keeps session sections still during background refresh', async () => {
     const initial = Promise.withResolvers<PanelState>()
     const refresh = Promise.withResolvers<PanelState>()
     let reads = 0
@@ -314,7 +314,8 @@ describe('Session Info UI contributions', () => {
     await fake.emit({ type: 'quirky.session-info/changed', data: { sessionId: 'quirky-1' } })
     await waitForUi()
     expect(reads).toBe(2)
-    expect(panel.element.querySelector('.ui-notice-line')?.textContent).toBe('Refreshing session info…')
+    expect(panel.element.querySelector('.ui-notice-line')).toBeNull()
+    expect(panel.element.querySelector('#session-info-section-identity')).not.toBeNull()
 
     refresh.resolve(state(info()))
     await waitForUi()

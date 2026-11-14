@@ -303,7 +303,7 @@ export function SessionInfoPanel({ context, report }: Props) {
         while (refreshQueuedRef.current && aliveRef.current) {
           refreshQueuedRef.current = false
           const request = requestRef.current
-          setLoading(true)
+          setLoading(projectionRef.current === null)
           setLoadError(null)
           try {
             const fetched = await context.call('quirky.session-info/get', {}) as PanelState
