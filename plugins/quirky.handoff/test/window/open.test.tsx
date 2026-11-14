@@ -12,6 +12,8 @@ import {
   settle,
   teardown,
   wtW2,
+  type Handler,
+  type Fake,
   type Ui
 } from './support'
 
@@ -26,15 +28,30 @@ afterAll(async () => {
 })
 afterEach(() => teardown(ui))
 
-async function opened(configure: (world: ReturnType<typeof makeWorld>) => void = () => {}) {
+function trackCommands(fake: Fake) {
+  const calls: { id: string; args?: unknown }[] = []
+  const executeCommand = fake.context.executeCommand.bind(fake.context)
+  fake.context.executeCommand = async (id, args) => {
+    calls.push({ id, args })
+    return executeCommand(id, args)
+  }
+  return calls
+}
+
+async function opened(
+  configure: (world: ReturnType<typeof makeWorld>) => void = () => {},
+  overrides: Record<string, Handler> = {}
+) {
   const world = makeWorld()
   configure(world)
-  const fake = fakeContext(daemon(world))
+  const fake = fakeContext(daemon(world, overrides))
+  const commands = trackCommands(fake)
   const overlay = await mountOverlay(ui, fake)
   const result = await fake.run('open', { session: 's_1' })
   await settle()
-  return { world, fake, overlay, result }
+  return { world, fake, overlay, result, commands }
 }
+
 
 describe('SC-1: the overlay and its menu command', () => {
   test('SC-1: the shared dialog exposes its heading as the accessible label', async () => {
@@ -195,19 +212,30 @@ describe('SC-5: the worktree list and its search', () => {
     await fake.run('search', { query: 'zzz' })
     expect(overlay.last().candidates).toEqual([])
     expect(v.text()).toContain('No matching worktrees.')
+    expect(v.q('.ui-empty-state')!.textContent).toBe('No matching worktrees.')
 
     await fake.run('search', { query: '' })
     expect(overlay.last().candidates).toHaveLength(3)
   })
 
-  test('SC-5: choosing a row selects that worktree and recomposes', async () => {
-    const { overlay, fake } = await opened()
+  test('SC-5: choosing a row routes the worktree selection and recomposes', async () => {
+    const { overlay, fake, commands } = await opened()
     const v = overlay.view
-    await v.click(v.q('[aria-label="Worktree"]'))
-    await v.click(v.all('[role="option"]')[1]!)
+    const combo = v.q('[aria-label="Worktree"]')!
+    await v.click(combo)
+    await v.type(v.q('input[placeholder="Search worktrees…"]') as HTMLInputElement, 'w2')
+    expect(v.all('[role="option"]')).toHaveLength(1)
+    await v.click(v.all('[role="option"]')[0]!)
+    expect(commands.at(-1)).toEqual({
+      id: 'command:quirky.handoff/set',
+      args: { field: 'worktree', value: 'wt_W2' }
+    })
     expect(overlay.last().controls.target).toEqual({ worktree: 'wt_W2' })
     expect(v.q('[aria-label="Worktree"]')!.textContent).toBe('W2')
     expect(v.q('[role="listbox"]')).toBeNull()
+    await v.click(combo)
+    expect((v.q('input[placeholder="Search worktrees…"]') as HTMLInputElement).value).toBe('')
+    await v.click(combo)
     await afterDebounce()
     expect(fake.callsTo('preview')).toHaveLength(2)
     expect(fake.callsTo('preview')[1]!.params.controls.target).toEqual({ worktree: 'wt_W2' })
@@ -216,10 +244,14 @@ describe('SC-5: the worktree list and its search', () => {
 
 describe('SC-6 and SC-8: creating a worktree', () => {
   test('SC-6: the toggle shows the name and base fields, and a blank name disables Start', async () => {
-    const { overlay, fake } = await opened()
+    const { overlay, fake, commands } = await opened()
     const v = overlay.view
     expect(v.button('Create a new worktree')).not.toBeNull()
     await v.click(v.button('Create a new worktree'))
+    expect(commands.at(-1)).toEqual({
+      id: 'command:quirky.handoff/set',
+      args: { field: 'create', value: true }
+    })
     expect(v.button('Use an existing worktree')).not.toBeNull()
     expect(v.q('input[aria-label="Worktree name"]')!.getAttribute('placeholder')).toBe('handoff-follow-up')
     expect(v.q('input[aria-label="Base branch (optional)"]')!.getAttribute('placeholder')).toBe('Current branch')
@@ -253,22 +285,28 @@ describe('SC-6 and SC-8: creating a worktree', () => {
 
 describe('SC-10 and SC-11: the agent control', () => {
   test('SC-10: the agent select lists the enabled agents and changing it recomposes', async () => {
-    const { overlay, fake } = await opened()
+    const { overlay, fake, commands } = await opened()
     const select = overlay.view.q('select[aria-label="Agent"]') as HTMLSelectElement
     expect([...select.options].map((option) => option.textContent)).toEqual(['Claude', 'Codex'])
     await overlay.view.choose(select, 'codex')
+    expect(commands.at(-1)).toEqual({
+      id: 'command:quirky.handoff/set',
+      args: { field: 'agent', value: 'codex' }
+    })
     expect(overlay.last().controls.agent).toBe('codex')
     await afterDebounce()
     expect(fake.callsTo('preview').at(-1)!.params.controls.agent).toBe('codex')
     expect((await fake.run('set', { field: 'agent', value: 'gemini' })).reason).toBe('unknown-agent')
   })
 
-  test('SC-11: a failed detection and an empty list show their messages and disable Start', async () => {
+  test('SC-11: a failed detection and an empty list show their shared state components and disable Start', async () => {
     const failed = await opened((world) => {
       world.agents = { state: 'failed', list: [] }
       delete world.controls.agent
     })
     expect(failed.overlay.view.text()).toContain('Could not detect Agents on the target host.')
+    expect(failed.overlay.view.q('.ui-inline-error')!.textContent).toBe('Could not detect Agents on the target host.')
+    expect(failed.overlay.view.q('[data-agents-state]')).toBeNull()
     expect(failed.overlay.last().agents).toMatchObject({ state: 'failed', message: 'Could not detect Agents on the target host.' })
     expect(failed.overlay.last().canStart).toBe(false)
     expect(failed.overlay.last().disabled).toContain('start:no-agent')
@@ -279,15 +317,26 @@ describe('SC-10 and SC-11: the agent control', () => {
       delete world.controls.agent
     })
     expect(empty.overlay.view.text()).toContain('No enabled Agents were detected on the target host.')
+    expect(empty.overlay.view.q('.ui-empty-state')!.textContent).toBe('No enabled Agents were detected on the target host.')
     expect(empty.overlay.last().agents.message).toBe('No enabled Agents were detected on the target host.')
     expect(empty.overlay.last().canStart).toBe(false)
   })
 
-  test('SC-11: while the agents are loading the message reads Detecting Agents and Start is disabled', async () => {
+  test('SC-11: the loading agent state uses NoticeLine until detection finishes', async () => {
     const { agentsMessage, disabledOf } = await import('../../src/window/model')
     expect(agentsMessage({ state: 'loading', list: [] })).toBe('Detecting Agents on the target host…')
     const closed = new (await import('../../src/window/model')).HandoffDialog(fakeContext(daemon(makeWorld())).context).getSnapshot()
     expect(disabledOf({ ...closed, shown: true })).toContain('start:agents-loading')
+
+    const detection = Promise.withResolvers<{ state: 'ready'; list: { id: string; label: string }[]; defaultAgent: string | null }>()
+    const { overlay, world } = await opened(() => {}, {
+      'quirky.handoff/targetAgents': () => detection.promise
+    })
+    expect(overlay.last().agents.state).toBe('loading')
+    expect(overlay.view.q('.ui-notice-line')!.textContent).toBe('Detecting Agents on the target host…')
+    detection.resolve({ state: 'ready', list: world.agents.list, defaultAgent: 'claude' })
+    await settle()
+    expect(overlay.view.q('.ui-notice-line')).toBeNull()
   })
 })
 
@@ -334,6 +383,45 @@ describe('SC-13 and SC-15: the content controls', () => {
     expect(await fake.run('set', { field: 'diffBodies', value: true })).toEqual({ ok: false, reason: 'repo-state-off' })
   })
 })
+
+  test('discrete destination, content, and template controls route through set', async () => {
+    const { overlay, commands } = await opened()
+    const v = overlay.view
+    const expectSet = (field: string, value: unknown) => {
+      expect(commands.at(-1)).toEqual({ id: 'command:quirky.handoff/set', args: { field, value } })
+    }
+
+    await v.choose(v.q('select[aria-label="Agent"]') as HTMLSelectElement, 'codex')
+    expectSet('agent', 'codex')
+    expect(overlay.last().controls.agent).toBe('codex')
+
+    await v.choose(v.q('select[aria-label="Relationship"]') as HTMLSelectElement, 'reviews')
+    expectSet('relationship', 'reviews')
+    expect(overlay.last().controls.relationship).toBe('reviews')
+
+    const [focused, full] = v.all('input[type="radio"]') as HTMLInputElement[]
+    await v.click(full!)
+    expectSet('context', 'full')
+    expect(overlay.last().controls.context).toBe('full')
+    await v.click(focused!)
+    expectSet('context', 'focused')
+    expect(overlay.last().controls.context).toBe('focused')
+
+    const [repoState, diffBodies, openEditorTabs] = v.all('input[type="checkbox"]') as HTMLInputElement[]
+    await v.click(diffBodies!)
+    expectSet('diffBodies', true)
+    expect(overlay.last().controls.include.diffBodies).toBe(true)
+    await v.click(openEditorTabs!)
+    expectSet('openEditorTabs', false)
+    expect(overlay.last().controls.include.openEditorTabs).toBe(false)
+    await v.click(repoState!)
+    expectSet('repoState', false)
+    expect(overlay.last().controls.include).toEqual({ repoState: false, diffBodies: false, openEditorTabs: false })
+
+    await v.choose(v.q('select[aria-label="Reusable template"]') as HTMLSelectElement, '__new__')
+    expectSet('template', 'new')
+    expect(overlay.last().templateEditor).toEqual({ name: '' })
+  })
 
 describe('SC-63: opening twice and unknown fields', () => {
   test('SC-63: set refuses an unknown field and a closed dialog', async () => {
