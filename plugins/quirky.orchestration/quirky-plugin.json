@@ -12,6 +12,101 @@
   "contributes": {
     "method": [
           {
+            "id": "summary",
+            "description": "Return a bounded local worktree summary with session activity and orchestration associations.",
+            "readOnly": true,
+            "params": {
+              "type": "object",
+              "properties": {
+                "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 100 }
+              },
+              "additionalProperties": false
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "scope": { "type": "string", "enum": ["local"] },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "worktree": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "path": { "type": "string" },
+                          "repoId": { "type": "string" }
+                        },
+                        "required": ["id", "name", "path", "repoId"],
+                        "additionalProperties": false
+                      },
+                      "sessions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "agent": { "type": "string" },
+                            "kind": { "type": "string", "enum": ["terminal", "structured"] },
+                            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
+                            "display": {
+                              "description": "Agent display state: working, monitoring, waiting, permission, blocked, failed, interrupted, done, unverifiable, idle, unconfirmed, or null. The protocol schema subset cannot express nullable enums."
+                            },
+                            "live": { "type": "boolean" }
+                          },
+                          "required": ["id", "agent", "kind", "status", "display", "live"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "runIds": { "type": "array", "items": { "type": "string" } },
+                      "dispatches": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "runId": { "type": "string" },
+                            "task": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "title": { "type": "string" },
+                                "status": { "type": "string", "enum": ["pending", "ready", "dispatched", "completed", "failed", "blocked"] }
+                              },
+                              "required": ["id", "title", "status"],
+                              "additionalProperties": false
+                            },
+                            "status": { "type": "string", "enum": ["pending", "dispatched", "completed", "failed", "circuit_broken"] },
+                            "creatorSessionId": { "description": "Session ID or null. String or null; null is represented without a schema type because the protocol subset has no union types." },
+                            "assigneeSessionId": { "description": "Session ID or null. String or null; null is represented without a schema type because the protocol subset has no union types." },
+                            "workerSessionId": { "description": "Session ID or null. String or null; null is represented without a schema type because the protocol subset has no union types." },
+                            "currentAssignment": { "type": "boolean" },
+                            "workerState": {
+                              "description": "Worker state: starting, ready, start_unknown, failed, succeeded, stopping, stop_unknown, stopped, abandoned, or null. The protocol schema subset cannot express nullable enums."
+                            },
+                            "terminalState": { "type": "string", "enum": ["active", "reclaimable", "retained", "release_pending", "release_unknown", "released"] }
+                          },
+                          "required": ["id", "runId", "task", "status", "creatorSessionId", "assigneeSessionId", "workerSessionId", "currentAssignment", "workerState", "terminalState"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["worktree", "sessions", "runIds", "dispatches"],
+                    "additionalProperties": false
+                  }
+                },
+                "total": { "type": "integer" },
+                "limit": { "type": "integer" },
+                "truncated": { "type": "boolean" },
+                "unavailable": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["scope", "rows", "total", "limit", "truncated", "unavailable"],
+              "additionalProperties": false
+            }
+          },
+          {
             "id": "runCreate",
             "description": "Create and bind a Run to the authenticated coordinator session.",
             "params": {"type": "object", "properties": {"objective": {"type": "string"}, "requestId": {"type": "string", "description": "Durable mutation receipt UUID supplied by the caller."}, "contractVersion": {"type": "integer", "enum": [1]}, "from": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}, "terminal": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}}, "required": ["objective", "requestId", "contractVersion"], "additionalProperties": false},
@@ -4081,7 +4176,8 @@
           {"id": "skill-install", "words": "skill-install", "summary": "explicitly install or update the orchestration skill", "flags": {"agents": {"type": "json", "param": "agents", "description": "Optional JSON array of detected agent IDs; omitted installs all detected supported targets."}}, "methods": ["quirky.orchestration/skillInstall"]},
           {"id": "policy-show", "words": "policy-show", "summary": "show the nested worker depth policy", "flags": {}, "methods": ["quirky.orchestration/policyShow"]},
           {"id": "policy-set", "words": "policy-set", "summary": "set the nested worker depth policy", "flags": {"nested-worker-max-depth": {"type": "integer", "param": "nestedWorkerMaxDepth", "required": true, "description": "Maximum worker dispatch depth; integer at least 1."}}, "methods": ["quirky.orchestration/policySet"]},
-          {"id": "task-terminal", "words": "task-terminal", "summary": "resolve a Task's exact local terminal or read its remote worker output", "flags": {"task-id": {"type": "string", "param": "taskId", "required": true, "description": "Task ID to navigate."}}, "methods": ["quirky.orchestration/taskTerminal"]}
+          {"id": "task-terminal", "words": "task-terminal", "summary": "resolve a Task's exact local terminal or read its remote worker output", "flags": {"task-id": {"type": "string", "param": "taskId", "required": true, "description": "Task ID to navigate."}}, "methods": ["quirky.orchestration/taskTerminal"]},
+          {"id": "ps", "words": "ps", "summary": "summarize local worktree, session, and orchestration activity", "flags": {"limit": {"type": "integer", "description": "Maximum worktree rows from 1 through 100; defaults to 100."}}, "methods": ["quirky.orchestration/summary"]}
         ],
     "view": [
       {"id": "settings", "title": "Orchestration", "settings": true},

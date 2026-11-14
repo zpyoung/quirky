@@ -243,6 +243,43 @@ function writeFile(root: string, relativePath: string, content: string): void {
   writeFileSync(path, content, { mode: 0o600 })
 }
 
+function prepareProviderExecutables(root: string): void {
+  const bin = join(root, 'fakebin')
+  for (const provider of ['claude', 'codex'] as const) {
+    const source = `#!${process.execPath}
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+const provider = ${JSON.stringify(provider)}
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(provider === 'claude' ? 'Claude Code 2.1.80' : 'codex 1.0.0')
+  process.exit(0)
+}
+if (process.argv.includes('login')) {
+  const home = provider === 'claude' ? process.env.CLAUDE_CONFIG_DIR : process.env.CODEX_HOME
+  if (!home) throw new Error('Missing isolated provider home')
+  mkdirSync(home, { recursive: true, mode: 0o700 })
+  if (provider === 'claude') {
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'claude@example.test', organizationUuid: 'fixture-org', organizationName: 'Fixture Org' } }))
+    writeFileSync(join(home, '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: 'fixture-claude-token', refreshToken: 'fixture-claude-refresh' } }), { mode: 0o600 })
+    if (process.env.BROWSER) {
+      const browser = Bun.spawn([process.env.BROWSER, 'https://claude.ai/oauth/authorize?client_id=fixture&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fixture'], { stdout: 'ignore', stderr: 'ignore' })
+      await browser.exited
+    }
+  } else {
+    const claims = { email: 'codex@example.test', 'https://api.openai.com/auth': { chatgpt_account_id: 'fixture-workspace' }, 'https://api.openai.com/profile': { email: 'codex@example.test' } }
+    writeFileSync(join(home, 'auth.json'), JSON.stringify({ auth_mode: 'chatgpt', tokens: { access_token: 'fixture-codex-token', id_token: 'header.' + Buffer.from(JSON.stringify(claims)).toString('base64url') + '.signature', account_id: 'fixture-workspace' } }), { mode: 0o600 })
+  }
+  process.exit(0)
+}
+process.on('SIGTERM', () => process.exit(0))
+process.on('SIGINT', () => process.exit(0))
+setInterval(() => {}, 60_000)
+`
+    writeFileSync(join(bin, provider), source, { mode: 0o700 })
+  }
+  writeFileSync(join(bin, 'security'), '#!/bin/sh\ncase "$1" in\n  find-generic-password|delete-generic-password) exit 44 ;;\n  *) exit 2 ;;\nesac\n', { mode: 0o700 })
+}
+
 /** Creates a real local Git repository under the disposable app home. */
 export async function prepareCaptureFixtureHome(
   home: string,
@@ -278,6 +315,7 @@ export async function prepareCaptureFixtureHome(
     mkdirSync(join(root, 'projects'), { recursive: true, mode: 0o700 })
     mkdirSync(worktreesRoot, { recursive: true, mode: 0o700 })
     const tasks = prepareTasksFixture(root, PRIMARY_PROJECT, env)
+    prepareProviderExecutables(root)
     writeFile(repoPath, 'README.md', '# UI screenshot fixture\n\nA disposable local project for renderer capture.\n')
     writeFile(repoPath, FIXTURE_FILES.source, INITIAL_SOURCE)
     writeFile(repoPath, FIXTURE_FILES.markdown, SAMPLE_MARKDOWN)
