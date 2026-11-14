@@ -97,6 +97,8 @@ test('feature table exports the complete required inventory in document order wi
   for (const row of gaps) expect(row.reason).toMatch(/Follow-up: \*\*[^*]+\*\*/)
   expect(result.rows).toHaveLength(39)
   expect(result.rows.filter((row) => row.disposition === 'covered')).toHaveLength(24)
+  expect(result.rows.filter((row) => row.disposition === 'excluded')).toHaveLength(8)
+  expect(result.rows.filter((row) => row.disposition === 'delegated')).toHaveLength(5)
 })
 
 test('fixture export has the exact four-row schema and preserves every check', () => {
