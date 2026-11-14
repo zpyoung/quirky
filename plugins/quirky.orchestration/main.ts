@@ -4,6 +4,8 @@ import { createOrchestration, type ComposedOrchestrationService } from './src/se
 import { migrations, policyMigration } from './src/store'
 import { createSetup } from './src/setup'
 import { createTaskNavigation } from './src/navigation'
+import { OrchestrationSummary } from './src/summary'
+import type { SummaryParams } from './src/summary-contracts'
 import { verifyCaller } from './src/identity'
 import { createWorkerCore } from './src/workers/core-adapter'
 import { registerWorkers, type WorkerComponents } from './src/workers/register'
@@ -65,6 +67,7 @@ export async function activate(context: PluginContext): Promise<void> {
     ...federationMailMigrations,
   ])
   const service = createOrchestration(context, store)
+  const summary = new OrchestrationSummary(context, store)
   const peers = new PeerManager(context, store)
   let workers: WorkerComponents | undefined
   let engine: FederationEnginePort | undefined
@@ -117,6 +120,9 @@ export async function activate(context: PluginContext): Promise<void> {
     for (const [method, handler] of Object.entries(workers.methods)) {
       context.provide(`method:${context.pluginId}/${method}`, handler)
     }
+    context.provide(`method:${context.pluginId}/summary`, (params: Record<string, unknown>) =>
+      summary.query(params as SummaryParams)
+    )
     await peers.restore()
     activeService = service
     activeWorkers = workers

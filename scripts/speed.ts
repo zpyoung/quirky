@@ -32,7 +32,7 @@ function scrubArtifacts(out: string, redactions: string[]): void {
   visit(out)
 }
 
-/** Measures only disposable local state, and publishes evidence only after owned cleanup settles. */
+/** Publishes native-wall and final-frame-accounted evidence only after disposable subjects are cleaned up. */
 export async function main(args: string[], measure: typeof measureSpeed = measureSpeed): Promise<number> {
   let out: string
   let count: number
@@ -107,7 +107,7 @@ export async function main(args: string[], measure: typeof measureSpeed = measur
   let cleanup: SpeedReport['cleanup'] = 'complete'
   let chromiumVersion = 'unavailable'
   const profile: SpeedReport['profile'] = {
-    workloadVersion: 2, compositor: 'software', worktrees: 10, terminals: 20, diffAddedLines: 5000,
+    workloadVersion: 3, compositor: 'software', frameTiming: 'native-final-frame-idle-cap-60hz', worktrees: 10, terminals: 20, diffAddedLines: 5000,
     renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context',
     floodChunkBytes: 65536, floodIntervalMs: 16,
     runner: process.env.QUIRKY_SPEED_RUNNER || 'local', os: platform(), arch: arch(), cpuModel: cpu[0]!.model, cpuCount: cpu.length,
@@ -223,8 +223,11 @@ export async function main(args: string[], measure: typeof measureSpeed = measur
 
   const metrics = Object.fromEntries(METRICS.map(metric => {
     const samplesMs = result?.samples[metric] ?? []
+    const rows = (result?.attempts ?? []).filter(row => row.metric === metric && row.phase === 'sample' && typeof row.durationMs === 'number')
+    const wallSamplesMs = rows.map(row => row.durationMs!)
+    const unavailableSamples = rows.filter(row => row.frameTiming?.status === 'unavailable').length
     const medianMs = median(samplesMs)
-    return [metric, { samplesMs, medianMs, budgetMs: BUDGETS[metric], budgetMiss: medianMs === null ? null : medianMs > BUDGETS[metric] }]
+    return [metric, { samplesMs, wallSamplesMs, unavailableSamples, medianMs, budgetMs: BUDGETS[metric], budgetMiss: medianMs === null ? null : medianMs > BUDGETS[metric] }]
   })) as SpeedReport['metrics']
   const report: SpeedReport = {
     version: 1, commit, runId: process.env.GITHUB_RUN_ID || `local-${randomUUID()}`, createdAt: new Date().toISOString(),

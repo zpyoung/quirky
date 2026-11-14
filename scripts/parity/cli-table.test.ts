@@ -212,6 +212,71 @@ test('inventory validation requires the compact worktree summary scope row', () 
   expect(codeOf(() => validateRows(inventory, rows))).toBe('missing-command')
 })
 
+test('worktree ps rows bind the summary command and preserve independent views', () => {
+  const rows = loadCliTable()
+  const ps = rows.find(row => row.id === 'worktree-ps')!
+  const summary = rows.find(row => row.id === 'worktree-ps-summary')!
+
+  expect(ps.equivalent).toContain('`orchestration ps --limit 100 --json`')
+  expect(summary.equivalent).toContain('`orchestration ps --limit 100 --json`')
+  expect(summary).toMatchObject({ disposition: 'covered', checks: ['workers-ps-summary'] })
+  expect(summary.followUp).toBeUndefined()
+  expect(ps.checks).toEqual(expect.arrayContaining([
+    'workers-ps-dashboard', 'workers-ps-runs', 'workers-ps-tasks', 'workers-list', 'workers-ps-summary'
+  ]))
+
+  const refs = new Map(validateCatalog(syntheticCatalog(), rows).map(entry => [entry.rowId, entry.refs]))
+  expect(refs.get('worktree-ps')).toEqual(expect.arrayContaining([
+    'command:agent-status dashboard',
+    'command:orchestration run-list',
+    'command:orchestration task-list',
+    'command:orchestration worker-list',
+    'command:orchestration ps',
+    'method:quirky.orchestration/summary'
+  ]))
+  expect(refs.get('worktree-ps-summary')).toEqual(expect.arrayContaining([
+    'command:orchestration ps',
+    'method:quirky.orchestration/summary'
+  ]))
+})
+
+test('catalog validation rejects summary without its public method', () => {
+  const mapping = CLI_MAPPINGS.find(candidate =>
+    candidate.rowId === 'worktree-ps-summary' && candidate.words === 'orchestration ps'
+  )
+  expect(mapping).toBeDefined()
+  if (!mapping) return
+  const catalog = syntheticCatalog()
+  catalog.methods = catalog.methods.filter(method => method.name !== 'quirky.orchestration/summary')
+  expect(codeOf(() => validateCatalog(catalog, loadCliTable()))).toBe('catalog-mismatch')
+})
+
+test('catalog validation rejects summary without its integer limit flag', () => {
+  const mapping = CLI_MAPPINGS.find(candidate =>
+    candidate.rowId === 'worktree-ps-summary' && candidate.words === 'orchestration ps'
+  )
+  expect(mapping).toBeDefined()
+  if (!mapping) return
+  const catalog = syntheticCatalog()
+  const command = catalog.cli.commands.find(entry => entry.id === mapping.commandId)!
+  command.flags = (command.flags as Array<{ name: string }>).filter(flag => flag.name !== 'limit')
+  expect(codeOf(() => validateCatalog(catalog, loadCliTable()))).toBe('catalog-mismatch')
+})
+
+test('a summary scope row cannot pass without its successful receipt', () => {
+  const summary = loadCliTable().find(row => row.id === 'worktree-ps-summary')!
+  const report = buildCliReport({
+    rows: [summary],
+    receipts: [],
+    proven: new Set(),
+    catalogRefs: new Map([['worktree-ps-summary', ['command:orchestration ps', 'method:quirky.orchestration/summary']]]),
+    elapsedMs: 0
+  })
+  expect(report.ok).toBe(false)
+  expect(report.error).toMatchObject({ stage: 'workers-ps-summary', kind: 'missing-receipt' })
+  expect(report.rows).toMatchObject([{ id: 'worktree-ps-summary', status: 'failed', executed: false }])
+})
+
 test('inventory validation rejects a duplicate command row', () => {
   const inventory = loadCliInventory()
   const rows = loadCliTable()
