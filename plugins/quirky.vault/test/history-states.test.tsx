@@ -241,7 +241,9 @@ test('unknown rows and groups are reported without changing the panel', async ()
   const panel = await mountPanel(context)
   const before = optionsState(panel.container)
 
-  expect(await runCommand(host, { action: 'select', id: 'missing' })).toEqual({ ok: false, reason: 'unknown-row', id: 'missing' })
+  for (const action of ['select', 'toggle-details', 'retry-details', 'menu', 'copy']) {
+    expect(await runCommand(host, { action, id: 'missing', field: 'first-prompt' })).toEqual({ ok: false, reason: 'unknown-row', id: 'missing' })
+  }
   expect(await runCommand(host, { action: 'toggle-group', id: 'project:missing' })).toEqual({ ok: false, reason: 'unknown-group', id: 'project:missing' })
   expect(optionsState(panel.container)).toEqual(before)
 })
@@ -351,7 +353,7 @@ test('cancel-remote-resume closes the active owner confirmation', async () => {
 })
 
 test('two mounts use newest-live defaults while clicks remain local to their own mount', async () => {
-  const { context, host } = makeContext()
+  const { context, host, commands } = makeContext()
   const first = await mountPanel(context)
   const second = await mountPanel(context)
   expect(panelInstance(first.container)).toBe('history-1')
@@ -362,12 +364,13 @@ test('two mounts use newest-live defaults while clicks remain local to their own
   expect(optionsState(second.container).visible).toBe(true)
 
   await act(async () => first.container.querySelector<HTMLButtonElement>('[aria-label="View options"]')!.click())
+  expect(commands.at(-1)).toEqual({ id: 'command:quirky.vault/history-control', args: { instance: 'history-1', action: 'set-options' } })
   expect(optionsState(first.container).visible).toBe(true)
   expect(optionsState(second.container).visible).toBe(true)
 
   await second.unmount()
-  expect(await runCommand(host, { action: 'set-options', open: true })).toEqual({ ok: true })
-  expect(optionsState(first.container).visible).toBe(true)
+  expect(await runCommand(host, { action: 'set-options', open: false })).toEqual({ ok: true })
+  expect(optionsState(first.container).visible).toBe(false)
   expect(await runCommand(host, { instance: 'history-2', action: 'set-options' })).toEqual({
     ok: false,
     reason: 'unknown-instance',
@@ -378,7 +381,7 @@ test('two mounts use newest-live defaults while clicks remain local to their own
 })
 
 test('unmounting the older panel leaves the newer default and its click handler live', async () => {
-  const { context, host } = makeContext()
+  const { context, host, commands } = makeContext()
   const first = await mountPanel(context)
   const second = await mountPanel(context)
   await first.unmount()
@@ -386,6 +389,7 @@ test('unmounting the older panel leaves the newer default and its click handler 
   expect(await runCommand(host, { action: 'set-options', open: true })).toEqual({ ok: true })
   expect(optionsState(second.container).visible).toBe(true)
   await act(async () => second.container.querySelector<HTMLButtonElement>('[aria-label="View options"]')!.click())
+  expect(commands.at(-1)).toEqual({ id: 'command:quirky.vault/history-control', args: { instance: 'history-2', action: 'set-options' } })
   expect(optionsState(second.container).visible).toBe(false)
   expect(optionsState(second.container).expanded).toBe('false')
 

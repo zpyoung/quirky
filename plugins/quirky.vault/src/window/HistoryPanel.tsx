@@ -999,14 +999,12 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
     } catch (error) { setError(messageOf(error)) }
   }
 
-  const copy = async (text: string) => {
-    await localClipboard(text)
-  }
+  const onCopy = localClipboard
   const copyHistoryField = async (row: VaultRow, field: HistoryControlField): Promise<HistoryControlResult> => {
     setMenuId(null)
     if (field === 'session-id') {
       try {
-        await copy(row.sessionId)
+        await onCopy(row.sessionId)
         context.toast('Session ID copied', '')
       } catch (error) {
         setError(messageOf(error))
@@ -1019,7 +1017,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
         return { ok: true }
       }
       try {
-        await copy(row.filePath)
+        await onCopy(row.filePath)
         context.toast('Log path copied', '')
       } catch (error) {
         setError(messageOf(error))
@@ -1036,7 +1034,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
         return { ok: false, reason: 'field-unavailable', field: 'first-prompt' }
       }
       if (typeof response.prompt !== 'string') throw new Error('The vault returned an invalid first-prompt response.')
-      await copy(response.prompt)
+      await onCopy(response.prompt)
       context.toast('First prompt copied', 'The complete selected prompt is on the clipboard.')
     } catch (error) {
       setError(messageOf(error))
@@ -1237,6 +1235,14 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
           if (entry.kind === 'group') return <div className="qvh-virtual-item" key={entry.id} style={style}><div className="qvh-group-heading"><IconButton className="qvh-group-toggle" label={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} aria-expanded={!entry.collapsed} title={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} onClick={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'toggle-group', id: entry.id })}>{entry.collapsed ? '›' : '⌄'}</IconButton><strong>{entry.label}</strong><Badge>{entry.count}</Badge></div></div>
           const row = entry.row
           const expanded = snapshot.view.expandedIds.includes(row.id)
+          const onSelect = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'select', id: row.id })
+          const onExpand = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'toggle-details', id: row.id })
+          const onRetryDetails = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'retry-details', id: row.id })
+          const onMenu = () => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'menu', id: row.id })
+          const onResumeWorktree = () => { selectRow(row.id); void resumeInWorktree(row) }
+          const onResume = () => { selectRow(row.id); void resume(row) }
+          const onHandoff = () => { selectRow(row.id); void handoff(row) }
+          const onOpenSource = (mode: 'view' | 'open' | 'reveal') => { selectRow(row.id); void openSource(row, mode) }
           return <div className="qvh-virtual-item" key={entry.id} style={style}><SessionRow
             context={context}
             instance={controller.instance}
@@ -1248,17 +1254,17 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
             expanded={expanded}
             retryAttempt={detailRetries[row.id] ?? 0}
             menuOpen={menuId === row.id}
-            onSelect={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'select', id: row.id })}
-            onExpand={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'toggle-details', id: row.id })}
-            onRetryDetails={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'retry-details', id: row.id })}
-            onMenu={() => void context.executeCommand('command:quirky.vault/history-control', { instance: controller.instance, action: 'menu', id: row.id })}
+            onSelect={onSelect}
+            onExpand={onExpand}
+            onRetryDetails={onRetryDetails}
+            onMenu={onMenu}
             onCloseMenu={() => setMenuId(null)}
             reportError={setError}
-            onResumeWorktree={() => { selectRow(row.id); void resumeInWorktree(row) }}
-            onResume={() => { selectRow(row.id); void resume(row) }}
-            onHandoff={() => { selectRow(row.id); void handoff(row) }}
-            onOpenSource={(mode) => { selectRow(row.id); void openSource(row, mode) }}
-            onCopy={copy}
+            onResumeWorktree={onResumeWorktree}
+            onResume={onResume}
+            onHandoff={onHandoff}
+            onOpenSource={onOpenSource}
+            onCopy={onCopy}
             onDelete={() => {
               setMenuId(null)
               void model.setView({ selectedId: null, expandedIds: snapshot.view.expandedIds.filter((id) => id !== row.id) }).catch(() => {})
