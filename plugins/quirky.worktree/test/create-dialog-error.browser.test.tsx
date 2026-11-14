@@ -68,6 +68,8 @@ function browserEntry(): string {
             if (method === 'quirky.repo/hooks') return noHooks
             if (method === 'quirky.worktree/availableHosts') return { hosts: [] }
             if (method === 'quirky.agents/list') return { agents: [] }
+            if (method === 'quirky.hosting/listWorkItems') return { items: [], partial: false }
+            if (method === 'quirky.git/branches') return { refs: [], current: 'main' }
             if (method === 'quirky.worktree/prefetchCreate') return {}
             if (method === 'quirky.worktree/navigate') return {}
             if (method === 'quirky.worktree/create') {
@@ -99,7 +101,7 @@ function browserEntry(): string {
         open && h(CreateDialog, {
           context,
           repos,
-          worktrees: [],
+          worktrees: repos.map((repo) => ({ id: repo.id + '-main', repoId: repo.id, isMain: true, name: 'main', branch: 'main', path: repo.path })),
           repoId,
           onRepoChange: setRepoId,
           onClose: () => setOpen(false),
@@ -286,6 +288,31 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     expect(await page.evaluate(() => window.__toastLog.some(({ title }) => title === 'Could not create worktree'))).toBe(false)
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('[role="dialog"]') === null)
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('announces successful empty GitHub and branch results through status regions', async () => {
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    await page.getByRole('tab', { name: 'GitHub', exact: true }).click()
+    const github = page.getByRole('status').filter({ hasText: 'No GitHub issues or pull requests found.' })
+    expect((await github.innerText()).trim()).toBe('No GitHub issues or pull requests found.')
+    expect(await github.locator('.ui-empty-state').count()).toBe(1)
+
+    await page.getByRole('tab', { name: 'Branch', exact: true }).click()
+    const branches = page.getByRole('status').filter({ hasText: 'No matching branches.' })
+    expect((await branches.innerText()).trim()).toBe('No matching branches.')
+    expect(await branches.locator('.ui-empty-state').count()).toBe(1)
+    expect(await page.getByRole('alert').count()).toBe(0)
+    expect(await page.evaluate(() => window.__createCallCount)).toBe(0)
   } finally {
     await context.close()
   }
