@@ -3466,6 +3466,24 @@
       {
         "id": "ai-settings",
         "title": "Source Control AI Settings"
+      },
+      {
+        "id": "ui-control",
+        "title": "Source Control UI Control",
+        "description": "Route a semantic action to one mounted Source Control controller in this window.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "surface": { "type": "string" },
+            "target": { "type": "string" },
+            "generation": { "type": "string" },
+            "action": { "type": "string" },
+            "data": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["surface", "target", "generation", "action"],
+          "additionalProperties": false
+        }
       }
     ],
     "keybinding": [

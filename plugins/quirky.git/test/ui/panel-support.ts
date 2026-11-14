@@ -152,6 +152,9 @@ export function reviewOf(
 
 export type Call = { method: string; params: Record<string, unknown> }
 type Handler = (params: Record<string, unknown>) => unknown | Promise<unknown>
+let nextFakeConnectionId = 1
+const fakesByConnectionId = new Map<number, Fake>()
+
 type HostedTab = {
   kind: 'view'
   id: string
@@ -170,8 +173,10 @@ type HostedRoot = HostedGroup | { kind: 'split'; id: string; direction: 'right';
 type HostedWorkspace = { id: string; revision: number; activeGroup: string; root: HostedRoot }
 
 export type Fake = {
+  connId: number
   context: UiPluginContext
   calls: Call[]
+  provided: Map<string, unknown>
   reports: any[]
   toasts: Array<[string, string]>
   /** The options each toast was shown with, parallel to `toasts`. */
@@ -200,7 +205,9 @@ export type Fake = {
 export const failure = (message: string, data: Record<string, unknown> = {}): Error => Object.assign(new Error(message), { data })
 
 /** A fake `UiPluginContext` that records what the panel does and answers methods from scripts. */
-export function fakeContext(initial: UiLayout): Fake {
+export function fakeContext(initial: UiLayout, requestedConnectionId?: number): Fake {
+  const connId = requestedConnectionId ?? nextFakeConnectionId++
+  nextFakeConnectionId = Math.max(nextFakeConnectionId, connId + 1)
   let layout = initial
   const eventListeners = new Set<(event: QuirkyEvent) => void>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
@@ -327,7 +334,9 @@ export function fakeContext(initial: UiLayout): Fake {
     throw new Error(`unexpected terminal method ${method}`)
   }
   const fake: Fake = {
+    connId,
     calls: [],
+    provided: new Map(),
     reports: [],
     toasts: [],
     toastOptions: [],
@@ -354,12 +363,31 @@ export function fakeContext(initial: UiLayout): Fake {
       nativeBrowser: createNativeBrowserCapability(),
       nativeDropPaths: async () => null,
       readClipboardText: async () => '',
-      log() {},
-      provide() {},
+      provide: (id, implementation) => void fake.provided.set(id, implementation),
       async call(method, params = {}) {
         fake.calls.push({ method, params })
         const scripted = handlers.get(method)
+        if (method === 'ui.window.self') {
+          const identity = scripted ? await scripted(params) : { connId }
+          if (typeof identity === 'object' && identity !== null && !Array.isArray(identity) &&
+              'connId' in identity && typeof identity.connId === 'number' &&
+              Number.isSafeInteger(identity.connId) && identity.connId > 0) {
+            fakesByConnectionId.set(identity.connId, fake)
+          }
+          return identity
+        }
         if (scripted) return scripted(params)
+        if (method === 'ui.window.command.run') {
+          const targetConnId = params.connId
+          const id = params.id
+          if (typeof targetConnId !== 'number' || !Number.isSafeInteger(targetConnId) || targetConnId < 1 ||
+              typeof id !== 'string') throw new Error('invalid fake exact-window command request')
+          const target = fakesByConnectionId.get(targetConnId) ?? fake
+          const command = target.provided.get(id)
+          if (typeof command !== 'function') throw new Error(`No provided command ${id} in window ${targetConnId}`)
+          const handler = command as (args?: unknown) => unknown
+          return { result: await handler(params.args) }
+        }
         if (method.startsWith('quirky.terminal/')) return terminalCall(method, params)
         switch (method) {
           case 'quirky.git/status':
@@ -460,6 +488,7 @@ export function fakeContext(initial: UiLayout): Fake {
       mountView: () => () => {}
     }
   }
+  fakesByConnectionId.set(connId, fake)
   return fake
 }
 

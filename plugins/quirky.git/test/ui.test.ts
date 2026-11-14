@@ -58,7 +58,7 @@ describe('quirky.git source-control panel', () => {
     await settle()
     expect(element.textContent).toContain('Select a workspace to view changes')
     expect(fake.calls).toEqual([])
-    expect(fake.reports.at(-1)).toMatchObject({ worktree: null, branch: null, sections: [], primary: null })
+    expect(fake.reports.at(-1)).toMatchObject({ worktree: null, branch: null, sections: [], primary: null, uiControls: [] })
     unmount()
   })
 
