@@ -79,6 +79,16 @@ Find protects the focused typed query from delayed canonical replies. Next, Prev
 
 `pane close` returns `true` after the hosted tab and pane resources are removed. Its `fromTab` and `tabId` parameters are reserved for the terminal's authenticated close hook.
 
+Window-local controls are also public commands. Read `tabs[].id` from `pane state`, then address a mounted pane:
+
+```sh
+quirky ui run command:quirky.browser/paneUiControl --args '{"action":"open-find","pane":"<pane-id>"}'
+quirky ui run command:quirky.browser/preferencesControl --args '{"action":"toggle-profile-menu","instance":"browser-pane:<pane-id>:profile-menu"}'
+quirky ui run command:quirky.browser/preferencesControl --args '{"action":"toggle-import-hint","instance":"browser-pane:<pane-id>:import-hint"}'
+```
+
+`paneUiControl` also accepts `dismiss-message`, `retry-watch`, `retry-native`, `dismiss-page-error`, `close-browser-menu`, and `close-history-menu`. It returns `{ pane, action, delivered }`; `preferencesControl` returns `{ instance, action, delivered }`. Delivery counts mounted controllers, including multiple mounts of one pane; a missing or unmounted target returns zero. These calls do not activate the owner window. They use the existing `ui.command.run` window routing, which refuses ambiguous multiple-window targets.
+
 Native is available only in the desktop shell. A plain web client explains that the system webview cannot be embedded and offers an explicit Watch action; it never silently substitutes Chrome. Native browsing uses the selected visible viewport size. Mobile device emulation is available only in Watch.
 
 `Open source file` uses public `quirky.editor/open` only with the backend's canonical in-worktree `sourcePath`; outside file URLs have no source action. `Open in Editor Preview` opens a separate editor preview tab and is not a Browser preview conversion. Selecting a supported non-HTML document suggestion navigates its backend-provided resource URL, and Browser Back returns to the prior location. Resource-backed previews do not serve `text/html`; unsupported editor previews show an error. Native `file:` navigation uses runtime authorization, and the UI does not resolve typed paths itself.
