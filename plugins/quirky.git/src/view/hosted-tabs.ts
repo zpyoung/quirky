@@ -155,6 +155,7 @@ export async function openHostedDiff(
     reuse: true,
     preview,
     activate,
+    closeCommand: CLOSE_DIFF_COMMAND,
     closeMethod: 'quirky.git/diffCloseGuard',
     closeParams: { worktree: requested.worktree, dirty },
     closeContext: true,

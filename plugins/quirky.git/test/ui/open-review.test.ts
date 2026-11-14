@@ -3,7 +3,7 @@ import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { clearDeferredReview, takeDeferredReview } from '../../src/view/registry'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { RpcErrorCode } from '@quirky/protocol'
+import { RpcErrorCode, type QuirkyEvent, type ReviewModel, type UiPluginContext } from '@quirky/protocol'
 import { registerDom } from './register-dom'
 
 registerDom()

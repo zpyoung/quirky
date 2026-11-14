@@ -681,7 +681,6 @@ describe('quirky.git review tab', () => {
     const element = await open()
     const handle = reviewViewFor('w1')!
     expect(await handle.applyScope!({ source: 'staged' }, 'refuse')).toBe('applied')
-    await settle()
     expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Staged changes')
 
     let confirms = 0
@@ -756,7 +755,6 @@ describe('quirky.git review tab', () => {
     const element = await draftReview()
     fake.context.confirm = async () => true
     expect(await reviewViewFor('w1')!.applyScope!({ source: 'staged' }, 'ask')).toBe('applied')
-    await settle()
     expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Staged changes')
     expect(order(element)).toEqual([])
   })

@@ -468,7 +468,26 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   }, [revealTick, items, ui, writeCard, activate, loadCard])
 
   const askingScope = useRef(false)
+  const pendingScope = useRef<{
+    scope: ReviewScope
+    promise: Promise<void>
+    resolve(): void
+    reject(reason: Error): void
+  } | null>(null)
+  useEffect(() => {
+    const pending = pendingScope.current
+    if (pending && pending.scope === scope) {
+      pendingScope.current = null
+      pending.resolve()
+    }
+  }, [scope])
+  useEffect(() => () => {
+    const pending = pendingScope.current
+    pendingScope.current = null
+    pending?.reject(new Error('The Review tab is no longer mounted.'))
+  }, [])
   const applyScope = async (nextScope: ReviewScope, ifDirty: 'ask' | 'refuse'): Promise<ScopeOutcome> => {
+    while (pendingScope.current !== null) await pendingScope.current.promise
     if (askingScope.current) return 'busy'
     const currentScope = scopeRef.current
     const unchanged =
@@ -495,7 +514,12 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       }
       if (!discard) return 'cancelled'
     }
+    pendingReveal.current = null
+    setNoteTarget(null)
+    const applied = Promise.withResolvers<void>()
+    pendingScope.current = { scope: nextScope, ...applied }
     setScopeState(nextScope)
+    await applied.promise
     return 'applied'
   }
   const applyScopeRef = useRef(applyScope)
@@ -503,6 +527,8 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
 
   useEffect(() => {
     const scrollToTop = () => {
+      pendingReveal.current = null
+      setNoteTarget(null)
       if (scrollRef.current) scrollRef.current.scrollTop = 0
     }
     const setScope = (commit: string | null) =>
