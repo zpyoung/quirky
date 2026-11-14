@@ -166,7 +166,7 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
             busy={busy}
             onAddressChange={setSelectedAddress}
           />
-          <PairingPanel offer={offer} busy={busy} error={null} buttonLabel="Generate QR code" onGenerate={generate} />
+          <PairingPanel context={context} offer={offer} busy={busy} buttonLabel="Generate QR code" onGenerate={generate} />
           <SelectField
             label="When you leave the mobile app"
             aria-label="When you leave the mobile app"

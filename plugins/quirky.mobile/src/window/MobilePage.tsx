@@ -221,7 +221,7 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
               />
             </div>
           </ToolPanelFrame>
-          <PairingPanel offer={offer} busy={busy} error={null} buttonLabel="Generate code" onGenerate={generate} />
+          <PairingPanel context={context} offer={offer} busy={busy} buttonLabel="Generate code" onGenerate={generate} />
           <div className="ui-cluster"><Button onClick={() => setStage('install')}>Back</Button></div>
         </>
       )}

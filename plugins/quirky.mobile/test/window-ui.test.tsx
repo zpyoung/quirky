@@ -8,9 +8,11 @@ import { MobilePage } from '../src/window/MobilePage'
 import { MobileSettings } from '../src/window/MobileSettings'
 import { PairingPanel } from '../src/window/PairingPanel'
 import { NetworkPicker } from '../src/window/NetworkPicker'
+import { activate } from '../src/ui'
 
 let root: Root | null = null
 let container: HTMLDivElement
+let clipboardDescriptor: PropertyDescriptor | undefined
 
 beforeAll(() => {
   GlobalRegistrator.register()
@@ -24,11 +26,14 @@ afterAll(async () => {
 beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
+  clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
   root = createRoot(container)
 })
 
 afterEach(async () => {
   await act(async () => root?.unmount())
+  if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor)
+  else Reflect.deleteProperty(navigator, 'clipboard')
   root = null
   document.body.innerHTML = ''
 })
@@ -69,8 +74,15 @@ const mobileState: MobileState = {
 }
 
 function pluginContext(call: (method: string, params: Record<string, unknown>) => unknown | Promise<unknown>): UiPluginContext {
-  return {
+  const providers = new Map<string, (args: unknown) => unknown>()
+  const context = {
     pluginId: 'quirky.mobile',
+    provide: (id: string, provider: (args: unknown) => unknown) => { providers.set(id, provider) },
+    executeCommand: async (id: string, args?: unknown) => {
+      const provider = providers.get(id)
+      if (!provider) throw new Error(`Missing command: ${id}`)
+      return provider(args)
+    },
     nativeBrowser: {} as UiPluginContext['nativeBrowser'],
     call: async (method: string, params?: Record<string, unknown>) => call(method, params ?? {}),
     subscribe: () => () => {},
@@ -79,6 +91,8 @@ function pluginContext(call: (method: string, params: Record<string, unknown>) =
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
     toast: () => {},
   } as unknown as UiPluginContext
+  activate(context)
+  return context
 }
 
 function mobileCall(method: string, params: Record<string, unknown>) {
@@ -92,6 +106,67 @@ function mobileCall(method: string, params: Record<string, unknown>) {
 }
 
 describe('Mobile desktop UI behavior', () => {
+  test('copies pairing codes through the registered command without exposing its URL in the result', async () => {
+    const copied: string[] = []
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied.push(text) } } })
+    const context = pluginContext(mobileCall)
+    const executed: unknown[][] = []
+    const executeCommand = context.executeCommand
+    context.executeCommand = async (...args) => {
+      executed.push(args)
+      return executeCommand(...args)
+    }
+    await render(<PairingPanel context={context} offer={pairingResult} busy={false} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
+    await act(async () => {
+      const copy = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Copy pairing code')
+      copy!.click()
+    })
+    expect(executed).toEqual([['command:quirky.mobile/copy-pairing-code', { pairingUrl }, { activateOwner: false }]])
+    expect(copied).toEqual([pairingUrl])
+    expect(container.querySelector('p.ui-text-muted[role="status"]')?.textContent).toBe('Pairing code copied.')
+    expect<unknown>(await context.executeCommand('command:quirky.mobile/copy-pairing-code')).toEqual({ copied: true })
+    expect(copied).toEqual([pairingUrl, pairingUrl])
+    const newerUrl = 'quirky-mobile://pair/newer-offer-fixture'
+    await render(<>
+      <PairingPanel key="first" context={context} offer={pairingResult} busy={false} buttonLabel="Generate QR code" onGenerate={async () => {}} />
+      <PairingPanel key="second" context={context} offer={{ ...pairingResult, pairingUrl: newerUrl }} busy={false} buttonLabel="Generate QR code" onGenerate={async () => {}} />
+    </>)
+    expect<unknown>(await context.executeCommand('command:quirky.mobile/copy-pairing-code')).toEqual({ copied: true })
+    expect(copied.at(-1)).toBe(newerUrl)
+    await render(<PairingPanel key="first" context={context} offer={pairingResult} busy={false} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
+    expect<unknown>(await context.executeCommand('command:quirky.mobile/copy-pairing-code')).toEqual({ copied: true })
+    expect(copied.at(-1)).toBe(pairingUrl)
+    expect<unknown>(await context.executeCommand('command:quirky.mobile/copy-pairing-code', { pairingUrl: newerUrl })).toEqual({ copied: true })
+    expect(copied.at(-1)).toBe(newerUrl)
+    const beforeUnmount = [...copied]
+    await render(<div />)
+    await expect(context.executeCommand('command:quirky.mobile/copy-pairing-code')).rejects.toThrow('No pairing code is shown. Generate one on the Mobile page first.')
+    expect(copied).toEqual(beforeUnmount)
+  })
+
+  test('shows a shared error when clipboard access is unavailable', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+    await render(<PairingPanel context={pluginContext(mobileCall)} offer={pairingResult} busy={false} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
+    await act(async () => {
+      const copy = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Copy pairing code')
+      copy!.click()
+    })
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Copy failed: Clipboard access is unavailable. Select the pairing code below and copy it manually.')
+    expect(container.querySelector('[role="status"]')).toBeNull()
+  })
+
+  test('uses one shared error for unavailable or unrenderable pairing offers', async () => {
+    const context = pluginContext(mobileCall)
+    await render(<PairingPanel context={context} offer={{ available: false, reason: 'network_exposure_failed', guidance: 'Start the mobile listener first.' }} busy={false} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
+    expect(container.querySelectorAll('.ui-inline-error').length).toBe(1)
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Start the mobile listener first.')
+    await render(<PairingPanel context={context} offer={{ ...pairingResult, qrDataUrl: null, qrError: 'encoding_failed' }} busy={true} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
+    expect(container.querySelectorAll('.ui-inline-error').length).toBe(1)
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('This pairing code couldn’t be rendered as a QR code. Copy it into Quirky Mobile instead.')
+    expect(container.textContent).not.toContain('QR encoding failed')
+    expect(container.querySelector('.ui-notice-line')?.textContent).toBe('Generating…')
+  })
+
   test('owns address removal and reports network refresh failures inside the picker', async () => {
     const changes: unknown[] = []
     const selections: string[] = []
@@ -120,7 +195,7 @@ describe('Mobile desktop UI behavior', () => {
   })
 
   test('closes the enlarged pairing QR dialog by Escape and backdrop', async () => {
-    await render(<PairingPanel offer={pairingResult} busy={false} error={null} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
+    await render(<PairingPanel context={pluginContext(mobileCall)} offer={pairingResult} busy={false} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
     await act(async () => {
       container.querySelector<HTMLButtonElement>('button[aria-label="Enlarge pairing QR code"]')!.click()
     })
