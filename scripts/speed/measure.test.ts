@@ -407,7 +407,7 @@ test('clears a stale app-rAF candidate when readiness is invalidated before the 
 test('trace setup and flush errors preserve a completed raw observation as unavailable frame timing', async () => {
   const raw = {
     observation: {
-      id: 'raw-80', kind: 'echo', startedAt: 10, endedAt: 90, durationMs: 80,
+      id: 'raw-80', kind: 'echo' as const, startedAt: 10, endedAt: 90, durationMs: 80,
       marks: { action: 'action', end: 'end' },
       pacing: { intervalsMs: [16], duplicateTimestamps: 0, invalidTimestamps: 0 },
       trace: []
@@ -416,7 +416,7 @@ test('trace setup and flush errors preserve a completed raw observation as unava
   let setupActionRuns = 0
   const setupFallback = await captureObservedFrameTiming({
     startTrace: async () => { throw new Error('trace setup unavailable') },
-    observe: async () => { setupActionRuns++; return raw as never },
+    observe: async () => { setupActionRuns++; return raw },
     signal: new AbortController().signal
   })
   expect(setupActionRuns).toBe(1)
@@ -427,7 +427,7 @@ test('trace setup and flush errors preserve a completed raw observation as unava
 
   const flushFallback = await captureObservedFrameTiming({
     startTrace: async () => ({ stop: async () => { throw new Error('trace flush unavailable') } }),
-    observe: async () => raw as never,
+    observe: async () => raw,
     signal: new AbortController().signal
   })
   expect(flushFallback.frameTiming).toMatchObject({
@@ -442,12 +442,12 @@ test('trace resource cleanup failures remain fatal after a completed raw observa
     startTrace: async () => ({ stop: async () => { throw cleanupFailure } }),
     observe: async () => ({
       observation: {
-        id: 'raw-80', kind: 'echo', startedAt: 10, endedAt: 90, durationMs: 80,
+        id: 'raw-80', kind: 'echo' as const, startedAt: 10, endedAt: 90, durationMs: 80,
         marks: { action: 'action', end: 'end' },
         pacing: { intervalsMs: [], duplicateTimestamps: 0, invalidTimestamps: 0 },
         trace: []
       }
-    } as never),
+    }),
     signal: new AbortController().signal
   })).rejects.toThrow('trace detach failed')
 })

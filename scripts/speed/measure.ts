@@ -932,7 +932,7 @@ export async function coordinateStartupAttempt<TRuntime, TRestart, TNavigation>(
     } catch (caught) {
       cleanupError = caught
     }
-    await Promise.allSettled([restartPromise, navigationPromise].filter((promise): promise is Promise<unknown> => promise !== undefined))
+    await Promise.allSettled([restartPromise, navigationPromise])
     if (cleanupError !== undefined) throw new Error(`${errorText(error)}; startup watcher cleanup failed: ${errorText(cleanupError)}`)
     throw error
   } finally {
