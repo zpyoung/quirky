@@ -548,7 +548,7 @@ test('public pane and preference commands address only their mounted pane target
 test('an informational message dismisses through the pane command', async () => {
   await mountWindow()
   await act(async () => {
-    mounted?.onPopup('https://example.test/popup', true)
+    mounted?.onPopup?.('https://example.test/popup', true)
     await settleUI()
   })
   const message = container.querySelector('[role="status"].qbp-message')

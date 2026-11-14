@@ -18,7 +18,7 @@ test('delivers only to the addressed pane and isolates contexts', () => {
   const first: unknown[] = [], second: unknown[] = []
   controls.registerPaneUiController(ctx, 'pane-1', args => first.push(args))
   controls.registerPaneUiController(ctx, 'pane-2', args => second.push(args))
-  const args = { action: 'open-find', pane: 'pane-2' }
+  const args = { action: 'open-find', pane: 'pane-2' } as const
   expect(controls.dispatchPaneUiControl(ctx, args)).toEqual({ ...args, delivered: 1 })
   expect(first).toEqual([])
   expect(second).toEqual([args])
@@ -31,7 +31,7 @@ test('counts registrations and removes only the cleaned registration', () => {
   const handler = (args: unknown) => { calls.push(args) }
   const cleanup = controls.registerPaneUiController(ctx, 'pane-1', handler)
   controls.registerPaneUiController(ctx, 'pane-1', handler)
-  const args = { action: 'open-find', pane: 'pane-1' }
+  const args = { action: 'open-find', pane: 'pane-1' } as const
   expect(controls.dispatchPaneUiControl(ctx, args)).toEqual({ ...args, delivered: 2 })
   expect(calls).toEqual([args, args])
   cleanup()

@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type ClipboardEvent as ReactClipboardEvent,
+  type CompositionEvent as ReactCompositionEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent
@@ -1497,7 +1498,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           onLoad={() => acknowledgeFrame(frame)}
           onError={() => setWatchError('The latest Watch frame could not be decoded.')}
         /> : null}
-        {!pane ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+        {!pane ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.stackedCard}>
           <SectionHeader title="Browser pane unavailable" />
           {paneStateLoading
             ? <div role="status"><NoticeLine>Loading browser pane…</NoticeLine></div>
