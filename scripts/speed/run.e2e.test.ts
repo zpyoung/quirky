@@ -48,6 +48,9 @@ function checkAttempt(row: Attempt): number {
   if (row.metric === 'echo' || row.metric === 'floodEcho') {
     const echo = row.echoTiming!
     expect(echo).toBeDefined()
+    expect(echo.receivedAt).not.toBeNull()
+    expect(echo.receivedAt!).toBeGreaterThanOrEqual(row.startedAt!)
+    expect(echo.receivedAt!).toBeLessThanOrEqual(row.endedAt!)
     if (echo.status === 'complete') {
       const phases = [echo.keystrokeToWorkerMs, echo.workerToPageMs, echo.pageToPaintMs]
       expect(phases.every(value => Number.isFinite(value) && value >= 0)).toBe(true)
@@ -181,6 +184,11 @@ test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only
     }
     for (const metric of ['echo', 'floodEcho'] as const) {
       expect(pair.metrics[metric].headSamplesMs[0]! - pair.metrics[metric].baseSamplesMs[0]!).toBeGreaterThanOrEqual(500)
+      const diagnostic = JSON.parse(readFileSync(join(out, `diagnostics/${metric}.json`), 'utf8'))
+      expect(diagnostic.status).toBe('complete')
+      expect(Number.isFinite(diagnostic.observation.echoTiming.receivedAt)).toBe(true)
+      expect(typeof diagnostic.observation.marks.echoReceived).toBe('string')
+      expect(diagnostic.observation.marks.echoReceived).not.toBe('')
     }
     const pairedAttempts = readAttempts(out, 'pair-samples.jsonl')
     for (const metric of METRICS) {

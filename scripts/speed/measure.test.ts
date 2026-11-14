@@ -1205,6 +1205,41 @@ test('socket arrival splits echo time at the matching binary frame before termin
   expect(clock.marks.get(observation.marks.echoReceived!)).toBe(18)
 })
 
+for (const legacy of [false, true]) {
+  for (const fragmented of [false, true]) {
+    test(`PTY CRCRLF ${legacy ? 'legacy' : 'timestamped'} echo arrives ${fragmented ? 'on the final fragment' : 'whole'} only once`, async () => {
+      environment()
+      const socket = observedSocket()
+      bindStream(socket, 'session-a', 17)
+      const echo = armSocketEcho(socket, { id: `pty-${legacy}-${fragmented}`, streamId: 17 })
+      const marker = `\r\r\n${echoMarker('worker-a', 'session-a', 5, 'b', legacy ? undefined : '100012').replace(/\r\n$/, '\r\r\n')}`
+      clock.now = 11
+      socket.emit('message', terminalFrame(17, marker.replace('SPEED_ECHO', 'noise SPEED_ECHO')))
+      socket.emit('message', terminalFrame(17, `${marker.slice(0, -3)} noise\r\r\n`))
+      const parts = fragmented ? [marker.slice(0, -2), marker.slice(-2, -1), marker.slice(-1)] : [marker]
+      for (const [index, part] of parts.entries()) {
+        clock.now = fragmented ? [12, 15, 18][index]! : 18
+        socket.emit('message', terminalFrame(17, part))
+      }
+      clock.now = 20
+      socket.emit('message', terminalFrame(17, marker))
+      await paintEcho()
+
+      const observation = await echo.result
+      expect(observation.durationMs).toBe(20)
+      expect(observation.echoTiming).toMatchObject(legacy ? {
+        status: 'unavailable', workerReadEpochMs: null, receivedAt: 18,
+        keystrokeToWorkerMs: null, workerToPageMs: null, pageToPaintMs: null
+      } : {
+        status: 'complete', workerReadEpochMs: 100012, receivedAt: 18,
+        keystrokeToWorkerMs: 2, workerToPageMs: 6, pageToPaintMs: 12
+      })
+      expect(observation.marks.echoReceived).toBeDefined()
+      expect(clock.marks.get(observation.marks.echoReceived!)).toBe(18)
+    })
+  }
+}
+
 test('split terminal marker arrival is the third message, and zero-length phases remain complete', async () => {
   environment()
   const socket = observedSocket()

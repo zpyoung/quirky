@@ -355,7 +355,7 @@ export function installSpeedSocketObserver(): void {
     deliveredAt: number,
     eligibleObservers: ReadonlySet<CaptureObserver>
   ) => {
-    const match = /^SPEED_ECHO\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)(?:\s+readEpochMs=(\S+))?$/.exec(line.replace(/\r$/, ''))
+    const match = /^SPEED_ECHO\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)(?:\s+readEpochMs=(\S+))?$/.exec(line.replace(/\r+$/, ''))
     if (!match) return
     for (const observer of eligibleObservers) {
       if (!observers.has(observer) || !state.bindings.get(observer.sessionId)?.has(streamId)
