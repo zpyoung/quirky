@@ -1,16 +1,14 @@
-import { formatContributionId, type PluginContext } from '@quirky/protocol'
-import { createEnv, type Handler, type HostingEnv } from './src/env'
+import { formatContributionId, type PluginActivationDisposer, type PluginContext } from '@quirky/protocol'
+import { createEnv, type Handler } from './src/env'
 import { detailMethods } from './src/details'
 import { prMethods } from './src/pr'
 import { refreshMethods } from './src/refresh'
 import { runtimeMethods } from './src/runtime'
 import { workItemMethods } from './src/work-items'
 
-let activeEnv: HostingEnv | undefined
-
-export function activate(context: PluginContext): void {
+/** Registers hosting methods and returns a disposer that releases this activation's environment. */
+export function activate(context: PluginContext): PluginActivationDisposer {
   const env = createEnv(context)
-  activeEnv = env
   const prHandlers = prMethods(env)
   const tables = [
     runtimeMethods(env),
@@ -29,10 +27,5 @@ export function activate(context: PluginContext): void {
   for (const [name, handler] of Object.entries(handlers)) {
     context.provide(formatContributionId('method', context.pluginId, name), handler)
   }
-}
-
-export async function deactivate(): Promise<void> {
-  const env = activeEnv
-  activeEnv = undefined
-  if (env) await env.dispose()
+  return () => env.dispose()
 }

@@ -222,6 +222,65 @@ describe('visual scoreboard measurement', () => {
     expect(result.cells).toHaveLength(source.targets.length * THEMES.length)
     expect(result.cells.every((visual) => visual.status === 'pass' && visual.score === 85)).toBe(true)
   })
+  test('plugin measurement captures and reviews only that plugin in both themes', async () => {
+    const source = inventory()
+    const pluginId = source.plugins[0]!.id
+    const targets = source.targets.filter((target) => target.plugin === pluginId)
+    const manifest = captureManifest(source, { scope: 'filtered', selectors: [pluginId], targets })
+    let receivedOptions: CaptureOptions | undefined
+    const result = await measureVisuals(source, { ...options(), plugin: pluginId }, {
+      capture: async (received) => {
+        receivedOptions = received
+        return manifest
+      },
+      review: async (filtered) => reviewReport(filtered),
+    })
+
+    expect(receivedOptions?.only).toEqual([pluginId])
+    expect(receivedOptions?.themes).toEqual(THEMES)
+    expect(result.targets.map((target) => target.id)).toEqual(targets.map((target) => target.id).sort())
+    expect(result.cells).toHaveLength(targets.length * THEMES.length)
+    expect(result.cells.every((visual) => visual.plugin === pluginId && visual.status === 'pass')).toBe(true)
+    expect(result.failures).toEqual([])
+  })
+
+  test('plugin measurement requires a filtered manifest with exactly its selector', async () => {
+    const source = inventory()
+    const pluginId = source.plugins[0]!.id
+    const targets = source.targets.filter((target) => target.plugin === pluginId)
+    const malformed = [
+      captureManifest(source, { scope: 'full', selectors: [], targets }),
+      captureManifest(source, { scope: 'filtered', selectors: ['another-plugin'], targets }),
+      captureManifest(source, { scope: 'filtered', selectors: [pluginId, 'another-plugin'], targets }),
+    ]
+
+    for (const manifest of malformed) {
+      const result = await measureVisuals(source, { ...options(), plugin: pluginId }, dependencies(manifest))
+      expect(result.operationalError).toBe(true)
+      expect(result.failures.some((failure) => failure.code === 'filtered-capture')).toBe(true)
+      expect(result.targets.every((target) => target.plugin === pluginId)).toBe(true)
+      expect(result.cells.every((visual) => visual.plugin === pluginId && visual.status === 'fail')).toBe(true)
+    }
+  })
+
+  test('plugin measurement rejects and does not leak another plugin from a filtered manifest', async () => {
+    const source = inventory()
+    const pluginId = source.plugins[0]!.id
+    const foreign: CaptureTarget = { id: 'view:other/private', plugin: 'other.plugin', title: 'Private', kind: 'view' }
+    source.plugins.push({ id: 'other.plugin', directory: 'plugins/other.plugin', hasUi: true, targets: [foreign.id], sources: [] })
+    source.targets.push(foreign)
+    const targets = source.targets.filter((target) => target.plugin === pluginId)
+    const manifest = captureManifest(source, { scope: 'filtered', selectors: [pluginId], targets: [...targets, foreign] })
+    const result = await measureVisuals(source, { ...options(), plugin: pluginId }, dependencies(manifest))
+
+    expect(result.operationalError).toBe(true)
+    expect(result.failures.some((failure) => failure.code === 'target-ownership')).toBe(true)
+    expect(result.targets.every((target) => target.plugin === pluginId)).toBe(true)
+    expect(result.cells.every((visual) => visual.plugin === pluginId)).toBe(true)
+    expect(result.targets.some((target) => target.id === foreign.id)).toBe(false)
+    expect(result.cells.some((visual) => visual.targetId === foreign.id)).toBe(false)
+  })
+
 
   test('uses each image score independently and ignores the review passed flag', async () => {
     const source = inventory()

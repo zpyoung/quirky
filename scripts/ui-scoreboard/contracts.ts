@@ -56,7 +56,7 @@ export type VisualCell = {
   assessment: VisualAssessment | null; image: ImageEvidence | null; reference: ImageEvidence | null
   reviewer: ReviewerIdentity | null
 }
-export type VisualOptions = { outputDir: string; authorFamily: ModelFamily; reviewerAlias: string; browserExecutable?: string; signal?: AbortSignal }
+export type VisualOptions = { outputDir: string; authorFamily: ModelFamily; reviewerAlias: string; browserExecutable?: string; signal?: AbortSignal; plugin?: string }
 export type VisualDependencies = {
   capture: (options: CaptureOptions) => Promise<CaptureManifest>
   review: (manifest: CaptureManifest, options: ReviewOptions) => Promise<ReviewReport>
@@ -65,7 +65,7 @@ export type VisualResult = { cells: VisualCell[]; targets: CaptureTarget[]; fail
 export type StaticRatchet = Record<string, StaticCheckId[]>
 export type RatchetResult = { exitCode: 0 | 1 | 2; failures: Evidence[] }
 export type ScoreboardReport = {
-  schemaVersion: 1; mode: 'full' | 'static-only'; commit: string; sourceDigest: string; threshold: 85
+  schemaVersion: 1; mode: 'full' | 'static-only' | 'plugin'; plugin?: string; commit: string; sourceDigest: string; threshold: 85
   status: 'passed' | 'failed' | 'error'; goalPassed: boolean
   plugins: Array<{ id: string; checks: CheckResult[]; targets: string[] }>
   host: { checks: CheckResult[]; targets: string[] }; cells: VisualCell[]

@@ -1,0 +1,78 @@
+{
+  "id": "quirky.objective",
+  "apiVersion": "1.14.0",
+  "name": "Objective runner",
+  "version": "0.1.0",
+  "description": "Plans objectives with approval and dispatches their tasks in order on a local git worktree.",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": ["quirky.heimdall", "quirky.orchestration", "quirky.worktree"],
+  "contributes": {
+    "method": [
+      {
+        "id": "authorize",
+        "description": "Heimdall-only objective workspace authorization.",
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "validate",
+        "description": "Heimdall-only objective enrollment validation.",
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "read",
+        "description": "Heimdall-only objective tree and progress observation.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "decide",
+        "description": "Heimdall-only objective next-step decision.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "execute",
+        "description": "Heimdall-only objective plan activation and worker request.",
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "submission",
+        "description": "Heimdall-only worker report preflight.",
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "stop",
+        "description": "Heimdall-only objective stop predicate.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "pace",
+        "description": "Heimdall-only objective reconciliation pacing.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
+        "id": "detail",
+        "description": "Reads the local objective contract, draft, approved plan and task progress.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "watcherId": { "type": "string" } },
+          "required": ["watcherId"],
+          "additionalProperties": false
+        },
+        "result": {}
+      }
+    ]
+  }
+}
