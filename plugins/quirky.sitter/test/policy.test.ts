@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { Attempt, CapabilityMode, CheckState, JournalEntry, SitterCheck, SitterPayload, SitterWorld, Snapshot } from '../src/policy'
+import type { Attempt, CapabilityMode, CheckState, JournalEntry, SitterAction, SitterCheck, SitterPayload, SitterWorld, Snapshot } from '../src/policy'
 import {
   contentIdentity,
   decide,
@@ -110,7 +110,7 @@ function actionFor(value: SitterWorld = world(), capabilities = caps(), journal:
   return decide(snapshot(value), journal, enrollment(capabilities)).action
 }
 
-function attempt(action: NonNullable<ReturnType<typeof actionFor>>, overrides: Partial<Attempt> = {}): Attempt {
+function attempt(action: SitterAction, overrides: Partial<Attempt> = {}): Attempt {
   const seq = overrides.seq ?? 1
   const attemptId = overrides.attemptId ?? `attempt-${seq}`
   return {
@@ -131,7 +131,7 @@ function attempt(action: NonNullable<ReturnType<typeof actionFor>>, overrides: P
   }
 }
 
-function failedAttempts(action: NonNullable<ReturnType<typeof actionFor>>, count: number, startAtMs = T): Attempt[] {
+function failedAttempts(action: SitterAction, count: number, startAtMs = T): Attempt[] {
   return Array.from({ length: count }, (_, index) => {
     const ordinal = index + 1
     let evidenceKey: string
@@ -588,6 +588,28 @@ test('a refused action is retried twice on the same head, two minutes apart, the
     kind: 'merge', method: 'rebase', ordinal: 1, evidenceKey: JSON.stringify(['merge', H1, 'rebase', 1])
   })
   expect(stop(snapshot(updateWorld, T + 4 * RETRY_DELAY_MS), updateFailures, enrollment(caps({ updateBranch: 'off' })))).toBeNull()
+})
+
+test('hosting-refused action-required, stale and error reruns exhaust retries and park with the refusal', () => {
+  const reason = 'no_failed_checks: No failed GitHub Actions checks to rerun.'
+  for (const conclusion of ['action_required', 'stale', 'error']) {
+    const current = worldFromHosting(review(), hostingChecks([{
+      kind: 'check_run', name: 'build', status: 'completed', conclusion, checkRunId: 9001, workflowRunId: 41
+    }]), payload)
+    const action = actionFor(current)!
+    expect(action).toMatchObject({ kind: 'rerun-check', checkNames: ['build'], ordinal: 1 })
+    for (let count = 1; count < RETRY_LIMIT; count++) {
+      const failures = failedAttempts(action, count).map((entry) => ({ ...entry, reason }))
+      expect(decide(snapshot(current, T + count * RETRY_DELAY_MS), failures, enrollment()).action).toMatchObject({
+        kind: 'rerun-check', ordinal: count + 1
+      })
+    }
+    const failures = failedAttempts(action, RETRY_LIMIT).map((entry) => ({ ...entry, reason }))
+    const exhausted = snapshot(current, T + RETRY_LIMIT * RETRY_DELAY_MS)
+    const detail = `rerun-check failed 3 times on ${H1.slice(0, 12)}: ${reason}`
+    expect(stop(exhausted, failures, enrollment())).toEqual({ kind: 'park', reason: 'stop-predicate', detail })
+    expect(decide(exhausted, failures, enrollment())).toMatchObject({ action: null, reason: 'retries-exhausted', detail })
+  }
 })
 
 test('pacing follows one ordered rule list; the first match wins', () => {
