@@ -4560,7 +4560,7 @@
               "methods": [
                 "quirky.heimdall/fleet",
                 "quirky.heimdall/detail",
-                "quirky.heimdall/objectiveDetail"
+                "quirky.objective/detail"
               ],
               "positionals": [
                 {
