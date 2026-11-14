@@ -69,6 +69,45 @@ describe('vault public API', () => {
     expect(all.sessions.every((session) => session.hostId === 'local')).toBe(true)
   })
 
+  test('view revisions increase on writes, reject caller revisions, and advance after restart', async () => {
+    const vault = await start()
+    const revisionOf = (view: ViewState): number => {
+      if (typeof view.revision !== 'number') throw new Error('view revision must be numeric')
+      return view.revision
+    }
+
+    const initial = await vault.call<ViewState>('getView', {})
+    const initialRevision = revisionOf(initial)
+    vault.events.length = 0
+
+    const first = await vault.call<ViewState>('setView', { query: 'first' })
+    const firstRevision = revisionOf(first)
+    expect(firstRevision).toBeGreaterThan(initialRevision)
+
+    const second = await vault.call<ViewState>('setView', { selectedId: 'local:test' })
+    const secondRevision = revisionOf(second)
+    expect(secondRevision).toBeGreaterThan(firstRevision)
+    expect(revisionOf(await vault.call<ViewState>('getView', {}))).toBe(secondRevision)
+
+    const reset = await vault.call<ViewState>('resetView', {})
+    const resetRevision = revisionOf(reset)
+    expect(resetRevision).toBeGreaterThan(secondRevision)
+
+    await expect(vault.call('setView', { revision: 1 })).rejects.toMatchObject({
+      code: RpcErrorCode.InvalidParams
+    })
+    expect(revisionOf(await vault.call<ViewState>('getView', {}))).toBe(resetRevision)
+
+    const viewEvents = vault.events.filter((event) => event.type === 'quirky.vault/viewChanged')
+    expect(viewEvents).toHaveLength(3)
+    expect(viewEvents[0]).toMatchObject({ data: { view: { revision: firstRevision } } })
+    expect(viewEvents[1]).toMatchObject({ data: { view: { revision: secondRevision } } })
+    expect(viewEvents[2]).toMatchObject({ data: { view: { revision: resetRevision } } })
+
+    await vault.restart()
+    expect(revisionOf(await vault.call<ViewState>('getView', {}))).toBeGreaterThan(resetRevision)
+  })
+
   test('stable view settings survive daemon restart while query and scope are transient', async () => {
     const vault = await start()
     const changed = await vault.call<ViewState>('setView', {
