@@ -3446,6 +3446,24 @@
         }
       },
       {
+        "id": "projects-control",
+        "title": "Projects Control",
+        "palette": false,
+        "description": "Open or close the project picker or the column settings, go back from the view chooser to the picker, or show, hide or resize one column, in the Tasks Projects view mounted in the window that runs it. Field ids are the ones quirky tasks project-view lists, plus title and type. Returns how many mounted Projects views applied it.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": { "type": "string", "enum": ["picker", "column-panel", "back-to-picker", "column"] },
+            "open": { "type": "boolean" },
+            "fieldId": { "type": "string" },
+            "visible": { "type": "boolean" },
+            "width": { "type": "integer", "minimum": 60, "maximum": 800 }
+          },
+          "required": ["action"]
+        }
+      },
+      {
         "id": "issue-control",
         "title": "Control Task Issue Page",
         "palette": false,

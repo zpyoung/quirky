@@ -4667,6 +4667,14 @@
               "rebase"
             ]
           },
+          "merge-check-scope": {
+            "type": "string",
+            "description": "Hosted-review merge check scope.",
+            "enum": [
+              "all",
+              "required"
+            ]
+          },
           "owner": {
             "type": "string",
             "description": "Owner agent.",

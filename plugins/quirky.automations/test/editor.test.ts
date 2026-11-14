@@ -163,7 +163,8 @@ function makeFixture(options: FixtureOptions = {}) {
     revision: 0,
     navigation: {
       page: 'list', automationId: null, runId: null, tab: 'overview', query: '', host: 'all',
-      status: 'all', lastRun: 'all', agent: '', sort: 'name', direction: 'asc', runQuery: '', runStatus: 'all'
+      status: 'all', lastRun: 'all', agent: '', sort: 'name', direction: 'asc', runQuery: '', runStatus: 'all',
+      promptExpanded: false, historyStarts: [0], runLimit: 100, settingsNotice: false
     },
     editor: null
   }

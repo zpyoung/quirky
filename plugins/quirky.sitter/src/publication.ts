@@ -389,8 +389,9 @@ export async function preflightContention(
   }
 ): Promise<GateVerdict> {
   const kind = params.action.kind
+  const rebase = kind === 'update-branch' && params.enrollment.kindPayload.branchUpdateMode === 'rebase'
   if (kind !== 'prepare-fix' && kind !== 'prepare-conflict-resolution' &&
-    kind !== 'publish-fix' && kind !== 'publish-conflict-resolution') return { verdict: 'allow' }
+    kind !== 'publish-fix' && kind !== 'publish-conflict-resolution' && !rebase) return { verdict: 'allow' }
   const worktreeId = params.enrollment.worktreeId
   if (typeof worktreeId !== 'string' || worktreeId.length === 0) return hold('worktree-unavailable', 'the enrolled worktree id is missing')
   try {
@@ -421,8 +422,10 @@ export async function preflightContention(
     const expectedKind: PreparedCommitKind | undefined = kind.endsWith('fix') ? 'fix' : kind.endsWith('conflict-resolution') ? 'conflict-resolution' : undefined
     const state = await inspectWorktreeState(processRun, worktreeResult.path, expectedKind)
     if (state.localDirty) return hold('worktree-busy', 'uncommitted-changes: the worktree has tracked or untracked changes')
-    if (kind.startsWith('prepare-')) {
-      const rawExpected = (params.action as SitterAction & { expectedHeadSha?: unknown }).expectedHeadSha
+    if (kind.startsWith('prepare-') || rebase) {
+      const rawExpected = params.action.kind === 'update-branch'
+        ? params.action.head
+        : (params.action as SitterAction & { expectedHeadSha?: unknown }).expectedHeadSha
       const expected = typeof rawExpected === 'string' ? rawExpected : ''
       if (!isSha(expected) || state.localHeadSha !== expected) {
         const trailer = state.localPrepared?.attemptTrailer
