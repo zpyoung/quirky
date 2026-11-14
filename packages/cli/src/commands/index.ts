@@ -6,6 +6,7 @@ import { daemonRestart } from './daemon'
 import { serve } from './serve'
 import { distroInspect, distroInstall, distroList, distroRemove } from './distro'
 import { open } from './open'
+import { desktopPickFolder } from './desktop'
 import {
   pluginActivate,
   pluginContributions,
@@ -19,6 +20,7 @@ import {
 import { settingGet, settingList, settingReset, settingSet } from './setting'
 import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
+import { diagnosticsMemory } from './diagnostics'
 import { themeList, themeSet } from './theme'
 import {
   uiClosePanel,
@@ -54,6 +56,7 @@ const help: Command = {
 
 export const COMMANDS: Command[] = [
   status,
+  diagnosticsMemory,
   pluginList,
   pluginContributions,
   pluginEnable,
@@ -91,6 +94,7 @@ export const COMMANDS: Command[] = [
   themeList,
   themeSet,
   open,
+  desktopPickFolder,
   api,
   apiCall,
   skillShow,
