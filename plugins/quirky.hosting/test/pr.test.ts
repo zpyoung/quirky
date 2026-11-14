@@ -1441,6 +1441,12 @@ describe('quirky.hosting PR mutations', () => {
     expect(updateCall.args).toContain('PUT')
     expect(requestBody(updateCall)).toEqual({ expected_head_sha: expectedHead })
 
+    const malformedHead = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'not-a-sha'
+    }))
+    expect(reasonOf(malformedHead)).toBe('validation_error')
+    expect(updateCalls()).toHaveLength(1)
+
     const movedHead = await rejection(testHost.call('updateBranch', {
       worktree: testHost.worktree, number: 7, expectedHead: 'c'.repeat(40)
     }))

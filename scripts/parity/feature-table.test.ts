@@ -93,7 +93,7 @@ test('feature table exports the complete required inventory in document order wi
     expect(fixtureRow(result, id)).toMatchObject({ disposition: 'covered' })
   }
   const gaps = result.rows.filter((row) => row.disposition === 'gap')
-  expect(gaps.every((row) => ['pr-sitter', 'objective-runner'].includes(row.id))).toBe(true)
+  expect(gaps.map((row) => row.id)).toEqual(['objective-runner'])
   expect(fixtureRow(result, 'pr-sitter')).toMatchObject({ disposition: 'covered' })
   for (const row of gaps) expect(row.reason).toMatch(/Follow-up: \*\*[^*]+\*\*/)
   expect(result.rows).toHaveLength(39)
