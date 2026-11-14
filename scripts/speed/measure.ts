@@ -2176,6 +2176,7 @@ async function diagnosticTrial(
     }
     writeFileSync(join(context.out, resultPath), `${JSON.stringify(failureEvidence, null, 2)}\n`)
     diagnosticPaths.push(resultPath)
+  } finally {
     probe?.finish()
     probe?.stop()
     if (floodStart) {
