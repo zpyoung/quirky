@@ -150,13 +150,35 @@ async function workerSession(harness: WorkerAcceptance, dispatchId: string): Pro
   )
   const sessionId = shown.worker?.sessionId
   if (!sessionId) throw new Error(`worker ${dispatchId} has no session`)
+  expect(shown.worker?.startOptions.agent).toBe('claude')
   return sessionId
+}
+
+async function expectLiveWorkerAssignment(harness: WorkerAcceptance, watcherId: string, dispatchId: string): Promise<void> {
+  const live = await eventually(
+    () => jsonCli<HeimdallShow>(harness, ['heimdall', 'show', watcherId, '--json']),
+    value => value.workers.some(worker =>
+      worker.identity.dispatchId === dispatchId && worker.state === 'live' && worker.assignmentActive),
+    `worker ${dispatchId} to hold its live assignment`,
+    90_000,
+  )
+  expect(live.workers).toContainEqual(expect.objectContaining({
+    identity: expect.objectContaining({ dispatchId }),
+    state: 'live',
+    assignmentActive: true,
+  }))
 }
 
 function reportPathFrom(spec: string): string {
   const match = spec.match(/^REPORT PATH: (.+)$/m)
   if (!match) throw new Error('worker spec has no REPORT PATH')
   return match[1]!
+}
+
+function promptSectionJson(spec: string, label: string): unknown {
+  const text = spec.match(new RegExp(`^${label}:\\n([^\\n]+)$`, 'm'))?.[1]
+  if (text === undefined) throw new Error(`worker spec has no ${label} JSON context`)
+  return JSON.parse(text)
 }
 
 async function expectKindHookGuard(harness: WorkerAcceptance, method: string): Promise<void> {
@@ -234,13 +256,6 @@ async function enrollObjective(
   }
   expect(created.kind).toBe('enrolled')
   expect(created.enrollment.kind).toBe('objective')
-  expect(created.enrollment.kindPayload).toMatchObject({
-    objectiveText: objective,
-    tier: options.tier,
-    landingBar: options.landingBar ?? 'files-on-disk',
-    writeTerritory: options.territory,
-    gates: options.gate ? [{ ...options.gate, timeoutSeconds: 1800 }] : [],
-  })
   expect(created.enrollment.capabilities).toEqual({
     plan: 'gated',
     implement: 'on',
@@ -255,6 +270,20 @@ async function enrollObjective(
   const main = worktrees.find(worktree => worktree.isMain)
   if (!main) throw new Error(`fixture repo ${repo.id} has no main worktree`)
   expect(created.enrollment.worktreeId).toBe(main.id)
+  expect(created.enrollment.kindPayload).toEqual({
+    objectiveText: objective,
+    tier: options.tier,
+    landingBar: options.landingBar ?? 'files-on-disk',
+    lanesEnabled: true,
+    maxConcurrency: 3,
+    writeTerritory: options.territory,
+    roleAgents: {},
+    gates: options.gate ? [{ ...options.gate, timeoutSeconds: 1800 }] : [],
+    worktree: `id:${main.id}`,
+  })
+  const initial = await objectiveDetail(harness, created.enrollment.watcherId)
+  expect(initial.draft).toBeNull()
+  expect(initial.revision).toBeNull()
   return created.enrollment.watcherId
 }
 
@@ -611,6 +640,7 @@ test('drives an objective from draft rejection and baseline overrun repair throu
   const draft = await objectiveDetail(harness, watcherId)
   expect(draft.draft).toMatchObject({ kind: 'initial', plannerAttemptId: firstPlanner.attemptId })
   expect(draft.draft?.digest).toMatch(/^[0-9a-f]{64}$/)
+  expect(draft.revision).toBeNull()
   const draftApproval = await approvalFor(
     harness,
     watcherId,
@@ -698,6 +728,10 @@ test('drives an objective from draft rejection and baseline overrun repair throu
   )).report.status).toBe('accepted')
   await harness.fixture.call('quirky.heimdall/reconcile', { watcherId })
   await settledAttempt(harness, watcherId, planner.attemptId!, 'landed')
+  const planned = await objectiveDetail(harness, watcherId)
+  expect(planned.revision).toBeNull()
+  expect(planned.draft?.digest).toMatch(/^[0-9a-f]{64}$/)
+  const approvedDigest = planned.draft!.digest
 
   const activateApproval = await approvalFor(harness, watcherId, 'activate-plan')
   await approve(harness, watcherId, activateApproval.escalationId)
@@ -707,6 +741,30 @@ test('drives an objective from draft rejection and baseline overrun repair throu
   expect(frozenAttempt.action).toMatchObject({ taskKey: 'frozen-base', revision: 1 })
   const frozenSession = await workerSession(harness, frozenAttempt.dispatchId!)
   const frozenTask = await orchestrationTaskFor(harness, watcherId, frozenAttempt)
+  const activated = await objectiveDetail(harness, watcherId)
+  expect(activated.draft).toBeNull()
+  expect(activated.revision).toMatchObject({
+    number: 1,
+    digest: approvedDigest,
+    approvedAtMs: expect.any(Number),
+    tasks: [
+      expect.objectContaining({ taskKey: 'frozen-base', state: 'in-flight' }),
+      expect.objectContaining({ taskKey: 'write-result', state: 'pending' }),
+    ],
+  })
+  await expectLiveWorkerAssignment(harness, watcherId, frozenAttempt.dispatchId!)
+  expect(promptSectionJson(frozenTask.spec, 'ASSIGNED TASK')).toEqual({
+    taskKey: 'frozen-base',
+    title: 'Write the base module',
+    spec: 'Create the base module before the result task.',
+    deps: [],
+    criteria: [{ body: 'The base module exists', shellCheckable: true, checkCommand: 'test -s src/frozen.ts' }],
+    territory: ['src/**'],
+  })
+  expect(promptSectionJson(frozenTask.spec, 'PLAN PROGRESS')).toEqual([
+    expect.objectContaining({ taskKey: 'frozen-base', state: 'in-flight' }),
+    expect.objectContaining({ taskKey: 'write-result', state: 'pending' }),
+  ])
   expect(frozenTask.spec).toContain('test -s src/frozen.ts')
   writeWorkspaceFile(repo, 'src/frozen.ts', 'export const frozen = true\n')
   const frozenReport = await submitWorkerReport(harness, watcherId, frozenSession, frozenAttempt, {
@@ -723,6 +781,19 @@ test('drives an objective from draft rejection and baseline overrun repair throu
   expect(overrunAttempt.action).toMatchObject({ taskKey: 'write-result', revision: 1 })
   const overrunSession = await workerSession(harness, overrunAttempt.dispatchId!)
   const overrunTask = await orchestrationTaskFor(harness, watcherId, overrunAttempt)
+  expect(promptSectionJson(overrunTask.spec, 'ASSIGNED TASK')).toEqual({
+    taskKey: 'write-result',
+    title: 'Write the result module',
+    spec: 'Create the result module and report every changed path.',
+    deps: ['frozen-base'],
+    criteria: [{ body: 'The result module contains repaired', shellCheckable: true, checkCommand: 'grep -q repaired src/result.ts' }],
+    territory: ['src/**'],
+  })
+  expect(promptSectionJson(overrunTask.spec, 'PLAN PROGRESS')).toEqual([
+    expect.objectContaining({ taskKey: 'frozen-base', state: 'succeeded', successfulAttemptId: frozenAttempt.attemptId,
+      summary: 'Wrote the base module.' }),
+    expect.objectContaining({ taskKey: 'write-result', state: 'in-flight' }),
+  ])
   const overrunReportPath = reportPathFrom(overrunTask.spec)
   writeWorkspaceFile(repo, 'src/unreported-result.ts', 'export const result = \"bad\"\n')
   writeWorkspaceFile(repo, 'outside/unrelated-change.txt', 'This path is outside write territory.\n')
@@ -929,6 +1000,10 @@ test('completes a full-tier objective through reviewer, integrator edits, re-che
   expect(plannerReport.result.report.status).toBe('accepted')
   await harness.fixture.call('quirky.heimdall/reconcile', { watcherId })
   await settledAttempt(harness, watcherId, planner.attemptId!, 'landed')
+  const featureDraft = await objectiveDetail(harness, watcherId)
+  expect(featureDraft.revision).toBeNull()
+  expect(featureDraft.draft?.digest).toMatch(/^[0-9a-f]{64}$/)
+  const featureDigest = featureDraft.draft!.digest
   const activateApproval = await approvalFor(harness, watcherId, 'activate-plan')
   await approve(harness, watcherId, activateApproval.escalationId)
   await harness.fixture.call('quirky.heimdall/reconcile', { watcherId })
@@ -936,6 +1011,26 @@ test('completes a full-tier objective through reviewer, integrator edits, re-che
   const implementer = await runningAttempt(harness, watcherId, 'dispatch-node')
   const implementerSession = await workerSession(harness, implementer.dispatchId!)
   const implementerTask = await orchestrationTaskFor(harness, watcherId, implementer)
+  const featureRevision = await objectiveDetail(harness, watcherId)
+  expect(featureRevision.draft).toBeNull()
+  expect(featureRevision.revision).toMatchObject({
+    number: 1,
+    digest: featureDigest,
+    approvedAtMs: expect.any(Number),
+    tasks: [expect.objectContaining({ taskKey: 'feature', state: 'in-flight' })],
+  })
+  await expectLiveWorkerAssignment(harness, watcherId, implementer.dispatchId!)
+  expect(promptSectionJson(implementerTask.spec, 'ASSIGNED TASK')).toEqual({
+    taskKey: 'feature',
+    title: 'Implement the feature',
+    spec: 'Create the feature module.',
+    deps: [],
+    criteria: [{ body: 'Feature module exports feature', shellCheckable: true, checkCommand: 'grep -q feature src/feature.ts' }],
+    territory: ['src/**'],
+  })
+  expect(promptSectionJson(implementerTask.spec, 'PLAN PROGRESS')).toEqual([
+    expect.objectContaining({ taskKey: 'feature', state: 'in-flight' }),
+  ])
   writeWorkspaceFile(repo, 'src/feature.ts', "export const feature = 'implementer'\n")
   expect((await submitWorkerReport(harness, watcherId, implementerSession, implementer, {
     taskKey: 'feature',
