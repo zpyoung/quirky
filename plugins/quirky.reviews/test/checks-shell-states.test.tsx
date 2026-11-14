@@ -548,3 +548,23 @@ test('Checks without a selected workspace renders genuine absence', async () => 
   expect(element.querySelector('.ui-empty-state')?.textContent).toContain('Select a workspace to view checks.')
   expect(element.querySelector('.ui-notice-line')).toBeNull()
 })
+
+for (const surface of surfaces) {
+  test(`${surface.kind} shell rejects invalid state and recovers through its reported Retry`, async () => {
+    const harness = makeContext(42)
+    let reads = 0
+    harness.methods.set('quirky.reviews/state', () => ++reads === 1 ? {} : reviewsState())
+    const reports: unknown[] = []
+    const { element } = await mountSurface(harness, surface.id, reports)
+    expect(element.querySelectorAll('.ui-inline-error')).toHaveLength(1)
+    expect(element.querySelector('.ui-inline-error')?.textContent).toContain('The daemon returned invalid review state.')
+    expect(element.querySelector('.ui-notice-line')).toBeNull()
+    const descriptor = latestShellControl(reports, surface.id)
+    await act(async () => {
+      expect(await requestReviewsUiControl(harness.context, { target: String(descriptor.target), generation: Number(descriptor.generation), action: 'retry' })).toEqual({ delivered: true })
+    })
+    expect(reads).toBeGreaterThan(1)
+    expect(element.querySelector('.ui-inline-error')).toBeNull()
+    expect(element.querySelector(surface.child)).not.toBeNull()
+  })
+}
