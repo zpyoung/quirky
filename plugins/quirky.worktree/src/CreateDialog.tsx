@@ -796,7 +796,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               <p className="ui-text-muted">{currentSearch.errors.join(' ')}</p>
             )}
             {currentSearch?.status === 'ready' && currentSearch.items.length === 0 && currentSearch.errors.length === 0 && (
-              <EmptyState message="No GitHub issues or pull requests found." />
+              <div role="status"><EmptyState message="No GitHub issues or pull requests found." /></div>
             )}
             {currentSearch?.status === 'ready' && currentSearch.items.length > 0 && (
               <ul className="ui-tree ui-stack" aria-label="GitHub issues and pull requests">
@@ -841,7 +841,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             {occupiedBranch && (
               <InlineError message={`Branch “${occupiedBranch.name}” is already in use in workspace “${occupiedBranch.checkedOutIn?.split('/').at(-1)}”. Open that workspace or choose another branch.`} />
             )}
-            {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <EmptyState message="No matching branches." />}
+            {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <div role="status"><EmptyState message="No matching branches." /></div>}
             {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length > 0 && (
               <ul className="ui-tree">
                 {currentBranchSearch.refs.map((ref) => (

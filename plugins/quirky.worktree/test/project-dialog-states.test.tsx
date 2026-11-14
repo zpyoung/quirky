@@ -321,10 +321,14 @@ test('successful empty GitHub, branch and shared-script reads use EmptyState', a
   const github = await mountCreate()
   await click(button(github.dialog, 'GitHub')!)
   expect(await waitFor(() => emptyText(github.dialog))).toBe('No GitHub issues or pull requests found.')
+  expect(github.dialog.querySelector('[role="status"] .ui-empty-state')?.textContent?.trim())
+    .toBe('No GitHub issues or pull requests found.')
 
   const branch = await mountCreate()
   await click(button(branch.dialog, 'Branch')!)
   expect(await waitFor(() => emptyText(branch.dialog))).toBe('No matching branches.')
+  expect(branch.dialog.querySelector('[role="status"] .ui-empty-state')?.textContent?.trim())
+    .toBe('No matching branches.')
 
   const settings = await mountSettings()
   expect(await waitFor(() => emptyText(settings.dialog))).toBe('No shared scripts.')
