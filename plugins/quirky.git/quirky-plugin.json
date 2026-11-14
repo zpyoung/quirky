@@ -687,6 +687,10 @@
             "expected": {
               "type": "string",
               "description": "Full 40- or 64-character commit SHA the remote branch must still be at; defaults to the remote-tracking ref."
+            },
+            "expectedLocalHead": {
+              "type": "string",
+              "description": "Full 40-character commit SHA to publish; requires purpose and refuses a changed local HEAD."
             }
           }
         },
