@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, type SyntheticEvent, type UIEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, EmptyState, FormRow, IconButton, SectionHeader } from '@quirky/ui'
+import { Badge, Button, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'
 import { StateLoader } from './loader'
 import type { DockAttachment, DockOptions, DockQuestion, DockState, PickerItem, SendResult } from '../types'
 
@@ -21,7 +21,7 @@ type PickerState = {
   truncated: boolean
   error: string | null
 }
-export type ComposerActions = { focus(): void; flush(): Promise<boolean> }
+export type ComposerActions = { focus(): void; flush(): Promise<boolean>; openAttach(): void }
 type RegisterActions = (pane: string, actions: ComposerActions | null) => void
 type DraftWrite = { baseRevision: number; text: string; version: number }
 type SendSnapshot = { baseRevision: number; text: string }
@@ -445,7 +445,8 @@ export function Composer({ context, pane, session, registerActions }: Props) {
   useLayoutEffect(() => {
     registerActions(pane, {
       focus() { editorRef.current?.focus() },
-      flush: flushDraft
+      flush: flushDraft,
+      openAttach() { fileRef.current?.click() },
     })
     return () => registerActions(pane, null)
   }, [pane, registerActions, flushDraft])
@@ -478,7 +479,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     }
   }, [changeDraft])
 
-  const browseHistory = useCallback(async (direction: 'previous' | 'next') => {
+  const browseHistory = async (direction: 'previous' | 'next') => {
     if (!(await flushDraft())) return
     try {
       const result = await context.call(`${PLUGIN_METHOD}history`, { pane, direction })
@@ -500,9 +501,9 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     } catch (reason) {
       setError(errorMessage(reason))
     }
-  }, [context, pane, flushDraft, reconcileState, setLocalValue])
+  }
 
-  const stop = useCallback(async () => {
+  const stop = async () => {
     if (stateRef.current?.enabled !== true) return
     try {
       await context.call(`${PLUGIN_METHOD}cancel`, { pane, interrupt: true })
@@ -512,7 +513,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     } catch (reason) {
       setError(errorMessage(reason))
     }
-  }, [context, pane, flushDraft, refreshState])
+  }
   const restoreFailedSend = useCallback((id: string, sentVersion: number) => {
     if (localVersionRef.current === sentVersion) return
     const snapshot = sendSnapshotsRef.current.get(id)
@@ -528,7 +529,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     schedulePersist()
   }, [schedulePersist, setLocalValue])
 
-  const send = useCallback(async () => {
+  const send = async () => {
     const current = stateRef.current
     if (current === null || current.question !== null || !current.enabled || !current.supported || current.disabledReason !== null || conflictRef.current) return
     if (localDraftRef.current.trim() === '' && current.attachments.length === 0) return
@@ -563,17 +564,16 @@ export function Composer({ context, pane, session, registerActions }: Props) {
       if (sendId !== null) sendSnapshotsRef.current.delete(sendId)
       setSending(false)
     }
-  }, [context, flushDraft, pane, refreshState, restoreFailedSend, setLocalValue])
+  }
 
   const chooseAnswer = (questionIndex: number, value: string, multiple: boolean) => {
-    setAnswers((current) => {
-      const next = current.map((answers) => [...answers])
-      while (next.length <= questionIndex) next.push([])
-      next[questionIndex] = multiple
-        ? next[questionIndex]!.includes(value) ? next[questionIndex]!.filter((answer) => answer !== value) : [...next[questionIndex]!, value]
+    setAnswers((current) => Array.from({ length: Math.max(current.length, questionIndex + 1) }, (_, index) => {
+      const selected = current[index] ?? []
+      if (index !== questionIndex) return [...selected]
+      return multiple
+        ? selected.includes(value) ? selected.filter((answer) => answer !== value) : [...selected, value]
         : [value]
-      return next
-    })
+    }))
   }
 
   const answerQuestion = async () => {
@@ -619,7 +619,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     }
   }
 
-  const uploadFiles = useCallback(async (files: File[]) => {
+  const uploadFiles = async (files: File[]) => {
     if (stateRef.current?.enabled !== true) {
       setError('Terminal dock is disabled.')
       return
@@ -644,7 +644,27 @@ export function Composer({ context, pane, session, registerActions }: Props) {
         setError(`Could not attach ${file.name}: ${errorMessage(reason)}`)
       }
     }
-  }, [context, pane, reconcileState])
+  }
+  const removeAttachment = (attachment: string) => {
+    if (stateRef.current?.enabled !== true) return
+    void context.call(`${PLUGIN_METHOD}removeAttachment`, { pane, attachment }).then((result) => {
+      if (!isDockState(result)) throw new Error('Attachment removal returned invalid state.')
+      reconcileState(result)
+    }).catch((reason: unknown) => setError(errorMessage(reason)))
+  }
+
+  const openAttachmentPicker = async () => {
+    setError(null)
+    try {
+      const identity = await context.call('ui.window.self', {})
+      if (!record(identity) || typeof identity.connId !== 'number' || !Number.isSafeInteger(identity.connId) || identity.connId <= 0) {
+        throw new Error('ui.window.self returned an invalid connection identity.')
+      }
+      await context.executeCommand('command:quirky.terminal-dock/attach', { pane, connId: identity.connId }, { activateOwner: false })
+    } catch (reason) {
+      setError(errorMessage(reason))
+    }
+  }
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
@@ -751,18 +771,21 @@ export function Composer({ context, pane, session, registerActions }: Props) {
   const contextUsage = state?.options.context ?? null
   const contextPercent = contextUsage !== null && contextUsage.limit > 0 ? Math.min(100, Math.max(0, Math.round((contextUsage.used / contextUsage.limit) * 100))) : null
   const contextStyle = contextPercent === null ? undefined : { '--qtd-context-used': `${contextPercent}%` } as CSSProperties
+  const loadingState = state === null && loadError === null
   const visibleError = error ?? loadError
+  const dirtyLabel = conflicted ? 'Draft conflict' : 'Saving draft…'
 
   return (
     <div className={`qtd-composer${state?.passthrough ? ' qtd-passthrough' : ''}`} onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() }} onDrop={onDrop}>
-      {(state?.passthrough || disabledReason !== null && state !== null || state?.notice || state?.options.notice || warning !== null || visibleError !== null) && (
+      {(loadingState || state?.passthrough || disabledReason !== null && state !== null || state?.notice || state?.options.notice || warning !== null || visibleError !== null) && (
         <div className="qtd-status-row" role="group" aria-label="Composer status">
+          {loadingState && <NoticeLine>Loading terminal dock state…</NoticeLine>}
           {state?.passthrough && <div className="qtd-notice qtd-passthrough-notice" role="status" title="Passthrough active — terminal has keyboard focus" aria-description="Passthrough active — terminal has keyboard focus">Passthrough active — terminal has keyboard focus</div>}
           {disabledReason !== null && state !== null && <div id="qtd-disabled-reason" className="qtd-notice" role="status" title={disabledReason} aria-description={disabledReason}>{disabledReason}</div>}
           {state?.notice && <div className="qtd-notice" role="status" title={state.notice} aria-description={state.notice}>{state.notice}</div>}
           {state?.options.notice && <div className="qtd-notice" role="status" title={state.options.notice} aria-description={state.options.notice}>{state.options.notice}</div>}
           {warning !== null && <div className="qtd-notice qtd-warning" role="alert" title={warning} aria-description={warning}>{warning}</div>}
-          {visibleError !== null && <div className="qtd-notice qtd-error" role="alert" title={visibleError} aria-description={visibleError}>{visibleError}</div>}
+          {visibleError !== null && <InlineError message={visibleError} />}
         </div>
       )}
       {(activeQuestion !== null && !activeQuestion.dismissed || picker !== null) && (
@@ -778,7 +801,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
               onInteract={(action) => void interact(activeQuestion, action)}
             />
           )}
-          {picker !== null && <PickerMenu picker={picker} onChoose={insertPickerItem} onSelect={(selected) => {
+          {picker !== null && <PickerMenu picker={picker} onPickItem={insertPickerItem} onHighlight={(selected) => {
             const next = { ...picker, selected }
             pickerRef.current = next
             setPicker(next)
@@ -796,7 +819,8 @@ export function Composer({ context, pane, session, registerActions }: Props) {
           value={draft}
           rows={3}
           onChange={onDraftChange}
-          onSelect={onSelection}
+          onKeyUp={onSelection}
+          onMouseUp={onSelection}
           onScroll={onScroll}
           onKeyDown={onKeyDown}
           onCompositionStart={onCompositionStart}
@@ -809,13 +833,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
       </div>
       <div className="qtd-attachments" role="list" aria-label="Attachments">
         {state === null ? null : state.attachments.map((attachment) => (
-          <AttachmentChip key={attachment.id} attachment={attachment} disabled={!state.enabled} onRemove={() => {
-            if (state.enabled !== true) return
-            void context.call(`${PLUGIN_METHOD}removeAttachment`, { pane, attachment: attachment.id }).then((result) => {
-              if (!isDockState(result)) throw new Error('Attachment removal returned invalid state.')
-              reconcileState(result)
-            }).catch((reason: unknown) => setError(errorMessage(reason)))
-          }} />
+          <AttachmentChip key={attachment.id} attachment={attachment} disabled={!state.enabled} onRemove={() => removeAttachment(attachment.id)} />
         ))}
       </div>
       <div className="qtd-actions">
@@ -832,13 +850,17 @@ export function Composer({ context, pane, session, registerActions }: Props) {
               </span>
             )}
           </div>
-          {dirty && <span className="qtd-action-status" role="status" title={conflicted ? 'Draft conflict' : 'Saving draft…'} aria-description={conflicted ? 'Draft conflict' : 'Saving draft…'}>{conflicted ? 'Draft conflict' : 'Saving draft…'}</span>}
+          {dirty && <span className="qtd-action-status" role="status" title={dirtyLabel} aria-description={dirtyLabel}>{dirtyLabel}</span>}
           {state?.activeSend !== null && state?.activeSend !== undefined && <span className="qtd-action-status" role="status" title={state.activeSend.phase} aria-description={state.activeSend.phase}>{state.activeSend.phase}</span>}
         </div>
         <div className="qtd-action-buttons">
           <input ref={fileRef} className="qtd-file-input" type="file" multiple aria-label="Attach files" disabled={state === null || !state.enabled} onChange={onFileChange} />
-          <Button type="button" className="qtd-attach" aria-label="Attach file" disabled={state === null || !state.enabled} onClick={() => fileRef.current?.click()}>Attach</Button>
-          <Button type="button" className="qtd-send" variant={shouldStop ? 'destructive' : 'primary'} aria-label={shouldStop ? 'Stop' : 'Send'} disabled={state === null || !state.enabled || !shouldStop && sendDisabled} onClick={() => shouldStop ? void stop() : void send()}>{shouldStop ? 'Stop' : 'Send'}</Button>
+          <Button type="button" className="qtd-attach" aria-label="Attach file" disabled={state === null || !state.enabled} onClick={openAttachmentPicker}>Attach</Button>
+          {shouldStop ? (
+            <Button type="button" className="qtd-send" variant="destructive" aria-label="Stop" disabled={state === null || !state.enabled} onClick={() => void stop()}>Stop</Button>
+          ) : (
+            <Button type="button" className="qtd-send" variant="primary" aria-label="Send" disabled={sendDisabled} onClick={() => void send()}>Send</Button>
+          )}
         </div>
       </div>
     </div>
@@ -861,14 +883,17 @@ function QuestionCard({ question, answers, answering, disabled, onAnswer, onSubm
 }) {
   const idPrefix = useId()
   const collapsed = question.collapsed
+  const badgeTone = question.kind === 'permission' ? 'needs-you' : 'accent'
+  const badgeLabel = question.kind === 'permission' ? 'Permission request' : 'Agent question'
+  const collapseLabel = collapsed ? 'Expand question' : 'Collapse question'
   return (
     <section className="qtd-question-card" role="region" aria-label={question.kind === 'permission' ? 'Pending permission' : 'Pending question'}>
       <SectionHeader
         title={question.title}
         actions={
           <>
-            <Badge tone={question.kind === 'permission' ? 'needs-you' : 'accent'}>{question.kind === 'permission' ? 'Permission request' : 'Agent question'}</Badge>
-            <Button type="button" variant="secondary" aria-label={collapsed ? 'Expand question' : 'Collapse question'} disabled={disabled} onClick={() => onInteract(collapsed ? 'expand' : 'collapse')}>{collapsed ? 'Expand question' : 'Collapse question'}</Button>
+            <Badge tone={badgeTone}>{badgeLabel}</Badge>
+            <Button type="button" variant="secondary" aria-label={collapseLabel} disabled={disabled} onClick={() => onInteract(collapsed ? 'expand' : 'collapse')}>{collapseLabel}</Button>
             <Button type="button" variant="secondary" aria-label="Dismiss question" disabled={disabled} onClick={() => onInteract('dismiss')}>Dismiss</Button>
           </>
         }
@@ -916,15 +941,18 @@ function QuestionCard({ question, answers, answering, disabled, onAnswer, onSubm
   )
 }
 
-function PickerMenu({ picker, onChoose, onSelect }: { picker: PickerState; onChoose(item: PickerItem): void; onSelect(index: number): void }) {
+function PickerMenu({ picker, onPickItem, onHighlight }: { picker: PickerState; onPickItem(item: PickerItem): void; onHighlight(index: number): void }) {
   const label = picker.kind === 'slash' ? 'Slash commands and skills' : 'Workspace files'
+  const loadingMessage = picker.kind === 'slash' ? 'Loading commands and skills…' : 'Loading workspace files…'
+  const errorMessage = `Could not load ${picker.kind === 'slash' ? 'commands and skills' : 'workspace files'}: ${picker.error}`
+  const emptyMessage = picker.kind === 'slash' ? 'No commands or skills found.' : 'No matching workspace files.'
   return (
     <div className="qtd-picker" role="listbox" aria-label={label} aria-busy={picker.status === 'loading'}>
-      {picker.status === 'loading' && <div className="qtd-picker__state" role="status">Loading {picker.kind === 'slash' ? 'commands and skills' : 'workspace files'}…</div>}
-      {picker.status === 'error' && <div className="qtd-picker__state" role="alert">Could not load {picker.kind === 'slash' ? 'commands and skills' : 'workspace files'}: {picker.error}</div>}
-      {picker.status === 'ready' && picker.items.length === 0 && <div className="qtd-picker__state" role="status"><EmptyState message={picker.kind === 'slash' ? 'No commands or skills found.' : 'No matching workspace files.'} /></div>}
+      {picker.status === 'loading' && <div className="qtd-picker__state"><NoticeLine>{loadingMessage}</NoticeLine></div>}
+      {picker.status === 'error' && <div className="qtd-picker__state"><InlineError message={errorMessage} /></div>}
+      {picker.status === 'ready' && picker.items.length === 0 && <div className="qtd-picker__state"><EmptyState message={emptyMessage} /></div>}
       {picker.status === 'ready' && picker.items.map((item, index) => (
-        <Button key={item.id} type="button" role="option" aria-selected={index === picker.selected} className={`qtd-picker__item${index === picker.selected ? ' qtd-picker__item--active' : ''}`} onMouseEnter={() => onSelect(index)} onClick={() => onChoose(item)}>
+        <Button key={item.id} type="button" role="option" aria-selected={index === picker.selected} className={`qtd-picker__item${index === picker.selected ? ' qtd-picker__item--active' : ''}`} onMouseEnter={() => onHighlight(index)} onClick={() => onPickItem(item)}>
           <span>{item.label}</span>{item.detail && <small>{item.detail}</small>}
         </Button>
       ))}
