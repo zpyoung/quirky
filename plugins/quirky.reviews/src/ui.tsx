@@ -9,6 +9,7 @@ import { ChecksPanel, ChecksAgentDialog } from './checks/ChecksPanel'
 import { CreateReview } from './create/CreateReview'
 import { HostingSettings } from './create/HostingSettings'
 import { ChecksSummary } from './StatusBarItem'
+import { requestOpenSitter } from './checks/data'
 import { nextDraftTick } from './draft-field'
 function record(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -133,6 +134,37 @@ export function activate(context: UiPluginContext): void {
   context.provide(CREATE_VIEW, mount(context, 'create'))
   context.provide(SETTINGS_VIEW, mount(context, 'settings'))
   context.provide('command:quirky.reviews/show-checks', () => context.call('quirky.reviews/showChecks'))
+  context.provide('command:quirky.reviews/open-sitter', async (input?: unknown) => {
+    const requestedWorktree = record(input) && typeof input.worktree === 'string' && input.worktree.trim() !== ''
+      ? input.worktree
+      : worktreeOf(context.getLayout())
+    requestOpenSitter(requestedWorktree)
+    const openPanels = Object.values(context.getLayout().tools?.open ?? {})
+    if (!openPanels.includes(CHECKS_PANEL)) await context.call('quirky.reviews/showChecks')
+  })
+  context.provide('command:quirky.reviews/arm-sitter', (input?: unknown) =>
+    context.call('quirky.reviews/checksSitterArm', record(input) ? input : {}))
+  context.provide('command:quirky.reviews/approve-sitter', (input?: unknown) =>
+    context.call('quirky.reviews/checksSitterApprove', record(input) ? input : {}))
+  context.provide('command:quirky.reviews/stop-sitter', (input?: unknown) =>
+    context.call('quirky.reviews/checksSitterStop', record(input) ? input : {}))
+  context.provide('command:quirky.reviews/stop-all-sitters', async () => {
+    const result = await context.call('quirky.reviews/checksSitterStopAll', {})
+    if (record(result) && typeof result.warning === 'string' && result.warning.trim() !== '') throw new Error(result.warning)
+    return result
+  })
+  context.provide('command:quirky.reviews/copy-sitter-debug', async (input?: unknown) => {
+    const result = await context.call('quirky.reviews/checksSitterDebugReport', record(input) ? input : {})
+    const report = record(result) ? result.report : null
+    if (report === null || typeof report !== 'object') throw new Error('The PR Sitter debug report is unavailable.')
+    if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
+      throw new Error('Clipboard access is unavailable in this window.')
+    }
+    const text = JSON.stringify(report, null, 2)
+    if (typeof text !== 'string') throw new Error('The PR Sitter debug report could not be serialized.')
+    await navigator.clipboard.writeText(text)
+    return { copied: true }
+  })
   context.provide('command:quirky.reviews/open-review', (input?: unknown) => {
     if (!record(input)) throw new Error('Select a review target.')
     return context.call('quirky.reviews/open', input)

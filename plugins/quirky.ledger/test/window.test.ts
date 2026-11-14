@@ -392,6 +392,7 @@ test('SC-17: triage snapshots conflict cleanly, then approval and confirmed stat
   const filed = await createBug(world, 'Triage snapshot record')
   const id = filed.entry.id as string
   await openOwnerCommand(world)
+  await world.win.waitFor(() => ledgerPage()?.querySelector(`[data-entry-id="${id}"]`))
   await click(button(ledgerPage()!, 'Triage')!)
   const triage = await world.win.waitFor(() => dialogNamed('Operation review'))
   expect((await request(world, { operation: 'show', target: { owner: owner(world) }, id })).entry.state).toBe('open')
@@ -522,7 +523,7 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   const attached = await request(world, { operation: 'catalog' })
   expect(attached.ledgers).toContainEqual(expect.objectContaining({ owner: { tier: 'project', id: replacement.id }, entryCount: 1 }))
 
-  await click(button(detachedPage, 'Delete ledger')!)
+  await click(await world.win.waitFor(() => button(detachedPage, 'Delete ledger')))
   const deleteConfirm = await world.win.waitFor(() => dialogNamed('Confirm ledger deletion'))
   await click(button(deleteConfirm, 'Confirm')!)
   await world.win.waitFor(() => chooserSection())
@@ -562,4 +563,63 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   const confirm = await world.win.waitFor(() => dialogNamed('Confirm ledger deletion'))
   await click(button(confirm, 'Confirm')!)
   await world.win.waitFor(async () => (await request(world, { operation: 'catalog' })).ledgers.length === 0)
+}, SLOW)
+
+test('g3-19: public controls address page and panel independently and confirm only displayed snapshots', async () => {
+  const world = await boot()
+  await request(world, {
+    operation: 'file', target: { workspaceId: world.workspace.id }, type: 'bug',
+    content: { title: 'Panel stays unchanged', file: { path: 'src/panel.ts', base: { kind: 'project', id: world.repo.id } }, description: 'Origin-aware panel fixture.', severity: 'low' }
+  })
+  const group = (await world.agent.callAny('quirky.repo/groupCreate', { name: 'control-group' })) as ProjectGroup
+  await world.agent.callAny('quirky.repo/groupAdd', { group: group.id, repo: world.repo.id })
+  const filed = await request(world, {
+    operation: 'file', target: { owner: groupOwner(group) }, type: 'proposal',
+    content: { title: 'Displayed group snapshot', context: 'Control routing', recommendation: 'Use the addressed ledger' }
+  })
+  await world.agent.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: world.workspace.id } })
+  await world.agent.callAny('ui.view.open', { id: LEDGER_VIEW, input: { target: { ledgerId: filed.ledger.ledgerId } } })
+  await world.agent.callAny('ui.panel.open', { id: LEDGER_PANEL })
+  const panel = await world.win.waitFor(() => document.querySelector<HTMLElement>('[aria-label="Ledger panel"]'))
+  await world.win.waitFor(() => panel.textContent?.includes('Panel stays unchanged'))
+  await world.win.waitFor(() => ledgerPage()?.textContent?.includes('Displayed group snapshot'))
+  const reports = (await uiState(world.agent)).slots
+  const pageReport = reports.find((slot) => slot.id === LEDGER_VIEW)!.report as { instance: string }
+  const panelReport = reports.find((slot) => slot.id === LEDGER_PANEL)!.report as { instance: string }
+  expect(typeof pageReport.instance).toBe('string')
+  expect(panelReport.instance).not.toBe(pageReport.instance)
+  const run = (args: Record<string, unknown>) => world.agent.callAny('ui.command.run', { id: CONTROL, args: { instance: pageReport.instance, ...args } })
+  await run({ action: 'chooser' })
+  await world.win.waitFor(() => chooserSection())
+  expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report).toMatchObject({ view: 'chooser', dialog: 'none', selection: [] })
+  await run({ action: 'refresh', resource: 'catalog' })
+  await run({ action: 'choose', target: { ledgerId: filed.ledger.ledgerId } })
+  await world.win.waitFor(() => ledgerPage()?.textContent?.includes('Displayed group snapshot'))
+  await run({ action: 'filters-open', open: true })
+  await world.win.waitFor(() => ledgerPage()?.querySelector('[aria-label="Ledger filters"]'))
+  expect(panel.querySelector('[aria-label="Ledger filters"]')).toBeNull()
+  await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'filters-open', instance: panelReport.instance, open: true } })
+  await world.win.waitFor(() => panel.querySelector('[aria-label="Ledger filters"]'))
+  await run({ action: 'refresh', resource: 'entries' })
+  await run({ action: 'prepare', kind: 'bulk-state', state: 'resolved', selections: [{ id: filed.entry.id, revision: 1 }] })
+  const first = await world.win.waitFor(() => dialogNamed('Confirm ledger action'))
+  expect(first.textContent).toContain(`${filed.entry.id} · revision 1 · Displayed group snapshot`)
+  expect((await request(world, { operation: 'show', target: { ledgerId: filed.ledger.ledgerId }, id: filed.entry.id })).entry.state).toBe('open')
+  await run({ action: 'dismiss', dialog: 'confirmation' })
+  await world.win.waitFor(() => !dialogNamed('Confirm ledger action'))
+  expect((await request(world, { operation: 'show', target: { ledgerId: filed.ledger.ledgerId }, id: filed.entry.id })).entry.revision).toBe(1)
+  await run({ action: 'prepare', kind: 'bulk-state', state: 'resolved', selections: [{ id: filed.entry.id, revision: 1 }] })
+  await world.win.waitFor(() => dialogNamed('Confirm ledger action'))
+  await run({ action: 'confirm' })
+  await world.win.waitFor(() => !dialogNamed('Confirm ledger action'))
+  const resolved = await request(world, { operation: 'show', target: { ledgerId: filed.ledger.ledgerId }, id: filed.entry.id })
+  expect(resolved.entry).toMatchObject({ state: 'resolved', revision: 2 })
+  expect((await request(world, { operation: 'list', target: { owner: owner(world) } })).entries[0]).toMatchObject({ state: 'open', revision: 1 })
+  await world.agent.callAny('ui.view.open', { id: LEDGER_VIEW, input: { target: { ledgerId: filed.ledger.ledgerId } } })
+  await world.win.waitFor(() => ledgerPage()?.textContent?.includes('Displayed group snapshot'))
+  await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'sort', sort: 'title' } })
+  await world.win.waitFor(async () => {
+    const report = (await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report as { sort?: string }
+    return report?.sort === 'title'
+  })
 }, SLOW)
