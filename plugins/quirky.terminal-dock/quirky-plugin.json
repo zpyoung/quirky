@@ -1,6 +1,6 @@
 {
   "id": "quirky.terminal-dock",
-  "apiVersion": "1.12.0",
+  "apiVersion": "1.15.0",
   "name": "Terminal Dock",
   "version": "0.1.0",
   "description": "A pane-scoped composer for recognized terminal agents, with acknowledged serialized sends and durable draft recovery.",
@@ -1989,6 +1989,23 @@
             "pane": { "type": "string" },
             "kind": { "type": "string", "enum": ["model", "effort", "permission"] },
             "value": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "attach",
+        "title": "Attach File to Terminal Dock",
+        "description": "Open the composer file picker or attach a readable file to a pane draft.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": { "type": "string" },
+            "path": { "type": "string" },
+            "name": { "type": "string" },
+            "mime": { "type": "string" },
+            "base64": { "type": "string" },
+            "connId": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
           },
           "additionalProperties": false
         }

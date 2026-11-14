@@ -1,0 +1,888 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.terminal-dock/composer": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.terminal-dock/settings": {
+      "loading": {
+        "applicable": false,
+        "reason": "Settings are read synchronously from the window context.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+            "quote": "useState(() => readSettings(context))"
+          }
+        ]
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "The fixed settings form always contains its two controls.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+            "quote": "<FormRow label=\"Terminal dock\" htmlFor=\"qtd-dock-enabled\">"
+          }
+        ]
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "view:quirky.terminal-dock/composer",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/ui.tsx",
+        "quote": "<InlineError"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.terminal-dock/src/ui.tsx",
+          "quote": "<InlineError message=\"Terminal dock unavailable: the terminal dock requires a pane and session.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.terminal-dock/src/ui.tsx",
+          "quote": "import { InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.terminal-dock/composer",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "loadingState &&"
+      },
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "<NoticeLine>Loading terminal dock state…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.terminal-dock/composer",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "visibleError !== null &&"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "<InlineError message={visibleError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.terminal-dock/composer",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "picker.status === 'loading' &&"
+      },
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "<NoticeLine>{loadingMessage}</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.terminal-dock/composer",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "picker.status === 'error' &&"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "<InlineError message={errorMessage} />"
+        },
+        "import": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.terminal-dock/composer",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "picker.status === 'ready' && picker.items.length === 0 &&"
+      },
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "<EmptyState message={emptyMessage} />"
+        },
+        "import": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.terminal-dock/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+        "quote": "error !== null &&"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+          "quote": "<InlineError message={`Could not save Terminal dock settings: ${error}`} />"
+        },
+        "import": {
+          "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+          "quote": "import { Badge, FormRow, InlineError, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "if (part.length > 4 && (part.startsWith('**') && part.endsWith('**') || part.startsWith('__') && part.endsWith('__')))"
+      },
+      "reason": "Markdown emphasis decoration, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "if (part.length > 2 && (part.startsWith('*') && part.endsWith('*') || part.startsWith('_') && part.endsWith('_')))"
+      },
+      "reason": "Markdown emphasis decoration, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "(loadingState || state?.passthrough || disabledReason !== null && state !== null || state?.notice || state?.options.notice || warning !== null || visibleError !== null) &&"
+      },
+      "reason": "Groups operational notices and separately covered shared loading/error states."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state?.passthrough &&"
+      },
+      "reason": "Terminal keyboard ownership status, not loading, empty or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "className=\"qtd-notice qtd-passthrough-notice\" role=\"status\" title=\"Passthrough active — terminal has keyboard focus\" aria-description=\"Passthrough active — terminal has keyboard focus\""
+      },
+      "reason": "Terminal keyboard ownership status, not loading, empty or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "disabledReason !== null && state !== null &&"
+      },
+      "reason": "Agent eligibility and enabled-state explanation, not a failed view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "id=\"qtd-disabled-reason\" className=\"qtd-notice\" role=\"status\" title={disabledReason} aria-description={disabledReason}"
+      },
+      "reason": "Agent eligibility and enabled-state explanation, not a failed view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state?.notice &&"
+      },
+      "reason": "Operational terminal notice, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "className=\"qtd-notice\" role=\"status\" title={state.notice} aria-description={state.notice}"
+      },
+      "reason": "Operational terminal notice, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state?.options.notice &&"
+      },
+      "reason": "Session option delivery acknowledgment, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "className=\"qtd-notice\" role=\"status\" title={state.options.notice} aria-description={state.options.notice}"
+      },
+      "reason": "Session option delivery acknowledgment, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "warning !== null &&"
+      },
+      "reason": "Delivery uncertainty warning preserves the draft; it is not a load or action failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "role=\"alert\""
+      },
+      "reason": "Delivery uncertainty warning preserves the draft; it is not a load or action failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "(activeQuestion !== null && !activeQuestion.dismissed || picker !== null) &&"
+      },
+      "reason": "Shows available overlays without changing view availability."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "activeQuestion !== null && !activeQuestion.dismissed &&"
+      },
+      "reason": "Shows available overlays without changing view availability."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "picker !== null &&"
+      },
+      "reason": "Shows available overlays without changing view availability."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "draft.length === 0 ?"
+      },
+      "reason": "Keeps the editor emphasis overlay aligned with an empty draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state === null ? null : state.attachments.map((attachment) => (\n          <AttachmentChip key={attachment.id} attachment={attachment} disabled={!state.enabled} onRemove={() => removeAttachment(attachment.id)} />\n        ))"
+      },
+      "reason": "Attachment list waits for a canonical snapshot; the composer loading state is reported separately."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "contextPercent === null ? <span title=\"Context usage unknown\" aria-description=\"Context usage unknown\">Context usage unknown</span> : (\n              <span className=\"qtd-context__ring\" role=\"progressbar\" aria-label=\"Context usage\" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercent} style={contextStyle}>\n                {contextPercent}%\n              </span>\n            )"
+      },
+      "reason": "Context usage may be unknown independently of view availability."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "dirty &&"
+      },
+      "reason": "Draft synchronization status, not view loading."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "className=\"qtd-action-status\" role=\"status\" title={dirtyLabel} aria-description={dirtyLabel}"
+      },
+      "reason": "Draft synchronization status, not view loading."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state?.activeSend !== null && state?.activeSend !== undefined &&"
+      },
+      "reason": "Current send phase, not initial view loading."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "className=\"qtd-action-status\" role=\"status\" title={state.activeSend.phase} aria-description={state.activeSend.phase}"
+      },
+      "reason": "Current send phase, not initial view loading."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "shouldStop ?"
+      },
+      "reason": "Selects the action for current send/agent activity."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "!collapsed &&"
+      },
+      "reason": "Question expansion preference, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "item.choices.length > 0 ?"
+      },
+      "reason": "Question input presentation follows its provider-supplied shape."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "question.kind === 'question' ?"
+      },
+      "reason": "Question input presentation follows its provider-supplied shape."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "answering ?"
+      },
+      "reason": "Question submission progress is an action label, not view loading."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "picker.status === 'ready' && picker.items.map((item, index) => (\n        <Button key={item.id} type=\"button\" role=\"option\" aria-selected={index === picker.selected} className={`qtd-picker__item${index === picker.selected ? ' qtd-picker__item--active' : ''}`} onMouseEnter={() => onHighlight(index)} onClick={() => onPickItem(item)}>\n          <span>{item.label}</span>{item.detail && <small>{item.detail}</small>}\n        </Button>\n      ))"
+      },
+      "anchor": "picker.status === 'ready' &&",
+      "reason": "Shows results or the query truncation hint after the shared picker state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "item.detail &&"
+      },
+      "reason": "Optional completion metadata."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "picker.status === 'ready' && picker.truncated &&"
+      },
+      "reason": "Shows results or the query truncation hint after the shared picker state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "attachment.image ?"
+      },
+      "reason": "Attachment type decoration."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "current === '' &&"
+      },
+      "reason": "Session option placeholder and currently reported value."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "current !== '' && !choices.includes(current) &&"
+      },
+      "reason": "Session option placeholder and currently reported value."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onState"
+      },
+      "notAction": "subscription",
+      "reason": "StateLoader snapshot lifecycle callback, not a user action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onFailure"
+      },
+      "notAction": "subscription",
+      "reason": "StateLoader snapshot lifecycle callback, not a user action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onDragOver"
+      },
+      "transient": "hover",
+      "reason": "Tracks only the drag target or highlighted completion row."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onDrop={onDrop}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/attach",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}attach`, {\n          pane,\n          name: file.name,\n          mime: file.type || 'application/octet-stream',\n          base64: encodeBase64(bytes)\n        })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const onDrop = (event: DragEvent<HTMLDivElement>) => {\n    const files = Array.from(event.dataTransfer.files)\n    if (files.length === 0) return\n    event.preventDefault()\n    void uploadFiles(files)\n  }"
+          },
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const uploadFiles = async (files: File[]) => {\n    if (stateRef.current?.enabled !== true) {\n      setError('Terminal dock is disabled.')\n      return\n    }\n    for (const file of files) {\n      if (file.size > MAX_ATTACHMENT_BYTES) {\n        setError(`${file.name} is larger than the 10 MiB attachment limit.`)\n        continue\n      }\n      try {\n        const bytes = new Uint8Array(await file.arrayBuffer())\n        const result = await context.call(`${PLUGIN_METHOD}attach`, {\n          pane,\n          name: file.name,\n          mime: file.type || 'application/octet-stream',\n          base64: encodeBase64(bytes)\n        })\n        if (!isDockState(result)) throw new Error('Attachment acquisition returned invalid state.')\n        reconcileState(result)\n        setError(null)\n      } catch (reason) {\n        setError(`Could not attach ${file.name}: ${errorMessage(reason)}`)\n      }\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onAnswer={chooseAnswer}"
+      },
+      "transient": "draft",
+      "reason": "Edits an unsent answer or completion in the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onSubmit={() => void answerQuestion()}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/interaction",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}interaction`, { pane, request: question.id, action: 'answer', answers })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const answerQuestion = async () => {\n    const question = stateRef.current?.question\n    if (question === null || question === undefined || !answersComplete(question, answers)) return\n    if (stateRef.current?.enabled !== true) return\n    setAnswering(true)\n    try {\n      const result = await context.call(`${PLUGIN_METHOD}interaction`, { pane, request: question.id, action: 'answer', answers })\n      if (!isDockState(result)) throw new Error('The question response returned invalid state.')\n      reconcileState(result)\n      setAnswers([])\n      setError(null)\n    } catch (reason) {\n      setError(errorMessage(reason))\n    } finally {\n      setAnswering(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onInteract={(action) => void interact(activeQuestion, action)}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/interaction",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}interaction`, { pane, request: question.id, action })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const interact = async (question: DockQuestion, action: 'collapse' | 'expand' | 'dismiss') => {\n    try {\n      if (stateRef.current?.enabled !== true) return\n      const result = await context.call(`${PLUGIN_METHOD}interaction`, { pane, request: question.id, action })\n      if (!isDockState(result)) throw new Error('The question action returned invalid state.')\n      reconcileState(result)\n    } catch (reason) {\n      setError(errorMessage(reason))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onPickItem={insertPickerItem}"
+      },
+      "transient": "draft",
+      "reason": "Edits an unsent answer or completion in the local draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onHighlight={(selected) => {\n            const next = { ...picker, selected }\n            pickerRef.current = next\n            setPicker(next)\n          }}"
+      },
+      "transient": "hover",
+      "reason": "Tracks only the drag target or highlighted completion row."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onChange={onDraftChange}"
+      },
+      "transient": "draft",
+      "reason": "Tracks the unsent editor draft and IME composition."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onKeyUp"
+      },
+      "transient": "caret",
+      "reason": "Tracks caret position or keeps the emphasis overlay scrolled with the editor."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onMouseUp"
+      },
+      "transient": "caret",
+      "reason": "Tracks caret position or keeps the emphasis overlay scrolled with the editor."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onScroll={onScroll}"
+      },
+      "transient": "caret",
+      "reason": "Tracks caret position or keeps the emphasis overlay scrolled with the editor."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onKeyDown={onKeyDown}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/send",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}send`, { pane, id: sendId, revision: canonical.revision })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {\n    event.stopPropagation()\n    const currentPicker = pickerRef.current\n    if (currentPicker !== null) {\n      if (event.key === 'Escape') {\n        event.preventDefault()\n        event.stopPropagation()\n        pickerRef.current = null\n        setPicker(null)\n        return\n      }\n      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {\n        event.preventDefault()\n        event.stopPropagation()\n        if (currentPicker.status === 'ready' && currentPicker.items.length > 0) {\n          const offset = event.key === 'ArrowDown' ? 1 : -1\n          const selected = (currentPicker.selected + offset + currentPicker.items.length) % currentPicker.items.length\n          const next = { ...currentPicker, selected }\n          pickerRef.current = next\n          setPicker(next)\n        }\n        return\n      }\n      if (event.key === 'Enter' && !event.shiftKey) {\n        if (event.nativeEvent.isComposing || composingRef.current || event.keyCode === 229) return\n        event.preventDefault()\n        event.stopPropagation()\n        if (currentPicker.status === 'ready' && currentPicker.items.length > 0) insertPickerItem(currentPicker.items[currentPicker.selected]!)\n        return\n      }\n    }\n\n    if (event.key === 'Escape') {\n      event.preventDefault()\n      event.stopPropagation()\n      void stop()\n      return\n    }\n    if (event.key === 'Enter') {\n      event.stopPropagation()\n      if (event.shiftKey || event.nativeEvent.isComposing || composingRef.current || event.keyCode === 229) return\n      event.preventDefault()\n      if (stateRef.current !== null && (localDraftRef.current.trim() !== '' || stateRef.current.attachments.length > 0)) void send()\n      return\n    }\n    if (event.key === 'ArrowUp') {\n      const field = event.currentTarget\n      const atFirstLine = field.selectionStart === 0 || !field.value.slice(0, field.selectionStart).includes('\\n')\n      if (atFirstLine && (field.value === '' || field.selectionStart === 0 || historyBrowsingRef.current)) {\n        event.preventDefault()\n        event.stopPropagation()\n        void browseHistory('previous')\n        return\n      }\n    }\n    if (event.key === 'ArrowDown' && historyBrowsingRef.current) {\n      event.preventDefault()\n      event.stopPropagation()\n      void browseHistory('next')\n      return\n    }\n    if (event.metaKey || event.ctrlKey || event.altKey) event.stopPropagation()\n  }"
+          },
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const send = async () => {\n    const current = stateRef.current\n    if (current === null || current.question !== null || !current.enabled || !current.supported || current.disabledReason !== null || conflictRef.current) return\n    if (localDraftRef.current.trim() === '' && current.attachments.length === 0) return\n    setSending(true)\n    setError(null)\n    setWarning(null)\n    let sendId: string | null = null\n    let sentVersion: number | null = null\n    try {\n      if (!(await flushDraft())) return\n      const canonical = stateRef.current\n      if (canonical === null || canonical.question !== null || !canonical.enabled || !canonical.supported || canonical.disabledReason !== null || conflictRef.current) return\n      sentVersion = localVersionRef.current\n      sendId = crypto.randomUUID()\n      sendSnapshotsRef.current.set(sendId, { baseRevision: canonical.revision, text: canonical.draft })\n      const result = makeSendResult(await context.call(`${PLUGIN_METHOD}send`, { pane, id: sendId, revision: canonical.revision }))\n      if (result === null) throw new Error('Terminal dock returned an invalid send result.')\n      await refreshState()\n      if (localVersionRef.current === sentVersion && !dirtyRef.current) setLocalValue(stateRef.current?.draft ?? '')\n      const restoresPrompt = result.outcome !== 'observed-cleared' && result.outcome !== 'unobservable'\n      if (restoresPrompt && sentVersion !== null) restoreFailedSend(sendId, sentVersion)\n      if (result.outcome === 'may-not-have-sent' || result.outcome === 'cancelled' && result.accepted) setWarning(UNCERTAINTY_WARNING)\n      else if (result.outcome === 'refused') setError(result.reason ?? 'The terminal refused this send before accepting the prompt.')\n      else if (result.outcome === 'unobservable') setWarning('Sent to the terminal; this agent does not provide delivery evidence.')\n    } catch (reason) {\n      const details = eventError(reason)\n      if (details.code === 'PTY_WRITE_UNCERTAIN' || details.acceptedBytes !== null && details.acceptedBytes > 0) setWarning(UNCERTAINTY_WARNING)\n      setError(errorMessage(reason))\n      await refreshState()\n      if (sendId !== null && sentVersion !== null) restoreFailedSend(sendId, sentVersion)\n    } finally {\n      if (sendId !== null) sendSnapshotsRef.current.delete(sendId)\n      setSending(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onCompositionStart={onCompositionStart}"
+      },
+      "transient": "draft",
+      "reason": "Tracks the unsent editor draft and IME composition."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onCompositionEnd={onCompositionEnd}"
+      },
+      "transient": "draft",
+      "reason": "Tracks the unsent editor draft and IME composition."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onPaste={onPaste}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/attach",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}attach`, {\n          pane,\n          name: file.name,\n          mime: file.type || 'application/octet-stream',\n          base64: encodeBase64(bytes)\n        })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {\n    const files = Array.from(event.clipboardData.files)\n    if (files.length === 0) return\n    event.preventDefault()\n    void uploadFiles(files)\n  }"
+          },
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const uploadFiles = async (files: File[]) => {\n    if (stateRef.current?.enabled !== true) {\n      setError('Terminal dock is disabled.')\n      return\n    }\n    for (const file of files) {\n      if (file.size > MAX_ATTACHMENT_BYTES) {\n        setError(`${file.name} is larger than the 10 MiB attachment limit.`)\n        continue\n      }\n      try {\n        const bytes = new Uint8Array(await file.arrayBuffer())\n        const result = await context.call(`${PLUGIN_METHOD}attach`, {\n          pane,\n          name: file.name,\n          mime: file.type || 'application/octet-stream',\n          base64: encodeBase64(bytes)\n        })\n        if (!isDockState(result)) throw new Error('Attachment acquisition returned invalid state.')\n        reconcileState(result)\n        setError(null)\n      } catch (reason) {\n        setError(`Could not attach ${file.name}: ${errorMessage(reason)}`)\n      }\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onRemove={() => removeAttachment(attachment.id)}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/removeAttachment",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}removeAttachment`, { pane, attachment })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const removeAttachment = (attachment: string) => {\n    if (stateRef.current?.enabled !== true) return\n    void context.call(`${PLUGIN_METHOD}removeAttachment`, { pane, attachment }).then((result) => {\n      if (!isDockState(result)) throw new Error('Attachment removal returned invalid state.')\n      reconcileState(result)\n    }).catch((reason: unknown) => setError(errorMessage(reason)))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state={state} kind=\"model\" onChange={optionChange}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/options",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}options`, { pane, kind, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const optionChange = async (kind: 'model' | 'effort' | 'permission', event: ChangeEvent<HTMLSelectElement>) => {\n    const value = event.currentTarget.value\n    if (stateRef.current?.enabled !== true) return\n    if (value === '') return\n    try {\n      const result = await context.call(`${PLUGIN_METHOD}options`, { pane, kind, value })\n      if (!isDockState(result)) throw new Error('The session option action returned invalid state.')\n      reconcileState(result)\n      setError(null)\n    } catch (reason) {\n      setError(errorMessage(reason))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state={state} kind=\"effort\" onChange={optionChange}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/options",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}options`, { pane, kind, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const optionChange = async (kind: 'model' | 'effort' | 'permission', event: ChangeEvent<HTMLSelectElement>) => {\n    const value = event.currentTarget.value\n    if (stateRef.current?.enabled !== true) return\n    if (value === '') return\n    try {\n      const result = await context.call(`${PLUGIN_METHOD}options`, { pane, kind, value })\n      if (!isDockState(result)) throw new Error('The session option action returned invalid state.')\n      reconcileState(result)\n      setError(null)\n    } catch (reason) {\n      setError(errorMessage(reason))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "state={state} kind=\"permission\" onChange={optionChange}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/options",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}options`, { pane, kind, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const optionChange = async (kind: 'model' | 'effort' | 'permission', event: ChangeEvent<HTMLSelectElement>) => {\n    const value = event.currentTarget.value\n    if (stateRef.current?.enabled !== true) return\n    if (value === '') return\n    try {\n      const result = await context.call(`${PLUGIN_METHOD}options`, { pane, kind, value })\n      if (!isDockState(result)) throw new Error('The session option action returned invalid state.')\n      reconcileState(result)\n      setError(null)\n    } catch (reason) {\n      setError(errorMessage(reason))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onChange={onFileChange}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/attach",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}attach`, {\n          pane,\n          name: file.name,\n          mime: file.type || 'application/octet-stream',\n          base64: encodeBase64(bytes)\n        })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {\n    const files = Array.from(event.currentTarget.files ?? [])\n    event.currentTarget.value = ''\n    if (files.length > 0) void uploadFiles(files)\n  }"
+          },
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const uploadFiles = async (files: File[]) => {\n    if (stateRef.current?.enabled !== true) {\n      setError('Terminal dock is disabled.')\n      return\n    }\n    for (const file of files) {\n      if (file.size > MAX_ATTACHMENT_BYTES) {\n        setError(`${file.name} is larger than the 10 MiB attachment limit.`)\n        continue\n      }\n      try {\n        const bytes = new Uint8Array(await file.arrayBuffer())\n        const result = await context.call(`${PLUGIN_METHOD}attach`, {\n          pane,\n          name: file.name,\n          mime: file.type || 'application/octet-stream',\n          base64: encodeBase64(bytes)\n        })\n        if (!isDockState(result)) throw new Error('Attachment acquisition returned invalid state.')\n        reconcileState(result)\n        setError(null)\n      } catch (reason) {\n        setError(`Could not attach ${file.name}: ${errorMessage(reason)}`)\n      }\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={openAttachmentPicker}"
+      },
+      "route": {
+        "target": "command:quirky.terminal-dock/attach",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.executeCommand('command:quirky.terminal-dock/attach', { pane, connId: identity.connId }, { activateOwner: false })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const openAttachmentPicker = async () => {\n    setError(null)\n    try {\n      const identity = await context.call('ui.window.self', {})\n      if (!record(identity) || typeof identity.connId !== 'number' || !Number.isSafeInteger(identity.connId) || identity.connId <= 0) {\n        throw new Error('ui.window.self returned an invalid connection identity.')\n      }\n      await context.executeCommand('command:quirky.terminal-dock/attach', { pane, connId: identity.connId }, { activateOwner: false })\n    } catch (reason) {\n      setError(errorMessage(reason))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={() => void stop()}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/cancel",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}cancel`, { pane, interrupt: true })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const stop = async () => {\n    if (stateRef.current?.enabled !== true) return\n    try {\n      await context.call(`${PLUGIN_METHOD}cancel`, { pane, interrupt: true })\n      await refreshState()\n      if (dirtyRef.current && !conflictRef.current && !(await flushDraft())) return\n      setError(null)\n    } catch (reason) {\n      setError(errorMessage(reason))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={() => void send()}"
+      },
+      "route": {
+        "target": "quirky.terminal-dock/send",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+          "quote": "context.call(`${PLUGIN_METHOD}send`, { pane, id: sendId, revision: canonical.revision })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+            "quote": "const send = async () => {\n    const current = stateRef.current\n    if (current === null || current.question !== null || !current.enabled || !current.supported || current.disabledReason !== null || conflictRef.current) return\n    if (localDraftRef.current.trim() === '' && current.attachments.length === 0) return\n    setSending(true)\n    setError(null)\n    setWarning(null)\n    let sendId: string | null = null\n    let sentVersion: number | null = null\n    try {\n      if (!(await flushDraft())) return\n      const canonical = stateRef.current\n      if (canonical === null || canonical.question !== null || !canonical.enabled || !canonical.supported || canonical.disabledReason !== null || conflictRef.current) return\n      sentVersion = localVersionRef.current\n      sendId = crypto.randomUUID()\n      sendSnapshotsRef.current.set(sendId, { baseRevision: canonical.revision, text: canonical.draft })\n      const result = makeSendResult(await context.call(`${PLUGIN_METHOD}send`, { pane, id: sendId, revision: canonical.revision }))\n      if (result === null) throw new Error('Terminal dock returned an invalid send result.')\n      await refreshState()\n      if (localVersionRef.current === sentVersion && !dirtyRef.current) setLocalValue(stateRef.current?.draft ?? '')\n      const restoresPrompt = result.outcome !== 'observed-cleared' && result.outcome !== 'unobservable'\n      if (restoresPrompt && sentVersion !== null) restoreFailedSend(sendId, sentVersion)\n      if (result.outcome === 'may-not-have-sent' || result.outcome === 'cancelled' && result.accepted) setWarning(UNCERTAINTY_WARNING)\n      else if (result.outcome === 'refused') setError(result.reason ?? 'The terminal refused this send before accepting the prompt.')\n      else if (result.outcome === 'unobservable') setWarning('Sent to the terminal; this agent does not provide delivery evidence.')\n    } catch (reason) {\n      const details = eventError(reason)\n      if (details.code === 'PTY_WRITE_UNCERTAIN' || details.acceptedBytes !== null && details.acceptedBytes > 0) setWarning(UNCERTAINTY_WARNING)\n      setError(errorMessage(reason))\n      await refreshState()\n      if (sendId !== null && sentVersion !== null) restoreFailedSend(sendId, sentVersion)\n    } finally {\n      if (sendId !== null) sendSnapshotsRef.current.delete(sendId)\n      setSending(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={() => onInteract(collapsed ? 'expand' : 'collapse')}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={() => onInteract('dismiss')}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onChange={() => onAnswer(questionIndex, choice.value, item.multiple)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onChange={(event) => onAnswer(questionIndex, event.currentTarget.value, false)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={onSubmit}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onMouseEnter"
+      },
+      "transient": "hover",
+      "reason": "Tracks only the drag target or highlighted completion row."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={() => onPickItem(item)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onClick={onRemove}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
+        "quote": "onChange={(event) => onChange(kind, event)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Child control forwards to its owning composer callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+        "quote": "onChange={(event) => change('enabled', event.currentTarget.checked)}"
+      },
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+          "quote": "context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+            "quote": "const change = (name: SettingName, value: boolean) => {\n    setSettings((current) => ({ ...current, [name]: value }))\n    setError(null)\n    context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((reason: unknown) => {\n      try {\n        setSettings(readSettings(context))\n      } catch {\n        // Keep the last reported values when settings cannot be read back.\n      }\n      setError(reason instanceof Error ? reason.message : String(reason))\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+        "quote": "onChange={(event) => change('autoOpen', event.currentTarget.checked)}"
+      },
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+          "quote": "context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.terminal-dock/src/window/Settings.tsx",
+            "quote": "const change = (name: SettingName, value: boolean) => {\n    setSettings((current) => ({ ...current, [name]: value }))\n    setError(null)\n    context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((reason: unknown) => {\n      try {\n        setSettings(readSettings(context))\n      } catch {\n        // Keep the last reported values when settings cannot be read back.\n      }\n      setError(reason instanceof Error ? reason.message : String(reason))\n    })\n  }"
+          }
+        ]
+      }
+    }
+  ]
+}
