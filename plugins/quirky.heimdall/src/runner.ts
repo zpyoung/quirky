@@ -855,11 +855,11 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         latestById.set(entry.escalationId, entry)
       }
     }
-    for (const entry of latestById.values()) {
+    for (const [escalationId, entry] of latestById) {
       if (
         entry.escalationKind !== 'awaiting-approval' ||
         entry.status !== 'open' ||
-        entry.escalationId === activeEscalationId
+        escalationId === activeEscalationId
       ) continue
       const { seq: _seq, eventId: _eventId, watcherId: _watcherId, atMs: _atMs, ...fields } = entry
       appendEntry({
@@ -868,7 +868,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         class: 'fact',
         origin: 'owner',
         resolved: true,
-        eventId: `approval-escalation-superseded:${watcherId}:${hash(entry.escalationId)}:${entry.seq}`,
+        eventId: `approval-escalation-superseded:${watcherId}:${hash(escalationId)}:${entry.seq}`,
         status: 'resolved',
         reason: 'superseded'
       }, version, { idempotent: true })

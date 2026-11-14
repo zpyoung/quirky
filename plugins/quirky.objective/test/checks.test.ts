@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -51,15 +52,15 @@ function rig(afterRun?: ProcessHook) {
           ...globalThis.process.env, ...(options?.env ?? {}),
           GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1'
         },
-        stdin: options?.input,
+        stdin: options?.input === undefined ? 'ignore' : Buffer.from(options.input),
         stdout: 'pipe', stderr: 'pipe'
       })
       const override = afterRun?.(argv, options)
-      const stdout = result.stdout
-      const stderr = result.stderr
+      const stdout = result.stdout ?? Buffer.alloc(0)
+      const stderr = result.stderr ?? Buffer.alloc(0)
       return {
         stdout, stdoutText: stdout.toString(), stderr: stderr.toString(), exitCode: result.exitCode,
-        signal: null, durationMs: 0,
+        signal: result.signalCode ?? null, durationMs: 0,
         ...(override ?? {})
       }
     }

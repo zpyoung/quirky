@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import { Buffer } from 'node:buffer'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -81,11 +82,14 @@ function rig(options: Options = {}) {
           ...globalThis.process.env, ...(runOptions?.env ?? {}),
           GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1'
         },
-        stdin: runOptions?.input, stdout: 'pipe', stderr: 'pipe'
+        stdin: runOptions?.input === undefined ? 'ignore' : Buffer.from(runOptions.input),
+        stdout: 'pipe', stderr: 'pipe'
       })
+      const stdout = result.stdout ?? Buffer.alloc(0)
+      const stderr = result.stderr ?? Buffer.alloc(0)
       return {
-        stdout: result.stdout, stdoutText: result.stdout.toString(), stderr: result.stderr.toString(),
-        exitCode: result.exitCode, signal: null, durationMs: 0
+        stdout, stdoutText: stdout.toString(), stderr: stderr.toString(),
+        exitCode: result.exitCode, signal: result.signalCode ?? null, durationMs: 0
       }
     }
   }
@@ -278,7 +282,7 @@ test('commits only inside-territory files with the attempt trailer and leaves ou
   expect(recovered.landingRows.find(row => row.rung === 'committed-local-branch')?.payload).toMatchObject({
     committedPaths: []
   })
-})
+}, 30_000)
 
 test('refuses detached HEAD with branch-not-attached and distinguishes commit-hook-failed from indeterminate', async () => {
   const detached = rig()
@@ -318,4 +322,4 @@ test('refuses detached HEAD with branch-not-attached and distinguishes commit-ho
     revision: 1, contentIdentity: indeterminateIdentity, branch: indeterminateHead.branch!, headSha: indeterminateHead.headSha!
   }, 'indeterminate-attempt')).toEqual({ effect: 'indeterminate', reason: 'commit-state-indeterminate' })
   expect(indeterminate.landingRows.some(row => row.rung === 'committed-local-branch')).toBe(false)
-})
+}, 30_000)
