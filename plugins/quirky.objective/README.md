@@ -16,6 +16,8 @@ Use a Git worktree. `heimdall objective <watcher-id>` and `quirky objective deta
 
 Approve the planner dispatch, then review and approve its draft plan. Tasks run in plan order. Each worker dispatch captures the workspace baseline; pre-existing dirty or untracked files are not blamed on that task. The runner rejects observed changes outside the plan's write territory and observed changes missing from the worker's `filesModified` report. Objective reports are stored under `.quirky/objective/<watcher-id>/` and excluded through the repository's private Git exclude file.
 
+Index suppression flags do not exempt present tracked files from these checks. Missing sparse-checkout files are not treated as deletions.
+
 After all active-plan tasks succeed, the runner executes shell-checkable criteria in plan order, then enrollment gates. Check and gate results belong to the exact workspace content identity: a changed tree invalidates old evidence, and a check raced by a workspace edit is discarded.
 
 ## Review and repair
@@ -23,6 +25,8 @@ After all active-plan tasks succeed, the runner executes shell-checkable criteri
 The review tier controls post-check work: `express` skips reviewers; `standard` requires a read-only reviewer; `full` requires a reviewer followed by an integrator. Reviewer workspace edits are rejected. Integrators may edit only inside write territory; their edits trigger fresh checks, gates, and review before landing.
 
 Three failed attempts for a task, a failing check or gate, or a blocking verdict can start a repair replan. Repairs preserve succeeded and running tasks: a patch cannot change them. Each revision allows at most three applied repair episodes, with up to three planner attempts per episode; after two unaccepted repair attempts, the next planner dispatch requires approval.
+
+Required checks and reviews must be verified after the latest repair, even when file contents stay unchanged.
 
 Reject an unapproved pending plan draft with:
 

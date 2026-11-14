@@ -250,7 +250,7 @@ const MAX_STALE_EVIDENCE_RETRIES = 3
 const MAX_DRAFT_REJECTIONS = 3
 const REPAIR_ESCALATION_REJECTED_PATCH_THRESHOLD = 2
 
-function latestAttempts(journal: ObjectiveJournalEntry[]): ObjectiveJournalEntry[] {
+export function latestAttempts(journal: ObjectiveJournalEntry[]): ObjectiveJournalEntry[] {
   const latest = new Map<string, ObjectiveJournalEntry>()
   for (const entry of journal) {
     if (entry.kind !== 'attempt' || typeof entry.attemptId !== 'string') continue
@@ -274,7 +274,7 @@ function unresolved(entry: ObjectiveJournalEntry): boolean {
   return entry.state !== 'settled' || entry.effect === 'indeterminate'
 }
 
-function issueFor(world: ObjectiveWorld, attemptId: string) {
+function issueFor(world: Pick<ObjectiveWorld, 'issued'>, attemptId: string) {
   return world.issued.find((candidate) => candidate.attemptId === attemptId) ?? null
 }
 
@@ -299,11 +299,11 @@ function matchingReport(
   ) ?? null
 }
 
-function repairsFor(world: ObjectiveWorld, revision: number): RevisionRepair[] {
+function repairsFor(world: Pick<ObjectiveWorld, 'repairs'>, revision: number): RevisionRepair[] {
   return (world.repairs ?? []).filter((repair) => repair.revision === revision)
 }
 
-function latestRepair(world: ObjectiveWorld, revision: number): RevisionRepair | null {
+function latestRepair(world: Pick<ObjectiveWorld, 'repairs'>, revision: number): RevisionRepair | null {
   let latest: RevisionRepair | null = null
   for (const repair of repairsFor(world, revision)) {
     if (!latest || repair.appliedAtMs > latest.appliedAtMs ||
@@ -654,7 +654,7 @@ function taskCriteria(
 function checkEvidenceIsCurrent(
   recordAttemptId: string,
   recordedAtMs: number,
-  world: ObjectiveWorld,
+  world: Pick<ObjectiveWorld, 'repairs'>,
   attempts: ObjectiveJournalEntry[],
   revision: number
 ): boolean {
@@ -668,8 +668,8 @@ function checkEvidenceIsCurrent(
     (evidenceKey.endsWith(marker) || evidenceKey.includes(`${marker}#`))
 }
 
-function currentChecks(
-  world: ObjectiveWorld,
+export function currentChecks(
+  world: Pick<ObjectiveWorld, 'checks' | 'repairs'>,
   attempts: ObjectiveJournalEntry[],
   revision: number,
   kind: CheckRecord['kind'],
@@ -827,8 +827,8 @@ function currentOverrun(
   return null
 }
 
-function currentVerdicts(
-  world: ObjectiveWorld,
+export function currentVerdicts(
+  world: Pick<ObjectiveWorld, 'verdicts' | 'issued' | 'repairs'>,
   attempts: ObjectiveJournalEntry[],
   revision: number,
   role: ReviewRole,

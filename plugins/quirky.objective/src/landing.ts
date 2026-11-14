@@ -1,8 +1,9 @@
 import { Buffer } from 'node:buffer'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
-import type { CheckRecord, Issued, LandingRecord, VerdictRecord } from './store'
+import type { CheckRecord, LandingRecord, VerdictRecord } from './store'
 import type { ObjectiveRuntime } from './checks'
-import type { ObjectiveProgress } from './decide'
+import { currentChecks, currentVerdicts, latestAttempts } from './decide'
+import type { ObjectiveJournalEntry, ObjectiveProgress } from './decide'
 
 interface GitResult {
   stdoutText: string
@@ -58,65 +59,63 @@ function isPrivateObjectivePath(path: string): boolean {
   return path === '.quirky/objective' || path.startsWith('.quirky/objective/')
 }
 
-function passedCheck(
-  checks: CheckRecord[],
-  revision: number,
-  contentIdentity: string,
-  kind: CheckRecord['kind'],
-  targetKey: string
-): CheckRecord | undefined {
-  return checks.find(row => row.revision === revision && row.kind === kind && row.targetKey === targetKey &&
-    row.contentIdentity === contentIdentity && row.status === 'passed')
-}
 
-function approvalFor(
-  verdicts: VerdictRecord[],
-  issued: Issued[],
-  role: VerdictRecord['role'],
-  revision: number,
-  contentIdentity: string
-): VerdictRecord | undefined {
-  return verdicts.find(row => row.revision === revision && row.role === role && row.verdict === 'approve' &&
-    row.contentIdentity === contentIdentity && issued.some(issue => issue.attemptId === row.attemptId &&
-      issue.role === role && issue.revision === revision && issue.contentIdentity === contentIdentity))
-}
 
 interface LandingEvidence {
   checks: CheckRecord[]
   verdicts: VerdictRecord[]
 }
 
-function requiredLandingEvidence(runtime: ObjectiveRuntime, revisionNumber: number, contentIdentity: string): LandingEvidence | null {
+function requiredLandingEvidence(
+  runtime: ObjectiveRuntime,
+  revisionNumber: number,
+  contentIdentity: string,
+  journal: ObjectiveJournalEntry[]
+): LandingEvidence | null {
   const watcherId = runtime.enrollment.watcherId
   const revision = runtime.store.revision(watcherId)
   if (!revision || revision.number !== revisionNumber) return null
 
-  const checks = runtime.store.checks(watcherId)
+  const evidenceWorld = {
+    checks: runtime.store.checks(watcherId),
+    verdicts: runtime.store.verdicts(watcherId),
+    issued: runtime.store.issued(watcherId),
+    repairs: runtime.store.repairs(watcherId)
+  }
+  const attempts = latestAttempts(journal)
   const requiredChecks: CheckRecord[] = []
   for (const task of revision.plan.plan.tasks) {
     for (let criterionIndex = 0; criterionIndex < task.criteria.length; criterionIndex++) {
       const criterion = task.criteria[criterionIndex]!
       if (!criterion.shellCheckable) continue
-      const row = passedCheck(checks, revisionNumber, contentIdentity, 'criterion', `${task.taskKey}:${criterionIndex}`)
+      if (!criterion.checkCommand) return null
+      const row = currentChecks(
+        evidenceWorld, attempts, revisionNumber, 'criterion', `${task.taskKey}:${criterionIndex}`,
+        criterion.checkCommand, contentIdentity
+      ).find(check => check.status === 'passed')
       if (!row) return null
       requiredChecks.push(row)
     }
   }
   for (const gate of runtime.enrollment.kindPayload.gates) {
-    const row = passedCheck(checks, revisionNumber, contentIdentity, 'gate', gate.name)
+    const row = currentChecks(
+      evidenceWorld, attempts, revisionNumber, 'gate', gate.name, gate.command, contentIdentity
+    ).find(check => check.status === 'passed')
     if (!row) return null
     requiredChecks.push(row)
   }
 
-  const verdicts = runtime.store.verdicts(watcherId).filter(row => row.revision === revisionNumber && row.contentIdentity === contentIdentity)
-  if (verdicts.some(row => row.verdict === 'block')) return null
+  const reviewerVerdicts = currentVerdicts(evidenceWorld, attempts, revisionNumber, 'reviewer', contentIdentity)
+  const integratorVerdicts = currentVerdicts(evidenceWorld, attempts, revisionNumber, 'integrator', contentIdentity)
+  if (reviewerVerdicts.some(row => row.verdict === 'block') ||
+    integratorVerdicts.some(row => row.verdict === 'block')) return null
   const needsRoles: VerdictRecord['role'][] = runtime.enrollment.kindPayload.tier === 'full'
     ? ['reviewer', 'integrator']
     : runtime.enrollment.kindPayload.tier === 'standard' ? ['reviewer'] : []
-  const issued = runtime.store.issued(watcherId)
   const approvals: VerdictRecord[] = []
   for (const role of needsRoles) {
-    const verdict = approvalFor(verdicts, issued, role, revisionNumber, contentIdentity)
+    const verdict = (role === 'reviewer' ? reviewerVerdicts : integratorVerdicts)
+      .find(row => row.verdict === 'approve')
     if (!verdict) return null
     approvals.push(verdict)
   }
@@ -131,6 +130,7 @@ export async function recordFilesOnDisk(
   runtime: ObjectiveRuntime,
   action: { revision: number; contentIdentity: string },
   attemptId: string,
+  journal: ObjectiveJournalEntry[],
   tasks?: ObjectiveProgress['tasks']
 ): Promise<{ effect: 'landed' | 'not-landed'; reason?: string }> {
   let beforeIdentity: string
@@ -141,7 +141,7 @@ export async function recordFilesOnDisk(
   }
   if (beforeIdentity !== action.contentIdentity) return landingResult('not-landed', 'landing-evidence-stale')
 
-  const evidence = requiredLandingEvidence(runtime, action.revision, action.contentIdentity)
+  const evidence = requiredLandingEvidence(runtime, action.revision, action.contentIdentity, journal)
   if (!evidence) return landingResult('not-landed', 'landing-evidence-incomplete')
 
   let afterIdentity: string

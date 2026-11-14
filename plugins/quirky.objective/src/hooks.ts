@@ -172,7 +172,7 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       if (action.kind === 'record-landing') {
         const inspection = await inspect(enrollment.watcherId)
         if (!inspection) throw new Error('The objective watcher no longer exists')
-        return recordFilesOnDisk(run, action, attemptId, deriveProgress(world(enrollment), inspection.journal).tasks)
+        return recordFilesOnDisk(run, action, attemptId, inspection.journal, deriveProgress(world(enrollment), inspection.journal).tasks)
       }
       if (action.kind === 'commit-local-branch') return commitLocalBranch(run, action, attemptId)
       const role = action.kind === 'dispatch-planner' ? 'planner'

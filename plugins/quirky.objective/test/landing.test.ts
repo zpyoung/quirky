@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
 import type { ObjectivePayload } from '../src/contract'
+import type { ObjectiveJournalEntry } from '../src/decide'
 import type { PlannerReport } from '../src/plan'
-import type { ObjectiveStore, Revision } from '../src/store'
+import type { ObjectiveStore, Revision, RevisionRepair } from '../src/store'
 import { captureContentIdentity, type ObjectiveRuntime } from '../src/checks'
 import { commitLocalBranch, readLocalGitHead, recordFilesOnDisk } from '../src/landing'
 
@@ -37,6 +38,8 @@ function rig(options: Options = {}) {
   const calls: { argv: string[]; options?: RunOptions }[] = []
   const checkRows: CheckRow[] = []
   const verdictRows: VerdictRow[] = []
+  const repairs: RevisionRepair[] = []
+  const journal: ObjectiveJournalEntry[] = []
   const landingRows: LandingRow[] = []
   const task = {
     taskKey: 'implement', title: 'Implement objective', spec: 'Implement the objective.', deps: [],
@@ -62,6 +65,7 @@ function rig(options: Options = {}) {
     issued(watcherId: string) { return issuedRows.filter(row => row.watcherId === watcherId) },
     checks(watcherId: string) { return checkRows.filter(row => row.watcherId === watcherId) },
     verdicts(watcherId: string) { return verdictRows.filter(row => row.watcherId === watcherId) },
+    repairs(watcherId: string) { return repairs.filter(row => row.watcherId === watcherId) },
     landings(watcherId: string) { return landingRows.filter(row => row.watcherId === watcherId) },
     recordLanding(row: LandingRow) {
       const existing = landingRows.find(value => value.watcherId === row.watcherId && value.rung === row.rung && value.contentIdentity === row.contentIdentity)
@@ -116,39 +120,90 @@ function rig(options: Options = {}) {
     await runChecked(['git', 'add', '-A'], { cwd: root })
     await runChecked(['git', 'commit', '-m', 'baseline'], { cwd: root })
   }
-  function approveEvidence(contentIdentity: string): void {
-    checkRows.push({
-      attemptId: 'criterion-pass', watcherId: enrollment.watcherId, revision: 1, kind: 'criterion',
-      targetKey: 'implement:0', contentIdentity, command: task.criteria[0]!.checkCommand!, status: 'passed',
-      exitCode: 0, timedOut: false, stdoutTail: '', stderrTail: '', checkedAtMs: 2
+  function appendAttempt(
+    attemptId: string,
+    action: NonNullable<ObjectiveJournalEntry['action']>,
+    dispatchId: string,
+    state: 'running' | 'settled' = 'settled'
+  ): void {
+    journal.push({
+      seq: journal.length + 1, kind: 'attempt', attemptId, action, dispatchId, state,
+      ...(state === 'settled' ? { effect: 'landed' as const } : {})
     })
+  }
+  function approveEvidence(
+    contentIdentity: string,
+    options: { suffix?: string; checkedAtMs?: number; acceptedAtMs?: number; repairOrdinal?: number } = {}
+  ): void {
+    const suffix = options.suffix ?? ''
+    const checkedAtMs = options.checkedAtMs ?? 2
+    const acceptedAtMs = options.acceptedAtMs ?? 3
+    const marker = options.repairOrdinal === undefined ? '' : `:r${options.repairOrdinal}`
+    const criterionAttemptId = `criterion-pass${suffix}`
+    const gateAttemptId = `gate-pass${suffix}`
+    const criterionCommand = task.criteria[0]!.checkCommand!
+    const gateCommand = payload.gates[0]!.command
     checkRows.push({
-      attemptId: 'gate-pass', watcherId: enrollment.watcherId, revision: 1, kind: 'gate', targetKey: 'ready',
-      contentIdentity, command: payload.gates[0]!.command, status: 'passed', exitCode: 0, timedOut: false,
-      stdoutTail: '', stderrTail: '', checkedAtMs: 2
+      attemptId: criterionAttemptId, watcherId: enrollment.watcherId, revision: 1, kind: 'criterion',
+      targetKey: 'implement:0', contentIdentity, command: criterionCommand, status: 'passed',
+      exitCode: 0, timedOut: false, stdoutTail: '', stderrTail: '', checkedAtMs
     })
+    appendAttempt(criterionAttemptId, {
+      kind: 'run-check', revision: 1, taskKey: 'implement', criterionIndex: 0, command: criterionCommand,
+      contentIdentity, evidenceKey: `check:1:implement:0:${contentIdentity}${marker}`
+    }, `${criterionAttemptId}-dispatch`)
+    checkRows.push({
+      attemptId: gateAttemptId, watcherId: enrollment.watcherId, revision: 1, kind: 'gate', targetKey: 'ready',
+      contentIdentity, command: gateCommand, status: 'passed', exitCode: 0, timedOut: false,
+      stdoutTail: '', stderrTail: '', checkedAtMs
+    })
+    appendAttempt(gateAttemptId, {
+      kind: 'run-gate', revision: 1, gateName: 'ready', command: gateCommand, contentIdentity,
+      evidenceKey: `gate:1:ready:${contentIdentity}${marker}`
+    }, `${gateAttemptId}-dispatch`)
+    const reviewerAttemptId = `reviewer-attempt${suffix}`
+    const integratorAttemptId = `integrator-attempt${suffix}`
     issuedRows.push(
-      { attemptId: 'reviewer-attempt', watcherId: enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity },
-      { attemptId: 'integrator-attempt', watcherId: enrollment.watcherId, role: 'integrator', revision: 1, contentIdentity }
+      { attemptId: reviewerAttemptId, watcherId: enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity },
+      { attemptId: integratorAttemptId, watcherId: enrollment.watcherId, role: 'integrator', revision: 1, contentIdentity }
     )
-    const reviewer = {
-      taskKey: 'implement', criterionIndex: 0, result: 'pass', note: 'Verified.'
-    }
+    const reviewer = { taskKey: 'implement', criterionIndex: 0, result: 'pass', note: 'Verified.' }
+    const reviewerDispatchId = `reviewer-dispatch${suffix}`
+    const integratorDispatchId = `integrator-dispatch${suffix}`
     verdictRows.push({
-      attemptId: 'reviewer-attempt', watcherId: enrollment.watcherId, dispatchId: 'reviewer-dispatch',
+      attemptId: reviewerAttemptId, watcherId: enrollment.watcherId, dispatchId: reviewerDispatchId,
       revision: 1, role: 'reviewer', contentIdentity, verdict: 'approve', criteriaResults: [reviewer],
-      checksRun: [], summary: 'Approved.', digest: 'reviewer-digest', acceptedAtMs: 3
+      checksRun: [], summary: 'Approved.', digest: `reviewer-digest${suffix}`, acceptedAtMs
     })
+    appendAttempt(reviewerAttemptId, {
+      kind: 'dispatch-reviewer', revision: 1, contentIdentity,
+      evidenceKey: `review:1:reviewer:${contentIdentity}:1`
+    }, reviewerDispatchId)
     verdictRows.push({
-      attemptId: 'integrator-attempt', watcherId: enrollment.watcherId, dispatchId: 'integrator-dispatch',
+      attemptId: integratorAttemptId, watcherId: enrollment.watcherId, dispatchId: integratorDispatchId,
       revision: 1, role: 'integrator', contentIdentity, verdict: 'approve', criteriaResults: [reviewer],
-      checksRun: [{ command: 'test -f src/main.ts', exitCode: 0 }], summary: 'Integrated.',
-      digest: 'integrator-digest', acceptedAtMs: 4
+      checksRun: [{ command: gateCommand, exitCode: 0 }], summary: 'Integrated.',
+      digest: `integrator-digest${suffix}`, acceptedAtMs: acceptedAtMs + 1
+    })
+    appendAttempt(integratorAttemptId, {
+      kind: 'dispatch-integrator', revision: 1, contentIdentity,
+      evidenceKey: `review:1:integrator:${contentIdentity}:1`
+    }, integratorDispatchId)
+  }
+  function addRepair(ordinal: number, appliedAtMs: number): void {
+    repairs.push({
+      watcherId: enrollment.watcherId, revision: 1, ordinal, attemptId: `repair-${ordinal}`,
+      beforeDigest: 'before-repair', afterDigest: 'after-repair', touchedTaskKeys: ['verification'],
+      patch: { repair: { upsertTasks: [{
+        taskKey: 'verification', title: 'Verify objective', spec: 'Run the acceptance check.',
+        deps: ['implement'], territory: ['src/**'],
+        criteria: [{ body: 'The source file exists.', shellCheckable: true, checkCommand: 'test -f src/main.ts' }]
+      }], dropTaskKeys: [] }, assumptions: [] }, appliedAtMs
     })
   }
   return {
-    root, dataDir, calls, checkRows, verdictRows, issuedRows, landingRows, task, plan, payload, enrollment,
-    store, context, runtime, runChecked, initGit, approveEvidence
+    root, dataDir, calls, checkRows, verdictRows, issuedRows, landingRows, repairs, journal, task, plan, payload, enrollment,
+    store, context, runtime, runChecked, initGit, approveEvidence, addRepair, appendAttempt
   }
 }
 
@@ -170,36 +225,100 @@ test('records files-on-disk landing only when content identity matches and requi
   const contentIdentity = await r.runtime.captureContentIdentity()
   const action = actionFor(contentIdentity)
 
-  const missingEvidence = await recordFilesOnDisk(r.runtime, action, 'landing-attempt')
+  const missingEvidence = await recordFilesOnDisk(r.runtime, action, 'landing-attempt', r.journal)
   expect(missingEvidence.effect).toBe('not-landed')
   expect(r.landingRows).toHaveLength(0)
 
   r.approveEvidence(contentIdentity)
   const integratorIssue = r.issuedRows.find(row => row.role === 'integrator')!
   integratorIssue.contentIdentity = 'objective-tree:stale-dispatch'
-  expect((await recordFilesOnDisk(r.runtime, action, 'wrong-dispatch-tree')).effect).toBe('not-landed')
+  expect((await recordFilesOnDisk(r.runtime, action, 'wrong-dispatch-tree', r.journal)).effect).toBe('not-landed')
   integratorIssue.contentIdentity = contentIdentity
+  const reviewerApproval = r.journal.find(entry => entry.attemptId === 'reviewer-attempt')!
+  const reviewerDispatchId = reviewerApproval.dispatchId
+  reviewerApproval.dispatchId = 'wrong-dispatch'
+  expect((await recordFilesOnDisk(r.runtime, action, 'wrong-review-dispatch', r.journal)).effect).toBe('not-landed')
+  reviewerApproval.dispatchId = reviewerDispatchId
+  const reviewerIssueIndex = r.issuedRows.findIndex(row => row.attemptId === 'reviewer-attempt')
+  const reviewerIssue = r.issuedRows.splice(reviewerIssueIndex, 1)[0]!
+  expect((await recordFilesOnDisk(r.runtime, action, 'unissued-approval', r.journal)).effect).toBe('not-landed')
+  r.issuedRows.splice(reviewerIssueIndex, 0, reviewerIssue)
+  const criterionCheck = r.checkRows.find(row => row.kind === 'criterion')!
+  const criterionCommand = criterionCheck.command
+  criterionCheck.command = 'different command'
+  expect((await recordFilesOnDisk(r.runtime, action, 'wrong-check-command', r.journal)).effect).toBe('not-landed')
+  criterionCheck.command = criterionCommand
+  r.issuedRows.push({
+    attemptId: 'reviewer-block', watcherId: r.enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity
+  })
   r.verdictRows.push({
     attemptId: 'reviewer-block', watcherId: r.enrollment.watcherId, dispatchId: 'reviewer-block-dispatch',
     revision: 1, role: 'reviewer', contentIdentity, verdict: 'block', criteriaResults: [], checksRun: [],
     summary: 'A blocking verdict cannot be overridden by approval.', digest: 'block-digest', acceptedAtMs: 5
   })
-  r.issuedRows.push({
-    attemptId: 'reviewer-block', watcherId: r.enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity
-  })
-  expect((await recordFilesOnDisk(r.runtime, action, 'blocked-attempt')).effect).toBe('not-landed')
+  r.appendAttempt('reviewer-block', {
+    kind: 'dispatch-reviewer', revision: 1, contentIdentity, evidenceKey: `review:1:reviewer:${contentIdentity}:2`
+  }, 'reviewer-block-dispatch')
+  expect((await recordFilesOnDisk(r.runtime, action, 'blocked-attempt', r.journal)).effect).toBe('not-landed')
   expect(r.landingRows).toHaveLength(0)
   r.verdictRows.pop()
+  r.issuedRows.pop()
+  r.journal.pop()
 
-  expect(await recordFilesOnDisk(r.runtime, action, 'landing-attempt')).toEqual({ effect: 'landed' })
+  reviewerApproval.state = 'running'
+  expect((await recordFilesOnDisk(r.runtime, action, 'unsettled-approval', r.journal)).effect).toBe('not-landed')
+  reviewerApproval.state = 'settled'
+
+  expect(await recordFilesOnDisk(r.runtime, action, 'landing-attempt', r.journal)).toEqual({ effect: 'landed' })
   expect(r.landingRows).toHaveLength(1)
   expect(r.landingRows[0]).toMatchObject({ rung: 'files-on-disk', contentIdentity, attemptId: 'landing-attempt' })
 
   writeFileSync(join(r.root, 'src', 'main.ts'), 'changed after evidence\n')
-  expect(await recordFilesOnDisk(r.runtime, action, 'stale-landing')).toEqual({
+  expect(await recordFilesOnDisk(r.runtime, action, 'stale-landing', r.journal)).toEqual({
     effect: 'not-landed', reason: 'landing-evidence-stale'
   })
   expect(r.landingRows).toHaveLength(1)
+})
+
+test('ignores superseded blocks and accepts only checks and approvals current to the latest repair', async () => {
+  const r = rig()
+  await r.initGit()
+  const contentIdentity = await r.runtime.captureContentIdentity()
+  const action = actionFor(contentIdentity)
+  r.approveEvidence(contentIdentity)
+  r.issuedRows.push({
+    attemptId: 'historical-block', watcherId: r.enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity
+  })
+  r.verdictRows.push({
+    attemptId: 'historical-block', watcherId: r.enrollment.watcherId, dispatchId: 'historical-block-dispatch',
+    revision: 1, role: 'reviewer', contentIdentity, verdict: 'block', criteriaResults: [], checksRun: [],
+    summary: 'Superseded after repair.', digest: 'historical-block-digest', acceptedAtMs: 5
+  })
+  r.appendAttempt('historical-block', {
+    kind: 'dispatch-reviewer', revision: 1, contentIdentity, evidenceKey: `review:1:reviewer:${contentIdentity}:2`
+  }, 'historical-block-dispatch')
+  r.addRepair(1, 10)
+  r.approveEvidence(contentIdentity, {
+    suffix: '-repair-1', checkedAtMs: 10, acceptedAtMs: 11, repairOrdinal: 1
+  })
+  const repairCheck = r.checkRows.find(row => row.attemptId === 'criterion-pass-repair-1')!
+  const repairCheckAttempt = r.journal.find(entry => entry.attemptId === repairCheck.attemptId)!
+  const repairCheckedAtMs = repairCheck.checkedAtMs
+  const repairEvidenceKey = repairCheckAttempt.action!.evidenceKey
+  repairCheck.checkedAtMs = 9
+  repairCheckAttempt.action!.evidenceKey = `check:1:implement:0:${contentIdentity}`
+  expect((await recordFilesOnDisk(r.runtime, action, 'superseded-check', r.journal)).effect).toBe('not-landed')
+  repairCheck.checkedAtMs = repairCheckedAtMs
+  repairCheckAttempt.action!.evidenceKey = repairEvidenceKey
+
+  const repairCommand = repairCheck.command
+  repairCheck.command = 'different command'
+  expect((await recordFilesOnDisk(r.runtime, action, 'repair-command-mismatch', r.journal)).effect).toBe('not-landed')
+  repairCheck.command = repairCommand
+
+  expect(await recordFilesOnDisk(r.runtime, action, 'repaired-landing', r.journal)).toEqual({ effect: 'landed' })
+  expect(r.landingRows).toHaveLength(1)
+  expect(r.verdictRows.find(row => row.attemptId === 'historical-block')).toMatchObject({ verdict: 'block' })
 })
 
 test('commits only inside-territory files with the attempt trailer and leaves outside dirty and staged files untouched', async () => {
