@@ -85,6 +85,7 @@ export type SitterPayload = {
   branchUpdateMode: 'merge-base-update'
   mergeMethod: 'merge' | 'squash' | 'rebase' | null
   mergeCheckScope: 'all'
+  agent?: string
 }
 export type CheckState = 'passed' | 'pending' | 'failed' | 'unknown'
 export type SitterCheck = {
@@ -94,6 +95,19 @@ export type SitterCheck = {
   observation: string
   rerunTarget: string | null
   workflowRunId: number | null
+  checkRunId: number | null
+  failureSignature: string | null
+  failureExcerpt: string | null
+}
+export type PreparedCommitKind = 'fix' | 'conflict-resolution'
+export type PreparedCommitInfo = {
+  sha: string
+  parentCount: number
+  primaryParentSha: string | null
+  secondaryParentSha: string | null
+  attemptTrailer: string | null
+  dirty: boolean
+  policyViolation: string | null
 }
 export type SitterWorld = {
   reviewNumber: number
@@ -102,6 +116,7 @@ export type SitterWorld = {
   draft: boolean
   headSha: string
   baseSha: string
+  baseRefName: string
   headRefName: string
   mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
   mergeStateStatus: string
@@ -112,11 +127,26 @@ export type SitterWorld = {
   allowedMergeMethods: string[]
   checksComplete: boolean
   checks: SitterCheck[]
+  localHeadSha: string | null
+  localDirty: boolean
+  localPrepared: PreparedCommitInfo | null
+}
+export type FailedCheckInfo = {
+  key: string
+  name: string
+  failureSignature: string
+  failureExcerpt: string
 }
 type RerunCheckAction = KernelAction & { kind: 'rerun-check'; head: string; observations: string[]; checkNames: string[]; ordinal: number }
 type UpdateBranchAction = KernelAction & { kind: 'update-branch'; head: string; base: string; ordinal: number }
 type MergeAction = KernelAction & { kind: 'merge'; head: string; method: 'merge' | 'squash' | 'rebase'; ordinal: number }
-export type SitterAction = RerunCheckAction | UpdateBranchAction | MergeAction
+type PrepareFixAction = KernelAction & { kind: 'prepare-fix'; expectedHeadSha: string; failedChecks: FailedCheckInfo[] }
+type PublishFixAction = KernelAction & { kind: 'publish-fix'; expectedHeadSha: string; preparedCommitSha: string; prepareFingerprint: string }
+type PrepareConflictAction = KernelAction & { kind: 'prepare-conflict-resolution'; expectedHeadSha: string; baseSha: string; baseRefName: string }
+type PublishConflictAction = KernelAction & { kind: 'publish-conflict-resolution'; expectedHeadSha: string; preparedCommitSha: string; prepareFingerprint: string; baseSha: string }
+export type SitterAction =
+  | RerunCheckAction | UpdateBranchAction | MergeAction
+  | PrepareFixAction | PublishFixAction | PrepareConflictAction | PublishConflictAction
 export type SitterEnrollment = { capabilities: Record<string, CapabilityMode>; kindPayload: SitterPayload }
 
 const CHECK_RUN_FAILURES: Record<string, true> = {
@@ -187,7 +217,10 @@ function mapCheck(value: unknown): SitterCheck | null {
     state,
     observation: `${kind}:${checkRunId ?? ''}:${workflowRunId ?? ''}:${status}:${conclusion}`,
     rerunTarget,
-    workflowRunId
+    workflowRunId,
+    checkRunId,
+    failureSignature: null,
+    failureExcerpt: null
   }
 }
 
@@ -224,6 +257,7 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
     draft: state === 'draft' || rawReview.draft === true || rawReview.isDraft === true,
     headSha: headRefOid,
     baseSha: asString(rawReview.baseRefOid),
+    baseRefName: asString(rawReview.baseRefName),
     headRefName: asString(rawReview.headRefName, payload.headRefName),
     mergeable,
     mergeStateStatus: asString(rawReview.mergeStateStatus, 'UNKNOWN'),
@@ -233,7 +267,10 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
     defaultMergeMethod,
     allowedMergeMethods,
     checksComplete,
-    checks: mappedChecks
+    checks: mappedChecks,
+    localHeadSha: null,
+    localDirty: false,
+    localPrepared: null
   }
 }
 
@@ -285,8 +322,9 @@ function retryState(action: SitterAction, journal: JournalEntry[]): RetryState {
 
 function failureDetail(action: SitterAction, failed: Attempt, count: number): string {
   const name = action.kind
+  const head = typeof action.head === 'string' ? action.head : asString(action.expectedHeadSha)
   const reason = typeof failed.reason === 'string' && failed.reason.length > 0 ? failed.reason : 'unknown failure'
-  return `${name} failed ${count} times on ${action.head.slice(0, 12)}: ${reason}`
+  return `${name} failed ${count} times on ${head.slice(0, 12)}: ${reason}`
 }
 
 function retryDetail(action: SitterAction, retry: RetryState): string | undefined {
@@ -320,7 +358,8 @@ function withOrdinal(action: SitterAction, ordinal: number): SitterAction {
   let evidenceKey: string
   if (action.kind === 'rerun-check') evidenceKey = JSON.stringify(['rerun-check', action.head, action.checkNames, ordinal])
   else if (action.kind === 'update-branch') evidenceKey = JSON.stringify(['update-branch', action.head, action.base, ordinal])
-  else evidenceKey = JSON.stringify(['merge', action.head, action.method, ordinal])
+  else if (action.kind === 'merge') evidenceKey = JSON.stringify(['merge', action.head, action.method, ordinal])
+  else return action
   return { ...action, ordinal, evidenceKey }
 }
 
@@ -391,6 +430,209 @@ function latestAttemptFor(action: SitterAction, journal: JournalEntry[]): Attemp
   return matchingAttempts(action, journal).at(-1) ?? null
 }
 
+export function checkKey(check: Pick<SitterCheck, 'kind' | 'name'>): string {
+  return JSON.stringify([check.kind, check.name])
+}
+
+type FailureSetEntry =
+  | Pick<SitterCheck, 'kind' | 'name' | 'failureSignature'>
+  | Pick<FailedCheckInfo, 'key' | 'failureSignature'>
+
+export function failureSetKey(checks: readonly FailureSetEntry[]): string {
+  return JSON.stringify(checks
+    .map((check) => ['key' in check ? check.key : checkKey(check), check.failureSignature] as const)
+    .sort((left, right) => {
+      const [leftKey, leftSignature] = left
+      const [rightKey, rightSignature] = right
+      if (leftKey !== rightKey) return leftKey < rightKey ? -1 : 1
+      if (leftSignature === rightSignature) return 0
+      if (leftSignature === null) return -1
+      if (rightSignature === null) return 1
+      return leftSignature < rightSignature ? -1 : 1
+    }))
+}
+
+const MAX_FAILURE_EXCERPT_LINES = 400
+const MAX_FAILURE_EXCERPT_CHARS = 16_000
+
+function boundedFailureExcerpt(value: string | null): string {
+  const excerpt = (value ?? '').split(/\r?\n/).filter((line) => line.trim().length > 0)
+    .slice(-MAX_FAILURE_EXCERPT_LINES).join('\n')
+  return excerpt.length <= MAX_FAILURE_EXCERPT_CHARS
+    ? excerpt
+    : excerpt.slice(-MAX_FAILURE_EXCERPT_CHARS)
+}
+
+function enabled(capability: CapabilityMode | undefined): boolean {
+  return capability === 'on' || capability === 'gated'
+}
+
+function failedCheckInfo(checks: SitterCheck[]): FailedCheckInfo[] {
+  return checks.map((check) => ({
+    key: checkKey(check),
+    name: check.name,
+    failureSignature: check.failureSignature!,
+    failureExcerpt: boundedFailureExcerpt(check.failureExcerpt)
+  })).sort((left, right) => {
+    if (left.key !== right.key) return left.key < right.key ? -1 : 1
+    if (left.failureSignature === right.failureSignature) return 0
+    return left.failureSignature < right.failureSignature ? -1 : 1
+  })
+}
+
+function newActionIdentity(action: KernelAction): string | null {
+  if (action.kind === 'prepare-fix') {
+    const candidate = action as PrepareFixAction
+    return Array.isArray(candidate.failedChecks)
+      ? JSON.stringify([candidate.kind, candidate.expectedHeadSha, failureSetKey(candidate.failedChecks)])
+      : null
+  }
+  if (action.kind === 'prepare-conflict-resolution') {
+    const candidate = action as PrepareConflictAction
+    return JSON.stringify([candidate.kind, candidate.expectedHeadSha, candidate.baseSha, candidate.baseRefName])
+  }
+  if (action.kind === 'publish-fix') {
+    const candidate = action as PublishFixAction
+    return JSON.stringify([
+      candidate.kind,
+      candidate.expectedHeadSha,
+      candidate.preparedCommitSha,
+      candidate.prepareFingerprint
+    ])
+  }
+  if (action.kind === 'publish-conflict-resolution') {
+    const candidate = action as PublishConflictAction
+    return JSON.stringify([
+      candidate.kind,
+      candidate.expectedHeadSha,
+      candidate.preparedCommitSha,
+      candidate.prepareFingerprint,
+      candidate.baseSha
+    ])
+  }
+  return null
+}
+
+function matchingNewAttempts(action: KernelAction, journal: JournalEntry[]): Attempt[] {
+  const identity = newActionIdentity(action)
+  return identity === null ? [] : latestAttempts(journal).filter((attempt) => newActionIdentity(attempt.action) === identity)
+}
+
+
+function prepareFixAction(world: SitterWorld, checks: SitterCheck[]): PrepareFixAction {
+  const failedChecks = failedCheckInfo(checks)
+  const key = failureSetKey(failedChecks)
+  return {
+    kind: 'prepare-fix',
+    capability: 'fixChecks',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    contentIdentity: contentIdentity(world),
+    evidenceKey: `${world.headSha}:fix-checks:${key}`,
+    expectedHeadSha: world.headSha,
+    failedChecks
+  }
+}
+
+function prepareConflictAction(world: SitterWorld): PrepareConflictAction {
+  return {
+    kind: 'prepare-conflict-resolution',
+    capability: 'resolveConflicts',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    contentIdentity: contentIdentity(world),
+    evidenceKey: `${world.headSha}:resolve-conflicts:${world.baseSha}`,
+    expectedHeadSha: world.headSha,
+    baseSha: world.baseSha,
+    baseRefName: world.baseRefName
+  }
+}
+
+function hasValidSecondaryParent(prepared: PreparedCommitInfo, baseSha: string): boolean {
+  return prepared.parentCount !== 2 ||
+    (/^[0-9a-f]{40}$/i.test(baseSha) && prepared.secondaryParentSha === baseSha)
+}
+
+function validPreparedCommit(world: SitterWorld, attempt: Attempt, kind: PreparedCommitKind): boolean {
+  const prepared = world.localPrepared
+  if (!prepared || !attempt.fingerprint || prepared.attemptTrailer !== attempt.fingerprint ||
+    prepared.sha === world.headSha || world.localHeadSha !== prepared.sha ||
+    world.localDirty || prepared.dirty || prepared.primaryParentSha !== world.headSha ||
+    prepared.policyViolation !== null) return false
+  return kind === 'fix'
+    ? prepared.parentCount === 1
+    : prepared.parentCount === 1 || (prepared.parentCount === 2 && hasValidSecondaryParent(prepared, world.baseSha))
+}
+
+function publishAction(
+  world: SitterWorld,
+  kind: 'publish-fix' | 'publish-conflict-resolution',
+  attempt: Attempt
+): PublishFixAction | PublishConflictAction | null {
+  const prepared = world.localPrepared
+  if (!prepared || !validPreparedCommit(world, attempt, kind === 'publish-fix' ? 'fix' : 'conflict-resolution')) return null
+  const capability = kind === 'publish-fix' ? 'fixChecks' : 'resolveConflicts'
+  const common = {
+    capability,
+    visibility: 'external' as const,
+    recovery: 'replay-safe' as const,
+    contentIdentity: contentIdentity(world),
+    evidenceKey: `${world.headSha}:${kind}:${prepared.sha}`,
+    preparedCommitSha: prepared.sha,
+    expectedHeadSha: world.headSha,
+    expectedState: { target: `${world.reviewUrl}#head`, before: world.headSha },
+    prepareFingerprint: attempt.fingerprint
+  }
+  return kind === 'publish-fix'
+    ? { kind, ...common }
+    : { kind, ...common, baseSha: world.baseSha }
+}
+
+function persistedFailures(world: SitterWorld, journal: JournalEntry[], checks: SitterCheck[]): SitterCheck[] {
+  const rerunByName = new Map<string, RerunCheckAction>()
+  for (const attempt of latestAttempts(journal)) {
+    if (attempt.action.kind !== 'rerun-check' || attempt.state !== 'settled' || attempt.effect !== 'landed') continue
+    const rerun = attempt.action as RerunCheckAction
+    if (rerun.head !== world.headSha) continue
+    for (const name of rerun.checkNames) rerunByName.set(name, rerun)
+  }
+  return checks.filter((check) => {
+    const rerun = rerunByName.get(check.name)
+    return rerun !== undefined && !rerun.observations.includes(check.observation)
+  })
+}
+
+function park(reason: string, predicate: string, deviationKind: OwnerDeviationKind, naturalKey: string): StopResult {
+  const detail = `${predicate}: ${reason}`
+  return {
+    kind: 'park',
+    reason: 'stop-predicate',
+    detail,
+    deviation: { kind: deviationKind, naturalKey, detail }
+  }
+}
+
+function isApprovalReady(world: SitterWorld): boolean {
+  return world.reviewDecision === 'APPROVED' || world.reviewDecision === 'NONE'
+}
+
+
+
+function prepareIsBlocked(attempts: Attempt[]): boolean {
+  return attempts.some((attempt) => {
+    if (attempt.state === 'attempted' && attempt.effect === undefined &&
+      attempt.workerRequest === undefined && attempt.requestId === undefined && attempt.dispatchId === undefined) return false
+    return attempt.state !== 'settled' || attempt.effect === 'indeterminate' || attempt.resolved === false
+  })
+}
+function newActionHoldReason(action: KernelAction, journal: JournalEntry[]): string | null {
+  const attempts = matchingNewAttempts(action, journal)
+  if (attempts.some((attempt) =>
+    attempt.state !== 'settled' || attempt.effect === 'indeterminate' || attempt.resolved === false
+  )) return 'action-in-flight'
+  return attempts.at(-1)?.effect === 'landed' ? 'awaiting-action-state' : null
+}
+
 function mergeGates(world: SitterWorld, enrollment: SitterEnrollment): string[] {
   const failed: string[] = []
   if (enrollment.capabilities.merge !== 'on' && enrollment.capabilities.merge !== 'gated') failed.push('capability')
@@ -412,7 +654,31 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
 
   considered.push('conflicts')
   if (world.mergeable === 'CONFLICTING' || world.mergeStateStatus === 'DIRTY') {
-    return noAction('conflicts-present', considered)
+    if (world.mergeable !== 'CONFLICTING' || !enabled(enrollment.capabilities.resolveConflicts) ||
+      snapshot.freshness !== 'live' || world.draft || !world.mergeMetadataKnown || !isApprovalReady(world)) {
+      return noAction('conflicts-present', considered)
+    }
+    const prepare = prepareConflictAction(world)
+    const attempts = matchingNewAttempts(prepare, journal)
+    if (prepareIsBlocked(attempts)) return noAction('prepare-in-flight', considered)
+    const previous = attempts.at(-1)
+    if (previous?.state === 'settled' && previous.effect === 'landed') {
+      if (world.localPrepared?.policyViolation) {
+        if (!hasValidSecondaryParent(world.localPrepared, world.baseSha)) {
+          return noAction('unverified-prepared-commit', considered)
+        }
+        return noAction('diff-policy-violation', considered)
+      }
+      const publish = publishAction(world, 'publish-conflict-resolution', previous)
+      if (!publish) return noAction('unverified-prepared-commit', considered)
+      const held = newActionHoldReason(publish, journal)
+      if (held !== null) return noAction('publish-in-flight', considered)
+      return { action: publish, considered }
+    }
+    if (previous?.reason === 'worker-failed') {
+      return noAction('conflicts-present', considered)
+    }
+    return { action: prepare, considered }
   }
 
   considered.push('fix-checks')
@@ -434,9 +700,54 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
       considered[considered.length - 1] = `fix-checks: ${rerunBlock}`
       return noAction(rerunBlock, considered)
     }
+
+    if (snapshot.freshness === 'live' && enabled(enrollment.capabilities.fixChecks) && !world.draft && world.mergeMetadataKnown &&
+      isApprovalReady(world) && runnableChecks.every((check) => Boolean(check.failureSignature))) {
+      const prepare = prepareFixAction(world, runnableChecks)
+      const prepareAttempts = matchingNewAttempts(prepare, journal)
+      if (prepareIsBlocked(prepareAttempts)) return noAction('prepare-in-flight', considered)
+      const previous = prepareAttempts.at(-1)
+      if (previous?.state === 'settled' && previous.effect === 'landed') {
+        if (world.localPrepared?.policyViolation) return noAction('diff-policy-violation', considered)
+        const publish = publishAction(world, 'publish-fix', previous)
+        if (!publish) return noAction('unverified-prepared-commit', considered)
+        if (newActionHoldReason(publish, journal) !== null) return noAction('publish-in-flight', considered)
+        return { action: publish, considered }
+      }
+      if (previous?.reason === 'worker-failed') return noAction('prepare-failed', considered)
+    }
+
+    const persisted = persistedFailures(world, journal, runnableChecks)
+    if (persisted.length > 0) {
+      considered[considered.length - 1] = 'fix-checks: failure-persisted-after-rerun'
+      if (!enabled(enrollment.capabilities.fixChecks)) return noAction('failure-persisted-after-rerun', considered)
+      if (persisted.some((check) => !check.failureSignature)) {
+        return noAction('unverifiable-reproduced-failure', considered)
+      }
+      if (snapshot.freshness === 'live' && !world.draft && world.mergeMetadataKnown && isApprovalReady(world)) {
+        const prepare = prepareFixAction(world, persisted)
+        const attempts = matchingNewAttempts(prepare, journal)
+        if (prepareIsBlocked(attempts)) return noAction('prepare-in-flight', considered)
+        const previous = attempts.at(-1)
+        if (previous?.state === 'settled' && previous.effect === 'landed') {
+          if (world.localPrepared?.policyViolation) return noAction('diff-policy-violation', considered)
+          const publish = publishAction(world, 'publish-fix', previous)
+          if (!publish) return noAction('unverified-prepared-commit', considered)
+          const held = newActionHoldReason(publish, journal)
+          if (held !== null) return noAction('publish-in-flight', considered)
+          return { action: publish, considered }
+        }
+        if (previous?.reason === 'worker-failed') {
+          return noAction('failure-persisted-after-rerun', considered)
+        }
+        return { action: prepare, considered }
+      }
+      return noAction('failure-persisted-after-rerun', considered)
+    }
+
     const alreadyRerun = landedRerunNames(world, journal)
     const remainingChecks = runnableChecks.filter((check) => !alreadyRerun.has(check.name))
-    if (remainingChecks.length > 0 && enrollment.capabilities.fixChecks !== 'off') {
+    if (remainingChecks.length > 0 && enabled(enrollment.capabilities.fixChecks)) {
       return { action: buildRerunAction(world, remainingChecks, journal), considered }
     }
     if (remainingChecks.length > 0) considered[considered.length - 1] = 'fix-checks: capability-off'
@@ -491,7 +802,7 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
 
 export function decide(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollment: SitterEnrollment): Decision<SitterAction> {
   const planned = plan(snapshot, journal, enrollment)
-  if (planned.action === null) return planned
+  if (planned.action === null || !['rerun-check', 'update-branch', 'merge'].includes(planned.action.kind)) return planned
   const retry = retryState(planned.action, journal)
   if (retry.failuresAfterReset.length >= RETRY_LIMIT) {
     const lastFailure = retry.failuresAfterReset.at(-1)!
@@ -514,8 +825,100 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
       reason: world.lifecycle === 'merged' ? 'review merged' : 'review closed'
     }
   }
+  const attempts = latestAttempts(journal)
+  if (world.localPrepared && world.localPrepared.sha !== world.headSha && world.localPrepared.policyViolation !== null &&
+    hasValidSecondaryParent(world.localPrepared, world.baseSha) &&
+    attempts.some((attempt) => (attempt.action.kind === 'prepare-fix' || attempt.action.kind === 'prepare-conflict-resolution') &&
+      attempt.action.expectedHeadSha === world.headSha && attempt.state === 'settled' && attempt.effect === 'landed')) {
+    return park(
+      world.localPrepared.policyViolation,
+      'diff-policy-violation',
+      'report-rejected',
+      `diff-policy-violation:${world.localPrepared.sha}`
+    )
+  }
+
+  const prepareByIdentity = new Map<string, Attempt>()
+  for (const attempt of attempts) {
+    if (attempt.action.kind !== 'prepare-fix' && attempt.action.kind !== 'prepare-conflict-resolution') continue
+    const identity = newActionIdentity(attempt.action)
+    if (identity !== null) prepareByIdentity.set(identity, attempt)
+  }
+  for (const attempt of attempts) {
+    if (attempt.action.kind !== 'publish-fix' || attempt.state !== 'settled' || attempt.effect !== 'landed') continue
+    const publish = attempt.action as PublishFixAction
+    if (publish.preparedCommitSha !== world.headSha) continue
+    const latestPublish = matchingNewAttempts(publish, journal).at(-1)
+    if (!latestPublish || latestPublish.state !== 'settled' || latestPublish.effect !== 'landed') continue
+    const sameFailure = world.checks.some((check) =>
+      check.state === 'failed' && [...prepareByIdentity.values()].some((entry) => {
+        if (entry.state !== 'settled' || entry.effect !== 'landed' || entry.fingerprint !== publish.prepareFingerprint) return false
+        const prepare = entry.action as PrepareFixAction
+        return prepare.expectedHeadSha === publish.expectedHeadSha &&
+          Array.isArray(prepare.failedChecks) &&
+          prepare.failedChecks.some((failed) => failed.key === checkKey(check) && failed.failureSignature === check.failureSignature)
+      })
+    )
+    if (sameFailure) {
+      return park(
+        `the same check failure returned on ${world.headSha}`,
+        'repeated-failure-after-own-fix',
+        'check-failed',
+        `repeated-failure-after-own-fix:${world.headSha}`
+      )
+    }
+  }
+
+  for (const attempt of prepareByIdentity.values()) {
+    if (attempt.action.expectedHeadSha !== world.headSha) continue
+    if (attempt.state === 'settled' && attempt.effect === 'not-landed' && attempt.reason === 'worker-failed') {
+      return park(
+        attempt.reason,
+        'unverified-prepared-commit',
+        'report-rejected',
+        `unverified-prepared-commit:${world.headSha}`
+      )
+    }
+    if (attempt.state === 'settled' && attempt.effect === 'landed') {
+      const kind = attempt.action.kind === 'prepare-fix' ? 'fix' : 'conflict-resolution'
+      if (!validPreparedCommit(world, attempt, kind)) {
+        return park(
+          'prepare did not produce a clean commit with the expected parent and attempt trailer',
+          'unverified-prepared-commit',
+          'report-rejected',
+          `unverified-prepared-commit:${world.headSha}`
+        )
+      }
+    }
+  }
+
+  const conflicting = world.mergeable === 'CONFLICTING' || world.mergeStateStatus === 'DIRTY'
+  if (conflicting && !enabled(enrollment.capabilities.resolveConflicts)) {
+    return park('merge conflicts are present', 'conflicts-present', 'landing-failed', `conflicts-present:${world.headSha}`)
+  }
+  const runnable = world.checks.filter((check) =>
+    check.state === 'failed' && check.kind === 'check_run' && check.rerunTarget !== null
+  )
+  const persisted = world.checksComplete ? persistedFailures(world, journal, runnable) : []
+  if (persisted.length > 0 && !enabled(enrollment.capabilities.fixChecks)) {
+    return park(
+      'checks remain failed after rerun',
+      'failure-persisted-after-rerun',
+      'check-failed',
+      `failure-persisted-after-rerun:${world.headSha}`
+    )
+  }
+  if (persisted.some((check) => !check.failureSignature)) {
+    return park(
+      'persisted check failure has no verifiable signature',
+      'unverifiable-reproduced-failure',
+      'check-failed',
+      `unverifiable-reproduced-failure:${world.headSha}`
+    )
+  }
+
   const planned = plan(snapshot, journal, enrollment)
-  if (planned.action === null) return null
+  if (planned.action === null || !['rerun-check', 'update-branch', 'merge'].includes(planned.action.kind)) return null
   const retry = retryState(planned.action, journal)
   if (retry.failuresAfterReset.length < RETRY_LIMIT) return null
   const lastFailure = retry.failuresAfterReset.at(-1)!
@@ -530,6 +933,13 @@ export function resolveOutcome(attempt: Attempt, snapshot: Snapshot<SitterWorld>
   const action = attempt.action
   const world = snapshot.world
   const age = snapshot.observedAtMs - attempt.atMs
+  if (action.kind === 'publish-fix' || action.kind === 'publish-conflict-resolution') {
+    if (snapshot.freshness !== 'live') return null
+    const publish = action as PublishFixAction | PublishConflictAction
+    if (world.headSha === publish.preparedCommitSha) return { effect: 'landed' }
+    if (world.headSha !== publish.expectedHeadSha) return { effect: 'not-landed', reason: 'head-moved' }
+    if (age >= UNOBSERVED_EFFECT_MS) return { effect: 'not-landed', reason: 'no-publish-observed' }
+  }
   if (action.kind === 'merge') {
     const merge = action as MergeAction
     if (world.lifecycle === 'merged') return { effect: 'landed' }
