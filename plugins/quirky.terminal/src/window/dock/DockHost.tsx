@@ -6,6 +6,8 @@ import { DEFAULT_GUTTER_ROWS, dockHeight, gutterRowsAfterDrag, shouldMountDock }
 import { DockLoader } from './loader'
 import { isDockState, type DockHostReport, type DockState, type DockTransport } from './types'
 import { useBoxSize } from '../workspace/useBoxSize'
+import { InlineError, NoticeLine } from '@quirky/ui'
+import { dockFocusCommand, requestWindowCommand } from '../pane/commands'
 
 const COMPOSER_VIEW_ID = 'view:quirky.terminal-dock/composer'
 
@@ -246,10 +248,10 @@ export function DockHost(props: Props) {
     }
   }, [acceptDock, context, dock?.enabled, focused, mounted, paneId, transport, viewMountSequence])
 
-  const requestComposerFocus = useCallback(() => {
+  const requestComposerFocus = () => {
     if (!controller.canFocusDock(paneId) || focusRequestPending.current) return
     focusRequestPending.current = true
-    void context.executeCommand('command:quirky.terminal-dock/focus', { pane: paneId }).then(
+    void requestWindowCommand(context, dockFocusCommand(paneId)).then(
       () => {
         focusRequestPending.current = false
       },
@@ -258,7 +260,7 @@ export function DockHost(props: Props) {
         setMountError(messageOf(error))
       }
     )
-  }, [context, controller, paneId])
+  }
 
   useEffect(() => {
     const enteringPassthrough = Boolean(dock?.passthrough && !wasPassthrough.current)
@@ -282,23 +284,20 @@ export function DockHost(props: Props) {
     wasRequested.current = requested
     wasActive.current = active
     wasPassthrough.current = Boolean(dock?.passthrough)
-  }, [active, composerFocused, controller, dock, hostFocused, mounted, paneId, requestComposerFocus, requested, viewMountSequence])
+  }, [active, composerFocused, context, controller, dock, hostFocused, mounted, paneId, requested, viewMountSequence])
 
-  const persistRows = useCallback(
-    async (nextRows: number) => {
-      const current = dockRef.current
-      if (!current?.enabled || !current.supported || !current.docked || current.gutterRows === nextRows) return
-      try {
-        const result = await context.call('quirky.terminal-dock/set', { pane: paneId, gutterRows: nextRows })
-        if (!isDockState(result)) throw new Error('The dock state response was invalid.')
-        acceptDock(result)
-      } catch (error) {
-        setRows(dockRef.current?.gutterRows ?? DEFAULT_GUTTER_ROWS)
-        context.toast('Could not resize the agent composer', messageOf(error))
-      }
-    },
-    [acceptDock, context, paneId]
-  )
+  const persistRows = async (nextRows: number) => {
+    const current = dockRef.current
+    if (!current?.enabled || !current.supported || !current.docked || current.gutterRows === nextRows) return
+    try {
+      const result = await context.call('quirky.terminal-dock/set', { pane: paneId, gutterRows: nextRows })
+      if (!isDockState(result)) throw new Error('The dock state response was invalid.')
+      acceptDock(result)
+    } catch (error) {
+      setRows(dockRef.current?.gutterRows ?? DEFAULT_GUTTER_ROWS)
+      context.toast('Could not resize the agent composer', messageOf(error))
+    }
+  }
 
   const beginResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !mounted || !dock?.enabled) return
@@ -335,7 +334,7 @@ export function DockHost(props: Props) {
       target.removeEventListener('mousemove', onMove)
       target.removeEventListener('mouseup', onUp)
     }
-  }, [persistRows, resize !== null])
+  }, [acceptDock, context, paneId, resize !== null])
 
   useEffect(() => () => {
     const current = dockRef.current
@@ -375,6 +374,7 @@ export function DockHost(props: Props) {
           ref={terminalRef}
           context={context}
           sessionId={sessionId}
+          paneId={paneId}
           active={active}
           autoFocus={!controller.suppressLayoutAutoFocus}
           dragging={workspaceDragging || resize !== null}
@@ -396,6 +396,7 @@ export function DockHost(props: Props) {
             data-resize-handle
             onMouseDown={beginResize}
           />
+          {!viewMounted && !mountError ? <div role="status"><NoticeLine>Opening agent composer…</NoticeLine></div> : null}
           <div
             ref={composerHost}
             className="qtd-composer-host"
@@ -404,8 +405,8 @@ export function DockHost(props: Props) {
           />
         </div>
       ) : null}
-      {hostError ? <div className="qtd-error" role="alert">Agent composer unavailable: {hostError}</div> : null}
-      {mountError && requested && geometryMounted ? <div className="qtd-error" role="alert">Agent composer unavailable: {mountError}</div> : null}
+      {hostError ? <div className="qtd-error"><InlineError message={`Agent composer unavailable: ${hostError}`} /></div> : null}
+      {mountError && requested && geometryMounted ? <div className="qtd-error"><InlineError message={`Agent composer unavailable: ${mountError}`} /></div> : null}
     </div>
   )
 }

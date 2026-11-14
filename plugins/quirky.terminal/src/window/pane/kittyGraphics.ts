@@ -19,7 +19,7 @@ function commandOf(frame: string): { command: Command; payload: string } {
     if (!field) continue
     const match = /^([a-zA-Z])=([a-zA-Z]|-?\d{1,10})$/.exec(field)
     if (!match || !KEYS.has(match[1]!) || Object.hasOwn(command, match[1]!)) throw new Error('ENOTSUP: unsupported graphics control')
-    command[match[1]!] = match[2]!
+    Object.assign(command, { [match[1]!]: match[2]! })
   }
   return { command, payload: separator < 0 ? '' : frame.slice(separator + 1) }
 }
@@ -79,7 +79,7 @@ async function decode(command: Command, payload: string, signal: AbortSignal): P
     const rgba = new Uint8ClampedArray(width * height * 4)
     if (format === 32) rgba.set(bytes)
     else for (let pixel = 0, input = 0; pixel < rgba.length; pixel += 4, input += 3) {
-      rgba[pixel] = bytes[input]!; rgba[pixel + 1] = bytes[input + 1]!; rgba[pixel + 2] = bytes[input + 2]!; rgba[pixel + 3] = 255
+      rgba.set([bytes[input]!, bytes[input + 1]!, bytes[input + 2]!, 255], pixel)
     }
     source = new ImageData(rgba, width, height)
   } else throw new Error('ENOTSUP: unsupported graphics pixel format')
