@@ -311,10 +311,7 @@ function makeContext(): UiPluginContext {
       executeCommandCalls.push({ id, args, ...(options ? { options } : {}) })
       const handler = provided.get(id)
       if (typeof handler !== 'function') return undefined
-      if (id !== 'command:quirky.accounts/select-account' && id !== 'command:quirky.accounts/refresh') return await (handler as (args?: unknown) => unknown)(args)
-      let result: unknown
-      await act(async () => { result = await (handler as (args?: unknown) => unknown)(args) })
-      return result
+      return await (handler as (args?: unknown) => unknown)(args)
     }, openView: () => {}, closeView: () => {}, togglePanel: () => {},
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }), onLayout: () => () => {}, onStream: () => () => {}, onConnection: () => () => {},
     confirm: async (confirmation: unknown) => {
