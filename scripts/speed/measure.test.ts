@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import {
   captureObservedFrameTiming,
   installBrowserObserver,
+  installSpeedSocketObserver,
   waitForBrowserObserver,
   waitForDiagnosticStatusProbe,
   waitForFloodProgressAfterSnapshot,
@@ -10,8 +11,10 @@ import {
   measureBrowserFrameIntervals,
   coordinateStartupAttempt,
   pairSides,
-  floodBlocks
+  floodBlocks,
+  joinFloodSleepTiming
 } from './measure.ts'
+import { createTimerProbe } from './runner-latency.ts'
 
 type EventHandler = (event: { target: FakeElement; key?: string }) => void
 
@@ -114,6 +117,7 @@ function environment(): void {
   clock = { now: 10, frames: [], cancelledFrames: new Set(), tasks: [], mutations: [], marks: new Map(), nextFrameId: 1 }
   replaceGlobal('document', document)
   replaceGlobal('performance', {
+    timeOrigin: 100_000,
     now: () => clock.now,
     mark: (name: string, options?: { startTime?: number }) => clock.marks.set(name, options?.startTime ?? clock.now),
     clearMarks: (name: string) => { clock.marks.delete(name) }
@@ -147,6 +151,9 @@ afterEach(() => {
     }
     observerState.clear()
   }
+  Reflect.deleteProperty(globalThis, '__quirkySpeedSocketHook')
+  for (const socket of FakeWebSocket.instances) socket.close()
+  FakeWebSocket.instances = []
   Reflect.deleteProperty(globalThis, '__quirkySpeedObservers')
   Reflect.deleteProperty(globalThis, '__quirkySpeedFrameHook')
   for (const [name, descriptor] of savedGlobals) {
@@ -204,6 +211,107 @@ function fakePage() {
   return {
     evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument)
   } as never
+}
+
+type SocketEvent = { data: unknown }
+type SocketHandler = (event: SocketEvent) => void
+type SocketListener = { handler: SocketHandler; capture: boolean }
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = []
+  readonly listeners = new Map<string, SocketListener[]>()
+  readonly sent: unknown[] = []
+  readyState = 1
+  binaryType = 'arraybuffer'
+  onmessage: SocketHandler | null = null
+  constructor(readonly url: string, readonly protocols?: string | string[]) { FakeWebSocket.instances.push(this) }
+  addEventListener(type: string, handler: SocketHandler, options?: boolean | { capture?: boolean }): void {
+    const listeners = this.listeners.get(type) ?? []
+    listeners.push({ handler, capture: options === true || (typeof options === 'object' && options.capture === true) })
+    this.listeners.set(type, listeners)
+  }
+  removeEventListener(type: string, handler: SocketHandler, options?: boolean | { capture?: boolean }): void {
+    const capture = options === true || (typeof options === 'object' && options.capture === true)
+    this.listeners.set(type, (this.listeners.get(type) ?? []).filter(candidate => candidate.handler !== handler || candidate.capture !== capture))
+  }
+  send(data: unknown): void { this.sent.push(data) }
+  emit(type: string, data?: unknown): void {
+    const event = { data }
+    const listeners = [...(this.listeners.get(type) ?? [])].sort((left, right) => Number(right.capture) - Number(left.capture))
+    for (const { handler } of listeners) handler(event)
+    if (type === 'message') this.onmessage?.(event)
+  }
+  close(): void { this.readyState = 3; this.emit('close') }
+}
+
+function newObservedSocket(url: string): FakeWebSocket {
+  const WebSocketConstructor = Reflect.get(globalThis, 'WebSocket') as typeof FakeWebSocket
+  return new WebSocketConstructor(url)
+}
+
+function observedSocket(): FakeWebSocket {
+  for (const socket of FakeWebSocket.instances) socket.close()
+  FakeWebSocket.instances = []
+  Reflect.deleteProperty(globalThis, '__quirkySpeedSocketHook')
+  replaceGlobal('WebSocket', FakeWebSocket)
+  installSpeedSocketObserver()
+  return newObservedSocket('wss://fixture.invalid/socket')
+}
+
+function bindStream(socket: FakeWebSocket, sessionId: string, streamId: number, requestId = `attach-${sessionId}`): void {
+  socket.send(JSON.stringify({
+    jsonrpc: '2.0', id: requestId, method: 'quirky.terminal/attach', params: { session: sessionId }
+  }))
+  socket.emit('message', JSON.stringify({
+    jsonrpc: '2.0', id: requestId, result: { streamId }
+  }))
+}
+
+function terminalFrame(streamId: number, payload: string, kind = 1): ArrayBuffer {
+  const bytes = new TextEncoder().encode(payload)
+  const frame = new Uint8Array(5 + bytes.length)
+  frame[0] = kind
+  new DataView(frame.buffer).setUint32(1, streamId, false)
+  frame.set(bytes, 5)
+  return frame.buffer
+}
+
+function renderTerminal(socket: FakeWebSocket, rows: FakeElement, streamId: number): void {
+  socket.addEventListener('message', ({ data }) => {
+    if (!(data instanceof ArrayBuffer)) return
+    const frame = new Uint8Array(data)
+    if (frame.length < 5 || frame[0] !== 1 || new DataView(data).getUint32(1, false) !== streamId) return
+    rows.textContent += new TextDecoder().decode(frame.subarray(5))
+    mutate()
+  })
+}
+
+function armSocketEcho(socket: FakeWebSocket, options: {
+  id: string; workerId?: string; sessionId?: string; sequence?: number; key?: string; streamId: number; timeoutMs?: number
+  signal?: AbortSignal
+}) {
+  const workerId = options.workerId ?? 'worker-a'
+  const sessionId = options.sessionId ?? 'session-a'
+  const sequence = options.sequence ?? 5
+  const key = options.key ?? 'b'
+  const { rows, input } = pane(sessionId)
+  renderTerminal(socket, rows, options.streamId)
+  installBrowserObserver({ id: options.id, kind: 'echo', workerId, sessionId, sequence, key })
+  const settled = watchObserverSettlement(options.id)
+  const result = waitForBrowserObserver(fakePage(), options.id, options.timeoutMs ?? 2000, options.signal)
+  document.dispatch('keydown', input, key)
+  return { rows, settled, result, workerId, sessionId, sequence, key }
+}
+
+function echoMarker(workerId: string, sessionId: string, sequence: number, key: string, readEpochMs?: string): string {
+  return `SPEED_ECHO ${workerId} ${sessionId} ${sequence} ${key}${readEpochMs === undefined ? '' : ` readEpochMs=${readEpochMs}`}\r\n`
+}
+
+async function paintEcho(): Promise<void> {
+  clock.now = 14
+  runFrameCallbacks()
+  await Promise.resolve()
+  runPostFrameTask()
+  await Promise.resolve()
 }
 
 test('discards duplicate timestamps and captures sixty positive native intervals with one scheduler', async () => {
@@ -1064,4 +1172,418 @@ test('flood pairs run in four balanced head-base-base-head blocks', () => {
     { side: 'base', first: 1, count: 1 }
   ])
   expect(floodBlocks(0)).toEqual([])
+})
+test('socket arrival splits echo time at the matching binary frame before terminal rendering', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'socket-split', streamId: 17 })
+
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 5, 'b', '100012')))
+  await paintEcho()
+
+  const observation = await echo.result
+  expect(observation).toMatchObject({
+    startedAt: 10,
+    endedAt: 30,
+    durationMs: 20,
+    echoTiming: {
+      status: 'complete',
+      reason: null,
+      workerReadEpochMs: 100012,
+      pageTimeOriginMs: 100000,
+      receivedAt: 18,
+      keystrokeToWorkerMs: 2,
+      workerToPageMs: 6,
+      pageToPaintMs: 12
+    }
+  })
+  expect(observation.marks.echoReceived).toBeDefined()
+  expect(clock.marks.get(observation.marks.echoReceived!)).toBe(18)
+})
+
+test('split terminal marker arrival is the third message, and zero-length phases remain complete', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'socket-fragments', streamId: 17 })
+  const marker = echoMarker('worker-a', 'session-a', 5, 'b', '100010')
+  for (const [part, at] of [[marker.slice(0, 13), 11], [marker.slice(13, 34), 12], [marker.slice(34), 18]] as const) {
+    clock.now = at
+    socket.emit('message', terminalFrame(17, part))
+  }
+  await paintEcho()
+
+  const observation = await echo.result
+  expect(observation.echoTiming).toMatchObject({
+    status: 'complete',
+    receivedAt: 18,
+    keystrokeToWorkerMs: 0,
+    workerToPageMs: 8,
+    pageToPaintMs: 12
+  })
+})
+
+test('only the active exact worker, session, sequence and key on its attached stream can match', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'socket-isolation', streamId: 17 })
+  const noise = [
+    echoMarker('worker-b', 'session-a', 5, 'b', '100012'),
+    echoMarker('worker-a', 'session-b', 5, 'b', '100012'),
+    echoMarker('worker-a', 'session-a', 4, 'b', '100012'),
+    echoMarker('worker-a', 'session-a', 5, 'a', '100012')
+  ]
+  for (const marker of noise) socket.emit('message', terminalFrame(17, marker))
+  socket.emit('message', JSON.stringify({ jsonrpc: '2.0', method: 'notification', params: { text: echoMarker('worker-a', 'session-a', 5, 'b', '100012') } }))
+  socket.emit('message', terminalFrame(18, echoMarker('worker-a', 'session-a', 5, 'b', '100012')))
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 5, 'b', '100012')))
+  await paintEcho()
+
+  const observation = await echo.result
+  expect(echo.settled()).toBe(true)
+  expect(observation.echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+})
+
+test('a legacy marker suffix preserves DOM success with an explicit unavailable split', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'socket-legacy-suffix', streamId: 17 })
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 5, 'b')))
+  await paintEcho()
+
+  expect(await echo.result).toMatchObject({
+    durationMs: 20,
+    echoTiming: {
+      status: 'unavailable',
+      workerReadEpochMs: null,
+      receivedAt: 18,
+      keystrokeToWorkerMs: null,
+      workerToPageMs: null,
+      pageToPaintMs: null
+    }
+  })
+})
+test('a DOM acknowledgement without a fresh socket arrival retains raw echo timing as unavailable', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'socket-missing-arrival', streamId: 17 })
+  echo.rows.textContent = echoMarker('worker-a', 'session-a', 5, 'b', '100012')
+  mutate()
+  await paintEcho()
+
+  expect(await echo.result).toMatchObject({
+    durationMs: 20,
+    echoTiming: {
+      status: 'unavailable',
+      reason: expect.stringContaining('arrival'),
+      receivedAt: null,
+      keystrokeToWorkerMs: null,
+      workerToPageMs: null,
+      pageToPaintMs: null
+    }
+  })
+})
+
+test('socket history before action and a wrong u32 stream do not satisfy a fresh echo', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const marker = echoMarker('worker-a', 'session-a', 5, 'b', '100012')
+  socket.emit('message', terminalFrame(17, marker))
+  const echo = armSocketEcho(socket, { id: 'socket-history', streamId: 17 })
+  await paintEcho()
+  expect(echo.settled()).toBe(false)
+  socket.emit('message', terminalFrame(18, marker))
+  await paintEcho()
+  expect(echo.settled()).toBe(false)
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, marker))
+  await paintEcho()
+  expect((await echo.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+})
+
+test('socket listener timestamps arrival before the application listener runs', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'socket-listener-order', streamId: 17 })
+  socket.addEventListener('message', ({ data }) => {
+    if (!(data instanceof ArrayBuffer)) return
+    clock.now = 25
+  })
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 5, 'b', '100012')))
+  expect(clock.now).toBe(25)
+  await paintEcho()
+
+  expect((await echo.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+})
+
+test('echo arrival is unavailable for missing, invalid, or out-of-order worker clocks', async () => {
+  for (const [readEpochMs, deliveredAt] of [
+    [undefined, 18],
+    ['Infinity', 18],
+    ['100009', 18],
+    ['100012', 11]
+  ] as const) {
+    environment()
+    const socket = observedSocket()
+    bindStream(socket, 'session-a', 17)
+    const echo = armSocketEcho(socket, { id: `bad-clock-${String(readEpochMs)}-${deliveredAt}`, streamId: 17 })
+    clock.now = deliveredAt
+    socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 5, 'b', readEpochMs)))
+    await paintEcho()
+
+    expect((await echo.result).echoTiming).toMatchObject({
+      status: 'unavailable',
+      keystrokeToWorkerMs: null,
+      workerToPageMs: null,
+      pageToPaintMs: null
+    })
+  }
+})
+
+test('first matching arrival wins over duplicates and reconnect binds the new stream', async () => {
+  environment()
+  const oldSocket = observedSocket()
+  bindStream(oldSocket, 'session-a', 17, 'old-attach')
+  oldSocket.close()
+  const socket = newObservedSocket('wss://fixture.invalid/reconnected')
+  bindStream(socket, 'session-a', 23, 'new-attach')
+  const echo = armSocketEcho(socket, { id: 'socket-reconnect', streamId: 23 })
+  const marker = echoMarker('worker-a', 'session-a', 5, 'b', '100012')
+
+  clock.now = 16
+  oldSocket.emit('message', terminalFrame(17, marker))
+  socket.emit('message', terminalFrame(17, marker))
+  socket.emit('message', terminalFrame(23, marker))
+  clock.now = 19
+  socket.emit('message', terminalFrame(23, marker))
+  await paintEcho()
+
+  expect((await echo.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 16 })
+})
+
+test('ambiguous matching streams keep the successful echo but make attribution unavailable', async () => {
+  environment()
+  const first = observedSocket()
+  bindStream(first, 'session-a', 17, 'first-attach')
+  const second = newObservedSocket('wss://fixture.invalid/parallel')
+  bindStream(second, 'session-a', 23, 'second-attach')
+  const echo = armSocketEcho(first, { id: 'socket-ambiguous', streamId: 17 })
+  const marker = echoMarker('worker-a', 'session-a', 5, 'b', '100012')
+  clock.now = 16
+  first.emit('message', terminalFrame(17, marker))
+  clock.now = 18
+  second.emit('message', terminalFrame(23, marker))
+  await paintEcho()
+
+  expect(await echo.result).toMatchObject({
+    durationMs: 20,
+    echoTiming: {
+      status: 'unavailable',
+      reason: expect.stringContaining('ambiguous'),
+      receivedAt: null,
+      keystrokeToWorkerMs: null
+    }
+  })
+})
+
+test('a 4096-byte marker line is accepted, an overlong fragment is unavailable, and the next sample recovers', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const exact = armSocketEcho(socket, { id: 'socket-line-limit', streamId: 17 })
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, `${'x'.repeat(4096)}\r\n${echoMarker('worker-a', 'session-a', 5, 'b', '100012')}`))
+  await paintEcho()
+  expect((await exact.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+
+  clock.now = 10
+  const overflow = armSocketEcho(socket, { id: 'socket-line-overflow', streamId: 17, sequence: 6, key: 'c' })
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, `${'x'.repeat(4097)}${echoMarker('worker-a', 'session-a', 6, 'c', '100012')}`))
+  await paintEcho()
+  expect((await overflow.result).echoTiming).toMatchObject({
+    status: 'unavailable',
+    reason: expect.stringContaining('overflow'),
+    receivedAt: null
+  })
+
+  clock.now = 10
+  const recovered = armSocketEcho(socket, { id: 'socket-line-recovered', streamId: 17, sequence: 7, key: 'd' })
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 7, 'd', '100012')))
+  await paintEcho()
+  expect((await recovered.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+})
+
+test('socket and stream tracking caps accept their exact bounds and reject beyond-bound arrivals', async () => {
+  for (const limit of ['sockets', 'streams'] as const) {
+    environment()
+    const primary = observedSocket()
+    let targetSocket = primary
+    let targetStream = 0
+    if (limit === 'sockets') {
+      for (let index = 0; index < 30; index++) newObservedSocket(`wss://fixture.invalid/${index}`)
+      targetSocket = newObservedSocket('wss://fixture.invalid/32nd')
+      targetStream = 32
+      bindStream(targetSocket, 'session-a', targetStream)
+    } else {
+      for (let index = 1; index < 128; index++) bindStream(primary, `session-${index}`, index)
+      targetStream = 128
+      bindStream(primary, 'session-a', targetStream)
+    }
+    const echo = armSocketEcho(targetSocket, { id: `cap-${limit}`, streamId: targetStream })
+    clock.now = 18
+    targetSocket.emit('message', terminalFrame(targetStream, echoMarker('worker-a', 'session-a', 5, 'b', '100012')))
+    await paintEcho()
+    expect((await echo.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+
+    const beyondSocket = limit === 'sockets' ? newObservedSocket('wss://fixture.invalid/33rd') : primary
+    const beyondStream = limit === 'sockets' ? 33 : 129
+    if (limit === 'streams') bindStream(beyondSocket, 'session-129', beyondStream)
+    clock.now = 10
+    const beyond = armSocketEcho(beyondSocket, {
+      id: `beyond-${limit}`, sessionId: limit === 'sockets' ? 'session-beyond' : 'session-129',
+      sequence: 6, key: 'c', streamId: beyondStream
+    })
+    clock.now = 18
+    beyondSocket.emit('message', terminalFrame(beyondStream, echoMarker(
+      'worker-a', limit === 'sockets' ? 'session-beyond' : 'session-129', 6, 'c', '100012'
+    )))
+    await paintEcho()
+    expect((await beyond.result).echoTiming).toMatchObject({
+      status: 'unavailable',
+      keystrokeToWorkerMs: null
+    })
+  }
+})
+
+test('socket observer disposes on action failure, timeout, and browser-observer disposal', async () => {
+  for (const mode of ['failed-action', 'timeout', 'dispose'] as const) {
+    environment()
+    const socket = observedSocket()
+    bindStream(socket, 'session-a', 17)
+    const echo = armSocketEcho(socket, {
+      id: `socket-${mode}`, streamId: 17, ...(mode === 'timeout' ? { timeoutMs: 5 } : {})
+    })
+    const state = Reflect.get(globalThis, '__quirkySpeedObservers') as Map<string, { dispose(error?: Error): void }>
+    if (mode === 'failed-action') state.get(`socket-${mode}`)!.dispose(new Error('echo action failed'))
+    if (mode === 'dispose') state.get(`socket-${mode}`)!.dispose(new Error('test disposed'))
+    await expect(echo.result).rejects.toThrow(
+      mode === 'timeout' ? 'timed out after 5ms' : mode === 'failed-action' ? 'echo action failed' : 'test disposed'
+    )
+    expect(observerIsPresent(`socket-${mode}`)).toBe(false)
+  }
+})
+
+test('flood sleep evidence joins only matching run identity and overlapping sample epochs', () => {
+  const capture = {
+    version: 1, workerId: 'flood-worker', sessionId: 'flood-session', runId: 'run-a',
+    status: 'complete', reason: null,
+    intervals: [
+      { requestedEpochMs: 100008, dueEpochMs: 100024, wokeEpochMs: 100060, lateMs: 36 },
+      { requestedEpochMs: 100071, dueEpochMs: 100087, wokeEpochMs: 100090, lateMs: 3 }
+    ]
+  } as const
+  const identity = { workerId: 'flood-worker', sessionId: 'flood-session', runId: 'run-a' }
+
+  expect(joinFloodSleepTiming(capture, identity, { startEpochMs: 100010, endEpochMs: 100050 })).toEqual({
+    status: 'complete', reason: null, intervals: [capture.intervals[0]], pendingLateAtEndMs: null
+  })
+  expect(joinFloodSleepTiming(capture, identity, { startEpochMs: 100061, endEpochMs: 100070 })).toEqual({
+    status: 'complete', reason: null, intervals: [], pendingLateAtEndMs: null
+  })
+  for (const wrong of [
+    { ...identity, workerId: 'other-worker' },
+    { ...identity, sessionId: 'other-session' },
+    { ...identity, runId: 'run-b' }
+  ]) {
+    expect(joinFloodSleepTiming(capture, wrong, { startEpochMs: 100010, endEpochMs: 100050 }))
+      .toMatchObject({ status: 'unavailable', intervals: [] })
+  }
+})
+
+test('controller timer evidence is joined to the page-origin echo window, including a wake after paint', () => {
+  let now = 100000
+  let callback: (() => void) | undefined
+  let cleared = false
+  const probe = createTimerProbe({
+    now: () => now,
+    setTimeout: (next) => { callback = next; return 1 },
+    clearTimeout: () => { cleared = true }
+  })
+  probe.start()
+  now = 100060
+  callback?.()
+  const window = probe.stop({
+    startEpochMs: 100010,
+    endEpochMs: 100030
+  })
+  expect(window).toMatchObject({
+    status: 'complete',
+    intervals: [{ requestedEpochMs: 100000, dueEpochMs: 100016, wokeEpochMs: 100060, lateMs: 44 }]
+  })
+  expect(cleared).toBe(true)
+})
+
+test('socket wrapper preserves native construction, statics, subclassing and borrowed sends', () => {
+  environment()
+  const first = observedSocket()
+  const Wrapped = Reflect.get(globalThis, 'WebSocket') as typeof FakeWebSocket
+  expect(Wrapped.prototype).toBe(FakeWebSocket.prototype)
+  expect(Wrapped.instances).toBe(FakeWebSocket.instances)
+  class Derived extends Wrapped {}
+  const second = new Derived('wss://fixture.invalid/derived', ['terminal'])
+  expect(second).toBeInstanceOf(Derived)
+  expect(second).toBeInstanceOf(FakeWebSocket)
+  expect(second.protocols).toEqual(['terminal'])
+  first.send.call(second, 'unchanged')
+  expect(second.sent).toEqual(['unchanged'])
+  expect(first.sent).toEqual([])
+})
+
+test('short headers and lagged terminal frames cannot establish an echo arrival', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'short-lagged', streamId: 17 })
+  for (let length = 0; length < 5; length++) socket.emit('message', new Uint8Array(length).fill(1).buffer)
+  socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 5, 'b', '100012'), 2))
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, echoMarker('worker-a', 'session-a', 5, 'b', '100012')))
+  await paintEcho()
+  expect((await echo.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+})
+
+test('simultaneous observers isolate partial markers by session and stream and dispose on abort', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  bindStream(socket, 'session-b', 18)
+  const first = armSocketEcho(socket, { id: 'parallel-a', streamId: 17 })
+  const second = armSocketEcho(socket, { id: 'parallel-b', sessionId: 'session-b', streamId: 18 })
+  const a = echoMarker('worker-a', 'session-a', 5, 'b', '100012')
+  const b = echoMarker('worker-a', 'session-b', 5, 'b', '100012')
+  for (const [stream, part] of [[17, a.slice(0, 20)], [18, b.slice(0, 20)], [17, a.slice(20)], [18, b.slice(20)]] as const) {
+    clock.now = 18
+    socket.emit('message', terminalFrame(stream, part))
+  }
+  await paintEcho()
+  expect((await first.result).echoTiming.status).toBe('complete')
+  expect((await second.result).echoTiming.status).toBe('complete')
+  clock.now = 10
+  const controller = new AbortController()
+  const aborted = armSocketEcho(socket, { id: 'socket-abort', streamId: 17, sequence: 6, key: 'c', signal: controller.signal })
+  controller.abort(new Error('aborted socket observation'))
+  await expect(aborted.result).rejects.toThrow('aborted socket observation')
+  expect(observerIsPresent('socket-abort')).toBe(false)
 })
