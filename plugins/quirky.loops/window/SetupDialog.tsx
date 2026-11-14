@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { Button, Dialog, EmptyState, FormRow, SelectField, TextArea, TextField } from '@quirky/ui'
+import { Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, SelectField, TextArea, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { LoopSnapshot } from '../src/types'
 import { ConfigFields, initialDraft, validateDraft } from './config-form'
@@ -562,7 +562,7 @@ export function SetupDialog(props: SetupDialogProps) {
     >
       <form className="ui-stack" aria-label="New loop" onSubmit={onSubmit}>
         <section className="ui-stack" aria-label="Loop prompt">
-          {warning && <p role="status">{warning}</p>}
+          {warning && <NoticeLine><span role="status">{warning}</span></NoticeLine>}
           <TextField
             id="loop-setup-name"
             label="Loop name"
@@ -596,7 +596,7 @@ export function SetupDialog(props: SetupDialogProps) {
               ))}
               {draft.queueItems.length === 0 && <EmptyState message="Add at least one prompt to the queue." />}
               {validation.errors.queueItems && draft.queueItems.length > 0 && (
-                <p role="alert">{validation.errors.queueItems}</p>
+                <InlineError message={validation.errors.queueItems} />
               )}
               <div className="ui-stack">
                 <TextArea
@@ -642,12 +642,12 @@ export function SetupDialog(props: SetupDialogProps) {
           )}
         </section>
         <section className="ui-stack" aria-label="Loop configuration">
-          {loading && <p role="status">Loading workspace and agents…</p>}
-          {workspaceLoadError && <p role="alert">Could not load the workspace: {workspaceLoadError}</p>}
-          {agentLoadError && <p role="alert">Could not load agents: {agentLoadError}</p>}
-          {loopLoadError && <p role="alert">Could not check for existing loops: {loopLoadError}</p>}
+          {loading && <NoticeLine><span role="status">Loading workspace and agents…</span></NoticeLine>}
+          {workspaceLoadError && <InlineError message={`Could not load the workspace: ${workspaceLoadError}`} />}
+          {agentLoadError && <InlineError message={`Could not load agents: ${agentLoadError}`} />}
+          {loopLoadError && <InlineError message={`Could not check for existing loops: ${loopLoadError}`} />}
           {!agentsLoading && !agentLoadError && agents.length === 0 && (
-            <p role="status">No installed and enabled Claude or Codex agents are available.</p>
+            <EmptyState message="No installed and enabled Claude or Codex agents are available." />
           )}
           <SelectField
             label="Agent"
@@ -668,9 +668,7 @@ export function SetupDialog(props: SetupDialogProps) {
             disabled={!canEdit}
           />
         </section>
-        {(serverError || loadError) && (
-          <p role="alert">{serverError ?? loadError}</p>
-        )}
+        {serverError && <InlineError message={serverError} />}
         <p>Run an agent in this workspace over and over until the work is done.</p>
         <div className="ui-cluster">
           <Button type="button" disabled={busy} onClick={() => void dispatch('cancel')}>Cancel</Button>

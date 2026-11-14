@@ -86,7 +86,24 @@ function queueItem(id: string, position: number, state: QueueItem['state'], body
   return { id, position, state, body }
 }
 
-function harness(initial = loop(), options: { history?: IterationDetail[]; messages?: unknown[]; failGet?: Error; failSteer?: Error; failQueue?: Error; queueConflictItem?: string } = {}) {
+function harness(initial = loop(), options: {
+  history?: IterationDetail[]
+  messages?: unknown[]
+  pendingGet?: Promise<unknown>
+  pendingRefreshGet?: Promise<unknown>
+  pendingMessages?: Promise<unknown>
+  pendingPause?: Promise<unknown>
+  failGet?: Error
+  failRefreshGet?: Error
+  malformedGet?: boolean
+  failHistory?: Error
+  failMessages?: Error
+  failPause?: Error
+  failSteer?: Error
+  failEdit?: Error
+  failQueue?: Error
+  queueConflictItem?: string
+} = {}) {
   let current = initial
   let history = options.history ?? []
   let messages = options.messages ?? [{ sessionId: 'session-1', seq: 1, role: 'assistant', text: 'Working through the task.', at: 2_000 }]
@@ -94,6 +111,7 @@ function harness(initial = loop(), options: { history?: IterationDetail[]; messa
   const eventListeners = new Set<Listener>()
   const connectionListeners = new Set<ConnectionListener>()
   let handle: SurfaceHandle | null = null
+  let getCalls = 0
   let failSteer = options.failSteer
   let failQueue = options.failQueue
 
@@ -101,12 +119,26 @@ function harness(initial = loop(), options: { history?: IterationDetail[]; messa
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       if (method === 'quirky.loops/get') {
-        if (options.failGet) throw options.failGet
+        getCalls++
+        if (getCalls === 1 && options.failGet) throw options.failGet
+        if (getCalls === 1 && options.pendingGet) return options.pendingGet
+        if (getCalls === 1 && options.malformedGet) return { id: initial.id }
+        if (getCalls > 1 && options.failRefreshGet) throw options.failRefreshGet
+        if (getCalls > 1 && options.pendingRefreshGet) return options.pendingRefreshGet
         return current
       }
-      if (method === 'quirky.loops/iterations') return history
-      if (method === 'quirky.structured/messages') return params.session === current.sessionId ? messages : []
+      if (method === 'quirky.loops/iterations') {
+        if (options.failHistory) throw options.failHistory
+        return history
+      }
+      if (method === 'quirky.structured/messages') {
+        if (options.failMessages) throw options.failMessages
+        if (options.pendingMessages) return options.pendingMessages
+        return params.session === current.sessionId ? messages : []
+      }
       if (method === 'quirky.loops/pause') {
+        if (options.failPause) throw options.failPause
+        if (options.pendingPause) return options.pendingPause
         current = { ...current, state: 'paused', pauseReason: 'user' }
         return current
       }
@@ -134,7 +166,10 @@ function harness(initial = loop(), options: { history?: IterationDetail[]; messa
         }
         return current
       }
-      if (method === 'quirky.loops/edit') return current
+      if (method === 'quirky.loops/edit') {
+        if (options.failEdit) throw options.failEdit
+        return current
+      }
       if (method === 'quirky.loops/queue') {
         if (failQueue !== undefined) {
           const error = failQueue
@@ -260,8 +295,170 @@ test('renders an empty journal without synthetic transcript messages', async () 
   await h.mount()
 
   expect(h.container.querySelector('[aria-label="Structured session journal"]')?.querySelectorAll('pre')).toHaveLength(0)
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toContain('No messages recorded.')
+  expect(h.container.querySelector('section[aria-label="Iteration history"] .ui-empty-state')?.textContent)
+    .toContain('No finished iterations.')
   expect(h.container.textContent).toContain('No messages recorded.')
   expect(h.container.textContent).not.toContain('Working through the task.')
+})
+
+test('uses a shared notice while the initial loop snapshot is pending', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingGet: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  const notice = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(notice?.textContent).toContain('Loading loop…')
+  expect(notice?.querySelector('[role="status"]')?.textContent).toBe('Loading loop…')
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+
+  await act(async () => {
+    pending.resolve(loop())
+    await pending.promise
+  })
+})
+
+test('marks a failed snapshot read unverifiable with a shared error and no controls', async () => {
+  const h = harness(loop(), { failGet: new Error('snapshot unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.textContent).toContain('Unverifiable')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('snapshot unavailable')
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+})
+
+test('renders a malformed snapshot as a shared unverifiable error', async () => {
+  const h = harness(loop(), { malformedGet: true })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.textContent).toContain('Unverifiable')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe(
+    'The loop service returned an unverifiable snapshot.'
+  )
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+})
+
+test('a failed refresh preserves output and makes queue controls read-only', async () => {
+  const initial = loop({
+    preset: 'queue',
+    config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+    queueItems: [queueItem('q1', 0, 'pending', 'Next task')]
+  })
+  const h = harness(initial, { failRefreshGet: new Error('refresh unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await h.emit({ type: 'quirky.loops/changed', data: initial })
+
+  expect(h.container.textContent).toContain('Working through the task.')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('refresh unavailable')
+  expect(h.container.querySelector('[aria-label="Loop lifecycle controls"]')).toBeNull()
+  expect(h.container.querySelector('[aria-label="Loop queue history"] button')).toBeNull()
+})
+
+test('refreshing a loaded view does not replace it or discard an open draft', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingRefreshGet: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Steer').click())
+  const guidance = h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement
+  await act(async () => setValue(guidance, 'keep this guidance'))
+  await h.emit({ type: 'quirky.loops/changed', data: loop() })
+
+  expect(h.container.textContent).not.toContain('Loading loop…')
+  expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value)
+    .toBe('keep this guidance')
+
+  await act(async () => {
+    pending.resolve(loop())
+    await pending.promise
+  })
+})
+
+test('uses a shared notice while structured output is pending', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingMessages: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  const notice = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(notice?.textContent).toContain('Loading output…')
+  expect(notice?.querySelector('[role="status"]')?.textContent).toBe('Loading output…')
+  pending.resolve([])
+  await pending.promise
+  await settle()
+})
+
+test('renders history failures as shared errors in the history section', async () => {
+  const h = harness(loop(), { failHistory: new Error('history unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  const history = h.container.querySelector('section[aria-label="Iteration history"]')
+  expect(history?.querySelector('.ui-inline-error[role="alert"]')?.textContent)
+    .toBe('Iteration history unavailable: history unavailable')
+  expect(h.container.textContent).not.toContain('No finished iterations.')
+  expect([...h.container.querySelectorAll('.ui-inline-error')].filter((item) => item.textContent?.includes('history unavailable')))
+    .toHaveLength(1)
+})
+
+test('renders journal failures as shared errors instead of successful emptiness', async () => {
+  const h = harness(loop(), { failMessages: new Error('journal unavailable') })
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent)
+    .toBe('Output unavailable: journal unavailable')
+  expect(h.container.textContent).not.toContain('No messages recorded.')
+})
+
+test('keeps the empty state for a loop without a structured session', async () => {
+  const h = harness(loop({ sessionId: null }))
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toBe('No structured session is attached.')
+})
+
+test('renders saved iteration errors through InlineError and keeps missing output empty', async () => {
+  const saved = iteration({ error: 'saved output unavailable' })
+  const h = harness(loop({ state: 'completed', endedAt: 5_000, recentIterations: [saved] }))
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('saved output unavailable')
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toBe('No output recorded for this iteration.')
+})
+
+test('keeps the empty state when a completed loop has no saved iteration output', async () => {
+  const h = harness(loop({ state: 'completed', endedAt: 5_000 }))
+  unmountCurrent = h.unmount
+  await h.mount()
+
+  expect(h.container.querySelector('.ui-empty-state')?.textContent).toBe('No output recorded for this iteration.')
+})
+
+test('uses shared notices for pending lifecycle work and reconnection', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingPause: pending.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Pause after this iteration').click())
+
+  const working = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(working?.textContent).toContain('Working…')
+  expect(working?.querySelector('[role="status"]')?.textContent).toBe('Working…')
+  pending.resolve(loop({ state: 'paused', pauseReason: 'user' }))
+  await pending.promise
+  await settle()
+
+  await h.reconnect('reconnecting')
+  const reconnecting = h.container.querySelector<HTMLElement>('.ui-notice-line')
+  expect(reconnecting?.textContent).toContain('Reconnecting to loop state…')
+  expect(reconnecting?.querySelector('[role="status"]')?.textContent).toBe('Reconnecting to loop state…')
 })
 
 test('marks an unreachable loop unverifiable and omits controls', async () => {
@@ -270,7 +467,7 @@ test('marks an unreachable loop unverifiable and omits controls', async () => {
   await h.mount()
 
   expect(h.container.textContent).toContain('Unverifiable')
-  expect(h.container.textContent).toContain('daemon disconnected')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('daemon disconnected')
   expect(h.container.querySelector('button')).toBeNull()
 })
 
@@ -298,18 +495,42 @@ test('rejects an invalid resume increment before making a lifecycle request', as
   expect(button(h.container, 'Resume').disabled).toBe(true)
   expect(h.calls.some(({ method }) => method === 'quirky.loops/resume')).toBe(false)
 })
-test('keeps steer guidance and displays the backend failure without a success message', async () => {
-  const h = harness(loop(), { failSteer: new Error('guidance was rejected') })
+test('keeps steer guidance and displays the backend failure through the shared error', async () => {
+  const h = harness(loop(), { failSteer: new Error('steer refused') })
   unmountCurrent = h.unmount
   await h.mount()
   await act(async () => button(h.container, 'Steer').click())
   const note = h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement
-  await act(async () => setValue(note, 'Keep the public API stable.'))
+  await act(async () => setValue(note, 'keep this guidance'))
   await act(async () => button(h.container, 'Send').click())
 
-  expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value).toBe('Keep the public API stable.')
-  expect(h.container.textContent).toContain('guidance was rejected')
-  expect(h.handle!.read()).toMatchObject({ activeForm: 'steer', errors: { action: 'guidance was rejected' } })
+  expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value)
+    .toBe('keep this guidance')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('steer refused')
+  expect(h.handle!.read()).toMatchObject({ activeForm: 'steer', errors: { action: 'steer refused' } })
+})
+
+test('renders a failed lifecycle action through the shared error', async () => {
+  const h = harness(loop(), { failPause: new Error('pause refused') })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Pause after this iteration').click())
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('pause refused')
+  expect(h.handle!.read()).toMatchObject({ errors: { action: 'pause refused' } })
+})
+
+test('renders a failed configuration edit through the shared error', async () => {
+  const h = harness(loop(), { failEdit: new Error('edit refused') })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => button(h.container, 'Edit configuration').click())
+  await act(async () => setValue(h.container.querySelector('[aria-label="Loop prompt"]') as HTMLTextAreaElement, 'Changed prompt'))
+  await act(async () => button(h.container, 'Save').click())
+
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('edit refused')
+  expect((h.container.querySelector('[aria-label="Loop prompt"]') as HTMLTextAreaElement).value).toBe('Changed prompt')
+  expect(h.handle!.read()).toMatchObject({ activeForm: 'edit', errors: { action: 'edit refused' } })
 })
 
 test('shows retained attempts with honest missing evidence and opens their detail', async () => {
@@ -349,12 +570,16 @@ test('shows retained attempts with honest missing evidence and opens their detai
   expect(h.handle!.read().selectedDetail).toEqual(retained)
   expect([...h.container.querySelectorAll('section[aria-labelledby="loop-iteration-title"] dl dd')].map((item) => item.textContent)).toContain('Unavailable')
   expect(h.container.textContent).toContain('The attempt output.')
+  expect(h.container.querySelector('section[aria-label="Errors"] .ui-empty-state')?.textContent).toContain('None recorded.')
+  expect(h.container.querySelector('section[aria-label="Iteration output tail"] .ui-readout')?.textContent)
+    .toBe('The attempt output.')
   expect(h.container.textContent).not.toContain('$0.00')
   await act(async () => button(h.container, 'Back').click())
   expect(h.handle!.read().selectedDetail).toBeNull()
 })
-test('omits empty check output while retaining the actual check error', async () => {
+test('deduplicates iteration and check errors through the shared error and marks an empty output tail', async () => {
   const detail = iteration({
+    error: 'Check runner failed.',
     check: {
       ran: true,
       pass: false,
@@ -372,7 +597,11 @@ test('omits empty check output while retaining the actual check error', async ()
   await act(async () => (h.container.querySelector('button[aria-label=\"Iteration 1\"]') as HTMLButtonElement).click())
 
   expect(h.container.querySelector('[aria-label=\"Check output\"]')).toBeNull()
-  expect(h.container.querySelector('[aria-label=\"Errors\"]')?.textContent).toContain('Check runner failed.')
+  const errors = h.container.querySelector('section[aria-label="Errors"]')
+  expect(errors?.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('Check runner failed.')
+  expect(errors?.querySelectorAll('.ui-inline-error')).toHaveLength(1)
+  expect(h.container.querySelector('section[aria-label="Iteration output tail"] .ui-empty-state')?.textContent)
+    .toContain('No output recorded.')
 })
 
 test('keeps queue identities and exposes no mutation controls for the in-flight item', async () => {
@@ -465,7 +694,8 @@ test('refreshes a queue conflict without discarding its local edit draft', async
   await act(async () => (h.container.querySelector('[data-queue-id=\"q2\"] button[type=\"submit\"]') as HTMLButtonElement).click())
   await settle()
 
-  expect(h.container.textContent).toContain('queue item is already in progress')
+  expect(h.container.querySelector('.ui-inline-error[role="alert"]')?.textContent)
+    .toBe('queue item is already in progress')
   expect(h.container.querySelector('[data-queue-id=\"q2\"]')?.textContent).toContain('In progress')
   expect(h.container.querySelector('[data-queue-id=\"q2\"] textarea')).toBeNull()
   expect(h.handle!.read()).toMatchObject({

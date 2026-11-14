@@ -5,7 +5,7 @@ import { ConfigFields, draftFromLoop, validateDraft } from './config-form'
 import type { DraftValidation, LoopDraft, LoopViewProps, SurfaceHandle } from './contracts'
 import { LoopIterationDetail, formatDuration, iterationCheckLabel } from './LoopIterationDetail'
 import { LoopQueueEditor, type QueueEditorCommand, type QueueEditorState } from './LoopQueueEditor'
-import { Badge, Button, Dialog, EmptyState, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
 
 type LoopState = LoopSnapshot['state']
 type EditPatch = LoopConfigPatch & { name?: string }
@@ -863,7 +863,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
   }, [])
 
   if (loading && loop === null) {
-    return <ToolPanelFrame title="Loop"><p role="status">Loading loop…</p></ToolPanelFrame>
+    return <ToolPanelFrame title="Loop"><NoticeLine><span role="status">Loading loop…</span></NoticeLine></ToolPanelFrame>
   }
 
   const currentLoop = loop
@@ -909,7 +909,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
               <p className="ui-text-muted">
                 {savedOutput === null ? 'Saved iteration output' : `Saved iteration ${savedOutput.n}${savedOutput.attempt > 1 ? ` · attempt ${savedOutput.attempt}` : ''} output`}
               </p>
-              {savedOutput?.error && <p role="alert">{savedOutput.error}</p>}
+              {savedOutput?.error && <InlineError message={savedOutput.error} />}
               <div className="ui-stack" role="log" aria-label="Saved iteration output">
                 {savedOutput?.outputTail ? <pre className="ui-readout">{savedOutput.outputTail}</pre> : <EmptyState message="No output recorded for this iteration." />}
               </div>
@@ -919,8 +919,8 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
           ) : (
             <>
               <p className="ui-text-muted">Session {currentLoop.sessionId}</p>
-              {messageError !== null && <p role="alert">Output unavailable: {messageError}</p>}
-              {messageLoading && <p role="status">Loading output…</p>}
+              {messageError !== null && <InlineError message={`Output unavailable: ${messageError}`} />}
+              {messageLoading && <NoticeLine><span role="status">Loading output…</span></NoticeLine>}
               {!messageLoading && messages.length === 0 && messageError === null && <EmptyState message="No messages recorded." />}
               <div className="ui-stack" role="log" aria-label="Structured session journal" aria-live="polite">
                 {messages.map((message) => {
@@ -958,8 +958,8 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
       >
         <section className="ui-stack" aria-label="Loop controls and history">
           {currentLoop !== null && <p className="ui-text-muted">{currentLoop.sessionId === null ? 'No session' : `Session ${currentLoop.sessionId}`}</p>}
-          {connectionStatus === 'reconnecting' && <p role="status">Reconnecting to loop state…</p>}
-          {currentLoop === null && !loading && <p role="alert">{viewError ?? 'Loop state is unavailable.'}</p>}
+          {connectionStatus === 'reconnecting' && <NoticeLine><span role="status">Reconnecting to loop state…</span></NoticeLine>}
+          {currentLoop === null && !loading && <InlineError message={viewError ?? 'Loop state is unavailable.'} />}
           {currentLoop !== null && <>
             <p><strong>Phase:</strong> {currentLoop.phase === null ? 'No active phase' : PHASE_LABELS[currentLoop.phase]}</p>
             <div role="status">
@@ -993,8 +993,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             {currentLoop.warnings.length > 0 && <ul aria-label="Warnings">{currentLoop.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul>}
           </>}
 
-          {visibleError !== null && <p role="alert">{visibleError}</p>}
-          {historyError !== null && <p role="alert">Iteration history unavailable: {historyError}</p>}
+          {visibleError !== null && <InlineError message={visibleError} />}
 
           {currentLoop !== null && !isReadOnly && <div className="ui-stack" role="group" aria-label="Loop lifecycle controls">
             {currentLoop.state === 'running' && <Button disabled={busy !== null} onClick={() => runFromDom('pause')}>Pause after this iteration</Button>}
@@ -1115,7 +1114,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
           {selectedDetail !== null ? <LoopIterationDetail detail={selectedDetail} onBack={() => runFromDom('back')} /> : (
             <section className="ui-stack" aria-label="Iteration history">
               <SectionHeader title="Iterations" />
-              {historyError !== null ? <EmptyState message="History could not be loaded." /> : currentHistory.length === 0
+              {historyError !== null ? <InlineError message={`Iteration history unavailable: ${historyError}`} /> : currentHistory.length === 0
                 ? <EmptyState message="No finished iterations." />
                 : <ol className="ui-stack">{currentHistory.slice().reverse().map((detail) => {
                   const duration = detail.endedAt === null ? null : detail.endedAt - detail.startedAt
@@ -1136,7 +1135,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
                 })}</ol>}
             </section>
           )}
-          {busy !== null && <p role="status">Working…</p>}
+          {busy !== null && <NoticeLine><span role="status">Working…</span></NoticeLine>}
         </section>
       </ToolPanelFrame>
     </div>
