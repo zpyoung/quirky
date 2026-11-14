@@ -10,7 +10,7 @@ import {
   type RegisteredCaptureFixtures
 } from '../ui-review/fixtures'
 import type { FaultKind } from './contracts.ts'
-import { buildFaultUi, FAULT_ENV, FAULT_PLUGIN_ID, SLOW_GIT_PIDS, installFaultPlugin, installSlowGit } from './faults.ts'
+import { FAULT_ENV, FAULT_PLUGIN_ID, SLOW_GIT_PIDS, installFaultPlugin, installSlowGit } from './faults.ts'
 
 type Worker = { worktree: string; path: string; session: string }
 
@@ -327,7 +327,21 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
     delete env[FAULT_ENV]
     if (options.fault) {
       installFaultPlugin(home, repoRoot)
-      if (uiDir) await waitWithAbort(buildFaultUi(home, repoRoot), options.signal, 180_000)
+      if (uiDir) {
+        const log = openSync(join(out, 'fault-ui-build.log'), 'w')
+        const build = (() => {
+          try {
+            return scope.spawn([
+              process.execPath, '-e',
+              'import { buildFaultUi } from "./scripts/soak/faults.ts"; await buildFaultUi(process.env.QUIRKY_HOME!, process.cwd())'
+            ], { cwd: repoRoot, env, stdin: 'ignore', stdout: log, stderr: log })
+          } finally {
+            closeSync(log)
+          }
+        })()
+        const code = await waitWithAbort(build.exited, options.signal, 180_000)
+        if (code !== 0) throw new Error(`feedback fixture UI build exited with code ${code}; see ${join(out, 'fault-ui-build.log')}`)
+      }
       throwIfAborted(options.signal)
       env[FAULT_ENV] = '1'
     }
