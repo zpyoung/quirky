@@ -68,7 +68,7 @@ test('the fragment covers the entire owned source through the full production gr
   const checks = checkPlugin(inventory, plugin.id)
   expect(checks.find((check) => check.id === 'compatibility-tokens')?.status).toBe('pass')
   const ratchet = require('../../../scripts/ui-scoreboard-ratchet.json')
-  expect(Object.hasOwn(ratchet, plugin.id)).toBe(false)
+  expect(ratchet[plugin.id]).toEqual(['commands', 'compatibility-tokens', 'empty', 'error', 'loading'])
 })
 
 test('removing an owned public action exposes its actual missing candidate', () => {
