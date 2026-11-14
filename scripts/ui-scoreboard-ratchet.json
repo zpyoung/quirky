@@ -10,6 +10,7 @@
   "quirky.mobile": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.terminal-dock": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.agents": ["commands", "empty", "error", "loading"],
+  "quirky.session-info": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.palette": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.sidebar-extras": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }
