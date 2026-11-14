@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { EffectiveHooks, GitHubWorktreeSource, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree, WorktreeCreateResult } from '@quirky/protocol'
-import { Badge, Button, Dialog, FormRow, Tabs, TextField } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, Tabs, TextField } from '@quirky/ui'
 import { createWorkspace, messageOf, SETUP_CHOICE_NEEDED, type CreateHooks } from './actions'
 import { isGitHubWorktreeReference, parseWorkItemsPage, parseWorktreeSource, type GitHubWorkItem } from './github'
 import { repoLabel, workspaceOption } from './report'
+import { registerUiControlScope, requestUiControl, type ScopedUiControlArgs, type ScopedUiControlInput } from './ui-control'
 import { InvalidNameError, sanitizeName } from './daemon/naming'
 
 /** Offered when `quirky.agents` isn't there to say which agents are installed. */
@@ -131,6 +132,30 @@ type BranchSearchState = {
   error?: string
 }
 type ActiveInput = { repoId: string; primaryId: string | undefined; mode: Mode; smartInput: string; query: string; branch: string }
+type CreateControlSnapshot = {
+  repoId: string
+  primaryId: string | undefined
+  mode: Mode
+  smartInput: string
+  query: string
+  branch: string
+  advanced: boolean
+  setupApplicable: boolean
+  busy: boolean
+  search: SearchState | null
+  branchSearch: BranchSearchState | null
+  selectedSource: SelectedSource | null
+  requestSource: (reference: string, expectedMode: 'smart' | 'github', expectedValue: string) => Promise<void>
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Reflect.ownKeys(value)
+  return keys.length === expected.length && expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+}
+
+function invalidCreateDialogControl(): never {
+  throw new Error('Invalid create-dialog control.')
+}
 
 function isBranchRef(value: unknown): value is BranchRef {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
@@ -204,6 +229,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [createMore, setCreateMore] = useState(false)
   const [busy, setBusy] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [controlError, setControlError] = useState<string | null>(null)
   const [placeholder, setPlaceholder] = useState('')
   const [suggestion, setSuggestion] = useState(0)
   const [project, setProject] = useState<Project | null>(null)
@@ -233,7 +259,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     if (input?.isConnected) input.focus()
   }, [suggestion, mode])
   const activeInput = useRef<ActiveInput>({ repoId, primaryId: primary?.id, mode, smartInput: '', query: '', branch: '' })
-  activeInput.current = { repoId, primaryId: primary?.id, mode, smartInput: smartInput.trim(), query: query.trim(), branch: branch.trim() }
+  const controlState = useRef<CreateControlSnapshot | null>(null)
+  useLayoutEffect(() => {
+    activeInput.current = { repoId, primaryId: primary?.id, mode, smartInput: smartInput.trim(), query: query.trim(), branch: branch.trim() }
+  }, [repoId, primary?.id, mode, smartInput, query, branch])
 
   useEffect(() => {
     let live = true
@@ -445,13 +474,13 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     }
   }, [context, mode, branch, repoId, folder, primary?.id])
 
-  const invalidateSource = () => {
+  const invalidateSource = useCallback(() => {
     sourceRequest.current += 1
     setSelectedSource(null)
     setSourceBusy(false)
     setSourceError(null)
     setSubmitPrompt(null)
-  }
+  }, [])
   const changeMode = (next: Mode) => {
     if (mode === next) return
     invalidateSource()
@@ -500,6 +529,120 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const blocked = !repo || busy || nameError !== null || (asksForSetup && setupChoice === null) || sourceBusy || unsupportedFolderReference ||
     (mode === 'github' && source === null) || (explicitSmartReference && source === null) || selectedHostUnavailable || branchUnavailable ||
     (launchSelectionRequested && (!agentOptionsCatalog?.supported || agentOptionsState?.status !== 'ready'))
+  useLayoutEffect(() => {
+    controlState.current = {
+      repoId,
+      primaryId: primary?.id,
+      mode,
+      smartInput,
+      query,
+      branch,
+      advanced,
+      setupApplicable: asksForSetup,
+      busy,
+      search,
+      branchSearch,
+      selectedSource,
+      requestSource
+    }
+  }, [repoId, primary?.id, mode, smartInput, query, branch, advanced, asksForSetup, busy, search, branchSearch, selectedSource, requestSource])
+
+  useLayoutEffect(() => registerUiControlScope(context, 'create-dialog', (args: ScopedUiControlArgs) => {
+    const current = controlState.current
+    if (!current || args.target !== current.repoId) return false
+    const payload = args.payload
+    switch (args.operation) {
+      case 'set-advanced': {
+        if (!hasExactKeys(payload, ['open']) || typeof payload.open !== 'boolean') return invalidCreateDialogControl()
+        if (current.busy) return false
+        setAdvanced(payload.open)
+        return true
+      }
+      case 'use-smart-text': {
+        const text = payload.text
+        const nextMode = payload.mode
+        if (!hasExactKeys(payload, ['text', 'mode']) || typeof text !== 'string' ||
+          (nextMode !== 'name' && nextMode !== 'branch' && nextMode !== 'github')) return invalidCreateDialogControl()
+        if (current.busy || current.mode !== 'smart' || text === '' || text !== current.smartInput.trim() ||
+          isGitHubWorktreeReference(text)) return false
+        if (nextMode === 'name') setName(text)
+        if (nextMode === 'branch') setBranch(text)
+        if (nextMode === 'github') setQuery(text)
+        invalidateSource()
+        setSmartInput('')
+        setMode(nextMode)
+        return true
+      }
+      case 'choose-work-item': {
+        const searchQuery = payload.query
+        const url = payload.url
+        if (!hasExactKeys(payload, ['query', 'url']) || typeof searchQuery !== 'string' || typeof url !== 'string') {
+          return invalidCreateDialogControl()
+        }
+        const search = current.search
+        if (current.busy || current.mode !== 'github' || !search || search.status !== 'ready' ||
+          search.repoId !== current.repoId || search.primaryId !== (current.primaryId ?? '') ||
+          search.query !== searchQuery || current.query.trim() !== searchQuery) return false
+        const item = search.items.find((candidate) => candidate.url === url)
+        if (!item) return false
+        void current.requestSource(item.url, 'github', searchQuery)
+        return true
+      }
+      case 'choose-branch': {
+        const searchQuery = payload.query
+        const branchName = payload.branch
+        if (!hasExactKeys(payload, ['query', 'branch']) || typeof searchQuery !== 'string' || typeof branchName !== 'string') {
+          return invalidCreateDialogControl()
+        }
+        const search = current.branchSearch
+        if (current.busy || current.mode !== 'branch' || !search || search.status !== 'ready' ||
+          search.repoId !== current.repoId || search.primaryId !== (current.primaryId ?? '') ||
+          search.query !== searchQuery || current.branch.trim() !== searchQuery) return false
+        const ref = search.refs.find((candidate) => candidate.name === branchName && !candidate.checkedOutIn)
+        if (!ref) return false
+        setBranch(ref.name)
+        return true
+      }
+      case 'clear-source': {
+        const url = payload.url
+        if (!hasExactKeys(payload, ['url']) || typeof url !== 'string') return invalidCreateDialogControl()
+        const selected = current.selectedSource
+        if (current.busy || !selected || selected.repoId !== current.repoId || selected.primaryId !== current.primaryId ||
+          selected.source.item.url !== url) return false
+        invalidateSource()
+        return true
+      }
+      case 'set-setup': {
+        const choice = payload.choice
+        if (!hasExactKeys(payload, ['choice']) || (choice !== 'run' && choice !== 'skip')) return invalidCreateDialogControl()
+        if (current.busy || !current.advanced || !current.setupApplicable) return false
+        setSetupChoice(choice)
+        return true
+      }
+      default:
+        return invalidCreateDialogControl()
+    }
+  }), [context, invalidateSource])
+
+  function requestCreateControl(operation: string, payload: Record<string, unknown>): void {
+    const args: ScopedUiControlInput = {
+      action: 'control',
+      scope: 'create-dialog',
+      target: repoId,
+      operation,
+      payload
+    }
+    void requestUiControl(context, args).then((result) => {
+      setControlError(null)
+      if (result.delivered === 0) {
+        context.log(`worktree: ${operation} reached no mounted target`)
+        return
+      }
+    }).catch((error: unknown) => {
+      setControlError(`Could not change worktree form: ${messageOf(error)}`)
+    })
+  }
+
 
   const fields = (): Record<string, unknown> => {
     const typedBase = base.trim()
@@ -584,22 +727,13 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     }
   }
 
-  const chooseWorkItem = (item: GitHubWorkItem) => {
-    void requestSource(item.url, 'github', query.trim())
+  const chooseWorkItem = (item: GitHubWorkItem) => requestCreateControl('choose-work-item', { query: query.trim(), url: item.url })
+  const smartName = () => requestCreateControl('use-smart-text', { text: smartInput.trim(), mode: 'name' })
+  const smartBranch = () => requestCreateControl('use-smart-text', { text: smartInput.trim(), mode: 'branch' })
+  const smartSearch = () => requestCreateControl('use-smart-text', { text: smartInput.trim(), mode: 'github' })
+  const clearSource = () => {
+    if (source) requestCreateControl('clear-source', { url: source.item.url })
   }
-  const smartName = () => {
-    setName(smartInput.trim())
-    changeMode('name')
-  }
-  const smartBranch = () => {
-    setBranch(smartInput.trim())
-    changeMode('branch')
-  }
-  const smartSearch = () => {
-    setQuery(smartInput.trim())
-    changeMode('github')
-  }
-  const clearSource = () => invalidateSource()
 
   return (
     <Dialog open title="New worktree" onClose={onClose} size="wide">
@@ -632,13 +766,13 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             />
             {plainSmartInputNeedsChoice && (
               <div className="ui-cluster" role="group" aria-label="Choose how to use this text">
-                <Button type="button" onClick={smartName}>Use text as workspace name</Button>
-                <Button type="button" onClick={smartBranch}>Search branches</Button>
-                <Button type="button" onClick={smartSearch}>Search GitHub</Button>
+                <Button type="button" disabled={busy} onClick={smartName}>Use text as workspace name</Button>
+                <Button type="button" disabled={busy} onClick={smartBranch}>Search branches</Button>
+                <Button type="button" disabled={busy} onClick={smartSearch}>Search GitHub</Button>
               </div>
             )}
-            {explicitSmartReference && sourceBusy && <p className="ui-text-muted" role="status">Loading GitHub work item…</p>}
-            {explicitSmartReference && sourceError && <p className="ui-error-text" role="alert">Could not resolve GitHub work item: {sourceError}</p>}
+            {explicitSmartReference && sourceBusy && <div role="status"><NoticeLine>Loading GitHub work item…</NoticeLine></div>}
+            {explicitSmartReference && sourceError && <InlineError message={`Could not resolve GitHub work item: ${sourceError}`} />}
           </>
         )}
         {mode === 'github' && !folder && (
@@ -654,15 +788,15 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               }}
               placeholder="Search issues and pull requests"
             />
-            {sourceBusy && <p className="ui-text-muted" role="status">Loading GitHub work item…</p>}
-            {sourceError && <p className="ui-error-text" role="alert">Could not resolve GitHub work item: {sourceError}</p>}
-            {currentSearch?.status === 'loading' && <p className="ui-text-muted" role="status">Loading GitHub issues and pull requests…</p>}
-            {currentSearch?.status === 'error' && <p className="ui-error-text" role="alert">Could not search GitHub work items: {currentSearch.error}</p>}
+            {sourceBusy && <div role="status"><NoticeLine>Loading GitHub work item…</NoticeLine></div>}
+            {sourceError && <InlineError message={`Could not resolve GitHub work item: ${sourceError}`} />}
+            {currentSearch?.status === 'loading' && <div role="status"><NoticeLine>Loading GitHub issues and pull requests…</NoticeLine></div>}
+            {currentSearch?.status === 'error' && <InlineError message={`Could not search GitHub work items: ${currentSearch.error}`} />}
             {currentSearch?.status === 'ready' && currentSearch.errors.length > 0 && (
-              <p className="ui-error-text" role="alert">{currentSearch.errors.join(' ')}</p>
+              <p className="ui-text-muted">{currentSearch.errors.join(' ')}</p>
             )}
             {currentSearch?.status === 'ready' && currentSearch.items.length === 0 && currentSearch.errors.length === 0 && (
-              <p className="ui-text-muted" role="status">No GitHub issues or pull requests found.</p>
+              <EmptyState message="No GitHub issues or pull requests found." />
             )}
             {currentSearch?.status === 'ready' && currentSearch.items.length > 0 && (
               <ul className="ui-tree ui-stack" aria-label="GitHub issues and pull requests">
@@ -672,6 +806,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                       type="button"
                       className="ui-stack"
                       aria-pressed={source?.item.url === item.url}
+                      disabled={busy}
                       onClick={() => chooseWorkItem(item)}
                     >
                       <Badge>{item.kind === 'pullRequest' ? 'Pull request' : 'Issue'}</Badge>
@@ -701,19 +836,17 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
           <>
             <TextField label="Name" id="create-branch-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholder} />
             <TextField label="Existing branch" id="create-branch" value={branch} onChange={(event) => setBranch(event.target.value)} placeholder="Search or enter an existing branch" />
-            {currentBranchSearch?.status === 'loading' && <p className="ui-text-muted" role="status">Loading branches…</p>}
-            {currentBranchSearch?.status === 'error' && <p className="ui-error-text" role="alert">Could not search branches: {currentBranchSearch.error}</p>}
+            {currentBranchSearch?.status === 'loading' && <div role="status"><NoticeLine>Loading branches…</NoticeLine></div>}
+            {currentBranchSearch?.status === 'error' && <InlineError message={`Could not search branches: ${currentBranchSearch.error}`} />}
             {occupiedBranch && (
-              <p className="ui-error-text" role="alert">
-                Branch “{occupiedBranch.name}” is already in use in workspace “{occupiedBranch.checkedOutIn?.split('/').at(-1)}”. Open that workspace or choose another branch.
-              </p>
+              <InlineError message={`Branch “${occupiedBranch.name}” is already in use in workspace “${occupiedBranch.checkedOutIn?.split('/').at(-1)}”. Open that workspace or choose another branch.`} />
             )}
-            {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <p className="ui-text-muted" role="status">No matching branches.</p>}
+            {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <EmptyState message="No matching branches." />}
             {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length > 0 && (
               <ul className="ui-tree">
                 {currentBranchSearch.refs.map((ref) => (
                   <li key={`${ref.kind}:${ref.name}`} className="ui-tree-item">
-                    <Button type="button" aria-pressed={branch.trim() === ref.name} disabled={!!ref.checkedOutIn} onClick={() => setBranch(ref.name)}>
+                    <Button type="button" aria-pressed={branch.trim() === ref.name} disabled={busy || !!ref.checkedOutIn} onClick={() => requestCreateControl('choose-branch', { query: branch.trim(), branch: ref.name })}>
                       {ref.name} <span className="ui-text-muted">{ref.kind}{ref.checkedOutIn ? ` · In use in ${ref.checkedOutIn.split('/').at(-1)}` : ''}</span>
                     </Button>
                   </li>
@@ -727,7 +860,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             <section className="ui-stack" aria-label="Chosen GitHub source">
               <div className="ui-cluster">
                 <strong>{source.item.kind === 'pullRequest' ? 'Pull request' : 'Issue'} #{source.item.number}: {source.item.title}</strong>
-                <Button type="button" onClick={clearSource}>Clear source</Button>
+                <Button type="button" disabled={busy} onClick={clearSource}>Clear source</Button>
               </div>
               {source.head?.refName && <p className="ui-text-muted">Source branch: {source.head.refName}</p>}
               <a className="ui-text-muted" href={source.item.url} target="_blank" rel="noreferrer">Open on GitHub</a>
@@ -742,8 +875,8 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             />
           </>
         )}
-        {nameError && <p className="ui-error-text" role="alert">{nameError}</p>}
-        {unsupportedFolderReference && <p className="ui-error-text" role="alert">GitHub worktree sources require a Git repository.</p>}
+        {nameError && <InlineError message={nameError} />}
+        {unsupportedFolderReference && <InlineError message="GitHub worktree sources require a Git repository." />}
         {showBase && (
           <TextField
             label="Base"
@@ -777,10 +910,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
           </select>
         </FormRow>
         {agent && agentOptionsState?.agent === agent && agentOptionsState.status === 'loading' && (
-          <p className="ui-text-muted" role="status">Loading {agent} model options…</p>
+          <div role="status"><NoticeLine>Loading {agent} model options…</NoticeLine></div>
         )}
         {agent && agentOptionsState?.agent === agent && agentOptionsState.status === 'error' && (
-          <p className="ui-error-text" role="alert">Could not load {agent} model options: {agentOptionsState.error}</p>
+          <InlineError message={`Could not load ${agent} model options: ${agentOptionsState.error}`} />
         )}
         {agentOptionsCatalog && !agentOptionsCatalog.supported && (
           <p className="ui-text-muted">This agent does not support launch-time model and option selection.</p>
@@ -810,7 +943,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 <input
                   type="checkbox"
                   checked={launchPicks[option.id] === true}
-                  onChange={(event) => setLaunchPicks((current) => ({ ...current, [option.id]: event.currentTarget.checked }))}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked
+                    setLaunchPicks((current) => ({ ...current, [option.id]: checked }))
+                  }}
                 />
                 <span>{option.label}</span>
               </label>
@@ -820,12 +956,14 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                   id={`create-agent-option-${option.id}`}
                   className="ui-text-field__input"
                   value={typeof launchPicks[option.id] === 'string' ? launchPicks[option.id] as string : ''}
-                  onChange={(event) => setLaunchPicks((current) => {
-                    const next = { ...current }
-                    if (event.target.value === '') delete next[option.id]
-                    else next[option.id] = event.target.value
-                    return next
-                  })}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    setLaunchPicks((current) => {
+                      const entries = Object.entries(current).filter(([id]) => id !== option.id)
+                      if (value !== '') entries.push([option.id, value])
+                      return Object.fromEntries(entries)
+                    })
+                  }}
                 >
                   <option value="">Use default</option>
                   {option.choices?.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
@@ -857,7 +995,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             <span>Submit prompt automatically</span>
           </label>
         )}
-        <Button type="button" className="ui-disclosure" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
+        <Button type="button" className="ui-disclosure" aria-expanded={advanced} disabled={busy} onClick={() => requestCreateControl('set-advanced', { open: !advanced })}>
           Advanced
         </Button>
         {advanced && (
@@ -959,10 +1097,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 {asksForSetup && (
                   <div className="ui-cluster" role="group" aria-label="Run setup now?">
                     <span>Run setup now?</span>
-                    <Button type="button" variant={setupChoice === 'run' ? 'primary' : 'secondary'} aria-pressed={setupChoice === 'run'} onClick={() => setSetupChoice('run')}>
+                    <Button type="button" disabled={busy} variant={setupChoice === 'run' ? 'primary' : 'secondary'} aria-pressed={setupChoice === 'run'} onClick={() => requestCreateControl('set-setup', { choice: 'run' })}>
                       Run setup now
                     </Button>
-                    <Button type="button" variant={setupChoice === 'skip' ? 'primary' : 'secondary'} aria-pressed={setupChoice === 'skip'} onClick={() => setSetupChoice('skip')}>
+                    <Button type="button" disabled={busy} variant={setupChoice === 'skip' ? 'primary' : 'secondary'} aria-pressed={setupChoice === 'skip'} onClick={() => requestCreateControl('set-setup', { choice: 'skip' })}>
                       Skip for now
                     </Button>
                   </div>
@@ -971,10 +1109,11 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             )}
           </div>
         )}
+        {controlError !== null && <InlineError message={controlError} />}
         {createError !== null && (
-          <p className="ui-error-text" role="alert" tabIndex={0} style={{ maxHeight: '6rem', overflowY: 'auto' }}>
-            Could not create worktree: {createError}
-          </p>
+          <div className="worktree-create-error" tabIndex={0}>
+            <InlineError message={`Could not create worktree: ${createError}`} />
+          </div>
         )}
         <div className="ui-actions">
           <label className="ui-checkbox-label">

@@ -18,8 +18,7 @@ type LegacyUiControlArgs =
   | { action: 'add-reference'; worktree: string; url: string; label: string }
   | { action: 'unlink-reference'; worktree: string; url: string }
 
-
-/** A scope-owned draft operation addressed by its public resource id. */
+/** A scope-owned UI operation addressed by its public resource id. */
 export type ScopedUiControlArgs = {
   action: 'control'
   scope: string
@@ -33,9 +32,9 @@ export type ScopedUiControlInput = Omit<ScopedUiControlArgs, 'payload'> & {
   payload?: Record<string, unknown>
 }
 
-export type UiControlArgs = LegacyUiControlArgs | ScopedUiControlArgs
-export type UiControlInput = LegacyUiControlArgs | ScopedUiControlInput
-export type UiControlResult = UiControlArgs & { delivered: number }
+export type UiControlArgs = LegacyUiControlArgs | ScopedUiControlInput
+type NormalizedUiControlArgs = LegacyUiControlArgs | ScopedUiControlArgs
+export type UiControlResult = NormalizedUiControlArgs & { delivered: number }
 export type UiControlTarget = 'remote-workspaces' | 'vm-environments' | 'worktree-details'
 
 type UiControlHandler = (args: UiControlArgs) => boolean
@@ -67,7 +66,7 @@ function invalidArgs(): never {
   throw new Error(INVALID_ARGS)
 }
 
-function normalizeUiControlArgs(raw: unknown): UiControlArgs {
+function normalizeUiControlArgs(raw: unknown): NormalizedUiControlArgs {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return invalidArgs()
   const value = raw as UiControlPayload
 
@@ -151,7 +150,10 @@ export function registerUiController(
   }
 }
 
-/** Registers an independent mounted scope; only accepted operations count toward delivery. */
+/**
+ * Registers an independent mounted scope in this context with idempotent cleanup.
+ * Blank scopes throw; handlers validate their own operations and return true only for accepted requests.
+ */
 export function registerUiControlScope(
   context: UiPluginContext,
   scope: string,
@@ -201,12 +203,12 @@ export function dispatchUiControl(context: UiPluginContext, args: unknown): UiCo
   return { ...normalized, delivered } as UiControlResult
 }
 
-function uiControlRequest(args: UiControlInput): { command: typeof UI_CONTROL_COMMAND; args: UiControlInput } {
+function uiControlRequest(args: UiControlArgs): { command: typeof UI_CONTROL_COMMAND; args: UiControlArgs } {
   return { command: UI_CONTROL_COMMAND, args }
 }
 
 /** Sends an action to this context's current window and returns its delivery result. */
-export async function requestUiControl(context: UiPluginContext, args: UiControlInput): Promise<UiControlResult> {
+export async function requestUiControl(context: UiPluginContext, args: UiControlArgs): Promise<UiControlResult> {
   const connId = await currentWindowId(context)
   const request = uiControlRequest(args)
   const reply = await context.call('ui.window.command.run', {
