@@ -64,8 +64,8 @@ function makePreparedRepo(fingerprint = 'prepare-fix-1') {
 
 const processRun: PluginContext['process']['run'] = async (argv, options) => {
   const result = spawnSync(argv[0] ?? '', argv.slice(1), { cwd: options?.cwd, encoding: 'utf8' })
-  const stdoutText = typeof result.stdout === 'string' ? result.stdout : result.stdout?.toString() ?? ''
-  const stderr = typeof result.stderr === 'string' ? result.stderr : result.stderr?.toString() ?? ''
+  const stdoutText = result.stdout ?? ''
+  const stderr = result.stderr ?? ''
   return {
     stdout: Buffer.from(stdoutText),
     stdoutText,
@@ -73,7 +73,7 @@ const processRun: PluginContext['process']['run'] = async (argv, options) => {
     exitCode: result.status,
     signal: result.signal,
     durationMs: 0,
-    ...(result.error ? { spawnError: { code: result.error.code ?? 'ERROR', message: result.error.message } } : {})
+    ...(result.error ? { spawnError: { code: (result.error as NodeJS.ErrnoException).code ?? 'ERROR', message: result.error.message } } : {})
   }
 }
 

@@ -20,6 +20,9 @@ import {
   preflightContention,
   publishPreparedBranch
 } from './publication'
+
+export type Call = (method: string, params: Record<string, unknown>) => Promise<unknown>
+
 type EnrollmentInput = {
   kind: string
   kindPayload: Record<string, unknown>
