@@ -146,7 +146,7 @@ async function addSuppressedTrackedPath(
   await r.runChecked(['git', 'update-index', `--${scenario.flag}`, '--', scenario.path], { cwd: r.root })
 }
 
-async function rewriteIndexWithoutWorkspaceChange(r: ChecksFixture): Promise<Buffer> {
+async function rewriteIndexWithoutWorkspaceChange(r: ChecksFixture) {
   const basePath = join(r.root, 'src', 'base.ts')
   writeFileSync(basePath, 'temporary index rewrite\n')
   await r.runChecked(['git', 'add', '--', 'src/base.ts'], { cwd: r.root })
@@ -164,7 +164,7 @@ function runtimeWithCaptureDirectory(
   }
 }
 
-function rewriteIndexDuringCheck(root: string): Buffer {
+function rewriteIndexDuringCheck(root: string) {
   const basePath = join(root, 'src', 'base.ts')
   writeFileSync(basePath, 'temporary index rewrite\n')
   const result = Bun.spawnSync(['git', 'add', '--', 'src/base.ts'], {

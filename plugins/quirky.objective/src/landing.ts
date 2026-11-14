@@ -1,7 +1,9 @@
+import { lstatSync } from 'node:fs'
+import { join } from 'node:path'
 import { Buffer } from 'node:buffer'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
 import type { CheckRecord, LandingRecord, VerdictRecord } from './store'
-import type { ObjectiveRuntime } from './checks'
+import { readIndexSuppressionFlags, type ObjectiveRuntime } from './checks'
 import { currentChecks, currentVerdicts, latestAttempts } from './decide'
 import type { ObjectiveJournalEntry, ObjectiveProgress } from './decide'
 
@@ -192,19 +194,375 @@ function parseStatusPaths(raw: string): string[] {
   return [...paths].sort()
 }
 
+
+async function treeDiffPaths(
+  context: PluginContext,
+  workspacePath: string,
+  leftTree: string,
+  rightTree: string
+): Promise<string[]> {
+  const result = await git(context, workspacePath, [
+    'diff-tree', '--no-commit-id', '-r', '--no-renames', '-z', '--name-only', leftTree, rightTree
+  ])
+  if (failed(result)) throw new Error(`git diff-tree failed: ${result.stderr}`)
+  return result.stdoutText.split('\0').filter(Boolean)
+}
+
 async function statusPaths(context: PluginContext, workspacePath: string): Promise<string[]> {
   const result = await git(context, workspacePath, ['status', '--porcelain=v1', '-z', '-uall'])
   if (failed(result)) throw new Error(`git status failed: ${result.stderr}`)
   return parseStatusPaths(result.stdoutText)
 }
-async function attemptTrailer(context: PluginContext, workspacePath: string, attemptId: string): Promise<boolean | null> {
+
+async function attemptTrailer(
+  context: PluginContext,
+  workspacePath: string,
+  headSha: string,
+  attemptId: string
+): Promise<boolean | null> {
   try {
-    const result = await git(context, workspacePath, ['log', '-1', '--format=%B'])
+    const result = await git(context, workspacePath, ['show', '-s', '--format=%B', headSha])
     if (failed(result)) return null
     return result.stdoutText.split(/\r?\n/).includes(`Quirky-Objective-Attempt: ${attemptId}`)
   } catch {
     return null
   }
+}
+
+async function territoryMatchesHead(
+  context: PluginContext,
+  workspacePath: string,
+  headSha: string,
+  reviewedTree: string,
+  territory: string[]
+): Promise<boolean | null> {
+  try {
+    const differences = await treeDiffPaths(context, workspacePath, headSha, reviewedTree)
+    return !differences.some(path => inTerritory(path, territory))
+  } catch {
+    return null
+  }
+}
+
+async function updateIndexPaths(
+  context: PluginContext,
+  workspacePath: string,
+  flag: string,
+  paths: string[]
+): Promise<boolean> {
+  if (!paths.length) return true
+  try {
+    const result = await git(context, workspacePath, ['update-index', '-z', flag, '--stdin'], {
+      input: Buffer.from(`${paths.join('\0')}\0`)
+    })
+    return !failed(result)
+  } catch {
+    return false
+  }
+}
+
+async function restoreIndexSuppressionFlags(
+  context: PluginContext,
+  workspacePath: string,
+  flags: { assumeUnchanged: string[]; skipWorktree: string[] }
+): Promise<boolean> {
+  try {
+    const trackedResult = await git(context, workspacePath, ['ls-files', '-z'])
+    if (failed(trackedResult)) return false
+    const trackedPaths = new Set(trackedResult.stdoutText.split('\0').filter(Boolean))
+    const assumeUnchanged = flags.assumeUnchanged.filter(path => trackedPaths.has(path))
+    const skipWorktree = flags.skipWorktree.filter(path => trackedPaths.has(path))
+    if (!await updateIndexPaths(context, workspacePath, '--assume-unchanged', assumeUnchanged)) return false
+    return updateIndexPaths(context, workspacePath, '--skip-worktree', skipWorktree)
+  } catch {
+    return false
+  }
+}
+
+function workspacePathExists(workspacePath: string, path: string): boolean {
+  try {
+    lstatSync(join(workspacePath, path))
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
+
+type LandingOutcome = { effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string }
+
+type CommitAttempt =
+  | { kind: 'failed'; result: LandingOutcome }
+  | {
+    kind: 'completed'
+    commitResult: GitResult
+    committedHead: { branch: string | null; headSha: string | null }
+    trailer: boolean | null
+  }
+
+async function commitReviewedPaths(
+  runtime: ObjectiveRuntime,
+  action: { revision: number; contentIdentity: string; branch: string; headSha: string },
+  attemptId: string,
+  insideTerritory: string[],
+  reviewedTree: string
+): Promise<CommitAttempt> {
+  const workspacePath = runtime.enrollment.workspacePath
+  const beforeStageIdentity = await currentContentIdentity(runtime)
+  if (beforeStageIdentity === null) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'landing-evidence-unavailable' } }
+  }
+  if (beforeStageIdentity !== action.contentIdentity) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'landing-evidence-stale' } }
+  }
+  let head: { branch: string | null; headSha: string | null }
+  try {
+    head = await readLocalGitHead(runtime.context, workspacePath)
+  } catch {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'git-head-unavailable' } }
+  }
+  if (head.branch !== action.branch || head.headSha !== action.headSha) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'head-moved' } }
+  }
+
+  const pathspecs = Buffer.from(`${insideTerritory.join('\0')}\0`)
+  const literalEnv = { ...process.env, GIT_LITERAL_PATHSPECS: '1' }
+  let addResult: GitResult
+  try {
+    addResult = await git(runtime.context, workspacePath,
+      ['add', '-A', '--pathspec-from-file=-', '--pathspec-file-nul'], { env: literalEnv, input: pathspecs })
+  } catch {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-stage-failed' } }
+  }
+  if (failed(addResult)) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-stage-failed' } }
+  }
+
+  const afterStageIdentity = await currentContentIdentity(runtime)
+  if (afterStageIdentity === null) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'landing-evidence-unavailable' } }
+  }
+  if (afterStageIdentity !== action.contentIdentity) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'landing-evidence-stale' } }
+  }
+  try {
+    head = await readLocalGitHead(runtime.context, workspacePath)
+  } catch {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'git-head-unavailable' } }
+  }
+  if (head.branch !== action.branch || head.headSha !== action.headSha) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'head-moved' } }
+  }
+
+  let indexTree: string
+  try {
+    const indexTreeResult = await git(runtime.context, workspacePath, ['write-tree'])
+    if (failed(indexTreeResult)) {
+      return { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-index-unavailable' } }
+    }
+    indexTree = indexTreeResult.stdoutText.trim()
+  } catch {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-index-unavailable' } }
+  }
+  let indexDifferences: string[]
+  try {
+    indexDifferences = await treeDiffPaths(runtime.context, workspacePath, indexTree, reviewedTree)
+  } catch {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-index-unavailable' } }
+  }
+  if (indexDifferences.some(path => inTerritory(path, runtime.enrollment.kindPayload.writeTerritory))) {
+    return { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-index-mismatch' } }
+  }
+
+  const objectiveFirstLine = runtime.enrollment.kindPayload.objectiveText.split(/\r?\n/, 1)[0] ?? ''
+  const message = `${objectiveFirstLine}\n\nQuirky-Objective-Attempt: ${attemptId}`
+  let commitResult: GitResult
+  try {
+    commitResult = await git(runtime.context, workspacePath, [
+      'commit', '--pathspec-from-file=-', '--pathspec-file-nul', '-m', message
+    ], { env: literalEnv, input: pathspecs })
+  } catch (error) {
+    commitResult = { stdoutText: '', stderr: String(error), exitCode: null, signal: null, spawnError: error }
+  }
+
+  let committedHead: { branch: string | null; headSha: string | null }
+  try {
+    committedHead = await readLocalGitHead(runtime.context, workspacePath)
+  } catch {
+    return { kind: 'failed', result: { effect: 'indeterminate', reason: 'commit-state-indeterminate' } }
+  }
+  const trailer = committedHead.headSha
+    ? await attemptTrailer(runtime.context, workspacePath, committedHead.headSha, attemptId)
+    : null
+  return { kind: 'completed', commitResult, committedHead, trailer }
+}
+
+export async function commitLocalBranch(
+  runtime: ObjectiveRuntime,
+  action: { revision: number; contentIdentity: string; branch: string; headSha: string },
+  attemptId: string
+): Promise<LandingOutcome> {
+  const beforeIdentity = await currentContentIdentity(runtime)
+  if (beforeIdentity === null) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
+  if (beforeIdentity !== action.contentIdentity) return { effect: 'not-landed', reason: 'landing-evidence-stale' }
+  const filesLanding = runtime.store.landings(runtime.enrollment.watcherId).find(row =>
+    row.rung === 'files-on-disk' && row.contentIdentity === action.contentIdentity)
+  if (!filesLanding) return { effect: 'not-landed', reason: 'files-on-disk-not-recorded' }
+
+  const treeMatch = /^objective-tree:([0-9a-f]{40}|[0-9a-f]{64})$/i.exec(action.contentIdentity)
+  if (!treeMatch) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
+  const reviewedTree = treeMatch[1]!
+  let currentHead: { branch: string | null; headSha: string | null }
+  try {
+    currentHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
+  } catch {
+    return { effect: 'not-landed', reason: 'git-head-unavailable' }
+  }
+  if (currentHead.branch === null) return { effect: 'not-landed', reason: 'branch-not-attached' }
+  if (currentHead.branch !== action.branch) return { effect: 'not-landed', reason: 'head-moved' }
+  if (!currentHead.headSha) return { effect: 'not-landed', reason: 'head-moved' }
+
+  let reviewedPaths: string[]
+  let status: string[]
+  try {
+    reviewedPaths = await treeDiffPaths(
+      runtime.context, runtime.enrollment.workspacePath, currentHead.headSha, reviewedTree
+    )
+    status = await statusPaths(runtime.context, runtime.enrollment.workspacePath)
+  } catch {
+    return { effect: 'not-landed', reason: 'git-status-failed' }
+  }
+  const relevantPaths = reviewedPaths.filter(path => !isPrivateObjectivePath(path))
+  const insideTerritory = relevantPaths
+    .filter(path => inTerritory(path, runtime.enrollment.kindPayload.writeTerritory))
+    .sort()
+  const outsideTerritoryPaths = [...new Set([
+    ...relevantPaths.filter(path => !inTerritory(path, runtime.enrollment.kindPayload.writeTerritory)),
+    ...status.filter(path => !inTerritory(path, runtime.enrollment.kindPayload.writeTerritory))
+  ])].sort()
+
+  if (insideTerritory.length === 0) {
+    if (currentHead.headSha !== action.headSha) {
+      const recovered = await attemptTrailer(
+        runtime.context, runtime.enrollment.workspacePath, currentHead.headSha, attemptId
+      )
+      if (recovered === null) return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+      if (!recovered) return { effect: 'not-landed', reason: 'head-moved' }
+    }
+    const noOpIdentity = await currentContentIdentity(runtime)
+    if (noOpIdentity === null) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
+    if (noOpIdentity !== action.contentIdentity) return { effect: 'not-landed', reason: 'landing-evidence-stale' }
+    let finalHead: { branch: string | null; headSha: string | null }
+    try {
+      finalHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
+    } catch {
+      return { effect: 'not-landed', reason: 'git-head-unavailable' }
+    }
+    if (finalHead.branch !== action.branch || finalHead.headSha !== currentHead.headSha) {
+      return { effect: 'not-landed', reason: 'head-moved' }
+    }
+    if (!finalHead.headSha) return { effect: 'not-landed', reason: 'head-moved' }
+    const matchesReviewedContent = await territoryMatchesHead(
+      runtime.context, runtime.enrollment.workspacePath, finalHead.headSha, reviewedTree,
+      runtime.enrollment.kindPayload.writeTerritory
+    )
+    if (matchesReviewedContent !== true) {
+      return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+    }
+    saveCommittedLanding(runtime, action, attemptId, finalHead.headSha, [], outsideTerritoryPaths)
+    return { effect: 'landed' }
+  }
+
+  if (currentHead.headSha !== action.headSha) return { effect: 'not-landed', reason: 'head-moved' }
+
+  let flags: { assumeUnchanged: string[]; skipWorktree: string[] }
+  try {
+    const currentFlags = await readIndexSuppressionFlags(runtime.context, runtime.enrollment.workspacePath)
+    const insidePaths = new Set(insideTerritory)
+    flags = {
+      assumeUnchanged: currentFlags.assumeUnchanged.filter(path => insidePaths.has(path)),
+      skipWorktree: currentFlags.skipWorktree.filter(path => insidePaths.has(path))
+    }
+  } catch {
+    return { effect: 'not-landed', reason: 'index-flags-unavailable' }
+  }
+  try {
+    if (flags.skipWorktree.some(path => !workspacePathExists(runtime.enrollment.workspacePath, path))) {
+      return { effect: 'not-landed', reason: 'sparse-path-unavailable' }
+    }
+  } catch {
+    return { effect: 'not-landed', reason: 'workspace-path-unavailable' }
+  }
+
+  let normalizationAttempted = false
+  let attempt: CommitAttempt | null = null
+  try {
+    if (flags.assumeUnchanged.length || flags.skipWorktree.length) {
+      normalizationAttempted = true
+      if (flags.assumeUnchanged.length && !await updateIndexPaths(
+        runtime.context, runtime.enrollment.workspacePath, '--no-assume-unchanged', flags.assumeUnchanged
+      )) {
+        attempt = { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-index-normalization-failed' } }
+      }
+      if (!attempt && flags.skipWorktree.length && !await updateIndexPaths(
+        runtime.context, runtime.enrollment.workspacePath, '--no-skip-worktree', flags.skipWorktree
+      )) {
+        attempt = { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-index-normalization-failed' } }
+      }
+    }
+    if (!attempt) {
+      attempt = await commitReviewedPaths(runtime, action, attemptId, insideTerritory, reviewedTree)
+    }
+  } catch {
+    attempt = { kind: 'failed', result: { effect: 'not-landed', reason: 'commit-index-normalization-failed' } }
+  }
+  if (normalizationAttempted && !await restoreIndexSuppressionFlags(
+    runtime.context, runtime.enrollment.workspacePath, flags
+  )) {
+    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  }
+  if (!attempt) return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  if (attempt.kind === 'failed') return attempt.result
+
+  const committedHead = attempt.committedHead
+  const moved = committedHead.headSha !== action.headSha
+  const afterIdentity = await currentContentIdentity(runtime)
+  if (!moved) {
+    if (afterIdentity === null) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
+    if (afterIdentity !== action.contentIdentity) return { effect: 'not-landed', reason: 'landing-evidence-stale' }
+    if (failed(attempt.commitResult)) {
+      return attempt.commitResult.exitCode !== null && attempt.commitResult.exitCode !== 0
+        ? { effect: 'not-landed', reason: 'commit-hook-failed' }
+        : { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+    }
+    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  }
+  if (attempt.trailer === null || !attempt.trailer) {
+    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  }
+  if (committedHead.branch !== action.branch || afterIdentity === null || afterIdentity !== action.contentIdentity) {
+    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  }
+  if (!committedHead.headSha) return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  let finalHead: { branch: string | null; headSha: string | null }
+  try {
+    finalHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
+  } catch {
+    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  }
+  if (finalHead.branch !== action.branch || finalHead.headSha !== committedHead.headSha) {
+    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  }
+  const matchesReviewedContent = await territoryMatchesHead(
+    runtime.context, runtime.enrollment.workspacePath, committedHead.headSha, reviewedTree,
+    runtime.enrollment.kindPayload.writeTerritory
+  )
+  if (matchesReviewedContent !== true) {
+    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
+  }
+
+  saveCommittedLanding(runtime, action, attemptId, committedHead.headSha, insideTerritory, outsideTerritoryPaths)
+  return { effect: 'landed' }
 }
 
 function saveCommittedLanding(
@@ -234,143 +592,3 @@ async function currentContentIdentity(runtime: ObjectiveRuntime): Promise<string
   }
 }
 
-export async function commitLocalBranch(
-  runtime: ObjectiveRuntime,
-  action: { revision: number; contentIdentity: string; branch: string; headSha: string },
-  attemptId: string
-): Promise<{ effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string }> {
-  const beforeIdentity = await currentContentIdentity(runtime)
-  if (beforeIdentity === null) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
-  if (beforeIdentity !== action.contentIdentity) return { effect: 'not-landed', reason: 'landing-evidence-stale' }
-  const filesLanding = runtime.store.landings(runtime.enrollment.watcherId).find(row =>
-    row.rung === 'files-on-disk' && row.contentIdentity === action.contentIdentity)
-  if (!filesLanding) return { effect: 'not-landed', reason: 'files-on-disk-not-recorded' }
-
-  let currentHead: { branch: string | null; headSha: string | null }
-  try {
-    currentHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
-  } catch {
-    return { effect: 'not-landed', reason: 'git-head-unavailable' }
-  }
-  if (currentHead.branch === null) return { effect: 'not-landed', reason: 'branch-not-attached' }
-  if (currentHead.branch !== action.branch) return { effect: 'not-landed', reason: 'head-moved' }
-
-  let paths: string[]
-  try {
-    paths = await statusPaths(runtime.context, runtime.enrollment.workspacePath)
-  } catch {
-    return { effect: 'not-landed', reason: 'git-status-failed' }
-  }
-  const insideTerritory = paths.filter(path => inTerritory(path, runtime.enrollment.kindPayload.writeTerritory))
-  const outsideTerritoryPaths = paths.filter(path => !inTerritory(path, runtime.enrollment.kindPayload.writeTerritory))
-
-  if (insideTerritory.length === 0) {
-    try {
-      currentHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
-    } catch {
-      return { effect: 'not-landed', reason: 'git-head-unavailable' }
-    }
-    if (currentHead.branch === null) return { effect: 'not-landed', reason: 'branch-not-attached' }
-    if (currentHead.branch !== action.branch) return { effect: 'not-landed', reason: 'head-moved' }
-    if (currentHead.headSha !== action.headSha) {
-      const recovered = await attemptTrailer(runtime.context, runtime.enrollment.workspacePath, attemptId)
-      if (recovered === null) return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-      if (!recovered) return { effect: 'not-landed', reason: 'head-moved' }
-    }
-    if (!currentHead.headSha) return { effect: 'not-landed', reason: 'head-moved' }
-    const noOpHeadSha = currentHead.headSha
-    const noOpIdentity = await currentContentIdentity(runtime)
-    if (noOpIdentity === null) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
-    if (noOpIdentity !== action.contentIdentity) return { effect: 'not-landed', reason: 'landing-evidence-stale' }
-    try {
-      currentHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
-    } catch {
-      return { effect: 'not-landed', reason: 'git-head-unavailable' }
-    }
-    if (currentHead.branch === null) return { effect: 'not-landed', reason: 'branch-not-attached' }
-    if (currentHead.branch !== action.branch || currentHead.headSha !== noOpHeadSha) {
-      return { effect: 'not-landed', reason: 'head-moved' }
-    }
-    if (!currentHead.headSha) return { effect: 'not-landed', reason: 'head-moved' }
-    saveCommittedLanding(runtime, action, attemptId, currentHead.headSha, [], outsideTerritoryPaths)
-    return { effect: 'landed' }
-  }
-  if (currentHead.headSha !== action.headSha) return { effect: 'not-landed', reason: 'head-moved' }
-
-  const pathspecs = Buffer.from(`${insideTerritory.join('\0')}\0`)
-  const literalEnv = { ...process.env, GIT_LITERAL_PATHSPECS: '1' }
-  let addResult: GitResult
-  try {
-    addResult = await git(runtime.context, runtime.enrollment.workspacePath,
-      ['add', '-A', '--pathspec-from-file=-', '--pathspec-file-nul'], { env: literalEnv, input: pathspecs })
-  } catch {
-    return { effect: 'not-landed', reason: 'commit-stage-failed' }
-  }
-  if (failed(addResult)) return { effect: 'not-landed', reason: 'commit-stage-failed' }
-
-  try {
-    currentHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
-  } catch {
-    return { effect: 'not-landed', reason: 'git-head-unavailable' }
-  }
-  if (currentHead.branch !== action.branch || currentHead.headSha !== action.headSha) {
-    return { effect: 'not-landed', reason: 'head-moved' }
-  }
-
-  const objectiveFirstLine = runtime.enrollment.kindPayload.objectiveText.split(/\r?\n/, 1)[0] ?? ''
-  const message = `${objectiveFirstLine}\n\nQuirky-Objective-Attempt: ${attemptId}`
-  let commitResult: GitResult
-  try {
-    commitResult = await git(runtime.context, runtime.enrollment.workspacePath, [
-      'commit', '--pathspec-from-file=-', '--pathspec-file-nul', '-m', message
-    ], { env: literalEnv, input: pathspecs })
-  } catch (error) {
-    commitResult = { stdoutText: '', stderr: String(error), exitCode: null, signal: null, spawnError: error }
-  }
-
-  let committedHead: { branch: string | null; headSha: string | null }
-  try {
-    committedHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
-  } catch {
-    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-  }
-  const moved = committedHead.headSha !== action.headSha
-  const afterIdentity = await currentContentIdentity(runtime)
-  if (!moved) {
-    if (afterIdentity === null) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
-    if (afterIdentity !== action.contentIdentity) return { effect: 'not-landed', reason: 'landing-evidence-stale' }
-    if (failed(commitResult)) {
-      return commitResult.exitCode !== null && commitResult.exitCode !== 0
-        ? { effect: 'not-landed', reason: 'commit-hook-failed' }
-        : { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-    }
-  }
-
-  let commitMessage: string
-  try {
-    const logResult = await git(runtime.context, runtime.enrollment.workspacePath, ['log', '-1', '--format=%B'])
-    if (failed(logResult)) return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-    commitMessage = logResult.stdoutText
-  } catch {
-    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-  }
-  if (!commitMessage.split(/\r?\n/).includes(`Quirky-Objective-Attempt: ${attemptId}`)) {
-    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-  }
-  if (committedHead.branch !== action.branch || afterIdentity === null || afterIdentity !== action.contentIdentity) {
-    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-  }
-  if (!committedHead.headSha) return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-  let finalHead: { branch: string | null; headSha: string | null }
-  try {
-    finalHead = await readLocalGitHead(runtime.context, runtime.enrollment.workspacePath)
-  } catch {
-    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-  }
-  if (finalHead.branch !== action.branch || finalHead.headSha !== committedHead.headSha) {
-    return { effect: 'indeterminate', reason: 'commit-state-indeterminate' }
-  }
-
-  saveCommittedLanding(runtime, action, attemptId, committedHead.headSha, insideTerritory, outsideTerritoryPaths)
-  return { effect: 'landed' }
-}

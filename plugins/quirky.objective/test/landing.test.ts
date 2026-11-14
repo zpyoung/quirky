@@ -403,6 +403,62 @@ test('commits only inside-territory files with the attempt trailer and leaves ou
   })
 }, 30_000)
 
+test('commits reviewed content for assume-unchanged and skip-worktree files while preserving outside state', async () => {
+  for (const flag of ['--assume-unchanged', '--skip-worktree'] as const) {
+    const r = rig()
+    await r.initGit()
+    await r.runChecked(['git', 'update-index', flag, '--', 'src/main.ts'], { cwd: r.root })
+    writeFileSync(join(r.root, 'src', 'main.ts'), `reviewed ${flag}\n`)
+    writeFileSync(join(r.root, 'outside-staged.txt'), 'staged outside\n')
+    await r.runChecked(['git', 'add', 'outside-staged.txt'], { cwd: r.root })
+    writeFileSync(join(r.root, 'outside.txt'), 'dirty outside\n')
+    writeFileSync(join(r.root, 'outside-untracked.txt'), 'untracked outside\n')
+
+    const contentIdentity = await r.runtime.captureContentIdentity()
+    landingFor(r, 'files-on-disk', contentIdentity)
+    const head = await readLocalGitHead(r.context, r.root)
+    const attemptId = `flagged-${flag}`
+    expect(await commitLocalBranch(r.runtime, {
+      revision: 1, contentIdentity, branch: head.branch!, headSha: head.headSha!
+    }, attemptId)).toEqual({ effect: 'landed' })
+
+    const landing = r.landingRows.find(row => row.rung === 'committed-local-branch')
+    const recordedHeadSha = landing?.payload.headSha
+    expect(typeof recordedHeadSha).toBe('string')
+    expect(await r.runChecked(['git', 'show', `${String(recordedHeadSha)}:src/main.ts`], { cwd: r.root }))
+      .toBe(`reviewed ${flag}\n`)
+    expect(await r.runChecked(['git', 'diff', '--cached', '--name-only'], { cwd: r.root }))
+      .toBe('outside-staged.txt\n')
+    expect(await r.runChecked(['git', 'diff', '--name-only'], { cwd: r.root })).toBe('outside.txt\n')
+    expect(await r.runChecked(['git', 'ls-files', '--others', '--exclude-standard'], { cwd: r.root }))
+      .toBe('outside-untracked.txt\n')
+    expect(await r.runChecked(['git', 'ls-files', '-v', '--', 'src/main.ts'], { cwd: r.root }))
+      .toBe(`${flag === '--assume-unchanged' ? 'h' : 'S'} src/main.ts\n`)
+  }
+}, 30_000)
+
+test('does not record a committed landing when a hook changes only the index content', async () => {
+  const r = rig()
+  await r.initGit()
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'reviewed content\n')
+  const contentIdentity = await r.runtime.captureContentIdentity()
+  landingFor(r, 'files-on-disk', contentIdentity)
+  const head = await readLocalGitHead(r.context, r.root)
+  const hooksPath = await r.runChecked(['git', 'rev-parse', '--git-path', 'hooks'], { cwd: r.root })
+  const hookDir = hooksPath.startsWith('/') ? hooksPath : join(r.root, hooksPath.trim())
+  mkdirSync(hookDir, { recursive: true })
+  writeFileSync(join(hookDir, 'pre-commit'),
+    '#!/bin/sh\nblob=$(printf "hook-only content\\n" | git hash-object -w --stdin) || exit 1\ngit update-index --cacheinfo 100644 "$blob" src/main.ts\n')
+  chmodSync(join(hookDir, 'pre-commit'), 0o755)
+
+  expect(await commitLocalBranch(r.runtime, {
+    revision: 1, contentIdentity, branch: head.branch!, headSha: head.headSha!
+  }, 'index-mismatch-attempt')).toEqual({ effect: 'indeterminate', reason: 'commit-state-indeterminate' })
+  expect(await r.runChecked(['git', 'show', 'HEAD:src/main.ts'], { cwd: r.root })).toBe('hook-only content\n')
+  expect(await Bun.file(join(r.root, 'src', 'main.ts')).text()).toBe('reviewed content\n')
+  expect(r.landingRows.some(row => row.rung === 'committed-local-branch')).toBe(false)
+}, 30_000)
+
 test('refuses detached HEAD with branch-not-attached and distinguishes commit-hook-failed from indeterminate', async () => {
   const detached = rig()
   await detached.initGit()
