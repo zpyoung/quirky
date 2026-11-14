@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { Attempt, CapabilityMode, CheckState, JournalEntry, SitterAction, SitterCheck, SitterPayload, SitterWorld, Snapshot } from '../src/policy'
+import type { Attempt, CapabilityMode, CheckState, JournalEntry, SitterAction, SitterCheck, SitterPayload, SitterWorld, Snapshot, StopResult } from '../src/policy'
 import {
   contentIdentity,
   decide,
@@ -32,7 +32,31 @@ const payload: SitterPayload = {
   mergeCheckScope: 'all'
 }
 
-function check(overrides: Partial<SitterCheck> = {}): SitterCheck {
+type CheckFixture = SitterCheck & {
+  checkRunId: number | null
+  failureSignature: string | null
+  failureExcerpt: string | null
+}
+
+type PreparedFixture = {
+  sha: string
+  parentCount: number
+  primaryParentSha: string | null
+  attemptTrailer: string | null
+  dirty: boolean
+  policyViolation: string | null
+}
+
+type WorldFixture = SitterWorld & {
+  baseRefName: string
+  localHeadSha: string | null
+  localDirty: boolean
+  localPrepared: PreparedFixture | null
+}
+
+const BUILD_CHECK_KEY = JSON.stringify(['check_run', 'build'])
+
+function check(overrides: Partial<CheckFixture> = {}): CheckFixture {
   return {
     name: 'build',
     kind: 'check_run',
@@ -40,11 +64,14 @@ function check(overrides: Partial<SitterCheck> = {}): SitterCheck {
     observation: 'check_run:9001:41:completed:success',
     rerunTarget: 'workflow:41',
     workflowRunId: 41,
+    checkRunId: 9001,
+    failureSignature: null,
+    failureExcerpt: null,
     ...overrides
   }
 }
 
-function world(overrides: Partial<SitterWorld> = {}): SitterWorld {
+function world(overrides: Partial<WorldFixture> = {}): WorldFixture {
   return {
     reviewNumber: 7,
     reviewUrl: REVIEW_URL,
@@ -52,6 +79,7 @@ function world(overrides: Partial<SitterWorld> = {}): SitterWorld {
     draft: false,
     headSha: H1,
     baseSha: B1,
+    baseRefName: 'main',
     headRefName: 'feature',
     mergeable: 'MERGEABLE',
     mergeStateStatus: 'CLEAN',
@@ -62,8 +90,100 @@ function world(overrides: Partial<SitterWorld> = {}): SitterWorld {
     allowedMergeMethods: ['squash', 'merge', 'rebase'],
     checksComplete: true,
     checks: [check()],
+    localHeadSha: H1,
+    localDirty: false,
+    localPrepared: null,
     ...overrides
   }
+}
+
+function preparedCommit(overrides: Partial<PreparedFixture> = {}): PreparedFixture {
+  return {
+    sha: B2,
+    parentCount: 1,
+    primaryParentSha: H1,
+    attemptTrailer: 'fp-fix',
+    dirty: false,
+    policyViolation: null,
+    ...overrides
+  }
+}
+
+function prepareFixAction(signature = 'sha256:reproduced'): SitterAction {
+  return {
+    kind: 'prepare-fix',
+    capability: 'fixChecks',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    contentIdentity: 'fix-checks:failure-set',
+    evidenceKey: `${H1}:failure-set`,
+    expectedHeadSha: H1,
+    failedChecks: [{
+      key: BUILD_CHECK_KEY,
+      name: 'build',
+      failureSignature: signature,
+      failureExcerpt: 'reproduced compiler failure'
+    }]
+  } as unknown as SitterAction
+}
+
+function prepareConflictAction(): SitterAction {
+  return {
+    kind: 'prepare-conflict-resolution',
+    capability: 'resolveConflicts',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    contentIdentity: `resolve-conflicts:${B1}`,
+    evidenceKey: `${H1}:${B1}`,
+    expectedHeadSha: H1,
+    baseSha: B1,
+    baseRefName: 'main'
+  } as unknown as SitterAction
+}
+
+function publishFixAction(): SitterAction {
+  return {
+    kind: 'publish-fix',
+    capability: 'fixChecks',
+    visibility: 'external',
+    recovery: 'replay-safe',
+    contentIdentity: `publish-fix:${B2}`,
+    evidenceKey: H1,
+    preparedCommitSha: B2,
+    expectedHeadSha: H1,
+    prepareFingerprint: 'fp-fix'
+  } as unknown as SitterAction
+}
+
+function publishConflictAction(): SitterAction {
+  return {
+    kind: 'publish-conflict-resolution',
+    capability: 'resolveConflicts',
+    visibility: 'external',
+    recovery: 'replay-safe',
+    contentIdentity: `publish-conflict-resolution:${B2}`,
+    evidenceKey: H1,
+    preparedCommitSha: B2,
+    expectedHeadSha: H1,
+    prepareFingerprint: 'fp-conflict'
+  } as unknown as SitterAction
+}
+
+function expectParked(
+  result: StopResult,
+  predicate: string,
+  deviationKind: 'check-failed' | 'report-rejected' | 'landing-failed',
+  naturalKey: string
+) {
+  expect(result?.kind).toBe('park')
+  if (result?.kind !== 'park') return
+  expect(result.reason).toBe('stop-predicate')
+  expect(result.detail.startsWith(`${predicate}: `)).toBe(true)
+  expect(result.deviation).toEqual({
+    kind: deviationKind,
+    naturalKey,
+    detail: result.detail
+  })
 }
 
 function caps(overrides: Partial<Record<'updateBranch' | 'resolveConflicts' | 'fixChecks' | 'merge', CapabilityMode>> = {}): Record<string, CapabilityMode> {
@@ -184,19 +304,19 @@ test('maps hosting results to a world and its content identity', () => {
   expect(open.checks).toEqual([
     {
       name: 'build', kind: 'check_run', state: 'passed', observation: 'check_run:9001:41:completed:success',
-      rerunTarget: 'workflow:41', workflowRunId: 41
+      rerunTarget: 'workflow:41', workflowRunId: 41, checkRunId: 9001, failureSignature: null, failureExcerpt: null
     },
     {
       name: 'lint', kind: 'check_run', state: 'failed', observation: 'check_run:9002::completed:failure',
-      rerunTarget: 'check:9002', workflowRunId: null
+      rerunTarget: 'check:9002', workflowRunId: null, checkRunId: 9002, failureSignature: null, failureExcerpt: null
     },
     {
       name: 'deploy', kind: 'status', state: 'passed', observation: 'status:::success:success',
-      rerunTarget: null, workflowRunId: null
+      rerunTarget: null, workflowRunId: null, checkRunId: null, failureSignature: null, failureExcerpt: null
     },
     {
       name: 'review gate', kind: 'approval', state: 'pending', observation: 'approval:::action_required:action_required',
-      rerunTarget: null, workflowRunId: null
+      rerunTarget: null, workflowRunId: null, checkRunId: null, failureSignature: null, failureExcerpt: null
     }
   ])
   expect(contentIdentity(open)).toBe(JSON.stringify([H1, B1]))
@@ -356,19 +476,45 @@ test('a rerun waits for the workflow run, then for its result, and is not repeat
   expect(decide(snapshot(start), [landed], enrollment())).toMatchObject({ action: null, reason: 'awaiting-rerun-result' })
   expect(pace(snapshot(start), [landed])).toBe('rapid')
 
-  const persisted = check({ state: 'failed', observation: 'check_run:9002:42:completed:failure', workflowRunId: 42, rerunTarget: 'workflow:42' })
+  const persisted = check({
+    state: 'failed',
+    observation: 'check_run:9002:42:completed:failure',
+    workflowRunId: 42,
+    rerunTarget: 'workflow:42',
+    checkRunId: 9002,
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'compiler failure at src/build.ts'
+  })
   const afterRerun = decide(snapshot(world({ checks: [persisted] })), [landed], enrollment())
-  expect(afterRerun).toMatchObject({ action: null, reason: 'merge-gates-unsatisfied', detail: 'checks' })
-  expect(afterRerun.considered).toContain('fix-checks: failure-persisted-after-rerun')
+  expect(afterRerun.action).toMatchObject({
+    kind: 'prepare-fix',
+    capability: 'fixChecks',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    expectedHeadSha: H1,
+    failedChecks: [{
+      key: BUILD_CHECK_KEY,
+      name: 'build',
+      failureSignature: 'sha256:reproduced',
+      failureExcerpt: 'compiler failure at src/build.ts'
+    }]
+  })
 
-  const lint = check({ name: 'lint', state: 'failed', observation: 'check_run:9003:43:completed:failure', workflowRunId: 43, rerunTarget: 'workflow:43' })
-  const secondFailed = decide(snapshot(world({ checks: [persisted, lint] })), [landed], enrollment())
+  const lint = check({
+    name: 'lint',
+    state: 'failed',
+    observation: 'check_run:9003:43:completed:failure',
+    workflowRunId: 43,
+    rerunTarget: 'workflow:43'
+  })
+  const secondFailed = decide(snapshot(world({ checks: [lint] })), [landed], enrollment())
   expect(secondFailed.action).toMatchObject({ kind: 'rerun-check', checkNames: ['lint'] })
 })
 
 test('owner-only failures and capability-off are recorded, not acted on', () => {
   const statusFailure = check({
-    kind: 'status', state: 'failed', observation: 'status:::failure:failure', rerunTarget: null, workflowRunId: null
+    kind: 'status', state: 'failed', observation: 'status:::failure:failure', rerunTarget: null, workflowRunId: null,
+    checkRunId: null, failureSignature: null, failureExcerpt: null
   })
   const statusDecision = decide(snapshot(world({ checks: [statusFailure] })), [], enrollment())
   expect(statusDecision).toMatchObject({ action: null, reason: 'merge-gates-unsatisfied', detail: 'checks' })
@@ -380,7 +526,7 @@ test('owner-only failures and capability-off are recorded, not acted on', () => 
   expect(offDecision.considered).toContain('fix-checks: capability-off')
 })
 
-test('a behind branch is updated when otherwise ready or red, never when draft or pending', () => {
+test('a behind branch is updated when ready, but persisted failures are fixed first', () => {
   const behind = world({ mergeStateStatus: 'BEHIND' })
   const update = actionFor(behind)
   expect(update).toEqual({
@@ -397,10 +543,26 @@ test('a behind branch is updated when otherwise ready or red, never when draft o
 
   const rerun = actionFor(world({ checks: [check({ state: 'failed', observation: 'check_run:9001:41:completed:failure' })] }))!
   const persistedFailure = check({
-    state: 'failed', observation: 'check_run:9002:42:completed:failure', workflowRunId: 42, rerunTarget: 'workflow:42'
+    state: 'failed',
+    observation: 'check_run:9002:42:completed:failure',
+    workflowRunId: 42,
+    rerunTarget: 'workflow:42',
+    checkRunId: 9002,
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'compiler failure at src/build.ts'
   })
   const redBehind = decide(snapshot(world({ mergeStateStatus: 'BEHIND', checks: [persistedFailure] })), [attempt(rerun, { effect: 'landed' })], enrollment())
-  expect(redBehind.action?.kind).toBe('update-branch')
+  expect(redBehind.action).toMatchObject({
+    kind: 'prepare-fix',
+    capability: 'fixChecks',
+    recovery: 'replay-safe',
+    expectedHeadSha: H1,
+    failedChecks: [{
+      key: BUILD_CHECK_KEY,
+      failureSignature: 'sha256:reproduced',
+      failureExcerpt: 'compiler failure at src/build.ts'
+    }]
+  })
 
   expect(decide(snapshot(world({ mergeStateStatus: 'BEHIND', draft: true })), [], enrollment())).toMatchObject({
     action: null, reason: 'merge-gates-unsatisfied'
@@ -708,4 +870,371 @@ test('pacing follows one ordered rule list; the first match wins', () => {
     attempt(merge, { state: 'running', effect: undefined }),
     ...oneFailure
   ])).toBe('rapid')
+})
+
+test('a settled rerun with changed observations prepares a fix exactly once', () => {
+  const originalFailure = check({
+    state: 'failed',
+    observation: 'check_run:9001:41:completed:failure',
+    failureSignature: 'sha256:first-failure',
+    failureExcerpt: 'initial compiler failure'
+  })
+  const originalWorld = world({ checks: [originalFailure] })
+  const rerun = actionFor(originalWorld)!
+  expect(rerun.kind).toBe('rerun-check')
+  const landedRerun = attempt(rerun, { effect: 'landed' })
+
+  const reproducedFailure = check({
+    state: 'failed',
+    observation: 'check_run:9002:42:completed:failure',
+    workflowRunId: 42,
+    rerunTarget: 'workflow:42',
+    checkRunId: 9002,
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'compiler failure at src/build.ts'
+  })
+  expect(reproducedFailure.observation).not.toBe(originalFailure.observation)
+  const current = snapshot(world({ checks: [reproducedFailure] }))
+  const decision = decide(current, [landedRerun], enrollment(caps({ fixChecks: 'gated' })))
+  expect(decision.action).toMatchObject({
+    kind: 'prepare-fix',
+    capability: 'fixChecks',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    expectedHeadSha: H1,
+    failedChecks: [{
+      key: BUILD_CHECK_KEY,
+      name: 'build',
+      failureSignature: 'sha256:reproduced',
+      failureExcerpt: 'compiler failure at src/build.ts'
+    }]
+  })
+  if (!decision.action) return
+  const action = decision.action as SitterAction & { contentIdentity: string; evidenceKey: string }
+  expect(action.contentIdentity.startsWith('fix-checks:')).toBe(true)
+  expect(action.evidenceKey).toBe(`${H1}:${action.contentIdentity.slice('fix-checks:'.length)}`)
+
+  for (const unresolved of [
+    attempt(action, { seq: 2, state: 'running', effect: undefined, resolved: false }),
+    attempt(action, { seq: 2, state: 'settled', effect: 'indeterminate', resolved: false })
+  ]) {
+    expect(decide(current, [landedRerun, unresolved], enrollment()).action).toBeNull()
+  }
+})
+
+test('enabled conflict resolution takes precedence over failed checks', () => {
+  const failed = check({
+    state: 'failed',
+    observation: 'check_run:9001:41:completed:failure',
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'compiler failure at src/build.ts'
+  })
+  const decision = decide(
+    snapshot(world({ mergeable: 'CONFLICTING', checks: [failed] })),
+    [],
+    enrollment(caps({ resolveConflicts: 'gated', fixChecks: 'on' }))
+  )
+  expect(decision.action).toMatchObject({
+    kind: 'prepare-conflict-resolution',
+    capability: 'resolveConflicts',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    contentIdentity: `resolve-conflicts:${B1}`,
+    evidenceKey: `${H1}:${B1}`,
+    expectedHeadSha: H1,
+    baseSha: B1,
+    baseRefName: 'main'
+  })
+})
+
+test('persisted failures and conflicts park when their fix capabilities are off', () => {
+  const initial = check({
+    state: 'failed',
+    observation: 'check_run:9001:41:completed:failure',
+    failureSignature: 'sha256:first-failure',
+    failureExcerpt: 'initial compiler failure'
+  })
+  const rerun = actionFor(world({ checks: [initial] }))!
+  const landedRerun = attempt(rerun, { effect: 'landed' })
+  const persisted = check({
+    state: 'failed',
+    observation: 'check_run:9002:42:completed:failure',
+    workflowRunId: 42,
+    rerunTarget: 'workflow:42',
+    checkRunId: 9002,
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'compiler failure at src/build.ts'
+  })
+  expectParked(
+    stop(snapshot(world({ checks: [persisted] })), [landedRerun], enrollment(caps({ fixChecks: 'off' }))),
+    'failure-persisted-after-rerun',
+    'check-failed',
+    `failure-persisted-after-rerun:${H1}`
+  )
+  expectParked(
+    stop(snapshot(world({ mergeable: 'CONFLICTING' })), [], enrollment(caps({ resolveConflicts: 'off' }))),
+    'conflicts-present',
+    'landing-failed',
+    `conflicts-present:${H1}`
+  )
+})
+
+test('clean landed prepares publish only their verified commit SHA', () => {
+  const fixPrepare = prepareFixAction()
+  const fixPrepared = attempt(fixPrepare, { fingerprint: 'fp-fix' })
+  const fixWorld = world({
+    checks: [check({
+      state: 'failed',
+      observation: 'check_run:9002:42:completed:failure',
+      workflowRunId: 42,
+      rerunTarget: 'workflow:42',
+      checkRunId: 9002,
+      failureSignature: 'sha256:reproduced',
+      failureExcerpt: 'compiler failure at src/build.ts'
+    })],
+    localHeadSha: B2,
+    localPrepared: preparedCommit()
+  })
+  const fixPublish = decide(snapshot(fixWorld), [fixPrepared], enrollment(caps({ fixChecks: 'gated' }))).action
+  expect(fixPublish).toMatchObject({
+    kind: 'publish-fix',
+    capability: 'fixChecks',
+    visibility: 'external',
+    recovery: 'replay-safe',
+    contentIdentity: `publish-fix:${B2}`,
+    evidenceKey: H1,
+    preparedCommitSha: B2,
+    expectedHeadSha: H1,
+    prepareFingerprint: 'fp-fix'
+  })
+
+  for (const unresolved of [
+    attempt(fixPrepare, { state: 'running', effect: undefined, resolved: false }),
+    attempt(fixPrepare, { state: 'settled', effect: 'indeterminate', resolved: false }),
+    attempt(fixPrepare, { state: 'settled', effect: 'not-landed', reason: 'worker-failed' }),
+    attempt(fixPrepare, { fingerprint: 'other-fingerprint' })
+  ]) {
+    expect(decide(snapshot(fixWorld), [unresolved], enrollment()).action?.kind).not.toBe('publish-fix')
+  }
+  expect(decide(
+    snapshot(world({ ...fixWorld, headSha: H2 })),
+    [fixPrepared],
+    enrollment(caps({ fixChecks: 'on' }))
+  ).action?.kind).not.toBe('publish-fix')
+  const revisedPrepare = attempt(fixPrepare, {
+    seq: 2,
+    attemptId: fixPrepared.attemptId,
+    effect: 'not-landed',
+    reason: 'worker-failed'
+  })
+  expect(decide(snapshot(fixWorld), [fixPrepared, revisedPrepare], enrollment()).action?.kind).not.toBe('publish-fix')
+
+  const conflictPrepare = prepareConflictAction()
+  const conflictPrepared = attempt(conflictPrepare, { fingerprint: 'fp-conflict' })
+  const conflictWorld = world({
+    mergeable: 'CONFLICTING',
+    localHeadSha: B2,
+    localPrepared: preparedCommit({ parentCount: 2, attemptTrailer: 'fp-conflict' })
+  })
+  const conflictPublish = decide(
+    snapshot(conflictWorld),
+    [conflictPrepared],
+    enrollment(caps({ resolveConflicts: 'gated' }))
+  ).action
+  expect(conflictPublish).toMatchObject({
+    kind: 'publish-conflict-resolution',
+    capability: 'resolveConflicts',
+    visibility: 'external',
+    recovery: 'replay-safe',
+    contentIdentity: `publish-conflict-resolution:${B2}`,
+    evidenceKey: H1,
+    preparedCommitSha: B2,
+    expectedHeadSha: H1,
+    prepareFingerprint: 'fp-conflict'
+  })
+  for (const unresolved of [
+    attempt(conflictPrepare, { state: 'running', effect: undefined, resolved: false, fingerprint: 'fp-conflict' }),
+    attempt(conflictPrepare, { fingerprint: 'other-fingerprint' })
+  ]) {
+    expect(decide(
+      snapshot(conflictWorld),
+      [unresolved],
+      enrollment(caps({ resolveConflicts: 'on' }))
+    ).action?.kind).not.toBe('publish-conflict-resolution')
+  }
+  expect(decide(
+    snapshot(world({ ...conflictWorld, baseSha: B2 })),
+    [conflictPrepared],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  ).action?.kind).not.toBe('publish-conflict-resolution')
+  expect(decide(
+    snapshot(world({ ...conflictWorld, headSha: H2 })),
+    [conflictPrepared],
+    enrollment(caps({ resolveConflicts: 'on' }))
+  ).action?.kind).not.toBe('publish-conflict-resolution')
+})
+
+test('a prepared commit with a diff-policy violation parks for review', () => {
+  const prepared = attempt(prepareFixAction(), { fingerprint: 'fp-fix' })
+  expectParked(
+    stop(snapshot(world({
+      checks: [check({
+        state: 'failed',
+        observation: 'check_run:9002:42:completed:failure',
+        workflowRunId: 42,
+        rerunTarget: 'workflow:42',
+        checkRunId: 9002,
+        failureSignature: 'sha256:reproduced',
+        failureExcerpt: 'compiler failure at src/build.ts'
+      })],
+      localHeadSha: B2,
+      localPrepared: preparedCommit({ policyViolation: 'removed test assertions' })
+    })), [prepared], enrollment()),
+    'diff-policy-violation',
+    'report-rejected',
+    `diff-policy-violation:${B2}`
+  )
+})
+
+test('broken prepare workers and commits park for review', () => {
+  const fixPrepare = prepareFixAction()
+  const currentFailure = check({
+    state: 'failed',
+    observation: 'check_run:9002:42:completed:failure',
+    workflowRunId: 42,
+    rerunTarget: 'workflow:42',
+    checkRunId: 9002,
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'compiler failure at src/build.ts'
+  })
+  const failureWorld = world({ checks: [currentFailure] })
+  const failures = [
+    {
+      name: 'worker failure',
+      journal: [attempt(fixPrepare, { effect: 'not-landed', reason: 'worker-failed', fingerprint: 'fp-fix' })],
+      value: failureWorld
+    },
+    {
+      name: 'missing attempt trailer',
+      journal: [attempt(fixPrepare, { fingerprint: 'fp-fix' })],
+      value: world({ ...failureWorld, localHeadSha: B2, localPrepared: preparedCommit({ attemptTrailer: null }) })
+    },
+    {
+      name: 'dirty worktree',
+      journal: [attempt(fixPrepare, { fingerprint: 'fp-fix' })],
+      value: world({
+        ...failureWorld,
+        localHeadSha: B2,
+        localDirty: true,
+        localPrepared: preparedCommit({ dirty: true })
+      })
+    },
+    {
+      name: 'wrong primary parent',
+      journal: [attempt(fixPrepare, { fingerprint: 'fp-fix' })],
+      value: world({ ...failureWorld, localHeadSha: B2, localPrepared: preparedCommit({ primaryParentSha: B1 }) })
+    },
+    {
+      name: 'multiple parents on a fix',
+      journal: [attempt(fixPrepare, { fingerprint: 'fp-fix' })],
+      value: world({ ...failureWorld, localHeadSha: B2, localPrepared: preparedCommit({ parentCount: 2 }) })
+    }
+  ]
+  for (const failure of failures) {
+    expectParked(
+      stop(snapshot(failure.value), failure.journal, enrollment()),
+      'unverified-prepared-commit',
+      'report-rejected',
+      `unverified-prepared-commit:${H1}`
+    )
+  }
+
+  const conflictPrepare = prepareConflictAction()
+  expectParked(
+    stop(snapshot(world({
+      mergeable: 'CONFLICTING',
+      checks: [currentFailure],
+      localHeadSha: B2,
+      localPrepared: preparedCommit({ parentCount: 3, attemptTrailer: 'fp-conflict' })
+    })), [attempt(conflictPrepare, { fingerprint: 'fp-conflict' })], enrollment(caps({ resolveConflicts: 'on' }))),
+    'unverified-prepared-commit',
+    'report-rejected',
+    `unverified-prepared-commit:${H1}`
+  )
+})
+
+test('an unverifiable persisted failure stops instead of preparing a fix', () => {
+  const initial = check({
+    state: 'failed',
+    observation: 'check_run:9001:41:completed:failure',
+    failureSignature: 'sha256:first-failure',
+    failureExcerpt: 'initial compiler failure'
+  })
+  const rerun = actionFor(world({ checks: [initial] }))!
+  const landedRerun = attempt(rerun, { effect: 'landed' })
+  const unverifiable = check({
+    state: 'failed',
+    observation: 'check_run:9002:42:completed:failure',
+    workflowRunId: 42,
+    rerunTarget: 'workflow:42',
+    checkRunId: 9002,
+    failureSignature: null,
+    failureExcerpt: null
+  })
+  expectParked(
+    stop(snapshot(world({ checks: [unverifiable] })), [landedRerun], enrollment(caps({ fixChecks: 'gated' }))),
+    'unverifiable-reproduced-failure',
+    'check-failed',
+    `unverifiable-reproduced-failure:${H1}`
+  )
+})
+
+test('only the same check key and signature after its own published fix parks', () => {
+  const fixPrepare = prepareFixAction()
+  const prepared = attempt(fixPrepare, { fingerprint: 'fp-fix' })
+  const published = attempt(publishFixAction(), { seq: 2, fingerprint: 'fp-publish' })
+  const sameFailure = check({
+    state: 'failed',
+    observation: 'check_run:9003:43:completed:failure',
+    workflowRunId: 43,
+    rerunTarget: 'workflow:43',
+    checkRunId: 9003,
+    failureSignature: 'sha256:reproduced',
+    failureExcerpt: 'same compiler failure'
+  })
+  const afterOwnFix = snapshot(world({ headSha: B2, localHeadSha: B2, checks: [sameFailure] }))
+  expectParked(
+    stop(afterOwnFix, [prepared, published], enrollment()),
+    'repeated-failure-after-own-fix',
+    'check-failed',
+    `repeated-failure-after-own-fix:${B2}`
+  )
+
+  const changedSignature = check({ ...sameFailure, failureSignature: 'sha256:changed' })
+  const changed = snapshot(world({ headSha: B2, localHeadSha: B2, checks: [changedSignature] }))
+  expect(stop(changed, [prepared, published], enrollment())).toBeNull()
+  expect(decide(changed, [prepared, published], enrollment()).action).toMatchObject({ kind: 'rerun-check' })
+
+  const unlinkedPublish = {
+    ...publishFixAction(),
+    prepareFingerprint: 'unrelated-prepare'
+  } as unknown as SitterAction
+  expect(stop(afterOwnFix, [prepared, attempt(unlinkedPublish, { seq: 2 })], enrollment())).toBeNull()
+  expect(stop(afterOwnFix, [
+    prepared,
+    published,
+    attempt(publishFixAction(), { seq: 3, attemptId: 'attempt-2', effect: 'not-landed', reason: 'head-moved' })
+  ], enrollment())).toBeNull()
+})
+
+test('indeterminate publish attempts resolve from live head observations', () => {
+  for (const action of [publishFixAction(), publishConflictAction()]) {
+    const indeterminate = attempt(action, { effect: 'indeterminate', resolved: false })
+    expect(resolveOutcome(indeterminate, snapshot(world({ headSha: B2 })))).toEqual({ effect: 'landed' })
+    expect(resolveOutcome(indeterminate, snapshot(world({ headSha: H2 })))).toMatchObject({ effect: 'not-landed' })
+    expect(resolveOutcome(
+      indeterminate,
+      snapshot(world({ headSha: H1 }), T + UNOBSERVED_EFFECT_MS)
+    )).toBeNull()
+  }
 })
