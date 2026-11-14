@@ -44,6 +44,16 @@ const PROVIDER_FAILURE_MESSAGES: Record<string, string> = {
 }
 export type ReviewState = 'open' | 'draft' | 'closed' | 'merged'
 export type CheckState = 'neutral' | 'pending' | 'success' | 'failure'
+export type MergeQueueEntry = {
+  id: string | null
+  state: string | null
+  position: number | null
+}
+type MergeQueueMembership = {
+  inMergeQueue: boolean
+  mergeQueueEntry: MergeQueueEntry | null
+  mergeQueueKnown: boolean
+}
 export type Review = {
   provider: 'github'
   number: number
@@ -64,6 +74,9 @@ export type Review = {
   stack: unknown
   mergeMethods: unknown
   mergeQueueRequired: boolean | null
+  inMergeQueue: boolean
+  mergeQueueEntry: MergeQueueEntry | null
+  mergeQueueKnown?: boolean
   autoMergeAllowed: boolean | null
   mergeMetadataKnown: boolean
   additions?: number
@@ -192,7 +205,7 @@ function mergeability(raw: Record<string, unknown>): Review['mergeable'] {
   return 'UNKNOWN'
 }
 
-function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, metadata: PRMergeMetadata, stack: unknown): Review | undefined {
+function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, metadata: PRMergeMetadata, stack: unknown, queueMembership: MergeQueueMembership): Review | undefined {
   const number = parsePositiveInteger(raw.number)
   const suppliedUrl = nonEmptyString(raw.url)
   const title = typeof raw.title === 'string' ? raw.title : undefined
@@ -230,6 +243,9 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
     stack,
     mergeMethods: metadata.mergeMethods,
     mergeQueueRequired: metadata.mergeQueueRequired,
+    inMergeQueue: queueMembership.inMergeQueue,
+    mergeQueueEntry: queueMembership.mergeQueueEntry,
+    mergeQueueKnown: queueMembership.mergeQueueKnown,
     autoMergeAllowed: metadata.autoMergeAllowed,
     mergeMetadataKnown: metadata.known
   }
@@ -306,6 +322,64 @@ function metadataFromResponse(value: unknown): PRMergeMetadata {
 
 function graphqlMetadataQuery(): string {
   return 'query HostingPRMergeMetadata($owner:String!,$name:String!,$branch:String!,$qualifiedBranch:String!){repository(owner:$owner,name:$name){viewerDefaultMergeMethod mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed autoMergeAllowed defaultBranchRef{name} mergeQueue(branch:$branch){id} ref(qualifiedName:$qualifiedBranch){rules(first:50){nodes{type parameters{... on PullRequestParameters{requiredApprovingReviewCount}}}}}}}'
+}
+
+function graphqlPullRequestQueueQuery(): string {
+  return 'query HostingPRMergeQueueEntry($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){mergeQueueEntry{id state position}}}}'
+}
+
+function mergeQueueEntryFrom(value: unknown): MergeQueueEntry | null | undefined {
+  if (value === null) return null
+  if (!isRecord(value)) return undefined
+  return {
+    id: nonEmptyString(value.id) ?? null,
+    state: nonEmptyString(value.state) ?? null,
+    position: typeof value.position === 'number' && Number.isSafeInteger(value.position) ? value.position : null
+  }
+}
+
+function mergeQueueMembershipFromResponse(value: unknown): MergeQueueMembership | undefined {
+  if (!isRecord(value) || (Array.isArray(value.errors) && value.errors.length > 0)) return undefined
+  const root = isRecord(value.data) ? value.data : value
+  const repository = isRecord(root.repository) ? root.repository : undefined
+  const pull = repository && isRecord(repository.pullRequest) ? repository.pullRequest : undefined
+  if (!pull || !Object.hasOwn(pull, 'mergeQueueEntry')) return undefined
+  const mergeQueueEntry = mergeQueueEntryFrom(pull.mergeQueueEntry)
+  if (mergeQueueEntry === undefined) return undefined
+  return { inMergeQueue: mergeQueueEntry !== null, mergeQueueEntry, mergeQueueKnown: true }
+}
+
+async function readMergeQueueMembership(
+  env: HostingEnv,
+  scope: Scope,
+  repository: IdentityValue,
+  number: number,
+  raw: Record<string, unknown>,
+  metadata: PRMergeMetadata
+): Promise<MergeQueueMembership> {
+  const unknown: MergeQueueMembership = { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: false }
+  if (raw.mergeQueueEntry !== undefined) {
+    const mergeQueueEntry = mergeQueueEntryFrom(raw.mergeQueueEntry)
+    return mergeQueueEntry === undefined
+      ? unknown
+      : { inMergeQueue: mergeQueueEntry !== null, mergeQueueEntry, mergeQueueKnown: true }
+  }
+  if (stateOf(raw) !== 'open') {
+    return { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: true }
+  }
+  if (metadata.known && metadata.mergeQueueRequired === false) {
+    return { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: true }
+  }
+  try {
+    const response = await env.graphql(scope, graphqlPullRequestQueueQuery(), {
+      owner: repository.owner,
+      name: repository.repo,
+      number
+    }, { idempotent: true })
+    return mergeQueueMembershipFromResponse(response) ?? unknown
+  } catch {
+    return unknown
+  }
 }
 
 async function readMetadata(env: HostingEnv, scope: Scope, repository: IdentityValue, branch: string, fresh = false): Promise<PRMergeMetadata> {
@@ -420,7 +494,8 @@ async function enrichRead(env: HostingEnv, scope: Scope, repository: IdentityVal
     // A normal review lookup remains available when optional stack metadata cannot be read.
   }
   const metadata = await readMetadata(env, scope, repository, nonEmptyString(raw.baseRefName) ?? '', fresh)
-  const review = reviewFromRaw({ ...raw, stack }, repository, metadata, stack)
+  const queueMembership = await readMergeQueueMembership(env, scope, repository, number, raw, metadata)
+  const review = reviewFromRaw({ ...raw, stack }, repository, metadata, stack, queueMembership)
   if (!review) throw env.invalid('upstream_unavailable', 'GitHub returned incomplete pull request details.')
   return { scope, repository, raw, review, metadata, stackKnown }
 }

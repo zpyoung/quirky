@@ -11,6 +11,7 @@ export interface StandInState {
     baseRefOid: string
     headRefName: string
     headRefOid: string
+    mergeQueueEntry: { id: string | null; state: string | null; position: number | null } | null
     headRepositoryOwner: { login: string }
     headRepository: { name: string; owner: { login: string } }
     baseRepositoryOwner: { login: string }
@@ -29,6 +30,7 @@ export interface StandInState {
     conclusion: string | null
     detailsUrl: string
     workflowRunId: number
+    required?: boolean | null
   }[]
   checkDetails?: Record<string, {
     annotations: Record<string, unknown>[]
@@ -39,6 +41,8 @@ export interface StandInState {
   updatedHead: string
   mergeQueueRequired: boolean
   mergeVisible: boolean
+  checksPartial?: boolean
+  mergeAsyncOutcome?: 'enqueued' | 'merged' | 'ambiguous-enqueued'
 }
 
 export function standInState(overrides: Partial<StandInState> = {}): StandInState {
@@ -55,6 +59,7 @@ export function standInState(overrides: Partial<StandInState> = {}): StandInStat
       baseRefOid: 'b'.repeat(40),
       headRefName: 'feature',
       headRefOid: '1'.repeat(40),
+      mergeQueueEntry: null,
       headRepositoryOwner: { login: 'test-owner' },
       headRepository: { name: 'test-repo', owner: { login: 'test-owner' } },
       baseRepositoryOwner: { login: 'test-owner' },
@@ -72,13 +77,16 @@ export function standInState(overrides: Partial<StandInState> = {}): StandInStat
       status: 'COMPLETED',
       conclusion: 'FAILURE',
       detailsUrl: 'https://github.com/test-owner/test-repo/actions/runs/41/job/9001',
-      workflowRunId: 41
+      workflowRunId: 41,
+      required: true
     }],
     checkDetails: {},
     defaultBranch: 'main',
     updatedHead: '2'.repeat(40),
     mergeQueueRequired: false,
     mergeVisible: true,
+    checksPartial: false,
+    mergeAsyncOutcome: 'enqueued',
     ...overrides
   }
 }
@@ -216,13 +224,45 @@ if (command === 'version' && args.length === 1) {
         out({ data: { repository: { pullRequest: {
           headRefOid: item.headRefOid,
           commits: { nodes: [{ commit: {
-            statusCheckRollup: { contexts: { nodes: state.checkRuns ?? [], pageInfo: { hasNextPage: false } } },
-            checkSuites: { nodes: [], pageInfo: { hasNextPage: false } },
+            statusCheckRollup: { contexts: { nodes: (state.checkRuns ?? []).map((check) => {
+              const { required, ...record } = check
+              return { ...record, isRequired: required ?? null }
+            }), pageInfo: { hasNextPage: state.checksPartial === true } } },
+            checkSuites: { nodes: [], pageInfo: { hasNextPage: state.checksPartial === true } },
           } }] },
         } } } })
       }
+    } else if (query.includes('mergeQueueEntry')) {
+      const item = byNumber(variables.number)
+      if (!item || variables.owner !== 'test-owner' || variables.name !== 'test-repo') {
+        out({ data: { repository: { pullRequest: null } } })
+      } else {
+        out({ data: { repository: { pullRequest: { mergeQueueEntry: item.mergeQueueEntry ?? null } } } })
+      }
     } else {
       fail('Unsupported GitHub GraphQL fixture query')
+    }
+  } else if (apiRepo && apiRepo.owner === 'test-owner' && apiRepo.repo === 'test-repo' &&
+    /^repos\/[^/]+\/[^/]+\/pulls\/\d+\/merge-async$/.test(endpoint) && method === 'PUT') {
+    const number = endpoint.match(/\/pulls\/(\d+)\/merge-async$/)?.[1]
+    const item = byNumber(number)
+    if (!item || !belongsTo(item, apiRepo)) fail('HTTP 404: Not Found')
+    if (item.state !== 'OPEN') fail('HTTP 422: pull request is not open')
+    if (inputFields.merge_action !== 'merge_queue') fail('The fixture only accepts merge-queue actions')
+    if (inputFields.sha !== item.headRefOid) fail("HTTP 422: expected head sha didn't match current head ref")
+    if (state.mergeQueueRequired !== true) fail('HTTP 422: the fixture pull request has no merge queue')
+    item.mergeQueueEntry = { id: 'MQ_test_7', state: 'QUEUED', position: 1 }
+    if (state.mergeAsyncOutcome === 'ambiguous-enqueued') {
+      saveState(state)
+      out({ status: 'unknown' })
+    } else if (state.mergeAsyncOutcome === 'merged') {
+      item.state = 'MERGED'
+      item.mergeQueueEntry = null
+      saveState(state)
+      out({ status: 'merged' })
+    } else {
+      saveState(state)
+      out({ status: 'enqueued' })
     }
   } else if (apiRepo && apiRepo.owner === 'test-owner' && apiRepo.repo === 'test-repo' && endpoint.includes('/pulls?') && method === 'GET') {
     const query = new URLSearchParams(endpoint.split('?')[1] ?? '')
