@@ -279,15 +279,106 @@ describe('Session Info UI contributions', () => {
     activate(fake.context)
     const panel = fake.mount('panel:quirky.session-info/info')
     await waitForUi()
-    expect(panel.element.textContent).toContain('daemon unavailable')
-    await click(button(panel.element, 'Retry'))
+    const loadError = panel.element.querySelector('.ui-inline-error')
+    expect(loadError?.textContent).toContain('Could not load session info: daemon unavailable')
+    const loadRetry = loadError?.querySelector('.ui-inline-error__action')
+    expect(loadRetry?.textContent).toBe('Retry')
+    if (loadRetry) await click(loadRetry)
     await waitForUi()
+    expect(attempts).toBe(2)
+    expect(panel.element.querySelector('.ui-inline-error')).toBeNull()
     await click(button(panel.element, 'Usage'))
     await click(button(panel.element, 'Context'))
     await waitForUi()
-    expect(panel.element.textContent).toContain('Waiting for the first completed turn')
-    expect(panel.element.textContent).toContain('Waiting for the first statusline update')
+    const notices = Array.from(panel.element.querySelectorAll('.ui-notice-line'), (notice) => notice.textContent)
+    expect(notices).toContain('Waiting for the first completed turn…')
+    expect(notices).toContain('Waiting for the first statusline update…')
     expect(panel.element.textContent).not.toContain('0 tokens')
+    panel.unmount()
+  })
+  test('shows shared loading notices for initial load and refresh', async () => {
+    const initial = Promise.withResolvers<PanelState>()
+    const refresh = Promise.withResolvers<PanelState>()
+    let reads = 0
+    const fake = makeContext({
+      'quirky.session-info/get': () => ++reads === 1 ? initial.promise : refresh.promise,
+      'quirky.session-info/sections': ({ open }) => ({ open })
+    })
+    activate(fake.context)
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+    expect(panel.element.querySelector('.ui-notice-line')?.textContent).toBe('Loading session info…')
+
+    initial.resolve(state(info()))
+    await waitForUi()
+    await fake.emit({ type: 'quirky.session-info/changed', data: { sessionId: 'quirky-1' } })
+    await waitForUi()
+    expect(reads).toBe(2)
+    expect(panel.element.querySelector('.ui-notice-line')?.textContent).toBe('Refreshing session info…')
+
+    refresh.resolve(state(info()))
+    await waitForUi()
+    panel.unmount()
+  })
+
+  test('renders usage failures inline and disables Retry usage while refreshing', async () => {
+    const inspection = Promise.withResolvers<unknown>()
+    const fake = makeContext({
+      'quirky.session-info/get': () => state(info({
+        usage: { status: 'ready', freshness: 'stale', totalTokens: 100, error: 'ENOENT: transcript missing' }
+      }), { openSections: ['usage'] }),
+      'quirky.session-info/inspect': () => inspection.promise
+    })
+    activate(fake.context)
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+
+    const usage = panel.element.querySelector('#session-info-section-usage') as HTMLElement
+    expect(usage.querySelector('.ui-inline-error')?.textContent).toBe('ENOENT: transcript missing')
+    expect(button(panel.element, 'Retry usage').getAttribute('aria-label')).toBe('Retry usage')
+    expect(button(panel.element, 'Retry usage').disabled).toBe(false)
+
+    await click(button(panel.element, 'Retry usage'))
+    await waitForUi()
+    expect(button(panel.element, 'Retry usage').disabled).toBe(true)
+    expect(Array.from(usage.querySelectorAll('.ui-notice-line'), (notice) => notice.textContent)).toContain('Refreshing usage…')
+
+    inspection.resolve({ mcp: [], updatedAt: 1_700_000_060_001 })
+    await waitForUi()
+    expect(button(panel.element, 'Retry usage').disabled).toBe(false)
+    panel.unmount()
+  })
+
+  test('shows Hooks & MCP inspection progress, errors, and retry results', async () => {
+    const pendingInspection = Promise.withResolvers<unknown>()
+    let inspectCount = 0
+    const fake = makeContext({
+      'quirky.session-info/get': () => state(info(), { openSections: ['hooksAndMcp'] }),
+      'quirky.session-info/inspect': () => {
+        inspectCount++
+        if (inspectCount === 1) return pendingInspection.promise
+        if (inspectCount === 2) return { mcp: [], updatedAt: 1_700_000_060_001 }
+        return { mcp: [], updatedAt: 1_700_000_060_002, error: 'inspection returned failure' }
+      }
+    })
+    activate(fake.context)
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+    expect(panel.element.querySelector('.ui-notice-line')?.textContent).toBe('Inspecting Hooks & MCP…')
+
+    pendingInspection.reject(new Error('settings unreadable'))
+    await waitForUi()
+    expect(panel.element.querySelector('.ui-inline-error')?.textContent).toBe('Could not inspect Hooks & MCP: settings unreadable')
+
+    await click(button(panel.element, 'Retry'))
+    await waitForUi()
+    expect(inspectCount).toBe(2)
+    expect(panel.element.querySelector('#session-info-section-hooksAndMcp .ui-empty-state')?.textContent).toBe('No configured servers found.')
+
+    await click(button(panel.element, 'Retry'))
+    await waitForUi()
+    expect(inspectCount).toBe(3)
+    expect(panel.element.querySelector('.ui-inline-error')?.textContent).toBe('inspection returned failure')
     panel.unmount()
   })
 
@@ -466,6 +557,146 @@ describe('Session Info routed actions and views', () => {
     const broken = fake.mount('view:quirky.session-info/transcript', { session: 'bad' })
     await waitForUi()
     expect(broken.element.textContent).toContain('transcript is unreadable')
+    broken.unmount()
+  })
+  test('renders copy failures as InlineError while preserving the error toast', async () => {
+    const fake = makeContext({
+      'quirky.session-info/get': () => state(info())
+    })
+    activate(fake.context)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => { throw new Error('clipboard denied') } }
+    })
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+
+    await click(button(panel.element, 'Copy ID'))
+    await waitForUi()
+    expect(panel.element.querySelector('.ui-inline-error')?.textContent).toBe('clipboard denied')
+    expect(fake.toasts.at(-1)?.title).toMatch(/copy/i)
+    panel.unmount()
+  })
+
+  test('routes Identity buttons through their commands in click order', async () => {
+    const fake = makeContext({
+      'quirky.session-info/get': () => state(info(), { openSections: ['identity'] }),
+      'quirky.terminal/openExternal': () => ({ ok: true })
+    })
+    activate(fake.context)
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+
+    for (const name of ['Open history', 'Open Vault', 'Focus pane', 'Open transcript', 'Reveal transcript']) {
+      await click(button(panel.element, name))
+      await waitForUi()
+    }
+    expect(fake.commands.filter(({ id }) =>
+      id.startsWith('command:quirky.session-info/') || id === 'command:quirky.vault/open'
+    )).toEqual([
+      { id: 'command:quirky.session-info/open-history', args: { session: 'quirky-1' } },
+      { id: 'command:quirky.vault/open', args: { agent: 'claude', sessionId: 'provider-1' } },
+      { id: 'command:quirky.session-info/focus-pane', args: { session: 'quirky-1' } },
+      { id: 'command:quirky.session-info/open-transcript', args: { session: 'quirky-1' } },
+      { id: 'command:quirky.session-info/reveal-transcript', args: { session: 'quirky-1' } }
+    ])
+    panel.unmount()
+  })
+
+  test('shows history loading, retries failures, and renders the empty state', async () => {
+    const firstSearch = Promise.withResolvers<unknown>()
+    let searches = 0
+    const fake = makeContext({
+      'quirky.session-info/history': () => ++searches === 1 ? firstSearch.promise : []
+    })
+    activate(fake.context)
+    const history = fake.mount('view:quirky.session-info/history')
+    await waitForUi()
+    expect(history.element.querySelector('.ui-notice-line')?.textContent).toBe('Searching session history…')
+
+    firstSearch.reject(new Error('index locked'))
+    await waitForUi()
+    expect(history.element.querySelector('.ui-inline-error')?.textContent).toContain('Could not load session history: index locked')
+    const retry = history.element.querySelector('.ui-inline-error__action')
+    expect(retry).not.toBeNull()
+    if (retry) await click(retry)
+    await waitForUi()
+    expect(searches).toBe(2)
+    expect(fake.calls.filter(({ method }) => method === 'quirky.session-info/history')).toHaveLength(2)
+    expect(history.element.querySelector('.ui-empty-state')?.textContent).toBe('No matching sessions.')
+    history.unmount()
+  })
+
+  test('routes history row actions and renders resume failures inline', async () => {
+    const record = {
+      id: 'q1', kind: 'terminal', agent: 'claude', worktreeId: 'wt', cwd: '/repo', title: 'First',
+      status: 'done', createdAt: 1, lastActivityAt: 2, exitCode: 0, exitSignal: null, exitCause: null,
+      restorable: false, launch: null, providerSession: { id: 'provider-1', transcriptPath: null }
+    }
+    const fake = makeContext({
+      'quirky.session-info/history': () => [record],
+      'quirky.session/resume': ({ fork }) => {
+        if (!fork) throw new Error('cannot resume this session')
+        return { id: 'q1-fork', worktreeId: 'wt' }
+      },
+      'quirky.session-info/resumeCommand': () => ({ command: 'claude --resume provider-1' })
+    })
+    activate(fake.context)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => {} }
+    })
+    const history = fake.mount('view:quirky.session-info/history')
+    await waitForUi()
+
+    await click(button(history.element, 'Resume q1'))
+    await waitForUi()
+    expect(fake.commands[0]).toEqual({ id: 'command:quirky.session-info/resume', args: { session: 'q1' } })
+    expect(history.element.querySelector('[data-session="q1"] .ui-inline-error')?.textContent).toBe('cannot resume this session')
+
+    await click(button(history.element, 'Fork q1'))
+    await waitForUi()
+    await click(button(history.element, 'Copy resume command q1'))
+    await waitForUi()
+    expect(fake.commands.filter(({ id }) => id.startsWith('command:quirky.session-info/'))).toEqual([
+      { id: 'command:quirky.session-info/resume', args: { session: 'q1' } },
+      { id: 'command:quirky.session-info/fork', args: { session: 'q1' } },
+      { id: 'command:quirky.session-info/copy-resume-command', args: { session: 'q1' } }
+    ])
+    history.unmount()
+  })
+
+  test('renders transcript pending, empty, failure, and retry states', async () => {
+    const emptyTranscript = Promise.withResolvers<unknown>()
+    let failedLoads = 0
+    const fake = makeContext({
+      'quirky.session-info/transcript': ({ session }) => {
+        if (session === 'empty') return emptyTranscript.promise
+        if (failedLoads++ === 0) throw new Error('transcript is unreadable')
+        return { path: '/tmp/session.jsonl', text: 'Transcript body' }
+      }
+    })
+    activate(fake.context)
+    const empty = fake.mount('view:quirky.session-info/transcript', { session: 'empty' })
+    await waitForUi()
+    expect(empty.element.querySelector('.ui-notice-line')?.textContent).toBe('Loading transcript…')
+    emptyTranscript.resolve({ path: '/tmp/session.jsonl', text: '' })
+    await waitForUi()
+    expect(empty.element.querySelector('.ui-empty-state')?.textContent).toBe('This transcript has no entries yet.')
+    expect(empty.element.querySelector('pre')).toBeNull()
+    empty.unmount()
+
+    const broken = fake.mount('view:quirky.session-info/transcript', { session: 'broken' })
+    await waitForUi()
+    expect(broken.element.querySelector('.ui-inline-error')?.textContent).toContain('Could not load transcript: transcript is unreadable')
+    const retry = broken.element.querySelector('.ui-inline-error__action')
+    expect(retry).not.toBeNull()
+    if (retry) await click(retry)
+    await waitForUi()
+    expect(broken.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(broken.element.querySelector('[aria-label="Transcript content"]')?.textContent).toBe('Transcript body')
+    expect(broken.element.textContent).toContain('/tmp/session.jsonl')
+    expect(broken.element.querySelector('textarea,input')).toBeNull()
     broken.unmount()
   })
 })

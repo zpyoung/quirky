@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import { Button, EmptyState, ListRow, SectionHeader } from '@quirky/ui'
-import type { Context as ContextInfo, FilesTouched, Inspection, LiveActivity, PanelState, SectionId, Usage } from '../types'
+import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
+import type { Context as ContextInfo, FilesTouched, Inspection, LiveActivity, PanelState, PlanWindow, SectionId, Usage } from '../types'
 import { contextThreshold, formatCount, formatPercentage, formatTimestamp } from './format'
 import { subscribeCopyFeedback, type CopyFeedback } from './feedback'
 type Props = { context: UiPluginContext; report?(state: unknown): void }
@@ -20,6 +20,13 @@ const CORE_SECTIONS: Section[] = [
 const PANEL_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflowY: 'auto', overflowWrap: 'anywhere' } as const
 const BODY_STYLE = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: '0', overflowWrap: 'anywhere' } as const
 const MUTED_STYLE = { color: 'var(--ui-muted)' } as const
+
+const COMMAND_COPY_ID = 'command:quirky.session-info/copy-id'
+const COMMAND_OPEN_HISTORY = 'command:quirky.session-info/open-history'
+const COMMAND_FOCUS_PANE = 'command:quirky.session-info/focus-pane'
+const COMMAND_OPEN_TRANSCRIPT = 'command:quirky.session-info/open-transcript'
+const COMMAND_REVEAL_TRANSCRIPT = 'command:quirky.session-info/reveal-transcript'
+const COMMAND_OPEN_VAULT = 'command:quirky.vault/open'
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -74,8 +81,14 @@ function AccordionSection({ id, title, open, onToggle, children }: { id: Section
   )
 }
 
-function IdentityContent({ state, copied, action }: { state: PanelState; copied: CopyFeedback | null; action(name: string, session: string | null): Promise<void> }) {
+function IdentityContent({ state, copied, context, track }: {
+  state: PanelState
+  copied: CopyFeedback | null
+  context: UiPluginContext
+  track(pending: Promise<unknown>): Promise<void>
+}) {
   const identity = state.info!.identity
+  const session = state.session
   const rows: { label: string; value: string | null }[] = [
     { label: 'Agent', value: identity.agent },
     { label: 'Model', value: displayValue(identity.model) },
@@ -92,15 +105,15 @@ function IdentityContent({ state, copied, action }: { state: PanelState; copied:
     { label: 'Branch', value: displayValue(identity.branch) }
   ]
   const buttons = [
-    ...(identity.providerSessionId ? [<Button key="copy" aria-label="Copy ID" onClick={() => void action('copy-id', state.session)}>{copied?.session === state.session && copied.kind === 'id' ? 'Copied' : 'Copy ID'}</Button>] : []),
-    <Button key="history" aria-label="Open history" onClick={() => void action('open-history', state.session)}>Open history</Button>,
+    ...(identity.providerSessionId ? [<Button key="copy" aria-label="Copy ID" onClick={() => void track(context.executeCommand(COMMAND_COPY_ID, { session }))}>{copied?.session === state.session && copied.kind === 'id' ? 'Copied' : 'Copy ID'}</Button>] : []),
+    <Button key="history" aria-label="Open history" onClick={() => void track(context.executeCommand(COMMAND_OPEN_HISTORY, { session }))}>Open history</Button>,
     ...(identity.providerSessionId ? [
-      <Button key="vault" aria-label="Open Vault" onClick={() => void action('open-vault', state.session)}>Open Vault</Button>
+      <Button key="vault" aria-label="Open Vault" onClick={() => void track(context.executeCommand(COMMAND_OPEN_VAULT, { agent: identity.agent, sessionId: identity.providerSessionId }))}>Open Vault</Button>
     ] : []),
-    ...(state.pane === null ? [] : [<Button key="focus" aria-label="Focus pane" onClick={() => void action('focus-pane', state.session)}>Focus pane</Button>]),
+    ...(state.pane === null ? [] : [<Button key="focus" aria-label="Focus pane" onClick={() => void track(context.executeCommand(COMMAND_FOCUS_PANE, { session }))}>Focus pane</Button>]),
     ...(identity.transcriptPath ? [
-      <Button key="transcript" aria-label="Open transcript" onClick={() => void action('open-transcript', state.session)}>Open transcript</Button>,
-      <Button key="reveal" aria-label="Reveal transcript" onClick={() => void action('reveal-transcript', state.session)}>Reveal transcript</Button>
+      <Button key="transcript" aria-label="Open transcript" onClick={() => void track(context.executeCommand(COMMAND_OPEN_TRANSCRIPT, { session }))}>Open transcript</Button>,
+      <Button key="reveal" aria-label="Reveal transcript" onClick={() => void track(context.executeCommand(COMMAND_REVEAL_TRANSCRIPT, { session }))}>Reveal transcript</Button>
     ] : [])
   ]
   return (
@@ -112,7 +125,7 @@ function IdentityContent({ state, copied, action }: { state: PanelState; copied:
 }
 
 function UsageContent({ usage, busy, onRetry }: { usage: Usage; busy: boolean; onRetry(): void }) {
-  if (usage.status === 'waiting') return <p role="status" style={MUTED_STYLE}>Waiting for the first completed turn…</p>
+  if (usage.status === 'waiting') return <NoticeLine>Waiting for the first completed turn…</NoticeLine>
   const values: [string, number | undefined][] = [
     ['Total tokens', usage.totalTokens], ['Turns', usage.turnCount], ['Input', usage.input], ['Output', usage.output], ['Cache read', usage.cacheRead], ['Cache write', usage.cacheWrite]
   ]
@@ -121,10 +134,10 @@ function UsageContent({ usage, busy, onRetry }: { usage: Usage; busy: boolean; o
   const canRetry = usage.freshness === 'stale' || usage.error !== undefined
   return (
     <div aria-busy={refreshing}>
-      {refreshing && <p role="status">Refreshing usage…</p>}
+      {refreshing && <NoticeLine>Refreshing usage…</NoticeLine>}
       {usage.freshness === 'stale' && <p role="status">Stale{timestamp ? ` · As of ${timestamp}` : ''}</p>}
       {values.filter(([, value]) => value !== undefined).map(([label, value]) => <Row key={label} label={label}>{formatCount(value) ?? value}</Row>)}
-      {usage.error && <p role="alert">{usage.error}</p>}
+      {usage.error && <InlineError message={usage.error} />}
       {usage.freshness === 'fresh' && timestamp && <p style={MUTED_STYLE}>As of {timestamp}</p>}
       {canRetry && <Button aria-label="Retry usage" onClick={onRetry} disabled={refreshing}>Retry</Button>}
     </div>
@@ -147,14 +160,15 @@ function LiveActivityContent({ activity }: { activity: LiveActivity }) {
   )
 }
 
-function PlanWindowRow({ label, usedPercentage, resetsAt }: { label: string; usedPercentage: number; resetsAt: number }) {
-  const percentage = formatPercentage(usedPercentage)
-  const reset = formatTimestamp(resetsAt)
-  return <Row label={label}>{percentage === null ? '—' : `${percentage}%`}{reset ? ` · resets ${reset}` : ''}</Row>
+function PlanWindowRow({ label, plan }: { label: string; plan: PlanWindow }) {
+  const percentage = formatPercentage(plan.usedPercentage)
+  const reset = formatTimestamp(plan.resetsAt)
+  const value = `${percentage === null ? '—' : `${percentage}%`}${reset ? ` · resets ${reset}` : ''}`
+  return <Row label={label}>{value}</Row>
 }
 
 function ContextContent({ detail }: { detail: ContextInfo }) {
-  if (detail.status === 'waiting') return <p role="status" style={MUTED_STYLE}>Waiting for the first statusline update…</p>
+  if (detail.status === 'waiting') return <NoticeLine>Waiting for the first statusline update…</NoticeLine>
   const used = formatPercentage(detail.usedPercentage)
   const remaining = formatPercentage(detail.remainingPercentage)
   const window = formatCount(detail.window)
@@ -167,8 +181,8 @@ function ContextContent({ detail }: { detail: ContextInfo }) {
       {detail.used !== undefined && <Row label="Tokens used">{formatCount(detail.used) ?? detail.used}</Row>}
       {detail.remaining !== undefined && <Row label="Tokens remaining">{formatCount(detail.remaining) ?? detail.remaining}</Row>}
       {detail.estimated && <p style={MUTED_STYLE}>Estimated from transcript</p>}
-      {detail.planWindows?.fiveHour && <PlanWindowRow label="5 hour plan" {...detail.planWindows.fiveHour} />}
-      {detail.planWindows?.sevenDay && <PlanWindowRow label="7 day plan" {...detail.planWindows.sevenDay} />}
+      {detail.planWindows?.fiveHour && <PlanWindowRow label="5 hour plan" plan={detail.planWindows.fiveHour} />}
+      {detail.planWindows?.sevenDay && <PlanWindowRow label="7 day plan" plan={detail.planWindows.sevenDay} />}
       {updated && <p style={MUTED_STYLE}>As of {updated}</p>}
     </div>
   )
@@ -210,9 +224,9 @@ function InspectionContent({
   const statuslineLabel = statusline?.state === 'available' ? 'Custom statusline detected' : statusline?.state === 'drifted' ? 'Custom statusline changed' : statusline?.state === 'chained' ? 'Chained' : statusline?.state === 'managed' ? 'Managed telemetry' : statusline?.state === 'disabled' ? 'Disabled' : statusline?.state === 'error' ? 'Error' : undefined
   return (
     <div>
-      {busy && <p role="status">Inspecting Hooks & MCP…</p>}
-      {error && <p role="alert" style={{ overflowWrap: 'anywhere' }}>Could not inspect Hooks & MCP: {error}</p>}
-      {inspection?.error && <p role="alert" style={{ overflowWrap: 'anywhere' }}>{inspection.error}</p>}
+      {busy && <NoticeLine>Inspecting Hooks & MCP…</NoticeLine>}
+      {error && <InlineError message={`Could not inspect Hooks & MCP: ${error}`} />}
+      {inspection?.error && <InlineError message={inspection.error} />}
       {inspection?.hooks && <>
         <SectionHeader title="Hooks" />
         <Row label="Status">{displayLabel(inspection.hooks.state)}</Row>
@@ -231,7 +245,7 @@ function InspectionContent({
       {nextLaunchEffect && <p role="status" style={{ overflowWrap: 'anywhere' }}>{nextLaunchEffect}</p>}
       {inspection && <>
         <SectionHeader title="Configured MCP servers" />
-        {inspection.mcp.length === 0 ? <p style={MUTED_STYLE}>No configured servers found.</p> : <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>
+        {inspection.mcp.length === 0 ? <EmptyState message="No configured servers found." /> : <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>
           {inspection.mcp.map((server) => <li key={server.name}><ListRow title={server.name} description={`${server.transport} · ${displayLabel(server.state)}`} /></li>)}
         </ul>}
         {formatTimestamp(inspection.updatedAt) && <p style={MUTED_STYLE}>As of {formatTimestamp(inspection.updatedAt)}</p>}
@@ -263,12 +277,12 @@ export function SessionInfoPanel({ context, report }: Props) {
   const sectionWritesRef = useRef<Promise<void>>(Promise.resolve())
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const updateProjection = useCallback((next: PanelState | null) => {
+  function updateProjection(next: PanelState | null): void {
     projectionRef.current = next
     setProjection(next)
-  }, [])
+  }
 
-  const reload = useCallback(async (clearFirst = false) => {
+  async function reload(clearFirst = false): Promise<void> {
     requestRef.current++
     if (clearFirst) {
       updateProjection(null)
@@ -289,7 +303,7 @@ export function SessionInfoPanel({ context, report }: Props) {
         while (refreshQueuedRef.current && aliveRef.current) {
           refreshQueuedRef.current = false
           const request = requestRef.current
-          setLoading(projectionRef.current === null)
+          setLoading(true)
           setLoadError(null)
           try {
             const fetched = await context.call('quirky.session-info/get', {}) as PanelState
@@ -322,9 +336,9 @@ export function SessionInfoPanel({ context, report }: Props) {
     })()
     refreshLoopRef.current = loop
     await loop
-  }, [context, updateProjection])
+  }
 
-  const inspect = useCallback(async (session: string, force = false) => {
+  async function inspect(session: string, force = false): Promise<void> {
     if (!force && inspectedSessionRef.current === session) return
     inspectedSessionRef.current = session
     const request = ++inspectionRequestRef.current
@@ -340,7 +354,7 @@ export function SessionInfoPanel({ context, report }: Props) {
     } finally {
       if (aliveRef.current && request === inspectionRequestRef.current) setInspectionBusy(false)
     }
-  }, [context, updateProjection])
+  }
 
   useEffect(() => {
     aliveRef.current = true
@@ -365,7 +379,7 @@ export function SessionInfoPanel({ context, report }: Props) {
       disconnect()
       clearTimeout(copiedTimerRef.current)
     }
-  }, [context, reload])
+  }, [context])
 
   useEffect(() => subscribeCopyFeedback((feedback) => {
     if (feedback.session !== projectionRef.current?.session) return
@@ -386,7 +400,7 @@ export function SessionInfoPanel({ context, report }: Props) {
   useEffect(() => {
     if (!hooksOpen || !hasHooksSection || !projection?.session || info?.hooksAndMcp) return
     void inspect(projection.session)
-  }, [hooksOpen, hasHooksSection, projection?.session, info?.hooksAndMcp, inspect])
+  }, [hooksOpen, hasHooksSection, projection?.session, info?.hooksAndMcp])
 
   useEffect(() => {
     if (!report) return
@@ -400,7 +414,7 @@ export function SessionInfoPanel({ context, report }: Props) {
     })
   }, [report, loading, loadError, projection, openSections, inspectionError, actionError])
 
-  const toggle = useCallback((id: SectionId) => {
+  function toggle(id: SectionId): void {
     const current = projectionRef.current
     if (!current) return
     const nextOpen = new Set(current.openSections)
@@ -417,28 +431,18 @@ export function SessionInfoPanel({ context, report }: Props) {
         if (aliveRef.current) setActionError(messageOf(error))
       }
     })
-  }, [context, updateProjection])
+  }
 
-  const runAction = useCallback(async (name: string, session: string | null) => {
-    if (session === null) return
+  async function track(pending: Promise<unknown>): Promise<void> {
     setActionError(null)
     try {
-      if (name === 'open-vault') {
-        const identity = projectionRef.current?.info?.identity
-        if (!identity?.providerSessionId) throw new Error('This session has no provider ID to open in the Vault.')
-        await context.executeCommand('command:quirky.vault/open', {
-          agent: identity.agent,
-          sessionId: identity.providerSessionId
-        })
-        return
-      }
-      await context.executeCommand(`command:quirky.session-info/${name}`, { session })
+      await pending
     } catch (error) {
       if (aliveRef.current) setActionError(messageOf(error))
     }
-  }, [context])
+  }
 
-  const retry = useCallback(async () => {
+  async function retry(): Promise<void> {
     setActionError(null)
     setLoadError(null)
     const current = projectionRef.current
@@ -449,9 +453,9 @@ export function SessionInfoPanel({ context, report }: Props) {
     } finally {
       if (aliveRef.current) setRetryBusy(false)
     }
-  }, [inspect, reload])
+  }
 
-  const setTelemetry = useCallback(async (enabled: boolean) => {
+  async function setTelemetry(enabled: boolean): Promise<void> {
     const session = projectionRef.current?.session
     if (!session) return
     const request = ++telemetryRequestRef.current
@@ -471,7 +475,7 @@ export function SessionInfoPanel({ context, report }: Props) {
     } finally {
       if (aliveRef.current && request === telemetryRequestRef.current) setEnableBusy(false)
     }
-  }, [context, updateProjection])
+  }
 
   const contextValue = info?.context?.status === 'ready' ? info.context.usedPercentage : undefined
   const contextPercentage = formatPercentage(contextValue)
@@ -491,15 +495,12 @@ export function SessionInfoPanel({ context, report }: Props) {
               {formatTimestamp(info.context?.updatedAt) && <small style={MUTED_STYLE}>As of {formatTimestamp(info.context?.updatedAt)}</small>}
             </div>}
           </div>}
-          {loading && !projection && <p role="status">Loading session info…</p>}
-          {loading && projection && <p role="status" style={MUTED_STYLE}>Refreshing session info…</p>}
-          {loadError && <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: '0', overflowWrap: 'anywhere' }}>
-            <p>Could not load session info: {loadError}</p>
-            <Button aria-label="Retry" onClick={() => void retry()}>Retry</Button>
-          </div>}
+          {loading && !projection && <NoticeLine>Loading session info…</NoticeLine>}
+          {loading && projection && <NoticeLine>Refreshing session info…</NoticeLine>}
+          {loadError && <InlineError message={`Could not load session info: ${loadError}`} action={{ label: 'Retry', onAction: () => void retry() }} />}
           {!loading && !loadError && projection?.info === null && <EmptyState message="No agent session. Focus a terminal pane with an agent session to inspect it here." />}
           {projection && info && <div style={BODY_STYLE}>
-            {actionError && <p role="alert" style={{ overflowWrap: 'anywhere' }}>{actionError}</p>}
+            {actionError && <InlineError message={actionError} />}
             {CORE_SECTIONS.filter(({ id }) => {
               if (id === 'identity' || id === 'liveActivity') return true
               if (id === 'usage') return info?.usage !== undefined
@@ -507,7 +508,7 @@ export function SessionInfoPanel({ context, report }: Props) {
               if (id === 'filesTouched') return info?.filesTouched !== undefined
               return hasHooksSection
             }).map(({ id, title }) => <AccordionSection key={id} id={id} title={title} open={openSections.includes(id)} onToggle={() => toggle(id)}>
-              {id === 'identity' && <IdentityContent state={projection} copied={copied} action={runAction} />}
+              {id === 'identity' && <IdentityContent state={projection} copied={copied} context={context} track={track} />}
               {id === 'usage' && info.usage && <UsageContent usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()} />}
               {id === 'liveActivity' && <LiveActivityContent activity={info.liveActivity} />}
               {id === 'context' && info.context && <ContextContent detail={info.context} />}
