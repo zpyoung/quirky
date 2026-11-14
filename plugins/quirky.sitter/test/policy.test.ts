@@ -655,6 +655,7 @@ test('a refused check run does not hold a rerun open after the selected check pa
     { kind: 'check_run', name: 'lint', status: 'completed', conclusion: 'stale', checkRunId: 9002, workflowRunId: 42 }
   ]), payload)
   const rerun = actionFor(before)!
+  if (rerun.kind !== 'rerun-check') throw new Error('Expected a rerun-check action')
   expect(rerun).toMatchObject({
     kind: 'rerun-check',
     checkNames: ['build'],
