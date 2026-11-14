@@ -324,6 +324,7 @@ function dynamicCustomPropertyExpressions(node: ts.TemplateExpression): ts.Expre
 function scanTemplateSegments(
   node: ts.TemplateExpression,
   sourceFile: ts.SourceFile,
+  styleEscapeContext: boolean,
   report: (code: string, offset: number, message: string) => void
 ): void {
   for (const segment of [node.head, ...node.templateSpans.map((span) => span.literal)]) {
@@ -336,13 +337,16 @@ function scanTemplateSegments(
       if (code === 'unresolved-style-token') rawUnresolved = true
       report(code, start + offset, message)
     })
-    scanEscapedCssTokens(raw, (code, offset, message) => {
-      if (code === 'unresolved-style-token') rawUnresolved = true
-      report(code, start + offset, message)
-    })
-    if (!rawUnresolved) scanDecodedLiteral(segment.text, raw, start, report)
+    if (styleEscapeContext) {
+      scanEscapedCssTokens(raw, (code, offset, message) => {
+        if (code === 'unresolved-style-token') rawUnresolved = true
+        report(code, start + offset, message)
+      })
+      if (!rawUnresolved) scanDecodedLiteral(segment.text, raw, start, report)
+    }
   }
 }
+
 
 function staticString(node: ts.Expression): string | null {
   const expression = stripParentheses(node)
@@ -399,6 +403,201 @@ function dynamicVarConcatOffset(node: ts.BinaryExpression, sourceFile: ts.Source
 function cssOrHtmlSource(file: string): boolean {
   return extensionOf(file) in MARKUP_EXTENSIONS
 }
+const STYLE_OBJECT_PROPERTIES: Record<string, true> = { style: true, styles: true, className: true, class: true, css: true, cssText: true }
+const JSX_STYLE_ATTRIBUTES: Record<string, true> = { style: true, className: true, class: true, fill: true, stroke: true, color: true, stopColor: true, floodColor: true, lightingColor: true }
+const STYLED_TEMPLATE_TAGS: Record<string, true> = { css: true, style: true, stylesheet: true, keyframes: true }
+const STYLE_SHEET_METHODS: Record<string, true> = { replace: true, replaceSync: true, insertRule: true, addRule: true }
+
+type StyleEscapeBindings = {
+  variables: Set<string>
+  styleElements: Set<string>
+  styleSheets: Set<string>
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text
+  if (ts.isComputedPropertyName(name)) return staticString(name.expression)
+  return null
+}
+
+function containsTypeIdentifier(node: ts.Node, name: string): boolean {
+  if (ts.isIdentifier(node) && node.text === name) return true
+  let found = false
+  ts.forEachChild(node, (child) => {
+    if (!found && containsTypeIdentifier(child, name)) found = true
+  })
+  return found
+}
+
+function styleVariableName(name: string): boolean {
+  return /^(?:style|styles|css|cssText|className|classes|stylesheet)$|(?:Style|Styles|Css|ClassName|Classes)$|_(?:style|styles|css|cssText|className|classes)$/.test(name)
+}
+
+function jsxAttributeName(attribute: ts.JsxAttribute): string | null {
+  return ts.isIdentifier(attribute.name) ? attribute.name.text : null
+}
+
+function jsxTagName(node: ts.Node): string | null {
+  const name = ts.isJsxElement(node) ? node.openingElement.tagName
+    : ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node) ? node.tagName
+      : null
+  return name && ts.isIdentifier(name) ? name.text : null
+}
+
+function expressionPath(expression: ts.Expression): string {
+  const node = stripParentheses(expression)
+  if (ts.isIdentifier(node)) return node.text
+  if (ts.isPropertyAccessExpression(node)) return `${expressionPath(node.expression)}.${node.name.text}`
+  if (ts.isCallExpression(node)) return expressionPath(node.expression)
+  return ''
+}
+
+function callMethodName(call: ts.CallExpression): string | null {
+  const expression = stripParentheses(call.expression)
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text
+  return ts.isIdentifier(expression) ? expression.text : null
+}
+
+function stylePropertyAccess(expression: ts.Expression | undefined): boolean {
+  if (!expression) return false
+  const node = stripParentheses(expression)
+  return ts.isPropertyAccessExpression(node) && node.name.text === 'style'
+}
+
+function styleObjectProperty(property: ts.PropertyAssignment): boolean {
+  const name = staticPropertyName(property.name)
+  return name !== null && (Object.hasOwn(STYLE_OBJECT_PROPERTIES, name) || name.startsWith('--'))
+}
+
+function createElementStyleCall(expression: ts.Expression | undefined): expression is ts.CallExpression {
+  if (!expression || !ts.isCallExpression(expression) || callMethodName(expression) !== 'createElement') return false
+  const tag = expression.arguments[0]
+  return tag !== undefined && staticString(tag) === 'style'
+}
+
+function collectStyleEscapeBindings(sourceFile: ts.SourceFile): StyleEscapeBindings {
+  const bindings: StyleEscapeBindings = { variables: new Set(), styleElements: new Set(), styleSheets: new Set() }
+  const addIdentifier = (target: Set<string>, expression: ts.Expression | undefined): void => {
+    if (!expression) return
+    const node = stripParentheses(expression)
+    if (ts.isIdentifier(node)) target.add(node.text)
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      if (createElementStyleCall(node.initializer)) bindings.styleElements.add(node.name.text)
+      if (node.type && containsTypeIdentifier(node.type, 'CSSStyleSheet')) bindings.styleSheets.add(node.name.text)
+      const initializer = node.initializer && stripParentheses(node.initializer)
+      if (initializer && ts.isNewExpression(initializer)) {
+        const constructor = expressionPath(initializer.expression)
+        if (constructor === 'CSSStyleSheet' || constructor.endsWith('.CSSStyleSheet')) bindings.styleSheets.add(node.name.text)
+      }
+    }
+
+    if (ts.isJsxAttribute(node) && jsxAttributeName(node) === 'style' && node.initializer && ts.isJsxExpression(node.initializer)) {
+      addIdentifier(bindings.variables, node.initializer.expression)
+    }
+
+    if (ts.isCallExpression(node)) {
+      const method = callMethodName(node)
+      const callee = stripParentheses(node.expression)
+      if (method === 'assign' && ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) && callee.expression.text === 'Object' &&
+        stylePropertyAccess(node.arguments[0]!)) {
+        addIdentifier(bindings.variables, node.arguments[1])
+      }
+
+      if (method === 'createElement') {
+        const properties = node.arguments[1]
+        if (properties && ts.isObjectLiteralExpression(properties)) {
+          for (const property of properties.properties) {
+            if (ts.isPropertyAssignment(property) && staticPropertyName(property.name) === 'style') {
+              addIdentifier(bindings.variables, property.initializer)
+            }
+          }
+        }
+      }
+    }
+
+    ts.forEachChild(node, visit)
+  }
+
+  visit(sourceFile)
+  return bindings
+}
+
+function styleSheetReceiver(expression: ts.Expression, bindings: StyleEscapeBindings): boolean {
+  const node = stripParentheses(expression)
+  if (ts.isIdentifier(node)) {
+    return bindings.styleSheets.has(node.text) || /^(?:(?:css|style)?sheets?)$/i.test(node.text) || /(?:Style|Css)Sheet$/.test(node.text)
+  }
+  if (ts.isElementAccessExpression(node)) {
+    const owner = stripParentheses(node.expression)
+    return ts.isPropertyAccessExpression(owner) && (owner.name.text === 'styleSheets' || owner.name.text === 'adoptedStyleSheets')
+  }
+  return ts.isPropertyAccessExpression(node) && (node.name.text === 'styleSheets' || node.name.text === 'adoptedStyleSheets')
+}
+
+function styleElementReceiver(expression: ts.Expression, bindings: StyleEscapeBindings): boolean {
+  const node = stripParentheses(expression)
+  return ts.isIdentifier(node) && bindings.styleElements.has(node.text)
+}
+
+function styleEscapeCall(call: ts.CallExpression, bindings: StyleEscapeBindings): boolean {
+  const method = callMethodName(call)
+  const callee = stripParentheses(call.expression)
+
+  if (createElementStyleCall(call)) return true
+  if (method === 'assign' && ts.isPropertyAccessExpression(callee) &&
+    ts.isIdentifier(callee.expression) && callee.expression.text === 'Object' &&
+    stylePropertyAccess(call.arguments[0]!)) return true
+
+  if (method === 'setAttribute') {
+    const argument = call.arguments[0]
+    const attribute = argument ? staticString(argument) : null
+    if (attribute === 'style' || attribute === 'class' || attribute === 'fill' || attribute === 'stroke') return true
+  }
+
+  if (!ts.isPropertyAccessExpression(callee)) return false
+  const receiver = callee.expression
+  if (stylePropertyAccess(receiver) && (method === 'setProperty' || method === 'getPropertyValue' || method === 'removeProperty')) return true
+  if (ts.isPropertyAccessExpression(receiver) && receiver.name.text === 'classList') return true
+  if (styleElementReceiver(receiver, bindings) && method === 'append') return true
+  if (styleSheetReceiver(receiver, bindings) && method && Object.hasOwn(STYLE_SHEET_METHODS, method)) return true
+
+  const path = expressionPath(callee)
+  return path === 'EditorView.theme' || path === 'HighlightStyle.define'
+}
+
+function styleEscapeAssignment(node: ts.BinaryExpression, bindings: StyleEscapeBindings): boolean {
+  if (node.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return false
+  const left = stripParentheses(node.left)
+  if (!ts.isPropertyAccessExpression(left)) return false
+  if (left.name.text === 'className' || stylePropertyAccess(left.expression)) return true
+  return (left.name.text === 'textContent' || left.name.text === 'innerHTML') && styleElementReceiver(left.expression, bindings)
+}
+
+function isStyleEscapeContext(node: ts.Node, sourceFile: ts.SourceFile, bindings: StyleEscapeBindings): boolean {
+  if (node.getSourceFile() !== sourceFile) return false
+
+  for (let ancestor: ts.Node | undefined = node; ancestor; ancestor = ancestor.parent) {
+    if (ts.isJsxAttribute(ancestor) && Object.hasOwn(JSX_STYLE_ATTRIBUTES, jsxAttributeName(ancestor) ?? '')) return true
+    if (jsxTagName(ancestor) === 'style') return true
+    if (ts.isTaggedTemplateExpression(ancestor)) {
+      const tag = expressionPath(ancestor.tag)
+      if (Object.hasOwn(STYLED_TEMPLATE_TAGS, tag) || tag === 'styled' || tag.startsWith('styled.')) return true
+    }
+    if (ts.isPropertyAssignment(ancestor) && styleObjectProperty(ancestor)) return true
+    if (ts.isVariableDeclaration(ancestor) && ts.isIdentifier(ancestor.name) &&
+      (bindings.variables.has(ancestor.name.text) || styleVariableName(ancestor.name.text) ||
+        (ancestor.type !== undefined && containsTypeIdentifier(ancestor.type, 'CSSProperties')))) return true
+    if ((ts.isAsExpression(ancestor) || ts.isSatisfiesExpression(ancestor)) && containsTypeIdentifier(ancestor.type, 'CSSProperties')) return true
+    if (ts.isBinaryExpression(ancestor) && styleEscapeAssignment(ancestor, bindings)) return true
+    if (ts.isCallExpression(ancestor) && styleEscapeCall(ancestor, bindings)) return true
+  }
+  return false
+}
+
 
 /** Scans one production source for literal and unresolved style-token usage. */
 export function scanTokens(source: SourceFile): Evidence[] {
@@ -422,28 +621,36 @@ export function scanTokens(source: SourceFile): Evidence[] {
     scanEscapedCssTokens(visible, report)
   } else {
     const imports = importedCatalogs(sourceFile)
+    const styleBindings = collectStyleEscapeBindings(sourceFile)
     function visit(node: ts.Node): void {
       if (ts.isStringLiteralLike(node)) {
         const start = node.getStart(sourceFile)
         const raw = source.content.slice(start, node.end)
+        const styleContext = isStyleEscapeContext(node, sourceFile, styleBindings)
         let rawUnresolved = false
         scanText(raw, (code, offset, message) => {
           if (code === 'unresolved-style-token') rawUnresolved = true
           report(code, start + offset, message)
         })
-        scanEscapedCssTokens(raw, (code, offset, message) => {
-          if (code === 'unresolved-style-token') rawUnresolved = true
-          report(code, start + offset, message)
-        })
-        if (!rawUnresolved) scanDecodedLiteral(node.text, raw, start, report)
+        if (styleContext) {
+          scanEscapedCssTokens(raw, (code, offset, message) => {
+            if (code === 'unresolved-style-token') rawUnresolved = true
+            report(code, start + offset, message)
+          })
+          if (!rawUnresolved) scanDecodedLiteral(node.text, raw, start, report)
+        }
       } else if (ts.isRegularExpressionLiteral(node) || ts.isJsxText(node)) {
         const start = node.getStart(sourceFile)
         const raw = source.content.slice(start, node.end)
         scanText(raw, (code, offset, message) => report(code, start + offset, message))
+        if (ts.isJsxText(node) && isStyleEscapeContext(node, sourceFile, styleBindings)) {
+          scanEscapedCssTokens(raw, (code, offset, message) => report(code, start + offset, message))
+        }
       }
 
       if (ts.isTemplateExpression(node)) {
-        scanTemplateSegments(node, sourceFile, report)
+        const styleContext = isStyleEscapeContext(node, sourceFile, styleBindings)
+        scanTemplateSegments(node, sourceFile, styleContext, report)
         for (const { index, expression } of dynamicVarExpressions(node)) {
           if (!safeDynamicTemplate(node, index, sourceFile, imports)) {
             report('unresolved-style-token', expression.getStart(sourceFile), 'Unresolved dynamic style token in var() argument')
