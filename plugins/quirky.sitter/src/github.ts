@@ -4,6 +4,8 @@ import {
   checkKey,
   contentIdentity,
   worldFromHosting,
+  type BranchUpdateMode,
+  type MergeCheckScope,
   type CapabilityMode,
   type ExecuteResult,
   type JournalEntry,
@@ -83,10 +85,10 @@ export const SITTER_PAYLOAD_SCHEMA: Schema = {
         repo: { type: 'string' }
       }
     },
-    branchUpdateMode: { type: 'string', enum: ['merge-base-update'] },
+    branchUpdateMode: { type: 'string', enum: ['merge-base-update', 'rebase'] },
     agent: { type: 'string' },
     mergeMethod: {},
-    mergeCheckScope: { type: 'string', enum: ['all'] }
+    mergeCheckScope: { type: 'string', enum: ['all', 'required'] }
   }
 }
 
@@ -109,9 +111,9 @@ export function assertHeimdallCaller(caller: PluginCaller): void {
 
 function validateInput(input: EnrollmentInput): {
   worktreeSelector: string
-  branchUpdateMode: 'merge-base-update'
+  branchUpdateMode: BranchUpdateMode
   mergeMethod: 'merge' | 'squash' | 'rebase' | null
-  mergeCheckScope: 'all'
+  mergeCheckScope: MergeCheckScope
   agent?: string
 } {
   const capabilities = input.capabilities
@@ -127,11 +129,11 @@ function validateInput(input: EnrollmentInput): {
 
   const kindPayload = asRecord(input.kindPayload)
   const branchUpdateMode = kindPayload.branchUpdateMode ?? 'merge-base-update'
-  if (branchUpdateMode !== 'merge-base-update') {
-    throw new Error('The PR sitter updates a branch by merging its base; rebase is not supported.')
+  if (branchUpdateMode !== 'merge-base-update' && branchUpdateMode !== 'rebase') {
+    throw new Error('branchUpdateMode must be merge-base-update or rebase.')
   }
   const mergeCheckScope = kindPayload.mergeCheckScope ?? 'all'
-  if (mergeCheckScope !== 'all') throw new Error('The PR sitter supports only the all-checks merge scope.')
+  if (mergeCheckScope !== 'all' && mergeCheckScope !== 'required') throw new Error('mergeCheckScope must be all or required.')
   const mergeMethod = kindPayload.mergeMethod === undefined ? null : kindPayload.mergeMethod
   if (mergeMethod !== null && !MERGE_METHODS.includes(mergeMethod as (typeof MERGE_METHODS)[number])) {
     throw new Error('mergeMethod must be null, merge, squash or rebase.')
@@ -460,6 +462,87 @@ function failureResult(error: unknown): ExecuteResult {
   return { effect: 'not-landed', reason: `${reason}: ${message}` }
 }
 
+function reasonOf(error: unknown): unknown {
+  const record = asRecord(error)
+  return asRecord(record.data).reason ?? record.reason
+}
+
+async function rebaseBranch(
+  call: Call,
+  processRun: PluginContext['process']['run'],
+  action: Extract<SitterAction, { kind: 'update-branch' }>,
+  enrollment: SitterEnrollment
+): Promise<ExecuteResult> {
+  const payload = enrollment.kindPayload
+  const worktree = `id:${payload.worktreeId}`
+  const worktreePath = await resolveWorktreePath(call, payload.worktreeId)
+  const initial = await inspectWorktree(processRun, worktreePath)
+  if (initial.localDirty) return { effect: 'not-landed', reason: 'worktree-busy', detail: 'uncommitted-changes' }
+  if (initial.localHeadSha !== action.head) return { effect: 'not-landed', reason: 'head-moved', detail: 'local HEAD differs from the pull-request head' }
+  try {
+    const target = asRecord(await call('quirky.git/pushTarget', { worktree, purpose: 'review' }))
+    if (target.ready !== true || typeof target.headOid !== 'string') {
+      return { effect: 'not-landed', reason: 'push-target-unavailable', detail: 'A validated review push target is required.' }
+    }
+    if (target.headOid !== action.head || target.localHead !== action.head) {
+      return { effect: 'not-landed', reason: 'head-moved', detail: 'The remote or local head changed during target lookup.' }
+    }
+    let base: string | undefined
+    if (action.baseRefName) {
+      const remotes = await processRun(['git', 'remote', '-v'], { cwd: worktreePath })
+      if (remotes.exitCode !== 0) throw new Error('Git remotes could not be read for the pull-request base.')
+      const matches = new Set<string>()
+      for (const row of remotes.stdoutText.split(/\r?\n/u)) {
+        const match = /^(\S+)\s+(\S+)\s+\(fetch\)$/u.exec(row)
+        if (!match) continue
+        const [, remote, rawUrl] = match
+        try {
+          const url = new URL(rawUrl!.includes('://') ? rawUrl! : rawUrl!.replace(/^(?:[^@/]+@)?([^:/]+):/u, 'ssh://$1/'))
+          const path = url.pathname.replace(/^\/|\/$/gu, '').replace(/\.git$/u, '')
+          if (url.hostname.toLowerCase() === payload.repository.host.toLowerCase() &&
+            path.toLowerCase() === `${payload.repository.owner}/${payload.repository.repo}`.toLowerCase()) matches.add(remote!)
+        } catch {
+          continue
+        }
+      }
+      if (matches.size > 1) return { effect: 'not-landed', reason: 'invalid-base', detail: 'Multiple fetch remotes match the pull-request base repository.' }
+      const remote = [...matches][0]
+      if (!remote) return { effect: 'not-landed', reason: 'invalid-base', detail: 'No fetch remote matches the pull-request base repository.' }
+      base = `${remote}/${action.baseRefName}`
+    }
+    const current = await inspectWorktree(processRun, worktreePath)
+    if (current.localDirty || current.localHeadSha !== action.head) {
+      return { effect: 'not-landed', reason: 'head-moved', detail: 'Local state changed during target lookup.' }
+    }
+    try {
+      await call('quirky.git/rebaseFromBase', { worktree, ...(base ? { base } : {}) })
+    } catch (error) {
+      if (reasonOf(error) !== 'conflicts') throw error
+      await call('quirky.git/abort', { worktree, yes: true })
+      const restored = await inspectWorktree(processRun, worktreePath)
+      if (restored.localDirty || restored.localHeadSha !== action.head) {
+        return { effect: 'not-landed', reason: 'rebase-abort-failed', detail: 'The worktree did not return to its original clean head.' }
+      }
+      return { effect: 'not-landed', reason: 'rebase-conflicts', detail: messageOf(error) }
+    }
+    const rebased = await inspectWorktree(processRun, worktreePath)
+    if (!rebased.localHeadSha || rebased.localDirty) {
+      return { effect: 'not-landed', reason: 'rebase-incomplete', detail: 'Rebase did not leave a clean committed HEAD.' }
+    }
+    if (rebased.localHeadSha === action.head) return { effect: 'landed', detail: 'already-up-to-date' }
+    const result = asRecord(await call('quirky.git/forcePush', {
+      worktree, purpose: 'review', expected: action.head, expectedLocalHead: rebased.localHeadSha, yes: true
+    }))
+    if (result.pushed === true || (typeof result.remote === 'string' && typeof result.branch === 'string' && typeof result.upstream === 'string')) {
+      return { effect: 'landed', expectedAfter: { head: rebased.localHeadSha } }
+    }
+    return { effect: 'indeterminate', reason: 'push-uncertain' }
+  } catch (error) {
+    if (reasonOf(error) === 'stale-target' || reasonOf(error) === 'stale-lease') return { effect: 'not-landed', reason: 'head-moved', detail: messageOf(error) }
+    return failureResult(error)
+  }
+}
+
 export async function execute(
   call: Call,
   action: SitterAction,
@@ -470,6 +553,18 @@ export async function execute(
   const payload = enrollment.kindPayload
   try {
     switch (action.kind) {
+      case 'enqueue': {
+        const result = asRecord(await call('quirky.hosting/merge', {
+          ...apiParams(payload),
+          worktree: `id:${payload.worktreeId}`,
+          expectedHead: action.head,
+          method: action.method,
+          action: 'queue',
+          yes: true
+        }))
+        if (result.state === 'enqueued' || result.state === 'merged') return { effect: 'landed' }
+        return { effect: 'indeterminate', reason: result.state === 'pending' ? 'pending' : 'queue result was not confirmed' }
+      }
       case 'merge': {
         const result = asRecord(await call('quirky.hosting/merge', {
           ...apiParams(payload),
@@ -484,6 +579,10 @@ export async function execute(
         return { effect: 'indeterminate', reason: 'merge result was not confirmed' }
       }
       case 'update-branch': {
+        if (payload.branchUpdateMode === 'rebase') {
+          if (!options.processRun) return { effect: 'not-landed', reason: 'git-unavailable', detail: 'A git process runner is required for rebase.' }
+          return rebaseBranch(call, options.processRun, action, enrollment)
+        }
         await call('quirky.hosting/updateBranch', {
           ...apiParams(payload),
           expectedHead: action.head
