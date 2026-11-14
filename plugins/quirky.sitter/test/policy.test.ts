@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import type { Attempt, CapabilityMode, JournalEntry, SitterCheck, SitterPayload, SitterWorld, Snapshot } from '../src/policy'
+import type { Attempt, CapabilityMode, CheckState, JournalEntry, SitterCheck, SitterPayload, SitterWorld, Snapshot } from '../src/policy'
 import {
   contentIdentity,
   decide,
@@ -207,7 +207,7 @@ test('maps hosting results to a world and its content identity', () => {
     expect(worldFromHosting(review({ state }), hostingChecks([]), payload)).toMatchObject({ lifecycle, draft })
   }
 
-  const completedConclusions: Array<[string, string]> = [
+  const completedConclusions: Array<[string, CheckState]> = [
     ['success', 'passed'], ['neutral', 'passed'], ['skipped', 'passed'],
     ['failure', 'failed'], ['timed_out', 'failed'], ['action_required', 'failed'], ['startup_failure', 'failed'],
     ['stale', 'failed'], ['error', 'failed'], ['cancelled', 'failed'], ['unknown-conclusion', 'unknown']
@@ -309,12 +309,12 @@ test('a rerun waits for the workflow run, then for its result, and is not repeat
   expect(decide(snapshot(start), [landed], enrollment())).toMatchObject({ action: null, reason: 'awaiting-rerun-result' })
   expect(pace(snapshot(start), [landed])).toBe('rapid')
 
-  const persisted = check({ state: 'failed', observation: 'check_run:9002:42:completed:failure', checkRunId: 9002, workflowRunId: 42 })
+  const persisted = check({ state: 'failed', observation: 'check_run:9002:42:completed:failure', workflowRunId: 42, rerunTarget: 'workflow:42' })
   const afterRerun = decide(snapshot(world({ checks: [persisted] })), [landed], enrollment())
   expect(afterRerun).toMatchObject({ action: null, reason: 'merge-gates-unsatisfied', detail: 'checks' })
   expect(afterRerun.considered).toContain('fix-checks: failure-persisted-after-rerun')
 
-  const lint = check({ name: 'lint', state: 'failed', observation: 'check_run:9003:43:completed:failure', checkRunId: 9003, workflowRunId: 43 })
+  const lint = check({ name: 'lint', state: 'failed', observation: 'check_run:9003:43:completed:failure', workflowRunId: 43, rerunTarget: 'workflow:43' })
   const secondFailed = decide(snapshot(world({ checks: [persisted, lint] })), [landed], enrollment())
   expect(secondFailed.action).toMatchObject({ kind: 'rerun-check', checkNames: ['lint'] })
 })
@@ -350,7 +350,7 @@ test('a behind branch is updated when otherwise ready or red, never when draft o
 
   const rerun = actionFor(world({ checks: [check({ state: 'failed', observation: 'check_run:9001:41:completed:failure' })] }))!
   const persistedFailure = check({
-    state: 'failed', observation: 'check_run:9002:42:completed:failure', checkRunId: 9002, workflowRunId: 42
+    state: 'failed', observation: 'check_run:9002:42:completed:failure', workflowRunId: 42, rerunTarget: 'workflow:42'
   })
   const redBehind = decide(snapshot(world({ mergeStateStatus: 'BEHIND', checks: [persistedFailure] })), [attempt(rerun, { effect: 'landed' })], enrollment())
   expect(redBehind.action?.kind).toBe('update-branch')
@@ -445,7 +445,7 @@ test('outcomes resolve from the next live snapshot and never wedge', () => {
   const failed = check({ state: 'failed', observation: 'check_run:9001:41:completed:failure' })
   const rerun = actionFor(world({ checks: [failed] }))!
   const rerunAttempt = attempt(rerun)
-  expect(resolveOutcome(rerunAttempt, snapshot(world({ checks: [check({ observation: 'check_run:9002:42:completed:success', checkRunId: 9002, workflowRunId: 42 })] }), T + 1))).toEqual({
+  expect(resolveOutcome(rerunAttempt, snapshot(world({ checks: [check({ observation: 'check_run:9002:42:completed:success', workflowRunId: 42, rerunTarget: 'workflow:42' })] }), T + 1))).toEqual({
     effect: 'landed'
   })
   expect(resolveOutcome(rerunAttempt, snapshot(world({ headSha: H2, checks: [failed] }), T + 1))).toEqual({
@@ -576,7 +576,7 @@ test('a refused action is retried twice on the same head, two minutes apart, the
     kind: 'rerun-check', ordinal: 4, evidenceKey: JSON.stringify(['rerun-check', H1, ['build'], 4])
   })
   const differentCheck = snapshot(world({ checks: [check({
-    name: 'lint', state: 'failed', observation: 'check_run:9002:42:completed:failure', checkRunId: 9002, workflowRunId: 42
+    name: 'lint', state: 'failed', observation: 'check_run:9002:42:completed:failure', workflowRunId: 42, rerunTarget: 'workflow:42'
   })] }), T + 4 * RETRY_DELAY_MS)
   expect(stop(differentCheck, rerunFailures, enrollment())).toBeNull()
   expect(decide(differentCheck, rerunFailures, enrollment()).action).toMatchObject({
@@ -607,7 +607,7 @@ test('pacing follows one ordered rule list; the first match wins', () => {
   expect(pace(snapshot(world({ mergeStateStatus: 'BEHIND' })), [attempt(update, { effect: 'landed' })])).toBe('rapid')
   expect(pace(snapshot(), [attempt(merge, { effect: 'landed' })])).toBe('rapid')
 
-  const rerunPersisted = check({ state: 'failed', observation: 'check_run:9002:42:completed:failure', checkRunId: 9002, workflowRunId: 42 })
+  const rerunPersisted = check({ state: 'failed', observation: 'check_run:9002:42:completed:failure', workflowRunId: 42, rerunTarget: 'workflow:42' })
   expect(pace(snapshot(world({ checks: [rerunPersisted] })), [attempt(rerun, { effect: 'landed' })])).toBe('active')
   expect(pace(snapshot(world({ mergeStateStatus: 'BEHIND' })), [])).toBe('active')
   expect(pace(snapshot(world({ mergeable: 'CONFLICTING' })), [])).toBe('active')
