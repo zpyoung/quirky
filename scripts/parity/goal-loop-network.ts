@@ -1,13 +1,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
-export function installGoalLoopNetworkGuard(preloadPath: string, logPath: string): string {
+export function installGoalLoopNetworkGuard(preloadPath: string, logPath: string, claudeUsageUrl: string): string {
   const preload = resolve(preloadPath)
   const log = resolve(logPath)
   mkdirSync(dirname(preload), { recursive: true, mode: 0o700 })
   writeFileSync(preload, `const fs = require('node:fs')
 const net = require('node:net')
 const log = ${JSON.stringify(log)}
+const claudeUsageUrl = ${JSON.stringify(claudeUsageUrl)}
 const marker = Symbol.for('quirky.goal-loop.fetch-guard')
 if (!globalThis[marker]) {
   Object.defineProperty(globalThis, marker, { value: true })
@@ -16,6 +17,25 @@ if (!globalThis[marker]) {
     const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     let url
     try { url = new URL(raw) } catch { throw new TypeError('invalid fetch URL refused by goal-loop fixture') }
+    const exactClaudeUsage = url.href === 'https://api.anthropic.com/api/oauth/usage'
+    if (exactClaudeUsage) {
+      const effective = new Request(input, { ...init, redirect: 'manual' })
+      const rerouted = new Request(claudeUsageUrl, {
+        method: effective.method,
+        headers: effective.headers,
+        signal: effective.signal,
+        redirect: 'manual',
+        cache: effective.cache,
+        credentials: effective.credentials,
+        integrity: effective.integrity,
+        keepalive: effective.keepalive,
+        mode: effective.mode,
+        referrer: effective.referrer,
+        referrerPolicy: effective.referrerPolicy,
+        ...(effective.body === null ? {} : { body: effective.body, duplex: 'half' })
+      })
+      return upstream(rerouted, { redirect: 'manual' })
+    }
     const host = url.hostname.toLowerCase()
     const loopback = host === 'localhost' || host === '[::1]' || host === '::1' || (net.isIP(host) === 4 && /^127\\./.test(host))
     if (!loopback) {
