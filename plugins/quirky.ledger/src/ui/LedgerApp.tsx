@@ -30,14 +30,30 @@ export const LEDGER_SIDEBAR_ID = 'sidebar-section:quirky.ledger/ledger'
 export type LedgerUiMode = 'page' | 'panel'
 export type ControlHandler = (control: LedgerControl) => Promise<void>
 
+const LEDGER_CONTROL_COMMAND_ID = 'command:quirky.ledger/control'
+type LedgerControlDescriptor = { command: typeof LEDGER_CONTROL_COMMAND_ID; args: LedgerControl }
+
+function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {
+  return { command: LEDGER_CONTROL_COMMAND_ID, args }
+}
+
+async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {
+  const descriptor = ledgerControlDescriptor(args)
+  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })
+}
+
+function validConnectionId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
 type RepoInfo = { id: string; name?: string; displayName?: string | null; path?: string; kind?: string; groupId?: string | null }
 type GroupInfo = { id: string; name: string; repoIds: string[] }
 type WorkspaceInfo = { id: string; repoId: string; name?: string; kind?: string; projectGroupId?: string | null }
 type Directory = { repos: RepoInfo[]; groups: GroupInfo[]; workspaces: WorkspaceInfo[]; loading: boolean; error: string }
 type CandidateSnapshot = { id: string; revision: number; title: string }
 type PendingConfirmation =
-  | { kind: 'bulk-state'; state: Extract<LedgerState, 'resolved' | 'archived'>; selections: LedgerSelection[]; snapshots: CandidateSnapshot[] }
-  | { kind: 'delete-entries'; selections: LedgerSelection[]; snapshots: CandidateSnapshot[] }
+  | { kind: 'bulk-state'; ledgerId: string; state: Extract<LedgerState, 'resolved' | 'archived'>; selections: LedgerSelection[]; snapshots: CandidateSnapshot[] }
+  | { kind: 'delete-entries'; ledgerId: string; selections: LedgerSelection[]; snapshots: CandidateSnapshot[] }
   | { kind: 'delete-ledger'; ledgerId: string; revision: number; entryCount: number }
   | { kind: 'attach'; ledgerId: string; revision: number; attachTo: LedgerOwner; ownerName: string }
 type SortMode = NonNullable<LedgerFilters['sort']>
@@ -129,6 +145,20 @@ function snapshotFor(selection: LedgerSelection, titles: Map<string, string>, en
   return { ...selection, title }
 }
 
+function selectionTitleCache(current: Map<string, string>, selections: LedgerSelection[], entries: LedgerEntry[]): Map<string, string> {
+  const next = new Map<string, string>()
+  for (const selection of selections) {
+    const key = selectionKey(selection)
+    if (current.has(key)) {
+      next.set(key, current.get(key)!)
+      continue
+    }
+    const entry = entries.find((candidate) => candidate.id === selection.id && candidate.revision === selection.revision)
+    if (entry) next.set(key, entryTitle(entry))
+  }
+  return next
+}
+
 function runtimeTip(response: LedgerResponse | null): string {
   if (!response?.runtime) return ''
   return `Ledger plugin store runtime ${response.runtime.runtimeId}; persistent store profile ${response.runtime.profileId}`
@@ -145,7 +175,7 @@ export function LedgerApp({
   input?: unknown
   report?(state: unknown): void
   mode?: LedgerUiMode
-  registerControl?(handler: ControlHandler, mode: LedgerUiMode): () => void
+  registerControl?(handler: ControlHandler, mode: LedgerUiMode, instance: string): () => void
 }) {
   const controlId = useId()
   const [target, setTarget] = useState<LedgerTarget | null>(() => targetFromInput(input))
@@ -192,12 +222,53 @@ export function LedgerApp({
   const candidateGeneration = useRef(0)
   const detailGeneration = useRef(0)
   const dispatchRef = useRef<ControlHandler>(async () => {})
+  const confirmationBusyRef = useRef(false)
+  const connectionIdRef = useRef<number | null>(null)
+  const detailTargetRef = useRef<LedgerTarget | null>(null)
+
+  async function runControl(command: LedgerControl): Promise<void> {
+    let connId = connectionIdRef.current
+    if (connId === null) {
+      const self = object(await context.call('ui.window.self', {}))
+      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')
+      connId = self.connId
+      connectionIdRef.current = connId
+    }
+    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })
+  }
+
+  function invalidateContextState(): void {
+    setResponse(null)
+    setEntries([])
+    setError('')
+    setSelected([])
+    setSelectionTitles(new Map())
+    setTriageSelected([])
+    setTriageTitles(new Map())
+    setForm(null)
+    setAttachChoice('')
+    setConfirmation(null)
+    detailGeneration.current++
+    detailTargetRef.current = null
+    setDetail(null)
+    setDetailId('')
+    setDetailLoading(false)
+    setDetailError('')
+    setTriageConflict('')
+    setActionMessage('')
+  }
 
   useEffect(() => {
     if (mode !== 'panel') return
     setWorkspaceId(activeWorkspace(context.getLayout()))
     return context.onLayout((next) => setWorkspaceId(activeWorkspace(next)))
   }, [context, mode])
+  const previousWorkspaceRef = useRef(workspaceId)
+  useEffect(() => {
+    if (mode !== 'panel') return
+    if (previousWorkspaceRef.current !== workspaceId) invalidateContextState()
+    previousWorkspaceRef.current = workspaceId
+  }, [mode, workspaceId])
 
   useEffect(() => {
     let live = true
@@ -413,36 +484,47 @@ export function LedgerApp({
   const selectedKeys = useMemo(() => new Set(selected.map(selectionKey)), [selected])
   const triageKeys = useMemo(() => new Set(triageSelected.map(selectionKey)), [triageSelected])
 
-  const openDetail = useCallback(async (entry: LedgerEntry, requestedTarget?: LedgerTarget) => {
-    const target = requestedTarget ?? pageLedgerTarget
-    if (!target) return
+  async function requestDetail(id: string, requestedTarget?: LedgerTarget): Promise<void> {
+    const requestTarget = requestedTarget ?? pageLedgerTarget
+    if (!requestTarget) throw new Error('Open a ledger before showing an entry.')
     const generation = ++detailGeneration.current
-    setDetailId(entry.id)
+    detailTargetRef.current = { ...requestTarget, ...(requestTarget.owner ? { owner: { ...requestTarget.owner } } : {}) }
+    setDetailId(id)
     setDetail(null)
     setDetailLoading(true)
     setDetailError('')
     try {
-      const result = await ledgerRequest(context, { operation: 'show', target, id: entry.id })
+      const result = await ledgerRequest(context, { operation: 'show', target: requestTarget, id })
       if (detailGeneration.current !== generation) return
-      if (!result.entry) throw new Error(`Ledger entry ${entry.id} was not returned.`)
+      if (!result.entry) throw new Error(`Ledger entry ${id} was not returned.`)
       setDetail(result.entry)
     } catch (reason) {
       if (detailGeneration.current === generation) setDetailError(errorMessage(reason))
     } finally {
       if (detailGeneration.current === generation) setDetailLoading(false)
     }
-  }, [context, pageLedgerTarget])
-  const closeDetail = () => {
+  }
+
+  function openDetail(entry: LedgerEntry, requestedTarget?: LedgerTarget): Promise<void> {
+    return requestDetail(entry.id, requestedTarget)
+  }
+
+  function closeDetail(): void {
     detailGeneration.current++
+    detailTargetRef.current = null
     setDetail(null)
     setDetailId('')
     setDetailError('')
     setActionMessage('')
+    setDetailLoading(false)
   }
 
   const returnToChooser = () => {
     closeDetail()
     setTarget(null)
+    setResponse(null)
+    setEntries([])
+    setError('')
     setPanelTargetOverride(null)
     setSelected([])
     setSelectionTitles(new Map())
@@ -455,14 +537,8 @@ export function LedgerApp({
     setAttachChoice('')
   }
 
-  const editEntry = (entry: LedgerEntry) => {
+  function beginNew(): void {
     closeDetail()
-    setForm({ entry })
-  }
-
-  const beginNew = () => {
-    setDetail(null)
-    setDetailId('')
     setForm({ type: 'bug' })
   }
 
@@ -480,36 +556,22 @@ export function LedgerApp({
     }
   }
 
-  const toggleSelected = (entry: LedgerEntry) => {
+  function toggleSelected(entry: LedgerEntry): void {
     const selection = { id: entry.id, revision: entry.revision }
     const key = selectionKey(selection)
-    setSelected((current) => {
-      if (current.some((item) => selectionKey(item) === key)) return current.filter((item) => selectionKey(item) !== key)
-      if (current.length >= MAX_SELECTIONS) return current
-      return [...current, selection]
-    })
-    setSelectionTitles((current) => {
-      const next = new Map(current)
-      if (selectedKeys.has(key)) next.delete(key)
-      else next.set(key, entryTitle(entry))
-      return next
-    })
+    const next = selected.some((item) => selectionKey(item) === key)
+      ? selected.filter((item) => selectionKey(item) !== key)
+      : selected.length < MAX_SELECTIONS ? [...selected, selection] : selected
+    void runControl({ action: 'selection', selectionScope: 'entries', selections: next })
   }
 
-  const toggleTriage = (candidate: LedgerCandidate) => {
+  function toggleTriage(candidate: LedgerCandidate): void {
     const selection = { id: candidate.entry.id, revision: candidate.entry.revision }
     const key = selectionKey(selection)
-    setTriageSelected((current) => {
-      if (current.some((item) => selectionKey(item) === key)) return current.filter((item) => selectionKey(item) !== key)
-      if (current.length >= MAX_SELECTIONS) return current
-      return [...current, selection]
-    })
-    setTriageTitles((current) => {
-      const next = new Map(current)
-      if (triageKeys.has(key)) next.delete(key)
-      else next.set(key, entryTitle(candidate.entry))
-      return next
-    })
+    const next = triageSelected.some((item) => selectionKey(item) === key)
+      ? triageSelected.filter((item) => selectionKey(item) !== key)
+      : triageSelected.length < MAX_SELECTIONS ? [...triageSelected, selection] : triageSelected
+    void runControl({ action: 'selection', selectionScope: 'triage', selections: next })
   }
 
   const approve = async (selections: LedgerSelection[], onConflict: (message: string) => void) => {
@@ -546,32 +608,53 @@ export function LedgerApp({
 
   const perRowReview = async (entry: LedgerEntry) => approve([{ id: entry.id, revision: entry.revision }], setActionMessage)
 
-  const beginDeleteSelections = (selections: LedgerSelection[], titles: Map<string, string>, sourceEntries: LedgerEntry[]) => {
-    if (selections.length === 0) return
-    setConfirmation({ kind: 'delete-entries', selections, snapshots: selections.map((selection) => snapshotFor(selection, titles, sourceEntries)) })
+  function beginDeleteSelections(selections: LedgerSelection[]): void {
+    void runControl({ action: 'prepare', kind: 'delete-entries', selections: selections.map((item) => ({ id: item.id, revision: item.revision })) })
   }
 
-  const beginDelete = (entriesToDelete: LedgerEntry[]) => {
-    const selections = entriesToDelete.map((entry) => ({ id: entry.id, revision: entry.revision }))
-    beginDeleteSelections(selections, new Map(entriesToDelete.map((entry) => [selectionKey({ id: entry.id, revision: entry.revision }), entryTitle(entry)])), entriesToDelete)
+  function beginDelete(entriesToDelete: LedgerEntry[]): void {
+    beginDeleteSelections(entriesToDelete.map((entry) => ({ id: entry.id, revision: entry.revision })))
   }
 
-  const requestBulkState = (state: Extract<LedgerState, 'resolved' | 'archived'>, selections: LedgerSelection[], titles: Map<string, string>, sourceEntries: LedgerEntry[]) => {
-    if (selections.length === 0) return
-    setConfirmation({ kind: 'bulk-state', state, selections, snapshots: selections.map((selection) => snapshotFor(selection, titles, sourceEntries)) })
+  function requestBulkState(state: Extract<LedgerState, 'resolved' | 'archived'>, selections: LedgerSelection[]): void {
+    void runControl({ action: 'prepare', kind: 'bulk-state', state, selections: selections.map((item) => ({ id: item.id, revision: item.revision })) })
   }
-
-  const openAttachConfirmation = () => {
-    if (!currentSummary || !attachChoice) return
-    const ownerOption = owners.find((owner) => `${owner.tier}:${owner.id}` === attachChoice)
-    if (!ownerOption) return
-    setConfirmation({
-      kind: 'attach',
-      ledgerId: currentSummary.ledgerId,
-      revision: currentSummary.revision,
-      attachTo: { tier: ownerOption.tier, id: ownerOption.id },
-      ownerName: ownerOption.name
-    })
+  function prepareConfirmation(command: LedgerControl): void {
+    if (!command.kind) throw new Error('Ledger prepare requires a confirmation kind.')
+    const summary = currentSummary
+    if (!summary) throw new Error('An authoritative ledger summary is required for this confirmation.')
+    if (command.kind === 'delete-ledger') {
+      setConfirmation({ kind: 'delete-ledger', ledgerId: summary.ledgerId, revision: summary.revision, entryCount: summary.entryCount })
+      return
+    }
+    if (command.kind === 'attach') {
+      const attachTo = command.attachTo
+      if (!attachTo) throw new Error('Ledger attach preparation requires an owner.')
+      const option = owners.find((candidate) => candidate.tier === attachTo.tier && candidate.id === attachTo.id)
+      if (summary.owner !== null || attachTo.tier !== summary.tier || !option || option.ledgerId) {
+        throw new Error('Choose an unoccupied live owner of the detached ledger tier.')
+      }
+      setConfirmation({
+        kind: 'attach',
+        ledgerId: summary.ledgerId,
+        revision: summary.revision,
+        attachTo: { tier: attachTo.tier, id: attachTo.id },
+        ownerName: option.name
+      })
+      return
+    }
+    const selections = command.selections ?? (triageOpen ? triageSelected : selected)
+    if (selections.length === 0) throw new Error('Ledger preparation requires at least one selected entry.')
+    const snapshots = selections.map((selection) => ({ id: selection.id, revision: selection.revision }))
+    const titles = new Map([...selectionTitles, ...triageTitles])
+    const sourceEntries = [...entries, ...candidates.map((candidate) => candidate.entry)]
+    const details = snapshots.map((selection) => snapshotFor(selection, titles, sourceEntries))
+    if (command.kind === 'bulk-state') {
+      if (!command.state) throw new Error('Ledger bulk-state preparation requires a state.')
+      setConfirmation({ kind: 'bulk-state', ledgerId: summary.ledgerId, state: command.state, selections: snapshots, snapshots: details })
+      return
+    }
+    setConfirmation({ kind: 'delete-entries', ledgerId: summary.ledgerId, selections: snapshots, snapshots: details })
   }
 
   const reloadAfterConflict = async (message: string) => {
@@ -584,39 +667,43 @@ export function LedgerApp({
     await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])
   }
 
-  const confirmAction = async () => {
+  async function confirmAction(): Promise<void> {
+    if (confirmationBusyRef.current) throw new Error('A ledger confirmation is already in progress.')
     const pending = confirmation
-    if (!pending || confirmBusy) return
+    if (!pending) throw new Error('There is no pending ledger confirmation.')
+    confirmationBusyRef.current = true
     setConfirmBusy(true)
     setActionMessage('')
     try {
       switch (pending.kind) {
         case 'bulk-state':
-          if (!pageLedgerTarget) throw new Error('The ledger target is no longer available.')
-          await ledgerRequest(context, { operation: 'bulk-state', target: pageLedgerTarget, state: pending.state, selections: pending.selections }, true)
+          await ledgerRequest(context, { operation: 'bulk-state', target: { ledgerId: pending.ledgerId }, state: pending.state, selections: pending.selections.map((item) => ({ id: item.id, revision: item.revision })) }, true)
           setSelected([])
           setSelectionTitles(new Map())
           setTriageSelected([])
           setTriageTitles(new Map())
           break
         case 'delete-entries':
-          if (!pageLedgerTarget) throw new Error('The ledger target is no longer available.')
-          await ledgerRequest(context, { operation: 'delete-entries', target: pageLedgerTarget, selections: pending.selections }, true)
+          await ledgerRequest(context, { operation: 'delete-entries', target: { ledgerId: pending.ledgerId }, selections: pending.selections.map((item) => ({ id: item.id, revision: item.revision })) }, true)
           setSelected([])
           setSelectionTitles(new Map())
           break
         case 'delete-ledger':
-          await ledgerRequest(context, { operation: 'delete-ledger', target: pageLedgerTarget ?? { ledgerId: pending.ledgerId }, ifLedgerRevision: pending.revision }, true)
+          await ledgerRequest(context, { operation: 'delete-ledger', target: { ledgerId: pending.ledgerId }, ifLedgerRevision: pending.revision }, true)
           returnToChooser()
           break
         case 'attach':
-          await ledgerRequest(context, { operation: 'attach', target: { ledgerId: pending.ledgerId }, attachTo: pending.attachTo, ifLedgerRevision: pending.revision }, true)
+          await ledgerRequest(context, { operation: 'attach', target: { ledgerId: pending.ledgerId }, attachTo: { ...pending.attachTo }, ifLedgerRevision: pending.revision }, true)
           setOwnerTarget({ owner: pending.attachTo })
           setAttachChoice('')
           break
       }
       setConfirmation(null)
-      await Promise.all([loadEntries(), loadCatalog(), ...(triageOpen ? [loadCandidates()] : [])])
+      await Promise.all([
+        ...(pending.kind === 'delete-ledger' ? [] : [loadEntries()]),
+        loadCatalog(),
+        ...(triageOpen && pending.kind !== 'delete-ledger' ? [loadCandidates()] : [])
+      ])
     } catch (reason) {
       setConfirmation(null)
       if (isConflict(reason)) {
@@ -627,6 +714,7 @@ export function LedgerApp({
         else setActionMessage(errorMessage(reason))
       }
     } finally {
+      confirmationBusyRef.current = false
       setConfirmBusy(false)
     }
   }
@@ -681,69 +769,141 @@ export function LedgerApp({
     setForm({ entry: result.entry })
   }
 
-  const setOwnerTarget = (next: LedgerTarget | undefined) => {
+  function setOwnerTarget(next: LedgerTarget | undefined): void {
     if (!next) return
-    if (JSON.stringify(effectiveTarget) !== JSON.stringify(next)) {
-      setSelected([])
-      setSelectionTitles(new Map())
-      setTriageSelected([])
-      setTriageTitles(new Map())
-      setForm(null)
-      setConfirmation(null)
-      detailGeneration.current++
-      setDetail(null)
-      setDetailId('')
-      setDetailError('')
-      setTriageConflict('')
-      setActionMessage('')
-    }
+    if (JSON.stringify(effectiveTarget) !== JSON.stringify(next)) invalidateContextState()
     if (mode === 'panel') setPanelTargetOverride(next)
     else setTarget(next)
   }
 
-  dispatchRef.current = async (command: LedgerControl) => {
-    if (command.target) setOwnerTarget(command.target)
+  function closeTriage(): void {
+    setTriageOpen(false)
+    setTriageConflict('')
+    setTriageSelected([])
+    setTriageTitles(new Map())
+  }
+
+  function dismissDialog(dialog: LedgerControl['dialog']): void {
+    if (!dialog) throw new Error('Ledger dismiss requires a dialog.')
+    switch (dialog) {
+      case 'confirmation':
+        if (confirmationBusyRef.current) throw new Error('A ledger confirmation is already in progress.')
+        setConfirmation(null)
+        return
+      case 'detail':
+        closeDetail()
+        return
+      case 'form':
+        setForm(null)
+        return
+      case 'triage':
+        closeTriage()
+        return
+    }
+  }
+
+  async function dispatchControl(command: LedgerControl): Promise<void> {
+    if (command.action === 'choose') {
+      if (!command.target) throw new Error('Ledger choose requires a target.')
+      setOwnerTarget(command.target)
+      return
+    }
+    if (command.action === 'chooser') {
+      if (mode !== 'page') throw new Error('The ledger chooser is only available in page mode.')
+      returnToChooser()
+      await loadCatalog()
+      return
+    }
+    if (command.action === 'refresh') {
+      if (command.target) throw new Error('Ledger refresh uses the current target.')
+      switch (command.resource) {
+        case 'entries':
+          await loadEntries(true)
+          return
+        case 'catalog':
+          await loadCatalog()
+          return
+        case 'directory':
+          setDirectoryRetry((value) => value + 1)
+          return
+        case 'candidates':
+          if (!triageOpen || !effectiveTarget) throw new Error('Ledger candidates require an open triage dialog and target.')
+          await loadCandidates()
+          return
+        case 'detail':
+          if (!detailId || !detailTargetRef.current) throw new Error('Ledger detail refresh requires an open detail dialog.')
+          await requestDetail(detailId, detailTargetRef.current)
+          return
+        default:
+          throw new Error('Ledger refresh requires a resource.')
+      }
+    }
+    if (command.action === 'prepare') {
+      prepareConfirmation(command)
+      return
+    }
+    if (command.action === 'confirm') {
+      await confirmAction()
+      return
+    }
+    if (command.action === 'dismiss') {
+      dismissDialog(command.dialog)
+      return
+    }
+
     switch (command.action) {
       case 'scope':
         if (!command.scope || !['worktree', 'project', 'group'].includes(command.scope)) throw new Error('Ledger scope must be worktree, project, or group.')
+        if (command.target) setOwnerTarget(command.target)
+        if (scope !== command.scope || (mode === 'panel' && !command.target && panelTargetOverride !== null)) invalidateContextState()
         setScope(command.scope)
         if (mode === 'panel' && !command.target) setPanelTargetOverride(null)
-        break
+        return
       case 'filters':
-        setFilters((previous) => ({ ...previous, ...(command.filters ?? {}) }))
-        break
+        if (command.target) setOwnerTarget(command.target)
+        setFilters((previous) => command.replace ? command.filters ?? {} : { ...previous, ...(command.filters ?? {}) })
+        return
+      case 'filters-open':
+        if (typeof command.open !== 'boolean') throw new Error('Ledger filters-open requires a boolean open value.')
+        if (command.target) setOwnerTarget(command.target)
+        setFiltersOpen(command.open)
+        return
       case 'sort':
-        if (!command.sort || !['activity', 'sequence', 'title'].includes(command.sort)) throw new Error('Ledger sort must be activity, sequence, or title.')
+        if (!command.sort || !['activity', 'sequence', 'title'].includes(command.sort)) throw new Error('Ledger sort requires a sort mode.')
+        if (command.target) setOwnerTarget(command.target)
         setSort(command.sort)
-        break
-      case 'selection':
-        setSelected(safeSelections(command.selections))
-        setSelectionTitles(new Map())
-        break
+        return
+      case 'selection': {
+        if (command.target) setOwnerTarget(command.target)
+        const selectionScope = command.selectionScope ?? 'entries'
+        const next = safeSelections(command.selections)
+        if (selectionScope === 'triage') {
+          setTriageSelected(next)
+          setTriageTitles((current) => selectionTitleCache(current, next, candidates.map((candidate) => candidate.entry)))
+        } else {
+          setSelected(next)
+          setSelectionTitles((current) => selectionTitleCache(current, next, entries))
+        }
+        return
+      }
       case 'detail':
         if (!command.id) throw new Error('Ledger detail requires an entry id.')
-        {
-          const requestTarget = command.target ?? pageLedgerTarget
-          if (!requestTarget) throw new Error('Open a ledger before showing an entry.')
-          const found = command.target ? undefined : entries.find((entry) => entry.id === command.id)
-          if (found) await openDetail(found, requestTarget)
-          else {
-            const result = await ledgerRequest(context, { operation: 'show', target: requestTarget, id: command.id })
-            if (!result.entry) throw new Error(`Ledger entry ${command.id} was not found.`)
-            await openDetail(result.entry, requestTarget)
-          }
-        }
-        break
+        if (command.target) setOwnerTarget(command.target)
+        await requestDetail(command.id, command.target ?? pageLedgerTarget)
+        return
       case 'new':
+        if (command.target) setOwnerTarget(command.target)
         beginNew()
-        break
+        return
       case 'edit':
         if (!command.id) throw new Error('Ledger edit requires an entry id.')
+        if (command.target) setOwnerTarget(command.target)
         await openEditById(command.id, command.target)
-        break
+        return
       case 'triage':
+        if (command.target) setOwnerTarget(command.target)
         openTriage()
-        break
+        return
       case 'settings': {
         const requestedOwner = command.target?.owner
         const projectOwner = requestedOwner
@@ -751,27 +911,35 @@ export function LedgerApp({
           : currentSummary?.owner?.tier === 'project' ? currentSummary.owner : effectiveTarget?.owner?.tier === 'project' ? effectiveTarget.owner : null
         const repoId = projectOwner ? currentSummary?.repoId ?? projectOwner.id : undefined
         if (!repoId) throw new Error('Ledger settings require a live project ledger.')
+        if (command.target) setOwnerTarget(command.target)
         context.openView(LEDGER_SETTINGS_VIEW_ID, { repoId })
-        break
+        return
       }
+      default:
+        throw new Error('Ledger control action is not supported.')
     }
   }
 
-  useEffect(() => registerControl?.((command) => dispatchRef.current(command), mode), [registerControl, mode])
+  dispatchRef.current = dispatchControl
+
+  useEffect(() => registerControl?.((command) => dispatchRef.current(command), mode, controlId), [registerControl, mode, controlId])
+
 
   const dialogName = confirmation ? `confirm:${confirmation.kind}` : triageOpen ? 'triage' : form ? (form.entry ? 'edit' : 'new') : detailId ? 'detail' : 'none'
   useEffect(() => {
     report?.({
       view: mode === 'panel' ? 'panel' : effectiveTarget ? 'page' : 'chooser',
       target: effectiveTarget ?? undefined,
+      instance: controlId,
       scope,
       filters,
+      filtersOpen,
       sort,
       selection: triageOpen ? triageSelected : selected,
       dialog: dialogName,
       entryId: detail?.id || detailId || form?.entry?.id
     })
-  }, [report, mode, effectiveTarget, scope, filters, sort, selected, triageSelected, triageOpen, dialogName, detail, detailId, form])
+  }, [report, mode, effectiveTarget, controlId, scope, filters, filtersOpen, sort, selected, triageSelected, triageOpen, dialogName, detail, detailId, form])
 
   useEffect(() => {
     return context.subscribe((event) => {
@@ -783,9 +951,25 @@ export function LedgerApp({
     })
   }, [context, loadCatalog, loadEntries, loadCandidates, triageOpen])
 
-  const refresh = () => void loadEntries(true)
   const availableOwners = owners.filter((candidate) => Boolean(currentSummary && !candidate.ledgerId && candidate.tier === currentSummary.tier && (!currentSummary.owner || candidate.id !== currentSummary.owner.id)))
   const detached = Boolean(currentSummary && !currentSummary.owner)
+  function prepareAttach(): void {
+    const owner = availableOwners.find((candidate) => `${candidate.tier}:${candidate.id}` === attachChoice)
+    if (!owner) return
+    void runControl({ action: 'prepare', kind: 'attach', attachTo: { tier: owner.tier, id: owner.id } })
+  }
+
+  function refreshEntries(): void {
+    void runControl({ action: 'refresh', resource: 'entries' })
+  }
+
+  function updateFilters(patch: Partial<LedgerFilters>): void {
+    const next: LedgerFilters = { ...filters, ...patch }
+    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {
+      if (next[key] === undefined || next[key] === '') delete next[key]
+    }
+    void runControl({ action: 'filters', replace: true, filters: next })
+  }
 
   const renderFilters = () => (
     <div className="ledger-filters" aria-label="Ledger filters" style={ledgerStyles.filters}>
@@ -795,47 +979,47 @@ export function LedgerApp({
           aria-label="Search ledger"
           placeholder="Search title or ID"
           value={filters.search ?? ''}
-          onChange={(event) => setFilters((previous) => ({ ...previous, search: event.target.value }))}
+          onChange={(event) => updateFilters({ search: event.target.value || undefined })}
         />
       </div>
       <div style={ledgerStyles.field}>
         <FormRow label="Type" htmlFor={`${controlId}-filter-type`}>
-          <select aria-label="Filter by type" className="ui-text-field__input" value={filters.type ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, type: event.target.value ? event.target.value as LedgerType : undefined }))}>
+          <select aria-label="Filter by type" className="ui-text-field__input" value={filters.type ?? ''} onChange={(event) => updateFilters({ type: event.target.value ? event.target.value as LedgerType : undefined })}>
             <option value="">All types</option>{TYPE_OPTIONS.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
           </select>
         </FormRow>
       </div>
       <div style={ledgerStyles.field}>
         <FormRow label="State" htmlFor={`${controlId}-filter-state`}>
-          <select aria-label="Filter by state" className="ui-text-field__input" value={filters.state ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, state: event.target.value ? event.target.value as LedgerState : undefined }))}>
+          <select aria-label="Filter by state" className="ui-text-field__input" value={filters.state ?? ''} onChange={(event) => updateFilters({ state: event.target.value ? event.target.value as LedgerState : undefined })}>
             <option value="">All states</option>{STATE_OPTIONS.map((state) => <option key={state} value={state}>{state[0]!.toUpperCase() + state.slice(1)}</option>)}
           </select>
         </FormRow>
       </div>
       <div style={ledgerStyles.field}>
         <FormRow label="Review" htmlFor={`${controlId}-filter-review`}>
-          <select aria-label="Filter by review status" className="ui-text-field__input" value={filters.reviewed === undefined ? '' : String(filters.reviewed)} onChange={(event) => setFilters((previous) => ({ ...previous, reviewed: event.target.value === '' ? undefined : event.target.value === 'true' }))}>
+          <select aria-label="Filter by review status" className="ui-text-field__input" value={filters.reviewed === undefined ? '' : String(filters.reviewed)} onChange={(event) => updateFilters({ reviewed: event.target.value === '' ? undefined : event.target.value === 'true' })}>
             <option value="">All review statuses</option><option value="true">Reviewed</option><option value="false">Unreviewed</option>
           </select>
         </FormRow>
       </div>
       <div style={ledgerStyles.field}>
         <FormRow label="Freshness" htmlFor={`${controlId}-filter-freshness`}>
-          <select aria-label="Filter by freshness" className="ui-text-field__input" value={filters.stale === undefined ? '' : String(filters.stale)} onChange={(event) => setFilters((previous) => ({ ...previous, stale: event.target.value === '' ? undefined : event.target.value === 'true' }))}>
+          <select aria-label="Filter by freshness" className="ui-text-field__input" value={filters.stale === undefined ? '' : String(filters.stale)} onChange={(event) => updateFilters({ stale: event.target.value === '' ? undefined : event.target.value === 'true' })}>
             <option value="">All entries</option><option value="true">Stale</option><option value="false">Not stale</option>
           </select>
         </FormRow>
       </div>
       {mode === 'page' && <>
         <div style={ledgerStyles.field}>
-          <TextField label="Origin workspace" aria-label="Origin workspace" value={filters.workspaceId ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, workspaceId: event.target.value || undefined }))} />
+          <TextField label="Origin workspace" aria-label="Origin workspace" value={filters.workspaceId ?? ''} onChange={(event) => updateFilters({ workspaceId: event.target.value || undefined })} />
         </div>
         <div style={ledgerStyles.field}>
-          <TextField label="Origin branch" aria-label="Origin branch" value={filters.branch ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, branch: event.target.value || undefined }))} />
+          <TextField label="Origin branch" aria-label="Origin branch" value={filters.branch ?? ''} onChange={(event) => updateFilters({ branch: event.target.value || undefined })} />
         </div>
         <div style={ledgerStyles.field}>
           <FormRow label="Sort" htmlFor={`${controlId}-filter-sort`}>
-            <select aria-label="Sort ledger entries" className="ui-text-field__input" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
+            <select aria-label="Sort ledger entries" className="ui-text-field__input" value={sort} onChange={(event) => void runControl({ action: 'sort', sort: event.target.value as SortMode })}>
               <option value="activity">Newest activity</option><option value="sequence">Sequence</option><option value="title">Title</option>
             </select>
           </FormRow>
@@ -853,13 +1037,13 @@ export function LedgerApp({
           {mode === 'page' && <label className="ledger-check-row" style={ledgerStyles.check}>
             <input type="checkbox" aria-label={`Select ${entry.id} revision ${entry.revision}`} checked={checked} style={ledgerStyles.checkbox} onChange={() => toggleSelected(entry)} />
           </label>}
-          <Button type="button" variant="secondary" className="ledger-row-title" style={ledgerStyles.entryTitle} aria-label={`Show details: ${entry.id}`} onClick={() => { setActionMessage(''); void openDetail(entry) }}>
+          <Button type="button" variant="secondary" className="ledger-row-title" style={ledgerStyles.entryTitle} aria-label={`Show details: ${entry.id}`} onClick={() => { setActionMessage(''); void runControl({ action: 'detail', id: entry.id }) }}>
             <code>{entry.id}</code> · <Badge>{TYPE_LABELS[entry.type]}</Badge> · <Badge>{entry.state}</Badge>{entry.reviewed && <Badge tone="working">reviewed</Badge>} · {entryTitle(entry)}
           </Button>
           {mode === 'panel' && scope !== 'worktree' && workspaceId && entry.origin.workspaceId === workspaceId && <Badge>Filed here</Badge>}
         </div>
         <div className="ledger-row-actions" style={ledgerStyles.entryActions}>
-          <Button type="button" aria-label={`Edit ${entry.id}`} onClick={() => setForm({ entry })}>Edit {entry.id}</Button>
+          <Button type="button" aria-label={`Edit ${entry.id}`} onClick={() => void runControl({ action: 'edit', id: entry.id })}>Edit {entry.id}</Button>
           <Button type="button" aria-label={`Review ${entry.id}`} disabled={entry.reviewed || actionBusy} onClick={() => void perRowReview(entry)}>Review {entry.id}</Button>
           <Button type="button" variant="destructive" aria-label={`Delete ${entry.id}`} onClick={() => beginDelete([entry])}>Delete {entry.id}</Button>
         </div>
@@ -868,7 +1052,7 @@ export function LedgerApp({
   }
 
   const refreshTool = (
-    <IconButton label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>
+    <IconButton label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refreshEntries}>
       {refreshSpinner ? '…' : <ControlIcon name="arrows-clockwise" />}
     </IconButton>
   )
@@ -879,22 +1063,22 @@ export function LedgerApp({
       title="Filter ledger"
       aria-pressed={filtersOpen || filtering}
       variant={filtering ? 'primary' : undefined}
-      onClick={() => setFiltersOpen((open) => !open)}
+      onClick={() => void runControl({ action: 'filters-open', open: !filtersOpen })}
     >
       <ControlIcon name="funnel" />
     </IconButton>
   )
-  const newEntryTool = (label: string) => <IconButton label={label} title={label} onClick={beginNew}><ControlIcon name="plus" /></IconButton>
+  const newEntryTool = (label: string) => <IconButton label={label} title={label} onClick={() => void runControl({ action: 'new' })}><ControlIcon name="plus" /></IconButton>
 
   const renderChooser = () => (
     <ToolPanelFrame
       title="Open ledger"
-      tools={<IconButton label="Refresh ledger catalog" title="Refresh ledger catalog" disabled={catalogLoading} onClick={() => void loadCatalog()}><ControlIcon name="arrows-clockwise" /></IconButton>}
+      tools={<IconButton label="Refresh ledger catalog" title="Refresh ledger catalog" disabled={catalogLoading} onClick={() => void runControl({ action: 'refresh', resource: 'catalog' })}><ControlIcon name="arrows-clockwise" /></IconButton>}
     >
     <section className="ledger-root ledger-chooser" style={ledgerStyles.page}>
       <p className="ledger-summary" style={ledgerStyles.meta}>Attached and detached ledgers for this runtime</p>
       {runtimeText && <p className="ledger-muted" title={runtimeText} style={ledgerStyles.meta}>Runtime identity: {response?.runtime.runtimeId ?? catalog?.runtime.runtimeId ?? 'loading'}</p>}
-      {catalogError && <div className="ledger-error" role="alert" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger catalog could not be loaded: {catalogError}</span><Button type="button" onClick={() => void loadCatalog()}>Retry</Button></div>}
+      {catalogError && <div className="ledger-error" role="alert" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger catalog could not be loaded: {catalogError}</span><Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'catalog' })}>Retry</Button></div>}
       {catalogLoading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledgers…</p>}
       {!catalogLoading && !catalogError && (catalog?.ledgers?.length ?? 0) === 0 && <EmptyState message="No attached or detached ledgers yet. File an entry to create one." />}
       <ul className="ledger-chooser-list" style={ledgerStyles.list}>
@@ -906,9 +1090,7 @@ export function LedgerApp({
           return <li className="ledger-chooser-row" key={summary.ledgerId} style={ledgerStyles.row}>
             <ListRow
               title={rowLabel}
-              trailing={<Button type="button" aria-label={`Open ledger ${summary.name}`} onClick={() => {
-                setOwnerTarget({ ledgerId: summary.ledgerId })
-              }}>Open</Button>}
+              trailing={<Button type="button" aria-label={`Open ledger ${summary.name}`} onClick={() => void runControl({ action: 'choose', target: { ledgerId: summary.ledgerId } })}>Open</Button>}
             />
           </li>
         })}
@@ -944,11 +1126,11 @@ export function LedgerApp({
             ...(workspaceGroup ? [{ id: 'group', label: 'Group', count: groupCount }] : [])
           ]}
           value={scope}
-          onChange={(nextScope) => { setScope(nextScope as Scope); setPanelTargetOverride(null) }}
+          onChange={(nextScope) => void runControl({ action: 'scope', scope: nextScope as Scope })}
         />}
         tools={<>
           {refreshTool}
-          <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="check" /></IconButton>
+          <IconButton label="Triage" title="Triage" onClick={() => void runControl({ action: 'triage' })}><ControlIcon name="check" /></IconButton>
           {filterTool}
           {newEntryTool('New')}
         </>}
@@ -959,13 +1141,13 @@ export function LedgerApp({
           {scope === 'worktree' && workspace && <span> · Filed in {workspace.name ?? workspace.id}</span>}
         </div>
         {(filtersOpen || filtering) && renderFilters()}
-        {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Owner catalog could not be loaded: {directory.error}</span><Button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</Button></div>}
+        {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Owner catalog could not be loaded: {directory.error}</span><Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'directory' })}>Retry</Button></div>}
         {directory.loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
         {!directory.loading && noWorkspace && <EmptyState message="Open a workspace to see its ledger." />}
         {!directory.loading && missingGroup && <p className="ledger-error" style={ledgerStyles.error}>This workspace has no group.</p>}
-        {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>{error}</span><Button type="button" onClick={refresh}>Retry</Button></div>}
+        {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>{error}</span><Button type="button" onClick={refreshEntries}>Retry</Button></div>}
         {!directory.loading && !noWorkspace && !missingGroup && loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
-        {!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: beginNew }} />}
+        {!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />}
         {!directory.loading && !error && !missingGroup && <ul className="ledger-entry-list" style={ledgerStyles.list}>{visibleRows.map(renderRow)}</ul>}
       </section>
       </ToolPanelFrame>
@@ -976,21 +1158,18 @@ export function LedgerApp({
     <ToolPanelFrame
       title={pageTitle}
       actions={<>
-        {(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') && <Button type="button" onClick={() => {
-          const repoId = currentSummary?.repoId ?? effectiveTarget?.owner?.id
-          if (repoId) context.openView(LEDGER_SETTINGS_VIEW_ID, { repoId })
-        }}>Ledger settings</Button>}
-        {currentSummary && <Button type="button" variant="destructive" onClick={() => setConfirmation({ kind: 'delete-ledger', ledgerId: currentSummary.ledgerId, revision: currentSummary.revision, entryCount: currentSummary.entryCount })}>Delete ledger</Button>}
+        {(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') && <Button type="button" onClick={() => void runControl({ action: 'settings' })}>Ledger settings</Button>}
+        {currentSummary && <Button type="button" variant="destructive" onClick={() => void runControl({ action: 'prepare', kind: 'delete-ledger' })}>Delete ledger</Button>}
       </>}
       tools={<>
         {refreshTool}
-        <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="check" /></IconButton>
+        <IconButton label="Triage" title="Triage" onClick={() => void runControl({ action: 'triage' })}><ControlIcon name="check" /></IconButton>
           {filterTool}
         {newEntryTool('New entry')}
       </>}
     >
     <section className="ledger-root ledger-page" style={ledgerStyles.page}>
-      <p className="ledger-muted" style={ledgerStyles.muted}><Button type="button" onClick={() => { returnToChooser(); void loadCatalog() }}>Open ledger</Button></p>
+      <p className="ledger-muted" style={ledgerStyles.muted}><Button type="button" onClick={() => void runControl({ action: 'chooser' })}>Open ledger</Button></p>
       <p className="ledger-summary" title={runtimeText} style={ledgerStyles.meta}>{pageTier === 'project' ? 'Project' : 'Group'} · {currentSummary ? `${currentSummary.entryCount} entries · revision ${currentSummary.revision}` : 'No ledger yet'}{response?.runtime && <span> · runtime {response.runtime.runtimeId} · profile {response.runtime.profileId}</span>}</p>
       <div className="ledger-row-meta" title={runtimeText} style={ledgerStyles.meta}>{currentSummary && currentSummary.owner === null ? `Detached ${currentSummary.tier} ledger · former owner ${currentSummary.formerOwner?.id ?? 'unknown'}` : ownerForPage ? `${ownerForPage.tier} · ${currentSummary?.ownerName ?? pageTitle}` : `${pageTier} · ${pageTitle}`}</div>
       {detached && <section className="ledger-attach" aria-label="Attach detached ledger" style={ledgerStyles.section}>
@@ -999,23 +1178,23 @@ export function LedgerApp({
             <option value="">Choose a live owner</option>{availableOwners.map((owner) => <option key={`${owner.tier}:${owner.id}`} value={`${owner.tier}:${owner.id}`}>{owner.tier} · {owner.name}</option>)}
           </select>
         </FormRow>
-        <Button type="button" disabled={!attachChoice} onClick={openAttachConfirmation}>Attach</Button>
+        <Button type="button" disabled={!attachChoice} onClick={prepareAttach}>Attach</Button>
         {availableOwners.length === 0 && <p className="ledger-muted" style={ledgerStyles.muted}>No unoccupied live owners are available.</p>}
       </section>}
       {catalogError && <p role="alert" className="ledger-error" style={ledgerStyles.error}>Owner catalog unavailable: {catalogError}</p>}
-      {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Location bases could not be loaded: {directory.error}</span><Button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</Button></div>}
+      {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Location bases could not be loaded: {directory.error}</span><Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'directory' })}>Retry</Button></div>}
       {(filtersOpen || filtering) && renderFilters()}
-      {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger could not be loaded: {error}</span><Button type="button" onClick={refresh}>Retry</Button></div>}
+      {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger could not be loaded: {error}</span><Button type="button" onClick={refreshEntries}>Retry</Button></div>}
       {actionMessage && <p role="alert" className="ledger-error" style={ledgerStyles.error}>{actionMessage}</p>}
       {loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
-      {!loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: beginNew }} />}
+      {!loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />}
       {!error && <ul className="ledger-entry-list" style={ledgerStyles.list}>{visibleRows.map(renderRow)}</ul>}
       {selected.length > 0 && <div className="ledger-bulk-actions" aria-label="Selected ledger actions" style={ledgerStyles.actions}>
         <span>{selected.length} selected</span>
         <Button type="button" disabled={actionBusy} onClick={() => void approve(selected, setActionMessage)}>Review ({selected.length})</Button>
-        <Button type="button" onClick={() => requestBulkState('resolved', selected, selectionTitles, entries)}>Resolve selected</Button>
-        <Button type="button" onClick={() => requestBulkState('archived', selected, selectionTitles, entries)}>Archive selected</Button>
-        <Button type="button" variant="destructive" onClick={() => beginDeleteSelections(selected, selectionTitles, entries)}>Delete selected</Button>
+        <Button type="button" onClick={() => requestBulkState('resolved', selected)}>Resolve selected</Button>
+        <Button type="button" onClick={() => requestBulkState('archived', selected)}>Archive selected</Button>
+        <Button type="button" variant="destructive" onClick={() => beginDeleteSelections(selected)}>Delete selected</Button>
       </div>}
     </section>
     </ToolPanelFrame>
@@ -1028,7 +1207,7 @@ export function LedgerApp({
       entry={form.entry}
       initialType={form.type}
       bases={locationBases}
-      onCancel={() => setForm(null)}
+      onCancel={() => void runControl({ action: 'dismiss', dialog: 'form' })}
       onSave={(type, content) => saveForm(type, content, form.entry)}
     />}
     {detailId && !detail && createPortal(
@@ -1037,14 +1216,11 @@ export function LedgerApp({
         title={`Ledger entry ${detailId}`}
         closeOnBackdrop={false}
         scrollBody
-        onClose={closeDetail}
-        actions={<div className="ledger-dialog-actions" style={ledgerStyles.actions}><Button type="button" onClick={closeDetail}>Close</Button></div>}
+        onClose={() => void runControl({ action: 'dismiss', dialog: 'detail' })}
+        actions={<div className="ledger-dialog-actions" style={ledgerStyles.actions}><Button type="button" onClick={() => void runControl({ action: 'dismiss', dialog: 'detail' })}>Close</Button></div>}
       >
         <div className="ledger-dialog-body">
-          {detailLoading ? <p style={ledgerStyles.message}>Loading entry…</p> : <p role="alert" className="ledger-error" style={ledgerStyles.error}>{detailError} <Button type="button" onClick={() => {
-            const entry = entries.find((item) => item.id === detailId)
-            if (entry) void openDetail(entry)
-          }}>Retry</Button></p>}
+          {detailLoading ? <p style={ledgerStyles.message}>Loading entry…</p> : <p role="alert" className="ledger-error" style={ledgerStyles.error}>{detailError} <Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'detail' })}>Retry</Button></p>}
         </div>
       </Dialog>,
       document.body
@@ -1053,11 +1229,11 @@ export function LedgerApp({
       entry={detail}
       busy={actionBusy}
       error={actionMessage}
-      onEdit={() => editEntry(detail)}
+      onEdit={() => void runControl({ action: 'edit', id: detail.id })}
       onReview={() => void reviewDetail(detail)}
       onState={(state) => void setState(detail, state)}
       onRevert={(revision) => void revertDetail(detail, revision)}
-      onClose={closeDetail}
+      onClose={() => void runControl({ action: 'dismiss', dialog: 'detail' })}
     />}
     {triageOpen && !confirmation && <LedgerTriage
       candidates={visibleCandidates}
@@ -1067,9 +1243,9 @@ export function LedgerApp({
       busy={candidateLoading || actionBusy}
       onToggle={toggleTriageCandidate}
       onApprove={approveTriage}
-      onBulkState={(state) => requestBulkState(state, triageSelected, triageTitles, visibleCandidates.map((candidate) => candidate.entry))}
-      onRetry={() => void loadCandidates()}
-      onClose={() => { setTriageOpen(false); setTriageConflict(''); setTriageSelected([]); setTriageTitles(new Map()) }}
+      onBulkState={(state) => requestBulkState(state, triageSelected)}
+      onRetry={() => void runControl({ action: 'refresh', resource: 'candidates' })}
+      onClose={() => void runControl({ action: 'dismiss', dialog: 'triage' })}
     />}
     {confirmation && createPortal(
       <Dialog
@@ -1077,10 +1253,10 @@ export function LedgerApp({
         title={confirmation.kind === 'delete-ledger' ? 'Confirm ledger deletion' : confirmation.kind === 'attach' ? 'Confirm ledger attachment' : 'Confirm ledger action'}
         closeOnBackdrop={false}
         scrollBody
-        onClose={() => { if (!confirmBusy) setConfirmation(null) }}
+        onClose={() => void runControl({ action: 'dismiss', dialog: 'confirmation' })}
         actions={<div className="ledger-dialog-actions" style={ledgerStyles.actions}>
-          <Button type="button" disabled={confirmBusy} onClick={() => setConfirmation(null)}>Cancel</Button>
-          <Button type="button" variant="primary" disabled={confirmBusy} onClick={() => void confirmAction()}>Confirm</Button>
+          <Button type="button" disabled={confirmBusy} onClick={() => void runControl({ action: 'dismiss', dialog: 'confirmation' })}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={confirmBusy} onClick={() => void runControl({ action: 'confirm' })}>Confirm</Button>
         </div>}
       >
         <div className="ledger-dialog-body">
