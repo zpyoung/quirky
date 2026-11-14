@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { checkIds } from './cli-checks'
+import { buildCliReport, reduceCliRows } from './cli-run'
 import {
   CLI_MAPPINGS,
   CliTableError,
@@ -112,6 +113,74 @@ function validateRows(inventory: CliInventory, rows: CliTableRow[], checks: Read
 }
 
 const tablePath = resolve(import.meta.dir, '../../docs/parity/orca-cli.md')
+const serviceRestoreIds = ['serve-restore-resume', 'serve-service-install', 'serve-service-status', 'serve-service-uninstall']
+
+test('service and host-restore scope decisions remain captured exclusions without behavioral claims', () => {
+  const inventory = loadCliInventory()
+  const rows = loadCliTable()
+  const excluded = rows.filter(row => serviceRestoreIds.includes(row.id))
+  expect(excluded.map(row => row.id)).toEqual(serviceRestoreIds)
+  for (const row of excluded) {
+    expect(row).toMatchObject({ disposition: 'excluded', checks: [] })
+    expect(row.reason.trim()).not.toBe('')
+    expect(row).not.toHaveProperty('followUp')
+    expect(row).not.toHaveProperty('missingBehavior')
+
+    const withoutReason = cloned(rows)
+    withoutReason.find(candidate => candidate.id === row.id)!.reason = ''
+    expect(codeOf(() => validateRows(inventory, withoutReason))).toBe('missing-reason')
+
+    const withCheck = cloned(rows)
+    withCheck.find(candidate => candidate.id === row.id)!.checks = ['status']
+    expect(codeOf(() => validateRows(inventory, withCheck))).toBe('missing-check')
+
+    expect(codeOf(() => validateRows(inventory, rows.filter(candidate => candidate.id !== row.id)))).toBe('missing-command')
+  }
+  expect(validateRows(inventory, rows)).toBeUndefined()
+})
+
+test('excluded service and host-restore rows have no compiled catalog obligations', () => {
+  const rows = loadCliTable()
+  const catalog = syntheticCatalog()
+  const refs = validateCatalog(catalog, rows)
+  expect(CLI_MAPPINGS.filter(mapping => serviceRestoreIds.includes(mapping.rowId))).toEqual([])
+  expect(refs.filter(entry => serviceRestoreIds.includes(entry.rowId))).toEqual(
+    serviceRestoreIds.map(rowId => ({ rowId, refs: [] }))
+  )
+  expect(refs.find(entry => entry.rowId === 'status')!.refs).toContain('command:status')
+  expect(refs.find(entry => entry.rowId === 'serve')!.refs).toContain('command:serve')
+
+  const status = CLI_MAPPINGS.find(mapping => mapping.rowId === 'status')!
+  expect(codeOf(() => validateCatalog(catalog, rows, [
+    ...CLI_MAPPINGS, { ...status, rowId: 'serve-service-status' }
+  ]))).toBe('catalog-mismatch')
+})
+
+test('excluded service and host-restore report rows do not fabricate execution', () => {
+  const allRows = loadCliTable()
+  const rows = allRows.filter(row => serviceRestoreIds.includes(row.id))
+  const refs = new Map(validateCatalog(syntheticCatalog(), allRows).map(entry => [entry.rowId, entry.refs]))
+  const results = reduceCliRows(rows, [], new Set(), refs)
+  expect(results).toEqual(rows.map(row => ({
+    id: row.id, status: 'excluded', executed: false, checks: [], catalogRefs: [], reason: row.reason
+  })))
+  expect(results.map(row => row.id)).toEqual(serviceRestoreIds)
+})
+
+test('service and host-restore exclusions preserve an unrelated catalog transport failure', () => {
+  const rows = loadCliTable().filter(row => serviceRestoreIds.includes(row.id))
+  const report = buildCliReport({
+    rows, receipts: [], proven: new Set(), catalogRefs: new Map(),
+    failure: { checkId: 'catalog', kind: 'transport', message: 'dead daemon' }, elapsedMs: 0
+  })
+  expect(report).toMatchObject({
+    schemaVersion: 1, ok: false, parityComplete: false, receipts: [],
+    error: { stage: 'catalog', kind: 'transport', message: 'dead daemon' }, cleanup: { ok: true }
+  })
+  expect(report.rows).toEqual(rows.map(row => ({
+    id: row.id, status: 'excluded', executed: false, checks: [], catalogRefs: [], reason: row.reason
+  })))
+})
 
 test('the frozen inventory and human table cover all required commands and delegate every other root', () => {
   const inventory = loadCliInventory()
