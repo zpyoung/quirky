@@ -538,6 +538,29 @@ describe('runtime asset HTTP verification', () => {
     }
   })
 
+  test('parses quoted tag attributes and raw import-map strings like the renderer', async () => {
+    const cases = [
+      ['<base data-note=">" href="//foreign.invalid/">', 'runtime assets: invalid URL'],
+      ['<script data-note=">" type="importmap">{"imports":{"react":"http://foreign.invalid/react.js"}}</script>', 'runtime assets: invalid URL'],
+      ['<script type="importmap">{"imports":{"react":"./vendor/a&amp;b.js"}}</script>', 'runtime assets: missing /vendor/a%26amp%3Bb.js']
+    ] as const
+    for (const [declaration, diagnostic] of cases) {
+      const fixture = makeRepo(freshRoot())
+      put(join(fixture.uiDir, 'vendor/a&b.js'), 'decoy module')
+      put(join(fixture.uiDir, 'index.html'), `<html><head><script type="importmap">{}</script>${declaration}</head><body><script src="./main.js"></script></body></html>`)
+      const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+      const url = moduleUrl()
+      const server = serveSnapshot(snapshot, [url])
+      try {
+        await expect(verifyRuntimeAssets(assets, snapshot, modelWithModules({ 'acme.fixture': url }), verifyOptions(server.server.port!)))
+          .rejects.toThrow(diagnostic)
+        expect(server.seen).toEqual([])
+      } finally {
+        await server.server.stop(true)
+      }
+    }
+  })
+
   test('rejects hostile module URLs before contacting either loopback server', async () => {
     const root = freshRoot()
     const fixture = makeRepo(root)

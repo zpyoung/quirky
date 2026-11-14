@@ -373,9 +373,8 @@ function decodeDocumentAttribute(value: string): string {
 }
 
 function documentAssetUrl(value: string): string {
-  const decoded = decodeDocumentAttribute(value)
-  if (/^[a-z][a-z0-9+.-]*:/i.test(decoded)) throw new Error(`runtime assets: invalid URL ${value}`)
-  return decoded.startsWith('/') ? decoded : `/${decoded.replace(/^\.\//, '')}`
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) throw new Error(`runtime assets: invalid URL ${value}`)
+  return value.startsWith('/') ? value : `/${value.replace(/^\.\//, '')}`
 }
 
 function checkDocumentAssets(html: string, snapshot: AssetSnapshot, origin: string): string[] {
@@ -385,35 +384,9 @@ function checkDocumentAssets(html: string, snapshot: AssetSnapshot, origin: stri
     const canonical = requireAsset(snapshot, url)
     if (url !== canonical) aliases.push(url)
   }
-  for (const match of html.matchAll(/<(script|link|base)\b([^>]*)>/gi)) {
-    const attributes: Record<string, string> = {}
-    for (const attribute of match[2]!.matchAll(/([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
-      const name = attribute[1]!.toLowerCase()
-      if (Object.hasOwn(attributes, name)) throw new Error(`runtime assets: invalid URL (duplicate HTML attribute ${name})`)
-      attributes[name] = attribute[2] ?? attribute[3] ?? attribute[4] ?? ''
-    }
-    if (match[1]!.toLowerCase() === 'base' && attributes.href !== undefined) {
-      let base: URL
-      try { base = new URL(decodeDocumentAttribute(attributes.href), `${origin}/index.html`) } catch {
-        throw new Error(`runtime assets: invalid URL ${attributes.href}`)
-      }
-      if (base.origin !== origin || new URL('.', base).pathname !== '/' || base.username || base.password || base.search || base.hash) {
-        throw new Error(`runtime assets: invalid URL ${attributes.href}`)
-      }
-    }
-    if (match[1]!.toLowerCase() === 'script' && attributes.src !== undefined) {
-      checkReference(attributes.src)
-    }
-    const relations = (attributes.rel ?? '').toLowerCase().split(/\s+/)
-    if (match[1]!.toLowerCase() === 'link' && attributes.href !== undefined &&
-      (relations.includes('stylesheet') || relations.includes('modulepreload') ||
-        (relations.includes('preload') && ['script', 'style'].includes(attributes.as ?? '')))) {
-      checkReference(attributes.href)
-    }
-  }
-  for (const match of html.matchAll(/<script\b(?=[^>]*\s+type\s*=\s*(["'])importmap\1)[^>]*>([\s\S]*?)<\/script\s*>/gi)) {
+  const checkImportMap = (text: string) => {
     let map: unknown
-    try { map = JSON.parse(match[2]!) } catch { throw new Error('runtime assets: invalid URL in index import map') }
+    try { map = JSON.parse(text) } catch { throw new Error('runtime assets: invalid URL in index import map') }
     if (!isRecord(map)) throw new Error('runtime assets: invalid URL in index import map')
     const mappings = [map.imports, ...(isRecord(map.scopes) ? Object.values(map.scopes) : [])]
     for (const mapping of mappings) {
@@ -425,6 +398,47 @@ function checkDocumentAssets(html: string, snapshot: AssetSnapshot, origin: stri
       }
     }
   }
+  let importMapText: string | null = null
+  const handlers: HTMLRewriterTypes.HTMLRewriterElementContentHandlers = {
+    element(element) {
+      const attributes: Record<string, string> = {}
+      for (const [name, value] of element.attributes) {
+        if (Object.hasOwn(attributes, name)) throw new Error(`runtime assets: invalid URL (duplicate HTML attribute ${name})`)
+        attributes[name] = value
+      }
+      if (element.tagName === 'base' && attributes.href !== undefined) {
+        let base: URL
+        try { base = new URL(decodeDocumentAttribute(attributes.href), `${origin}/index.html`) } catch {
+          throw new Error(`runtime assets: invalid URL ${attributes.href}`)
+        }
+        if (base.origin !== origin || new URL('.', base).pathname !== '/' || base.username || base.password || base.search || base.hash) {
+          throw new Error(`runtime assets: invalid URL ${attributes.href}`)
+        }
+      }
+      if (element.tagName === 'script' && attributes.src !== undefined) {
+        checkReference(decodeDocumentAttribute(attributes.src))
+      }
+      const relations = decodeDocumentAttribute(attributes.rel ?? '').toLowerCase().split(/\s+/)
+      if (element.tagName === 'link' && attributes.href !== undefined &&
+        (relations.includes('stylesheet') || relations.includes('modulepreload') ||
+          (relations.includes('preload') && ['script', 'style'].includes(decodeDocumentAttribute(attributes.as ?? '').toLowerCase())))) {
+        checkReference(decodeDocumentAttribute(attributes.href))
+      }
+      if (element.tagName === 'script' && decodeDocumentAttribute(attributes.type ?? '').trim().toLowerCase() === 'importmap') {
+        importMapText = ''
+        element.onEndTag(() => {
+          if (importMapText === null) throw new Error('runtime assets: invalid URL in index import map')
+          checkImportMap(importMapText)
+          importMapText = null
+        })
+      }
+    },
+    text(chunk) {
+      if (importMapText !== null) importMapText += chunk.text
+    }
+  }
+  new HTMLRewriter().on('base', handlers).on('script', handlers).on('link', handlers).transform(html)
+  if (importMapText !== null) throw new Error('runtime assets: invalid URL in index import map')
   return aliases
 }
 
