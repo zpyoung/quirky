@@ -5,6 +5,7 @@ import { RpcError, RpcErrorCode, type QuirkyEvent, type UiPluginContext } from '
 
 const VIEW_ID = 'view:quirky.notifications/settings'
 const COMMAND_ID = 'command:quirky.notifications/open-settings'
+const EDIT_CUSTOM_SOUND_COMMAND = 'command:quirky.notifications/edit-custom-sound'
 const SETTING = (name: string) => `setting:quirky.notifications/${name}`
 
 type Handler = (params: Record<string, any>) => unknown
@@ -33,6 +34,7 @@ async function settle(): Promise<void> {
 function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<string, boolean | number | string> = {}) {
   const values = { ...DEFAULTS, ...initial }
   const calls: { method: string; params: Record<string, any> }[] = []
+  const executed: { id: string; input: unknown }[] = []
   const provided = new Map<string, (...args: any[]) => any>()
   const listeners = new Set<(event: QuirkyEvent) => void>()
   const opened: { id: string; input: unknown }[] = []
@@ -70,7 +72,12 @@ function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<str
       if (!(key in values)) throw new Error(`no setting ${name}`)
       return values[key]
     },
-    async executeCommand() {},
+    async executeCommand(id: string, input?: unknown) {
+      executed.push({ id, input })
+      const handler = provided.get(id)
+      if (!handler) throw new Error(`unknown command: ${id}`)
+      return handler(input)
+    },
     openView(id: string, input?: unknown) {
       opened.push({ id, input })
     },
@@ -93,6 +100,7 @@ function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<str
     context,
     values,
     calls,
+    executed,
     opened,
     toasts,
     provided,
@@ -413,3 +421,34 @@ describe('opening settings', () => {
   })
 })
 
+describe('editing the custom sound path', () => {
+  test('Change routes through the edit-custom-sound command to a mounted view', async () => {
+    const fake = fakeContext({}, { sound: 'custom', customSoundPath: '/tmp/ping.wav' })
+    const view = await open(fake)
+
+    await view.click(view.button('Change'))
+
+    expect(fake.executed).toEqual([{ id: EDIT_CUSTOM_SOUND_COMMAND, input: undefined }])
+    expect(view.pathField()?.value).toBe('/tmp/ping.wav')
+  })
+
+  test('the command opens settings with the custom path active when no view is mounted', async () => {
+    const fake = fakeContext()
+    activate(fake.context)
+
+    await act(async () => void (await fake.provided.get(EDIT_CUSTOM_SOUND_COMMAND)!()))
+
+    expect(fake.opened).toEqual([{ id: VIEW_ID, input: { customOpen: true } }])
+
+    element = document.createElement('div')
+    document.body.appendChild(element)
+    await act(async () => {
+      unmount = fake.provided.get(VIEW_ID)!(element!, {
+        input: fake.opened[0]!.input,
+        report: (state: unknown) => void reports.push(state)
+      })
+    })
+    await settle()
+    expect(element.querySelector('input[placeholder="/absolute/path/to/sound.wav"]')).not.toBeNull()
+  })
+})

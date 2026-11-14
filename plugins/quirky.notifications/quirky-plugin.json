@@ -283,6 +283,10 @@
       {
         "id": "open-settings",
         "title": "Open notification settings"
+      },
+      {
+        "id": "edit-custom-sound",
+        "title": "Edit custom notification sound"
       }
     ],
     "cli-command": [

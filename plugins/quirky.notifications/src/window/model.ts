@@ -1,8 +1,11 @@
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { DEFAULT_VALUES, PLUGIN_ID, SETTING_NAMES, settingId, type SettingName, type Values } from './copy'
 
-const TEST = `${PLUGIN_ID}/test`
-const PREVIEW = `${PLUGIN_ID}/preview`
+const TEST = 'quirky.notifications/test'
+const PREVIEW = 'quirky.notifications/preview'
+
+/** Command that opens the custom sound path editor in Notifications settings. */
+export const EDIT_CUSTOM_SOUND_COMMAND = 'command:quirky.notifications/edit-custom-sound'
 
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -86,6 +89,10 @@ export class NotificationsStore {
     this.commit({ customOpen: true, customError: null })
   }
 
+  editCustom(): void {
+    void this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND)
+  }
+
   /** Tries `path` as the notification sound; it is saved only when the daemon plays it. */
   async useCustom(path: string): Promise<void> {
     if (this.snapshot.busy) return
@@ -136,15 +143,15 @@ export class NotificationsStore {
   }
 
   private read(): Values {
-    const values: Record<string, unknown> = { ...DEFAULT_VALUES }
-    for (const name of SETTING_NAMES) {
+    const entries = SETTING_NAMES.map((name) => {
       try {
-        values[name] = this.context.getSetting(name)
+        return [name, this.context.getSetting(name)] as const
       } catch {
         // an undeclared setting keeps its default
+        return [name, DEFAULT_VALUES[name]] as const
       }
-    }
-    return values as Values
+    })
+    return { ...DEFAULT_VALUES, ...Object.fromEntries(entries) } as Values
   }
 
   private commit(change: Partial<Snapshot>): void {
