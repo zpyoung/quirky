@@ -132,8 +132,12 @@ test('refuses each invalid contract with its code', () => {
     ...['[', ']', '{', '}', '(', ')', '!'].map((character): [string, string, (value: ObjectivePayload) => void] => [
       `forbidden ${character} in territory entry`, 'territory-invalid', (value) => { value.writeTerritory = [`src/${character}file`] }
     ]),
-    ['.git territory root', 'territory-invalid', (value) => { value.writeTerritory = ['.git/config'] }],
-    ['.quirky territory root', 'territory-invalid', (value) => { value.writeTerritory = ['.quirky/objective'] }],
+    ['dot path segment in territory', 'territory-invalid', (value) => { value.writeTerritory = ['.'] }],
+    ['leading dot path segment in territory', 'territory-invalid', (value) => { value.writeTerritory = ['./.git/**'] }],
+    ['repeated leading dot path segments in territory', 'territory-invalid', (value) => { value.writeTerritory = ['././.git/**'] }],
+    ['leading dot path segment before .quirky', 'territory-invalid', (value) => { value.writeTerritory = ['./.quirky/**'] }],
+    ['repeated leading dot path segments before .quirky', 'territory-invalid', (value) => { value.writeTerritory = ['././.quirky/**'] }],
+    ['interior dot path segment in territory', 'territory-invalid', (value) => { value.writeTerritory = ['src/./**'] }],
     ['too many gates', 'gates-invalid', (value) => { value.gates = Array.from({ length: 9 }, (_, index) => ({ name: `gate-${index}`, command: 'true', timeoutSeconds: 30 })) }],
     ['invalid gate name', 'gates-invalid', (value) => { value.gates = [{ name: 'Lint', command: 'true', timeoutSeconds: 30 }] }],
     ['duplicate gate names', 'gates-invalid', (value) => { value.gates = [{ name: 'lint', command: 'true', timeoutSeconds: 30 }, { name: 'lint', command: 'true', timeoutSeconds: 30 }] }],
@@ -149,6 +153,7 @@ test('refuses each invalid contract with its code', () => {
   expect(contractProblems({ ...validPayload(), landingBar: 'committed-local-branch' })).toEqual([])
   expect(contractProblems({ ...validPayload(), writeTerritory: ['**'] })).toEqual([])
   expect(territoryProblems(['**', 'src/**'])).toEqual([])
+  expect(contractProblems({ ...validPayload(), writeTerritory: ['.gitignore'] })).toEqual([])
   expect(territoryProblems(null).some((problem) => problem.startsWith('territory-invalid:'))).toBe(true)
 
   for (const [description, code, mutate] of invalid) {

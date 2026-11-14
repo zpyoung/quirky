@@ -18,6 +18,8 @@ First approve the planner dispatch. When the planner returns a valid draft, revi
 
 Workers write reports to `.quirky/objective/<watcher-id>/<attempt-id>.json` in the selected worktree. The runner adds `/.quirky/objective/` to that repository's private Git exclude file, keeping reports out of `git status` and the workspace content identity.
 
+Territory globs and reported file paths must be relative and contain neither `.` nor `..` path segments. Root `.git` and `.quirky` paths are refused.
+
 ## Limits
 
 The runner validates report structure but does not verify report claims against changed files. It does not run acceptance criteria or enrollment gates, review the implementation, or land it. After workers report every task as successful, the watcher parks with `verification-unavailable`.

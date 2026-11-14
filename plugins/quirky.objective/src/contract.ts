@@ -116,6 +116,7 @@ export function territoryProblems(value: unknown): string[] {
     if (entry.includes('\\')) problems.push(contractProblem('territory-invalid', `write territory entry '${entry}' must use forward slashes`))
     if (/^[A-Za-z]:/.test(entry)) problems.push(contractProblem('territory-invalid', `write territory entry '${entry}' must not start with a drive letter`))
     if (/(^|\/)\.\.(\/|$)/.test(entry)) problems.push(contractProblem('territory-invalid', `write territory entry '${entry}' must not contain a '..' path segment`))
+    if (/(^|\/)\.(\/|$)/.test(entry)) problems.push(contractProblem('territory-invalid', `write territory entry '${entry}' must not contain a '.' path segment`))
     if (controlCharacters.test(entry)) problems.push(contractProblem('territory-invalid', 'write territory entries must not contain control characters'))
     if (forbiddenTerritoryCharacters.test(entry)) problems.push(contractProblem('territory-invalid', `write territory entry '${entry}' contains a forbidden character`))
     const firstSegment = entry.split('/')[0]

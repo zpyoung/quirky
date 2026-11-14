@@ -326,7 +326,7 @@ export function plannerReportProblems(report: unknown): string[] {
 function isSafeModifiedPath(path: string): boolean {
   if (path.length === 0 || path.startsWith('/') || /^[A-Za-z]:/.test(path) || path.includes('\\')) return false
   const segments = path.split('/')
-  if (segments.includes('..')) return false
+  if (segments.includes('.') || segments.includes('..')) return false
   return segments[0] !== '.git' && segments[0] !== '.quirky'
 }
 

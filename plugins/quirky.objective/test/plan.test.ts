@@ -210,6 +210,12 @@ test('refuses planner reports that break the graph or limits', () => {
     ['assumption names unknown task', plannerReport({ assumptions: [{ claim: 'claim', dependentTaskKeys: ['unknown'] }] }), 'unknown']
   ]
   for (const [name, value, includes] of limitCases) expectPlannerProblem(name, value, includes)
+  for (const prefix of ['./', '././']) {
+    for (const metadata of ['.git', '.quirky']) {
+      const territory = `${prefix}${metadata}/**`
+      expectPlannerProblem(`aliased metadata territory ${territory}`, withTask(task({ territory: [territory] })), 'territory-invalid')
+    }
+  }
 })
 
 test('accepts an implementer report only for its task with every criterion assessed once and files inside the territory', () => {
@@ -221,6 +227,9 @@ test('accepts an implementer report only for its task with every criterion asses
     ]
   })
   expect(implementerReportProblems(validReport, assignedTask, ['src/**'])).toEqual([])
+  expect(implementerReportProblems({
+    ...validReport, filesModified: ['.gitignore', '.quirky-notes.md', 'src/a/b.ts']
+  }, assignedTask, ['**'])).toEqual([])
   expect(implementerReportProblems(implementerReport({ summary: 'é'.repeat(16_384) }), task(), ['src/**'])).toEqual([])
   expect(implementerReportProblems(implementerReport({ filesModified: Array.from({ length: 1_024 }, () => 'src/a.ts') }), task(), ['src/**'])).toEqual([])
   expect(implementerReportProblems(implementerReport({ filesModified: [] }), task(), ['src/**'])).toEqual([])
@@ -252,7 +261,12 @@ test('accepts an implementer report only for its task with every criterion asses
     ['modified path outside the territory glob', { ...validReport, filesModified: ['docs/a.md'] }, ['modified file path "docs/a.md" matches no write-territory glob']],
     ['more than 1,024 modified files', { ...validReport, filesModified: Array.from({ length: 1_025 }, () => 'src/a.ts') }, ['filesModified must contain no more than 1,024 entries']]
   ]
-  for (const path of ['.git/config', '.quirky/objective/report.json', '/workspace/src/a.ts', 'C:/workspace/src/a.ts', 'src/../outside.ts', 'src\\a.ts']) {
+  for (const path of [
+    '.git/config', '.quirky/objective/report.json', '/workspace/src/a.ts', 'C:/workspace/src/a.ts',
+    'src/../outside.ts', 'src\\a.ts', './.git/config', '././.git/config',
+    './.quirky/objective/report.json', '././.quirky/objective/report.json',
+    './src/a.ts', '././src/a.ts', 'src/./a.ts', 'src/././a.ts', '.'
+  ]) {
     invalidReports.push([
       `unsafe modified path ${path}`, { ...validReport, filesModified: [path] },
       [`modified file path ${JSON.stringify(path)} is not a safe relative path`], ['**']
