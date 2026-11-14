@@ -238,7 +238,7 @@ function isReassigned(source: ts.SourceFile, name: string): boolean {
   let reassigned = false
   const visit = (node: ts.Node) => {
     if (reassigned) return
-    if (ts.isBinaryExpression(node) && ts.isAssignmentOperator(node.operatorToken.kind) && assignmentTargets(node.left, name)) reassigned = true
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment && assignmentTargets(node.left, name)) reassigned = true
     else if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
       (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) && assignmentTargets(node.operand, name)) reassigned = true
     else if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && assignmentTargets(node.initializer, name)) reassigned = true
@@ -258,12 +258,13 @@ function isBarrier(handler: ts.Node | undefined, source: ts.SourceFile): boolean
 
   const parameter = fn.parameters[0]!
   if (!ts.isIdentifier(parameter.name) || parameter.initializer || parameter.dotDotDotToken || parameter.questionToken) return false
+  const parameterName = parameter.name.text
 
   let stopsPropagation = false
   const acceptsCall = (call: ts.CallExpression) => {
     if (call.arguments.length || call.typeArguments?.length || call.questionDotToken || !ts.isPropertyAccessExpression(call.expression)) return false
     const property = call.expression
-    if (property.questionDotToken || !ts.isIdentifier(property.expression) || property.expression.text !== parameter.name.text) return false
+    if (property.questionDotToken || !ts.isIdentifier(property.expression) || property.expression.text !== parameterName) return false
     if (property.name.text === 'stopPropagation') { stopsPropagation = true; return true }
     return property.name.text === 'preventDefault'
   }

@@ -401,11 +401,11 @@ describe('quote-bound source audit', () => {
   })
 
   const barrierReason = 'Keeps overlay events from shell listeners'
-  const barrierClassification = { notAction: 'barrier', reason: barrierReason }
+  const barrierClassification = { notAction: 'barrier', reason: barrierReason } as const
   const barrierFailure = 'A barrier must be a jsx handler that only calls stopPropagation() and preventDefault() on its event parameter'
 
   test('parses barrier action classifications', () => {
-    const barrier = { site: ref('onClick'), notAction: 'barrier', reason: 'x' }
+    const barrier = { site: ref('onClick'), notAction: 'barrier', reason: 'x' } as const
     const parsed = parseCoverage(JSON.stringify({ schemaVersion: 1, surfaces: {}, states: [], notState: [], actions: [barrier] }))
     expect(parsed.actions).toEqual([barrier])
   })
