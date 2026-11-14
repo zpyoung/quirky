@@ -72,6 +72,7 @@ export interface ObjectiveJournalAction {
   visibility?: 'local' | 'external'
   contentIdentity?: string
   plannerMode?: 'initial' | 'repair'
+  recovery?: 'replay-safe'
   repairEpisode?: number
   criterionIndex?: number
   command?: string
@@ -956,6 +957,45 @@ function commitAttempts(
     entry.action.headSha === headSha
   )
 }
+function pendingCommitAction(
+  attempts: ObjectiveJournalEntry[],
+  revision: number
+): ObjectiveAction | null {
+  let latest: ObjectiveJournalEntry | null = null
+  for (const entry of attempts) {
+    if (
+      entry.action?.kind !== 'commit-local-branch' ||
+      entry.action.revision !== revision ||
+      !unresolved(entry)
+    ) continue
+    if (!latest || entry.seq > latest.seq) latest = entry
+  }
+
+  const action = latest?.action
+  if (
+    !action ||
+    action.kind !== 'commit-local-branch' ||
+    action.capability !== 'land' ||
+    action.visibility !== 'local' ||
+    action.recovery !== 'replay-safe' ||
+    typeof action.evidenceKey !== 'string' ||
+    typeof action.contentIdentity !== 'string' ||
+    typeof action.branch !== 'string' ||
+    typeof action.headSha !== 'string'
+  ) return null
+  return {
+    kind: 'commit-local-branch',
+    capability: 'land',
+    visibility: 'local',
+    recovery: 'replay-safe',
+    evidenceKey: action.evidenceKey,
+    revision,
+    contentIdentity: action.contentIdentity,
+    branch: action.branch,
+    headSha: action.headSha
+  }
+}
+
 
 export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]): ObjectiveStep {
   const attempts = latestAttempts(journal)
@@ -967,6 +1007,8 @@ export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]
   const revision = world.revision
   if (revision === null) return initialPlanStep(world, attempts)
 
+  const pendingCommit = pendingCommitAction(attempts, revision.number)
+  if (pendingCommit) return { action: pendingCommit }
   const progress = deriveProgress(world, journal)
   const activeNodeAttempts = currentNodeAttempts(world, attempts, revision.number)
   if (activeNodeAttempts.some(unresolved)) return { action: null, reason: 'node-in-flight' }
@@ -1068,9 +1110,13 @@ export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]
 
 export function decideObjective(snapshot: ObjectiveSnapshot, journal: ObjectiveJournalEntry[]): ObjectiveDecision {
   const step = nextStep(contentIdentityFrom(snapshot), journal)
-  return step.action === null
-    ? { action: null, ...(step.reason === undefined ? {} : { reason: step.reason }) }
-    : { action: { ...step.action, contentIdentity: snapshot.contentIdentity } }
+  if (step.action === null) {
+    return { action: null, ...(step.reason === undefined ? {} : { reason: step.reason }) }
+  }
+  const actionContentIdentity = 'contentIdentity' in step.action
+    ? step.action.contentIdentity
+    : snapshot.contentIdentity
+  return { action: { ...step.action, contentIdentity: actionContentIdentity } }
 }
 
 function park(

@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
 import type { CheckRecord, Issued, LandingRecord, VerdictRecord } from './store'
 import type { ObjectiveRuntime } from './checks'
+import type { ObjectiveProgress } from './decide'
 
 interface GitResult {
   stdoutText: string
@@ -129,7 +130,8 @@ function landingResult(effect: 'landed' | 'not-landed', reason?: string): { effe
 export async function recordFilesOnDisk(
   runtime: ObjectiveRuntime,
   action: { revision: number; contentIdentity: string },
-  attemptId: string
+  attemptId: string,
+  tasks?: ObjectiveProgress['tasks']
 ): Promise<{ effect: 'landed' | 'not-landed'; reason?: string }> {
   let beforeIdentity: string
   try {
@@ -162,7 +164,8 @@ export async function recordFilesOnDisk(
     payload: {
       revision: action.revision,
       checkAttempts: evidence.checks.map(row => row.attemptId),
-      verdictAttempts: evidence.verdicts.map(row => row.attemptId)
+      verdictAttempts: evidence.verdicts.map(row => row.attemptId),
+      ...(tasks ? { tasks } : {})
     },
     recordedAtMs: Date.now()
   }

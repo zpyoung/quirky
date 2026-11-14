@@ -68,6 +68,56 @@ function world(overrides: Partial<ObjectiveWorld> = {}): TestWorld {
     capabilities
   }
 }
+function gateEnrollment(): GateEnrollment {
+  return {
+    watcherId: 'watcher',
+    kind: 'objective',
+    workspaceKey: 'local::/workspace',
+    workspacePath: '/workspace',
+    executionHostId: 'local',
+    schedulerOwner: 'local',
+    kindPayload: null,
+    enabled: true,
+    paused: false,
+    commandRevision: 0,
+    capabilities: { land: 'on' },
+    budget: { wallClockActiveMs: null, turns: null },
+    coordinator: { handle: 'coordinator', paneKey: 'pane' },
+    orchestrationRunId: null,
+    createdAtMs: 0,
+    terminalAtMs: null,
+    parkReason: null,
+    haltReason: null
+  }
+}
+
+function gateSnapshot() {
+  return { freshness: 'live' as const, contentIdentity: identity, observedAtMs: 1, world: null }
+}
+
+function gateAttemptEntry(
+  seq: number,
+  attemptId: string,
+  action: KernelAction,
+  state: AttemptState,
+  effect?: AttemptEffect
+): GateJournalEntry {
+  return {
+    seq,
+    eventId: `gate-event-${seq}`,
+    watcherId: 'watcher',
+    atMs: seq,
+    class: 'fact',
+    origin: 'owner',
+    kind: 'attempt',
+    resolved: false,
+    attemptId,
+    fingerprint: actionFingerprint(action),
+    action,
+    state,
+    ...(effect === undefined ? {} : { effect })
+  }
+}
 
 function snapshot(value: ObjectiveWorld, contentIdentity = identity, observedAtMs = 1) {
   return { freshness: 'live' as const, contentIdentity, observedAtMs, world: value }
@@ -103,6 +153,7 @@ function attempt(
     kind: 'attempt',
     attemptId,
     action: {
+      ...(kind === 'commit-local-branch' ? { recovery: 'replay-safe' as const } : {}),
       kind,
       capability: kind === 'dispatch-node' ? 'implement' : review ? 'review' : checking ? 'check' : kind === 'commit-local-branch' ? 'land' : kind === 'record-landing' ? 'land' : 'plan',
       visibility: 'local',
@@ -1154,6 +1205,49 @@ describe('objective decisions', () => {
     expect(stopObjective(snapshot(landOff), completedJournal())).toMatchObject({
       kind: 'park', deviation: { kind: 'gate-held', naturalKey: 'land-capability-off' }
     })
+  })
+
+  test('replays unresolved commit evidence across unchanged and advanced HEADs', () => {
+    const initialWorld = completedWorld('express', {
+      contract: { ...contract, landingBar: 'committed-local-branch' },
+      landings: [landingRow('files-on-disk')],
+      git: { branch: 'main', headSha: 'head-1' }
+    })
+    const first = nextStep(initialWorld, completedJournal()).action
+    if (!first || first.kind !== 'commit-local-branch') {
+      throw new Error('Expected the initial local branch commit action')
+    }
+    const pending = attempt('pending-commit', 2, 'commit-local-branch', {
+      state: 'running',
+      dispatchId: 'dispatch-pending',
+      revision: 1,
+      contentIdentity: identity,
+      evidenceKey: first.evidenceKey,
+      branch: 'main',
+      headSha: 'head-1'
+    })
+    const journal = [...completedJournal(), pending]
+    const gateJournal = [gateAttemptEntry(2, 'pending-commit', first as unknown as KernelAction, 'running')]
+    const enrollment = gateEnrollment()
+    const gateRead = gateSnapshot()
+
+    for (const headSha of ['head-1', 'head-2']) {
+      const currentWorld = world({ ...initialWorld, git: { branch: 'main', headSha } })
+      const replayed = nextStep(currentWorld, journal).action
+      expect(replayed).toEqual(first)
+      expect(decideObjective(snapshot(currentWorld), journal).action).toEqual(first)
+
+      const action = replayed as unknown as KernelAction
+      const input = {
+        action,
+        snapshot: gateRead,
+        enrollment,
+        journal: gateJournal,
+        budget: { activeMs: 0, turns: 0, exhausted: null }
+      }
+      expect(gateAction(input)).toEqual({ verdict: 'hold', reason: 'attempt-in-flight' })
+      expect(gateAction({ ...input, ignoreAttemptId: 'pending-commit' })).toEqual({ verdict: 'allow' })
+    }
   })
 
   test('paces active while work is out, idle while an approval waits or nothing can act, and rapid only when the next tick acts', () => {

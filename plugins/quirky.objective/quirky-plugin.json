@@ -3,7 +3,7 @@
   "apiVersion": "1.14.0",
   "name": "Objective runner",
   "version": "0.1.0",
-  "description": "Plans objectives with approval and dispatches their tasks in order on a local git worktree.",
+  "description": "Plans, verifies, reviews and lands objectives locally on a git worktree.",
   "main": "main.ts",
   "activation": "startup",
   "dependencies": ["quirky.heimdall", "quirky.orchestration", "quirky.worktree"],
@@ -42,6 +42,13 @@
         "result": {}
       },
       {
+        "id": "resolveOutcome",
+        "description": "Heimdall-only recovery of persisted local objective outcomes.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true },
+        "result": {}
+      },
+      {
         "id": "submission",
         "description": "Heimdall-only worker report preflight.",
         "params": { "type": "object", "additionalProperties": true },
@@ -62,6 +69,31 @@
         "result": {}
       },
       {
+        "id": "rejectDraft",
+        "description": "Rejects a pending initial or repair plan and requests another draft.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "watcherId": { "type": "string" },
+            "digest": { "type": "string" },
+            "reason": { "type": "string" }
+          },
+          "required": ["watcherId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "rejected": { "type": "boolean" },
+            "attemptId": { "type": "string" },
+            "digest": { "type": "string" },
+            "reason": {}
+          },
+          "required": ["rejected", "attemptId", "digest", "reason"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "detail",
         "description": "Reads the local objective contract, draft, approved plan and task progress.",
         "readOnly": true,
@@ -72,6 +104,13 @@
           "additionalProperties": false
         },
         "result": {}
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "reject-draft",
+        "summary": "reject a pending initial or repair objective draft",
+        "method": "quirky.objective/rejectDraft"
       }
     ]
   }
