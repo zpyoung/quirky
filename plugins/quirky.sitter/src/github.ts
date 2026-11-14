@@ -1,15 +1,25 @@
 import { realpathSync } from 'node:fs'
-import { RpcError, RpcErrorCode, type PluginCaller, type Schema } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
 import {
+  checkKey,
   contentIdentity,
   worldFromHosting,
   type CapabilityMode,
   type ExecuteResult,
+  type JournalEntry,
   type SitterAction,
   type SitterPayload,
   type SitterWorld,
   type Snapshot
 } from './policy'
+import { prepareWorkerExecute } from './agent'
+import {
+  computeFailureSignature,
+  inspectWorktree,
+  normalizeLogText,
+  preflightContention,
+  publishPreparedBranch
+} from './publication'
 
 export type Call = (method: string, params: Record<string, unknown>) => Promise<unknown>
 
@@ -31,7 +41,11 @@ type AuthorizedEnrollment = {
   kindPayload: SitterPayload
 }
 
-type SitterEnrollment = { kindPayload: SitterPayload }
+type SitterEnrollment = {
+  capabilities: Record<string, CapabilityMode>
+  worktreeId?: string | null
+  kindPayload: SitterPayload
+}
 
 const CAPABILITIES = ['updateBranch', 'resolveConflicts', 'fixChecks', 'merge'] as const
 const SORTED_CAPABILITIES = [...CAPABILITIES].sort()
@@ -70,6 +84,7 @@ export const SITTER_PAYLOAD_SCHEMA: Schema = {
       }
     },
     branchUpdateMode: { type: 'string', enum: ['merge-base-update'] },
+    agent: { type: 'string' },
     mergeMethod: {},
     mergeCheckScope: { type: 'string', enum: ['all'] }
   }
@@ -97,6 +112,7 @@ function validateInput(input: EnrollmentInput): {
   branchUpdateMode: 'merge-base-update'
   mergeMethod: 'merge' | 'squash' | 'rebase' | null
   mergeCheckScope: 'all'
+  agent?: string
 } {
   const capabilities = input.capabilities
   const capabilityKeys = capabilities === undefined ? [] : Object.keys(capabilities).sort()
@@ -120,6 +136,10 @@ function validateInput(input: EnrollmentInput): {
   if (mergeMethod !== null && !MERGE_METHODS.includes(mergeMethod as (typeof MERGE_METHODS)[number])) {
     throw new Error('mergeMethod must be null, merge, squash or rebase.')
   }
+  const agent = kindPayload.agent
+  if (agent !== undefined && (typeof agent !== 'string' || agent.trim().length === 0)) {
+    throw new Error('kindPayload.agent must be a non-empty string.')
+  }
   const worktreeSelector = kindPayload.worktree
   if (typeof worktreeSelector !== 'string' || worktreeSelector.length === 0) {
     throw new Error('kindPayload.worktree must name a worktree.')
@@ -129,7 +149,8 @@ function validateInput(input: EnrollmentInput): {
     worktreeSelector,
     branchUpdateMode,
     mergeMethod: mergeMethod as 'merge' | 'squash' | 'rebase' | null,
-    mergeCheckScope
+    mergeCheckScope,
+    ...(typeof agent === 'string' ? { agent } : {})
   }
 }
 
@@ -225,7 +246,8 @@ export async function authorize(call: Call, input: EnrollmentInput): Promise<Aut
       repository: canonicalRepository,
       branchUpdateMode: options.branchUpdateMode,
       mergeMethod: options.mergeMethod,
-      mergeCheckScope: options.mergeCheckScope
+      mergeCheckScope: options.mergeCheckScope,
+      ...(options.agent === undefined ? {} : { agent: options.agent })
     }
   }
 }
@@ -262,7 +284,104 @@ function lookupErrorMessage(lookup: Record<string, unknown>, payload: SitterPayl
 }
 
 
-export async function read(call: Call, enrollment: SitterEnrollment): Promise<Snapshot<SitterWorld>> {
+const MAX_FAILURE_EXCERPT_BYTES = 32 * 1024
+
+function boundedFailureExcerpt(text: string): string {
+  let start = text.length
+  let bytes = 0
+  while (start > 0) {
+    let charStart = start - 1
+    const trailing = text.charCodeAt(charStart)
+    if (trailing >= 0xdc00 && trailing <= 0xdfff && charStart > 0) charStart--
+    const codePoint = text.codePointAt(charStart)
+    if (codePoint === undefined) break
+    const width = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4
+    if (bytes + width > MAX_FAILURE_EXCERPT_BYTES) break
+    bytes += width
+    start = charStart
+  }
+  return text.slice(start)
+}
+
+function signatureEvidence(details: Record<string, unknown>): { text: string; excerpt: string } | null {
+  const annotationText: string[] = []
+  if (Array.isArray(details.annotations)) {
+    for (const annotation of details.annotations) {
+      const row = asRecord(annotation)
+      for (const field of ['title', 'message', 'rawDetails']) {
+        const value = row[field]
+        if (typeof value === 'string') annotationText.push(value)
+      }
+    }
+  }
+  const logs: string[] = []
+  if (Array.isArray(details.logTails)) {
+    for (const log of details.logTails) {
+      const tail = asRecord(log).tail
+      if (typeof tail === 'string') logs.push(tail)
+    }
+  }
+  const text = normalizeLogText([...annotationText, ...logs].join('\n'))
+  return text.length === 0 ? null : { text, excerpt: boundedFailureExcerpt(text) }
+}
+
+async function resolveWorktreePath(call: Call, worktreeId: string): Promise<string> {
+  const resolved = asRecord(await call('quirky.worktree/resolve', { selector: `id:${worktreeId}` }))
+  if (resolved.id !== worktreeId || resolved.kind !== 'git' || typeof resolved.path !== 'string' || resolved.path.length === 0) {
+    throw new Error(`The enrolled worktree ${worktreeId} could not be resolved as a git worktree.`)
+  }
+  return resolved.path
+}
+
+async function enrichFailures(
+  call: Call,
+  checksValue: unknown,
+  world: SitterWorld,
+  payload: SitterPayload
+): Promise<void> {
+  const rows = asRecord(checksValue).checks
+  const sourceRows = Array.isArray(rows) ? rows : []
+  world.checks = await Promise.all(world.checks.map(async (check, index) => {
+    if (check.state !== 'failed') return check
+    const source = asRecord(sourceRows[index])
+    if (check.kind === 'status') {
+      const status = typeof source.status === 'string' ? source.status : ''
+      const conclusion = typeof source.conclusion === 'string' ? source.conclusion : ''
+      return {
+        ...check,
+        failureSignature: computeFailureSignature(checkKey(check), `${status}\u0000${conclusion}\u0000${check.observation}`),
+        failureExcerpt: check.observation
+      }
+    }
+    if (check.kind !== 'check_run' || check.checkRunId === null) return check
+    try {
+      const details = asRecord(await call('quirky.hosting/checkDetails', {
+        worktree: payload.worktreeId,
+        number: payload.reviewNumber,
+        prRepo: payload.repository,
+        checkRunId: check.checkRunId,
+        ...(check.workflowRunId === null ? {} : { workflowRunId: check.workflowRunId }),
+        noCache: true
+      }))
+      const evidence = signatureEvidence(details)
+      return evidence === null
+        ? { ...check, failureSignature: null, failureExcerpt: null }
+        : {
+          ...check,
+          failureSignature: computeFailureSignature(checkKey(check), evidence.text),
+          failureExcerpt: evidence.excerpt
+        }
+    } catch {
+      return { ...check, failureSignature: null, failureExcerpt: null }
+    }
+  }))
+}
+
+export async function read(
+  call: Call,
+  enrollment: SitterEnrollment,
+  processRun: PluginContext['process']['run']
+): Promise<Snapshot<SitterWorld>> {
   const payload = enrollment.kindPayload
   const review = reviewFromLookup(await call('quirky.hosting/review', {
     worktree: payload.worktreeId,
@@ -282,6 +401,11 @@ export async function read(call: Call, enrollment: SitterEnrollment): Promise<Sn
       noCache: true
     })
   const world = worldFromHosting(review, checks, payload)
+  if (checks !== null) await enrichFailures(call, checks, world, payload)
+  const worktreePath = await resolveWorktreePath(call, payload.worktreeId)
+  const localState = await inspectWorktree(processRun, worktreePath)
+  if (localState.localHeadSha === null) throw new Error('Git HEAD could not be read for the enrolled worktree.')
+  Object.assign(world, localState)
   return {
     freshness: 'live',
     contentIdentity: contentIdentity(world),
@@ -292,6 +416,38 @@ export async function read(call: Call, enrollment: SitterEnrollment): Promise<Sn
 
 function apiParams(payload: SitterPayload): Record<string, unknown> {
   return { worktree: payload.worktreeId, number: payload.reviewNumber, prRepo: payload.repository }
+}
+type PreflightParams = {
+  action: SitterAction
+  snapshot: { world: SitterWorld }
+  journal: JournalEntry[]
+  enrollment: SitterEnrollment
+}
+
+type WorkerRequest = {
+  spec: string
+  worktree: string
+  agent: string
+  mode: 'structured'
+  taskTitle: string
+  model?: string
+}
+
+type ExecuteOptions = {
+  processRun?: PluginContext['process']['run']
+  fingerprint?: string
+}
+
+export async function preflight(
+  call: Call,
+  params: PreflightParams,
+  processRun: PluginContext['process']['run']
+) {
+  const worktreeId = params.enrollment.worktreeId ?? params.enrollment.kindPayload.worktreeId ?? null
+  return preflightContention(call, processRun, {
+    ...params,
+    enrollment: { ...params.enrollment, worktreeId }
+  })
 }
 
 function failureResult(error: unknown): ExecuteResult {
@@ -308,8 +464,9 @@ export async function execute(
   call: Call,
   action: SitterAction,
   enrollment: SitterEnrollment,
-  sleep: (ms: number) => Promise<void> = ms => Bun.sleep(ms)
-): Promise<ExecuteResult> {
+  sleep: (ms: number) => Promise<void> = ms => Bun.sleep(ms),
+  options: ExecuteOptions = {}
+): Promise<ExecuteResult | { effect: 'not-landed'; reason: string; detail: string } | { worker: WorkerRequest }> {
   const payload = enrollment.kindPayload
   try {
     switch (action.kind) {
@@ -376,6 +533,33 @@ export async function execute(
           return { effect: 'landed', expectedAfter: { started, targetCount } }
         }
         return { effect: 'not-landed', reason: 'no checks started' }
+      }
+      case 'prepare-fix':
+      case 'prepare-conflict-resolution': {
+        if (typeof options.fingerprint !== 'string' || options.fingerprint.length === 0) {
+          return {
+            effect: 'not-landed',
+            reason: 'attempt-fingerprint-unavailable',
+            detail: 'Heimdall did not provide the fingerprint for this prepare attempt.'
+          }
+        }
+        return prepareWorkerExecute(call, { action, enrollment, fingerprint: options.fingerprint })
+      }
+      case 'publish-fix':
+      case 'publish-conflict-resolution': {
+        if (!options.processRun) {
+          return { effect: 'not-landed', reason: 'git-unavailable', detail: 'A git process runner is required to verify publication.' }
+        }
+        const worktreePath = await resolveWorktreePath(call, payload.worktreeId)
+        return publishPreparedBranch(call, options.processRun, {
+          worktreePath,
+          worktreeId: payload.worktreeId,
+          expectedHeadSha: action.expectedHeadSha,
+          preparedCommitSha: action.preparedCommitSha,
+          expectedPrepareFingerprint: action.prepareFingerprint,
+          expectedBaseSha: action.kind === 'publish-conflict-resolution' ? action.baseSha : undefined,
+          expectedKind: action.kind === 'publish-fix' ? 'fix' : 'conflict-resolution'
+        })
       }
       default:
         return { effect: 'not-landed', reason: 'unsupported-action' }

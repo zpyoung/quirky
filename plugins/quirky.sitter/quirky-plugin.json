@@ -6,7 +6,7 @@
   "description": "Keeps an enrolled GitHub pull request moving through checks, branch updates, and merge.",
   "main": "main.ts",
   "activation": "startup",
-  "dependencies": ["quirky.heimdall"],
+  "dependencies": ["quirky.heimdall", "quirky.hosting", "quirky.git", "quirky.worktree", "quirky.agents", "quirky.terminal", "quirky.agent-status"],
   "contributes": {
     "method": [
       {
@@ -48,6 +48,13 @@
         "description": "Heimdall hosted-review hook that refuses any caller other than quirky.heimdall.",
         "readOnly": true,
         "params": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "preflight",
+        "description": "Heimdall preflight hook guarding worktree contention before prepare and publish actions.",
+        "readOnly": true,
+        "params": { "type": "object", "additionalProperties": true },
+        "result": { "type": "object", "additionalProperties": true }
       }
     ]
   }

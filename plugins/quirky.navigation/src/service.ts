@@ -6,7 +6,11 @@ import { ServerPool, type Language, type ServerLocation } from './servers'
 export type NavLocation = ServerLocation & { relativePath: string | null; preview: string }
 export type NavResult = { worktreeId: string; language: string; locations: NavLocation[]; truncated: boolean }
 type NavParams = { worktree?: string; path: string; line: number; column: number }
-const extensions: Record<string, true> = { '.ts': true, '.tsx': true, '.mts': true, '.cts': true, '.js': true, '.jsx': true, '.mjs': true, '.cjs': true }
+const extensions: Record<string, Language> = {
+  '.ts': 'typescript', '.tsx': 'typescript', '.mts': 'typescript', '.cts': 'typescript',
+  '.js': 'typescript', '.jsx': 'typescript', '.mjs': 'typescript', '.cjs': 'typescript',
+  '.py': 'python', '.pyi': 'python'
+}
 const maxPreviewBytes = 8 * 1024 * 1024
 const maxLocations = 1000
 
@@ -48,9 +52,10 @@ export class NavigationService {
     const fileStat = await stat(path)
     if (!fileStat.isFile()) throw this.context.error('invalid-params', `Path must be a file: ${params.path}`)
     const extension = extname(path).toLowerCase()
-    if (!extensions[extension]) throw this.context.error('invalid-params', `Unsupported file extension: ${extension || '(none)'}`)
-    const language: Language = 'typescript'
-    const lines = (await readFile(path, 'utf8')).split(/\r\n|[\n\r\u2028\u2029]/)
+    const language = extensions[extension]
+    if (!language) throw this.context.error('invalid-params', `Unsupported file extension: ${extension || '(none)'}`)
+    const lineBreak = language === 'python' ? /\r\n|[\n\r]/ : /\r\n|[\n\r\u2028\u2029]/
+    const lines = (await readFile(path, 'utf8')).split(lineBreak)
     const text = lines[params.line - 1]
     if (!Number.isInteger(params.line) || params.line < 1 || text === undefined) {
       throw this.context.error('invalid-params', `Invalid line ${params.line} in ${params.path}`)
@@ -84,7 +89,7 @@ export class NavigationService {
     const preview = async (file: string, line: number): Promise<string> => {
       let contents = previews.get(file)
       if (!contents) {
-        contents = (async () => (await stat(file)).size > maxPreviewBytes ? [] : (await readFile(file, 'utf8')).split(/\r\n|[\n\r\u2028\u2029]/))().catch(() => [])
+        contents = (async () => (await stat(file)).size > maxPreviewBytes ? [] : (await readFile(file, 'utf8')).split(lineBreak))().catch(() => [])
         previews.set(file, contents)
       }
       return (await contents)[line - 1]?.slice(0, 240) ?? ''
