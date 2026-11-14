@@ -57,14 +57,23 @@ export type World = {
   failNext: string | null
 }
 
+export type ExecutedCommand = { id: string; args: unknown }
+export type QcFakeResult = { fake: FakeContext; world: World; executed: ExecutedCommand[] }
+
 /**
  * A fake window context whose daemon keeps quick commands in `world` and applies the real
  * normalization and validation, so a saved command reads back as the daemon would return it.
  */
-export function qcFake(init: Partial<World> = {}): { fake: FakeContext; world: World } {
+export function qcFake(init: Partial<World> = {}): QcFakeResult {
   const world: World = { commands: [], agents: [agent('claude'), agent('codex')], repos: [{ id: 'api', name: 'api' }], worktrees: { wt_main: 'api' }, failNext: null, ...init }
+  const executed: ExecutedCommand[] = []
   const reject = (message: string) => new RpcError(RpcErrorCode.InvalidParams, message)
-  const fake = fakeContext({
+  let fake: FakeContext
+  const changeListeners = new Set<(event: QuirkyEvent) => void>()
+  const emitChanged = () => {
+    for (const listener of changeListeners) listener(quickCommandsChanged)
+  }
+  fake = fakeContext({
     'quirky.terminal/quickCommands': (params) => {
       if (params.all === true) return { commands: world.commands }
       return { commands: visibleQuickCommands(world.commands, world.worktrees[params.workspace] ?? null) }
@@ -74,6 +83,7 @@ export function qcFake(init: Partial<World> = {}): { fake: FakeContext; world: W
       const problems = validateQuickCommand(params)
       if (problems.length > 0) throw reject(problems.map((problem) => problem.message).join('; '))
       world.commands = normalizeQuickCommands([...world.commands, params])
+      emitChanged()
       return { commands: world.commands }
     },
     'quirky.terminal/updateQuickCommand': (params) => {
@@ -81,12 +91,14 @@ export function qcFake(init: Partial<World> = {}): { fake: FakeContext; world: W
       const found = world.commands.find((entry) => entry.id === params.id)
       if (!found) throw new RpcError(RpcErrorCode.NotFound, `no quick command ${params.id}`)
       world.commands = normalizeQuickCommands(world.commands.map((entry) => (entry === found ? { ...found, ...params } : entry)))
+      emitChanged()
       return { commands: world.commands }
     },
     'quirky.terminal/removeQuickCommand': (params) => {
       if (params.yes !== true) throw new RpcError(RpcErrorCode.ConfirmationRequired, 'confirmation required')
       if (!world.commands.some((entry) => entry.id === params.id)) throw new RpcError(RpcErrorCode.NotFound, `no quick command ${params.id}`)
       world.commands = world.commands.filter((entry) => entry.id !== params.id)
+      emitChanged()
       return { commands: world.commands }
     },
     'quirky.terminal/runQuickCommand': () => ({ ok: true }),
@@ -99,7 +111,24 @@ export function qcFake(init: Partial<World> = {}): { fake: FakeContext; world: W
       return { id, repoId, name: id }
     }
   })
-  return { fake, world }
+  const subscribe = fake.context.subscribe
+  fake.context.subscribe = (listener) => {
+    changeListeners.add(listener)
+    const stop = subscribe(listener)
+    return () => {
+      changeListeners.delete(listener)
+      stop()
+    }
+  }
+  fake.context.provide(modules.dialog.QUICK_COMMAND_DIALOG_COMMAND, (args: unknown) => modules.dialog.quickCommandDialogCommand(fake.context, args))
+  fake.context.provide(modules.shared.COPY_QUICK_COMMAND_COMMAND, (args: unknown) => modules.shared.copyQuickCommand(fake.context, args))
+  fake.context.executeCommand = async (id, args) => {
+    executed.push({ id, args })
+    const handler = fake.provided.get(id)
+    if (handler === undefined) throw new RpcError(RpcErrorCode.MethodNotFound, `unknown command: ${id}`)
+    await handler(args)
+  }
+  return { fake, world, executed }
 }
 
 export const quickCommandsChanged = { type: 'quirky.terminal/quickCommands' } as unknown as QuirkyEvent

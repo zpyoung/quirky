@@ -4517,7 +4517,9 @@
       {
         "id": "minimize-floating",
         "title": "Minimize Floating Workspace Panel"
-      }
+      },
+      {"id":"quick-command-dialog","title":"Quick Command Dialog","palette":false,"args":{"type":"object","properties":{"action":{"type":"string","enum":["open","toggle-advanced","toggle-append-enter"]},"command":{"type":"string","description":"A quick command ID from quirky terminal quick-command list --all; open edits it, and without it open adds one."},"repo":{"type":"string","description":"The repo a new Project-scoped command belongs to."}},"required":["action"],"additionalProperties":false}},
+      {"id":"copy-quick-command","title":"Copy Quick Command","palette":false,"args":{"type":"object","properties":{"command":{"type":"string","description":"A quick command ID from quirky terminal quick-command list --all."}},"required":["command"],"additionalProperties":false}}
     ],
     "menu-item": [
       {"id":"new-emulator","menu":"quirky.terminal/tab","title":"New Mobile Emulator","command":"new-emulator","after":"quick-commands"},

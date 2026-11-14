@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { Button, Dialog, FormRow } from '@quirky/ui'
+import { Button, Dialog, FormRow, InlineError } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { QUICK_COMMAND_LIMITS, type QuickCommand } from '../../layout/types'
 import { messageOf, useRepoName } from './shared'
@@ -20,22 +20,51 @@ export type QuickCommandDialogProps = {
 type AgentOption = { id: string; label: string }
 type AgentRow = { id: string; label: string; installed: boolean; enabled: boolean; promptMode: string }
 
-/** The agents a quick command can start: installed, enabled, and given their prompt on the command line. */
-async function loadAgentOptions(context: UiPluginContext): Promise<AgentOption[]> {
-  try {
-    const result = (await context.call('quirky.agents/list', {})) as { agents: AgentRow[] }
-    return result.agents.filter((entry) => entry.installed && entry.enabled && entry.promptMode !== 'stdin-after-start').map((entry) => ({ id: entry.id, label: entry.label }))
-  } catch {
-    return []
-  }
+export const QUICK_COMMAND_DIALOG_COMMAND = 'command:quirky.terminal/quick-command-dialog'
+
+export type QuickCommandDialogArgs =
+  | { action: 'open'; command?: string; repo?: string }
+  | { action: 'toggle-advanced' }
+  | { action: 'toggle-append-enter' }
+
+export type QuickCommandDialogResult =
+  | { ok: true; dialog: 'add' | 'edit' }
+  | { ok: true; advanced: boolean }
+  | { ok: true; appendEnter: boolean }
+  | { ok: false; reason: string }
+
+type DialogController = {
+  dialog: 'add' | 'edit'
+  kind: 'terminal' | 'agent'
+  advancedOpen: boolean
+  appendEnter: boolean
+  setAdvancedOpen?: (open: boolean) => void
+  setAppendEnter?: (appendEnter: boolean) => void
+  close(): void
 }
 
+type QuickCommandListResult = { commands: QuickCommand[] }
+type AgentListResult = { agents: AgentRow[] }
+type QuickCommandDialogInput = { action?: unknown; command?: unknown; repo?: unknown }
+
+const dialogControllers = new WeakMap<UiPluginContext, DialogController>()
+
+/** Runs the dialog command with a literal ID, so every caller in the window routes through it. */
+export function requestQuickCommandDialog(context: UiPluginContext, args: QuickCommandDialogArgs): Promise<void> {
+  return context.executeCommand(QUICK_COMMAND_DIALOG_COMMAND, args)
+}
+
+/** The agents a quick command can start: installed, enabled, and given their prompt on the command line. */
+async function loadAgentOptions(context: UiPluginContext): Promise<AgentOption[]> {
+  const result = (await context.call('quirky.agents/list', {})) as AgentListResult
+  return result.agents.filter((entry) => entry.installed && entry.enabled && entry.promptMode !== 'stdin-after-start').map((entry) => ({ id: entry.id, label: entry.label }))
+}
 /**
  * The Add / Edit Quick Command form. It saves through the daemon and shows a refusal inline, so
  * the text survives a rejected save. Terminal and Agent keep separate drafts: switching action
  * never turns a command line into a prompt. Save is Cmd+Enter and Escape closes.
  */
-export function QuickCommandDialog({ context, command, repo, onClose, onSaved }: QuickCommandDialogProps) {
+export function QuickCommandDialog({ context, command, repo, onClose: onDialogClose, onSaved }: QuickCommandDialogProps) {
   const editing = command !== null
   const title = editing ? 'Edit Quick Command' : 'Add Quick Command'
 
@@ -51,22 +80,68 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
   const scope = pickedScope === 'repo' && projectRepo === null ? 'global' : (pickedScope ?? (projectRepo !== null ? 'repo' : 'global'))
   const [advancedOpen, setAdvancedOpen] = useState(true)
   const [agents, setAgents] = useState<AgentOption[]>([])
+  const [agentLoadError, setAgentLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const labelInput = useRef<HTMLInputElement>(null)
   const dialogHost = useRef<HTMLDivElement>(null)
+  const controllerRef = useRef<DialogController | null>(null)
+  const closeRef = useRef<() => void>(() => {})
   const repoName = useRepoName(context, projectRepo)
+  const onClose = () => {
+    const controller = controllerRef.current
+    if (controller !== null && dialogControllers.get(context) === controller) dialogControllers.delete(context)
+    onDialogClose()
+  }
+  closeRef.current = onClose
 
   useEffect(() => {
     let live = true
     void loadAgentOptions(context).then((options) => {
-      if (live) setAgents(options)
+      if (live) {
+        setAgents(options)
+        setAgentLoadError(null)
+      }
+    }).catch((failure: unknown) => {
+      if (live) setAgentLoadError(`Could not load agents: ${messageOf(failure)}`)
     })
     return () => {
       live = false
     }
   }, [context])
+  useEffect(() => {
+    const existing = dialogControllers.get(context)
+    const controller = existing ?? {
+      dialog: editing ? 'edit' : 'add',
+      kind,
+      advancedOpen,
+      appendEnter,
+      close: () => closeRef.current()
+    }
+    if (existing === undefined) {
+      dialogControllers.set(context, controller)
+    } else {
+      setKind(existing.kind)
+      setAdvancedOpen(existing.advancedOpen)
+      setAppendEnter(existing.appendEnter)
+    }
+    controllerRef.current = controller
+    controller.setAdvancedOpen = setAdvancedOpen
+    controller.setAppendEnter = setAppendEnter
+    controller.close = () => closeRef.current()
+    return () => {
+      if (dialogControllers.get(context) === controller) dialogControllers.delete(context)
+      controller.setAdvancedOpen = undefined
+      controller.setAppendEnter = undefined
+      controllerRef.current = null
+    }
+  }, [context])
+
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (controller !== null) controller.kind = kind
+  }, [kind])
 
   useEffect(() => {
     if (kind === 'agent' && agent === '' && agents.length > 0) setAgent(agents[0]!.id)
@@ -85,7 +160,8 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
   const canSave = !saving && label.trim() !== '' && text.trim() !== '' && (kind === 'terminal' || agentChosen)
 
   const close = () => {
-    if (!savingRef.current) onClose()
+    if (savingRef.current) return
+    onClose()
   }
   const save = async () => {
     if (savingRef.current || !canSave) return
@@ -102,8 +178,12 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
       ...(scope === 'repo' ? { repo: projectRepo } : {})
     }
     try {
-      const method = editing ? 'quirky.terminal/updateQuickCommand' : 'quirky.terminal/addQuickCommand'
-      const result = (await context.call(method, editing ? { id: command.id, ...fields } : fields)) as { commands: QuickCommand[] }
+      let result: QuickCommandListResult
+      if (editing) {
+        result = (await context.call('quirky.terminal/updateQuickCommand', { id: command.id, ...fields })) as QuickCommandListResult
+      } else {
+        result = (await context.call('quirky.terminal/addQuickCommand', fields)) as QuickCommandListResult
+      }
       onSaved?.(result.commands)
       onClose()
     } catch (failure) {
@@ -130,7 +210,7 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
     <div ref={dialogHost} className="qc-dialog">
       <Dialog open title={title} onClose={close} closeOnBackdrop={!saving} actions={
         <div className="qc-dialog-foot">
-          <Button onClick={close} disabled={saving}>Cancel</Button>
+          <Button onClick={onClose} disabled={saving}>Cancel</Button>
           <Button variant="primary" title="Save (⌘Enter)" disabled={!canSave} onClick={() => void save()}>
             Save
           </Button>
@@ -167,7 +247,7 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
               </fieldset>
             </div>
 
-            <FormRow label="Agent" htmlFor="qc-command-agent">
+            <FormRow label="Agent" htmlFor="qc-command-agent" error={agentLoadError ?? undefined}>
               <select
                 id="qc-command-agent"
                 className="ui-text-field__input"
@@ -209,13 +289,13 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
               name="appendEnter"
               aria-checked={kind === 'terminal' && appendEnter}
               disabled={kind === 'agent'}
-              onClick={() => setAppendEnter((on) => !on)}
+              onClick={() => void requestQuickCommandDialog(context, { action: 'toggle-append-enter' })}
             >
               <span className="qc-switch-track" aria-hidden="true" />
               Append Enter — run immediately
             </Button>
 
-            <Button type="button" className="qc-advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>
+            <Button type="button" className="qc-advanced-toggle" aria-expanded={advancedOpen} onClick={() => void requestQuickCommandDialog(context, { action: 'toggle-advanced' })}>
               <span aria-hidden="true">{advancedOpen ? '▾' : '▸'}</span>
               Advanced
             </Button>
@@ -238,7 +318,7 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
               </fieldset>
             ) : null}
 
-            {error !== null ? <div className="ui-error-text" role="alert">{error}</div> : null}
+            {error !== null ? <InlineError message={error} /> : null}
           </fieldset>
         </div>
       </Dialog>
@@ -251,20 +331,92 @@ export function QuickCommandDialog({ context, command, repo, onClose, onSaved }:
  * Opens the dialog in its own React root on `document.body`, for callers with no React tree to
  * render it in (a menu item's handler). Returns a function that closes it.
  */
-export function openQuickCommandDialog(props: Omit<QuickCommandDialogProps, 'onClose'> & { onClose?(): void }): () => void {
+type OpenQuickCommandDialogProps = Omit<QuickCommandDialogProps, 'onClose'> & { onClose?(): void }
+export function openQuickCommandDialog(props: OpenQuickCommandDialogProps): () => void {
+  const existing = dialogControllers.get(props.context)
+  if (existing !== undefined) return existing.close
+
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
   let open = true
+  let controller: DialogController
   const close = () => {
     if (!open) return
     open = false
+    if (dialogControllers.get(props.context) === controller) dialogControllers.delete(props.context)
     props.onClose?.()
     queueMicrotask(() => {
       root.unmount()
       host.remove()
     })
   }
-  root.render(<QuickCommandDialog {...props} onClose={close} />)
+  controller = {
+    dialog: props.command === null ? 'add' : 'edit',
+    kind: props.command?.kind ?? 'terminal',
+    advancedOpen: true,
+    appendEnter: props.command?.kind === 'agent' ? true : (props.command?.appendEnter ?? true),
+    close
+  }
+  dialogControllers.set(props.context, controller)
+  root.render(
+    <QuickCommandDialog
+      context={props.context}
+      command={props.command}
+      repo={props.repo}
+      onSaved={props.onSaved}
+      onClose={close}
+    />
+  )
   return close
+}
+
+/** Handles the public command without throwing on malformed arguments or refused operations. */
+export async function quickCommandDialogCommand(context: UiPluginContext, raw: unknown): Promise<QuickCommandDialogResult> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, reason: 'action must be one of open, toggle-advanced, toggle-append-enter' }
+  }
+  const args = raw as QuickCommandDialogInput
+  if (args.action === 'open') {
+    const unexpected = Object.keys(raw).find((key) => !['action', 'command', 'repo'].includes(key))
+    if (unexpected !== undefined) return { ok: false, reason: `unexpected argument ${unexpected}` }
+    if (args.command !== undefined && typeof args.command !== 'string') return { ok: false, reason: 'command must be a string' }
+    if (args.repo !== undefined && typeof args.repo !== 'string') return { ok: false, reason: 'repo must be a string' }
+    if (args.command === '') return { ok: false, reason: 'command must be a quick command ID' }
+    try {
+      let command: QuickCommand | null = null
+      if (typeof args.command === 'string') {
+        const result = (await context.call('quirky.terminal/quickCommands', { all: true })) as QuickCommandListResult
+        command = result.commands.find((entry) => entry.id === args.command) ?? null
+        if (command === null) return { ok: false, reason: `no quick command ${args.command}` }
+      }
+      const existing = dialogControllers.get(context)
+      if (existing !== undefined) return { ok: true, dialog: existing.dialog }
+      const dialog = command === null ? 'add' : 'edit'
+      openQuickCommandDialog({
+        context,
+        command,
+        repo: typeof args.repo === 'string' ? args.repo : null
+      })
+      return { ok: true, dialog }
+    } catch (error) {
+      return { ok: false, reason: messageOf(error) }
+    }
+  }
+  if (args.action === 'toggle-advanced' || args.action === 'toggle-append-enter') {
+    const unexpected = Object.keys(raw).find((key) => key !== 'action')
+    if (unexpected !== undefined) return { ok: false, reason: `unexpected argument ${unexpected}` }
+    const controller = dialogControllers.get(context)
+    if (controller === undefined) return { ok: false, reason: 'no quick command dialog is open' }
+    if (args.action === 'toggle-advanced') {
+      controller.advancedOpen = !controller.advancedOpen
+      controller.setAdvancedOpen?.(controller.advancedOpen)
+      return { ok: true, advanced: controller.advancedOpen }
+    }
+    if (controller.kind === 'agent') return { ok: false, reason: 'Append Enter applies only to terminal commands' }
+    controller.appendEnter = !controller.appendEnter
+    controller.setAppendEnter?.(controller.appendEnter)
+    return { ok: true, appendEnter: controller.appendEnter }
+  }
+  return { ok: false, reason: 'action must be one of open, toggle-advanced, toggle-append-enter' }
 }
