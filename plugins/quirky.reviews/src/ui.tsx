@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
-import { Button, EmptyState, StatusDot } from '@quirky/ui'
+import { Button, InlineError, NoticeLine } from '@quirky/ui'
 import '@quirky/ui/styles.css'
 import { CHECKS_PANEL, CREATE_VIEW, REVIEW_VIEW, SETTINGS_VIEW, type JsonRecord, type ReviewsState } from './contracts'
 import { ReviewPage } from './detail/ReviewPage'
@@ -9,8 +9,177 @@ import { ChecksPanel, ChecksAgentDialog } from './checks/ChecksPanel'
 import { CreateReview } from './create/CreateReview'
 import { HostingSettings } from './create/HostingSettings'
 import { ChecksSummary } from './StatusBarItem'
-import { requestOpenSitter } from './checks/data'
+import {
+  copyReviewsText,
+  listReviewsUiControls,
+  registerReviewsUiControl,
+  requestOpenSitter,
+  requestReviewsUiControl,
+  REVIEWS_UI_CONTROL,
+  runReviewsUiControl,
+  subscribeReviewsUiControls,
+  type ReviewsUiControlDescriptor
+} from './checks/data'
 import { nextDraftTick } from './draft-field'
+const SURFACE_IDS: Record<SurfaceKind, string> = {
+  detail: REVIEW_VIEW,
+  checks: CHECKS_PANEL,
+  create: CREATE_VIEW,
+  settings: SETTINGS_VIEW
+}
+
+function shellControlTarget(kind: SurfaceKind, state: ReviewsState | null, layoutWorktree: string | null): string {
+  const rawWorktree = kind === 'detail'
+    ? state?.detail.target?.worktree
+    : kind === 'checks'
+      ? layoutWorktree
+      : kind === 'create'
+        ? state?.creation.worktree
+        : state?.settings.worktree
+  const worktree = typeof rawWorktree === 'string' && rawWorktree.trim() !== '' ? rawWorktree : layoutWorktree
+  const review = kind === 'detail' ? state?.detail.review : kind === 'checks' && state?.checks.worktree === layoutWorktree ? state?.checks.review : null
+  const target = kind === 'detail' ? state?.detail.target : null
+  const repositoryValue = review?.prRepo ?? target?.prRepo
+  const repository = record(repositoryValue)
+    && typeof repositoryValue.host === 'string'
+    && typeof repositoryValue.owner === 'string'
+    && typeof repositoryValue.repo === 'string'
+    ? { host: repositoryValue.host, owner: repositoryValue.owner, repo: repositoryValue.repo }
+    : null
+  const numberValue = review?.number ?? target?.number
+  const number = typeof numberValue === 'number' && Number.isSafeInteger(numberValue) ? numberValue : null
+  const headOid = typeof review?.headRefOid === 'string' ? review.headRefOid : null
+  return JSON.stringify([SURFACE_IDS[kind], 'shell', worktree, repository, number, headOid, null])
+}
+
+function shellUiControls(context: UiPluginContext, kind: SurfaceKind): ReviewsUiControlDescriptor[] {
+  return listReviewsUiControls(context, SURFACE_IDS[kind])
+}
+
+function Surface({ context, kind, report }: { context: UiPluginContext; kind: SurfaceKind; report?: (state: unknown) => void }) {
+  const [loaded, setLoaded] = useState<{ state: ReviewsState; snapshot: number } | null>(null)
+  const state = loaded?.state ?? null
+  const snapshot = loaded?.snapshot
+  const [error, setError] = useState<string | null>(null)
+  const request = useRef(0)
+  const [layoutWorktree, setLayoutWorktree] = useState<string | null>(() => kind === 'checks' ? worktreeOf(context.getLayout()) : null)
+  const layoutWorktreeRef = useRef(layoutWorktree)
+  layoutWorktreeRef.current = layoutWorktree
+  const [controlRevision, setControlRevision] = useState(0)
+  const surfaceId = SURFACE_IDS[kind]
+  const target = shellControlTarget(kind, state, layoutWorktree)
+  const errorRef = useRef(error)
+  errorRef.current = error
+  const registrationRef = useRef<{ target: string; generation: number; changed(): void; dispose(): void } | null>(null)
+  useEffect(() => {
+    if (kind !== 'checks') return
+    setLayoutWorktree(worktreeOf(context.getLayout()))
+    return context.onLayout((layout) => setLayoutWorktree(worktreeOf(layout)))
+  }, [context, kind])
+  const refresh = useCallback(async () => {
+    const epoch = ++request.current
+    try {
+      const worktree = layoutWorktreeRef.current
+      const tick = nextDraftTick()
+      const next = stateValue(await context.call('quirky.reviews/state', kind === 'checks' && worktree !== null ? { worktree } : undefined))
+      if (epoch !== request.current) return
+      setLoaded((old) => old && next.revision < old.state.revision ? old : { state: next, snapshot: tick })
+      setError(null)
+    } catch (failure) { if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.') }
+  }, [context, kind])
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+  useEffect(() => {
+    void refresh()
+    const options = kind === 'checks'
+      ? (layoutWorktree === null ? undefined : { worktreeId: layoutWorktree })
+      : { worktreeId: null }
+    const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() }, options)
+    const offConnection = context.onConnection((status) => {
+      if (status === 'connected') { request.current++; setLoaded(null); void refresh() }
+    })
+    return () => { request.current++; offEvent(); offConnection() }
+  }, [context, refresh, kind, layoutWorktree])
+  useEffect(() => subscribeReviewsUiControls(context, () => setControlRevision((revision) => revision + 1)), [context])
+  useEffect(() => {
+    const registration = registerReviewsUiControl(context, {
+      surface: surfaceId,
+      slot: 'shell',
+      target,
+      actions: () => [{ action: 'retry', enabled: errorRef.current !== null }],
+      run: (control, isCurrent) => {
+        if (control.value !== undefined) throw new Error('Retry does not accept command arguments.')
+        if (!isCurrent() || errorRef.current === null) return undefined
+        void refreshRef.current()
+      }
+    })
+    registrationRef.current = { target, generation: registration.generation, changed: registration.changed, dispose: registration.dispose }
+    return () => {
+      if (registrationRef.current?.generation === registration.generation) registrationRef.current = null
+      registration.dispose()
+    }
+  }, [context, surfaceId, target])
+  useEffect(() => { registrationRef.current?.changed() }, [error, target])
+  useEffect(() => {
+    if (!report) return
+    const uiControls = shellUiControls(context, kind)
+    if (state) report({ ...surfaceSummary(kind, state, error !== null), uiControls })
+    else report({
+      surface: kind,
+      revision: null,
+      stateMethod: 'quirky.reviews/state',
+      worktree: layoutWorktree,
+      loading: error === null,
+      errorPresent: error !== null,
+      uiControls
+    })
+  }, [state, kind, report, error, layoutWorktree, context, controlRevision])
+  const retryControl = shellUiControls(context, kind).find((control) => control.slot === 'shell' && control.target === target)
+  const requestRetry = (descriptor: ReviewsUiControlDescriptor) => {
+    const isSameLease = () => registrationRef.current?.target === descriptor.target
+      && registrationRef.current.generation === descriptor.generation
+    void requestReviewsUiControl(context, {
+      target: descriptor.target,
+      generation: descriptor.generation,
+      action: 'retry'
+    }).then((result) => {
+      if (result.delivered || !isSameLease()) return
+      const message = result.reason === 'disabled'
+        ? 'Retry is currently unavailable. Try again when this Reviews surface is ready.'
+        : result.reason === 'unknown-action'
+          ? 'Retry is no longer supported by this Reviews surface. Reload the surface and try again.'
+          : 'The Reviews surface changed before Retry was delivered. Retry from the current surface.'
+      setError(message)
+    }).catch((failure) => {
+      if (isSameLease()) setError(failure instanceof Error ? failure.message : 'Retry could not be delivered to this Reviews window.')
+    })
+  }
+  const retryAction = error !== null && retryControl?.actions.some((action) => action.action === 'retry' && action.enabled)
+    ? { label: 'Retry', onAction: () => requestRetry(retryControl) }
+    : undefined
+  const fail = (failure: unknown) => context.toast('Reviews', failure instanceof Error ? failure.message : 'The action failed.', { kind: 'error' })
+  return <section
+    className="ui-stack"
+    data-review-surface={kind}
+    data-review-control-target={retryControl?.target}
+    data-review-control-generation={retryControl?.generation}
+    style={{ height: '100%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}
+  >
+    {kind === 'checks' && state === null && error === null && <NoticeLine>Loading review…</NoticeLine>}
+    {kind === 'checks' && error !== null && <InlineError message={error} action={retryAction} />}
+    {kind === 'detail' && state === null && error === null && <NoticeLine>Loading review…</NoticeLine>}
+    {kind === 'detail' && error !== null && <InlineError message={error} action={retryAction} />}
+    {kind === 'create' && state === null && error === null && <NoticeLine>Loading review…</NoticeLine>}
+    {kind === 'create' && error !== null && <InlineError message={error} action={retryAction} />}
+    {kind === 'settings' && state === null && error === null && <NoticeLine>Loading review…</NoticeLine>}
+    {kind === 'settings' && error !== null && <InlineError message={error} action={retryAction} />}
+    {kind === 'detail' && state !== null && <ReviewPage context={context} state={state} snapshot={snapshot} refresh={refresh} />}
+    {kind === 'checks' && state !== null && <ChecksPanel context={context} state={state} snapshot={snapshot} refresh={refresh} />}
+    {kind === 'create' && state !== null && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><CreateReview context={context} state={state} snapshot={snapshot} refresh={refresh} /></>}
+    {kind === 'settings' && state !== null && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><HostingSettings context={context} state={state} snapshot={snapshot} refresh={refresh} /></>}
+    {state !== null && (kind === 'detail' || kind === 'checks') && state.checks.agentDialog && state.checks.agentDialog.visible !== false && (state.checks.agentDialog.surface ?? 'checks') === kind && <ChecksAgentDialog context={context} state={state} snapshot={snapshot} refresh={refresh} />}
+  </section>
+}
 function record(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -65,55 +234,6 @@ function surfaceSummary(kind: SurfaceKind, state: ReviewsState, connectionError:
   }
 }
 
-function Surface({ context, kind, report }: { context: UiPluginContext; kind: SurfaceKind; report?: (state: unknown) => void }) {
-  const [loaded, setLoaded] = useState<{ state: ReviewsState; snapshot: number } | null>(null)
-  const state = loaded?.state ?? null
-  const snapshot = loaded?.snapshot
-  const [error, setError] = useState<string | null>(null)
-  const request = useRef(0)
-  const [layoutWorktree, setLayoutWorktree] = useState<string | null>(() => kind === 'checks' ? worktreeOf(context.getLayout()) : null)
-  const layoutWorktreeRef = useRef(layoutWorktree)
-  layoutWorktreeRef.current = layoutWorktree
-  useEffect(() => {
-    if (kind !== 'checks') return
-    setLayoutWorktree(worktreeOf(context.getLayout()))
-    return context.onLayout((layout) => setLayoutWorktree(worktreeOf(layout)))
-  }, [context, kind])
-  const refresh = useCallback(async () => {
-    const epoch = ++request.current
-    try {
-      const worktree = layoutWorktreeRef.current
-      const tick = nextDraftTick()
-      const next = stateValue(await context.call('quirky.reviews/state', kind === 'checks' && worktree !== null ? { worktree } : undefined))
-      if (epoch !== request.current) return
-      setLoaded((old) => old && next.revision < old.state.revision ? old : { state: next, snapshot: tick })
-      setError(null)
-    } catch (failure) { if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.') }
-  }, [context, kind])
-  useEffect(() => {
-    void refresh()
-    const options = kind === 'checks'
-      ? (layoutWorktree === null ? undefined : { worktreeId: layoutWorktree })
-      : { worktreeId: null }
-    const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() }, options)
-    const offConnection = context.onConnection((status) => {
-      if (status === 'connected') { request.current++; setLoaded(null); void refresh() }
-    })
-    return () => { request.current++; offEvent(); offConnection() }
-  }, [context, refresh, kind, layoutWorktree])
-  useEffect(() => { if (state && report) report(surfaceSummary(kind, state, error !== null)) }, [state, kind, report, error])
-  const fail = (failure: unknown) => context.toast('Reviews', failure instanceof Error ? failure.message : 'The action failed.', { kind: 'error' })
-  return <section className="ui-stack" data-review-surface={kind} style={{ height: '100%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}>
-    {error && <div role="alert"><EmptyState message={error} icon={<StatusDot status="failing" label="Error" />} action={{ label: 'Retry', onAction: () => { void refresh() } }} /></div>}
-    {!state ? <p role="status" className="ui-text-muted">Loading review…</p> : <>
-      {kind === 'detail' && <ReviewPage context={context} state={state} snapshot={snapshot} refresh={refresh} />}
-      {kind === 'checks' && <ChecksPanel context={context} state={state} snapshot={snapshot} refresh={refresh} />}
-      {kind === 'create' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><CreateReview context={context} state={state} snapshot={snapshot} refresh={refresh} /></>}
-      {kind === 'settings' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><HostingSettings context={context} state={state} snapshot={snapshot} refresh={refresh} /></>}
-      {(kind === 'detail' || kind === 'checks') && state.checks.agentDialog && state.checks.agentDialog.visible !== false && (state.checks.agentDialog.surface ?? 'checks') === kind && <ChecksAgentDialog context={context} state={state} snapshot={snapshot} refresh={refresh} />}
-    </>}
-  </section>
-}
 
 function mount(context: UiPluginContext, kind: SurfaceKind): MountFunction {
   return (element, props) => {
@@ -133,6 +253,7 @@ export function activate(context: UiPluginContext): void {
   })
   context.provide(CREATE_VIEW, mount(context, 'create'))
   context.provide(SETTINGS_VIEW, mount(context, 'settings'))
+  context.provide(REVIEWS_UI_CONTROL, (input?: unknown) => runReviewsUiControl(context, input))
   context.provide('command:quirky.reviews/show-checks', () => context.call('quirky.reviews/showChecks'))
   context.provide('command:quirky.reviews/open-sitter', async (input?: unknown) => {
     const requestedWorktree = record(input) && typeof input.worktree === 'string' && input.worktree.trim() !== ''
@@ -180,9 +301,8 @@ export function activate(context: UiPluginContext): void {
   })
   context.provide('command:quirky.reviews/open-settings', (input?: unknown) => context.call('quirky.reviews/settingsOpen', record(input) ? input : {}))
   context.provide('command:quirky.reviews/copy-text', async (input?: unknown) => {
-    if (!record(input) || typeof input.text !== 'string' || input.text.length > 1_048_576) throw new Error('Invalid clipboard text.')
-    if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this window.')
-    await navigator.clipboard.writeText(input.text)
+    if (!record(input)) throw new Error('Invalid clipboard text.')
+    await copyReviewsText(input.text)
     return { copied: true }
   })
   context.provide('command:quirky.reviews/open-link', async (input?: unknown) => {
