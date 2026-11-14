@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Browser, BrowserContext, CDPSession, Page, Route } from 'playwright'
-import { BUDGETS, METRICS, PAIR_COUNTS, type Failure, type FrameTiming, type Metric, type PairSide } from './contracts.ts'
+import { BUDGETS, METRICS, PAIR_COUNTS, type EchoTiming, type Failure, type FloodSleepCapture, type FrameTiming, type Metric, type PairSide, type SampleScheduler, type TimerWindow } from './contracts.ts'
 import { extractFrameTiming, type FrameTimingObservation } from './frame-timing.ts'
 import { median } from './report.ts'
 import { watchReplacementRuntime } from './startup.ts'
@@ -12,6 +12,8 @@ import type { ProbeRecord } from '../soak/contracts.ts'
 import type { SoakWindows } from '../soak/windows.ts'
 import type { DaemonSpawn, SoakWorld } from '../soak/world.ts'
 import type { FloodStart, FloodStats, SpeedFixture, SpeedFixtureWorktree } from './fixtures.ts'
+import { createTimerProbe, timerWindow, type EpochWindow } from './runner-latency.ts'
+
 const MAX_BROWSER_TRACE_BYTES = 32 * 1024 * 1024
 
 const DEADLINE_MS = 30_000
@@ -20,6 +22,11 @@ const VIEWPORT = { width: 1400, height: 880 } as const
 const CHANGES_PANEL = 'panel:quirky.git/source-control'
 const DIFF_VIEW = 'view:quirky.git/diff'
 const ECHO_KEYS = 'abcdefghijklmnopqrst'
+
+/** Retains a separate diagnostic trial for misses and thin passes without changing measured samples. */
+export function shouldRunDiagnostic(metric: Metric, value: number | null): boolean {
+  return value !== null && Number.isFinite(value) && value >= 0.8 * BUDGETS[metric]
+}
 
 export function pairSides(index: number): readonly [PairSide, PairSide] {
   return index % 2 === 1 ? ['head', 'base'] : ['base', 'head']
@@ -34,6 +41,41 @@ export function floodBlocks(count: number): { side: PairSide; first: number; cou
   if (secondHalf > 0) blocks.push({ side: 'base', first: firstHalf + 1, count: secondHalf })
   if (secondHalf > 0) blocks.push({ side: 'head', first: firstHalf + 1, count: secondHalf })
   return blocks
+}
+
+/** Joins one completed flood run to a sample window without mixing runs or worker identities. */
+export function joinFloodSleepTiming(
+  capture: Omit<FloodSleepCapture, 'intervals'> & { intervals: readonly FloodSleepCapture['intervals'][number][] },
+  expectedIdentity: { workerId: string; sessionId: string; runId: string },
+  bounds: EpochWindow
+): TimerWindow {
+  if (capture === null || typeof capture !== 'object' || Array.isArray(capture)) {
+    return { status: 'unavailable', reason: 'flood-sleep-capture-unavailable', intervals: [], pendingLateAtEndMs: null }
+  }
+  const value = capture as unknown as {
+    version: unknown; status: unknown; reason: unknown; workerId: unknown; sessionId: unknown; runId: unknown; intervals: unknown
+  }
+  if (value.version !== 1 || value.status !== 'complete' || value.reason !== null) {
+    return {
+      status: 'unavailable',
+      reason: typeof value.reason === 'string' ? value.reason : 'flood-sleep-capture-unavailable',
+      intervals: [],
+      pendingLateAtEndMs: null
+    }
+  }
+  if (typeof expectedIdentity?.workerId !== 'string' || typeof expectedIdentity.sessionId !== 'string'
+    || typeof expectedIdentity.runId !== 'string' || !expectedIdentity.workerId || !expectedIdentity.sessionId || !expectedIdentity.runId
+    || value.workerId !== expectedIdentity.workerId || value.sessionId !== expectedIdentity.sessionId || value.runId !== expectedIdentity.runId) {
+    return { status: 'unavailable', reason: 'flood-sleep-identity-mismatch', intervals: [], pendingLateAtEndMs: null }
+  }
+  if (!Array.isArray(value.intervals) || value.intervals.length > 8192 || value.intervals.some(interval => {
+    if (interval === null || typeof interval !== 'object' || Array.isArray(interval)) return true
+    const record = interval as Record<string, unknown>
+    return !['requestedEpochMs', 'dueEpochMs', 'wokeEpochMs', 'lateMs'].every(key => typeof record[key] === 'number')
+  })) {
+    return { status: 'unavailable', reason: 'invalid-flood-sleep-capture', intervals: [], pendingLateAtEndMs: null }
+  }
+  return timerWindow(value.intervals as FloodSleepCapture['intervals'], bounds)
 }
 
 export type FrameIntervalCapture = {
@@ -89,6 +131,7 @@ type BrowserObservationResult = {
   trace: { event: string; at: number }[]
   pacing: FrameIntervalCapture
   marks: BrowserObservationMarks
+  echoTiming?: EchoTiming
 }
 
 type BrowserObservation = { observation: BrowserObservationResult }
@@ -132,6 +175,8 @@ export type SpeedSample = {
   ownedPids: number[]
   pacing: FrameIntervalCapture
   frameTiming?: FrameTiming
+  echoTiming?: EchoTiming
+  scheduler?: SampleScheduler
   flood?: Record<string, number | string | null>
 }
 
@@ -246,7 +291,292 @@ function diffRowSelector(path: string): string {
   return `li.git-row[data-row-path="${cssValue(path)}"]`
 }
 
+/** Installs bounded socket metadata capture in a fresh page before application scripts run. */
+export function installSpeedSocketObserver(): void {
+  type CaptureObserver = {
+    sessionId: string
+    workerId: string
+    sequence: number
+    key: string
+    onMarker(workerReadEpochMs: number | null, receivedAt: number, source: object): void
+    onOverflow(): void
+    onUnavailable(reason: string): void
+  }
+  type StreamBuffer = {
+    text: string
+    bytes: number
+    discarding: boolean
+    eligibleObservers: Set<CaptureObserver> | null
+  }
+  type SocketState = {
+    socket: WebSocket
+    bindings: Map<string, Set<number>>
+    sources: Map<number, object>
+    pending: Map<string, string>
+    messageHandler: ((event: MessageEvent) => void) | null
+    closeHandler: (() => void) | null
+    buffers: Map<number, StreamBuffer>
+  }
+  type SocketHook = {
+    add(observer: CaptureObserver): void
+    remove(observer: CaptureObserver): void
+  }
+  const root = globalThis as typeof globalThis & { __quirkySpeedSocketHook?: SocketHook }
+  if (root.__quirkySpeedSocketHook) return
+  const NativeWebSocket = root.WebSocket
+  if (typeof NativeWebSocket !== 'function') return
+
+  const states = new WeakMap<WebSocket, SocketState>()
+  const untrackedSockets = new WeakSet<WebSocket>()
+  const unavailableSessions = new Map<string, string>()
+  const liveSockets = new Set<SocketState>()
+  const observers = new Set<CaptureObserver>()
+  let bindingCount = 0
+  let pendingCount = 0
+  const requestKey = (id: unknown): string | null => {
+    if (typeof id === 'string') return `s:${id}`
+    if (typeof id === 'number' && Number.isFinite(id)) return `n:${id}`
+    return null
+  }
+  const rejectSession = (sessionId: string, reason: string) => {
+    if (!unavailableSessions.has(sessionId) && unavailableSessions.size === 128) {
+      unavailableSessions.delete(unavailableSessions.keys().next().value!)
+    }
+    unavailableSessions.set(sessionId, reason)
+    for (const observer of observers) if (observer.sessionId === sessionId) observer.onUnavailable(reason)
+  }
+  const matchingStreams = (state: SocketState): Set<number> => {
+    const result = new Set<number>()
+    for (const observer of observers) {
+      const streamIds = state.bindings.get(observer.sessionId)
+      if (streamIds) for (const streamId of streamIds) result.add(streamId)
+    }
+    return result
+  }
+  const removeCapture = (state: SocketState) => {
+    if (state.messageHandler) state.socket.removeEventListener('message', state.messageHandler, true)
+    state.messageHandler = null
+    state.buffers.clear()
+  }
+  const processLine = (
+    state: SocketState,
+    streamId: number,
+    line: string,
+    deliveredAt: number,
+    eligibleObservers: ReadonlySet<CaptureObserver>
+  ) => {
+    const match = /^SPEED_ECHO\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)(?:\s+readEpochMs=(\S+))?$/.exec(line.replace(/\r+$/, ''))
+    if (!match) return
+    for (const observer of eligibleObservers) {
+      if (!observers.has(observer) || !state.bindings.get(observer.sessionId)?.has(streamId)
+        || match[1] !== observer.workerId || match[2] !== observer.sessionId
+        || match[3] !== String(observer.sequence) || match[4] !== observer.key) continue
+      const readEpochMs = match[5] === undefined ? null : Number(match[5])
+      observer.onMarker(readEpochMs, deliveredAt, state.sources.get(streamId)!)
+    }
+  }
+  const processBinary = (state: SocketState, data: unknown, deliveredAt: number) => {
+    let bytes: Uint8Array | null = null
+    if (data instanceof ArrayBuffer) bytes = new Uint8Array(data)
+    else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+    if (!bytes || bytes.byteLength < 5 || bytes[0] !== 1) return
+    const streamId = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(1, false)
+    let buffer = state.buffers.get(streamId)
+    if (!buffer) return
+    for (let index = 5; index < bytes.length; index++) {
+      const byte = bytes[index]!
+      if (byte === 10) {
+        if (!buffer.discarding) processLine(state, streamId, buffer.text, deliveredAt, buffer.eligibleObservers ?? new Set())
+        buffer.text = ''
+        buffer.bytes = 0
+        buffer.discarding = false
+        buffer.eligibleObservers = null
+      } else if (!buffer.discarding) {
+        if (buffer.bytes === 0) {
+          buffer.eligibleObservers = new Set([...observers].filter(observer => state.bindings.get(observer.sessionId)?.has(streamId)))
+        }
+        if (buffer.bytes === 4096 && byte === 13) {
+          buffer.text += '\r'
+          buffer.bytes++
+        } else if (buffer.bytes >= 4096) {
+          buffer.text = ''
+          buffer.bytes = 0
+          buffer.discarding = true
+          for (const observer of buffer.eligibleObservers ?? []) if (observers.has(observer)) observer.onOverflow()
+        } else {
+          buffer.text += String.fromCharCode(byte)
+          buffer.bytes++
+        }
+      }
+    }
+  }
+  const updateCapture = (state: SocketState) => {
+    const streams = matchingStreams(state)
+    for (const streamId of [...state.buffers.keys()]) if (!streams.has(streamId)) state.buffers.delete(streamId)
+    for (const streamId of streams) if (!state.buffers.has(streamId)) {
+      state.buffers.set(streamId, { text: '', bytes: 0, discarding: false, eligibleObservers: null })
+    }
+    const needsListener = streams.size > 0 || state.pending.size > 0
+    if (!needsListener) {
+      removeCapture(state)
+      return
+    }
+    if (state.messageHandler) return
+    const handler = (event: MessageEvent) => {
+      const deliveredAt = root.performance.now()
+      if (typeof event.data === 'string') {
+        let response: unknown
+        try { response = JSON.parse(event.data) } catch { return }
+        if (response === null || typeof response !== 'object') return
+        const record = response as Record<string, unknown>
+        const key = requestKey(record.id)
+        if (key === null || !state.pending.has(key)) return
+        const sessionId = state.pending.get(key)!
+        state.pending.delete(key)
+        pendingCount--
+        const result = record.result
+        const streamId = result !== null && typeof result === 'object' ? (result as Record<string, unknown>).streamId : null
+        if (typeof streamId === 'number' && Number.isInteger(streamId) && streamId >= 0 && streamId <= 0xffffffff) {
+          const bindings = state.bindings.get(sessionId) ?? new Set<number>()
+          if (bindings.has(streamId) || bindingCount < 128) {
+            if (!bindings.has(streamId)) bindingCount++
+            bindings.add(streamId)
+            if (!state.sources.has(streamId)) state.sources.set(streamId, {})
+            state.bindings.set(sessionId, bindings)
+            unavailableSessions.delete(sessionId)
+          } else {
+            rejectSession(sessionId, 'stream-limit-exceeded')
+          }
+        }
+        updateCapture(state)
+        return
+      }
+      processBinary(state, event.data, deliveredAt)
+    }
+    state.messageHandler = handler
+    state.socket.addEventListener('message', handler, true)
+  }
+  const detachStream = (state: SocketState, streamId: number) => {
+    let removed = false
+    for (const [sessionId, bindings] of state.bindings) {
+      if (!bindings.delete(streamId)) continue
+      bindingCount--
+      removed = true
+      if (bindings.size === 0) state.bindings.delete(sessionId)
+      state.sources.delete(streamId)
+      state.buffers.delete(streamId)
+      for (const observer of observers) {
+        if (observer.sessionId === sessionId) observer.onUnavailable('terminal-stream-detached')
+      }
+    }
+    if (removed) updateCapture(state)
+  }
+  const clearSocket = (state: SocketState) => {
+    removeCapture(state)
+    if (state.closeHandler) state.socket.removeEventListener('close', state.closeHandler)
+    state.closeHandler = null
+    bindingCount -= [...state.bindings.values()].reduce((sum, streams) => sum + streams.size, 0)
+    state.bindings.clear()
+    state.sources.clear()
+    pendingCount -= state.pending.size
+    state.pending.clear()
+    liveSockets.delete(state)
+  }
+  const trackSocket = (socket: WebSocket) => {
+    if (liveSockets.size >= 32) {
+      untrackedSockets.add(socket)
+      return
+    }
+    const state: SocketState = {
+      socket, bindings: new Map(), sources: new Map(), pending: new Map(), messageHandler: null, closeHandler: null, buffers: new Map()
+    }
+    states.set(socket, state)
+    liveSockets.add(state)
+    const closeHandler = () => clearSocket(state)
+    state.closeHandler = closeHandler
+    socket.addEventListener('close', closeHandler, { once: true })
+  }
+
+  const hook: SocketHook = {
+    add(observer) {
+      const bound = [...liveSockets].some(state => state.bindings.has(observer.sessionId))
+      const reason = unavailableSessions.get(observer.sessionId)
+        ?? (!bound && liveSockets.size >= 32 ? 'socket-limit-exceeded'
+          : !bound && bindingCount >= 128 ? 'stream-limit-exceeded' : null)
+      if (reason) {
+        observer.onUnavailable(reason)
+        return
+      }
+      observers.add(observer)
+      for (const state of liveSockets) updateCapture(state)
+    },
+    remove(observer) {
+      observers.delete(observer)
+      for (const state of liveSockets) updateCapture(state)
+    }
+  }
+  root.__quirkySpeedSocketHook = hook
+
+  const nativeSend = NativeWebSocket.prototype.send
+  const sendDescriptor = Object.getOwnPropertyDescriptor(NativeWebSocket.prototype, 'send')
+  if (sendDescriptor && typeof nativeSend === 'function' && sendDescriptor.configurable) {
+    const wrappedSend = function (this: WebSocket, data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+      const state = states.get(this)
+      let pending: { key: string; sessionId: string } | null = null
+      let detachedStreamId: number | null = null
+      if (typeof data === 'string' && (state || untrackedSockets.has(this))) {
+        try {
+          const request = JSON.parse(data) as Record<string, unknown>
+          const params = request.params
+          const key = requestKey(request.id)
+          if (params !== null && typeof params === 'object') {
+            const sessionId = (params as Record<string, unknown>).session
+            const streamId = (params as Record<string, unknown>).streamId
+            if (request.method === 'quirky.terminal/attach' && key !== null && typeof sessionId === 'string') {
+              const existing = state?.pending.has(key) ?? false
+              if (!state) rejectSession(sessionId, 'socket-limit-exceeded')
+              else if (!existing && pendingCount >= 128) rejectSession(sessionId, 'stream-limit-exceeded')
+              else {
+                pending = { key, sessionId }
+                if (!existing) pendingCount++
+                state.pending.set(key, sessionId)
+                updateCapture(state)
+              }
+            } else if (request.method === 'quirky.terminal/detach'
+              && typeof streamId === 'number' && Number.isInteger(streamId) && streamId >= 0 && streamId <= 0xffffffff) {
+              detachedStreamId = streamId
+            }
+          }
+        } catch {}
+      }
+      try {
+        const result = Reflect.apply(nativeSend, this, [data])
+        if (state && detachedStreamId !== null) detachStream(state, detachedStreamId)
+        return result
+      } catch (error) {
+        if (state && pending) {
+          state.pending.delete(pending.key)
+          pendingCount--
+          updateCapture(state)
+        }
+        throw error
+      }
+    }
+    Object.defineProperty(NativeWebSocket.prototype, 'send', { ...sendDescriptor, value: wrappedSend })
+  }
+  let WrappedWebSocket: typeof WebSocket
+  WrappedWebSocket = new Proxy(NativeWebSocket, {
+    construct(target, args, newTarget) {
+      const socket = Reflect.construct(target, args, newTarget === WrappedWebSocket ? target : newTarget) as WebSocket
+      trackSocket(socket)
+      return socket
+    }
+  })
+  root.WebSocket = WrappedWebSocket
+}
+
 /** Installs a browser-local event and DOM observer; Playwright serializes this self-contained function into the page. */
+
 export function installBrowserObserver(spec: BrowserObservationSpec): void {
   type FrameObserver = {
     beforeApplicationFrame(): boolean | null
@@ -267,9 +597,20 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     afterCallback(timestamp: number, nativeFrame: boolean, deliveredAt: number): void
     ensureFrame(): void
   }
+  type SocketCaptureObserver = {
+    sessionId: string
+    workerId: string
+    sequence: number
+    key: string
+    onMarker(workerReadEpochMs: number | null, receivedAt: number, source: object): void
+    onOverflow(): void
+    onUnavailable(reason: string): void
+  }
+  type SocketCaptureHook = { add(observer: SocketCaptureObserver): void; remove(observer: SocketCaptureObserver): void }
   const root = globalThis as typeof globalThis & {
     __quirkySpeedObservers?: Map<string, ObserverEntry>
     __quirkySpeedFrameHook?: FrameHook
+    __quirkySpeedSocketHook?: SocketCaptureHook
   }
   const document = root.document
   const paneSelector = spec.sessionId === undefined ? '' : `.qt-pane[data-session="${spec.sessionId.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"]`
@@ -371,6 +712,66 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       return
     }
   }
+
+  let echoReadEpochMs: number | null = null
+  let echoReceivedAt: number | null = null
+  let echoSource: object | null = null
+  let echoUnavailableReason: string | null = null
+  let echoAmbiguous = false
+  let echoCaptureStopped = false
+  let socketCaptureActive = false
+  const socketCaptureHook = root.__quirkySpeedSocketHook
+  const socketCaptureObserver: SocketCaptureObserver | null = spec.kind === 'echo' && spec.sessionId !== undefined
+    ? {
+        sessionId: spec.sessionId,
+        workerId: spec.workerId ?? '',
+        sequence: spec.sequence ?? -1,
+        key: spec.key ?? '',
+        onMarker(workerReadEpochMs, receivedAt, source) {
+          if (echoAmbiguous || echoCaptureStopped) return
+          if (echoSource !== null) {
+            if (echoSource !== source) {
+              echoAmbiguous = true
+              echoReadEpochMs = null
+              echoReceivedAt = null
+              echoSource = null
+              echoUnavailableReason = 'ambiguous-matching-streams'
+              if (marks.echoReceived) {
+                clearPerformanceMark(marks.echoReceived)
+                delete marks.echoReceived
+              }
+            }
+            return
+          }
+          echoReadEpochMs = workerReadEpochMs
+          echoReceivedAt = receivedAt
+          echoSource = source
+          if (Number.isFinite(receivedAt)) {
+            const name = `quirky-speed-${spec.id}-echo-received`
+            marks.echoReceived = name
+            addPerformanceMark(name, receivedAt)
+          }
+        },
+        onOverflow() {
+          if (echoUnavailableReason === null) echoUnavailableReason = 'terminal-marker-buffer-overflow'
+        },
+        onUnavailable(reason) {
+          echoCaptureStopped = true
+          echoUnavailableReason = reason
+          echoReadEpochMs = null
+          echoReceivedAt = null
+          echoSource = null
+          if (marks.echoReceived) {
+            clearPerformanceMark(marks.echoReceived)
+            delete marks.echoReceived
+          }
+          if (socketCaptureActive && socketCaptureObserver) {
+            socketCaptureHook?.remove(socketCaptureObserver)
+            socketCaptureActive = false
+          }
+        }
+      }
+    : null
   let startAt: number | null = null
   if (spec.kind === 'flood') {
     startAt = root.performance.now()
@@ -490,11 +891,64 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     delete root.__quirkySpeedFrameHook
   }
   const cleanup = () => {
+    if (socketCaptureActive && socketCaptureObserver) {
+      socketCaptureHook?.remove(socketCaptureObserver)
+      socketCaptureActive = false
+    }
     if (spec.kind !== 'flood') document.removeEventListener(spec.kind === 'echo' ? 'keydown' : 'click', onAction, true)
     mutationObserver?.disconnect()
     hook.observers.delete(frameObserver)
     releaseHook()
   }
+  const makeEchoTiming = (endedAt: number): EchoTiming | undefined => {
+    if (spec.kind !== 'echo') return undefined
+    const workerReadEpochMs = echoReadEpochMs !== null && Number.isFinite(echoReadEpochMs) ? echoReadEpochMs : null
+    const pageTimeOriginMs = Number.isFinite(root.performance.timeOrigin) ? root.performance.timeOrigin : null
+    const receivedAt = echoReceivedAt !== null && Number.isFinite(echoReceivedAt) ? echoReceivedAt : null
+    let reason = echoUnavailableReason
+    let keystrokeToWorkerMs = Number.NaN
+    let workerToPageMs = Number.NaN
+    let pageToPaintMs = Number.NaN
+    if (reason === null && receivedAt === null) reason = 'echo-arrival-not-observed'
+    if (reason === null && workerReadEpochMs === null) reason = 'worker-read-timestamp-unavailable'
+    if (reason === null && pageTimeOriginMs === null) reason = 'page-time-origin-unavailable'
+    if (reason === null && workerReadEpochMs !== null && pageTimeOriginMs !== null && receivedAt !== null && startAt !== null) {
+      const workerReadPageAt = workerReadEpochMs - pageTimeOriginMs
+      keystrokeToWorkerMs = workerReadPageAt - startAt
+      workerToPageMs = receivedAt - workerReadPageAt
+      pageToPaintMs = endedAt - receivedAt
+      if (![workerReadPageAt, keystrokeToWorkerMs, workerToPageMs, pageToPaintMs].every(Number.isFinite)) {
+        reason = 'nonfinite-echo-timing'
+      } else if ([keystrokeToWorkerMs, workerToPageMs, pageToPaintMs].some(phase => phase < 0)) {
+        reason = 'out-of-order-echo-timing'
+      } else if (Math.abs(keystrokeToWorkerMs + workerToPageMs + pageToPaintMs - (endedAt - startAt)) > 0.001) {
+        reason = 'echo-timing-does-not-match-raw-duration'
+      }
+    }
+    if (reason !== null || workerReadEpochMs === null || pageTimeOriginMs === null || receivedAt === null) {
+      return {
+        status: 'unavailable',
+        reason: reason ?? 'echo-timing-unavailable',
+        workerReadEpochMs,
+        pageTimeOriginMs,
+        receivedAt,
+        keystrokeToWorkerMs: null,
+        workerToPageMs: null,
+        pageToPaintMs: null
+      }
+    }
+    return {
+      status: 'complete',
+      reason: null,
+      workerReadEpochMs,
+      pageTimeOriginMs,
+      receivedAt,
+      keystrokeToWorkerMs,
+      workerToPageMs,
+      pageToPaintMs
+    }
+  }
+
   const finish = (error?: Error, counter?: number) => {
     if (finished) return
     finished = true
@@ -511,6 +965,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     }
     addPerformanceMark(marks.end, endedAt)
     trace.push({ event: 'paint', at: endedAt })
+    const timing = makeEchoTiming(endedAt)
     resolveResult({
       id: spec.id,
       kind: spec.kind,
@@ -520,7 +975,8 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       ...(counter === undefined ? {} : { counter }),
       trace,
       pacing,
-      marks
+      marks,
+      ...(timing === undefined ? {} : { echoTiming: timing })
     })
   }
   const frameObserver: FrameObserver = {
@@ -626,6 +1082,18 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     if (spec.kind === 'echo' && event.key !== spec.key) return
     if (startAt !== null) return
     startAt = root.performance.now()
+    if (socketCaptureObserver) {
+      if (socketCaptureHook) {
+        try {
+          socketCaptureHook.add(socketCaptureObserver)
+          socketCaptureActive = true
+        } catch {
+          echoUnavailableReason = 'socket-observer-failed'
+        }
+      } else {
+        echoUnavailableReason = 'socket-observer-unavailable'
+      }
+    }
     addPerformanceMark(marks.action, startAt)
     try {
       lastReady = condition().ready
@@ -998,7 +1466,7 @@ async function observeAction(
   signal: AbortSignal,
   timeoutMs = DEADLINE_MS,
   traceMode: 'none' | 'active' | 'owned' = 'none'
-): Promise<{ observation: BrowserObservationResult; controllerActionMs: number; controllerEndpointAt: number; frameTiming?: FrameTiming }> {
+): Promise<{ observation: BrowserObservationResult; controllerActionMs: number; controllerEndpointAt: number; frameTiming?: FrameTiming; scheduler?: TimerWindow }> {
   if (signal.aborted) throw new Error('speed measurement interrupted')
   const browser = page.context().browser()
   if (!browser) throw new Error('Chromium page is disconnected from its browser')
@@ -1013,18 +1481,33 @@ async function observeAction(
   const observe = async () => {
     const beganAt = performance.now()
     let controllerEndpointAt = Number.NaN
+    const timerProbe = spec.kind === 'echo' ? createTimerProbe() : null
+    let timerProbeStopped = false
     const observationPromise = waitForBrowserObserver(
       page, spec.id, timeoutMs, signal, closeContext, OBSERVER_CLEANUP_MS,
       () => { controllerEndpointAt = performance.now() }
     )
     try {
+      timerProbe?.start()
       await withDeadline(action(), timeoutMs, `${spec.kind} action`, signal)
       const observation = await observationPromise
       await ensurePageAlive(page, browser)
+      let scheduler: TimerWindow | undefined
+      if (timerProbe) {
+        scheduler = timerProbe.stop(echoEpochWindow(
+          observation.echoTiming?.pageTimeOriginMs,
+          observation.startedAt,
+          observation.endedAt
+        ))
+        timerProbeStopped = true
+      }
       const controllerActionMs = controllerEndpointAt - beganAt
       if (!Number.isFinite(controllerActionMs) || controllerActionMs <= 0) throw new Error(`${spec.kind} controller phase returned invalid timing`)
-      return { observation, controllerActionMs, controllerEndpointAt }
+      return { observation, controllerActionMs, controllerEndpointAt, ...(scheduler === undefined ? {} : { scheduler }) }
     } catch (error) {
+      if (timerProbe && !timerProbeStopped) {
+        try { timerProbe.stop(); timerProbeStopped = true } catch {}
+      }
       let cleanupError: unknown
       try {
         await cancelBrowserObserver(page, spec.id, errorText(error), closeContext)
@@ -1065,7 +1548,7 @@ async function echoTrial(
   signal: AbortSignal,
   timeoutMs = DEADLINE_MS,
   traceMode: 'none' | 'active' | 'owned' = 'none'
-): Promise<{ observation: BrowserObservationResult; controllerActionMs: number; controllerEndpointAt: number; frameTiming?: FrameTiming }> {
+): Promise<{ observation: BrowserObservationResult; controllerActionMs: number; controllerEndpointAt: number; frameTiming?: FrameTiming; scheduler?: TimerWindow }> {
   await waitForTerminalVisible(page, worktree, 0, timeoutMs)
   await focusEcho(page, worktree, timeoutMs)
   const sessionId = worktree.sessions[0]
@@ -1416,11 +1899,41 @@ function emptyFrameIntervalCapture(): FrameIntervalCapture {
   return { intervalsMs: [], duplicateTimestamps: 0, invalidTimestamps: 0 }
 }
 
+function echoEpochWindow(
+  pageTimeOriginMs: number | null | undefined,
+  startedAt: number | null,
+  endedAt: number | null
+): EpochWindow {
+  return {
+    startEpochMs: typeof pageTimeOriginMs === 'number' && startedAt !== null ? pageTimeOriginMs + startedAt : Number.NaN,
+    endEpochMs: typeof pageTimeOriginMs === 'number' && endedAt !== null ? pageTimeOriginMs + endedAt : Number.NaN
+  }
+}
+
+function unavailableTimerWindow(reason: string): TimerWindow {
+  return { status: 'unavailable', reason, intervals: [], pendingLateAtEndMs: null }
+}
+
+function unavailableEchoTiming(reason: string): EchoTiming {
+  return {
+    status: 'unavailable', reason, workerReadEpochMs: null, pageTimeOriginMs: null, receivedAt: null,
+    keystrokeToWorkerMs: null, workerToPageMs: null, pageToPaintMs: null
+  }
+}
+
 function recordObservationEvidence(
   row: SpeedSample,
   observation: BrowserObservationResult,
-  frameTiming?: FrameTiming
+  frameTiming?: FrameTiming,
+  scheduler?: TimerWindow
 ): void {
+  if (row.metric === 'echo' || row.metric === 'floodEcho') {
+    row.echoTiming = observation.echoTiming ?? unavailableEchoTiming('browser-echo-timing-missing')
+    row.scheduler = {
+      harness: scheduler ?? unavailableTimerWindow('controller-timer-capture-missing'),
+      floodWorker: null
+    }
+  }
   row.pacing = observation.pacing
   if (row.metric === 'echo' || row.metric === 'switch' || row.metric === 'floodEcho') {
     row.frameTiming = frameTiming ?? frameTimingFallback(observation, 'frame-timing-capture-missing')
@@ -1508,7 +2021,7 @@ async function runEchoAttempt(context: MetricContext, phase: SpeedSample['phase'
   try {
     const startedController = performance.now()
     const result = await echoTrial(context.page, worktree, sequence, key, signal, DEADLINE_MS, 'owned')
-    recordObservationEvidence(row, result.observation, result.frameTiming)
+    recordObservationEvidence(row, result.observation, result.frameTiming, result.scheduler)
     const endedController = performance.now()
     context.sessionSequence.set(worktree.sessions[0], sequence)
     const timing = echoTimingPhases(result.observation)
@@ -1609,6 +2122,25 @@ async function runFloodEchoSeries(context: MetricContext, sampleCount: number, s
         : new Error(`${errorText(failure)}; flood cleanup failed: ${errorText(error)}`)
     }
   }
+  if (stats) {
+    const expectedIdentity = { workerId: flood.start.workerId, sessionId: flood.start.sessionId, runId: flood.start.runId }
+    for (const row of context.attempts.slice(firstAttemptIndex)) {
+      if (row.metric !== 'floodEcho' || row.durationMs === null || row.startedAt === null || row.endedAt === null) continue
+      const scheduler = row.scheduler ?? {
+        harness: unavailableTimerWindow('controller-timer-capture-missing'),
+        floodWorker: null
+      }
+      row.scheduler = {
+        ...scheduler,
+        floodWorker: joinFloodSleepTiming(
+          stats.sleepTiming,
+          expectedIdentity,
+          echoEpochWindow(row.echoTiming?.pageTimeOriginMs, row.startedAt, row.endedAt)
+        )
+      }
+    }
+  }
+
   if (failure !== undefined) throw new MeasurementFailure('floodEcho', failureSample, failurePhase, failure)
   if (!stats) throw new MeasurementFailure('floodEcho', firstSample + sampleCount - 1, 'sample', new Error('flood cleanup returned no statistics'))
   validateFloodStats(stats, flood.start)
@@ -1633,7 +2165,7 @@ async function runFloodEchoAttempt(context: MetricContext, phase: SpeedSample['p
     await context.page.locator(busyPane).waitFor({ state: 'visible', timeout: DEADLINE_MS })
     const beganAt = performance.now()
     const result = await echoTrial(context.page, worktree, (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1, key, signal, DEADLINE_MS, 'owned')
-    recordObservationEvidence(row, result.observation, result.frameTiming)
+    recordObservationEvidence(row, result.observation, result.frameTiming, result.scheduler)
     const endedAt = performance.now()
     context.sessionSequence.set(worktree.sessions[0], (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1)
     const timing = echoTimingPhases(result.observation)
@@ -1664,6 +2196,7 @@ async function openContext(browser: Browser, contextSet: Set<BrowserContext>, si
   contextSet.add(context)
   try {
     await withDeadline(routeLoopback(context), DEADLINE_MS, 'browser loopback routing', signal)
+    await withDeadline(context.addInitScript(installSpeedSocketObserver), DEADLINE_MS, 'browser socket observer init script install', signal)
     const pageCreation = context.newPage()
     let page: Page
     try {
@@ -1973,6 +2506,8 @@ async function diagnosticTrial(
   let floodRunId: string | undefined
   let phases: Record<string, number | null> = {}
   let observation: BrowserObservationResult | undefined
+  let scheduler: SampleScheduler | undefined
+  let failureEvidence: Record<string, unknown> | undefined
   const resultPath = `diagnostics/${metric}.json`
   mkdirSync(join(context.out, 'diagnostics'), { recursive: true })
   try {
@@ -2002,6 +2537,10 @@ async function diagnosticTrial(
       const endAt = performance.now()
       context.sessionSequence.set(worktree.sessions[0], sequence)
       observation = trial.observation
+      scheduler = {
+        harness: trial.scheduler ?? unavailableTimerWindow('controller-timer-capture-missing'),
+        floodWorker: null
+      }
       const timing = echoTimingPhases(trial.observation)
       phases = {
         controllerActionMs: trial.controllerActionMs,
@@ -2041,6 +2580,9 @@ async function diagnosticTrial(
       const sequence = (context.sessionSequence.get(context.fixture.target.sessions[0]) ?? 0) + 1
       const startAt = performance.now()
       const trial = await echoTrial(context.page, context.fixture.target, sequence, 'x', signal, DEADLINE_MS, 'active')
+      observation = trial.observation
+      const harnessScheduler = trial.scheduler ?? unavailableTimerWindow('controller-timer-capture-missing')
+      scheduler = { harness: harnessScheduler, floodWorker: unavailableTimerWindow('flood-sleep-capture-unavailable') }
       const endAt = performance.now()
       context.sessionSequence.set(context.fixture.target.sessions[0], sequence)
       const endProgress = await waitForFloodProgressAfterSnapshot(
@@ -2053,8 +2595,15 @@ async function diagnosticTrial(
       const endCounter = endProgress.afterCounter
       const stats = await context.fixture.stopFlood()
       floodStart = undefined
+      scheduler = {
+        harness: harnessScheduler,
+        floodWorker: joinFloodSleepTiming(
+          stats.sleepTiming,
+          { workerId: flood.start.workerId, sessionId: flood.start.sessionId, runId: flood.start.runId },
+          echoEpochWindow(trial.observation.echoTiming?.pageTimeOriginMs, trial.observation.startedAt, trial.observation.endedAt)
+        )
+      }
       validateFloodStats(stats, flood.start)
-      observation = trial.observation
       const timing = echoTimingPhases(trial.observation)
       floodRunId = stats.runId
       phases = {
@@ -2116,6 +2665,8 @@ async function diagnosticTrial(
       status: 'complete',
       observation,
       phases,
+      ...(observation.echoTiming === undefined ? {} : { echoTiming: observation.echoTiming }),
+      ...(scheduler === undefined ? {} : { scheduler }),
       ...(floodRunId === undefined ? {} : { floodRunId }),
       ...(frameTiming === undefined ? {} : { frameTiming }),
       ...(traceFault === null ? {} : { traceError: traceFault }),
@@ -2158,7 +2709,7 @@ async function diagnosticTrial(
     }
     const message = sanitizeText(errorText(error), context.redactions)
     diagnosticErrors.push(`${metric}: ${message}`)
-    const failureEvidence = {
+    failureEvidence = {
       version: 1,
       metric,
       status: 'error',
@@ -2174,15 +2725,33 @@ async function diagnosticTrial(
         statusGet: { successful: probeStatus.successful, daemonPid: probeDaemonPid, ptyHostPid: probeStatus.ptyHostPid }
       }
     }
-    writeFileSync(join(context.out, resultPath), `${JSON.stringify(failureEvidence, null, 2)}\n`)
-    diagnosticPaths.push(resultPath)
   } finally {
     probe?.finish()
     probe?.stop()
     if (floodStart) {
-      try { await context.fixture.stopFlood() } catch (error) {
+      const expectedIdentity = floodStart
+      try {
+        const stats = await context.fixture.stopFlood()
+        floodStart = undefined
+        if (metric === 'floodEcho' && observation) {
+          scheduler = {
+            harness: scheduler?.harness ?? unavailableTimerWindow('controller-timer-capture-missing'),
+            floodWorker: joinFloodSleepTiming(
+              stats.sleepTiming,
+              { workerId: expectedIdentity.workerId, sessionId: expectedIdentity.sessionId, runId: expectedIdentity.runId },
+              echoEpochWindow(observation.echoTiming?.pageTimeOriginMs, observation.startedAt, observation.endedAt)
+            )
+          }
+        }
+      } catch (error) {
         diagnosticErrors.push(`flood cleanup: ${sanitizeText(errorText(error), context.redactions)}`)
       }
+    }
+    if (failureEvidence) {
+      if (observation?.echoTiming) failureEvidence.echoTiming = observation.echoTiming
+      if (scheduler) failureEvidence.scheduler = scheduler
+      writeFileSync(join(context.out, resultPath), `${JSON.stringify(failureEvidence, null, 2)}\n`)
+      diagnosticPaths.push(resultPath)
     }
   }
 }
@@ -2609,7 +3178,7 @@ export async function measureSpeed(options: {
 
       for (const metric of METRICS) {
         const value = median(sampleValues[metric])
-        if (value !== null && value > BUDGETS[metric]) {
+        if (shouldRunDiagnostic(metric, value)) {
           await diagnosticTrial(context, metric, contexts, signal, diagnostics, diagnosticErrors)
         }
       }
