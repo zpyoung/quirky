@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { main } from '../speed.ts'
 import { chromiumPath } from '../soak/windows.ts'
-import { METRICS, type SpeedPair } from './contracts.ts'
+import { METRICS, type FrameTiming, type SpeedPair, type SpeedReport } from './contracts.ts'
 
 const executable = chromiumPath()
 if (executable === null) console.warn('Skipping speed smoke proof: Playwright Chromium is unavailable')
@@ -19,6 +19,106 @@ function isAlive(pid: number): boolean {
   }
 }
 
+type Attempt = {
+  metric: typeof METRICS[number]
+  side?: 'head' | 'base'
+  phase: string
+  error?: string
+  durationMs?: number | null
+  startedAt?: number | null
+  endedAt?: number | null
+  pacing: { intervalsMs: number[]; duplicateTimestamps: number; invalidTimestamps: number }
+  frameTiming?: FrameTiming
+  phases?: Record<string, number>
+  fixture?: { worktrees?: number; sessions: string[]; worktreeIds: string[] }
+  ownedPids?: number[]
+}
+
+function readAttempts(out: string, file: string): Attempt[] {
+  return readFileSync(join(out, file), 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line))
+}
+
+function checkAttempt(row: Attempt): number {
+  expect(row.durationMs).toBe(row.endedAt! - row.startedAt!)
+  expect(row.pacing.intervalsMs.every(value => Number.isFinite(value) && value > 0)).toBe(true)
+  expect(Number.isInteger(row.pacing.duplicateTimestamps)).toBe(true)
+  expect(Number.isInteger(row.pacing.invalidTimestamps)).toBe(true)
+  if (['echo', 'switch', 'floodEcho'].includes(row.metric)) {
+    const timing = row.frameTiming!
+    expect(timing).toBeDefined()
+    expect(timing.wallMs).toBe(row.durationMs!)
+    expect(timing.effectiveMs).toBeGreaterThan(0)
+    expect(timing.effectiveMs).toBeLessThanOrEqual(timing.wallMs)
+    expect(timing.wallMs - timing.deductionMs).toBeCloseTo(timing.effectiveMs, 9)
+    if (timing.candidate) {
+      const candidate = timing.candidate
+      expect(candidate.requestedAt).toBeGreaterThanOrEqual(row.startedAt!)
+      expect(candidate.deliveredAt).toBeLessThanOrEqual(row.endedAt!)
+      expect(candidate.deliveredAt).toBeGreaterThanOrEqual(candidate.requestedAt)
+      if (candidate.kind === 'application-raf') {
+        expect(candidate.receiveCapAt).not.toBeNull()
+        expect(candidate.requestedAt).toBeGreaterThanOrEqual(candidate.receiveCapAt!)
+      }
+      let busyMs = 0
+      let busyEnd = candidate.requestedAt
+      for (const span of [...candidate.busySpans].sort((a, b) => a.start - b.start)) {
+        const start = Math.max(candidate.requestedAt, span.start, busyEnd)
+        const end = Math.min(candidate.deliveredAt, span.end)
+        busyMs += Math.max(0, end - start)
+        busyEnd = Math.max(busyEnd, end)
+      }
+      const idleMs = candidate.deliveredAt - candidate.requestedAt - busyMs
+      expect(timing.deductionMs).toBeCloseTo(Math.max(0, idleMs - 1000 / 60), 9)
+    }
+    if (timing.status === 'unavailable') {
+      expect(timing).toMatchObject({ effectiveMs: timing.wallMs, deductionMs: 0, candidate: null })
+      expect(timing.reason).toBeTruthy()
+    } else expect(timing.status).toBe('complete')
+    return timing.effectiveMs
+  }
+  if (row.metric === 'startup') {
+    for (const phase of ['runtimePublicationMs', 'rendererNavigationAndAttachMs', 'readinessInputToPaintMs', 'postPaintVerificationMs']) {
+      expect(Number.isFinite(row.phases?.[phase])).toBe(true)
+      expect(row.phases![phase]!).toBeGreaterThanOrEqual(0)
+    }
+  }
+  return row.durationMs!
+}
+
+function checkEvidence(out: string, report: SpeedReport, paired?: SpeedPair): void {
+  const attempts = readAttempts(out, 'samples.jsonl')
+  const pairAttempts = paired ? readAttempts(out, 'pair-samples.jsonl') : []
+  const pacing = JSON.parse(readFileSync(join(out, 'diagnostics/frame-pacing.json'), 'utf8'))
+  expect(pacing).toMatchObject({ version: 2, gpuCompositing: 'disabled_software' })
+  for (const metric of METRICS) {
+    for (const side of ['solo', 'head', 'base'] as const) {
+      const rows = (side === 'solo' ? attempts : pairAttempts).filter(row =>
+        row.metric === metric && (side === 'solo' || row.side === side))
+      const successful = rows.filter(row => row.phase === 'sample' && !row.error && typeof row.durationMs === 'number')
+      const values = successful.map(checkAttempt)
+      const unavailable = successful.filter(row => row.frameTiming?.status === 'unavailable').length
+      const aggregate = pacing.metrics[metric][side]
+      expect(aggregate.unavailableSamples).toBe(unavailable)
+      expect(aggregate.observedAttempts).toBe(successful.length)
+      expect(aggregate.duplicateTimestamps).toBe(successful.reduce((sum, row) => sum + row.pacing.duplicateTimestamps, 0))
+      expect(aggregate.invalidTimestamps).toBe(successful.reduce((sum, row) => sum + row.pacing.invalidTimestamps, 0))
+      expect(aggregate.frames).toBe(successful.reduce((sum, row) => sum + row.pacing.intervalsMs.length, 0))
+      if (side === 'solo') {
+        expect(values).toEqual(report.metrics[metric].samplesMs)
+        expect(successful.map(row => row.durationMs!)).toEqual(report.metrics[metric].wallSamplesMs!)
+        expect(report.metrics[metric].unavailableSamples!).toBe(unavailable)
+      } else if (paired) expect(values).toEqual(paired.metrics[metric][side === 'head' ? 'headSamplesMs' : 'baseSamplesMs'])
+    }
+  }
+  console.info(`Local smoke evidence (not runner performance): ${JSON.stringify({
+    environment: report.profile,
+    metrics: report.metrics,
+    deductions: [...attempts, ...pairAttempts].filter(row => row.phase === 'sample').map(row =>
+      ({ metric: row.metric, side: row.side ?? 'solo', frameTiming: row.frameTiming })),
+    pacing,
+  })}`)
+}
+
 test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only seeded slowdown and cleans up both worlds', async () => {
   const out = mkdtempSync(join(tmpdir(), 'quirky-speed-smoke-'))
   try {
@@ -26,35 +126,22 @@ test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only
     const commit = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: repoRoot }).stdout.toString().trim()
     const exitCode = await main(['--out', out, '--smoke', '--base-root', repoRoot, '--base-basis', 'parent', '--seed-echo-delay-ms', '1500'])
     expect(exitCode).toBe(0)
-    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as {
-      status: string
-      qualified: boolean
-      cleanup: string
-      profile: { workloadVersion: number; compositor: string; worktrees: number; terminals: number }
-      evidence: { diagnostics: string[] }
-      metrics: Record<string, { samplesMs: number[] }>
-    }
+    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as SpeedReport
     expect(report).toMatchObject({ status: 'complete', qualified: false, cleanup: 'complete' })
-    expect(report.profile).toMatchObject({ workloadVersion: 2, compositor: 'software', worktrees: 10, terminals: 20 })
+    expect(report.profile).toMatchObject({ workloadVersion: 3, compositor: 'software', frameTiming: 'native-final-frame-idle-cap-60hz', worktrees: 10, terminals: 20 })
     expect(report.evidence.diagnostics).toContain('diagnostics/frame-pacing.json')
     const pacing = JSON.parse(readFileSync(join(out, 'diagnostics/frame-pacing.json'), 'utf8'))
-    expect(pacing).toEqual({
-      version: 1, frames: 60, gpuCompositing: 'disabled_software',
-      medianIntervalMs: expect.any(Number), p90IntervalMs: expect.any(Number), maxIntervalMs: expect.any(Number),
-      intervalsMs: expect.any(Array)
-    })
-    expect(pacing.intervalsMs).toHaveLength(60)
-    for (const interval of pacing.intervalsMs) {
-      expect(Number.isFinite(interval)).toBe(true)
-      expect(interval).toBeGreaterThan(0)
-    }
-    for (const interval of [pacing.medianIntervalMs, pacing.p90IntervalMs, pacing.maxIntervalMs]) {
-      expect(Number.isFinite(interval)).toBe(true)
-      expect(interval).toBeGreaterThan(0)
-    }
+    expect(pacing.version).toBe(2)
+    expect(pacing.preflight.frames).toBe(pacing.preflight.intervalsMs.length)
+    expect(pacing.preflight.intervalsMs.every((value: number) => Number.isFinite(value) && value > 0)).toBe(true)
+    if (pacing.preflight.frames === 0) {
+      expect(pacing.preflight.error).toBeTruthy()
+      for (const summary of ['medianIntervalMs', 'p90IntervalMs', 'maxIntervalMs']) expect(pacing.preflight[summary]).toBeNull()
+    } else expect(pacing.preflight.error).toBeNull()
     expect(Object.values(report.metrics).map((metric) => metric.samplesMs.length)).toEqual([1, 1, 1, 1, 1])
     const pair = JSON.parse(readFileSync(join(out, 'pair.json'), 'utf8')) as SpeedPair
     expect(pair).toMatchObject({ status: 'complete', qualified: false, head: { commit }, base: { commit, basis: 'parent' }, failures: [] })
+    checkEvidence(out, report, pair)
     for (const metric of METRICS) {
       expect(pair.metrics[metric].headSamplesMs).toHaveLength(1)
       expect(pair.metrics[metric].baseSamplesMs).toHaveLength(1)
@@ -62,16 +149,14 @@ test.skipIf(executable === null)('scenario 8: pairs real builds with a head-only
     for (const metric of ['echo', 'floodEcho'] as const) {
       expect(pair.metrics[metric].headSamplesMs[0]! - pair.metrics[metric].baseSamplesMs[0]!).toBeGreaterThanOrEqual(500)
     }
-    const pairedAttempts = readFileSync(join(out, 'pair-samples.jsonl'), 'utf8').trim().split('\n')
-      .filter(Boolean).map(line => JSON.parse(line) as { metric: string; side: string; phase: string; phases?: Record<string, number>; fixture?: { sessions: string[]; worktreeIds: string[] }; ownedPids?: number[] })
+    const pairedAttempts = readAttempts(out, 'pair-samples.jsonl')
     for (const metric of METRICS) {
       for (const side of ['head', 'base']) expect(pairedAttempts.some(row => row.metric === metric && row.side === side)).toBe(true)
     }
     expect(pairedAttempts.filter(row => row.metric === 'startup' && row.phase === 'sample')).toHaveLength(2)
     expect(pairedAttempts.filter(row => row.metric === 'startup' && row.phase === 'warmup')).toHaveLength(0)
 
-    const attempts = readFileSync(join(out, 'samples.jsonl'), 'utf8').trim().split('\n')
-      .filter(Boolean).map((line) => JSON.parse(line) as { metric?: string; phase?: string; phases?: Record<string, number>; fixture?: { worktrees?: number; sessions: string[]; worktreeIds: string[] }; ownedPids?: number[] })
+    const attempts = readAttempts(out, 'samples.jsonl')
     const echoes = attempts.filter((attempt) => (attempt.metric === 'echo' || attempt.metric === 'floodEcho') && attempt.phase === 'sample')
     expect(echoes).toHaveLength(2)
     for (const echo of echoes) {
@@ -119,14 +204,7 @@ test.skipIf(executable === null)('scenario 10: keeps the solo smoke complete on 
       options => measureSpeed({ ...options, frameTimestamp: 1 }),
     )
     expect(exitCode).toBe(0)
-    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as {
-      status: string
-      qualified: boolean
-      cleanup: string
-      failures: unknown[]
-      evidence: { diagnostics: string[] }
-      metrics: Record<string, { samplesMs: number[] }>
-    }
+    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as SpeedReport
     expect(report).toMatchObject({ status: 'complete', qualified: false, cleanup: 'complete' })
     expect(report.failures).toEqual([])
     const pair = JSON.parse(readFileSync(join(out, 'pair.json'), 'utf8')) as SpeedPair
@@ -135,27 +213,18 @@ test.skipIf(executable === null)('scenario 10: keeps the solo smoke complete on 
     expect(report.evidence.diagnostics).toContain('diagnostics/frame-pacing.json')
     expect(Object.values(report.metrics).map((metric) => metric.samplesMs.length)).toEqual([1, 1, 1, 1, 1])
 
-    const pacing = JSON.parse(readFileSync(join(out, 'diagnostics/frame-pacing.json'), 'utf8')) as {
-      version: number
-      frames: number
-      gpuCompositing: string
-      intervalsMs: number[]
-      error: string
-    }
+    const pacing = JSON.parse(readFileSync(join(out, 'diagnostics/frame-pacing.json'), 'utf8'))
     expect(pacing).toMatchObject({
-      version: 1,
-      frames: 60,
-      gpuCompositing: 'disabled_software',
-      intervalsMs: Array.from({ length: 60 }, () => 0)
+      version: 2, gpuCompositing: 'disabled_software',
+      preflight: {
+        frames: 0, intervalsMs: [], duplicateTimestamps: 119, invalidTimestamps: 0,
+        medianIntervalMs: null, p90IntervalMs: null, maxIntervalMs: null,
+      },
     })
-    expect(pacing.error).toMatch(/^frame pacing needs positive finite intervals/)
-    expect(pacing.error).toContain(JSON.stringify(pacing.intervalsMs))
-    for (const summary of ['medianIntervalMs', 'p90IntervalMs', 'maxIntervalMs']) {
-      expect(pacing).not.toHaveProperty(summary)
-    }
+    expect(pacing.preflight.error).toBeTruthy()
+    checkEvidence(out, report)
 
-    const attempts = readFileSync(join(out, 'samples.jsonl'), 'utf8').trim().split('\n')
-      .filter(Boolean).map((line) => JSON.parse(line) as { metric?: string; phase?: string; phases?: Record<string, number>; ownedPids?: number[] })
+    const attempts = readAttempts(out, 'samples.jsonl')
     const echoes = attempts.filter((attempt) => (attempt.metric === 'echo' || attempt.metric === 'floodEcho') && attempt.phase === 'sample')
     expect(echoes).toHaveLength(2)
     for (const echo of echoes) {

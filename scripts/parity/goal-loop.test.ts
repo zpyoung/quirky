@@ -24,7 +24,7 @@ test('goal loop rehearsal proves worktree, terminal, loop, Ask, usage and cleanu
   mkdirSync(env.TMPDIR!, { recursive: true })
   try {
     const child = scope.spawn([process.execPath, join(import.meta.dir, 'goal-loop.ts'), '--json'], {
-      cwd: repoRoot, env, stdout: 'pipe', stderr: 'pipe', timeout: 125_000
+      cwd: repoRoot, env, stdout: 'pipe', stderr: 'pipe', timeout: 185_000
     })
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited
@@ -47,7 +47,7 @@ test('goal loop rehearsal proves worktree, terminal, loop, Ask, usage and cleanu
       cleanup: { ok: true }
     })
     expect(report.elapsedMs).toBeGreaterThanOrEqual(0)
-    expect(report.elapsedMs).toBeLessThanOrEqual(120_000)
+    expect(report.elapsedMs).toBeLessThanOrEqual(180_000)
     expect(report.steps.map(step => step.id)).toEqual(stepIds)
     expect(report.steps.every(step => step.status === 'passed' && step.elapsedMs >= 0)).toBe(true)
     expect(stdout).not.toContain(scope.home)
@@ -98,11 +98,20 @@ test('goal loop rehearsal proves worktree, terminal, loop, Ask, usage and cleanu
         text: 'fixture-nudge-a', sendReceiptReceived: true, inputLines: ['fixture-nudge-a'],
         ackQuote: 'ACK:fixture-nudge-a', ackCountA: 1, ackCountB: 0
       },
+      interrupt: {
+        sessionId: launches[0]!.id, signalCountA: 1, signalCountB: 0,
+        marker: `INTERRUPT:${launches[0]!.id}`, markerCountA: 1, markerCountB: 0
+      },
+      close: {
+        sessionId: launches[0]!.id,
+        sessionAbsent: true, tabAbsent: true, otherSessionPresent: true
+      },
       shell: {
         input: 'fixture-shell-input', sendReceiptReceived: true,
         ackQuote: 'ACK:fixture-shell-input', ackCount: 1
       }
     })
+    expect(terminalEvidence.close.tabId).toBeString()
 
     const loopEvidence = evidence('loop-run-stop')
     expect(loopEvidence).toMatchObject({
@@ -117,12 +126,30 @@ test('goal loop rehearsal proves worktree, terminal, loop, Ask, usage and cleanu
         sessionId: expect.any(String),
         state: 'stopped', activeTurnObserved: true,
         interruptRequestCount: 1, extraTurnStartCount: 0
+      },
+      checkCompleted: {
+        id: expect.any(String), agent: 'claude', state: 'completed', pauseReason: null,
+        iterationsCompleted: 2, turnStartCount: 2, checkExitCodes: [1, 0], checkPasses: [false, true],
+        resume: { beforeState: 'paused', beforeReason: 'user', afterState: 'running' },
+        config: {
+          pacing: { kind: 'interval', minutes: 1, anchor: 'from-end' },
+          sessionPolicy: 'fresh', caps: {}, resumeAtLimitReset: true
+        }
       }
     })
     expect(['interrupted', 'stopped']).toContain((loopEvidence.interrupt as Record<string, any>).turnOutcome)
+    const checkCompleted = loopEvidence.checkCompleted
+    expect(checkCompleted.sessionIds).toHaveLength(2)
+    expect(new Set(checkCompleted.sessionIds).size).toBe(2)
+    expect(checkCompleted.nativeSessionIds).toHaveLength(2)
+    expect(new Set(checkCompleted.nativeSessionIds).size).toBe(2)
+    expect(checkCompleted.nextIterationAt).toBe(checkCompleted.firstEndedAt + 60_000)
+    expect(checkCompleted.secondStartedAt).toBeGreaterThanOrEqual(checkCompleted.nextIterationAt)
+    expect(checkCompleted.intervalWaitMs).toBe(checkCompleted.secondStartedAt - checkCompleted.firstEndedAt)
     const loopSessionIds = [
       (loopEvidence.capped as Record<string, any>).sessionId,
-      (loopEvidence.interrupt as Record<string, any>).sessionId
+      (loopEvidence.interrupt as Record<string, any>).sessionId,
+      ...checkCompleted.sessionIds
     ]
 
     const asks = evidence('ask-answer-cancel')
@@ -145,6 +172,7 @@ test('goal loop rehearsal proves worktree, terminal, loop, Ask, usage and cleanu
       codexConsumeCalls: 0,
       egressAttempts: 0,
       orcaInvocations: 0,
+      claudeTurnsDuringRefresh: 0,
       antigravityArgv: [
         ['--version'],
         ['-p', '/usage', '--output-format', 'json', '--print-timeout', '20s']
@@ -162,11 +190,16 @@ test('goal loop rehearsal proves worktree, terminal, loop, Ask, usage and cleanu
           weekly: { usedPercent: 60, resetsAt: 1_893_456_000_000 }
         },
         claude: {
-          status: 'unavailable', session: null, weekly: null,
-          refreshedStatus: 'unavailable', refreshedSession: null, refreshedWeekly: null
+          status: 'ok',
+          session: { usedPercent: 17, resetsAt: 1_893_456_000_000 },
+          weekly: { usedPercent: 43, resetsAt: 1_893_456_000_000 },
+          refreshedStatus: 'ok',
+          refreshedSession: { usedPercent: 17, resetsAt: 1_893_456_000_000 },
+          refreshedWeekly: { usedPercent: 43, resetsAt: 1_893_456_000_000 }
         }
       }
     })
+    expect(evidence('accounts-usage').claudeUsageRequests).toBeGreaterThan(0)
 
     const removal = evidence('worktrees-remove')
     const createdIds = worktrees.map(worktree => worktree.id)
@@ -177,10 +210,11 @@ test('goal loop rehearsal proves worktree, terminal, loop, Ask, usage and cleanu
       ...launches.map(session => session.id), shellEvidence.sessionId, ...loopSessionIds
     ]))
     expect(removal.closedTabIds).toContain(shellEvidence.tabId)
+    expect(removal.closedTabIds).toContain(terminalEvidence.close.tabId)
     expect(removal.remainingWorktreeIds).not.toEqual(expect.arrayContaining(createdIds))
     const retainedBranches = removal.retainedBranches as Array<Record<string, any>>
     expect(retainedBranches.every(branch => branch.deletedThroughCli === true && !!branch.name && !!branch.head)).toBe(true)
   } finally {
     await scope.cleanup()
   }
-}, 135_000)
+}, 195_000)
