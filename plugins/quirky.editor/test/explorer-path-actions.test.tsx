@@ -241,7 +241,7 @@ function makeContext(fixture: Fixture): UiPluginContext {
 
 type CommandHandler = (args?: unknown) => unknown
 
-function activateControlBridge(context: UiPluginContext): () => void {
+function activateControlBridge(context: UiPluginContext, commandDeadlineMs?: number): () => void {
   const handlers = new Map<string, CommandHandler>()
   const originalCall = context.call.bind(context)
   context.provide = ((id: string, handler: CommandHandler) => { handlers.set(id, handler) }) as typeof context.provide
@@ -251,12 +251,86 @@ function activateControlBridge(context: UiPluginContext): () => void {
       if (params.connId !== 22) throw new Error('The control must stay in this window.')
       const handler = handlers.get(String(params.id))
       if (!handler) throw new Error(`No activated handler for ${String(params.id)}.`)
-      return { result: await handler(params.args) }
+      const delivery = Promise.resolve().then(() => handler(params.args)).then((result) => ({ result }))
+      if (commandDeadlineMs === undefined) return await delivery
+      const { promise: deadlinePromise, reject } = Promise.withResolvers<never>()
+      const deadline = setTimeout(() => reject(new Error('Simulated host command deadline expired.')), commandDeadlineMs)
+      try {
+        return await Promise.race([delivery, deadlinePromise])
+      } finally {
+        clearTimeout(deadline)
+      }
     }
     return originalCall(method, params)
   }) as typeof context.call
   activate(context)
   return () => deactivate()
+}
+
+type ControlDelivery = { args: unknown; result?: unknown; error?: unknown }
+
+function captureControlDeliveries(context: UiPluginContext, deliveries: ControlDelivery[]): void {
+  const originalCall = context.call.bind(context)
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'ui.window.command.run') {
+      try {
+        const result = await originalCall(method, params)
+        deliveries.push({ args: params.args, result })
+        return result
+      } catch (error) {
+        deliveries.push({ args: params.args, error })
+        throw error
+      }
+    }
+    return originalCall(method, params)
+  }) as typeof context.call
+}
+
+async function renderExplorer(
+  fixture: Fixture,
+  context = makeContext(fixture),
+  includeConfirmHost = false,
+  commandDeadlineMs?: number
+): Promise<Mounted> {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const root = createRoot(element)
+  const disposeBridge = activateControlBridge(context, commandDeadlineMs)
+  const scope = createEditorUiControlReportScope((value) => {
+    if (typeof value !== 'object' || value === null || !('loading' in value) || typeof value.loading !== 'boolean') return
+    fixture.reports.push({
+      loading: value.loading,
+      error: 'error' in value && typeof value.error === 'string' ? value.error : null,
+      expandedCount: 'expandedCount' in value && typeof value.expandedCount === 'number' ? value.expandedCount : 0
+    })
+  }, { surface: 'panel:quirky.editor/explorer' })
+  let unmounted = false
+  const surface: Mounted = {
+    element,
+    async unmount() {
+      if (unmounted) return
+      unmounted = true
+      try {
+        await act(async () => root.unmount())
+      } finally {
+        scope.dispose()
+        disposeBridge()
+      }
+    }
+  }
+  mounted.push(surface)
+  await act(async () => {
+    root.render(
+      <EditorUiControlProvider scope={scope}>
+        <>
+          <ExplorerPanel context={context} report={scope.report} />
+          {includeConfirmHost && <ConfirmHost />}
+        </>
+      </EditorUiControlProvider>
+    )
+  })
+  await waitForUi(() => fixture.listing.entries.some((entry) => findRow(element, entry.path)))
+  return surface
 }
 
 function interceptExplorerChanged(context: UiPluginContext, fixture: Fixture): () => void {
@@ -301,6 +375,9 @@ async function waitForUi<T>(
     return await check()
   }, timeoutMs)
 }
+async function waitForClipboardText(expected: string): Promise<void> {
+  await waitForUi(async () => (await navigator.clipboard.readText()) === expected || false)
+}
 
 async function waitForNextAnimationFrame(): Promise<void> {
   const frame = Promise.withResolvers<void>()
@@ -308,47 +385,6 @@ async function waitForNextAnimationFrame(): Promise<void> {
   await frame.promise
 }
 
-async function renderExplorer(fixture: Fixture, context = makeContext(fixture), includeConfirmHost = false): Promise<Mounted> {
-  const element = document.createElement('div')
-  document.body.append(element)
-  const root = createRoot(element)
-  const disposeBridge = activateControlBridge(context)
-  const scope = createEditorUiControlReportScope((value) => {
-    if (typeof value !== 'object' || value === null || !('loading' in value) || typeof value.loading !== 'boolean') return
-    fixture.reports.push({
-      loading: value.loading,
-      error: 'error' in value && typeof value.error === 'string' ? value.error : null,
-      expandedCount: 'expandedCount' in value && typeof value.expandedCount === 'number' ? value.expandedCount : 0
-    })
-  }, { surface: 'panel:quirky.editor/explorer' })
-  let unmounted = false
-  const surface: Mounted = {
-    element,
-    async unmount() {
-      if (unmounted) return
-      unmounted = true
-      try {
-        await act(async () => root.unmount())
-      } finally {
-        scope.dispose()
-        disposeBridge()
-      }
-    }
-  }
-  mounted.push(surface)
-  await act(async () => {
-    root.render(
-      <EditorUiControlProvider scope={scope}>
-        <>
-          <ExplorerPanel context={context} report={scope.report} />
-          {includeConfirmHost && <ConfirmHost />}
-        </>
-      </EditorUiControlProvider>
-    )
-  })
-  await waitForUi(() => fixture.listing.entries.some((entry) => findRow(element, entry.path)))
-  return surface
-}
 
 async function renderStandaloneExplorer(context: UiPluginContext, includeConfirmHost = false): Promise<Mounted> {
   const element = document.createElement('div')
@@ -505,10 +541,15 @@ test('Explorer distinguishes a pending root listing from a settled empty folder'
   }) as typeof context.call
   const panel = await renderStandaloneExplorer(context)
   try {
-    expect(panel.element.querySelector('.ui-notice-line')?.textContent).toBe('Loading files…')
+    const loadingStatus = panel.element.querySelector<HTMLElement>('[role="status"]')
+    expect(loadingStatus?.getAttribute('aria-live')).toBe('polite')
+    expect(loadingStatus?.querySelector('.ui-notice-line')?.textContent).toBe('Loading files…')
     expect(panel.element.querySelector('.ui-empty-state')).toBeNull()
     await act(async () => listing.resolve({ ...fixture.listing, entries: [] }))
     const empty = await waitForUi(() => panel.element.querySelector('.ui-empty-state') ?? false)
+    const emptyStatus = panel.element.querySelector<HTMLElement>('[role="status"]')
+    expect(emptyStatus?.getAttribute('aria-live')).toBe('polite')
+    expect(emptyStatus?.querySelector('.ui-empty-state')).toBe(empty)
     expect(empty.textContent).toContain('No files in this folder.')
   } finally {
     await act(async () => listing.resolve({ ...fixture.listing, entries: [] }))
@@ -537,6 +578,10 @@ test('Explorer does not show an empty Names result from a stale query', async ()
     await waitForUi(() => filterCount === 1 || false)
     await setQuery('missing-current')
     await waitForUi(() => filterCount === 2 || false)
+    const searchingStatus = Array.from(panel.element.querySelectorAll<HTMLElement>('[role="status"]'))
+      .find((status) => status.querySelector('.ui-notice-line')?.textContent === 'Searching files…')
+    expect(searchingStatus?.getAttribute('aria-live')).toBe('polite')
+    expect(searchingStatus?.querySelector('.ui-notice-line')).not.toBeNull()
     await act(async () => results[0]!.resolve({ ...fixture.listing, entries: [] }))
     await flushReact()
     expect(panel.element.querySelector('.ui-empty-state')).toBeNull()
@@ -544,6 +589,10 @@ test('Explorer does not show an empty Names result from a stale query', async ()
     await act(async () => results[1]!.resolve({ ...fixture.listing, entries: [] }))
     const empty = await waitForUi(() => panel.element.querySelector('.ui-empty-state') ?? false)
     expect(empty.textContent).toContain('No files match “missing-current”.')
+    const emptyStatus = Array.from(panel.element.querySelectorAll<HTMLElement>('[role="status"]'))
+      .find((status) => status.querySelector('.ui-empty-state') === empty)
+    expect(emptyStatus?.getAttribute('aria-live')).toBe('polite')
+    expect(emptyStatus?.querySelector('.ui-empty-state')).toBe(empty)
     const clear = Array.from(empty.querySelectorAll<HTMLButtonElement>('button'))
       .find((button) => /clear filter/i.test(button.textContent ?? ''))
     expect(clear).toBeDefined()
@@ -758,11 +807,11 @@ test('Explorer row actions copy canonical absolute and worktree-relative paths a
   expect(fileRow).not.toBeNull()
   const absoluteAction = await actionButton(fileRow!, 'Copy Path')
   await act(async () => absoluteAction.click())
-  expect(await navigator.clipboard.readText()).toBe(file)
+  await waitForClipboardText(file)
 
   const relativeAction = await actionButton(fileRow!, 'Copy Relative Path')
   await act(async () => relativeAction.click())
-  expect(await navigator.clipboard.readText()).toBe(FILE_A)
+  await waitForClipboardText(FILE_A)
   expect(clipboardWrites).toEqual([file, FILE_A])
 
   const directory = join(fixture.root, 'nested/archive')
@@ -908,9 +957,9 @@ test.each([
     expect(state.tabs.some((tab) => tab.bufferId === buffer!.id)).toBe(true)
   }
   await act(async () => footerButton(panel.element, 'Copy Path').click())
-  expect(await navigator.clipboard.readText()).toBe(created)
+  await waitForClipboardText(created)
   await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
-  expect(await navigator.clipboard.readText()).toBe(path)
+  await waitForClipboardText(path)
   await act(async () => footerButton(panel.element, 'Delete').click())
   await waitForUi(() => !existsSync(created))
   expect(existsSync(join(fixture.root, FILE_A))).toBe(true)
@@ -957,9 +1006,9 @@ test('Explorer Duplicate selects and opens the copy and targets it in footer act
   expect(panel.element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]')).toHaveLength(1)
 
   await act(async () => footerButton(panel.element, 'Copy Path').click())
-  expect(await navigator.clipboard.readText()).toBe(copy)
+  await waitForClipboardText(copy)
   await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
-  expect(await navigator.clipboard.readText()).toBe(copyRelativePath)
+  await waitForClipboardText(copyRelativePath)
   await act(async () => footerButton(panel.element, 'Delete').click())
   await waitForUi(() => !existsSync(copy))
   expect(existsSync(source)).toBe(true)
@@ -1449,6 +1498,193 @@ test('Explorer failed rename keeps focus in the inline editor', async () => {
   const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
   expect(tree?.getAttribute('aria-activedescendant')).toBe(row.id)
   expect(existsSync(join(dirname(source), 'failed-rename.txt'))).toBe(false)
+}, 60_000)
+
+test('Explorer create is accepted before a simulated host deadline while mutation is pending', async () => {
+  const fixture = await makeFixture()
+  const context = makeContext(fixture)
+  const originalCall = context.call.bind(context)
+  const mutation = Promise.withResolvers<void>()
+  let mutationCalls = 0
+  let mutationSettled = false
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && params.action === 'createFile') {
+      mutationCalls++
+      try {
+        await mutation.promise
+        mutationSettled = true
+      } catch (reason) {
+        mutationSettled = true
+        throw reason
+      }
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context, false, 250)
+  const deliveries: ControlDelivery[] = []
+  captureControlDeliveries(context, deliveries)
+  try {
+    const newFile = panel.element.querySelector<HTMLButtonElement>('button[title="New File"]')
+    if (!newFile) throw new Error('Missing New File action')
+    await act(async () => newFile.click())
+    const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input') ?? false)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'accepted-create.txt')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const create = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-inline-row button'))
+      .find((button) => button.textContent?.trim() === 'Create')
+    if (!create) throw new Error('Missing Create action')
+    await act(async () => create.click())
+    await waitForUi(() => mutationCalls === 1 || false)
+    const accepted = await waitForUi(() => deliveries.find((delivery) => {
+      const args = delivery.args
+      return typeof args === 'object' && args !== null && 'action' in args && args.action === 'create'
+    }) ?? false)
+    expect(accepted.error).toBeUndefined()
+    expect(accepted.result).toEqual({ result: { delivered: true } })
+    expect(mutationSettled).toBe(false)
+    expect(panel.element.querySelector('[role="alert"]')).toBeNull()
+    expect(panel.element.querySelector<HTMLButtonElement>('.qe-explorer-inline-row button')?.disabled).toBe(true)
+
+    const duplicate = await context.call('ui.window.command.run', {
+      connId: 22,
+      id: 'command:quirky.editor/ui-control',
+      args: accepted.args as Record<string, unknown>
+    })
+    expect(duplicate).toEqual({ result: { delivered: false } })
+    expect(mutationCalls).toBe(1)
+
+    await act(async () => mutation.resolve())
+    await waitForUi(() => existsSync(join(fixture.root, 'accepted-create.txt')) || false)
+    await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+    expect(mutationSettled).toBe(true)
+  } finally {
+    if (!mutationSettled) mutation.resolve()
+    await panel.unmount()
+  }
+}, 60_000)
+
+test('Explorer rename is accepted before a simulated host deadline and reports late failure without losing its draft', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  const originalCall = context.call.bind(context)
+  const mutation = Promise.withResolvers<void>()
+  const errorMessage = 'deferred rename failure'
+  let mutationCalls = 0
+  let mutationSettled = false
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && params.action === 'rename') {
+      mutationCalls++
+      try {
+        await mutation.promise
+      } finally {
+        mutationSettled = true
+      }
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context, false, 250)
+  const deliveries: ControlDelivery[] = []
+  captureControlDeliveries(context, deliveries)
+  try {
+    const source = join(fixture.root, FILE_A)
+    const row = findRow(panel.element, source)
+    if (!row) throw new Error('Missing rename source row')
+    const renameAction = await actionButton(row, 'Rename')
+    await act(async () => renameAction.click())
+    const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'accepted-rename.txt')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const rename = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-inline-row button'))
+      .find((button) => button.textContent?.trim() === 'Rename')
+    if (!rename) throw new Error('Missing Rename action')
+    await act(async () => rename.click())
+    await waitForUi(() => mutationCalls === 1 || false)
+    const accepted = await waitForUi(() => deliveries.find((delivery) => {
+      const args = delivery.args
+      return typeof args === 'object' && args !== null && 'action' in args && args.action === 'rename'
+    }) ?? false)
+    expect(accepted.error).toBeUndefined()
+    expect(accepted.result).toEqual({ result: { delivered: true } })
+    expect(mutationSettled).toBe(false)
+    expect(panel.element.querySelector('[role="alert"]')).toBeNull()
+
+    const duplicate = await context.call('ui.window.command.run', {
+      connId: 22,
+      id: 'command:quirky.editor/ui-control',
+      args: accepted.args as Record<string, unknown>
+    })
+    expect(duplicate).toEqual({ result: { delivered: false } })
+    expect(mutationCalls).toBe(1)
+
+    await act(async () => mutation.reject(new Error(errorMessage)))
+    await waitForUi(() => panel.element.querySelector<HTMLElement>('[role="alert"]')?.textContent?.includes(errorMessage) || false)
+    expect(input.isConnected).toBe(true)
+    expect(input.value).toBe('accepted-rename.txt')
+    expect(mutationSettled).toBe(true)
+    expect(existsSync(join(dirname(source), 'accepted-rename.txt'))).toBe(false)
+  } finally {
+    if (!mutationSettled) mutation.resolve()
+    await panel.unmount()
+  }
+}, 60_000)
+
+test('Explorer copy-path is accepted before deferred clipboard completion and rejects a duplicate', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  const clipboard = Promise.withResolvers<void>()
+  let clipboardCalls = 0
+  let clipboardSettled = false
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      async readText() { return '' },
+      async writeText(value: string) {
+        clipboardCalls++
+        await clipboard.promise
+        clipboardWrites.push(value)
+        clipboardSettled = true
+      }
+    }
+  })
+  const panel = await renderExplorer(fixture, context, false, 250)
+  const deliveries: ControlDelivery[] = []
+  captureControlDeliveries(context, deliveries)
+  try {
+    const source = join(fixture.root, FILE_A)
+    const row = findRow(panel.element, source)
+    if (!row) throw new Error('Missing copy-path source row')
+    await act(async () => row.click())
+    await waitForUi(() => findRow(panel.element, source)?.getAttribute('aria-selected') === 'true' || false)
+    await act(async () => footerButton(panel.element, 'Copy Path').click())
+    await waitForUi(() => clipboardCalls === 1 || false)
+    const accepted = await waitForUi(() => deliveries.find((delivery) => {
+      const args = delivery.args
+      return typeof args === 'object' && args !== null && 'action' in args && args.action === 'copy-path'
+    }) ?? false)
+    expect(accepted.error).toBeUndefined()
+    expect(accepted.result).toEqual({ result: { delivered: true } })
+    expect(clipboardSettled).toBe(false)
+    expect(panel.element.querySelector('[role="alert"]')).toBeNull()
+
+    const duplicate = await context.call('ui.window.command.run', {
+      connId: 22,
+      id: 'command:quirky.editor/ui-control',
+      args: accepted.args as Record<string, unknown>
+    })
+    expect(duplicate).toEqual({ result: { delivered: false } })
+    expect(clipboardCalls).toBe(1)
+
+    await act(async () => clipboard.resolve())
+    await waitForUi(() => clipboardSettled || false)
+    expect(clipboardWrites).toEqual([source])
+  } finally {
+    if (!clipboardSettled) clipboard.resolve()
+    await panel.unmount()
+  }
 }, 60_000)
 test('Explorer cancelling a New File form preserves a failed Rename error', async () => {
   const { context, filePath } = makeDeleteConfirmationFixture()
@@ -1946,7 +2182,7 @@ test('Explorer selection actions use visible Names results and restore hidden se
       expect(footerButton(panel.element, label).disabled).toBe(false)
     }
     await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
-    expect(await navigator.clipboard.readText()).toBe(FILE_A)
+    await waitForClipboardText(FILE_A)
   } finally {
     await panel.unmount()
   }
@@ -2013,9 +2249,9 @@ test('Explorer footer copies and deletes only visible files from a partial Names
     )
 
     await act(async () => footerButton(panel.element, 'Copy Path').click())
-    expect(await navigator.clipboard.readText()).toBe(visiblePath)
+    await waitForClipboardText(visiblePath)
     await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
-    expect(await navigator.clipboard.readText()).toBe(FILE_A)
+    await waitForClipboardText(FILE_A)
 
     await act(async () => footerButton(panel.element, 'Delete').click())
     await waitForUi(() => !existsSync(visiblePath) || false, 15_000)
@@ -2092,14 +2328,18 @@ test('Explorer Contents summary waits until the search completes', async () => {
     })
     await act(async () => panel.element.querySelector<HTMLButtonElement>('.qe-explorer-query button')!.click())
 
-    expect(panel.element.querySelector('.ui-notice-line')?.textContent).toBe('Searching files…')
+    const searchingStatus = panel.element.querySelector<HTMLElement>('.qe-explorer-content-results [role="status"]')
+    expect(searchingStatus?.getAttribute('aria-live')).toBe('polite')
+    expect(searchingStatus?.querySelector('.ui-notice-line')?.textContent).toBe('Searching files…')
     expect(panel.element.querySelector('.qe-explorer-content-results .ui-empty-state')).toBeNull()
 
     await act(async () => {
       search.resolve({ files: [], totalMatches: 0, truncated: false, error: null, loading: false })
     })
     expect(panel.element.querySelector('.qe-explorer-content-results .ui-notice-line')).toBeNull()
-    expect(panel.element.querySelector('.ui-empty-state')?.textContent).toContain('No results')
+    const emptyStatus = panel.element.querySelector<HTMLElement>('.qe-explorer-content-results [role="status"]')
+    expect(emptyStatus?.getAttribute('aria-live')).toBe('polite')
+    expect(emptyStatus?.querySelector('.ui-empty-state')?.textContent).toContain('No results')
   } finally {
     await act(async () => search.resolve({ files: [], totalMatches: 0, truncated: false, error: null, loading: false }))
     await panel.unmount()
@@ -2485,7 +2725,7 @@ test('Explorer explains an unmatched Contents query in Names and clears it to re
   expect(document.activeElement).toBe(query)
   expect(emptyMessage!.isConnected).toBe(false)
   await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
-  expect(await navigator.clipboard.readText()).toBe('qa-focus.txt')
+  await waitForClipboardText('qa-focus.txt')
 }, 60_000)
 
 test('Explorer footer Search in Files focuses the contents query', async () => {
@@ -2578,12 +2818,12 @@ test('Explorer header actions copy all selected paths', async () => {
     const copyPath = buttons.find((button) => button.textContent?.trim() === 'Copy Path')
     expect(copyPath).toBeDefined()
     await act(async () => copyPath!.click())
-    expect(await navigator.clipboard.readText()).toBe(`${absoluteA}\n${absoluteB}`)
+    await waitForClipboardText(`${absoluteA}\n${absoluteB}`)
 
     const copyRelativePath = buttons.find((button) => button.textContent?.trim() === 'Copy Relative Path')
     expect(copyRelativePath).toBeDefined()
     await act(async () => copyRelativePath!.click())
-    expect(await navigator.clipboard.readText()).toBe(`${FILE_A}\n${FILE_B}`)
+    await waitForClipboardText(`${FILE_A}\n${FILE_B}`)
   } finally {
     await panel.unmount()
   }
@@ -2599,9 +2839,9 @@ test('Explorer footer copies multi-selection paths and row drags satisfy the Ter
   await selectRow(panel.element, absoluteB)
 
   await act(async () => footerButton(panel.element, 'Copy Path').click())
-  expect(await navigator.clipboard.readText()).toBe(`${absoluteA}\n${absoluteB}`)
+  await waitForClipboardText(`${absoluteA}\n${absoluteB}`)
   await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
-  expect(await navigator.clipboard.readText()).toBe(`${FILE_A}\n${FILE_B}`)
+  await waitForClipboardText(`${FILE_A}\n${FILE_B}`)
   expect(clipboardWrites).toEqual([`${absoluteA}\n${absoluteB}`, `${FILE_A}\n${FILE_B}`])
 
   const row = findRow(panel.element, absoluteA)

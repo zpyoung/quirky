@@ -246,6 +246,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const itemBusySessionRef = useRef<string | null>(null)
   const renameBusyRef = useRef(false)
   const renameBusySessionRef = useRef<string | null>(null)
+  const copyBusyRef = useRef<{ worktree: string; generation: string } | null>(null)
   const controlsRef = useRef<EditorUiControlActions | null>(null)
 
   const rotateControlGeneration = () => {
@@ -1095,30 +1096,42 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
 
-  const copyPaths = async (
+  const copyPaths = (
     relative: boolean,
     paths: string[],
-    isCurrent: () => boolean
-  ): Promise<boolean> => {
-    const requestedWorktree = worktree
-    if (!requestedWorktree || paths.length === 0 || !paths.every((path) => entryForPath(path) !== undefined)) return false
-    try {
-      const root = await resolveWorktreeRoot(requestedWorktree)
-      if (root === null || !isCurrent() || currentWorktree.current !== requestedWorktree) return false
-      const relativePaths = paths.map((path) => relativeExplorerPath(root, path))
-      if (relativePaths.includes(null)) throw new Error('The selected path is outside this worktree.')
-      const values = relative ? relativePaths : paths
-      await navigator.clipboard.writeText(values.join('\n'))
-      if (!isCurrent() || currentWorktree.current !== requestedWorktree) return false
-      context.toast('Paths copied', `${values.length} path(s)`)
-      return true
-    } catch (reason) {
-      if (isCurrent() && currentWorktree.current === requestedWorktree) setError(messageOf(reason))
-      return isCurrent()
+    requestedWorktree: string,
+    generation: string
+  ): boolean => {
+    if (currentWorktree.current !== requestedWorktree || paths.length === 0 ||
+      !paths.every((path) => entryForPath(path) !== undefined)) return false
+    const pending = copyBusyRef.current
+    if (pending?.worktree === requestedWorktree && pending.generation === generation) return false
+    const operation = { worktree: requestedWorktree, generation }
+    copyBusyRef.current = operation
+    const isCurrent = () => mountedRef.current &&
+      currentWorktree.current === requestedWorktree &&
+      controlGenerationRef.current === generation
+    const completeCopy = async () => {
+      try {
+        const root = await resolveWorktreeRoot(requestedWorktree)
+        if (root === null || !isCurrent()) return
+        const relativePaths = paths.map((path) => relativeExplorerPath(root, path))
+        if (relativePaths.includes(null)) throw new Error('The selected path is outside this worktree.')
+        const values = relative ? relativePaths : paths
+        await navigator.clipboard.writeText(values.join('\n'))
+        if (!isCurrent()) return
+        context.toast('Paths copied', `${values.length} path(s)`)
+      } catch (reason) {
+        if (isCurrent()) setError(messageOf(reason))
+      } finally {
+        if (copyBusyRef.current === operation) copyBusyRef.current = null
+      }
     }
+    void completeCopy()
+    return true
   }
 
-  const renameSelected = async (explicitName?: string): Promise<boolean> => {
+  const renameSelected = (explicitName?: string): boolean => {
     const requestedWorktree = worktree
     const session = renameSessionRef.current
     const sourcePath = renamePathRef.current
@@ -1138,58 +1151,60 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     renameBusyRef.current = true
     renameBusySessionRef.current = session.generation
     setRenameBusy(true)
-    try {
-      if (!isCurrent()) return false
-      await context.call('quirky.editor/mutate', {
-        worktree: requestedWorktree,
-        action: 'rename',
-        path: sourcePath,
-        newPath: destinationPath
-      })
-      if (!isCurrent()) return false
-      const preserveEditedInput = userIntentRef.current !== intent && document.activeElement === renameInputRef.current
-      if (renamePathRef.current === sourcePath && !preserveEditedInput) {
-        changeRenamePath(null)
-        setRenameValue('')
-      }
-      await updateExpandedPathsAfterMutation(
-        requestedWorktree,
-        [],
-        sourceIsDirectory ? { from: sourcePath, to: destinationPath } : undefined,
-        isCurrent
-      )
-      if (!isCurrent()) return false
-      const filterListing = await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery, isCurrent)
-      if (!isCurrent()) return false
-      if (filterListing !== null && isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) {
-        const visible = new Set(filterListing.entries.map((entry) => entry.path))
-        const targetPath = visible.has(destinationPath)
-          ? destinationPath
-          : renameNeighborPaths(visiblePaths, sourcePath, destinationPath).find((path) => visible.has(path)) ?? null
-        const queryParams = requestedMode === 'names' && requestedQuery.trim() !== '' ? { query: requestedQuery } : {}
-        const result = await enqueueInteraction(targetPath === null
-          ? { action: 'navigate', key: 'Home', ...queryParams }
-          : { action: 'select', path: targetPath, ...queryParams },
-        () => isCurrent() && isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery))
-        if (!isCurrent()) return false
-        if (result !== null && isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) {
-          treeRef.current?.focus()
-          refreshEditorState()
+    const completeRename = async () => {
+      try {
+        if (!isCurrent()) return
+        await context.call('quirky.editor/mutate', {
+          worktree: requestedWorktree,
+          action: 'rename',
+          path: sourcePath,
+          newPath: destinationPath
+        })
+        if (!isCurrent()) return
+        const preserveEditedInput = userIntentRef.current !== intent && document.activeElement === renameInputRef.current
+        if (renamePathRef.current === sourcePath && !preserveEditedInput) {
+          changeRenamePath(null)
+          setRenameValue('')
+        }
+        await updateExpandedPathsAfterMutation(
+          requestedWorktree,
+          [],
+          sourceIsDirectory ? { from: sourcePath, to: destinationPath } : undefined,
+          isCurrent
+        )
+        if (!isCurrent()) return
+        const filterListing = await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery, isCurrent)
+        if (!isCurrent()) return
+        if (filterListing !== null && isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) {
+          const visible = new Set(filterListing.entries.map((entry) => entry.path))
+          const targetPath = visible.has(destinationPath)
+            ? destinationPath
+            : renameNeighborPaths(visiblePaths, sourcePath, destinationPath).find((path) => visible.has(path)) ?? null
+          const queryParams = requestedMode === 'names' && requestedQuery.trim() !== '' ? { query: requestedQuery } : {}
+          const result = await enqueueInteraction(targetPath === null
+            ? { action: 'navigate', key: 'Home', ...queryParams }
+            : { action: 'select', path: targetPath, ...queryParams },
+          () => isCurrent() && isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery))
+          if (!isCurrent()) return
+          if (result !== null && isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) {
+            treeRef.current?.focus()
+            refreshEditorState()
+          }
+        }
+        if (!preserveEditedInput && renameSessionRef.current === session) renameSessionRef.current = null
+      } catch (reason) {
+        if (!isCurrent()) return
+        setError(messageOf(reason), 'rename')
+      } finally {
+        if (renameBusySessionRef.current === session.generation) {
+          renameBusySessionRef.current = null
+          renameBusyRef.current = false
+          setRenameBusy(false)
         }
       }
-      if (!preserveEditedInput && renameSessionRef.current === session) renameSessionRef.current = null
-      return true
-    } catch (reason) {
-      if (!isCurrent()) return false
-      setError(messageOf(reason), 'rename')
-      return true
-    } finally {
-      if (renameBusySessionRef.current === session.generation) {
-        renameBusySessionRef.current = null
-        renameBusyRef.current = false
-        setRenameBusy(false)
-      }
     }
+    void completeRename()
+    return true
   }
   const startNewItem = (kind: 'file' | 'folder', directory = '.') => {
     if (!worktree) return false
@@ -1221,7 +1236,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     clearInlineError('create')
   }
 
-  const commitNewItem = async (explicitName?: string): Promise<boolean> => {
+  const commitNewItem = (explicitName?: string): boolean => {
     if (inlineBlurTimer.current !== undefined) {
       window.clearTimeout(inlineBlurTimer.current)
       inlineBlurTimer.current = undefined
@@ -1245,57 +1260,59 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     itemBusySessionRef.current = session.generation
     setItemBusy(true)
     let openedTabId: string | undefined
-    try {
-      if (!isCurrent()) return false
-      if (kind === 'file') {
-        await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'createFile', path, content: '' })
-        if (!isCurrent()) {
+    const completeCreate = async () => {
+      try {
+        if (!isCurrent()) return
+        if (kind === 'file') {
+          await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'createFile', path, content: '' })
+          if (!isCurrent()) {
+            focusHandoff?.cancel()
+            return
+          }
+          const opened = await context.call('quirky.editor/open', { worktree: requestedWorktree, path, preview: false, focus: true }) as { openedTabId?: unknown }
+          if (!isCurrent()) {
+            focusHandoff?.cancel()
+            return
+          }
+          if (typeof opened.openedTabId === 'string' && opened.openedTabId !== '') {
+            openedTabId = opened.openedTabId
+            focusHandoff?.setTarget(openedTabId)
+          }
+        } else {
+          await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'createFolder', path })
+          if (!isCurrent()) return
+        }
+        await enqueueInteraction({ action: 'reveal', path }, isCurrent)
+        if (!isCurrent()) return
+        await enqueueInteraction({ action: 'select', path }, isCurrent)
+        if (!isCurrent()) return
+        await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery, isCurrent)
+        if (!isCurrent()) return
+        createSessionRef.current = null
+        setNewItemKind(null)
+        setNewItemName('')
+        if (openedTabId !== undefined && focusHandoff !== null && focusHandoffRef.current === focusHandoff) {
+          setFocusAfterCreate(focusHandoff)
+        } else {
           focusHandoff?.cancel()
-          return false
+          if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
         }
-        const opened = await context.call('quirky.editor/open', { worktree: requestedWorktree, path, preview: false, focus: true }) as { openedTabId?: unknown }
-        if (!isCurrent()) {
-          focusHandoff?.cancel()
-          return false
-        }
-        if (typeof opened.openedTabId === 'string' && opened.openedTabId !== '') {
-          openedTabId = opened.openedTabId
-          focusHandoff?.setTarget(openedTabId)
-        }
-      } else {
-        await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'createFolder', path })
-        if (!isCurrent()) return false
-      }
-      await enqueueInteraction({ action: 'reveal', path }, isCurrent)
-      if (!isCurrent()) return false
-      await enqueueInteraction({ action: 'select', path }, isCurrent)
-      if (!isCurrent()) return false
-      await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery, isCurrent)
-      if (!isCurrent()) return false
-      createSessionRef.current = null
-      setNewItemKind(null)
-      setNewItemName('')
-      if (openedTabId !== undefined && focusHandoff !== null && focusHandoffRef.current === focusHandoff) {
-        setFocusAfterCreate(focusHandoff)
-      } else {
+        refreshEditorState()
+      } catch (reason) {
         focusHandoff?.cancel()
         if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
-      }
-      refreshEditorState()
-      return true
-    } catch (reason) {
-      focusHandoff?.cancel()
-      if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
-      if (!isCurrent()) return false
-      setError(messageOf(reason), 'create')
-      return true
-    } finally {
-      if (itemBusySessionRef.current === session.generation) {
-        itemBusySessionRef.current = null
-        itemBusyRef.current = false
-        setItemBusy(false)
+        if (!isCurrent()) return
+        setError(messageOf(reason), 'create')
+      } finally {
+        if (itemBusySessionRef.current === session.generation) {
+          itemBusySessionRef.current = null
+          itemBusyRef.current = false
+          setItemBusy(false)
+        }
       }
     }
+    void completeCreate()
+    return true
   }
 
   const deleteSelected = async (paths = visibleSelectedPaths, opener?: HTMLElement) => {
@@ -1565,7 +1582,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         const name = data.name
         if (!exactData(['name']) || !createSessionRef.current || newItemKind === null || itemBusyRef.current ||
           (hasName && (typeof name !== 'string' || name.trim() === ''))) return { delivered: false }
-        return { delivered: await commitNewItem(typeof name === 'string' ? name : undefined) }
+        return { delivered: commitNewItem(typeof name === 'string' ? name : undefined) }
       }
       case 'cancel-create':
         if (!exactData([]) || !createSessionRef.current) return { delivered: false }
@@ -1584,7 +1601,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           renameBusyRef.current || (hasName && (typeof name !== 'string' || name.trim() === ''))) {
           return { delivered: false }
         }
-        return { delivered: await renameSelected(typeof name === 'string' ? name : undefined) }
+        return { delivered: renameSelected(typeof name === 'string' ? name : undefined) }
       }
       case 'cancel-rename':
         if (!exactData([]) || !renameSessionRef.current) return { delivered: false }
@@ -1678,10 +1695,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         const requestedWorktree = worktree
         const generation = control.generation
         if (!requestedWorktree) return { delivered: false }
-        const isCurrent = () => mountedRef.current &&
-          currentWorktree.current === requestedWorktree &&
-          controlGenerationRef.current === generation
-        return { delivered: await copyPaths(data.relative === true, paths, isCurrent) }
+        return { delivered: copyPaths(data.relative === true, paths, requestedWorktree, generation) }
       }
       default:
         return { delivered: false }
@@ -1782,9 +1796,9 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       {settingsError && <InlineError message={settingsError} />}
       {editorStateError && <InlineError message={editorStateError} />}
       {namesFilterError && <InlineError message={namesFilterError} />}
-      {treeLoading && <NoticeLine>Loading files…</NoticeLine>}
+      {treeLoading && <div role="status" aria-live="polite"><NoticeLine>Loading files…</NoticeLine></div>}
       {gitError && <p className="muted" role="status">Git status unavailable: {gitError}</p>}
-      {searchMode === 'names' && namesFilterPending && <NoticeLine>Searching files…</NoticeLine>}
+      {searchMode === 'names' && namesFilterPending && <div role="status" aria-live="polite"><NoticeLine>Searching files…</NoticeLine></div>}
       {searchMode === 'names' ? (
         <div
           className="qe-explorer-tree"
@@ -1892,13 +1906,15 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           ))}
           </div>
           {currentNameFilter?.status === 'success' && currentFilterListing?.entries.length === 0 && (
-            <EmptyState
-              message={`No files match “${query}”. Clear the filter to show all files.`}
-              action={{ label: 'Clear filter', onAction: () => { void controlsRef.current?.run('clear-filter') } }}
-            />
+            <div role="status" aria-live="polite">
+              <EmptyState
+                message={`No files match “${query}”. Clear the filter to show all files.`}
+                action={{ label: 'Clear filter', onAction: () => { void controlsRef.current?.run('clear-filter') } }}
+              />
+            </div>
           )}
           {query.trim() === '' && rootListing !== null && rootListing.entries.length === 0 && !treeLoading && (
-            <EmptyState message="No files in this folder." />
+            <div role="status" aria-live="polite"><EmptyState message="No files in this folder." /></div>
           )}
           {newItemKind && (
             <div className="qe-explorer-inline-row" ref={newItemRowRef}>
@@ -1949,10 +1965,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         <div className="qe-explorer-content-results">
           {!query.trim() && <p className="muted">Type to search in files</p>}
           {query.trim() && !searchResult && <p className="muted">Press Enter to search</p>}
-          {searchResult?.loading && <NoticeLine>Searching files…</NoticeLine>}
+          {searchResult?.loading && <div role="status" aria-live="polite"><NoticeLine>Searching files…</NoticeLine></div>}
           {searchResult?.error && <InlineError message={searchResult.error} />}
           {searchResult && !searchResult.loading && !searchResult.error && searchResult.totalMatches === 0 && (
-            <EmptyState message="No results" />
+            <div role="status" aria-live="polite"><EmptyState message="No results" /></div>
           )}
           {searchResult && !searchResult.loading && !searchResult.error && searchResult.totalMatches > 0 && <p>
             {`${searchResult.totalMatches} result${searchResult.totalMatches === 1 ? '' : 's'} in ${searchResult.files.length} file${searchResult.files.length === 1 ? '' : 's'}`}

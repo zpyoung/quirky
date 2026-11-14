@@ -145,8 +145,11 @@ function activateControlBridge(context: UiPluginContext): void {
   disposeActivatedContext = () => deactivate()
 }
 
-async function mountExplorer(surface = 'panel:quirky.editor/explorer', withFrame = true): Promise<void> {
-  const context = makeContext()
+async function mountExplorer(
+  surface = 'panel:quirky.editor/explorer',
+  withFrame = true,
+  context = makeContext()
+): Promise<void> {
   activateControlBridge(context)
   const scope = createEditorUiControlReportScope((value) => { report = value as UiControlReport }, { surface })
   disposeControlScope = () => scope.dispose()
@@ -239,6 +242,30 @@ test.each([
     action: 'new-file'
   })
   expect(container.querySelector('.qe-explorer-inline-row')).not.toBeNull()
+})
+
+test('Explorer shared loading and empty states keep polite status semantics inside the host frame', async () => {
+  const context = makeContext()
+  const listing = Promise.withResolvers<typeof LISTING>()
+  const originalCall = context.call.bind(context)
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/explorer' && params.action === 'list') return await listing.promise
+    return await originalCall(method, params)
+  }) as typeof context.call
+  await mountExplorer('panel:quirky.editor/explorer', true, context)
+
+  const loadingStatus = container.querySelector<HTMLElement>('[role="status"]')
+  expect(loadingStatus?.getAttribute('aria-live')).toBe('polite')
+  expect(loadingStatus?.querySelector('.ui-notice-line')?.textContent).toBe('Loading files…')
+  expect(container.querySelector('.ui-empty-state')).toBeNull()
+
+  await act(async () => {
+    listing.resolve({ ...LISTING, entries: [] })
+    await tick()
+  })
+  const emptyStatus = container.querySelector<HTMLElement>('[role="status"]')
+  expect(emptyStatus?.getAttribute('aria-live')).toBe('polite')
+  expect(emptyStatus?.querySelector('.ui-empty-state')?.textContent).toContain('No files in this folder.')
 })
 
 test('without a host frame the panel still shows its tools', async () => {
