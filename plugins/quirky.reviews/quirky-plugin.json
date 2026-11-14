@@ -4978,6 +4978,22 @@
     ],
     "command": [
       {
+        "id": "ui-control",
+        "title": "Run Reviews UI control",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "target": { "type": "string" },
+            "generation": { "type": "integer", "minimum": 1 },
+            "action": { "type": "string" },
+            "value": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["target", "generation", "action"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "show-checks",
         "title": "Show Checks"
       },

@@ -27,6 +27,24 @@ export const WINDOW_SILENCE_SECONDS = 30
 export type FaultDetail = { pids: number[]; refreshes: number; blockedMs: number | null; worktrees?: [string, string] }
 export type FaultRecord = { kind: FaultKind; check: FaultCheck; at: number; detail: FaultDetail }
 
+export type RefreshExample = {
+  id: string
+  startedAt: string
+  phase: 'setup' | 'run' | 'unknown'
+  elapsedMs: number
+  loopLagMs: number
+  maxProbeOwnLagMs: number | null
+  outcome: 'ok' | 'error' | 'timeout' | 'pending'
+}
+export type RefreshSummary = {
+  slow: number
+  completed: number
+  failed: number
+  pending: number
+  invalid: number
+  examples: RefreshExample[]
+}
+
 export const DEFAULT_LIMITS: SoakLimits = { maxChildren: 60, maxGrowth: 5, maxZombies: 0, maxEventsPer5s: 30, maxStallMs: 1000, maxUnanswered: 0 }
 export const QUALIFYING_MINUTES = 30
 export const QUALIFYING_WINDOWS = 2
@@ -97,7 +115,7 @@ export type SoakReport = {
       byWindow: { index: number; worktree: string; total: number; peakPer5s: number }[]
     }
     stalls: { ok: boolean; probes: number; stalls: number; hostBusy: number; p50Ms: number; p95Ms: number; maxMs: number; worst: { at: number; ms: number }[]; daemonExited: boolean }
-    calls: { ok: boolean; unanswered: number; byMethod: { method: string; count: number }[]; gitTimeouts: number }
+    calls: { ok: boolean; unanswered: number; byMethod: { method: string; count: number }[]; gitTimeouts: number; refreshes: RefreshSummary }
     workers: { ok: boolean; expected: number; alive: number; stale: string[] }
     windows: { ok: boolean; expected: number; alive: number; lost: string[] }
   }

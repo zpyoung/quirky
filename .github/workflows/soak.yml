@@ -16,6 +16,7 @@ on:
   pull_request:
     paths:
       - scripts/soak.ts
+      - plugins/quirky.notifications/**
       - scripts/soak/**
       - .github/workflows/soak.yml
 
@@ -48,7 +49,7 @@ jobs:
           bun test scripts/soak/feedback.e2e.test.ts
       - name: Run isolated soak
         env:
-          MINUTES: ${{ github.event_name == 'pull_request' && '2' || inputs.minutes || '30' }}
+          MINUTES: ${{ github.event_name == 'pull_request' && '30' || inputs.minutes || '30' }}
           SLOW_GIT: ${{ inputs.slow_git }}
         run: |
           export QUIRKY_HOME="$(mktemp -d)"

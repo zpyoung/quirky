@@ -804,6 +804,88 @@ test('scenario 16: calls fails above the default unanswered limit', () => {
       { method: 'quirky.worktree/resolve', count: 1 },
     ],
     gitTimeouts: 0,
+    refreshes: { slow: 0, completed: 0, failed: 0, pending: 0, invalid: 0, examples: [] },
+  })
+  expect(result.verdict).toBe('fail')
+})
+test('scenario 16: legacy two-line warnings retain unanswered counts', () => {
+  const log = [
+    'quirky.worktree/list failed: quirky.worktree/list did not answer within 2000ms',
+    'quirky.worktree/list failed: quirky.worktree/list did not answer within 2000ms',
+  ].join('\n')
+  const result = judge(evidence({ daemonLog: log }), config())
+
+  expect(result.checks.calls).toMatchObject({
+    ok: false,
+    unanswered: 2,
+    byMethod: [{ method: 'quirky.worktree/list', count: 2 }],
+  })
+})
+
+test('scenario 6: an unfinished slow refresh fails calls without an unanswered warning', () => {
+  const diagnostic = {
+    v: 1,
+    id: 'pending-refresh',
+    event: 'slow',
+    startedAt: '2026-11-14T00:00:01.000Z',
+    at: '2026-11-14T00:00:03.000Z',
+    elapsedMs: 2000,
+    loopLagMs: 0,
+  }
+  const result = judge(
+    evidence({ daemonLog: `notification-worktree-refresh ${JSON.stringify(diagnostic)}` }),
+    config(),
+  )
+
+  expect(result.checks.calls).toMatchObject({
+    ok: false,
+    unanswered: 0,
+    refreshes: { slow: 1, completed: 0, failed: 0, pending: 1, invalid: 0 },
+  })
+  expect(result.verdict).toBe('fail')
+})
+
+test('scenario 6: a completed slow refresh is reported without failing calls', () => {
+  const startedAt = '2026-11-14T00:00:00.000Z'
+  const refresh = {
+    v: 1,
+    id: 'completed-refresh',
+    startedAt: '2026-11-14T00:00:01.000Z',
+    elapsedMs: 2500,
+    loopLagMs: 0,
+  }
+  const log = [
+    `notification-worktree-refresh ${JSON.stringify({ ...refresh, event: 'slow', at: '2026-11-14T00:00:03.000Z' })}`,
+    `notification-worktree-refresh ${JSON.stringify({ ...refresh, event: 'finished', at: '2026-11-14T00:00:03.500Z', outcome: 'ok' })}`,
+  ].join('\n')
+  const result = judge(evidence({ startedAt, daemonLog: log }), config())
+
+  expect(result.checks.calls).toMatchObject({
+    ok: true,
+    unanswered: 0,
+    refreshes: { slow: 1, completed: 1, failed: 0, pending: 0, invalid: 0 },
+  })
+})
+
+test('scenario 6: error finishes fail calls, including a fast error without a slow record', () => {
+  const diagnostic = {
+    v: 1,
+    id: 'failed-refresh',
+    event: 'finished',
+    startedAt: '2026-11-14T00:00:01.000Z',
+    at: '2026-11-14T00:00:01.040Z',
+    elapsedMs: 40,
+    loopLagMs: 0,
+    outcome: 'error',
+  }
+  const result = judge(
+    evidence({ daemonLog: `notification-worktree-refresh ${JSON.stringify(diagnostic)}` }),
+    config(),
+  )
+
+  expect(result.checks.calls).toMatchObject({
+    ok: false,
+    refreshes: { slow: 0, completed: 0, failed: 1, pending: 0, invalid: 0 },
   })
   expect(result.verdict).toBe('fail')
 })
@@ -829,7 +911,69 @@ test('unanswered calls from third-party plugins fail the calls check', () => {
     ok: false,
     unanswered: 1,
     byMethod: [{ method: 'acme.tools/read', count: 1 }],
-    gitTimeouts: 0
+    gitTimeouts: 0,
+    refreshes: { slow: 0, completed: 0, failed: 0, pending: 0, invalid: 0, examples: [] },
+  })
+  expect(result.verdict).toBe('fail')
+})
+
+test('scenario 6: timeout failures keep the ordinary unanswered warning counted once', () => {
+  const slow = {
+    v: 1, id: 'timeout', event: 'slow', startedAt: '2026-11-14T00:00:01.000Z',
+    at: '2026-11-14T00:00:03.000Z', elapsedMs: 2000, loopLagMs: 0,
+  }
+  const finished = {
+    v: 1, id: 'timeout', event: 'finished', startedAt: slow.startedAt,
+    at: '2026-11-14T00:00:31.000Z', elapsedMs: 30_000, loopLagMs: 0, outcome: 'timeout',
+  }
+  const daemonLog = [
+    `notification-worktree-refresh ${JSON.stringify(slow)}`,
+    `notification-worktree-refresh ${JSON.stringify(finished)}`,
+    'quirky.worktree/list failed: quirky.worktree/list did not answer within 30000ms',
+  ].join('\n')
+  const result = judge(evidence({ daemonLog }), config())
+
+  expect(result.checks.calls).toMatchObject({
+    ok: false,
+    unanswered: 1,
+    byMethod: [{ method: 'quirky.worktree/list', count: 1 }],
+    refreshes: { slow: 1, failed: 1, pending: 0, invalid: 0 },
+  })
+})
+
+test('scenario 6: setup refresh failures receive the same calls failure treatment', () => {
+  const diagnostic = {
+    v: 1,
+    id: 'setup-pending',
+    event: 'slow',
+    startedAt: '2026-11-13T23:59:58.000Z',
+    at: '2026-11-14T00:00:00.000Z',
+    elapsedMs: 2000,
+    loopLagMs: 0,
+  }
+  const result = judge(
+    evidence({
+      startedAt: '2026-11-14T00:00:00.000Z',
+      daemonLog: `notification-worktree-refresh ${JSON.stringify(diagnostic)}`,
+    }),
+    config(),
+  )
+
+  expect(result.checks.calls).toMatchObject({
+    ok: false,
+    refreshes: { slow: 1, pending: 1, invalid: 0, examples: [{ phase: 'setup' }] },
+  })
+})
+
+test('scenario 6: malformed diagnostics fail the calls check', () => {
+  const result = judge(
+    evidence({ daemonLog: 'notification-worktree-refresh {broken' }),
+    config(),
+  )
+
+  expect(result.checks.calls).toMatchObject({
+    ok: false,
+    refreshes: { slow: 0, failed: 0, pending: 0, invalid: 1 },
   })
   expect(result.verdict).toBe('fail')
 })
